@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+
 import 'package:table_calendar/table_calendar.dart';
 
 import '../../../../core/theme/app_theme.dart';
@@ -45,26 +46,6 @@ class _DailyPrayerScreenState extends ConsumerState<DailyPrayerScreen> {
           mainAxisSize: MainAxisSize.min,
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Container(
-              width: isPhone ? 40 : 44,
-              height: isPhone ? 40 : 44,
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: AppColors.textOnPrimary.withValues(alpha: 0.2),
-                shape: BoxShape.circle,
-              ),
-              clipBehavior: Clip.antiAlias,
-              child: Image.asset(
-                'assets/logo.png',
-                fit: BoxFit.contain,
-                errorBuilder: (_, __, ___) => Icon(
-                  Icons.volunteer_activism_rounded,
-                  size: isPhone ? 24 : 28,
-                  color: AppColors.textOnPrimary,
-                ),
-              ),
-            ),
-            SizedBox(width: isPhone ? 14 : 16),
             Flexible(
               child: Text(
                 'Молитва',
@@ -508,7 +489,10 @@ class _PrayerCardsList extends StatelessWidget {
       ),
       children: [
         if (data.members.isNotEmpty) ...[
-          _SectionHeader(icon: Icons.people_rounded, title: 'Молитва за члена церкви'),
+          _SectionHeader(
+            icon: Icons.volunteer_activism_rounded,
+            title: 'Молитва за члена церкви',
+          ),
           const SizedBox(height: 12),
           ...data.members.map((m) => _MemberCard(member: m)),
           const SizedBox(height: 24),

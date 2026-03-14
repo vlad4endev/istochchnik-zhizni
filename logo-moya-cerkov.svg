@@ -1,39 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 1200" role="img" aria-labelledby="title desc">
-  <title id="title">>3>B8? / & ,</title>
-  <desc id="desc">1AB@0:B=K9 <8=8<0;8AB8G=K9 :@5AB 87 ?;02=KE ?5@5?;5B0NI8EAO ;8=89, A8<2>;878@CNI8E 25@C 8 A>>1I5AB2>.</desc>
-
-  <defs>
-    <linearGradient id="faithGradient" x1="260" y1="180" x2="860" y2="620" gradientUnits="userSpaceOnUse">
-      <stop offset="0%" stop-color="#123C98"/>
-      <stop offset="55%" stop-color="#2F76D6"/>
-      <stop offset="100%" stop-color="#76D7FF"/>
-    </linearGradient>
-  </defs>
-
-  <rect width="1200" height="1200" fill="#FFFFFF"/>
-
-  <g fill="none" stroke="url(#faithGradient)" stroke-width="26" stroke-linecap="round" stroke-linejoin="round">
-    <!-- 5@E=OO 4C30: =0<5: =0 >1I=>ABL 8 0@:C -->
-    <path d="M300 400 C430 320 670 320 800 400"/>
-
-    <!-- 5@B8:0;L :@5AB0 (@0745;5=0 4;O MDD5:B0 ?5@5?;5B5=8O 8 2>74CH=>AB8) -->
-    <path d="M550 170 C558 250 558 322 550 360"/>
-    <path d="M550 430 C542 468 542 520 550 560"/>
-
-    <!-- 86=OO ?;02=0O 4C30: 2B>@>9 C@>25=L A>>1I5AB20/;N459 -->
-    <path d="M360 520 C450 438 650 438 740 520"/>
-  </g>
-
-  <text
-    x="600"
-    y="835"
-    text-anchor="middle"
-    font-family="Inter, Avenir Next, Helvetica Neue, Arial, sans-serif"
-    font-size="74"
-    font-weight="300"
-    letter-spacing="8"
-    fill="#15397F"
-  >
-    / & ,
-  </text>
-</svg>

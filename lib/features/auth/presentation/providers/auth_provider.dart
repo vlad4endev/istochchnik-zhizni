@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/auth/auth_token_store.dart';
+import '../../../../core/config/app_config.dart';
 
 class AuthSession {
   const AuthSession({
@@ -30,24 +31,43 @@ final authControllerProvider =
     AsyncNotifierProvider<AuthController, AuthSession?>(AuthController.new);
 
 class AuthController extends AsyncNotifier<AuthSession?> {
-  static const String _baseUrl = 'http://localhost:3000/api/auth';
+  static final String _baseUrl = AppConfig.authApiBaseUrl;
   final Dio _dio = Dio();
 
   @override
   Future<AuthSession?> build() async {
     await AuthTokenStore.load();
-    final token = AuthTokenStore.token;
-    if (token == null || token.isEmpty) {
+    final cachedSession = AuthTokenStore.cachedSession;
+    if (cachedSession == null) {
       return null;
     }
 
-    final me = await _fetchMe(token);
-    if (me == null) {
+    try {
+      final me = await _fetchMe(cachedSession.token);
+      if (me == null) {
+        await AuthTokenStore.clear();
+        return null;
+      }
+
+      await AuthTokenStore.saveSession(
+        token: me.token,
+        firstName: me.firstName,
+        lastName: me.lastName,
+        role: me.role,
+      );
+      return me;
+    } on DioException {
+      // Keep local session on temporary network errors.
+      return AuthSession(
+        token: cachedSession.token,
+        firstName: cachedSession.firstName,
+        lastName: cachedSession.lastName,
+        role: cachedSession.role,
+      );
+    } catch (_) {
       await AuthTokenStore.clear();
       return null;
     }
-
-    return me;
   }
 
   Future<AuthSession?> _fetchMe(String token) async {
@@ -107,7 +127,12 @@ class AuthController extends AsyncNotifier<AuthSession?> {
         role: (user['app_role'] as String?)?.trim() ?? 'member',
       );
 
-      await AuthTokenStore.save(token);
+      await AuthTokenStore.saveSession(
+        token: token,
+        firstName: session.firstName,
+        lastName: session.lastName,
+        role: session.role,
+      );
       state = AsyncData(session);
       return true;
     } catch (_) {
@@ -154,7 +179,12 @@ class AuthController extends AsyncNotifier<AuthSession?> {
           role: (user['app_role'] as String?)?.trim() ?? 'member',
         );
 
-        await AuthTokenStore.save(token);
+        await AuthTokenStore.saveSession(
+          token: token,
+          firstName: session.firstName,
+          lastName: session.lastName,
+          role: session.role,
+        );
         state = AsyncData(session);
         return const SignUpOutcome(type: SignUpOutcomeType.approved);
       }

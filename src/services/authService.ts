@@ -4,7 +4,12 @@ import { query } from '../config/db';
 
 const scrypt = promisify(scryptCallback);
 const MIN_PASSWORD_LENGTH = 8;
-const SESSION_TTL_DAYS = 30;
+const DEFAULT_SESSION_TTL_DAYS = 365;
+const MIN_SESSION_TTL_DAYS = 7;
+const MAX_SESSION_TTL_DAYS = 3650;
+const DEFAULT_MAX_ACTIVE_SESSIONS_PER_USER = 3;
+const MIN_ACTIVE_SESSIONS_PER_USER = 1;
+const MAX_ACTIVE_SESSIONS_PER_USER = 20;
 const PHONE_DIGITS_MIN = 7;
 const PHONE_DIGITS_MAX = 20;
 
@@ -155,6 +160,39 @@ function createSessionToken(): { token: string; tokenHash: string } {
   return { token, tokenHash };
 }
 
+function getSessionTtlDays(): number {
+  const rawValue = process.env.AUTH_SESSION_TTL_DAYS;
+  if (!rawValue) {
+    return DEFAULT_SESSION_TTL_DAYS;
+  }
+
+  const parsed = Number(rawValue);
+  if (!Number.isFinite(parsed)) {
+    return DEFAULT_SESSION_TTL_DAYS;
+  }
+
+  const integerValue = Math.floor(parsed);
+  return Math.min(MAX_SESSION_TTL_DAYS, Math.max(MIN_SESSION_TTL_DAYS, integerValue));
+}
+
+function getMaxActiveSessionsPerUser(): number {
+  const rawValue = process.env.AUTH_MAX_ACTIVE_SESSIONS_PER_USER;
+  if (!rawValue) {
+    return DEFAULT_MAX_ACTIVE_SESSIONS_PER_USER;
+  }
+
+  const parsed = Number(rawValue);
+  if (!Number.isFinite(parsed)) {
+    return DEFAULT_MAX_ACTIVE_SESSIONS_PER_USER;
+  }
+
+  const integerValue = Math.floor(parsed);
+  return Math.min(
+    MAX_ACTIVE_SESSIONS_PER_USER,
+    Math.max(MIN_ACTIVE_SESSIONS_PER_USER, integerValue)
+  );
+}
+
 function mapAuthUser(row: MemberRow): AuthUser {
   return {
     id: row.id,
@@ -171,12 +209,36 @@ function mapAuthUser(row: MemberRow): AuthUser {
 
 async function createSessionForUser(userId: number): Promise<{ token: string; expiresAt: string }> {
   const { token, tokenHash } = createSessionToken();
-  const expiresAt = new Date(Date.now() + SESSION_TTL_DAYS * 24 * 60 * 60 * 1000);
+  const sessionTtlDays = getSessionTtlDays();
+  const maxActiveSessions = getMaxActiveSessionsPerUser();
+  const expiresAt = new Date(Date.now() + sessionTtlDays * 24 * 60 * 60 * 1000);
+
+  // Remove stale sessions first to keep per-user session limits accurate.
+  await query(
+    `DELETE FROM auth_sessions
+     WHERE member_id = $1
+       AND expires_at <= NOW()`,
+    [userId]
+  );
 
   await query(
     `INSERT INTO auth_sessions (token_hash, member_id, expires_at)
      VALUES ($1, $2, $3)`,
     [tokenHash, userId, expiresAt.toISOString()]
+  );
+
+  // Keep recent sessions only (for multi-device sign-in).
+  await query(
+    `DELETE FROM auth_sessions
+     WHERE member_id = $1
+       AND token_hash IN (
+         SELECT token_hash
+         FROM auth_sessions
+         WHERE member_id = $1
+         ORDER BY created_at DESC, token_hash DESC
+         OFFSET $2
+       )`,
+    [userId, maxActiveSessions]
   );
 
   return { token, expiresAt: expiresAt.toISOString() };
@@ -517,15 +579,18 @@ export async function resolveSessionByToken(token: string): Promise<SessionPrinc
   }
 
   const tokenHash = createHash('sha256').update(normalizedToken).digest('hex');
+  const sessionTtlDays = getSessionTtlDays();
+  const refreshedExpiresAt = new Date(Date.now() + sessionTtlDays * 24 * 60 * 60 * 1000);
   const result = await query(
-    `SELECT m.id AS user_id, m.app_role
-     FROM auth_sessions s
-     JOIN members m ON m.id = s.member_id
-     WHERE s.token_hash = $1
+    `UPDATE auth_sessions s
+     SET expires_at = $2
+     FROM members m
+     WHERE s.member_id = m.id
+       AND s.token_hash = $1
        AND s.expires_at > NOW()
        AND m.is_active = TRUE
-     LIMIT 1`,
-    [tokenHash]
+     RETURNING m.id AS user_id, m.app_role`,
+    [tokenHash, refreshedExpiresAt.toISOString()]
   );
 
   const row = result.rows[0] as { user_id: number; app_role: string } | undefined;

@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">My Church Warm Logo</title>
+  <desc id="desc">Warm abstract church mark with an implicit cross and community lines.</desc>
+  <defs>
+    <linearGradient id="warmMain" x1="140" y1="80" x2="380" y2="430" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#6F1D32"/>
+      <stop offset="0.55" stop-color="#92405A"/>
+      <stop offset="1" stop-color="#C98B60"/>
+    </linearGradient>
+    <linearGradient id="warmAccent" x1="170" y1="240" x2="370" y2="420" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#E4AA74"/>
+      <stop offset="1" stop-color="#D97C67"/>
+    </linearGradient>
+  </defs>
+
+  <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M256 74V48M239 61H273M256 74V112C205 140 160 191 150 260C142 305 147 351 160 402C210 397 256 378 290 348C330 313 353 267 356 214C359 151 321 110 256 74"
+      stroke="url(#warmMain)" stroke-width="16"/>
+    <path d="M181 382C215 374 246 360 267 335C285 311 291 284 286 263C280 237 258 229 241 239C219 253 206 283 200 316C196 336 196 357 200 381"
+      stroke="url(#warmMain)" stroke-width="16"/>
+    <path d="M208 421C251 409 298 409 334 388C360 374 373 350 372 324C371 297 354 278 331 266C311 256 296 243 297 227C300 208 322 205 338 219C352 232 364 252 382 261"
+      stroke="url(#warmAccent)" stroke-width="16"/>
+  </g>
+</svg>

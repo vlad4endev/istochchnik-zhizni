@@ -1,11 +1,15 @@
 {
     "name": "МОЯ ЦЕРКОВЬ",
-    "short_name": "МОЯ ЦЕРКОВЬ",
-    "start_url": ".",
+    "short_name": "ЦЕРКОВЬ",
+    "start_url": "/",
+    "scope": "/",
     "display": "standalone",
+    "display_override": ["standalone", "minimal-ui"],
     "background_color": "#0175C2",
     "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "description": "МОЯ ЦЕРКОВЬ — молитвенный календарь для ежедневной духовной практики.",
+    "lang": "ru-RU",
+    "categories": ["lifestyle", "productivity"],
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

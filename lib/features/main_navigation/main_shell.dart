@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/project/project_branding_provider.dart';
+import '../../../core/widgets/app_logo.dart';
 import '../auth/presentation/providers/auth_provider.dart';
 import '../admin/presentation/screens/admin_panel_screen.dart';
 import '../calendar/presentation/screens/daily_prayer_screen.dart';
@@ -49,7 +51,7 @@ class _MainShellState extends ConsumerState<MainShell> {
     final items = <_NavItem>[
       const _NavItem(
         label: 'Молитва',
-        icon: Icons.favorite_rounded,
+        icon: Icons.volunteer_activism_rounded,
         screen: DailyPrayerScreen(),
       ),
       const _NavItem(
@@ -74,11 +76,16 @@ class _MainShellState extends ConsumerState<MainShell> {
 
   @override
   Widget build(BuildContext context) {
+    final mediaQuery = MediaQuery.of(context);
+    final screenWidth = mediaQuery.size.width;
+    final isCompactPhone = screenWidth < 380;
     final authSession = ref.watch(authControllerProvider).valueOrNull;
+    final branding = ref.watch(projectBrandingValueProvider);
     final isAdmin = (authSession?.role.toLowerCase() ?? '') == 'admin';
     final navItems = _navItemsForRole(isAdmin: isAdmin);
-    final selectedIndex =
-        navItems.isEmpty ? 0 : _currentIndex.clamp(0, navItems.length - 1) as int;
+    final selectedIndex = navItems.isEmpty
+        ? 0
+        : _currentIndex.clamp(0, navItems.length - 1);
 
     final showBottomNav = Responsive.isPhone(context);
 
@@ -89,6 +96,8 @@ class _MainShellState extends ConsumerState<MainShell> {
           children: [
             _DesktopSidebar(
               currentIndex: selectedIndex,
+              appName: branding.appName,
+              appDescription: branding.description,
               navItems: navItems,
               onSelect: (index) => setState(() => _currentIndex = index),
               onLogout: _handleLogout,
@@ -106,11 +115,19 @@ class _MainShellState extends ConsumerState<MainShell> {
       ),
       extendBody: true,
       bottomNavigationBar: Padding(
-        padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+        padding: EdgeInsets.fromLTRB(
+          isCompactPhone ? 10 : 20,
+          0,
+          isCompactPhone ? 10 : 20,
+          isCompactPhone ? 10 : 16,
+        ),
         child: SafeArea(
           top: false,
           child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+            padding: EdgeInsets.symmetric(
+              horizontal: isCompactPhone ? 4 : 8,
+              vertical: isCompactPhone ? 6 : 8,
+            ),
             decoration: BoxDecoration(
               color: AppColors.surfaceElevated,
               borderRadius: BorderRadius.circular(AppRadius.xxl),
@@ -123,6 +140,7 @@ class _MainShellState extends ConsumerState<MainShell> {
                 (index) => _NavBarItem(
                   item: navItems[index],
                   isSelected: selectedIndex == index,
+                  compact: isCompactPhone,
                   onTap: () => setState(() => _currentIndex = index),
                 ),
               ),
@@ -137,12 +155,16 @@ class _MainShellState extends ConsumerState<MainShell> {
 class _DesktopSidebar extends StatelessWidget {
   const _DesktopSidebar({
     required this.currentIndex,
+    required this.appName,
+    required this.appDescription,
     required this.navItems,
     required this.onSelect,
     required this.onLogout,
   });
 
   final int currentIndex;
+  final String appName;
+  final String appDescription;
   final List<_NavItem> navItems;
   final ValueChanged<int> onSelect;
   final Future<void> Function() onLogout;
@@ -155,7 +177,7 @@ class _DesktopSidebar extends StatelessWidget {
         color: AppColors.surfaceElevated,
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.06),
+            color: Colors.black.withValues(alpha: 0.06),
             blurRadius: 16,
             offset: const Offset(4, 0),
           ),
@@ -170,31 +192,36 @@ class _DesktopSidebar extends StatelessWidget {
               padding: const EdgeInsets.fromLTRB(24, 24, 24, 32),
               child: Row(
                 children: [
-                  Container(
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      color: AppColors.surfaceElevated,
-                      shape: BoxShape.circle,
-                    ),
-                    clipBehavior: Clip.antiAlias,
-                    child: Image.asset(
-                      'assets/logo.png',
-                      fit: BoxFit.contain,
-                      errorBuilder: (_, __, ___) => const SizedBox.shrink(),
-                    ),
-                  ),
+                  const AppLogo(size: 40),
                   const SizedBox(width: 12),
-                  const Expanded(
-                    child: Text(
-                      'МОЯ ЦЕРКОВЬ',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w800,
-                        color: AppColors.textPrimary,
-                        letterSpacing: -0.4,
-                      ),
-                      overflow: TextOverflow.ellipsis,
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          appName,
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w800,
+                            color: AppColors.textPrimary,
+                            letterSpacing: -0.4,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 1,
+                        ),
+                        if (appDescription.trim().isNotEmpty)
+                          Text(
+                            appDescription,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: AppColors.textTertiary,
+                              letterSpacing: 0.1,
+                              height: 1.2,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                            maxLines: 2,
+                          ),
+                      ],
                     ),
                   ),
                 ],
@@ -226,7 +253,7 @@ class _DesktopSidebar extends StatelessWidget {
                       ),
                       decoration: BoxDecoration(
                         color: isSelected
-                            ? AppColors.primary.withOpacity(0.1)
+                            ? AppColors.primary.withValues(alpha: 0.1)
                             : Colors.transparent,
                         borderRadius: BorderRadius.circular(AppRadius.md),
                       ),
@@ -292,11 +319,13 @@ class _NavBarItem extends StatelessWidget {
   const _NavBarItem({
     required this.item,
     required this.isSelected,
+    required this.compact,
     required this.onTap,
   });
 
   final _NavItem item;
   final bool isSelected;
+  final bool compact;
   final VoidCallback onTap;
 
   @override
@@ -311,7 +340,10 @@ class _NavBarItem extends StatelessWidget {
           highlightColor: AppColors.primary.withValues(alpha: 0.05),
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 220),
-            padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 20),
+            padding: EdgeInsets.symmetric(
+              vertical: compact ? 10 : 14,
+              horizontal: compact ? 8 : 20,
+            ),
             decoration: BoxDecoration(
               color: isSelected
                   ? AppColors.primary.withValues(alpha: 0.1)
@@ -324,18 +356,18 @@ class _NavBarItem extends StatelessWidget {
               children: [
                 Icon(
                   item.icon,
-                  size: 22,
+                  size: compact ? 20 : 22,
                   color: isSelected
                       ? AppColors.primary
                       : AppColors.textTertiary,
                 ),
-                const SizedBox(height: 6),
+                SizedBox(height: compact ? 4 : 6),
                 Text(
                   item.label,
                   style: TextStyle(
-                    fontSize: 11,
+                    fontSize: compact ? 10 : 11,
                     fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
-                    letterSpacing: 0.4,
+                    letterSpacing: compact ? 0.2 : 0.4,
                     color: isSelected
                         ? AppColors.primary
                         : AppColors.textTertiary,

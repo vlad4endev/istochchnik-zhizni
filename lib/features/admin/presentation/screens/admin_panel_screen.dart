@@ -1,11 +1,16 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:dio/dio.dart';
+import 'package:file_picker/file_picker.dart';
 
+import '../../../../core/project/project_branding_provider.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/responsive.dart';
+import '../../../../core/widgets/app_logo.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../domain/entities/admin_backslider.dart';
 import '../../domain/entities/admin_direction_template.dart';
@@ -103,7 +108,7 @@ class _AdminPanelScreenState extends ConsumerState<AdminPanelScreen> {
     final roleTemplatesAsync = ref.watch(adminRoleTemplatesProvider);
     final directionTemplatesAsync = ref.watch(adminDirectionTemplatesProvider);
     return DefaultTabController(
-      length: 3,
+      length: 4,
       child: Scaffold(
         backgroundColor: AppColors.surface,
         appBar: AppBar(
@@ -121,6 +126,7 @@ class _AdminPanelScreenState extends ConsumerState<AdminPanelScreen> {
           backgroundColor: AppColors.primary,
           surfaceTintColor: Colors.transparent,
           bottom: TabBar(
+            isScrollable: true,
             indicatorColor: AppColors.textOnPrimary,
             indicatorSize: TabBarIndicatorSize.tab,
             indicatorWeight: 3,
@@ -140,6 +146,10 @@ class _AdminPanelScreenState extends ConsumerState<AdminPanelScreen> {
               Tab(
                 icon: Icon(Icons.inventory_2_rounded),
                 text: 'Шаблоны',
+              ),
+              Tab(
+                icon: Icon(Icons.tune_rounded),
+                text: 'Проект',
               ),
             ],
           ),
@@ -170,6 +180,7 @@ class _AdminPanelScreenState extends ConsumerState<AdminPanelScreen> {
               onAddDirectionTemplate: _addDirectionTemplate,
               onDeleteDirectionTemplate: _deleteDirectionTemplate,
             ),
+            const _ProjectBrandingTab(),
           ],
         ),
       ),
@@ -1417,6 +1428,381 @@ class _MembersManagementTabState extends ConsumerState<_MembersManagementTab> {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _ProjectBrandingTab extends ConsumerStatefulWidget {
+  const _ProjectBrandingTab();
+
+  @override
+  ConsumerState<_ProjectBrandingTab> createState() => _ProjectBrandingTabState();
+}
+
+class _ProjectBrandingTabState extends ConsumerState<_ProjectBrandingTab> {
+  static const _logoPresets = <({String title, String assetPath, String note})>[
+    (
+      title: 'Теплый абстрактный крест',
+      assetPath: 'assets/logo.svg',
+      note: 'Современный минимализм'
+    ),
+    (
+      title: 'Золотой геометрический',
+      assetPath: 'assets/logo_gold.svg',
+      note: 'Более торжественный знак'
+    ),
+    (
+      title: 'Линейный знак',
+      assetPath: 'assets/logo_minimal.svg',
+      note: 'Четко читается в малом размере'
+    ),
+  ];
+
+  late final TextEditingController _nameController;
+  late final TextEditingController _descriptionController;
+  String? _lastLoadedSignature;
+  bool _removeLightBackground = ProjectBrandingSettings.defaults.removeLightBackground;
+  double _logoScalePercent = ProjectBrandingSettings.defaults.logoScalePercent.toDouble();
+  bool _saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _nameController = TextEditingController();
+    _descriptionController = TextEditingController();
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _descriptionController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final brandingAsync = ref.watch(projectBrandingProvider);
+    final branding = brandingAsync.valueOrNull ?? ProjectBrandingSettings.defaults;
+
+    final signature =
+        '${branding.appName}|${branding.description}|${branding.removeLightBackground}|${branding.logoScalePercent}';
+    if (_lastLoadedSignature != signature && !_saving) {
+      _nameController.text = branding.appName;
+      _descriptionController.text = branding.description;
+      _removeLightBackground = branding.removeLightBackground;
+      _logoScalePercent = branding.logoScalePercent.toDouble();
+      _lastLoadedSignature = signature;
+    }
+
+    final hasCustomLogo =
+        branding.customLogoDataUrl != null && branding.customLogoDataUrl!.isNotEmpty;
+
+    return SafeArea(
+      top: false,
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(20, 20, 20, 28),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(18),
+              decoration: BoxDecoration(
+                color: AppColors.surfaceElevated,
+                borderRadius: BorderRadius.circular(AppRadius.lg),
+                boxShadow: AppShadows.cardSubtle,
+                border: Border.all(color: AppColors.dividerLight),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    width: 72,
+                    height: 72,
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: AppColors.surface,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: AppColors.dividerLight),
+                    ),
+                    child: const AppLogo(size: 56),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          branding.appName,
+                          style: const TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.w800,
+                            color: AppColors.textPrimary,
+                            letterSpacing: -0.3,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          branding.description,
+                          style: const TextStyle(
+                            fontSize: 13,
+                            color: AppColors.textSecondary,
+                            height: 1.35,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 20),
+            TextFormField(
+              controller: _nameController,
+              decoration: const InputDecoration(
+                labelText: 'Название проекта',
+                hintText: 'Например: МОЯ ЦЕРКОВЬ',
+                prefixIcon: Icon(Icons.title_rounded),
+              ),
+              textInputAction: TextInputAction.next,
+            ),
+            const SizedBox(height: 14),
+            TextFormField(
+              controller: _descriptionController,
+              maxLines: 3,
+              decoration: const InputDecoration(
+                labelText: 'Описание',
+                hintText: 'Коротко о проекте',
+                prefixIcon: Icon(Icons.notes_rounded),
+              ),
+            ),
+            const SizedBox(height: 18),
+            const Text(
+              'Логотип проекта',
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w800,
+                color: AppColors.textPrimary,
+              ),
+            ),
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: _logoPresets.map((preset) {
+                final selected = !hasCustomLogo && branding.logoAssetPath == preset.assetPath;
+                return ChoiceChip(
+                  selected: selected,
+                  onSelected: (_) => _selectPresetLogo(preset.assetPath),
+                  avatar: Icon(
+                    selected ? Icons.check_circle_rounded : Icons.image_outlined,
+                    size: 18,
+                    color: selected ? AppColors.primary : AppColors.textSecondary,
+                  ),
+                  label: Text(preset.title),
+                );
+              }).toList(growable: false),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              hasCustomLogo
+                  ? 'Сейчас выбран пользовательский загруженный логотип.'
+                  : 'Выбран пресет: ${_logoPresets.firstWhere((e) => e.assetPath == branding.logoAssetPath, orElse: () => _logoPresets.first).note}',
+              style: const TextStyle(
+                fontSize: 12,
+                color: AppColors.textSecondary,
+              ),
+            ),
+            const SizedBox(height: 14),
+            Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: [
+                OutlinedButton.icon(
+                  onPressed: _saving ? null : _pickCustomLogo,
+                  icon: const Icon(Icons.upload_file_rounded),
+                  label: const Text('Загрузить PNG/SVG'),
+                ),
+                if (hasCustomLogo)
+                  OutlinedButton.icon(
+                    onPressed: _saving ? null : _clearCustomLogo,
+                    icon: const Icon(Icons.delete_outline_rounded),
+                    label: const Text('Вернуть пресет'),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            SwitchListTile.adaptive(
+              value: _removeLightBackground,
+              onChanged: _saving
+                  ? null
+                  : (value) async {
+                      final messenger = ScaffoldMessenger.of(context);
+                      setState(() => _removeLightBackground = value);
+                      await ref.read(projectBrandingProvider.notifier).updateSettings(
+                            removeLightBackground: value,
+                          );
+                      if (!mounted) return;
+                      messenger.showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            value
+                                ? 'Удаление светлого фона включено'
+                                : 'Удаление светлого фона выключено',
+                          ),
+                        ),
+                      );
+                    },
+              title: const Text(
+                'Удалять светлый фон',
+                style: TextStyle(fontWeight: FontWeight.w700),
+              ),
+              subtitle: const Text(
+                'Полезно для PNG с белой/серой подложкой',
+              ),
+              contentPadding: EdgeInsets.zero,
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Масштаб логотипа: ${_logoScalePercent.round()}%',
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                color: AppColors.textPrimary,
+              ),
+            ),
+            Slider(
+              min: 80,
+              max: 160,
+              divisions: 80,
+              value: _logoScalePercent.clamp(80, 160),
+              label: '${_logoScalePercent.round()}%',
+              onChanged: _saving
+                  ? null
+                  : (value) => setState(() => _logoScalePercent = value),
+              onChangeEnd: _saving
+                  ? null
+                  : (value) async {
+                      final rounded = value.round().clamp(80, 160);
+                      setState(() => _logoScalePercent = rounded.toDouble());
+                      await ref.read(projectBrandingProvider.notifier).updateSettings(
+                            logoScalePercent: rounded,
+                          );
+                    },
+            ),
+            const SizedBox(height: 24),
+            Row(
+              children: [
+                FilledButton.icon(
+                  onPressed: _saving ? null : _saveBranding,
+                  icon: _saving
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.save_rounded),
+                  label: const Text('Сохранить настройки'),
+                ),
+                const SizedBox(width: 10),
+                TextButton.icon(
+                  onPressed: _saving ? null : _resetDefaults,
+                  icon: const Icon(Icons.restore_rounded),
+                  label: const Text('Сбросить'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _selectPresetLogo(String assetPath) async {
+    await ref.read(projectBrandingProvider.notifier).updateSettings(
+          logoAssetPath: assetPath,
+          clearCustomLogo: true,
+        );
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Пресет логотипа применен')),
+    );
+  }
+
+  Future<void> _pickCustomLogo() async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: const ['png', 'jpg', 'jpeg', 'svg', 'webp'],
+      withData: true,
+    );
+    if (result == null || result.files.isEmpty) return;
+    final file = result.files.single;
+    final bytes = file.bytes;
+    if (bytes == null || bytes.isEmpty) return;
+
+    final ext = (file.extension ?? '').toLowerCase();
+    final mime = switch (ext) {
+      'svg' => 'image/svg+xml',
+      'jpg' || 'jpeg' => 'image/jpeg',
+      'webp' => 'image/webp',
+      _ => 'image/png',
+    };
+    final dataUrl = 'data:$mime;base64,${base64Encode(bytes)}';
+    await ref.read(projectBrandingProvider.notifier).updateSettings(
+          customLogoDataUrl: dataUrl,
+        );
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Логотип загружен и оптимизирован')),
+    );
+  }
+
+  Future<void> _clearCustomLogo() async {
+    await ref.read(projectBrandingProvider.notifier).updateSettings(
+          clearCustomLogo: true,
+        );
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Возврат к пресету выполнен')),
+    );
+  }
+
+  Future<void> _saveBranding() async {
+    final appName = _nameController.text.trim();
+    if (appName.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Название проекта не может быть пустым')),
+      );
+      return;
+    }
+    setState(() => _saving = true);
+    try {
+      await ref.read(projectBrandingProvider.notifier).updateSettings(
+            appName: appName,
+            description: _descriptionController.text.trim(),
+            removeLightBackground: _removeLightBackground,
+            logoScalePercent: _logoScalePercent.round().clamp(80, 160),
+          );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Настройки проекта сохранены')),
+      );
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  Future<void> _resetDefaults() async {
+    await ref.read(projectBrandingProvider.notifier).resetDefaults();
+    const defaults = ProjectBrandingSettings.defaults;
+    setState(() {
+      _nameController.text = defaults.appName;
+      _descriptionController.text = defaults.description;
+      _removeLightBackground = defaults.removeLightBackground;
+      _logoScalePercent = defaults.logoScalePercent.toDouble();
+    });
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Сброшено к настройкам по умолчанию')),
     );
   }
 }

@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">My Church Gold Logo</title>
+  <desc id="desc">Geometric gold church logo with a cross cutout.</desc>
+  <defs>
+    <linearGradient id="gold" x1="110" y1="95" x2="390" y2="430" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#E5CC84"/>
+      <stop offset="0.6" stop-color="#C8A858"/>
+      <stop offset="1" stop-color="#A7873D"/>
+    </linearGradient>
+  </defs>
+
+  <path fill="url(#gold)"
+    d="M248 70c3-2 7-2 10 0l70 40c4 3 6 8 6 13v53h54c9 0 15 8 15 16v80c0 8-6 16-15 16h-54v108c0 6-4 12-10 15l-63 28c-4 2-8 2-12 0l-63-28c-6-3-10-9-10-15V288h-54c-9 0-15-8-15-16v-80c0-8 6-16 15-16h54v-53c0-5 2-10 6-13z"/>
+  <path fill="#fff"
+    d="M244 112h24v70h70v24h-70v198h-24V206h-70v-24h70z"/>
+</svg>

@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:intl/date_symbol_data_local.dart';
 
+import 'core/project/project_branding_provider.dart';
 import 'core/theme/app_theme.dart';
 import 'features/auth/presentation/widgets/auth_gate.dart';
 
@@ -21,13 +22,14 @@ void main() async {
   runApp(const ProviderScope(child: MyApp()));
 }
 
-class MyApp extends StatelessWidget {
+class MyApp extends ConsumerWidget {
   const MyApp({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final branding = ref.watch(projectBrandingValueProvider);
     return MaterialApp(
-      title: 'МОЯ ЦЕРКОВЬ',
+      title: branding.appName,
       debugShowCheckedModeBanner: false,
       locale: const Locale('ru'),
       supportedLocales: const [Locale('ru'), Locale('en')],
@@ -37,7 +39,7 @@ class MyApp extends StatelessWidget {
         GlobalCupertinoLocalizations.delegate,
       ],
       theme: ThemeData(
-        colorScheme: ColorScheme.light(
+        colorScheme: const ColorScheme.light(
           primary: AppColors.primary,
           onPrimary: AppColors.textOnPrimary,
           secondary: AppColors.accent,
@@ -106,6 +108,13 @@ class MyApp extends StatelessWidget {
           ),
         ),
       ),
+      builder: (context, child) {
+        return GestureDetector(
+          behavior: HitTestBehavior.translucent,
+          onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
+          child: child ?? const SizedBox.shrink(),
+        );
+      },
       home: const AuthGate(),
     );
   }

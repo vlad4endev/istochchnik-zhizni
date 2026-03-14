@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-labelledby="title desc">
+  <title id="title">Church Logo</title>
+  <desc id="desc">Elegant minimalist church logo with a cross and abstract community arcs.</desc>
+
+  <defs>
+    <linearGradient id="mainWarm" x1="250" y1="140" x2="760" y2="820" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#5C1325" />
+      <stop offset="55%" stop-color="#8C2C3F" />
+      <stop offset="100%" stop-color="#C1684B" />
+    </linearGradient>
+    <linearGradient id="accentWarm" x1="330" y1="470" x2="690" y2="830" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#D58A57" />
+      <stop offset="100%" stop-color="#E8B67A" />
+    </linearGradient>
+  </defs>
+
+  <rect width="1024" height="1024" fill="#FFFFFF" />
+
+  <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <!-- Minimal church silhouette with integrated cross -->
+    <path
+      d="M512 170
+         V124
+         M486 148 H538
+         M512 170
+         L512 236
+         C420 288 340 382 320 506
+         C306 590 316 690 336 782
+         C422 774 500 742 560 690
+         C630 630 670 550 676 458
+         C682 346 614 244 512 170"
+      stroke="url(#mainWarm)"
+      stroke-width="30"
+    />
+
+    <!-- Community arcs: two abstract figures embracing -->
+    <path
+      d="M374 744
+         C430 730 480 706 514 664
+         C544 626 554 582 546 548
+         C536 506 500 494 472 512
+         C436 534 414 586 404 640
+         C398 672 398 708 404 742"
+      stroke="url(#mainWarm)"
+      stroke-width="30"
+    />
+    <path
+      d="M418 812
+         C488 792 564 792 624 758
+         C666 734 686 696 684 654
+         C682 612 654 582 616 562
+         C584 546 560 526 562 502
+         C566 472 602 468 626 490
+         C648 510 666 542 694 556"
+      stroke="url(#accentWarm)"
+      stroke-width="30"
+    />
+  </g>
+</svg>

@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 
 import '../../../../core/auth/auth_token_store.dart';
+import '../../../../core/config/app_config.dart';
 import '../../domain/entities/day_prayer_model.dart';
 import '../../domain/repositories/calendar_repository.dart';
 import '../dto/day_prayer_dto.dart';
@@ -10,7 +11,7 @@ class CalendarRepositoryImpl implements CalendarRepository {
   CalendarRepositoryImpl({Dio? dio}) : _dio = dio ?? Dio();
 
   final Dio _dio;
-  static const String _baseUrl = 'http://localhost:3000/api/calendar';
+  static final String _baseUrl = AppConfig.calendarApiBaseUrl;
 
   @override
   Future<DayPrayerModel> getPrayerDataByDate(String date) async {

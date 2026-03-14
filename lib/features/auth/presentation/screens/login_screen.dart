@@ -3,17 +3,22 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
 
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/widgets/app_logo.dart';
 import '../providers/auth_provider.dart';
 
+const _authLogoHeroTag = 'auth_logo_hero';
+
 class LoginScreen extends ConsumerStatefulWidget {
-  const LoginScreen({super.key});
+  const LoginScreen({super.key, this.initialMode = AuthMode.signIn});
+
+  final AuthMode initialMode;
 
   @override
   ConsumerState<LoginScreen> createState() => _LoginScreenState();
 }
 
 class _LoginScreenState extends ConsumerState<LoginScreen> {
-  bool _isRegisterMode = false;
+  late bool _isRegisterMode;
   final _firstNameController = TextEditingController();
   final _lastNameController = TextEditingController();
   final _phoneController = TextEditingController();
@@ -29,6 +34,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   bool _isSubmitting = false;
   bool _isPasswordObscured = true;
   bool _isConfirmPasswordObscured = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _isRegisterMode = widget.initialMode == AuthMode.signUp;
+  }
 
   @override
   void dispose() {
@@ -266,6 +277,17 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+    ref.listen<AsyncValue<AuthSession?>>(authControllerProvider, (_, next) {
+      final session = next.valueOrNull;
+      if (session == null || !mounted) {
+        return;
+      }
+      final navigator = Navigator.of(context);
+      if (navigator.canPop()) {
+        navigator.popUntil((route) => route.isFirst);
+      }
+    });
+
     final title = _isRegisterMode ? 'Создание аккаунта' : 'Вход в систему';
 
     return Scaffold(
@@ -293,17 +315,24 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         mainAxisSize: MainAxisSize.min,
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          Container(
-                            width: 64,
-                            height: 64,
-                            decoration: BoxDecoration(
-                              color: AppColors.primary.withValues(alpha: 0.12),
-                              shape: BoxShape.circle,
-                            ),
-                            child: const Icon(
-                              Icons.lock_rounded,
-                              color: AppColors.primary,
-                              size: 30,
+                          Hero(
+                            tag: _authLogoHeroTag,
+                            child: Material(
+                              color: Colors.transparent,
+                              child: Container(
+                                width: 72,
+                                height: 72,
+                                decoration: BoxDecoration(
+                                  color: AppColors.primary.withValues(
+                                    alpha: 0.12,
+                                  ),
+                                  borderRadius: BorderRadius.circular(
+                                    AppRadius.lg,
+                                  ),
+                                ),
+                                alignment: Alignment.center,
+                                child: const AppLogo(size: 44),
+                              ),
                             ),
                           ),
                           const SizedBox(height: 14),
@@ -457,6 +486,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     );
   }
 }
+
+enum AuthMode { signIn, signUp }
 
 class _ModeChip extends StatelessWidget {
   const _ModeChip({

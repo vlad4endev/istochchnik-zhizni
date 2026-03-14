@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:intl/intl.dart';
 
 import '../../../../core/auth/auth_token_store.dart';
+import '../../../../core/config/app_config.dart';
 import '../../domain/entities/admin_backslider.dart';
 import '../../domain/entities/admin_direction_template.dart';
 import '../../domain/entities/admin_member.dart';
@@ -20,8 +21,8 @@ class AdminRepositoryImpl implements AdminRepository {
   AdminRepositoryImpl({Dio? dio}) : _dio = dio ?? Dio();
 
   final Dio _dio;
-  static const String _baseUrl = 'http://localhost:3000/api/users';
-  static const String _calendarBaseUrl = 'http://localhost:3000/api/calendar';
+  static final String _baseUrl = AppConfig.usersApiBaseUrl;
+  static final String _calendarBaseUrl = AppConfig.calendarApiBaseUrl;
 
   Options _options({bool requireAdmin = false}) {
     final headers = <String, String>{};
