@@ -1,0 +1,16 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: istochnik-api
+    restart: unless-stopped
+    environment:
+      PORT: ${PORT:-3000}
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL must be set}
+      DB_SSL: ${DB_SSL:-true}
+      DB_SSL_REJECT_UNAUTHORIZED: ${DB_SSL_REJECT_UNAUTHORIZED:-false}
+      AUTH_SESSION_TTL_DAYS: ${AUTH_SESSION_TTL_DAYS:-30}
+      AUTH_MAX_ACTIVE_SESSIONS_PER_USER: ${AUTH_MAX_ACTIVE_SESSIONS_PER_USER:-5}
+    ports:
+      - "${PORT:-3000}:3000"
