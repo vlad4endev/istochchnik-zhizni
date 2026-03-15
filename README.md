@@ -21,6 +21,7 @@ cp .env.example .env
 ```env
 DB_SSL=true
 DB_SSL_REJECT_UNAUTHORIZED=false
+SKIP_DB_INIT_ON_START=true
 ```
 
 ### 2) Запуск контейнеров

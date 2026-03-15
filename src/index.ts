@@ -14,6 +14,7 @@ dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const skipDbInitOnStart = process.env.SKIP_DB_INIT_ON_START === 'true';
 
 app.use(cors());
 app.use(express.json());
@@ -34,8 +35,12 @@ app.use('/api/users', userRoutes);
 
 async function start(): Promise<void> {
   if (process.env.DATABASE_URL) {
-    await initDb();
-    console.log('Database tables initialized');
+    if (skipDbInitOnStart) {
+      console.log('Skipping database initialization on startup');
+    } else {
+      await initDb();
+      console.log('Database tables initialized');
+    }
   }
   app.listen(PORT, () => {
     console.log(`Server is running on http://localhost:${PORT}`);
