@@ -38,9 +38,20 @@ npm run prod:start
 
 После запуска:
 
-- API: `http://localhost:3000`
-- Health route: `http://localhost:3000/`
+- API: `http://localhost:40978`
+- Health route: `http://localhost:40978/`
 - База данных: внутри Docker-сети на хосте `db:5432`
+
+### Portainer: API + Web (интерфейс в контейнере)
+
+В `docker-compose.portainer.yml` добавлен сервис **web** — Flutter Web собирается в образе и отдаётся через nginx. Переменная **API_BASE_URL** задаётся при сборке (публичный URL API), например:
+
+```env
+API_BASE_URL=http://77.93.125.36:40978
+WEB_PORT=80
+```
+
+После деплоя интерфейс: `http://IP_СЕРВЕРА:80` (или другой порт из `WEB_PORT`).
 
 ### 3) Остановка
 
@@ -73,12 +84,12 @@ npm run prod:fresh    # полный пересоздание (с удалени
 
 ## Flutter Web and API URL
 
-Во Flutter убран хардкод `localhost:3000`; теперь используется `API_BASE_URL` через `--dart-define`.
+Во Flutter убран хардкод `localhost:40978`; теперь используется `API_BASE_URL` через `--dart-define`.
 
 ### Локальный запуск Flutter с внешним API
 
 ```bash
-flutter run -d chrome --dart-define=API_BASE_URL=http://localhost:3000
+flutter run -d chrome --dart-define=API_BASE_URL=http://localhost:40978
 ```
 
 ### Build Flutter web для продакшена

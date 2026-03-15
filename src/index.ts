@@ -13,7 +13,7 @@ import userRoutes from './routes/userRoutes';
 dotenv.config();
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 40978;
 const skipDbInitOnStart = process.env.SKIP_DB_INIT_ON_START === 'true';
 
 app.use(cors());
