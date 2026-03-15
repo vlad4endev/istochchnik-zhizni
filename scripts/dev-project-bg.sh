@@ -3,6 +3,7 @@ set -euo pipefail
 
 WEB_PORT="${WEB_PORT:-8081}"
 UI_PORT="$WEB_PORT"
+API_PORT="${API_PORT:-3000}"
 PID_DIR=".run"
 API_PID_FILE="${PID_DIR}/api.pid"
 UI_PID_FILE="${PID_DIR}/flutter.pid"
@@ -58,6 +59,25 @@ if ! kill -0 "${UI_PID}" 2>/dev/null; then
   rm -f "${UI_PID_FILE}" "${UI_PORT_FILE}"
   kill "${API_PID}" 2>/dev/null || true
   rm -f "${API_PID_FILE}"
+  exit 1
+fi
+
+API_HEALTH_OK=false
+for _ in {1..15}; do
+  if curl -fsS "http://localhost:${API_PORT}/" >/dev/null 2>&1; then
+    API_HEALTH_OK=true
+    break
+  fi
+  sleep 1
+done
+
+if [[ "${API_HEALTH_OK}" != "true" ]]; then
+  echo "Ошибка: API процесс запущен, но не отвечает на http://localhost:${API_PORT}/"
+  echo "Проверьте креды/доступ к БД в .env (DATABASE_URL)."
+  echo "Лог API: ${API_LOG_FILE}"
+  kill "${UI_PID}" 2>/dev/null || true
+  kill "${API_PID}" 2>/dev/null || true
+  rm -f "${API_PID_FILE}" "${UI_PID_FILE}" "${UI_PORT_FILE}"
   exit 1
 fi
 
