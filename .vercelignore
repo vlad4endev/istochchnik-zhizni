@@ -1,3 +1,4 @@
+# Не добавляйте сюда: lib/, web/, pubspec.yaml, assets/, scripts/ — иначе Flutter-сборка на Vercel сломается.
 node_modules
 dist
 .dart_tool

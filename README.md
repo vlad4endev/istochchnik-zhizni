@@ -2,6 +2,16 @@
 
 Монорепозиторий с Flutter UI и Node.js/TypeScript API.
 
+## Чтобы всё заработало (кратко)
+
+1. **Один раз:** из корня репозитория выполните `npm run quickstart` (создаст `.env` из примера, поставит зависимости, соберёт API). Откройте **`.env`** и укажите **`DATABASE_URL`**:
+   - **Вариант «всё локально»:** оставьте строку с `db:5432` из `.env.example` и поднимите Postgres через Docker (шаг 2).
+   - **Вариант Supabase:** вставьте строку подключения из Supabase (pooler **5432**, пароль из *Database password*), добавьте `?sslmode=require`, в том же файле включите `DB_SSL=true`, `DB_SSL_REJECT_UNAUTHORIZED=false`, `SKIP_DB_INIT_ON_START=true`.
+2. **Запуск с базой в Docker:** `docker compose up -d --build` → API: [http://localhost:40978/health](http://localhost:40978/health).
+3. **Интерфейс:** `npm run dev:start` (Flutter в Chrome + API) или соберите web и откройте статику; для Vercel задайте **`API_BASE_URL`** в настройках проекта.
+
+Если API не стартует — смотрите, что в **`.env`** корректный `DATABASE_URL` и база доступна.
+
 ## Project Docs
 
 - [Logo and icon guidelines](docs/logo-guidelines.md)
@@ -145,8 +155,7 @@ flutter build web --release --dart-define=API_BASE_URL=https://your-api-domain.c
 **Важно:** точка входа API в репозитории — `src/main.ts`, не `src/index.ts`. Vercel автоматически подключает Express, если найден `src/index.ts`, и тогда вместо Flutter отдаётся serverless API (в логах будет `[db] DATABASE_URL is not set` на `GET /`).
 
 1. Подключите репозиторий к [Vercel](https://vercel.com).
-2. В **Settings → Environment Variables** добавьте для Production (и при необходимости Preview):
-   - **`API_BASE_URL`** — полный URL API без слэша в конце, например `https://api.ваш-домен.ru` или `http://IP:40978` только для тестов.
+2. В **Settings → Environment Variables** добавьте **`API_BASE_URL`** (полный URL API без слэша в конце) и **включите галочки** для всех окружений, где собираете деплой: **Production**, **Preview** (и при необходимости **Development**). Иначе сборка на Vercel завершится с ошибкой: переменная не попадает в шаг **Build**.
 3. Сборка задаётся в `vercel.json`: `scripts/vercel-build.sh` ставит Flutter stable и выполняет `flutter build web --release`.
 4. После деплоя проверьте сайт; в браузере не должно быть обращений к `localhost` (иначе в билде не подставился `API_BASE_URL`).
 

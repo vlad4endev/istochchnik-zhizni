@@ -23,7 +23,8 @@
     "lint": "npx eslint src --ext .ts",
     "lint:fix": "npx eslint src --ext .ts --fix",
     "format": "npx prettier --write \"src/**/*.ts\"",
-    "db:init": "npx ts-node scripts/runInitDb.ts"
+    "db:init": "npx ts-node scripts/runInitDb.ts",
+    "quickstart": "bash scripts/quickstart.sh"
   },
   "keywords": [],
   "author": "",
