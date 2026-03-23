@@ -32,6 +32,6 @@ COPY --from=build /app/dist ./dist
 EXPOSE 40978
 
 HEALTHCHECK --interval=15s --timeout=5s --start-period=45s --retries=5 \
-  CMD-SHELL curl -fsS http://127.0.0.1:40978/health >/dev/null || exit 1
+  CMD ["curl", "-fsS", "http://127.0.0.1:40978/health"]
 
 CMD ["node", "dist/main.js"]
