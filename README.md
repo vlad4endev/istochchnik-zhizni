@@ -12,6 +12,10 @@
 
 Если API не стартует — смотрите, что в **`.env`** корректный `DATABASE_URL` и база доступна.
 
+### Supabase: `Circuit breaker open` или ошибка на порту 6543
+
+В Dashboard **Connect → Connection string** выберите **Session pooler** и порт **5432**, не **Transaction pooler** (6543). Скопируйте URI в `DATABASE_URL` (пользователь `postgres.<project-ref>`, `?sslmode=require`). Transaction pooler с 6543 может отдавать `Circuit breaker open` при миграциях и `psql` — это не пароль и не ваш сервер, а режим pooler.
+
 ## Project Docs
 
 - [Logo and icon guidelines](docs/logo-guidelines.md)
