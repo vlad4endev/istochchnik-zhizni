@@ -18,6 +18,13 @@ class AuthSession {
   final String role;
 }
 
+const _guestSession = AuthSession(
+  token: '',
+  firstName: 'Гость',
+  lastName: '',
+  role: 'member',
+);
+
 enum SignUpOutcomeType { approved, pending, failed }
 
 class SignUpOutcome {
@@ -104,6 +111,10 @@ class AuthController extends AsyncNotifier<AuthSession?> {
 
   @override
   Future<AuthSession?> build() async {
+    if (AppConfig.authDisabled) {
+      return _guestSession;
+    }
+
     await AuthTokenStore.load();
     final cachedSession = AuthTokenStore.cachedSession;
     if (cachedSession == null) {
@@ -168,6 +179,9 @@ class AuthController extends AsyncNotifier<AuthSession?> {
     required String phoneNumber,
     required String password,
   }) async {
+    if (AppConfig.authDisabled) {
+      return const SignInResult.failure('Вход временно отключён.');
+    }
     try {
       final response = await _dio.post<Map<String, dynamic>>(
         '$_baseUrl/login',
@@ -229,6 +243,12 @@ class AuthController extends AsyncNotifier<AuthSession?> {
     required String phoneNumber,
     required String password,
   }) async {
+    if (AppConfig.authDisabled) {
+      return const SignUpOutcome(
+        type: SignUpOutcomeType.failed,
+        message: 'Регистрация временно отключена.',
+      );
+    }
     try {
       final response = await _dio.post<Map<String, dynamic>>(
         '$_baseUrl/register',
@@ -309,6 +329,9 @@ class AuthController extends AsyncNotifier<AuthSession?> {
   }
 
   Future<void> signOut() async {
+    if (AppConfig.authDisabled) {
+      return;
+    }
     final current = state.valueOrNull;
     try {
       if (current != null && current.token.isNotEmpty) {

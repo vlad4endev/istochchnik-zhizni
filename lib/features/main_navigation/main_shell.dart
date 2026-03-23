@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/config/app_config.dart';
 import '../../../core/project/project_branding_provider.dart';
 import '../../../core/widgets/app_logo.dart';
 import '../auth/presentation/providers/auth_provider.dart';
@@ -22,6 +23,9 @@ class _MainShellState extends ConsumerState<MainShell> {
   int _currentIndex = 0;
 
   Future<void> _handleLogout() async {
+    if (AppConfig.authDisabled) {
+      return;
+    }
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -288,14 +292,15 @@ class _DesktopSidebar extends StatelessWidget {
               );
             }),
             const Spacer(),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
-              child: OutlinedButton.icon(
-                onPressed: onLogout,
-                icon: const Icon(Icons.logout_rounded),
-                label: const Text('Выйти из аккаунта'),
+            if (!AppConfig.authDisabled)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
+                child: OutlinedButton.icon(
+                  onPressed: onLogout,
+                  icon: const Icon(Icons.logout_rounded),
+                  label: const Text('Выйти из аккаунта'),
+                ),
               ),
-            ),
           ],
         ),
       ),

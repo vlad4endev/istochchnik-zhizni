@@ -3,6 +3,13 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 class AppConfig {
   const AppConfig._();
 
+  /// Пока `true` — экраны входа и регистрации скрыты, используется гостевой режим.
+  /// Верните `false` или задайте `--dart-define=AUTH_DISABLED=false` при сборке.
+  static const bool authDisabled = bool.fromEnvironment(
+    'AUTH_DISABLED',
+    defaultValue: true,
+  );
+
   static const String _rawApiBaseUrl = String.fromEnvironment(
     'API_BASE_URL',
     defaultValue: 'http://localhost:40978',

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/config/app_config.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/responsive.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
@@ -110,12 +111,14 @@ class ProfileScreen extends ConsumerWidget {
                         letterSpacing: 0.1,
                       ),
                     ),
-                    const SizedBox(height: 20),
-                    OutlinedButton.icon(
-                      onPressed: logout,
-                      icon: const Icon(Icons.logout_rounded),
-                      label: const Text('Выйти из аккаунта'),
-                    ),
+                    if (!AppConfig.authDisabled) ...[
+                      const SizedBox(height: 20),
+                      OutlinedButton.icon(
+                        onPressed: logout,
+                        icon: const Icon(Icons.logout_rounded),
+                        label: const Text('Выйти из аккаунта'),
+                      ),
+                    ],
                   ],
                 ),
               ),
