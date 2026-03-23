@@ -25,12 +25,16 @@ services:
       db:
         condition: service_healthy
     environment:
-      PORT: ${PORT:-3000}
+      PORT: ${PORT:-40978}
       DATABASE_URL: ${DATABASE_URL:?DATABASE_URL must be set}
+      DB_SSL: ${DB_SSL:-false}
+      DB_SSL_REJECT_UNAUTHORIZED: ${DB_SSL_REJECT_UNAUTHORIZED:-true}
+      DB_DEBUG_LOG: ${DB_DEBUG_LOG:-false}
+      SKIP_DB_INIT_ON_START: ${SKIP_DB_INIT_ON_START:-false}
       AUTH_SESSION_TTL_DAYS: ${AUTH_SESSION_TTL_DAYS:-30}
       AUTH_MAX_ACTIVE_SESSIONS_PER_USER: ${AUTH_MAX_ACTIVE_SESSIONS_PER_USER:-5}
     ports:
-      - "${PORT:-3000}:3000"
+      - "${PORT:-40978}:40978"
 
 volumes:
   postgres_data:

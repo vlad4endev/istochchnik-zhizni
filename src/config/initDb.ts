@@ -107,12 +107,11 @@ ALTER TABLE members ADD COLUMN IF NOT EXISTS password_hash TEXT;
 ALTER TABLE members ADD COLUMN IF NOT EXISTS phone_number VARCHAR(32);
 ALTER TABLE members ADD COLUMN IF NOT EXISTS ministry_role VARCHAR(120);
 ALTER TABLE members ADD COLUMN IF NOT EXISTS ministry_direction VARCHAR(120);
-ALTER TABLE members ADD COLUMN IF NOT EXISTS app_role VARCHAR(20) NOT NULL DEFAULT 'member';
+ALTER TABLE members ADD COLUMN IF NOT EXISTS app_role VARCHAR(16) NOT NULL DEFAULT 'member';
 ALTER TABLE members ADD COLUMN IF NOT EXISTS email VARCHAR(255);
 ALTER TABLE members ADD COLUMN IF NOT EXISTS account_provider VARCHAR(100);
 ALTER TABLE members ADD COLUMN IF NOT EXISTS account_id VARCHAR(255);
 ALTER TABLE members ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE;
-ALTER TABLE members ADD COLUMN IF NOT EXISTS app_role VARCHAR(16);
 ALTER TABLE members ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
 ALTER TABLE members ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
 UPDATE members
@@ -149,6 +148,84 @@ CREATE INDEX IF NOT EXISTS access_requests_status_idx
 
 CREATE INDEX IF NOT EXISTS access_requests_phone_digits_idx
   ON access_requests (phone_digits);
+
+CREATE INDEX IF NOT EXISTS idx_member_cycle_overrides_member_id
+  ON member_cycle_overrides (member_id);
+
+-- RPC aligned with src/services/calendarService.ts (overrides + is_active + sort order).
+CREATE OR REPLACE FUNCTION get_daily_prayer(target_date date)
+RETURNS json
+LANGUAGE plpgsql
+SET search_path = public
+AS $$
+DECLARE
+  v_start_date date;
+  v_day_diff integer;
+  v_total_members integer;
+  v_index integer;
+  v_member members%ROWTYPE;
+BEGIN
+  INSERT INTO global_settings (id, start_date)
+  VALUES (1, CURRENT_DATE)
+  ON CONFLICT (id) DO NOTHING;
+
+  SELECT m.*
+  INTO v_member
+  FROM member_cycle_overrides o
+  JOIN members m ON m.id = o.member_id
+  WHERE o.target_date = target_date
+    AND m.is_active = TRUE
+  LIMIT 1;
+
+  IF FOUND THEN
+    RETURN json_build_object('date', target_date, 'member', row_to_json(v_member));
+  END IF;
+
+  SELECT start_date INTO v_start_date FROM global_settings WHERE id = 1;
+
+  v_day_diff := target_date - v_start_date;
+
+  SELECT COUNT(*)::integer INTO v_total_members
+  FROM members
+  WHERE is_active = TRUE;
+
+  IF v_total_members = 0 THEN
+    RETURN json_build_object('date', target_date, 'member', NULL);
+  END IF;
+
+  v_index := ((v_day_diff % v_total_members) + v_total_members) % v_total_members;
+
+  SELECT m.*
+  INTO v_member
+  FROM members m
+  WHERE m.is_active = TRUE
+  ORDER BY
+    LOWER(COALESCE(NULLIF(trim(m.last_name), ''), split_part(trim(m.name), ' ', 1))) ASC,
+    LOWER(COALESCE(NULLIF(trim(m.first_name), ''), m.name)) ASC,
+    m.id ASC
+  LIMIT 1 OFFSET v_index;
+
+  RETURN json_build_object('date', target_date, 'member', row_to_json(v_member));
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION set_access_requests_updated_at()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SET search_path = public
+AS $$
+BEGIN
+  NEW.updated_at := NOW();
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trg_access_requests_updated_at ON access_requests;
+
+CREATE TRIGGER trg_access_requests_updated_at
+BEFORE UPDATE ON access_requests
+FOR EACH ROW
+EXECUTE FUNCTION set_access_requests_updated_at();
 
 CREATE OR REPLACE FUNCTION reset_cycle_on_member_change()
 RETURNS TRIGGER

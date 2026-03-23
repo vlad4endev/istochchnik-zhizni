@@ -1,0 +1,12 @@
+node_modules
+dist
+.dart_tool
+android
+ios
+linux
+macos
+windows
+.git
+**/.DS_Store
+coverage
+*.log

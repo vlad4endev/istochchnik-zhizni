@@ -1,0 +1,35 @@
+# Проверка, что веб-сборка не ломается (как на Vercel).
+name: Flutter web
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Dependencies
+        run: flutter pub get
+
+      - name: Build web (same flags as scripts/vercel-build.sh)
+        env:
+          # Заглушка: в рантайме приложение берёт URL из билда; для CI важна только успешная компиляция.
+          API_BASE_URL: https://example.com
+        run: |
+          flutter build web --release \
+            --base-href=/ \
+            --no-web-resources-cdn \
+            --dart-define=API_BASE_URL=$API_BASE_URL
+
+      - name: List output
+        run: ls -la build/web | head -20

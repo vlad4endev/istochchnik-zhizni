@@ -3,7 +3,7 @@ set -euo pipefail
 
 WEB_PORT="${WEB_PORT:-8081}"
 UI_PORT="$WEB_PORT"
-API_PORT="${API_PORT:-3000}"
+API_PORT="${API_PORT:-40978}"
 PID_DIR=".run"
 API_PID_FILE="${PID_DIR}/api.pid"
 UI_PID_FILE="${PID_DIR}/flutter.pid"

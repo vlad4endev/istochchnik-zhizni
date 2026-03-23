@@ -3,7 +3,7 @@ class AppConfig {
 
   static const String _rawApiBaseUrl = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: 'http://localhost:3000',
+    defaultValue: 'http://localhost:40978',
   );
 
   static String get apiBaseUrl => _rawApiBaseUrl.replaceFirst(RegExp(r'/$'), '');

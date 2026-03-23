@@ -1,3 +1,7 @@
+/**
+ * Точка входа HTTP-сервера. Не называть файл src/index.ts — Vercel тогда
+ * подхватывает Express как serverless и ломает деплой статического Flutter web.
+ */
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
@@ -27,6 +31,10 @@ app.use(enforceRoleAccess);
 
 app.get('/', (req, res) => {
   res.json({ message: 'Server is running' });
+});
+
+app.get('/health', (_req, res) => {
+  res.status(200).json({ status: 'ok' });
 });
 
 app.use('/api', routes);

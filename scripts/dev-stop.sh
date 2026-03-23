@@ -31,8 +31,8 @@ for pid_file in "${API_PID_FILE}" "${UI_PID_FILE}"; do
 done
 
 for pattern in \
-  "ts-node-dev --respawn src/index.ts" \
-  "node dist/index.js" \
+  "ts-node-dev --respawn src/main.ts" \
+  "node dist/main.js" \
   "flutter run -d chrome --web-port"; do
   if pgrep -f "${pattern}" >/dev/null 2>&1; then
     echo "Stopping process: ${pattern}"
