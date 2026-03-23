@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
 
+import '../../../../core/config/app_config.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widgets/app_logo.dart';
 import '../providers/auth_provider.dart';
@@ -82,7 +83,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       _statusText = null;
     });
 
-    final ok = await ref
+    final result = await ref
         .read(authControllerProvider.notifier)
         .signIn(phoneNumber: phone, password: password);
 
@@ -92,8 +93,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
     setState(() {
       _isSubmitting = false;
-      _statusText = ok ? null : 'Не удалось войти. Проверьте телефон и пароль.';
-      _isErrorStatus = !ok;
+      if (result.ok) {
+        _statusText = null;
+        _isErrorStatus = false;
+      } else {
+        _statusText =
+            result.message ?? 'Не удалось войти. Проверьте телефон и пароль.';
+        _isErrorStatus = true;
+      }
     });
   }
 
@@ -355,6 +362,40 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                             ),
                           ),
                           const SizedBox(height: 18),
+                          if (AppConfig.isApiUrlProbablyWrongForWeb)
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 16),
+                              child: Material(
+                                color: Colors.red.shade50,
+                                borderRadius: BorderRadius.circular(AppRadius.md),
+                                child: Padding(
+                                  padding: const EdgeInsets.all(12),
+                                  child: Row(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Icon(
+                                        Icons.warning_amber_rounded,
+                                        color: Colors.red.shade700,
+                                        size: 22,
+                                      ),
+                                      const SizedBox(width: 10),
+                                      Expanded(
+                                        child: Text(
+                                          'Сайт собран без адреса API (в билде остался localhost). '
+                                          'В Vercel: Environment Variables → API_BASE_URL = ваш публичный HTTPS API → Redeploy.',
+                                          style: TextStyle(
+                                            color: Colors.red.shade900,
+                                            fontSize: 13,
+                                            height: 1.35,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
                           _modeToggle(),
                           const SizedBox(height: 16),
                           if (_isRegisterMode) ...[

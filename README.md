@@ -155,13 +155,15 @@ flutter build web --release --dart-define=API_BASE_URL=https://your-api-domain.c
 **Важно:** точка входа API в репозитории — `src/main.ts`, не `src/index.ts`. Vercel автоматически подключает Express, если найден `src/index.ts`, и тогда вместо Flutter отдаётся serverless API (в логах будет `[db] DATABASE_URL is not set` на `GET /`).
 
 1. Подключите репозиторий к [Vercel](https://vercel.com).
-2. В **Settings → Environment Variables** добавьте **`API_BASE_URL`** (полный URL API без слэша в конце) и **включите галочки** для всех окружений, где собираете деплой: **Production**, **Preview** (и при необходимости **Development**). Иначе сборка на Vercel завершится с ошибкой: переменная не попадает в шаг **Build**.
+2. В **Settings → Environment Variables** добавьте **`API_BASE_URL`** (полный URL API без слэша в конце). **Обязательно** отметьте окружения **Production** и **Preview** (деплой с ветки `main` — Production; PR и другие ветки — Preview; если у переменной только Production, сборка Preview упадёт с «API_BASE_URL не задана»). Сохраните и сделайте **Redeploy**.
 3. Сборка задаётся в `vercel.json`: `scripts/vercel-build.sh` ставит Flutter stable и выполняет `flutter build web --release`.
 4. После деплоя проверьте сайт; в браузере не должно быть обращений к `localhost` (иначе в билде не подставился `API_BASE_URL`).
 
 **CORS:** API использует открытый `cors()` — запросы с домена Vercel обычно проходят. Если ограничите CORS на бэкенде, добавьте origin вида `https://<проект>.vercel.app`.
 
 **Белый экран после деплоя:** сборка на Vercel использует `--no-web-resources-cdn`, чтобы CanvasKit не загружался с CDN Google (в части сетей он недоступен — тогда интерфейс не поднимается). После правок сделайте redeploy. В DevTools → Network проверьте, что нет массовых 404 по `main.dart.js` / `flutter_bootstrap.js`.
+
+**Логи Vercel:** строка `Woah! You appear to be trying to run flutter as root` — ожидаемо на их сборщике; на результат не влияет. Сообщение `flutter pub outdated` — только напоминание про новые версии пакетов, не ошибка.
 
 **Дальше (чеклист):**
 

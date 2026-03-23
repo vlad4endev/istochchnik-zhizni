@@ -6,6 +6,8 @@ cd "$ROOT"
 
 export FLUTTER_SUPPRESS_ANALYTICS=true
 export GIT_TERMINAL_PROMPT=0
+# Режим CI: Vercel часто запускает билд от root — предупреждение Flutter «Woah! root» можно игнорировать.
+export CI=true
 
 log() {
   echo "[vercel-build] $*"
@@ -16,8 +18,25 @@ fail() {
   exit 1
 }
 
+# Дубликат имени (если случайно завели как у Next.js)
+if [[ -z "${API_BASE_URL:-}" && -n "${NEXT_PUBLIC_API_BASE_URL:-}" ]]; then
+  export API_BASE_URL="$NEXT_PUBLIC_API_BASE_URL"
+fi
+
+log "VERCEL_ENV=${VERCEL_ENV:-unset} (Preview-деплои требуют отдельной галочки для переменной)"
+
 if [[ -z "${API_BASE_URL:-}" ]]; then
-  fail "Переменная API_BASE_URL не задана. В Vercel: Project → Settings → Environment Variables → добавьте API_BASE_URL и отметьте галочки Production и Preview (и при необходимости Development), затем Redeploy. Без неё сборка не может подставить URL API в билд."
+  fail "Переменная API_BASE_URL не задана на шаге Build.
+
+Что сделать в Vercel:
+  1) Project → Settings → Environment Variables → Add New
+  2) Name: API_BASE_URL
+  3) Value: публичный URL вашего API, например https://api.example.com (без слэша в конце)
+  4) Environments: отметьте ВСЕ, что используете — как минимум Production И Preview
+     (ветки и PR собираются как Preview; если галочка только у Production — сборка Preview упадёт)
+  5) Save → Deployments → … → Redeploy
+
+Локальная проверка: API_BASE_URL=https://... bash scripts/vercel-build.sh"
 fi
 
 log "API_BASE_URL задан (длина ${#API_BASE_URL} символов)"

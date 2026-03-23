@@ -30,9 +30,77 @@ class SignUpOutcome {
 final authControllerProvider =
     AsyncNotifierProvider<AuthController, AuthSession?>(AuthController.new);
 
+class SignInResult {
+  const SignInResult.success() : ok = true, message = null;
+  const SignInResult.failure(this.message) : ok = false;
+  final bool ok;
+  final String? message;
+}
+
 class AuthController extends AsyncNotifier<AuthSession?> {
   static final String _baseUrl = AppConfig.authApiBaseUrl;
-  final Dio _dio = Dio();
+  final Dio _dio = Dio(
+    BaseOptions(
+      connectTimeout: const Duration(seconds: 25),
+      receiveTimeout: const Duration(seconds: 25),
+      sendTimeout: const Duration(seconds: 25),
+      headers: const {'Accept': 'application/json'},
+    ),
+  );
+
+  static String? _serverErrorMessage(dynamic data) {
+    if (data is Map<String, dynamic>) {
+      final err = data['error'];
+      if (err is String && err.trim().isNotEmpty) {
+        return err.trim();
+      }
+    }
+    return null;
+  }
+
+  static String _humanizeServerError(String raw) {
+    if (raw == 'Database error') {
+      return 'Ошибка базы данных на сервере. Проверьте DATABASE_URL на хосте API '
+          '(пароль, порт, SSL) и что миграции применены к этой базе.';
+    }
+    return raw;
+  }
+
+  static String _mapDioError(DioException e) {
+    switch (e.type) {
+      case DioExceptionType.connectionTimeout:
+      case DioExceptionType.connectionError:
+      case DioExceptionType.sendTimeout:
+      case DioExceptionType.receiveTimeout:
+        return 'Нет связи с сервером. Частая причина: в сборке Flutter не задан '
+            'API_BASE_URL на ваш публичный API (не localhost). На Vercel: '
+            'Environment Variables → API_BASE_URL → Redeploy. Страница HTTPS '
+            'не может вызывать HTTP-API (нужен HTTPS).';
+      case DioExceptionType.badCertificate:
+        return 'Ошибка проверки SSL-сертификата сервера.';
+      case DioExceptionType.badResponse:
+        final server = _serverErrorMessage(e.response?.data);
+        if (server != null) {
+          return _humanizeServerError(server);
+        }
+        break;
+      default:
+        break;
+    }
+    final code = e.response?.statusCode;
+    if (code == 401 || code == 403) {
+      return 'Неверный телефон или пароль.';
+    }
+    final server = _serverErrorMessage(e.response?.data);
+    if (server != null) {
+      return _humanizeServerError(server);
+    }
+    final msg = e.message;
+    if (msg != null && msg.isNotEmpty) {
+      return msg;
+    }
+    return 'Ошибка сети.';
+  }
 
   @override
   Future<AuthSession?> build() async {
@@ -96,7 +164,7 @@ class AuthController extends AsyncNotifier<AuthSession?> {
     );
   }
 
-  Future<bool> signIn({
+  Future<SignInResult> signIn({
     required String phoneNumber,
     required String password,
   }) async {
@@ -105,19 +173,30 @@ class AuthController extends AsyncNotifier<AuthSession?> {
         '$_baseUrl/login',
         data: {'phone_number': phoneNumber.trim(), 'password': password},
         options: Options(
-          validateStatus: (status) => status != null && status < 500,
+          validateStatus: (status) => status != null && status < 600,
         ),
       );
 
       if (response.statusCode != 200 || response.data == null) {
-        return false;
+        if (response.statusCode == 401 || response.statusCode == 400) {
+          return const SignInResult.failure('Неверный телефон или пароль.');
+        }
+        if (response.statusCode == 500) {
+          final raw = _serverErrorMessage(response.data);
+          return SignInResult.failure(
+            raw != null
+                ? _humanizeServerError(raw)
+                : 'Сервер вернул ошибку. Попробуйте позже.',
+          );
+        }
+        return const SignInResult.failure('Не удалось войти. Попробуйте позже.');
       }
 
       final data = response.data!;
       final token = data['token'] as String?;
       final user = data['user'] as Map<String, dynamic>?;
       if (token == null || user == null || token.isEmpty) {
-        return false;
+        return const SignInResult.failure('Неверный телефон или пароль.');
       }
 
       final session = AuthSession(
@@ -134,9 +213,13 @@ class AuthController extends AsyncNotifier<AuthSession?> {
         role: session.role,
       );
       state = AsyncData(session);
-      return true;
+      return const SignInResult.success();
+    } on DioException catch (e) {
+      return SignInResult.failure(_mapDioError(e));
     } catch (_) {
-      return false;
+      return const SignInResult.failure(
+        'Не удалось войти. Проверьте соединение и настройку API_BASE_URL.',
+      );
     }
   }
 
@@ -156,11 +239,21 @@ class AuthController extends AsyncNotifier<AuthSession?> {
           'password': password,
         },
         options: Options(
-          validateStatus: (status) => status != null && status < 500,
+          validateStatus: (status) => status != null && status < 600,
         ),
       );
 
       final data = response.data ?? const <String, dynamic>{};
+
+      if (response.statusCode == 500) {
+        final raw = _serverErrorMessage(data);
+        return SignUpOutcome(
+          type: SignUpOutcomeType.failed,
+          message: raw != null
+              ? _humanizeServerError(raw)
+              : 'Сервер вернул ошибку. Попробуйте позже.',
+        );
+      }
 
       if (response.statusCode == 201 && data['status'] == 'approved') {
         final token = data['token'] as String?;
@@ -201,10 +294,16 @@ class AuthController extends AsyncNotifier<AuthSession?> {
         message:
             (data['error'] as String?)?.trim() ?? 'Регистрация не удалась.',
       );
+    } on DioException catch (e) {
+      return SignUpOutcome(
+        type: SignUpOutcomeType.failed,
+        message: _mapDioError(e),
+      );
     } catch (_) {
       return const SignUpOutcome(
         type: SignUpOutcomeType.failed,
-        message: 'Не удалось отправить регистрацию. Проверьте соединение.',
+        message:
+            'Не удалось обработать ответ сервера. Проверьте соединение и API_BASE_URL.',
       );
     }
   }
