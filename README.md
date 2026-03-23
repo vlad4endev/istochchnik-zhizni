@@ -20,6 +20,27 @@
 
 Должно быть полностью **`sslmode=require`**, не `requir` и не обрезанная строка при копировании. Проверьте конец `DATABASE_URL` в `.env`.
 
+### Расхождение истории миграций (`migration repair`, `db pull`)
+
+Если `supabase db push` ругается на уже применённые версии или «битую» таблицу истории на удалённой БД:
+
+1. Обновите репозиторий: `git pull`.
+2. Подставьте **номер версии из текста ошибки CLI** (формат `YYYYMMDDHHMMSS`, не имя файла). В репозитории может не быть файла с этим префиксом — тогда версия записана только в удалённой БД.
+3. Пометить миграцию как откатанную (чтобы можно было синхронизировать историю). Версия — число из ошибки CLI, **первым аргументом** после `repair`:
+
+   ```bash
+   set -a && source .env && set +a
+   npx supabase@latest migration repair <VERSION> --status reverted --db-url "$DATABASE_URL"
+   ```
+
+4. Подтянуть схему с удалённой БД в локальные миграции (осторожно: создаст/изменит файлы — сделайте коммит или копию ветки до этого):
+
+   ```bash
+   npx supabase@latest db pull --db-url "$DATABASE_URL"
+   ```
+
+5. Снова `npx supabase@latest db push --db-url "$DATABASE_URL"` или `./scripts/supabase-db-push.sh`.
+
 ## Project Docs
 
 - [Logo and icon guidelines](docs/logo-guidelines.md)
