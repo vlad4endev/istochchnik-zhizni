@@ -7,7 +7,8 @@ const rawConnectionString = process.env.DATABASE_URL;
 const forceSsl = process.env.DB_SSL === 'true';
 const hasSslModeInConnectionString = rawConnectionString?.includes('sslmode=');
 const useSsl = forceSsl || Boolean(hasSslModeInConnectionString);
-const rejectUnauthorized = process.env.DB_SSL_REJECT_UNAUTHORIZED !== 'false';
+/** По умолчанию false — Supabase/managed Postgres часто дают SELF_SIGNED_CERT_IN_CHAIN при verify-full. Строгая проверка CA: DB_SSL_REJECT_UNAUTHORIZED=true */
+const rejectUnauthorized = process.env.DB_SSL_REJECT_UNAUTHORIZED === 'true';
 const dbDebugLog = process.env.DB_DEBUG_LOG === 'true';
 
 /**

@@ -20,6 +20,10 @@
 
 Должно быть полностью **`sslmode=require`**, не `requir` и не обрезанная строка при копировании. Проверьте конец `DATABASE_URL` в `.env`.
 
+### `SELF_SIGNED_CERT_IN_CHAIN` в логах API (Docker + Supabase)
+
+Задайте **`DB_SSL_REJECT_UNAUTHORIZED=false`** в окружении контейнера (или пересоберите образ с обновлённым `src/config/db.ts`: по умолчанию проверка цепочки CA отключена, пока явно не задано `true`). Без этого Node/pg отклоняет TLS к pooler Supabase.
+
 ### Расхождение истории миграций (`migration repair`, `db pull`)
 
 Если `supabase db push` ругается на уже применённые версии или «битую» таблицу истории на удалённой БД:
