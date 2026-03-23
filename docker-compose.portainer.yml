@@ -6,7 +6,7 @@ services:
     container_name: istochnik-api
     restart: unless-stopped
     environment:
-      PORT: ${PORT:-40978}
+      PORT: "40978"
       DATABASE_URL: ${DATABASE_URL:?DATABASE_URL must be set}
       DB_SSL: ${DB_SSL:-true}
       DB_SSL_REJECT_UNAUTHORIZED: ${DB_SSL_REJECT_UNAUTHORIZED:-false}
@@ -14,5 +14,7 @@ services:
       SKIP_DB_INIT_ON_START: ${SKIP_DB_INIT_ON_START:-true}
       AUTH_SESSION_TTL_DAYS: ${AUTH_SESSION_TTL_DAYS:-30}
       AUTH_MAX_ACTIVE_SESSIONS_PER_USER: ${AUTH_MAX_ACTIVE_SESSIONS_PER_USER:-5}
+      TRUST_PROXY: ${TRUST_PROXY:-true}
     ports:
+      # PORT в .env — порт на хосте; внутри контейнера API всегда 40978.
       - "${PORT:-40978}:40978"

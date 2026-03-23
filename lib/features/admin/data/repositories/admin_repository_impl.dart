@@ -21,8 +21,8 @@ class AdminRepositoryImpl implements AdminRepository {
   AdminRepositoryImpl({Dio? dio}) : _dio = dio ?? Dio();
 
   final Dio _dio;
-  static final String _baseUrl = AppConfig.usersApiBaseUrl;
-  static final String _calendarBaseUrl = AppConfig.calendarApiBaseUrl;
+  static String get _baseUrl => AppConfig.usersApiBaseUrl;
+  static String get _calendarBaseUrl => AppConfig.calendarApiBaseUrl;
 
   Options _options({bool requireAdmin = false}) {
     final headers = <String, String>{};

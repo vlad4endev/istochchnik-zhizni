@@ -67,4 +67,8 @@ flutter build web --release \
   --no-web-resources-cdn \
   --dart-define=API_BASE_URL="$API_BASE_URL"
 
+# Рантайм-конфиг для web: клиент читает `/api-config.json` с того же origin (см. AppConfig.initializeForWeb).
+log "Writing build/web/api-config.json..."
+node -e "const fs=require('fs'); fs.writeFileSync('build/web/api-config.json', JSON.stringify({apiBaseUrl: process.argv[1]}));" "$API_BASE_URL"
+
 log "Готово: build/web"

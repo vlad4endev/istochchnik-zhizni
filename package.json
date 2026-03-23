@@ -13,6 +13,8 @@
     "dev:status": "bash ./scripts/dev-status.sh",
     "dev:logs": "bash ./scripts/dev-logs.sh",
     "prod:start": "docker compose up -d --build",
+    "prod:deploy": "docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build",
+    "prod:deploy:down": "docker compose -f docker-compose.yml -f docker-compose.prod.yml down",
     "prod:stop": "docker compose down",
     "prod:restart": "npm run prod:stop && npm run prod:start",
     "prod:status": "docker compose ps",

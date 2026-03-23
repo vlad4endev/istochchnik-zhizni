@@ -1,9 +1,11 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import 'package:table_calendar/table_calendar.dart';
 
+import '../../../../core/config/app_config.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/responsive.dart';
 import '../../domain/entities/day_prayer_model.dart';
@@ -101,6 +103,7 @@ class _DailyPrayerScreenState extends ConsumerState<DailyPrayerScreen> {
               data: (data) => _PrayerCardsList(data: data),
               loading: () => _LoadingState(),
               error: (err, _) => _ErrorState(
+                error: err,
                 onRetry: () =>
                     ref.invalidate(prayerDataProvider(dateStr)),
               ),
@@ -208,6 +211,32 @@ class _SelectedDateChip extends StatelessWidget {
       a.year == b.year && a.month == b.month && a.day == b.day;
 }
 
+String? _loadErrorDescription(Object? error) {
+  if (error == null) {
+    return null;
+  }
+  if (error is DioException) {
+    final code = error.response?.statusCode;
+    final ct = error.response?.headers.value('content-type') ?? '';
+    if (code == 404) {
+      return 'Сервер вернул 404. Убедитесь, что API_BASE_URL — это хост бэкенда '
+          '(с маршрутом /api/calendar), а не только статика фронтенда на Vercel.';
+    }
+    if (ct.contains('text/html')) {
+      return 'Пришёл ответ HTML вместо JSON. Часто URL API совпадает с сайтом на Vercel '
+          '— укажите отдельный адрес сервера с бэкендом.';
+    }
+    if (error.type == DioExceptionType.connectionError) {
+      return 'Не удаётся подключиться к серверу. Проверьте CORS, HTTPS и доступность API.';
+    }
+    final msg = error.message;
+    if (msg != null && msg.isNotEmpty) {
+      return msg;
+    }
+  }
+  return error.toString();
+}
+
 class _LoadingState extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
@@ -241,13 +270,15 @@ class _LoadingState extends StatelessWidget {
 }
 
 class _ErrorState extends StatelessWidget {
-  const _ErrorState({required this.onRetry});
+  const _ErrorState({required this.onRetry, this.error});
 
   final VoidCallback onRetry;
+  final Object? error;
 
   @override
   Widget build(BuildContext context) {
     final padding = Responsive.horizontalPadding(context);
+    final detail = _loadErrorDescription(error);
     return Center(
       child: SingleChildScrollView(
         child: Padding(
@@ -280,7 +311,7 @@ class _ErrorState extends StatelessWidget {
             ),
             const SizedBox(height: 10),
             Text(
-              'Проверьте подключение к интернету\nи что сервер запущен',
+              'Проверьте подключение к интернету и что бэкенд доступен по HTTPS.',
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 15,
@@ -289,6 +320,44 @@ class _ErrorState extends StatelessWidget {
                 letterSpacing: 0.1,
               ),
             ),
+            if (detail != null) ...[
+              const SizedBox(height: 16),
+              Text(
+                detail,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 13,
+                  height: 1.45,
+                  color: AppColors.textSecondary,
+                  letterSpacing: 0.1,
+                ),
+              ),
+            ],
+            const SizedBox(height: 8),
+            Text(
+              'API: ${AppConfig.apiBaseUrlForDisplay}',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 12,
+                height: 1.4,
+                color: AppColors.textTertiary,
+                letterSpacing: 0.05,
+              ),
+            ),
+            if (AppConfig.isApiUrlProbablyWrongForWeb) ...[
+              const SizedBox(height: 12),
+              Text(
+                'Похоже, в сборке указан localhost вместо публичного API. '
+                'В Vercel: Environment Variables → API_BASE_URL → Redeploy.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 13,
+                  height: 1.45,
+                  color: AppColors.burgundy,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
             const SizedBox(height: 24),
             FilledButton.icon(
               onPressed: onRetry,

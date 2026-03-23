@@ -11,7 +11,7 @@ class CalendarRepositoryImpl implements CalendarRepository {
   CalendarRepositoryImpl({Dio? dio}) : _dio = dio ?? Dio();
 
   final Dio _dio;
-  static final String _baseUrl = AppConfig.calendarApiBaseUrl;
+  static String get _baseUrl => AppConfig.calendarApiBaseUrl;
 
   @override
   Future<DayPrayerModel> getPrayerDataByDate(String date) async {

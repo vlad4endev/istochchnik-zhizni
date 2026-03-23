@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/config/app_config.dart';
 import '../../data/repositories/admin_repository_impl.dart';
 import '../../domain/entities/admin_direction_template.dart';
 import '../../domain/entities/admin_member.dart';
@@ -10,7 +11,9 @@ import '../../domain/entities/upcoming_week_member_assignment.dart';
 import '../../domain/repositories/admin_repository.dart';
 
 final adminRepositoryProvider = Provider<AdminRepository>((ref) {
-  return AdminRepositoryImpl(dio: Dio());
+  return AdminRepositoryImpl(
+    dio: Dio(BaseOptions(baseUrl: AppConfig.dioBaseUrl)),
+  );
 });
 
 final adminMembersProvider =

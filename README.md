@@ -4,13 +4,25 @@
 
 ## Чтобы всё заработало (кратко)
 
-1. **Один раз:** из корня репозитория выполните `npm run quickstart` (создаст `.env` из примера, поставит зависимости, соберёт API). Откройте **`.env`** и укажите **`DATABASE_URL`**:
-   - **Вариант «всё локально»:** оставьте строку с `db:5432` из `.env.example` и поднимите Postgres через Docker (шаг 2).
-   - **Вариант Supabase:** вставьте строку подключения из Supabase (pooler **5432**, пароль из *Database password*), добавьте `?sslmode=require`, в том же файле включите `DB_SSL=true`, `DB_SSL_REJECT_UNAUTHORIZED=false`, `SKIP_DB_INIT_ON_START=true`.
-2. **Запуск с базой в Docker:** `docker compose up -d --build` → API: [http://localhost:40978/health](http://localhost:40978/health).
-3. **Интерфейс:** `npm run dev:start` (Flutter в Chrome + API) или соберите web и откройте статику; для Vercel задайте **`API_BASE_URL`** в настройках проекта.
+### Локальный веб-сервис (рекомендуется: БД + API + веб в Docker)
 
-Если API не стартует — смотрите, что в **`.env`** корректный `DATABASE_URL` и база доступна.
+Один стек: Postgres, Node API и Flutter web за **nginx** на одном порту для браузера — без отдельной настройки `API_BASE_URL` для LAN.
+
+1. **Один раз:** `npm run quickstart` или `cp .env.example .env` и при необходимости `npm ci && npm run build`. В **`.env`** задайте **`DATABASE_URL`**:
+   - **Всё локально:** строка с `db:5432` из `.env.example` (Postgres поднимается вместе с compose).
+   - **Supabase:** URI из Supabase (pooler **5432**), `?sslmode=require`, плюс `DB_SSL=true`, `DB_SSL_REJECT_UNAUTHORIZED=false`, `SKIP_DB_INIT_ON_START=true`.
+2. **Запуск:** `docker compose up -d --build` (или `npm run prod:start`). Первый раз дольше — собирается образ Flutter web.
+3. **Откройте в браузере:** [http://localhost:8080](http://localhost:8080) — интерфейс. Запросы к API идут на **тот же хост** (`/api/...`, прокси в nginx).
+4. **Проверки:** [http://localhost:8080/health](http://localhost:8080/health) (через nginx) и при необходимости прямой API: [http://localhost:40978/health](http://localhost:40978/health).
+
+Порт веба меняется переменной **`WEB_PORT`** в `.env`. Только API и БД без nginx: `docker compose up -d db api`.
+
+### Разработка без Docker (Flutter + API в терминале)
+
+- `npm run dev:start` — Flutter в Chrome и API в фоне.
+- Для Vercel задайте **`API_BASE_URL`** в настройках проекта (см. ниже).
+
+Если API не стартует — проверьте **`DATABASE_URL`** в **`.env`** и доступность базы.
 
 ### Supabase: `Circuit breaker open` или ошибка на порту 6543
 
@@ -51,6 +63,24 @@
 
 ## Docker Deployment (API + Postgres)
 
+### Продакшен на VPS (полный чеклист)
+
+1. **Сервер:** Docker и Docker Compose v2, открыт в фаерволе порт **`WEB_PORT`** (по умолчанию 8080).
+2. **Репозиторий и окружение:** `git clone` → `cp .env.example .env` → задать **`DATABASE_URL`**, для Supabase см. блоки выше (`DB_SSL`, `SKIP_DB_INIT_ON_START`).
+3. **Запуск с закрытым API наружу** (API только на `127.0.0.1`, браузер ходит в nginx на `WEB_PORT`):
+   ```bash
+   npm run prod:deploy
+   ```
+   или
+   ```bash
+   bash scripts/deploy-production.sh
+   ```
+   Локально / без ограничения API на loopback: `npm run prod:start` или `docker compose up -d --build`. Остановка этого режима: `npm run prod:stop`. Остановка после `prod:deploy`: `npm run prod:deploy:down`.
+4. **Проверка:** `http://<IP>:<WEB_PORT>/` — приложение; `http://<IP>:<WEB_PORT>/health` — health.
+5. **HTTPS:** поставьте на хосте Caddy / Traefik / nginx с TLS и прокси на `127.0.0.1:<WEB_PORT>` (не публикуйте API напрямую в интернет).
+6. **Переменная `PORT` в `.env`** — это порт **на хосте**, который пробрасывается **в** контейнер на **40978**. Внутри контейнера Node всегда слушает **40978** (так устроен прокси в `docker/nginx-web.unified.conf`).
+7. **Portainer, одна БД снаружи (Supabase):** файл **`docker-compose.portainer.stack.yml`** — стек **API + веб** без Postgres; задайте `DATABASE_URL` и `WEB_PORT` в UI.
+
 ### 1) Подготовка переменных окружения
 
 ```bash
@@ -81,19 +111,20 @@ npm run prod:start
 
 После запуска:
 
-- API: `http://localhost:40978`
-- Health: `http://localhost:40978/health` (удобно для балансировщика / Portainer)
-- Корень: `http://localhost:40978/`
+- **Веб-интерфейс:** `http://localhost:8080` (или `WEB_PORT` из `.env`) — nginx отдаёт Flutter и проксирует `/api` и `/health` к API.
+- API напрямую: `http://localhost:40978`
+- Health: `http://localhost:8080/health` или `http://localhost:40978/health`
+- Корень API: `http://localhost:40978/` (JSON «Server is running»)
 - База данных: внутри Docker-сети на хосте `db:5432`
 
 ### Portainer: production workflow (Supabase + API + Web)
 
-Для надёжного прод-развёртывания используйте два отдельных стека:
+Варианты:
 
-1. **API стек** через `docker-compose.portainer.yml`  
-   (без секретов в файле, все значения через Environment variables в Portainer).
-2. **Web runtime стек** через `docker-compose.portainer.web-runtime.yml`  
-   (только nginx + уже собранная папка Flutter web, без `flutter build` на сервере).
+- **Один стек (API + веб, сборка Flutter на сервере):** `docker-compose.portainer.stack.yml` — удобно, если на VPS хватает RAM/CPU под `flutter build`.
+- **Два стека (надёжно на слабом VPS):**
+  1. **API** — `docker-compose.portainer.yml` (секреты только через Environment в Portainer).
+  2. **Только nginx + готовая папка** — `docker-compose.portainer.web-runtime.yml` (без `flutter build` на сервере; соберите web локально и залейте в `WEB_DIST_PATH`).
 
 Это позволяет избежать частых падений сборки Flutter на слабом VPS.
 

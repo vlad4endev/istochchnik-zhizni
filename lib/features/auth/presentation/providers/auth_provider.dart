@@ -45,9 +45,10 @@ class SignInResult {
 }
 
 class AuthController extends AsyncNotifier<AuthSession?> {
-  static final String _baseUrl = AppConfig.authApiBaseUrl;
+  static String get _baseUrl => AppConfig.authApiBaseUrl;
   final Dio _dio = Dio(
     BaseOptions(
+      baseUrl: AppConfig.dioBaseUrl,
       connectTimeout: const Duration(seconds: 25),
       receiveTimeout: const Duration(seconds: 25),
       sendTimeout: const Duration(seconds: 25),

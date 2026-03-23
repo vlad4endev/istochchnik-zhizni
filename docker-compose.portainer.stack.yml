@@ -1,44 +1,31 @@
-services:
-  db:
-    image: postgres:16-alpine
-    container_name: istochnik-db
-    restart: unless-stopped
-    environment:
-      POSTGRES_DB: ${POSTGRES_DB:-istochik_db}
-      POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-istochik_db}"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
+# Один стек в Portainer: API + веб (nginx + Flutter), внешняя БД (Supabase и т.д.).
+# Секреты только через Environment в UI, не коммитьте .env с паролями.
+#
+# Развёртывание: Stack → Web editor → вставить этот файл + задать переменные ниже.
+#
+# Обязательные переменные:
+#   DATABASE_URL, WEB_PORT (например 8080)
+# Опционально: PORT (внутренний порт API, по умолчанию 40978)
 
+services:
   api:
     build:
       context: .
       dockerfile: Dockerfile
     container_name: istochnik-api
     restart: unless-stopped
-    depends_on:
-      db:
-        condition: service_healthy
     environment:
-      # Внутри контейнера всегда 40978 (nginx upstream в Dockerfile.web). PORT в .env — порт на хосте.
       PORT: "40978"
-      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL must be set}
-      DB_SSL: ${DB_SSL:-false}
+      DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL in Portainer}
+      DB_SSL: ${DB_SSL:-true}
       DB_SSL_REJECT_UNAUTHORIZED: ${DB_SSL_REJECT_UNAUTHORIZED:-false}
       DB_DEBUG_LOG: ${DB_DEBUG_LOG:-false}
-      SKIP_DB_INIT_ON_START: ${SKIP_DB_INIT_ON_START:-false}
+      SKIP_DB_INIT_ON_START: ${SKIP_DB_INIT_ON_START:-true}
       AUTH_SESSION_TTL_DAYS: ${AUTH_SESSION_TTL_DAYS:-30}
       AUTH_MAX_ACTIVE_SESSIONS_PER_USER: ${AUTH_MAX_ACTIVE_SESSIONS_PER_USER:-5}
       TRUST_PROXY: ${TRUST_PROXY:-true}
-    ports:
-      # Прямой доступ к API с хоста (curl, отладка). UI в браузере — через сервис web.
-      # В docker-compose.prod.yml порт API привязан к 127.0.0.1.
-      - "${PORT:-40978}:40978"
+    expose:
+      - "40978"
     healthcheck:
       test:
         [
@@ -73,6 +60,3 @@ services:
       timeout: 5s
       retries: 3
       start_period: 25s
-
-volumes:
-  postgres_data:

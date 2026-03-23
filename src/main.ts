@@ -20,6 +20,11 @@ const app = express();
 const PORT = process.env.PORT || 40978;
 const skipDbInitOnStart = process.env.SKIP_DB_INIT_ON_START === 'true';
 
+// За nginx / reverse proxy: корректные req.ip и X-Forwarded-* (отключить: TRUST_PROXY=false)
+if (process.env.TRUST_PROXY !== 'false') {
+  app.set('trust proxy', 1);
+}
+
 app.use(cors());
 app.use(express.json());
 app.use(resolveAuthSession);

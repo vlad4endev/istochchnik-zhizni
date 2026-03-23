@@ -1,0 +1,8 @@
+# Продакшен на VPS: API слушает только на loopback — снаружи доступ через nginx (web) или reverse-proxy на хосте.
+# Запуск: docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+# Либо: npm run prod:deploy
+
+services:
+  api:
+    ports:
+      - "127.0.0.1:${PORT:-40978}:40978"
