@@ -1,0 +1,8 @@
+# Overlay к docker-compose.yml: API только на loopback (полный стек с Flutter web).
+# Запуск: docker compose -f docker-compose.yml -f docker-compose.prod.overlay.yml up -d --build
+# См. также: docker-compose.prod.yml — только БД + API для VPS без контейнера web.
+
+services:
+  api:
+    ports:
+      - "127.0.0.1:${PORT:-40978}:40978"

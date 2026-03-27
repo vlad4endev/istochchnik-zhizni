@@ -37,7 +37,7 @@ services:
       TRUST_PROXY: ${TRUST_PROXY:-true}
     ports:
       # Прямой доступ к API с хоста (curl, отладка). UI в браузере — через сервис web.
-      # В docker-compose.prod.yml порт API привязан к 127.0.0.1.
+      # В docker-compose.prod.overlay.yml порт API привязан к 127.0.0.1.
       - "${PORT:-40978}:40978"
     healthcheck:
       test:

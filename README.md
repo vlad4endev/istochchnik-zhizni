@@ -93,6 +93,7 @@
    bash scripts/deploy-production.sh
    ```
    Локально / без ограничения API на loopback: `npm run prod:start` или `docker compose up -d --build`. Остановка этого режима: `npm run prod:stop`. Остановка после `prod:deploy`: `npm run prod:deploy:down`.
+   **Только Postgres + API** (SPA на Vercel/Netlify): `cp .env.production .env`, задайте `POSTGRES_PASSWORD` и `DATABASE_URL` с хостом `db`, затем `npm run prod:vps:up` (`docker-compose.prod.yml`). Остановка: `npm run prod:vps:down`.
 4. **Проверка:** `http://<IP>:<WEB_PORT>/` — приложение; `http://<IP>:<WEB_PORT>/health` — health.
 5. **HTTPS:** поставьте на хосте Caddy / Traefik / nginx с TLS и прокси на `127.0.0.1:<WEB_PORT>` (не публикуйте API напрямую в интернет).
 6. **Переменная `PORT` в `.env`** — это порт **на хосте**, который пробрасывается **в** контейнер на **40978**. Внутри контейнера Node всегда слушает **40978** (так устроен прокси в `docker/nginx-web.unified.conf`).

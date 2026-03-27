@@ -25,4 +25,4 @@ rsync -a --delete build/web/ release/web/
 
 echo ""
 echo "Готово: release/web/ — скопируйте на сервер в $(pwd)/release/web/"
-echo "На сервере: docker compose -f docker-compose.yml -f docker-compose.prod.yml -f docker-compose.web-prebuilt.yml up -d --build"
+echo "На сервере: docker compose -f docker-compose.yml -f docker-compose.prod.overlay.yml -f docker-compose.web-prebuilt.yml up -d --build"

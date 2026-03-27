@@ -1,3 +1,4 @@
+# Multi-stage: deps → build (tsc) → prod-deps → runtime (только dist + production node_modules)
 FROM node:20-alpine AS deps
 WORKDIR /app
 

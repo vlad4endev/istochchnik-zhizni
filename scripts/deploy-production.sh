@@ -10,7 +10,7 @@ if [[ ! -f .env ]]; then
   exit 1
 fi
 
-export COMPOSE_FILE=docker-compose.yml:docker-compose.prod.yml
+export COMPOSE_FILE=docker-compose.yml:docker-compose.prod.overlay.yml
 
 echo "[deploy-production] docker compose up -d --build ..."
 docker compose up -d --build
