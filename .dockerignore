@@ -1,6 +1,6 @@
-# Зависимости и артефакты (корневой образ API + меньший контекст для Flutter web)
+# Зависимости и артефакты (корневой образ API + сборка web-react в Dockerfile.web)
 node_modules
-web-react/
+web-react/node_modules
 dist
 .git
 .github
