@@ -7,6 +7,8 @@
     "dev": "ts-node-dev --respawn src/main.ts",
     "dev:all": "concurrently -k -n api,flutter -c blue,cyan \"npm run dev\" \"flutter run -d chrome --web-port=${FLUTTER_WEB_PORT:-8081} --dart-define=API_BASE_URL=${API_BASE_URL:-http://localhost:40978}\"",
     "db:up": "docker compose -f docker-compose.yml -f docker-compose.local.yml up -d db",
+    "web:dev": "npm --prefix web-react run dev",
+    "web:build": "npm --prefix web-react run build",
     "dev:project": "bash ./scripts/dev-project.sh",
     "dev:start": "bash ./scripts/dev-project-bg.sh",
     "dev:start:fg": "bash ./scripts/dev-project.sh",
@@ -29,7 +31,8 @@
     "lint:fix": "npx eslint src --ext .ts --fix",
     "format": "npx prettier --write \"src/**/*.ts\"",
     "db:init": "npx ts-node scripts/runInitDb.ts",
-    "quickstart": "bash scripts/quickstart.sh"
+    "quickstart": "bash scripts/quickstart.sh",
+    "start-all": "bash ./start-all"
   },
   "keywords": [],
   "author": "",

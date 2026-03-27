@@ -1,25 +1,33 @@
+# Зависимости и артефакты (корневой образ API)
 node_modules
+web-react/node_modules
 dist
 .git
-.gitignore
-.env
-.env.*
+.github
+.cursor
+*.log
+.DS_Store
 
+# Мобильный / десктопный клиент
 .dart_tool
 build
-.flutter-plugins
-.flutter-plugins-dependencies
-.packages
-
 android/.gradle
 ios/Pods
-ios/Flutter/ephemeral
 macos/Pods
-linux/flutter/ephemeral
-windows/flutter/ephemeral
+**/ephemeral
 
-.run
-coverage
-*.log
-*.pid
-tmp
+# Документация и прочее (не нужно в контексте сборки API)
+*.md
+!README.md
+
+# Локальные env (секреты не в образе)
+.env
+.env.*
+!.env.example
+
+# Prebuilt web bundles
+release
+
+# Тесты и линт (при необходимости раскомментируйте)
+# coverage
+# **/*.test.ts

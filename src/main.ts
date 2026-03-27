@@ -26,13 +26,48 @@ if (process.env.TRUST_PROXY !== 'false') {
   app.set('trust proxy', 1);
 }
 
-function corsOptions(): Parameters<typeof cors>[0] | undefined {
-  const raw = process.env.CORS_ORIGIN?.trim();
+function normalizeOrigin(url: string): string {
+  return url.trim().replace(/\/+$/, '');
+}
+
+/**
+ * Разрешённые Origin для CORS (браузерные запросы с другого домена, чем API).
+ * Задаётся в .env одним из способов:
+ * - CORS_ALLOWED_ORIGINS=https://app.example.com,https://www.example.com
+ * - CORS_ORIGIN=… (алиас, то же правило)
+ * - JSON-массив: CORS_ALLOWED_ORIGINS=["https://a.com","https://b.com"]
+ *
+ * Пусто: пакет `cors` отражает любой Origin (удобно за nginx на одном хосте; в production лучше задать явно).
+ */
+function resolveAllowedOrigins(): string[] {
+  const raw = (process.env.CORS_ALLOWED_ORIGINS ?? process.env.CORS_ORIGIN ?? '').trim();
   if (!raw) {
-    return undefined;
+    return [];
   }
-  const origins = raw.split(',').map((s) => s.trim()).filter(Boolean);
+  if (raw.startsWith('[')) {
+    try {
+      const parsed = JSON.parse(raw) as unknown;
+      if (Array.isArray(parsed)) {
+        return parsed
+          .map((v) => normalizeOrigin(String(v)))
+          .filter((s) => s.length > 0);
+      }
+    } catch {
+      /* fall through: не JSON — разбираем как строку с запятыми */
+    }
+  }
+  return raw.split(',').map((s) => normalizeOrigin(s)).filter((s) => s.length > 0);
+}
+
+function corsOptions(): Parameters<typeof cors>[0] | undefined {
+  const origins = resolveAllowedOrigins();
   if (origins.length === 0) {
+    if (process.env.NODE_ENV === 'production') {
+      console.warn(
+        '[cors] CORS_ALLOWED_ORIGINS / CORS_ORIGIN не заданы — разрешены запросы с любых Origin. ' +
+          'Для публичного API укажите домены фронтенда через запятую.',
+      );
+    }
     return undefined;
   }
   return {

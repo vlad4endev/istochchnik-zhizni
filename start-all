@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$ROOT"
+
+API_PORT="${API_PORT:-40978}"
+export VITE_DEV_API_PROXY="${VITE_DEV_API_PROXY:-http://127.0.0.1:${API_PORT}}"
+
+if [[ "${SKIP_DB:-0}" != "1" ]]; then
+  echo "[start-all] PostgreSQL (docker compose)…"
+  if ! npm run db:up; then
+    echo "[start-all] Предупреждение: db:up не выполнен (нет Docker или БД уже запущена на DATABASE_URL)."
+  fi
+else
+  echo "[start-all] SKIP_DB=1 — контейнер БД не трогаем."
+fi
+
+echo "[start-all] API :${API_PORT} + Vite (web-react), прокси Vite → ${VITE_DEV_API_PROXY}"
+echo "[start-all] Остановка: Ctrl+C"
+exec npx concurrently -k -n api,web -c blue,magenta \
+  "npm run dev" \
+  "npm run web:dev"
