@@ -43,6 +43,8 @@ services:
       dockerfile: Dockerfile.web
       args:
         API_BASE_URL: ${WEB_BUILD_API_BASE_URL:-http://localhost:40978}
+        FLUTTER_STORAGE_BASE_URL: ${FLUTTER_STORAGE_BASE_URL:-https://storage.googleapis.com}
+        PUB_HOSTED_URL: ${PUB_HOSTED_URL:-https://pub.dev}
     container_name: istochnik-web
     restart: unless-stopped
     depends_on:

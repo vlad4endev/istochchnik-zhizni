@@ -3,6 +3,8 @@ set -euo pipefail
 
 WEB_PORT="${WEB_PORT:-8081}"
 UI_PORT="$WEB_PORT"
+API_PORT="${API_PORT:-40978}"
+API_BASE_URL_FOR_FLUTTER="${API_BASE_URL:-http://localhost:${API_PORT}}"
 PID_DIR=".run"
 DEV_PID_FILE="${PID_DIR}/dev-project.pid"
 
@@ -26,5 +28,6 @@ cleanup() {
 
 trap cleanup EXIT INT TERM
 
-echo "Starting Flutter UI in Chrome on port ${UI_PORT}..."
-flutter run -d chrome --web-port "${UI_PORT}"
+echo "Starting Flutter UI in Chrome on port ${UI_PORT} (API ${API_BASE_URL_FOR_FLUTTER})..."
+flutter run -d chrome --web-port "${UI_PORT}" \
+  --dart-define=API_BASE_URL="${API_BASE_URL_FOR_FLUTTER}"

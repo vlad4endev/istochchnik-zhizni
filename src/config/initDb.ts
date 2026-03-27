@@ -225,7 +225,7 @@ DROP TRIGGER IF EXISTS trg_access_requests_updated_at ON access_requests;
 CREATE TRIGGER trg_access_requests_updated_at
 BEFORE UPDATE ON access_requests
 FOR EACH ROW
-EXECUTE FUNCTION set_access_requests_updated_at();
+EXECUTE PROCEDURE set_access_requests_updated_at();
 
 CREATE OR REPLACE FUNCTION reset_cycle_on_member_change()
 RETURNS TRIGGER
@@ -329,7 +329,7 @@ DROP TRIGGER IF EXISTS trg_reset_cycle_on_member_change ON members;
 CREATE TRIGGER trg_reset_cycle_on_member_change
 AFTER INSERT OR DELETE ON members
 FOR EACH ROW
-EXECUTE FUNCTION reset_cycle_on_member_change();
+EXECUTE PROCEDURE reset_cycle_on_member_change();
 
 INSERT INTO ministry_role_templates (title)
 VALUES

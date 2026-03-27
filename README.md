@@ -24,6 +24,23 @@
 
 Если API не стартует — проверьте **`DATABASE_URL`** в **`.env`** и доступность базы.
 
+### Docker на сервере: `storage.googleapis.com` / таймаут при `flutter build web`
+
+Сборка образа **web** качает Web SDK с Google. Если с сервера до него нет доступа:
+
+1. **Зеркало (часто помогает из РФ/КНР):** в **`.env`** раскомментируйте и задайте:
+   ```env
+   FLUTTER_STORAGE_BASE_URL=https://storage.flutter-io.cn
+   PUB_HOSTED_URL=https://pub.flutter-io.cn
+   ```
+   Затем снова `docker compose build --no-cache web` (или `npm run prod:deploy`).
+
+2. **Без Flutter на сервере (надёжно):** на своём ПК с Flutter выполните `bash scripts/package-web-for-server.sh`, скопируйте на сервер папку **`release/web/`**, затем:
+   ```bash
+   npm run prod:deploy:prebuilt
+   ```
+   (используется **`Dockerfile.web.prebuilt`** и **`docker-compose.web-prebuilt.yml`**).
+
 ### Supabase: `Circuit breaker open` или ошибка на порту 6543
 
 В Dashboard **Connect → Connection string** выберите **Session pooler** и порт **5432**, не **Transaction pooler** (6543). Скопируйте URI в `DATABASE_URL` (пользователь `postgres.<project-ref>`, `?sslmode=require`). Transaction pooler с 6543 может отдавать `Circuit breaker open` при миграциях и `psql` — это не пароль и не ваш сервер, а режим pooler.

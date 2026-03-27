@@ -5,6 +5,8 @@
   "main": "dist/main.js",
   "scripts": {
     "dev": "ts-node-dev --respawn src/main.ts",
+    "dev:all": "concurrently -k -n api,flutter -c blue,cyan \"npm run dev\" \"flutter run -d chrome --web-port=${FLUTTER_WEB_PORT:-8081} --dart-define=API_BASE_URL=${API_BASE_URL:-http://localhost:40978}\"",
+    "db:up": "docker compose -f docker-compose.yml -f docker-compose.local.yml up -d db",
     "dev:project": "bash ./scripts/dev-project.sh",
     "dev:start": "bash ./scripts/dev-project-bg.sh",
     "dev:start:fg": "bash ./scripts/dev-project.sh",
@@ -14,6 +16,7 @@
     "dev:logs": "bash ./scripts/dev-logs.sh",
     "prod:start": "docker compose up -d --build",
     "prod:deploy": "docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build",
+    "prod:deploy:prebuilt": "docker compose -f docker-compose.yml -f docker-compose.prod.yml -f docker-compose.web-prebuilt.yml up -d --build",
     "prod:deploy:down": "docker compose -f docker-compose.yml -f docker-compose.prod.yml down",
     "prod:stop": "docker compose down",
     "prod:restart": "npm run prod:stop && npm run prod:start",
@@ -47,6 +50,7 @@
     "eslint": "^8.57.0",
     "eslint-config-prettier": "^9.1.0",
     "prettier": "^3.3.3",
+    "concurrently": "^9.1.2",
     "ts-node": "^10.9.2",
     "ts-node-dev": "^2.0.0",
     "typescript": "^5.5.4"

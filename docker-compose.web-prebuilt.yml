@@ -1,0 +1,10 @@
+# Подключайте поверх основного compose, если на сервере нет доступа к Google (Flutter Web SDK).
+# Локально: bash scripts/package-web-for-server.sh
+# На сервере: положите папку release/web/ в корень проекта, затем:
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml -f docker-compose.web-prebuilt.yml up -d --build
+
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web.prebuilt

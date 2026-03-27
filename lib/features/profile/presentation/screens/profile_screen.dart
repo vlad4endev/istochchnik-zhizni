@@ -12,7 +12,7 @@ class ProfileScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final padding = Responsive.horizontalPadding(context);
-    final authSession = ref.watch(authControllerProvider).valueOrNull;
+    final authAsync = ref.watch(authControllerProvider);
 
     Future<void> logout() async {
       final confirm = await showDialog<bool>(
@@ -60,69 +60,97 @@ class ProfileScreen extends ConsumerWidget {
         surfaceTintColor: Colors.transparent,
       ),
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: EdgeInsets.all(padding * 2),
-          child: Column(
-            children: [
-              const SizedBox(height: 32),
-              Container(
-                padding: const EdgeInsets.all(32),
-                decoration: BoxDecoration(
-                  color: AppColors.surfaceElevated,
-                  borderRadius: BorderRadius.circular(AppRadius.xl),
-                  boxShadow: AppShadows.card,
-                ),
-                child: Column(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(24),
-                      decoration: BoxDecoration(
-                        color: AppColors.primary.withOpacity(0.08),
-                        shape: BoxShape.circle,
+        child: authAsync.when(
+          data: (authSession) => SingleChildScrollView(
+            padding: EdgeInsets.all(padding * 2),
+            child: Column(
+              children: [
+                const SizedBox(height: 32),
+                Container(
+                  padding: const EdgeInsets.all(32),
+                  decoration: BoxDecoration(
+                    color: AppColors.surfaceElevated,
+                    borderRadius: BorderRadius.circular(AppRadius.xl),
+                    boxShadow: AppShadows.card,
+                  ),
+                  child: Column(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(24),
+                        decoration: BoxDecoration(
+                          color: AppColors.primary.withOpacity(0.08),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          Icons.person_rounded,
+                          size: 56,
+                          color: AppColors.primary.withOpacity(0.6),
+                        ),
                       ),
-                      child: Icon(
-                        Icons.person_rounded,
-                        size: 56,
-                        color: AppColors.primary.withOpacity(0.6),
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-                    Text(
-                      '${authSession?.firstName ?? ''} ${authSession?.lastName ?? ''}'
-                              .trim()
-                              .isEmpty
-                          ? 'Профиль'
-                          : '${authSession?.firstName ?? ''} ${authSession?.lastName ?? ''}'
-                                .trim(),
-                      style: TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.w800,
-                        color: AppColors.textPrimary,
-                        letterSpacing: -0.4,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Роль: ${authSession?.role ?? 'member'}',
-                      style: TextStyle(
-                        fontSize: 16,
-                        color: AppColors.textMuted,
-                        height: 1.5,
-                        letterSpacing: 0.1,
-                      ),
-                    ),
-                    if (!AppConfig.authDisabled) ...[
                       const SizedBox(height: 20),
-                      OutlinedButton.icon(
-                        onPressed: logout,
-                        icon: const Icon(Icons.logout_rounded),
-                        label: const Text('Выйти из аккаунта'),
+                      Text(
+                        '${authSession?.firstName ?? ''} ${authSession?.lastName ?? ''}'
+                                .trim()
+                                .isEmpty
+                            ? 'Профиль'
+                            : '${authSession?.firstName ?? ''} ${authSession?.lastName ?? ''}'
+                                  .trim(),
+                        style: TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.w800,
+                          color: AppColors.textPrimary,
+                          letterSpacing: -0.4,
+                        ),
                       ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Роль: ${authSession?.role ?? 'member'}',
+                        style: TextStyle(
+                          fontSize: 16,
+                          color: AppColors.textMuted,
+                          height: 1.5,
+                          letterSpacing: 0.1,
+                        ),
+                      ),
+                      if (!AppConfig.authDisabled) ...[
+                        const SizedBox(height: 20),
+                        OutlinedButton.icon(
+                          onPressed: logout,
+                          icon: const Icon(Icons.logout_rounded),
+                          label: const Text('Выйти из аккаунта'),
+                        ),
+                      ],
                     ],
-                  ],
+                  ),
                 ),
+              ],
+            ),
+          ),
+          loading: () => const Center(child: CircularProgressIndicator()),
+          error: (err, _) => Center(
+            child: Padding(
+              padding: EdgeInsets.all(padding * 2),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    'Не удалось загрузить профиль',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  OutlinedButton(
+                    onPressed: () =>
+                        ref.invalidate(authControllerProvider),
+                    child: const Text('Повторить'),
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
         ),
       ),

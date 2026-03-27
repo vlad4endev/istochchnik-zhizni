@@ -4,6 +4,7 @@ set -euo pipefail
 WEB_PORT="${WEB_PORT:-8081}"
 UI_PORT="$WEB_PORT"
 API_PORT="${API_PORT:-40978}"
+API_BASE_URL_FOR_FLUTTER="${API_BASE_URL:-http://localhost:${API_PORT}}"
 PID_DIR=".run"
 API_PID_FILE="${PID_DIR}/api.pid"
 UI_PID_FILE="${PID_DIR}/flutter.pid"
@@ -40,8 +41,9 @@ nohup npm run dev > "${API_LOG_FILE}" 2>&1 &
 API_PID=$!
 echo "${API_PID}" > "${API_PID_FILE}"
 
-echo "Запуск Flutter UI в фоне (Chrome, порт ${UI_PORT})..."
-nohup flutter run -d chrome --web-port "${UI_PORT}" > "${UI_LOG_FILE}" 2>&1 &
+echo "Запуск Flutter UI в фоне (Chrome, порт ${UI_PORT}, API ${API_BASE_URL_FOR_FLUTTER})..."
+nohup flutter run -d chrome --web-port "${UI_PORT}" \
+  --dart-define=API_BASE_URL="${API_BASE_URL_FOR_FLUTTER}" > "${UI_LOG_FILE}" 2>&1 &
 UI_PID=$!
 echo "${UI_PID}" > "${UI_PID_FILE}"
 echo "${UI_PORT}" > "${UI_PORT_FILE}"

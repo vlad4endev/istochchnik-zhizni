@@ -2,11 +2,21 @@
 FROM ghcr.io/cirruslabs/flutter:stable AS build
 WORKDIR /app
 
+# Если на сервере таймаут к storage.googleapis.com — задайте зеркало при сборке, например:
+#   FLUTTER_STORAGE_BASE_URL=https://storage.flutter-io.cn
+#   PUB_HOSTED_URL=https://pub.flutter-io.cn
+# (docker-compose передаёт их из .env, см. .env.example)
+ARG FLUTTER_STORAGE_BASE_URL=https://storage.googleapis.com
+ARG PUB_HOSTED_URL=https://pub.dev
+ENV FLUTTER_STORAGE_BASE_URL=${FLUTTER_STORAGE_BASE_URL}
+ENV PUB_HOSTED_URL=${PUB_HOSTED_URL}
+
 # Значение по умолчанию перекрывается build/web/api-config.json (пустой URL = тот же хост).
 ARG API_BASE_URL=http://localhost:40978
 ENV API_BASE_URL=$API_BASE_URL
 
 COPY pubspec.yaml pubspec.lock ./
+RUN flutter config --enable-web --no-analytics >/dev/null 2>&1 || true
 RUN flutter pub get
 
 COPY . .

@@ -1,0 +1,2 @@
+# Сюда кладутся артефакты flutter build web перед сборкой образа (Dockerfile.web.prebuilt).
+# Не коммитьте содержимое — генерируется скриптом scripts/package-web-for-server.sh

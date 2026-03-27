@@ -6,6 +6,7 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 
+import { pool } from './config/db';
 import { initDb } from './config/initDb';
 import { resolveAuthSession } from './middleware/authSession';
 import { enforceRoleAccess, resolveUserRole } from './middleware/roleAccess';
@@ -25,7 +26,22 @@ if (process.env.TRUST_PROXY !== 'false') {
   app.set('trust proxy', 1);
 }
 
-app.use(cors());
+function corsOptions(): Parameters<typeof cors>[0] | undefined {
+  const raw = process.env.CORS_ORIGIN?.trim();
+  if (!raw) {
+    return undefined;
+  }
+  const origins = raw.split(',').map((s) => s.trim()).filter(Boolean);
+  if (origins.length === 0) {
+    return undefined;
+  }
+  return {
+    origin: origins.length === 1 ? origins[0] : origins,
+    credentials: true,
+  };
+}
+
+app.use(cors(corsOptions()));
 app.use(express.json());
 app.use(resolveAuthSession);
 
@@ -38,8 +54,18 @@ app.get('/', (req, res) => {
   res.json({ message: 'Server is running' });
 });
 
-app.get('/health', (_req, res) => {
-  res.status(200).json({ status: 'ok' });
+app.get('/health', async (_req, res) => {
+  if (!pool) {
+    res.status(200).json({ status: 'ok', database: 'not_configured' });
+    return;
+  }
+  try {
+    await pool.query('SELECT 1');
+    res.status(200).json({ status: 'ok', database: 'up' });
+  } catch (err) {
+    console.error('[health] database ping failed:', err);
+    res.status(503).json({ status: 'error', database: 'down' });
+  }
 });
 
 app.use('/api', routes);

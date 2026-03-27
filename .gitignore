@@ -18,3 +18,7 @@ macos/Pods/
 linux/flutter/ephemeral/
 windows/flutter/ephemeral/
 supabase/.temp/
+
+# Артефакты для Dockerfile.web.prebuilt (генерируются локально)
+release/web/*
+!release/web/.gitkeep
