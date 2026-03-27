@@ -1,8 +1,12 @@
-# Overlay к docker-compose.yml: API только на loopback (полный стек с nginx + React).
-# Запуск: docker compose -f docker-compose.yml -f docker-compose.prod.overlay.yml up -d --build
-# См. также: docker-compose.prod.yml — только БД + API для VPS без контейнера web.
+# Overlay к docker-compose.yml для прод-деплоя (тот же COMPOSE_FILE, что в deploy-production.sh).
+#
+# Раньше здесь был второй services.api.ports (127.0.0.1:…). Compose объединяет списки портов
+# с docker-compose.yml → два проброса одного хост-порта → "address already in use", при этом сокет мог
+# не попадать в ss так, как у обычного процесса.
+#
+# Привязка API только к loopback: в .env задайте API_PUBLISH=127.0.0.1 (см. ports в docker-compose.yml).
 
 services:
   api:
-    ports:
-      - "127.0.0.1:${PORT:-40978}:40978"
+    labels:
+      istochik.stack: production

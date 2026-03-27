@@ -10,6 +10,8 @@ if [[ ! -f .env ]]; then
   exit 1
 fi
 
+# Только localhost на хосте, если в .env не задано иначе (см. API_PUBLISH в docker-compose.yml).
+export API_PUBLISH="${API_PUBLISH:-127.0.0.1}"
 export COMPOSE_FILE=docker-compose.yml:docker-compose.prod.overlay.yml
 
 echo "[deploy-production] docker compose up -d --build ..."

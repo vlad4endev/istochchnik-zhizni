@@ -36,9 +36,9 @@ services:
       AUTH_MAX_ACTIVE_SESSIONS_PER_USER: ${AUTH_MAX_ACTIVE_SESSIONS_PER_USER:-5}
       TRUST_PROXY: ${TRUST_PROXY:-true}
     ports:
-      # Прямой доступ к API с хоста (curl, отладка). UI в браузере — через сервис web.
-      # В docker-compose.prod.overlay.yml порт API привязан к 127.0.0.1.
-      - "${PORT:-40978}:40978"
+      # Один проброс: Compose склеивает ports из нескольких файлов — дубль того же ${PORT} даёт bind error.
+      # Снаружи: API_PUBLISH:PORT → 40978 в контейнере. Прод на том же хосте: API_PUBLISH=127.0.0.1 в .env
+      - "${API_PUBLISH:-0.0.0.0}:${PORT:-40978}:40978"
     healthcheck:
       test:
         [
