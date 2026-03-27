@@ -11,6 +11,7 @@ import { LoginPage } from '../features/auth/pages/LoginPage';
 import { useAuthStore } from '../features/auth/authStore';
 import { useAuthHydrated } from '../hooks/useAuthHydrated';
 
+import { AdminPage } from '../features/admin/pages/AdminPage';
 import { DailyPrayerPage } from '../features/calendar/pages/DailyPrayerPage';
 import { ProfilePage } from '../features/profile/pages/ProfilePage';
 
@@ -51,15 +52,6 @@ function RequireAdmin({ children }: { children: ReactNode }) {
   return <>{children}</>;
 }
 
-function AdminPlaceholder() {
-  return (
-    <div className="p-6">
-      <h1 className="text-xl font-extrabold text-stone-900">Админка</h1>
-      <p className="mt-2 text-stone-600">Заглушка панели администратора.</p>
-    </div>
-  );
-}
-
 export function AppRouter() {
   return (
     <Routes>
@@ -80,7 +72,7 @@ export function AppRouter() {
           path="admin"
           element={
             <RequireAdmin>
-              <AdminPlaceholder />
+              <AdminPage />
             </RequireAdmin>
           }
         />

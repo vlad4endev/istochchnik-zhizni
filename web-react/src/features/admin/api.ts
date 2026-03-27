@@ -1,0 +1,172 @@
+import axios from 'axios';
+
+import { apiClient } from '../../lib/apiClient';
+import type { Backslider, GlobalTheme, Ministry } from '../../types';
+
+import type { AppUser } from './types';
+
+const USERS = '/api/users';
+const CAL = '/api/calendar';
+
+export function apiErrorMessage(err: unknown, fallback: string): string {
+  if (axios.isAxiosError(err)) {
+    const data = err.response?.data;
+    if (data && typeof data === 'object' && 'error' in data) {
+      const m = (data as { error?: unknown }).error;
+      if (typeof m === 'string' && m.trim()) return m.trim();
+    }
+  }
+  if (err instanceof Error && err.message) return err.message;
+  return fallback;
+}
+
+export async function fetchAdminMembers(): Promise<AppUser[]> {
+  const { data } = await apiClient.get<AppUser[]>(USERS);
+  return data;
+}
+
+export async function createAdminMember(body: {
+  first_name: string;
+  last_name: string;
+  phone_number: string;
+  birth_date: string;
+  ministry_role?: string;
+  ministry_direction?: string;
+}): Promise<AppUser> {
+  const { data } = await apiClient.post<AppUser>(USERS, body);
+  return data;
+}
+
+export async function updateAdminMember(
+  id: number,
+  body: Partial<{
+    first_name: string;
+    last_name: string;
+    phone_number: string;
+    birth_date: string;
+    ministry_role: string;
+    ministry_direction: string;
+    prayer_request: string;
+    is_active: boolean;
+  }>,
+): Promise<AppUser> {
+  const { data } = await apiClient.patch<AppUser>(`${USERS}/${id}`, body);
+  return data;
+}
+
+export async function deleteAdminMember(id: number): Promise<void> {
+  await apiClient.delete(`${USERS}/${id}`, { validateStatus: (s) => s === 204 || (s != null && s < 500) });
+}
+
+export async function setMemberAppRole(id: number, app_role: 'member' | 'admin'): Promise<AppUser> {
+  const { data } = await apiClient.patch<AppUser>(`${USERS}/${id}/app-role`, { app_role });
+  return data;
+}
+
+export async function startPrayerCycle(start_date: string): Promise<{ start_date?: string }> {
+  const { data } = await apiClient.post<{ start_date?: string }>(`${USERS}/prayer-cycle/start`, {
+    start_date,
+  });
+  return data;
+}
+
+export async function setOneTimeMemberDate(memberId: number, target_date: string): Promise<void> {
+  await apiClient.post(`${USERS}/${memberId}/prayer-cycle/one-time-date`, { target_date });
+}
+
+export interface MinistryTemplate {
+  id: number;
+  title: string;
+  created_at?: string;
+}
+
+export async function fetchRoleTemplates(): Promise<MinistryTemplate[]> {
+  const { data } = await apiClient.get<MinistryTemplate[]>(`${USERS}/templates/ministry-roles`);
+  return data;
+}
+
+export async function createRoleTemplate(title: string): Promise<MinistryTemplate> {
+  const { data } = await apiClient.post<MinistryTemplate>(`${USERS}/templates/ministry-roles`, {
+    title,
+  });
+  return data;
+}
+
+export async function deleteRoleTemplate(id: number): Promise<void> {
+  await apiClient.delete(`${USERS}/templates/ministry-roles/${id}`, {
+    validateStatus: (s) => s === 204 || (s != null && s < 500),
+  });
+}
+
+export async function fetchDirectionTemplates(): Promise<MinistryTemplate[]> {
+  const { data } = await apiClient.get<MinistryTemplate[]>(`${USERS}/templates/ministry-directions`);
+  return data;
+}
+
+export async function createDirectionTemplate(title: string): Promise<MinistryTemplate> {
+  const { data } = await apiClient.post<MinistryTemplate>(`${USERS}/templates/ministry-directions`, {
+    title,
+  });
+  return data;
+}
+
+export async function deleteDirectionTemplate(id: number): Promise<void> {
+  await apiClient.delete(`${USERS}/templates/ministry-directions/${id}`, {
+    validateStatus: (s) => s === 204 || (s != null && s < 500),
+  });
+}
+
+export async function fetchGlobalThemes(): Promise<GlobalTheme[]> {
+  const { data } = await apiClient.get<GlobalTheme[]>(`${CAL}/global/themes`);
+  return data;
+}
+
+export async function createGlobalThemeApi(body: {
+  title: string;
+  bible_verse?: string;
+  prayer_points?: string;
+}): Promise<GlobalTheme> {
+  const { data } = await apiClient.post<GlobalTheme>(`${CAL}/global/themes`, body);
+  return data;
+}
+
+export async function deleteGlobalThemeApi(id: number): Promise<void> {
+  await apiClient.delete(`${CAL}/global/themes/${id}`, {
+    validateStatus: (s) => s === 204 || (s != null && s < 500),
+  });
+}
+
+export async function fetchGlobalMinistries(): Promise<Ministry[]> {
+  const { data } = await apiClient.get<Ministry[]>(`${CAL}/global/ministries`);
+  return data;
+}
+
+export async function createMinistryApi(body: {
+  title: string;
+  prayer_points?: string;
+}): Promise<Ministry> {
+  const { data } = await apiClient.post<Ministry>(`${CAL}/global/ministries`, body);
+  return data;
+}
+
+export async function deleteMinistryApi(id: number): Promise<void> {
+  await apiClient.delete(`${CAL}/global/ministries/${id}`, {
+    validateStatus: (s) => s === 204 || (s != null && s < 500),
+  });
+}
+
+export async function fetchGlobalBacksliders(): Promise<Backslider[]> {
+  const { data } = await apiClient.get<Backslider[]>(`${CAL}/global/backsliders`);
+  return data;
+}
+
+export async function createBacksliderApi(name: string): Promise<Backslider> {
+  const { data } = await apiClient.post<Backslider>(`${CAL}/global/backsliders`, { name });
+  return data;
+}
+
+export async function deleteBacksliderApi(id: number): Promise<void> {
+  await apiClient.delete(`${CAL}/global/backsliders/${id}`, {
+    validateStatus: (s) => s === 204 || (s != null && s < 500),
+  });
+}
