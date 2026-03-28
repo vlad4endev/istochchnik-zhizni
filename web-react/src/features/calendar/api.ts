@@ -18,8 +18,9 @@ function normalizeDayPrayer(raw: unknown): DayPrayerData {
     throw new Error('Некорректный ответ API календаря');
   }
   const date = raw.date;
-  const diffDays = raw.diffDays;
-  if (typeof date !== 'string' || typeof diffDays !== 'number') {
+  const diffRaw = raw.diffDays ?? raw.diff_days;
+  const diffDays = typeof diffRaw === 'number' ? diffRaw : Number(diffRaw);
+  if (typeof date !== 'string' || !Number.isFinite(diffDays)) {
     throw new Error('Некорректный ответ API календаря: нет date/diffDays');
   }
   return {

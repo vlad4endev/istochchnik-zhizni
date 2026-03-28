@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import axios from 'axios';
 import { format } from 'date-fns';
 import { ru } from 'date-fns/locale';
-import { type ReactNode, useState } from 'react';
+import { type ReactNode, useId, useState } from 'react';
 import { DayPicker } from 'react-day-picker';
 
 import {
@@ -53,13 +53,15 @@ function hasPrayerContent(data: DayPrayerData | null | undefined): data is DayPr
   return data != null && !isDayPrayerEmpty(data);
 }
 
-function SectionHeader({ emoji, title }: { emoji: string; title: string }) {
+function SectionHeader({ emoji, title, id }: { emoji: string; title: string; id?: string }) {
   return (
     <div className="mb-3 flex items-center gap-3 pl-0.5">
-      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] bg-primary/10 text-lg">
+      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] bg-primary/10 text-lg" aria-hidden>
         {emoji}
       </div>
-      <h2 className="text-xs font-extrabold uppercase tracking-[0.12em] text-stone-900">{title}</h2>
+      <h2 id={id} className="text-xs font-extrabold uppercase tracking-[0.12em] text-stone-900">
+        {title}
+      </h2>
     </div>
   );
 }
@@ -89,7 +91,9 @@ function PrayerCard(props: {
           </h3>
         </div>
       </div>
-      <div className="px-4 py-4 text-[15px] leading-relaxed text-stone-600 shell:px-5 shell:pb-5">{children}</div>
+      <div className="px-4 py-4 text-[15px] leading-relaxed text-stone-600 shell:px-5 shell:pb-5 [&_p]:whitespace-pre-wrap">
+        {children}
+      </div>
     </article>
   );
 }
@@ -115,10 +119,16 @@ function GlobalThemeCard({ theme }: { theme: GlobalTheme }) {
     <PrayerCard emoji="📖" title={theme.title} accentVar="var(--theme)">
       {hasVerse ? (
         <div className="mb-3 rounded-xl border border-[color-mix(in_srgb,var(--theme)_18%,transparent)] bg-[color-mix(in_srgb,var(--theme)_8%,transparent)] px-3.5 py-3.5">
-          <p className="text-[15px] italic leading-relaxed text-stone-600">{theme.bible_verse}</p>
+          <p className="mb-1 text-[11px] font-extrabold uppercase tracking-[0.1em] text-stone-500">Библейский стих</p>
+          <p className="text-[15px] italic leading-relaxed text-stone-600 whitespace-pre-wrap">{theme.bible_verse}</p>
         </div>
       ) : null}
-      {hasPoints ? <p className="text-[16px] text-stone-600">{theme.prayer_points}</p> : null}
+      {hasPoints ? (
+        <div>
+          <p className="mb-1.5 text-[11px] font-extrabold uppercase tracking-[0.1em] text-stone-500">Акценты молитвы</p>
+          <p className="text-[16px] text-stone-600 whitespace-pre-wrap">{theme.prayer_points}</p>
+        </div>
+      ) : null}
       {hasNothing ? <p className="italic text-stone-400">Нет дополнительной информации</p> : null}
     </PrayerCard>
   );
@@ -129,7 +139,10 @@ function MinistryCard({ ministry }: { ministry: Ministry }) {
   return (
     <PrayerCard emoji="🛠️" title={ministry.title} accentVar="var(--ministry)">
       {hasPoints ? (
-        <p className="text-[16px] text-stone-600">{ministry.prayer_points}</p>
+        <div>
+          <p className="mb-1.5 text-[11px] font-extrabold uppercase tracking-[0.1em] text-stone-500">Пункты молитвы</p>
+          <p className="text-[16px] text-stone-600 whitespace-pre-wrap">{ministry.prayer_points}</p>
+        </div>
       ) : (
         <p className="italic text-stone-400">Нет указанных пунктов молитвы</p>
       )}
@@ -139,8 +152,8 @@ function MinistryCard({ ministry }: { ministry: Ministry }) {
 
 function BacksliderCard({ b }: { b: Backslider }) {
   return (
-    <PrayerCard emoji="🙅" title={b.name} accentVar="var(--backslider)">
-      <p className="italic text-stone-500">Отпавший — нуждается в молитве о возвращении</p>
+    <PrayerCard emoji="🕯️" title={b.name} accentVar="var(--backslider)">
+      <p className="italic text-stone-500">Молимся о возвращении к Господу и к общению с церковью</p>
     </PrayerCard>
   );
 }
@@ -238,6 +251,11 @@ const CAL_END = new Date(2030, 11, 31);
 export function DailyPrayerPage() {
   const [selected, setSelected] = useState<Date>(() => new Date());
   const [calendarExpanded, setCalendarExpanded] = useState(false);
+
+  const sectionMemberId = useId();
+  const sectionThemesId = useId();
+  const sectionMinistryId = useId();
+  const sectionBacksliderId = useId();
 
   const dateKey = formatCalendarDayKey(selected);
 
@@ -341,34 +359,66 @@ export function DailyPrayerPage() {
           <ErrorBlock err={queryError} onRetry={() => void refetch()} />
         ) : hasPrayerContent(data) ? (
           <div className="pb-6">
+            <p
+              className="mb-5 rounded-2xl border border-stone-200/70 bg-[color-mix(in_srgb,var(--primary)_6%,var(--surface-elevated))] px-4 py-3 text-center text-[13px] font-semibold leading-snug text-stone-700"
+              role="status"
+            >
+              {data.diffDays >= 0
+                ? `День ${data.diffDays + 1} с начала молитвенного цикла`
+                : 'Выбранная дата раньше старта текущего цикла'}
+            </p>
+
             {data.members.length > 0 ? (
-              <>
-                <SectionHeader emoji="🙏" title="Молитва за члена церкви" />
+              <section aria-labelledby={sectionMemberId}>
+                <SectionHeader emoji="🙏" title="Молитва за члена церкви" id={sectionMemberId} />
                 {data.members.map((m) => (
                   <MemberCard key={m.id} member={m} />
                 ))}
-                <div className="h-6" />
-              </>
+              </section>
             ) : null}
 
-            {data.global_themes.map((t) => (
-              <GlobalThemeCard key={`gt-${t.id}`} theme={t} />
-            ))}
-            {data.ministries.map((m) => (
-              <MinistryCard key={`m-${m.id}`} ministry={m} />
-            ))}
+            {data.global_themes.length > 0 ? (
+              <section
+                className={data.members.length > 0 ? 'mt-6' : undefined}
+                aria-labelledby={sectionThemesId}
+              >
+                <SectionHeader emoji="📖" title="Глобальные темы" id={sectionThemesId} />
+                {data.global_themes.map((t) => (
+                  <GlobalThemeCard key={`gt-${t.id}`} theme={t} />
+                ))}
+              </section>
+            ) : null}
 
-            {(data.global_themes.length > 0 || data.ministries.length > 0) && data.backsliders.length > 0 ? (
-              <div className="h-5" />
+            {data.ministries.length > 0 ? (
+              <section
+                className={
+                  data.members.length > 0 || data.global_themes.length > 0 ? 'mt-6' : undefined
+                }
+                aria-labelledby={sectionMinistryId}
+              >
+                <SectionHeader emoji="🛠️" title="Служения" id={sectionMinistryId} />
+                {data.ministries.map((m) => (
+                  <MinistryCard key={`m-${m.id}`} ministry={m} />
+                ))}
+              </section>
             ) : null}
 
             {data.backsliders.length > 0 ? (
-              <>
-                <SectionHeader emoji="📍" title="Отпавшие" />
+              <section
+                className={
+                  data.members.length > 0 ||
+                  data.global_themes.length > 0 ||
+                  data.ministries.length > 0
+                    ? 'mt-6'
+                    : undefined
+                }
+                aria-labelledby={sectionBacksliderId}
+              >
+                <SectionHeader emoji="📍" title="Отпавшие" id={sectionBacksliderId} />
                 {data.backsliders.map((b) => (
                   <BacksliderCard key={b.id} b={b} />
                 ))}
-              </>
+              </section>
             ) : null}
           </div>
         ) : (
