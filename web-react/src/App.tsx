@@ -133,8 +133,6 @@ export function App() {
                 📍 {(backslider?.name ?? 'Не указан').trim()}
               </p>
             </article>
-
-            <p className="meta">День цикла: {data.diffDays}</p>
           </div>
         )}
       </main>
@@ -214,7 +212,6 @@ export function App() {
         .card-verse { margin: 0 0 0.75rem; color: var(--text-secondary); font-size: 0.95rem; }
         .card-body { margin: 0; color: var(--text-secondary); }
         .whitespace-pre-wrap { white-space: pre-wrap; }
-        .meta { font-size: 0.8125rem; color: var(--text-muted); margin: 0.5rem 0 0; text-align: center; }
       `}</style>
     </div>
   );

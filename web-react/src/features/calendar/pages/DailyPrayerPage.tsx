@@ -359,15 +359,6 @@ export function DailyPrayerPage() {
           <ErrorBlock err={queryError} onRetry={() => void refetch()} />
         ) : hasPrayerContent(data) ? (
           <div className="pb-6">
-            <p
-              className="mb-5 rounded-2xl border border-stone-200/70 bg-[color-mix(in_srgb,var(--primary)_6%,var(--surface-elevated))] px-4 py-3 text-center text-[13px] font-semibold leading-snug text-stone-700"
-              role="status"
-            >
-              {data.diffDays >= 0
-                ? `День ${data.diffDays + 1} с начала молитвенного цикла`
-                : 'Выбранная дата раньше старта текущего цикла'}
-            </p>
-
             {data.members.length > 0 ? (
               <section aria-labelledby={sectionMemberId}>
                 <SectionHeader emoji="🙏" title="Молитва за члена церкви" id={sectionMemberId} />

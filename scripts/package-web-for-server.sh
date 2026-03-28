@@ -24,4 +24,6 @@ echo "Готово: release/web/ — скопируйте на сервер в $
 echo "На сервере: docker compose -f docker-compose.yml -f docker-compose.prod.overlay.yml -f docker-compose.web-prebuilt.yml up -d --build"
 echo ""
 echo "Важно: если в /admin всё ещё текст «Заглушка панели администратора», на сервере отдаётся"
-echo "старый билд. Пересоберите (этот скрипт) и заново скопируйте release/web/ в образ / nginx."
+echo "старый билд или не та ветка (нужен main с коммитами admin / AdminPage)."
+echo "Проверка: после деплоя откройте /admin-panel.txt — должно быть «admin-panel-v2-react»."
+echo "Docker: docker compose build --no-cache web && docker compose up -d web"
