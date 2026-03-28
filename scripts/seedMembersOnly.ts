@@ -63,7 +63,15 @@ async function main(): Promise<void> {
   process.exit(0);
 }
 
-main().catch((err) => {
+main().catch((err: unknown) => {
   console.error('[seed-members] Ошибка:', err);
+  const code = err && typeof err === 'object' && 'code' in err ? String((err as { code?: string }).code) : '';
+  if (code === 'ECONNREFUSED') {
+    console.error(
+      '[seed-members] Порт Postgres на хост не открыт (типично для VPS). Выполните сид через контейнер БД:\n' +
+        '  npm run db:seed-members:docker\n' +
+        'или: bash scripts/seed-members-db-container.sh',
+    );
+  }
   process.exit(1);
 });
