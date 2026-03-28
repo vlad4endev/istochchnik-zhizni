@@ -14,7 +14,7 @@ usage() {
   echo "Использование: $(basename "$0") start | update | stop"
   echo ""
   echo "  start   — API + Vite (http://localhost:5173)"
-  echo "  update  — git pull, npm install, сборка API, при необходимости db:up"
+  echo "  update  — git pull, npm install, сборка API, package-web-for-server.sh → release/web/, db:up"
   echo "  stop    — остановить API+Vite и прочие процессы разработки из scripts/dev-stop.sh"
 }
 
@@ -85,6 +85,9 @@ cmd_update() {
 
   echo "[project] Сборка TypeScript API…"
   npm run build
+
+  echo "[project] Сборка web-react для сервера (release/web/)…"
+  bash "$ROOT/scripts/package-web-for-server.sh"
 
   if [[ "${SKIP_DB:-0}" != "1" ]]; then
     npm run db:up 2>/dev/null || echo "[project] db:up пропущен."

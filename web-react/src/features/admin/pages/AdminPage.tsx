@@ -1,6 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { type FormEvent, useEffect, useState } from 'react';
+import { type FormEvent, useEffect, useMemo, useState } from 'react';
 
+import { LuCross, LuImage, LuPenLine } from 'react-icons/lu';
+
+import { ADMIN_TABS, type AdminTabId } from '../adminTabs';
 import { useBrandingStore } from '../../branding/brandingStore';
 import {
   apiErrorMessage,
@@ -43,68 +46,150 @@ function displayName(u: AppUser): string {
   return u.name.trim() || `#${u.id}`;
 }
 
-export function AdminPage() {
-  const [tab, setTab] = useState(0);
-
+function fieldClass() {
   return (
-    <div className="mx-auto max-w-6xl px-4 py-5 shell:px-6 shell:py-6">
-      <header className="mb-6">
-        <h1 className="text-xl font-extrabold tracking-tight text-stone-900">Админ панель</h1>
-        <p className="mt-1 text-sm text-stone-600">
-          Управление участниками, циклом молитв и шаблонами. Оформление сохраняется локально (как во Flutter).
-        </p>
-      </header>
-
-      <div className="mb-4 flex flex-wrap gap-2 border-b border-stone-200/90 pb-3">
-        {(
-          [
-            ['Пользователи', '👥'],
-            ['Календарь', '📅'],
-            ['Шаблоны', '📋'],
-            ['Проект', '⚙️'],
-          ] as const
-        ).map(([label, emoji], i) => (
-          <button
-            key={label}
-            type="button"
-            onClick={() => setTab(i)}
-            className={
-              tab === i
-                ? 'rounded-xl bg-primary px-4 py-2 text-sm font-bold text-white shadow-md shadow-primary/20'
-                : 'rounded-xl px-4 py-2 text-sm font-semibold text-stone-600 hover:bg-stone-100'
-            }
-          >
-            <span className="mr-1.5" aria-hidden>
-              {emoji}
-            </span>
-            {label}
-          </button>
-        ))}
-      </div>
-
-      {tab === 0 && <MembersSection />}
-      {tab === 1 && <CalendarSection />}
-      {tab === 2 && <TemplatesSection />}
-      {tab === 3 && <ProjectSection />}
-
-      <p className="mt-10 text-center text-[10px] text-stone-400">
-        web-react · сборка {__WEB_REACT_BUILD_STAMP__}
-      </p>
-    </div>
+    'w-full rounded-xl border border-stone-200/90 bg-white px-3 py-2.5 text-sm text-stone-900 outline-none ' +
+    'focus:border-primary focus:ring-2 focus:ring-primary/20 placeholder:text-stone-400'
   );
 }
 
-function fieldClass(short?: boolean) {
+function btnPrimary(className = '') {
+  return `rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-white shadow-md shadow-primary/20 transition hover:opacity-95 disabled:opacity-50 ${className}`;
+}
+
+function btnSecondary(className = '') {
+  return `rounded-xl border border-stone-200 bg-white px-3 py-2 text-sm font-semibold text-stone-700 transition hover:bg-stone-50 ${className}`;
+}
+
+function btnDangerOutline(className = '') {
+  return `rounded-xl border border-red-200 bg-white px-3 py-2 text-sm font-semibold text-red-700 transition hover:bg-red-50 ${className}`;
+}
+
+export function AdminPage() {
+  const [tab, setTab] = useState<AdminTabId>('members');
+  const meta = ADMIN_TABS.find((t) => t.id === tab)!;
+  const MetaIcon = meta.Icon;
+
   return (
-    'rounded-xl border border-stone-200/90 bg-white px-3 py-2 text-sm text-stone-900 outline-none ' +
-    'focus:border-primary focus:ring-2 focus:ring-primary/20 ' +
-    (short ? 'w-full max-w-[140px]' : 'w-full')
+    <div className="mx-auto max-w-6xl px-4 py-4 shell:flex shell:min-h-0 shell:gap-8 shell:px-6 shell:py-6">
+      {/* Боковое меню — desktop */}
+      <aside className="mb-4 hidden w-[220px] shrink-0 shell:block">
+        <div className="sticky top-4 rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] p-2 shadow-[var(--shadow)]">
+          <p className="px-3 pb-2 pt-1 text-[10px] font-extrabold uppercase tracking-[0.16em] text-stone-400">
+            Разделы панели
+          </p>
+          <nav className="flex flex-col gap-1" aria-label="Админ-разделы">
+            {ADMIN_TABS.map((t) => {
+              const active = tab === t.id;
+              const TabIcon = t.Icon;
+              return (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => setTab(t.id)}
+                  className={
+                    active
+                      ? 'group flex items-center gap-3 rounded-xl bg-primary px-3 py-2.5 text-left text-sm font-bold text-white shadow-md shadow-primary/20'
+                      : 'group flex items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold text-stone-700 transition hover:bg-stone-100'
+                  }
+                >
+                  <span
+                    className={
+                      active
+                        ? 'flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white/20'
+                        : 'flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-stone-100'
+                    }
+                    aria-hidden
+                  >
+                    <TabIcon
+                      className={`h-5 w-5 transition-colors ${active ? 'text-white' : 'text-stone-600 group-hover:text-primary'}`}
+                    />
+                  </span>
+                  <span className="min-w-0 leading-tight">
+                    <span className="block">{t.label}</span>
+                    <span
+                      className={
+                        active ? 'mt-0.5 block text-[10px] font-medium text-white/80' : 'mt-0.5 block text-[10px] font-medium text-stone-500'
+                      }
+                    >
+                      {t.short}
+                    </span>
+                  </span>
+                </button>
+              );
+            })}
+          </nav>
+        </div>
+      </aside>
+
+      <div className="min-w-0 flex-1">
+        <header className="mb-5 overflow-hidden rounded-3xl border border-stone-200/80 bg-gradient-to-br from-primary/[0.07] via-[var(--surface-elevated)] to-stone-50/90 p-5 shadow-[var(--shadow)]">
+          <p className="text-[10px] font-extrabold uppercase tracking-[0.2em] text-primary/85">Настройки</p>
+          <h1 className="mt-2 text-[22px] font-extrabold tracking-tight text-stone-900 shell:text-2xl">
+            Админ-панель
+          </h1>
+          <p className="mt-2 text-sm leading-relaxed text-stone-600">{meta.description}</p>
+        </header>
+
+        {/* Табы — мобильные и узкий экран */}
+        <div className="sticky top-0 z-20 -mx-4 mb-4 border-b border-stone-200/80 bg-[var(--surface)] px-4 py-2 shell:hidden">
+          <div className="flex gap-1 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            {ADMIN_TABS.map((t) => {
+              const active = tab === t.id;
+              const TabIcon = t.Icon;
+              return (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => setTab(t.id)}
+                  className={
+                    active
+                      ? 'group shrink-0 rounded-xl bg-primary px-3 py-2 text-xs font-bold text-white shadow-sm'
+                      : 'group shrink-0 rounded-xl border border-stone-200 bg-[var(--surface-elevated)] px-3 py-2 text-xs font-semibold text-stone-700 transition hover:border-stone-300'
+                  }
+                >
+                  <span className="inline-flex items-center gap-1">
+                    <TabIcon
+                      className={`h-4 w-4 shrink-0 transition-colors ${active ? 'text-white' : 'text-stone-500 group-hover:text-primary'}`}
+                      aria-hidden
+                    />
+                    {t.short}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="mb-3 flex items-center gap-3 shell:mb-4">
+          <span
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary shadow-sm"
+            aria-hidden
+          >
+            <MetaIcon className="h-5 w-5" strokeWidth={2} />
+          </span>
+          <div className="min-w-0">
+            <h2 className="text-lg font-extrabold tracking-tight text-stone-900">{meta.label}</h2>
+            <p className="text-xs font-medium text-stone-500">{meta.short}</p>
+          </div>
+        </div>
+
+        {tab === 'members' && <MembersSection />}
+        {tab === 'calendar' && <CalendarSection />}
+        {tab === 'templates' && <TemplatesSection />}
+        {tab === 'project' && <ProjectSection />}
+      </div>
+    </div>
   );
 }
 
 function MembersSection() {
   const qc = useQueryClient();
-  const { data, isLoading, error } = useQuery({ queryKey: Q_MEMBERS, queryFn: fetchAdminMembers });
+  const { data, isLoading, error, isFetching } = useQuery({
+    queryKey: Q_MEMBERS,
+    queryFn: fetchAdminMembers,
+  });
+  const [search, setSearch] = useState('');
   const [form, setForm] = useState({
     first_name: '',
     last_name: '',
@@ -113,6 +198,7 @@ function MembersSection() {
     ministry_role: '',
     ministry_direction: '',
   });
+  const [showCreate, setShowCreate] = useState(true);
   const [editing, setEditing] = useState<AppUser | null>(null);
   const [editForm, setEditForm] = useState({
     first_name: '',
@@ -127,8 +213,28 @@ function MembersSection() {
   const [oneTimeId, setOneTimeId] = useState<number | null>(null);
   const [oneTimeDate, setOneTimeDate] = useState('');
   const [banner, setBanner] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
+  const [menuOpenFor, setMenuOpenFor] = useState<number | null>(null);
 
   const invalidate = () => void qc.invalidateQueries({ queryKey: Q_MEMBERS });
+
+  const filtered = useMemo(() => {
+    const list = data ?? [];
+    const q = search.trim().toLowerCase();
+    if (!q) return list;
+    return list.filter((u) => {
+      const blob = `${displayName(u)} ${u.phone_number ?? ''} ${u.email ?? ''}`.toLowerCase();
+      return blob.includes(q);
+    });
+  }, [data, search]);
+
+  const stats = useMemo(() => {
+    const list = data ?? [];
+    return {
+      total: list.length,
+      active: list.filter((u) => u.is_active).length,
+      admins: list.filter((u) => u.app_role === 'admin').length,
+    };
+  }, [data]);
 
   const createMut = useMutation({
     mutationFn: () =>
@@ -212,6 +318,7 @@ function MembersSection() {
   });
 
   function openEdit(u: AppUser) {
+    setMenuOpenFor(null);
     setEditing(u);
     setEditForm({
       first_name: (u.first_name ?? '').trim(),
@@ -231,216 +338,486 @@ function MembersSection() {
     createMut.mutate();
   }
 
+  function closeMenu() {
+    setMenuOpenFor(null);
+  }
+
+  const oneTimeSubject =
+    oneTimeId != null ? ((data ?? []).find((u) => u.id === oneTimeId) ?? null) : null;
+
   if (isLoading) {
-    return <p className="text-sm text-stone-500">Загрузка списка…</p>;
+    return (
+      <div className="space-y-4">
+        <div className="h-24 animate-pulse rounded-2xl bg-stone-200/60" />
+        <div className="h-48 animate-pulse rounded-2xl bg-stone-200/60" />
+      </div>
+    );
   }
   if (error) {
     return (
-      <p className="text-sm text-red-600">
-        {apiErrorMessage(error, 'Не удалось загрузить участников.')}
-      </p>
+      <div className="rounded-2xl border border-red-200 bg-red-50/80 p-6 text-center">
+        <p className="font-semibold text-red-900">Не удалось загрузить список</p>
+        <p className="mt-2 text-sm text-red-800">{apiErrorMessage(error, 'Ошибка сети или сервера.')}</p>
+        <button type="button" className={`${btnPrimary('mt-4')}`} onClick={() => void invalidate()}>
+          Обновить
+        </button>
+      </div>
     );
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
+      {menuOpenFor != null ? (
+        <button
+          type="button"
+          className="fixed inset-0 z-[90] cursor-default bg-transparent"
+          aria-label="Закрыть меню"
+          onClick={closeMenu}
+        />
+      ) : null}
+
       {banner && (
         <div
           className={
             banner.type === 'ok'
-              ? 'rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900'
-              : 'rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900'
+              ? 'flex items-start justify-between gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900'
+              : 'flex items-start justify-between gap-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900'
           }
         >
-          {banner.text}
+          <span>{banner.text}</span>
+          <button
+            type="button"
+            className="shrink-0 rounded-lg px-2 py-0.5 text-stone-500 hover:bg-black/5"
+            onClick={() => setBanner(null)}
+            aria-label="Закрыть"
+          >
+            ✕
+          </button>
         </div>
       )}
 
-      <section className="rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] p-4 shadow-[var(--shadow)] shell:p-5">
-        <h2 className="mb-3 text-xs font-extrabold uppercase tracking-[0.12em] text-stone-900">
-          Новый участник
-        </h2>
-        <form onSubmit={onCreate} className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          <input
-            className={fieldClass()}
-            placeholder="Имя"
-            value={form.first_name}
-            onChange={(e) => setForm((s) => ({ ...s, first_name: e.target.value }))}
-            required
-          />
-          <input
-            className={fieldClass()}
-            placeholder="Фамилия"
-            value={form.last_name}
-            onChange={(e) => setForm((s) => ({ ...s, last_name: e.target.value }))}
-            required
-          />
-          <input
-            className={fieldClass()}
-            placeholder="Телефон"
-            value={form.phone_number}
-            onChange={(e) => setForm((s) => ({ ...s, phone_number: e.target.value }))}
-            required
-          />
-          <input
-            className={fieldClass()}
-            type="date"
-            value={form.birth_date}
-            onChange={(e) => setForm((s) => ({ ...s, birth_date: e.target.value }))}
-            required
-          />
-          <input
-            className={fieldClass()}
-            placeholder="Служение (роль), необязательно"
-            value={form.ministry_role}
-            onChange={(e) => setForm((s) => ({ ...s, ministry_role: e.target.value }))}
-          />
-          <input
-            className={fieldClass()}
-            placeholder="Направление, необязательно"
-            value={form.ministry_direction}
-            onChange={(e) => setForm((s) => ({ ...s, ministry_direction: e.target.value }))}
-          />
-          <div className="sm:col-span-2 lg:col-span-3">
-            <button
-              type="submit"
-              disabled={createMut.isPending}
-              className="rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-white shadow-md shadow-primary/20 disabled:opacity-50"
-            >
-              {createMut.isPending ? 'Создание…' : 'Добавить'}
-            </button>
-          </div>
-        </form>
-      </section>
+      <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] px-4 py-3 shadow-[var(--shadow)]">
+        <div className="flex flex-wrap gap-4 text-sm">
+          <span>
+            <span className="font-extrabold text-stone-900">{stats.total}</span>
+            <span className="text-stone-500"> всего</span>
+          </span>
+          <span>
+            <span className="font-extrabold text-emerald-700">{stats.active}</span>
+            <span className="text-stone-500"> активных</span>
+          </span>
+          <span>
+            <span className="font-extrabold text-primary">{stats.admins}</span>
+            <span className="text-stone-500"> админов</span>
+          </span>
+        </div>
+        {isFetching && !isLoading ? (
+          <span className="text-xs text-stone-400">Обновление…</span>
+        ) : null}
+      </div>
 
-      <div className="overflow-x-auto rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] shadow-[var(--shadow)]">
-        <table className="min-w-[720px] w-full border-collapse text-left text-sm">
-          <thead>
-            <tr className="border-b border-stone-200 bg-stone-50/80 text-xs font-extrabold uppercase tracking-wider text-stone-600">
-              <th className="px-3 py-3">Участник</th>
-              <th className="px-3 py-3">Телефон</th>
-              <th className="px-3 py-3">Роль</th>
-              <th className="px-3 py-3">Статус</th>
-              <th className="px-3 py-3 text-right">Действия</th>
-            </tr>
-          </thead>
-          <tbody>
-            {(data ?? []).map((u) => (
-              <tr key={u.id} className="border-b border-stone-100/90">
-                <td className="px-3 py-2.5 font-medium text-stone-900">{displayName(u)}</td>
-                <td className="px-3 py-2.5 text-stone-600">{u.phone_number ?? '—'}</td>
-                <td className="px-3 py-2.5 text-stone-700">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <input
+          type="search"
+          className={`${fieldClass()} sm:max-w-xs`}
+          placeholder="Поиск по имени или телефону…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          aria-label="Поиск участников"
+        />
+        <button
+          type="button"
+          className={btnSecondary('self-start sm:self-auto')}
+          onClick={() => setShowCreate((v) => !v)}
+        >
+          {showCreate ? 'Скрыть форму добавления' : 'Добавить участника'}
+        </button>
+      </div>
+
+      {showCreate ? (
+        <section className="rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] p-4 shadow-[var(--shadow)] shell:p-5">
+          <h3 className="text-sm font-extrabold text-stone-900">Новый участник</h3>
+          <p className="mt-1 text-xs text-stone-500">
+            Обязательны имя, фамилия, телефон и дата рождения. Служение можно указать позже в карточке.
+          </p>
+          <form onSubmit={onCreate} className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-stone-600">Имя</label>
+              <input
+                className={fieldClass()}
+                value={form.first_name}
+                onChange={(e) => setForm((s) => ({ ...s, first_name: e.target.value }))}
+                required
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-stone-600">Фамилия</label>
+              <input
+                className={fieldClass()}
+                value={form.last_name}
+                onChange={(e) => setForm((s) => ({ ...s, last_name: e.target.value }))}
+                required
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-stone-600">Телефон</label>
+              <input
+                className={fieldClass()}
+                inputMode="tel"
+                value={form.phone_number}
+                onChange={(e) => setForm((s) => ({ ...s, phone_number: e.target.value }))}
+                required
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-stone-600">Дата рождения</label>
+              <input
+                className={fieldClass()}
+                type="date"
+                value={form.birth_date}
+                onChange={(e) => setForm((s) => ({ ...s, birth_date: e.target.value }))}
+                required
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-stone-600">Роль служения</label>
+              <input
+                className={fieldClass()}
+                placeholder="Необязательно"
+                value={form.ministry_role}
+                onChange={(e) => setForm((s) => ({ ...s, ministry_role: e.target.value }))}
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-stone-600">Направление</label>
+              <input
+                className={fieldClass()}
+                placeholder="Необязательно"
+                value={form.ministry_direction}
+                onChange={(e) => setForm((s) => ({ ...s, ministry_direction: e.target.value }))}
+              />
+            </div>
+            <div className="sm:col-span-2 lg:col-span-3">
+              <button type="submit" disabled={createMut.isPending} className={btnPrimary()}>
+                {createMut.isPending ? 'Создание…' : 'Создать участника'}
+              </button>
+            </div>
+          </form>
+        </section>
+      ) : null}
+
+      {/* Карточки — мобильные */}
+      <div className="space-y-3 shell:hidden">
+        {filtered.length === 0 ? (
+          <p className="rounded-2xl border border-dashed border-stone-200 py-10 text-center text-sm text-stone-500">
+            {search.trim() ? 'Никого не найдено.' : 'Список пуст.'}
+          </p>
+        ) : (
+          filtered.map((u) => (
+            <article
+              key={u.id}
+              className="rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] p-4 shadow-[var(--shadow)]"
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <p className="font-bold text-stone-900">{displayName(u)}</p>
+                  <p className="mt-0.5 text-sm text-stone-600">{u.phone_number ?? '—'}</p>
+                </div>
+                <div className="relative shrink-0">
+                  <button
+                    type="button"
+                    className={btnSecondary('px-3 py-1.5 text-xs')}
+                    onClick={() => setMenuOpenFor(menuOpenFor === u.id ? null : u.id)}
+                    aria-expanded={menuOpenFor === u.id}
+                  >
+                    Действия ▾
+                  </button>
+                  {menuOpenFor === u.id ? (
+                    <ul className="absolute right-0 z-[100] mt-1 min-w-[13rem] overflow-hidden rounded-xl border border-stone-200 bg-white py-1 text-sm shadow-xl">
+                      <li>
+                        <button
+                          type="button"
+                          className="block w-full px-3 py-2.5 text-left hover:bg-stone-50"
+                          onClick={() => openEdit(u)}
+                        >
+                          Изменить данные
+                        </button>
+                      </li>
+                      <li>
+                        <button
+                          type="button"
+                          className="block w-full px-3 py-2.5 text-left hover:bg-stone-50"
+                          onClick={() => {
+                            closeMenu();
+                            setBanner(null);
+                            roleMut.mutate({
+                              id: u.id,
+                              role: u.app_role === 'admin' ? 'member' : 'admin',
+                            });
+                          }}
+                        >
+                          {u.app_role === 'admin' ? 'Снять права админа' : 'Сделать администратором'}
+                        </button>
+                      </li>
+                      <li>
+                        <button
+                          type="button"
+                          className="block w-full px-3 py-2.5 text-left hover:bg-stone-50"
+                          onClick={() => {
+                            closeMenu();
+                            setBanner(null);
+                            void updateAdminMember(u.id, { is_active: !u.is_active }).then(
+                              () => {
+                                setBanner({ type: 'ok', text: 'Статус обновлён.' });
+                                invalidate();
+                              },
+                              (e) =>
+                                setBanner({ type: 'err', text: apiErrorMessage(e, 'Ошибка.') }),
+                            );
+                          }}
+                        >
+                          {u.is_active ? 'Деактивировать' : 'Активировать'}
+                        </button>
+                      </li>
+                      <li>
+                        <button
+                          type="button"
+                          className="block w-full px-3 py-2.5 text-left hover:bg-stone-50"
+                          onClick={() => {
+                            closeMenu();
+                            setOneTimeId(u.id);
+                            setOneTimeDate('');
+                            setBanner(null);
+                          }}
+                        >
+                          Разовая дата в цикле
+                        </button>
+                      </li>
+                      <li className="border-t border-stone-100">
+                        <button
+                          type="button"
+                          className="block w-full px-3 py-2.5 text-left font-semibold text-red-700 hover:bg-red-50"
+                          onClick={() => {
+                            closeMenu();
+                            if (!window.confirm(`Удалить ${displayName(u)}?`)) return;
+                            setBanner(null);
+                            deleteMut.mutate(u.id);
+                          }}
+                        >
+                          Удалить
+                        </button>
+                      </li>
+                    </ul>
+                  ) : null}
+                </div>
+              </div>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <span
+                  className={
+                    u.app_role === 'admin'
+                      ? 'rounded-full bg-primary/12 px-2.5 py-0.5 text-xs font-bold text-primary'
+                      : 'rounded-full bg-stone-100 px-2.5 py-0.5 text-xs font-semibold text-stone-600'
+                  }
+                >
                   {u.app_role === 'admin' ? 'Админ' : 'Участник'}
-                </td>
-                <td className="px-3 py-2.5">
-                  {u.is_active ? (
-                    <span className="text-emerald-700">Активен</span>
-                  ) : (
-                    <span className="text-stone-500">Неактивен</span>
-                  )}
-                </td>
-                <td className="px-3 py-2.5">
-                  <div className="flex flex-wrap justify-end gap-1.5">
-                    <button
-                      type="button"
-                      className="rounded-lg border border-stone-200 px-2 py-1 text-xs font-semibold text-stone-700 hover:bg-stone-50"
-                      onClick={() => openEdit(u)}
-                    >
-                      Изменить
-                    </button>
-                    <button
-                      type="button"
-                      className="rounded-lg border border-stone-200 px-2 py-1 text-xs font-semibold text-stone-700 hover:bg-stone-50"
-                      onClick={() => {
-                        setBanner(null);
-                        roleMut.mutate({
-                          id: u.id,
-                          role: u.app_role === 'admin' ? 'member' : 'admin',
-                        });
-                      }}
-                      disabled={roleMut.isPending}
-                    >
-                      {u.app_role === 'admin' ? '→ Участник' : '→ Админ'}
-                    </button>
-                    <button
-                      type="button"
-                      className="rounded-lg border border-stone-200 px-2 py-1 text-xs font-semibold text-stone-700 hover:bg-stone-50"
-                      onClick={() => {
-                        setBanner(null);
-                        void updateAdminMember(u.id, { is_active: !u.is_active }).then(
-                          () => {
-                            setBanner({ type: 'ok', text: 'Статус обновлён.' });
-                            invalidate();
-                          },
-                          (e) =>
-                            setBanner({
-                              type: 'err',
-                              text: apiErrorMessage(e, 'Ошибка.'),
-                            }),
-                        );
-                      }}
-                    >
-                      {u.is_active ? 'Деактивировать' : 'Активировать'}
-                    </button>
-                    <button
-                      type="button"
-                      className="rounded-lg border border-stone-200 px-2 py-1 text-xs font-semibold text-stone-700 hover:bg-stone-50"
-                      onClick={() => {
-                        setOneTimeId(u.id);
-                        setOneTimeDate('');
-                        setBanner(null);
-                      }}
-                    >
-                      Разовая дата
-                    </button>
-                    <button
-                      type="button"
-                      className="rounded-lg border border-red-200 px-2 py-1 text-xs font-semibold text-red-700 hover:bg-red-50"
-                      onClick={() => {
-                        if (!window.confirm(`Удалить ${displayName(u)}?`)) return;
-                        setBanner(null);
-                        deleteMut.mutate(u.id);
-                      }}
-                      disabled={deleteMut.isPending}
-                    >
-                      Удалить
-                    </button>
-                  </div>
-                </td>
+                </span>
+                <span
+                  className={
+                    u.is_active
+                      ? 'rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-semibold text-emerald-800'
+                      : 'rounded-full bg-stone-100 px-2.5 py-0.5 text-xs font-semibold text-stone-500'
+                  }
+                >
+                  {u.is_active ? 'Активен' : 'Неактивен'}
+                </span>
+              </div>
+            </article>
+          ))
+        )}
+      </div>
+
+      {/* Таблица — shell+ */}
+      <div className="hidden overflow-hidden rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] shadow-[var(--shadow)] shell:block">
+        <div className="overflow-x-auto">
+          <table className="min-w-[640px] w-full border-collapse text-left text-sm">
+            <thead>
+              <tr className="border-b border-stone-200 bg-stone-50/90 text-xs font-extrabold uppercase tracking-wider text-stone-500">
+                <th className="px-4 py-3">Участник</th>
+                <th className="px-4 py-3">Телефон</th>
+                <th className="px-4 py-3">Роль в приложении</th>
+                <th className="px-4 py-3">Статус</th>
+                <th className="px-4 py-3 text-right">Действия</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {filtered.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="px-4 py-10 text-center text-stone-500">
+                    {search.trim() ? 'Никого не найдено.' : 'Список пуст.'}
+                  </td>
+                </tr>
+              ) : (
+                filtered.map((u) => (
+                  <tr key={u.id} className="border-b border-stone-100/90 last:border-0">
+                    <td className="px-4 py-3 font-semibold text-stone-900">{displayName(u)}</td>
+                    <td className="px-4 py-3 text-stone-600">{u.phone_number ?? '—'}</td>
+                    <td className="px-4 py-3">
+                      <span
+                        className={
+                          u.app_role === 'admin'
+                            ? 'rounded-full bg-primary/10 px-2 py-0.5 text-xs font-bold text-primary'
+                            : 'text-stone-600'
+                        }
+                      >
+                        {u.app_role === 'admin' ? 'Администратор' : 'Участник'}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      {u.is_active ? (
+                        <span className="text-emerald-700">Активен</span>
+                      ) : (
+                        <span className="text-stone-500">Неактивен</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <div className="relative inline-block text-left">
+                        <button
+                          type="button"
+                          className={btnSecondary('text-xs')}
+                          onClick={() => setMenuOpenFor(menuOpenFor === u.id ? null : u.id)}
+                        >
+                          Меню ▾
+                        </button>
+                        {menuOpenFor === u.id ? (
+                          <ul className="absolute right-0 z-[100] mt-1 min-w-[14rem] overflow-hidden rounded-xl border border-stone-200 bg-white py-1 text-sm shadow-xl">
+                            <li>
+                              <button
+                                type="button"
+                                className="block w-full px-3 py-2 text-left hover:bg-stone-50"
+                                onClick={() => openEdit(u)}
+                              >
+                                Изменить данные
+                              </button>
+                            </li>
+                            <li>
+                              <button
+                                type="button"
+                                className="block w-full px-3 py-2 text-left hover:bg-stone-50"
+                                onClick={() => {
+                                  closeMenu();
+                                  setBanner(null);
+                                  roleMut.mutate({
+                                    id: u.id,
+                                    role: u.app_role === 'admin' ? 'member' : 'admin',
+                                  });
+                                }}
+                              >
+                                {u.app_role === 'admin'
+                                  ? 'Снять права администратора'
+                                  : 'Назначить администратором'}
+                              </button>
+                            </li>
+                            <li>
+                              <button
+                                type="button"
+                                className="block w-full px-3 py-2 text-left hover:bg-stone-50"
+                                onClick={() => {
+                                  closeMenu();
+                                  setBanner(null);
+                                  void updateAdminMember(u.id, { is_active: !u.is_active }).then(
+                                    () => {
+                                      setBanner({ type: 'ok', text: 'Статус обновлён.' });
+                                      invalidate();
+                                    },
+                                    (e) =>
+                                      setBanner({
+                                        type: 'err',
+                                        text: apiErrorMessage(e, 'Ошибка.'),
+                                      }),
+                                  );
+                                }}
+                              >
+                                {u.is_active ? 'Деактивировать' : 'Активировать'}
+                              </button>
+                            </li>
+                            <li>
+                              <button
+                                type="button"
+                                className="block w-full px-3 py-2 text-left hover:bg-stone-50"
+                                onClick={() => {
+                                  closeMenu();
+                                  setOneTimeId(u.id);
+                                  setOneTimeDate('');
+                                  setBanner(null);
+                                }}
+                              >
+                                Разовая дата в цикле
+                              </button>
+                            </li>
+                            <li className="border-t border-stone-100">
+                              <button
+                                type="button"
+                                className="block w-full px-3 py-2 text-left font-semibold text-red-700 hover:bg-red-50"
+                                onClick={() => {
+                                  closeMenu();
+                                  if (!window.confirm(`Удалить ${displayName(u)}?`)) return;
+                                  setBanner(null);
+                                  deleteMut.mutate(u.id);
+                                }}
+                              >
+                                Удалить из базы
+                              </button>
+                            </li>
+                          </ul>
+                        ) : null}
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {oneTimeId != null && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-4">
-          <div className="max-w-sm rounded-2xl bg-white p-5 shadow-xl">
-            <h3 className="font-bold text-stone-900">Разовая дата молитвы</h3>
-            <p className="mt-1 text-sm text-stone-600">Участник #{oneTimeId}</p>
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/45 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="one-time-title"
+        >
+          <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl">
+            <h3 id="one-time-title" className="text-lg font-extrabold text-stone-900">
+              Разовая дата в цикле
+            </h3>
+            <p className="mt-1 text-sm text-stone-600">
+              Участник:{' '}
+              <strong>{oneTimeSubject ? displayName(oneTimeSubject) : `#${oneTimeId}`}</strong>
+            </p>
+            <p className="mt-2 text-xs text-stone-500">
+              Назначение на один день без сдвига общего расписания цикла.
+            </p>
+            <label className="mt-4 block text-xs font-semibold text-stone-600">Дата</label>
             <input
               type="date"
-              className={`${fieldClass()} mt-4`}
+              className={`${fieldClass()} mt-1`}
               value={oneTimeDate}
               onChange={(e) => setOneTimeDate(e.target.value)}
             />
-            <div className="mt-4 flex gap-2">
+            <div className="mt-5 flex flex-wrap gap-2">
               <button
                 type="button"
-                className="flex-1 rounded-xl bg-primary py-2 text-sm font-bold text-white disabled:opacity-50"
+                className={btnPrimary('flex-1')}
                 disabled={!oneTimeDate || oneTimeMut.isPending}
                 onClick={() => {
                   setBanner(null);
                   oneTimeMut.mutate();
                 }}
               >
-                Сохранить
+                {oneTimeMut.isPending ? 'Сохранение…' : 'Сохранить'}
               </button>
-              <button
-                type="button"
-                className="rounded-xl border border-stone-200 px-4 py-2 text-sm font-semibold"
-                onClick={() => setOneTimeId(null)}
-              >
+              <button type="button" className={btnSecondary()} onClick={() => setOneTimeId(null)}>
                 Отмена
               </button>
             </div>
@@ -449,78 +826,102 @@ function MembersSection() {
       )}
 
       {editing && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-4">
-          <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-white p-5 shadow-xl">
-            <h3 className="font-bold text-stone-900">Редактирование</h3>
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/45 p-4"
+          role="dialog"
+          aria-modal="true"
+        >
+          <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-white p-5 shadow-2xl">
+            <h3 className="text-lg font-extrabold text-stone-900">
+              Карточка: {displayName(editing)}
+            </h3>
             <div className="mt-4 grid gap-3">
-              <input
-                className={fieldClass()}
-                placeholder="Имя"
-                value={editForm.first_name}
-                onChange={(e) => setEditForm((s) => ({ ...s, first_name: e.target.value }))}
-              />
-              <input
-                className={fieldClass()}
-                placeholder="Фамилия"
-                value={editForm.last_name}
-                onChange={(e) => setEditForm((s) => ({ ...s, last_name: e.target.value }))}
-              />
-              <input
-                className={fieldClass()}
-                placeholder="Телефон"
-                value={editForm.phone_number}
-                onChange={(e) => setEditForm((s) => ({ ...s, phone_number: e.target.value }))}
-              />
-              <input
-                type="date"
-                className={fieldClass()}
-                value={editForm.birth_date}
-                onChange={(e) => setEditForm((s) => ({ ...s, birth_date: e.target.value }))}
-              />
-              <input
-                className={fieldClass()}
-                placeholder="Роль служения"
-                value={editForm.ministry_role}
-                onChange={(e) => setEditForm((s) => ({ ...s, ministry_role: e.target.value }))}
-              />
-              <input
-                className={fieldClass()}
-                placeholder="Направление"
-                value={editForm.ministry_direction}
-                onChange={(e) => setEditForm((s) => ({ ...s, ministry_direction: e.target.value }))}
-              />
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div>
+                  <label className="mb-1 block text-xs font-semibold text-stone-600">Имя</label>
+                  <input
+                    className={fieldClass()}
+                    value={editForm.first_name}
+                    onChange={(e) => setEditForm((s) => ({ ...s, first_name: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-semibold text-stone-600">Фамилия</label>
+                  <input
+                    className={fieldClass()}
+                    value={editForm.last_name}
+                    onChange={(e) => setEditForm((s) => ({ ...s, last_name: e.target.value }))}
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-stone-600">Телефон</label>
+                <input
+                  className={fieldClass()}
+                  value={editForm.phone_number}
+                  onChange={(e) => setEditForm((s) => ({ ...s, phone_number: e.target.value }))}
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-stone-600">Дата рождения</label>
+                <input
+                  type="date"
+                  className={fieldClass()}
+                  value={editForm.birth_date}
+                  onChange={(e) => setEditForm((s) => ({ ...s, birth_date: e.target.value }))}
+                />
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div>
+                  <label className="mb-1 block text-xs font-semibold text-stone-600">Роль служения</label>
+                  <input
+                    className={fieldClass()}
+                    value={editForm.ministry_role}
+                    onChange={(e) => setEditForm((s) => ({ ...s, ministry_role: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-semibold text-stone-600">Направление</label>
+                  <input
+                    className={fieldClass()}
+                    value={editForm.ministry_direction}
+                    onChange={(e) => setEditForm((s) => ({ ...s, ministry_direction: e.target.value }))}
+                  />
+                </div>
+              </div>
               <label className="flex items-center gap-2 text-sm text-stone-700">
                 <input
                   type="checkbox"
+                  className="h-4 w-4 rounded border-stone-300 text-primary"
                   checked={editForm.is_active}
                   onChange={(e) => setEditForm((s) => ({ ...s, is_active: e.target.checked }))}
                 />
-                Активен
+                Активен (может войти в приложение)
               </label>
-              <textarea
-                className={`${fieldClass()} min-h-[100px]`}
-                placeholder="Молитвенная нужда"
-                value={editForm.prayer_request}
-                onChange={(e) => setEditForm((s) => ({ ...s, prayer_request: e.target.value }))}
-              />
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-stone-600">
+                  Молитвенная нужда
+                </label>
+                <textarea
+                  className={`${fieldClass()} min-h-[100px] resize-y`}
+                  value={editForm.prayer_request}
+                  onChange={(e) => setEditForm((s) => ({ ...s, prayer_request: e.target.value }))}
+                />
+              </div>
             </div>
-            <div className="mt-4 flex gap-2">
+            <div className="mt-5 flex flex-wrap gap-2">
               <button
                 type="button"
-                className="flex-1 rounded-xl bg-primary py-2 text-sm font-bold text-white disabled:opacity-50"
+                className={btnPrimary('flex-1')}
                 disabled={saveEditMut.isPending}
                 onClick={() => {
                   setBanner(null);
                   saveEditMut.mutate();
                 }}
               >
-                Сохранить
+                {saveEditMut.isPending ? 'Сохранение…' : 'Сохранить'}
               </button>
-              <button
-                type="button"
-                className="rounded-xl border border-stone-200 px-4 py-2 text-sm font-semibold"
-                onClick={() => setEditing(null)}
-              >
+              <button type="button" className={btnSecondary()} onClick={() => setEditing(null)}>
                 Отмена
               </button>
             </div>
@@ -536,52 +937,76 @@ function CalendarSection() {
   const [msg, setMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
   const mut = useMutation({
     mutationFn: () => startPrayerCycle(date.trim()),
-    onSuccess: (data) => {
-      const d = data.start_date ?? date;
-      setMsg({ type: 'ok', text: `Цикл запущен с даты ${d}.` });
+    onSuccess: (d) => {
+      const x = d.start_date ?? date;
+      setMsg({ type: 'ok', text: `Цикл отсчитывается с ${x}.` });
     },
     onError: (e) => setMsg({ type: 'err', text: apiErrorMessage(e, 'Не удалось запустить цикл.') }),
   });
 
   return (
     <div className="space-y-8">
-      <section className="max-w-md rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] p-5 shadow-[var(--shadow)]">
-        <h2 className="text-xs font-extrabold uppercase tracking-[0.12em] text-stone-900">
-          Старт цикла молитв
-        </h2>
-        <p className="mt-2 text-sm text-stone-600">
-          Устанавливает дату отсчёта цикла в настройках (как во Flutter, вкладка «Календарь»).
-        </p>
+      <section className="max-w-xl rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] p-5 shadow-[var(--shadow)]">
+        <div className="flex items-start gap-3">
+          <span
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-sm font-extrabold text-primary"
+            aria-hidden
+          >
+            1
+          </span>
+          <div>
+            <h3 className="font-extrabold text-stone-900">Старт цикла молитв</h3>
+            <p className="mt-1 text-sm text-stone-600">
+              С какой даты считать «день 1» для ротации участников и глобальных блоков в разделе «Молитва».
+            </p>
+          </div>
+        </div>
+        <label className="mt-4 block text-xs font-semibold text-stone-600">Дата старта</label>
         <input
           type="date"
-          className={`${fieldClass()} mt-4`}
+          className={`${fieldClass()} mt-1 max-w-xs`}
           value={date}
           onChange={(e) => setDate(e.target.value)}
         />
         <button
           type="button"
-          className="mt-4 w-full rounded-xl bg-primary py-2.5 text-sm font-bold text-white shadow-md shadow-primary/20 disabled:opacity-50"
+          className={`${btnPrimary('mt-4')}`}
           disabled={mut.isPending}
           onClick={() => {
             setMsg(null);
             mut.mutate();
           }}
         >
-          {mut.isPending ? 'Отправка…' : 'Запустить цикл'}
+          {mut.isPending ? 'Сохранение…' : 'Применить дату старта'}
         </button>
-        {msg && (
+        {msg ? (
           <p
             className={
-              msg.type === 'ok'
-                ? 'mt-3 text-sm text-emerald-700'
-                : 'mt-3 text-sm text-red-600'
+              msg.type === 'ok' ? 'mt-3 text-sm font-medium text-emerald-700' : 'mt-3 text-sm text-red-600'
             }
           >
             {msg.text}
           </p>
-        )}
+        ) : null}
       </section>
-      <GlobalNeedsSection />
+
+      <div>
+        <div className="mb-4 flex items-start gap-3">
+          <span
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-stone-200/80 text-sm font-extrabold text-stone-700"
+            aria-hidden
+          >
+            2
+          </span>
+          <div>
+            <h3 className="font-extrabold text-stone-900">Контент на экране молитвы</h3>
+            <p className="mt-1 text-sm text-stone-600">
+              Три колонки ниже — это блоки «Глобальные темы», «Служения» и «Отступники» в приложении.
+            </p>
+          </div>
+        </div>
+        <GlobalNeedsSection />
+      </div>
     </div>
   );
 }
@@ -673,167 +1098,189 @@ function GlobalNeedsSection() {
     onError: (e) => setNote({ type: 'err', text: apiErrorMessage(e, 'Ошибка.') }),
   });
 
+  const loading = themes.isLoading || ministries.isLoading || backsliders.isLoading;
+
   return (
     <div>
-      <h2 className="mb-3 text-xs font-extrabold uppercase tracking-[0.12em] text-stone-900">
-        Глобальные молитвенные нужды
-      </h2>
-      <p className="mb-4 text-sm text-stone-600">
-        Темы, служения и отступники на неделю — как в мобильной админке (раздел календаря).
-      </p>
       {note && (
         <div
           className={
             note.type === 'ok'
-              ? 'mb-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900'
-              : 'mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900'
+              ? 'mb-4 flex justify-between gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900'
+              : 'mb-4 flex justify-between gap-2 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900'
           }
         >
-          {note.text}
+          <span>{note.text}</span>
+          <button type="button" className="text-stone-500 hover:text-stone-800" onClick={() => setNote(null)}>
+            ✕
+          </button>
         </div>
       )}
-      <div className="grid gap-6 lg:grid-cols-3">
-        <section className="rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] p-4 shadow-[var(--shadow)]">
-          <h3 className="text-sm font-bold text-stone-900">Глобальные темы</h3>
-          <input
-            className={`${fieldClass()} mt-2`}
-            placeholder="Заголовок *"
-            value={tTitle}
-            onChange={(e) => setTTitle(e.target.value)}
-          />
-          <input
-            className={`${fieldClass()} mt-2`}
-            placeholder="Стих (необяз.)"
-            value={tVerse}
-            onChange={(e) => setTVerse(e.target.value)}
-          />
-          <textarea
-            className={`${fieldClass()} mt-2 min-h-[72px]`}
-            placeholder="Акценты молитвы (необяз.)"
-            value={tPoints}
-            onChange={(e) => setTPoints(e.target.value)}
-          />
-          <button
-            type="button"
-            className="mt-2 w-full rounded-xl bg-primary py-2 text-sm font-bold text-white disabled:opacity-50"
-            disabled={!tTitle.trim() || addT.isPending}
-            onClick={() => {
-              setNote(null);
-              addT.mutate();
-            }}
-          >
-            Добавить тему
-          </button>
-          <ul className="mt-3 max-h-48 space-y-1 overflow-y-auto text-sm">
-            {(themes.data ?? []).map((x) => (
-              <li
-                key={x.id}
-                className="flex items-start justify-between gap-2 rounded-lg border border-stone-100 bg-white px-2 py-1.5"
-              >
-                <span className="min-w-0 break-words">{x.title}</span>
-                <button
-                  type="button"
-                  className="shrink-0 text-xs font-semibold text-red-600"
-                  onClick={() => {
-                    setNote(null);
-                    delT.mutate(x.id);
-                  }}
-                >
-                  ✕
-                </button>
-              </li>
-            ))}
-          </ul>
-        </section>
-        <section className="rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] p-4 shadow-[var(--shadow)]">
-          <h3 className="text-sm font-bold text-stone-900">Служения</h3>
-          <input
-            className={`${fieldClass()} mt-2`}
-            placeholder="Название *"
-            value={mTitle}
-            onChange={(e) => setMTitle(e.target.value)}
-          />
-          <textarea
-            className={`${fieldClass()} mt-2 min-h-[72px]`}
-            placeholder="Акценты (необяз.)"
-            value={mPoints}
-            onChange={(e) => setMPoints(e.target.value)}
-          />
-          <button
-            type="button"
-            className="mt-2 w-full rounded-xl bg-primary py-2 text-sm font-bold text-white disabled:opacity-50"
-            disabled={!mTitle.trim() || addM.isPending}
-            onClick={() => {
-              setNote(null);
-              addM.mutate();
-            }}
-          >
-            Добавить
-          </button>
-          <ul className="mt-3 max-h-48 space-y-1 overflow-y-auto text-sm">
-            {(ministries.data ?? []).map((x) => (
-              <li
-                key={x.id}
-                className="flex items-start justify-between gap-2 rounded-lg border border-stone-100 bg-white px-2 py-1.5"
-              >
-                <span className="min-w-0 break-words">{x.title}</span>
-                <button
-                  type="button"
-                  className="shrink-0 text-xs font-semibold text-red-600"
-                  onClick={() => {
-                    setNote(null);
-                    delM.mutate(x.id);
-                  }}
-                >
-                  ✕
-                </button>
-              </li>
-            ))}
-          </ul>
-        </section>
-        <section className="rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] p-4 shadow-[var(--shadow)]">
-          <h3 className="text-sm font-bold text-stone-900">Отступники</h3>
-          <div className="mt-2 flex gap-2">
+      {loading ? (
+        <div className="grid gap-4 lg:grid-cols-3">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="h-64 animate-pulse rounded-2xl bg-stone-200/50" />
+          ))}
+        </div>
+      ) : (
+        <div className="grid gap-6 lg:grid-cols-3">
+          <section className="rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] p-4 shadow-[var(--shadow)]">
+            <h4 className="text-sm font-extrabold text-stone-900">Глобальные темы</h4>
+            <p className="mt-1 text-xs text-stone-500">Заголовок, стих, акценты молитвы.</p>
             <input
-              className={fieldClass()}
-              placeholder="Имя *"
-              value={bName}
-              onChange={(e) => setBName(e.target.value)}
+              className={`${fieldClass()} mt-3`}
+              placeholder="Заголовок *"
+              value={tTitle}
+              onChange={(e) => setTTitle(e.target.value)}
+            />
+            <input
+              className={`${fieldClass()} mt-2`}
+              placeholder="Стих (необязательно)"
+              value={tVerse}
+              onChange={(e) => setTVerse(e.target.value)}
+            />
+            <textarea
+              className={`${fieldClass()} mt-2 min-h-[72px]`}
+              placeholder="Акценты молитвы"
+              value={tPoints}
+              onChange={(e) => setTPoints(e.target.value)}
             />
             <button
               type="button"
-              className="shrink-0 rounded-xl bg-primary px-4 py-2 text-sm font-bold text-white disabled:opacity-50"
-              disabled={!bName.trim() || addB.isPending}
+              className={`${btnPrimary('mt-3 w-full')}`}
+              disabled={!tTitle.trim() || addT.isPending}
               onClick={() => {
                 setNote(null);
-                addB.mutate();
+                addT.mutate();
               }}
             >
-              +
+              Добавить тему
             </button>
-          </div>
-          <ul className="mt-3 max-h-56 space-y-1 overflow-y-auto text-sm">
-            {(backsliders.data ?? []).map((x) => (
-              <li
-                key={x.id}
-                className="flex items-start justify-between gap-2 rounded-lg border border-stone-100 bg-white px-2 py-1.5"
+            <ul className="mt-3 max-h-52 space-y-1.5 overflow-y-auto text-sm">
+              {(themes.data ?? []).length === 0 ? (
+                <li className="py-4 text-center text-xs text-stone-400">Пока нет тем</li>
+              ) : (
+                (themes.data ?? []).map((x) => (
+                  <li
+                    key={x.id}
+                    className="flex items-start justify-between gap-2 rounded-xl border border-stone-100 bg-white px-3 py-2"
+                  >
+                    <span className="min-w-0 font-medium text-stone-800">{x.title}</span>
+                    <button
+                      type="button"
+                      className="shrink-0 text-xs font-semibold text-red-600 hover:underline"
+                      onClick={() => {
+                        setNote(null);
+                        delT.mutate(x.id);
+                      }}
+                    >
+                      Удалить
+                    </button>
+                  </li>
+                ))
+              )}
+            </ul>
+          </section>
+          <section className="rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] p-4 shadow-[var(--shadow)]">
+            <h4 className="text-sm font-extrabold text-stone-900">Служения</h4>
+            <p className="mt-1 text-xs text-stone-500">Название и текст для блока служений.</p>
+            <input
+              className={`${fieldClass()} mt-3`}
+              placeholder="Название *"
+              value={mTitle}
+              onChange={(e) => setMTitle(e.target.value)}
+            />
+            <textarea
+              className={`${fieldClass()} mt-2 min-h-[72px]`}
+              placeholder="Акценты молитвы"
+              value={mPoints}
+              onChange={(e) => setMPoints(e.target.value)}
+            />
+            <button
+              type="button"
+              className={`${btnPrimary('mt-3 w-full')}`}
+              disabled={!mTitle.trim() || addM.isPending}
+              onClick={() => {
+                setNote(null);
+                addM.mutate();
+              }}
+            >
+              Добавить служение
+            </button>
+            <ul className="mt-3 max-h-52 space-y-1.5 overflow-y-auto text-sm">
+              {(ministries.data ?? []).length === 0 ? (
+                <li className="py-4 text-center text-xs text-stone-400">Пока нет записей</li>
+              ) : (
+                (ministries.data ?? []).map((x) => (
+                  <li
+                    key={x.id}
+                    className="flex items-start justify-between gap-2 rounded-xl border border-stone-100 bg-white px-3 py-2"
+                  >
+                    <span className="min-w-0 font-medium text-stone-800">{x.title}</span>
+                    <button
+                      type="button"
+                      className="shrink-0 text-xs font-semibold text-red-600 hover:underline"
+                      onClick={() => {
+                        setNote(null);
+                        delM.mutate(x.id);
+                      }}
+                    >
+                      Удалить
+                    </button>
+                  </li>
+                ))
+              )}
+            </ul>
+          </section>
+          <section className="rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] p-4 shadow-[var(--shadow)]">
+            <h4 className="text-sm font-extrabold text-stone-900">Отступники</h4>
+            <p className="mt-1 text-xs text-stone-500">Имена для блока «Отпавшие».</p>
+            <div className="mt-3 flex gap-2">
+              <input
+                className={fieldClass()}
+                placeholder="Имя *"
+                value={bName}
+                onChange={(e) => setBName(e.target.value)}
+              />
+              <button
+                type="button"
+                className={`${btnPrimary('shrink-0 px-5')}`}
+                disabled={!bName.trim() || addB.isPending}
+                onClick={() => {
+                  setNote(null);
+                  addB.mutate();
+                }}
               >
-                <span className="min-w-0 break-words">{x.name}</span>
-                <button
-                  type="button"
-                  className="shrink-0 text-xs font-semibold text-red-600"
-                  onClick={() => {
-                    setNote(null);
-                    delB.mutate(x.id);
-                  }}
-                >
-                  ✕
-                </button>
-              </li>
-            ))}
-          </ul>
-        </section>
-      </div>
+                +
+              </button>
+            </div>
+            <ul className="mt-3 max-h-60 space-y-1.5 overflow-y-auto text-sm">
+              {(backsliders.data ?? []).length === 0 ? (
+                <li className="py-4 text-center text-xs text-stone-400">Список пуст</li>
+              ) : (
+                (backsliders.data ?? []).map((x) => (
+                  <li
+                    key={x.id}
+                    className="flex items-start justify-between gap-2 rounded-xl border border-stone-100 bg-white px-3 py-2"
+                  >
+                    <span className="min-w-0 font-medium text-stone-800">{x.name}</span>
+                    <button
+                      type="button"
+                      className="shrink-0 text-xs font-semibold text-red-600 hover:underline"
+                      onClick={() => {
+                        setNote(null);
+                        delB.mutate(x.id);
+                      }}
+                    >
+                      Удалить
+                    </button>
+                  </li>
+                ))
+              )}
+            </ul>
+          </section>
+        </div>
+      )}
     </div>
   );
 }
@@ -853,7 +1300,7 @@ function TemplatesSection() {
     mutationFn: () => createRoleTemplate(roleTitle.trim()),
     onSuccess: () => {
       setRoleTitle('');
-      setNote({ type: 'ok', text: 'Шаблон роли добавлен.' });
+      setNote({ type: 'ok', text: 'Шаблон добавлен.' });
       invRoles();
     },
     onError: (e) => setNote({ type: 'err', text: apiErrorMessage(e, 'Ошибка.') }),
@@ -872,7 +1319,7 @@ function TemplatesSection() {
     mutationFn: () => createDirectionTemplate(dirTitle.trim()),
     onSuccess: () => {
       setDirTitle('');
-      setNote({ type: 'ok', text: 'Шаблон направления добавлен.' });
+      setNote({ type: 'ok', text: 'Шаблон добавлен.' });
       invDirs();
     },
     onError: (e) => setNote({ type: 'err', text: apiErrorMessage(e, 'Ошибка.') }),
@@ -887,107 +1334,121 @@ function TemplatesSection() {
     onError: (e) => setNote({ type: 'err', text: apiErrorMessage(e, 'Ошибка.') }),
   });
 
+  const loading = roles.isLoading || dirs.isLoading;
+
   return (
-    <div className="grid gap-6 lg:grid-cols-2">
+    <div className="space-y-4">
+      <p className="text-sm text-stone-600">
+        Эти списки подставляются как подсказки при заполнении полей «роль служения» и «направление» у
+        участника — удобно держать единый словарь.
+      </p>
       {note && (
         <div
           className={
             note.type === 'ok'
-              ? 'lg:col-span-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900'
-              : 'lg:col-span-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900'
+              ? 'flex justify-between gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900'
+              : 'flex justify-between gap-2 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900'
           }
         >
-          {note.text}
+          <span>{note.text}</span>
+          <button type="button" onClick={() => setNote(null)} className="text-stone-500">
+            ✕
+          </button>
         </div>
       )}
-      <section className="rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] p-4 shadow-[var(--shadow)]">
-        <h2 className="text-xs font-extrabold uppercase tracking-[0.12em] text-stone-900">
-          Роли служений
-        </h2>
-        <div className="mt-3 flex gap-2">
-          <input
-            className={fieldClass()}
-            placeholder="Название"
-            value={roleTitle}
-            onChange={(e) => setRoleTitle(e.target.value)}
-          />
-          <button
-            type="button"
-            className="shrink-0 rounded-xl bg-primary px-4 py-2 text-sm font-bold text-white disabled:opacity-50"
-            disabled={!roleTitle.trim() || addRole.isPending}
-            onClick={() => {
-              setNote(null);
-              addRole.mutate();
-            }}
-          >
-            +
-          </button>
+      {loading ? (
+        <div className="grid gap-6 lg:grid-cols-2">
+          <div className="h-56 animate-pulse rounded-2xl bg-stone-200/50" />
+          <div className="h-56 animate-pulse rounded-2xl bg-stone-200/50" />
         </div>
-        <ul className="mt-3 max-h-64 space-y-1 overflow-y-auto text-sm">
-          {(roles.data ?? []).map((t) => (
-            <li
-              key={t.id}
-              className="flex items-center justify-between gap-2 rounded-lg border border-stone-100 bg-white px-3 py-2"
-            >
-              <span>{t.title}</span>
+      ) : (
+        <div className="grid gap-6 lg:grid-cols-2">
+          <section className="rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] p-5 shadow-[var(--shadow)]">
+            <h3 className="font-extrabold text-stone-900">Роли служений</h3>
+            <div className="mt-3 flex gap-2">
+              <input
+                className={fieldClass()}
+                placeholder="Новая роль"
+                value={roleTitle}
+                onChange={(e) => setRoleTitle(e.target.value)}
+              />
               <button
                 type="button"
-                className="text-xs font-semibold text-red-600 hover:underline"
+                className={`${btnPrimary('shrink-0')}`}
+                disabled={!roleTitle.trim() || addRole.isPending}
                 onClick={() => {
                   setNote(null);
-                  delRole.mutate(t.id);
+                  addRole.mutate();
                 }}
               >
-                Удалить
+                Добавить
               </button>
-            </li>
-          ))}
-        </ul>
-      </section>
-      <section className="rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] p-4 shadow-[var(--shadow)]">
-        <h2 className="text-xs font-extrabold uppercase tracking-[0.12em] text-stone-900">
-          Направления
-        </h2>
-        <div className="mt-3 flex gap-2">
-          <input
-            className={fieldClass()}
-            placeholder="Название"
-            value={dirTitle}
-            onChange={(e) => setDirTitle(e.target.value)}
-          />
-          <button
-            type="button"
-            className="shrink-0 rounded-xl bg-primary px-4 py-2 text-sm font-bold text-white disabled:opacity-50"
-            disabled={!dirTitle.trim() || addDir.isPending}
-            onClick={() => {
-              setNote(null);
-              addDir.mutate();
-            }}
-          >
-            +
-          </button>
-        </div>
-        <ul className="mt-3 max-h-64 space-y-1 overflow-y-auto text-sm">
-          {(dirs.data ?? []).map((t) => (
-            <li
-              key={t.id}
-              className="flex items-center justify-between gap-2 rounded-lg border border-stone-100 bg-white px-3 py-2"
-            >
-              <span>{t.title}</span>
+            </div>
+            <ul className="mt-4 max-h-72 space-y-1.5 overflow-y-auto">
+              {(roles.data ?? []).map((t) => (
+                <li
+                  key={t.id}
+                  className="flex items-center justify-between gap-2 rounded-xl border border-stone-100 bg-white px-3 py-2.5 text-sm"
+                >
+                  <span>{t.title}</span>
+                  <button
+                    type="button"
+                    className="text-xs font-semibold text-red-600 hover:underline"
+                    onClick={() => {
+                      setNote(null);
+                      delRole.mutate(t.id);
+                    }}
+                  >
+                    Удалить
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </section>
+          <section className="rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] p-5 shadow-[var(--shadow)]">
+            <h3 className="font-extrabold text-stone-900">Направления</h3>
+            <div className="mt-3 flex gap-2">
+              <input
+                className={fieldClass()}
+                placeholder="Новое направление"
+                value={dirTitle}
+                onChange={(e) => setDirTitle(e.target.value)}
+              />
               <button
                 type="button"
-                className="text-xs font-semibold text-red-600 hover:underline"
+                className={`${btnPrimary('shrink-0')}`}
+                disabled={!dirTitle.trim() || addDir.isPending}
                 onClick={() => {
                   setNote(null);
-                  delDir.mutate(t.id);
+                  addDir.mutate();
                 }}
               >
-                Удалить
+                Добавить
               </button>
-            </li>
-          ))}
-        </ul>
-      </section>
+            </div>
+            <ul className="mt-4 max-h-72 space-y-1.5 overflow-y-auto">
+              {(dirs.data ?? []).map((t) => (
+                <li
+                  key={t.id}
+                  className="flex items-center justify-between gap-2 rounded-xl border border-stone-100 bg-white px-3 py-2.5 text-sm"
+                >
+                  <span>{t.title}</span>
+                  <button
+                    type="button"
+                    className="text-xs font-semibold text-red-600 hover:underline"
+                    onClick={() => {
+                      setNote(null);
+                      delDir.mutate(t.id);
+                    }}
+                  >
+                    Удалить
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </section>
+        </div>
+      )}
     </div>
   );
 }
@@ -1011,59 +1472,70 @@ function ProjectSection() {
   }, [appName, description]);
 
   return (
-    <section className="max-w-lg space-y-5 rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] p-5 shadow-[var(--shadow)]">
-      <h2 className="text-xs font-extrabold uppercase tracking-[0.12em] text-stone-900">
-        Оформление приложения
-      </h2>
-      <p className="text-sm text-stone-600">
-        Те же настройки, что вкладка «Проект» в Flutter: синхронизация через ключ{' '}
-        <code className="rounded bg-stone-100 px-1">project_branding_settings_v1</code>.
-      </p>
-      <div>
-        <label className="text-xs font-semibold text-stone-600">Название</label>
-        <input
-          className={`${fieldClass()} mt-1`}
-          value={localName}
-          onChange={(e) => setLocalName(e.target.value)}
-          onBlur={() => updateBranding({ appName: localName.trim() || appName })}
-        />
-      </div>
-      <div>
-        <label className="text-xs font-semibold text-stone-600">Описание</label>
-        <input
-          className={`${fieldClass()} mt-1`}
-          value={localDesc}
-          onChange={(e) => setLocalDesc(e.target.value)}
-          onBlur={() => updateBranding({ description: localDesc.trim() || description })}
-        />
-      </div>
-      <div>
-        <label className="text-xs font-semibold text-stone-600">
-          Масштаб логотипа: {logoScalePercent}%
+    <div className="max-w-lg space-y-6">
+      <section className="rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] p-5 shadow-[var(--shadow)]">
+        <h3 className="flex items-center gap-2 font-extrabold text-stone-900">
+          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary" aria-hidden>
+            <LuPenLine className="h-5 w-5" strokeWidth={2} />
+          </span>
+          Тексты в шапке
+        </h3>
+        <p className="mt-2 text-xs leading-relaxed text-stone-600">
+          Хранятся только на этом устройстве в браузере, без отправки на сервер. Тот же набор полей, что в
+          мобильном приложении — при необходимости можно перенести оформление между устройствами.
+        </p>
+        <div className="mt-4 space-y-3">
+          <div>
+            <label className="mb-1 block text-xs font-semibold text-stone-600">Название</label>
+            <input
+              className={fieldClass()}
+              value={localName}
+              onChange={(e) => setLocalName(e.target.value)}
+              onBlur={() => updateBranding({ appName: localName.trim() || appName })}
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-semibold text-stone-600">Подзаголовок</label>
+            <input
+              className={fieldClass()}
+              value={localDesc}
+              onChange={(e) => setLocalDesc(e.target.value)}
+              onBlur={() => updateBranding({ description: localDesc.trim() || description })}
+            />
+          </div>
+        </div>
+      </section>
+      <section className="rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] p-5 shadow-[var(--shadow)]">
+        <h3 className="flex items-center gap-2 font-extrabold text-stone-900">
+          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary" aria-hidden>
+            <LuImage className="h-5 w-5" strokeWidth={2} />
+          </span>
+          Логотип
+        </h3>
+        <label className="mt-3 block text-xs font-semibold text-stone-600">
+          Масштаб: {logoScalePercent}%
         </label>
         <input
           type="range"
           min={80}
           max={160}
           value={logoScalePercent}
-          className="mt-2 w-full"
+          className="mt-2 w-full accent-primary"
           onChange={(e) =>
             updateBranding({ logoScalePercent: Number.parseInt(e.target.value, 10) || 110 })
           }
         />
-      </div>
-      <label className="flex items-center gap-2 text-sm text-stone-700">
-        <input
-          type="checkbox"
-          checked={removeLightBackground}
-          onChange={(e) => updateBranding({ removeLightBackground: e.target.checked })}
-        />
-        Убирать светлый фон у логотипа при загрузке
-      </label>
-      <div>
-        <label className="text-xs font-semibold text-stone-600">Логотип</label>
-        <div className="mt-2 flex flex-wrap items-center gap-3">
-          <div className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-xl border border-stone-200 bg-stone-50">
+        <label className="mt-4 flex items-start gap-2 text-sm text-stone-700">
+          <input
+            type="checkbox"
+            className="mt-1 h-4 w-4 rounded border-stone-300"
+            checked={removeLightBackground}
+            onChange={(e) => updateBranding({ removeLightBackground: e.target.checked })}
+          />
+          <span>Убирать светлый фон при загрузке PNG/JPEG</span>
+        </label>
+        <div className="mt-4 flex flex-wrap items-center gap-4">
+          <div className="flex h-20 w-20 items-center justify-center overflow-hidden rounded-2xl border border-stone-200 bg-stone-50">
             {customLogoDataUrl ? (
               <img
                 src={customLogoDataUrl}
@@ -1072,45 +1544,47 @@ function ProjectSection() {
                 style={{ transform: `scale(${logoScalePercent / 100})` }}
               />
             ) : (
-              <span className="text-stone-400">✝</span>
+              <LuCross className="h-7 w-7 text-stone-300" strokeWidth={1.75} aria-hidden />
             )}
           </div>
-          <input
-            type="file"
-            accept="image/*"
-            className="max-w-[200px] text-xs"
-            onChange={(e) => {
-              const f = e.target.files?.[0];
-              if (!f) return;
-              const reader = new FileReader();
-              reader.onload = () => {
-                const url = typeof reader.result === 'string' ? reader.result : '';
-                if (url) void applyCustomLogoDataUrl(url, false);
-              };
-              reader.readAsDataURL(f);
-              e.target.value = '';
-            }}
-          />
-          <button
-            type="button"
-            className="rounded-lg border border-stone-200 px-3 py-1.5 text-xs font-semibold"
-            onClick={() => void applyCustomLogoDataUrl(null, true)}
-          >
-            Сбросить лого
-          </button>
+          <div className="flex flex-col gap-2">
+            <input
+              type="file"
+              accept="image/*"
+              className="max-w-[220px] text-xs file:mr-2 file:rounded-lg file:border-0 file:bg-primary file:px-3 file:py-1.5 file:text-xs file:font-bold file:text-white"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (!f) return;
+                const reader = new FileReader();
+                reader.onload = () => {
+                  const url = typeof reader.result === 'string' ? reader.result : '';
+                  if (url) void applyCustomLogoDataUrl(url, false);
+                };
+                reader.readAsDataURL(f);
+                e.target.value = '';
+              }}
+            />
+            <button
+              type="button"
+              className={btnSecondary('self-start text-xs')}
+              onClick={() => void applyCustomLogoDataUrl(null, true)}
+            >
+              Убрать свой логотип
+            </button>
+          </div>
         </div>
-      </div>
+      </section>
       <button
         type="button"
-        className="w-full rounded-xl border border-stone-200 py-2.5 text-sm font-semibold text-stone-700 hover:bg-stone-50"
+        className={`${btnDangerOutline('w-full')}`}
         onClick={() => {
           resetBrandingDefaults();
           setLocalName(useBrandingStore.getState().appName);
           setLocalDesc(useBrandingStore.getState().description);
         }}
       >
-        Сбросить оформление по умолчанию
+        Сбросить оформление к значениям по умолчанию
       </button>
-    </section>
+    </div>
   );
 }

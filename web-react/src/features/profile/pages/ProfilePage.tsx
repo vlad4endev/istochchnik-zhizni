@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useId, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { LuCross, LuUser } from 'react-icons/lu';
 
 import { useAuthStore } from '../../auth/authStore';
 import { brandingDefaults, useBrandingStore, type BrandingStateSnapshot } from '../../branding/brandingStore';
@@ -219,8 +220,8 @@ export function ProfilePage() {
           <div className="mx-auto flex max-w-lg flex-col gap-8">
             <section className="rounded-3xl border border-stone-200/80 bg-[var(--surface-elevated)] p-8 shadow-[var(--shadow)]">
               <div className="flex flex-col items-center text-center">
-                <div className="flex h-24 w-24 items-center justify-center rounded-full bg-primary/[0.08] text-5xl text-primary/70">
-                  👤
+                <div className="flex h-24 w-24 items-center justify-center rounded-full bg-primary/[0.08] text-primary/80">
+                  <LuUser className="h-12 w-12" strokeWidth={1.75} aria-hidden />
                 </div>
                 <h2 className="mt-5 text-[22px] font-extrabold tracking-tight text-stone-900">
                   {displayName(user)}
@@ -333,7 +334,7 @@ export function ProfilePage() {
                           style={{ transform: `scale(${draft.logoScalePercent / 100})` }}
                         />
                       ) : (
-                        <span className="text-2xl text-stone-300">✝</span>
+                        <LuCross className="h-8 w-8 text-stone-300" strokeWidth={1.75} aria-hidden />
                       )}
                     </div>
                     <div className="flex flex-col gap-2">

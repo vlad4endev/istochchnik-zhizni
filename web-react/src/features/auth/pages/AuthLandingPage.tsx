@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { LuCross } from 'react-icons/lu';
 
 import { useAuthHydrated } from '../../../hooks/useAuthHydrated';
 import { useAuthStore } from '../authStore';
@@ -34,10 +35,10 @@ export function AuthLandingPage() {
 
         <div className="flex flex-col items-center">
           <div
-            className="flex h-28 w-28 items-center justify-center rounded-2xl bg-white/12"
+            className="flex h-28 w-28 items-center justify-center rounded-2xl bg-white/12 text-white"
             aria-hidden
           >
-            <span className="text-5xl leading-none">✝</span>
+            <LuCross className="h-14 w-14" strokeWidth={1.5} />
           </div>
 
           <h1 className="mt-[18px] text-center text-3xl font-extrabold tracking-tight text-white sm:text-4xl">

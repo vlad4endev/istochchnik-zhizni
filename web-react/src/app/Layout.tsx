@@ -1,4 +1,7 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { FaPrayingHands } from 'react-icons/fa';
+import type { IconType } from 'react-icons';
+import { LuCross, LuShield, LuUser } from 'react-icons/lu';
 
 import { useAuthStore } from '../features/auth/authStore';
 import { useBrandingStore } from '../features/branding/brandingStore';
@@ -7,19 +10,25 @@ import { useSyncServerRole } from '../hooks/useSyncServerRole';
 type NavItem = {
   to: string;
   label: string;
-  emoji: string;
+  Icon: IconType;
   adminOnly?: boolean;
 };
 
 const NAV_ITEMS: NavItem[] = [
-  { to: '/prayer', label: 'Молитва', emoji: '🙏' },
-  { to: '/profile', label: 'Профиль', emoji: '👤' },
-  { to: '/admin', label: 'Админ', emoji: '⚙️', adminOnly: true },
+  { to: '/prayer', label: 'Молитва', Icon: FaPrayingHands },
+  { to: '/profile', label: 'Профиль', Icon: LuUser },
+  { to: '/admin', label: 'Админ', Icon: LuShield, adminOnly: true },
 ];
+
+const navIconClass = (isActive: boolean) =>
+  [
+    'h-5 w-5 shrink-0 transition-colors',
+    isActive ? 'text-white' : 'text-stone-500 group-hover:text-primary',
+  ].join(' ');
 
 function navClassName(isActive: boolean, compact = false): string {
   const base =
-    'flex items-center justify-center gap-2 rounded-2xl font-semibold transition-colors tap-highlight-transparent';
+    'group flex items-center justify-center gap-2 rounded-2xl font-semibold transition-colors tap-highlight-transparent';
   const size = compact ? 'min-h-[44px] flex-1 px-2 py-2 text-xs' : 'w-full px-4 py-3 text-sm text-left';
   const active = isActive
     ? 'bg-primary text-white shadow-md shadow-primary/25'
@@ -55,7 +64,7 @@ export function Layout() {
       <aside className="hidden w-[260px] flex-col border-r border-stone-200/80 bg-[var(--surface-elevated)] shadow-[4px_0_16px_rgba(0,0,0,0.06)] shell:flex">
         <div className="flex flex-1 flex-col gap-1 p-6">
           <div className="mb-6 flex items-start gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-primary/15 text-lg font-bold text-primary">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-primary/15 text-primary">
               {customLogoDataUrl ? (
                 <img
                   src={customLogoDataUrl}
@@ -64,7 +73,7 @@ export function Layout() {
                   style={{ transform: `scale(${logoScalePercent / 100})` }}
                 />
               ) : (
-                <span aria-hidden>✝</span>
+                <LuCross className="h-5 w-5" strokeWidth={2} aria-hidden />
               )}
             </div>
             <div className="min-w-0">
@@ -76,10 +85,12 @@ export function Layout() {
           <nav className="flex flex-col gap-1">
             {items.map((item) => (
               <NavLink key={item.to} to={item.to} className={({ isActive }) => navClassName(isActive)}>
-                <span className="text-base" aria-hidden>
-                  {item.emoji}
-                </span>
-                {item.label}
+                {({ isActive }) => (
+                  <>
+                    <item.Icon className={navIconClass(isActive)} aria-hidden />
+                    {item.label}
+                  </>
+                )}
               </NavLink>
             ))}
           </nav>
@@ -113,12 +124,14 @@ export function Layout() {
               to={item.to}
               className={({ isActive }) => navClassName(isActive, true)}
             >
-              <span className="text-lg leading-none" aria-hidden>
-                {item.emoji}
-              </span>
-              <span className="max-w-[4.5rem] truncate text-center text-[10px] font-bold leading-tight min-[400px]:max-w-none min-[400px]:text-xs">
-                {item.label}
-              </span>
+              {({ isActive }) => (
+                <>
+                  <item.Icon className={navIconClass(isActive)} aria-hidden />
+                  <span className="max-w-[4.5rem] truncate text-center text-[10px] font-bold leading-tight min-[400px]:max-w-none min-[400px]:text-xs">
+                    {item.label}
+                  </span>
+                </>
+              )}
             </NavLink>
           ))}
         </div>

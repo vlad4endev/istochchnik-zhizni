@@ -2,6 +2,18 @@ import { useQuery } from '@tanstack/react-query';
 import axios from 'axios';
 import { format } from 'date-fns';
 import { ru } from 'date-fns/locale';
+import type { IconType } from 'react-icons';
+import { FaPrayingHands } from 'react-icons/fa';
+import {
+  LuBookOpen,
+  LuCalendarDays,
+  LuChevronDown,
+  LuCloudOff,
+  LuFlame,
+  LuHammer,
+  LuMapPin,
+  LuRefreshCw,
+} from 'react-icons/lu';
 import { type ReactNode, useId, useState } from 'react';
 import { DayPicker } from 'react-day-picker';
 
@@ -53,11 +65,14 @@ function hasPrayerContent(data: DayPrayerData | null | undefined): data is DayPr
   return data != null && !isDayPrayerEmpty(data);
 }
 
-function SectionHeader({ emoji, title, id }: { emoji: string; title: string; id?: string }) {
+function SectionHeader({ Icon, title, id }: { Icon: IconType; title: string; id?: string }) {
   return (
     <div className="mb-3 flex items-center gap-3 pl-0.5">
-      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] bg-primary/10 text-lg" aria-hidden>
-        {emoji}
+      <div
+        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] bg-primary/10 text-primary"
+        aria-hidden
+      >
+        <Icon className="h-5 w-5" />
       </div>
       <h2 id={id} className="text-xs font-extrabold uppercase tracking-[0.12em] text-stone-900">
         {title}
@@ -67,12 +82,12 @@ function SectionHeader({ emoji, title, id }: { emoji: string; title: string; id?
 }
 
 function PrayerCard(props: {
-  emoji: string;
+  Icon: IconType;
   title: string;
   accentVar: string;
   children: ReactNode;
 }) {
-  const { emoji, title, accentVar, children } = props;
+  const { Icon, title, accentVar, children } = props;
   return (
     <article
       className="mb-3.5 overflow-hidden rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] shadow-[var(--shadow)]"
@@ -81,10 +96,10 @@ function PrayerCard(props: {
       <div className="border-b border-stone-100/90 px-4 pb-0 pt-[18px] shell:px-5">
         <div className="flex items-start gap-3">
           <div
-            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-lg"
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-[var(--card-accent)]"
             style={{ backgroundColor: `color-mix(in srgb, ${accentVar} 12%, transparent)` }}
           >
-            <span aria-hidden>{emoji}</span>
+            <Icon className="h-5 w-5" aria-hidden />
           </div>
           <h3 className="min-w-0 flex-1 pb-1 text-[17px] font-bold leading-snug tracking-tight text-stone-900 shell:text-[18px]">
             {title}
@@ -101,7 +116,7 @@ function PrayerCard(props: {
 function MemberCard({ member }: { member: Member }) {
   const hasRequest = member.prayer_request != null && member.prayer_request.trim().length > 0;
   return (
-    <PrayerCard emoji="🙏" title={member.name} accentVar="var(--member)">
+    <PrayerCard Icon={FaPrayingHands} title={member.name} accentVar="var(--member)">
       {hasRequest ? (
         <p className="text-[16px] text-stone-600">{member.prayer_request}</p>
       ) : (
@@ -116,7 +131,7 @@ function GlobalThemeCard({ theme }: { theme: GlobalTheme }) {
   const hasPoints = theme.prayer_points != null && theme.prayer_points.trim().length > 0;
   const hasNothing = !hasVerse && !hasPoints;
   return (
-    <PrayerCard emoji="📖" title={theme.title} accentVar="var(--theme)">
+    <PrayerCard Icon={LuBookOpen} title={theme.title} accentVar="var(--theme)">
       {hasVerse ? (
         <div className="mb-3 rounded-xl border border-[color-mix(in_srgb,var(--theme)_18%,transparent)] bg-[color-mix(in_srgb,var(--theme)_8%,transparent)] px-3.5 py-3.5">
           <p className="mb-1 text-[11px] font-extrabold uppercase tracking-[0.1em] text-stone-500">Библейский стих</p>
@@ -137,7 +152,7 @@ function GlobalThemeCard({ theme }: { theme: GlobalTheme }) {
 function MinistryCard({ ministry }: { ministry: Ministry }) {
   const hasPoints = ministry.prayer_points != null && ministry.prayer_points.trim().length > 0;
   return (
-    <PrayerCard emoji="🛠️" title={ministry.title} accentVar="var(--ministry)">
+    <PrayerCard Icon={LuHammer} title={ministry.title} accentVar="var(--ministry)">
       {hasPoints ? (
         <div>
           <p className="mb-1.5 text-[11px] font-extrabold uppercase tracking-[0.1em] text-stone-500">Пункты молитвы</p>
@@ -152,7 +167,7 @@ function MinistryCard({ ministry }: { ministry: Ministry }) {
 
 function BacksliderCard({ b }: { b: Backslider }) {
   return (
-    <PrayerCard emoji="🕯️" title={b.name} accentVar="var(--backslider)">
+    <PrayerCard Icon={LuFlame} title={b.name} accentVar="var(--backslider)">
       <p className="italic text-stone-500">Молимся о возвращении к Господу и к общению с церковью</p>
     </PrayerCard>
   );
@@ -204,8 +219,8 @@ function ErrorBlock(props: { err: unknown; onRetry: () => void }) {
           Бэкенд не ответил или вернул ошибку. Проверьте, что API сервер запущен и совпадает с прокси Vite.
         </p>
       </div>
-      <div className="mx-auto mb-6 flex h-24 w-24 items-center justify-center rounded-full bg-primary/[0.08] text-4xl">
-        ☁️
+      <div className="mx-auto mb-6 flex h-24 w-24 items-center justify-center rounded-full bg-primary/[0.08] text-primary">
+        <LuCloudOff className="h-10 w-10" strokeWidth={1.75} aria-hidden />
       </div>
       <h2 className="text-xl font-bold tracking-tight text-stone-900">Не удалось загрузить данные</h2>
       <p className="mt-2 text-[15px] leading-relaxed text-stone-500">
@@ -227,7 +242,8 @@ function ErrorBlock(props: { err: unknown; onRetry: () => void }) {
         onClick={props.onRetry}
         className="mt-6 inline-flex min-h-[52px] items-center justify-center gap-2 rounded-xl bg-primary px-7 text-[15px] font-bold text-white shadow-md shadow-primary/25 transition hover:bg-primary-dark"
       >
-        ⟳ Повторить
+        <LuRefreshCw className="h-5 w-5 shrink-0" strokeWidth={2} aria-hidden />
+        Повторить
       </button>
     </div>
   );
@@ -236,8 +252,8 @@ function ErrorBlock(props: { err: unknown; onRetry: () => void }) {
 function EmptyBlock() {
   return (
     <div className="mx-auto flex max-w-md flex-col items-center px-6 py-14 text-center">
-      <div className="mb-6 flex h-28 w-28 items-center justify-center rounded-full bg-primary/[0.08] text-5xl opacity-90">
-        🙏
+      <div className="mb-6 flex h-28 w-28 items-center justify-center rounded-full bg-primary/[0.08] text-primary opacity-90">
+        <FaPrayingHands className="h-14 w-14" aria-hidden />
       </div>
       <h2 className="text-xl font-bold tracking-tight text-stone-900">Нет данных на эту дату</h2>
       <p className="mt-2 text-[15px] text-stone-500">Выберите другую дату в календаре</p>
@@ -285,10 +301,10 @@ export function DailyPrayerPage() {
         <button
           type="button"
           onClick={() => setCalendarExpanded((e) => !e)}
-          className="flex w-full items-center gap-3 rounded-full bg-[var(--surface-elevated)] px-4 py-3 text-left shadow-[var(--shadow)] transition hover:bg-stone-50"
+          className="group flex w-full items-center gap-3 rounded-full bg-[var(--surface-elevated)] px-4 py-3 text-left shadow-[var(--shadow)] transition hover:bg-stone-50"
         >
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-            📅
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary transition-colors group-hover:text-primary-dark">
+            <LuCalendarDays className="h-5 w-5" strokeWidth={2} aria-hidden />
           </span>
           <span className="min-w-0 flex-1 truncate text-[15px] font-bold text-stone-900 shell:text-base">{chipLabel}</span>
           {isToday ? (
@@ -296,12 +312,11 @@ export function DailyPrayerPage() {
               СЕГОДНЯ
             </span>
           ) : null}
-          <span
-            className={`shrink-0 text-2xl text-stone-400 transition-transform duration-200 ${calendarExpanded ? 'rotate-180' : ''}`}
+          <LuChevronDown
+            className={`h-6 w-6 shrink-0 text-stone-400 transition-transform duration-200 ${calendarExpanded ? 'rotate-180' : ''}`}
+            strokeWidth={2}
             aria-hidden
-          >
-            ⌄
-          </span>
+          />
         </button>
       </div>
 
@@ -361,7 +376,7 @@ export function DailyPrayerPage() {
           <div className="pb-6">
             {data.members.length > 0 ? (
               <section aria-labelledby={sectionMemberId}>
-                <SectionHeader emoji="🙏" title="Молитва за члена церкви" id={sectionMemberId} />
+                <SectionHeader Icon={FaPrayingHands} title="Молитва за члена церкви" id={sectionMemberId} />
                 {data.members.map((m) => (
                   <MemberCard key={m.id} member={m} />
                 ))}
@@ -373,7 +388,7 @@ export function DailyPrayerPage() {
                 className={data.members.length > 0 ? 'mt-6' : undefined}
                 aria-labelledby={sectionThemesId}
               >
-                <SectionHeader emoji="📖" title="Глобальные темы" id={sectionThemesId} />
+                <SectionHeader Icon={LuBookOpen} title="Глобальные темы" id={sectionThemesId} />
                 {data.global_themes.map((t) => (
                   <GlobalThemeCard key={`gt-${t.id}`} theme={t} />
                 ))}
@@ -387,7 +402,7 @@ export function DailyPrayerPage() {
                 }
                 aria-labelledby={sectionMinistryId}
               >
-                <SectionHeader emoji="🛠️" title="Служения" id={sectionMinistryId} />
+                <SectionHeader Icon={LuHammer} title="Служения" id={sectionMinistryId} />
                 {data.ministries.map((m) => (
                   <MinistryCard key={`m-${m.id}`} ministry={m} />
                 ))}
@@ -405,7 +420,7 @@ export function DailyPrayerPage() {
                 }
                 aria-labelledby={sectionBacksliderId}
               >
-                <SectionHeader emoji="📍" title="Отпавшие" id={sectionBacksliderId} />
+                <SectionHeader Icon={LuMapPin} title="Отпавшие" id={sectionBacksliderId} />
                 {data.backsliders.map((b) => (
                   <BacksliderCard key={b.id} b={b} />
                 ))}

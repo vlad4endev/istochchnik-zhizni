@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { FaPrayingHands } from 'react-icons/fa';
+import { LuBookOpen, LuMapPin, LuWrench } from 'react-icons/lu';
 import { fetchPrayerByDate } from './api/prayer';
 import type { DayPrayerData } from './types';
 
@@ -109,28 +111,33 @@ export function App() {
               <p className="card-title">
                 {(theme?.title?.trim() || 'Тема не указана').toUpperCase()}
               </p>
-              <p className="card-verse">
-                📖 {(theme?.bible_verse?.trim() || 'Стих не указан').trim()}
+              <p className="card-verse flex gap-2">
+                <LuBookOpen className="mt-0.5 h-4 w-4 shrink-0 opacity-70" aria-hidden />
+                <span>{(theme?.bible_verse?.trim() || 'Стих не указан').trim()}</span>
               </p>
-              <p className="card-body whitespace-pre-wrap">
-                🙏 {(theme?.prayer_points?.trim() || 'Пункты молитвы не указаны').trim()}
+              <p className="card-body flex gap-2 whitespace-pre-wrap">
+                <FaPrayingHands className="mt-0.5 h-4 w-4 shrink-0 opacity-70" aria-hidden />
+                <span>{(theme?.prayer_points?.trim() || 'Пункты молитвы не указаны').trim()}</span>
               </p>
             </article>
 
             <article className="card card-ministry">
               <h2 className="card-label">Служение</h2>
-              <p className="card-body whitespace-pre-wrap">
-                🛠️{' '}
-                {(ministry?.prayer_points?.trim() ||
-                  ministry?.title?.trim() ||
-                  'Служение не указано').trim()}
+              <p className="card-body flex gap-2 whitespace-pre-wrap">
+                <LuWrench className="mt-0.5 h-4 w-4 shrink-0 opacity-70" aria-hidden />
+                <span>
+                  {(ministry?.prayer_points?.trim() ||
+                    ministry?.title?.trim() ||
+                    'Служение не указано').trim()}
+                </span>
               </p>
             </article>
 
             <article className="card card-backslider">
               <h2 className="card-label">Отпавшие</h2>
-              <p className="card-body">
-                📍 {(backslider?.name ?? 'Не указан').trim()}
+              <p className="card-body flex gap-2">
+                <LuMapPin className="mt-0.5 h-4 w-4 shrink-0 opacity-70" aria-hidden />
+                <span>{(backslider?.name ?? 'Не указан').trim()}</span>
               </p>
             </article>
           </div>

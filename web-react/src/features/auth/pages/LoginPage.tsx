@@ -1,6 +1,14 @@
 import axios from 'axios';
 import { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
+import {
+  LuArrowRight,
+  LuCross,
+  LuEye,
+  LuEyeOff,
+  LuPenLine,
+  LuTriangleAlert,
+} from 'react-icons/lu';
 
 import { useAuthHydrated } from '../../../hooks/useAuthHydrated';
 import { apiClient } from '../../../lib/apiClient';
@@ -261,10 +269,8 @@ export function LoginPage() {
         <div className="flex flex-1 flex-col justify-center">
           <div className="mx-auto w-full max-w-[480px] rounded-2xl bg-[var(--surface-elevated)] p-6 shadow-[var(--shadow)] ring-1 ring-stone-900/5">
             <div className="flex justify-center">
-              <div className="flex h-[72px] w-[72px] items-center justify-center rounded-xl bg-primary/10">
-                <span className="text-3xl" aria-hidden>
-                  ✝
-                </span>
+              <div className="flex h-[72px] w-[72px] items-center justify-center rounded-xl bg-primary/10 text-primary">
+                <LuCross className="h-9 w-9" strokeWidth={1.75} aria-hidden />
               </div>
             </div>
 
@@ -282,9 +288,7 @@ export function LoginPage() {
                 className="mt-4 flex gap-2.5 rounded-xl bg-red-50 p-3 text-sm leading-snug text-red-900"
                 role="alert"
               >
-                <span className="shrink-0 text-lg" aria-hidden>
-                  ⚠️
-                </span>
+                <LuTriangleAlert className="h-5 w-5 shrink-0 text-amber-600" strokeWidth={2} aria-hidden />
                 <p>
                   Сайт собран без адреса API (в билде остался localhost). В Vercel: Environment
                   Variables → VITE_API_BASE_URL = ваш публичный HTTPS API → пересборка.
@@ -378,11 +382,15 @@ export function LoginPage() {
                   />
                   <button
                     type="button"
-                    className="absolute right-2 top-1/2 -translate-y-1/2 rounded-lg p-2 text-stone-500 hover:bg-stone-100"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 rounded-lg p-2 text-stone-500 transition-colors hover:bg-stone-100 hover:text-primary"
                     onClick={() => setShowPassword((v) => !v)}
                     aria-label={showPassword ? 'Показать пароль' : 'Скрыть пароль'}
                   >
-                    {showPassword ? '👁' : '🙈'}
+                    {showPassword ? (
+                      <LuEye className="h-5 w-5" strokeWidth={2} aria-hidden />
+                    ) : (
+                      <LuEyeOff className="h-5 w-5" strokeWidth={2} aria-hidden />
+                    )}
                   </button>
                 </div>
               </label>
@@ -402,11 +410,15 @@ export function LoginPage() {
                     />
                     <button
                       type="button"
-                      className="absolute right-2 top-1/2 -translate-y-1/2 rounded-lg p-1.5 text-stone-500 hover:bg-stone-100"
+                      className="absolute right-2 top-1/2 -translate-y-1/2 rounded-lg p-1.5 text-stone-500 transition-colors hover:bg-stone-100 hover:text-primary"
                       onClick={() => setShowConfirm((v) => !v)}
                       aria-label={showConfirm ? 'Показать пароль' : 'Скрыть пароль'}
                     >
-                      {showConfirm ? '👁' : '🙈'}
+                      {showConfirm ? (
+                        <LuEye className="h-5 w-5" strokeWidth={2} aria-hidden />
+                      ) : (
+                        <LuEyeOff className="h-5 w-5" strokeWidth={2} aria-hidden />
+                      )}
                     </button>
                   </div>
                 </label>
@@ -429,14 +441,18 @@ export function LoginPage() {
             <button
               type="button"
               disabled={submitting}
-              className="mt-4 flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-primary text-base font-bold text-white shadow-sm transition-opacity disabled:cursor-not-allowed disabled:opacity-60"
+              className="mt-4 flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-primary text-base font-bold text-white shadow-sm transition-opacity hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-60"
               onClick={() => void (isRegisterMode ? submitRegister() : submitLogin())}
             >
               {submitting ? (
                 <span>{isRegisterMode ? 'Создаем...' : 'Входим...'}</span>
               ) : (
                 <>
-                  <span aria-hidden>{isRegisterMode ? '📝' : '➜'}</span>
+                  {isRegisterMode ? (
+                    <LuPenLine className="h-5 w-5 shrink-0" strokeWidth={2} aria-hidden />
+                  ) : (
+                    <LuArrowRight className="h-5 w-5 shrink-0" strokeWidth={2} aria-hidden />
+                  )}
                   <span>{isRegisterMode ? 'Зарегистрироваться' : 'Войти'}</span>
                 </>
               )}
