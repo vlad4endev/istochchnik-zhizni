@@ -31,35 +31,6 @@
         "cwd": "${workspaceFolder}"
       },
       "problemMatcher": []
-    },
-    {
-      "label": "Dev: Run Project (API + Flutter)",
-      "type": "shell",
-      "command": "npm run dev:start",
-      "options": {
-        "cwd": "${workspaceFolder}"
-      },
-      "isBackground": true,
-      "problemMatcher": []
-    },
-    {
-      "label": "Dev: Stop Project",
-      "type": "shell",
-      "command": "npm run dev:stop",
-      "options": {
-        "cwd": "${workspaceFolder}"
-      },
-      "problemMatcher": []
-    },
-    {
-      "label": "Dev: Restart Project",
-      "type": "shell",
-      "command": "npm run dev:restart",
-      "options": {
-        "cwd": "${workspaceFolder}"
-      },
-      "isBackground": true,
-      "problemMatcher": []
     }
   ]
 }

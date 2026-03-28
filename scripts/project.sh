@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-# Один вход: запуск / обновление / остановка локальной разработки.
-# По умолчанию: API + Vite (web-react). Для Flutter: PROJECT_STACK=flutter или файл .run/stack-preference со строкой flutter
+# Запуск / обновление / остановка: API (Express) + фронт web-react (Vite).
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -9,46 +8,18 @@ cd "$ROOT"
 PID_DIR=".run"
 mkdir -p "$PID_DIR"
 WEB_STACK_PID="${PID_DIR}/stack-web.pid"
-STACK_PREF="${PID_DIR}/stack-preference"
 LOG_WEB="${PID_DIR}/stack-web.log"
 
 usage() {
   echo "Использование: $(basename "$0") start | update | stop"
   echo ""
-  echo "  start   — поднять проект (веб: API + http://localhost:5173)"
-  echo "  update  — подтянуть код/зависимости и пересобрать API (опционально git pull)"
-  echo "  stop    — остановить фоновые процессы (веб-стек, Flutter, ts-node-dev)"
-  echo ""
-  echo "Стек UI: PROJECT_STACK=web|flutter или echo web > ${STACK_PREF}"
-}
-
-resolve_stack() {
-  local s="${PROJECT_STACK:-}"
-  if [[ -z "$s" && -f "$STACK_PREF" ]]; then
-    s="$(tr -d '[:space:]' <"$STACK_PREF" || true)"
-  fi
-  if [[ -z "$s" ]]; then
-    s="web"
-  fi
-  echo "$s"
+  echo "  start   — API + Vite (http://localhost:5173)"
+  echo "  update  — git pull, npm install, сборка API, при необходимости db:up"
+  echo "  stop    — остановить API+Vite и прочие процессы разработки из scripts/dev-stop.sh"
 }
 
 cmd_start() {
-  local stack
-  stack="$(resolve_stack)"
-  case "$stack" in
-    flutter|Flutter)
-      echo "[project] Стек: Flutter + API (npm run dev:start)…"
-      npm run dev:start
-      ;;
-    web|vite|react|Web)
-      start_web_background
-      ;;
-    *)
-      echo "Неизвестный PROJECT_STACK=$stack (ожидается web или flutter)." >&2
-      exit 1
-      ;;
-  esac
+  start_web_background
 }
 
 start_web_background() {
@@ -56,7 +27,7 @@ start_web_background() {
     local old
     old="$(<"$WEB_STACK_PID")"
     if [[ -n "$old" ]] && kill -0 "$old" 2>/dev/null; then
-      echo "[project] Веб-стек уже запущен (PID $old)."
+      echo "[project] Уже запущено (PID $old)."
       echo "  UI:  http://localhost:5173"
       echo "  API: http://localhost:${API_PORT:-40978}"
       return 0
@@ -72,7 +43,7 @@ start_web_background() {
     npm run db:up 2>/dev/null || echo "[project] db:up пропущен или с ошибкой (Docker/БД)."
   fi
 
-  echo "[project] Запуск API + Vite, лог: $LOG_WEB"
+  echo "[project] Запуск API + Vite (web-react), лог: $LOG_WEB"
   : >"$LOG_WEB"
   nohup bash -c "cd \"$ROOT\" && export API_PORT=\"$api_port\" && export VITE_DEV_API_PROXY=\"$VITE_DEV_API_PROXY\" && exec npx concurrently -k -n api,web -c blue,magenta \"npm run dev\" \"npm run web:dev\"" >>"$LOG_WEB" 2>&1 &
   echo $! >"$WEB_STACK_PID"
@@ -83,7 +54,7 @@ start_web_background() {
     echo "[project] Готово."
     echo "  UI:  http://localhost:5173"
     echo "  API: http://localhost:${api_port}"
-    echo "  Остановка: npm run go:stop  (или Tasks → Остановить проект)"
+    echo "  Остановка: npm run go:stop"
   else
     echo "[project] Не удалось запустить. Смотрите $LOG_WEB" >&2
     rm -f "$WEB_STACK_PID"
@@ -115,11 +86,6 @@ cmd_update() {
   echo "[project] Сборка TypeScript API…"
   npm run build
 
-  if command -v flutter >/dev/null 2>&1; then
-    echo "[project] flutter pub get…"
-    flutter pub get || true
-  fi
-
   if [[ "${SKIP_DB:-0}" != "1" ]]; then
     npm run db:up 2>/dev/null || echo "[project] db:up пропущен."
   fi
@@ -132,7 +98,7 @@ cmd_stop() {
     local pid
     pid="$(<"$WEB_STACK_PID")"
     if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null; then
-      echo "[project] Останавливаю веб-стек (PID $pid)…"
+      echo "[project] Останавливаю API + Vite (PID $pid)…"
       kill "$pid" 2>/dev/null || true
       sleep 1
       kill -9 "$pid" 2>/dev/null || true
@@ -140,7 +106,6 @@ cmd_stop() {
     rm -f "$WEB_STACK_PID"
   fi
 
-  # На случай ручного concurrently без pid-файла
   if pgrep -f "concurrently.*api,web" >/dev/null 2>&1; then
     pkill -f "concurrently.*api,web" || true
   fi
