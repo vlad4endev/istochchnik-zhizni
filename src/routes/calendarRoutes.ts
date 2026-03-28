@@ -28,6 +28,9 @@ const router = Router();
 router.get('/next-week/members', getNextWeekMembers);
 router.get('/cycle/collection-claims', getCycleCollectionClaims);
 router.patch('/cycle/collection-claims', patchCycleCollectionClaims);
+/** Совместимость: старые клиенты / кэш PWA ходили на next-week/collection. */
+router.get('/next-week/collection', getCycleCollectionClaims);
+router.patch('/next-week/collection', patchCycleCollectionClaims);
 router.get('/next-week/global', getNextWeekGlobal);
 router.get('/bot-message/today', getTodayPrayerBotMessage);
 router.get('/bot-message/:date', getPrayerBotMessage);

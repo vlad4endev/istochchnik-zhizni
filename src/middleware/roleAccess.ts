@@ -104,8 +104,9 @@ export async function resolveUserRole(
   next();
 }
 
-/** Участники с ролью member могут PATCH только заявки на сбор нужд по текущему циклу. */
-const MEMBER_ALLOWED_PATCH = /^\/api\/calendar\/cycle\/collection-claims\/?$/;
+/** Участники с ролью member могут PATCH только заявки на сбор нужд (новый и legacy URL). */
+const MEMBER_ALLOWED_PATCH =
+  /^\/api\/calendar\/(?:cycle\/collection-claims|next-week\/collection)\/?$/;
 
 export function enforceRoleAccess(req: Request, res: Response, next: NextFunction): void {
   const roleReq = req as RoleRequest;
