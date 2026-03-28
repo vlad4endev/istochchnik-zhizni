@@ -2,6 +2,37 @@
   "version": "2.0.0",
   "tasks": [
     {
+      "label": "▶ Запуск проекта",
+      "type": "shell",
+      "command": "npm run go:start",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      }
+    },
+    {
+      "label": "↻ Обновить проект",
+      "type": "shell",
+      "command": "npm run go:update",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "■ Остановить проект",
+      "type": "shell",
+      "command": "npm run go:stop",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": []
+    },
+    {
       "label": "Dev: Run Project (API + Flutter)",
       "type": "shell",
       "command": "npm run dev:start",

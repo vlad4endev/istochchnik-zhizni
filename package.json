@@ -34,7 +34,11 @@
     "format": "npx prettier --write \"src/**/*.ts\"",
     "db:init": "npx ts-node scripts/runInitDb.ts",
     "quickstart": "bash scripts/quickstart.sh",
-    "start-all": "bash ./start-all"
+    "start-all": "bash ./start-all",
+    "go": "bash scripts/project.sh",
+    "go:start": "bash scripts/project.sh start",
+    "go:update": "bash scripts/project.sh update",
+    "go:stop": "bash scripts/project.sh stop"
   },
   "keywords": [],
   "author": "",

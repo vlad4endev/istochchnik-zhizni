@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useId, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 
 import { useAuthStore } from '../../auth/authStore';
 import { brandingDefaults, useBrandingStore, type BrandingStateSnapshot } from '../../branding/brandingStore';
@@ -226,6 +226,14 @@ export function ProfilePage() {
                   {displayName(user)}
                 </h2>
                 <p className="mt-1 text-base text-stone-500">Роль: {roleLabel(user.app_role)}</p>
+                {user.app_role?.toLowerCase() === 'admin' ? (
+                  <Link
+                    to="/admin"
+                    className="mt-4 inline-flex min-h-[44px] items-center justify-center rounded-xl bg-white/15 px-5 text-sm font-bold text-white ring-1 ring-white/40 transition hover:bg-white/25"
+                  >
+                    Админ-панель
+                  </Link>
+                ) : null}
                 <p className="mt-3 text-[15px] text-stone-600">
                   <span className="font-semibold text-stone-500">Телефон:</span>{' '}
                   {formatPhone(user.phone_number)}

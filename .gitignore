@@ -1,4 +1,5 @@
 .cursor/
+.run/
 node_modules
 dist
 .env

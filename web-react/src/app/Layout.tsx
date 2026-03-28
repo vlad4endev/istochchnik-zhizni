@@ -2,6 +2,7 @@ import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 
 import { useAuthStore } from '../features/auth/authStore';
 import { useBrandingStore } from '../features/branding/brandingStore';
+import { useSyncServerRole } from '../hooks/useSyncServerRole';
 
 type NavItem = {
   to: string;
@@ -27,6 +28,7 @@ function navClassName(isActive: boolean, compact = false): string {
 }
 
 export function Layout() {
+  useSyncServerRole();
   const navigate = useNavigate();
   const role = useAuthStore((s) => s.role);
   const logout = useAuthStore((s) => s.logout);
@@ -114,7 +116,9 @@ export function Layout() {
               <span className="text-lg leading-none" aria-hidden>
                 {item.emoji}
               </span>
-              <span className="max-[380px]:hidden">{item.label}</span>
+              <span className="max-w-[4.5rem] truncate text-center text-[10px] font-bold leading-tight min-[400px]:max-w-none min-[400px]:text-xs">
+                {item.label}
+              </span>
             </NavLink>
           ))}
         </div>
