@@ -30,13 +30,19 @@
 }
 
 html {
+  width: 100%;
+  min-height: 100%;
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
   -webkit-tap-highlight-color: transparent;
+  /* На полноэкранных экранах входа без полос по краям */
+  background-color: var(--surface);
 }
 
 body {
   margin: 0;
+  width: 100%;
+  min-height: 100%;
   font-family:
     system-ui,
     -apple-system,
@@ -50,22 +56,20 @@ body {
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
   overscroll-behavior-y: contain;
-  padding-top: env(safe-area-inset-top);
-  padding-bottom: env(safe-area-inset-bottom);
-  padding-left: max(0.75rem, env(safe-area-inset-left));
-  padding-right: max(0.75rem, env(safe-area-inset-right));
+  /* Только вертикальные safe-area: боковые отступы дают «полосы» на full-bleed экранах */
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 
 @supports (padding: max(0px)) {
   body {
-    padding-left: max(0.75rem, env(safe-area-inset-left));
-    padding-right: max(0.75rem, env(safe-area-inset-right));
-    padding-bottom: max(0px, env(safe-area-inset-bottom));
-    padding-top: max(0px, env(safe-area-inset-top));
+    padding-bottom: max(0px, env(safe-area-inset-bottom, 0px));
+    padding-top: max(0px, env(safe-area-inset-top, 0px));
   }
 }
 
 #root {
+  width: 100%;
   min-height: 100vh;
   min-height: 100dvh;
   min-height: -webkit-fill-available;

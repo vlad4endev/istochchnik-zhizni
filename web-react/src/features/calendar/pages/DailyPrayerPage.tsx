@@ -6,7 +6,6 @@ import {
   format,
   isAfter,
   isBefore,
-  parse,
   startOfDay,
   startOfWeek,
 } from 'date-fns';
@@ -27,7 +26,6 @@ import {
   LuMapPin,
   LuRefreshCw,
   LuUserX,
-  LuUsers,
 } from 'react-icons/lu';
 import { type ReactNode, useEffect, useId, useState } from 'react';
 import { DayPicker } from 'react-day-picker';
@@ -37,17 +35,14 @@ import {
   isApiUrlProbablyWrongForWeb,
   resolveAxiosBaseURL,
 } from '../../../lib/config';
-import type {
-  Backslider,
-  DayPrayerData,
-  GlobalTheme,
-  Member,
-  Ministry,
-  NextWeekMemberDay,
-} from '../../../types';
+import type { Backslider, DayPrayerData, GlobalTheme, Member, Ministry } from '../../../types';
 import { fetchMe, patchProfile } from '../../profile/api';
 import { NextWeekCollectionBlock } from '../components/NextWeekCollectionBlock';
-import { formatCalendarDayKey, getCalendarDay, getNextWeekMembers } from '../api';
+import {
+  NextWeekPrayerPlanSection,
+  userCanViewNextWeekPrayerPlan,
+} from '../components/NextWeekPrayerPlanSection';
+import { formatCalendarDayKey, getCalendarDay } from '../api';
 import { loadErrorDescription } from '../prayerPageUtils';
 
 import 'react-day-picker/style.css';
@@ -411,108 +406,6 @@ function WeekStripPicker(props: {
   );
 }
 
-function formatNextWeekRangeLabel(days: NextWeekMemberDay[]): string {
-  if (days.length < 2) return '';
-  const a = parse(days[0].date, 'yyyy-MM-dd', new Date());
-  const b = parse(days[days.length - 1].date, 'yyyy-MM-dd', new Date());
-  if (a.getMonth() === b.getMonth() && a.getFullYear() === b.getFullYear()) {
-    return `${format(a, 'd', { locale: ru })}–${format(b, 'd MMMM yyyy', { locale: ru })}`;
-  }
-  return `${format(a, 'd MMMM yyyy', { locale: ru })} — ${format(b, 'd MMMM yyyy', { locale: ru })}`;
-}
-
-function NextWeekMembersPanel(props: {
-  days: NextWeekMemberDay[] | undefined;
-  isPending: boolean;
-  isError: boolean;
-  error: unknown;
-  onRetry: () => void;
-}) {
-  const sectionId = useId();
-  const { days, isPending, isError, error, onRetry } = props;
-
-  if (isPending) {
-    return (
-      <section className="mb-6" aria-busy="true" aria-label="Загрузка плана на следующую неделю">
-        <div className="mb-3 flex items-center gap-3">
-          <div className="h-10 w-10 animate-pulse rounded-[10px] bg-stone-200/90" />
-          <div className="h-4 w-48 animate-pulse rounded bg-stone-200/90" />
-        </div>
-        <div className="space-y-2 rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] p-4 shadow-[var(--shadow)]">
-          {[0, 1, 2, 3, 4, 5, 6].map((i) => (
-            <div
-              key={i}
-              className="flex justify-between gap-3 border-b border-stone-100 pb-2 last:border-0 last:pb-0"
-            >
-              <div className="h-4 w-28 animate-pulse rounded bg-stone-100" />
-              <div className="h-4 w-32 max-w-[50%] animate-pulse rounded bg-stone-100" />
-            </div>
-          ))}
-        </div>
-      </section>
-    );
-  }
-
-  if (isError) {
-    return (
-      <section className="mb-6 rounded-2xl border border-amber-200/80 bg-amber-50/90 px-4 py-3 text-[14px] text-amber-950">
-        <p className="font-semibold">План на следующую неделю</p>
-        <p className="mt-1 text-[13px] text-amber-900/90">{loadErrorDescription(error) ?? 'Ошибка загрузки'}</p>
-        <button
-          type="button"
-          onClick={onRetry}
-          className="mt-3 min-h-[44px] rounded-lg px-2 text-left text-[13px] font-bold text-primary underline"
-        >
-          Повторить
-        </button>
-      </section>
-    );
-  }
-
-  if (!days || days.length === 0) return null;
-
-  const range = formatNextWeekRangeLabel(days);
-
-  return (
-    <section className="mb-6" aria-labelledby={sectionId}>
-      <div className="mb-3 flex items-center gap-3 pl-0.5">
-        <div
-          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] bg-primary/10 text-primary"
-          aria-hidden
-        >
-          <LuUsers className="h-5 w-5" />
-        </div>
-        <div className="min-w-0">
-          <h2 id={sectionId} className="text-xs font-extrabold uppercase tracking-[0.12em] text-stone-900">
-            Следующая неделя — молитва за члена
-          </h2>
-          <p className="mt-0.5 text-[13px] text-stone-500">{range}</p>
-        </div>
-      </div>
-      <div className="overflow-hidden rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] shadow-[var(--shadow)]">
-        <ul className="divide-y divide-stone-100">
-          {days.map((row) => {
-            const d = parse(row.date, 'yyyy-MM-dd', new Date());
-            const label = format(d, 'EEEE, d MMMM', { locale: ru });
-            const name = row.member?.name?.trim() || null;
-            return (
-              <li
-                key={row.date}
-                className="flex flex-col gap-1 px-4 py-3 sm:flex-row sm:items-start sm:justify-between sm:gap-3 shell:px-5"
-              >
-                <span className="min-w-0 shrink text-[13px] font-medium text-stone-600">{label}</span>
-                <span className="text-[15px] font-semibold text-stone-900 sm:max-w-[55%] sm:text-right">
-                  {name ?? '—'}
-                </span>
-              </li>
-            );
-          })}
-        </ul>
-      </div>
-    </section>
-  );
-}
-
 export function DailyPrayerPage() {
   const qc = useQueryClient();
   const [selected, setSelected] = useState<Date>(() => new Date());
@@ -540,18 +433,6 @@ export function DailyPrayerPage() {
   } = useQuery({
     queryKey: ['calendar', 'day', dateKey],
     queryFn: () => getCalendarDay(dateKey),
-  });
-
-  const {
-    data: nextWeekDays,
-    isPending: nextWeekPending,
-    isError: nextWeekError,
-    error: nextWeekErr,
-    refetch: refetchNextWeek,
-  } = useQuery({
-    queryKey: ['calendar', 'next-week', 'members'],
-    queryFn: getNextWeekMembers,
-    staleTime: 5 * 60_000,
   });
 
   const today = new Date();
@@ -696,13 +577,7 @@ export function DailyPrayerPage() {
       </div>
 
       <div className="px-4 pt-4 shell:px-6">
-        <NextWeekMembersPanel
-          days={nextWeekDays}
-          isPending={nextWeekPending}
-          isError={nextWeekError}
-          error={nextWeekErr}
-          onRetry={() => void refetchNextWeek()}
-        />
+        <NextWeekPrayerPlanSection canView={userCanViewNextWeekPrayerPlan(me)} />
         <NextWeekCollectionBlock />
         {isPending ? (
           <CalendarPrayerSkeleton />

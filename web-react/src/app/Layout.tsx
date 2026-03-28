@@ -69,7 +69,7 @@ export function Layout() {
   }
 
   return (
-    <div className="flex min-h-[100dvh] min-h-screen flex-col bg-[var(--surface)] text-[var(--text)] md:min-h-screen md:flex-row">
+    <div className="flex min-h-[100dvh] min-h-screen w-full max-w-[100vw] flex-col bg-[var(--surface)] text-[var(--text)] [padding-left:env(safe-area-inset-left,0px)] [padding-right:env(safe-area-inset-right,0px)] md:min-h-screen md:flex-row">
       {/* Планшет/десктоп: сайдбар с md (768px). На узких экранах — нижняя навигация. */}
       <aside className="hidden w-[min(100%,280px)] shrink-0 flex-col border-r border-stone-200/80 bg-[var(--surface-elevated)] shadow-[4px_0_16px_rgba(0,0,0,0.06)] md:flex md:w-[260px] lg:w-[272px]">
         <div className="flex flex-1 flex-col gap-1 p-6">

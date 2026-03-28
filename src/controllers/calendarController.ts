@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import { query } from '../config/db';
 import { getNextWeekMemberAssignments, getPrayerDataByDate } from '../services/calendarService';
 import {
   getNextWeekCollectionSnapshot,
@@ -117,7 +118,42 @@ export async function getTodayPrayerBotMessage(req: Request, res: Response): Pro
   }
 }
 
+type AuthReq = Request & { authUserId?: number; authUserRole?: 'member' | 'admin' };
+
+/** План «молитва за члена» на следующую неделю — только админы и ответственные за сбор. */
+async function assertCanViewNextWeekMembersPlan(req: Request, res: Response): Promise<boolean> {
+  const authReq = req as AuthReq;
+  if (!authReq.authUserId) {
+    res.status(401).json({ error: 'Требуется вход в аккаунт' });
+    return false;
+  }
+  if (authReq.authUserRole === 'admin') {
+    return true;
+  }
+
+  try {
+    const result = await query(
+      'SELECT is_collection_coordinator FROM members WHERE id = $1 AND is_active = TRUE LIMIT 1',
+      [authReq.authUserId]
+    );
+    const row = result.rows[0] as { is_collection_coordinator?: boolean } | undefined;
+    if (row?.is_collection_coordinator === true) {
+      return true;
+    }
+  } catch (err) {
+    console.error('Calendar next-week members access check failed:', err);
+    res.status(500).json({ error: 'Database error' });
+    return false;
+  }
+
+  res.status(403).json({ error: 'Нет доступа к плану на следующую неделю' });
+  return false;
+}
+
 export async function getNextWeekMembers(req: Request, res: Response): Promise<void> {
+  if (!(await assertCanViewNextWeekMembersPlan(req, res))) {
+    return;
+  }
   try {
     const days = await getNextWeekMemberAssignments();
     res.json({ days });
@@ -126,8 +162,6 @@ export async function getNextWeekMembers(req: Request, res: Response): Promise<v
     res.status(500).json({ error: 'Database error' });
   }
 }
-
-type AuthReq = Request & { authUserId?: number };
 
 export async function getNextWeekCollection(req: Request, res: Response): Promise<void> {
   try {

@@ -251,8 +251,8 @@ export function LoginPage() {
     'min-h-[48px] w-full rounded-xl border border-stone-200 bg-[var(--surface-elevated)] px-3.5 py-3 text-base text-stone-900 outline-none ring-primary/30 placeholder:text-stone-400 focus:border-primary focus:ring-2 sm:min-h-0 sm:py-2.5 sm:text-[15px]';
 
   return (
-    <div className="min-h-[100dvh] min-h-screen bg-[var(--surface)]">
-      <div className="flex min-h-[100dvh] min-h-screen flex-col px-4 py-5 sm:px-5 sm:py-6">
+    <div className="min-h-[100dvh] min-h-screen w-full max-w-[100vw] bg-[var(--surface)]">
+      <div className="flex min-h-[100dvh] min-h-screen flex-col py-5 [padding-left:max(1rem,env(safe-area-inset-left,0px))] [padding-right:max(1rem,env(safe-area-inset-right,0px))] sm:py-6">
         <Link
           to="/login"
           className="mb-3 inline-flex min-h-[44px] items-center gap-1.5 text-sm font-semibold text-stone-500 transition active:text-primary hover:text-primary"

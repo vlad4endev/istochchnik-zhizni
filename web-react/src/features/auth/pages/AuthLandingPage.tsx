@@ -22,26 +22,26 @@ export function AuthLandingPage() {
 
   if (!hydrated) {
     return (
-      <div className="flex min-h-[100dvh] min-h-screen items-center justify-center bg-primary text-white">
+      <div className="flex min-h-[100dvh] min-h-screen w-full max-w-[100vw] items-center justify-center bg-primary text-white">
         <p className="text-sm font-medium opacity-90">Загрузка…</p>
       </div>
     );
   }
 
   return (
-    <div className="min-h-[100dvh] min-h-screen bg-gradient-to-b from-primary via-primary to-[#5c2830] text-white">
-      <div className="mx-auto flex min-h-[100dvh] min-h-screen max-w-lg flex-col px-5 py-6 sm:px-6">
+    <div className="min-h-[100dvh] min-h-screen w-full max-w-[100vw] bg-gradient-to-b from-primary via-primary to-[#5c2830] text-white">
+      <div className="mx-auto flex min-h-[100dvh] min-h-screen w-full max-w-lg flex-col py-6 [padding-left:max(1.25rem,env(safe-area-inset-left,0px))] [padding-right:max(1.25rem,env(safe-area-inset-right,0px))] sm:py-6">
         <div className="flex-[3]" />
 
         <div className="flex flex-col items-center">
           <div
-            className="flex h-28 w-28 items-center justify-center rounded-2xl bg-white/12 text-white"
+            className="flex h-44 w-44 shrink-0 items-center justify-center rounded-3xl bg-white/15 p-3 text-white shadow-[0_12px_40px_rgba(0,0,0,0.2)] ring-1 ring-white/25 sm:h-52 sm:w-52 sm:p-4"
             aria-hidden
           >
-            <LatinCrossIcon className="h-14 w-14" aria-hidden />
+            <LatinCrossIcon className="h-[9.5rem] w-[9.5rem] sm:h-44 sm:w-44" aria-hidden />
           </div>
 
-          <h1 className="mt-[18px] text-center text-3xl font-extrabold tracking-tight text-white sm:text-4xl">
+          <h1 className="mt-9 text-center text-2xl font-extrabold tracking-tight text-white sm:mt-10 sm:text-3xl md:text-4xl">
             {DEFAULT_APP_NAME}
           </h1>
 
