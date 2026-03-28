@@ -1,11 +1,11 @@
 import { Router } from 'express';
 import {
-  getNextWeekCollection,
+  getCycleCollectionClaims,
   getNextWeekMembers,
   getPrayerBotMessage,
   getPrayerData,
   getTodayPrayerBotMessage,
-  patchNextWeekCollection,
+  patchCycleCollectionClaims,
 } from '../controllers/calendarController';
 import {
   getThemes,
@@ -26,8 +26,8 @@ import {
 const router = Router();
 
 router.get('/next-week/members', getNextWeekMembers);
-router.get('/next-week/collection', getNextWeekCollection);
-router.patch('/next-week/collection', patchNextWeekCollection);
+router.get('/cycle/collection-claims', getCycleCollectionClaims);
+router.patch('/cycle/collection-claims', patchCycleCollectionClaims);
 router.get('/next-week/global', getNextWeekGlobal);
 router.get('/bot-message/today', getTodayPrayerBotMessage);
 router.get('/bot-message/:date', getPrayerBotMessage);

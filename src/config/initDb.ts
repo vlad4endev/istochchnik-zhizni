@@ -140,20 +140,19 @@ ALTER TABLE members ADD CONSTRAINT members_app_role_check CHECK (app_role IN ('m
 
 ALTER TABLE members ADD COLUMN IF NOT EXISTS is_collection_coordinator BOOLEAN NOT NULL DEFAULT FALSE;
 
-CREATE TABLE IF NOT EXISTS next_week_collection_picks (
-  coordinator_id INTEGER NOT NULL REFERENCES members(id) ON DELETE CASCADE,
-  week_start DATE NOT NULL,
-  day_date DATE NOT NULL,
-  selected_member_id INTEGER REFERENCES members(id) ON DELETE SET NULL,
+CREATE TABLE IF NOT EXISTS cycle_collection_claims (
+  cycle_index INTEGER NOT NULL,
+  member_id INTEGER NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+  claimed_by_member_id INTEGER NOT NULL REFERENCES members(id) ON DELETE CASCADE,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  PRIMARY KEY (coordinator_id, week_start, day_date),
-  CONSTRAINT next_week_collection_picks_week_range_chk
-    CHECK (day_date >= week_start AND day_date <= week_start + 6)
+  PRIMARY KEY (cycle_index, member_id)
 );
 
-CREATE INDEX IF NOT EXISTS next_week_collection_picks_week_start_idx
-  ON next_week_collection_picks (week_start);
+CREATE INDEX IF NOT EXISTS cycle_collection_claims_cycle_idx
+  ON cycle_collection_claims (cycle_index);
+
+CREATE INDEX IF NOT EXISTS cycle_collection_claims_claimer_idx
+  ON cycle_collection_claims (claimed_by_member_id);
 
 CREATE UNIQUE INDEX IF NOT EXISTS members_email_unique_idx
   ON members (LOWER(email))

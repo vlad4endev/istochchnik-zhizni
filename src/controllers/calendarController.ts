@@ -2,9 +2,9 @@ import { Request, Response } from 'express';
 import { query } from '../config/db';
 import { getNextWeekMemberAssignments, getPrayerDataByDate } from '../services/calendarService';
 import {
-  getNextWeekCollectionSnapshot,
-  upsertCoordinatorPicks,
-} from '../services/collectionPicksService';
+  getCycleCollectionClaimsSnapshot,
+  setCycleCollectionClaim,
+} from '../services/cycleCollectionClaimsService';
 
 function isValidDateInput(value: unknown): value is string {
   if (typeof value !== 'string') {
@@ -163,64 +163,77 @@ export async function getNextWeekMembers(req: Request, res: Response): Promise<v
   }
 }
 
-export async function getNextWeekCollection(req: Request, res: Response): Promise<void> {
+export async function getCycleCollectionClaims(req: Request, res: Response): Promise<void> {
   if (!(await assertAdminOrCollectionCoordinator(req, res))) {
     return;
   }
   try {
     const authReq = req as AuthReq;
-    const snapshot = await getNextWeekCollectionSnapshot(authReq.authUserId ?? null);
+    const isAdmin = authReq.authUserRole === 'admin';
+    const snapshot = await getCycleCollectionClaimsSnapshot(authReq.authUserId ?? null, isAdmin);
     res.json(snapshot);
   } catch (err) {
-    console.error('Calendar next-week collection GET error:', err);
+    console.error('Calendar cycle collection-claims GET error:', err);
     res.status(500).json({ error: 'Database error' });
   }
 }
 
-function isValidYmdMap(value: unknown): value is Record<string, number | null> {
-  if (typeof value !== 'object' || value === null) {
-    return false;
+function parsePositiveInt(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isInteger(value) && value > 0) {
+    return value;
   }
-  const o = value as Record<string, unknown>;
-  for (const v of Object.values(o)) {
-    if (v !== null && typeof v !== 'number') {
-      return false;
-    }
-    if (typeof v === 'number' && (!Number.isInteger(v) || v <= 0)) {
-      return false;
-    }
+  if (typeof value === 'string' && /^\d+$/.test(value)) {
+    const n = Number(value);
+    if (Number.isInteger(n) && n > 0) return n;
   }
-  return true;
+  return null;
 }
 
-export async function patchNextWeekCollection(req: Request, res: Response): Promise<void> {
+export async function patchCycleCollectionClaims(req: Request, res: Response): Promise<void> {
   const authReq = req as AuthReq;
   if (!authReq.authUserId) {
     res.status(401).json({ error: 'Требуется вход в аккаунт' });
     return;
   }
 
-  const picksRaw = req.body?.picks;
-  if (!isValidYmdMap(picksRaw)) {
-    res.status(400).json({ error: 'Ожидается объект picks: { \"YYYY-MM-DD\": member_id | null }' });
+  const memberId = parsePositiveInt(req.body?.member_id);
+  const claim = req.body?.claim;
+  if (memberId == null || typeof claim !== 'boolean') {
+    res.status(400).json({ error: 'Ожидается { member_id: number, claim: boolean }' });
     return;
   }
 
   try {
-    await upsertCoordinatorPicks(authReq.authUserId, picksRaw);
-    const snapshot = await getNextWeekCollectionSnapshot(authReq.authUserId);
+    await setCycleCollectionClaim({
+      authUserId: authReq.authUserId,
+      authIsAdmin: authReq.authUserRole === 'admin',
+      memberId,
+      claim,
+    });
+    const snapshot = await getCycleCollectionClaimsSnapshot(
+      authReq.authUserId,
+      authReq.authUserRole === 'admin'
+    );
     res.json(snapshot);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    if (msg === 'not_coordinator') {
-      res.status(403).json({ error: 'Только ответственные за сбор могут редактировать свой список' });
+    if (msg === 'not_allowed') {
+      res.status(403).json({ error: 'Нет прав на назначение сбора' });
       return;
     }
-    if (msg === 'invalid_date' || msg === 'invalid_member') {
-      res.status(400).json({ error: 'Некорректные даты или участник' });
+    if (msg === 'already_claimed') {
+      res.status(409).json({ error: 'Этого участника уже выбрал другой ответственный' });
       return;
     }
-    console.error('Calendar next-week collection PATCH error:', err);
+    if (msg === 'not_owner') {
+      res.status(400).json({ error: 'Можно снять только свою отметку' });
+      return;
+    }
+    if (msg === 'invalid_member') {
+      res.status(400).json({ error: 'Некорректный участник' });
+      return;
+    }
+    console.error('Calendar cycle collection-claims PATCH error:', err);
     res.status(500).json({ error: 'Database error' });
   }
 }

@@ -37,7 +37,7 @@ import {
 } from '../../../lib/config';
 import type { Backslider, DayPrayerData, GlobalTheme, Member, Ministry } from '../../../types';
 import { fetchMe, patchProfile } from '../../profile/api';
-import { NextWeekCollectionBlock } from '../components/NextWeekCollectionBlock';
+import { CycleCollectionClaimsSection } from '../components/CycleCollectionClaimsSection';
 import {
   NextWeekPrayerPlanSection,
   userCanViewNextWeekPrayerPlan,
@@ -580,7 +580,7 @@ export function DailyPrayerPage() {
         {userCanViewNextWeekPrayerPlan(me) ? (
           <>
             <NextWeekPrayerPlanSection canView />
-            <NextWeekCollectionBlock />
+            <CycleCollectionClaimsSection currentUserId={me?.id ?? null} />
           </>
         ) : null}
         {isPending ? (
@@ -600,7 +600,7 @@ export function DailyPrayerPage() {
                     onPrayerSaved={() => {
                       void qc.invalidateQueries({ queryKey: ['calendar', 'day', dateKey] });
                       void qc.invalidateQueries({ queryKey: ['calendar', 'next-week', 'members'] });
-                      void qc.invalidateQueries({ queryKey: ['calendar', 'next-week', 'collection'] });
+                      void qc.invalidateQueries({ queryKey: ['calendar', 'cycle', 'collection-claims'] });
                     }}
                   />
                 ))}

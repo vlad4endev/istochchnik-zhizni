@@ -1,13 +1,13 @@
-/** Ответ GET `/api/calendar/next-week/collection`. */
-export interface NextWeekCollectionSnapshot {
-  week_start: string;
-  day_dates: string[];
-  coordinator_rows: CoordinatorCollectionRow[];
-  members_for_select: { id: number; name: string }[];
+/** Ответ GET/PATCH `/api/calendar/cycle/collection-claims`. */
+export interface CycleCollectionClaimRow {
+  id: number;
+  name: string;
+  claimed_by: { id: number; name: string } | null;
+  can_toggle: boolean;
 }
 
-export interface CoordinatorCollectionRow {
-  coordinator: { id: number; name: string };
-  days: Array<{ date: string; selected_member: { id: number; name: string } | null }>;
-  can_edit: boolean;
+export interface CycleCollectionClaimsSnapshot {
+  cycle_index: number;
+  cycle_number: number;
+  members: CycleCollectionClaimRow[];
 }

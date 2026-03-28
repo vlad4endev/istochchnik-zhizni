@@ -4,7 +4,7 @@ import { format } from 'date-fns';
 import { apiClient } from '../../lib/apiClient';
 import type { DayPrayerData, Member, NextWeekMemberDay, PrayerCycleInfo } from '../../types';
 
-import type { NextWeekCollectionSnapshot } from './collectionTypes';
+import type { CycleCollectionClaimsSnapshot } from './collectionTypes';
 
 /** Ключ даты для `/api/calendar/{date}` — `yyyy-MM-dd`. */
 export function formatCalendarDayKey(date: Date): string {
@@ -106,42 +106,60 @@ function normalizeDayPrayer(raw: unknown): DayPrayerData {
   };
 }
 
-function normalizeCollectionSnapshot(raw: unknown): NextWeekCollectionSnapshot {
+function normalizeClaimRow(raw: unknown): import('./collectionTypes').CycleCollectionClaimRow | null {
+  if (!isRecord(raw)) return null;
+  const id = raw.id;
+  const name = raw.name;
+  const can_toggle = raw.can_toggle;
+  if (typeof id !== 'number' || typeof name !== 'string' || typeof can_toggle !== 'boolean') return null;
+  let claimed_by: { id: number; name: string } | null = null;
+  if (raw.claimed_by === null) {
+    claimed_by = null;
+  } else if (isRecord(raw.claimed_by)) {
+    const cid = raw.claimed_by.id;
+    const cname = raw.claimed_by.name;
+    if (typeof cid === 'number' && typeof cname === 'string') {
+      claimed_by = { id: cid, name: cname };
+    }
+  }
+  return { id, name, claimed_by, can_toggle };
+}
+
+function normalizeCycleCollectionSnapshot(raw: unknown): CycleCollectionClaimsSnapshot {
   if (!isRecord(raw)) {
-    throw new Error('Некорректный ответ API: next-week/collection');
+    throw new Error('Некорректный ответ API: cycle/collection-claims');
   }
-  const week_start = raw.week_start;
-  const day_dates = raw.day_dates;
-  const coordinator_rows = raw.coordinator_rows;
-  const members_for_select = raw.members_for_select;
-  if (typeof week_start !== 'string' || !Array.isArray(day_dates)) {
-    throw new Error('Некорректный ответ API: next-week/collection');
+  const cycle_index = raw.cycle_index;
+  const cycle_number = raw.cycle_number;
+  const members = raw.members;
+  if (typeof cycle_index !== 'number' || typeof cycle_number !== 'number' || !Array.isArray(members)) {
+    throw new Error('Некорректный ответ API: cycle/collection-claims');
   }
-  if (!Array.isArray(coordinator_rows) || !Array.isArray(members_for_select)) {
-    throw new Error('Некорректный ответ API: next-week/collection');
+  const rows: import('./collectionTypes').CycleCollectionClaimRow[] = [];
+  for (const m of members) {
+    const r = normalizeClaimRow(m);
+    if (!r) {
+      throw new Error('Некорректный ответ API: cycle/collection-claims');
+    }
+    rows.push(r);
   }
-  return {
-    week_start,
-    day_dates: day_dates as string[],
-    coordinator_rows: coordinator_rows as NextWeekCollectionSnapshot['coordinator_rows'],
-    members_for_select: members_for_select as NextWeekCollectionSnapshot['members_for_select'],
-  };
+  return { cycle_index, cycle_number, members: rows };
 }
 
-/** GET — публично: кто назначен ответственными за сбор; can_edit для текущего пользователя. */
-export async function getNextWeekCollection(): Promise<NextWeekCollectionSnapshot> {
-  const { data } = await apiClient.get<unknown>('/api/calendar/next-week/collection');
-  return normalizeCollectionSnapshot(data);
+export async function getCycleCollectionClaims(): Promise<CycleCollectionClaimsSnapshot> {
+  const { data } = await apiClient.get<unknown>('/api/calendar/cycle/collection-claims');
+  return normalizeCycleCollectionSnapshot(data);
 }
 
-/** PATCH — только ответственный за сбор (свой список). */
-export async function patchNextWeekCollection(
-  picks: Record<string, number | null>,
-): Promise<NextWeekCollectionSnapshot> {
-  const { data } = await apiClient.patch<unknown>('/api/calendar/next-week/collection', {
-    picks,
+export async function patchCycleCollectionClaim(
+  memberId: number,
+  claim: boolean,
+): Promise<CycleCollectionClaimsSnapshot> {
+  const { data } = await apiClient.patch<unknown>('/api/calendar/cycle/collection-claims', {
+    member_id: memberId,
+    claim,
   });
-  return normalizeCollectionSnapshot(data);
+  return normalizeCycleCollectionSnapshot(data);
 }
 
 /**
