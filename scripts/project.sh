@@ -96,11 +96,11 @@ cmd_update() {
       section "Git: связь с GitHub и pull"
       echo "[$( _ts )] Текущая ветка: $(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "?")"
       git remote -v | head -6 || true
-      # npm install на сервере часто меняет lock-файлы — иначе git pull падает с «would be overwritten by merge»
-      echo "[$( _ts )] Сброс локальных правок package-lock.json (корень и web-react), если есть…"
-      for _lock in package-lock.json web-react/package-lock.json; do
-        if [[ -f "$_lock" ]]; then
-          git restore -- "$_lock" 2>/dev/null || git checkout -- "$_lock" 2>/dev/null || true
+      # npm на сервере меняет package.json / lock — иначе git pull падает с «would be overwritten by merge»
+      echo "[$( _ts )] Сброс локальных правок package.json и package-lock (корень и web-react)…"
+      for _pkg in package.json package-lock.json web-react/package.json web-react/package-lock.json; do
+        if [[ -f "$_pkg" ]]; then
+          git restore -- "$_pkg" 2>/dev/null || git checkout -- "$_pkg" 2>/dev/null || true
         fi
       done
       echo "[$( _ts )] Выполняю: git fetch origin …"
