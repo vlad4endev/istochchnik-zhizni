@@ -10,9 +10,8 @@ import {
 } from 'react';
 import { createPortal } from 'react-dom';
 
-import { LuImage, LuPenLine } from 'react-icons/lu';
+import { LuImage, LuPenLine, LuTv } from 'react-icons/lu';
 
-import { LatinCrossIcon } from '../../../components/LatinCrossIcon';
 import { ADMIN_TABS, type AdminTabId } from '../adminTabs';
 import { AccessRequestsSection } from '../AccessRequestsSection';
 import { useBrandingStore } from '../../branding/brandingStore';
@@ -45,6 +44,7 @@ import {
   updateGlobalThemeApi,
   updateMinistryApi,
 } from '../api';
+import { fetchBroadcastEmbed, patchBroadcastEmbed } from '../../../api/broadcast';
 import type { AppUser } from '../types';
 
 const Q_MEMBERS = ['admin', 'members'] as const;
@@ -1839,6 +1839,30 @@ function ProjectSection() {
   const [localName, setLocalName] = useState(appName);
   const [localDesc, setLocalDesc] = useState(description);
 
+  const qc = useQueryClient();
+  const { data: broadcastData, isLoading: broadcastLoading } = useQuery({
+    queryKey: ['broadcast'],
+    queryFn: fetchBroadcastEmbed,
+  });
+  
+  const [rutubeCode, setRutubeCode] = useState('');
+  useEffect(() => {
+    if (broadcastData) {
+      setRutubeCode(broadcastData.rutube_embed_code || '');
+    }
+  }, [broadcastData]);
+
+  const patchBroadcast = useMutation({
+    mutationFn: (code: string) => patchBroadcastEmbed(code || null),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['broadcast'] });
+      alert('Код трансляции сохранён.');
+    },
+    onError: () => {
+      alert('Ошибка при сохранении кода трансляции.');
+    }
+  });
+
   useEffect(() => {
     setLocalName(appName);
     setLocalDesc(description);
@@ -1878,6 +1902,40 @@ function ProjectSection() {
           </div>
         </div>
       </section>
+
+      <section className="rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] p-5 shadow-[var(--shadow)]">
+        <h3 className="flex items-center gap-2 font-extrabold text-stone-900">
+          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary" aria-hidden>
+            <LuTv className="h-5 w-5" strokeWidth={2} />
+          </span>
+          Прямая трансляция
+        </h3>
+        <p className="mt-2 text-xs leading-relaxed text-stone-600">
+          Укажите код вставки (iframe) из Rutube или ссылку трансляции, чтобы она отобразилась в разделе Трансляции. Оставьте пустым, чтобы убрать плеер.
+        </p>
+        <div className="mt-4 space-y-3">
+          <div>
+            <label className="mb-1 block text-xs font-semibold text-stone-600">Код плеера или ссылка</label>
+            <textarea
+              className={`${fieldClass()} resize-y`}
+              rows={3}
+              placeholder='<iframe width="720" height="405" src="..." ...></iframe>'
+              value={rutubeCode}
+              onChange={(e) => setRutubeCode(e.target.value)}
+              disabled={broadcastLoading}
+            />
+          </div>
+          <button
+            type="button"
+            className={btnPrimary()}
+            disabled={patchBroadcast.isPending || broadcastLoading}
+            onClick={() => patchBroadcast.mutate(rutubeCode)}
+          >
+            {patchBroadcast.isPending ? 'Сохранение...' : 'Сохранить трансляцию'}
+          </button>
+        </div>
+      </section>
+      
       <section className="rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] p-5 shadow-[var(--shadow)]">
         <h3 className="flex items-center gap-2 font-extrabold text-stone-900">
           <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary" aria-hidden>
@@ -1908,7 +1966,7 @@ function ProjectSection() {
           <span>Убирать светлый фон при загрузке PNG/JPEG</span>
         </label>
         <div className="mt-4 flex flex-wrap items-center gap-4">
-          <div className="flex h-20 w-20 items-center justify-center overflow-hidden rounded-2xl border border-stone-200 bg-stone-50">
+          <div className="flex h-20 w-20 items-center justify-center overflow-hidden rounded-[1rem] border border-stone-200 bg-stone-50 p-1.5 focus:border-primary">
             {customLogoDataUrl ? (
               <img
                 src={customLogoDataUrl}
@@ -1917,7 +1975,7 @@ function ProjectSection() {
                 style={{ transform: `scale(${logoScalePercent / 100})` }}
               />
             ) : (
-              <LatinCrossIcon className="h-7 w-7 text-stone-300" aria-hidden />
+              <img src="/assets/logo.svg" alt="" className="h-full w-full object-contain drop-shadow-sm opacity-60 grayscale-[1]" />
             )}
           </div>
           <div className="flex flex-col gap-2">

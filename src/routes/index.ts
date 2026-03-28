@@ -1,7 +1,9 @@
 import { Router } from 'express';
+import { getBroadcastEmbed, updateBroadcastEmbed } from '../controllers/broadcastController';
 
 const router = Router();
 
-// Routes will be placed here
+router.get('/broadcast', getBroadcastEmbed);
+router.patch('/broadcast', updateBroadcastEmbed);
 
 export default router;

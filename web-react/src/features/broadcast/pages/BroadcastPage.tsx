@@ -1,6 +1,15 @@
 import { LuTv } from 'react-icons/lu';
+import { useQuery } from '@tanstack/react-query';
+import { fetchBroadcastEmbed } from '../../../api/broadcast';
 
 export function BroadcastPage() {
+  const { data, isLoading, error } = useQuery({
+    queryKey: ['broadcast'],
+    queryFn: fetchBroadcastEmbed,
+  });
+
+  const embedCode = data?.rutube_embed_code;
+
   return (
     <div className="min-h-full bg-[var(--surface)] pb-6 shell:pb-8">
       <header className="bg-primary px-4 py-4 text-white shadow-[0_4px_24px_rgba(125,54,64,0.3)] sm:px-5 sm:py-5 md:rounded-none md:shadow-sm md:px-6 max-md:rounded-b-[1.75rem]">
@@ -30,13 +39,29 @@ export function BroadcastPage() {
               Трансляция богослужения доступна онлайн. Подключайтесь к нам из любой точки мира.
             </p>
 
-            {/* Rutube Placeholder / Embed Container */}
+            {/* Rutube Player or Placeholder */}
             <div className="relative w-full overflow-hidden rounded-2xl bg-stone-900 shadow-xl border border-stone-800" style={{ paddingTop: '56.25%' }}>
-              <div className="absolute inset-0 flex flex-col items-center justify-center text-stone-400 p-6 text-center bg-stone-950/50">
-                <LuTv className="h-12 w-12 mb-4 opacity-50" strokeWidth={1} />
-                <p className="text-sm font-medium">Трансляция Rutube</p>
-                <p className="text-xs opacity-70 mt-1 max-w-xs">Код плеера будет добавлен сюда</p>
-              </div>
+              {isLoading ? (
+                <div className="absolute inset-0 flex flex-col items-center justify-center text-stone-400 p-6 text-center bg-stone-950/50">
+                  <div className="h-10 w-10 animate-spin rounded-full border-2 border-primary border-t-transparent mb-4" />
+                  <p className="text-sm font-medium">Загрузка эфира...</p>
+                </div>
+              ) : error ? (
+                <div className="absolute inset-0 flex flex-col items-center justify-center text-red-400 p-6 text-center bg-stone-950/50">
+                  <p className="text-sm font-medium">Не удалось загрузить данные трансляции</p>
+                </div>
+              ) : embedCode ? (
+                <div 
+                  className="absolute inset-0 w-full h-full [&>iframe]:w-full [&>iframe]:h-full" 
+                  dangerouslySetInnerHTML={{ __html: embedCode }} 
+                />
+              ) : (
+                <div className="absolute inset-0 flex flex-col items-center justify-center text-stone-400 p-6 text-center bg-stone-950/50">
+                  <LuTv className="h-12 w-12 mb-4 opacity-50" strokeWidth={1} />
+                  <p className="text-sm font-medium">Трансляция не запущена</p>
+                  <p className="text-xs opacity-70 mt-1 max-w-xs">Эфир временно недоступен или ещё не начался</p>
+                </div>
+              )}
             </div>
           </section>
         </div>

@@ -55,7 +55,8 @@ CREATE TABLE IF NOT EXISTS ministry_direction_templates (
 
 CREATE TABLE IF NOT EXISTS global_settings (
   id INTEGER PRIMARY KEY CHECK (id = 1),
-  start_date DATE NOT NULL
+  start_date DATE NOT NULL,
+  rutube_embed_code TEXT
 );
 
 CREATE TABLE IF NOT EXISTS member_cycle_overrides (
@@ -137,6 +138,8 @@ ALTER TABLE members DROP CONSTRAINT IF EXISTS members_app_role_check;
 ALTER TABLE members ADD CONSTRAINT members_app_role_check CHECK (app_role IN ('member', 'admin'));
 
 ALTER TABLE members ADD COLUMN IF NOT EXISTS is_collection_coordinator BOOLEAN NOT NULL DEFAULT FALSE;
+
+ALTER TABLE global_settings ADD COLUMN IF NOT EXISTS rutube_embed_code TEXT;
 
 CREATE TABLE IF NOT EXISTS cycle_collection_claims (
   cycle_index INTEGER NOT NULL,

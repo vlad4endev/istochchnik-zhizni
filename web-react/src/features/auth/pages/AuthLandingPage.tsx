@@ -1,7 +1,6 @@
 import { useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 
-import { LatinCrossIcon } from '../../../components/LatinCrossIcon';
 import { useAuthHydrated } from '../../../hooks/useAuthHydrated';
 import { useAuthStore } from '../authStore';
 
@@ -31,14 +30,14 @@ export function AuthLandingPage() {
   return (
     <div className="min-h-[100dvh] min-h-screen w-full max-w-[100vw] bg-gradient-to-b from-primary via-primary to-[#5c2830] text-white">
       <div className="mx-auto flex min-h-[100dvh] min-h-screen w-full max-w-lg flex-col py-6 [padding-left:max(1.25rem,env(safe-area-inset-left,0px))] [padding-right:max(1.25rem,env(safe-area-inset-right,0px))] sm:py-6">
-        <div className="flex-[3]" />
+        <div className="flex-[2] min-h-[2rem]" />
 
         <div className="flex flex-col items-center">
           <div
-            className="flex h-44 w-44 shrink-0 items-center justify-center rounded-3xl bg-white/15 p-3 text-white shadow-[0_12px_40px_rgba(0,0,0,0.2)] ring-1 ring-white/25 sm:h-52 sm:w-52 sm:p-4"
+            className="flex h-40 w-40 shrink-0 items-center justify-center rounded-[2rem] bg-white/10 p-5 text-white shadow-[0_12px_40px_rgba(0,0,0,0.2)] ring-1 ring-white/25 sm:h-48 sm:w-48 sm:p-6"
             aria-hidden
           >
-            <LatinCrossIcon className="h-[9.5rem] w-[9.5rem] sm:h-44 sm:w-44" aria-hidden />
+            <img src="/assets/logo.svg" alt="" className="h-full w-full object-contain drop-shadow-md" />
           </div>
 
           <h1 className="mt-9 text-center text-2xl font-extrabold tracking-tight text-white sm:mt-10 sm:text-3xl md:text-4xl">
@@ -52,9 +51,9 @@ export function AuthLandingPage() {
           )}
         </div>
 
-        <div className="flex-[4]" />
+        <div className="flex-[1.5] min-h-[3rem]" />
 
-        <div className="pb-1">
+        <div className="flex flex-col gap-3 pb-2">
           <Link
             to="/login/form"
             state={{ mode: 'signIn' as const }}
@@ -65,11 +64,13 @@ export function AuthLandingPage() {
           <Link
             to="/login/form"
             state={{ mode: 'signUp' as const }}
-            className="touch-manipulation mt-3 flex h-14 w-full items-center justify-center rounded-2xl border border-white/25 bg-white/10 text-center text-base font-bold text-white shadow-inner backdrop-blur-sm transition-[transform,opacity] active:scale-[0.98] hover:bg-white/15"
+            className="touch-manipulation flex h-14 w-full items-center justify-center rounded-2xl border border-white/25 bg-white/10 text-center text-base font-bold text-white shadow-inner backdrop-blur-sm transition-[transform,opacity] active:scale-[0.98] hover:bg-white/15"
           >
             Зарегистрироваться
           </Link>
         </div>
+
+        <div className="flex-[1] min-h-[2rem]" />
       </div>
     </div>
   );

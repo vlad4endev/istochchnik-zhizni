@@ -3,7 +3,6 @@ import { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { LuArrowRight, LuEye, LuEyeOff, LuPenLine, LuTriangleAlert } from 'react-icons/lu';
 
-import { LatinCrossIcon } from '../../../components/LatinCrossIcon';
 import { useAuthHydrated } from '../../../hooks/useAuthHydrated';
 import { apiClient } from '../../../lib/apiClient';
 import { isApiUrlProbablyWrongForWeb } from '../../../lib/config';
@@ -263,8 +262,8 @@ export function LoginPage() {
         <div className="flex flex-1 flex-col justify-center pb-4">
           <div className="mx-auto w-full max-w-[min(100%,480px)] rounded-[1.25rem] bg-[var(--surface-elevated)] p-5 shadow-[var(--shadow-card)] ring-1 ring-stone-900/[0.06] sm:rounded-2xl sm:p-6 md:shadow-[var(--shadow)]">
             <div className="flex justify-center">
-              <div className="flex h-[72px] w-[72px] items-center justify-center rounded-xl bg-primary/10 text-primary">
-                <LatinCrossIcon className="h-9 w-9" aria-hidden />
+              <div className="flex h-[72px] w-[72px] items-center justify-center rounded-[1rem] bg-stone-50 p-3 shadow-inner ring-1 ring-stone-900/5">
+                <img src="/assets/logo.svg" alt="" className="h-full w-full object-contain" />
               </div>
             </div>
 

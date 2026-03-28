@@ -3,7 +3,6 @@ import { useEffect, useState } from 'react';
 import type { IconType } from 'react-icons';
 import { LuChurch, LuShield, LuUser, LuWifiOff, LuX, LuTv } from 'react-icons/lu';
 
-import { LatinCrossIcon } from '../components/LatinCrossIcon';
 import { useAuthStore } from '../features/auth/authStore';
 import { useBrandingStore } from '../features/branding/brandingStore';
 import { useRealtimeQuerySync } from '../hooks/useRealtimeQuerySync';
@@ -141,7 +140,7 @@ export function Layout() {
   }
 
   return (
-    <div className="flex min-h-[100dvh] min-h-screen w-full max-w-[100vw] flex-col overflow-x-hidden bg-[var(--surface)] text-[var(--text)] [padding-left:env(safe-area-inset-left,0px)] [padding-right:env(safe-area-inset-right,0px)]">
+    <div className="flex min-h-[100dvh] min-h-screen w-full max-w-[100vw] flex-col overflow-x-clip bg-[var(--surface)] text-[var(--text)] [padding-left:env(safe-area-inset-left,0px)] [padding-right:env(safe-area-inset-right,0px)]">
       <div className="flex min-h-0 min-w-0 w-full max-w-full flex-1 flex-col box-border md:pl-[260px] lg:pl-[272px]">
       <div className="shrink-0">
         <ConnectivityBanner />
@@ -151,7 +150,7 @@ export function Layout() {
       <aside className="hidden w-[260px] max-w-[260px] shrink-0 flex-col overflow-y-auto overflow-x-hidden border-r border-stone-200/80 bg-[var(--surface-elevated)] shadow-[4px_0_16px_rgba(0,0,0,0.06)] md:fixed md:bottom-0 md:left-0 md:top-0 md:z-30 md:flex lg:w-[272px] lg:max-w-[272px] [padding-bottom:env(safe-area-inset-bottom,0px)] [padding-top:env(safe-area-inset-top,0px)]">
         <div className="flex min-h-0 flex-1 flex-col gap-1 p-6">
           <div className="mb-6 flex items-start gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-primary/15 text-primary">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden xl:rounded-[0.9rem] rounded-xl bg-primary/10 text-primary p-1">
               {customLogoDataUrl ? (
                 <img
                   src={customLogoDataUrl}
@@ -160,7 +159,7 @@ export function Layout() {
                   style={{ transform: `scale(${logoScalePercent / 100})` }}
                 />
               ) : (
-                <LatinCrossIcon className="h-5 w-5" aria-hidden />
+                <img src="/assets/logo.svg" alt="" className="h-full w-full object-contain drop-shadow-sm" />
               )}
             </div>
             <div className="min-w-0">
@@ -198,7 +197,7 @@ export function Layout() {
       </aside>
 
       {/* Main: отступ слева от сайдбара — на родителе (padding); снизу под нижний бар на мобильных */}
-      <main className="min-h-0 w-full min-w-0 max-w-full flex-1 overflow-x-hidden overflow-y-auto overscroll-y-contain pb-[max(7rem,calc(5rem+env(safe-area-inset-bottom)))] [-webkit-overflow-scrolling:touch] md:pb-0 2xl:px-8 min-[1920px]:px-12">
+      <main className="min-h-0 w-full min-w-0 max-w-full flex-1 overflow-x-clip pb-[max(7rem,calc(5rem+env(safe-area-inset-bottom)))] md:pb-0 2xl:px-8 min-[1920px]:px-12">
         <Outlet />
       </main>
 
