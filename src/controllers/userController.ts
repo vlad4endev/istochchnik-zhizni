@@ -13,11 +13,36 @@ import {
   listPrayerRequestHistory,
   listMinistryRoleTemplates,
   listUsers,
+  MemberNameDuplicateError,
   setOneTimeMemberDateOverride,
   setUserAppRole,
   startPrayerCycle,
   updateUser,
 } from '../services/userService';
+import { notifyRealtime, type RealtimeScope } from '../realtime/notify';
+
+type AuthRequest = Request & { authUserId?: number; authUserRole?: string };
+
+function ensureAuthenticated(req: Request, res: Response): AuthRequest | null {
+  const r = req as AuthRequest;
+  if (!r.authUserId) {
+    res.status(401).json({ error: 'Требуется вход в аккаунт' });
+    return null;
+  }
+  return r;
+}
+
+function ensureAdmin(req: Request, res: Response): AuthRequest | null {
+  const r = ensureAuthenticated(req, res);
+  if (!r) {
+    return null;
+  }
+  if (r.authUserRole !== 'admin') {
+    res.status(403).json({ error: 'Недостаточно прав' });
+    return null;
+  }
+  return r;
+}
 
 function parseUserId(value: string): number | null {
   const parsed = Number(value);
@@ -78,6 +103,9 @@ function isValidAppRole(value: unknown): value is AppRole {
 }
 
 export async function getUsers(req: Request, res: Response): Promise<void> {
+  if (!ensureAdmin(req, res)) {
+    return;
+  }
   try {
     const users = await listUsers();
     res.json(users);
@@ -91,6 +119,15 @@ export async function getUser(req: Request, res: Response): Promise<void> {
   const userId = parseUserId(req.params.id);
   if (!userId) {
     res.status(400).json({ error: 'Invalid user id' });
+    return;
+  }
+
+  const auth = ensureAuthenticated(req, res);
+  if (!auth) {
+    return;
+  }
+  if (auth.authUserRole !== 'admin' && auth.authUserId !== userId) {
+    res.status(403).json({ error: 'Access denied' });
     return;
   }
 
@@ -108,17 +145,16 @@ export async function getUser(req: Request, res: Response): Promise<void> {
 }
 
 export async function getPrayerRequestHistoryHandler(req: Request, res: Response): Promise<void> {
-  const authReq = req as Request & { authUserId?: number; authUserRole?: string };
+  const authReq = ensureAuthenticated(req, res);
+  if (!authReq) {
+    return;
+  }
   const userId = parseUserId(req.params.id);
   if (!userId) {
     res.status(400).json({ error: 'Invalid user id' });
     return;
   }
 
-  if (!authReq.authUserId) {
-    res.status(401).json({ error: 'Authentication required' });
-    return;
-  }
   if (authReq.authUserRole !== 'admin' && authReq.authUserId !== userId) {
     res.status(403).json({ error: 'Access denied' });
     return;
@@ -140,6 +176,9 @@ export async function getPrayerRequestHistoryHandler(req: Request, res: Response
 }
 
 export async function createUserHandler(req: Request, res: Response): Promise<void> {
+  if (!ensureAdmin(req, res)) {
+    return;
+  }
   const { first_name, last_name, phone_number, birth_date } = req.body as {
     first_name?: unknown;
     last_name?: unknown;
@@ -190,14 +229,22 @@ export async function createUserHandler(req: Request, res: Response): Promise<vo
       phone_number: (phone_number as string).trim(),
       birth_date: (birth_date as string).trim(),
     });
+    notifyRealtime(['members', 'calendar']);
     res.status(201).json(user);
   } catch (error) {
+    if (error instanceof MemberNameDuplicateError) {
+      res.status(409).json({ error: error.message });
+      return;
+    }
     console.error('Failed to create user', error);
     res.status(500).json({ error: 'Database error' });
   }
 }
 
 export async function updateUserHandler(req: Request, res: Response): Promise<void> {
+  if (!ensureAdmin(req, res)) {
+    return;
+  }
   const userId = parseUserId(req.params.id);
   if (!userId) {
     res.status(400).json({ error: 'Invalid user id' });
@@ -257,14 +304,26 @@ export async function updateUserHandler(req: Request, res: Response): Promise<vo
       res.status(404).json({ error: 'User not found' });
       return;
     }
+    const rt: RealtimeScope[] = ['members', 'calendar'];
+    if (req.body.is_collection_coordinator !== undefined || req.body.app_role !== undefined) {
+      rt.push('me');
+    }
+    notifyRealtime(rt);
     res.json(updated);
   } catch (error) {
+    if (error instanceof MemberNameDuplicateError) {
+      res.status(409).json({ error: error.message });
+      return;
+    }
     console.error('Failed to update user', error);
     res.status(500).json({ error: 'Database error' });
   }
 }
 
 export async function deleteUserHandler(req: Request, res: Response): Promise<void> {
+  if (!ensureAdmin(req, res)) {
+    return;
+  }
   const userId = parseUserId(req.params.id);
   if (!userId) {
     res.status(400).json({ error: 'Invalid user id' });
@@ -277,6 +336,7 @@ export async function deleteUserHandler(req: Request, res: Response): Promise<vo
       res.status(404).json({ error: 'User not found' });
       return;
     }
+    notifyRealtime(['members', 'calendar']);
     res.status(204).send();
   } catch (error) {
     console.error('Failed to delete user', error);
@@ -285,6 +345,9 @@ export async function deleteUserHandler(req: Request, res: Response): Promise<vo
 }
 
 export async function linkUserAccountHandler(req: Request, res: Response): Promise<void> {
+  if (!ensureAdmin(req, res)) {
+    return;
+  }
   const userId = parseUserId(req.params.id);
   if (!userId) {
     res.status(400).json({ error: 'Invalid user id' });
@@ -309,6 +372,7 @@ export async function linkUserAccountHandler(req: Request, res: Response): Promi
       res.status(404).json({ error: 'User not found' });
       return;
     }
+    notifyRealtime(['members']);
     res.json(user);
   } catch (error) {
     console.error('Failed to link account', error);
@@ -317,6 +381,9 @@ export async function linkUserAccountHandler(req: Request, res: Response): Promi
 }
 
 export async function setUserAppRoleHandler(req: Request, res: Response): Promise<void> {
+  if (!ensureAdmin(req, res)) {
+    return;
+  }
   const userId = parseUserId(req.params.id);
   if (!userId) {
     res.status(400).json({ error: 'Invalid user id' });
@@ -335,6 +402,7 @@ export async function setUserAppRoleHandler(req: Request, res: Response): Promis
       res.status(404).json({ error: 'User not found' });
       return;
     }
+    notifyRealtime(['members', 'me']);
     res.json(updated);
   } catch (error) {
     if (error instanceof Error && error.message === 'Cannot remove the last active administrator') {
@@ -347,6 +415,9 @@ export async function setUserAppRoleHandler(req: Request, res: Response): Promis
 }
 
 export async function startPrayerCycleHandler(req: Request, res: Response): Promise<void> {
+  if (!ensureAdmin(req, res)) {
+    return;
+  }
   const startDateRaw = typeof req.body.start_date === 'string' ? req.body.start_date.trim() : '';
 
   if (!isValidDateInput(startDateRaw)) {
@@ -356,6 +427,7 @@ export async function startPrayerCycleHandler(req: Request, res: Response): Prom
 
   try {
     const result = await startPrayerCycle(startDateRaw);
+    notifyRealtime(['calendar', 'members', 'me']);
     res.json(result);
   } catch (error) {
     console.error('Failed to start prayer cycle', error);
@@ -367,6 +439,9 @@ export async function setOneTimeMemberDateOverrideHandler(
   req: Request,
   res: Response
 ): Promise<void> {
+  if (!ensureAdmin(req, res)) {
+    return;
+  }
   const userId = parseUserId(req.params.id);
   if (!userId) {
     res.status(400).json({ error: 'Invalid user id' });
@@ -381,6 +456,7 @@ export async function setOneTimeMemberDateOverrideHandler(
 
   try {
     const result = await setOneTimeMemberDateOverride(userId, targetDate);
+    notifyRealtime(['calendar']);
     res.json(result);
   } catch (error) {
     if (error instanceof Error && error.message === 'User not found') {
@@ -396,6 +472,9 @@ export async function getMinistryRoleTemplatesHandler(
   req: Request,
   res: Response
 ): Promise<void> {
+  if (!ensureAdmin(req, res)) {
+    return;
+  }
   try {
     const templates = await listMinistryRoleTemplates();
     res.json(templates);
@@ -409,6 +488,9 @@ export async function createMinistryRoleTemplateHandler(
   req: Request,
   res: Response
 ): Promise<void> {
+  if (!ensureAdmin(req, res)) {
+    return;
+  }
   const title = typeof req.body.title === 'string' ? req.body.title.trim() : '';
   if (!title) {
     res.status(400).json({ error: 'Field "title" is required' });
@@ -421,6 +503,7 @@ export async function createMinistryRoleTemplateHandler(
 
   try {
     const created = await createMinistryRoleTemplate(title);
+    notifyRealtime(['templates']);
     res.status(201).json(created);
   } catch (error) {
     if (error instanceof Error && /duplicate key/i.test(error.message)) {
@@ -436,6 +519,9 @@ export async function deleteMinistryRoleTemplateHandler(
   req: Request,
   res: Response
 ): Promise<void> {
+  if (!ensureAdmin(req, res)) {
+    return;
+  }
   const templateId = parseUserId(req.params.id);
   if (!templateId) {
     res.status(400).json({ error: 'Invalid template id' });
@@ -448,6 +534,7 @@ export async function deleteMinistryRoleTemplateHandler(
       res.status(404).json({ error: 'Template not found' });
       return;
     }
+    notifyRealtime(['templates']);
     res.status(204).send();
   } catch (error) {
     console.error('Failed to delete ministry role template', error);
@@ -459,6 +546,9 @@ export async function getMinistryDirectionTemplatesHandler(
   req: Request,
   res: Response
 ): Promise<void> {
+  if (!ensureAdmin(req, res)) {
+    return;
+  }
   try {
     const templates = await listMinistryDirectionTemplates();
     res.json(templates);
@@ -472,6 +562,9 @@ export async function createMinistryDirectionTemplateHandler(
   req: Request,
   res: Response
 ): Promise<void> {
+  if (!ensureAdmin(req, res)) {
+    return;
+  }
   const title = typeof req.body.title === 'string' ? req.body.title.trim() : '';
   if (!title) {
     res.status(400).json({ error: 'Field "title" is required' });
@@ -484,6 +577,7 @@ export async function createMinistryDirectionTemplateHandler(
 
   try {
     const created = await createMinistryDirectionTemplate(title);
+    notifyRealtime(['templates']);
     res.status(201).json(created);
   } catch (error) {
     if (error instanceof Error && /duplicate key/i.test(error.message)) {
@@ -499,6 +593,9 @@ export async function deleteMinistryDirectionTemplateHandler(
   req: Request,
   res: Response
 ): Promise<void> {
+  if (!ensureAdmin(req, res)) {
+    return;
+  }
   const templateId = parseUserId(req.params.id);
   if (!templateId) {
     res.status(400).json({ error: 'Invalid template id' });
@@ -511,6 +608,7 @@ export async function deleteMinistryDirectionTemplateHandler(
       res.status(404).json({ error: 'Template not found' });
       return;
     }
+    notifyRealtime(['templates']);
     res.status(204).send();
   } catch (error) {
     console.error('Failed to delete ministry direction template', error);

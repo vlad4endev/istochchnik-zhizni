@@ -2,6 +2,7 @@
  * Точка входа HTTP-сервера. Не называть файл src/index.ts — Vercel тогда
  * подхватывает Express как serverless и ломает деплой статического фронта (web-react).
  */
+import http from 'node:http';
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
@@ -16,6 +17,7 @@ import routes from './routes';
 import authRoutes from './routes/authRoutes';
 import calendarRoutes from './routes/calendarRoutes';
 import userRoutes from './routes/userRoutes';
+import { attachRealtimeWebSocket } from './realtime/wsHub';
 
 dotenv.config();
 
@@ -138,8 +140,11 @@ async function start(): Promise<void> {
       }
     }
   }
-  app.listen(PORT, () => {
+  const server = http.createServer(app);
+  attachRealtimeWebSocket(server);
+  server.listen(Number(PORT), () => {
     console.log(`Server is running on http://localhost:${PORT}`);
+    console.log('[realtime] WebSocket: /api/realtime');
   });
 }
 

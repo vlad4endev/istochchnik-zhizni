@@ -10,6 +10,8 @@ import {
   registerUser,
   updateAuthUserProfile,
 } from '../services/authService';
+import { notifyRealtime } from '../realtime/notify';
+import { MemberNameDuplicateError } from '../services/userService';
 
 type AuthRequest = Request & {
   authUserId?: number;
@@ -124,6 +126,10 @@ export async function registerHandler(req: Request, res: Response): Promise<void
 
     res.status(201).json(registration);
   } catch (error) {
+    if (error instanceof MemberNameDuplicateError) {
+      res.status(409).json({ error: error.message });
+      return;
+    }
     if (error instanceof Error && error.message === 'Account already exists') {
       res.status(409).json({ error: 'Аккаунт уже зарегистрирован для этого участника' });
       return;
@@ -305,8 +311,17 @@ export async function patchProfileHandler(req: Request, res: Response): Promise<
       res.status(404).json({ error: 'User not found' });
       return;
     }
+    const rt: ('me' | 'calendar')[] = ['me'];
+    if (typeof body.prayer_request === 'string') {
+      rt.push('calendar');
+    }
+    notifyRealtime(rt);
     res.json(user);
   } catch (error: unknown) {
+    if (error instanceof MemberNameDuplicateError) {
+      res.status(409).json({ error: error.message });
+      return;
+    }
     const pg = error as { code?: string };
     if (pg.code === '23505') {
       res.status(409).json({ error: 'Этот email уже используется' });
@@ -412,6 +427,7 @@ export async function approveAccessRequestHandler(req: Request, res: Response): 
       res.status(404).json({ error: 'Pending request not found' });
       return;
     }
+    notifyRealtime(['members', 'calendar']);
     res.json({ status: 'approved', user });
   } catch (error) {
     console.error('Failed to approve access request', error);
@@ -439,6 +455,7 @@ export async function rejectAccessRequestHandler(req: Request, res: Response): P
       res.status(404).json({ error: 'Pending request not found' });
       return;
     }
+    notifyRealtime(['members']);
     res.json({ status: 'rejected' });
   } catch (error) {
     console.error('Failed to reject access request', error);

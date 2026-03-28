@@ -1,10 +1,12 @@
 import { NextFunction, Request, Response } from 'express';
-import { query } from '../config/db';
 
 /**
- * Роли доступа:
- * - Администратор (admin) — полный доступ
- * - Пользователь (member) — только просмотр
+ * Роли доступа (для coarse-grained middleware):
+ * - admin — может менять данные через маршруты под enforceRoleAccess
+ * - member — только безопасные чтения и явно разрешённые PATCH (см. MEMBER_ALLOWED_PATCH)
+ *
+ * Роль берётся только из сессии (Bearer), установленной в resolveAuthSession.
+ * Заголовки x-role / x-user-id не используются — иначе любой клиент мог бы выдать себе права админа.
  */
 export type UserRole = 'member' | 'admin';
 type RoleRequest = Request & {
@@ -15,92 +17,16 @@ type RoleRequest = Request & {
 
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 
-const ROLE_ALIASES: Record<string, UserRole> = {
-  // Администратор
-  admin: 'admin',
-  administrator: 'admin',
-  'администратор': 'admin',
-  // Пользователь
-  member: 'member',
-  user: 'member',
-  'пользователь': 'member',
-  church_member: 'member',
-  'church-member': 'member',
-  'church member': 'member',
-  'член_церкви': 'member',
-  'член-церкви': 'member',
-  'член церкви': 'member',
-};
-
-function normalizeRole(value: string | undefined): UserRole | null {
-  if (!value) {
-    return 'member';
-  }
-
-  const normalized = value.trim().toLowerCase();
-  return ROLE_ALIASES[normalized] ?? null;
-}
-
-async function resolveRoleFromUserId(userIdHeader: string | undefined): Promise<UserRole | null> {
-  if (!userIdHeader) {
-    return null;
-  }
-
-  const userId = Number(userIdHeader);
-  if (!Number.isInteger(userId) || userId <= 0) {
-    return null;
-  }
-
-  const result = await query(
-    'SELECT app_role FROM members WHERE id = $1 AND is_active = TRUE LIMIT 1',
-    [userId]
-  );
-
-  if (!result.rows[0]?.app_role || typeof result.rows[0].app_role !== 'string') {
-    return null;
-  }
-
-  return normalizeRole(result.rows[0].app_role) ?? null;
-}
-
-export async function resolveUserRole(
-  req: Request,
-  res: Response,
-  next: NextFunction
-): Promise<void> {
+export function resolveUserRole(req: Request, _res: Response, next: NextFunction): void {
   const roleReq = req as RoleRequest;
-  const roleHeader = req.header('x-role');
-  const userIdHeader =
-    req.header('x-user-id') ?? (roleReq.authUserId ? String(roleReq.authUserId) : undefined);
-  let role: UserRole | null = null;
+  const sessionRole = roleReq.authUserRole;
 
-  if (roleReq.authUserRole) {
-    role = roleReq.authUserRole;
+  if (sessionRole === 'admin' || sessionRole === 'member') {
+    roleReq.userRole = sessionRole;
+  } else {
+    roleReq.userRole = 'member';
   }
 
-  if (!role && process.env.DATABASE_URL) {
-    try {
-      role = await resolveRoleFromUserId(userIdHeader);
-    } catch (error) {
-      console.error('Failed to resolve role from user id', error);
-      res.status(500).json({ error: 'Failed to resolve user role' });
-      return;
-    }
-  }
-
-  if (!role) {
-    role = normalizeRole(roleHeader);
-  }
-
-  if (!role) {
-    res.status(400).json({
-      error:
-        'Unknown role. Provide valid "x-role" or active "x-user-id". Supported roles: "Пользователь", "Администратор".',
-    });
-    return;
-  }
-
-  roleReq.userRole = role;
   next();
 }
 

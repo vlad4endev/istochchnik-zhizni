@@ -55,6 +55,30 @@ export function getCalendarApiBaseUrl(): string {
 }
 
 /**
+ * WebSocket для realtime (`/api/realtime`): тот же хост, что и REST (Vite proxy или nginx /api).
+ */
+export function resolveRealtimeWebSocketUrl(): string {
+  const httpBase = resolveAxiosBaseURL().trim();
+  if (!httpBase) {
+    if (typeof window !== 'undefined' && window.location?.host) {
+      const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      return `${proto}//${window.location.host}/api/realtime`;
+    }
+    return '';
+  }
+  try {
+    const u = new URL(httpBase.includes('://') ? httpBase : `https://${httpBase}`);
+    u.protocol = u.protocol === 'https:' ? 'wss:' : 'ws:';
+    u.pathname = '/api/realtime';
+    u.search = '';
+    u.hash = '';
+    return u.toString();
+  } catch {
+    return '';
+  }
+}
+
+/**
  * Аналог AppConfig.isApiUrlProbablyWrongForWeb: прод-сайт на HTTPS, а в билде остался localhost.
  */
 export function isApiUrlProbablyWrongForWeb(): boolean {

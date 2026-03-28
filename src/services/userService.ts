@@ -62,6 +62,59 @@ export interface LinkAccountInput {
 
 export type AppRole = 'member' | 'admin';
 
+export class MemberNameDuplicateError extends Error {
+  constructor(
+    message = 'Участник с таким именем и фамилией уже есть'
+  ) {
+    super(message);
+    this.name = 'MemberNameDuplicateError';
+  }
+}
+
+/**
+ * Ищет другого участника с тем же именем и фамилией (без учёта регистра и лишних пробелов)
+ * или с тем же полным именем в колонке `name` («Имя Фамилия» / «Фамилия Имя» для старых записей).
+ */
+export async function findMemberIdConflictingName(
+  firstName: string,
+  lastName: string,
+  excludeMemberId?: number
+): Promise<number | null> {
+  const fn = firstName.trim();
+  const ln = lastName.trim();
+  if (!fn || !ln) {
+    return null;
+  }
+  const fullDirect = `${fn} ${ln}`.trim();
+  const fullReverse = `${ln} ${fn}`.trim();
+
+  const result = await query(
+    `SELECT id FROM members
+     WHERE ($3::INTEGER IS NULL OR id <> $3)
+       AND (
+         (
+           TRIM(COALESCE(first_name, '')) <> ''
+           AND TRIM(COALESCE(last_name, '')) <> ''
+           AND LOWER(TRIM(first_name)) = LOWER($1)
+           AND LOWER(TRIM(last_name)) = LOWER($2)
+         )
+         OR (
+           LOWER(regexp_replace(TRIM(COALESCE(name, '')), '\\s+', ' ', 'g'))
+             = LOWER(regexp_replace(TRIM($4), '\\s+', ' ', 'g'))
+         )
+         OR (
+           LOWER(regexp_replace(TRIM(COALESCE(name, '')), '\\s+', ' ', 'g'))
+             = LOWER(regexp_replace(TRIM($5), '\\s+', ' ', 'g'))
+         )
+       )
+     LIMIT 1`,
+    [fn, ln, excludeMemberId ?? null, fullDirect, fullReverse]
+  );
+
+  const row = result.rows[0] as { id: number } | undefined;
+  return row ? Number(row.id) : null;
+}
+
 export interface PrayerCycleStartResult {
   requested_date: string;
   start_date: string;
@@ -191,6 +244,11 @@ export async function getUserById(id: number): Promise<AppUser | null> {
 }
 
 export async function createUser(input: CreateUserInput): Promise<AppUser> {
+  const dupId = await findMemberIdConflictingName(input.first_name, input.last_name);
+  if (dupId !== null) {
+    throw new MemberNameDuplicateError();
+  }
+
   const result = await query(
     `INSERT INTO members
       (first_name, last_name, name, phone_number, ministry_role, ministry_direction, prayer_request, birth_date, email, account_provider, account_id, is_active, app_role, is_collection_coordinator, updated_at)
@@ -251,6 +309,27 @@ export async function updateUser(id: number, input: UpdateUserInput): Promise<Ap
       return null;
     }
     previousPrayerRequest = (existing.prayer_request ?? '').trim() || null;
+  }
+
+  if (typeof input.first_name === 'string' || typeof input.last_name === 'string') {
+    const existing = await getUserById(id);
+    if (!existing) {
+      return null;
+    }
+    const effFirst =
+      typeof input.first_name === 'string'
+        ? input.first_name.trim()
+        : (existing.first_name ?? '').trim();
+    const effLast =
+      typeof input.last_name === 'string'
+        ? input.last_name.trim()
+        : (existing.last_name ?? '').trim();
+    if (effFirst && effLast) {
+      const dupId = await findMemberIdConflictingName(effFirst, effLast, id);
+      if (dupId !== null) {
+        throw new MemberNameDuplicateError();
+      }
+    }
   }
 
   const updates: string[] = [];

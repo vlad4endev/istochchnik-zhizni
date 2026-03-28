@@ -354,30 +354,6 @@ export function ProfilePage() {
                   </label>
                   <p className="mt-0.5 text-xs text-stone-500">
                     Текст показывается в календаре в день, когда назначена молитва за вас.
-                    {user?.prayer_cycle ? (
-                      <>
-                        {' '}
-                        Сохраняется для{' '}
-                        <span className="font-semibold text-stone-700">
-                          цикла {user.prayer_cycle.number}
-                        </span>{' '}
-                        (
-                        {new Date(`${user.prayer_cycle.start_date}T12:00:00Z`).toLocaleDateString('ru-RU', {
-                          day: 'numeric',
-                          month: 'short',
-                          year: 'numeric',
-                          timeZone: 'UTC',
-                        })}{' '}
-                        —{' '}
-                        {new Date(`${user.prayer_cycle.end_date}T12:00:00Z`).toLocaleDateString('ru-RU', {
-                          day: 'numeric',
-                          month: 'short',
-                          year: 'numeric',
-                          timeZone: 'UTC',
-                        })}
-                        ).
-                      </>
-                    ) : null}
                   </p>
                   <textarea
                     id="pf-prayer"

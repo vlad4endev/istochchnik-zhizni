@@ -17,6 +17,7 @@ export default defineConfig(({ mode }) => {
     '/api': {
       target: apiProxyTarget,
       changeOrigin: true,
+      ws: true,
     },
     '/health': {
       target: apiProxyTarget,
@@ -34,7 +35,7 @@ export default defineConfig(({ mode }) => {
         registerType: 'autoUpdate',
         injectRegister: 'auto',
         manifest: {
-          id: '/',
+          id: './',
           name: 'МОЯ ЦЕРКОВЬ — молитвенный календарь',
           short_name: 'Молитва',
           description:
@@ -43,8 +44,8 @@ export default defineConfig(({ mode }) => {
           background_color: '#f4f1ed',
           display: 'standalone',
           display_override: ['standalone', 'minimal-ui', 'browser'],
-          start_url: '/',
-          scope: '/',
+          start_url: './',
+          scope: './',
           lang: 'ru',
           dir: 'ltr',
           icons: [
@@ -70,7 +71,7 @@ export default defineConfig(({ mode }) => {
         },
         workbox: {
           globPatterns: ['**/*.{js,css,html,ico,png,svg,webp,woff2,woff,ttf}'],
-          navigateFallback: '/index.html',
+          navigateFallback: 'index.html',
           navigateFallbackDenylist: [/^\/api\//],
         },
         devOptions: {
@@ -78,7 +79,8 @@ export default defineConfig(({ mode }) => {
         },
       }),
     ],
-    base: '/',
+    // Относительные пути — корректная загрузка ассетов в Capacitor WebView (file/capacitor).
+    base: './',
     server: {
       port: 5173,
       proxy: apiProxy,

@@ -14,6 +14,7 @@ import {
   deleteBackslider,
   getNextWeekGlobalAssignments,
 } from '../services/globalNeedsService';
+import { notifyRealtime } from '../realtime/notify';
 
 function parseId(value: string): number | null {
   const parsed = Number(value);
@@ -54,6 +55,7 @@ export async function postTheme(req: Request, res: Response): Promise<void> {
       bible_verse: req.body?.bible_verse ?? null,
       prayer_points: req.body?.prayer_points ?? null,
     });
+    notifyRealtime(['global', 'calendar']);
     res.status(201).json(theme);
   } catch (err) {
     console.error('postTheme error', err);
@@ -78,6 +80,7 @@ export async function patchTheme(req: Request, res: Response): Promise<void> {
       res.status(404).json({ error: 'Theme not found' });
       return;
     }
+    notifyRealtime(['global', 'calendar']);
     res.json(theme);
   } catch (err) {
     console.error('patchTheme error', err);
@@ -98,6 +101,7 @@ export async function deleteTheme(req: Request, res: Response): Promise<void> {
       res.status(404).json({ error: 'Theme not found' });
       return;
     }
+    notifyRealtime(['global', 'calendar']);
     res.status(204).send();
   } catch (err) {
     console.error('deleteTheme error', err);
@@ -131,6 +135,7 @@ export async function postMinistry(req: Request, res: Response): Promise<void> {
       title: title.trim(),
       prayer_points: req.body?.prayer_points ?? null,
     });
+    notifyRealtime(['global', 'calendar']);
     res.status(201).json(ministry);
   } catch (err) {
     console.error('postMinistry error', err);
@@ -154,6 +159,7 @@ export async function patchMinistry(req: Request, res: Response): Promise<void> 
       res.status(404).json({ error: 'Ministry not found' });
       return;
     }
+    notifyRealtime(['global', 'calendar']);
     res.json(ministry);
   } catch (err) {
     console.error('patchMinistry error', err);
@@ -174,6 +180,7 @@ export async function deleteMinistryHandler(req: Request, res: Response): Promis
       res.status(404).json({ error: 'Ministry not found' });
       return;
     }
+    notifyRealtime(['global', 'calendar']);
     res.status(204).send();
   } catch (err) {
     console.error('deleteMinistry error', err);
@@ -200,6 +207,7 @@ export async function postBackslider(req: Request, res: Response): Promise<void>
 
   try {
     const backslider = await createBackslider({ name: name.trim() });
+    notifyRealtime(['global', 'calendar']);
     res.status(201).json(backslider);
   } catch (err) {
     console.error('postBackslider error', err);
@@ -220,6 +228,7 @@ export async function patchBackslider(req: Request, res: Response): Promise<void
       res.status(404).json({ error: 'Backslider not found' });
       return;
     }
+    notifyRealtime(['global', 'calendar']);
     res.json(backslider);
   } catch (err) {
     console.error('patchBackslider error', err);
@@ -240,6 +249,7 @@ export async function deleteBacksliderHandler(req: Request, res: Response): Prom
       res.status(404).json({ error: 'Backslider not found' });
       return;
     }
+    notifyRealtime(['global', 'calendar']);
     res.status(204).send();
   } catch (err) {
     console.error('deleteBackslider error', err);

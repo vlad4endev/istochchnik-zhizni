@@ -3,7 +3,7 @@ import { promisify } from 'util';
 import { query } from '../config/db';
 import type { PrayerCyclePublic } from './prayerCycleService';
 import { getPrayerCycleSnapshotForDate, toPublicCycleInfo } from './prayerCycleService';
-import { updateUser } from './userService';
+import { findMemberIdConflictingName, MemberNameDuplicateError, updateUser } from './userService';
 
 const scrypt = promisify(scryptCallback);
 const MIN_PASSWORD_LENGTH = 8;
@@ -533,6 +533,13 @@ export async function registerUser(input: RegisterInput): Promise<RegisterResult
     };
   }
 
+  const nameConflictId = await findMemberIdConflictingName(firstName, lastName);
+  if (nameConflictId != null) {
+    throw new MemberNameDuplicateError(
+      'Участник с таким именем и фамилией уже есть. Войдите с номером из карточки или обратитесь к администратору.'
+    );
+  }
+
   const requestId = await createPendingAccessRequest(
     firstName,
     lastName,
@@ -802,12 +809,39 @@ export async function approveAccessRequest(
     return null;
   }
 
-  const existingMember = await findMemberByIdentity(
+  let existingMember: MemberRow | null = await findMemberByIdentity(
     requestRow.first_name,
     requestRow.last_name,
     requestRow.full_name,
     requestRow.phone_digits
   );
+
+  if (!existingMember) {
+    const conflictId = await findMemberIdConflictingName(
+      requestRow.first_name,
+      requestRow.last_name
+    );
+    if (conflictId != null) {
+      const conflictResult = await query(
+        `SELECT
+          id,
+          first_name,
+          last_name,
+          name,
+          phone_number,
+          app_role,
+          is_active,
+          created_at,
+          updated_at,
+          password_hash
+        FROM members
+        WHERE id = $1
+        LIMIT 1`,
+        [conflictId]
+      );
+      existingMember = (conflictResult.rows[0] as MemberRow | undefined) ?? null;
+    }
+  }
 
   let member: MemberRow;
   if (existingMember) {

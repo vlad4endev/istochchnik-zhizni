@@ -10,6 +10,7 @@ import {
   getCycleCollectionClaimsSnapshot,
   setCycleCollectionClaim,
 } from '../services/cycleCollectionClaimsService';
+import { notifyRealtime } from '../realtime/notify';
 
 function isValidDateInput(value: unknown): value is string {
   if (typeof value !== 'string') {
@@ -193,6 +194,7 @@ export async function patchMemberCyclePrayer(req: Request, res: Response): Promi
 
   try {
     await setCoordinatorPrayerNeedForDate(memberId, targetDate, prayerRaw);
+    notifyRealtime(['calendar']);
     res.json({ ok: true });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
@@ -260,6 +262,7 @@ export async function patchCycleCollectionClaims(req: Request, res: Response): P
       authReq.authUserId,
       authReq.authUserRole === 'admin'
     );
+    notifyRealtime(['calendar']);
     res.json(snapshot);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);

@@ -6,7 +6,6 @@ import {
   format,
   isAfter,
   isBefore,
-  parseISO,
   startOfDay,
   startOfWeek,
 } from 'date-fns';
@@ -62,18 +61,6 @@ function isDayPrayerEmpty(data: DayPrayerData): boolean {
 
 function hasPrayerContent(data: DayPrayerData | null | undefined): data is DayPrayerData {
   return data != null && !isDayPrayerEmpty(data);
-}
-
-function formatPrayerNeedUpdated(iso: string | null | undefined): string | null {
-  if (iso == null || typeof iso !== 'string' || !iso.trim()) return null;
-  try {
-    const normalized = iso.includes('T') ? iso : iso.replace(' ', 'T');
-    const d = parseISO(normalized);
-    if (Number.isNaN(d.getTime())) return null;
-    return format(d, 'd MMM yyyy, HH:mm', { locale: ru });
-  } catch {
-    return null;
-  }
 }
 
 function SectionHeader({ Icon, title, id }: { Icon: IconType; title: string; id?: string }) {
@@ -156,7 +143,6 @@ function MemberCard({
   }
 
   const hasRequest = member.prayer_request != null && member.prayer_request.trim().length > 0;
-  const updatedLine = formatPrayerNeedUpdated(member.prayer_need_updated_at);
 
   return (
     <PrayerCard Icon={LuHeartHandshake} title={member.name} accentVar="var(--member)">
@@ -175,9 +161,6 @@ function MemberCard({
               placeholder="О чём просим молиться…"
             />
           </label>
-          {updatedLine ? (
-            <p className="text-[12px] text-stone-500">Нужда для этого цикла обновлена: {updatedLine}</p>
-          ) : null}
           {saveErr ? <p className="text-sm text-red-600">{saveErr}</p> : null}
           <button
             type="button"
@@ -189,12 +172,7 @@ function MemberCard({
           </button>
         </div>
       ) : hasRequest ? (
-        <div className="space-y-2">
-          <p className="text-[16px] text-stone-600">{member.prayer_request}</p>
-          {updatedLine ? (
-            <p className="text-[12px] text-stone-500">Обновлено для этого цикла: {updatedLine}</p>
-          ) : null}
-        </div>
+        <p className="text-[16px] text-stone-600">{member.prayer_request}</p>
       ) : (
         <p className="italic text-stone-400">Нет указанных нужд</p>
       )}
@@ -448,6 +426,7 @@ export function DailyPrayerPage() {
   const {
     data,
     isPending,
+    isFetching,
     isError,
     error: queryError,
     refetch,
@@ -492,30 +471,10 @@ export function DailyPrayerPage() {
             aria-hidden
           />
         </button>
-        {!isPending && !isError && data ? (
-          <p className="mt-2 text-center text-[12px] leading-snug text-stone-500">
-            {data.prayer_cycle ? (
-              <>
-                Молитвенный цикл <span className="font-semibold text-stone-700">№{data.prayer_cycle.number}</span>
-                {' · '}
-                {new Date(`${data.prayer_cycle.start_date}T12:00:00Z`).toLocaleDateString('ru-RU', {
-                  day: 'numeric',
-                  month: 'short',
-                  timeZone: 'UTC',
-                })}{' '}
-                —{' '}
-                {new Date(`${data.prayer_cycle.end_date}T12:00:00Z`).toLocaleDateString('ru-RU', {
-                  day: 'numeric',
-                  month: 'short',
-                  year: 'numeric',
-                  timeZone: 'UTC',
-                })}
-                {' · '}
-                день {data.prayer_cycle.day_index + 1} из {data.prayer_cycle.member_count}
-              </>
-            ) : (
-              <>Смещение от начала графика: {data.diffDays} дн.</>
-            )}
+        {!isPending && isFetching ? (
+          <p className="mt-2 flex items-center justify-center gap-2 text-center text-[12px] font-semibold text-primary">
+            <LuRefreshCw className="h-3.5 w-3.5 shrink-0 animate-spin" strokeWidth={2} aria-hidden />
+            Обновляем данные…
           </p>
         ) : null}
       </div>

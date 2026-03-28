@@ -420,6 +420,7 @@ export function NextWeekPrayerPlanSection({ canView, currentUserId }: Props) {
   const {
     data: weekDays,
     isPending: weekPending,
+    isFetching: weekFetching,
     isError: weekError,
     error: weekErr,
     refetch: refetchWeek,
@@ -433,6 +434,7 @@ export function NextWeekPrayerPlanSection({ canView, currentUserId }: Props) {
   const {
     data: claimsSnapshot,
     isPending: claimsPending,
+    isFetching: claimsFetching,
     isError: claimsError,
     error: claimsErr,
     refetch: refetchClaims,
@@ -515,6 +517,15 @@ export function NextWeekPrayerPlanSection({ canView, currentUserId }: Props) {
               </div>
 
               {mutErr ? <p className="mb-3 text-[13px] text-red-600">{mutErr}</p> : null}
+              {!weekPending &&
+              !claimsPending &&
+              enabled &&
+              (weekFetching || claimsFetching) ? (
+                <p className="mb-3 flex items-center gap-2 text-[13px] font-semibold text-primary">
+                  <LuLoader className="h-4 w-4 shrink-0 animate-spin" aria-hidden />
+                  Обновляем план и отметки…
+                </p>
+              ) : null}
               {claimsError && !weekError ? (
                 <div className="mb-3 flex flex-wrap items-center gap-2 rounded-xl border border-amber-200/90 bg-amber-50/90 px-3 py-2 text-[13px] text-amber-950">
                   <span>{loadErrorDescription(claimsErr) ?? 'Ошибка загрузки отметок'}</span>
