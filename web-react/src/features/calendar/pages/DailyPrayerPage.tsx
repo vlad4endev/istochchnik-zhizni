@@ -490,7 +490,7 @@ export function DailyPrayerPage() {
 
   return (
     <div className="prayer-page-bg min-h-full pb-6 shell:pb-8">
-      <header className="relative overflow-hidden bg-gradient-to-br from-primary via-[#6d3039] to-primary-dark px-4 py-5 text-white shadow-[0_8px_32px_rgba(92,40,48,0.35)] sm:px-5 sm:py-6 md:px-6 md:py-6 shell:rounded-none">
+      <header className="relative overflow-hidden bg-gradient-to-br from-primary via-[#6d3039] to-primary-dark px-4 py-4 text-white shadow-[0_8px_32px_rgba(92,40,48,0.35)] sm:px-5 sm:py-5 md:px-6 md:py-5 shell:rounded-none">
         <div
           className="pointer-events-none absolute -right-4 -top-20 h-48 w-48 rounded-full bg-white/[0.13] blur-3xl animate-prayer-header-breathe motion-reduce:animate-none"
           aria-hidden
@@ -499,17 +499,9 @@ export function DailyPrayerPage() {
           className="pointer-events-none absolute -bottom-12 -left-10 h-40 w-40 rounded-full bg-black/18 blur-2xl"
           aria-hidden
         />
-        <div className="relative">
-          <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/72 animate-prayer-fade-in motion-reduce:animate-none">
-            Молитвенный календарь
-          </p>
-          <h1 className="mt-1.5 text-xl font-extrabold leading-tight tracking-tight sm:text-2xl md:text-3xl lg:text-[1.65rem] xl:text-[26px] animate-prayer-fade-up motion-reduce:animate-none [animation-delay:50ms] motion-reduce:[animation-delay:0ms]">
-            Молитва
-          </h1>
-          <p className="mt-2 max-w-lg text-[13px] leading-relaxed text-white/88 sm:text-[14px] animate-prayer-fade-up motion-reduce:animate-none [animation-delay:110ms] motion-reduce:[animation-delay:0ms]">
-            Темы дня, служения и молитвенные нужды — всё для совместной молитвы церкви.
-          </p>
-        </div>
+        <h1 className="relative text-xl font-extrabold leading-tight tracking-tight sm:text-2xl md:text-3xl lg:text-[1.65rem] xl:text-[26px] animate-prayer-fade-up motion-reduce:animate-none">
+          Молитва
+        </h1>
       </header>
 
       {/* Чип даты */}
