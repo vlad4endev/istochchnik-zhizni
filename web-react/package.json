@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "package:server": "bash ../scripts/package-web-for-server.sh"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.95.2",

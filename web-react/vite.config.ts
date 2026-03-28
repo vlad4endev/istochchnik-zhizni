@@ -9,6 +9,8 @@ import react from '@vitejs/plugin-react';
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
   const apiProxyTarget = env.VITE_DEV_API_PROXY || 'http://127.0.0.1:40978';
+  /** Видно внизу админки — чтобы отличить свежий деплой от старой «Заглушки». */
+  const buildStamp = new Date().toISOString().replace('T', ' ').slice(0, 16);
 
   const apiProxy = {
     '/api': {
@@ -22,6 +24,9 @@ export default defineConfig(({ mode }) => {
   };
 
   return {
+    define: {
+      __WEB_REACT_BUILD_STAMP__: JSON.stringify(buildStamp),
+    },
     plugins: [react()],
     base: '/',
     server: {

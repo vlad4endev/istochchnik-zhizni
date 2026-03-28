@@ -86,6 +86,10 @@ export function AdminPage() {
       {tab === 1 && <CalendarSection />}
       {tab === 2 && <TemplatesSection />}
       {tab === 3 && <ProjectSection />}
+
+      <p className="mt-10 text-center text-[10px] text-stone-400">
+        web-react · сборка {__WEB_REACT_BUILD_STAMP__}
+      </p>
     </div>
   );
 }
