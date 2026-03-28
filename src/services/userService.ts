@@ -1,4 +1,5 @@
 import { query } from '../config/db';
+import { getCurrentCycleIndexForUpsert, upsertMemberPrayerForCycle } from './prayerCycleService';
 
 export interface AppUser {
   id: number;
@@ -15,6 +16,8 @@ export interface AppUser {
   account_id: string | null;
   is_active: boolean;
   app_role: 'member' | 'admin';
+  /** Ответственный за сбор — может назначать участников на дни следующей недели. */
+  is_collection_coordinator: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -32,6 +35,7 @@ export interface CreateUserInput {
   account_id?: string;
   is_active?: boolean;
   app_role?: 'member' | 'admin';
+  is_collection_coordinator?: boolean;
 }
 
 export interface UpdateUserInput {
@@ -47,6 +51,7 @@ export interface UpdateUserInput {
   account_id?: string;
   is_active?: boolean;
   app_role?: 'member' | 'admin';
+  is_collection_coordinator?: boolean;
 }
 
 export interface LinkAccountInput {
@@ -82,6 +87,8 @@ export interface PrayerRequestHistoryItem {
   id: number;
   member_id: number;
   prayer_request: string;
+  /** Индекс молитвенного цикла на момент сохранения (если есть в БД). */
+  cycle_index: number | null;
   created_at: string;
 }
 
@@ -97,16 +104,20 @@ function mapUser(row: AppUser): AppUser {
   return row;
 }
 
-async function appendPrayerRequestHistory(memberId: number, prayerRequest: string): Promise<void> {
+async function appendPrayerRequestHistory(
+  memberId: number,
+  prayerRequest: string,
+  cycleIndex: number
+): Promise<void> {
   const normalized = prayerRequest.trim();
   if (!normalized) {
     return;
   }
 
   await query(
-    `INSERT INTO member_prayer_request_history (member_id, prayer_request)
-     VALUES ($1, $2)`,
-    [memberId, normalized]
+    `INSERT INTO member_prayer_request_history (member_id, prayer_request, cycle_index)
+     VALUES ($1, $2, $3)`,
+    [memberId, normalized, cycleIndex]
   );
 }
 
@@ -120,52 +131,59 @@ async function resetCycleStartToCurrentDate(): Promise<void> {
 }
 
 export async function listUsers(): Promise<AppUser[]> {
+  const ci = await getCurrentCycleIndexForUpsert();
   const result = await query(
     `SELECT
-      id,
-      first_name,
-      last_name,
-      name,
-      phone_number,
-      ministry_role,
-      ministry_direction,
-      prayer_request,
-      birth_date,
-      email,
-      account_provider,
-      account_id,
-      is_active,
-      app_role,
-      created_at,
-      updated_at
-    FROM members
-    ORDER BY id DESC`
+      m.id,
+      m.first_name,
+      m.last_name,
+      m.name,
+      m.phone_number,
+      m.ministry_role,
+      m.ministry_direction,
+      COALESCE(mpc.prayer_request, m.prayer_request) AS prayer_request,
+      m.birth_date,
+      m.email,
+      m.account_provider,
+      m.account_id,
+      m.is_active,
+      m.app_role,
+      m.is_collection_coordinator,
+      m.created_at,
+      m.updated_at
+    FROM members m
+    LEFT JOIN member_prayer_by_cycle mpc ON mpc.member_id = m.id AND mpc.cycle_index = $1
+    ORDER BY m.id DESC`,
+    [ci]
   );
   return result.rows.map(mapUser);
 }
 
 export async function getUserById(id: number): Promise<AppUser | null> {
+  const ci = await getCurrentCycleIndexForUpsert();
   const result = await query(
     `SELECT
-      id,
-      first_name,
-      last_name,
-      name,
-      phone_number,
-      ministry_role,
-      ministry_direction,
-      prayer_request,
-      birth_date,
-      email,
-      account_provider,
-      account_id,
-      is_active,
-      app_role,
-      created_at,
-      updated_at
-    FROM members
-    WHERE id = $1`,
-    [id]
+      m.id,
+      m.first_name,
+      m.last_name,
+      m.name,
+      m.phone_number,
+      m.ministry_role,
+      m.ministry_direction,
+      COALESCE(mpc.prayer_request, m.prayer_request) AS prayer_request,
+      m.birth_date,
+      m.email,
+      m.account_provider,
+      m.account_id,
+      m.is_active,
+      m.app_role,
+      m.is_collection_coordinator,
+      m.created_at,
+      m.updated_at
+    FROM members m
+    LEFT JOIN member_prayer_by_cycle mpc ON mpc.member_id = m.id AND mpc.cycle_index = $2
+    WHERE m.id = $1`,
+    [id, ci]
   );
 
   return result.rows[0] ? mapUser(result.rows[0] as AppUser) : null;
@@ -174,8 +192,8 @@ export async function getUserById(id: number): Promise<AppUser | null> {
 export async function createUser(input: CreateUserInput): Promise<AppUser> {
   const result = await query(
     `INSERT INTO members
-      (first_name, last_name, name, phone_number, ministry_role, ministry_direction, prayer_request, birth_date, email, account_provider, account_id, is_active, app_role, updated_at)
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, COALESCE($12, TRUE), COALESCE($13, 'member'), NOW())
+      (first_name, last_name, name, phone_number, ministry_role, ministry_direction, prayer_request, birth_date, email, account_provider, account_id, is_active, app_role, is_collection_coordinator, updated_at)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, COALESCE($12, TRUE), COALESCE($13, 'member'), COALESCE($14, FALSE), NOW())
     RETURNING
       id,
       first_name,
@@ -191,6 +209,7 @@ export async function createUser(input: CreateUserInput): Promise<AppUser> {
       account_id,
       is_active,
       app_role,
+      is_collection_coordinator,
       created_at,
       updated_at`,
     [
@@ -207,13 +226,16 @@ export async function createUser(input: CreateUserInput): Promise<AppUser> {
       normalizeOptionalString(input.account_id),
       input.is_active ?? true,
       input.app_role ?? 'member',
+      input.is_collection_coordinator ?? false,
     ]
   );
 
   const created = mapUser(result.rows[0] as AppUser);
   const prayerRequest = (created.prayer_request ?? '').trim();
+  const ci = await getCurrentCycleIndexForUpsert();
   if (prayerRequest.length > 0) {
-    await appendPrayerRequestHistory(created.id, prayerRequest);
+    await upsertMemberPrayerForCycle(created.id, ci, prayerRequest);
+    await appendPrayerRequestHistory(created.id, prayerRequest, ci);
   }
 
   return created;
@@ -298,6 +320,11 @@ export async function updateUser(id: number, input: UpdateUserInput): Promise<Ap
     values.push(input.app_role);
   }
 
+  if (typeof input.is_collection_coordinator === 'boolean') {
+    updates.push(`is_collection_coordinator = $${values.length + 1}`);
+    values.push(input.is_collection_coordinator);
+  }
+
   if (updates.length === 0) {
     return getUserById(id);
   }
@@ -324,6 +351,7 @@ export async function updateUser(id: number, input: UpdateUserInput): Promise<Ap
       account_id,
       is_active,
       app_role,
+      is_collection_coordinator,
       created_at,
       updated_at`,
     values
@@ -337,8 +365,10 @@ export async function updateUser(id: number, input: UpdateUserInput): Promise<Ap
   if (hasPrayerRequestUpdate) {
     const nextPrayerRequest = (updated.prayer_request ?? '').trim();
     const prevPrayerRequest = previousPrayerRequest ?? '';
+    const ci = await getCurrentCycleIndexForUpsert();
+    await upsertMemberPrayerForCycle(id, ci, normalizeOptionalString(input.prayer_request));
     if (nextPrayerRequest.length > 0 && nextPrayerRequest !== prevPrayerRequest) {
-      await appendPrayerRequestHistory(id, nextPrayerRequest);
+      await appendPrayerRequestHistory(id, nextPrayerRequest, ci);
     }
   }
 
@@ -374,6 +404,7 @@ export async function linkUserAccount(id: number, input: LinkAccountInput): Prom
       account_id,
       is_active,
       app_role,
+      is_collection_coordinator,
       created_at,
       updated_at`,
     [input.account_provider.trim(), input.account_id.trim(), id]
@@ -419,6 +450,7 @@ export async function setUserAppRole(id: number, appRole: AppRole): Promise<AppU
       account_id,
       is_active,
       app_role,
+      is_collection_coordinator,
       created_at,
       updated_at`,
     [appRole, id]
@@ -536,7 +568,7 @@ export async function listPrayerRequestHistory(
 ): Promise<PrayerRequestHistoryItem[]> {
   const safeLimit = Number.isInteger(limit) ? Math.min(Math.max(limit, 1), 100) : 20;
   const result = await query(
-    `SELECT id, member_id, prayer_request, created_at
+    `SELECT id, member_id, prayer_request, cycle_index, created_at
      FROM member_prayer_request_history
      WHERE member_id = $1
      ORDER BY created_at DESC

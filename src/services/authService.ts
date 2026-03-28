@@ -1,6 +1,8 @@
 import { createHash, randomBytes, scrypt as scryptCallback, timingSafeEqual } from 'crypto';
 import { promisify } from 'util';
 import { query } from '../config/db';
+import type { PrayerCyclePublic } from './prayerCycleService';
+import { getPrayerCycleSnapshotForDate, toPublicCycleInfo } from './prayerCycleService';
 import { updateUser } from './userService';
 
 const scrypt = promisify(scryptCallback);
@@ -28,8 +30,11 @@ export interface AuthUser {
   prayer_request: string | null;
   app_role: AuthRole;
   is_active: boolean;
+  is_collection_coordinator: boolean;
   created_at: string;
   updated_at: string;
+  /** Текущий молитвенный цикл (на «сегодня» по UTC); нужда в профиле относится к этому циклу. */
+  prayer_cycle?: PrayerCyclePublic | null;
 }
 
 export interface RegisterInput {
@@ -78,6 +83,7 @@ type MemberRow = {
   prayer_request: string | null;
   app_role: string;
   is_active: boolean;
+  is_collection_coordinator?: boolean;
   created_at: string;
   updated_at: string;
   password_hash?: string | null;
@@ -212,6 +218,7 @@ function mapAuthUser(row: MemberRow): AuthUser {
     prayer_request: row.prayer_request ?? null,
     app_role: normalizeRole(row.app_role),
     is_active: row.is_active,
+    is_collection_coordinator: Boolean(row.is_collection_coordinator),
     created_at: row.created_at,
     updated_at: row.updated_at,
   };
@@ -506,6 +513,7 @@ export async function registerUser(input: RegisterInput): Promise<RegisterResult
         prayer_request,
         app_role,
         is_active,
+        is_collection_coordinator,
         created_at,
         updated_at`,
       [firstName, lastName, fullName, phoneNumber, passwordHash, matchedMember.id]
@@ -513,11 +521,15 @@ export async function registerUser(input: RegisterInput): Promise<RegisterResult
 
     const member = updatedResult.rows[0] as MemberRow;
     const { token, expiresAt } = await createSessionForUser(member.id);
+    const user = await getAuthUserById(member.id);
+    if (!user) {
+      throw new Error('Member not found after approval');
+    }
     return {
       status: 'approved',
       token,
       expires_at: expiresAt,
-      user: mapAuthUser(member),
+      user,
     };
   }
 
@@ -554,6 +566,7 @@ export async function loginUser(phoneInput: string, password: string): Promise<L
       prayer_request,
       app_role,
       is_active,
+      is_collection_coordinator,
       created_at,
       updated_at,
       password_hash
@@ -580,7 +593,10 @@ export async function loginUser(phoneInput: string, password: string): Promise<L
   }
 
   const { token, expiresAt } = await createSessionForUser(row.id);
-  const user = mapAuthUser(row);
+  const user = await getAuthUserById(row.id);
+  if (!user) {
+    return null;
+  }
   return {
     token,
     expires_at: expiresAt,
@@ -632,29 +648,42 @@ export async function logoutByToken(token: string): Promise<void> {
 }
 
 export async function getAuthUserById(userId: number): Promise<AuthUser | null> {
+  const today = new Date().toISOString().slice(0, 10);
+  const snap = await getPrayerCycleSnapshotForDate(today);
+  const ci = snap?.cycle_index ?? 0;
+
   const result = await query(
     `SELECT
-      id,
-      first_name,
-      last_name,
-      name,
-      phone_number,
-      birth_date,
-      email,
-      prayer_request,
-      app_role,
-      is_active,
-      created_at,
-      updated_at
-    FROM members
-    WHERE id = $1
-      AND is_active = TRUE
+      m.id,
+      m.first_name,
+      m.last_name,
+      m.name,
+      m.phone_number,
+      m.birth_date,
+      m.email,
+      COALESCE(mpc.prayer_request, m.prayer_request) AS prayer_request,
+      m.app_role,
+      m.is_active,
+      m.is_collection_coordinator,
+      m.created_at,
+      m.updated_at
+    FROM members m
+    LEFT JOIN member_prayer_by_cycle mpc ON mpc.member_id = m.id AND mpc.cycle_index = $2
+    WHERE m.id = $1
+      AND m.is_active = TRUE
     LIMIT 1`,
-    [userId]
+    [userId, ci]
   );
 
   const row = result.rows[0] as MemberRow | undefined;
-  return row ? mapAuthUser(row) : null;
+  if (!row) {
+    return null;
+  }
+  const user = mapAuthUser(row);
+  return {
+    ...user,
+    prayer_cycle: snap ? toPublicCycleInfo(snap) : null,
+  };
 }
 
 export async function updateAuthUserProfile(
@@ -805,6 +834,7 @@ export async function approveAccessRequest(
         prayer_request,
         app_role,
         is_active,
+        is_collection_coordinator,
         created_at,
         updated_at`,
       [
@@ -833,6 +863,7 @@ export async function approveAccessRequest(
         prayer_request,
         app_role,
         is_active,
+        is_collection_coordinator,
         created_at,
         updated_at`,
       [
@@ -859,7 +890,11 @@ export async function approveAccessRequest(
     [member.id, reviewerId, reviewNote?.trim() || null, requestId]
   );
 
-  return mapAuthUser(member);
+  const approved = await getAuthUserById(member.id);
+  if (!approved) {
+    throw new Error('Member not found after approval');
+  }
+  return approved;
 }
 
 export async function rejectAccessRequest(

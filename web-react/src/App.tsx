@@ -73,6 +73,24 @@ export function App() {
             onChange={(e) => setDate(e.target.value)}
           />
           <p className="date-caption">{formatDisplayDate(date)}</p>
+          {!loading && !error && data?.prayer_cycle ? (
+            <p className="cycle-caption" style={{ marginTop: '0.35rem', fontSize: '0.85rem', opacity: 0.85 }}>
+              Цикл №{data.prayer_cycle.number} (
+              {new Date(`${data.prayer_cycle.start_date}T12:00:00Z`).toLocaleDateString('ru-RU', {
+                day: 'numeric',
+                month: 'short',
+                timeZone: 'UTC',
+              })}{' '}
+              —{' '}
+              {new Date(`${data.prayer_cycle.end_date}T12:00:00Z`).toLocaleDateString('ru-RU', {
+                day: 'numeric',
+                month: 'short',
+                year: 'numeric',
+                timeZone: 'UTC',
+              })}
+              )
+            </p>
+          ) : null}
         </section>
 
         {loading && (

@@ -1,5 +1,15 @@
 import { apiClient } from '../../lib/apiClient';
 
+/** Фрагмент ответа `/api/auth/me` — текущий молитвенный цикл (UTC). */
+export interface MePrayerCycle {
+  index: number;
+  number: number;
+  member_count: number;
+  start_date: string;
+  end_date: string;
+  day_index: number;
+}
+
 /** Ответ GET/PATCH `/api/auth/me`. */
 export interface MeResponse {
   id: number;
@@ -11,7 +21,11 @@ export interface MeResponse {
   email: string | null;
   /** Текст молитвенной нужды для дня, когда вы назначены в календаре */
   prayer_request: string | null;
+  /** Текущий цикл: нужда ниже сохраняется на этот цикл. */
+  prayer_cycle?: MePrayerCycle | null;
   app_role: string;
+  /** Ответственный за сбор — может редактировать назначения на следующую неделю. */
+  is_collection_coordinator: boolean;
   is_active: boolean;
   created_at: string;
   updated_at: string;
@@ -30,6 +44,7 @@ export interface PrayerHistoryItem {
   id: number;
   member_id: number;
   prayer_request: string;
+  cycle_index: number | null;
   created_at: string;
 }
 

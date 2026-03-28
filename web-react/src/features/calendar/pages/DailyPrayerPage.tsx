@@ -1,5 +1,4 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import axios from 'axios';
 import {
   addDays,
   addWeeks,
@@ -7,6 +6,7 @@ import {
   format,
   isAfter,
   isBefore,
+  parse,
   startOfDay,
   startOfWeek,
 } from 'date-fns';
@@ -27,6 +27,7 @@ import {
   LuMapPin,
   LuRefreshCw,
   LuUserX,
+  LuUsers,
 } from 'react-icons/lu';
 import { type ReactNode, useEffect, useId, useState } from 'react';
 import { DayPicker } from 'react-day-picker';
@@ -36,35 +37,23 @@ import {
   isApiUrlProbablyWrongForWeb,
   resolveAxiosBaseURL,
 } from '../../../lib/config';
-import type { Backslider, DayPrayerData, GlobalTheme, Member, Ministry } from '../../../types';
+import type {
+  Backslider,
+  DayPrayerData,
+  GlobalTheme,
+  Member,
+  Ministry,
+  NextWeekMemberDay,
+} from '../../../types';
 import { fetchMe, patchProfile } from '../../profile/api';
-import { formatCalendarDayKey, getCalendarDay } from '../api';
+import { NextWeekCollectionBlock } from '../components/NextWeekCollectionBlock';
+import { formatCalendarDayKey, getCalendarDay, getNextWeekMembers } from '../api';
+import { loadErrorDescription } from '../prayerPageUtils';
 
 import 'react-day-picker/style.css';
 
 function isSameDay(a: Date, b: Date): boolean {
   return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
-}
-
-function loadErrorDescription(err: unknown): string | null {
-  if (err == null) return null;
-  if (axios.isAxiosError(err)) {
-    const code = err.response?.status;
-    const ct = String(err.response?.headers?.['content-type'] ?? '');
-    if (code === 404) {
-      return 'Сервер вернул 404. Убедитесь, что адрес API — хост бэкенда с маршрутом /api/calendar, а не только статика.';
-    }
-    if (ct.includes('text/html')) {
-      return 'Пришёл ответ HTML вместо JSON. Часто URL API совпадает с фронтендом — укажите отдельный адрес бэкенда.';
-    }
-    if (err.code === 'ERR_NETWORK' || err.message.toLowerCase().includes('network')) {
-      return 'Не удаётся подключиться к серверу. Проверьте CORS, HTTPS и доступность API.';
-    }
-    const msg = err.message;
-    if (msg) return msg;
-  }
-  if (err instanceof Error && err.message) return err.message;
-  return String(err);
 }
 
 function isDayPrayerEmpty(data: DayPrayerData): boolean {
@@ -105,7 +94,7 @@ function PrayerCard(props: {
   const { Icon, title, accentVar, children } = props;
   return (
     <article
-      className="mb-3.5 overflow-hidden rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] shadow-[var(--shadow)]"
+      className="mb-3.5 overflow-hidden rounded-2xl border border-stone-200/70 bg-[var(--surface-elevated)] shadow-[var(--shadow-card)] md:border-stone-200/80 md:shadow-[var(--shadow)]"
       style={{ ['--card-accent' as string]: accentVar }}
     >
       <div className="border-b border-stone-100/90 px-4 pb-0 pt-[18px] shell:px-5">
@@ -183,7 +172,7 @@ function MemberCard({
             type="button"
             disabled={saving}
             onClick={() => void savePrayer()}
-            className="rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-white shadow-md shadow-primary/20 disabled:opacity-60"
+            className="min-h-[44px] rounded-xl bg-primary px-5 py-2.5 text-sm font-bold text-white shadow-md shadow-primary/20 disabled:opacity-60"
           >
             {saving ? 'Сохранение…' : 'Сохранить'}
           </button>
@@ -368,7 +357,7 @@ function WeekStripPicker(props: {
           type="button"
           disabled={!canPrev}
           onClick={() => goWeek(-1)}
-          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-stone-600 hover:bg-stone-100 disabled:opacity-30"
+          className="flex h-11 w-11 min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-xl text-stone-600 hover:bg-stone-100 disabled:opacity-30"
           aria-label="Предыдущая неделя"
         >
           <LuChevronLeft className="h-6 w-6" strokeWidth={2} />
@@ -380,7 +369,7 @@ function WeekStripPicker(props: {
           type="button"
           disabled={!canNext}
           onClick={() => goWeek(1)}
-          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-stone-600 hover:bg-stone-100 disabled:opacity-30"
+          className="flex h-11 w-11 min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-xl text-stone-600 hover:bg-stone-100 disabled:opacity-30"
           aria-label="Следующая неделя"
         >
           <LuChevronRight className="h-6 w-6" strokeWidth={2} />
@@ -404,7 +393,7 @@ function WeekStripPicker(props: {
               disabled={outOfRange}
               onClick={() => onSelect(d)}
               className={[
-                'flex h-9 w-full items-center justify-center rounded-full text-[13px] font-medium shell:h-10 shell:text-[15px]',
+                'flex min-h-[44px] w-full items-center justify-center rounded-full text-[13px] font-medium sm:text-sm shell:h-11 shell:text-[15px]',
                 outOfRange ? 'cursor-not-allowed opacity-30' : '',
                 isSel
                   ? 'bg-primary font-semibold text-white hover:bg-primary'
@@ -419,6 +408,108 @@ function WeekStripPicker(props: {
         })}
       </div>
     </div>
+  );
+}
+
+function formatNextWeekRangeLabel(days: NextWeekMemberDay[]): string {
+  if (days.length < 2) return '';
+  const a = parse(days[0].date, 'yyyy-MM-dd', new Date());
+  const b = parse(days[days.length - 1].date, 'yyyy-MM-dd', new Date());
+  if (a.getMonth() === b.getMonth() && a.getFullYear() === b.getFullYear()) {
+    return `${format(a, 'd', { locale: ru })}–${format(b, 'd MMMM yyyy', { locale: ru })}`;
+  }
+  return `${format(a, 'd MMMM yyyy', { locale: ru })} — ${format(b, 'd MMMM yyyy', { locale: ru })}`;
+}
+
+function NextWeekMembersPanel(props: {
+  days: NextWeekMemberDay[] | undefined;
+  isPending: boolean;
+  isError: boolean;
+  error: unknown;
+  onRetry: () => void;
+}) {
+  const sectionId = useId();
+  const { days, isPending, isError, error, onRetry } = props;
+
+  if (isPending) {
+    return (
+      <section className="mb-6" aria-busy="true" aria-label="Загрузка плана на следующую неделю">
+        <div className="mb-3 flex items-center gap-3">
+          <div className="h-10 w-10 animate-pulse rounded-[10px] bg-stone-200/90" />
+          <div className="h-4 w-48 animate-pulse rounded bg-stone-200/90" />
+        </div>
+        <div className="space-y-2 rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] p-4 shadow-[var(--shadow)]">
+          {[0, 1, 2, 3, 4, 5, 6].map((i) => (
+            <div
+              key={i}
+              className="flex justify-between gap-3 border-b border-stone-100 pb-2 last:border-0 last:pb-0"
+            >
+              <div className="h-4 w-28 animate-pulse rounded bg-stone-100" />
+              <div className="h-4 w-32 max-w-[50%] animate-pulse rounded bg-stone-100" />
+            </div>
+          ))}
+        </div>
+      </section>
+    );
+  }
+
+  if (isError) {
+    return (
+      <section className="mb-6 rounded-2xl border border-amber-200/80 bg-amber-50/90 px-4 py-3 text-[14px] text-amber-950">
+        <p className="font-semibold">План на следующую неделю</p>
+        <p className="mt-1 text-[13px] text-amber-900/90">{loadErrorDescription(error) ?? 'Ошибка загрузки'}</p>
+        <button
+          type="button"
+          onClick={onRetry}
+          className="mt-3 min-h-[44px] rounded-lg px-2 text-left text-[13px] font-bold text-primary underline"
+        >
+          Повторить
+        </button>
+      </section>
+    );
+  }
+
+  if (!days || days.length === 0) return null;
+
+  const range = formatNextWeekRangeLabel(days);
+
+  return (
+    <section className="mb-6" aria-labelledby={sectionId}>
+      <div className="mb-3 flex items-center gap-3 pl-0.5">
+        <div
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] bg-primary/10 text-primary"
+          aria-hidden
+        >
+          <LuUsers className="h-5 w-5" />
+        </div>
+        <div className="min-w-0">
+          <h2 id={sectionId} className="text-xs font-extrabold uppercase tracking-[0.12em] text-stone-900">
+            Следующая неделя — молитва за члена
+          </h2>
+          <p className="mt-0.5 text-[13px] text-stone-500">{range}</p>
+        </div>
+      </div>
+      <div className="overflow-hidden rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] shadow-[var(--shadow)]">
+        <ul className="divide-y divide-stone-100">
+          {days.map((row) => {
+            const d = parse(row.date, 'yyyy-MM-dd', new Date());
+            const label = format(d, 'EEEE, d MMMM', { locale: ru });
+            const name = row.member?.name?.trim() || null;
+            return (
+              <li
+                key={row.date}
+                className="flex flex-col gap-1 px-4 py-3 sm:flex-row sm:items-start sm:justify-between sm:gap-3 shell:px-5"
+              >
+                <span className="min-w-0 shrink text-[13px] font-medium text-stone-600">{label}</span>
+                <span className="text-[15px] font-semibold text-stone-900 sm:max-w-[55%] sm:text-right">
+                  {name ?? '—'}
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+      </div>
+    </section>
   );
 }
 
@@ -451,6 +542,18 @@ export function DailyPrayerPage() {
     queryFn: () => getCalendarDay(dateKey),
   });
 
+  const {
+    data: nextWeekDays,
+    isPending: nextWeekPending,
+    isError: nextWeekError,
+    error: nextWeekErr,
+    refetch: refetchNextWeek,
+  } = useQuery({
+    queryKey: ['calendar', 'next-week', 'members'],
+    queryFn: getNextWeekMembers,
+    staleTime: 5 * 60_000,
+  });
+
   const today = new Date();
   const chipLabel = format(selected, 'd MMMM yyyy', { locale: ru });
   const isToday = isSameDay(selected, today);
@@ -458,9 +561,11 @@ export function DailyPrayerPage() {
     data != null && (data.global_themes.length > 0 || data.ministries.length > 0);
 
   return (
-    <div className="min-h-full bg-[var(--surface)] pb-28 shell:pb-8">
-      <header className="bg-primary px-5 py-5 text-white shadow-sm shell:rounded-none">
-        <h1 className="text-2xl font-extrabold leading-tight tracking-tight shell:text-[26px]">Молитва</h1>
+    <div className="min-h-full bg-[var(--surface)] pb-6 shell:pb-8">
+      <header className="bg-primary px-4 py-4 text-white shadow-sm sm:px-5 sm:py-5 md:px-6 md:py-5 shell:rounded-none">
+        <h1 className="text-xl font-extrabold leading-tight tracking-tight sm:text-2xl md:text-3xl lg:text-[1.65rem] xl:text-[26px]">
+          Молитва
+        </h1>
       </header>
 
       {/* Чип даты */}
@@ -468,7 +573,7 @@ export function DailyPrayerPage() {
         <button
           type="button"
           onClick={() => setCalendarExpanded((e) => !e)}
-          className="group flex w-full items-center gap-3 rounded-full bg-[var(--surface-elevated)] px-4 py-3 text-left shadow-[var(--shadow)] transition hover:bg-stone-50"
+          className="group flex min-h-[48px] w-full items-center gap-3 rounded-full bg-[var(--surface-elevated)] px-4 py-3 text-left shadow-[var(--shadow)] transition hover:bg-stone-50 sm:min-h-[52px]"
         >
           <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary transition-colors group-hover:text-primary-dark">
             <LuCalendarDays className="h-5 w-5" strokeWidth={2} aria-hidden />
@@ -486,7 +591,30 @@ export function DailyPrayerPage() {
           />
         </button>
         {!isPending && !isError && data ? (
-          <p className="mt-2 text-center text-[12px] text-stone-400">День в цикле: {data.diffDays}</p>
+          <p className="mt-2 text-center text-[12px] leading-snug text-stone-500">
+            {data.prayer_cycle ? (
+              <>
+                Молитвенный цикл <span className="font-semibold text-stone-700">№{data.prayer_cycle.number}</span>
+                {' · '}
+                {new Date(`${data.prayer_cycle.start_date}T12:00:00Z`).toLocaleDateString('ru-RU', {
+                  day: 'numeric',
+                  month: 'short',
+                  timeZone: 'UTC',
+                })}{' '}
+                —{' '}
+                {new Date(`${data.prayer_cycle.end_date}T12:00:00Z`).toLocaleDateString('ru-RU', {
+                  day: 'numeric',
+                  month: 'short',
+                  year: 'numeric',
+                  timeZone: 'UTC',
+                })}
+                {' · '}
+                день {data.prayer_cycle.day_index + 1} из {data.prayer_cycle.member_count}
+              </>
+            ) : (
+              <>Смещение от начала графика: {data.diffDays} дн.</>
+            )}
+          </p>
         ) : null}
       </div>
 
@@ -530,7 +658,7 @@ export function DailyPrayerPage() {
                   weekdays: 'text-[11px] font-semibold text-stone-500 shell:text-xs',
                   day: 'p-0.5 text-center',
                   day_button:
-                    'flex h-9 w-9 items-center justify-center rounded-full text-[13px] font-medium text-stone-800 hover:bg-stone-100 shell:h-10 shell:w-10 shell:text-[15px]',
+                    'flex h-11 min-h-[44px] w-11 min-w-[44px] items-center justify-center rounded-full text-[13px] font-medium text-stone-800 hover:bg-stone-100 sm:h-10 sm:min-h-[44px] sm:w-10 sm:min-w-[44px] shell:text-[15px]',
                   selected: 'bg-primary font-semibold text-white hover:bg-primary hover:text-white',
                   today: 'font-bold text-primary',
                 }}
@@ -568,6 +696,14 @@ export function DailyPrayerPage() {
       </div>
 
       <div className="px-4 pt-4 shell:px-6">
+        <NextWeekMembersPanel
+          days={nextWeekDays}
+          isPending={nextWeekPending}
+          isError={nextWeekError}
+          error={nextWeekErr}
+          onRetry={() => void refetchNextWeek()}
+        />
+        <NextWeekCollectionBlock />
         {isPending ? (
           <CalendarPrayerSkeleton />
         ) : isError ? (
@@ -582,9 +718,11 @@ export function DailyPrayerPage() {
                     key={m.id}
                     member={m}
                     currentUserId={me?.id ?? null}
-                    onPrayerSaved={() =>
-                      void qc.invalidateQueries({ queryKey: ['calendar', 'day', dateKey] })
-                    }
+                    onPrayerSaved={() => {
+                      void qc.invalidateQueries({ queryKey: ['calendar', 'day', dateKey] });
+                      void qc.invalidateQueries({ queryKey: ['calendar', 'next-week', 'members'] });
+                      void qc.invalidateQueries({ queryKey: ['calendar', 'next-week', 'collection'] });
+                    }}
                   />
                 ))}
               </section>

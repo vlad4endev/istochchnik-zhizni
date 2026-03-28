@@ -22,6 +22,16 @@ export interface Backslider {
   name: string;
 }
 
+/** Молитвенный цикл для выбранной даты (один полный круг по участникам). */
+export interface PrayerCycleInfo {
+  index: number;
+  number: number;
+  member_count: number;
+  start_date: string;
+  end_date: string;
+  day_index: number;
+}
+
 export interface DayPrayerData {
   date: string;
   diffDays: number;
@@ -29,4 +39,11 @@ export interface DayPrayerData {
   global_themes: GlobalTheme[];
   ministries: Ministry[];
   backsliders: Backslider[];
+  prayer_cycle: PrayerCycleInfo | null;
+}
+
+/** Один день из `/api/calendar/next-week/members` — молитва за члена на дату. */
+export interface NextWeekMemberDay {
+  date: string;
+  member: Member | null;
 }

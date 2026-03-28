@@ -209,20 +209,23 @@ export function ProfilePage() {
   }
 
   const sectionClass =
-    'rounded-3xl border border-stone-200/80 bg-[var(--surface-elevated)] p-6 shadow-[var(--shadow)] shell:p-8';
-  const sectionTitleClass = 'flex items-center gap-2 text-lg font-extrabold text-stone-900';
+    'rounded-[1.35rem] border border-stone-200/70 bg-[var(--surface-elevated)] p-4 shadow-[var(--shadow-card)] sm:rounded-3xl sm:p-6 sm:shadow-[var(--shadow)] lg:p-8 shell:p-8';
+  const sectionTitleClass =
+    'flex items-center gap-2 text-base font-extrabold text-stone-900 sm:text-lg md:text-xl';
   const labelClass = 'block text-sm font-semibold text-stone-700';
   const inputClass =
-    'mt-1.5 w-full rounded-xl border border-stone-200 bg-white px-4 py-3 text-[15px] text-stone-900 outline-none ring-primary/20 transition placeholder:text-stone-400 focus:border-primary focus:ring-2';
+    'mt-1.5 min-h-[48px] w-full rounded-xl border border-stone-200 bg-white px-4 py-3 text-base text-stone-900 outline-none ring-primary/20 transition placeholder:text-stone-400 focus:border-primary focus:ring-2 sm:min-h-0 sm:text-[15px]';
 
   return (
-    <div className="min-h-full bg-[var(--surface)] pb-28 shell:pb-8">
-      <header className="bg-primary px-5 py-5 text-white shadow-sm">
-        <h1 className="text-[22px] font-extrabold tracking-tight">Профиль</h1>
-        <p className="mt-1 text-sm text-white/85">Данные аккаунта, безопасность и история молитвенных записок</p>
+    <div className="min-h-full bg-[var(--surface)] pb-6 shell:pb-8">
+      <header className="bg-primary px-4 py-4 text-white shadow-[0_4px_24px_rgba(125,54,64,0.3)] sm:px-5 sm:py-5 md:rounded-none md:shadow-sm md:px-6 max-md:rounded-b-[1.75rem]">
+        <h1 className="text-xl font-extrabold tracking-tight sm:text-2xl md:text-3xl">Профиль</h1>
+        <p className="mt-1 max-w-3xl text-sm text-white/85 md:text-base">
+          Данные аккаунта, безопасность и история молитвенных записок
+        </p>
       </header>
 
-      <div className="px-4 py-8 shell:px-8">
+      <div className="px-3 py-6 sm:px-4 sm:py-8 md:px-6 lg:px-8 xl:px-10">
         {loading ? (
           <div className="flex flex-col items-center justify-center py-20 text-stone-500">
             <div className="h-10 w-10 animate-spin rounded-full border-2 border-primary border-t-transparent" />
@@ -234,13 +237,13 @@ export function ProfilePage() {
             <button
               type="button"
               onClick={() => void loadProfile()}
-              className="mt-4 rounded-xl border-2 border-primary px-5 py-2.5 text-sm font-bold text-primary transition hover:bg-primary/5"
+              className="mt-4 min-h-[44px] rounded-xl border-2 border-primary px-6 py-2.5 text-sm font-bold text-primary transition hover:bg-primary/5"
             >
               Повторить
             </button>
           </div>
         ) : user ? (
-          <div className="mx-auto flex max-w-lg flex-col gap-8">
+          <div className="mx-auto flex w-full max-w-lg flex-col gap-6 sm:gap-8 md:max-w-xl lg:max-w-2xl xl:max-w-3xl">
             <div className="flex flex-col items-center text-center">
               <div className="flex h-20 w-20 items-center justify-center rounded-full bg-primary/[0.08] text-primary/80">
                 <LuUser className="h-10 w-10" strokeWidth={1.75} aria-hidden />
@@ -351,6 +354,30 @@ export function ProfilePage() {
                   </label>
                   <p className="mt-0.5 text-xs text-stone-500">
                     Текст показывается в календаре в день, когда назначена молитва за вас.
+                    {user?.prayer_cycle ? (
+                      <>
+                        {' '}
+                        Сохраняется для{' '}
+                        <span className="font-semibold text-stone-700">
+                          цикла {user.prayer_cycle.number}
+                        </span>{' '}
+                        (
+                        {new Date(`${user.prayer_cycle.start_date}T12:00:00Z`).toLocaleDateString('ru-RU', {
+                          day: 'numeric',
+                          month: 'short',
+                          year: 'numeric',
+                          timeZone: 'UTC',
+                        })}{' '}
+                        —{' '}
+                        {new Date(`${user.prayer_cycle.end_date}T12:00:00Z`).toLocaleDateString('ru-RU', {
+                          day: 'numeric',
+                          month: 'short',
+                          year: 'numeric',
+                          timeZone: 'UTC',
+                        })}
+                        ).
+                      </>
+                    ) : null}
                   </p>
                   <textarea
                     id="pf-prayer"

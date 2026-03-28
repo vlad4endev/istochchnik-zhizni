@@ -69,8 +69,23 @@ CREATE TABLE IF NOT EXISTS member_prayer_request_history (
   id BIGSERIAL PRIMARY KEY,
   member_id INTEGER NOT NULL REFERENCES members(id) ON DELETE CASCADE,
   prayer_request TEXT NOT NULL,
+  cycle_index BIGINT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+CREATE TABLE IF NOT EXISTS member_prayer_by_cycle (
+  member_id INTEGER NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+  cycle_index BIGINT NOT NULL,
+  prayer_request TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (member_id, cycle_index)
+);
+
+CREATE INDEX IF NOT EXISTS idx_member_prayer_by_cycle_cycle
+  ON member_prayer_by_cycle (cycle_index);
+
+ALTER TABLE member_prayer_request_history ADD COLUMN IF NOT EXISTS cycle_index BIGINT;
 
 CREATE TABLE IF NOT EXISTS auth_sessions (
   token_hash CHAR(64) PRIMARY KEY,
@@ -123,6 +138,23 @@ ALTER TABLE members ALTER COLUMN app_role SET NOT NULL;
 ALTER TABLE members DROP CONSTRAINT IF EXISTS members_app_role_check;
 ALTER TABLE members ADD CONSTRAINT members_app_role_check CHECK (app_role IN ('member', 'admin'));
 
+ALTER TABLE members ADD COLUMN IF NOT EXISTS is_collection_coordinator BOOLEAN NOT NULL DEFAULT FALSE;
+
+CREATE TABLE IF NOT EXISTS next_week_collection_picks (
+  coordinator_id INTEGER NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+  week_start DATE NOT NULL,
+  day_date DATE NOT NULL,
+  selected_member_id INTEGER REFERENCES members(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (coordinator_id, week_start, day_date),
+  CONSTRAINT next_week_collection_picks_week_range_chk
+    CHECK (day_date >= week_start AND day_date <= week_start + 6)
+);
+
+CREATE INDEX IF NOT EXISTS next_week_collection_picks_week_start_idx
+  ON next_week_collection_picks (week_start);
+
 CREATE UNIQUE INDEX IF NOT EXISTS members_email_unique_idx
   ON members (LOWER(email))
   WHERE email IS NOT NULL;
@@ -153,7 +185,7 @@ CREATE INDEX IF NOT EXISTS access_requests_phone_digits_idx
 CREATE INDEX IF NOT EXISTS idx_member_cycle_overrides_member_id
   ON member_cycle_overrides (member_id);
 
--- RPC aligned with src/services/calendarService.ts (overrides + is_active + sort order).
+-- RPC aligned with src/services/calendarService.ts (overrides + is_active + per-cycle prayer_request).
 CREATE OR REPLACE FUNCTION get_daily_prayer(target_date date)
 RETURNS json
 LANGUAGE plpgsql
@@ -164,23 +196,12 @@ DECLARE
   v_day_diff integer;
   v_total_members integer;
   v_index integer;
-  v_member members%ROWTYPE;
+  v_cycle_index bigint;
+  v_member_json json;
 BEGIN
   INSERT INTO global_settings (id, start_date)
   VALUES (1, CURRENT_DATE)
   ON CONFLICT (id) DO NOTHING;
-
-  SELECT m.*
-  INTO v_member
-  FROM member_cycle_overrides o
-  JOIN members m ON m.id = o.member_id
-  WHERE o.target_date = target_date
-    AND m.is_active = TRUE
-  LIMIT 1;
-
-  IF FOUND THEN
-    RETURN json_build_object('date', target_date, 'member', row_to_json(v_member));
-  END IF;
 
   SELECT start_date INTO v_start_date FROM global_settings WHERE id = 1;
 
@@ -194,11 +215,34 @@ BEGIN
     RETURN json_build_object('date', target_date, 'member', NULL);
   END IF;
 
+  v_cycle_index := FLOOR(v_day_diff::numeric / v_total_members)::bigint;
   v_index := ((v_day_diff % v_total_members) + v_total_members) % v_total_members;
 
-  SELECT m.*
-  INTO v_member
+  SELECT (jsonb_set(
+    to_jsonb(m),
+    '{prayer_request}',
+    to_jsonb(COALESCE(mpc.prayer_request, m.prayer_request))
+  ))::json
+  INTO v_member_json
+  FROM member_cycle_overrides o
+  JOIN members m ON m.id = o.member_id
+  LEFT JOIN member_prayer_by_cycle mpc ON mpc.member_id = m.id AND mpc.cycle_index = v_cycle_index
+  WHERE o.target_date = target_date
+    AND m.is_active = TRUE
+  LIMIT 1;
+
+  IF FOUND THEN
+    RETURN json_build_object('date', target_date, 'member', v_member_json);
+  END IF;
+
+  SELECT (jsonb_set(
+    to_jsonb(m),
+    '{prayer_request}',
+    to_jsonb(COALESCE(mpc.prayer_request, m.prayer_request))
+  ))::json
+  INTO v_member_json
   FROM members m
+  LEFT JOIN member_prayer_by_cycle mpc ON mpc.member_id = m.id AND mpc.cycle_index = v_cycle_index
   WHERE m.is_active = TRUE
   ORDER BY
     LOWER(COALESCE(NULLIF(trim(m.last_name), ''), split_part(trim(m.name), ' ', 1))) ASC,
@@ -206,7 +250,7 @@ BEGIN
     m.id ASC
   LIMIT 1 OFFSET v_index;
 
-  RETURN json_build_object('date', target_date, 'member', row_to_json(v_member));
+  RETURN json_build_object('date', target_date, 'member', v_member_json);
 END;
 $$;
 

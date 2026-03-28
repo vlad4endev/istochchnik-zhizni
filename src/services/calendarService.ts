@@ -1,36 +1,12 @@
 import { query } from '../config/db';
-
-const ISO_DATE_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/;
-
-function parseIsoDateToUtc(dateValue: string): Date {
-  const match = ISO_DATE_PATTERN.exec(dateValue);
-  if (!match) {
-    throw new Error('Invalid date format');
-  }
-
-  const year = Number(match[1]);
-  const month = Number(match[2]);
-  const day = Number(match[3]);
-  const utcDate = new Date(Date.UTC(year, month - 1, day));
-
-  // Guard against impossible dates like 2026-02-31.
-  if (
-    utcDate.getUTCFullYear() !== year ||
-    utcDate.getUTCMonth() !== month - 1 ||
-    utcDate.getUTCDate() !== day
-  ) {
-    throw new Error('Invalid date value');
-  }
-
-  return utcDate;
-}
-
-function getDiffDays(targetDate: string, startDate: string): number {
-  const start = parseIsoDateToUtc(startDate);
-  const target = parseIsoDateToUtc(targetDate);
-  const diffTime = target.getTime() - start.getTime();
-  return Math.round(diffTime / (1000 * 60 * 60 * 24));
-}
+import { getDiffDays } from '../utils/isoDates';
+import {
+  computeCycleIndex,
+  getCycleStartDate,
+  getPrayerCycleSnapshotForDate,
+  toPublicCycleInfo,
+  type PrayerCyclePublic,
+} from './prayerCycleService';
 
 interface Member {
   id: number;
@@ -69,24 +45,13 @@ export interface PrayerDataByDate {
   global_themes: GlobalTheme[];
   ministries: Ministry[];
   backsliders: Backslider[];
+  /** Молитвенный цикл для этой даты (один полный круг по активным участникам = member_count дней). */
+  prayer_cycle: PrayerCyclePublic | null;
 }
 
 export interface NextWeekMemberAssignment {
   date: string;
   member: Member | null;
-}
-
-async function getCycleStartDate(): Promise<string> {
-  await query(
-    `INSERT INTO global_settings (id, start_date)
-     VALUES (1, CURRENT_DATE)
-     ON CONFLICT (id) DO NOTHING`
-  );
-
-  const result = await query('SELECT start_date::text FROM global_settings WHERE id = 1');
-
-  return (result.rows[0] as { start_date?: string } | undefined)?.start_date ??
-    new Date().toISOString().slice(0, 10);
 }
 
 function formatUtcDate(date: Date): string {
@@ -99,7 +64,8 @@ function addUtcDays(date: Date, days: number): Date {
   return result;
 }
 
-function getNextWeekDates(): string[] {
+/** Семь дат пн–вс следующей календарной недели (от следующего понедельника). */
+export function getNextWeekDates(): string[] {
   const now = new Date();
   const todayUtc = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
   const day = todayUtc.getUTCDay(); // 0=Sun ... 6=Sat
@@ -121,18 +87,21 @@ async function getByIndex<T>(
   return result.rows as T[];
 }
 
-export async function getPrayerDataByDate(
-  targetDate: string
-): Promise<PrayerDataByDate> {
+const MEMBER_ORDER_SQL = `LOWER(COALESCE(NULLIF(trim(m.last_name), ''), split_part(trim(m.name), ' ', 1))) ASC,
+    LOWER(COALESCE(NULLIF(trim(m.first_name), ''), m.name)) ASC,
+    m.id ASC`;
+
+export async function getPrayerDataByDate(targetDate: string): Promise<PrayerDataByDate> {
   const cycleStartDate = await getCycleStartDate();
   const diffDays = getDiffDays(targetDate, cycleStartDate);
 
-  const [membersCount, themesCount, ministriesCount, backslidersCount] =
+  const [membersCount, themesCount, ministriesCount, backslidersCount, cycleSnap] =
     await Promise.all([
       query('SELECT COUNT(*)::int FROM members WHERE is_active = TRUE'),
       query('SELECT COUNT(*)::int FROM global_themes'),
       query('SELECT COUNT(*)::int FROM ministries'),
       query('SELECT COUNT(*)::int FROM backsliders'),
+      getPrayerCycleSnapshotForDate(targetDate),
     ]);
 
   const totalMembers = membersCount.rows[0]?.count ?? 0;
@@ -140,20 +109,27 @@ export async function getPrayerDataByDate(
   const totalMinistries = ministriesCount.rows[0]?.count ?? 0;
   const totalBacksliders = backslidersCount.rows[0]?.count ?? 0;
 
-  const memberIndex = totalMembers > 0 ? ((diffDays % totalMembers) + totalMembers) % totalMembers : 0;
+  const memberIndex =
+    totalMembers > 0 ? ((diffDays % totalMembers) + totalMembers) % totalMembers : 0;
   const themeIndex = totalThemes > 0 ? ((diffDays % totalThemes) + totalThemes) % totalThemes : 0;
-  const ministryIndex = totalMinistries > 0 ? ((diffDays % totalMinistries) + totalMinistries) % totalMinistries : 0;
-  const backsliderIndex = totalBacksliders > 0 ? ((diffDays % totalBacksliders) + totalBacksliders) % totalBacksliders : 0;
+  const ministryIndex =
+    totalMinistries > 0 ? ((diffDays % totalMinistries) + totalMinistries) % totalMinistries : 0;
+  const backsliderIndex =
+    totalBacksliders > 0 ? ((diffDays % totalBacksliders) + totalBacksliders) % totalBacksliders : 0;
+
+  const cycleIndexForDate =
+    totalMembers > 0 ? computeCycleIndex(diffDays, totalMembers) : 0;
 
   const overridePromise = query(
-    `SELECT m.id, m.name, m.prayer_request
+    `SELECT m.id, m.name, COALESCE(mpc.prayer_request, m.prayer_request) AS prayer_request
      FROM member_cycle_overrides o
      JOIN members m ON m.id = o.member_id
+     LEFT JOIN member_prayer_by_cycle mpc
+       ON mpc.member_id = m.id AND mpc.cycle_index = $2
      WHERE m.is_active = TRUE
-       AND
-       o.target_date = $1::date
+       AND o.target_date = $1::date
      LIMIT 1`,
-    [targetDate]
+    [targetDate, cycleIndexForDate]
   ).then((result) => (result.rows[0] as MemberOverrideRow | undefined) ?? null);
 
   const membersPromise = (async (): Promise<Member[]> => {
@@ -167,15 +143,14 @@ export async function getPrayerDataByDate(
     }
 
     const result = await query(
-      `SELECT id, name, prayer_request
-       FROM members
-       WHERE is_active = TRUE
-       ORDER BY
-         LOWER(COALESCE(NULLIF(trim(last_name), ''), split_part(trim(name), ' ', 1))) ASC,
-         LOWER(COALESCE(NULLIF(trim(first_name), ''), name)) ASC,
-         id ASC
+      `SELECT m.id, m.name, COALESCE(mpc.prayer_request, m.prayer_request) AS prayer_request
+       FROM members m
+       LEFT JOIN member_prayer_by_cycle mpc
+         ON mpc.member_id = m.id AND mpc.cycle_index = $2
+       WHERE m.is_active = TRUE
+       ORDER BY ${MEMBER_ORDER_SQL}
        LIMIT 1 OFFSET $1`,
-      [memberIndex]
+      [memberIndex, cycleIndexForDate]
     );
     return result.rows as Member[];
   })();
@@ -194,6 +169,7 @@ export async function getPrayerDataByDate(
     global_themes,
     ministries,
     backsliders,
+    prayer_cycle: cycleSnap ? toPublicCycleInfo(cycleSnap) : null,
   };
 }
 
@@ -210,18 +186,15 @@ export async function getNextWeekMemberAssignments(): Promise<NextWeekMemberAssi
     return dates.map((date) => ({ date, member: null }));
   }
 
-  const sortedMembers = await query(
-    `SELECT id, name, prayer_request
-     FROM members
-     WHERE is_active = TRUE
-     ORDER BY
-       LOWER(COALESCE(NULLIF(trim(last_name), ''), split_part(trim(name), ' ', 1))) ASC,
-       LOWER(COALESCE(NULLIF(trim(first_name), ''), name)) ASC,
-       id ASC`
-  ).then((result) => result.rows as Member[]);
+  const sortedBase = await query(
+    `SELECT m.id, m.name
+     FROM members m
+     WHERE m.is_active = TRUE
+     ORDER BY ${MEMBER_ORDER_SQL}`
+  ).then((result) => result.rows as { id: number; name: string }[]);
 
   const overrides = await query(
-    `SELECT o.target_date::text AS target_date, m.id, m.name, m.prayer_request
+    `SELECT o.target_date::text AS target_date, m.id
      FROM member_cycle_overrides o
      JOIN members m ON m.id = o.member_id
      WHERE m.is_active = TRUE
@@ -232,27 +205,60 @@ export async function getNextWeekMemberAssignments(): Promise<NextWeekMemberAssi
   const overrideByDate = new Map<string, Member>();
   for (const row of overrides.rows) {
     const targetDate = (row as { target_date?: string }).target_date;
-    if (!targetDate) {
+    const memberId = Number((row as { id: number }).id);
+    if (!targetDate || !Number.isFinite(memberId)) {
       continue;
     }
-    overrideByDate.set(targetDate, {
-      id: Number((row as { id: number }).id),
-      name: String((row as { name: string }).name),
-      prayer_request: (row as { prayer_request?: string | null }).prayer_request ?? null,
-    });
+    const diffD = getDiffDays(targetDate, cycleStartDate);
+    const cIdx = computeCycleIndex(diffD, totalMembers);
+    const r = await query(
+      `SELECT m.id, m.name, COALESCE(mpc.prayer_request, m.prayer_request) AS prayer_request
+       FROM members m
+       LEFT JOIN member_prayer_by_cycle mpc ON mpc.member_id = m.id AND mpc.cycle_index = $2
+       WHERE m.id = $1`,
+      [memberId, cIdx]
+    );
+    const enriched = r.rows[0] as Member | undefined;
+    if (enriched) {
+      overrideByDate.set(targetDate, enriched);
+    }
   }
 
-  return dates.map((date) => {
+  const out: NextWeekMemberAssignment[] = [];
+
+  for (const date of dates) {
     const overrideMember = overrideByDate.get(date);
     if (overrideMember) {
-      return { date, member: overrideMember };
+      out.push({ date, member: overrideMember });
+      continue;
     }
 
     const diffDays = getDiffDays(date, cycleStartDate);
     const index = ((diffDays % totalMembers) + totalMembers) % totalMembers;
-    return {
+    const cIdx = computeCycleIndex(diffDays, totalMembers);
+    const base = sortedBase[index];
+    if (!base) {
+      out.push({ date, member: null });
+      continue;
+    }
+
+    const pr = await query(
+      `SELECT COALESCE(mpc.prayer_request, m.prayer_request) AS prayer_request
+       FROM members m
+       LEFT JOIN member_prayer_by_cycle mpc ON mpc.member_id = m.id AND mpc.cycle_index = $2
+       WHERE m.id = $1`,
+      [base.id, cIdx]
+    );
+    const prayerRequest = (pr.rows[0] as { prayer_request?: string | null } | undefined)?.prayer_request ?? null;
+    out.push({
       date,
-      member: sortedMembers[index] ?? null,
-    };
-  });
+      member: {
+        id: base.id,
+        name: base.name,
+        prayer_request: prayerRequest,
+      },
+    });
+  }
+
+  return out;
 }
