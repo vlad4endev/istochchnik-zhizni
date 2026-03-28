@@ -1,19 +1,32 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import axios from 'axios';
-import { format } from 'date-fns';
+import {
+  addDays,
+  addWeeks,
+  eachDayOfInterval,
+  format,
+  isAfter,
+  isBefore,
+  startOfDay,
+  startOfWeek,
+} from 'date-fns';
 import { ru } from 'date-fns/locale';
 import type { IconType } from 'react-icons';
 import {
+  LuBookMarked,
   LuBookOpen,
   LuCalendarDays,
+  LuCalendarRange,
   LuChevronDown,
-  LuChurch,
+  LuChevronLeft,
+  LuChevronRight,
+  LuChevronUp,
   LuCloudOff,
-  LuFlame,
   LuHammer,
+  LuHeartHandshake,
   LuMapPin,
   LuRefreshCw,
-  LuUserRound,
+  LuUserX,
 } from 'react-icons/lu';
 import { type ReactNode, useEffect, useId, useState } from 'react';
 import { DayPicker } from 'react-day-picker';
@@ -149,7 +162,7 @@ function MemberCard({
   const hasRequest = member.prayer_request != null && member.prayer_request.trim().length > 0;
 
   return (
-    <PrayerCard Icon={LuUserRound} title={member.name} accentVar="var(--member)">
+    <PrayerCard Icon={LuHeartHandshake} title={member.name} accentVar="var(--member)">
       {isMe ? (
         <div className="space-y-3">
           <label className="block">
@@ -192,16 +205,13 @@ function GlobalThemeCard({ theme }: { theme: GlobalTheme }) {
     <PrayerCard Icon={LuBookOpen} title={theme.title} accentVar="var(--theme)">
       {hasVerse ? (
         <div className="mb-3 rounded-xl border border-[color-mix(in_srgb,var(--theme)_18%,transparent)] bg-[color-mix(in_srgb,var(--theme)_8%,transparent)] px-3.5 py-3.5">
-          <p className="mb-1 text-[11px] font-extrabold uppercase tracking-[0.1em] text-stone-500">Библейский стих</p>
-          <p className="text-[15px] italic leading-relaxed text-stone-600 whitespace-pre-wrap">{theme.bible_verse}</p>
+          <div className="flex gap-2.5">
+            <LuBookMarked className="mt-0.5 h-[18px] w-[18px] shrink-0 text-[var(--theme)]" aria-hidden />
+            <p className="text-[15px] italic leading-relaxed text-stone-600 whitespace-pre-wrap">{theme.bible_verse}</p>
+          </div>
         </div>
       ) : null}
-      {hasPoints ? (
-        <div>
-          <p className="mb-1.5 text-[11px] font-extrabold uppercase tracking-[0.1em] text-stone-500">Акценты молитвы</p>
-          <p className="text-[16px] text-stone-600 whitespace-pre-wrap">{theme.prayer_points}</p>
-        </div>
-      ) : null}
+      {hasPoints ? <p className="text-[16px] leading-relaxed text-stone-600 whitespace-pre-wrap">{theme.prayer_points}</p> : null}
       {hasNothing ? <p className="italic text-stone-400">Нет дополнительной информации</p> : null}
     </PrayerCard>
   );
@@ -212,10 +222,7 @@ function MinistryCard({ ministry }: { ministry: Ministry }) {
   return (
     <PrayerCard Icon={LuHammer} title={ministry.title} accentVar="var(--ministry)">
       {hasPoints ? (
-        <div>
-          <p className="mb-1.5 text-[11px] font-extrabold uppercase tracking-[0.1em] text-stone-500">Пункты молитвы</p>
-          <p className="text-[16px] text-stone-600 whitespace-pre-wrap">{ministry.prayer_points}</p>
-        </div>
+        <p className="text-[16px] leading-relaxed text-stone-600 whitespace-pre-wrap">{ministry.prayer_points}</p>
       ) : (
         <p className="italic text-stone-400">Нет указанных пунктов молитвы</p>
       )}
@@ -225,8 +232,8 @@ function MinistryCard({ ministry }: { ministry: Ministry }) {
 
 function BacksliderCard({ b }: { b: Backslider }) {
   return (
-    <PrayerCard Icon={LuFlame} title={b.name} accentVar="var(--backslider)">
-      <p className="italic text-stone-500">Молимся о возвращении к Господу и к общению с церковью</p>
+    <PrayerCard Icon={LuUserX} title={b.name} accentVar="var(--backslider)">
+      <p className="italic text-stone-500">Отпавший — нуждается в молитве о возвращении</p>
     </PrayerCard>
   );
 }
@@ -311,7 +318,7 @@ function EmptyBlock() {
   return (
     <div className="mx-auto flex max-w-md flex-col items-center px-6 py-14 text-center">
       <div className="mb-6 flex h-28 w-28 items-center justify-center rounded-full bg-primary/[0.08] text-primary opacity-90">
-        <LuChurch className="h-14 w-14" strokeWidth={1.75} aria-hidden />
+        <LuHeartHandshake className="h-14 w-14" strokeWidth={1.75} aria-hidden />
       </div>
       <h2 className="text-xl font-bold tracking-tight text-stone-900">Нет данных на эту дату</h2>
       <p className="mt-2 text-[15px] text-stone-500">Выберите другую дату в календаре</p>
@@ -322,10 +329,104 @@ function EmptyBlock() {
 const CAL_START = new Date(2020, 0, 1);
 const CAL_END = new Date(2030, 11, 31);
 
+const WEEKDAY_LABELS_SHORT = ['пн', 'вт', 'ср', 'чт', 'пт', 'сб', 'вс'] as const;
+
+function WeekStripPicker(props: {
+  selected: Date;
+  onSelect: (d: Date) => void;
+  minDate: Date;
+  maxDate: Date;
+}) {
+  const { selected, onSelect, minDate, maxDate } = props;
+  const weekStart = startOfWeek(selected, { weekStartsOn: 1 });
+  const days = eachDayOfInterval({ start: weekStart, end: addDays(weekStart, 6) });
+  const minWeekStart = startOfWeek(minDate, { weekStartsOn: 1 });
+  const maxWeekStart = startOfWeek(maxDate, { weekStartsOn: 1 });
+  const canPrev = weekStart.getTime() > minWeekStart.getTime();
+  const canNext = weekStart.getTime() < maxWeekStart.getTime();
+
+  function goWeek(delta: number) {
+    const next = addWeeks(selected, delta);
+    const ws = startOfWeek(next, { weekStartsOn: 1 });
+    if (ws.getTime() < minWeekStart.getTime()) {
+      onSelect(minDate);
+      return;
+    }
+    if (ws.getTime() > maxWeekStart.getTime()) {
+      onSelect(maxDate);
+      return;
+    }
+    onSelect(next);
+  }
+
+  const today = new Date();
+
+  return (
+    <div className="w-full">
+      <div className="mb-3 flex items-center justify-between gap-2 px-0.5">
+        <button
+          type="button"
+          disabled={!canPrev}
+          onClick={() => goWeek(-1)}
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-stone-600 hover:bg-stone-100 disabled:opacity-30"
+          aria-label="Предыдущая неделя"
+        >
+          <LuChevronLeft className="h-6 w-6" strokeWidth={2} />
+        </button>
+        <p className="min-w-0 flex-1 text-center text-[15px] font-semibold capitalize text-stone-900 shell:text-[17px]">
+          {format(weekStart, 'LLLL yyyy', { locale: ru })}
+        </p>
+        <button
+          type="button"
+          disabled={!canNext}
+          onClick={() => goWeek(1)}
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-stone-600 hover:bg-stone-100 disabled:opacity-30"
+          aria-label="Следующая неделя"
+        >
+          <LuChevronRight className="h-6 w-6" strokeWidth={2} />
+        </button>
+      </div>
+      <div className="mb-1.5 grid grid-cols-7 gap-0.5 text-center text-[11px] font-semibold text-stone-500 shell:text-xs">
+        {WEEKDAY_LABELS_SHORT.map((d) => (
+          <div key={d}>{d}</div>
+        ))}
+      </div>
+      <div className="grid grid-cols-7 gap-0.5">
+        {days.map((d) => {
+          const isSel = isSameDay(d, selected);
+          const isTodayCell = isSameDay(d, today);
+          const outOfRange =
+            isBefore(startOfDay(d), startOfDay(minDate)) || isAfter(startOfDay(d), startOfDay(maxDate));
+          return (
+            <button
+              key={d.getTime()}
+              type="button"
+              disabled={outOfRange}
+              onClick={() => onSelect(d)}
+              className={[
+                'flex h-9 w-full items-center justify-center rounded-full text-[13px] font-medium shell:h-10 shell:text-[15px]',
+                outOfRange ? 'cursor-not-allowed opacity-30' : '',
+                isSel
+                  ? 'bg-primary font-semibold text-white hover:bg-primary'
+                  : isTodayCell
+                    ? 'font-bold text-primary hover:bg-stone-100'
+                    : 'text-stone-800 hover:bg-stone-100',
+              ].join(' ')}
+            >
+              {format(d, 'd')}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 export function DailyPrayerPage() {
   const qc = useQueryClient();
   const [selected, setSelected] = useState<Date>(() => new Date());
   const [calendarExpanded, setCalendarExpanded] = useState(false);
+  const [calendarView, setCalendarView] = useState<'week' | 'month'>('week');
 
   const { data: me } = useQuery({
     queryKey: ['auth', 'me'],
@@ -334,9 +435,8 @@ export function DailyPrayerPage() {
   });
 
   const sectionMemberId = useId();
-  const sectionThemesId = useId();
-  const sectionMinistryId = useId();
   const sectionBacksliderId = useId();
+  const themesMinistriesRegionId = useId();
 
   const dateKey = formatCalendarDayKey(selected);
 
@@ -354,6 +454,8 @@ export function DailyPrayerPage() {
   const today = new Date();
   const chipLabel = format(selected, 'd MMMM yyyy', { locale: ru });
   const isToday = isSameDay(selected, today);
+  const hasThemesOrMinistries =
+    data != null && (data.global_themes.length > 0 || data.ministries.length > 0);
 
   return (
     <div className="min-h-full bg-[var(--surface)] pb-28 shell:pb-8">
@@ -383,6 +485,9 @@ export function DailyPrayerPage() {
             aria-hidden
           />
         </button>
+        {!isPending && !isError && data ? (
+          <p className="mt-2 text-center text-[12px] text-stone-400">День в цикле: {data.diffDays}</p>
+        ) : null}
       </div>
 
       {/* Раскрывающийся календарь */}
@@ -391,41 +496,71 @@ export function DailyPrayerPage() {
       >
         <div className="overflow-hidden">
           <div className="mx-4 mt-3 rounded-b-3xl border border-t-0 border-stone-200/80 bg-[var(--surface-elevated)] px-3 py-5 shadow-[var(--shadow)] shell:mx-6">
-            <DayPicker
-              mode="single"
-              selected={selected}
-              onSelect={(d) => {
-                if (d) {
+            {calendarView === 'week' ? (
+              <WeekStripPicker
+                selected={selected}
+                minDate={CAL_START}
+                maxDate={CAL_END}
+                onSelect={(d) => {
                   setSelected(d);
                   setCalendarExpanded(false);
-                }
-              }}
-              locale={ru}
-              startMonth={CAL_START}
-              endMonth={CAL_END}
-              defaultMonth={selected}
-              showOutsideDays={false}
-              className="mx-auto [--rdp-accent-color:var(--primary)] [--rdp-background-color:var(--surface-elevated)]"
-              classNames={{
-                root: 'rdp-root relative gap-3',
-                month_caption: 'flex justify-center px-1 pb-2 text-[16px] font-semibold text-stone-900',
-                nav: 'absolute right-0 top-0 flex gap-1',
-                month_grid: 'w-full border-collapse',
-                weekdays: 'text-[11px] font-semibold text-stone-500 shell:text-xs',
-                day: 'p-0.5 text-center',
-                day_button:
-                  'flex h-9 w-9 items-center justify-center rounded-full text-[13px] font-medium text-stone-800 hover:bg-stone-100 shell:h-10 shell:w-10 shell:text-[15px]',
-                selected: 'bg-primary font-semibold text-white hover:bg-primary hover:text-white',
-                today: 'font-bold text-primary',
-              }}
-            />
-            <div className="mt-3 flex justify-end border-t border-stone-100 pt-3">
+                }}
+              />
+            ) : (
+              <DayPicker
+                mode="single"
+                selected={selected}
+                onSelect={(d) => {
+                  if (d) {
+                    setSelected(d);
+                    setCalendarExpanded(false);
+                  }
+                }}
+                locale={ru}
+                startMonth={CAL_START}
+                endMonth={CAL_END}
+                defaultMonth={selected}
+                showOutsideDays={false}
+                className="mx-auto [--rdp-accent-color:var(--primary)] [--rdp-background-color:var(--surface-elevated)]"
+                classNames={{
+                  root: 'rdp-root relative gap-3',
+                  month_caption: 'flex justify-center px-1 pb-2 text-[16px] font-semibold text-stone-900',
+                  nav: 'absolute right-0 top-0 flex gap-1',
+                  month_grid: 'w-full border-collapse',
+                  weekdays: 'text-[11px] font-semibold text-stone-500 shell:text-xs',
+                  day: 'p-0.5 text-center',
+                  day_button:
+                    'flex h-9 w-9 items-center justify-center rounded-full text-[13px] font-medium text-stone-800 hover:bg-stone-100 shell:h-10 shell:w-10 shell:text-[15px]',
+                  selected: 'bg-primary font-semibold text-white hover:bg-primary hover:text-white',
+                  today: 'font-bold text-primary',
+                }}
+              />
+            )}
+            <div className="mt-3 flex items-stretch gap-2 border-t border-stone-100 pt-3">
               <button
                 type="button"
-                className="rounded-xl px-4 py-2 text-sm font-bold text-stone-500 hover:bg-stone-100"
-                onClick={() => setCalendarExpanded(false)}
+                className="flex min-h-[48px] flex-1 items-center justify-center gap-2 rounded-xl px-4 py-3 text-[14px] font-bold text-primary hover:bg-primary/[0.06]"
+                onClick={() => setCalendarView((v) => (v === 'month' ? 'week' : 'month'))}
               >
-                Свернуть
+                {calendarView === 'month' ? (
+                  <>
+                    <LuCalendarRange className="h-5 w-5 shrink-0" strokeWidth={2} aria-hidden />
+                    Неделя
+                  </>
+                ) : (
+                  <>
+                    <LuCalendarDays className="h-5 w-5 shrink-0" strokeWidth={2} aria-hidden />
+                    Весь месяц
+                  </>
+                )}
+              </button>
+              <button
+                type="button"
+                className="flex h-auto min-h-[48px] w-12 shrink-0 items-center justify-center rounded-xl text-stone-500 hover:bg-stone-100"
+                onClick={() => setCalendarExpanded(false)}
+                aria-label="Свернуть календарь"
+              >
+                <LuChevronUp className="h-7 w-7" strokeWidth={2} aria-hidden />
               </button>
             </div>
           </div>
@@ -441,7 +576,7 @@ export function DailyPrayerPage() {
           <div className="pb-6">
             {data.members.length > 0 ? (
               <section aria-labelledby={sectionMemberId}>
-                <SectionHeader Icon={LuChurch} title="Молитва за члена церкви" id={sectionMemberId} />
+                <SectionHeader Icon={LuHeartHandshake} title="Молитва за члена церкви" id={sectionMemberId} />
                 {data.members.map((m) => (
                   <MemberCard
                     key={m.id}
@@ -455,26 +590,17 @@ export function DailyPrayerPage() {
               </section>
             ) : null}
 
-            {data.global_themes.length > 0 ? (
+            {hasThemesOrMinistries ? (
               <section
                 className={data.members.length > 0 ? 'mt-6' : undefined}
-                aria-labelledby={sectionThemesId}
+                aria-labelledby={themesMinistriesRegionId}
               >
-                <SectionHeader Icon={LuBookOpen} title="Глобальные темы" id={sectionThemesId} />
+                <h2 id={themesMinistriesRegionId} className="sr-only">
+                  Глобальные темы и служения
+                </h2>
                 {data.global_themes.map((t) => (
                   <GlobalThemeCard key={`gt-${t.id}`} theme={t} />
                 ))}
-              </section>
-            ) : null}
-
-            {data.ministries.length > 0 ? (
-              <section
-                className={
-                  data.members.length > 0 || data.global_themes.length > 0 ? 'mt-6' : undefined
-                }
-                aria-labelledby={sectionMinistryId}
-              >
-                <SectionHeader Icon={LuHammer} title="Служения" id={sectionMinistryId} />
                 {data.ministries.map((m) => (
                   <MinistryCard key={`m-${m.id}`} ministry={m} />
                 ))}
@@ -484,11 +610,7 @@ export function DailyPrayerPage() {
             {data.backsliders.length > 0 ? (
               <section
                 className={
-                  data.members.length > 0 ||
-                  data.global_themes.length > 0 ||
-                  data.ministries.length > 0
-                    ? 'mt-6'
-                    : undefined
+                  data.members.length > 0 || hasThemesOrMinistries ? 'mt-6' : undefined
                 }
                 aria-labelledby={sectionBacksliderId}
               >
