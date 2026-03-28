@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { FaPrayingHands } from 'react-icons/fa';
-import { LuBookOpen, LuMapPin, LuWrench } from 'react-icons/lu';
+import { LuBookOpen, LuHeart, LuMapPin, LuWrench } from 'react-icons/lu';
 import { fetchPrayerByDate } from './api/prayer';
 import type { DayPrayerData } from './types';
 
@@ -112,11 +111,11 @@ export function App() {
                 {(theme?.title?.trim() || 'Тема не указана').toUpperCase()}
               </p>
               <p className="card-verse flex gap-2">
-                <LuBookOpen className="mt-0.5 h-4 w-4 shrink-0 opacity-70" aria-hidden />
+                <LuBookOpen className="mt-0.5 h-4 w-4 shrink-0 opacity-70" strokeWidth={2} aria-hidden />
                 <span>{(theme?.bible_verse?.trim() || 'Стих не указан').trim()}</span>
               </p>
               <p className="card-body flex gap-2 whitespace-pre-wrap">
-                <FaPrayingHands className="mt-0.5 h-4 w-4 shrink-0 opacity-70" aria-hidden />
+                <LuHeart className="mt-0.5 h-4 w-4 shrink-0 opacity-70" strokeWidth={2} aria-hidden />
                 <span>{(theme?.prayer_points?.trim() || 'Пункты молитвы не указаны').trim()}</span>
               </p>
             </article>

@@ -38,7 +38,8 @@
     "go": "bash scripts/project.sh",
     "go:start": "bash scripts/project.sh start",
     "go:update": "bash scripts/project.sh update",
-    "go:stop": "bash scripts/project.sh stop"
+    "go:stop": "bash scripts/project.sh stop",
+    "docker:web:rebuild": "docker compose build --no-cache web && docker compose up -d web"
   },
   "keywords": [],
   "author": "",

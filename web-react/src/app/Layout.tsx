@@ -1,7 +1,6 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
-import { FaPrayingHands } from 'react-icons/fa';
 import type { IconType } from 'react-icons';
-import { LuCross, LuShield, LuUser } from 'react-icons/lu';
+import { LuChurch, LuCross, LuShield, LuUser } from 'react-icons/lu';
 
 import { useAuthStore } from '../features/auth/authStore';
 import { useBrandingStore } from '../features/branding/brandingStore';
@@ -15,7 +14,8 @@ type NavItem = {
 };
 
 const NAV_ITEMS: NavItem[] = [
-  { to: '/prayer', label: 'Молитва', Icon: FaPrayingHands },
+  /** Контурные Lucide — не путать с цветными эмодзи / Font Awesome «картинками». */
+  { to: '/prayer', label: 'Молитва', Icon: LuChurch },
   { to: '/profile', label: 'Профиль', Icon: LuUser },
   { to: '/admin', label: 'Админ', Icon: LuShield, adminOnly: true },
 ];
@@ -82,17 +82,20 @@ export function Layout() {
             </div>
           </div>
 
-          <nav className="flex flex-col gap-1">
-            {items.map((item) => (
-              <NavLink key={item.to} to={item.to} className={({ isActive }) => navClassName(isActive)}>
-                {({ isActive }) => (
-                  <>
-                    <item.Icon className={navIconClass(isActive)} aria-hidden />
-                    {item.label}
-                  </>
-                )}
-              </NavLink>
-            ))}
+          <nav className="flex flex-col gap-1" data-web-nav="react-icons">
+            {items.map((item) => {
+              const Icon = item.Icon;
+              return (
+                <NavLink key={item.to} to={item.to} className={({ isActive }) => navClassName(isActive)}>
+                  {({ isActive }) => (
+                    <>
+                      <Icon className={navIconClass(isActive)} strokeWidth={2} aria-hidden />
+                      {item.label}
+                    </>
+                  )}
+                </NavLink>
+              );
+            })}
           </nav>
         </div>
 
@@ -118,22 +121,25 @@ export function Layout() {
         aria-label="Основная навигация"
       >
         <div className="mx-auto flex max-w-lg items-center justify-around rounded-3xl bg-[var(--surface-elevated)] px-2 py-2 shadow-[var(--shadow)]">
-          {items.map((item) => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              className={({ isActive }) => navClassName(isActive, true)}
-            >
-              {({ isActive }) => (
-                <>
-                  <item.Icon className={navIconClass(isActive)} aria-hidden />
-                  <span className="max-w-[4.5rem] truncate text-center text-[10px] font-bold leading-tight min-[400px]:max-w-none min-[400px]:text-xs">
-                    {item.label}
-                  </span>
-                </>
-              )}
-            </NavLink>
-          ))}
+          {items.map((item) => {
+            const Icon = item.Icon;
+            return (
+              <NavLink
+                key={item.to}
+                to={item.to}
+                className={({ isActive }) => navClassName(isActive, true)}
+              >
+                {({ isActive }) => (
+                  <>
+                    <Icon className={navIconClass(isActive)} strokeWidth={2} aria-hidden />
+                    <span className="max-w-[4.5rem] truncate text-center text-[10px] font-bold leading-tight min-[400px]:max-w-none min-[400px]:text-xs">
+                      {item.label}
+                    </span>
+                  </>
+                )}
+              </NavLink>
+            );
+          })}
         </div>
       </nav>
     </div>

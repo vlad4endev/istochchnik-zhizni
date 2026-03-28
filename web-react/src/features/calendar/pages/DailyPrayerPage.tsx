@@ -3,16 +3,17 @@ import axios from 'axios';
 import { format } from 'date-fns';
 import { ru } from 'date-fns/locale';
 import type { IconType } from 'react-icons';
-import { FaPrayingHands } from 'react-icons/fa';
 import {
   LuBookOpen,
   LuCalendarDays,
   LuChevronDown,
+  LuChurch,
   LuCloudOff,
   LuFlame,
   LuHammer,
   LuMapPin,
   LuRefreshCw,
+  LuUserRound,
 } from 'react-icons/lu';
 import { type ReactNode, useId, useState } from 'react';
 import { DayPicker } from 'react-day-picker';
@@ -116,7 +117,7 @@ function PrayerCard(props: {
 function MemberCard({ member }: { member: Member }) {
   const hasRequest = member.prayer_request != null && member.prayer_request.trim().length > 0;
   return (
-    <PrayerCard Icon={FaPrayingHands} title={member.name} accentVar="var(--member)">
+    <PrayerCard Icon={LuUserRound} title={member.name} accentVar="var(--member)">
       {hasRequest ? (
         <p className="text-[16px] text-stone-600">{member.prayer_request}</p>
       ) : (
@@ -253,7 +254,7 @@ function EmptyBlock() {
   return (
     <div className="mx-auto flex max-w-md flex-col items-center px-6 py-14 text-center">
       <div className="mb-6 flex h-28 w-28 items-center justify-center rounded-full bg-primary/[0.08] text-primary opacity-90">
-        <FaPrayingHands className="h-14 w-14" aria-hidden />
+        <LuChurch className="h-14 w-14" strokeWidth={1.75} aria-hidden />
       </div>
       <h2 className="text-xl font-bold tracking-tight text-stone-900">Нет данных на эту дату</h2>
       <p className="mt-2 text-[15px] text-stone-500">Выберите другую дату в календаре</p>
@@ -376,7 +377,7 @@ export function DailyPrayerPage() {
           <div className="pb-6">
             {data.members.length > 0 ? (
               <section aria-labelledby={sectionMemberId}>
-                <SectionHeader Icon={FaPrayingHands} title="Молитва за члена церкви" id={sectionMemberId} />
+                <SectionHeader Icon={LuChurch} title="Молитва за члена церкви" id={sectionMemberId} />
                 {data.members.map((m) => (
                   <MemberCard key={m.id} member={m} />
                 ))}
