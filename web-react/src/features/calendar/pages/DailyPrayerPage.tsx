@@ -20,10 +20,11 @@ import {
   LuChevronLeft,
   LuChevronRight,
   LuChevronUp,
+  LuChurch,
   LuCloudOff,
   LuHammer,
+  LuHandHeart,
   LuHeartHandshake,
-  LuMapPin,
   LuRefreshCw,
   LuUserX,
 } from 'react-icons/lu';
@@ -68,11 +69,13 @@ function SectionHeader({
   title,
   id,
   subtitle,
+  titleClassName,
 }: {
   Icon: IconType;
   title: string;
   id?: string;
   subtitle?: string;
+  titleClassName?: string;
 }) {
   return (
     <div className="mb-4 animate-prayer-fade-up motion-reduce:animate-none">
@@ -84,7 +87,13 @@ function SectionHeader({
           <Icon className="h-5 w-5" />
         </div>
         <div className="min-w-0 flex-1 pt-0.5">
-          <h2 id={id} className="text-[11px] font-extrabold uppercase tracking-[0.14em] text-stone-900">
+          <h2
+            id={id}
+            className={
+              titleClassName ??
+              'text-[11px] font-extrabold uppercase tracking-[0.14em] text-stone-900'
+            }
+          >
             {title}
           </h2>
           {subtitle ? <p className="mt-1 text-[13px] leading-snug text-stone-500">{subtitle}</p> : null}
@@ -623,10 +632,10 @@ export function DailyPrayerPage() {
             {data.members.length > 0 ? (
               <section aria-labelledby={sectionMemberId}>
                 <SectionHeader
-                  Icon={LuHeartHandshake}
-                  title="Молитва за члена церкви"
+                  Icon={LuChurch}
+                  title="СЕГОДНЯ МОЛИМСЯ ЗА ЧЛЕНА ЦЕРКВИ:"
                   id={sectionMemberId}
-                  subtitle="Кто в фокусе молитвы в выбранный день"
+                  titleClassName="text-[10px] font-extrabold uppercase leading-snug tracking-[0.1em] text-stone-900 sm:text-[11px]"
                 />
                 {data.members.map((m, i) => (
                   <MemberCard
@@ -646,15 +655,12 @@ export function DailyPrayerPage() {
 
             {hasThemesOrMinistries ? (
               <section
-                className={data.members.length > 0 ? 'mt-8' : undefined}
+                className={data.members.length > 0 ? 'mt-3' : undefined}
                 aria-labelledby={themesMinistriesRegionId}
               >
-                <SectionHeader
-                  Icon={LuBookOpen}
-                  title="Темы и служения"
-                  id={themesMinistriesRegionId}
-                  subtitle="Пункты молитвы по глобальному расписанию цикла"
-                />
+                <h2 id={themesMinistriesRegionId} className="sr-only">
+                  Темы и служения
+                </h2>
                 {data.global_themes.map((t, i) => (
                   <GlobalThemeCard key={`gt-${t.id}`} theme={t} cardIndex={i} />
                 ))}
@@ -671,15 +677,15 @@ export function DailyPrayerPage() {
             {data.backsliders.length > 0 ? (
               <section
                 className={
-                  data.members.length > 0 || hasThemesOrMinistries ? 'mt-8' : undefined
+                  data.members.length > 0 || hasThemesOrMinistries ? 'mt-3' : undefined
                 }
                 aria-labelledby={sectionBacksliderId}
               >
                 <SectionHeader
-                  Icon={LuMapPin}
-                  title="Отпавшие"
+                  Icon={LuHandHeart}
+                  title="Молимся за отпавшего"
                   id={sectionBacksliderId}
-                  subtitle="Молитва о возвращении к Господу"
+                  titleClassName="text-[11px] font-extrabold uppercase tracking-[0.14em] text-stone-900"
                 />
                 {data.backsliders.map((b, i) => (
                   <BacksliderCard key={b.id} b={b} cardIndex={i} />

@@ -141,11 +141,14 @@ export function Layout() {
 
   return (
     <div className="flex min-h-[100dvh] min-h-screen w-full max-w-[100vw] flex-col bg-[var(--surface)] text-[var(--text)] [padding-left:env(safe-area-inset-left,0px)] [padding-right:env(safe-area-inset-right,0px)]">
-      <ConnectivityBanner />
-      <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col md:flex-row">
-      {/* Планшет/десктоп: сайдбар с md (768px). На узких экранах — нижняя навигация. */}
-      <aside className="hidden w-[min(100%,280px)] shrink-0 flex-col border-r border-stone-200/80 bg-[var(--surface-elevated)] shadow-[4px_0_16px_rgba(0,0,0,0.06)] md:flex md:w-[260px] lg:w-[272px]">
-        <div className="flex flex-1 flex-col gap-1 p-6">
+      {/* На md+ баннер только над контентом, не над фиксированным сайдбаром */}
+      <div className="shrink-0 md:ml-[260px] lg:ml-[272px]">
+        <ConnectivityBanner />
+      </div>
+      <div className="relative flex min-h-0 w-full min-w-0 flex-1 flex-col">
+      {/* Планшет/десктоп: фиксированный сайдбар (не в потоке, не растягивается по ширине main). На узких — нижняя навигация. */}
+      <aside className="hidden w-[260px] max-w-[260px] shrink-0 flex-col overflow-y-auto overflow-x-hidden border-r border-stone-200/80 bg-[var(--surface-elevated)] shadow-[4px_0_16px_rgba(0,0,0,0.06)] md:fixed md:bottom-0 md:left-0 md:top-0 md:z-30 md:flex lg:w-[272px] lg:max-w-[272px] [padding-bottom:env(safe-area-inset-bottom,0px)] [padding-top:env(safe-area-inset-top,0px)]">
+        <div className="flex min-h-0 flex-1 flex-col gap-1 p-6">
           <div className="mb-6 flex items-start gap-3">
             <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-primary/15 text-primary">
               {customLogoDataUrl ? (
@@ -193,8 +196,8 @@ export function Layout() {
         </div>
       </aside>
 
-      {/* Main: отступ сверху под «чёлку», снизу под нижний бар + safe-area */}
-      <main className="min-h-0 w-full min-w-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-y-contain pb-[max(7rem,calc(5rem+env(safe-area-inset-bottom)))] [-webkit-overflow-scrolling:touch] md:pb-0 2xl:px-8 min-[1920px]:px-12">
+      {/* Main: на md+ отступ под фиксированный сайдбар; снизу под нижний бар + safe-area на мобильных */}
+      <main className="min-h-0 w-full min-w-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-y-contain pb-[max(7rem,calc(5rem+env(safe-area-inset-bottom)))] [-webkit-overflow-scrolling:touch] md:ml-[260px] md:pb-0 lg:ml-[272px] 2xl:px-8 min-[1920px]:px-12">
         <Outlet />
       </main>
 
