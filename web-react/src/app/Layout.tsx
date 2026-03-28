@@ -1,7 +1,7 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import type { IconType } from 'react-icons';
-import { LuChurch, LuShield, LuUser, LuWifiOff, LuX } from 'react-icons/lu';
+import { LuChurch, LuShield, LuUser, LuWifiOff, LuX, LuTv } from 'react-icons/lu';
 
 import { LatinCrossIcon } from '../components/LatinCrossIcon';
 import { useAuthStore } from '../features/auth/authStore';
@@ -19,6 +19,7 @@ type NavItem = {
 const NAV_ITEMS: NavItem[] = [
   /** Контурные Lucide — не путать с цветными эмодзи / Font Awesome «картинками». */
   { to: '/prayer', label: 'Молитва', Icon: LuChurch },
+  { to: '/broadcast', label: 'Трансляции', Icon: LuTv },
   { to: '/profile', label: 'Профиль', Icon: LuUser },
   { to: '/admin', label: 'Админ', Icon: LuShield, adminOnly: true },
 ];
@@ -27,7 +28,7 @@ function navIconClass(isActive: boolean, compact: boolean) {
   return [
     compact ? 'h-6 w-6' : 'h-5 w-5',
     'shrink-0 transition-[transform,color] duration-150',
-    isActive ? 'text-white' : 'text-stone-500 group-hover:text-primary group-active:text-primary',
+    isActive && compact ? 'text-primary' : isActive ? 'text-white' : 'text-stone-400 group-hover:text-primary',
   ].join(' ');
 }
 
@@ -101,17 +102,17 @@ function ConnectivityBanner() {
 
 function navClassName(isActive: boolean, compact = false): string {
   const base = compact
-    ? 'group relative flex min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-2xl px-1.5 py-2 text-center font-semibold transition-[transform,background-color,box-shadow,color] duration-150 tap-highlight-transparent touch-manipulation active:scale-[0.94] sm:gap-1 sm:py-2.5'
+    ? 'group relative flex min-w-0 flex-1 flex-col items-center justify-center rounded-xl px-1 py-1.5 transition-[color,transform] duration-150 tap-highlight-transparent touch-manipulation active:scale-[0.92]'
     : 'group flex w-full items-center justify-start gap-3 rounded-2xl px-4 py-3 text-left text-sm font-semibold transition-colors tap-highlight-transparent';
   const size = compact
-    ? 'min-h-[52px] text-[10px] font-bold leading-tight tracking-tight sm:min-h-[54px] sm:text-[11px]'
+    ? 'min-h-[48px]'
     : '';
   const active = isActive
     ? compact
-      ? 'bg-primary text-white shadow-md shadow-primary/30 ring-1 ring-primary/20'
+      ? 'text-primary'
       : 'bg-primary text-white shadow-md shadow-primary/25'
     : compact
-      ? 'text-stone-600 hover:bg-stone-100/90 active:bg-stone-200/80'
+      ? 'text-stone-400 hover:text-stone-700'
       : 'text-stone-600 hover:bg-stone-100 shell:hover:bg-stone-50';
   return `${base} ${size} ${active}`.replace(/\s+/g, ' ').trim();
 }
@@ -203,31 +204,29 @@ export function Layout() {
 
       {/* Телефон: нижняя навигация (иконка + подпись, как в нативных приложениях) */}
       <nav
-        className="pointer-events-none fixed bottom-0 left-0 right-0 z-50 md:hidden"
+        className="fixed bottom-0 left-0 right-0 z-50 border-t border-stone-200/70 bg-[var(--surface-elevated)]/90 pb-[env(safe-area-inset-bottom)] shadow-[0_-4px_24px_rgba(0,0,0,0.04)] backdrop-blur-xl supports-[backdrop-filter]:bg-[var(--surface-elevated)]/80 md:hidden"
         aria-label="Основная навигация"
       >
-        <div className="pointer-events-auto mx-auto max-w-md px-3 pb-[max(0.35rem,env(safe-area-inset-bottom))] pt-2">
-          <div className="flex items-stretch justify-between gap-1 rounded-[1.35rem] border border-stone-200/70 bg-[var(--surface-elevated)]/92 px-1 py-1.5 shadow-[var(--nav-pill-shadow)] backdrop-blur-xl supports-[backdrop-filter]:bg-[var(--surface-elevated)]/88">
-            {items.map((item) => {
-              const Icon = item.Icon;
-              return (
-                <NavLink
-                  key={item.to}
-                  to={item.to}
-                  className={({ isActive }) => navClassName(isActive, true)}
-                >
-                  {({ isActive }) => (
-                    <>
-                      <Icon className={navIconClass(isActive, true)} strokeWidth={2} aria-hidden />
-                      <span className="max-w-[5rem] truncate px-0.5 text-center max-[360px]:max-w-[4.25rem]">
-                        {item.label}
-                      </span>
-                    </>
-                  )}
-                </NavLink>
-              );
-            })}
-          </div>
+        <div className="mx-auto flex max-w-md items-stretch justify-around px-2 pb-1 pt-1">
+          {items.map((item) => {
+            const Icon = item.Icon;
+            return (
+              <NavLink
+                key={item.to}
+                to={item.to}
+                className={({ isActive }) => navClassName(isActive, true)}
+              >
+                {({ isActive }) => (
+                  <>
+                    <Icon className={navIconClass(isActive, true)} strokeWidth={2} aria-hidden />
+                    <span className="mt-1 truncate px-0.5 text-center text-[10px] font-semibold tracking-tight">
+                      {item.label}
+                    </span>
+                  </>
+                )}
+              </NavLink>
+            );
+          })}
         </div>
       </nav>
       </div>

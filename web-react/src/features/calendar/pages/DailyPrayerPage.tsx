@@ -78,31 +78,27 @@ function SectionHeader({
   titleClassName?: string;
 }) {
   return (
-    <div className="mb-4 animate-prayer-fade-up motion-reduce:animate-none">
-      <div className="flex items-start gap-3.5">
+    <div className="mb-4 mt-2 pl-1 pr-1 shell:pr-2 animate-prayer-fade-up motion-reduce:animate-none">
+      <div className="flex items-center gap-3">
         <div
-          className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-primary/[0.14] to-primary/[0.05] text-primary shadow-sm ring-1 ring-primary/[0.12]"
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[12px] bg-gradient-to-br from-[var(--surface-elevated)] to-primary/[0.04] text-primary shadow-sm ring-1 ring-primary/20"
           aria-hidden
         >
           <Icon className="h-5 w-5" />
         </div>
-        <div className="min-w-0 flex-1 pt-0.5">
+        <div className="min-w-0 flex-1">
           <h2
             id={id}
             className={
               titleClassName ??
-              'text-[11px] font-extrabold uppercase tracking-[0.14em] text-stone-900'
+              'text-[16px] font-extrabold tracking-tight text-stone-900'
             }
           >
             {title}
           </h2>
-          {subtitle ? <p className="mt-1 text-[13px] leading-snug text-stone-500">{subtitle}</p> : null}
+          {subtitle ? <p className="mt-0.5 text-[13px] leading-snug text-stone-500">{subtitle}</p> : null}
         </div>
       </div>
-      <div
-        className="mt-3.5 h-px w-full bg-gradient-to-r from-stone-300/90 via-stone-200/55 to-transparent"
-        aria-hidden
-      />
     </div>
   );
 }
@@ -490,6 +486,7 @@ export function DailyPrayerPage() {
 
   return (
     <div className="prayer-page-bg min-h-full pb-6 shell:pb-8">
+      <div className="sticky top-0 z-40 pb-2 bg-[var(--surface)]/95 shadow-[0_4px_16px_rgba(0,0,0,0.02)] backdrop-blur-md supports-[backdrop-filter]:bg-[var(--surface)]/80">
       <header className="relative overflow-hidden bg-gradient-to-br from-primary via-[#6d3039] to-primary-dark px-4 py-4 text-white shadow-[0_8px_32px_rgba(92,40,48,0.35)] sm:px-5 sm:py-5 md:px-6 md:py-5 shell:rounded-none">
         <div
           className="pointer-events-none absolute -right-4 -top-20 h-48 w-48 rounded-full bg-white/[0.13] blur-3xl animate-prayer-header-breathe motion-reduce:animate-none"
@@ -610,6 +607,7 @@ export function DailyPrayerPage() {
           </div>
         </div>
       </div>
+      </div>
 
       <div className="px-4 pt-4 shell:px-6">
         {userCanViewNextWeekPrayerPlan(me) ? (
@@ -625,9 +623,8 @@ export function DailyPrayerPage() {
               <section aria-labelledby={sectionMemberId}>
                 <SectionHeader
                   Icon={LuChurch}
-                  title="СЕГОДНЯ МОЛИМСЯ ЗА ЧЛЕНА ЦЕРКВИ:"
+                  title="Сегодня молимся за члена церкви"
                   id={sectionMemberId}
-                  titleClassName="text-[10px] font-extrabold uppercase leading-snug tracking-[0.1em] text-stone-900 sm:text-[11px]"
                 />
                 {data.members.map((m, i) => (
                   <MemberCard
@@ -677,7 +674,6 @@ export function DailyPrayerPage() {
                   Icon={LuHandHeart}
                   title="Молимся за отпавшего"
                   id={sectionBacksliderId}
-                  titleClassName="text-[11px] font-extrabold uppercase tracking-[0.14em] text-stone-900"
                 />
                 {data.backsliders.map((b, i) => (
                   <BacksliderCard key={b.id} b={b} cardIndex={i} />
