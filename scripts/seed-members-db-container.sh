@@ -39,6 +39,9 @@ else
 fi
 
 echo "[seed-members] compose: docker compose ${COMPOSE_ARGS[*]}"
+if [[ -n "${COMPOSE_FILE:-}" ]]; then
+  echo "[seed-members] Подсказка: сейчас действует переменная COMPOSE_FILE. Для стека по умолчанию (prod-файл, если есть): unset COMPOSE_FILE или npm run db:seed-members:docker:prod"
+fi
 
 # Внутри образа postgres локальное подключение к серверу в том же контейнере обычно без пароля.
 exec docker compose "${COMPOSE_ARGS[@]}" exec -T db \

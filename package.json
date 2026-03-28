@@ -35,6 +35,7 @@
     "db:init": "npx ts-node scripts/runInitDb.ts",
     "db:seed-members": "npx ts-node scripts/seedMembersOnly.ts",
     "db:seed-members:docker": "bash scripts/seed-members-db-container.sh",
+    "db:seed-members:docker:prod": "env -u COMPOSE_FILE bash scripts/seed-members-db-container.sh",
     "quickstart": "bash scripts/quickstart.sh",
     "start-all": "bash ./start-all",
     "go": "bash scripts/project.sh",
