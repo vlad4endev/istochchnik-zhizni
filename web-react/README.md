@@ -1,6 +1,6 @@
 # React-интерфейс (Vite)
 
-Экран **«Молитва дня»** — те же данные, что и у Flutter (`GET /api/calendar/:date`).
+Экран **«Молитва дня»** и остальной UI — данные с `GET /api/...` (см. корневой API).
 
 ## Разработка
 
@@ -25,6 +25,6 @@ npm run dev
 npm run build
 ```
 
-Статика в `web-react/dist/` — можно отдавать nginx вместо Flutter `build/web`.
+Статика в `web-react/dist/` — отдаётся nginx из `Dockerfile.web` или копируется в `release/web/` через `scripts/package-web-for-server.sh`.
 
 Из корня монорепозитория: `npm run web:build`.

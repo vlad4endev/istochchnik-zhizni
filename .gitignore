@@ -5,19 +5,7 @@ dist
 .env
 *.log
 .DS_Store
-.dart_tool/
-build/
-.flutter-plugins
-.flutter-plugins-dependencies
-.packages
 coverage/
-android/.gradle/
-android/local.properties
-ios/Flutter/ephemeral/
-ios/Pods/
-macos/Pods/
-linux/flutter/ephemeral/
-windows/flutter/ephemeral/
 supabase/.temp/
 
 # Артефакты для Dockerfile.web.prebuilt (генерируются локально)

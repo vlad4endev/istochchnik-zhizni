@@ -170,3 +170,37 @@ export async function deleteBacksliderApi(id: number): Promise<void> {
     validateStatus: (s) => s === 204 || (s != null && s < 500),
   });
 }
+
+/** Заявки на доступ (регистрация без автоматического совпадения с карточкой). */
+export interface AccessRequestItem {
+  id: number;
+  first_name: string;
+  last_name: string;
+  phone_number: string;
+  status: 'pending' | 'approved' | 'rejected';
+  member_id: number | null;
+  review_note: string | null;
+  created_at: string;
+  reviewed_at: string | null;
+}
+
+export async function fetchAccessRequests(
+  status?: 'pending' | 'approved' | 'rejected',
+): Promise<AccessRequestItem[]> {
+  const { data } = await apiClient.get<AccessRequestItem[]>('/api/auth/access-requests', {
+    params: status ? { status } : {},
+  });
+  return data;
+}
+
+export async function approveAccessRequest(id: number, review_note?: string): Promise<void> {
+  await apiClient.post(`/api/auth/access-requests/${id}/approve`, {
+    review_note: review_note?.trim() || undefined,
+  });
+}
+
+export async function rejectAccessRequest(id: number, review_note?: string): Promise<void> {
+  await apiClient.post(`/api/auth/access-requests/${id}/reject`, {
+    review_note: review_note?.trim() || undefined,
+  });
+}

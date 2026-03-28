@@ -1,6 +1,7 @@
 import { createHash, randomBytes, scrypt as scryptCallback, timingSafeEqual } from 'crypto';
 import { promisify } from 'util';
 import { query } from '../config/db';
+import { updateUser } from './userService';
 
 const scrypt = promisify(scryptCallback);
 const MIN_PASSWORD_LENGTH = 8;
@@ -22,6 +23,9 @@ export interface AuthUser {
   last_name: string | null;
   name: string;
   phone_number: string | null;
+  birth_date: string | null;
+  email: string | null;
+  prayer_request: string | null;
   app_role: AuthRole;
   is_active: boolean;
   created_at: string;
@@ -69,6 +73,9 @@ type MemberRow = {
   last_name: string | null;
   name: string;
   phone_number: string | null;
+  birth_date: string | null;
+  email: string | null;
+  prayer_request: string | null;
   app_role: string;
   is_active: boolean;
   created_at: string;
@@ -200,6 +207,9 @@ function mapAuthUser(row: MemberRow): AuthUser {
     last_name: row.last_name,
     name: row.name,
     phone_number: row.phone_number,
+    birth_date: row.birth_date ?? null,
+    email: row.email ?? null,
+    prayer_request: row.prayer_request ?? null,
     app_role: normalizeRole(row.app_role),
     is_active: row.is_active,
     created_at: row.created_at,
@@ -491,6 +501,9 @@ export async function registerUser(input: RegisterInput): Promise<RegisterResult
         last_name,
         name,
         phone_number,
+        birth_date,
+        email,
+        prayer_request,
         app_role,
         is_active,
         created_at,
@@ -536,6 +549,9 @@ export async function loginUser(phoneInput: string, password: string): Promise<L
       last_name,
       name,
       phone_number,
+      birth_date,
+      email,
+      prayer_request,
       app_role,
       is_active,
       created_at,
@@ -623,6 +639,9 @@ export async function getAuthUserById(userId: number): Promise<AuthUser | null> 
       last_name,
       name,
       phone_number,
+      birth_date,
+      email,
+      prayer_request,
       app_role,
       is_active,
       created_at,
@@ -636,6 +655,54 @@ export async function getAuthUserById(userId: number): Promise<AuthUser | null> 
 
   const row = result.rows[0] as MemberRow | undefined;
   return row ? mapAuthUser(row) : null;
+}
+
+export async function updateAuthUserProfile(
+  userId: number,
+  input: {
+    first_name?: string;
+    last_name?: string;
+    phone_number?: string;
+    birth_date?: string;
+    email?: string;
+    prayer_request?: string;
+  }
+): Promise<AuthUser | null> {
+  const updated = await updateUser(userId, input);
+  if (!updated) {
+    return null;
+  }
+  return getAuthUserById(userId);
+}
+
+export async function changeMemberPassword(
+  userId: number,
+  currentPassword: string,
+  newPassword: string
+): Promise<'ok' | 'wrong_password' | 'no_password' | 'weak_password'> {
+  try {
+    ensureValidPassword(newPassword);
+  } catch {
+    return 'weak_password';
+  }
+  const result = await query(
+    `SELECT password_hash FROM members WHERE id = $1 AND is_active = TRUE LIMIT 1`,
+    [userId]
+  );
+  const row = result.rows[0] as { password_hash: string | null } | undefined;
+  const hash = row?.password_hash;
+  if (!hash) {
+    return 'no_password';
+  }
+  if (!(await verifyPassword(currentPassword, hash))) {
+    return 'wrong_password';
+  }
+  const newHash = await hashPassword(newPassword);
+  await query(`UPDATE members SET password_hash = $1, updated_at = NOW() WHERE id = $2`, [
+    newHash,
+    userId,
+  ]);
+  return 'ok';
 }
 
 export async function listAccessRequests(status?: AccessRequestStatus): Promise<AccessRequestItem[]> {
@@ -733,6 +800,9 @@ export async function approveAccessRequest(
         last_name,
         name,
         phone_number,
+        birth_date,
+        email,
+        prayer_request,
         app_role,
         is_active,
         created_at,
@@ -758,6 +828,9 @@ export async function approveAccessRequest(
         last_name,
         name,
         phone_number,
+        birth_date,
+        email,
+        prayer_request,
         app_role,
         is_active,
         created_at,

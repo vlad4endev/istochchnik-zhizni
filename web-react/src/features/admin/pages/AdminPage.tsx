@@ -4,6 +4,7 @@ import { type FormEvent, useEffect, useMemo, useState } from 'react';
 import { LuCross, LuImage, LuPenLine } from 'react-icons/lu';
 
 import { ADMIN_TABS, type AdminTabId } from '../adminTabs';
+import { AccessRequestsSection } from '../AccessRequestsSection';
 import { useBrandingStore } from '../../branding/brandingStore';
 import {
   apiErrorMessage,
@@ -175,6 +176,7 @@ export function AdminPage() {
         </div>
 
         {tab === 'members' && <MembersSection />}
+        {tab === 'requests' && <AccessRequestsSection />}
         {tab === 'calendar' && <CalendarSection />}
         {tab === 'templates' && <TemplatesSection />}
         {tab === 'project' && <ProjectSection />}

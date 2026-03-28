@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import axios from 'axios';
 import { format } from 'date-fns';
 import { ru } from 'date-fns/locale';
@@ -15,7 +15,7 @@ import {
   LuRefreshCw,
   LuUserRound,
 } from 'react-icons/lu';
-import { type ReactNode, useId, useState } from 'react';
+import { type ReactNode, useEffect, useId, useState } from 'react';
 import { DayPicker } from 'react-day-picker';
 
 import {
@@ -24,6 +24,7 @@ import {
   resolveAxiosBaseURL,
 } from '../../../lib/config';
 import type { Backslider, DayPrayerData, GlobalTheme, Member, Ministry } from '../../../types';
+import { fetchMe, patchProfile } from '../../profile/api';
 import { formatCalendarDayKey, getCalendarDay } from '../api';
 
 import 'react-day-picker/style.css';
@@ -114,11 +115,67 @@ function PrayerCard(props: {
   );
 }
 
-function MemberCard({ member }: { member: Member }) {
+function MemberCard({
+  member,
+  currentUserId,
+  onPrayerSaved,
+}: {
+  member: Member;
+  currentUserId: number | null;
+  onPrayerSaved: () => void;
+}) {
+  const isMe = currentUserId != null && member.id === currentUserId;
+  const [editText, setEditText] = useState(member.prayer_request ?? '');
+  const [saving, setSaving] = useState(false);
+  const [saveErr, setSaveErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    setEditText(member.prayer_request ?? '');
+  }, [member.id, member.prayer_request]);
+
+  async function savePrayer() {
+    setSaving(true);
+    setSaveErr(null);
+    try {
+      await patchProfile({ prayer_request: editText });
+      onPrayerSaved();
+    } catch (e) {
+      setSaveErr(loadErrorDescription(e) ?? 'Не удалось сохранить');
+    } finally {
+      setSaving(false);
+    }
+  }
+
   const hasRequest = member.prayer_request != null && member.prayer_request.trim().length > 0;
+
   return (
     <PrayerCard Icon={LuUserRound} title={member.name} accentVar="var(--member)">
-      {hasRequest ? (
+      {isMe ? (
+        <div className="space-y-3">
+          <label className="block">
+            <span className="text-[11px] font-extrabold uppercase tracking-[0.1em] text-stone-500">
+              Ваша молитвенная нужда
+            </span>
+            <textarea
+              value={editText}
+              onChange={(e) => setEditText(e.target.value)}
+              rows={5}
+              maxLength={8000}
+              className="mt-2 w-full rounded-xl border border-stone-200 bg-white px-3 py-2.5 text-[15px] text-stone-800 outline-none ring-primary/20 focus:border-primary focus:ring-2"
+              placeholder="О чём просим молиться…"
+            />
+          </label>
+          {saveErr ? <p className="text-sm text-red-600">{saveErr}</p> : null}
+          <button
+            type="button"
+            disabled={saving}
+            onClick={() => void savePrayer()}
+            className="rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-white shadow-md shadow-primary/20 disabled:opacity-60"
+          >
+            {saving ? 'Сохранение…' : 'Сохранить'}
+          </button>
+        </div>
+      ) : hasRequest ? (
         <p className="text-[16px] text-stone-600">{member.prayer_request}</p>
       ) : (
         <p className="italic text-stone-400">Нет указанных нужд</p>
@@ -266,8 +323,15 @@ const CAL_START = new Date(2020, 0, 1);
 const CAL_END = new Date(2030, 11, 31);
 
 export function DailyPrayerPage() {
+  const qc = useQueryClient();
   const [selected, setSelected] = useState<Date>(() => new Date());
   const [calendarExpanded, setCalendarExpanded] = useState(false);
+
+  const { data: me } = useQuery({
+    queryKey: ['auth', 'me'],
+    queryFn: fetchMe,
+    staleTime: 60_000,
+  });
 
   const sectionMemberId = useId();
   const sectionThemesId = useId();
@@ -297,7 +361,7 @@ export function DailyPrayerPage() {
         <h1 className="text-2xl font-extrabold leading-tight tracking-tight shell:text-[26px]">Молитва</h1>
       </header>
 
-      {/* Чип даты (как во Flutter) */}
+      {/* Чип даты */}
       <div className="px-4 pt-2.5 shell:px-6">
         <button
           type="button"
@@ -379,7 +443,14 @@ export function DailyPrayerPage() {
               <section aria-labelledby={sectionMemberId}>
                 <SectionHeader Icon={LuChurch} title="Молитва за члена церкви" id={sectionMemberId} />
                 {data.members.map((m) => (
-                  <MemberCard key={m.id} member={m} />
+                  <MemberCard
+                    key={m.id}
+                    member={m}
+                    currentUserId={me?.id ?? null}
+                    onPrayerSaved={() =>
+                      void qc.invalidateQueries({ queryKey: ['calendar', 'day', dateKey] })
+                    }
+                  />
                 ))}
               </section>
             ) : null}

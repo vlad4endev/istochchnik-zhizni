@@ -1,6 +1,5 @@
 # Prebuilt React (без npm в Docker): положите артефакты в release/web/ (см. scripts/package-web-for-server.sh).
 #   docker compose -f docker-compose.yml -f docker-compose.prod.overlay.yml -f docker-compose.web-prebuilt.yml up -d --build
-# Legacy Flutter: Dockerfile.web.flutter или старый package-web (см. историю репо).
 
 services:
   web:

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Подготовка окружения: .env, зависимости, проверка сборки.
+# Подготовка окружения: .env, зависимости, проверка сборки API и web-react.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
@@ -21,35 +21,32 @@ if ! command -v node >/dev/null 2>&1; then
   exit 1
 fi
 
-echo "npm install..."
+echo "npm install (корень)..."
 npm install
+
+if [[ -f web-react/package.json ]]; then
+  echo "npm install (web-react)..."
+  npm --prefix web-react install
+fi
 
 echo "npm run build (TypeScript API)..."
 npm run build
 
-if command -v flutter >/dev/null 2>&1; then
-  echo "flutter pub get..."
-  flutter pub get
-else
-  echo "Предупреждение: flutter не найден в PATH — пропускаю flutter pub get (нужен для UI)."
-fi
-
 echo ""
 echo "Готово. Дальше выберите вариант:"
 echo ""
-echo "  A) Только Postgres в Docker, API+Flutter на Mac/ПК (без Docker для Node):"
-echo "       cp .env.local.example .env"
-echo "       npm install && npm run db:up"
-echo "       npm run dev:all"
-echo "       Или в двух терминалах: npm run dev  и  flutter run ... (см. README)"
+echo "  A) Postgres в Docker, API + React (Vite) на хосте:"
+echo "       cp .env.local.example .env   # при необходимости"
+echo "       npm run db:up"
+echo "       npm run start-all            # или: npm run dev:start:fg"
 echo ""
 echo "  B) Postgres + API + веб (nginx) целиком в Docker:"
 echo "       docker compose up -d --build"
 echo "       Веб: http://localhost:8080  •  health: http://localhost:8080/health"
 echo ""
-echo "  C) Только API на хосте (в .env уже указан Supabase или другой DATABASE_URL):"
+echo "  C) Только API на хосте:"
 echo "       npm run dev"
 echo ""
-echo "  D) Flutter в браузере + API в фоне (bash, нужен flutter):"
+echo "  D) API + Vite в фоне:"
 echo "       npm run dev:start"
 echo ""

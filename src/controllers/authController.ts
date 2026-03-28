@@ -1,12 +1,14 @@
 import { Request, Response } from 'express';
 import {
   approveAccessRequest,
+  changeMemberPassword,
   getAuthUserById,
   listAccessRequests,
   loginUser,
   logoutByToken,
   rejectAccessRequest,
   registerUser,
+  updateAuthUserProfile,
 } from '../services/authService';
 
 type AuthRequest = Request & {
@@ -29,6 +31,50 @@ function parseId(value: string): number | null {
     return null;
   }
   return parsed;
+}
+
+function isValidDateYmd(value: unknown): boolean {
+  if (typeof value !== 'string') {
+    return false;
+  }
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) {
+    return false;
+  }
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return (
+    date.getUTCFullYear() === year &&
+    date.getUTCMonth() === month - 1 &&
+    date.getUTCDate() === day
+  );
+}
+
+function isValidPhoneForProfile(value: unknown): boolean {
+  if (typeof value !== 'string') {
+    return false;
+  }
+  const normalized = value.trim();
+  if (normalized.length < 7 || normalized.length > 20) {
+    return false;
+  }
+  return /^[0-9+\-() ]+$/.test(normalized);
+}
+
+function isValidOptionalEmail(value: unknown): boolean {
+  if (value === undefined || value === null) {
+    return true;
+  }
+  if (typeof value !== 'string') {
+    return false;
+  }
+  const t = value.trim();
+  if (t.length === 0) {
+    return true;
+  }
+  return t.length <= 255 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(t);
 }
 
 function normalizePhoneDigits(phone: string): string {
@@ -156,6 +202,152 @@ export async function meHandler(req: Request, res: Response): Promise<void> {
     res.json(user);
   } catch (error) {
     console.error('Failed to fetch current user', error);
+    res.status(500).json({ error: 'Database error' });
+  }
+}
+
+export async function patchProfileHandler(req: Request, res: Response): Promise<void> {
+  const authReq = req as AuthRequest;
+  if (!authReq.authUserId) {
+    res.status(401).json({ error: 'Authentication required' });
+    return;
+  }
+
+  const body = req.body as Record<string, unknown>;
+  const hasFirst = body.first_name !== undefined;
+  const hasLast = body.last_name !== undefined;
+  if (hasFirst !== hasLast) {
+    res.status(400).json({ error: 'Fields "first_name" and "last_name" must be sent together' });
+    return;
+  }
+  if (hasFirst && hasLast) {
+    if (typeof body.first_name !== 'string' || !body.first_name.trim()) {
+      res.status(400).json({ error: 'Field "first_name" is required' });
+      return;
+    }
+    if (typeof body.last_name !== 'string' || !body.last_name.trim()) {
+      res.status(400).json({ error: 'Field "last_name" is required' });
+      return;
+    }
+  }
+
+  if (body.phone_number !== undefined && !isValidPhoneForProfile(body.phone_number)) {
+    res.status(400).json({ error: 'Field "phone_number" must be valid' });
+    return;
+  }
+
+  if (body.birth_date !== undefined && body.birth_date !== null) {
+    if (typeof body.birth_date === 'string' && body.birth_date.trim() === '') {
+      /* clear */
+    } else if (!isValidDateYmd(body.birth_date)) {
+      res.status(400).json({ error: 'Field "birth_date" must be YYYY-MM-DD or empty' });
+      return;
+    }
+  }
+
+  if (!isValidOptionalEmail(body.email)) {
+    res.status(400).json({ error: 'Field "email" must be a valid address or empty' });
+    return;
+  }
+
+  const MAX_PRAYER_REQUEST_CHARS = 8000;
+  if (body.prayer_request !== undefined) {
+    if (typeof body.prayer_request !== 'string') {
+      res.status(400).json({ error: 'Field "prayer_request" must be a string' });
+      return;
+    }
+    if (body.prayer_request.length > MAX_PRAYER_REQUEST_CHARS) {
+      res.status(400).json({
+        error: `Field "prayer_request" must be at most ${MAX_PRAYER_REQUEST_CHARS} characters`,
+      });
+      return;
+    }
+  }
+
+  const patch: {
+    first_name?: string;
+    last_name?: string;
+    phone_number?: string;
+    birth_date?: string;
+    email?: string;
+    prayer_request?: string;
+  } = {};
+
+  if (hasFirst && hasLast) {
+    patch.first_name = (body.first_name as string).trim();
+    patch.last_name = (body.last_name as string).trim();
+  }
+  if (typeof body.phone_number === 'string') {
+    patch.phone_number = body.phone_number.trim();
+  }
+  if (body.birth_date !== undefined) {
+    if (body.birth_date === null || (typeof body.birth_date === 'string' && !body.birth_date.trim())) {
+      patch.birth_date = '';
+    } else if (typeof body.birth_date === 'string') {
+      patch.birth_date = body.birth_date.trim();
+    }
+  }
+  if (typeof body.email === 'string') {
+    patch.email = body.email.trim();
+  }
+  if (typeof body.prayer_request === 'string') {
+    patch.prayer_request = body.prayer_request;
+  }
+
+  if (Object.keys(patch).length === 0) {
+    res.status(400).json({ error: 'No valid fields to update' });
+    return;
+  }
+
+  try {
+    const user = await updateAuthUserProfile(authReq.authUserId, patch);
+    if (!user) {
+      res.status(404).json({ error: 'User not found' });
+      return;
+    }
+    res.json(user);
+  } catch (error: unknown) {
+    const pg = error as { code?: string };
+    if (pg.code === '23505') {
+      res.status(409).json({ error: 'Этот email уже используется' });
+      return;
+    }
+    console.error('Failed to update profile', error);
+    res.status(500).json({ error: 'Database error' });
+  }
+}
+
+export async function changePasswordHandler(req: Request, res: Response): Promise<void> {
+  const authReq = req as AuthRequest;
+  if (!authReq.authUserId) {
+    res.status(401).json({ error: 'Authentication required' });
+    return;
+  }
+
+  const currentPassword = readStringField(req.body.current_password);
+  const newPassword = readStringField(req.body.new_password);
+  if (!currentPassword || !newPassword) {
+    res.status(400).json({ error: 'Fields "current_password" and "new_password" are required' });
+    return;
+  }
+
+  try {
+    const result = await changeMemberPassword(authReq.authUserId, currentPassword, newPassword);
+    if (result === 'ok') {
+      res.status(204).send();
+      return;
+    }
+    if (result === 'wrong_password') {
+      res.status(401).json({ error: 'Неверный текущий пароль' });
+      return;
+    }
+    if (result === 'no_password') {
+      res.status(409).json({ error: 'Для аккаунта не задан пароль' });
+      return;
+    }
+    res.status(400).json({ error: `Пароль должен быть не короче ${MIN_PASSWORD_LENGTH} символов` });
+  } catch (error) {
+    console.error('Failed to change password', error);
     res.status(500).json({ error: 'Database error' });
   }
 }

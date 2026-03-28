@@ -1,13 +1,5 @@
-# Не добавляйте сюда: lib/, web/, pubspec.yaml, assets/, scripts/ — иначе Flutter-сборка на Vercel сломается.
+# Ускорение загрузки репозитория на Vercel: исключаем тяжёлые/не нужные для сборки web-react каталоги.
 node_modules
 dist
-.dart_tool
-android
-ios
-linux
-macos
-windows
+release
 .git
-**/.DS_Store
-coverage
-*.log

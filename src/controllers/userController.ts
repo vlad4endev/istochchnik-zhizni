@@ -108,9 +108,19 @@ export async function getUser(req: Request, res: Response): Promise<void> {
 }
 
 export async function getPrayerRequestHistoryHandler(req: Request, res: Response): Promise<void> {
+  const authReq = req as Request & { authUserId?: number; authUserRole?: string };
   const userId = parseUserId(req.params.id);
   if (!userId) {
     res.status(400).json({ error: 'Invalid user id' });
+    return;
+  }
+
+  if (!authReq.authUserId) {
+    res.status(401).json({ error: 'Authentication required' });
+    return;
+  }
+  if (authReq.authUserRole !== 'admin' && authReq.authUserId !== userId) {
+    res.status(403).json({ error: 'Access denied' });
     return;
   }
 

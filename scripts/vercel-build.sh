@@ -1,13 +1,8 @@
 #!/usr/bin/env bash
-# Сборка Flutter web на Vercel. Нужна переменная API_BASE_URL (см. Vercel → Environment Variables).
+# Сборка web-react (Vite) на Vercel. Задайте VITE_API_BASE_URL или API_BASE_URL в Vercel → Environment Variables.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
-
-export FLUTTER_SUPPRESS_ANALYTICS=true
-export GIT_TERMINAL_PROMPT=0
-# Режим CI: Vercel часто запускает билд от root — предупреждение Flutter «Woah! root» можно игнорировать.
-export CI=true
 
 log() {
   echo "[vercel-build] $*"
@@ -18,57 +13,32 @@ fail() {
   exit 1
 }
 
-# Дубликат имени (если случайно завели как у Next.js)
-if [[ -z "${API_BASE_URL:-}" && -n "${NEXT_PUBLIC_API_BASE_URL:-}" ]]; then
-  export API_BASE_URL="$NEXT_PUBLIC_API_BASE_URL"
+if [[ -z "${VITE_API_BASE_URL:-}" && -n "${API_BASE_URL:-}" ]]; then
+  export VITE_API_BASE_URL="$API_BASE_URL"
+fi
+if [[ -z "${VITE_API_BASE_URL:-}" && -n "${NEXT_PUBLIC_API_BASE_URL:-}" ]]; then
+  export VITE_API_BASE_URL="$NEXT_PUBLIC_API_BASE_URL"
 fi
 
-log "VERCEL_ENV=${VERCEL_ENV:-unset} (Preview-деплои требуют отдельной галочки для переменной)"
+log "VERCEL_ENV=${VERCEL_ENV:-unset}"
 
-if [[ -z "${API_BASE_URL:-}" ]]; then
-  fail "Переменная API_BASE_URL не задана на шаге Build.
+if [[ -z "${VITE_API_BASE_URL:-}" ]]; then
+  fail "Задайте переменную VITE_API_BASE_URL или API_BASE_URL (публичный URL API без слэша в конце).
 
-Что сделать в Vercel:
-  1) Project → Settings → Environment Variables → Add New
-  2) Name: API_BASE_URL
-  3) Value: публичный URL вашего API, например https://api.example.com (без слэша в конце)
-  4) Environments: отметьте ВСЕ, что используете — как минимум Production И Preview
-     (ветки и PR собираются как Preview; если галочка только у Production — сборка Preview упадёт)
-  5) Save → Deployments → … → Redeploy
+В Vercel: Project → Settings → Environment Variables:
+  Name: API_BASE_URL (или сразу VITE_API_BASE_URL)
+  Value: https://api.example.com
+  Environments: Production и Preview
 
-Локальная проверка: API_BASE_URL=https://... bash scripts/vercel-build.sh"
+Локально: API_BASE_URL=https://… bash scripts/vercel-build.sh"
 fi
 
-log "API_BASE_URL задан (длина ${#API_BASE_URL} символов)"
+log "VITE_API_BASE_URL задан (длина ${#VITE_API_BASE_URL} символов)"
 
-FLUTTER_ROOT="${FLUTTER_ROOT:-$HOME/flutter_sdk_vercel}"
-if [[ ! -x "$FLUTTER_ROOT/bin/flutter" ]]; then
-  log "Клонирование Flutter stable (shallow)..."
-  rm -rf "$FLUTTER_ROOT"
-  git clone --depth 1 --branch stable https://github.com/flutter/flutter.git "$FLUTTER_ROOT" \
-    || fail "git clone Flutter не удался (сеть или лимиты). Повторите деплой."
-fi
+log "npm run build (web-react)…"
+(
+  cd web-react
+  npm run build
+)
 
-export PATH="$FLUTTER_ROOT/bin:$PATH"
-
-log "Flutter: $(flutter --version | head -1)"
-
-# Без интерактива; precache не обязателен и иногда падает по таймауту на CI
-flutter config --no-analytics >/dev/null
-flutter config --enable-web >/dev/null
-
-log "pub get..."
-flutter pub get
-
-log "build web..."
-# Без --no-web-resources-cdn CanvasKit тянется с gstatic (часто блокируется).
-flutter build web --release \
-  --base-href=/ \
-  --no-web-resources-cdn \
-  --dart-define=API_BASE_URL="$API_BASE_URL"
-
-# Рантайм-конфиг для web: клиент читает `/api-config.json` с того же origin (см. AppConfig.initializeForWeb).
-log "Writing build/web/api-config.json..."
-node -e "const fs=require('fs'); fs.writeFileSync('build/web/api-config.json', JSON.stringify({apiBaseUrl: process.argv[1]}));" "$API_BASE_URL"
-
-log "Готово: build/web"
+log "Готово: web-react/dist"

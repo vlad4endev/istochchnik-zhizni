@@ -1,8 +1,8 @@
 import type { IconType } from 'react-icons';
-import { LuCalendarDays, LuPalette, LuSparkles, LuUsersRound } from 'react-icons/lu';
+import { LuCalendarDays, LuInbox, LuPalette, LuSparkles, LuUsersRound } from 'react-icons/lu';
 
 export interface AdminTabConfig {
-  id: 'members' | 'calendar' | 'templates' | 'project';
+  id: 'members' | 'requests' | 'calendar' | 'templates' | 'project';
   label: string;
   Icon: IconType;
   short: string;
@@ -17,6 +17,13 @@ export const ADMIN_TABS: readonly AdminTabConfig[] = [
     Icon: LuUsersRound,
     short: 'Люди',
     description: 'Карточки, роли, доступ и разовая дата в цикле молитв.',
+  },
+  {
+    id: 'requests',
+    label: 'Заявки',
+    Icon: LuInbox,
+    short: 'Вход',
+    description: 'Одобрение регистраций, когда ФИО и телефон не совпали с карточкой автоматически.',
   },
   {
     id: 'calendar',

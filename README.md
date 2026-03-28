@@ -1,45 +1,43 @@
 # istochchnik_zhizni
 
-Монорепозиторий с Flutter UI и Node.js/TypeScript API.
+Монорепозиторий: **React (Vite)** в `web-react/` и **Node.js/TypeScript API** в `src/`.
 
 ## Чтобы всё заработало (кратко)
 
 ### Локальный веб-сервис (рекомендуется: БД + API + веб в Docker)
 
-Один стек: Postgres, Node API и Flutter web за **nginx** на одном порту для браузера — без отдельной настройки `API_BASE_URL` для LAN.
+Один стек: Postgres, Node API и статика **web-react** за **nginx** на одном порту для браузера — без отдельной настройки `VITE_API_BASE_URL` для LAN (запросы на тот же origin, `/api` в nginx).
 
 1. **Один раз:** `npm run quickstart` или `cp .env.example .env` и при необходимости `npm ci && npm run build`. В **`.env`** задайте **`DATABASE_URL`**:
    - **Всё локально:** строка с `db:5432` из `.env.example` (Postgres поднимается вместе с compose).
    - **Supabase:** URI из Supabase (pooler **5432**), `?sslmode=require`, плюс `DB_SSL=true`, `DB_SSL_REJECT_UNAUTHORIZED=false`, `SKIP_DB_INIT_ON_START=true`.
-2. **Запуск:** `docker compose up -d --build` (или `npm run prod:start`). Первый раз дольше — собирается образ Flutter web.
+2. **Запуск:** `docker compose up -d --build` (или `npm run prod:start`). Собирается образ **`Dockerfile.web`** (Vite → nginx).
 3. **Откройте в браузере:** [http://localhost:8080](http://localhost:8080) — интерфейс. Запросы к API идут на **тот же хост** (`/api/...`, прокси в nginx).
 4. **Проверки:** [http://localhost:8080/health](http://localhost:8080/health) (через nginx) и при необходимости прямой API: [http://localhost:40978/health](http://localhost:40978/health).
 
 Порт веба меняется переменной **`WEB_PORT`** в `.env`. Только API и БД без nginx: `docker compose up -d db api`.
 
-### Разработка без Docker (Flutter + API в терминале)
+### Разработка без Docker (React + API в терминале)
 
-- `npm run dev:start` — Flutter в Chrome и API в фоне.
-- Для Vercel задайте **`API_BASE_URL`** в настройках проекта (см. ниже).
+- `npm run start-all` или `npm run dev:start:fg` — API и Vite в одном терминале.
+- `npm run dev:start` — то же в фоне (лог `.run/dev-bg.log`).
+- `npm run go:start` — API + Vite + при необходимости `db:up` (см. `scripts/project.sh`).
+
+Для деплоя фронта на Vercel задайте **`VITE_API_BASE_URL`** или **`API_BASE_URL`** (см. ниже).
 
 Если API не стартует — проверьте **`DATABASE_URL`** в **`.env`** и доступность базы.
 
-### Docker на сервере: `storage.googleapis.com` / таймаут при `flutter build web`
+### Готовая статика без сборки Node в Docker на сервере
 
-Сборка образа **web** качает Web SDK с Google. Если с сервера до него нет доступа:
+На слабом VPS надёжно собрать фронт локально и залить **`release/web/`**:
 
-1. **Зеркало (часто помогает из РФ/КНР):** в **`.env`** раскомментируйте и задайте:
-   ```env
-   FLUTTER_STORAGE_BASE_URL=https://storage.flutter-io.cn
-   PUB_HOSTED_URL=https://pub.flutter-io.cn
-   ```
-   Затем снова `docker compose build --no-cache web` (или `npm run prod:deploy`).
+```bash
+bash scripts/package-web-for-server.sh
+# скопируйте release/web/ на сервер, затем:
+npm run prod:deploy:prebuilt
+```
 
-2. **Без Flutter на сервере (надёжно):** на своём ПК с Flutter выполните `bash scripts/package-web-for-server.sh`, скопируйте на сервер папку **`release/web/`**, затем:
-   ```bash
-   npm run prod:deploy:prebuilt
-   ```
-   (используется **`Dockerfile.web.prebuilt`** и **`docker-compose.web-prebuilt.yml`**).
+Используются **`Dockerfile.web.prebuilt`** и **`docker-compose.web-prebuilt.yml`**.
 
 ### Supabase: `Circuit breaker open` или ошибка на порту 6543
 
@@ -129,7 +127,7 @@ npm run prod:start
 
 После запуска:
 
-- **Веб-интерфейс:** `http://localhost:8080` (или `WEB_PORT` из `.env`) — nginx отдаёт Flutter и проксирует `/api` и `/health` к API.
+- **Веб-интерфейс:** `http://localhost:8080` (или `WEB_PORT` из `.env`) — nginx отдаёт сборку **web-react** и проксирует `/api` и `/health` к API.
 - API напрямую: `http://localhost:40978`
 - Health: `http://localhost:8080/health` или `http://localhost:40978/health`
 - Корень API: `http://localhost:40978/` (JSON «Server is running»)
@@ -139,12 +137,10 @@ npm run prod:start
 
 Варианты:
 
-- **Один стек (API + веб, сборка Flutter на сервере):** `docker-compose.portainer.stack.yml` — удобно, если на VPS хватает RAM/CPU под `flutter build`.
+- **Один стек (API + веб, сборка Vite в Docker):** `docker-compose.portainer.stack.yml` — образ `Dockerfile.web`.
 - **Два стека (надёжно на слабом VPS):**
   1. **API** — `docker-compose.portainer.yml` (секреты только через Environment в Portainer).
-  2. **Только nginx + готовая папка** — `docker-compose.portainer.web-runtime.yml` (без `flutter build` на сервере; соберите web локально и залейте в `WEB_DIST_PATH`).
-
-Это позволяет избежать частых падений сборки Flutter на слабом VPS.
+  2. **Только nginx + готовая папка** — `docker-compose.portainer.web-runtime.yml` (соберите web локально и залейте в `WEB_DIST_PATH`).
 
 #### API stack variables (Portainer)
 
@@ -161,17 +157,16 @@ AUTH_MAX_ACTIVE_SESSIONS_PER_USER=5
 
 #### Web runtime deployment
 
-1) Локально соберите Flutter web:
+1) Локально соберите фронт:
 
 ```bash
-flutter pub get
-flutter build web --release --dart-define=API_BASE_URL=http://<SERVER_IP>:40978
+bash scripts/package-web-for-server.sh
 ```
 
-2) Скопируйте артефакты на сервер в `WEB_DIST_PATH` (например, `/opt/istochik-web`):
+2) Скопируйте **`release/web/`** на сервер в `WEB_DIST_PATH` (например, `/opt/istochik-web`):
 
 ```bash
-rsync -av --delete build/web/ user@<SERVER_IP>:/opt/istochik-web/
+rsync -av --delete release/web/ user@<SERVER_IP>:/opt/istochik-web/
 ```
 
 3) Разверните web runtime stack (`docker-compose.portainer.web-runtime.yml`) с переменными:
@@ -214,57 +209,50 @@ npm run prod:stop     # остановка всех служб
 npm run prod:fresh    # полный пересоздание (с удалением volume БД)
 ```
 
-## Flutter Web and API URL
+## React (Vite) и URL API
 
-Во Flutter убран хардкод `localhost:40978`; теперь используется `API_BASE_URL` через `--dart-define`.
+В **web-react** базовый URL API задаётся переменной окружения **`VITE_API_BASE_URL`** на этапе сборки. Локально в dev можно не задавать: запросы идут на тот же origin, Vite проксирует `/api` на бэкенд (`vite.config.ts`).
 
-### Локальный запуск Flutter с внешним API
-
-```bash
-flutter run -d chrome --dart-define=API_BASE_URL=http://localhost:40978
-```
-
-### Build Flutter web для продакшена
+### Сборка web-react для продакшена
 
 ```bash
-flutter build web --release --dart-define=API_BASE_URL=https://your-api-domain.com
+cd web-react
+VITE_API_BASE_URL=https://your-api-domain.com npm run build
 ```
+
+Из корня: передайте переменную в окружении перед `npm run web:build`.
 
 ### Деплой фронтенда на Vercel
 
-На Vercel публикуется **только Flutter web** (статический `build/web`). **Node API** должен быть уже развёрнут отдельно (Docker, Railway, Render, VPS и т.д.) и доступен по HTTPS.
+Публикуется статика **`web-react/dist`**. **Node API** должен быть развёрнут отдельно (Docker, Railway, Render, VPS и т.д.) и доступен по HTTPS.
 
-**Важно:** точка входа API в репозитории — `src/main.ts`, не `src/index.ts`. Vercel автоматически подключает Express, если найден `src/index.ts`, и тогда вместо Flutter отдаётся serverless API (в логах будет `[db] DATABASE_URL is not set` на `GET /`).
+**Важно:** точка входа API в репозитории — `src/main.ts`, не `src/index.ts`. Vercel автоматически подключает Express, если найден `src/index.ts`, и тогда вместо статики отдаётся serverless API.
 
 1. Подключите репозиторий к [Vercel](https://vercel.com).
-2. В **Settings → Environment Variables** добавьте **`API_BASE_URL`** (полный URL API без слэша в конце). **Обязательно** отметьте окружения **Production** и **Preview** (деплой с ветки `main` — Production; PR и другие ветки — Preview; если у переменной только Production, сборка Preview упадёт с «API_BASE_URL не задана»). Сохраните и сделайте **Redeploy**.
-3. Сборка задаётся в `vercel.json`: `scripts/vercel-build.sh` ставит Flutter stable и выполняет `flutter build web --release`.
-4. После деплоя проверьте сайт; в браузере не должно быть обращений к `localhost` (иначе в билде не подставился `API_BASE_URL`).
+2. В **Settings → Environment Variables** добавьте **`API_BASE_URL`** или сразу **`VITE_API_BASE_URL`** (полный URL API без слэша в конце). Отметьте **Production** и **Preview**.
+3. Сборка: `vercel.json` → `npm ci --prefix web-react`, затем `scripts/vercel-build.sh` (`npm run build` в `web-react`).
+4. После деплоя проверьте сайт; в прод-сборке не должно остаться обращений к `localhost` вместо реального API.
 
 **CORS:** API использует открытый `cors()` — запросы с домена Vercel обычно проходят. Если ограничите CORS на бэкенде, добавьте origin вида `https://<проект>.vercel.app`.
 
-**Белый экран после деплоя:** сборка на Vercel использует `--no-web-resources-cdn`, чтобы CanvasKit не загружался с CDN Google (в части сетей он недоступен — тогда интерфейс не поднимается). После правок сделайте redeploy. В DevTools → Network проверьте, что нет массовых 404 по `main.dart.js` / `flutter_bootstrap.js`.
+**Чеклист:**
 
-**Логи Vercel:** строка `Woah! You appear to be trying to run flutter as root` — ожидаемо на их сборщике; на результат не влияет. Сообщение `flutter pub outdated` — только напоминание про новые версии пакетов, не ошибка.
-
-**Дальше (чеклист):**
-
-1. **Два разных URL:** в браузере для приложения — домен **Vercel** (`https://….vercel.app`). Ответ `{"message":"Server is running"}` — это только **API**; интерфейс там не откроется.
-2. Локальная проверка «как на Vercel» перед пушем:
+1. В браузере приложение — домен **Vercel**; ответ `{"message":"Server is running"}` на URL API — это только бэкенд.
+2. Локальная проверка сборки как на Vercel:
    ```bash
    export API_BASE_URL=https://ваш-реальный-api
    bash scripts/vercel-build.sh
    ```
-   затем можно открыть `build/web/index.html` через любой статический сервер или задеплоить снова.
-3. **HTTPS:** с страницы Vercel (https) браузер блокирует запросы к **http**-API; для прода у API нужен HTTPS или прокси с TLS.
-4. После `git push` в `main` GitHub Actions (`.github/workflows/flutter-web.yml`) проверит, что веб-сборка собирается.
+3. **HTTPS:** со страницы Vercel (https) браузер блокирует запросы к **http**-API без прокси/TLS.
+
+4. GitHub Actions (`.github/workflows/web-react.yml`) проверяет сборку `web-react` на `main`.
 
 ## Локальный запуск всех сервисов в фоне
 
 ```bash
-npm run dev:start      # API + Flutter в фоне
+npm run dev:start      # API + Vite в фоне
 npm run dev:status     # статус фоновых процессов
-npm run dev:logs       # последние логи API и Flutter
+npm run dev:logs       # последние логи
 npm run dev:restart    # перезапуск в фоне
 npm run dev:stop       # остановка всех dev-служб
 ```

@@ -123,7 +123,7 @@ export function App() {
             <article className="card card-ministry">
               <h2 className="card-label">Служение</h2>
               <p className="card-body flex gap-2 whitespace-pre-wrap">
-                <LuWrench className="mt-0.5 h-4 w-4 shrink-0 opacity-70" aria-hidden />
+                <LuWrench className="mt-0.5 h-4 w-4 shrink-0 opacity-70" strokeWidth={2} aria-hidden />
                 <span>
                   {(ministry?.prayer_points?.trim() ||
                     ministry?.title?.trim() ||
@@ -135,7 +135,7 @@ export function App() {
             <article className="card card-backslider">
               <h2 className="card-label">Отпавшие</h2>
               <p className="card-body flex gap-2">
-                <LuMapPin className="mt-0.5 h-4 w-4 shrink-0 opacity-70" aria-hidden />
+                <LuMapPin className="mt-0.5 h-4 w-4 shrink-0 opacity-70" strokeWidth={2} aria-hidden />
                 <span>{(backslider?.name ?? 'Не указан').trim()}</span>
               </p>
             </article>

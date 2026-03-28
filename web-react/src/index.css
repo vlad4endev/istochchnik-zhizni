@@ -39,6 +39,13 @@ body {
   min-height: 100vh;
 }
 
+/* react-icons (Lucide): SVG-контуры, не подменяются системными эмодзи */
+[data-web-nav='react-icons'] svg,
+nav[aria-label='Основная навигация'] svg {
+  display: block;
+  flex-shrink: 0;
+}
+
 button {
   font: inherit;
   cursor: pointer;

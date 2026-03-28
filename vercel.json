@@ -1,9 +1,9 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": null,
-  "installCommand": "echo 'Vercel: пропуск npm — сборка только Flutter (scripts/vercel-build.sh)'",
+  "installCommand": "npm ci --prefix web-react",
   "buildCommand": "bash scripts/vercel-build.sh",
-  "outputDirectory": "build/web",
+  "outputDirectory": "web-react/dist",
   "rewrites": [
     {
       "source": "/(.*)",

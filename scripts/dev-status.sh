@@ -2,7 +2,10 @@
 set -euo pipefail
 
 PID_DIR=".run"
+BG_PID_FILE="${PID_DIR}/dev-bg.pid"
+STACK_WEB_PID="${PID_DIR}/stack-web.pid"
 API_PID_FILE="${PID_DIR}/api.pid"
+# Старые pid-файлы от прежнего стека (до React-only)
 UI_PID_FILE="${PID_DIR}/flutter.pid"
 UI_PORT_FILE="${PID_DIR}/flutter.port"
 
@@ -24,9 +27,13 @@ status_line() {
   fi
 }
 
-status_line "API" "${API_PID_FILE}"
-status_line "Flutter" "${UI_PID_FILE}"
+status_line "Dev stack (npm run dev:start)" "${BG_PID_FILE}"
+status_line "Project stack (npm run go:start)" "${STACK_WEB_PID}"
+status_line "API (legacy api.pid)" "${API_PID_FILE}"
+status_line "Legacy UI pid (старый формат)" "${UI_PID_FILE}"
+
+echo "Vite UI: http://localhost:5173 (если стек запущен)"
 
 if [[ -f "${UI_PORT_FILE}" ]]; then
-  echo "Flutter URL: http://localhost:$(<"${UI_PORT_FILE}")"
+  echo "Legacy UI port file: http://localhost:$(<"${UI_PORT_FILE}")"
 fi
