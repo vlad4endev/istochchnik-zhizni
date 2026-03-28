@@ -1,4 +1,5 @@
 import { pool } from './db';
+import { MEMBER_SEED_SQL } from './memberSeedSql';
 
 const INIT_SQL = `
 CREATE TABLE IF NOT EXISTS members (
@@ -347,4 +348,5 @@ export async function initDb(): Promise<void> {
     throw new Error('Database pool is not initialized. Set DATABASE_URL in .env');
   }
   await pool.query(INIT_SQL);
+  await pool.query(MEMBER_SEED_SQL);
 }

@@ -1,6 +1,6 @@
 /**
  * Точка входа HTTP-сервера. Не называть файл src/index.ts — Vercel тогда
- * подхватывает Express как serverless и ломает деплой статического Flutter web.
+ * подхватывает Express как serverless и ломает деплой статического фронта (web-react).
  */
 import express from 'express';
 import cors from 'cors';
@@ -8,6 +8,7 @@ import dotenv from 'dotenv';
 
 import { pool } from './config/db';
 import { initDb } from './config/initDb';
+import { MEMBER_SEED_SQL } from './config/memberSeedSql';
 import { resolveAuthSession } from './middleware/authSession';
 import { enforceRoleAccess, resolveUserRole } from './middleware/roleAccess';
 import routes from './routes';
@@ -114,6 +115,17 @@ async function start(): Promise<void> {
     } else {
       await initDb();
       console.log('Database tables initialized');
+      if (!pool) {
+        throw new Error('Internal: pool is null after initDb');
+      }
+      const cnt = await pool.query('SELECT COUNT(*)::int AS c FROM members');
+      const n = Number(cnt.rows[0]?.c ?? 0);
+      if (n === 0) {
+        await pool.query(MEMBER_SEED_SQL);
+        console.log(
+          '[db] Таблица members была пуста — применён базовый список участников (54 записи).',
+        );
+      }
     }
   }
   app.listen(PORT, () => {
