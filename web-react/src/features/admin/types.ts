@@ -15,6 +15,8 @@ export interface AppUser {
   is_active: boolean;
   app_role: 'member' | 'admin';
   is_collection_coordinator: boolean;
+  /** Задан пароль для входа (прошёл регистрацию в приложении). */
+  has_registered: boolean;
   created_at: string;
   updated_at: string;
 }

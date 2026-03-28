@@ -63,18 +63,37 @@ function hasPrayerContent(data: DayPrayerData | null | undefined): data is DayPr
   return data != null && !isDayPrayerEmpty(data);
 }
 
-function SectionHeader({ Icon, title, id }: { Icon: IconType; title: string; id?: string }) {
+function SectionHeader({
+  Icon,
+  title,
+  id,
+  subtitle,
+}: {
+  Icon: IconType;
+  title: string;
+  id?: string;
+  subtitle?: string;
+}) {
   return (
-    <div className="mb-3 flex items-center gap-3 pl-0.5">
-      <div
-        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] bg-primary/10 text-primary"
-        aria-hidden
-      >
-        <Icon className="h-5 w-5" />
+    <div className="mb-4 animate-prayer-fade-up motion-reduce:animate-none">
+      <div className="flex items-start gap-3.5">
+        <div
+          className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-primary/[0.14] to-primary/[0.05] text-primary shadow-sm ring-1 ring-primary/[0.12]"
+          aria-hidden
+        >
+          <Icon className="h-5 w-5" />
+        </div>
+        <div className="min-w-0 flex-1 pt-0.5">
+          <h2 id={id} className="text-[11px] font-extrabold uppercase tracking-[0.14em] text-stone-900">
+            {title}
+          </h2>
+          {subtitle ? <p className="mt-1 text-[13px] leading-snug text-stone-500">{subtitle}</p> : null}
+        </div>
       </div>
-      <h2 id={id} className="text-xs font-extrabold uppercase tracking-[0.12em] text-stone-900">
-        {title}
-      </h2>
+      <div
+        className="mt-3.5 h-px w-full bg-gradient-to-r from-stone-300/90 via-stone-200/55 to-transparent"
+        aria-hidden
+      />
     </div>
   );
 }
@@ -84,17 +103,26 @@ function PrayerCard(props: {
   title: string;
   accentVar: string;
   children: ReactNode;
+  cardIndex?: number;
 }) {
-  const { Icon, title, accentVar, children } = props;
+  const { Icon, title, accentVar, children, cardIndex = 0 } = props;
+  const staggerMs = Math.min(cardIndex * 48, 320);
   return (
     <article
-      className="mb-3.5 overflow-hidden rounded-2xl border border-stone-200/70 bg-[var(--surface-elevated)] shadow-[var(--shadow-card)] md:border-stone-200/80 md:shadow-[var(--shadow)]"
-      style={{ ['--card-accent' as string]: accentVar }}
+      className="group relative mb-4 overflow-hidden rounded-2xl border border-stone-200/70 bg-[var(--surface-elevated)] shadow-[var(--shadow-card)] transition-[box-shadow,transform,border-color] duration-300 ease-out animate-prayer-fade-up hover:-translate-y-0.5 hover:border-stone-300/85 hover:shadow-lg motion-reduce:animate-none motion-reduce:transform-none motion-reduce:transition-none md:border-stone-200/80 md:shadow-[var(--shadow)]"
+      style={{
+        ['--card-accent' as string]: accentVar,
+        animationDelay: `${staggerMs}ms`,
+      }}
     >
+      <div
+        className="absolute left-0 top-0 h-full w-[3px] rounded-l-2xl bg-[var(--card-accent)] opacity-90 transition-opacity duration-300 group-hover:opacity-100"
+        aria-hidden
+      />
       <div className="border-b border-stone-100/90 px-4 pb-0 pt-[18px] shell:px-5">
         <div className="flex items-start gap-3">
           <div
-            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-[var(--card-accent)]"
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-[var(--card-accent)] transition-transform duration-300 group-hover:scale-[1.04] motion-reduce:group-hover:scale-100"
             style={{ backgroundColor: `color-mix(in srgb, ${accentVar} 12%, transparent)` }}
           >
             <Icon className="h-5 w-5" aria-hidden />
@@ -115,10 +143,12 @@ function MemberCard({
   member,
   currentUserId,
   onPrayerSaved,
+  cardIndex = 0,
 }: {
   member: Member;
   currentUserId: number | null;
   onPrayerSaved: () => void;
+  cardIndex?: number;
 }) {
   const isMe = currentUserId != null && member.id === currentUserId;
   const [editText, setEditText] = useState(member.prayer_request ?? '');
@@ -145,7 +175,12 @@ function MemberCard({
   const hasRequest = member.prayer_request != null && member.prayer_request.trim().length > 0;
 
   return (
-    <PrayerCard Icon={LuHeartHandshake} title={member.name} accentVar="var(--member)">
+    <PrayerCard
+      Icon={LuHeartHandshake}
+      title={member.name}
+      accentVar="var(--member)"
+      cardIndex={cardIndex}
+    >
       {isMe ? (
         <div className="space-y-3">
           <label className="block">
@@ -157,7 +192,7 @@ function MemberCard({
               onChange={(e) => setEditText(e.target.value)}
               rows={5}
               maxLength={8000}
-              className="mt-2 w-full rounded-xl border border-stone-200 bg-white px-3 py-2.5 text-[15px] text-stone-800 outline-none ring-primary/20 focus:border-primary focus:ring-2"
+              className="mt-2 w-full rounded-xl border border-stone-200 bg-white px-3 py-2.5 text-[15px] text-stone-800 outline-none transition-shadow duration-200 ring-primary/15 focus:border-primary focus:ring-2 focus:ring-primary/25"
               placeholder="О чём просим молиться…"
             />
           </label>
@@ -166,7 +201,7 @@ function MemberCard({
             type="button"
             disabled={saving}
             onClick={() => void savePrayer()}
-            className="min-h-[44px] rounded-xl bg-primary px-5 py-2.5 text-sm font-bold text-white shadow-md shadow-primary/20 disabled:opacity-60"
+            className="min-h-[44px] rounded-xl bg-primary px-5 py-2.5 text-sm font-bold text-white shadow-md shadow-primary/25 transition hover:bg-primary-dark active:scale-[0.98] disabled:opacity-60 motion-reduce:active:scale-100"
           >
             {saving ? 'Сохранение…' : 'Сохранить'}
           </button>
@@ -180,12 +215,12 @@ function MemberCard({
   );
 }
 
-function GlobalThemeCard({ theme }: { theme: GlobalTheme }) {
+function GlobalThemeCard({ theme, cardIndex = 0 }: { theme: GlobalTheme; cardIndex?: number }) {
   const hasVerse = theme.bible_verse != null && theme.bible_verse.trim().length > 0;
   const hasPoints = theme.prayer_points != null && theme.prayer_points.trim().length > 0;
   const hasNothing = !hasVerse && !hasPoints;
   return (
-    <PrayerCard Icon={LuBookOpen} title={theme.title} accentVar="var(--theme)">
+    <PrayerCard Icon={LuBookOpen} title={theme.title} accentVar="var(--theme)" cardIndex={cardIndex}>
       {hasVerse ? (
         <div className="mb-3 rounded-xl border border-[color-mix(in_srgb,var(--theme)_18%,transparent)] bg-[color-mix(in_srgb,var(--theme)_8%,transparent)] px-3.5 py-3.5">
           <div className="flex gap-2.5">
@@ -200,10 +235,10 @@ function GlobalThemeCard({ theme }: { theme: GlobalTheme }) {
   );
 }
 
-function MinistryCard({ ministry }: { ministry: Ministry }) {
+function MinistryCard({ ministry, cardIndex = 0 }: { ministry: Ministry; cardIndex?: number }) {
   const hasPoints = ministry.prayer_points != null && ministry.prayer_points.trim().length > 0;
   return (
-    <PrayerCard Icon={LuHammer} title={ministry.title} accentVar="var(--ministry)">
+    <PrayerCard Icon={LuHammer} title={ministry.title} accentVar="var(--ministry)" cardIndex={cardIndex}>
       {hasPoints ? (
         <p className="text-[16px] leading-relaxed text-stone-600 whitespace-pre-wrap">{ministry.prayer_points}</p>
       ) : (
@@ -213,9 +248,9 @@ function MinistryCard({ ministry }: { ministry: Ministry }) {
   );
 }
 
-function BacksliderCard({ b }: { b: Backslider }) {
+function BacksliderCard({ b, cardIndex = 0 }: { b: Backslider; cardIndex?: number }) {
   return (
-    <PrayerCard Icon={LuUserX} title={b.name} accentVar="var(--backslider)">
+    <PrayerCard Icon={LuUserX} title={b.name} accentVar="var(--backslider)" cardIndex={cardIndex}>
       <p className="italic text-stone-500">Отпавший — нуждается в молитве о возвращении</p>
     </PrayerCard>
   );
@@ -233,7 +268,8 @@ function CalendarPrayerSkeleton() {
       {[0, 1, 2].map((i) => (
         <div
           key={i}
-          className="rounded-2xl border border-stone-100 bg-[var(--surface-elevated)] p-4 shadow-[var(--shadow)]"
+          className="overflow-hidden rounded-2xl border border-stone-100 bg-[var(--surface-elevated)] p-4 shadow-[var(--shadow)] animate-prayer-fade-in motion-reduce:animate-none"
+          style={{ animationDelay: `${i * 80}ms` }}
         >
           <div className="flex gap-3">
             <div className="h-11 w-11 shrink-0 animate-pulse rounded-xl bg-stone-200/90" />
@@ -299,12 +335,14 @@ function ErrorBlock(props: { err: unknown; onRetry: () => void }) {
 
 function EmptyBlock() {
   return (
-    <div className="mx-auto flex max-w-md flex-col items-center px-6 py-14 text-center">
-      <div className="mb-6 flex h-28 w-28 items-center justify-center rounded-full bg-primary/[0.08] text-primary opacity-90">
+    <div className="mx-auto flex max-w-md flex-col items-center px-6 py-14 text-center animate-prayer-fade-up motion-reduce:animate-none">
+      <div className="mb-6 flex h-28 w-28 items-center justify-center rounded-full bg-gradient-to-br from-primary/12 to-primary/6 text-primary shadow-[0_8px_32px_rgba(125,54,64,0.12)] ring-1 ring-primary/10">
         <LuHeartHandshake className="h-14 w-14" strokeWidth={1.75} aria-hidden />
       </div>
       <h2 className="text-xl font-bold tracking-tight text-stone-900">Нет данных на эту дату</h2>
-      <p className="mt-2 text-[15px] text-stone-500">Выберите другую дату в календаре</p>
+      <p className="mt-2 text-[15px] leading-relaxed text-stone-500">
+        Выберите другую дату в календаре выше — появятся темы и нужды.
+      </p>
     </div>
   );
 }
@@ -387,10 +425,10 @@ function WeekStripPicker(props: {
               disabled={outOfRange}
               onClick={() => onSelect(d)}
               className={[
-                'flex min-h-[44px] w-full items-center justify-center rounded-full text-[13px] font-medium sm:text-sm shell:h-11 shell:text-[15px]',
+                'flex min-h-[44px] w-full items-center justify-center rounded-full text-[13px] font-medium transition-colors duration-200 sm:text-sm shell:h-11 shell:text-[15px]',
                 outOfRange ? 'cursor-not-allowed opacity-30' : '',
                 isSel
-                  ? 'bg-primary font-semibold text-white hover:bg-primary'
+                  ? 'bg-primary font-semibold text-white shadow-sm shadow-primary/25 hover:bg-primary'
                   : isTodayCell
                     ? 'font-bold text-primary hover:bg-stone-100'
                     : 'text-stone-800 hover:bg-stone-100',
@@ -442,21 +480,37 @@ export function DailyPrayerPage() {
     data != null && (data.global_themes.length > 0 || data.ministries.length > 0);
 
   return (
-    <div className="min-h-full bg-[var(--surface)] pb-6 shell:pb-8">
-      <header className="bg-primary px-4 py-4 text-white shadow-sm sm:px-5 sm:py-5 md:px-6 md:py-5 shell:rounded-none">
-        <h1 className="text-xl font-extrabold leading-tight tracking-tight sm:text-2xl md:text-3xl lg:text-[1.65rem] xl:text-[26px]">
-          Молитва
-        </h1>
+    <div className="prayer-page-bg min-h-full pb-6 shell:pb-8">
+      <header className="relative overflow-hidden bg-gradient-to-br from-primary via-[#6d3039] to-primary-dark px-4 py-5 text-white shadow-[0_8px_32px_rgba(92,40,48,0.35)] sm:px-5 sm:py-6 md:px-6 md:py-6 shell:rounded-none">
+        <div
+          className="pointer-events-none absolute -right-4 -top-20 h-48 w-48 rounded-full bg-white/[0.13] blur-3xl animate-prayer-header-breathe motion-reduce:animate-none"
+          aria-hidden
+        />
+        <div
+          className="pointer-events-none absolute -bottom-12 -left-10 h-40 w-40 rounded-full bg-black/18 blur-2xl"
+          aria-hidden
+        />
+        <div className="relative">
+          <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/72 animate-prayer-fade-in motion-reduce:animate-none">
+            Молитвенный календарь
+          </p>
+          <h1 className="mt-1.5 text-xl font-extrabold leading-tight tracking-tight sm:text-2xl md:text-3xl lg:text-[1.65rem] xl:text-[26px] animate-prayer-fade-up motion-reduce:animate-none [animation-delay:50ms] motion-reduce:[animation-delay:0ms]">
+            Молитва
+          </h1>
+          <p className="mt-2 max-w-lg text-[13px] leading-relaxed text-white/88 sm:text-[14px] animate-prayer-fade-up motion-reduce:animate-none [animation-delay:110ms] motion-reduce:[animation-delay:0ms]">
+            Темы дня, служения и молитвенные нужды — всё для совместной молитвы церкви.
+          </p>
+        </div>
       </header>
 
       {/* Чип даты */}
-      <div className="px-4 pt-2.5 shell:px-6">
+      <div className="px-4 pt-3 shell:px-6">
         <button
           type="button"
           onClick={() => setCalendarExpanded((e) => !e)}
-          className="group flex min-h-[48px] w-full items-center gap-3 rounded-full bg-[var(--surface-elevated)] px-4 py-3 text-left shadow-[var(--shadow)] transition hover:bg-stone-50 sm:min-h-[52px]"
+          className="group flex min-h-[48px] w-full items-center gap-3 rounded-full border border-stone-200/60 bg-[var(--surface-elevated)] px-4 py-3 text-left shadow-[var(--shadow)] transition-all duration-200 hover:border-stone-300/80 hover:bg-stone-50/90 active:scale-[0.99] sm:min-h-[52px] motion-reduce:active:scale-100 animate-prayer-fade-in motion-reduce:animate-none"
         >
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary transition-colors group-hover:text-primary-dark">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary transition-all duration-200 group-hover:scale-105 group-hover:bg-primary/[0.14] group-hover:text-primary-dark motion-reduce:group-hover:scale-100">
             <LuCalendarDays className="h-5 w-5" strokeWidth={2} aria-hidden />
           </span>
           <span className="min-w-0 flex-1 truncate text-[15px] font-bold text-stone-900 shell:text-base">{chipLabel}</span>
@@ -481,7 +535,7 @@ export function DailyPrayerPage() {
 
       {/* Раскрывающийся календарь */}
       <div
-        className={`grid transition-[grid-template-rows] duration-300 ease-in-out ${calendarExpanded ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}
+        className={`grid transition-[grid-template-rows] duration-300 ease-in-out motion-reduce:transition-none ${calendarExpanded ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}
       >
         <div className="overflow-hidden">
           <div className="mx-4 mt-3 rounded-b-3xl border border-t-0 border-stone-200/80 bg-[var(--surface-elevated)] px-3 py-5 shadow-[var(--shadow)] shell:mx-6">
@@ -568,10 +622,16 @@ export function DailyPrayerPage() {
           <div className="pb-6">
             {data.members.length > 0 ? (
               <section aria-labelledby={sectionMemberId}>
-                <SectionHeader Icon={LuHeartHandshake} title="Молитва за члена церкви" id={sectionMemberId} />
-                {data.members.map((m) => (
+                <SectionHeader
+                  Icon={LuHeartHandshake}
+                  title="Молитва за члена церкви"
+                  id={sectionMemberId}
+                  subtitle="Кто в фокусе молитвы в выбранный день"
+                />
+                {data.members.map((m, i) => (
                   <MemberCard
                     key={m.id}
+                    cardIndex={i}
                     member={m}
                     currentUserId={me?.id ?? null}
                     onPrayerSaved={() => {
@@ -586,17 +646,24 @@ export function DailyPrayerPage() {
 
             {hasThemesOrMinistries ? (
               <section
-                className={data.members.length > 0 ? 'mt-6' : undefined}
+                className={data.members.length > 0 ? 'mt-8' : undefined}
                 aria-labelledby={themesMinistriesRegionId}
               >
-                <h2 id={themesMinistriesRegionId} className="sr-only">
-                  Глобальные темы и служения
-                </h2>
-                {data.global_themes.map((t) => (
-                  <GlobalThemeCard key={`gt-${t.id}`} theme={t} />
+                <SectionHeader
+                  Icon={LuBookOpen}
+                  title="Темы и служения"
+                  id={themesMinistriesRegionId}
+                  subtitle="Пункты молитвы по глобальному расписанию цикла"
+                />
+                {data.global_themes.map((t, i) => (
+                  <GlobalThemeCard key={`gt-${t.id}`} theme={t} cardIndex={i} />
                 ))}
-                {data.ministries.map((m) => (
-                  <MinistryCard key={`m-${m.id}`} ministry={m} />
+                {data.ministries.map((m, i) => (
+                  <MinistryCard
+                    key={`m-${m.id}`}
+                    ministry={m}
+                    cardIndex={data.global_themes.length + i}
+                  />
                 ))}
               </section>
             ) : null}
@@ -604,13 +671,18 @@ export function DailyPrayerPage() {
             {data.backsliders.length > 0 ? (
               <section
                 className={
-                  data.members.length > 0 || hasThemesOrMinistries ? 'mt-6' : undefined
+                  data.members.length > 0 || hasThemesOrMinistries ? 'mt-8' : undefined
                 }
                 aria-labelledby={sectionBacksliderId}
               >
-                <SectionHeader Icon={LuMapPin} title="Отпавшие" id={sectionBacksliderId} />
-                {data.backsliders.map((b) => (
-                  <BacksliderCard key={b.id} b={b} />
+                <SectionHeader
+                  Icon={LuMapPin}
+                  title="Отпавшие"
+                  id={sectionBacksliderId}
+                  subtitle="Молитва о возвращении к Господу"
+                />
+                {data.backsliders.map((b, i) => (
+                  <BacksliderCard key={b.id} b={b} cardIndex={i} />
                 ))}
               </section>
             ) : null}

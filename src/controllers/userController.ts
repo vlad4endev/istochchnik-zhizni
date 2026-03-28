@@ -251,14 +251,22 @@ export async function updateUserHandler(req: Request, res: Response): Promise<vo
     return;
   }
 
-  if (req.body.birth_date !== undefined && !isValidDateInput(req.body.birth_date)) {
-    res.status(400).json({ error: 'Field "birth_date" must be YYYY-MM-DD' });
-    return;
+  if (req.body.birth_date !== undefined) {
+    const bdRaw = req.body.birth_date;
+    const bd = typeof bdRaw === 'string' ? bdRaw.trim() : '';
+    if (bd.length > 0 && !isValidDateInput(bdRaw)) {
+      res.status(400).json({ error: 'Field "birth_date" must be YYYY-MM-DD or empty' });
+      return;
+    }
   }
 
-  if (req.body.phone_number !== undefined && !isValidPhoneInput(req.body.phone_number)) {
-    res.status(400).json({ error: 'Field "phone_number" must be valid' });
-    return;
+  if (req.body.phone_number !== undefined) {
+    const phRaw = req.body.phone_number;
+    const ph = typeof phRaw === 'string' ? phRaw.trim() : '';
+    if (ph.length > 0 && !isValidPhoneInput(phRaw)) {
+      res.status(400).json({ error: 'Field "phone_number" must be valid' });
+      return;
+    }
   }
 
   if (req.body.first_name !== undefined || req.body.last_name !== undefined) {

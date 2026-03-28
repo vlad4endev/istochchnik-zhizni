@@ -8,6 +8,8 @@
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "package:server": "bash ../scripts/package-web-for-server.sh",
+    "pwa:icons": "npx @vite-pwa/assets-generator assets/logo.svg -r ./public -p minimal -o",
+    "pwa:splash": "npx pwa-asset-generator@8.1.4 public/assets/logo.svg public/pwa -b \"#f4f1ed\" -p \"18%\" -t png --splash-only --portrait-only -o",
     "cap:sync": "cap sync",
     "cap:open:android": "cap open android",
     "cap:open:ios": "cap open ios",

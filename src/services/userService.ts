@@ -19,6 +19,8 @@ export interface AppUser {
   app_role: 'member' | 'admin';
   /** Ответственный за сбор — может назначать участников на дни следующей недели. */
   is_collection_coordinator: boolean;
+  /** Есть пароль для входа в приложение (прошёл регистрацию). */
+  has_registered: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -203,6 +205,7 @@ export async function listUsers(): Promise<AppUser[]> {
       m.is_active,
       m.app_role,
       m.is_collection_coordinator,
+      (m.password_hash IS NOT NULL) AS has_registered,
       m.created_at,
       m.updated_at
     FROM members m
@@ -232,6 +235,7 @@ export async function getUserById(id: number): Promise<AppUser | null> {
       m.is_active,
       m.app_role,
       m.is_collection_coordinator,
+      (m.password_hash IS NOT NULL) AS has_registered,
       m.created_at,
       m.updated_at
     FROM members m
@@ -269,6 +273,7 @@ export async function createUser(input: CreateUserInput): Promise<AppUser> {
       is_active,
       app_role,
       is_collection_coordinator,
+      (password_hash IS NOT NULL) AS has_registered,
       created_at,
       updated_at`,
     [
@@ -432,6 +437,7 @@ export async function updateUser(id: number, input: UpdateUserInput): Promise<Ap
       is_active,
       app_role,
       is_collection_coordinator,
+      (password_hash IS NOT NULL) AS has_registered,
       created_at,
       updated_at`,
     values
@@ -485,6 +491,7 @@ export async function linkUserAccount(id: number, input: LinkAccountInput): Prom
       is_active,
       app_role,
       is_collection_coordinator,
+      (password_hash IS NOT NULL) AS has_registered,
       created_at,
       updated_at`,
     [input.account_provider.trim(), input.account_id.trim(), id]
@@ -531,6 +538,7 @@ export async function setUserAppRole(id: number, appRole: AppRole): Promise<AppU
       is_active,
       app_role,
       is_collection_coordinator,
+      (password_hash IS NOT NULL) AS has_registered,
       created_at,
       updated_at`,
     [appRole, id]

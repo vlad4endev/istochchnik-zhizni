@@ -131,6 +131,14 @@ export async function createGlobalThemeApi(body: {
   return data;
 }
 
+export async function updateGlobalThemeApi(
+  id: number,
+  body: Partial<{ title: string; bible_verse: string | null; prayer_points: string | null }>,
+): Promise<GlobalTheme> {
+  const { data } = await apiClient.patch<GlobalTheme>(`${CAL}/global/themes/${id}`, body);
+  return data;
+}
+
 export async function deleteGlobalThemeApi(id: number): Promise<void> {
   await apiClient.delete(`${CAL}/global/themes/${id}`, {
     validateStatus: (s) => s === 204 || (s != null && s < 500),
@@ -150,6 +158,14 @@ export async function createMinistryApi(body: {
   return data;
 }
 
+export async function updateMinistryApi(
+  id: number,
+  body: Partial<{ title: string; prayer_points: string | null }>,
+): Promise<Ministry> {
+  const { data } = await apiClient.patch<Ministry>(`${CAL}/global/ministries/${id}`, body);
+  return data;
+}
+
 export async function deleteMinistryApi(id: number): Promise<void> {
   await apiClient.delete(`${CAL}/global/ministries/${id}`, {
     validateStatus: (s) => s === 204 || (s != null && s < 500),
@@ -163,6 +179,11 @@ export async function fetchGlobalBacksliders(): Promise<Backslider[]> {
 
 export async function createBacksliderApi(name: string): Promise<Backslider> {
   const { data } = await apiClient.post<Backslider>(`${CAL}/global/backsliders`, { name });
+  return data;
+}
+
+export async function updateBacksliderApi(id: number, name: string): Promise<Backslider> {
+  const { data } = await apiClient.patch<Backslider>(`${CAL}/global/backsliders/${id}`, { name });
   return data;
 }
 

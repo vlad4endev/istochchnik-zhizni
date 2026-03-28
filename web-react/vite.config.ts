@@ -48,21 +48,28 @@ export default defineConfig(({ mode }) => {
           scope: './',
           lang: 'ru',
           dir: 'ltr',
+          categories: ['lifestyle', 'utilities'],
           icons: [
             {
-              src: 'pwa/icon-192.png',
+              src: 'assets/pwa-64x64.png',
+              sizes: '64x64',
+              type: 'image/png',
+              purpose: 'any',
+            },
+            {
+              src: 'assets/pwa-192x192.png',
               sizes: '192x192',
               type: 'image/png',
               purpose: 'any',
             },
             {
-              src: 'pwa/icon-512.png',
+              src: 'assets/pwa-512x512.png',
               sizes: '512x512',
               type: 'image/png',
               purpose: 'any',
             },
             {
-              src: 'pwa/icon-maskable-512.png',
+              src: 'assets/maskable-icon-512x512.png',
               sizes: '512x512',
               type: 'image/png',
               purpose: 'maskable',

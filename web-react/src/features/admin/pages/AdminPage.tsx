@@ -40,6 +40,9 @@ import {
   setOneTimeMemberDate,
   startPrayerCycle,
   updateAdminMember,
+  updateBacksliderApi,
+  updateGlobalThemeApi,
+  updateMinistryApi,
 } from '../api';
 import type { AppUser } from '../types';
 
@@ -55,6 +58,67 @@ function displayName(u: AppUser): string {
   const l = (u.last_name ?? '').trim();
   if (f || l) return `${f} ${l}`.trim();
   return u.name.trim() || `#${u.id}`;
+}
+
+/**
+ * Поля имени в БД могут быть заполнены только через `name` (старые записи).
+ * Для формы редактирования раскладываем `name` в имя и фамилию.
+ * — 3+ слова: «Фамилия Имя Отчество» (как в сиде).
+ * — 2 слова: «Имя Фамилия» (как при создании в админке).
+ */
+/** Плашка: есть ли у участника аккаунт в приложении (пароль в базе). */
+function MemberRegistrationBadge({ u }: { u: AppUser }) {
+  const ok = Boolean(u.has_registered);
+  return (
+    <span
+      className={
+        ok
+          ? 'inline-flex items-center gap-1 rounded-full border border-emerald-200/90 bg-gradient-to-r from-emerald-50 to-teal-50 px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wide text-emerald-900 shadow-sm shadow-emerald-900/5'
+          : 'inline-flex items-center gap-1 rounded-full border border-amber-200/90 bg-gradient-to-r from-amber-50 to-orange-50/80 px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wide text-amber-950 shadow-sm shadow-amber-900/5'
+      }
+      title={
+        ok
+          ? 'Пароль задан — можно войти в приложение по телефону'
+          : 'В списке участников, но вход в приложение ещё не оформлен'
+      }
+    >
+      {ok ? (
+        <>
+          <span className="text-emerald-600" aria-hidden>
+            ✓
+          </span>
+          В приложении
+        </>
+      ) : (
+        <>
+          <span className="text-amber-700/90" aria-hidden>
+            ○
+          </span>
+          Нет входа
+        </>
+      )}
+    </span>
+  );
+}
+
+function splitNameForEditForm(u: AppUser): { first_name: string; last_name: string } {
+  let f = (u.first_name ?? '').trim();
+  let l = (u.last_name ?? '').trim();
+  if (f || l) {
+    return { first_name: f, last_name: l };
+  }
+  const raw = (u.name ?? '').trim();
+  if (!raw) {
+    return { first_name: '', last_name: '' };
+  }
+  const parts = raw.split(/\s+/).filter(Boolean);
+  if (parts.length >= 3) {
+    return { first_name: parts.slice(1).join(' '), last_name: parts[0] };
+  }
+  if (parts.length === 2) {
+    return { first_name: parts[0], last_name: parts[1] };
+  }
+  return { first_name: parts[0], last_name: '' };
 }
 
 function fieldClass() {
@@ -240,10 +304,13 @@ function MembersSection() {
 
   const stats = useMemo(() => {
     const list = data ?? [];
+    const registered = list.filter((u) => u.has_registered).length;
     return {
       total: list.length,
       active: list.filter((u) => u.is_active).length,
       admins: list.filter((u) => u.app_role === 'admin').length,
+      registered,
+      withoutApp: Math.max(0, list.length - registered),
     };
   }, [data]);
 
@@ -355,9 +422,10 @@ function MembersSection() {
   function openEdit(u: AppUser) {
     closeMenu();
     setEditing(u);
+    const { first_name: ef, last_name: el } = splitNameForEditForm(u);
     setEditForm({
-      first_name: (u.first_name ?? '').trim(),
-      last_name: (u.last_name ?? '').trim(),
+      first_name: ef,
+      last_name: el,
       phone_number: (u.phone_number ?? '').trim(),
       birth_date: (u.birth_date ?? '').trim(),
       ministry_role: (u.ministry_role ?? '').trim(),
@@ -575,6 +643,16 @@ function MembersSection() {
         </div>
       )}
 
+      <div className="rounded-2xl border border-sky-200/50 bg-gradient-to-br from-sky-50/95 via-white to-indigo-50/40 px-4 py-3.5 shadow-[var(--shadow)]">
+        <p className="text-xs font-extrabold uppercase tracking-wide text-sky-900/80">Вход в приложение</p>
+        <p className="mt-1.5 text-sm leading-relaxed text-stone-600">
+          Не все в списке уже заходят в приложение: плашка{' '}
+          <span className="whitespace-nowrap font-semibold text-emerald-800">«В приложении»</span> — пароль
+          задан; <span className="whitespace-nowrap font-semibold text-amber-900">«Нет входа»</span> — карточка
+          есть, регистрация ещё не пройдена.
+        </p>
+      </div>
+
       <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] px-4 py-3 shadow-[var(--shadow)]">
         <div className="flex flex-wrap gap-4 text-sm">
           <span>
@@ -584,6 +662,14 @@ function MembersSection() {
           <span>
             <span className="font-extrabold text-emerald-700">{stats.active}</span>
             <span className="text-stone-500"> активных</span>
+          </span>
+          <span>
+            <span className="font-extrabold text-teal-700">{stats.registered}</span>
+            <span className="text-stone-500"> в приложении</span>
+          </span>
+          <span>
+            <span className="font-extrabold text-amber-800">{stats.withoutApp}</span>
+            <span className="text-stone-500"> без входа</span>
           </span>
           <span>
             <span className="font-extrabold text-primary">{stats.admins}</span>
@@ -714,7 +800,8 @@ function MembersSection() {
                   </button>
                 </div>
               </div>
-              <div className="mt-3 flex flex-wrap gap-2">
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <MemberRegistrationBadge u={u} />
                 <span
                   className={
                     u.app_role === 'admin'
@@ -747,10 +834,11 @@ function MembersSection() {
       {/* Таблица — shell+; горизонтальный скролл без обрезки выпадающих меню по вертикали */}
       <div className="hidden rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] shadow-[var(--shadow)] shell:block">
         <div className="overflow-x-auto overscroll-x-contain [-webkit-overflow-scrolling:touch] scroll-smooth">
-          <table className="min-w-[640px] w-full border-collapse text-left text-sm">
+          <table className="min-w-[720px] w-full border-collapse text-left text-sm">
             <thead>
               <tr className="border-b border-stone-200 bg-stone-50/90 text-xs font-extrabold uppercase tracking-wider text-stone-500">
                 <th className="px-4 py-3">Участник</th>
+                <th className="px-4 py-3 whitespace-nowrap">Вход</th>
                 <th className="px-4 py-3">Телефон</th>
                 <th className="px-4 py-3">Роль в приложении</th>
                 <th className="px-4 py-3">Статус</th>
@@ -760,7 +848,7 @@ function MembersSection() {
             <tbody>
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-4 py-10 text-center text-stone-500">
+                  <td colSpan={6} className="px-4 py-10 text-center text-stone-500">
                     {search.trim() ? 'Никого не найдено.' : 'Список пуст.'}
                   </td>
                 </tr>
@@ -768,6 +856,9 @@ function MembersSection() {
                 filtered.map((u) => (
                   <tr key={u.id} className="border-b border-stone-100/90 last:border-0">
                     <td className="px-4 py-3 font-semibold text-stone-900">{displayName(u)}</td>
+                    <td className="px-4 py-3 align-middle">
+                      <MemberRegistrationBadge u={u} />
+                    </td>
                     <td className="px-4 py-3 text-stone-600">{u.phone_number ?? '—'}</td>
                     <td className="px-4 py-3">
                       <span
@@ -861,6 +952,9 @@ function MembersSection() {
             <h3 className="text-lg font-extrabold text-stone-900">
               Карточка: {displayName(editing)}
             </h3>
+            <div className="mt-2">
+              <MemberRegistrationBadge u={editing} />
+            </div>
             <div className="mt-4 grid gap-3">
               <div className="grid gap-3 sm:grid-cols-2">
                 <div>
@@ -1050,6 +1144,14 @@ function GlobalNeedsSection() {
   const [mPoints, setMPoints] = useState('');
   const [bName, setBName] = useState('');
   const [note, setNote] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
+  const [tEdit, setTEdit] = useState<{
+    id: number;
+    title: string;
+    bible_verse: string;
+    prayer_points: string;
+  } | null>(null);
+  const [mEdit, setMEdit] = useState<{ id: number; title: string; prayer_points: string } | null>(null);
+  const [bEdit, setBEdit] = useState<{ id: number; name: string } | null>(null);
 
   const invT = () => void qc.invalidateQueries({ queryKey: Q_GT });
   const invM = () => void qc.invalidateQueries({ queryKey: Q_GM });
@@ -1081,6 +1183,21 @@ function GlobalNeedsSection() {
     onError: (e) => setNote({ type: 'err', text: apiErrorMessage(e, 'Ошибка.') }),
   });
 
+  const updT = useMutation({
+    mutationFn: (draft: { id: number; title: string; bible_verse: string; prayer_points: string }) =>
+      updateGlobalThemeApi(draft.id, {
+        title: draft.title.trim(),
+        bible_verse: draft.bible_verse.trim() || null,
+        prayer_points: draft.prayer_points.trim() || null,
+      }),
+    onSuccess: () => {
+      setTEdit(null);
+      setNote({ type: 'ok', text: 'Тема обновлена.' });
+      invT();
+    },
+    onError: (e) => setNote({ type: 'err', text: apiErrorMessage(e, 'Ошибка.') }),
+  });
+
   const addM = useMutation({
     mutationFn: () =>
       createMinistryApi({
@@ -1105,6 +1222,20 @@ function GlobalNeedsSection() {
     onError: (e) => setNote({ type: 'err', text: apiErrorMessage(e, 'Ошибка.') }),
   });
 
+  const updM = useMutation({
+    mutationFn: (draft: { id: number; title: string; prayer_points: string }) =>
+      updateMinistryApi(draft.id, {
+        title: draft.title.trim(),
+        prayer_points: draft.prayer_points.trim() || null,
+      }),
+    onSuccess: () => {
+      setMEdit(null);
+      setNote({ type: 'ok', text: 'Служение обновлено.' });
+      invM();
+    },
+    onError: (e) => setNote({ type: 'err', text: apiErrorMessage(e, 'Ошибка.') }),
+  });
+
   const addB = useMutation({
     mutationFn: () => createBacksliderApi(bName.trim()),
     onSuccess: () => {
@@ -1119,6 +1250,16 @@ function GlobalNeedsSection() {
     mutationFn: (id: number) => deleteBacksliderApi(id),
     onSuccess: () => {
       setNote({ type: 'ok', text: 'Удалено.' });
+      invB();
+    },
+    onError: (e) => setNote({ type: 'err', text: apiErrorMessage(e, 'Ошибка.') }),
+  });
+
+  const updB = useMutation({
+    mutationFn: (draft: { id: number; name: string }) => updateBacksliderApi(draft.id, draft.name.trim()),
+    onSuccess: () => {
+      setBEdit(null);
+      setNote({ type: 'ok', text: 'Запись обновлена.' });
       invB();
     },
     onError: (e) => setNote({ type: 'err', text: apiErrorMessage(e, 'Ошибка.') }),
@@ -1186,24 +1327,89 @@ function GlobalNeedsSection() {
               {(themes.data ?? []).length === 0 ? (
                 <li className="py-4 text-center text-xs text-stone-400">Пока нет тем</li>
               ) : (
-                (themes.data ?? []).map((x) => (
-                  <li
-                    key={x.id}
-                    className="flex items-start justify-between gap-2 rounded-xl border border-stone-100 bg-white px-3 py-2"
-                  >
-                    <span className="min-w-0 font-medium text-stone-800">{x.title}</span>
-                    <button
-                      type="button"
-                      className="shrink-0 text-xs font-semibold text-red-600 hover:underline"
-                      onClick={() => {
-                        setNote(null);
-                        delT.mutate(x.id);
-                      }}
+                (themes.data ?? []).map((x) =>
+                  tEdit?.id === x.id ? (
+                    <li
+                      key={x.id}
+                      className="space-y-2 rounded-xl border border-amber-200/80 bg-amber-50/50 px-3 py-2.5"
                     >
-                      Удалить
-                    </button>
-                  </li>
-                ))
+                      <input
+                        className={fieldClass()}
+                        placeholder="Заголовок *"
+                        value={tEdit.title}
+                        onChange={(e) => setTEdit((s) => (s ? { ...s, title: e.target.value } : s))}
+                      />
+                      <input
+                        className={fieldClass()}
+                        placeholder="Стих"
+                        value={tEdit.bible_verse}
+                        onChange={(e) => setTEdit((s) => (s ? { ...s, bible_verse: e.target.value } : s))}
+                      />
+                      <textarea
+                        className={`${fieldClass()} min-h-[64px]`}
+                        placeholder="Акценты молитвы"
+                        value={tEdit.prayer_points}
+                        onChange={(e) => setTEdit((s) => (s ? { ...s, prayer_points: e.target.value } : s))}
+                      />
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          className={btnPrimary('flex-1')}
+                          disabled={!tEdit.title.trim() || updT.isPending}
+                          onClick={() => {
+                            setNote(null);
+                            updT.mutate(tEdit);
+                          }}
+                        >
+                          Сохранить
+                        </button>
+                        <button
+                          type="button"
+                          className={btnSecondary('flex-1')}
+                          disabled={updT.isPending}
+                          onClick={() => setTEdit(null)}
+                        >
+                          Отмена
+                        </button>
+                      </div>
+                    </li>
+                  ) : (
+                    <li
+                      key={x.id}
+                      className="flex items-start justify-between gap-2 rounded-xl border border-stone-100 bg-white px-3 py-2"
+                    >
+                      <span className="min-w-0 font-medium text-stone-800">{x.title}</span>
+                      <div className="flex shrink-0 gap-2">
+                        <button
+                          type="button"
+                          className="text-xs font-semibold text-stone-600 hover:underline"
+                          onClick={() => {
+                            setNote(null);
+                            setTEdit({
+                              id: x.id,
+                              title: x.title,
+                              bible_verse: x.bible_verse ?? '',
+                              prayer_points: x.prayer_points ?? '',
+                            });
+                          }}
+                        >
+                          Изменить
+                        </button>
+                        <button
+                          type="button"
+                          className="text-xs font-semibold text-red-600 hover:underline"
+                          onClick={() => {
+                            setNote(null);
+                            setTEdit(null);
+                            delT.mutate(x.id);
+                          }}
+                        >
+                          Удалить
+                        </button>
+                      </div>
+                    </li>
+                  ),
+                )
               )}
             </ul>
           </section>
@@ -1237,24 +1443,82 @@ function GlobalNeedsSection() {
               {(ministries.data ?? []).length === 0 ? (
                 <li className="py-4 text-center text-xs text-stone-400">Пока нет записей</li>
               ) : (
-                (ministries.data ?? []).map((x) => (
-                  <li
-                    key={x.id}
-                    className="flex items-start justify-between gap-2 rounded-xl border border-stone-100 bg-white px-3 py-2"
-                  >
-                    <span className="min-w-0 font-medium text-stone-800">{x.title}</span>
-                    <button
-                      type="button"
-                      className="shrink-0 text-xs font-semibold text-red-600 hover:underline"
-                      onClick={() => {
-                        setNote(null);
-                        delM.mutate(x.id);
-                      }}
+                (ministries.data ?? []).map((x) =>
+                  mEdit?.id === x.id ? (
+                    <li
+                      key={x.id}
+                      className="space-y-2 rounded-xl border border-amber-200/80 bg-amber-50/50 px-3 py-2.5"
                     >
-                      Удалить
-                    </button>
-                  </li>
-                ))
+                      <input
+                        className={fieldClass()}
+                        placeholder="Название *"
+                        value={mEdit.title}
+                        onChange={(e) => setMEdit((s) => (s ? { ...s, title: e.target.value } : s))}
+                      />
+                      <textarea
+                        className={`${fieldClass()} min-h-[64px]`}
+                        placeholder="Акценты молитвы"
+                        value={mEdit.prayer_points}
+                        onChange={(e) => setMEdit((s) => (s ? { ...s, prayer_points: e.target.value } : s))}
+                      />
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          className={btnPrimary('flex-1')}
+                          disabled={!mEdit.title.trim() || updM.isPending}
+                          onClick={() => {
+                            setNote(null);
+                            updM.mutate(mEdit);
+                          }}
+                        >
+                          Сохранить
+                        </button>
+                        <button
+                          type="button"
+                          className={btnSecondary('flex-1')}
+                          disabled={updM.isPending}
+                          onClick={() => setMEdit(null)}
+                        >
+                          Отмена
+                        </button>
+                      </div>
+                    </li>
+                  ) : (
+                    <li
+                      key={x.id}
+                      className="flex items-start justify-between gap-2 rounded-xl border border-stone-100 bg-white px-3 py-2"
+                    >
+                      <span className="min-w-0 font-medium text-stone-800">{x.title}</span>
+                      <div className="flex shrink-0 gap-2">
+                        <button
+                          type="button"
+                          className="text-xs font-semibold text-stone-600 hover:underline"
+                          onClick={() => {
+                            setNote(null);
+                            setMEdit({
+                              id: x.id,
+                              title: x.title,
+                              prayer_points: x.prayer_points ?? '',
+                            });
+                          }}
+                        >
+                          Изменить
+                        </button>
+                        <button
+                          type="button"
+                          className="text-xs font-semibold text-red-600 hover:underline"
+                          onClick={() => {
+                            setNote(null);
+                            setMEdit(null);
+                            delM.mutate(x.id);
+                          }}
+                        >
+                          Удалить
+                        </button>
+                      </div>
+                    </li>
+                  ),
+                )
               )}
             </ul>
           </section>
@@ -1284,24 +1548,72 @@ function GlobalNeedsSection() {
               {(backsliders.data ?? []).length === 0 ? (
                 <li className="py-4 text-center text-xs text-stone-400">Список пуст</li>
               ) : (
-                (backsliders.data ?? []).map((x) => (
-                  <li
-                    key={x.id}
-                    className="flex items-start justify-between gap-2 rounded-xl border border-stone-100 bg-white px-3 py-2"
-                  >
-                    <span className="min-w-0 font-medium text-stone-800">{x.name}</span>
-                    <button
-                      type="button"
-                      className="shrink-0 text-xs font-semibold text-red-600 hover:underline"
-                      onClick={() => {
-                        setNote(null);
-                        delB.mutate(x.id);
-                      }}
+                (backsliders.data ?? []).map((x) =>
+                  bEdit?.id === x.id ? (
+                    <li
+                      key={x.id}
+                      className="space-y-2 rounded-xl border border-amber-200/80 bg-amber-50/50 px-3 py-2.5"
                     >
-                      Удалить
-                    </button>
-                  </li>
-                ))
+                      <input
+                        className={fieldClass()}
+                        placeholder="Имя *"
+                        value={bEdit.name}
+                        onChange={(e) => setBEdit((s) => (s ? { ...s, name: e.target.value } : s))}
+                      />
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          className={btnPrimary('flex-1')}
+                          disabled={!bEdit.name.trim() || updB.isPending}
+                          onClick={() => {
+                            setNote(null);
+                            updB.mutate(bEdit);
+                          }}
+                        >
+                          Сохранить
+                        </button>
+                        <button
+                          type="button"
+                          className={btnSecondary('flex-1')}
+                          disabled={updB.isPending}
+                          onClick={() => setBEdit(null)}
+                        >
+                          Отмена
+                        </button>
+                      </div>
+                    </li>
+                  ) : (
+                    <li
+                      key={x.id}
+                      className="flex items-start justify-between gap-2 rounded-xl border border-stone-100 bg-white px-3 py-2"
+                    >
+                      <span className="min-w-0 font-medium text-stone-800">{x.name}</span>
+                      <div className="flex shrink-0 gap-2">
+                        <button
+                          type="button"
+                          className="text-xs font-semibold text-stone-600 hover:underline"
+                          onClick={() => {
+                            setNote(null);
+                            setBEdit({ id: x.id, name: x.name });
+                          }}
+                        >
+                          Изменить
+                        </button>
+                        <button
+                          type="button"
+                          className="text-xs font-semibold text-red-600 hover:underline"
+                          onClick={() => {
+                            setNote(null);
+                            setBEdit(null);
+                            delB.mutate(x.id);
+                          }}
+                        >
+                          Удалить
+                        </button>
+                      </div>
+                    </li>
+                  ),
+                )
               )}
             </ul>
           </section>

@@ -39,6 +39,13 @@ html {
   background-color: var(--surface);
 }
 
+/* PWA с экрана «Домой» iOS/Android — тот же фон, что у splash и manifest */
+@media (display-mode: standalone) {
+  html {
+    background-color: var(--surface);
+  }
+}
+
 body {
   margin: 0;
   width: 100%;
@@ -82,6 +89,20 @@ body {
 
   .touch-manipulation {
     touch-action: manipulation;
+  }
+
+  /** Страница «Молитва»: лёгкая сетка на фоне */
+  .prayer-page-bg {
+    background-color: var(--surface);
+    background-image:
+      radial-gradient(ellipse 120% 80% at 50% -30%, rgba(125, 54, 64, 0.07), transparent 55%),
+      radial-gradient(ellipse 60% 40% at 100% 20%, rgba(13, 148, 136, 0.04), transparent 45%);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .prayer-page-bg {
+      background-image: none;
+    }
   }
 }
 
