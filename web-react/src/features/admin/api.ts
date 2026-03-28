@@ -59,6 +59,14 @@ export async function deleteAdminMember(id: number): Promise<void> {
   await apiClient.delete(`${USERS}/${id}`, { validateStatus: (s) => s === 204 || (s != null && s < 500) });
 }
 
+/** Объединяет дубликаты участников (одинаковое ФИО), оставляя карточку с меньшим id. */
+export async function mergeDuplicateMembers(): Promise<{ ok: boolean; mergedPairs: number }> {
+  const { data } = await apiClient.post<{ ok: boolean; mergedPairs: number }>(
+    `${USERS}/merge-duplicates`,
+  );
+  return data;
+}
+
 export async function setMemberAppRole(id: number, app_role: 'member' | 'admin'): Promise<AppUser> {
   const { data } = await apiClient.patch<AppUser>(`${USERS}/${id}/app-role`, { app_role });
   return data;

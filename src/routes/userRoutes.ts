@@ -16,6 +16,7 @@ import {
   setOneTimeMemberDateOverrideHandler,
   startPrayerCycleHandler,
   updateUserHandler,
+  mergeDuplicateMembersHandler,
 } from '../controllers/userController';
 
 const router = Router();
@@ -28,6 +29,7 @@ router.post('/templates/ministry-directions', createMinistryDirectionTemplateHan
 router.delete('/templates/ministry-directions/:id', deleteMinistryDirectionTemplateHandler);
 
 router.get('/', getUsers);
+router.post('/merge-duplicates', mergeDuplicateMembersHandler);
 router.get('/:id', getUser);
 router.get('/:id/prayer-requests/history', getPrayerRequestHistoryHandler);
 router.post('/', createUserHandler);

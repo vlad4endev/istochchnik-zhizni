@@ -20,6 +20,7 @@ import {
   updateUser,
 } from '../services/userService';
 import { notifyRealtime, type RealtimeScope } from '../realtime/notify';
+import { mergeAllDuplicateMembers } from '../services/memberMergeService';
 
 type AuthRequest = Request & { authUserId?: number; authUserRole?: string };
 
@@ -112,6 +113,21 @@ export async function getUsers(req: Request, res: Response): Promise<void> {
   } catch (error) {
     console.error('Failed to fetch users', error);
     res.status(500).json({ error: 'Database error' });
+  }
+}
+
+/** Объединяет дубликаты участников (одинаковое ФИО), оставляя старую карточку. Только админ. */
+export async function mergeDuplicateMembersHandler(req: Request, res: Response): Promise<void> {
+  if (!ensureAdmin(req, res)) {
+    return;
+  }
+  try {
+    const result = await mergeAllDuplicateMembers();
+    notifyRealtime(['members', 'calendar']);
+    res.json({ ok: true, mergedPairs: result.mergedPairs });
+  } catch (error) {
+    console.error('Failed to merge duplicate members', error);
+    res.status(500).json({ error: 'Не удалось объединить дубликаты' });
   }
 }
 

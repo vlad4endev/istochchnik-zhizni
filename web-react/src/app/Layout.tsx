@@ -140,9 +140,9 @@ export function Layout() {
   }
 
   return (
-    <div className="flex min-h-[100dvh] min-h-screen w-full max-w-[100vw] flex-col bg-[var(--surface)] text-[var(--text)] [padding-left:env(safe-area-inset-left,0px)] [padding-right:env(safe-area-inset-right,0px)]">
-      {/* На md+ баннер только над контентом, не над фиксированным сайдбаром */}
-      <div className="shrink-0 md:ml-[260px] lg:ml-[272px]">
+    <div className="flex min-h-[100dvh] min-h-screen w-full max-w-[100vw] flex-col overflow-x-hidden bg-[var(--surface)] text-[var(--text)] [padding-left:env(safe-area-inset-left,0px)] [padding-right:env(safe-area-inset-right,0px)]">
+      <div className="flex min-h-0 min-w-0 w-full max-w-full flex-1 flex-col box-border md:pl-[260px] lg:pl-[272px]">
+      <div className="shrink-0">
         <ConnectivityBanner />
       </div>
       <div className="relative flex min-h-0 w-full min-w-0 flex-1 flex-col">
@@ -196,8 +196,8 @@ export function Layout() {
         </div>
       </aside>
 
-      {/* Main: на md+ отступ под фиксированный сайдбар; снизу под нижний бар + safe-area на мобильных */}
-      <main className="min-h-0 w-full min-w-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-y-contain pb-[max(7rem,calc(5rem+env(safe-area-inset-bottom)))] [-webkit-overflow-scrolling:touch] md:ml-[260px] md:pb-0 lg:ml-[272px] 2xl:px-8 min-[1920px]:px-12">
+      {/* Main: отступ слева от сайдбара — на родителе (padding); снизу под нижний бар на мобильных */}
+      <main className="min-h-0 w-full min-w-0 max-w-full flex-1 overflow-x-hidden overflow-y-auto overscroll-y-contain pb-[max(7rem,calc(5rem+env(safe-area-inset-bottom)))] [-webkit-overflow-scrolling:touch] md:pb-0 2xl:px-8 min-[1920px]:px-12">
         <Outlet />
       </main>
 
@@ -230,6 +230,7 @@ export function Layout() {
           </div>
         </div>
       </nav>
+      </div>
       </div>
     </div>
   );

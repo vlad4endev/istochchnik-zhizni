@@ -124,6 +124,7 @@ export async function registerHandler(req: Request, res: Response): Promise<void
       return;
     }
 
+    notifyRealtime(['members', 'calendar']);
     res.status(201).json(registration);
   } catch (error) {
     if (error instanceof MemberNameDuplicateError) {

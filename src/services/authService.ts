@@ -3,7 +3,7 @@ import { promisify } from 'util';
 import { query } from '../config/db';
 import type { PrayerCyclePublic } from './prayerCycleService';
 import { getPrayerCycleSnapshotForDate, toPublicCycleInfo } from './prayerCycleService';
-import { findMemberIdConflictingName, MemberNameDuplicateError, updateUser } from './userService';
+import { findMemberIdConflictingName, updateUser } from './userService';
 
 const scrypt = promisify(scryptCallback);
 const MIN_PASSWORD_LENGTH = 8;
@@ -533,11 +533,58 @@ export async function registerUser(input: RegisterInput): Promise<RegisterResult
     };
   }
 
-  const nameConflictId = await findMemberIdConflictingName(firstName, lastName);
-  if (nameConflictId != null) {
-    throw new MemberNameDuplicateError(
-      'Участник с таким именем и фамилией уже есть. Войдите с номером из карточки или обратитесь к администратору.'
+  const sameNameMemberId = await findMemberIdConflictingName(firstName, lastName);
+  if (sameNameMemberId != null) {
+    const dupCheck = await query(
+      `SELECT id, password_hash FROM members WHERE id = $1 LIMIT 1`,
+      [sameNameMemberId]
     );
+    const dupRow = dupCheck.rows[0] as { id: number; password_hash: string | null } | undefined;
+    if (dupRow?.password_hash) {
+      throw new Error('Account already exists');
+    }
+    if (dupRow) {
+      const mergedResult = await query(
+        `UPDATE members
+         SET
+          first_name = $1,
+          last_name = $2,
+          name = $3,
+          phone_number = $4,
+          password_hash = $5,
+          app_role = COALESCE(NULLIF(app_role, ''), 'member'),
+          is_active = TRUE,
+          updated_at = NOW()
+         WHERE id = $6
+         RETURNING
+          id,
+          first_name,
+          last_name,
+          name,
+          phone_number,
+          birth_date,
+          email,
+          prayer_request,
+          app_role,
+          is_active,
+          is_collection_coordinator,
+          created_at,
+          updated_at`,
+        [firstName, lastName, fullName, phoneNumber, passwordHash, dupRow.id]
+      );
+      const member = mergedResult.rows[0] as MemberRow;
+      const { token, expiresAt } = await createSessionForUser(member.id);
+      const user = await getAuthUserById(member.id);
+      if (!user) {
+        throw new Error('Member not found after approval');
+      }
+      return {
+        status: 'approved',
+        token,
+        expires_at: expiresAt,
+        user,
+      };
+    }
   }
 
   const requestId = await createPendingAccessRequest(
@@ -840,6 +887,13 @@ export async function approveAccessRequest(
         [conflictId]
       );
       existingMember = (conflictResult.rows[0] as MemberRow | undefined) ?? null;
+    }
+  }
+
+  if (!existingMember) {
+    const byPhone = await findMemberByPhoneDigits(requestRow.phone_digits);
+    if (byPhone && isInputNameMatchingMember(byPhone, requestRow.first_name, requestRow.last_name)) {
+      existingMember = byPhone;
     }
   }
 

@@ -36,6 +36,7 @@ import {
   fetchGlobalMinistries,
   fetchGlobalThemes,
   fetchRoleTemplates,
+  mergeDuplicateMembers,
   setMemberAppRole,
   setOneTimeMemberDate,
   startPrayerCycle,
@@ -170,7 +171,7 @@ export function AdminPage() {
   const MetaIcon = meta.Icon;
 
   return (
-    <div className="mx-auto max-w-6xl px-3 py-3 sm:px-4 sm:py-4 shell:px-6 shell:py-6">
+    <div className="mx-auto w-full min-w-0 max-w-6xl px-3 py-3 sm:px-4 sm:py-4 shell:px-6 shell:py-6">
       <header className="mb-4 overflow-hidden rounded-3xl border border-stone-200/80 bg-gradient-to-br from-primary/[0.07] via-[var(--surface-elevated)] to-stone-50/90 p-5 shadow-[var(--shadow)] sm:mb-5">
         <p className="text-[10px] font-extrabold uppercase tracking-[0.2em] text-primary/85">Настройки</p>
         <h1 className="mt-2 text-[22px] font-extrabold tracking-tight text-stone-900 shell:text-2xl">
@@ -181,7 +182,7 @@ export function AdminPage() {
 
       {/* Разделы — горизонтальная полоса: на узком экране прокрутка, на шире — перенос строк */}
       <nav
-        className="sticky top-0 z-20 -mx-3 mb-5 rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] px-2 py-2.5 shadow-[var(--shadow)] backdrop-blur-sm supports-[backdrop-filter]:bg-[var(--surface-elevated)]/95 sm:-mx-4 sm:mb-6 sm:px-3 shell:mx-0"
+        className="sticky top-0 z-20 -mx-3 mb-5 rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] px-2 py-2.5 shadow-[var(--shadow)] backdrop-blur-sm supports-[backdrop-filter]:bg-[var(--surface-elevated)]/95 sm:-mx-4 sm:mb-6 sm:px-3 md:mx-0"
         aria-label="Разделы панели"
       >
         <p className="px-1.5 pb-2 text-[10px] font-extrabold uppercase tracking-[0.14em] text-stone-400">
@@ -379,6 +380,21 @@ function MembersSection() {
       invalidate();
     },
     onError: (e) => setBanner({ type: 'err', text: apiErrorMessage(e, 'Нельзя изменить роль.') }),
+  });
+
+  const mergeDupesMut = useMutation({
+    mutationFn: () => mergeDuplicateMembers(),
+    onSuccess: (r) => {
+      setBanner({
+        type: 'ok',
+        text:
+          r.mergedPairs > 0
+            ? `Объединено пар дубликатов: ${r.mergedPairs}.`
+            : 'Дубликатов с одинаковым ФИО не найдено.',
+      });
+      invalidate();
+    },
+    onError: (e) => setBanner({ type: 'err', text: apiErrorMessage(e, 'Не удалось объединить.') }),
   });
 
   const oneTimeMut = useMutation({
@@ -679,6 +695,25 @@ function MembersSection() {
         {isFetching && !isLoading ? (
           <span className="text-xs text-stone-400">Обновление…</span>
         ) : null}
+        <button
+          type="button"
+          className={btnSecondary('shrink-0 text-xs')}
+          disabled={mergeDupesMut.isPending}
+          title="Слить в одну карточку записи с одинаковым именем и фамилией (безопаснее, если создавались дубликаты)"
+          onClick={() => {
+            if (
+              !window.confirm(
+                'Объединить дубликаты участников? Останется одна карточка с меньшим номером (старая запись), пароль и данные перенесутся.',
+              )
+            ) {
+              return;
+            }
+            setBanner(null);
+            mergeDupesMut.mutate();
+          }}
+        >
+          {mergeDupesMut.isPending ? 'Объединение…' : 'Объединить дубликаты'}
+        </button>
       </div>
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
