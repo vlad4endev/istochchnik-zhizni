@@ -12,12 +12,15 @@ interface Member {
   id: number;
   name: string;
   prayer_request: string | null;
+  /** Когда последний раз меняли молитвенную нужду для этого цикла (member_prayer_by_cycle). */
+  prayer_need_updated_at: string | null;
 }
 
 interface MemberOverrideRow {
   id: number;
   name: string;
   prayer_request: string | null;
+  prayer_need_updated_at: string | null;
 }
 
 interface GlobalTheme {
@@ -75,6 +78,16 @@ export function getNextWeekDates(): string[] {
   return Array.from({ length: 7 }, (_, index) => formatUtcDate(addUtcDays(nextMonday, index)));
 }
 
+/** Семь дат пн–вс текущей календарной недели (включая сегодня). */
+export function getCurrentWeekDates(): string[] {
+  const now = new Date();
+  const todayUtc = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  const day = todayUtc.getUTCDay(); // 0=Sun ... 6=Sat
+  const daysFromMonday = day === 0 ? 6 : day - 1;
+  const monday = addUtcDays(todayUtc, -daysFromMonday);
+  return Array.from({ length: 7 }, (_, index) => formatUtcDate(addUtcDays(monday, index)));
+}
+
 async function getByIndex<T>(
   table: string,
   index: number,
@@ -121,7 +134,8 @@ export async function getPrayerDataByDate(targetDate: string): Promise<PrayerDat
     totalMembers > 0 ? computeCycleIndex(diffDays, totalMembers) : 0;
 
   const overridePromise = query(
-    `SELECT m.id, m.name, COALESCE(mpc.prayer_request, m.prayer_request) AS prayer_request
+    `SELECT m.id, m.name, COALESCE(mpc.prayer_request, m.prayer_request) AS prayer_request,
+            mpc.updated_at::text AS prayer_need_updated_at
      FROM member_cycle_overrides o
      JOIN members m ON m.id = o.member_id
      LEFT JOIN member_prayer_by_cycle mpc
@@ -143,7 +157,8 @@ export async function getPrayerDataByDate(targetDate: string): Promise<PrayerDat
     }
 
     const result = await query(
-      `SELECT m.id, m.name, COALESCE(mpc.prayer_request, m.prayer_request) AS prayer_request
+      `SELECT m.id, m.name, COALESCE(mpc.prayer_request, m.prayer_request) AS prayer_request,
+              mpc.updated_at::text AS prayer_need_updated_at
        FROM members m
        LEFT JOIN member_prayer_by_cycle mpc
          ON mpc.member_id = m.id AND mpc.cycle_index = $2
@@ -173,8 +188,21 @@ export async function getPrayerDataByDate(targetDate: string): Promise<PrayerDat
   };
 }
 
+export type WeekPlanKind = 'current' | 'next';
+
+export async function getMemberAssignmentsForWeek(kind: WeekPlanKind): Promise<NextWeekMemberAssignment[]> {
+  const dates = kind === 'next' ? getNextWeekDates() : getCurrentWeekDates();
+  return getMemberAssignmentsForDates(dates);
+}
+
 export async function getNextWeekMemberAssignments(): Promise<NextWeekMemberAssignment[]> {
-  const dates = getNextWeekDates();
+  return getMemberAssignmentsForWeek('next');
+}
+
+async function getMemberAssignmentsForDates(dates: string[]): Promise<NextWeekMemberAssignment[]> {
+  if (dates.length === 0) {
+    return [];
+  }
   const firstDate = dates[0];
   const lastDate = dates[dates.length - 1];
 
@@ -212,7 +240,8 @@ export async function getNextWeekMemberAssignments(): Promise<NextWeekMemberAssi
     const diffD = getDiffDays(targetDate, cycleStartDate);
     const cIdx = computeCycleIndex(diffD, totalMembers);
     const r = await query(
-      `SELECT m.id, m.name, COALESCE(mpc.prayer_request, m.prayer_request) AS prayer_request
+      `SELECT m.id, m.name, COALESCE(mpc.prayer_request, m.prayer_request) AS prayer_request,
+              mpc.updated_at::text AS prayer_need_updated_at
        FROM members m
        LEFT JOIN member_prayer_by_cycle mpc ON mpc.member_id = m.id AND mpc.cycle_index = $2
        WHERE m.id = $1`,
@@ -243,19 +272,23 @@ export async function getNextWeekMemberAssignments(): Promise<NextWeekMemberAssi
     }
 
     const pr = await query(
-      `SELECT COALESCE(mpc.prayer_request, m.prayer_request) AS prayer_request
+      `SELECT COALESCE(mpc.prayer_request, m.prayer_request) AS prayer_request,
+              mpc.updated_at::text AS prayer_need_updated_at
        FROM members m
        LEFT JOIN member_prayer_by_cycle mpc ON mpc.member_id = m.id AND mpc.cycle_index = $2
        WHERE m.id = $1`,
       [base.id, cIdx]
     );
-    const prayerRequest = (pr.rows[0] as { prayer_request?: string | null } | undefined)?.prayer_request ?? null;
+    const row = pr.rows[0] as { prayer_request?: string | null; prayer_need_updated_at?: string | null } | undefined;
+    const prayerRequest = row?.prayer_request ?? null;
+    const updatedAt = row?.prayer_need_updated_at ?? null;
     out.push({
       date,
       member: {
         id: base.id,
         name: base.name,
         prayer_request: prayerRequest,
+        prayer_need_updated_at: updatedAt,
       },
     });
   }

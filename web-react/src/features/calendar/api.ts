@@ -24,10 +24,13 @@ function normalizeMemberRow(raw: unknown): Member | null {
   const idNum = typeof id === 'number' ? id : Number(id);
   if (!Number.isFinite(idNum)) return null;
   const pr = raw.prayer_request;
+  const pu = raw.prayer_need_updated_at;
   return {
     id: idNum,
     name: String(name),
     prayer_request: typeof pr === 'string' ? pr : pr == null ? null : String(pr),
+    prayer_need_updated_at:
+      typeof pu === 'string' ? pu : pu == null || pu === undefined ? null : String(pu),
   };
 }
 
@@ -41,11 +44,16 @@ function normalizeNextWeekDay(raw: unknown): NextWeekMemberDay | null {
   };
 }
 
+export type WeekPlanKind = 'current' | 'next';
+
 /**
- * GET `/api/calendar/next-week/members` — 7 дней (пн–вс) следующей календарной недели, по члену на день.
+ * GET `/api/calendar/next-week/members` — 7 дней (пн–вс) выбранной недели, по члену на день.
+ * @param week `current` — текущая календарная неделя, `next` — следующая (по умолчанию).
  */
-export async function getNextWeekMembers(): Promise<NextWeekMemberDay[]> {
-  const { data } = await apiClient.get<unknown>('/api/calendar/next-week/members');
+export async function getWeekPlanMembers(week: WeekPlanKind = 'next'): Promise<NextWeekMemberDay[]> {
+  const { data } = await apiClient.get<unknown>('/api/calendar/next-week/members', {
+    params: { week },
+  });
   if (!isRecord(data) || !Array.isArray(data.days)) {
     throw new Error('Некорректный ответ API: next-week/members');
   }
@@ -58,6 +66,23 @@ export async function getNextWeekMembers(): Promise<NextWeekMemberDay[]> {
     throw new Error('Некорректный ответ API: next-week/members');
   }
   return out;
+}
+
+/** @deprecated используйте getWeekPlanMembers */
+export async function getNextWeekMembers(): Promise<NextWeekMemberDay[]> {
+  return getWeekPlanMembers('next');
+}
+
+export async function patchMemberCyclePrayer(
+  memberId: number,
+  targetDate: string,
+  prayerRequest: string
+): Promise<void> {
+  await apiClient.patch('/api/calendar/member-cycle-prayer', {
+    member_id: memberId,
+    target_date: targetDate,
+    prayer_request: prayerRequest,
+  });
 }
 
 function normalizePrayerCycle(raw: unknown): PrayerCycleInfo | null {
@@ -93,10 +118,16 @@ function normalizeDayPrayer(raw: unknown): DayPrayerData {
     throw new Error('Некорректный ответ API календаря: нет date/diffDays');
   }
   const pc = normalizePrayerCycle(raw.prayer_cycle);
+  const membersRaw = Array.isArray(raw.members) ? raw.members : [];
+  const members: Member[] = [];
+  for (const m of membersRaw) {
+    const row = normalizeMemberRow(m);
+    if (row) members.push(row);
+  }
   return {
     date,
     diffDays,
-    members: Array.isArray(raw.members) ? (raw.members as DayPrayerData['members']) : [],
+    members,
     global_themes: Array.isArray(raw.global_themes)
       ? (raw.global_themes as DayPrayerData['global_themes'])
       : [],

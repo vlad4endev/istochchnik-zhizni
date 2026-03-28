@@ -1,4 +1,5 @@
 import { query } from '../config/db';
+import { getPrayerDataByDate } from './calendarService';
 import { getCurrentCycleIndexForUpsert, upsertMemberPrayerForCycle } from './prayerCycleService';
 
 export interface AppUser {
@@ -560,6 +561,33 @@ export async function createMinistryDirectionTemplate(
 export async function deleteMinistryDirectionTemplate(id: number): Promise<boolean> {
   const result = await query('DELETE FROM ministry_direction_templates WHERE id = $1', [id]);
   return (result.rowCount ?? 0) > 0;
+}
+
+/**
+ * Сохранение молитвенной нужды для участника на конкретную дату цикла (координатор / админ).
+ * Пишет member_prayer_by_cycle и при изменении текста — запись в member_prayer_request_history.
+ */
+export async function setCoordinatorPrayerNeedForDate(
+  memberId: number,
+  targetDate: string,
+  prayerRequest: string | null
+): Promise<void> {
+  const data = await getPrayerDataByDate(targetDate);
+  const assigned = data.members[0];
+  if (!assigned || assigned.id !== memberId) {
+    throw new Error('member_mismatch');
+  }
+  const ci = data.prayer_cycle?.index;
+  if (ci === undefined) {
+    throw new Error('no_cycle');
+  }
+  const prev = (assigned.prayer_request ?? '').trim();
+  const normalized = normalizeOptionalString(prayerRequest);
+  await upsertMemberPrayerForCycle(memberId, ci, normalized);
+  const next = (normalized ?? '').trim();
+  if (next.length > 0 && next !== prev) {
+    await appendPrayerRequestHistory(memberId, next, ci);
+  }
 }
 
 export async function listPrayerRequestHistory(

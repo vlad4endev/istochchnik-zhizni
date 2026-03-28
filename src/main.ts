@@ -9,6 +9,7 @@ import dotenv from 'dotenv';
 import { pool } from './config/db';
 import { initDb } from './config/initDb';
 import { MEMBER_SEED_SQL } from './config/memberSeedSql';
+import { ensurePrayerCycleAnchor } from './config/prayerCycleAnchor';
 import { resolveAuthSession } from './middleware/authSession';
 import { enforceRoleAccess, resolveUserRole } from './middleware/roleAccess';
 import routes from './routes';
@@ -112,12 +113,20 @@ async function start(): Promise<void> {
   if (process.env.DATABASE_URL) {
     if (skipDbInitOnStart) {
       console.log('Skipping database initialization on startup');
+      if (pool) {
+        try {
+          await ensurePrayerCycleAnchor(pool);
+        } catch (e) {
+          console.warn('[cycle] ensurePrayerCycleAnchor (SKIP_DB_INIT_ON_START):', e);
+        }
+      }
     } else {
       await initDb();
       console.log('Database tables initialized');
       if (!pool) {
         throw new Error('Internal: pool is null after initDb');
       }
+      await ensurePrayerCycleAnchor(pool);
       const cnt = await pool.query('SELECT COUNT(*)::int AS c FROM members');
       const n = Number(cnt.rows[0]?.c ?? 0);
       if (n === 0) {
@@ -125,6 +134,7 @@ async function start(): Promise<void> {
         console.log(
           '[db] Таблица members была пуста — применён базовый список участников (54 записи).',
         );
+        await ensurePrayerCycleAnchor(pool);
       }
     }
   }

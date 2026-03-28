@@ -6,6 +6,7 @@ import {
   format,
   isAfter,
   isBefore,
+  parseISO,
   startOfDay,
   startOfWeek,
 } from 'date-fns';
@@ -37,7 +38,6 @@ import {
 } from '../../../lib/config';
 import type { Backslider, DayPrayerData, GlobalTheme, Member, Ministry } from '../../../types';
 import { fetchMe, patchProfile } from '../../profile/api';
-import { CycleCollectionClaimsSection } from '../components/CycleCollectionClaimsSection';
 import {
   NextWeekPrayerPlanSection,
   userCanViewNextWeekPrayerPlan,
@@ -62,6 +62,18 @@ function isDayPrayerEmpty(data: DayPrayerData): boolean {
 
 function hasPrayerContent(data: DayPrayerData | null | undefined): data is DayPrayerData {
   return data != null && !isDayPrayerEmpty(data);
+}
+
+function formatPrayerNeedUpdated(iso: string | null | undefined): string | null {
+  if (iso == null || typeof iso !== 'string' || !iso.trim()) return null;
+  try {
+    const normalized = iso.includes('T') ? iso : iso.replace(' ', 'T');
+    const d = parseISO(normalized);
+    if (Number.isNaN(d.getTime())) return null;
+    return format(d, 'd MMM yyyy, HH:mm', { locale: ru });
+  } catch {
+    return null;
+  }
 }
 
 function SectionHeader({ Icon, title, id }: { Icon: IconType; title: string; id?: string }) {
@@ -144,6 +156,7 @@ function MemberCard({
   }
 
   const hasRequest = member.prayer_request != null && member.prayer_request.trim().length > 0;
+  const updatedLine = formatPrayerNeedUpdated(member.prayer_need_updated_at);
 
   return (
     <PrayerCard Icon={LuHeartHandshake} title={member.name} accentVar="var(--member)">
@@ -162,6 +175,9 @@ function MemberCard({
               placeholder="О чём просим молиться…"
             />
           </label>
+          {updatedLine ? (
+            <p className="text-[12px] text-stone-500">Нужда для этого цикла обновлена: {updatedLine}</p>
+          ) : null}
           {saveErr ? <p className="text-sm text-red-600">{saveErr}</p> : null}
           <button
             type="button"
@@ -173,7 +189,12 @@ function MemberCard({
           </button>
         </div>
       ) : hasRequest ? (
-        <p className="text-[16px] text-stone-600">{member.prayer_request}</p>
+        <div className="space-y-2">
+          <p className="text-[16px] text-stone-600">{member.prayer_request}</p>
+          {updatedLine ? (
+            <p className="text-[12px] text-stone-500">Обновлено для этого цикла: {updatedLine}</p>
+          ) : null}
+        </div>
       ) : (
         <p className="italic text-stone-400">Нет указанных нужд</p>
       )}
@@ -578,10 +599,7 @@ export function DailyPrayerPage() {
 
       <div className="px-4 pt-4 shell:px-6">
         {userCanViewNextWeekPrayerPlan(me) ? (
-          <>
-            <NextWeekPrayerPlanSection canView />
-            <CycleCollectionClaimsSection currentUserId={me?.id ?? null} />
-          </>
+          <NextWeekPrayerPlanSection canView currentUserId={me?.id ?? null} />
         ) : null}
         {isPending ? (
           <CalendarPrayerSkeleton />
@@ -599,7 +617,7 @@ export function DailyPrayerPage() {
                     currentUserId={me?.id ?? null}
                     onPrayerSaved={() => {
                       void qc.invalidateQueries({ queryKey: ['calendar', 'day', dateKey] });
-                      void qc.invalidateQueries({ queryKey: ['calendar', 'next-week', 'members'] });
+                      void qc.invalidateQueries({ queryKey: ['calendar', 'week-members'] });
                       void qc.invalidateQueries({ queryKey: ['calendar', 'cycle', 'collection-claims'] });
                     }}
                   />

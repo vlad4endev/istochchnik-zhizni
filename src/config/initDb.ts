@@ -111,9 +111,7 @@ CREATE TABLE IF NOT EXISTS access_requests (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-INSERT INTO global_settings (id, start_date)
-VALUES (1, CURRENT_DATE)
-ON CONFLICT (id) DO NOTHING;
+-- global_settings: строка (id=1) создаётся в ensurePrayerCycleAnchor() после initDb — не затирать якорь при обновлениях.
 
 ALTER TABLE members ADD COLUMN IF NOT EXISTS birth_date DATE;
 ALTER TABLE members ADD COLUMN IF NOT EXISTS first_name VARCHAR(120);

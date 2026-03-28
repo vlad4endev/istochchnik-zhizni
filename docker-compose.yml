@@ -12,6 +12,7 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+    # Не удаляйте том: docker compose down -v сбросит БД и якорь молитвенного цикла.
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
@@ -32,6 +33,9 @@ services:
       DB_SSL_REJECT_UNAUTHORIZED: ${DB_SSL_REJECT_UNAUTHORIZED:-false}
       DB_DEBUG_LOG: ${DB_DEBUG_LOG:-false}
       SKIP_DB_INIT_ON_START: ${SKIP_DB_INIT_ON_START:-false}
+      PRAYER_CYCLE_START_DATE: ${PRAYER_CYCLE_START_DATE:-}
+      PRAYER_CYCLE_SYNC_FROM_ENV: ${PRAYER_CYCLE_SYNC_FROM_ENV:-false}
+      PRAYER_CYCLE_FORCE_RESTORE: ${PRAYER_CYCLE_FORCE_RESTORE:-false}
       AUTH_SESSION_TTL_DAYS: ${AUTH_SESSION_TTL_DAYS:-30}
       AUTH_MAX_ACTIVE_SESSIONS_PER_USER: ${AUTH_MAX_ACTIVE_SESSIONS_PER_USER:-5}
       TRUST_PROXY: ${TRUST_PROXY:-true}

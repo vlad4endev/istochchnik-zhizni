@@ -1,6 +1,11 @@
 import { Request, Response } from 'express';
 import { query } from '../config/db';
-import { getNextWeekMemberAssignments, getPrayerDataByDate } from '../services/calendarService';
+import {
+  getMemberAssignmentsForWeek,
+  type WeekPlanKind,
+  getPrayerDataByDate,
+} from '../services/calendarService';
+import { setCoordinatorPrayerNeedForDate } from '../services/userService';
 import {
   getCycleCollectionClaimsSnapshot,
   setCycleCollectionClaim,
@@ -150,15 +155,56 @@ async function assertAdminOrCollectionCoordinator(req: Request, res: Response): 
   return false;
 }
 
+function parseWeekPlanKind(value: unknown): WeekPlanKind {
+  return value === 'current' ? 'current' : 'next';
+}
+
 export async function getNextWeekMembers(req: Request, res: Response): Promise<void> {
   if (!(await assertAdminOrCollectionCoordinator(req, res))) {
     return;
   }
   try {
-    const days = await getNextWeekMemberAssignments();
-    res.json({ days });
+    const kind = parseWeekPlanKind(req.query?.week);
+    const days = await getMemberAssignmentsForWeek(kind);
+    res.json({ days, week: kind });
   } catch (err) {
     console.error('Calendar next-week error:', err);
+    res.status(500).json({ error: 'Database error' });
+  }
+}
+
+export async function patchMemberCyclePrayer(req: Request, res: Response): Promise<void> {
+  if (!(await assertAdminOrCollectionCoordinator(req, res))) {
+    return;
+  }
+
+  const memberId = parsePositiveInt(req.body?.member_id);
+  const targetDate = req.body?.target_date;
+  const prayerRaw = req.body?.prayer_request;
+
+  if (memberId == null || typeof targetDate !== 'string' || !isValidDateInput(targetDate)) {
+    res.status(400).json({ error: 'Ожидается member_id и target_date (YYYY-MM-DD)' });
+    return;
+  }
+  if (typeof prayerRaw !== 'string') {
+    res.status(400).json({ error: 'Ожидается prayer_request (строка)' });
+    return;
+  }
+
+  try {
+    await setCoordinatorPrayerNeedForDate(memberId, targetDate, prayerRaw);
+    res.json({ ok: true });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg === 'member_mismatch') {
+      res.status(400).json({ error: 'Участник не соответствует назначению на эту дату' });
+      return;
+    }
+    if (msg === 'no_cycle') {
+      res.status(400).json({ error: 'Нет активного молитвенного цикла' });
+      return;
+    }
+    console.error('Calendar member-cycle-prayer PATCH error:', err);
     res.status(500).json({ error: 'Database error' });
   }
 }

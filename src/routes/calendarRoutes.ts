@@ -6,6 +6,7 @@ import {
   getPrayerData,
   getTodayPrayerBotMessage,
   patchCycleCollectionClaims,
+  patchMemberCyclePrayer,
 } from '../controllers/calendarController';
 import {
   getThemes,
@@ -26,6 +27,7 @@ import {
 const router = Router();
 
 router.get('/next-week/members', getNextWeekMembers);
+router.patch('/member-cycle-prayer', patchMemberCyclePrayer);
 router.get('/cycle/collection-claims', getCycleCollectionClaims);
 router.patch('/cycle/collection-claims', patchCycleCollectionClaims);
 /** Совместимость: старые клиенты / кэш PWA ходили на next-week/collection. */

@@ -2,6 +2,8 @@ export interface Member {
   id: number;
   name: string;
   prayer_request: string | null;
+  /** Когда сохраняли нужду для текущего цикла (member_prayer_by_cycle.updated_at). */
+  prayer_need_updated_at?: string | null;
 }
 
 export interface GlobalTheme {
