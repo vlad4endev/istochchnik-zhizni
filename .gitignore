@@ -7,6 +7,7 @@ dist
 *.log
 .DS_Store
 coverage/
+*.tsbuildinfo
 supabase/.temp/
 
 # Артефакты для Dockerfile.web.prebuilt (генерируются локально)

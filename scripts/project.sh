@@ -97,8 +97,8 @@ cmd_update() {
       echo "[$( _ts )] Текущая ветка: $(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "?")"
       git remote -v | head -6 || true
       # npm на сервере меняет package.json / lock — иначе git pull падает с «would be overwritten by merge»
-      echo "[$( _ts )] Сброс локальных правок package.json и package-lock (корень и web-react)…"
-      for _pkg in package.json package-lock.json web-react/package.json web-react/package-lock.json; do
+      echo "[$( _ts )] Сброс локальных правок package*.json / lock и tsbuildinfo (артефакты сборки)…"
+      for _pkg in package.json package-lock.json web-react/package.json web-react/package-lock.json web-react/tsconfig.tsbuildinfo; do
         if [[ -f "$_pkg" ]]; then
           git restore -- "$_pkg" 2>/dev/null || git checkout -- "$_pkg" 2>/dev/null || true
         fi
