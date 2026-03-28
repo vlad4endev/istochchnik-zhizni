@@ -577,8 +577,12 @@ export function DailyPrayerPage() {
       </div>
 
       <div className="px-4 pt-4 shell:px-6">
-        <NextWeekPrayerPlanSection canView={userCanViewNextWeekPrayerPlan(me)} />
-        <NextWeekCollectionBlock />
+        {userCanViewNextWeekPrayerPlan(me) ? (
+          <>
+            <NextWeekPrayerPlanSection canView />
+            <NextWeekCollectionBlock />
+          </>
+        ) : null}
         {isPending ? (
           <CalendarPrayerSkeleton />
         ) : isError ? (

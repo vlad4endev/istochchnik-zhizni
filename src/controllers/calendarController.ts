@@ -120,8 +120,8 @@ export async function getTodayPrayerBotMessage(req: Request, res: Response): Pro
 
 type AuthReq = Request & { authUserId?: number; authUserRole?: 'member' | 'admin' };
 
-/** План «молитва за члена» на следующую неделю — только админы и ответственные за сбор. */
-async function assertCanViewNextWeekMembersPlan(req: Request, res: Response): Promise<boolean> {
+/** План на след. неделю и назначения сбора — только администраторы и ответственные за сбор. */
+async function assertAdminOrCollectionCoordinator(req: Request, res: Response): Promise<boolean> {
   const authReq = req as AuthReq;
   if (!authReq.authUserId) {
     res.status(401).json({ error: 'Требуется вход в аккаунт' });
@@ -146,12 +146,12 @@ async function assertCanViewNextWeekMembersPlan(req: Request, res: Response): Pr
     return false;
   }
 
-  res.status(403).json({ error: 'Нет доступа к плану на следующую неделю' });
+  res.status(403).json({ error: 'Нет доступа к разделу следующей недели' });
   return false;
 }
 
 export async function getNextWeekMembers(req: Request, res: Response): Promise<void> {
-  if (!(await assertCanViewNextWeekMembersPlan(req, res))) {
+  if (!(await assertAdminOrCollectionCoordinator(req, res))) {
     return;
   }
   try {
@@ -164,6 +164,9 @@ export async function getNextWeekMembers(req: Request, res: Response): Promise<v
 }
 
 export async function getNextWeekCollection(req: Request, res: Response): Promise<void> {
+  if (!(await assertAdminOrCollectionCoordinator(req, res))) {
+    return;
+  }
   try {
     const authReq = req as AuthReq;
     const snapshot = await getNextWeekCollectionSnapshot(authReq.authUserId ?? null);

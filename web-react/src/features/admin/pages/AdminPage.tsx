@@ -1,5 +1,14 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { type FormEvent, useEffect, useMemo, useState } from 'react';
+import {
+  type FormEvent,
+  type MouseEvent,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
+import { createPortal } from 'react-dom';
 
 import { LuImage, LuPenLine } from 'react-icons/lu';
 
@@ -67,121 +76,117 @@ function btnDangerOutline(className = '') {
   return `rounded-xl border border-red-200 bg-white px-3 py-2 text-sm font-semibold text-red-700 transition hover:bg-red-50 ${className}`;
 }
 
+/** Позиция fixed-меню у якоря; не обрезается родителями с overflow-x-auto / overflow-hidden. */
+const MEMBER_MENU_MIN_W = 224;
+const MEMBER_MENU_GAP = 4;
+const MEMBER_MENU_PAD = 8;
+
+function computeMemberMenuPosition(anchor: DOMRect): { top: number; left: number } {
+  let left = anchor.right - MEMBER_MENU_MIN_W;
+  left = Math.max(
+    MEMBER_MENU_PAD,
+    Math.min(left, window.innerWidth - MEMBER_MENU_MIN_W - MEMBER_MENU_PAD),
+  );
+  const estHeight = 340;
+  let top = anchor.bottom + MEMBER_MENU_GAP;
+  const spaceBelow = window.innerHeight - anchor.bottom - MEMBER_MENU_PAD;
+  const spaceAbove = anchor.top - MEMBER_MENU_PAD;
+  if (spaceBelow < estHeight && spaceAbove > spaceBelow) {
+    top = anchor.top - estHeight - MEMBER_MENU_GAP;
+  }
+  return {
+    top: Math.max(MEMBER_MENU_PAD, Math.min(top, window.innerHeight - MEMBER_MENU_PAD - 48)),
+    left,
+  };
+}
+
 export function AdminPage() {
   const [tab, setTab] = useState<AdminTabId>('members');
   const meta = ADMIN_TABS.find((t) => t.id === tab)!;
   const MetaIcon = meta.Icon;
 
   return (
-    <div className="mx-auto max-w-6xl px-3 py-3 sm:px-4 sm:py-4 shell:flex shell:min-h-0 shell:gap-8 shell:px-6 shell:py-6">
-      {/* Боковое меню — desktop */}
-      <aside className="mb-4 hidden w-[220px] shrink-0 shell:block">
-        <div className="sticky top-4 rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] p-2 shadow-[var(--shadow)]">
-          <p className="px-3 pb-2 pt-1 text-[10px] font-extrabold uppercase tracking-[0.16em] text-stone-400">
-            Разделы панели
-          </p>
-          <nav className="flex flex-col gap-1" aria-label="Админ-разделы">
-            {ADMIN_TABS.map((t) => {
-              const active = tab === t.id;
-              const TabIcon = t.Icon;
-              return (
-                <button
-                  key={t.id}
-                  type="button"
-                  onClick={() => setTab(t.id)}
+    <div className="mx-auto max-w-6xl px-3 py-3 sm:px-4 sm:py-4 shell:px-6 shell:py-6">
+      <header className="mb-4 overflow-hidden rounded-3xl border border-stone-200/80 bg-gradient-to-br from-primary/[0.07] via-[var(--surface-elevated)] to-stone-50/90 p-5 shadow-[var(--shadow)] sm:mb-5">
+        <p className="text-[10px] font-extrabold uppercase tracking-[0.2em] text-primary/85">Настройки</p>
+        <h1 className="mt-2 text-[22px] font-extrabold tracking-tight text-stone-900 shell:text-2xl">
+          Админ-панель
+        </h1>
+        <p className="mt-2 text-sm leading-relaxed text-stone-600">{meta.description}</p>
+      </header>
+
+      {/* Разделы — горизонтальная полоса: на узком экране прокрутка, на шире — перенос строк */}
+      <nav
+        className="sticky top-0 z-20 -mx-3 mb-5 rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] px-2 py-2.5 shadow-[var(--shadow)] backdrop-blur-sm supports-[backdrop-filter]:bg-[var(--surface-elevated)]/95 sm:-mx-4 sm:mb-6 sm:px-3 shell:mx-0"
+        aria-label="Разделы панели"
+      >
+        <p className="px-1.5 pb-2 text-[10px] font-extrabold uppercase tracking-[0.14em] text-stone-400">
+          Разделы панели
+        </p>
+        <div className="flex max-md:snap-x max-md:snap-mandatory max-md:flex-nowrap max-md:gap-2 max-md:overflow-x-auto max-md:pb-1 max-md:[-ms-overflow-style:none] max-md:[scrollbar-width:none] max-md:[&::-webkit-scrollbar]:hidden md:flex-wrap md:gap-2">
+          {ADMIN_TABS.map((t) => {
+            const active = tab === t.id;
+            const TabIcon = t.Icon;
+            return (
+              <button
+                key={t.id}
+                type="button"
+                onClick={() => setTab(t.id)}
+                className={
+                  active
+                    ? 'touch-manipulation group flex min-h-[44px] min-w-[min(100%,11rem)] shrink-0 snap-start items-center gap-2 rounded-xl bg-primary px-3 py-2 text-left text-sm font-bold text-white shadow-md shadow-primary/20 max-md:max-w-[85vw] active:scale-[0.99] md:min-w-0 md:flex-1 md:basis-[calc(50%-0.25rem)] lg:flex-none lg:basis-auto'
+                    : 'touch-manipulation group flex min-h-[44px] min-w-[min(100%,11rem)] shrink-0 snap-start items-center gap-2 rounded-xl border border-stone-200/90 bg-white/80 px-3 py-2 text-left text-sm font-semibold text-stone-800 transition hover:border-stone-300 hover:bg-stone-50 max-md:max-w-[85vw] active:scale-[0.99] md:min-w-0 md:flex-1 md:basis-[calc(50%-0.25rem)] lg:flex-none lg:basis-auto'
+                }
+              >
+                <span
                   className={
                     active
-                      ? 'group flex items-center gap-3 rounded-xl bg-primary px-3 py-2.5 text-left text-sm font-bold text-white shadow-md shadow-primary/20'
-                      : 'group flex items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold text-stone-700 transition hover:bg-stone-100'
+                      ? 'flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white/20'
+                      : 'flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-stone-100 group-hover:bg-stone-200/80'
                   }
+                  aria-hidden
                 >
+                  <TabIcon
+                    className={`h-5 w-5 transition-colors ${active ? 'text-white' : 'text-stone-600 group-hover:text-primary'}`}
+                  />
+                </span>
+                <span className="min-w-0 leading-tight">
+                  <span className="block sm:hidden">{t.short}</span>
+                  <span className="hidden sm:block">{t.label}</span>
                   <span
                     className={
                       active
-                        ? 'flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white/20'
-                        : 'flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-stone-100'
+                        ? 'mt-0.5 hidden text-[10px] font-medium text-white/85 sm:block'
+                        : 'mt-0.5 hidden text-[10px] font-medium text-stone-500 sm:block'
                     }
-                    aria-hidden
                   >
-                    <TabIcon
-                      className={`h-5 w-5 transition-colors ${active ? 'text-white' : 'text-stone-600 group-hover:text-primary'}`}
-                    />
-                  </span>
-                  <span className="min-w-0 leading-tight">
-                    <span className="block">{t.label}</span>
-                    <span
-                      className={
-                        active ? 'mt-0.5 block text-[10px] font-medium text-white/80' : 'mt-0.5 block text-[10px] font-medium text-stone-500'
-                      }
-                    >
-                      {t.short}
-                    </span>
-                  </span>
-                </button>
-              );
-            })}
-          </nav>
-        </div>
-      </aside>
-
-      <div className="min-w-0 flex-1">
-        <header className="mb-5 overflow-hidden rounded-3xl border border-stone-200/80 bg-gradient-to-br from-primary/[0.07] via-[var(--surface-elevated)] to-stone-50/90 p-5 shadow-[var(--shadow)]">
-          <p className="text-[10px] font-extrabold uppercase tracking-[0.2em] text-primary/85">Настройки</p>
-          <h1 className="mt-2 text-[22px] font-extrabold tracking-tight text-stone-900 shell:text-2xl">
-            Админ-панель
-          </h1>
-          <p className="mt-2 text-sm leading-relaxed text-stone-600">{meta.description}</p>
-        </header>
-
-        {/* Табы — мобильные и узкий экран */}
-        <div className="sticky top-0 z-20 -mx-3 mb-4 border-b border-stone-200/80 bg-[var(--surface)]/95 px-3 py-2 backdrop-blur-md supports-[backdrop-filter]:bg-[var(--surface)]/90 sm:-mx-4 sm:px-4 shell:hidden">
-          <div className="flex snap-x snap-mandatory gap-1.5 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            {ADMIN_TABS.map((t) => {
-              const active = tab === t.id;
-              const TabIcon = t.Icon;
-              return (
-                <button
-                  key={t.id}
-                  type="button"
-                  onClick={() => setTab(t.id)}
-                  className={
-                    active
-                      ? 'touch-manipulation group min-h-[44px] shrink-0 snap-start rounded-xl bg-primary px-3.5 py-2.5 text-[12px] font-bold text-white shadow-sm active:scale-[0.98] sm:text-xs'
-                      : 'touch-manipulation group min-h-[44px] shrink-0 snap-start rounded-xl border border-stone-200 bg-[var(--surface-elevated)] px-3.5 py-2.5 text-[12px] font-semibold text-stone-700 transition hover:border-stone-300 active:scale-[0.98] sm:text-xs'
-                  }
-                >
-                  <span className="inline-flex items-center gap-1">
-                    <TabIcon
-                      className={`h-4 w-4 shrink-0 transition-colors ${active ? 'text-white' : 'text-stone-500 group-hover:text-primary'}`}
-                      aria-hidden
-                    />
                     {t.short}
                   </span>
-                </button>
-              );
-            })}
-          </div>
+                </span>
+              </button>
+            );
+          })}
         </div>
+      </nav>
 
-        <div className="mb-3 flex items-center gap-3 shell:mb-4">
-          <span
-            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary shadow-sm"
-            aria-hidden
-          >
-            <MetaIcon className="h-5 w-5" strokeWidth={2} />
-          </span>
-          <div className="min-w-0">
-            <h2 className="text-lg font-extrabold tracking-tight text-stone-900">{meta.label}</h2>
-            <p className="text-xs font-medium text-stone-500">{meta.short}</p>
-          </div>
+      <div className="mb-3 flex items-center gap-3 sm:mb-4">
+        <span
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary shadow-sm"
+          aria-hidden
+        >
+          <MetaIcon className="h-5 w-5" strokeWidth={2} />
+        </span>
+        <div className="min-w-0">
+          <h2 className="text-lg font-extrabold tracking-tight text-stone-900">{meta.label}</h2>
+          <p className="text-xs font-medium text-stone-500">{meta.short}</p>
         </div>
-
-        {tab === 'members' && <MembersSection />}
-        {tab === 'requests' && <AccessRequestsSection />}
-        {tab === 'calendar' && <CalendarSection />}
-        {tab === 'templates' && <TemplatesSection />}
-        {tab === 'project' && <ProjectSection />}
       </div>
+
+      {tab === 'members' && <MembersSection />}
+      {tab === 'requests' && <AccessRequestsSection />}
+      {tab === 'calendar' && <CalendarSection />}
+      {tab === 'templates' && <TemplatesSection />}
+      {tab === 'project' && <ProjectSection />}
     </div>
   );
 }
@@ -217,6 +222,9 @@ function MembersSection() {
   const [oneTimeDate, setOneTimeDate] = useState('');
   const [banner, setBanner] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
   const [menuOpenFor, setMenuOpenFor] = useState<number | null>(null);
+  const [menuVariant, setMenuVariant] = useState<'card' | 'table' | null>(null);
+  const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null);
+  const menuTriggerRef = useRef<HTMLButtonElement | null>(null);
 
   const invalidate = () => void qc.invalidateQueries({ queryKey: Q_MEMBERS });
 
@@ -320,8 +328,32 @@ function MembersSection() {
     onError: (e) => setBanner({ type: 'err', text: apiErrorMessage(e, 'Ошибка.') }),
   });
 
-  function openEdit(u: AppUser) {
+  function refreshMemberMenuPosition() {
+    const el = menuTriggerRef.current;
+    if (!el) return;
+    setMenuPos(computeMemberMenuPosition(el.getBoundingClientRect()));
+  }
+
+  function closeMenu() {
     setMenuOpenFor(null);
+    setMenuVariant(null);
+    setMenuPos(null);
+    menuTriggerRef.current = null;
+  }
+
+  function toggleMemberMenu(u: AppUser, e: MouseEvent<HTMLButtonElement>, variant: 'card' | 'table') {
+    if (menuOpenFor === u.id) {
+      closeMenu();
+      return;
+    }
+    menuTriggerRef.current = e.currentTarget;
+    setMenuVariant(variant);
+    setMenuOpenFor(u.id);
+    setMenuPos(computeMemberMenuPosition(e.currentTarget.getBoundingClientRect()));
+  }
+
+  function openEdit(u: AppUser) {
+    closeMenu();
     setEditing(u);
     setEditForm({
       first_name: (u.first_name ?? '').trim(),
@@ -341,9 +373,30 @@ function MembersSection() {
     createMut.mutate();
   }
 
-  function closeMenu() {
-    setMenuOpenFor(null);
-  }
+  useLayoutEffect(() => {
+    if (menuOpenFor == null) return;
+    refreshMemberMenuPosition();
+  }, [menuOpenFor]);
+
+  useEffect(() => {
+    if (menuOpenFor == null) return;
+    const onScrollOrResize = () => refreshMemberMenuPosition();
+    window.addEventListener('scroll', onScrollOrResize, true);
+    window.addEventListener('resize', onScrollOrResize);
+    return () => {
+      window.removeEventListener('scroll', onScrollOrResize, true);
+      window.removeEventListener('resize', onScrollOrResize);
+    };
+  }, [menuOpenFor]);
+
+  useEffect(() => {
+    if (menuOpenFor == null) return;
+    const onKey = (ev: KeyboardEvent) => {
+      if (ev.key === 'Escape') closeMenu();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [menuOpenFor]);
 
   const oneTimeSubject =
     oneTimeId != null ? ((data ?? []).find((u) => u.id === oneTimeId) ?? null) : null;
@@ -368,16 +421,139 @@ function MembersSection() {
     );
   }
 
+  const menuUser = menuOpenFor != null ? (filtered.find((x) => x.id === menuOpenFor) ?? null) : null;
+
   return (
     <div className="space-y-5">
       {menuOpenFor != null ? (
         <button
           type="button"
-          className="fixed inset-0 z-[90] cursor-default bg-transparent"
+          className="fixed inset-0 z-[100] cursor-default bg-transparent"
           aria-label="Закрыть меню"
           onClick={closeMenu}
         />
       ) : null}
+
+      {menuOpenFor != null &&
+        menuPos &&
+        menuVariant &&
+        menuUser &&
+        createPortal(
+          <ul
+            className="fixed z-[110] max-h-[min(70vh,calc(100dvh-16px))] min-w-[14rem] overflow-y-auto overflow-x-hidden rounded-xl border border-stone-200 bg-white py-1 text-sm shadow-xl"
+            style={{ top: menuPos.top, left: menuPos.left, minWidth: MEMBER_MENU_MIN_W }}
+            role="menu"
+          >
+            <li>
+              <button
+                type="button"
+                className="block w-full px-3 py-2.5 text-left hover:bg-stone-50 sm:py-2"
+                role="menuitem"
+                onClick={() => openEdit(menuUser)}
+              >
+                Изменить данные
+              </button>
+            </li>
+            <li>
+              <button
+                type="button"
+                className="block w-full px-3 py-2.5 text-left hover:bg-stone-50 sm:py-2"
+                role="menuitem"
+                onClick={() => {
+                  closeMenu();
+                  setBanner(null);
+                  roleMut.mutate({
+                    id: menuUser.id,
+                    role: menuUser.app_role === 'admin' ? 'member' : 'admin',
+                  });
+                }}
+              >
+                {menuVariant === 'card'
+                  ? menuUser.app_role === 'admin'
+                    ? 'Снять права админа'
+                    : 'Сделать администратором'
+                  : menuUser.app_role === 'admin'
+                    ? 'Снять права администратора'
+                    : 'Назначить администратором'}
+              </button>
+            </li>
+            <li>
+              <button
+                type="button"
+                className="block w-full px-3 py-2.5 text-left hover:bg-stone-50 sm:py-2"
+                role="menuitem"
+                onClick={() => {
+                  closeMenu();
+                  setBanner(null);
+                  void updateAdminMember(menuUser.id, {
+                    is_collection_coordinator: !menuUser.is_collection_coordinator,
+                  }).then(
+                    () => {
+                      setBanner({ type: 'ok', text: 'Роль «сбор» обновлена.' });
+                      invalidate();
+                    },
+                    (e) => setBanner({ type: 'err', text: apiErrorMessage(e, 'Ошибка.') }),
+                  );
+                }}
+              >
+                {menuUser.is_collection_coordinator
+                  ? 'Снять ответственного за сбор'
+                  : 'Назначить ответственным за сбор'}
+              </button>
+            </li>
+            <li>
+              <button
+                type="button"
+                className="block w-full px-3 py-2.5 text-left hover:bg-stone-50 sm:py-2"
+                role="menuitem"
+                onClick={() => {
+                  closeMenu();
+                  setBanner(null);
+                  void updateAdminMember(menuUser.id, { is_active: !menuUser.is_active }).then(
+                    () => {
+                      setBanner({ type: 'ok', text: 'Статус обновлён.' });
+                      invalidate();
+                    },
+                    (e) => setBanner({ type: 'err', text: apiErrorMessage(e, 'Ошибка.') }),
+                  );
+                }}
+              >
+                {menuUser.is_active ? 'Деактивировать' : 'Активировать'}
+              </button>
+            </li>
+            <li>
+              <button
+                type="button"
+                className="block w-full px-3 py-2.5 text-left hover:bg-stone-50 sm:py-2"
+                role="menuitem"
+                onClick={() => {
+                  closeMenu();
+                  setOneTimeId(menuUser.id);
+                  setOneTimeDate('');
+                  setBanner(null);
+                }}
+              >
+                Разовая дата в цикле
+              </button>
+            </li>
+            <li className="border-t border-stone-100">
+              <button
+                type="button"
+                className="block w-full px-3 py-2.5 text-left font-semibold text-red-700 hover:bg-red-50 sm:py-2"
+                role="menuitem"
+                onClick={() => {
+                  closeMenu();
+                  if (!window.confirm(`Удалить ${displayName(menuUser)}?`)) return;
+                  setBanner(null);
+                  deleteMut.mutate(menuUser.id);
+                }}
+              >
+                {menuVariant === 'card' ? 'Удалить' : 'Удалить из базы'}
+              </button>
+            </li>
+          </ul>,
+          document.body,
+        )}
 
       {banner && (
         <div
@@ -530,112 +706,12 @@ function MembersSection() {
                   <button
                     type="button"
                     className={btnSecondary('px-3 py-1.5 text-xs')}
-                    onClick={() => setMenuOpenFor(menuOpenFor === u.id ? null : u.id)}
+                    onClick={(e) => toggleMemberMenu(u, e, 'card')}
                     aria-expanded={menuOpenFor === u.id}
+                    aria-haspopup="menu"
                   >
                     Действия ▾
                   </button>
-                  {menuOpenFor === u.id ? (
-                    <ul className="absolute right-0 z-[100] mt-1 min-w-[13rem] overflow-hidden rounded-xl border border-stone-200 bg-white py-1 text-sm shadow-xl">
-                      <li>
-                        <button
-                          type="button"
-                          className="block w-full px-3 py-2.5 text-left hover:bg-stone-50"
-                          onClick={() => openEdit(u)}
-                        >
-                          Изменить данные
-                        </button>
-                      </li>
-                      <li>
-                        <button
-                          type="button"
-                          className="block w-full px-3 py-2.5 text-left hover:bg-stone-50"
-                          onClick={() => {
-                            closeMenu();
-                            setBanner(null);
-                            roleMut.mutate({
-                              id: u.id,
-                              role: u.app_role === 'admin' ? 'member' : 'admin',
-                            });
-                          }}
-                        >
-                          {u.app_role === 'admin' ? 'Снять права админа' : 'Сделать администратором'}
-                        </button>
-                      </li>
-                      <li>
-                        <button
-                          type="button"
-                          className="block w-full px-3 py-2.5 text-left hover:bg-stone-50"
-                          onClick={() => {
-                            closeMenu();
-                            setBanner(null);
-                            void updateAdminMember(u.id, {
-                              is_collection_coordinator: !u.is_collection_coordinator,
-                            }).then(
-                              () => {
-                                setBanner({ type: 'ok', text: 'Роль «сбор» обновлена.' });
-                                invalidate();
-                              },
-                              (e) =>
-                                setBanner({ type: 'err', text: apiErrorMessage(e, 'Ошибка.') }),
-                            );
-                          }}
-                        >
-                          {u.is_collection_coordinator
-                            ? 'Снять ответственного за сбор'
-                            : 'Назначить ответственным за сбор'}
-                        </button>
-                      </li>
-                      <li>
-                        <button
-                          type="button"
-                          className="block w-full px-3 py-2.5 text-left hover:bg-stone-50"
-                          onClick={() => {
-                            closeMenu();
-                            setBanner(null);
-                            void updateAdminMember(u.id, { is_active: !u.is_active }).then(
-                              () => {
-                                setBanner({ type: 'ok', text: 'Статус обновлён.' });
-                                invalidate();
-                              },
-                              (e) =>
-                                setBanner({ type: 'err', text: apiErrorMessage(e, 'Ошибка.') }),
-                            );
-                          }}
-                        >
-                          {u.is_active ? 'Деактивировать' : 'Активировать'}
-                        </button>
-                      </li>
-                      <li>
-                        <button
-                          type="button"
-                          className="block w-full px-3 py-2.5 text-left hover:bg-stone-50"
-                          onClick={() => {
-                            closeMenu();
-                            setOneTimeId(u.id);
-                            setOneTimeDate('');
-                            setBanner(null);
-                          }}
-                        >
-                          Разовая дата в цикле
-                        </button>
-                      </li>
-                      <li className="border-t border-stone-100">
-                        <button
-                          type="button"
-                          className="block w-full px-3 py-2.5 text-left font-semibold text-red-700 hover:bg-red-50"
-                          onClick={() => {
-                            closeMenu();
-                            if (!window.confirm(`Удалить ${displayName(u)}?`)) return;
-                            setBanner(null);
-                            deleteMut.mutate(u.id);
-                          }}
-                        >
-                          Удалить
-                        </button>
-                      </li>
-                    </ul>
-                  ) : null}
                 </div>
               </div>
               <div className="mt-3 flex flex-wrap gap-2">
@@ -668,9 +744,9 @@ function MembersSection() {
         )}
       </div>
 
-      {/* Таблица — shell+ */}
-      <div className="hidden overflow-hidden rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] shadow-[var(--shadow)] shell:block">
-        <div className="overflow-x-auto">
+      {/* Таблица — shell+; горизонтальный скролл без обрезки выпадающих меню по вертикали */}
+      <div className="hidden rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] shadow-[var(--shadow)] shell:block">
+        <div className="overflow-x-auto overscroll-x-contain [-webkit-overflow-scrolling:touch] scroll-smooth">
           <table className="min-w-[640px] w-full border-collapse text-left text-sm">
             <thead>
               <tr className="border-b border-stone-200 bg-stone-50/90 text-xs font-extrabold uppercase tracking-wider text-stone-500">
@@ -712,124 +788,15 @@ function MembersSection() {
                       )}
                     </td>
                     <td className="px-4 py-3 text-right">
-                      <div className="relative inline-block text-left">
-                        <button
-                          type="button"
-                          className={btnSecondary('text-xs')}
-                          onClick={() => setMenuOpenFor(menuOpenFor === u.id ? null : u.id)}
-                        >
-                          Меню ▾
-                        </button>
-                        {menuOpenFor === u.id ? (
-                          <ul className="absolute right-0 z-[100] mt-1 min-w-[14rem] overflow-hidden rounded-xl border border-stone-200 bg-white py-1 text-sm shadow-xl">
-                            <li>
-                              <button
-                                type="button"
-                                className="block w-full px-3 py-2 text-left hover:bg-stone-50"
-                                onClick={() => openEdit(u)}
-                              >
-                                Изменить данные
-                              </button>
-                            </li>
-                            <li>
-                              <button
-                                type="button"
-                                className="block w-full px-3 py-2 text-left hover:bg-stone-50"
-                                onClick={() => {
-                                  closeMenu();
-                                  setBanner(null);
-                                  roleMut.mutate({
-                                    id: u.id,
-                                    role: u.app_role === 'admin' ? 'member' : 'admin',
-                                  });
-                                }}
-                              >
-                                {u.app_role === 'admin'
-                                  ? 'Снять права администратора'
-                                  : 'Назначить администратором'}
-                              </button>
-                            </li>
-                            <li>
-                              <button
-                                type="button"
-                                className="block w-full px-3 py-2 text-left hover:bg-stone-50"
-                                onClick={() => {
-                                  closeMenu();
-                                  setBanner(null);
-                                  void updateAdminMember(u.id, {
-                                    is_collection_coordinator: !u.is_collection_coordinator,
-                                  }).then(
-                                    () => {
-                                      setBanner({ type: 'ok', text: 'Роль «сбор» обновлена.' });
-                                      invalidate();
-                                    },
-                                    (e) =>
-                                      setBanner({
-                                        type: 'err',
-                                        text: apiErrorMessage(e, 'Ошибка.'),
-                                      }),
-                                  );
-                                }}
-                              >
-                                {u.is_collection_coordinator
-                                  ? 'Снять ответственного за сбор'
-                                  : 'Назначить ответственным за сбор'}
-                              </button>
-                            </li>
-                            <li>
-                              <button
-                                type="button"
-                                className="block w-full px-3 py-2 text-left hover:bg-stone-50"
-                                onClick={() => {
-                                  closeMenu();
-                                  setBanner(null);
-                                  void updateAdminMember(u.id, { is_active: !u.is_active }).then(
-                                    () => {
-                                      setBanner({ type: 'ok', text: 'Статус обновлён.' });
-                                      invalidate();
-                                    },
-                                    (e) =>
-                                      setBanner({
-                                        type: 'err',
-                                        text: apiErrorMessage(e, 'Ошибка.'),
-                                      }),
-                                  );
-                                }}
-                              >
-                                {u.is_active ? 'Деактивировать' : 'Активировать'}
-                              </button>
-                            </li>
-                            <li>
-                              <button
-                                type="button"
-                                className="block w-full px-3 py-2 text-left hover:bg-stone-50"
-                                onClick={() => {
-                                  closeMenu();
-                                  setOneTimeId(u.id);
-                                  setOneTimeDate('');
-                                  setBanner(null);
-                                }}
-                              >
-                                Разовая дата в цикле
-                              </button>
-                            </li>
-                            <li className="border-t border-stone-100">
-                              <button
-                                type="button"
-                                className="block w-full px-3 py-2 text-left font-semibold text-red-700 hover:bg-red-50"
-                                onClick={() => {
-                                  closeMenu();
-                                  if (!window.confirm(`Удалить ${displayName(u)}?`)) return;
-                                  setBanner(null);
-                                  deleteMut.mutate(u.id);
-                                }}
-                              >
-                                Удалить из базы
-                              </button>
-                            </li>
-                          </ul>
-                        ) : null}
-                      </div>
+                      <button
+                        type="button"
+                        className={btnSecondary('text-xs')}
+                        onClick={(e) => toggleMemberMenu(u, e, 'table')}
+                        aria-expanded={menuOpenFor === u.id}
+                        aria-haspopup="menu"
+                      >
+                        Меню ▾
+                      </button>
                     </td>
                   </tr>
                 ))
@@ -841,7 +808,7 @@ function MembersSection() {
 
       {oneTimeId != null && (
         <div
-          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/45 p-4"
+          className="fixed inset-0 z-[120] flex items-center justify-center bg-black/45 p-4"
           role="dialog"
           aria-modal="true"
           aria-labelledby="one-time-title"
@@ -886,7 +853,7 @@ function MembersSection() {
 
       {editing && (
         <div
-          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/45 p-4"
+          className="fixed inset-0 z-[120] flex items-center justify-center bg-black/45 p-4"
           role="dialog"
           aria-modal="true"
         >
