@@ -243,6 +243,14 @@ export async function updateUserHandler(req: Request, res: Response): Promise<vo
     return;
   }
 
+  if (
+    req.body.is_collection_coordinator !== undefined &&
+    typeof req.body.is_collection_coordinator !== 'boolean'
+  ) {
+    res.status(400).json({ error: 'Field "is_collection_coordinator" must be boolean' });
+    return;
+  }
+
   try {
     const updated = await updateUser(userId, req.body);
     if (!updated) {

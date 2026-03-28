@@ -1,7 +1,8 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import type { IconType } from 'react-icons';
-import { LuChurch, LuCross, LuShield, LuUser } from 'react-icons/lu';
+import { LuChurch, LuShield, LuUser } from 'react-icons/lu';
 
+import { LatinCrossIcon } from '../components/LatinCrossIcon';
 import { useAuthStore } from '../features/auth/authStore';
 import { useBrandingStore } from '../features/branding/brandingStore';
 import { useSyncServerRole } from '../hooks/useSyncServerRole';
@@ -20,20 +21,29 @@ const NAV_ITEMS: NavItem[] = [
   { to: '/admin', label: 'Админ', Icon: LuShield, adminOnly: true },
 ];
 
-const navIconClass = (isActive: boolean) =>
-  [
-    'h-5 w-5 shrink-0 transition-colors',
-    isActive ? 'text-white' : 'text-stone-500 group-hover:text-primary',
+function navIconClass(isActive: boolean, compact: boolean) {
+  return [
+    compact ? 'h-6 w-6' : 'h-5 w-5',
+    'shrink-0 transition-[transform,color] duration-150',
+    isActive ? 'text-white' : 'text-stone-500 group-hover:text-primary group-active:text-primary',
   ].join(' ');
+}
 
 function navClassName(isActive: boolean, compact = false): string {
-  const base =
-    'group flex items-center justify-center gap-2 rounded-2xl font-semibold transition-colors tap-highlight-transparent';
-  const size = compact ? 'min-h-[44px] flex-1 px-2 py-2 text-xs' : 'w-full px-4 py-3 text-sm text-left';
+  const base = compact
+    ? 'group relative flex min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-2xl px-1.5 py-2 text-center font-semibold transition-[transform,background-color,box-shadow,color] duration-150 tap-highlight-transparent touch-manipulation active:scale-[0.94] sm:gap-1 sm:py-2.5'
+    : 'group flex w-full items-center justify-start gap-3 rounded-2xl px-4 py-3 text-left text-sm font-semibold transition-colors tap-highlight-transparent';
+  const size = compact
+    ? 'min-h-[52px] text-[10px] font-bold leading-tight tracking-tight sm:min-h-[54px] sm:text-[11px]'
+    : '';
   const active = isActive
-    ? 'bg-primary text-white shadow-md shadow-primary/25'
-    : 'text-stone-600 hover:bg-stone-100 shell:hover:bg-stone-50';
-  return `${base} ${size} ${active}`;
+    ? compact
+      ? 'bg-primary text-white shadow-md shadow-primary/30 ring-1 ring-primary/20'
+      : 'bg-primary text-white shadow-md shadow-primary/25'
+    : compact
+      ? 'text-stone-600 hover:bg-stone-100/90 active:bg-stone-200/80'
+      : 'text-stone-600 hover:bg-stone-100 shell:hover:bg-stone-50';
+  return `${base} ${size} ${active}`.replace(/\s+/g, ' ').trim();
 }
 
 export function Layout() {
@@ -59,9 +69,9 @@ export function Layout() {
   }
 
   return (
-    <div className="flex min-h-screen flex-col bg-[var(--surface)] text-[var(--text)] shell:flex-row">
-      {/* Desktop sidebar */}
-      <aside className="hidden w-[260px] flex-col border-r border-stone-200/80 bg-[var(--surface-elevated)] shadow-[4px_0_16px_rgba(0,0,0,0.06)] shell:flex">
+    <div className="flex min-h-[100dvh] min-h-screen flex-col bg-[var(--surface)] text-[var(--text)] md:min-h-screen md:flex-row">
+      {/* Планшет/десктоп: сайдбар с md (768px). На узких экранах — нижняя навигация. */}
+      <aside className="hidden w-[min(100%,280px)] shrink-0 flex-col border-r border-stone-200/80 bg-[var(--surface-elevated)] shadow-[4px_0_16px_rgba(0,0,0,0.06)] md:flex md:w-[260px] lg:w-[272px]">
         <div className="flex flex-1 flex-col gap-1 p-6">
           <div className="mb-6 flex items-start gap-3">
             <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-primary/15 text-primary">
@@ -73,7 +83,7 @@ export function Layout() {
                   style={{ transform: `scale(${logoScalePercent / 100})` }}
                 />
               ) : (
-                <LuCross className="h-5 w-5" strokeWidth={2} aria-hidden />
+                <LatinCrossIcon className="h-5 w-5" aria-hidden />
               )}
             </div>
             <div className="min-w-0">
@@ -89,7 +99,7 @@ export function Layout() {
                 <NavLink key={item.to} to={item.to} className={({ isActive }) => navClassName(isActive)}>
                   {({ isActive }) => (
                     <>
-                      <Icon className={navIconClass(isActive)} strokeWidth={2} aria-hidden />
+                      <Icon className={navIconClass(isActive, false)} strokeWidth={2} aria-hidden />
                       {item.label}
                     </>
                   )}
@@ -103,43 +113,45 @@ export function Layout() {
           <button
             type="button"
             onClick={() => void handleLogout()}
-            className="w-full rounded-xl px-4 py-3 text-left text-sm font-semibold text-stone-600 transition-colors hover:bg-stone-100"
+            className="flex min-h-[44px] w-full items-center rounded-xl px-4 py-3 text-left text-sm font-semibold text-stone-600 transition-colors hover:bg-stone-100"
           >
             Выйти
           </button>
         </div>
       </aside>
 
-      {/* Main */}
-      <main className="min-h-0 flex-1 overflow-auto pb-24 shell:ml-0 shell:pb-0">
+      {/* Main: отступ сверху под «чёлку», снизу под нижний бар + safe-area */}
+      <main className="min-h-0 w-full min-w-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-y-contain pb-[max(7rem,calc(5rem+env(safe-area-inset-bottom)))] [-webkit-overflow-scrolling:touch] md:pb-0 2xl:px-8 min-[1920px]:px-12">
         <Outlet />
       </main>
 
-      {/* Mobile bottom nav */}
+      {/* Телефон: нижняя навигация (иконка + подпись, как в нативных приложениях) */}
       <nav
-        className="fixed bottom-0 left-0 right-0 z-50 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-1 shell:hidden"
+        className="pointer-events-none fixed bottom-0 left-0 right-0 z-50 md:hidden"
         aria-label="Основная навигация"
       >
-        <div className="mx-auto flex max-w-lg items-center justify-around rounded-3xl bg-[var(--surface-elevated)] px-2 py-2 shadow-[var(--shadow)]">
-          {items.map((item) => {
-            const Icon = item.Icon;
-            return (
-              <NavLink
-                key={item.to}
-                to={item.to}
-                className={({ isActive }) => navClassName(isActive, true)}
-              >
-                {({ isActive }) => (
-                  <>
-                    <Icon className={navIconClass(isActive)} strokeWidth={2} aria-hidden />
-                    <span className="max-w-[4.5rem] truncate text-center text-[10px] font-bold leading-tight min-[400px]:max-w-none min-[400px]:text-xs">
-                      {item.label}
-                    </span>
-                  </>
-                )}
-              </NavLink>
-            );
-          })}
+        <div className="pointer-events-auto mx-auto max-w-md px-3 pb-[max(0.35rem,env(safe-area-inset-bottom))] pt-2">
+          <div className="flex items-stretch justify-between gap-1 rounded-[1.35rem] border border-stone-200/70 bg-[var(--surface-elevated)]/92 px-1 py-1.5 shadow-[var(--nav-pill-shadow)] backdrop-blur-xl supports-[backdrop-filter]:bg-[var(--surface-elevated)]/88">
+            {items.map((item) => {
+              const Icon = item.Icon;
+              return (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  className={({ isActive }) => navClassName(isActive, true)}
+                >
+                  {({ isActive }) => (
+                    <>
+                      <Icon className={navIconClass(isActive, true)} strokeWidth={2} aria-hidden />
+                      <span className="max-w-[5rem] truncate px-0.5 text-center max-[360px]:max-w-[4.25rem]">
+                        {item.label}
+                      </span>
+                    </>
+                  )}
+                </NavLink>
+              );
+            })}
+          </div>
         </div>
       </nav>
     </div>

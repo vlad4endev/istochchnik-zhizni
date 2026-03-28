@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { LuCross } from 'react-icons/lu';
 
+import { LatinCrossIcon } from '../../../components/LatinCrossIcon';
 import { useAuthHydrated } from '../../../hooks/useAuthHydrated';
 import { useAuthStore } from '../authStore';
 
@@ -22,15 +22,15 @@ export function AuthLandingPage() {
 
   if (!hydrated) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-primary text-white">
+      <div className="flex min-h-[100dvh] min-h-screen items-center justify-center bg-primary text-white">
         <p className="text-sm font-medium opacity-90">Загрузка…</p>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-primary text-white">
-      <div className="mx-auto flex min-h-screen max-w-lg flex-col px-6 py-[18px]">
+    <div className="min-h-[100dvh] min-h-screen bg-gradient-to-b from-primary via-primary to-[#5c2830] text-white">
+      <div className="mx-auto flex min-h-[100dvh] min-h-screen max-w-lg flex-col px-5 py-6 sm:px-6">
         <div className="flex-[3]" />
 
         <div className="flex flex-col items-center">
@@ -38,7 +38,7 @@ export function AuthLandingPage() {
             className="flex h-28 w-28 items-center justify-center rounded-2xl bg-white/12 text-white"
             aria-hidden
           >
-            <LuCross className="h-14 w-14" strokeWidth={1.5} />
+            <LatinCrossIcon className="h-14 w-14" aria-hidden />
           </div>
 
           <h1 className="mt-[18px] text-center text-3xl font-extrabold tracking-tight text-white sm:text-4xl">
@@ -54,18 +54,18 @@ export function AuthLandingPage() {
 
         <div className="flex-[4]" />
 
-        <div className="pb-[env(safe-area-inset-bottom)]">
+        <div className="pb-1">
           <Link
             to="/login/form"
             state={{ mode: 'signIn' as const }}
-            className="flex h-[54px] w-full items-center justify-center rounded-xl bg-white text-center text-base font-bold text-primary shadow-sm transition-opacity hover:opacity-95"
+            className="touch-manipulation flex h-14 w-full items-center justify-center rounded-2xl bg-white text-center text-base font-bold text-primary shadow-lg shadow-stone-900/15 transition-[transform,opacity] active:scale-[0.98] hover:opacity-95"
           >
             Войти
           </Link>
           <Link
             to="/login/form"
             state={{ mode: 'signUp' as const }}
-            className="mt-3 flex h-[54px] w-full items-center justify-center rounded-xl bg-[#9E4A55] text-center text-base font-bold text-white shadow-sm transition-opacity hover:opacity-95"
+            className="touch-manipulation mt-3 flex h-14 w-full items-center justify-center rounded-2xl border border-white/25 bg-white/10 text-center text-base font-bold text-white shadow-inner backdrop-blur-sm transition-[transform,opacity] active:scale-[0.98] hover:bg-white/15"
           >
             Зарегистрироваться
           </Link>

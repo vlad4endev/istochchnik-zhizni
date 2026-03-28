@@ -104,11 +104,19 @@ export async function resolveUserRole(
   next();
 }
 
+/** Участники с ролью member могут PATCH только назначения сбора на следующую неделю (свои). */
+const MEMBER_ALLOWED_PATCH = /^\/api\/calendar\/next-week\/collection\/?$/;
+
 export function enforceRoleAccess(req: Request, res: Response, next: NextFunction): void {
   const roleReq = req as RoleRequest;
   const role = roleReq.userRole ?? 'member';
 
   if (SAFE_METHODS.has(req.method)) {
+    next();
+    return;
+  }
+
+  if (req.method === 'PATCH' && MEMBER_ALLOWED_PATCH.test(req.path)) {
     next();
     return;
   }

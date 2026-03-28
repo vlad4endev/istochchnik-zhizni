@@ -1,5 +1,9 @@
 import { Request, Response } from 'express';
 import { getNextWeekMemberAssignments, getPrayerDataByDate } from '../services/calendarService';
+import {
+  getNextWeekCollectionSnapshot,
+  upsertCoordinatorPicks,
+} from '../services/collectionPicksService';
 
 function isValidDateInput(value: unknown): value is string {
   if (typeof value !== 'string') {
@@ -119,6 +123,67 @@ export async function getNextWeekMembers(req: Request, res: Response): Promise<v
     res.json({ days });
   } catch (err) {
     console.error('Calendar next-week error:', err);
+    res.status(500).json({ error: 'Database error' });
+  }
+}
+
+type AuthReq = Request & { authUserId?: number };
+
+export async function getNextWeekCollection(req: Request, res: Response): Promise<void> {
+  try {
+    const authReq = req as AuthReq;
+    const snapshot = await getNextWeekCollectionSnapshot(authReq.authUserId ?? null);
+    res.json(snapshot);
+  } catch (err) {
+    console.error('Calendar next-week collection GET error:', err);
+    res.status(500).json({ error: 'Database error' });
+  }
+}
+
+function isValidYmdMap(value: unknown): value is Record<string, number | null> {
+  if (typeof value !== 'object' || value === null) {
+    return false;
+  }
+  const o = value as Record<string, unknown>;
+  for (const v of Object.values(o)) {
+    if (v !== null && typeof v !== 'number') {
+      return false;
+    }
+    if (typeof v === 'number' && (!Number.isInteger(v) || v <= 0)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+export async function patchNextWeekCollection(req: Request, res: Response): Promise<void> {
+  const authReq = req as AuthReq;
+  if (!authReq.authUserId) {
+    res.status(401).json({ error: 'Требуется вход в аккаунт' });
+    return;
+  }
+
+  const picksRaw = req.body?.picks;
+  if (!isValidYmdMap(picksRaw)) {
+    res.status(400).json({ error: 'Ожидается объект picks: { \"YYYY-MM-DD\": member_id | null }' });
+    return;
+  }
+
+  try {
+    await upsertCoordinatorPicks(authReq.authUserId, picksRaw);
+    const snapshot = await getNextWeekCollectionSnapshot(authReq.authUserId);
+    res.json(snapshot);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg === 'not_coordinator') {
+      res.status(403).json({ error: 'Только ответственные за сбор могут редактировать свой список' });
+      return;
+    }
+    if (msg === 'invalid_date' || msg === 'invalid_member') {
+      res.status(400).json({ error: 'Некорректные даты или участник' });
+      return;
+    }
+    console.error('Calendar next-week collection PATCH error:', err);
     res.status(500).json({ error: 'Database error' });
   }
 }

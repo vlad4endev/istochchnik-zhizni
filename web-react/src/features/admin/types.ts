@@ -14,6 +14,7 @@ export interface AppUser {
   account_id: string | null;
   is_active: boolean;
   app_role: 'member' | 'admin';
+  is_collection_coordinator: boolean;
   created_at: string;
   updated_at: string;
 }

@@ -1,15 +1,14 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
-  <title id="title">My Church Minimal Logo</title>
-  <desc id="desc">Clean line church logo optimized for small sizes.</desc>
+  <title id="title">Минимальный латинский крест</title>
+  <desc id="desc">Компактный латинский крест для малых размеров.</desc>
   <defs>
-    <linearGradient id="minimalLine" x1="158" y1="72" x2="348" y2="430" gradientUnits="userSpaceOnUse">
+    <linearGradient id="minimalCross" x1="256" y1="80" x2="256" y2="432" gradientUnits="userSpaceOnUse">
       <stop offset="0" stop-color="#7D3640"/>
       <stop offset="1" stop-color="#B85B50"/>
     </linearGradient>
   </defs>
-
-  <g fill="none" stroke="url(#minimalLine)" stroke-width="18" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M256 82V58M242 70H270M256 82V116C210 144 172 190 164 250C158 295 162 339 174 388C218 383 258 365 288 334C323 299 344 253 346 203C348 150 314 109 256 82"/>
-    <path d="M194 374C226 368 252 356 270 335C286 316 290 290 283 270C275 248 257 242 243 249C223 259 212 285 206 312C202 330 202 350 206 373"/>
+  <g fill="none" stroke="url(#minimalCross)" stroke-width="44" stroke-linecap="round" stroke-linejoin="round">
+    <line x1="256" y1="92" x2="256" y2="420"/>
+    <line x1="132" y1="208" x2="380" y2="208"/>
   </g>
 </svg>

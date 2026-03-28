@@ -1,5 +1,6 @@
 import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
+import { VitePWA } from 'vite-plugin-pwa';
 
 /**
  * Локальный бэкенд: `PORT` в корневом `.env` (в `src/main.ts` дефолт 40978).
@@ -27,7 +28,56 @@ export default defineConfig(({ mode }) => {
     define: {
       __WEB_REACT_BUILD_STAMP__: JSON.stringify(buildStamp),
     },
-    plugins: [react()],
+    plugins: [
+      react(),
+      VitePWA({
+        registerType: 'autoUpdate',
+        injectRegister: 'auto',
+        manifest: {
+          id: '/',
+          name: 'МОЯ ЦЕРКОВЬ — молитвенный календарь',
+          short_name: 'Молитва',
+          description:
+            'Молитвенный календарь церкви: дневные темы, служения, молитва за членов и профиль.',
+          theme_color: '#7d3640',
+          background_color: '#f4f1ed',
+          display: 'standalone',
+          display_override: ['standalone', 'minimal-ui', 'browser'],
+          start_url: '/',
+          scope: '/',
+          lang: 'ru',
+          dir: 'ltr',
+          icons: [
+            {
+              src: 'pwa/icon-192.png',
+              sizes: '192x192',
+              type: 'image/png',
+              purpose: 'any',
+            },
+            {
+              src: 'pwa/icon-512.png',
+              sizes: '512x512',
+              type: 'image/png',
+              purpose: 'any',
+            },
+            {
+              src: 'pwa/icon-maskable-512.png',
+              sizes: '512x512',
+              type: 'image/png',
+              purpose: 'maskable',
+            },
+          ],
+        },
+        workbox: {
+          globPatterns: ['**/*.{js,css,html,ico,png,svg,webp,woff2,woff,ttf}'],
+          navigateFallback: '/index.html',
+          navigateFallbackDenylist: [/^\/api\//],
+        },
+        devOptions: {
+          enabled: false,
+        },
+      }),
+    ],
     base: '/',
     server: {
       port: 5173,

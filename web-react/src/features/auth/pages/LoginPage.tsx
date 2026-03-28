@@ -1,15 +1,9 @@
 import axios from 'axios';
 import { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import {
-  LuArrowRight,
-  LuCross,
-  LuEye,
-  LuEyeOff,
-  LuPenLine,
-  LuTriangleAlert,
-} from 'react-icons/lu';
+import { LuArrowRight, LuEye, LuEyeOff, LuPenLine, LuTriangleAlert } from 'react-icons/lu';
 
+import { LatinCrossIcon } from '../../../components/LatinCrossIcon';
 import { useAuthHydrated } from '../../../hooks/useAuthHydrated';
 import { apiClient } from '../../../lib/apiClient';
 import { isApiUrlProbablyWrongForWeb } from '../../../lib/config';
@@ -65,7 +59,7 @@ export function LoginPage() {
 
   if (!hydrated) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[var(--surface)] text-stone-500">
+      <div className="flex min-h-[100dvh] min-h-screen items-center justify-center bg-[var(--surface)] text-stone-500">
         <p className="text-sm font-medium">Загрузка…</p>
       </div>
     );
@@ -254,28 +248,30 @@ export function LoginPage() {
     : 'Введите номер телефона и пароль';
 
   const inputClass =
-    'w-full rounded-xl border border-stone-200 bg-[var(--surface-elevated)] px-3 py-2.5 text-stone-900 outline-none ring-primary/30 placeholder:text-stone-400 focus:border-primary focus:ring-2';
+    'min-h-[48px] w-full rounded-xl border border-stone-200 bg-[var(--surface-elevated)] px-3.5 py-3 text-base text-stone-900 outline-none ring-primary/30 placeholder:text-stone-400 focus:border-primary focus:ring-2 sm:min-h-0 sm:py-2.5 sm:text-[15px]';
 
   return (
-    <div className="min-h-screen bg-[var(--surface)]">
-      <div className="safe-area-pad flex min-h-screen flex-col px-5 py-4">
+    <div className="min-h-[100dvh] min-h-screen bg-[var(--surface)]">
+      <div className="flex min-h-[100dvh] min-h-screen flex-col px-4 py-5 sm:px-5 sm:py-6">
         <Link
           to="/login"
-          className="mb-2 inline-flex text-sm font-semibold text-stone-500 hover:text-primary"
+          className="mb-3 inline-flex min-h-[44px] items-center gap-1.5 text-sm font-semibold text-stone-500 transition active:text-primary hover:text-primary"
         >
-          ← Назад
+          <span aria-hidden>←</span> Назад
         </Link>
 
-        <div className="flex flex-1 flex-col justify-center">
-          <div className="mx-auto w-full max-w-[480px] rounded-2xl bg-[var(--surface-elevated)] p-6 shadow-[var(--shadow)] ring-1 ring-stone-900/5">
+        <div className="flex flex-1 flex-col justify-center pb-4">
+          <div className="mx-auto w-full max-w-[min(100%,480px)] rounded-[1.25rem] bg-[var(--surface-elevated)] p-5 shadow-[var(--shadow-card)] ring-1 ring-stone-900/[0.06] sm:rounded-2xl sm:p-6 md:shadow-[var(--shadow)]">
             <div className="flex justify-center">
               <div className="flex h-[72px] w-[72px] items-center justify-center rounded-xl bg-primary/10 text-primary">
-                <LuCross className="h-9 w-9" strokeWidth={1.75} aria-hidden />
+                <LatinCrossIcon className="h-9 w-9" aria-hidden />
               </div>
             </div>
 
-            <h1 className="mt-3.5 text-2xl font-extrabold text-stone-900">{title}</h1>
-            <p className="mt-1 text-sm text-stone-600">{subtitle}</p>
+            <h1 className="mt-3.5 text-[1.35rem] font-extrabold leading-snug text-stone-900 sm:text-2xl">
+              {title}
+            </h1>
+            <p className="mt-1.5 text-sm leading-relaxed text-stone-600 sm:text-[15px]">{subtitle}</p>
             {isRegisterMode && (
               <p className="mt-2 rounded-lg bg-stone-50 px-3 py-2 text-xs leading-snug text-stone-600">
                 Учётная запись привязывается к участнику в базе церкви: ФИО и телефон должны совпадать с
@@ -296,13 +292,13 @@ export function LoginPage() {
               </div>
             )}
 
-            <div className="mt-4 rounded-full bg-stone-100 p-1">
-              <div className="flex">
+            <div className="mt-4 rounded-full bg-stone-100/95 p-1 ring-1 ring-stone-200/60">
+              <div className="flex gap-0.5">
                 <button
                   type="button"
-                  className={`flex-1 rounded-full py-2.5 text-sm font-bold transition-colors ${
+                  className={`touch-manipulation flex-1 rounded-full py-3 text-sm font-bold transition-all active:scale-[0.98] sm:py-2.5 ${
                     !isRegisterMode
-                      ? 'bg-primary text-white shadow-sm'
+                      ? 'bg-primary text-white shadow-sm shadow-primary/20'
                       : 'bg-transparent text-stone-600'
                   }`}
                   onClick={() => {
@@ -314,9 +310,9 @@ export function LoginPage() {
                 </button>
                 <button
                   type="button"
-                  className={`flex-1 rounded-full py-2.5 text-sm font-bold transition-colors ${
+                  className={`touch-manipulation flex-1 rounded-full py-3 text-sm font-bold transition-all active:scale-[0.98] sm:py-2.5 ${
                     isRegisterMode
-                      ? 'bg-primary text-white shadow-sm'
+                      ? 'bg-primary text-white shadow-sm shadow-primary/20'
                       : 'bg-transparent text-stone-600'
                   }`}
                   onClick={() => {
@@ -382,7 +378,7 @@ export function LoginPage() {
                   />
                   <button
                     type="button"
-                    className="absolute right-2 top-1/2 -translate-y-1/2 rounded-lg p-2 text-stone-500 transition-colors hover:bg-stone-100 hover:text-primary"
+                    className="absolute right-1.5 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-lg text-stone-500 transition-colors hover:bg-stone-100 hover:text-primary"
                     onClick={() => setShowPassword((v) => !v)}
                     aria-label={showPassword ? 'Показать пароль' : 'Скрыть пароль'}
                   >
@@ -410,7 +406,7 @@ export function LoginPage() {
                     />
                     <button
                       type="button"
-                      className="absolute right-2 top-1/2 -translate-y-1/2 rounded-lg p-1.5 text-stone-500 transition-colors hover:bg-stone-100 hover:text-primary"
+                      className="absolute right-1.5 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-lg text-stone-500 transition-colors hover:bg-stone-100 hover:text-primary"
                       onClick={() => setShowConfirm((v) => !v)}
                       aria-label={showConfirm ? 'Показать пароль' : 'Скрыть пароль'}
                     >
@@ -441,7 +437,7 @@ export function LoginPage() {
             <button
               type="button"
               disabled={submitting}
-              className="mt-4 flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-primary text-base font-bold text-white shadow-sm transition-opacity hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-60"
+              className="touch-manipulation mt-5 flex min-h-[52px] w-full items-center justify-center gap-2 rounded-xl bg-primary text-base font-bold text-white shadow-md shadow-primary/25 transition-[opacity,transform] hover:opacity-95 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60 disabled:active:scale-100"
               onClick={() => void (isRegisterMode ? submitRegister() : submitLogin())}
             >
               {submitting ? (

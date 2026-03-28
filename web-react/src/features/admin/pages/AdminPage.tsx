@@ -1,8 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { type FormEvent, useEffect, useMemo, useState } from 'react';
 
-import { LuCross, LuImage, LuPenLine } from 'react-icons/lu';
+import { LuImage, LuPenLine } from 'react-icons/lu';
 
+import { LatinCrossIcon } from '../../../components/LatinCrossIcon';
 import { ADMIN_TABS, type AdminTabId } from '../adminTabs';
 import { AccessRequestsSection } from '../AccessRequestsSection';
 import { useBrandingStore } from '../../branding/brandingStore';
@@ -72,7 +73,7 @@ export function AdminPage() {
   const MetaIcon = meta.Icon;
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-4 shell:flex shell:min-h-0 shell:gap-8 shell:px-6 shell:py-6">
+    <div className="mx-auto max-w-6xl px-3 py-3 sm:px-4 sm:py-4 shell:flex shell:min-h-0 shell:gap-8 shell:px-6 shell:py-6">
       {/* Боковое меню — desktop */}
       <aside className="mb-4 hidden w-[220px] shrink-0 shell:block">
         <div className="sticky top-4 rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] p-2 shadow-[var(--shadow)]">
@@ -133,8 +134,8 @@ export function AdminPage() {
         </header>
 
         {/* Табы — мобильные и узкий экран */}
-        <div className="sticky top-0 z-20 -mx-4 mb-4 border-b border-stone-200/80 bg-[var(--surface)] px-4 py-2 shell:hidden">
-          <div className="flex gap-1 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <div className="sticky top-0 z-20 -mx-3 mb-4 border-b border-stone-200/80 bg-[var(--surface)]/95 px-3 py-2 backdrop-blur-md supports-[backdrop-filter]:bg-[var(--surface)]/90 sm:-mx-4 sm:px-4 shell:hidden">
+          <div className="flex snap-x snap-mandatory gap-1.5 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             {ADMIN_TABS.map((t) => {
               const active = tab === t.id;
               const TabIcon = t.Icon;
@@ -145,8 +146,8 @@ export function AdminPage() {
                   onClick={() => setTab(t.id)}
                   className={
                     active
-                      ? 'group shrink-0 rounded-xl bg-primary px-3 py-2 text-xs font-bold text-white shadow-sm'
-                      : 'group shrink-0 rounded-xl border border-stone-200 bg-[var(--surface-elevated)] px-3 py-2 text-xs font-semibold text-stone-700 transition hover:border-stone-300'
+                      ? 'touch-manipulation group min-h-[44px] shrink-0 snap-start rounded-xl bg-primary px-3.5 py-2.5 text-[12px] font-bold text-white shadow-sm active:scale-[0.98] sm:text-xs'
+                      : 'touch-manipulation group min-h-[44px] shrink-0 snap-start rounded-xl border border-stone-200 bg-[var(--surface-elevated)] px-3.5 py-2.5 text-[12px] font-semibold text-stone-700 transition hover:border-stone-300 active:scale-[0.98] sm:text-xs'
                   }
                 >
                   <span className="inline-flex items-center gap-1">
@@ -568,6 +569,30 @@ function MembersSection() {
                           onClick={() => {
                             closeMenu();
                             setBanner(null);
+                            void updateAdminMember(u.id, {
+                              is_collection_coordinator: !u.is_collection_coordinator,
+                            }).then(
+                              () => {
+                                setBanner({ type: 'ok', text: 'Роль «сбор» обновлена.' });
+                                invalidate();
+                              },
+                              (e) =>
+                                setBanner({ type: 'err', text: apiErrorMessage(e, 'Ошибка.') }),
+                            );
+                          }}
+                        >
+                          {u.is_collection_coordinator
+                            ? 'Снять ответственного за сбор'
+                            : 'Назначить ответственным за сбор'}
+                        </button>
+                      </li>
+                      <li>
+                        <button
+                          type="button"
+                          className="block w-full px-3 py-2.5 text-left hover:bg-stone-50"
+                          onClick={() => {
+                            closeMenu();
+                            setBanner(null);
                             void updateAdminMember(u.id, { is_active: !u.is_active }).then(
                               () => {
                                 setBanner({ type: 'ok', text: 'Статус обновлён.' });
@@ -632,6 +657,11 @@ function MembersSection() {
                 >
                   {u.is_active ? 'Активен' : 'Неактивен'}
                 </span>
+                {u.is_collection_coordinator ? (
+                  <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-900">
+                    Сбор
+                  </span>
+                ) : null}
               </div>
             </article>
           ))
@@ -717,6 +747,33 @@ function MembersSection() {
                                 {u.app_role === 'admin'
                                   ? 'Снять права администратора'
                                   : 'Назначить администратором'}
+                              </button>
+                            </li>
+                            <li>
+                              <button
+                                type="button"
+                                className="block w-full px-3 py-2 text-left hover:bg-stone-50"
+                                onClick={() => {
+                                  closeMenu();
+                                  setBanner(null);
+                                  void updateAdminMember(u.id, {
+                                    is_collection_coordinator: !u.is_collection_coordinator,
+                                  }).then(
+                                    () => {
+                                      setBanner({ type: 'ok', text: 'Роль «сбор» обновлена.' });
+                                      invalidate();
+                                    },
+                                    (e) =>
+                                      setBanner({
+                                        type: 'err',
+                                        text: apiErrorMessage(e, 'Ошибка.'),
+                                      }),
+                                  );
+                                }}
+                              >
+                                {u.is_collection_coordinator
+                                  ? 'Снять ответственного за сбор'
+                                  : 'Назначить ответственным за сбор'}
                               </button>
                             </li>
                             <li>
@@ -1546,7 +1603,7 @@ function ProjectSection() {
                 style={{ transform: `scale(${logoScalePercent / 100})` }}
               />
             ) : (
-              <LuCross className="h-7 w-7 text-stone-300" strokeWidth={1.75} aria-hidden />
+              <LatinCrossIcon className="h-7 w-7 text-stone-300" aria-hidden />
             )}
           </div>
           <div className="flex flex-col gap-2">
