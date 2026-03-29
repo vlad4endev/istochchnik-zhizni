@@ -537,18 +537,39 @@ export async function searchMembers(
   limit: number = 20,
 ) {
   const result = await query(
-    `SELECT id, name, first_name, last_name
-     FROM members
-     WHERE is_active = TRUE
-       AND id != $1
+    `SELECT DISTINCT m.id, m.name, m.first_name, m.last_name
+     FROM members m
+     INNER JOIN auth_sessions s ON s.member_id = m.id
+     WHERE m.is_active = TRUE
+       AND m.id != $1
        AND (
-         LOWER(name) LIKE '%' || LOWER($2) || '%'
-         OR LOWER(COALESCE(first_name, '')) LIKE '%' || LOWER($2) || '%'
-         OR LOWER(COALESCE(last_name, '')) LIKE '%' || LOWER($2) || '%'
+         LOWER(m.name) LIKE '%' || LOWER($2) || '%'
+         OR LOWER(COALESCE(m.first_name, '')) LIKE '%' || LOWER($2) || '%'
+         OR LOWER(COALESCE(m.last_name, '')) LIKE '%' || LOWER($2) || '%'
        )
-     ORDER BY name ASC
+     ORDER BY m.name ASC
      LIMIT $3`,
     [excludeMemberId, searchTerm.trim(), limit],
+  );
+  return result.rows;
+}
+
+/**
+ * List all registered members (for "new chat" list without search).
+ */
+export async function listRegisteredMembers(
+  excludeMemberId: number,
+  limit: number = 50,
+) {
+  const result = await query(
+    `SELECT DISTINCT m.id, m.name, m.first_name, m.last_name
+     FROM members m
+     INNER JOIN auth_sessions s ON s.member_id = m.id
+     WHERE m.is_active = TRUE
+       AND m.id != $1
+     ORDER BY m.first_name ASC, m.last_name ASC
+     LIMIT $2`,
+    [excludeMemberId, limit],
   );
   return result.rows;
 }

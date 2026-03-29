@@ -10,7 +10,9 @@ import {
 } from 'react';
 import { createPortal } from 'react-dom';
 
-import { LuImage, LuPenLine } from 'react-icons/lu';
+import { LuCalendarDays, LuChevronDown, LuHistory, LuImage, LuPenLine } from 'react-icons/lu';
+import { format } from 'date-fns';
+import { ru } from 'date-fns/locale';
 
 import { ADMIN_TABS, type AdminTabId } from '../adminTabs';
 import { AccessRequestsSection } from '../AccessRequestsSection';
@@ -45,6 +47,7 @@ import {
   updateMinistryApi,
 } from '../api';
 import type { AppUser } from '../types';
+import { fetchPrayerRequestHistory, type PrayerHistoryItem } from '../../profile/api';
 
 const Q_MEMBERS = ['admin', 'members'] as const;
 const Q_ROLES = ['admin', 'templates', 'roles'] as const;
@@ -982,108 +985,274 @@ function MembersSection() {
           role="dialog"
           aria-modal="true"
         >
-          <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-white p-5 shadow-2xl">
-            <h3 className="text-lg font-extrabold text-stone-900">
-              Карточка: {displayName(editing)}
-            </h3>
-            <div className="mt-2">
-              <MemberRegistrationBadge u={editing} />
+          <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white shadow-2xl">
+            {/* Header */}
+            <div className="sticky top-0 z-10 border-b border-stone-100 bg-gradient-to-r from-primary/[0.06] via-white to-stone-50/80 px-5 py-4 backdrop-blur-sm">
+              <div className="flex items-center gap-3">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary/12 text-primary">
+                  <LuPenLine className="h-5 w-5" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <h3 className="text-lg font-extrabold tracking-tight text-stone-900">
+                    {displayName(editing)}
+                  </h3>
+                  <div className="mt-1 flex flex-wrap items-center gap-2">
+                    <MemberRegistrationBadge u={editing} />
+                    <span
+                      className={
+                        editing.app_role === 'admin'
+                          ? 'rounded-full bg-primary/12 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-primary'
+                          : 'rounded-full bg-stone-100 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-stone-600'
+                      }
+                    >
+                      {editing.app_role === 'admin' ? 'Админ' : 'Участник'}
+                    </span>
+                    <span
+                      className={
+                        editing.is_active
+                          ? 'rounded-full bg-emerald-100 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-800'
+                          : 'rounded-full bg-stone-100 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-stone-500'
+                      }
+                    >
+                      {editing.is_active ? 'Активен' : 'Неактивен'}
+                    </span>
+                    {editing.is_collection_coordinator ? (
+                      <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-900">
+                        Сбор
+                      </span>
+                    ) : null}
+                  </div>
+                </div>
+              </div>
             </div>
-            <div className="mt-4 grid gap-3">
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div>
-                  <label className="mb-1 block text-xs font-semibold text-stone-600">Имя</label>
-                  <input
-                    className={fieldClass()}
-                    value={editForm.first_name}
-                    onChange={(e) => setEditForm((s) => ({ ...s, first_name: e.target.value }))}
-                  />
+
+            <div className="p-5 space-y-5">
+              {/* Personal info */}
+              <section>
+                <p className="mb-3 text-[10px] font-extrabold uppercase tracking-[0.15em] text-stone-400">Личные данные</p>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold text-stone-600">Имя</label>
+                    <input
+                      className={fieldClass()}
+                      value={editForm.first_name}
+                      onChange={(e) => setEditForm((s) => ({ ...s, first_name: e.target.value }))}
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold text-stone-600">Фамилия</label>
+                    <input
+                      className={fieldClass()}
+                      value={editForm.last_name}
+                      onChange={(e) => setEditForm((s) => ({ ...s, last_name: e.target.value }))}
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold text-stone-600">Телефон</label>
+                    <input
+                      className={fieldClass()}
+                      inputMode="tel"
+                      value={editForm.phone_number}
+                      onChange={(e) => setEditForm((s) => ({ ...s, phone_number: e.target.value }))}
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold text-stone-600">Дата рождения</label>
+                    <input
+                      type="date"
+                      className={fieldClass()}
+                      value={editForm.birth_date}
+                      onChange={(e) => setEditForm((s) => ({ ...s, birth_date: e.target.value }))}
+                    />
+                  </div>
                 </div>
-                <div>
-                  <label className="mb-1 block text-xs font-semibold text-stone-600">Фамилия</label>
-                  <input
-                    className={fieldClass()}
-                    value={editForm.last_name}
-                    onChange={(e) => setEditForm((s) => ({ ...s, last_name: e.target.value }))}
-                  />
+              </section>
+
+              {/* Ministry */}
+              <section>
+                <p className="mb-3 text-[10px] font-extrabold uppercase tracking-[0.15em] text-stone-400">Служение</p>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold text-stone-600">Роль служения</label>
+                    <input
+                      className={fieldClass()}
+                      value={editForm.ministry_role}
+                      onChange={(e) => setEditForm((s) => ({ ...s, ministry_role: e.target.value }))}
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold text-stone-600">Направление</label>
+                    <input
+                      className={fieldClass()}
+                      value={editForm.ministry_direction}
+                      onChange={(e) => setEditForm((s) => ({ ...s, ministry_direction: e.target.value }))}
+                    />
+                  </div>
                 </div>
-              </div>
-              <div>
-                <label className="mb-1 block text-xs font-semibold text-stone-600">Телефон</label>
-                <input
-                  className={fieldClass()}
-                  value={editForm.phone_number}
-                  onChange={(e) => setEditForm((s) => ({ ...s, phone_number: e.target.value }))}
-                />
-              </div>
-              <div>
-                <label className="mb-1 block text-xs font-semibold text-stone-600">Дата рождения</label>
-                <input
-                  type="date"
-                  className={fieldClass()}
-                  value={editForm.birth_date}
-                  onChange={(e) => setEditForm((s) => ({ ...s, birth_date: e.target.value }))}
-                />
-              </div>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div>
-                  <label className="mb-1 block text-xs font-semibold text-stone-600">Роль служения</label>
+              </section>
+
+              {/* Status */}
+              <section>
+                <label className="flex items-center gap-2 text-sm text-stone-700">
                   <input
-                    className={fieldClass()}
-                    value={editForm.ministry_role}
-                    onChange={(e) => setEditForm((s) => ({ ...s, ministry_role: e.target.value }))}
+                    type="checkbox"
+                    className="h-4 w-4 rounded border-stone-300 text-primary"
+                    checked={editForm.is_active}
+                    onChange={(e) => setEditForm((s) => ({ ...s, is_active: e.target.checked }))}
                   />
-                </div>
-                <div>
-                  <label className="mb-1 block text-xs font-semibold text-stone-600">Направление</label>
-                  <input
-                    className={fieldClass()}
-                    value={editForm.ministry_direction}
-                    onChange={(e) => setEditForm((s) => ({ ...s, ministry_direction: e.target.value }))}
-                  />
-                </div>
-              </div>
-              <label className="flex items-center gap-2 text-sm text-stone-700">
-                <input
-                  type="checkbox"
-                  className="h-4 w-4 rounded border-stone-300 text-primary"
-                  checked={editForm.is_active}
-                  onChange={(e) => setEditForm((s) => ({ ...s, is_active: e.target.checked }))}
-                />
-                Активен (может войти в приложение)
-              </label>
-              <div>
-                <label className="mb-1 block text-xs font-semibold text-stone-600">
-                  Молитвенная нужда
+                  Активен (может войти в приложение)
                 </label>
+              </section>
+
+              {/* Prayer request */}
+              <section>
+                <p className="mb-3 text-[10px] font-extrabold uppercase tracking-[0.15em] text-stone-400">Молитвенная нужда</p>
                 <textarea
                   className={`${fieldClass()} min-h-[100px] resize-y`}
                   value={editForm.prayer_request}
                   onChange={(e) => setEditForm((s) => ({ ...s, prayer_request: e.target.value }))}
+                  placeholder="Текст молитвенной нужды…"
                 />
+              </section>
+
+              {/* Prayer history */}
+              <AdminPrayerHistory memberId={editing.id} />
+
+              {/* Actions */}
+              <div className="flex flex-wrap gap-2 border-t border-stone-100 pt-4">
+                <button
+                  type="button"
+                  className={btnPrimary('flex-1')}
+                  disabled={saveEditMut.isPending}
+                  onClick={() => {
+                    setBanner(null);
+                    saveEditMut.mutate();
+                  }}
+                >
+                  {saveEditMut.isPending ? 'Сохранение…' : 'Сохранить'}
+                </button>
+                <button type="button" className={btnSecondary()} onClick={() => setEditing(null)}>
+                  Отмена
+                </button>
               </div>
-            </div>
-            <div className="mt-5 flex flex-wrap gap-2">
-              <button
-                type="button"
-                className={btnPrimary('flex-1')}
-                disabled={saveEditMut.isPending}
-                onClick={() => {
-                  setBanner(null);
-                  saveEditMut.mutate();
-                }}
-              >
-                {saveEditMut.isPending ? 'Сохранение…' : 'Сохранить'}
-              </button>
-              <button type="button" className={btnSecondary()} onClick={() => setEditing(null)}>
-                Отмена
-              </button>
             </div>
           </div>
         </div>
       )}
     </div>
   );
+}
+
+/** Сворачиваемый/разворачиваемый блок с историей молитвенных нужд участника. */
+function AdminPrayerHistory({ memberId }: { memberId: number }) {
+  const [open, setOpen] = useState(false);
+
+  const { data, isPending } = useQuery({
+    queryKey: ['admin', 'prayer-history', memberId],
+    queryFn: () => fetchPrayerRequestHistory(memberId, 30),
+    enabled: open,
+    staleTime: 30_000,
+  });
+
+  return (
+    <section>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex min-h-[40px] w-full items-center gap-2 rounded-xl border border-stone-200/80 bg-stone-50/60 px-3.5 py-2.5 text-left text-[13px] font-bold text-stone-600 transition-colors hover:bg-stone-100/70 hover:text-stone-800"
+      >
+        <LuHistory className="h-4 w-4 shrink-0 text-primary/70" strokeWidth={2} aria-hidden />
+        <span className="flex-1">История молитвенных нужд</span>
+        <LuChevronDown
+          className={`h-4 w-4 shrink-0 transition-transform duration-200 ${open ? 'rotate-180' : ''}`}
+          strokeWidth={2}
+          aria-hidden
+        />
+      </button>
+
+      <div
+        className={`grid transition-[grid-template-rows] duration-300 ease-in-out motion-reduce:transition-none ${open ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}
+      >
+        <div className="overflow-hidden">
+          <div className="pt-3 pb-1">
+            {isPending ? (
+              <div className="space-y-3 py-2">
+                {[0, 1, 2].map((i) => (
+                  <div key={i} className="flex gap-3 animate-pulse">
+                    <div className="h-2 w-2 mt-1.5 shrink-0 rounded-full bg-stone-200" />
+                    <div className="flex-1 space-y-1.5">
+                      <div className="h-3 w-28 rounded bg-stone-100" />
+                      <div className="h-3 w-full rounded bg-stone-100" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : data && data.length > 0 ? (
+              <div className="space-y-0">
+                {data.map((item, idx) => (
+                  <AdminPrayerHistoryRow key={item.id} item={item} isLast={idx === data.length - 1} />
+                ))}
+              </div>
+            ) : (
+              <p className="py-4 text-center text-[13px] italic text-stone-400">
+                Пока нет записей
+              </p>
+            )}
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function AdminPrayerHistoryRow({ item, isLast }: { item: PrayerHistoryItem; isLast: boolean }) {
+  const prayedDate = item.prayed_on_date
+    ? formatAdminDate(item.prayed_on_date)
+    : null;
+  const createdDate = formatAdminDate(item.created_at);
+
+  return (
+    <div className={`relative flex gap-3 py-2.5 ${!isLast ? 'border-b border-stone-100' : ''}`}>
+      {/* Timeline dot */}
+      <div className="flex flex-col items-center pt-1.5">
+        <div className="h-2 w-2 shrink-0 rounded-full bg-primary/40" />
+        {!isLast ? (
+          <div className="mt-1 flex-1 w-px bg-stone-100" />
+        ) : null}
+      </div>
+
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+          {prayedDate ? (
+            <span className="inline-flex items-center gap-1 text-[11px] font-bold text-primary">
+              <LuCalendarDays className="h-3 w-3" aria-hidden />
+              Цикл {item.cycle_index != null ? item.cycle_index + 1 : '—'} · {prayedDate}
+            </span>
+          ) : (
+            <span className="text-[11px] font-semibold text-stone-400">
+              {createdDate}
+            </span>
+          )}
+        </div>
+        <p className="mt-1 text-[13px] leading-snug text-stone-600 whitespace-pre-wrap break-words">
+          {item.prayer_request}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+/** Форматирование даты для истории: «25 марта 2026» или «25 мар» если текущий год. */
+function formatAdminDate(dateStr: string): string {
+  try {
+    const d = new Date(dateStr);
+    if (Number.isNaN(d.getTime())) return dateStr;
+    const now = new Date();
+    const sameYear = d.getFullYear() === now.getFullYear();
+    return format(d, sameYear ? 'd MMM' : 'd MMM yyyy', { locale: ru });
+  } catch {
+    return dateStr;
+  }
 }
 
 function CalendarSection() {

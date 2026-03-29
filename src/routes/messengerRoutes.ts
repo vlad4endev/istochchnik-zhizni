@@ -346,13 +346,15 @@ router.delete('/messages/:id/reactions/:emoji', async (req: Request, res: Respon
 router.get('/members/search', async (req: Request, res: Response) => {
   const userId = (req as AuthReq).authUserId!;
   const q = (req.query.q as string || '').trim();
-  if (q.length < 1) {
-    res.json([]);
-    return;
-  }
   try {
-    const members = await svc.searchMembers(q, userId);
-    res.json(members);
+    if (q.length < 1) {
+      // Return all registered members when no search query
+      const members = await svc.listRegisteredMembers(userId);
+      res.json(members);
+    } else {
+      const members = await svc.searchMembers(q, userId);
+      res.json(members);
+    }
   } catch (e) {
     console.error('[messenger] searchMembers error:', e);
     res.status(500).json({ error: 'Failed to search members' });
