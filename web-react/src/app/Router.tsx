@@ -15,6 +15,7 @@ import { AdminPage } from '../features/admin/pages/AdminPage';
 import { DailyPrayerPage } from '../features/calendar/pages/DailyPrayerPage';
 import { ProfilePage } from '../features/profile/pages/ProfilePage';
 import { BroadcastPage } from '../features/broadcast/pages/BroadcastPage';
+import { MessengerPage } from '../features/messenger/components/MessengerPage';
 
 import { Layout } from './Layout';
 
@@ -68,6 +69,7 @@ export function AppRouter() {
       >
         <Route index element={<Navigate to="/prayer" replace />} />
         <Route path="prayer" element={<DailyPrayerPage />} />
+        <Route path="messenger" element={<MessengerPage />} />
         <Route path="broadcast" element={<BroadcastPage />} />
         <Route path="profile" element={<ProfilePage />} />
         <Route

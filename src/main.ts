@@ -17,7 +17,10 @@ import routes from './routes';
 import authRoutes from './routes/authRoutes';
 import calendarRoutes from './routes/calendarRoutes';
 import userRoutes from './routes/userRoutes';
+import pushRoutes from './routes/pushRoutes';
+import messengerRoutes from './routes/messengerRoutes';
 import { attachRealtimeWebSocket } from './realtime/wsHub';
+import { initPushCronJobs } from './cron/pushJobs';
 
 dotenv.config();
 
@@ -110,6 +113,8 @@ app.get('/health', async (_req, res) => {
 app.use('/api', routes);
 app.use('/api/calendar', calendarRoutes);
 app.use('/api/users', userRoutes);
+app.use('/api/push', pushRoutes);
+app.use('/api/messenger', messengerRoutes);
 
 async function start(): Promise<void> {
   if (process.env.DATABASE_URL) {
@@ -142,6 +147,9 @@ async function start(): Promise<void> {
   }
   const server = http.createServer(app);
   attachRealtimeWebSocket(server);
+  
+  initPushCronJobs();
+  
   server.listen(Number(PORT), () => {
     console.log(`Server is running on http://localhost:${PORT}`);
     console.log('[realtime] WebSocket: /api/realtime');

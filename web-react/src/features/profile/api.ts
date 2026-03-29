@@ -45,6 +45,8 @@ export interface PrayerHistoryItem {
   member_id: number;
   prayer_request: string;
   cycle_index: number | null;
+  /** Дата, когда за участника молились в этом цикле (вычисляется бэкендом). */
+  prayed_on_date?: string | null;
   created_at: string;
 }
 
@@ -71,4 +73,17 @@ export async function fetchPrayerRequestHistory(
     { params: { limit } },
   );
   return data;
+}
+
+export async function fetchVapidPublicKey(): Promise<string> {
+  const { data } = await apiClient.get<{ publicKey: string }>('/api/push/vapid-public-key');
+  return data.publicKey;
+}
+
+export async function subscribeToPushApi(subscription: PushSubscription): Promise<void> {
+  await apiClient.post('/api/push/subscribe', subscription);
+}
+
+export async function unsubscribeFromPushApi(endpoint: string): Promise<void> {
+  await apiClient.post('/api/push/unsubscribe', { endpoint });
 }

@@ -80,6 +80,7 @@ export default defineConfig(({ mode }) => {
           globPatterns: ['**/*.{js,css,html,ico,png,svg,webp,woff2,woff,ttf}'],
           navigateFallback: 'index.html',
           navigateFallbackDenylist: [/^\/api\//],
+          importScripts: ['custom-sw.js']
         },
         devOptions: {
           enabled: false,

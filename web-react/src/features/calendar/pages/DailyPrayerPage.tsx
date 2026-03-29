@@ -25,6 +25,7 @@ import {
   LuHammer,
   LuHandHeart,
   LuHeartHandshake,
+  LuHistory,
   LuRefreshCw,
   LuUserX,
 } from 'react-icons/lu';
@@ -36,8 +37,8 @@ import {
   isApiUrlProbablyWrongForWeb,
   resolveAxiosBaseURL,
 } from '../../../lib/config';
-import type { Backslider, DayPrayerData, GlobalTheme, Member, Ministry } from '../../../types';
-import { fetchMe, patchProfile } from '../../profile/api';
+import type { Backslider, DayPrayerData, GlobalTheme, Member, Ministry, PrayerCycleInfo } from '../../../types';
+import { fetchMe, fetchPrayerRequestHistory, patchProfile, type PrayerHistoryItem } from '../../profile/api';
 import {
   NextWeekPrayerPlanSection,
   userCanViewNextWeekPrayerPlan,
@@ -149,20 +150,33 @@ function MemberCard({
   currentUserId,
   onPrayerSaved,
   cardIndex = 0,
+  prayerCycle,
 }: {
   member: Member;
   currentUserId: number | null;
   onPrayerSaved: () => void;
   cardIndex?: number;
+  prayerCycle?: PrayerCycleInfo | null;
 }) {
   const isMe = currentUserId != null && member.id === currentUserId;
   const [editText, setEditText] = useState(member.prayer_request ?? '');
   const [saving, setSaving] = useState(false);
   const [saveErr, setSaveErr] = useState<string | null>(null);
+  const [historyOpen, setHistoryOpen] = useState(false);
 
   useEffect(() => {
     setEditText(member.prayer_request ?? '');
   }, [member.id, member.prayer_request]);
+
+  const {
+    data: history,
+    isPending: historyLoading,
+  } = useQuery({
+    queryKey: ['prayer-history', member.id],
+    queryFn: () => fetchPrayerRequestHistory(member.id, 30),
+    enabled: historyOpen,
+    staleTime: 30_000,
+  });
 
   async function savePrayer() {
     setSaving(true);
@@ -178,6 +192,9 @@ function MemberCard({
   }
 
   const hasRequest = member.prayer_request != null && member.prayer_request.trim().length > 0;
+  const cycleLabel = prayerCycle
+    ? `Цикл ${prayerCycle.number} · день ${prayerCycle.day_index + 1} из ${prayerCycle.member_count}`
+    : null;
 
   return (
     <PrayerCard
@@ -186,6 +203,16 @@ function MemberCard({
       accentVar="var(--member)"
       cardIndex={cardIndex}
     >
+      {/* Cycle info badge */}
+      {cycleLabel ? (
+        <div className="mb-3 flex items-center gap-2">
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-[color-mix(in_srgb,var(--member)_10%,transparent)] px-3 py-1 text-[11px] font-bold tracking-wide text-[var(--member)]">
+            <LuCalendarDays className="h-3 w-3" aria-hidden />
+            {cycleLabel}
+          </span>
+        </div>
+      ) : null}
+
       {isMe ? (
         <div className="space-y-3">
           <label className="block">
@@ -212,12 +239,111 @@ function MemberCard({
           </button>
         </div>
       ) : hasRequest ? (
-        <p className="text-[16px] text-stone-600">{member.prayer_request}</p>
+        <p className="text-[16px] leading-relaxed text-stone-600 whitespace-pre-wrap">{member.prayer_request}</p>
       ) : (
         <p className="italic text-stone-400">Нет указанных нужд</p>
       )}
+
+      {/* Prayer history accordion */}
+      <div className="mt-4 border-t border-stone-100 pt-3">
+        <button
+          type="button"
+          onClick={() => setHistoryOpen((v) => !v)}
+          className="flex min-h-[40px] w-full items-center gap-2 rounded-lg px-1 py-1.5 text-left text-[13px] font-bold text-stone-500 transition-colors hover:bg-stone-50 hover:text-stone-700"
+        >
+          <LuHistory className="h-4 w-4 shrink-0" strokeWidth={2} aria-hidden />
+          <span className="flex-1">История молитвенных нужд</span>
+          <LuChevronDown
+            className={`h-4 w-4 shrink-0 transition-transform duration-200 ${historyOpen ? 'rotate-180' : ''}`}
+            strokeWidth={2}
+            aria-hidden
+          />
+        </button>
+
+        <div
+          className={`grid transition-[grid-template-rows] duration-300 ease-in-out motion-reduce:transition-none ${historyOpen ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}
+        >
+          <div className="overflow-hidden">
+            <div className="pt-2 pb-1">
+              {historyLoading ? (
+                <div className="space-y-2.5 py-2">
+                  {[0, 1, 2].map((i) => (
+                    <div key={i} className="flex gap-3 animate-pulse">
+                      <div className="h-8 w-8 shrink-0 rounded-lg bg-stone-100" />
+                      <div className="flex-1 space-y-1.5">
+                        <div className="h-3 w-24 rounded bg-stone-100" />
+                        <div className="h-3 w-full rounded bg-stone-100" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : history && history.length > 0 ? (
+                <div className="space-y-0">
+                  {history.map((item, idx) => (
+                    <PrayerHistoryRow key={item.id} item={item} isLast={idx === history.length - 1} />
+                  ))}
+                </div>
+              ) : (
+                <p className="py-3 text-center text-[13px] italic text-stone-400">
+                  Пока нет записей
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
     </PrayerCard>
   );
+}
+
+function PrayerHistoryRow({ item, isLast }: { item: PrayerHistoryItem; isLast: boolean }) {
+  const prayedDate = item.prayed_on_date
+    ? formatHistoryDate(item.prayed_on_date)
+    : null;
+  const createdDate = formatHistoryDate(item.created_at);
+
+  return (
+    <div className={`relative flex gap-3 py-2.5 ${!isLast ? 'border-b border-stone-50' : ''}`}>
+      {/* Timeline dot */}
+      <div className="flex flex-col items-center pt-1">
+        <div className="h-2 w-2 shrink-0 rounded-full bg-[var(--member)] opacity-50" />
+        {!isLast ? (
+          <div className="mt-1 flex-1 w-px bg-stone-100" />
+        ) : null}
+      </div>
+
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+          {prayedDate ? (
+            <span className="inline-flex items-center gap-1 text-[11px] font-bold text-[var(--member)]">
+              <LuCalendarDays className="h-3 w-3" aria-hidden />
+              Цикл {item.cycle_index != null ? item.cycle_index + 1 : '—'} · {prayedDate}
+            </span>
+          ) : (
+            <span className="text-[11px] font-semibold text-stone-400">
+              {createdDate}
+            </span>
+          )}
+        </div>
+        <p className="mt-1 text-[13px] leading-snug text-stone-600 whitespace-pre-wrap break-words">
+          {item.prayer_request}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+/** Форматирование даты для истории: «25 марта 2026» или «25 мар» если текущий год. */
+function formatHistoryDate(dateStr: string): string {
+  try {
+    const d = new Date(dateStr);
+    if (Number.isNaN(d.getTime())) return dateStr;
+    const now = new Date();
+    const sameYear = d.getFullYear() === now.getFullYear();
+    return format(d, sameYear ? 'd MMM' : 'd MMM yyyy', { locale: ru });
+  } catch {
+    return dateStr;
+  }
 }
 
 function GlobalThemeCard({ theme, cardIndex = 0 }: { theme: GlobalTheme; cardIndex?: number }) {
@@ -632,10 +758,12 @@ export function DailyPrayerPage() {
                     cardIndex={i}
                     member={m}
                     currentUserId={me?.id ?? null}
+                    prayerCycle={data.prayer_cycle}
                     onPrayerSaved={() => {
                       void qc.invalidateQueries({ queryKey: ['calendar', 'day', dateKey] });
                       void qc.invalidateQueries({ queryKey: ['calendar', 'week-members'] });
                       void qc.invalidateQueries({ queryKey: ['calendar', 'cycle', 'collection-claims'] });
+                      void qc.invalidateQueries({ queryKey: ['prayer-history', m.id] });
                     }}
                   />
                 ))}

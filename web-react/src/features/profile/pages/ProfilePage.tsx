@@ -13,6 +13,7 @@ import {
   type MeResponse,
   type PrayerHistoryItem,
 } from '../api';
+import { PushSettings } from '../components/PushSettings';
 
 function displayName(user: MeResponse): string {
   const fn = (user.first_name ?? '').trim();
@@ -384,6 +385,8 @@ export function ProfilePage() {
               >
                 {profileSaving ? 'Сохранение…' : 'Сохранить данные'}
               </button>
+              
+              <PushSettings />
             </section>
 
             {/* Безопасность */}

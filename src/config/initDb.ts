@@ -210,6 +210,20 @@ CREATE INDEX IF NOT EXISTS access_requests_phone_digits_idx
 CREATE INDEX IF NOT EXISTS idx_member_cycle_overrides_member_id
   ON member_cycle_overrides (member_id);
 
+CREATE TABLE IF NOT EXISTS push_subscriptions (
+  id SERIAL PRIMARY KEY,
+  member_id INTEGER NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+  endpoint TEXT NOT NULL,
+  keys_p256dh TEXT NOT NULL,
+  keys_auth TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE(endpoint)
+);
+
+CREATE INDEX IF NOT EXISTS idx_push_subs_member_id
+  ON push_subscriptions (member_id);
+
+
 -- RPC aligned with src/services/calendarService.ts (overrides + is_active + per-cycle prayer_request).
 CREATE OR REPLACE FUNCTION get_daily_prayer(target_date date)
 RETURNS json
@@ -400,6 +414,119 @@ CREATE TRIGGER trg_reset_cycle_on_member_change
 AFTER INSERT OR DELETE ON members
 FOR EACH ROW
 EXECUTE PROCEDURE reset_cycle_on_member_change();
+
+-- ═══════════════════════════════════════════════════════════════════
+-- MESSENGER MODULE
+-- ═══════════════════════════════════════════════════════════════════
+
+CREATE TABLE IF NOT EXISTS conversations (
+  id BIGSERIAL PRIMARY KEY,
+  type VARCHAR(16) NOT NULL DEFAULT 'personal'
+    CHECK (type IN ('personal', 'group', 'channel')),
+  title VARCHAR(255),
+  avatar_url TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS conversation_participants (
+  conversation_id BIGINT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+  member_id INTEGER NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+  role VARCHAR(16) NOT NULL DEFAULT 'member'
+    CHECK (role IN ('owner', 'admin', 'member')),
+  joined_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  left_at TIMESTAMPTZ,
+  PRIMARY KEY (conversation_id, member_id)
+);
+
+CREATE TABLE IF NOT EXISTS messages (
+  id BIGSERIAL PRIMARY KEY,
+  conversation_id BIGINT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+  sender_id INTEGER REFERENCES members(id) ON DELETE SET NULL,
+  content TEXT NOT NULL DEFAULT '',
+  reply_to_message_id BIGINT REFERENCES messages(id) ON DELETE SET NULL,
+  is_edited BOOLEAN NOT NULL DEFAULT FALSE,
+  is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS read_receipts (
+  conversation_id BIGINT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+  member_id INTEGER NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+  last_read_message_id BIGINT REFERENCES messages(id) ON DELETE SET NULL,
+  read_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (conversation_id, member_id)
+);
+
+CREATE TABLE IF NOT EXISTS message_reactions (
+  message_id BIGINT NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+  member_id INTEGER NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+  emoji VARCHAR(32) NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (message_id, member_id, emoji)
+);
+
+-- Indexes
+CREATE INDEX IF NOT EXISTS idx_conv_participants_member
+  ON conversation_participants (member_id) WHERE left_at IS NULL;
+
+CREATE INDEX IF NOT EXISTS idx_messages_conv_created
+  ON messages (conversation_id, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_messages_conv_id_desc
+  ON messages (conversation_id, id DESC);
+
+CREATE INDEX IF NOT EXISTS idx_messages_reply
+  ON messages (reply_to_message_id) WHERE reply_to_message_id IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS idx_read_receipts_member
+  ON read_receipts (member_id);
+
+CREATE INDEX IF NOT EXISTS idx_msg_reactions_message
+  ON message_reactions (message_id);
+
+CREATE INDEX IF NOT EXISTS idx_conv_type
+  ON conversations (type);
+
+-- Trigger: auto-update conversations.updated_at
+CREATE OR REPLACE FUNCTION set_conversations_updated_at()
+RETURNS TRIGGER LANGUAGE plpgsql SET search_path = public AS $$
+BEGIN NEW.updated_at := NOW(); RETURN NEW; END; $$;
+
+DROP TRIGGER IF EXISTS trg_conversations_updated_at ON conversations;
+CREATE TRIGGER trg_conversations_updated_at
+BEFORE UPDATE ON conversations FOR EACH ROW
+EXECUTE PROCEDURE set_conversations_updated_at();
+
+-- Trigger: auto-update messages.updated_at + is_edited on content change
+CREATE OR REPLACE FUNCTION set_messages_updated_at()
+RETURNS TRIGGER LANGUAGE plpgsql SET search_path = public AS $$
+BEGIN
+  NEW.updated_at := NOW();
+  IF OLD.content IS DISTINCT FROM NEW.content THEN
+    NEW.is_edited := TRUE;
+  END IF;
+  RETURN NEW;
+END; $$;
+
+DROP TRIGGER IF EXISTS trg_messages_updated_at ON messages;
+CREATE TRIGGER trg_messages_updated_at
+BEFORE UPDATE ON messages FOR EACH ROW
+EXECUTE PROCEDURE set_messages_updated_at();
+
+-- Trigger: bump conversation.updated_at on new message (for sidebar sorting)
+CREATE OR REPLACE FUNCTION bump_conversation_on_message()
+RETURNS TRIGGER LANGUAGE plpgsql SET search_path = public AS $$
+BEGIN
+  UPDATE conversations SET updated_at = NEW.created_at WHERE id = NEW.conversation_id;
+  RETURN NEW;
+END; $$;
+
+DROP TRIGGER IF EXISTS trg_bump_conversation_on_message ON messages;
+CREATE TRIGGER trg_bump_conversation_on_message
+AFTER INSERT ON messages FOR EACH ROW
+EXECUTE PROCEDURE bump_conversation_on_message();
 
 INSERT INTO ministry_role_templates (title)
 VALUES
