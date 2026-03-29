@@ -1,0 +1,117 @@
+/* Messenger Page Styles */
+.tg-messenger {
+  display: flex;
+  height: calc(100vh - 64px); /* Subtract header height if applicable */
+  background: var(--bg-primary, #f5f7fa);
+  overflow: hidden;
+  position: relative;
+}
+
+.tg-sidebar {
+  width: 350px;
+  background: var(--bg-surface, #ffffff);
+  border-right: 1px solid var(--border-color, #e1e4e8);
+  display: flex;
+  flex-direction: column;
+  transition: transform 0.3s ease;
+  z-index: 10;
+}
+
+.tg-sidebar-header {
+  padding: 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--border-color, #e1e4e8);
+}
+
+.tg-sidebar-title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin: 0;
+  color: var(--text-primary, #1a1a1a);
+}
+
+.tg-compose-btn {
+  background: var(--primary-color, #007aff);
+  color: white;
+  border: none;
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: transform 0.2s, background 0.2s;
+  box-shadow: 0 4px 12px rgba(0, 122, 255, 0.3);
+}
+
+.tg-compose-btn:hover {
+  transform: scale(1.05);
+  background: var(--primary-hover, #0063d1);
+}
+
+.tg-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-secondary, #fafbfc);
+  transition: transform 0.3s ease;
+}
+
+.tg-empty-state {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 2rem;
+  color: var(--text-secondary, #666);
+}
+
+.tg-empty-icon {
+  margin-bottom: 1.5rem;
+  opacity: 0.5;
+  color: var(--primary-color, #007aff);
+}
+
+.tg-empty-title {
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+  color: var(--text-primary, #1a1a1a);
+}
+
+.tg-empty-sub {
+  font-size: 0.9rem;
+}
+
+/* Mobile Responsiveness */
+@media (max-width: 768px) {
+  .tg-sidebar {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+  }
+
+  .tg-sidebar--hidden {
+    transform: translateX(-100%);
+  }
+
+  .tg-main {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    transform: translateX(100%);
+  }
+
+  .tg-main--visible {
+    transform: translateX(0);
+  }
+}
