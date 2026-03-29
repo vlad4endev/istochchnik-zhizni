@@ -126,6 +126,14 @@ export async function mergeMemberInto(keepId: number, dropId: number): Promise<v
       dropId,
     ]);
 
+    await client.query(
+      `DELETE FROM member_cycle_overrides d
+       USING member_cycle_overrides k
+       WHERE d.member_id = $2
+         AND k.member_id = $1
+         AND d.target_date = k.target_date`,
+      [keepId, dropId]
+    );
     await client.query(`UPDATE member_cycle_overrides SET member_id = $1 WHERE member_id = $2`, [
       keepId,
       dropId,
@@ -159,6 +167,11 @@ export async function mergeMemberInto(keepId: number, dropId: number): Promise<v
     );
 
     await client.query(`UPDATE access_requests SET member_id = $1 WHERE member_id = $2`, [
+      keepId,
+      dropId,
+    ]);
+
+    await client.query(`UPDATE access_requests SET reviewed_by_member_id = $1 WHERE reviewed_by_member_id = $2`, [
       keepId,
       dropId,
     ]);

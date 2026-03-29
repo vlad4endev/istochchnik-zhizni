@@ -27,6 +27,13 @@ export async function updateBroadcastEmbed(req: Request, res: Response): Promise
         rutube_embed_code = null;
     }
     
+    // Auto-migrate just in case SKIP_DB_INIT_ON_START prevented initDb
+    try {
+      await pool.query('ALTER TABLE global_settings ADD COLUMN IF NOT EXISTS rutube_embed_code TEXT;');
+    } catch (e) {
+      console.warn('Auto-migration failed, ignoring:', e);
+    }
+    
     await pool.query(
       `INSERT INTO global_settings (id, start_date, rutube_embed_code) 
        VALUES (1, CURRENT_DATE, $1) 

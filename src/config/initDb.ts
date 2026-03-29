@@ -112,6 +112,25 @@ CREATE TABLE IF NOT EXISTS access_requests (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- Fix foreign keys for existing tables to include ON DELETE CASCADE / SET NULL
+ALTER TABLE member_cycle_overrides DROP CONSTRAINT IF EXISTS member_cycle_overrides_member_id_fkey;
+ALTER TABLE member_cycle_overrides ADD CONSTRAINT member_cycle_overrides_member_id_fkey FOREIGN KEY (member_id) REFERENCES members(id) ON DELETE CASCADE;
+
+ALTER TABLE member_prayer_request_history DROP CONSTRAINT IF EXISTS member_prayer_request_history_member_id_fkey;
+ALTER TABLE member_prayer_request_history ADD CONSTRAINT member_prayer_request_history_member_id_fkey FOREIGN KEY (member_id) REFERENCES members(id) ON DELETE CASCADE;
+
+ALTER TABLE member_prayer_by_cycle DROP CONSTRAINT IF EXISTS member_prayer_by_cycle_member_id_fkey;
+ALTER TABLE member_prayer_by_cycle ADD CONSTRAINT member_prayer_by_cycle_member_id_fkey FOREIGN KEY (member_id) REFERENCES members(id) ON DELETE CASCADE;
+
+ALTER TABLE auth_sessions DROP CONSTRAINT IF EXISTS auth_sessions_member_id_fkey;
+ALTER TABLE auth_sessions ADD CONSTRAINT auth_sessions_member_id_fkey FOREIGN KEY (member_id) REFERENCES members(id) ON DELETE CASCADE;
+
+ALTER TABLE access_requests DROP CONSTRAINT IF EXISTS access_requests_member_id_fkey;
+ALTER TABLE access_requests ADD CONSTRAINT access_requests_member_id_fkey FOREIGN KEY (member_id) REFERENCES members(id) ON DELETE SET NULL;
+
+ALTER TABLE access_requests DROP CONSTRAINT IF EXISTS access_requests_reviewed_by_member_id_fkey;
+ALTER TABLE access_requests ADD CONSTRAINT access_requests_reviewed_by_member_id_fkey FOREIGN KEY (reviewed_by_member_id) REFERENCES members(id) ON DELETE SET NULL;
+
 -- global_settings: строка (id=1) создаётся в ensurePrayerCycleAnchor() после initDb — не затирать якорь при обновлениях.
 
 ALTER TABLE members ADD COLUMN IF NOT EXISTS birth_date DATE;
@@ -148,6 +167,12 @@ CREATE TABLE IF NOT EXISTS cycle_collection_claims (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   PRIMARY KEY (cycle_index, member_id)
 );
+
+ALTER TABLE cycle_collection_claims DROP CONSTRAINT IF EXISTS cycle_collection_claims_member_id_fkey;
+ALTER TABLE cycle_collection_claims ADD CONSTRAINT cycle_collection_claims_member_id_fkey FOREIGN KEY (member_id) REFERENCES members(id) ON DELETE CASCADE;
+
+ALTER TABLE cycle_collection_claims DROP CONSTRAINT IF EXISTS cycle_collection_claims_claimed_by_member_id_fkey;
+ALTER TABLE cycle_collection_claims ADD CONSTRAINT cycle_collection_claims_claimed_by_member_id_fkey FOREIGN KEY (claimed_by_member_id) REFERENCES members(id) ON DELETE CASCADE;
 
 CREATE INDEX IF NOT EXISTS cycle_collection_claims_cycle_idx
   ON cycle_collection_claims (cycle_index);
