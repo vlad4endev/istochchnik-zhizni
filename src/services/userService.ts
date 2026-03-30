@@ -1,7 +1,6 @@
 import { query } from '../config/db';
-import { getDiffDays, addUtcDaysToIsoDate } from '../utils/isoDates';
 import { getPrayerDataByDate } from './calendarService';
-import { getCycleStartDate, getActiveMemberCount, getCurrentCycleIndexForUpsert, upsertMemberPrayerForCycle } from './prayerCycleService';
+import { getCurrentCycleIndexForUpsert, upsertMemberPrayerForCycle } from './prayerCycleService';
 
 export interface AppUser {
   id: number;
@@ -696,61 +695,13 @@ export async function listPrayerRequestHistory(
 
   const rows = result.rows as PrayerRequestHistoryItem[];
 
-  // Compute prayed_on_date for each entry that has a cycle_index.
-  // prayed_on_date = start_date + (cycle_index * member_count) + member_position_in_sorted_list
-  // This gives the calendar date when the church specifically prayed for this member.
-  const hasCycleRows = rows.some((r) => r.cycle_index != null);
-  if (!hasCycleRows) {
-    return rows;
-  }
-
-  const startDate = await getCycleStartDate();
-  const memberCount = await getActiveMemberCount();
-
-  // Find this member's 0-based position in the alphabetically sorted active list
-  let memberPosition = 0;
-  if (memberCount > 0) {
-    const posResult = await query(
-      `SELECT pos FROM (
-         SELECT id, ROW_NUMBER() OVER (
-           ORDER BY LOWER(COALESCE(NULLIF(trim(last_name), ''), split_part(trim(name), ' ', 1))) ASC,
-                    LOWER(COALESCE(NULLIF(trim(first_name), ''), name)) ASC,
-                    id ASC
-         ) - 1 AS pos
-         FROM members
-         WHERE is_active = TRUE
-       ) sub
-       WHERE id = $1`,
-      [memberId]
-    );
-    memberPosition = posResult.rows[0]?.pos ?? 0;
-  }
-
-  // Also check for one-time overrides that moved this member to a specific date
-  const overrideResult = await query(
-    `SELECT target_date::text AS target_date, member_id
-     FROM member_cycle_overrides
-     WHERE member_id = $1`,
-    [memberId]
-  );
-  const overridesByDiff = new Map<number, string>();
-  for (const row of overrideResult.rows) {
-    const r = row as { target_date: string; member_id: number };
-    overridesByDiff.set(getDiffDays(r.target_date, startDate), r.target_date);
-  }
-
+  // prayed_on_date = the date the record was created.
+  // This is reliable because the history entry is written on the same day
+  // the coordinator/user saves/edits the prayer request — i.e. the prayer day itself.
+  // (Using cycle_index * memberCount would be wrong because start_date shifts
+  //  via the reset_cycle_on_member_change trigger whenever the member list changes.)
   for (const item of rows) {
-    if (item.cycle_index == null || memberCount <= 0) {
-      continue;
-    }
-    // Check if there was an override for this cycle
-    const naturalDiffDays = item.cycle_index * memberCount + memberPosition;
-    const overrideDate = overridesByDiff.get(naturalDiffDays);
-    if (overrideDate) {
-      item.prayed_on_date = overrideDate;
-    } else {
-      item.prayed_on_date = addUtcDaysToIsoDate(startDate, naturalDiffDays);
-    }
+    item.prayed_on_date = item.created_at.slice(0, 10);
   }
 
   return rows;

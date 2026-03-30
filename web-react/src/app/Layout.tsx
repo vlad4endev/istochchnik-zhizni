@@ -1,12 +1,14 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import type { IconType } from 'react-icons';
-import { LuChurch, LuShield, LuUser, LuWifiOff, LuX } from 'react-icons/lu';
+import { LuChurch, LuMessageCircle, LuShield, LuUser, LuWifiOff, LuX } from 'react-icons/lu';
 
 import { useAuthStore } from '../features/auth/authStore';
 import { useBrandingStore } from '../features/branding/brandingStore';
 import { useRealtimeQuerySync } from '../hooks/useRealtimeQuerySync';
 import { useSyncServerRole } from '../hooks/useSyncServerRole';
+import { IOSInstallBanner } from '../components/IOSInstallBanner';
+import { AndroidInstallBanner } from '../components/AndroidInstallBanner';
 
 type NavItem = {
   to: string;
@@ -18,7 +20,7 @@ type NavItem = {
 const NAV_ITEMS: NavItem[] = [
   /** Контурные Lucide — не путать с цветными эмодзи / Font Awesome «картинками». */
   { to: '/prayer', label: 'Молитва', Icon: LuChurch },
-  // { to: '/messenger', label: 'Чаты', Icon: LuMessageCircle },
+  { to: '/messenger', label: 'Чаты', Icon: LuMessageCircle, adminOnly: true },
   // { to: '/broadcast', label: 'Трансляции', Icon: LuTv },
   { to: '/profile', label: 'Профиль', Icon: LuUser },
   { to: '/admin', label: 'Админ', Icon: LuShield, adminOnly: true },
@@ -231,6 +233,8 @@ export function Layout() {
       </nav>
       </div>
       </div>
+      <IOSInstallBanner />
+      <AndroidInstallBanner />
     </div>
   );
 }

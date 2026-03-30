@@ -4,9 +4,11 @@ import type { MessageWithSender } from '../api/messengerApi';
 
 interface MessageBubbleProps {
   message: MessageWithSender;
+  isGroupedPrev: boolean;
+  isGroupedNext: boolean;
 }
 
-export function MessageBubble({ message }: MessageBubbleProps) {
+export function MessageBubble({ message, isGroupedPrev, isGroupedNext }: MessageBubbleProps) {
   const setReplyTo = useChatStore((s) => s.setReplyTo);
   const setEditing = useChatStore((s) => s.setEditing);
   const deleteMessage = useChatStore((s) => s.deleteMessage);
@@ -51,53 +53,83 @@ export function MessageBubble({ message }: MessageBubbleProps) {
 
   if (isDeleted) {
     return (
-      <div className={`msg-row ${isMine ? 'msg-row--mine' : ''}`}>
-        <div className="msg-bubble msg-bubble--deleted">
+      <div className={`tg-bubble-wrap ${isMine ? 'tg-bubble-wrap--out' : 'tg-bubble-wrap--in'}`}>
+        <div className="tg-bubble msg-bubble--deleted">
           <span className="msg-deleted-text">Сообщение удалено</span>
         </div>
-        <style>{bubbleStyles}</style>
       </div>
     );
   }
 
+  const bubbleClasses = [
+    'tg-bubble',
+    isMine ? 'tg-bubble--out' : 'tg-bubble--in',
+    isOptimistic ? 'msg-bubble--sending' : '',
+    isGroupedPrev ? (isMine ? 'tg-bubble--out.tg-bubble--grouped-prev' : 'tg-bubble--in.tg-bubble--grouped-prev') : '',
+    isGroupedNext ? (isMine ? 'tg-bubble--out.tg-bubble--grouped-next' : 'tg-bubble--in.tg-bubble--grouped-next') : '',
+  ].filter(Boolean).join(' ');
+
   return (
     <div
-      className={`msg-row ${isMine ? 'msg-row--mine' : ''}`}
+      className={`tg-bubble-wrap ${isMine ? 'tg-bubble-wrap--out' : 'tg-bubble-wrap--in'}`}
       onContextMenu={handleContextMenu}
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
       onTouchCancel={handleTouchEnd}
+      style={{ 
+        marginTop: isGroupedPrev ? '2px' : '8px',
+        marginBottom: isGroupedNext ? '0' : '4px'
+      }}
     >
-      <div className={`msg-bubble ${isMine ? 'msg-bubble--mine' : 'msg-bubble--theirs'} ${isOptimistic ? 'msg-bubble--sending' : ''}`}>
-        {/* Sender name (for group chats) */}
-        {!isMine && message.sender_name && (
-          <span className="msg-sender">{message.sender_name}</span>
+      <div className={bubbleClasses}>
+        {/* Tail (only if first in group) */}
+        {!isGroupedPrev && (
+          <div className={`tg-bubble-tail ${isMine ? 'tg-bubble-tail--out' : 'tg-bubble-tail--in'}`}>
+            <svg width="9" height="12" viewBox="0 0 9 12" fill="currentColor">
+              {isMine ? (
+                <path d="M0 0C3 0 9 0 9 0V12C9 12 1 5 0 0Z" />
+              ) : (
+                <path d="M9 0C6 0 0 0 0 0V12C0 12 8 5 9 0Z" />
+              )}
+            </svg>
+          </div>
+        )}
+
+        {/* Sender name (only if first message in group and not mine) */}
+        {!isMine && !isGroupedPrev && message.sender_name && (
+          <div className="tg-bubble-sender">{message.sender_name}</div>
         )}
 
         {/* Reply preview */}
         {message.reply_preview && (
           <div className="msg-reply-preview">
-            <span className="msg-reply-author">
+            <div className="msg-reply-author">
               {message.reply_preview.sender_name || 'Удалённый пользователь'}
-            </span>
-            <span className="msg-reply-text">
+            </div>
+            <div className="msg-reply-text">
               {message.reply_preview.is_deleted ? 'Сообщение удалено' : message.reply_preview.content}
-            </span>
+            </div>
           </div>
         )}
 
         {/* Content */}
-        <span className="msg-content">{message.content}</span>
+        <div className="msg-content">{message.content}</div>
 
-        {/* Meta: time + edited */}
-        <span className="msg-meta">
+        {/* Meta */}
+        <div className="tg-bubble-meta">
           {message.is_edited && <span className="msg-edited">ред.</span>}
-          <span className="msg-time">{formattedTime}</span>
-          {isOptimistic && <span className="msg-sending">⏳</span>}
-        </span>
+          <span>{formattedTime}</span>
+          {isMine && !isOptimistic && (
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="20 6 9 17 4 12" />
+              <polyline points="22 6 11 17 6 12" style={{ marginLeft: '-8px' }} />
+            </svg>
+          )}
+          {isOptimistic && <span>⏳</span>}
+        </div>
       </div>
 
-      {/* Reactions */}
+      {/* Reactions Display */}
       {message.reactions.length > 0 && (
         <div className={`msg-reactions ${isMine ? 'msg-reactions--mine' : ''}`}>
           {message.reactions.map((r) => (
@@ -114,26 +146,26 @@ export function MessageBubble({ message }: MessageBubbleProps) {
         </div>
       )}
 
-      {/* Actions popup */}
+      {/* Actions Popup (Context Menu) */}
       {showActions && (
         <>
           <div className="msg-actions-overlay" onClick={() => setShowActions(false)} />
           <div className={`msg-actions ${isMine ? 'msg-actions--mine' : ''}`}>
             <button type="button" onClick={() => { setReplyTo(message); setShowActions(false); }}>
-              ↩️ Ответить
+              <span>↩️</span> Ответить
             </button>
             {isMine && (
               <button type="button" onClick={() => { setEditing(message); setShowActions(false); }}>
-                ✏️ Редактировать
+                <span>✏️</span> Редактировать
               </button>
             )}
             {isMine && (
               <button type="button" className="msg-actions__danger" onClick={() => { void deleteMessage(message.id); setShowActions(false); }}>
-                🗑 Удалить
+                <span>🗑</span> Удалить
               </button>
             )}
             <button type="button" onClick={() => { setShowReactions(!showReactions); }}>
-              😀 Реакция
+              <span>😀</span> Реакция
             </button>
             {showReactions && (
               <div className="msg-quick-reactions">
@@ -157,225 +189,42 @@ export function MessageBubble({ message }: MessageBubbleProps) {
         </>
       )}
 
-      <style>{bubbleStyles}</style>
+      <style>{bubbleExtraStyles}</style>
     </div>
   );
 }
 
-const bubbleStyles = `
-  .msg-row {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    position: relative;
-    padding: 2px 0;
-    max-width: 85%;
-  }
-  .msg-row--mine {
-    align-self: flex-end;
-    align-items: flex-end;
-  }
-
-  .msg-bubble {
-    position: relative;
-    padding: 8px 12px 6px;
-    border-radius: 16px;
-    max-width: 100%;
-    word-wrap: break-word;
-    word-break: break-word;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
-    transition: opacity 0.2s;
-  }
-
-  .msg-bubble--mine {
-    background: var(--primary);
-    color: white;
-    border-bottom-right-radius: 4px;
-  }
-
-  .msg-bubble--theirs {
-    background: var(--surface-elevated);
-    color: var(--text);
-    border-bottom-left-radius: 4px;
-    border: 1px solid rgba(28, 25, 23, 0.06);
-  }
-
-  .msg-bubble--sending {
-    opacity: 0.7;
-  }
-
-  .msg-bubble--deleted {
-    background: transparent;
-    border: 1px dashed rgba(28, 25, 23, 0.15);
-    padding: 6px 12px;
-  }
-  .msg-deleted-text {
-    font-size: 0.8125rem;
-    color: var(--text-muted);
-    font-style: italic;
-  }
-
-  .msg-sender {
-    display: block;
-    font-size: 0.75rem;
-    font-weight: 700;
-    color: var(--primary);
-    margin-bottom: 2px;
-  }
-
-  .msg-reply-preview {
-    display: flex;
-    flex-direction: column;
-    padding: 4px 8px;
-    margin-bottom: 4px;
-    border-left: 3px solid rgba(125, 54, 64, 0.5);
-    border-radius: 0 6px 6px 0;
-    background: rgba(0, 0, 0, 0.05);
-    max-width: 100%;
-    overflow: hidden;
-  }
-  .msg-bubble--mine .msg-reply-preview {
-    border-left-color: rgba(255, 255, 255, 0.5);
-    background: rgba(255, 255, 255, 0.12);
-  }
-  .msg-reply-author {
-    font-size: 0.6875rem;
-    font-weight: 700;
-    opacity: 0.8;
-  }
-  .msg-reply-text {
-    font-size: 0.75rem;
-    opacity: 0.7;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  .msg-content {
-    display: inline;
-    font-size: 0.9375rem;
-    line-height: 1.45;
-    white-space: pre-wrap;
-  }
-
-  .msg-meta {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    float: right;
-    margin-left: 8px;
-    margin-top: 4px;
-    font-size: 0.6875rem;
-    opacity: 0.6;
-  }
-  .msg-edited {
-    font-style: italic;
-  }
-
-  .msg-reactions {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 4px;
-    margin-top: 2px;
-    padding-left: 4px;
-  }
-  .msg-reactions--mine {
-    justify-content: flex-end;
-    padding-right: 4px;
-    padding-left: 0;
-  }
-
-  .msg-reaction-chip {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    padding: 2px 8px;
-    border-radius: 12px;
-    border: 1px solid rgba(28, 25, 23, 0.1);
-    background: var(--surface-elevated);
-    font-size: 0.8125rem;
-    cursor: pointer;
-    transition: all 0.15s;
-  }
-  .msg-reaction-chip:hover {
-    transform: scale(1.1);
-  }
-  .msg-reaction-chip--active {
-    border-color: var(--primary);
-    background: rgba(125, 54, 64, 0.08);
-  }
-  .msg-reaction-count {
-    font-size: 0.6875rem;
-    font-weight: 600;
-    color: var(--text-secondary);
-  }
-
-  .msg-actions-overlay {
-    position: fixed;
-    inset: 0;
-    z-index: 100;
-  }
-
-  .msg-actions {
+const bubbleExtraStyles = `
+  .tg-bubble-tail {
     position: absolute;
-    top: 100%;
-    left: 0;
-    z-index: 101;
-    display: flex;
-    flex-direction: column;
-    background: var(--surface-elevated);
-    border-radius: 12px;
-    box-shadow: 0 4px 20px rgba(0,0,0,0.12);
-    overflow: hidden;
-    min-width: 180px;
-    animation: msgActionsFade 0.15s ease;
+    bottom: 0;
+    width: 9px;
+    height: 12px;
+    z-index: -1;
   }
-  .msg-actions--mine {
-    left: auto;
-    right: 0;
+  .tg-bubble-tail--out {
+    right: -7px;
+    color: var(--tg-bubble-out);
   }
-
-  @keyframes msgActionsFade {
-    from { opacity: 0; transform: translateY(-4px) scale(0.96); }
-    to { opacity: 1; transform: translateY(0) scale(1); }
+  .tg-bubble-tail--in {
+    left: -7px;
+    color: var(--tg-bubble-in);
   }
-
-  .msg-actions button {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    width: 100%;
-    padding: 10px 14px;
-    border: none;
-    background: transparent;
-    font-size: 0.875rem;
-    font-weight: 500;
-    color: var(--text);
-    cursor: pointer;
-    text-align: left;
-    transition: background 0.1s;
+  
+  .tg-bubble--grouped-prev {
+    margin-top: 2px !important;
   }
-  .msg-actions button:hover {
-    background: rgba(28, 25, 23, 0.04);
+  
+  .msg-reply-preview {
+    border-left: 2px solid var(--tg-primary);
+    padding-left: 8px;
+    margin-bottom: 4px;
+    background: rgba(0,0,0,0.03);
+    border-radius: 2px 4px 4px 2px;
   }
-  .msg-actions__danger {
-    color: #dc2626 !important;
-  }
-
-  .msg-quick-reactions {
-    display: flex;
-    gap: 2px;
-    padding: 6px 10px;
-    border-top: 1px solid rgba(28, 25, 23, 0.06);
-  }
-  .msg-quick-reaction {
-    font-size: 1.25rem;
-    padding: 4px 6px;
-    border-radius: 6px;
-    min-width: 0 !important;
-  }
-  .msg-quick-reaction:hover {
-    background: rgba(28, 25, 23, 0.06) !important;
-    transform: scale(1.2) !important;
+  
+  .tg-bubble--out .msg-reply-preview {
+    border-left-color: white;
+    background: rgba(255,255,255,0.1);
   }
 `;

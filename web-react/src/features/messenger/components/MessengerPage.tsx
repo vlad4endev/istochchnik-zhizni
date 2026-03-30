@@ -4,6 +4,7 @@ import { useMessengerWs } from '../useMessengerWs';
 import { ChatList } from './ChatList';
 import { ChatWindow } from './ChatWindow';
 import { NewChatDialog } from './NewChatDialog';
+import { LuPlus, LuMessageSquare } from 'react-icons/lu';
 import './messenger.css';
 
 export function MessengerPage() {
@@ -31,20 +32,23 @@ export function MessengerPage() {
   return (
     <div className="tg-messenger">
       {/* Sidebar */}
-      <aside className={`tg-sidebar${mobileView === 'chat' ? ' tg-sidebar--hidden' : ''}`}>
+      <aside className={`tg-sidebar ${mobileView === 'chat' ? 'tg-sidebar--hidden' : ''}`}>
         <div className="tg-sidebar-header">
-          <h1 className="tg-sidebar-title">Чаты</h1>
-          <button className="tg-icon-btn tg-compose-btn" onClick={() => setShowNewChat(true)} aria-label="Новый чат">
-            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
-            </svg>
+          <h1 className="tg-sidebar-title">Мессенджер</h1>
+          <button 
+            type="button"
+            className="tg-compose-btn" 
+            onClick={() => setShowNewChat(true)} 
+            aria-label="Новый чат"
+          >
+            <LuPlus size={24} />
           </button>
         </div>
         <ChatList onSelect={handleSelectConversation} activeId={activeId} />
       </aside>
 
       {/* Main chat area */}
-      <main className={`tg-main${mobileView === 'chat' ? ' tg-main--visible' : ''}`}>
+      <main className={`tg-main ${mobileView === 'chat' ? 'tg-main--visible' : ''}`}>
         {activeId ? (
           <ChatWindow
             conversationId={activeId}
@@ -55,9 +59,7 @@ export function MessengerPage() {
         ) : (
           <div className="tg-empty-state">
             <div className="tg-empty-icon">
-              <svg viewBox="0 0 24 24" width="80" height="80" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
-              </svg>
+              <LuMessageSquare size={80} strokeWidth={1} />
             </div>
             <h2 className="tg-empty-title">Выберите чат</h2>
             <p className="tg-empty-sub">или создайте новый, нажав на <strong>+</strong></p>
@@ -68,7 +70,10 @@ export function MessengerPage() {
       {showNewChat && (
         <NewChatDialog
           onClose={() => setShowNewChat(false)}
-          onCreated={(id) => { setShowNewChat(false); handleSelectConversation(id); }}
+          onCreated={(id) => { 
+            setShowNewChat(false); 
+            handleSelectConversation(id); 
+          }}
         />
       )}
     </div>

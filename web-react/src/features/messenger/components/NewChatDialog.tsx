@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import * as api from '../api/messengerApi';
 import type { SearchMember, ConversationType } from '../api/messengerApi';
+import { LuX, LuSearch, LuUser, LuUsers, LuMegaphone, LuCheck } from 'react-icons/lu';
 
 interface NewChatDialogProps {
   onClose: () => void;
@@ -18,28 +19,36 @@ export function NewChatDialog({ onClose, onCreated }: NewChatDialogProps) {
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const overlayRef = useRef<HTMLDivElement>(null);
 
-  // Debounced search
-  useEffect(() => {
-    if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
-    if (!searchQuery.trim()) {
+  // Initial load & Debounced search
+  const performSearch = useCallback(async (q: string) => {
+    setSearching(true);
+    try {
+      const results = await api.searchMembers(q);
+      setSearchResults(results);
+    } catch {
       setSearchResults([]);
+    } finally {
+      setSearching(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    // Show registered users on empty search or initial load
+    if (!searchQuery.trim()) {
+      performSearch('');
       return;
     }
+
+    if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
     setSearching(true);
-    searchTimerRef.current = setTimeout(async () => {
-      try {
-        const results = await api.searchMembers(searchQuery.trim());
-        setSearchResults(results);
-      } catch {
-        setSearchResults([]);
-      } finally {
-        setSearching(false);
-      }
+    searchTimerRef.current = setTimeout(() => {
+      performSearch(searchQuery.trim());
     }, 300);
+
     return () => {
       if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
     };
-  }, [searchQuery]);
+  }, [searchQuery, performSearch]);
 
   const handleSelectMember = useCallback(
     async (member: SearchMember) => {
@@ -58,7 +67,6 @@ export function NewChatDialog({ onClose, onCreated }: NewChatDialogProps) {
           setSelectedMembers((prev) => [...prev, member]);
         }
         setSearchQuery('');
-        setSearchResults([]);
       }
     },
     [mode, selectedMembers, onCreated],
@@ -69,7 +77,7 @@ export function NewChatDialog({ onClose, onCreated }: NewChatDialogProps) {
   };
 
   const handleCreateGroup = async () => {
-    if (!groupTitle.trim() || selectedMembers.length === 0) return;
+    if (!groupTitle.trim()) return;
     setCreating(true);
     try {
       const result = await api.createGroupChat(
@@ -88,10 +96,12 @@ export function NewChatDialog({ onClose, onCreated }: NewChatDialogProps) {
   return (
     <div className="newchat-overlay" ref={overlayRef} onClick={(e) => { if (e.target === overlayRef.current) onClose(); }}>
       <div className="newchat-dialog">
-        <div className="newchat-header">
-          <h2 className="newchat-title">Новый чат</h2>
-          <button type="button" className="newchat-close" onClick={onClose}>✕</button>
-        </div>
+        <header className="newchat-header">
+          <h2 className="newchat-title">
+            {mode === 'personal' ? 'Новое сообщение' : mode === 'group' ? 'Новая группа' : 'Новый канал'}
+          </h2>
+          <button type="button" className="newchat-close" onClick={onClose}><LuX /></button>
+        </header>
 
         {/* Mode tabs */}
         <div className="newchat-tabs">
@@ -100,9 +110,10 @@ export function NewChatDialog({ onClose, onCreated }: NewChatDialogProps) {
               key={m}
               type="button"
               className={`newchat-tab ${mode === m ? 'newchat-tab--active' : ''}`}
-              onClick={() => { setMode(m); setSelectedMembers([]); setGroupTitle(''); }}
+              onClick={() => { setMode(m); setSelectedMembers([]); setGroupTitle(''); setSearchQuery(''); }}
             >
-              {m === 'personal' ? '💬 Личный' : m === 'group' ? '👥 Группа' : '📢 Канал'}
+              {m === 'personal' ? <LuUser size={16} /> : m === 'group' ? <LuUsers size={16} /> : <LuMegaphone size={16} />}
+              <span>{m === 'personal' ? 'Личный' : m === 'group' ? 'Группа' : 'Канал'}</span>
             </button>
           ))}
         </div>
@@ -117,42 +128,48 @@ export function NewChatDialog({ onClose, onCreated }: NewChatDialogProps) {
               value={groupTitle}
               onChange={(e) => setGroupTitle(e.target.value)}
               maxLength={100}
+              autoFocus
             />
           </div>
         )}
 
-        {/* Selected members (for group/channel) */}
+        {/* Selected members chips */}
         {mode !== 'personal' && selectedMembers.length > 0 && (
           <div className="newchat-selected">
             {selectedMembers.map((m) => (
               <span key={m.id} className="newchat-chip">
-                {(m.first_name || m.name).split(' ')[0]}
-                <button type="button" onClick={() => handleRemoveSelected(m.id)}>×</button>
+                <span>{(m.first_name || m.name).split(' ')[0]}</span>
+                <button type="button" onClick={() => handleRemoveSelected(m.id)}><LuX size={12} /></button>
               </span>
             ))}
           </div>
         )}
 
-        {/* Search */}
-        <div className="newchat-field">
+        {/* Search Field */}
+        <div className="newchat-search-wrap">
+          <LuSearch className="newchat-search-icon" />
           <input
             type="text"
-            className="newchat-input"
-            placeholder="Поиск участников..."
+            className="newchat-input-search"
+            placeholder={mode === 'personal' ? 'Кому отправить?' : 'Добавить участников…'}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            autoFocus
+            autoFocus={mode === 'personal'}
           />
         </div>
 
-        {/* Results */}
+        {/* Results List */}
         <div className="newchat-results">
           {searching && (
-            <div className="newchat-searching">Поиск…</div>
+            <div className="newchat-status">Ищем участников…</div>
           )}
           {!searching && searchResults.length === 0 && searchQuery.trim() && (
-            <div className="newchat-no-results">Никого не найдено</div>
+            <div className="newchat-status">Никого не найдено</div>
           )}
+          {!searching && searchResults.length === 0 && !searchQuery.trim() && (
+            <div className="newchat-status">Нет доступных участников</div>
+          )}
+          
           {searchResults.map((member) => {
             const displayName = `${member.first_name || ''} ${member.last_name || ''}`.trim() || member.name;
             const isSelected = selectedMembers.some((m) => m.id === member.id);
@@ -162,273 +179,262 @@ export function NewChatDialog({ onClose, onCreated }: NewChatDialogProps) {
                 type="button"
                 className={`newchat-member ${isSelected ? 'newchat-member--selected' : ''}`}
                 onClick={() => handleSelectMember(member)}
-                disabled={creating || isSelected}
+                disabled={creating || (mode !== 'personal' && isSelected)}
               >
-                <div className="newchat-member__avatar" style={{ background: `hsl(${(member.id * 37) % 360}, 60%, 55%)` }}>
+                <div className="newchat-member__avatar" style={{ background: `hsl(${(member.id * 137) % 360}, 60%, 50%)` }}>
                   {displayName.charAt(0).toUpperCase()}
                 </div>
-                <span className="newchat-member__name">{displayName}</span>
-                {isSelected && <span className="newchat-member__check">✓</span>}
+                <div className="newchat-member__name">{displayName}</div>
+                {isSelected && <LuCheck className="newchat-member__check" />}
               </button>
             );
           })}
         </div>
 
-        {/* Create group button */}
+        {/* Footer for groups/channels */}
         {mode !== 'personal' && (
           <div className="newchat-footer">
             <button
               type="button"
               className="newchat-create"
-              disabled={creating || !groupTitle.trim() || selectedMembers.length === 0}
+              disabled={creating || !groupTitle.trim()}
               onClick={() => void handleCreateGroup()}
             >
-              {creating ? 'Создание…' : `Создать ${mode === 'channel' ? 'канал' : 'группу'}`}
+              {creating ? 'Создаётся…' : `Создать ${mode === 'channel' ? 'канал' : 'группу'}`}
             </button>
-          </div>
-        )}
-
-        {creating && mode === 'personal' && (
-          <div className="newchat-footer">
-            <span className="newchat-creating-text">Создание чата…</span>
           </div>
         )}
       </div>
 
-      <style>{dialogStyles}</style>
+      <style>{tgDialogStyles}</style>
     </div>
   );
 }
 
-const dialogStyles = `
+const tgDialogStyles = `
   .newchat-overlay {
     position: fixed;
     inset: 0;
-    z-index: 200;
+    backdrop-filter: blur(8px);
+    background: rgba(0, 0, 0, 0.3);
+    z-index: 1000;
     display: flex;
     align-items: center;
     justify-content: center;
-    background: rgba(0, 0, 0, 0.4);
-    backdrop-filter: blur(4px);
-    animation: overlayFadeIn 0.2s ease;
-  }
-
-  @keyframes overlayFadeIn {
-    from { opacity: 0; }
-    to { opacity: 1; }
+    padding: 20px;
+    animation: fadeIn 0.2s ease;
   }
 
   .newchat-dialog {
-    width: 90%;
+    background: var(--surface-elevated);
+    width: 100%;
     max-width: 440px;
-    max-height: 80vh;
+    border-radius: 24px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.15);
+    overflow: hidden;
     display: flex;
     flex-direction: column;
-    background: var(--surface-elevated);
-    border-radius: 20px;
-    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
-    overflow: hidden;
-    animation: dialogSlideUp 0.25s ease;
-  }
-
-  @keyframes dialogSlideUp {
-    from { opacity: 0; transform: translateY(20px) scale(0.96); }
-    to { opacity: 1; transform: translateY(0) scale(1); }
+    max-height: 90vh;
   }
 
   .newchat-header {
+    padding: 20px 24px;
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 16px 20px;
-    border-bottom: 1px solid rgba(28, 25, 23, 0.06);
+    border-bottom: 1px solid rgba(0,0,0,0.05);
   }
 
   .newchat-title {
     margin: 0;
-    font-size: 1.125rem;
+    font-size: 1.25rem;
     font-weight: 800;
   }
 
   .newchat-close {
+    background: rgba(0,0,0,0.05);
+    border: none;
     width: 32px;
     height: 32px;
-    border: none;
-    border-radius: 8px;
-    background: transparent;
-    font-size: 1rem;
-    color: var(--text-muted);
-    cursor: pointer;
+    border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: all 0.15s;
-  }
-  .newchat-close:hover {
-    background: rgba(28, 25, 23, 0.06);
-    color: var(--text);
+    cursor: pointer;
   }
 
   .newchat-tabs {
     display: flex;
-    gap: 4px;
-    padding: 12px 16px;
+    padding: 12px;
+    gap: 8px;
+    background: rgba(0,0,0,0.02);
   }
+
   .newchat-tab {
     flex: 1;
-    padding: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 10px;
+    border-radius: 14px;
     border: none;
-    border-radius: 10px;
-    background: rgba(28, 25, 23, 0.04);
-    font-size: 0.8125rem;
-    font-weight: 600;
+    background: transparent;
+    font-size: 0.85rem;
+    font-weight: 700;
     color: var(--text-secondary);
-    cursor: pointer;
-    transition: all 0.15s;
+    transition: all 0.2s;
   }
-  .newchat-tab:hover {
-    background: rgba(28, 25, 23, 0.08);
-  }
+
   .newchat-tab--active {
-    background: var(--primary) !important;
-    color: white !important;
+    background: var(--primary);
+    color: white;
   }
 
   .newchat-field {
-    padding: 0 16px 8px;
+    padding: 16px 20px 8px;
   }
+
   .newchat-input {
     width: 100%;
-    padding: 10px 14px;
-    border: 1px solid rgba(28, 25, 23, 0.1);
+    background: rgba(0,0,0,0.03);
+    border: 1px solid transparent;
+    padding: 12px 16px;
     border-radius: 12px;
-    background: var(--surface);
-    font-size: 0.9375rem;
-    color: var(--text);
+    font-size: 1rem;
     outline: none;
-    transition: border-color 0.2s;
+    transition: all 0.2s;
   }
+
   .newchat-input:focus {
     border-color: var(--primary);
+    background: white;
+    box-shadow: 0 0 0 4px rgba(125, 54, 64, 0.1);
   }
-  .newchat-input::placeholder {
+
+  .newchat-search-wrap {
+    position: relative;
+    padding: 8px 20px;
+  }
+
+  .newchat-search-icon {
+    position: absolute;
+    left: 36px;
+    top: 50%;
+    transform: translateY(-50%);
     color: var(--text-muted);
   }
 
+  .newchat-input-search {
+    width: 100%;
+    background: rgba(0,0,0,0.03);
+    border: none;
+    padding: 10px 16px 10px 44px;
+    border-radius: 20px;
+    font-size: 0.95rem;
+    outline: none;
+  }
+
   .newchat-selected {
+    padding: 4px 20px;
     display: flex;
     flex-wrap: wrap;
-    gap: 6px;
-    padding: 0 16px 8px;
+    gap: 8px;
   }
+
   .newchat-chip {
+    background: rgba(125, 54, 64, 0.08);
+    color: var(--primary);
+    padding: 6px 12px;
+    border-radius: 12px;
+    font-size: 0.8rem;
+    font-weight: 700;
     display: flex;
     align-items: center;
-    gap: 4px;
-    padding: 4px 10px;
-    border-radius: 16px;
-    background: rgba(125, 54, 64, 0.1);
-    color: var(--primary);
-    font-size: 0.8125rem;
-    font-weight: 600;
+    gap: 6px;
   }
+
   .newchat-chip button {
-    border: none;
     background: transparent;
+    border: none;
     color: var(--primary);
-    font-size: 1rem;
+    display: flex;
     cursor: pointer;
-    padding: 0 2px;
   }
 
   .newchat-results {
     flex: 1;
     overflow-y: auto;
-    min-height: 120px;
-    max-height: 320px;
+    padding: 8px 0;
+    min-height: 200px;
   }
 
-  .newchat-searching,
-  .newchat-no-results {
-    padding: 20px;
+  .newchat-status {
     text-align: center;
+    padding: 40px;
     color: var(--text-muted);
-    font-size: 0.875rem;
+    font-size: 0.9rem;
   }
 
   .newchat-member {
+    width: 100%;
     display: flex;
     align-items: center;
-    gap: 12px;
-    width: 100%;
-    padding: 10px 20px;
+    gap: 16px;
+    padding: 10px 24px;
     border: none;
     background: transparent;
-    text-align: left;
     cursor: pointer;
-    transition: background 0.12s;
+    transition: background 0.2s;
   }
-  .newchat-member:hover {
-    background: rgba(125, 54, 64, 0.04);
-  }
-  .newchat-member--selected {
-    opacity: 0.5;
+
+  .newchat-member:hover:not(:disabled) {
+    background: rgba(0,0,0,0.03);
   }
 
   .newchat-member__avatar {
-    width: 40px;
-    height: 40px;
+    width: 44px;
+    height: 44px;
     border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
     color: white;
     font-weight: 700;
-    font-size: 1rem;
-    flex-shrink: 0;
   }
 
   .newchat-member__name {
-    font-size: 0.9375rem;
-    font-weight: 600;
-    color: var(--text);
     flex: 1;
+    text-align: left;
+    font-weight: 700;
+    font-size: 0.95rem;
   }
 
   .newchat-member__check {
     color: var(--primary);
-    font-weight: 700;
-    font-size: 1.125rem;
   }
 
   .newchat-footer {
-    padding: 12px 16px;
-    border-top: 1px solid rgba(28, 25, 23, 0.06);
-  }
-  .newchat-create {
-    width: 100%;
-    padding: 12px;
-    border: none;
-    border-radius: 12px;
-    background: var(--primary);
-    color: white;
-    font-size: 0.9375rem;
-    font-weight: 700;
-    cursor: pointer;
-    transition: all 0.15s;
-  }
-  .newchat-create:hover:not(:disabled) {
-    background: var(--primary-dark);
-  }
-  .newchat-create:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
+    padding: 16px 24px 24px;
+    border-top: 1px solid rgba(0,0,0,0.05);
   }
 
-  .newchat-creating-text {
-    display: block;
-    text-align: center;
-    color: var(--text-muted);
-    font-size: 0.875rem;
+  .newchat-create {
+    width: 100%;
+    padding: 14px;
+    border-radius: 16px;
+    border: none;
+    background: var(--primary);
+    color: white;
+    font-weight: 800;
+    font-size: 1rem;
+    cursor: pointer;
+    box-shadow: 0 4px 12px rgba(125, 54, 64, 0.2);
+  }
+
+  .newchat-create:disabled {
+    background: var(--text-muted);
+    opacity: 0.5;
+    cursor: not-allowed;
   }
 `;

@@ -39,7 +39,6 @@ export function ChatWindow({
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
     if (messages.length > prevLenRef.current) {
-      // Only auto-scroll if near bottom
       const el = scrollContainerRef.current;
       if (el) {
         const isNearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 200;
@@ -60,7 +59,7 @@ export function ChatWindow({
     }
   }, [conversationId, messages.length, markRead]);
 
-  // Load older messages on scroll to top
+  // Load older messages on scroll
   const handleScroll = useCallback(() => {
     const el = scrollContainerRef.current;
     if (!el || loading || !hasMore) return;
@@ -69,7 +68,6 @@ export function ChatWindow({
     }
   }, [conversationId, loading, hasMore, loadMessages]);
 
-  // Conversation header info
   const headerName = useMemo(() => {
     if (!conv) return '...';
     if (conv.type === 'personal' && conv.other_member) {
@@ -80,6 +78,8 @@ export function ChatWindow({
     return conv.title || 'Чат';
   }, [conv]);
 
+  const isOnline = conv?.type === 'personal' && conv.other_member && onlineMembers.has(conv.other_member.id);
+
   const headerSubtitle = useMemo(() => {
     if (!conv) return '';
     if (typingUsers.length > 0) {
@@ -87,192 +87,78 @@ export function ChatWindow({
       return `${names.join(', ')} печатает…`;
     }
     if (conv.type === 'personal' && conv.other_member) {
-      return onlineMembers.has(conv.other_member.id) ? 'в сети' : 'не в сети';
+      return isOnline ? 'в сети' : 'не в сети';
     }
-    return conv.type === 'channel' ? 'Канал' : 'Группа';
-  }, [conv, typingUsers, onlineMembers]);
-
-  const isTypingActive = typingUsers.length > 0;
-  const isOnline = conv?.type === 'personal' && conv.other_member
-    ? onlineMembers.has(conv.other_member.id)
-    : false;
-
-  // Group messages by date
-  const groupedMessages = useMemo(() => {
-    const groups: { date: string; messages: typeof messages }[] = [];
-    let currentDate = '';
-    for (const msg of messages) {
-      const msgDate = new Date(msg.created_at).toLocaleDateString('ru-RU', {
-        day: 'numeric', month: 'long', year: 'numeric',
-      });
-      if (msgDate !== currentDate) {
-        currentDate = msgDate;
-        groups.push({ date: msgDate, messages: [] });
-      }
-      groups[groups.length - 1].messages.push(msg);
-    }
-    return groups;
-  }, [messages]);
+    return conv.type === 'channel' ? 'канал' : 'группа';
+  }, [conv, typingUsers, isOnline]);
 
   return (
-    <div className="chatwindow">
+    <div className="tg-main">
       {/* Header */}
-      <div className="chatwindow-header">
-        <button type="button" className="chatwindow-back" onClick={onBack} aria-label="Назад">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <header className="tg-chat-header">
+        <button type="button" className="tg-back-btn" onClick={onBack}>
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
             <polyline points="15 18 9 12 15 6" />
           </svg>
         </button>
-        <div className="chatwindow-header__info">
-          <span className="chatwindow-header__name">{headerName}</span>
-          <span className={`chatwindow-header__status ${isTypingActive ? 'chatwindow-header__status--typing' : isOnline ? 'chatwindow-header__status--online' : ''}`}>
+        <div className="tg-header-info">
+          <div className="tg-header-name">{headerName}</div>
+          <div className={`tg-header-status ${isOnline || typingUsers.length > 0 ? 'tg-header-status--online' : ''}`}>
             {headerSubtitle}
-          </span>
+          </div>
         </div>
-      </div>
+      </header>
 
-      {/* Messages */}
-      <div
-        className="chatwindow-messages"
+      {/* Message List */}
+      <div 
+        className="tg-message-list" 
         ref={scrollContainerRef}
         onScroll={handleScroll}
       >
-        {loading && (
-          <div className="chatwindow-loader">
-            <div className="chatlist-spinner" />
-          </div>
-        )}
+        {loading && <div className="chatlist-loading"><div className="chatlist-spinner" /></div>}
+        
+        {messages.map((msg, idx) => {
+          const prev = messages[idx - 1];
+          const next = messages[idx + 1];
+          
+          const isGroupedPrev = prev && prev.sender_id === msg.sender_id && 
+            (new Date(msg.created_at).getTime() - new Date(prev.created_at).getTime()) < 300000;
+            
+          const isGroupedNext = next && next.sender_id === msg.sender_id && 
+            (new Date(next.created_at).getTime() - new Date(msg.created_at).getTime()) < 300000;
 
-        {groupedMessages.map((group) => (
-          <div key={group.date}>
-            <div className="chatwindow-date-divider">
-              <span>{group.date}</span>
+          // Date divider
+          const msgDate = new Date(msg.created_at).toLocaleDateString('ru-RU', {
+            day: 'numeric', month: 'long',
+          });
+          const prevDate = prev ? new Date(prev.created_at).toLocaleDateString('ru-RU', {
+            day: 'numeric', month: 'long',
+          }) : null;
+          
+          return (
+            <div key={msg.id} style={{ display: 'contents' }}>
+              {msgDate !== prevDate && (
+                <div className="tg-date-divider">{msgDate}</div>
+              )}
+              <MessageBubble 
+                message={msg} 
+                isGroupedPrev={!!isGroupedPrev}
+                isGroupedNext={!!isGroupedNext}
+              />
             </div>
-            {group.messages.map((msg) => (
-              <MessageBubble key={msg.id} message={msg} />
-            ))}
-          </div>
-        ))}
-
+          );
+        })}
+        
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Input */}
+      {/* Input area */}
       <ChatInput
         conversationId={conversationId}
         sendTypingStart={sendTypingStart}
         sendTypingStop={sendTypingStop}
-        canSend={conv?.type !== 'channel' || (conv?.type === 'channel' && true /* TODO: check role */)}
+        canSend={conv?.type !== 'channel' || true /* TODO: logic */}
       />
-
-      <style>{chatWindowStyles}</style>
     </div>
   );
 }
-
-const chatWindowStyles = `
-  .chatwindow {
-    display: flex;
-    flex-direction: column;
-    height: 100%;
-    background: var(--surface);
-    overflow: hidden;
-  }
-
-  .chatwindow-header {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 12px 16px;
-    background: var(--surface-elevated);
-    border-bottom: 1px solid rgba(28, 25, 23, 0.08);
-    min-height: 60px;
-  }
-
-  .chatwindow-back {
-    display: none;
-    align-items: center;
-    justify-content: center;
-    width: 36px;
-    height: 36px;
-    border: none;
-    border-radius: 10px;
-    background: transparent;
-    color: var(--text-secondary);
-    cursor: pointer;
-    transition: all 0.15s;
-  }
-  .chatwindow-back:hover {
-    background: rgba(28, 25, 23, 0.05);
-  }
-
-  @media (max-width: 767px) {
-    .chatwindow-back {
-      display: flex;
-    }
-  }
-
-  .chatwindow-header__info {
-    display: flex;
-    flex-direction: column;
-    min-width: 0;
-  }
-
-  .chatwindow-header__name {
-    font-size: 1rem;
-    font-weight: 700;
-    color: var(--text);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  .chatwindow-header__status {
-    font-size: 0.75rem;
-    color: var(--text-muted);
-    transition: color 0.2s;
-  }
-  .chatwindow-header__status--online {
-    color: #22c55e;
-  }
-  .chatwindow-header__status--typing {
-    color: var(--primary);
-    animation: typingPulse 1.5s ease-in-out infinite;
-  }
-
-  .chatwindow-messages {
-    flex: 1;
-    overflow-y: auto;
-    overflow-x: hidden;
-    padding: 8px 16px;
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    -webkit-overflow-scrolling: touch;
-    scroll-behavior: auto;
-  }
-
-  .chatwindow-loader {
-    display: flex;
-    justify-content: center;
-    padding: 12px;
-  }
-
-  .chatwindow-date-divider {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 12px 0 8px;
-  }
-  .chatwindow-date-divider span {
-    font-size: 0.6875rem;
-    font-weight: 600;
-    color: var(--text-muted);
-    background: var(--surface);
-    padding: 4px 12px;
-    border-radius: 10px;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    box-shadow: 0 1px 4px rgba(28, 25, 23, 0.06);
-  }
-`;
