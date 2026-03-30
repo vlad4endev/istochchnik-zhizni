@@ -540,8 +540,8 @@ CREATE INDEX IF NOT EXISTS idx_conv_type
 
 -- Upgrades for DBs created before metadata / payload / interactions
 ALTER TABLE conversations ADD COLUMN IF NOT EXISTS metadata JSONB NOT NULL DEFAULT '{}'::jsonb;
-UPDATE conversations SET type = 'private' WHERE type = 'personal';
 ALTER TABLE conversations DROP CONSTRAINT IF EXISTS conversations_type_check;
+UPDATE conversations SET type = 'private' WHERE type = 'personal';
 ALTER TABLE conversations ADD CONSTRAINT conversations_type_check
   CHECK (type IN ('personal', 'private', 'group', 'channel'));
 ALTER TABLE conversations ALTER COLUMN type SET DEFAULT 'private';
