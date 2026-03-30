@@ -35,6 +35,7 @@ export interface ConversationListItem {
     name: string;
     first_name: string | null;
     last_name: string | null;
+    avatar_url?: string | null;
   } | null;
 }
 
@@ -158,8 +159,25 @@ export type ConversationMember = {
   last_name: string | null;
 };
 
+export type PrivateChatProfile = {
+  id: number;
+  name: string;
+  first_name: string | null;
+  last_name: string | null;
+  phone_number: string | null;
+  app_role: string | null;
+  ministry_role: string | null;
+  ministry_direction: string | null;
+  birth_date: string | null; // YYYY-MM-DD
+};
+
 export async function fetchConversationMembers(conversationId: string): Promise<ConversationMember[]> {
   const { data } = await apiClient.get<ConversationMember[]>(`${BASE}/conversations/${conversationId}/members`);
+  return data;
+}
+
+export async function fetchPrivateChatProfile(conversationId: string): Promise<PrivateChatProfile> {
+  const { data } = await apiClient.get<PrivateChatProfile>(`${BASE}/conversations/${conversationId}/private-profile`);
   return data;
 }
 

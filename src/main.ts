@@ -6,6 +6,7 @@ import http from 'node:http';
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import path from 'node:path';
 
 import { pool } from './config/db';
 import { initDb } from './config/initDb';
@@ -86,6 +87,9 @@ function corsOptions(): Parameters<typeof cors>[0] | undefined {
 app.use(cors(corsOptions()));
 app.use(express.json());
 app.use(resolveAuthSession);
+
+// User-uploaded files (avatars, etc.)
+app.use('/uploads', express.static(path.join(process.cwd(), 'uploads'), { fallthrough: false }));
 
 app.use('/api/auth', authRoutes);
 

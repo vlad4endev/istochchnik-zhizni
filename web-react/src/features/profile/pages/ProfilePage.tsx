@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { FiClock, FiLock, FiUser } from 'react-icons/fi';
-import { LuUser } from 'react-icons/lu';
+import { LuImagePlus, LuUser } from 'react-icons/lu';
 
 import { useAuthStore } from '../../auth/authStore';
 import { formatRuPhoneInput } from '../../auth/utils/formatRuPhone';
@@ -10,6 +10,7 @@ import {
   fetchMe,
   fetchPrayerRequestHistory,
   patchProfile,
+  uploadMyAvatar,
   type MeResponse,
   type PrayerHistoryItem,
 } from '../api';
@@ -83,6 +84,8 @@ export function ProfilePage() {
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyError, setHistoryError] = useState<string | null>(null);
 
+  const [avatarUploading, setAvatarUploading] = useState(false);
+
   const loadProfile = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -114,6 +117,26 @@ export function ProfilePage() {
   useEffect(() => {
     void loadProfile();
   }, [loadProfile]);
+
+  const onPickAvatar = async (file: File | null) => {
+    if (!file) return;
+    setAvatarUploading(true);
+    setProfileMsg(null);
+    try {
+      const next = await uploadMyAvatar(file);
+      setUser(next);
+      applyServerProfile({
+        firstName: next.first_name ?? '',
+        lastName: next.last_name ?? '',
+        role: next.app_role ?? 'member',
+      });
+      setProfileMsg({ kind: 'ok', text: 'Аватар обновлён' });
+    } catch (e) {
+      setProfileMsg({ kind: 'err', text: axiosMessage(e) });
+    } finally {
+      setAvatarUploading(false);
+    }
+  };
 
   useEffect(() => {
     if (!user?.id) return;
@@ -246,13 +269,38 @@ export function ProfilePage() {
         ) : user ? (
           <div className="mx-auto flex w-full max-w-lg flex-col gap-6 sm:gap-8 md:max-w-xl lg:max-w-2xl xl:max-w-3xl">
             <div className="flex flex-col items-center text-center">
-              <div className="flex h-20 w-20 items-center justify-center rounded-full bg-primary/[0.08] text-primary/80">
-                <LuUser className="h-10 w-10" strokeWidth={1.75} aria-hidden />
+              <div className="relative">
+                <div className="flex h-20 w-20 items-center justify-center overflow-hidden rounded-full bg-primary/[0.08] text-primary/80 ring-1 ring-primary/10">
+                  {user.avatar_url ? (
+                    <img
+                      src={user.avatar_url}
+                      alt="Аватар"
+                      className="h-full w-full object-cover"
+                      loading="lazy"
+                    />
+                  ) : (
+                    <LuUser className="h-10 w-10" strokeWidth={1.75} aria-hidden />
+                  )}
+                </div>
+                <label className="absolute -bottom-2 -right-2 grid h-9 w-9 cursor-pointer place-items-center rounded-full bg-white text-primary shadow-md ring-1 ring-stone-200 transition hover:bg-stone-50">
+                  <LuImagePlus className="h-5 w-5" aria-hidden />
+                  <span className="sr-only">Загрузить аватар</span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    disabled={avatarUploading}
+                    onChange={(e) => void onPickAvatar(e.target.files?.[0] ?? null)}
+                  />
+                </label>
               </div>
               <h2 className="mt-4 text-xl font-extrabold tracking-tight text-stone-900">
                 {displayName(user)}
               </h2>
               <p className="mt-0.5 text-sm text-stone-500">Роль: {roleLabel(user.app_role)}</p>
+              {avatarUploading ? (
+                <p className="mt-2 text-xs font-semibold text-stone-500">Загружаем фото…</p>
+              ) : null}
             </div>
 
             {/* Данные */}

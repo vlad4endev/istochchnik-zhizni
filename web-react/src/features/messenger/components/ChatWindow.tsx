@@ -4,12 +4,14 @@ import { useChatStore, EMPTY_ARRAY } from '../chatStore';
 import { MessageBubble } from './MessageBubble';
 import { ChatInput } from './ChatInput';
 import { SearchChat } from './SearchChat';
-import { LuArrowLeft, LuSearch } from 'react-icons/lu';
+import { LuArrowLeft, LuChevronRight, LuSearch } from 'react-icons/lu';
 import './messenger.css';
 
 interface ChatWindowProps {
   conversationId: string;
   onBack: () => void;
+  sidebarCollapsed: boolean;
+  onToggleSidebarCollapsed: () => void;
   sendTypingStart: (id: string) => void;
   sendTypingStop: (id: string) => void;
 }
@@ -17,6 +19,8 @@ interface ChatWindowProps {
 export function ChatWindow({
   conversationId,
   onBack,
+  sidebarCollapsed,
+  onToggleSidebarCollapsed,
   sendTypingStart,
   sendTypingStop,
 }: ChatWindowProps) {
@@ -89,6 +93,10 @@ export function ChatWindow({
   }, [conv]);
 
   const headerInitial = displayName.trim().charAt(0).toUpperCase() || '?';
+  const headerAvatarUrl =
+    conv?.type === 'private'
+      ? (conv.other_member?.avatar_url ?? null)
+      : (conv?.avatar_url ?? null);
   const headerAvatarColor = useMemo(() => {
     if (!conv?.id) return 'var(--tg-primary)';
     let hash = 0;
@@ -142,8 +150,28 @@ export function ChatWindow({
         <button type="button" className="tg-icon-btn tg-header-back" onClick={onBack} aria-label="Назад к списку чатов">
           <LuArrowLeft size={22} strokeWidth={2.25} />
         </button>
+        {sidebarCollapsed ? (
+          <button
+            type="button"
+            className="tg-icon-btn tg-sidebar-open"
+            onClick={onToggleSidebarCollapsed}
+            aria-label="Показать список чатов"
+            title="Показать список"
+          >
+            <LuChevronRight size={20} strokeWidth={2.25} />
+          </button>
+        ) : null}
         <div className="tg-header-avatar" style={{ background: headerAvatarColor }} aria-hidden>
-          {headerInitial}
+          {headerAvatarUrl ? (
+            <img
+              src={headerAvatarUrl}
+              alt=""
+              style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 12 }}
+              loading="lazy"
+            />
+          ) : (
+            headerInitial
+          )}
         </div>
         <div className="tg-header-info">
           <div className="tg-header-name">{displayName}</div>

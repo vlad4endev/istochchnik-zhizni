@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { LuChevronRight, LuShield, LuSettings2, LuUsers, LuX } from 'react-icons/lu';
+import { LuCake, LuChevronRight, LuPhone, LuShield, LuSettings2, LuUsers, LuX } from 'react-icons/lu';
 import * as api from '../api/messengerApi';
 import { useChatStore } from '../chatStore';
 
@@ -8,10 +8,12 @@ export function ManageChatHomePage() {
   const { chatId } = useParams<{ chatId: string }>();
   const navigate = useNavigate();
   const me = useChatStore((s) => s.currentMemberId);
+  const onlineMembers = useChatStore((s) => s.onlineMembers);
   const conversations = useChatStore((s) => s.conversations);
   const conv = useMemo(() => conversations.find((c) => c.id === chatId) ?? null, [conversations, chatId]);
 
   const [meta, setMeta] = useState<api.ConversationMeta | null>(null);
+  const [privateProfile, setPrivateProfile] = useState<api.PrivateChatProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
 
@@ -39,6 +41,29 @@ export function ManageChatHomePage() {
     };
   }, [chatId]);
 
+  useEffect(() => {
+    if (!chatId) return;
+    const isPrivate = conv?.type === 'private';
+    if (!isPrivate) {
+      setPrivateProfile(null);
+      return;
+    }
+    let alive = true;
+    void api
+      .fetchPrivateChatProfile(chatId)
+      .then((p) => {
+        if (!alive) return;
+        setPrivateProfile(p);
+      })
+      .catch(() => {
+        if (!alive) return;
+        setErr('Не удалось загрузить профиль');
+      });
+    return () => {
+      alive = false;
+    };
+  }, [chatId, conv?.type]);
+
   const title =
     conv?.type === 'private'
       ? (conv.other_member?.first_name ? `${conv.other_member.first_name} ${conv.other_member.last_name ?? ''}`.trim() : conv.other_member?.name) ??
@@ -46,6 +71,12 @@ export function ManageChatHomePage() {
       : conv?.title ?? meta?.title ?? 'Чат';
 
   const subtitle = meta?.type === 'channel' ? 'Канал' : meta?.type === 'group' ? 'Группа' : 'Личный чат';
+  const isPrivate = conv?.type === 'private';
+  const isOnline = privateProfile ? onlineMembers.has(privateProfile.id) : false;
+  const statusText = isOnline ? 'в сети' : 'был(а) недавно';
+  const fullName = privateProfile
+    ? [privateProfile.first_name, privateProfile.last_name].filter(Boolean).join(' ').trim() || privateProfile.name
+    : null;
 
   return (
     <div className="mx-auto w-full max-w-xl px-4 pt-4 pb-24">
@@ -87,26 +118,90 @@ export function ManageChatHomePage() {
         ) : null}
       </div>
 
-      <div className="mt-4 space-y-3">
-        <SectionCard
-          title="Участники"
-          description="Список, роли, управление"
-          Icon={LuUsers}
-          to={chatId ? `/messenger/chat/${chatId}/manage/members` : '/messenger'}
-        />
-        <SectionCard
-          title="Администраторы"
-          description="Назначение и ограничения"
-          Icon={LuShield}
-          to={chatId ? `/messenger/chat/${chatId}/manage/admins` : '/messenger'}
-        />
-        <SectionCard
-          title="Разрешения"
-          description="Кто может писать, медиа, приглашения"
-          Icon={LuSettings2}
-          to={chatId ? `/messenger/chat/${chatId}/manage/permissions` : '/messenger'}
-        />
+      {isPrivate ? (
+        <div className="mt-4 space-y-3">
+          <div className="rounded-3xl bg-white/80 p-5 shadow-[0_10px_30px_rgba(28,25,23,0.07)] ring-1 ring-stone-200/70 backdrop-blur">
+            <p className="text-[15px] font-extrabold text-stone-900">Профиль</p>
+            <p className="mt-0.5 text-sm font-semibold text-stone-500">
+              Данные участника личного чата
+            </p>
+
+            <div className="mt-4 space-y-3">
+              <InfoRow label="Имя и фамилия" value={fullName ?? '—'} />
+              <InfoRow label="Статус" value={privateProfile ? statusText : '—'} />
+              <InfoRow
+                Icon={LuPhone}
+                label="Телефон"
+                value={privateProfile?.phone_number ?? '—'}
+              />
+              <InfoRow
+                label="Роль в проекте"
+                value={privateProfile?.app_role ?? '—'}
+              />
+              <InfoRow
+                label="Роль (служение)"
+                value={privateProfile?.ministry_role ?? '—'}
+              />
+              <InfoRow
+                label="Направление"
+                value={privateProfile?.ministry_direction ?? '—'}
+              />
+              <InfoRow
+                Icon={LuCake}
+                label="Дата рождения"
+                value={privateProfile?.birth_date ?? '—'}
+              />
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="mt-4 space-y-3">
+          <SectionCard
+            title="Участники"
+            description="Список, роли, управление"
+            Icon={LuUsers}
+            to={chatId ? `/messenger/chat/${chatId}/manage/members` : '/messenger'}
+          />
+          <SectionCard
+            title="Администраторы"
+            description="Назначение и ограничения"
+            Icon={LuShield}
+            to={chatId ? `/messenger/chat/${chatId}/manage/admins` : '/messenger'}
+          />
+          <SectionCard
+            title="Разрешения"
+            description="Кто может писать, медиа, приглашения"
+            Icon={LuSettings2}
+            to={chatId ? `/messenger/chat/${chatId}/manage/permissions` : '/messenger'}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function InfoRow({
+  Icon,
+  label,
+  value,
+}: {
+  Icon?: (p: { size?: number; className?: string }) => React.ReactNode;
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="flex items-start justify-between gap-4 rounded-2xl bg-white/70 px-4 py-3 ring-1 ring-stone-200/60">
+      <div className="min-w-0">
+        <div className="flex items-center gap-2">
+          {Icon ? (
+            <span className="grid h-7 w-7 place-items-center rounded-xl bg-stone-100 text-stone-700">
+              <Icon size={16} />
+            </span>
+          ) : null}
+          <p className="text-sm font-extrabold text-stone-900">{label}</p>
+        </div>
       </div>
+      <p className="max-w-[60%] text-right text-sm font-semibold text-stone-600">{value}</p>
     </div>
   );
 }

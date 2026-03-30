@@ -16,6 +16,7 @@ export interface MeResponse {
   first_name: string | null;
   last_name: string | null;
   name: string;
+  avatar_url?: string | null;
   phone_number: string | null;
   birth_date: string | null;
   email: string | null;
@@ -57,6 +58,15 @@ export async function fetchMe(): Promise<MeResponse> {
 
 export async function patchProfile(body: PatchProfileBody): Promise<MeResponse> {
   const { data } = await apiClient.patch<MeResponse>('/api/auth/me', body);
+  return data;
+}
+
+export async function uploadMyAvatar(file: File): Promise<MeResponse> {
+  const form = new FormData();
+  form.append('file', file);
+  const { data } = await apiClient.post<MeResponse>('/api/auth/me/avatar', form, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
   return data;
 }
 

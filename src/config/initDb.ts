@@ -7,6 +7,7 @@ CREATE TABLE IF NOT EXISTS members (
   first_name VARCHAR(120),
   last_name VARCHAR(120),
   name VARCHAR(255) NOT NULL,
+  avatar_url TEXT,
   login VARCHAR(64),
   password_hash TEXT,
   phone_number VARCHAR(32),
@@ -506,6 +507,9 @@ CREATE TABLE IF NOT EXISTS message_interactions (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   UNIQUE (message_id, member_id)
 );
+
+-- Upgrades for DBs created before avatar_url
+ALTER TABLE members ADD COLUMN IF NOT EXISTS avatar_url TEXT;
 
 -- Indexes
 CREATE INDEX IF NOT EXISTS idx_conv_participants_member

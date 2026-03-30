@@ -1,39 +1,18 @@
-import { useEffect } from 'react';
 import './UpdateNotification.css';
 
 interface UpdateNotificationProps {
+  onUpdate?: () => void;
   onDismiss?: () => void;
-  autoReload?: boolean;
 }
 
 /**
  * Выглядит как уведомление об обновлении PWA приложения.
  * Автоматически обновляет страницу при обновлении Service Worker.
  */
-export function UpdateNotification({ onDismiss, autoReload = true }: UpdateNotificationProps) {
-  useEffect(() => {
-    if (!('serviceWorker' in navigator)) return;
-
-    const handleControllerChange = () => {
-      if (autoReload) {
-        setTimeout(() => {
-          window.location.reload();
-        }, 1000);
-      }
-    };
-
-    navigator.serviceWorker.addEventListener('controllerchange', handleControllerChange);
-
-    return () => {
-      navigator.serviceWorker.removeEventListener('controllerchange', handleControllerChange);
-    };
-  }, [autoReload]);
-
+export function UpdateNotification({ onDismiss, onUpdate }: UpdateNotificationProps) {
   const handleUpdate = () => {
-    if (autoReload) {
-      window.location.reload();
-    }
     onDismiss?.();
+    onUpdate?.();
   };
 
   return (

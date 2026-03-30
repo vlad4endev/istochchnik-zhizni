@@ -9,7 +9,7 @@ import { useRealtimeQuerySync } from '../hooks/useRealtimeQuerySync';
 import { useSyncServerRole } from '../hooks/useSyncServerRole';
 import { IOSInstallBanner } from '../components/IOSInstallBanner';
 import { AndroidInstallBanner } from '../components/AndroidInstallBanner';
-import { UpdateNotification } from '../features/pwa';
+import { UpdateNotification, useServiceWorkerUpdate } from '../features/pwa';
 
 type NavItem = {
   to: string;
@@ -126,6 +126,7 @@ export function Layout() {
   const navigate = useNavigate();
   const role = useAuthStore((s) => s.role);
   const logout = useAuthStore((s) => s.logout);
+  const updatePrompt = useServiceWorkerUpdate({ showPrompt: true });
 
   const appName = useBrandingStore((s) => s.appName);
   const description = useBrandingStore((s) => s.description);
@@ -236,7 +237,9 @@ export function Layout() {
       </div>
       <IOSInstallBanner />
       <AndroidInstallBanner />
-      <UpdateNotification autoReload={true} />
+      {updatePrompt.show ? (
+        <UpdateNotification onUpdate={updatePrompt.onUpdate} onDismiss={() => updatePrompt.onDismiss?.()} />
+      ) : null}
     </div>
   );
 }

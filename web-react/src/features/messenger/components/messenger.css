@@ -4,6 +4,7 @@
 
 :root {
   --tg-sidebar-width: min(400px, 100vw);
+  --tg-sidebar-collapsed-width: 76px;
   --tg-primary: #7d3640;
   --tg-primary-hover: #5c2830;
   --tg-primary-light: rgba(125, 54, 64, 0.12);
@@ -92,6 +93,65 @@
   flex-shrink: 0;
   z-index: 10;
   box-shadow: 4px 0 32px rgba(28, 25, 23, 0.04);
+}
+
+.tg-sidebar-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tg-sidebar-toggle {
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  color: var(--tg-text-muted);
+  background: rgba(0, 0, 0, 0.02);
+  border: 1px solid var(--tg-border);
+}
+
+.tg-sidebar-toggle:hover {
+  background: rgba(0, 0, 0, 0.04);
+  color: var(--tg-primary);
+}
+
+/* Desktop collapse: shrink sidebar, keep chat usable */
+.tg-messenger--sidebar-collapsed .tg-sidebar {
+  width: var(--tg-sidebar-collapsed-width);
+}
+
+.tg-messenger--sidebar-collapsed .tg-sidebar-header {
+  padding: 12px 10px;
+}
+
+.tg-messenger--sidebar-collapsed .chatlist-item {
+  padding: 10px 10px;
+  justify-content: center;
+}
+
+.tg-messenger--sidebar-collapsed .chatlist-content,
+.tg-messenger--sidebar-collapsed .chatlist-time,
+.tg-messenger--sidebar-collapsed .chatlist-unread,
+.tg-messenger--sidebar-collapsed .chatlist-preview,
+.tg-messenger--sidebar-collapsed .chatlist-typing,
+.tg-messenger--sidebar-collapsed .chatlist-top,
+.tg-messenger--sidebar-collapsed .chatlist-bottom {
+  display: none !important;
+}
+
+.tg-messenger--sidebar-collapsed .chatlist-avatar {
+  width: 46px;
+  height: 46px;
+}
+
+.tg-sidebar-open {
+  display: none;
+}
+
+@media (min-width: 769px) {
+  .tg-messenger--sidebar-collapsed .tg-sidebar-open {
+    display: inline-flex;
+  }
 }
 
 .chatlist-item {

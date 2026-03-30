@@ -24,6 +24,7 @@ export interface AuthUser {
   first_name: string | null;
   last_name: string | null;
   name: string;
+  avatar_url: string | null;
   phone_number: string | null;
   birth_date: string | null;
   email: string | null;
@@ -77,6 +78,7 @@ type MemberRow = {
   first_name: string | null;
   last_name: string | null;
   name: string;
+  avatar_url?: string | null;
   phone_number: string | null;
   birth_date: string | null;
   email: string | null;
@@ -212,6 +214,7 @@ function mapAuthUser(row: MemberRow): AuthUser {
     first_name: row.first_name,
     last_name: row.last_name,
     name: row.name,
+    avatar_url: (row.avatar_url ?? null) as string | null,
     phone_number: row.phone_number,
     birth_date: row.birth_date ?? null,
     email: row.email ?? null,
@@ -712,6 +715,7 @@ export async function getAuthUserById(userId: number): Promise<AuthUser | null> 
       m.first_name,
       m.last_name,
       m.name,
+      m.avatar_url,
       m.phone_number,
       m.birth_date,
       m.email,
@@ -738,6 +742,17 @@ export async function getAuthUserById(userId: number): Promise<AuthUser | null> 
     ...user,
     prayer_cycle: snap ? toPublicCycleInfo(snap) : null,
   };
+}
+
+export async function updateAuthUserAvatar(
+  userId: number,
+  avatarUrl: string | null,
+): Promise<AuthUser | null> {
+  await query(`UPDATE members SET avatar_url = $1, updated_at = NOW() WHERE id = $2`, [
+    avatarUrl,
+    userId,
+  ]);
+  return getAuthUserById(userId);
 }
 
 export async function updateAuthUserProfile(

@@ -5,6 +5,7 @@ import type { ParticipantRole, PermissionsJson, PermissionKey } from '../types/m
 type AuthReq = Request & { authUserId?: number };
 
 type Action =
+  | 'view'
   | 'send_message'
   | 'send_media'
   | 'add_users'
@@ -133,7 +134,9 @@ export function checkChatPermission(action: Action) {
     };
 
     // Action rules
-    if (action === 'send_message') {
+    if (action === 'view') {
+      // membership-only; no additional checks
+    } else if (action === 'send_message') {
       if (meta.type === 'channel' && role !== 'owner' && role !== 'admin') {
         return deny(res, 403, 'Only admins can post in channels');
       }

@@ -49,7 +49,8 @@ export async function listConversations(memberId: number): Promise<ConversationL
       om.id          AS om_id,
       om.name        AS om_name,
       om.first_name  AS om_first_name,
-      om.last_name   AS om_last_name
+      om.last_name   AS om_last_name,
+      om.avatar_url  AS om_avatar_url
     FROM conversation_participants cp
     JOIN conversations c ON c.id = cp.conversation_id
     -- last message via lateral
@@ -65,7 +66,7 @@ export async function listConversations(memberId: number): Promise<ConversationL
     LEFT JOIN read_receipts rr ON rr.conversation_id = c.id AND rr.member_id = $1
     -- other member for private chats
     LEFT JOIN LATERAL (
-      SELECT om2.id, om2.name, om2.first_name, om2.last_name
+      SELECT om2.id, om2.name, om2.first_name, om2.last_name, om2.avatar_url
       FROM conversation_participants op
       JOIN members om2 ON om2.id = op.member_id
       WHERE op.conversation_id = c.id
@@ -104,6 +105,7 @@ export async function listConversations(memberId: number): Promise<ConversationL
           name: r.om_name,
           first_name: r.om_first_name,
           last_name: r.om_last_name,
+          avatar_url: r.om_avatar_url ?? null,
         }
       : null,
   }));
@@ -275,7 +277,8 @@ export async function getConversationListItem(
       om.id          AS om_id,
       om.name        AS om_name,
       om.first_name  AS om_first_name,
-      om.last_name   AS om_last_name
+      om.last_name   AS om_last_name,
+      om.avatar_url  AS om_avatar_url
     FROM conversation_participants cp
     JOIN conversations c ON c.id = cp.conversation_id
     LEFT JOIN LATERAL (
@@ -288,7 +291,7 @@ export async function getConversationListItem(
     LEFT JOIN members lm_sender ON lm_sender.id = lm.sender_id
     LEFT JOIN read_receipts rr ON rr.conversation_id = c.id AND rr.member_id = $1
     LEFT JOIN LATERAL (
-      SELECT om2.id, om2.name, om2.first_name, om2.last_name
+      SELECT om2.id, om2.name, om2.first_name, om2.last_name, om2.avatar_url
       FROM conversation_participants op
       JOIN members om2 ON om2.id = op.member_id
       WHERE op.conversation_id = c.id
@@ -331,6 +334,7 @@ export async function getConversationListItem(
           name: r.om_name,
           first_name: r.om_first_name,
           last_name: r.om_last_name,
+          avatar_url: r.om_avatar_url ?? null,
         }
       : null,
   };
@@ -552,6 +556,61 @@ export async function updateConversation(
     `UPDATE conversations SET ${sets.join(', ')} WHERE id = $${i}`,
     params,
   );
+}
+
+export type PrivateChatProfile = {
+  id: number;
+  name: string;
+  first_name: string | null;
+  last_name: string | null;
+  phone_number: string | null;
+  /** “Роль в проекте” */
+  app_role: string | null;
+  ministry_role: string | null;
+  ministry_direction: string | null;
+  birth_date: string | null;
+};
+
+export async function getPrivateChatProfile(
+  conversationId: string,
+  requesterMemberId: number,
+): Promise<PrivateChatProfile | null> {
+  const result = await dbQuery(
+    `
+    SELECT
+      m.id,
+      m.name,
+      m.first_name,
+      m.last_name,
+      m.phone_number,
+      m.app_role,
+      m.ministry_role,
+      m.ministry_direction,
+      m.birth_date
+    FROM conversation_participants cp
+    JOIN conversations c ON c.id = cp.conversation_id
+    JOIN members m ON m.id = cp.member_id
+    WHERE cp.conversation_id = $1
+      AND cp.left_at IS NULL
+      AND c.type = 'private'
+      AND cp.member_id <> $2
+    LIMIT 1
+    `,
+    [conversationId, requesterMemberId],
+  );
+  const r = result.rows[0];
+  if (!r) return null;
+  return {
+    id: Number(r.id),
+    name: r.name,
+    first_name: r.first_name ?? null,
+    last_name: r.last_name ?? null,
+    phone_number: r.phone_number ?? null,
+    app_role: r.app_role ?? null,
+    ministry_role: r.ministry_role ?? null,
+    ministry_direction: r.ministry_direction ?? null,
+    birth_date: r.birth_date ? new Date(r.birth_date).toISOString().slice(0, 10) : null,
+  };
 }
 
 // ─── Messages ─────────────────────────────────────────────────

@@ -110,7 +110,7 @@ router.get('/conversations/:id/participants', async (req: Request, res: Response
 });
 
 /** GET /api/messenger/conversations/:id/meta */
-router.get('/conversations/:id/meta', checkChatPermission('send_message'), async (req: Request, res: Response) => {
+router.get('/conversations/:id/meta', checkChatPermission('view'), async (req: Request, res: Response) => {
   const convId = String(req.params.id);
   try {
     const meta = await svc.getConversationMeta(convId);
@@ -125,8 +125,25 @@ router.get('/conversations/:id/meta', checkChatPermission('send_message'), async
   }
 });
 
+/** GET /api/messenger/conversations/:id/private-profile */
+router.get('/conversations/:id/private-profile', checkChatPermission('view'), async (req: Request, res: Response) => {
+  const userId = (req as AuthReq).authUserId!;
+  const convId = String(req.params.id);
+  try {
+    const profile = await svc.getPrivateChatProfile(convId, userId);
+    if (!profile) {
+      res.status(404).json({ error: 'Profile not found (not a private chat?)' });
+      return;
+    }
+    res.json(profile);
+  } catch (e) {
+    console.error('[messenger] getPrivateChatProfile error:', e);
+    res.status(500).json({ error: 'Failed to load profile' });
+  }
+});
+
 /** GET /api/messenger/conversations/:id/members */
-router.get('/conversations/:id/members', checkChatPermission('send_message'), async (req: Request, res: Response) => {
+router.get('/conversations/:id/members', checkChatPermission('view'), async (req: Request, res: Response) => {
   const convId = String(req.params.id);
   try {
     const members = await svc.listConversationMembers(convId);

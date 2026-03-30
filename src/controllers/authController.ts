@@ -8,6 +8,7 @@ import {
   logoutByToken,
   rejectAccessRequest,
   registerUser,
+  updateAuthUserAvatar,
   updateAuthUserProfile,
 } from '../services/authService';
 import { notifyRealtime } from '../realtime/notify';
@@ -329,6 +330,28 @@ export async function patchProfileHandler(req: Request, res: Response): Promise<
       return;
     }
     console.error('Failed to update profile', error);
+    res.status(500).json({ error: 'Database error' });
+  }
+}
+
+export async function uploadAvatarHandler(req: Request, res: Response): Promise<void> {
+  const authReq = req as AuthRequest;
+  if (!authReq.authUserId) {
+    res.status(401).json({ error: 'Authentication required' });
+    return;
+  }
+  const file = (req as Request & { file?: Express.Multer.File }).file;
+  if (!file) {
+    res.status(400).json({ error: 'File is required' });
+    return;
+  }
+  const avatarUrl = `/uploads/avatars/${file.filename}`;
+  try {
+    const user = await updateAuthUserAvatar(authReq.authUserId, avatarUrl);
+    notifyRealtime(['me', 'members']);
+    res.json(user);
+  } catch (error) {
+    console.error('Failed to upload avatar', error);
     res.status(500).json({ error: 'Database error' });
   }
 }

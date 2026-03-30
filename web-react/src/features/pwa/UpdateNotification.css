@@ -11,6 +11,14 @@
   animation: slideUp 0.3s ease-out;
 }
 
+/* On mobile, keep it above the bottom navigation bar */
+@media (max-width: 768px) {
+  .update-notification {
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 72px);
+    z-index: 40;
+  }
+}
+
 @keyframes slideUp {
   from {
     transform: translateY(100%);

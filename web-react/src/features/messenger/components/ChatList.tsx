@@ -142,6 +142,10 @@ function ChatListItem({
   const displayName = getConversationName(conv);
   const avatarLetter = displayName.charAt(0).toUpperCase();
   const avatarColor = getAvatarColor(conv.id);
+  const avatarUrl =
+    conv.type === 'private'
+      ? (conv.other_member?.avatar_url ?? null)
+      : (conv.avatar_url ?? null);
   const lastMsg = conv.last_message;
   const isTyping = typingUsers.length > 0;
 
@@ -157,8 +161,15 @@ function ChatListItem({
       ].join(' ')}
       onClick={onClick}
     >
-      <div className="relative grid h-12 w-12 shrink-0 place-items-center rounded-2xl text-white shadow-sm" style={{ background: avatarColor }}>
-        <span className="text-[15px] font-extrabold">{avatarLetter}</span>
+      <div
+        className="relative grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-2xl text-white shadow-sm"
+        style={{ background: avatarColor }}
+      >
+        {avatarUrl ? (
+          <img src={avatarUrl} alt="" className="h-full w-full object-cover" loading="lazy" />
+        ) : (
+          <span className="text-[15px] font-extrabold">{avatarLetter}</span>
+        )}
         {conv.type === 'private' ? (
           <span
             className={[

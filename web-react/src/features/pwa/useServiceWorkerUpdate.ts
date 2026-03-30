@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 interface UpdatePrompt {
   show: boolean;
   onUpdate: () => void;
+  onDismiss?: () => void;
 }
 
 /**
@@ -12,11 +13,13 @@ interface UpdatePrompt {
  */
 export function useServiceWorkerUpdate(options?: { showPrompt?: boolean }) {
   const [updatePrompt, setUpdatePrompt] = useState<UpdatePrompt>({ show: false, onUpdate: () => {} });
+  const dismissedForThisSession = useRef(false);
 
   useEffect(() => {
     if (!('serviceWorker' in navigator)) return;
 
     let updateCheckInterval: ReturnType<typeof setInterval>;
+    let alive = true;
 
     const checkForUpdate = async () => {
       try {
@@ -29,17 +32,35 @@ export function useServiceWorkerUpdate(options?: { showPrompt?: boolean }) {
       }
     };
 
-    const handleControllerChange = () => {
-      // Service Worker обновился, перезагружаем страницу
-      if (options?.showPrompt) {
-        setUpdatePrompt({
-          show: true,
-          onUpdate: () => window.location.reload(),
-        });
-      } else {
-        // Автоматическая перезагрузка
-        window.location.reload();
+    const maybeShowPrompt = async () => {
+      const registration = await navigator.serviceWorker.getRegistration();
+      if (!registration) return;
+      if (dismissedForThisSession.current) return;
+
+      // If there is a waiting SW, it means an update is ready to activate.
+      const waiting = registration.waiting;
+      if (!waiting) return;
+
+      if (!options?.showPrompt) {
+        waiting.postMessage({ type: 'SKIP_WAITING' });
+        return;
       }
+
+      setUpdatePrompt({
+        show: true,
+        onUpdate: () => {
+          waiting.postMessage({ type: 'SKIP_WAITING' });
+        },
+        onDismiss: () => {
+          dismissedForThisSession.current = true;
+          setUpdatePrompt({ show: false, onUpdate: () => {} });
+        },
+      });
+    };
+
+    const handleControllerChange = () => {
+      // New SW took control -> safe to reload once.
+      window.location.reload();
     };
 
     // Проверяем обновления каждые 60 секунд
@@ -50,8 +71,30 @@ export function useServiceWorkerUpdate(options?: { showPrompt?: boolean }) {
 
     // Первая проверка сразу же
     void checkForUpdate();
+    void maybeShowPrompt();
+
+    // Also listen to updatefound -> installed -> waiting.
+    void (async () => {
+      try {
+        const registration = await navigator.serviceWorker.getRegistration();
+        if (!registration) return;
+        registration.addEventListener('updatefound', () => {
+          const installing = registration.installing;
+          if (!installing) return;
+          installing.addEventListener('statechange', () => {
+            if (!alive) return;
+            if (installing.state === 'installed' && navigator.serviceWorker.controller) {
+              void maybeShowPrompt();
+            }
+          });
+        });
+      } catch {
+        /* ignore */
+      }
+    })();
 
     return () => {
+      alive = false;
       clearInterval(updateCheckInterval);
       navigator.serviceWorker.removeEventListener('controllerchange', handleControllerChange);
     };
