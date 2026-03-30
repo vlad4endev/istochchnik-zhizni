@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import axios from 'axios';
 import type { ConversationListItem, MessageWithSender } from './api/messengerApi';
 import * as api from './api/messengerApi';
 
@@ -211,6 +212,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
   sendMessage: async (conversationId, content, replyToId) => {
     const tempId = `temp-${Date.now()}-${Math.random().toString(36).slice(2)}`;
     const clientMsgId = `c-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const serverReplyId =
+      replyToId != null && /^\d+$/.test(String(replyToId)) ? replyToId : null;
 
     // Optimistic: add temp message immediately
     const optimistic: MessageWithSender = {
@@ -250,7 +253,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }));
 
     try {
-      const real = await api.sendMessage(conversationId, content, replyToId, clientMsgId, 'text', { text: content });
+      const real = await api.sendMessage(conversationId, content, serverReplyId, clientMsgId, 'text', { text: content });
       // Replace temp with real
       set((s) => ({
         messagesByConv: {
@@ -261,7 +264,15 @@ export const useChatStore = create<ChatState>((set, get) => ({
         },
       }));
     } catch (e) {
-      console.error('[chatStore] sendMessage error:', e);
+      if (axios.isAxiosError(e)) {
+        console.error('[chatStore] sendMessage error:', {
+          status: e.response?.status,
+          data: e.response?.data,
+          message: e.message,
+        });
+      } else {
+        console.error('[chatStore] sendMessage error:', e);
+      }
       // Remove failed optimistic message
       set((s) => ({
         messagesByConv: {

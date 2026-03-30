@@ -6,6 +6,15 @@ import { sendToRoomAll, sendToMember, ensureMemberInRoom } from '../realtime/wsH
 
 type AuthReq = Request & { authUserId?: number };
 
+/** DB `messages.id` / FK columns are bigint; drop temp-ids and other junk so Postgres never 500s on cast. */
+function normalizeOptionalBigintId(raw: unknown): string | null {
+  if (raw == null) return null;
+  const s = String(raw).trim();
+  if (!s) return null;
+  if (!/^\d+$/.test(s)) return null;
+  return s;
+}
+
 const router = Router();
 
 async function getConversationListItemForMember(memberId: number, convId: string) {
@@ -292,8 +301,9 @@ router.post('/conversations/:id/messages', checkChatPermission('send_message'), 
     payload != null && typeof payload === 'object' && !Array.isArray(payload)
       ? (payload as Record<string, unknown>)
       : {};
+  const replyId = normalizeOptionalBigintId(replyToMessageId);
   try {
-    const message = await svc.sendMessage(convId, userId, content, replyToMessageId, clientMsgId, pt, pl);
+    const message = await svc.sendMessage(convId, userId, content, replyId, clientMsgId, pt, pl);
     const convKey = String(convId);
     // Всем участникам комнаты, включая другие вкладки отправителя (дедуп по id на клиенте)
     sendToRoomAll(convKey, { type: 'msg:new', conversationId: convKey, message });
@@ -308,7 +318,10 @@ router.post('/conversations/:id/messages', checkChatPermission('send_message'), 
 
     // Helpful for DB errors without leaking request body contents.
     console.error('[messenger] sendMessage error:', { message, code, detail, hint });
-    res.status(500).json({ error: 'Failed to send message' });
+    res.status(500).json({
+      error: 'Failed to send message',
+      ...(code ? { dbCode: code } : {}),
+    });
   }
 });
 
