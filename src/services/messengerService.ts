@@ -642,6 +642,7 @@ export async function sendMessage(
   const pl: MessagePayload = pt === 'text' && Object.keys(plRaw).length === 0
     ? { text: content.trim() }
     : plRaw;
+  const payloadJson = JSON.stringify(pl);
 
   // For consistent ordering in `/conversations` across clients.
   await dbQuery(`UPDATE conversations SET updated_at = NOW() WHERE id = $1`, [conversationId]);
@@ -673,7 +674,7 @@ export async function sendMessage(
     LEFT JOIN messages rm ON rm.id = ins.reply_to_message_id
     LEFT JOIN members rm_s ON rm_s.id = rm.sender_id
     `,
-    [conversationId, senderId, content.trim(), replyToMessageId || null, clientMsgId || null, pt, pl],
+    [conversationId, senderId, content.trim(), replyToMessageId || null, clientMsgId || null, pt, payloadJson],
   );
 
   return mapMessageWithSender(result.rows[0], senderId);
