@@ -421,10 +421,19 @@ EXECUTE PROCEDURE reset_cycle_on_member_change();
 
 CREATE TABLE IF NOT EXISTS conversations (
   id BIGSERIAL PRIMARY KEY,
-  type VARCHAR(16) NOT NULL DEFAULT 'personal'
-    CHECK (type IN ('personal', 'group', 'channel')),
+  type VARCHAR(16) NOT NULL DEFAULT 'private'
+    CHECK (type IN ('private', 'group', 'channel')),
   title VARCHAR(255),
   avatar_url TEXT,
+  default_permissions JSONB NOT NULL DEFAULT jsonb_build_object(
+    'can_send_messages', true,
+    'can_send_media',    true,
+    'can_add_users',     false,
+    'can_pin_messages',  false,
+    'can_manage_chat',   false
+  ),
+  settings JSONB NOT NULL DEFAULT '{}'::jsonb,
+  metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -434,19 +443,33 @@ CREATE TABLE IF NOT EXISTS conversation_participants (
   member_id INTEGER NOT NULL REFERENCES members(id) ON DELETE CASCADE,
   role VARCHAR(16) NOT NULL DEFAULT 'member'
     CHECK (role IN ('owner', 'admin', 'member')),
+  permissions JSONB NOT NULL DEFAULT '{}'::jsonb,
   joined_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  muted_until TIMESTAMPTZ,
   left_at TIMESTAMPTZ,
   PRIMARY KEY (conversation_id, member_id)
 );
+
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'message_payload_type') THEN
+    CREATE TYPE message_payload_type AS ENUM ('text', 'prayer_request', 'audio');
+  END IF;
+END $$;
 
 CREATE TABLE IF NOT EXISTS messages (
   id BIGSERIAL PRIMARY KEY,
   conversation_id BIGINT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
   sender_id INTEGER REFERENCES members(id) ON DELETE SET NULL,
+  client_msg_id TEXT,
   content TEXT NOT NULL DEFAULT '',
+  payload_type message_payload_type NOT NULL DEFAULT 'text',
+  payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+  interaction_count INTEGER NOT NULL DEFAULT 0,
   reply_to_message_id BIGINT REFERENCES messages(id) ON DELETE SET NULL,
+  forwarded_from JSONB,
   is_edited BOOLEAN NOT NULL DEFAULT FALSE,
   is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
+  is_pinned BOOLEAN NOT NULL DEFAULT FALSE,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -467,6 +490,23 @@ CREATE TABLE IF NOT EXISTS message_reactions (
   PRIMARY KEY (message_id, member_id, emoji)
 );
 
+CREATE TABLE IF NOT EXISTS chat_pins (
+  conversation_id BIGINT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+  message_id BIGINT NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+  pinned_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  pinned_by INTEGER REFERENCES members(id) ON DELETE SET NULL,
+  PRIMARY KEY (conversation_id, message_id)
+);
+
+CREATE TABLE IF NOT EXISTS message_interactions (
+  id BIGSERIAL PRIMARY KEY,
+  message_id BIGINT NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+  member_id INTEGER NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+  type VARCHAR(32) NOT NULL DEFAULT 'pray_click',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (message_id, member_id)
+);
+
 -- Indexes
 CREATE INDEX IF NOT EXISTS idx_conv_participants_member
   ON conversation_participants (member_id) WHERE left_at IS NULL;
@@ -480,14 +520,73 @@ CREATE INDEX IF NOT EXISTS idx_messages_conv_id_desc
 CREATE INDEX IF NOT EXISTS idx_messages_reply
   ON messages (reply_to_message_id) WHERE reply_to_message_id IS NOT NULL;
 
+CREATE UNIQUE INDEX IF NOT EXISTS idx_messages_client_dedupe
+  ON messages (conversation_id, sender_id, client_msg_id)
+  WHERE client_msg_id IS NOT NULL;
+
 CREATE INDEX IF NOT EXISTS idx_read_receipts_member
   ON read_receipts (member_id);
 
 CREATE INDEX IF NOT EXISTS idx_msg_reactions_message
   ON message_reactions (message_id);
 
+CREATE INDEX IF NOT EXISTS idx_chat_pins_conv
+  ON chat_pins (conversation_id, pinned_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_message_interactions_member
+  ON message_interactions (member_id);
+
+CREATE INDEX IF NOT EXISTS idx_message_interactions_message
+  ON message_interactions (message_id);
+
 CREATE INDEX IF NOT EXISTS idx_conv_type
   ON conversations (type);
+
+-- Upgrades for DBs created before metadata / payload / interactions
+ALTER TABLE conversations ADD COLUMN IF NOT EXISTS metadata JSONB NOT NULL DEFAULT '{}'::jsonb;
+UPDATE conversations SET type = 'private' WHERE type = 'personal';
+ALTER TABLE conversations DROP CONSTRAINT IF EXISTS conversations_type_check;
+ALTER TABLE conversations ADD CONSTRAINT conversations_type_check
+  CHECK (type IN ('private', 'group', 'channel'));
+ALTER TABLE conversations ALTER COLUMN type SET DEFAULT 'private';
+
+ALTER TABLE messages ADD COLUMN IF NOT EXISTS payload JSONB NOT NULL DEFAULT '{}'::jsonb;
+ALTER TABLE messages ADD COLUMN IF NOT EXISTS interaction_count INTEGER NOT NULL DEFAULT 0;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'message_payload_type') THEN
+    CREATE TYPE message_payload_type AS ENUM ('text', 'prayer_request', 'audio');
+  END IF;
+END $$;
+
+ALTER TABLE messages ADD COLUMN IF NOT EXISTS payload_type message_payload_type NOT NULL DEFAULT 'text';
+
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns c
+    JOIN pg_class t ON t.relname = c.table_name
+    WHERE c.table_schema = 'public' AND c.table_name = 'messages' AND c.column_name = 'payload_type'
+      AND c.data_type = 'text'
+  ) THEN
+    ALTER TABLE messages
+    ALTER COLUMN payload_type DROP DEFAULT,
+    ALTER COLUMN payload_type TYPE message_payload_type
+    USING CASE trim(lower(payload_type::text))
+      WHEN 'prayer_request' THEN 'prayer_request'::message_payload_type
+      WHEN 'audio' THEN 'audio'::message_payload_type
+      ELSE 'text'::message_payload_type
+    END;
+    ALTER TABLE messages ALTER COLUMN payload_type SET DEFAULT 'text'::message_payload_type;
+    ALTER TABLE messages ALTER COLUMN payload_type SET NOT NULL;
+  END IF;
+END $$;
+
+UPDATE messages m
+SET payload = jsonb_build_object('text', m.content)
+WHERE m.payload_type = 'text'
+  AND (m.payload IS NULL OR m.payload = '{}'::jsonb);
 
 -- Trigger: auto-update conversations.updated_at
 CREATE OR REPLACE FUNCTION set_conversations_updated_at()
@@ -504,7 +603,8 @@ CREATE OR REPLACE FUNCTION set_messages_updated_at()
 RETURNS TRIGGER LANGUAGE plpgsql SET search_path = public AS $$
 BEGIN
   NEW.updated_at := NOW();
-  IF OLD.content IS DISTINCT FROM NEW.content THEN
+  IF OLD.content IS DISTINCT FROM NEW.content
+     OR OLD.payload IS DISTINCT FROM NEW.payload THEN
     NEW.is_edited := TRUE;
   END IF;
   RETURN NEW;

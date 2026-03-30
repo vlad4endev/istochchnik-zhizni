@@ -38,6 +38,12 @@ interface ChatState {
   // --- Total unread ---
   totalUnread: number;
 
+  // --- Smart tabs ---
+  activeTab: ChatTab;
+  setActiveTab: (tab: ChatTab) => void;
+  getConversationsForActiveTab: () => ConversationListItem[];
+  getUnreadForTab: (tab: ChatTab) => number;
+
   // --- Reply state ---
   replyToMessage: MessageWithSender | null;
 
@@ -93,6 +99,8 @@ interface ChatState {
   refreshUnread: () => Promise<void>;
 }
 
+export type ChatTab = 'all' | 'personal' | 'services' | 'notifications';
+
 export const EMPTY_ARRAY: any[] = [];
 export const EMPTY_OBJECT: any = {};
 
@@ -110,8 +118,23 @@ export const useChatStore = create<ChatState>((set, get) => ({
   typingByConv: {},
   onlineMembers: new Set(),
   totalUnread: 0,
+  activeTab: 'all',
   replyToMessage: null,
   editingMessage: null,
+  setActiveTab: (tab) => set({ activeTab: tab }),
+
+  getConversationsForActiveTab: () => {
+    const tab = get().activeTab;
+    const list = get().conversations || EMPTY_ARRAY;
+    if (tab === 'all') return list;
+    return list.filter((c) => classifyConversation(c) === tab);
+  },
+
+  getUnreadForTab: (tab) => {
+    const list = get().conversations || EMPTY_ARRAY;
+    if (tab === 'all') return list.reduce((sum: number, c: any) => sum + (c.unread_count ?? 0), 0);
+    return list.reduce((sum: number, c: any) => sum + (classifyConversation(c) === tab ? (c.unread_count ?? 0) : 0), 0);
+  },
   searchResults: [],
   searchQuery: '',
   searchLoading: false,
@@ -187,13 +210,18 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   sendMessage: async (conversationId, content, replyToId) => {
     const tempId = `temp-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const clientMsgId = `c-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
     // Optimistic: add temp message immediately
     const optimistic: MessageWithSender = {
       id: tempId,
       conversation_id: conversationId,
       sender_id: null, // Will be set properly when confirmed
+      client_msg_id: clientMsgId,
       content,
+      payload_type: 'text',
+      payload: { text: content },
+      interaction_count: 0,
       reply_to_message_id: replyToId || null,
       is_edited: false,
       is_deleted: false,
@@ -222,7 +250,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }));
 
     try {
-      const real = await api.sendMessage(conversationId, content, replyToId);
+      const real = await api.sendMessage(conversationId, content, replyToId, clientMsgId, 'text', { text: content });
       // Replace temp with real
       set((s) => ({
         messagesByConv: {
@@ -597,3 +625,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
   },
 }));
+
+function classifyConversation(conv: ConversationListItem): Exclude<ChatTab, 'all'> {
+  // Heuristic v1:
+  // - private → personal
+  // - group → services
+  // - channel → notifications
+  if (conv.type === 'private') return 'personal';
+  if (conv.type === 'channel') return 'notifications';
+  return 'services';
+}

@@ -1,5 +1,6 @@
 import { Router, type Request, type Response } from 'express';
 import { requireAuthSession } from '../middleware/authSession';
+import { checkChatPermission } from '../middleware/chatPermission';
 import * as svc from '../services/messengerService';
 import { sendToRoomAll, sendToRoom, sendToMember, ensureMemberInRoom } from '../realtime/wsHub';
 
@@ -108,6 +109,68 @@ router.get('/conversations/:id/participants', async (req: Request, res: Response
   }
 });
 
+/** GET /api/messenger/conversations/:id/meta */
+router.get('/conversations/:id/meta', checkChatPermission('send_message'), async (req: Request, res: Response) => {
+  const convId = String(req.params.id);
+  try {
+    const meta = await svc.getConversationMeta(convId);
+    if (!meta) {
+      res.status(404).json({ error: 'Conversation not found' });
+      return;
+    }
+    res.json(meta);
+  } catch (e) {
+    console.error('[messenger] getConversationMeta error:', e);
+    res.status(500).json({ error: 'Failed to load conversation' });
+  }
+});
+
+/** GET /api/messenger/conversations/:id/members */
+router.get('/conversations/:id/members', checkChatPermission('send_message'), async (req: Request, res: Response) => {
+  const convId = String(req.params.id);
+  try {
+    const members = await svc.listConversationMembers(convId);
+    res.json(members);
+  } catch (e) {
+    console.error('[messenger] listConversationMembers error:', e);
+    res.status(500).json({ error: 'Failed to load members' });
+  }
+});
+
+/** PATCH /api/messenger/conversations/:id/permissions { default_permissions?, settings? } */
+router.patch('/conversations/:id/permissions', checkChatPermission('manage_chat'), async (req: Request, res: Response) => {
+  const convId = String(req.params.id);
+  const { default_permissions, settings } = req.body ?? {};
+  try {
+    await svc.updateConversationPermissionsAndSettings(convId, { default_permissions, settings });
+    sendToRoomAll(String(convId), { type: 'conv:updated', conversationId: String(convId) });
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('[messenger] patchConversationPermissions error:', e);
+    res.status(500).json({ error: 'Failed to update permissions' });
+  }
+});
+
+/** PATCH /api/messenger/conversations/:id/members/:memberId { role?, permissions?, muted_until? } */
+router.patch('/conversations/:id/members/:memberId', checkChatPermission('set_permissions'), async (req: Request, res: Response) => {
+  const convId = String(req.params.id);
+  const targetId = Number(req.params.memberId);
+  const { role, permissions, muted_until } = req.body ?? {};
+  try {
+    await svc.updateMemberRoleAndPermissions(convId, targetId, { role, permissions, muted_until });
+    // Notify the updated member (refresh list)
+    const convForMember = await getConversationListItemForMember(targetId, String(convId));
+    if (convForMember) {
+      sendToMember(targetId, { type: 'conv:created', conversation: convForMember });
+    }
+    sendToRoomAll(String(convId), { type: 'conv:updated', conversationId: String(convId) });
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('[messenger] patchMemberPermissions error:', e);
+    res.status(500).json({ error: 'Failed to update member' });
+  }
+});
+
 /** PATCH /api/messenger/conversations/:id  { title?, avatar_url? } */
 router.patch('/conversations/:id', async (req: Request, res: Response) => {
   const userId = (req as AuthReq).authUserId!;
@@ -196,31 +259,24 @@ router.get('/conversations/:id/messages', async (req: Request, res: Response) =>
 });
 
 /** POST /api/messenger/conversations/:id/messages { content, replyToMessageId? } */
-router.post('/conversations/:id/messages', async (req: Request, res: Response) => {
+router.post('/conversations/:id/messages', checkChatPermission('send_message'), async (req: Request, res: Response) => {
   const userId = (req as AuthReq).authUserId!;
   const convId = req.params.id;
-  const { content, replyToMessageId } = req.body;
+  const { content, replyToMessageId, clientMsgId, payloadType, payload } = req.body;
   if (!content || typeof content !== 'string' || !content.trim()) {
     res.status(400).json({ error: 'Message content is required' });
     return;
   }
+  const pt =
+    payloadType === 'prayer_request' || payloadType === 'text' || payloadType === 'audio'
+      ? payloadType
+      : 'text';
+  const pl =
+    payload != null && typeof payload === 'object' && !Array.isArray(payload)
+      ? (payload as Record<string, unknown>)
+      : {};
   try {
-    const isMember = await svc.isMemberInConversation(convId, userId);
-    if (!isMember) {
-      res.status(403).json({ error: 'Not a member of this conversation' });
-      return;
-    }
-    // Channel: only owner/admin can post
-    const convType = await svc.getConversationType(convId);
-    if (convType === 'channel') {
-      const role = await svc.getParticipantRole(convId, userId);
-      if (role === 'member') {
-        res.status(403).json({ error: 'Only admins can post in channels' });
-        return;
-      }
-    }
-
-    const message = await svc.sendMessage(convId, userId, content, replyToMessageId);
+    const message = await svc.sendMessage(convId, userId, content, replyToMessageId, clientMsgId, pt, pl);
     const convKey = String(convId);
     // Всем участникам комнаты, включая другие вкладки отправителя (дедуп по id на клиенте)
     sendToRoomAll(convKey, { type: 'msg:new', conversationId: convKey, message });

@@ -18,6 +18,8 @@ export function useSwipeGesture(
     const element = elementRef.current;
     if (!element) return;
 
+    const passive: AddEventListenerOptions = { passive: true };
+
     const handleTouchStart = (e: TouchEvent) => {
       touchStartX.current = e.touches[0]?.clientX ?? 0;
       touchStartY.current = e.touches[0]?.clientY ?? 0;
@@ -46,12 +48,12 @@ export function useSwipeGesture(
       }
     };
 
-    element.addEventListener('touchstart', handleTouchStart);
-    element.addEventListener('touchend', handleTouchEnd);
+    element.addEventListener('touchstart', handleTouchStart, passive);
+    element.addEventListener('touchend', handleTouchEnd, passive);
 
     return () => {
-      element.removeEventListener('touchstart', handleTouchStart);
-      element.removeEventListener('touchend', handleTouchEnd);
+      element.removeEventListener('touchstart', handleTouchStart, passive);
+      element.removeEventListener('touchend', handleTouchEnd, passive);
     };
   }, [elementRef, options]);
 }

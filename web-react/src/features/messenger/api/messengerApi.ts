@@ -4,8 +4,13 @@ const BASE = '/api/messenger';
 
 // ─── Types (mirroring backend) ────────────────────────────────
 
-export type ConversationType = 'personal' | 'group' | 'channel';
+export type ConversationType = 'private' | 'group' | 'channel';
 export type ParticipantRole = 'owner' | 'admin' | 'member';
+
+/** Rich message kinds (mirrors server `message_payload_type`). */
+export type MessagePayloadType = 'text' | 'prayer_request' | 'audio';
+
+export type MessagePayload = Record<string, unknown>;
 
 export interface ConversationListItem {
   id: string;
@@ -13,6 +18,9 @@ export interface ConversationListItem {
   title: string | null;
   avatar_url: string | null;
   updated_at: string;
+  default_permissions?: Record<string, boolean>;
+  settings?: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
   last_message: {
     id: string;
     content: string;
@@ -34,10 +42,17 @@ export interface MessageWithSender {
   id: string;
   conversation_id: string;
   sender_id: number | null;
+  client_msg_id?: string | null;
   content: string;
+  payload_type?: MessagePayloadType;
+  payload?: MessagePayload;
+  /** Серверный счётчик взаимодействий (напр. «Я молюсь»). */
+  interaction_count?: number;
   reply_to_message_id: string | null;
+  forwarded_from?: unknown;
   is_edited: boolean;
   is_deleted: boolean;
+  is_pinned?: boolean;
   created_at: string;
   updated_at: string;
   sender_name: string | null;
@@ -101,12 +116,66 @@ export async function fetchMessages(conversationId: string, beforeId?: string, l
   return data;
 }
 
-export async function sendMessage(conversationId: string, content: string, replyToMessageId?: string | null): Promise<MessageWithSender> {
+export async function sendMessage(
+  conversationId: string,
+  content: string,
+  replyToMessageId?: string | null,
+  clientMsgId?: string | null,
+  payloadType?: MessagePayloadType,
+  payload?: MessagePayload,
+): Promise<MessageWithSender> {
   const { data } = await apiClient.post<MessageWithSender>(
     `${BASE}/conversations/${conversationId}/messages`,
-    { content, replyToMessageId },
+    { content, replyToMessageId, clientMsgId, payloadType, payload },
   );
   return data;
+}
+
+export type ConversationMeta = {
+  id: string;
+  type: ConversationType;
+  title: string | null;
+  avatar_url: string | null;
+  updated_at: string;
+  default_permissions?: Record<string, boolean>;
+  settings?: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
+};
+
+export async function fetchConversationMeta(conversationId: string): Promise<ConversationMeta> {
+  const { data } = await apiClient.get<ConversationMeta>(`${BASE}/conversations/${conversationId}/meta`);
+  return data;
+}
+
+export type ConversationMember = {
+  member_id: number;
+  role: ParticipantRole;
+  joined_at: string;
+  muted_until: string | null;
+  permissions: Record<string, boolean>;
+  name: string;
+  first_name: string | null;
+  last_name: string | null;
+};
+
+export async function fetchConversationMembers(conversationId: string): Promise<ConversationMember[]> {
+  const { data } = await apiClient.get<ConversationMember[]>(`${BASE}/conversations/${conversationId}/members`);
+  return data;
+}
+
+export async function patchConversationPermissions(
+  conversationId: string,
+  patch: { default_permissions?: Record<string, boolean>; settings?: Record<string, unknown> },
+) {
+  await apiClient.patch(`${BASE}/conversations/${conversationId}/permissions`, patch);
+}
+
+export async function patchConversationMember(
+  conversationId: string,
+  memberId: number,
+  patch: { role?: ParticipantRole; permissions?: Record<string, boolean>; muted_until?: string | null },
+) {
+  await apiClient.patch(`${BASE}/conversations/${conversationId}/members/${memberId}`, patch);
 }
 
 export async function editMessage(messageId: string, content: string) {

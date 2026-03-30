@@ -1,4 +1,5 @@
 import { useEffect, useRef, useMemo, useCallback, useState, useLayoutEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useChatStore, EMPTY_ARRAY } from '../chatStore';
 import { MessageBubble } from './MessageBubble';
 import { ChatInput } from './ChatInput';
@@ -19,6 +20,7 @@ export function ChatWindow({
   sendTypingStart,
   sendTypingStop,
 }: ChatWindowProps) {
+  const navigate = useNavigate();
   const messages = useChatStore((s) => s.messagesByConv[conversationId] || EMPTY_ARRAY);
   const loading = useChatStore((s) => s.messagesLoading[conversationId] || false);
   const hasMore = useChatStore((s) => s.hasMore[conversationId] ?? true);
@@ -78,7 +80,7 @@ export function ChatWindow({
 
   const displayName = useMemo(() => {
     if (!conv) return 'Чат';
-    if (conv.type === 'personal' && conv.other_member) {
+    if (conv.type === 'private' && conv.other_member) {
       const fn = conv.other_member.first_name || '';
       const ln = conv.other_member.last_name || '';
       return `${fn} ${ln}`.trim() || conv.other_member.name;
@@ -97,14 +99,14 @@ export function ChatWindow({
     return palette[Math.abs(hash) % palette.length];
   }, [conv?.id]);
 
-  const isOnline = conv?.type === 'personal' && conv.other_member && onlineMembers.has(conv.other_member.id);
+  const isOnline = conv?.type === 'private' && conv.other_member && onlineMembers.has(conv.other_member.id);
 
   const headerSubtitle = useMemo(() => {
     if (typingUsers.length > 0) {
       return `${typingUsers.map((u: { memberName: string }) => u.memberName.split(' ')[0]).join(', ')} печатает…`;
     }
     if (!conv) return '';
-    if (conv.type === 'personal' && conv.other_member) {
+    if (conv.type === 'private' && conv.other_member) {
       return isOnline ? 'в сети' : 'был(а) недавно';
     }
     return conv.type === 'channel' ? 'канал' : 'группа';
@@ -150,6 +152,17 @@ export function ChatWindow({
           </div>
         </div>
         <div className="tg-header-actions">
+          <button
+            type="button"
+            className="tg-icon-btn"
+            onClick={() => navigate(`/messenger/chat/${conversationId}/manage`)}
+            aria-label="Управление чатом"
+            title="Управление"
+          >
+            <span style={{ width: 20, height: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800 }}>
+              ⋮
+            </span>
+          </button>
           <button
             type="button"
             className="tg-icon-btn"

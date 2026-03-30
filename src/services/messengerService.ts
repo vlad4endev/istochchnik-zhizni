@@ -2,8 +2,12 @@ import { query as dbQuery } from '../config/db';
 import type {
   ConversationListItem,
   ConversationType,
+  ConversationMember,
+  MessagePayload,
+  MessagePayloadType,
   MessageWithSender,
   ParticipantRole,
+  PermissionsJson,
 } from '../types/messenger';
 
 // ─── Helpers ──────────────────────────────────────────────────
@@ -41,7 +45,7 @@ export async function listConversations(memberId: number): Promise<ConversationL
            AND m2.id > COALESCE(rr.last_read_message_id, 0)),
         0
       ) AS unread_count,
-      -- other member for personal chats
+      -- other member for private chats
       om.id          AS om_id,
       om.name        AS om_name,
       om.first_name  AS om_first_name,
@@ -59,7 +63,7 @@ export async function listConversations(memberId: number): Promise<ConversationL
     LEFT JOIN members lm_sender ON lm_sender.id = lm.sender_id
     -- read receipt
     LEFT JOIN read_receipts rr ON rr.conversation_id = c.id AND rr.member_id = $1
-    -- other member for personal chats
+    -- other member for private chats
     LEFT JOIN LATERAL (
       SELECT om2.id, om2.name, om2.first_name, om2.last_name
       FROM conversation_participants op
@@ -67,7 +71,7 @@ export async function listConversations(memberId: number): Promise<ConversationL
       WHERE op.conversation_id = c.id
         AND op.member_id != $1
         AND op.left_at IS NULL
-        AND c.type = 'personal'
+        AND c.type = 'private'
       LIMIT 1
     ) om ON TRUE
     WHERE cp.member_id = $1
@@ -105,9 +109,141 @@ export async function listConversations(memberId: number): Promise<ConversationL
   }));
 }
 
+export async function getConversationMeta(
+  conversationId: string,
+): Promise<Pick<
+  ConversationListItem,
+  'id' | 'type' | 'title' | 'avatar_url' | 'updated_at' | 'default_permissions' | 'settings' | 'metadata'
+> | null> {
+  const result = await dbQuery(
+    `SELECT id, type, title, avatar_url, updated_at, default_permissions, settings, metadata
+     FROM conversations
+     WHERE id = $1
+     LIMIT 1`,
+    [conversationId],
+  );
+  const r = result.rows[0];
+  if (!r) return null;
+  return {
+    id: bigint(r.id),
+    type: r.type as ConversationType,
+    title: r.title,
+    avatar_url: r.avatar_url,
+    updated_at: r.updated_at,
+    default_permissions: (r.default_permissions ?? undefined) as PermissionsJson | undefined,
+    settings: (r.settings ?? undefined) as Record<string, unknown> | undefined,
+    metadata: (r.metadata ?? undefined) as Record<string, unknown> | undefined,
+  };
+}
+
+export async function updateConversationPermissionsAndSettings(
+  conversationId: string,
+  patch: {
+    default_permissions?: PermissionsJson;
+    settings?: Record<string, unknown>;
+    metadata?: Record<string, unknown>;
+    title?: string;
+    avatar_url?: string | null;
+  },
+): Promise<void> {
+  const sets: string[] = [];
+  const params: unknown[] = [];
+  let i = 1;
+
+  if (patch.title !== undefined) {
+    sets.push(`title = $${i++}`);
+    params.push(patch.title);
+  }
+  if (patch.avatar_url !== undefined) {
+    sets.push(`avatar_url = $${i++}`);
+    params.push(patch.avatar_url);
+  }
+  if (patch.default_permissions !== undefined) {
+    sets.push(`default_permissions = $${i++}::jsonb`);
+    params.push(JSON.stringify(patch.default_permissions));
+  }
+  if (patch.settings !== undefined) {
+    sets.push(`settings = $${i++}::jsonb`);
+    params.push(JSON.stringify(patch.settings));
+  }
+  if (patch.metadata !== undefined) {
+    sets.push(`metadata = $${i++}::jsonb`);
+    params.push(JSON.stringify(patch.metadata));
+  }
+
+  if (sets.length === 0) return;
+  params.push(conversationId);
+
+  await dbQuery(`UPDATE conversations SET ${sets.join(', ')} WHERE id = $${i}`, params);
+}
+
+export async function listConversationMembers(conversationId: string): Promise<ConversationMember[]> {
+  const result = await dbQuery(
+    `SELECT
+        cp.member_id,
+        cp.role,
+        cp.joined_at,
+        cp.muted_until,
+        cp.permissions,
+        m.name,
+        m.first_name,
+        m.last_name
+     FROM conversation_participants cp
+     JOIN members m ON m.id = cp.member_id
+     WHERE cp.conversation_id = $1
+       AND cp.left_at IS NULL
+     ORDER BY
+       CASE cp.role WHEN 'owner' THEN 0 WHEN 'admin' THEN 1 ELSE 2 END,
+       cp.joined_at ASC`,
+    [conversationId],
+  );
+  return result.rows.map((r: any) => ({
+    member_id: Number(r.member_id),
+    role: r.role as ParticipantRole,
+    joined_at: r.joined_at,
+    muted_until: r.muted_until ?? null,
+    permissions: (r.permissions ?? {}) as PermissionsJson,
+    name: r.name,
+    first_name: r.first_name ?? null,
+    last_name: r.last_name ?? null,
+  }));
+}
+
+export async function updateMemberRoleAndPermissions(
+  conversationId: string,
+  memberId: number,
+  patch: { role?: ParticipantRole; permissions?: PermissionsJson; muted_until?: string | null },
+): Promise<void> {
+  const sets: string[] = [];
+  const params: unknown[] = [];
+  let i = 1;
+
+  if (patch.role !== undefined) {
+    sets.push(`role = $${i++}`);
+    params.push(patch.role);
+  }
+  if (patch.permissions !== undefined) {
+    sets.push(`permissions = $${i++}::jsonb`);
+    params.push(JSON.stringify(patch.permissions));
+  }
+  if (patch.muted_until !== undefined) {
+    sets.push(`muted_until = $${i++}`);
+    params.push(patch.muted_until);
+  }
+  if (sets.length === 0) return;
+
+  params.push(conversationId, memberId);
+  await dbQuery(
+    `UPDATE conversation_participants
+     SET ${sets.join(', ')}
+     WHERE conversation_id = $${i++} AND member_id = $${i} AND left_at IS NULL`,
+    params,
+  );
+}
+
 /**
  * Fetch a single conversation list item shaped for a specific member.
- * (Important: `other_member` for personal chats must be computed from the recipient's POV.)
+ * (Important: `other_member` for private chats must be computed from the recipient's POV.)
  */
 export async function getConversationListItem(
   memberId: number,
@@ -135,7 +271,7 @@ export async function getConversationListItem(
            AND m2.id > COALESCE(rr.last_read_message_id, 0)),
         0
       ) AS unread_count,
-      -- other member for personal chats
+      -- other member for private chats
       om.id          AS om_id,
       om.name        AS om_name,
       om.first_name  AS om_first_name,
@@ -158,7 +294,7 @@ export async function getConversationListItem(
       WHERE op.conversation_id = c.id
         AND op.member_id != $1
         AND op.left_at IS NULL
-        AND c.type = 'personal'
+        AND c.type = 'private'
       LIMIT 1
     ) om ON TRUE
     WHERE cp.member_id = $1
@@ -201,7 +337,7 @@ export async function getConversationListItem(
 }
 
 /**
- * Find or create a personal (P2P) conversation between two members.
+ * Find or create a private (P2P) conversation between two members.
  */
 export async function findOrCreatePersonalConversation(
   memberA: number,
@@ -209,7 +345,7 @@ export async function findOrCreatePersonalConversation(
 ): Promise<string> {
   if (memberA === memberB) throw new Error('Cannot create chat with yourself');
 
-  // Check if personal conversation already exists
+  // Check if private conversation already exists
   const existing = await dbQuery(
     `
     SELECT cp1.conversation_id
@@ -220,7 +356,7 @@ export async function findOrCreatePersonalConversation(
       AND cp2.member_id = $2
       AND cp1.left_at IS NULL
       AND cp2.left_at IS NULL
-      AND c.type = 'personal'
+      AND c.type = 'private'
     LIMIT 1
     `,
     [memberA, memberB],
@@ -232,7 +368,7 @@ export async function findOrCreatePersonalConversation(
 
   // Create new
   const conv = await dbQuery(
-    `INSERT INTO conversations (type) VALUES ('personal') RETURNING id`,
+    `INSERT INTO conversations (type) VALUES ('private') RETURNING id`,
   );
   const convId = bigint(conv.rows[0].id);
 
@@ -420,23 +556,47 @@ export async function updateConversation(
 
 // ─── Messages ─────────────────────────────────────────────────
 
-/**
- * Send a message. Returns the full message with sender info.
- */
+function normalizePayloadType(raw: unknown): MessagePayloadType {
+  if (raw === 'prayer_request' || raw === 'audio') return raw;
+  return 'text';
+}
+
+function normalizePayload(raw: unknown): MessagePayload {
+  if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+    return raw as MessagePayload;
+  }
+  return {};
+}
+
+/** Send a message. Returns the full message with sender info. */
 export async function sendMessage(
   conversationId: string,
   senderId: number,
   content: string,
   replyToMessageId?: string | null,
+  clientMsgId?: string | null,
+  payloadType: MessagePayloadType = 'text',
+  payload: MessagePayload = {},
 ): Promise<MessageWithSender> {
+  const pt = normalizePayloadType(payloadType);
+  const plRaw = normalizePayload(payload);
+  const pl: MessagePayload = pt === 'text' && Object.keys(plRaw).length === 0
+    ? { text: content.trim() }
+    : plRaw;
+
   // For consistent ordering in `/conversations` across clients.
   await dbQuery(`UPDATE conversations SET updated_at = NOW() WHERE id = $1`, [conversationId]);
 
   const result = await dbQuery(
     `
     WITH inserted AS (
-      INSERT INTO messages (conversation_id, sender_id, content, reply_to_message_id)
-      VALUES ($1, $2, $3, $4)
+      INSERT INTO messages (conversation_id, sender_id, content, reply_to_message_id, client_msg_id, payload_type, payload)
+      VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb)
+      ON CONFLICT (conversation_id, sender_id, client_msg_id)
+      DO UPDATE SET
+        content = EXCLUDED.content,
+        payload_type = EXCLUDED.payload_type,
+        payload = EXCLUDED.payload
       RETURNING *
     )
     SELECT
@@ -454,7 +614,7 @@ export async function sendMessage(
     LEFT JOIN messages rm ON rm.id = ins.reply_to_message_id
     LEFT JOIN members rm_s ON rm_s.id = rm.sender_id
     `,
-    [conversationId, senderId, content.trim(), replyToMessageId || null],
+    [conversationId, senderId, content.trim(), replyToMessageId || null, clientMsgId || null, pt, pl],
   );
 
   return mapMessageWithSender(result.rows[0], senderId);
@@ -530,7 +690,13 @@ export async function editMessage(
   newContent: string,
 ): Promise<{ content: string; updated_at: string } | null> {
   const result = await dbQuery(
-    `UPDATE messages SET content = $1
+    `UPDATE messages
+     SET
+       content = $1,
+       payload = CASE
+         WHEN payload_type::text = 'text' THEN jsonb_build_object('text', $1)
+         ELSE payload
+       END
      WHERE id = $2 AND sender_id = $3 AND is_deleted = FALSE
      RETURNING content, updated_at`,
     [newContent.trim(), messageId, senderId],
@@ -636,6 +802,44 @@ export async function getMessageConversationId(messageId: string): Promise<strin
   return raw != null ? bigint(raw) : null;
 }
 
+export async function interactWithMessage(
+  messageId: string,
+  memberId: number,
+  type: 'pray_click' = 'pray_click',
+): Promise<{ interaction_count: number; conversation_id: string; inserted: boolean } | null> {
+  const result = await dbQuery(
+    `
+    WITH ins AS (
+      INSERT INTO message_interactions (message_id, member_id, type)
+      VALUES ($1, $2, $3)
+      ON CONFLICT (message_id, member_id) DO NOTHING
+      RETURNING 1
+    ),
+    upd AS (
+      UPDATE messages
+      SET interaction_count = interaction_count + (SELECT COUNT(*) FROM ins)
+      WHERE id = $1
+      RETURNING interaction_count, conversation_id
+    )
+    SELECT
+      COALESCE((SELECT interaction_count FROM upd), m.interaction_count)::int AS interaction_count,
+      m.conversation_id,
+      (SELECT COUNT(*) FROM ins) = 1 AS inserted
+    FROM messages m
+    WHERE m.id = $1
+    LIMIT 1
+    `,
+    [messageId, memberId, type],
+  );
+  const r = result.rows[0];
+  if (!r) return null;
+  return {
+    interaction_count: Number(r.interaction_count ?? 0),
+    conversation_id: bigint(r.conversation_id),
+    inserted: Boolean(r.inserted),
+  };
+}
+
 // ─── Search members for new chat ──────────────────────────────
 
 export async function searchMembers(
@@ -698,10 +902,16 @@ function mapMessageWithSender(r: any, currentMemberId: number): MessageWithSende
     id: bigint(r.id),
     conversation_id: bigint(r.conversation_id),
     sender_id: r.sender_id,
+    client_msg_id: r.client_msg_id ?? null,
     content: r.content,
+    payload_type: normalizePayloadType(r.payload_type),
+    payload: normalizePayload(r.payload),
+    interaction_count: Number(r.interaction_count ?? 0),
     reply_to_message_id: r.reply_to_message_id ? bigint(r.reply_to_message_id) : null,
+    forwarded_from: r.forwarded_from ?? null,
     is_edited: r.is_edited,
     is_deleted: r.is_deleted,
+    is_pinned: r.is_pinned ?? false,
     created_at: r.created_at,
     updated_at: r.updated_at,
     sender_name: r.sender_name?.trim() || null,

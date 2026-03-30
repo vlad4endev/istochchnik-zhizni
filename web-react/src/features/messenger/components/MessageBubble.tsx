@@ -29,6 +29,59 @@ export function MessageBubble({ message, isGroupedPrev, isGroupedNext }: Message
     return d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
   }, [message.created_at]);
 
+  const payloadType = message.payload_type ?? 'text';
+  const payload = (message.payload ?? {}) as Record<string, unknown>;
+
+  const handlePrayClick = () => {
+    // Этап 2: заглушка для интерактивной карточки
+    // В Этапе 3/следующих этапах подключим API + WS синк.
+    // eslint-disable-next-line no-console
+    console.log('[messenger] pray click', { messageId: message.id });
+  };
+
+  const renderContent = () => {
+    if (payloadType === 'prayer_request') {
+      const text = String(
+        payload.text ?? payload.request ?? payload.content ?? message.content ?? '',
+      ).trim();
+      const count = Number(message.interaction_count ?? payload.count ?? 0);
+
+      return (
+        <div className="w-full max-w-[22rem]">
+          <div className="rounded-2xl border border-white/10 bg-white/8 p-3 shadow-[0_12px_30px_rgba(0,0,0,0.10)] backdrop-blur-sm">
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <div className="text-[12px] font-extrabold tracking-wide text-white/75">
+                  Молитвенная нужда
+                </div>
+                <div className="mt-1 whitespace-pre-wrap break-words text-[14px] leading-5 text-white/95">
+                  {text || '—'}
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-3 flex items-center justify-between gap-2">
+              <button
+                type="button"
+                onClick={handlePrayClick}
+                className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-2 text-[13px] font-semibold text-white/95 transition hover:bg-white/14 active:scale-[0.99]"
+              >
+                <span aria-hidden>🙏</span>
+                <span>Я молюсь</span>
+                <span className="rounded-full bg-white/12 px-2 py-0.5 text-[12px] font-bold">
+                  {Number.isFinite(count) ? count : 0}
+                </span>
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // text (default)
+    return <>{message.content}</>;
+  };
+
   const handleContextMenu = (e: React.MouseEvent) => {
     e.preventDefault();
     if (!isDeleted && !isOptimistic) {
@@ -135,7 +188,7 @@ export function MessageBubble({ message, isGroupedPrev, isGroupedNext }: Message
         )}
 
         {/* Content */}
-        <div className="msg-content">{message.content}</div>
+        <div className="msg-content">{renderContent()}</div>
 
         {/* Meta */}
         <div className="tg-bubble-meta">
