@@ -34,34 +34,35 @@ export function resolveUserRole(req: Request, _res: Response, next: NextFunction
 const MEMBER_ALLOWED_PATCH =
   /^\/api\/calendar\/(?:cycle\/collection-claims|next-week\/collection|member-cycle-prayer)\/?$/;
 
-/** Участники с ролью member могут выполнять мутации в мессенджере (внутри него отдельные ACL). */
-const MEMBER_ALLOWED_MESSENGER_MUTATIONS = /^\/api\/messenger\/.+$/;
-
-/** Участники с ролью member могут обновлять свой профиль (внутри — валидация). */
-const MEMBER_ALLOWED_ME_MUTATIONS = /^\/api\/auth\/me(?:\/avatar)?\/?$/;
+function fullUrlPath(req: Request): string {
+  // IMPORTANT: app.use('/api/messenger', ...) меняет req.path (без префикса),
+  // поэтому используем originalUrl для RBAC-исключений.
+  return (req.originalUrl || req.url || req.path || '').split('?')[0] || '';
+}
 
 export function enforceRoleAccess(req: Request, res: Response, next: NextFunction): void {
   const roleReq = req as RoleRequest;
   const role = roleReq.userRole ?? 'member';
+  const fullPath = fullUrlPath(req);
 
   if (SAFE_METHODS.has(req.method)) {
     next();
     return;
   }
 
-  if (req.method === 'PATCH' && MEMBER_ALLOWED_PATCH.test(req.path)) {
+  if (req.method === 'PATCH' && MEMBER_ALLOWED_PATCH.test(fullPath)) {
     next();
     return;
   }
 
   if (role === 'member') {
     // Messenger: отдельные права на уровне чата (checkChatPermission), поэтому разрешаем мутации.
-    if (MEMBER_ALLOWED_MESSENGER_MUTATIONS.test(req.path)) {
+    if (fullPath.startsWith('/api/messenger/')) {
       next();
       return;
     }
     // Profile: разрешаем PATCH/POST только для /auth/me (и /avatar).
-    if ((req.method === 'PATCH' || req.method === 'POST') && MEMBER_ALLOWED_ME_MUTATIONS.test(req.path)) {
+    if ((req.method === 'PATCH' || req.method === 'POST') && (fullPath === '/api/auth/me' || fullPath === '/api/auth/me/avatar')) {
       next();
       return;
     }

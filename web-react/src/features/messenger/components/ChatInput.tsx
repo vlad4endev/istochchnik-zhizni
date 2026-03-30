@@ -108,7 +108,7 @@ export function ChatInput({
   }
 
   return (
-    <div className="tg-input-area-wrap">
+    <div className="w-full">
       {/* Reply/Edit Banners */}
       {(replyTo || editing) && (
         <div className="tg-input-banner">

@@ -77,89 +77,94 @@ function deny(res: Response, code: number, error: string) {
 
 export function checkChatPermission(action: Action) {
   return async (req: Request, res: Response, next: NextFunction) => {
-    const userId = (req as AuthReq).authUserId;
-    if (!userId) {
-      return deny(res, 401, 'Unauthorized');
-    }
-    const convId = String(req.params.id ?? req.params.conversationId ?? req.body?.conversationId ?? '');
-    if (!convId) {
-      return deny(res, 400, 'conversationId is required');
-    }
-
-    const role = await svc.getParticipantRole(convId, userId);
-    if (!role) {
-      return deny(res, 403, 'Not a member of this conversation');
-    }
-
-    const meta = await svc.getConversationMeta(convId);
-    if (!meta) {
-      return deny(res, 404, 'Conversation not found');
-    }
-
-    // Load member override fields (permissions/mute)
-    const memberRow = await (async () => {
-      const { query } = await import('../config/db');
-      const r = await query(
-        `SELECT permissions, muted_until FROM conversation_participants
-         WHERE conversation_id = $1 AND member_id = $2 AND left_at IS NULL
-         LIMIT 1`,
-        [convId, userId],
-      );
-      return r.rows[0] ?? null;
-    })();
-
-    const mutedUntil = memberRow?.muted_until ?? null;
-    const memberPermissions = (memberRow?.permissions ?? {}) as PermissionsJson;
-
-    // base from chat + role superpowers (then allow override to restrict)
-    const roleBase = superpowers(role);
-    const base = roleBase ?? (meta.default_permissions ?? {});
-    const effective = mergePermissions(base, memberPermissions);
-
-    // Common mute restriction
-    if (
-      mutedUntil &&
-      (action === 'send_message' || action === 'send_media') &&
-      new Date(mutedUntil).getTime() > Date.now()
-    ) {
-      return deny(res, 403, 'Muted');
-    }
-
-    const require = (key: PermissionKey) => {
-      if (!effective[key]) {
-        deny(res, 403, 'Forbidden');
-        return false;
+    try {
+      const userId = (req as AuthReq).authUserId;
+      if (!userId) {
+        return deny(res, 401, 'Unauthorized');
       }
-      return true;
-    };
+      const convId = String(req.params.id ?? req.params.conversationId ?? req.body?.conversationId ?? '');
+      if (!convId) {
+        return deny(res, 400, 'conversationId is required');
+      }
 
-    // Action rules
-    if (action === 'view') {
-      // membership-only; no additional checks
-    } else if (action === 'send_message') {
-      if (meta.type === 'channel' && role !== 'owner' && role !== 'admin') {
-        return deny(res, 403, 'Only admins can post in channels');
+      const role = await svc.getParticipantRole(convId, userId);
+      if (!role) {
+        return deny(res, 403, 'Not a member of this conversation');
       }
-      if (!require('can_send_messages')) return;
-    } else if (action === 'send_media') {
-      if (!require('can_send_media')) return;
-    } else if (action === 'add_users') {
-      if (!require('can_add_users')) return;
-    } else if (action === 'pin_messages') {
-      if (!require('can_pin_messages')) return;
-    } else if (action === 'manage_chat') {
-      if (!require('can_manage_chat')) return;
-    } else if (action === 'set_admin' || action === 'set_permissions' || action === 'remove_member') {
-      if (role !== 'owner' && !effective.can_manage_chat) {
-        return deny(res, 403, 'Forbidden');
+
+      const meta = await svc.getConversationMeta(convId);
+      if (!meta) {
+        return deny(res, 404, 'Conversation not found');
       }
-    } else if (action === 'edit_message' || action === 'delete_message') {
-      // handled in specific endpoints with additional checks (ownership)
-      // we still require membership
+
+      // Load member override fields (permissions/mute)
+      const memberRow = await (async () => {
+        const { query } = await import('../config/db');
+        const r = await query(
+          `SELECT permissions, muted_until FROM conversation_participants
+           WHERE conversation_id = $1 AND member_id = $2 AND left_at IS NULL
+           LIMIT 1`,
+          [convId, userId],
+        );
+        return r.rows[0] ?? null;
+      })();
+
+      const mutedUntil = memberRow?.muted_until ?? null;
+      const memberPermissions = (memberRow?.permissions ?? {}) as PermissionsJson;
+
+      // base from chat + role superpowers (then allow override to restrict)
+      const roleBase = superpowers(role);
+      const base = roleBase ?? (meta.default_permissions ?? {});
+      const effective = mergePermissions(base, memberPermissions);
+
+      // Common mute restriction
+      if (
+        mutedUntil &&
+        (action === 'send_message' || action === 'send_media') &&
+        new Date(mutedUntil).getTime() > Date.now()
+      ) {
+        return deny(res, 403, 'Muted');
+      }
+
+      const require = (key: PermissionKey) => {
+        if (!effective[key]) {
+          deny(res, 403, 'Forbidden');
+          return false;
+        }
+        return true;
+      };
+
+      // Action rules
+      if (action === 'view') {
+        // membership-only; no additional checks
+      } else if (action === 'send_message') {
+        if (meta.type === 'channel' && role !== 'owner' && role !== 'admin') {
+          return deny(res, 403, 'Only admins can post in channels');
+        }
+        if (!require('can_send_messages')) return;
+      } else if (action === 'send_media') {
+        if (!require('can_send_media')) return;
+      } else if (action === 'add_users') {
+        if (!require('can_add_users')) return;
+      } else if (action === 'pin_messages') {
+        if (!require('can_pin_messages')) return;
+      } else if (action === 'manage_chat') {
+        if (!require('can_manage_chat')) return;
+      } else if (action === 'set_admin' || action === 'set_permissions' || action === 'remove_member') {
+        if (role !== 'owner' && !effective.can_manage_chat) {
+          return deny(res, 403, 'Forbidden');
+        }
+      } else if (action === 'edit_message' || action === 'delete_message') {
+        // handled in specific endpoints with additional checks (ownership)
+        // we still require membership
+      }
+
+      req.chatAuth = { conversationId: convId, memberId: userId, role, effective, mutedUntil };
+      next();
+    } catch (e) {
+      console.error('[messenger] checkChatPermission error:', e);
+      return deny(res, 500, 'Failed to authorize chat action');
     }
-
-    req.chatAuth = { conversationId: convId, memberId: userId, role, effective, mutedUntil };
-    next();
   };
 }
 

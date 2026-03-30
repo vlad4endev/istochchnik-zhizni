@@ -141,86 +141,127 @@ export function ChatWindow({
   }, [messages]);
 
   return (
-    <div className="tg-chat-window">
-      <header className="tg-header">
-        <button type="button" className="tg-icon-btn tg-header-back" onClick={onBack} aria-label="Назад к списку чатов">
-          <LuArrowLeft size={22} strokeWidth={2.25} />
-        </button>
-        <div className="tg-header-avatar" style={{ background: headerAvatarColor }} aria-hidden>
-          {headerAvatarUrl ? (
-            <img
-              src={headerAvatarUrl}
-              alt=""
-              style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 12 }}
-              loading="lazy"
-            />
-          ) : (
-            headerInitial
-          )}
-        </div>
-        <div className="tg-header-info">
-          <div className="tg-header-name">{displayName}</div>
-          <div className={`tg-header-status ${typingUsers.length > 0 ? 'tg-header-status--typing' : ''}`} aria-live="polite">
-            {headerSubtitle}
+    <div className="flex h-[100dvh] w-full flex-col overflow-hidden bg-gray-50">
+      <header className="shrink-0 bg-white shadow-sm z-10">
+        <div className="flex items-center gap-3 px-3 py-2.5">
+          <button
+            type="button"
+            onClick={onBack}
+            aria-label="Назад к списку чатов"
+            className="shrink-0 inline-flex h-10 w-10 items-center justify-center rounded-full text-stone-600 hover:bg-stone-100 active:scale-[0.98]"
+          >
+            <LuArrowLeft size={22} strokeWidth={2.25} />
+          </button>
+
+          <div
+            className="grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-full text-sm font-semibold text-white"
+            style={{ background: headerAvatarColor }}
+            aria-hidden
+          >
+            {headerAvatarUrl ? (
+              <img
+                src={headerAvatarUrl}
+                alt=""
+                className="h-full w-full object-cover"
+                loading="lazy"
+              />
+            ) : (
+              headerInitial
+            )}
           </div>
-        </div>
-        <div className="tg-header-actions">
-          <button
-            type="button"
-            className="tg-icon-btn"
-            onClick={() => navigate(`/messenger/chat/${conversationId}/manage`)}
-            aria-label="Управление чатом"
-            title="Управление"
-          >
-            <span style={{ width: 20, height: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800 }}>
-              ⋮
-            </span>
-          </button>
-          <button
-            type="button"
-            className="tg-icon-btn"
-            onClick={() => setShowSearch(true)}
-            aria-label="Поиск по сообщениям"
-          >
-            <LuSearch size={20} strokeWidth={2.25} />
-          </button>
+
+          <div className="min-w-0 flex-1">
+            <div className="truncate text-lg font-semibold text-stone-900">
+              {displayName}
+            </div>
+            <div
+              className={[
+                'truncate text-xs',
+                typingUsers.length > 0 ? 'text-primary font-medium' : 'text-gray-500',
+              ].join(' ')}
+              aria-live="polite"
+            >
+              {headerSubtitle}
+            </div>
+          </div>
+
+          <div className="flex shrink-0 items-center gap-1">
+            <button
+              type="button"
+              onClick={() => navigate(`/messenger/chat/${conversationId}/manage`)}
+              aria-label="Управление чатом"
+              title="Управление"
+              className="inline-flex h-10 w-10 items-center justify-center rounded-full text-stone-600 hover:bg-stone-100 active:scale-[0.98]"
+            >
+              <span className="text-lg font-black leading-none" aria-hidden>⋮</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowSearch(true)}
+              aria-label="Поиск по сообщениям"
+              className="inline-flex h-10 w-10 items-center justify-center rounded-full text-stone-600 hover:bg-stone-100 active:scale-[0.98]"
+            >
+              <LuSearch size={20} strokeWidth={2.25} />
+            </button>
+          </div>
         </div>
       </header>
 
       <div
-        className="tg-messages tg-messages--native"
+        className="flex flex-1 flex-col gap-3 overflow-y-auto p-4"
         ref={scrollRef}
         onScroll={handleScroll}
         role="log"
         aria-live="polite"
         aria-relevant="additions"
       >
-        {hasMore && (
-          <div className="tg-load-older">
-            {loading ? <span className="tg-load-older-text">Загрузка истории…</span> : <span className="tg-load-older-hint">↑ Ранние сообщения</span>}
+        {hasMore ? (
+          <div className="flex justify-center">
+            <div className="rounded-full bg-white/80 px-3 py-1 text-[11px] font-semibold text-stone-500 shadow-sm ring-1 ring-stone-200/60">
+              {loading ? 'Загрузка истории…' : '↑ Ранние сообщения'}
+            </div>
           </div>
-        )}
+        ) : null}
+
         {messages.length === 0 && !loading ? (
-          <div className="tg-empty-chat">
-            <p className="tg-empty-chat-title">Пока тихо</p>
-            <p className="tg-empty-chat-sub">Напишите первое сообщение — оно появится здесь.</p>
+          <div className="flex flex-1 flex-col items-center justify-center py-12 text-center">
+            <p className="text-base font-semibold text-stone-900">Пока тихо</p>
+            <p className="mt-1 max-w-xs text-sm text-stone-500">
+              Напишите первое сообщение — оно появится здесь.
+            </p>
           </div>
         ) : (
           groupedMessages.map((msg) => (
-            <div key={msg.id} className="tg-msg-row">
+            <div key={msg.id} className="flex flex-col gap-3">
               {msg.showDate ? (
-                <div className="tg-date-divider">
-                  <span>{msg.dateLabel}</span>
+                <div className="flex justify-center">
+                  <span className="rounded-full bg-white/80 px-3 py-1 text-[11px] font-semibold text-stone-600 shadow-sm ring-1 ring-stone-200/60">
+                    {msg.dateLabel}
+                  </span>
                 </div>
               ) : null}
-              <MessageBubble message={msg} isGroupedPrev={msg.isGroupedPrev} isGroupedNext={msg.isGroupedNext} />
+              <MessageBubble
+                message={msg}
+                isGroupedPrev={msg.isGroupedPrev}
+                isGroupedNext={msg.isGroupedNext}
+              />
             </div>
           ))
         )}
       </div>
-      <ChatInput conversationId={conversationId} sendTypingStart={sendTypingStart} sendTypingStop={sendTypingStop} canSend={true} />
 
-      {showSearch ? <SearchChat conversationId={conversationId} onClose={() => setShowSearch(false)} /> : null}
+      <div className="shrink-0 bg-white border-t p-3 [padding-bottom:max(0.75rem,env(safe-area-inset-bottom,0px))]">
+        <ChatInput
+          conversationId={conversationId}
+          sendTypingStart={sendTypingStart}
+          sendTypingStop={sendTypingStop}
+          canSend={true}
+        />
+      </div>
+
+      {showSearch ? (
+        <SearchChat conversationId={conversationId} onClose={() => setShowSearch(false)} />
+      ) : null}
     </div>
   );
 }
