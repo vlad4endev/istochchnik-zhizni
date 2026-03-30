@@ -422,7 +422,7 @@ EXECUTE PROCEDURE reset_cycle_on_member_change();
 CREATE TABLE IF NOT EXISTS conversations (
   id BIGSERIAL PRIMARY KEY,
   type VARCHAR(16) NOT NULL DEFAULT 'private'
-    CHECK (type IN ('private', 'group', 'channel')),
+    CHECK (type IN ('personal', 'private', 'group', 'channel')),
   title VARCHAR(255),
   avatar_url TEXT,
   default_permissions JSONB NOT NULL DEFAULT jsonb_build_object(
@@ -543,7 +543,7 @@ ALTER TABLE conversations ADD COLUMN IF NOT EXISTS metadata JSONB NOT NULL DEFAU
 UPDATE conversations SET type = 'private' WHERE type = 'personal';
 ALTER TABLE conversations DROP CONSTRAINT IF EXISTS conversations_type_check;
 ALTER TABLE conversations ADD CONSTRAINT conversations_type_check
-  CHECK (type IN ('private', 'group', 'channel'));
+  CHECK (type IN ('personal', 'private', 'group', 'channel'));
 ALTER TABLE conversations ALTER COLUMN type SET DEFAULT 'private';
 
 ALTER TABLE messages ADD COLUMN IF NOT EXISTS client_msg_id TEXT;
