@@ -652,7 +652,8 @@ export async function sendMessage(
     WITH inserted AS (
       INSERT INTO messages (conversation_id, sender_id, content, reply_to_message_id, client_msg_id, payload_type, payload)
       VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb)
-      ON CONFLICT (conversation_id, sender_id, client_msg_id)
+      -- Match partial unique index idx_messages_client_dedupe (WHERE client_msg_id IS NOT NULL).
+      ON CONFLICT (conversation_id, sender_id, client_msg_id) WHERE client_msg_id IS NOT NULL
       DO UPDATE SET
         content = EXCLUDED.content,
         payload_type = EXCLUDED.payload_type,

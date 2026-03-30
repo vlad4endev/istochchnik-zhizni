@@ -2,7 +2,7 @@ import { Router, type Request, type Response } from 'express';
 import { requireAuthSession } from '../middleware/authSession';
 import { checkChatPermission } from '../middleware/chatPermission';
 import * as svc from '../services/messengerService';
-import { sendToRoomAll, sendToRoom, sendToMember, ensureMemberInRoom } from '../realtime/wsHub';
+import { sendToRoomAll, sendToMember, ensureMemberInRoom } from '../realtime/wsHub';
 
 type AuthReq = Request & { authUserId?: number };
 
@@ -299,7 +299,15 @@ router.post('/conversations/:id/messages', checkChatPermission('send_message'), 
     sendToRoomAll(convKey, { type: 'msg:new', conversationId: convKey, message });
     res.json(message);
   } catch (e) {
-    console.error('[messenger] sendMessage error:', e);
+    const obj: Record<string, unknown> | null = e && typeof e === 'object' ? (e as Record<string, unknown>) : null;
+    const message =
+      e instanceof Error ? e.message : (typeof obj?.message === 'string' ? obj.message : String(e));
+    const code = typeof obj?.code === 'string' ? obj.code : undefined;
+    const detail = typeof obj?.detail === 'string' ? obj.detail : undefined;
+    const hint = typeof obj?.hint === 'string' ? obj.hint : undefined;
+
+    // Helpful for DB errors without leaking request body contents.
+    console.error('[messenger] sendMessage error:', { message, code, detail, hint });
     res.status(500).json({ error: 'Failed to send message' });
   }
 });
