@@ -520,10 +520,6 @@ CREATE INDEX IF NOT EXISTS idx_messages_conv_id_desc
 CREATE INDEX IF NOT EXISTS idx_messages_reply
   ON messages (reply_to_message_id) WHERE reply_to_message_id IS NOT NULL;
 
-CREATE UNIQUE INDEX IF NOT EXISTS idx_messages_client_dedupe
-  ON messages (conversation_id, sender_id, client_msg_id)
-  WHERE client_msg_id IS NOT NULL;
-
 CREATE INDEX IF NOT EXISTS idx_read_receipts_member
   ON read_receipts (member_id);
 
@@ -550,8 +546,13 @@ ALTER TABLE conversations ADD CONSTRAINT conversations_type_check
   CHECK (type IN ('private', 'group', 'channel'));
 ALTER TABLE conversations ALTER COLUMN type SET DEFAULT 'private';
 
+ALTER TABLE messages ADD COLUMN IF NOT EXISTS client_msg_id TEXT;
 ALTER TABLE messages ADD COLUMN IF NOT EXISTS payload JSONB NOT NULL DEFAULT '{}'::jsonb;
 ALTER TABLE messages ADD COLUMN IF NOT EXISTS interaction_count INTEGER NOT NULL DEFAULT 0;
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_messages_client_dedupe
+  ON messages (conversation_id, sender_id, client_msg_id)
+  WHERE client_msg_id IS NOT NULL;
 
 DO $$
 BEGIN
