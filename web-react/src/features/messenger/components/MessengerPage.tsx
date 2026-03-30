@@ -19,7 +19,15 @@ export function MessengerPage() {
 
   const ws = useMessengerWs();
 
-  // Swipe right to go back from chat to list
+  useEffect(() => {
+    if (mobileView === 'chat') {
+      document.documentElement.dataset.chatOpen = '1';
+    } else {
+      delete document.documentElement.dataset.chatOpen;
+    }
+    return () => { delete document.documentElement.dataset.chatOpen; };
+  }, [mobileView]);
+
   useSwipeGesture(messengerRef, {
     onSwipeRight: () => {
       if (mobileView === 'chat' && !isTransitioning) {
@@ -56,13 +64,13 @@ export function MessengerPage() {
       >
         <div className="tg-sidebar-header">
           <h1 className="tg-sidebar-title">Мессенджер</h1>
-          <button 
+          <button
             type="button"
-            className="tg-compose-btn" 
-            onClick={() => setShowNewChat(true)} 
+            className="tg-compose-btn-sm"
+            onClick={() => setShowNewChat(true)}
             aria-label="Новый чат"
           >
-            <LuPlus size={24} />
+            <LuPlus size={20} strokeWidth={2.5} />
           </button>
         </div>
         <ChatList onSelect={handleSelectConversation} activeId={activeId} />

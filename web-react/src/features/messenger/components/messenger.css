@@ -237,28 +237,26 @@
   background: linear-gradient(180deg, var(--tg-surface-elevated) 0%, var(--tg-surface) 100%);
 }
 
-.tg-compose-btn {
-  width: 44px;
-  height: 44px;
-  border-radius: 14px;
+.tg-compose-btn-sm {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
   border: none;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  background: var(--tg-primary);
-  color: #fff;
-  box-shadow: 0 4px 14px rgba(125, 54, 64, 0.35);
-  transition: transform 0.18s ease, background 0.18s ease, box-shadow 0.18s ease;
+  background: var(--tg-primary-light);
+  color: var(--tg-primary);
+  transition: transform 0.18s ease, background 0.18s ease;
 }
 
-.tg-compose-btn:hover {
-  background: var(--tg-primary-hover);
-  box-shadow: 0 6px 20px rgba(125, 54, 64, 0.4);
+.tg-compose-btn-sm:hover {
+  background: rgba(125, 54, 64, 0.18);
 }
 
-.tg-compose-btn:active {
-  transform: scale(0.96);
+.tg-compose-btn-sm:active {
+  transform: scale(0.93);
 }
 
 .chatlist-spinner {
@@ -332,8 +330,6 @@
   gap: 12px;
   flex-shrink: 0;
   z-index: 20;
-  position: sticky;
-  top: 0;
   background: var(--tg-glass);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
@@ -376,18 +372,18 @@
 
 .tg-header-name {
   font-weight: 600;
-  font-size: 1rem;
+  font-size: 1.125rem;
   color: var(--tg-text);
-  line-height: 1.2;
+  line-height: 1.25;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
 .tg-header-status {
-  font-size: 0.8125rem;
-  color: var(--tg-text-muted);
-  line-height: 1.2;
+  font-size: 0.75rem;
+  color: #6b7280;
+  line-height: 1.3;
 }
 
 .tg-header-status--typing {
@@ -543,10 +539,10 @@
 }
 
 .tg-bubble {
-  padding: 8px 12px 6px;
-  border-radius: var(--tg-bubble-radius);
-  font-size: 0.9375rem;
-  line-height: 1.4;
+  padding: 8px 16px;
+  border-radius: 16px;
+  font-size: 15px;
+  line-height: 1.6;
   position: relative;
   word-wrap: break-word;
   z-index: 1;
@@ -556,25 +552,39 @@
 .tg-bubble--out {
   background: var(--tg-bubble-out);
   color: var(--tg-bubble-out-text);
-  border-bottom-right-radius: 5px;
-  box-shadow: 0 2px 12px rgba(125, 54, 64, 0.22);
+  border-bottom-right-radius: 4px;
+  box-shadow: 0 2px 12px rgba(125, 54, 64, 0.18);
 }
 
 .tg-bubble--in {
   background: var(--tg-bubble-in);
   color: var(--tg-bubble-in-text);
   border-bottom-left-radius: 4px;
-  box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+}
+
+.tg-bubble--grouped-prev.tg-bubble--out {
+  border-bottom-right-radius: 16px;
+}
+
+.tg-bubble--grouped-prev.tg-bubble--in {
+  border-bottom-left-radius: 16px;
+}
+
+.tg-bubble-sender {
+  font-size: 12px;
+  color: #3b82f6;
+  font-weight: 500;
+  margin-bottom: 2px;
 }
 
 .tg-bubble-meta {
-  display: inline-flex;
+  display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 4px;
-  float: right;
-  margin-left: 12px;
   margin-top: 4px;
-  font-size: 0.7rem;
+  font-size: 11px;
 }
 
 .tg-bubble--out .tg-bubble-meta {
@@ -582,7 +592,7 @@
 }
 
 .tg-bubble--in .tg-bubble-meta {
-  color: var(--tg-bubble-meta-in);
+  color: #9ca3af;
 }
 
 /* Tail Positioning Fix */
@@ -633,8 +643,7 @@
   display: flex;
   flex-direction: column;
   width: 100%;
-  position: sticky;
-  bottom: 0;
+  position: relative;
   z-index: 10;
   flex-shrink: 0;
 }
@@ -648,19 +657,18 @@
 
 .tg-input-container {
   flex: 1;
-  background: var(--tg-surface);
-  border-radius: 22px;
+  background: #f3f4f6;
+  border-radius: 9999px;
   display: flex;
   align-items: flex-end;
   padding: 4px 10px;
-  box-shadow: 0 2px 12px rgba(28, 25, 23, 0.06);
-  border: 1px solid var(--tg-border);
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  border: none;
+  transition: background 0.2s ease, box-shadow 0.2s ease;
 }
 
 .tg-input-container:focus-within {
-  border-color: rgba(125, 54, 64, 0.35);
-  box-shadow: 0 2px 16px rgba(125, 54, 64, 0.12);
+  background: #e5e7eb;
+  box-shadow: 0 0 0 2px rgba(125, 54, 64, 0.15);
 }
 
 .tg-input-textarea {
@@ -677,8 +685,10 @@
 }
 
 .tg-send-btn {
-  width: 44px;
-  height: 44px;
+  width: 40px;
+  height: 40px;
+  min-width: 40px;
+  min-height: 40px;
   border-radius: 50%;
   background: var(--tg-bubble-out);
   color: white;
@@ -687,7 +697,7 @@
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  box-shadow: 0 4px 14px rgba(125, 54, 64, 0.35);
+  box-shadow: 0 3px 10px rgba(125, 54, 64, 0.3);
   flex-shrink: 0;
   transition: transform 0.18s ease, opacity 0.2s ease, box-shadow 0.2s ease;
 }
@@ -1142,9 +1152,23 @@
   transform: scale(1.05);
 }
 
+/* Mobile: hide bottom nav & go full-screen when chat is open */
+@media (max-width: 768px) {
+  html[data-chat-open="1"] .app-bottom-nav {
+    display: none !important;
+  }
+
+  html[data-chat-open="1"] .app-main-content {
+    padding-bottom: 0 !important;
+  }
+
+  html[data-chat-open="1"] {
+    --app-bottom-nav-h: 0px;
+  }
+}
+
 /* Mobile Adjustments */
 @media (max-width: 768px) {
-  /* Desktop layout becomes mobile layout: list and chat stack vertically */
   .tg-messenger {
     position: relative;
   }
@@ -1153,7 +1177,6 @@
     position: relative;
   }
 
-  /* Sidebar (chat list) - slide in from left */
   .tg-sidebar {
     position: absolute;
     left: 0;
@@ -1168,41 +1191,41 @@
     background: var(--tg-surface);
   }
 
-  /* Show sidebar when viewing list */
   .tg-sidebar--visible {
     transform: translateX(0);
   }
 
-  /* Hide sidebar when viewing chat */
   .tg-sidebar--hidden {
     transform: translateX(-100%);
     pointer-events: none;
   }
 
-  /* Chat window - slide in from right */
   .tg-chat-window {
     position: absolute;
     left: 0;
     top: 0;
-    bottom: var(--app-bottom-nav-h);
+    bottom: 0;
     width: 100%;
-    height: calc(100% - var(--app-bottom-nav-h));
+    height: 100%;
     z-index: 50;
     transform: translateX(100%);
     transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
     will-change: transform;
-    background: var(--tg-surface);
+    background: var(--tg-bg);
     pointer-events: none;
+    background-attachment: scroll;
   }
 
-  /* Show chat when viewing chat */
+  .tg-messages.tg-messages--native {
+    scroll-behavior: auto;
+  }
+
   .tg-main--visible .tg-chat-window {
     transform: translateX(0);
     pointer-events: auto;
     z-index: 120;
   }
 
-  /* Disable scroll during transitions */
   .tg-messenger.transitioning {
     overflow: hidden;
   }
@@ -1212,25 +1235,25 @@
   }
 
   .tg-header-actions .tg-icon-btn {
-    min-width: 48px;
-    min-height: 48px;
+    min-width: 44px;
+    min-height: 44px;
   }
 }
 
 @media (max-width: 640px) {
   .tg-header {
-    height: 52px;
+    min-height: 52px;
     padding: 0 12px;
     gap: 10px;
   }
 
   .tg-header-back {
-    margin-left: -8px;
+    margin-left: -6px;
   }
 
   .tg-icon-btn {
-    min-width: 48px;
-    min-height: 48px;
+    min-width: 44px;
+    min-height: 44px;
     padding: 8px;
     display: flex;
     align-items: center;
@@ -1238,10 +1261,10 @@
   }
 
   .tg-send-btn {
-    width: 48px;
-    height: 48px;
-    min-width: 48px;
-    min-height: 48px;
+    width: 40px;
+    height: 40px;
+    min-width: 40px;
+    min-height: 40px;
     flex-shrink: 0;
   }
 
@@ -1258,22 +1281,22 @@
   }
 
   .tg-bubble-wrap {
-    max-width: min(90%, 17.5rem);
-    margin-bottom: 6px;
+    max-width: min(88%, 17.5rem);
   }
 
   .tg-bubble {
-    padding: 8px 12px;
-    font-size: 0.95rem;
-    line-height: 1.4;
+    padding: 8px 14px;
+    font-size: 15px;
+    line-height: 1.55;
   }
 
   .tg-input-area-wrap {
-    padding: 0 10px 10px;
+    padding: 0 10px;
+    padding-bottom: max(10px, env(safe-area-inset-bottom, 0px));
   }
 
   .tg-input-container {
-    border-radius: 18px;
+    border-radius: 9999px;
     padding: 4px 8px;
   }
 
@@ -1294,13 +1317,13 @@
 
 @media (max-width: 480px) {
   .tg-header {
-    height: 48px;
-    gap: 0;
+    min-height: 48px;
+    gap: 8px;
     padding: 0 10px;
   }
 
   .tg-header-name {
-    font-size: 0.9rem;
+    font-size: 1rem;
     font-weight: 600;
   }
 
@@ -1310,18 +1333,20 @@
 
   .tg-icon-btn {
     padding: 6px;
-    min-width: 44px;
-    min-height: 44px;
+    min-width: 40px;
+    min-height: 40px;
   }
 
   .tg-send-btn {
-    width: 44px;
-    height: 44px;
+    width: 38px;
+    height: 38px;
+    min-width: 38px;
+    min-height: 38px;
   }
 
   .tg-bubble {
-    padding: 6px 10px;
-    font-size: 0.9rem;
+    padding: 7px 12px;
+    font-size: 15px;
   }
 
   .tg-input-textarea::placeholder {

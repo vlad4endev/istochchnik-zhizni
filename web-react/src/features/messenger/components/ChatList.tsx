@@ -49,8 +49,8 @@ export function ChatList({ onSelect, activeId }: ChatListProps) {
         />
       </div>
 
-      <div className="mt-2 min-h-0 flex-1 overflow-y-auto px-2 pb-2 [scrollbar-gutter:stable]">
-        <div className="space-y-2">
+      <div className="mt-1 min-h-0 flex-1 overflow-y-auto px-2 pb-2 [scrollbar-gutter:stable]">
+        <div className="space-y-1">
           {filtered.map((conv: ConversationListItem) => (
             <ChatListItem
               key={conv.id}
@@ -95,7 +95,7 @@ function SmartTabs({
   ];
 
   return (
-    <div className="flex items-center gap-2 rounded-2xl bg-white/80 p-2 shadow-sm ring-1 ring-stone-200/70 backdrop-blur">
+    <div className="flex items-center gap-1 rounded-xl bg-stone-200/60 p-1">
       {tabs.map((t) => {
         const isActive = t.id === activeTab;
         return (
@@ -104,16 +104,18 @@ function SmartTabs({
             type="button"
             onClick={() => onChange(t.id)}
             className={[
-              'relative inline-flex min-h-[40px] flex-1 items-center justify-center gap-2 rounded-2xl px-3 py-2 text-xs font-extrabold transition',
-              isActive ? 'bg-primary text-white shadow-md shadow-primary/20' : 'text-stone-600 hover:bg-stone-100/70',
+              'relative inline-flex min-h-[32px] flex-1 items-center justify-center gap-1.5 rounded-lg px-2 py-1.5 text-[11px] font-semibold transition-all duration-200',
+              isActive
+                ? 'bg-white text-stone-900 shadow-sm'
+                : 'text-stone-500 hover:text-stone-700',
             ].join(' ')}
           >
             <span className="truncate">{t.label}</span>
             {t.unread > 0 ? (
               <span
                 className={[
-                  'inline-flex min-w-[20px] items-center justify-center rounded-full px-1.5 py-0.5 text-[11px] font-extrabold',
-                  isActive ? 'bg-white/90 text-primary' : 'bg-primary/10 text-primary',
+                  'inline-flex min-w-[18px] items-center justify-center rounded-full px-1 py-px text-[10px] font-bold',
+                  isActive ? 'bg-primary text-white' : 'bg-primary/10 text-primary',
                 ].join(' ')}
               >
                 {t.unread > 99 ? '99+' : t.unread}

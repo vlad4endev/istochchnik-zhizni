@@ -120,6 +120,16 @@ app.use('/api/users', userRoutes);
 app.use('/api/push', pushRoutes);
 app.use('/api/messenger', messengerRoutes);
 
+// ─── Static web (Vite dist) ──────────────────────────────────
+// В production раздаём собранный фронтенд как SPA:
+// - /assets/*, /manifest.webmanifest, /sw.js, etc.
+// - любые не-/api пути → index.html (React Router)
+const webDist = path.join(process.cwd(), 'web-react', 'dist');
+app.use(express.static(webDist, { fallthrough: true }));
+app.get(/^\/(?!api\/).*/, (req, res) => {
+  res.sendFile(path.join(webDist, 'index.html'));
+});
+
 async function start(): Promise<void> {
   if (process.env.DATABASE_URL) {
     if (skipDbInitOnStart) {

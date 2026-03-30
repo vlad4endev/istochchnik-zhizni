@@ -297,13 +297,13 @@ export function Layout() {
       </aside>
 
       {/* Main: отступ слева от сайдбара — на родителе (padding); снизу под нижний бар на мобильных */}
-      <main className="flex min-h-0 min-w-0 w-full max-w-full flex-1 flex-col overflow-x-clip pb-[max(7rem,calc(5rem+env(safe-area-inset-bottom)))] md:pb-0 2xl:px-8 min-[1920px]:px-12">
+      <main className="app-main-content flex min-h-0 min-w-0 w-full max-w-full flex-1 flex-col overflow-x-clip pb-[max(7rem,calc(5rem+env(safe-area-inset-bottom)))] md:pb-0 2xl:px-8 min-[1920px]:px-12">
         <Outlet />
       </main>
 
       {/* Телефон: нижняя навигация (иконка + подпись, как в нативных приложениях) */}
       <nav
-        className="fixed bottom-0 left-0 right-0 z-50 border-t border-stone-200/70 bg-[var(--surface-elevated)]/90 pb-[env(safe-area-inset-bottom)] shadow-[0_-4px_24px_rgba(0,0,0,0.04)] backdrop-blur-xl supports-[backdrop-filter]:bg-[var(--surface-elevated)]/80 md:hidden"
+        className="app-bottom-nav fixed bottom-0 left-0 right-0 z-50 border-t border-stone-200/70 bg-[var(--surface-elevated)]/90 pb-[env(safe-area-inset-bottom)] shadow-[0_-4px_24px_rgba(0,0,0,0.04)] backdrop-blur-xl supports-[backdrop-filter]:bg-[var(--surface-elevated)]/80 md:hidden"
         aria-label="Основная навигация"
       >
         <div className="mx-auto flex max-w-md items-stretch justify-around px-2 pb-1 pt-1">

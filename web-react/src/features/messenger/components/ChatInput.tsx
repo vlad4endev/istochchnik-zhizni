@@ -153,9 +153,9 @@ export function ChatInput({
           className="tg-send-btn"
           onClick={() => void handleSend()}
           disabled={!content.trim()}
-          style={{ opacity: content.trim() ? 1 : 0.6 }}
+          style={{ opacity: content.trim() ? 1 : 0.5 }}
         >
-          <LuSend size={24} style={{ marginLeft: content.trim() ? '2px' : '0' }} />
+          <LuSend size={18} style={{ marginLeft: '1px' }} />
         </button>
       </div>
     </div>

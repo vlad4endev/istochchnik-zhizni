@@ -25,6 +25,9 @@ export default defineConfig(({ mode }) => {
     },
   };
 
+  const useRelativeBase = String(env.VITE_RELATIVE_BASE ?? '').trim() === 'true';
+  const base = mode === 'production' && !useRelativeBase ? '/' : './';
+
   return {
     define: {
       __WEB_REACT_BUILD_STAMP__: JSON.stringify(buildStamp),
@@ -34,12 +37,8 @@ export default defineConfig(({ mode }) => {
       VitePWA({
         registerType: 'autoUpdate',
         injectRegister: 'auto',
-        // Автоматически проверяет обновления каждый раз при загрузке страницы
-        minInterval: 60000,
-        // Периодическая проверка обновлений даже если страница открыта
-        pollInterval: 60000,
         manifest: {
-          id: './',
+          id: base,
           name: 'МОЯ ЦЕРКОВЬ — молитвенный календарь',
           short_name: 'Молитва',
           description:
@@ -48,8 +47,8 @@ export default defineConfig(({ mode }) => {
           background_color: '#f4f1ed',
           display: 'standalone',
           display_override: ['standalone', 'minimal-ui', 'browser'],
-          start_url: './',
-          scope: './',
+          start_url: base,
+          scope: base,
           lang: 'ru',
           dir: 'ltr',
           categories: ['lifestyle', 'utilities'],
@@ -108,8 +107,9 @@ export default defineConfig(({ mode }) => {
         },
       }),
     ],
-    // Относительные пути — корректная загрузка ассетов в Capacitor WebView (file/capacitor).
-    base: './',
+    // Для web-деплоя (SPA на домене) нужен абсолютный base '/', иначе на /route ищет /route/assets/*
+    // Для Capacitor оставляем относительный base './' через VITE_RELATIVE_BASE=true
+    base,
     server: {
       port: 5173,
       proxy: apiProxy,
