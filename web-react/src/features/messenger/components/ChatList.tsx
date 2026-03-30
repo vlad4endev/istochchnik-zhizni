@@ -40,7 +40,7 @@ export function ChatList({ onSelect, activeId }: ChatListProps) {
         itemSize={70}
         width="100%"
       >
-        {({ index, style }) => {
+        {({ index, style }: { index: number; style: React.CSSProperties }) => {
           const conv = conversations[index];
           return (
             <div style={style} key={conv.id}>

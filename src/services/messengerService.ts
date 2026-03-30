@@ -1,4 +1,4 @@
-import { query } from '../config/db';
+import { query as dbQuery } from '../config/db';
 import type {
   ConversationListItem,
   ConversationType,
@@ -19,7 +19,7 @@ function bigint(v: unknown): string {
  * Includes last message preview and unread count.
  */
 export async function listConversations(memberId: number): Promise<ConversationListItem[]> {
-  const result = await query(
+  const result = await dbQuery(
     `
     SELECT
       c.id,
@@ -115,7 +115,7 @@ export async function findOrCreatePersonalConversation(
   if (memberA === memberB) throw new Error('Cannot create chat with yourself');
 
   // Check if personal conversation already exists
-  const existing = await query(
+  const existing = await dbQuery(
     `
     SELECT cp1.conversation_id
     FROM conversation_participants cp1
@@ -136,12 +136,12 @@ export async function findOrCreatePersonalConversation(
   }
 
   // Create new
-  const conv = await query(
+  const conv = await dbQuery(
     `INSERT INTO conversations (type) VALUES ('personal') RETURNING id`,
   );
   const convId = bigint(conv.rows[0].id);
 
-  await query(
+  await dbQuery(
     `INSERT INTO conversation_participants (conversation_id, member_id, role)
      VALUES ($1, $2, 'member'), ($1, $3, 'member')`,
     [convId, memberA, memberB],
@@ -159,14 +159,14 @@ export async function createGroupConversation(
   type: 'group' | 'channel',
   memberIds: number[],
 ): Promise<string> {
-  const conv = await query(
+  const conv = await dbQuery(
     `INSERT INTO conversations (type, title) VALUES ($1, $2) RETURNING id`,
     [type, title.trim()],
   );
   const convId = bigint(conv.rows[0].id);
 
   // Creator is owner
-  await query(
+  await dbQuery(
     `INSERT INTO conversation_participants (conversation_id, member_id, role)
      VALUES ($1, $2, 'owner')`,
     [convId, creatorId],
@@ -175,7 +175,7 @@ export async function createGroupConversation(
   // Add members
   const uniqueMembers = [...new Set(memberIds.filter((id) => id !== creatorId))];
   for (const mId of uniqueMembers) {
-    await query(
+    await dbQuery(
       `INSERT INTO conversation_participants (conversation_id, member_id, role)
        VALUES ($1, $2, 'member')
        ON CONFLICT DO NOTHING`,
@@ -193,7 +193,7 @@ export async function isMemberInConversation(
   conversationId: string,
   memberId: number,
 ): Promise<boolean> {
-  const result = await query(
+  const result = await dbQuery(
     `SELECT 1 FROM conversation_participants
      WHERE conversation_id = $1 AND member_id = $2 AND left_at IS NULL
      LIMIT 1`,
@@ -209,7 +209,7 @@ export async function getParticipantRole(
   conversationId: string,
   memberId: number,
 ): Promise<ParticipantRole | null> {
-  const result = await query(
+  const result = await dbQuery(
     `SELECT role FROM conversation_participants
      WHERE conversation_id = $1 AND member_id = $2 AND left_at IS NULL
      LIMIT 1`,
@@ -224,7 +224,7 @@ export async function getParticipantRole(
 export async function getConversationType(
   conversationId: string,
 ): Promise<ConversationType | null> {
-  const result = await query(
+  const result = await dbQuery(
     `SELECT type FROM conversations WHERE id = $1 LIMIT 1`,
     [conversationId],
   );
@@ -235,7 +235,7 @@ export async function getConversationType(
  * Get active participant member IDs for a conversation.
  */
 export async function getConversationMemberIds(conversationId: string): Promise<number[]> {
-  const result = await query(
+  const result = await dbQuery(
     `SELECT member_id FROM conversation_participants
      WHERE conversation_id = $1 AND left_at IS NULL`,
     [conversationId],
@@ -247,7 +247,7 @@ export async function getConversationMemberIds(conversationId: string): Promise<
  * Get conversation participants with member info.
  */
 export async function getConversationParticipants(conversationId: string) {
-  const result = await query(
+  const result = await dbQuery(
     `SELECT
        cp.member_id,
        cp.role,
@@ -272,7 +272,7 @@ export async function addParticipant(
   memberId: number,
   role: ParticipantRole = 'member',
 ): Promise<void> {
-  await query(
+  await dbQuery(
     `INSERT INTO conversation_participants (conversation_id, member_id, role)
      VALUES ($1, $2, $3)
      ON CONFLICT (conversation_id, member_id) DO UPDATE
@@ -288,7 +288,7 @@ export async function removeParticipant(
   conversationId: string,
   memberId: number,
 ): Promise<void> {
-  await query(
+  await dbQuery(
     `UPDATE conversation_participants SET left_at = NOW()
      WHERE conversation_id = $1 AND member_id = $2 AND left_at IS NULL`,
     [conversationId, memberId],
@@ -317,7 +317,7 @@ export async function updateConversation(
   if (sets.length === 0) return;
 
   params.push(conversationId);
-  await query(
+  await dbQuery(
     `UPDATE conversations SET ${sets.join(', ')} WHERE id = $${i}`,
     params,
   );
@@ -334,7 +334,7 @@ export async function sendMessage(
   content: string,
   replyToMessageId?: string | null,
 ): Promise<MessageWithSender> {
-  const result = await query(
+  const result = await dbQuery(
     `
     WITH inserted AS (
       INSERT INTO messages (conversation_id, sender_id, content, reply_to_message_id)
@@ -380,7 +380,7 @@ export async function loadMessages(
     params.push(beforeId);
   }
 
-  const result = await query(
+  const result = await dbQuery(
     `
     SELECT
       msg.*,
@@ -431,7 +431,7 @@ export async function editMessage(
   senderId: number,
   newContent: string,
 ): Promise<{ content: string; updated_at: string } | null> {
-  const result = await query(
+  const result = await dbQuery(
     `UPDATE messages SET content = $1
      WHERE id = $2 AND sender_id = $3 AND is_deleted = FALSE
      RETURNING content, updated_at`,
@@ -447,7 +447,7 @@ export async function deleteMessage(
   messageId: string,
   senderId: number,
 ): Promise<boolean> {
-  const result = await query(
+  const result = await dbQuery(
     `UPDATE messages SET is_deleted = TRUE, content = ''
      WHERE id = $1 AND sender_id = $2 AND is_deleted = FALSE
      RETURNING id`,
@@ -466,7 +466,7 @@ export async function markRead(
   memberId: number,
   lastReadMessageId: string,
 ): Promise<void> {
-  await query(
+  await dbQuery(
     `INSERT INTO read_receipts (conversation_id, member_id, last_read_message_id, read_at)
      VALUES ($1, $2, $3, NOW())
      ON CONFLICT (conversation_id, member_id) DO UPDATE
@@ -480,7 +480,7 @@ export async function markRead(
  * Get total unread count across all conversations for a member.
  */
 export async function getTotalUnreadCount(memberId: number): Promise<number> {
-  const result = await query(
+  const result = await dbQuery(
     `
     SELECT COALESCE(SUM(cnt), 0)::int AS total
     FROM (
@@ -505,7 +505,7 @@ export async function addReaction(
   memberId: number,
   emoji: string,
 ): Promise<boolean> {
-  const result = await query(
+  const result = await dbQuery(
     `INSERT INTO message_reactions (message_id, member_id, emoji)
      VALUES ($1, $2, $3)
      ON CONFLICT DO NOTHING
@@ -520,7 +520,7 @@ export async function removeReaction(
   memberId: number,
   emoji: string,
 ): Promise<boolean> {
-  const result = await query(
+  const result = await dbQuery(
     `DELETE FROM message_reactions
      WHERE message_id = $1 AND member_id = $2 AND emoji = $3
      RETURNING message_id`,
@@ -536,7 +536,7 @@ export async function searchMembers(
   excludeMemberId: number,
   limit: number = 20,
 ) {
-  const result = await query(
+  const result = await dbQuery(
     `SELECT DISTINCT m.id, m.name, m.first_name, m.last_name
      FROM members m
      INNER JOIN auth_sessions s ON s.member_id = m.id
@@ -561,7 +561,7 @@ export async function listRegisteredMembers(
   excludeMemberId: number,
   limit: number = 50,
 ) {
-  const result = await query(
+  const result = await dbQuery(
     `SELECT DISTINCT m.id, m.name, m.first_name, m.last_name
      FROM members m
      INNER JOIN auth_sessions s ON s.member_id = m.id
@@ -625,7 +625,7 @@ export async function searchMessages(
 ): Promise<MessageWithSender[]> {
   const searchTerm = `%${searchQuery.trim()}%`;
 
-  const result = await query(
+  const result = await dbQuery(
     `
     SELECT
       msg.*,

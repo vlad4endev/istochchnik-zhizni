@@ -136,7 +136,7 @@ export function ChatWindow({
             onScroll={handleScroll}
             className="tg-messages-virtual"
           >
-            {({ index, style }) => {
+            {({ index, style }: { index: number; style: React.CSSProperties }) => {
               if (index === 0 && hasMore) {
                 return (
                   <div style={style} className="tg-loading-older">
