@@ -16,6 +16,82 @@ function bigint(v: unknown): string {
   return String(v);
 }
 
+function isPgUndefinedColumnError(e: unknown): boolean {
+  return typeof e === 'object' && e !== null && (e as { code?: string }).code === '42703';
+}
+
+/**
+ * Права/мьют участника для checkChatPermission. Несколько вариантов SELECT на случай старой БД без
+ * колонок `left_at`, `permissions` и т.д. (иначе middleware ловит 500 «Failed to authorize chat action»).
+ */
+export async function getParticipantChatAuthRow(
+  conversationId: string,
+  memberId: number,
+): Promise<{ permissions: PermissionsJson; muted_until: string | null }> {
+  const attempts: Array<{ sql: string; muteOnly: boolean }> = [
+    {
+      sql: `SELECT permissions, muted_until FROM conversation_participants
+            WHERE conversation_id = $1 AND member_id = $2 AND left_at IS NULL
+            LIMIT 1`,
+      muteOnly: false,
+    },
+    {
+      sql: `SELECT permissions, muted_until FROM conversation_participants
+            WHERE conversation_id = $1 AND member_id = $2
+            LIMIT 1`,
+      muteOnly: false,
+    },
+    {
+      sql: `SELECT muted_until FROM conversation_participants
+            WHERE conversation_id = $1 AND member_id = $2 AND left_at IS NULL
+            LIMIT 1`,
+      muteOnly: true,
+    },
+    {
+      sql: `SELECT muted_until FROM conversation_participants
+            WHERE conversation_id = $1 AND member_id = $2
+            LIMIT 1`,
+      muteOnly: true,
+    },
+    {
+      sql: `SELECT 1 AS present FROM conversation_participants
+            WHERE conversation_id = $1 AND member_id = $2
+            LIMIT 1`,
+      muteOnly: false,
+    },
+  ];
+
+  for (const { sql, muteOnly } of attempts) {
+    try {
+      const result = await dbQuery(sql, [conversationId, memberId]);
+      const row = result.rows[0];
+      if (!row) {
+        continue;
+      }
+      if ('present' in row) {
+        return { permissions: {}, muted_until: null };
+      }
+      if (muteOnly) {
+        return { permissions: {}, muted_until: (row.muted_until as string | null) ?? null };
+      }
+      return {
+        permissions: (row.permissions ?? {}) as PermissionsJson,
+        muted_until: (row.muted_until as string | null) ?? null,
+      };
+    } catch (e) {
+      if (!isPgUndefinedColumnError(e)) {
+        throw e;
+      }
+      console.warn(
+        '[messenger] getParticipantChatAuthRow: fallback (42703 undefined column), trying simpler SELECT',
+        (e as Error)?.message,
+      );
+    }
+  }
+  console.warn('[messenger] getParticipantChatAuthRow: no matching row from fallbacks, using empty overrides');
+  return { permissions: {}, muted_until: null };
+}
+
 // ─── Conversations ────────────────────────────────────────────
 
 /**
@@ -481,13 +557,30 @@ export async function getParticipantRole(
   conversationId: string,
   memberId: number,
 ): Promise<ParticipantRole | null> {
-  const result = await dbQuery(
-    `SELECT role FROM conversation_participants
-     WHERE conversation_id = $1 AND member_id = $2 AND left_at IS NULL
-     LIMIT 1`,
-    [conversationId, memberId],
-  );
-  return (result.rows[0]?.role as ParticipantRole) ?? null;
+  try {
+    const result = await dbQuery(
+      `SELECT role FROM conversation_participants
+       WHERE conversation_id = $1 AND member_id = $2 AND left_at IS NULL
+       LIMIT 1`,
+      [conversationId, memberId],
+    );
+    return (result.rows[0]?.role as ParticipantRole) ?? null;
+  } catch (e) {
+    if (!isPgUndefinedColumnError(e)) {
+      throw e;
+    }
+    console.warn(
+      '[messenger] getParticipantRole: retrying without left_at (column missing on older DB)',
+      (e as Error)?.message,
+    );
+    const legacy = await dbQuery(
+      `SELECT role FROM conversation_participants
+       WHERE conversation_id = $1 AND member_id = $2
+       LIMIT 1`,
+      [conversationId, memberId],
+    );
+    return (legacy.rows[0]?.role as ParticipantRole) ?? null;
+  }
 }
 
 /**

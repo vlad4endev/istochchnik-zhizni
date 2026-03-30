@@ -1,6 +1,10 @@
 /**
- * Запуск инициализации БД вручную:
- * npx ts-node scripts/runInitDb.ts
+ * Запуск инициализации БД вручную (на машине с полным репозиторием):
+ *   npm run db:init
+ *
+ * В прод-контейнере API (только dist — без scripts/src):
+ *   docker compose exec api npm run db:init:docker
+ *   (или, если есть файл после git pull: node dist/cli/runInitDb.js)
  */
 import dotenv from 'dotenv';
 

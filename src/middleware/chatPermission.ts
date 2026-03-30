@@ -1,5 +1,4 @@
 import type { Request, Response, NextFunction } from 'express';
-import { query as dbQuery } from '../config/db';
 import * as svc from '../services/messengerService';
 import type { ParticipantRole, PermissionsJson, PermissionKey } from '../types/messenger';
 
@@ -102,17 +101,9 @@ export function checkChatPermission(action: Action) {
         return deny(res, 404, 'Conversation not found');
       }
 
-      // Load member override fields (permissions/mute)
-      const memberRowRes = await dbQuery(
-        `SELECT permissions, muted_until FROM conversation_participants
-           WHERE conversation_id = $1 AND member_id = $2 AND left_at IS NULL
-           LIMIT 1`,
-        [convId, userId],
-      );
-      const memberRow = memberRowRes.rows[0] ?? null;
-
-      const mutedUntil = memberRow?.muted_until ?? null;
-      const memberPermissions = (memberRow?.permissions ?? {}) as PermissionsJson;
+      // Load member override fields (permissions/mute) — устойчиво к старым схемам БД
+      const { permissions: memberPermissions, muted_until: mutedUntil } =
+        await svc.getParticipantChatAuthRow(convId, userId);
 
       // base from chat + role superpowers (then allow override to restrict)
       const roleBase = superpowers(role);
@@ -195,7 +186,14 @@ export function checkChatPermission(action: Action) {
       if (e instanceof Error && e.stack) {
         console.error('[messenger] checkChatPermission stack:', e.stack);
       }
-      return deny(res, 500, 'Failed to authorize chat action');
+      res.status(500).json({
+        error: 'Failed to authorize chat action',
+        ...(pgCode ? { dbCode: pgCode } : {}),
+        ...(pgDetail ? { dbDetail: pgDetail.slice(0, 500) } : {}),
+        ...(pgHint ? { dbHint: pgHint.slice(0, 300) } : {}),
+        ...(pgColumn ? { dbColumn: pgColumn } : {}),
+      });
+      return;
     }
   };
 }

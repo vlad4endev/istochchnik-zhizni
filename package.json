@@ -40,6 +40,8 @@
     "lint:fix": "npx eslint src --ext .ts --fix",
     "format": "npx prettier --write \"src/**/*.ts\"",
     "db:init": "npx ts-node scripts/runInitDb.ts",
+    "db:init:dist": "node dist/cli/runInitDb.js",
+    "db:init:docker": "node -e \"require('./dist/config/initDb').initDb().then(function(){console.log('[db] initDb OK');process.exit(0);}).catch(function(e){console.error(e);process.exit(1);})\"",
     "db:seed-members": "npx ts-node scripts/seedMembersOnly.ts",
     "db:seed-members:docker": "bash scripts/seed-members-db-container.sh",
     "db:seed-members:docker:prod": "env -u COMPOSE_FILE bash scripts/seed-members-db-container.sh",

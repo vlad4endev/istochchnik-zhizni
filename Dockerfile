@@ -10,7 +10,7 @@ WORKDIR /app
 
 COPY tsconfig.json ./
 COPY src ./src
-RUN npm run build
+RUN npm run build && test -f dist/config/initDb.js
 
 FROM node:20-alpine AS prod-deps
 WORKDIR /app
