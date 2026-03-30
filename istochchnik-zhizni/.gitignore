@@ -1,0 +1,15 @@
+.cursor/
+.run/
+node_modules
+dist
+.env
+.env.production
+*.log
+.DS_Store
+coverage/
+*.tsbuildinfo
+supabase/.temp/
+
+# Артефакты для Dockerfile.web.prebuilt (генерируются локально)
+release/web/*
+!release/web/.gitkeep

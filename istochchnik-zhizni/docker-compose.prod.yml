@@ -1,0 +1,68 @@
+# =============================================================================
+# Production VPS: PostgreSQL + Node API (React/Vite на Vercel/Netlify или свой nginx).
+#
+# 1. cp .env.production .env  — задайте POSTGRES_PASSWORD, DATABASE_URL, CORS_ALLOWED_ORIGINS
+# 2. DATABASE_URL внутри Docker-сети: postgresql://USER:PASSWORD@db:5432/DBNAME
+#    Пример: postgresql://postgres:ВАШ_ПАРОЛЬ@db:5432/istochik_db
+# 3. Запуск: docker compose -f docker-compose.prod.yml up -d --build
+# 4. Остановка: docker compose -f docker-compose.prod.yml down
+#
+# Полный стек с веб в контейнере: docker-compose.yml + docker-compose.prod.overlay.yml (React в Dockerfile.web)
+# =============================================================================
+
+name: istochnik-prod
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: always
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-istochik_db}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Задайте POSTGRES_PASSWORD в .env}
+    volumes:
+      - postgres_data_prod:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-istochik_db}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: always
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: "40978"
+      DATABASE_URL: ${DATABASE_URL:?Задайте DATABASE_URL, хост db — имя сервиса Postgres}
+      DB_SSL: ${DB_SSL:-false}
+      DB_SSL_REJECT_UNAUTHORIZED: ${DB_SSL_REJECT_UNAUTHORIZED:-false}
+      SKIP_DB_INIT_ON_START: ${SKIP_DB_INIT_ON_START:-false}
+      AUTH_SESSION_TTL_DAYS: ${AUTH_SESSION_TTL_DAYS:-30}
+      AUTH_MAX_ACTIVE_SESSIONS_PER_USER: ${AUTH_MAX_ACTIVE_SESSIONS_PER_USER:-5}
+      TRUST_PROXY: ${TRUST_PROXY:-true}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-}
+      CORS_ORIGIN: ${CORS_ORIGIN:-}
+    ports:
+      # Снаружи: ${API_PUBLISH:-127.0.0.1}:${PORT:-40978} -> 40978 в контейнере.
+      # Для TLS nginx на этом же VPS оставьте 127.0.0.1. Прямой доступ: API_PUBLISH=0.0.0.0
+      - "${API_PUBLISH:-127.0.0.1}:${PORT:-40978}:40978"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "curl -fsS http://127.0.0.1:40978/health >/dev/null || exit 1",
+        ]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+
+volumes:
+  postgres_data_prod:

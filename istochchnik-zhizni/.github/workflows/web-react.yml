@@ -1,0 +1,55 @@
+# Сборка web-react на main: проверка, что в исходниках нет старой заглушки админки.
+name: web-react
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - 'web-react/**'
+      - 'vercel.json'
+      - 'scripts/vercel-build.sh'
+      - '.github/workflows/web-react.yml'
+  pull_request:
+    branches: [main, master]
+    paths:
+      - 'web-react/**'
+      - 'vercel.json'
+      - 'scripts/vercel-build.sh'
+      - '.github/workflows/web-react.yml'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web-react
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: No admin placeholder in sources
+        run: |
+          if grep -R "Заглушка панели администратора" src/; then
+            echo "::error::В src осталась старая заглушка админки — удалите или замените на AdminPage."
+            exit 1
+          fi
+          if grep -R "AdminPlaceholder" src/; then
+            echo "::error::Удалите AdminPlaceholder, используйте AdminPage."
+            exit 1
+          fi
+          echo "OK: заглушки в исходниках нет."
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: web-react/package-lock.json
+
+      - name: Install and build
+        run: |
+          npm ci
+          npm run build
+
+      - name: Marker file in dist
+        run: |
+          test -f dist/admin-panel.txt
+          grep -q admin-panel-v2-react dist/admin-panel.txt

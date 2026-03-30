@@ -1,0 +1,119 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --primary: #7d3640;
+  --primary-dark: #5c2830;
+  --accent: #dc2626;
+  --surface: #f4f1ed;
+  --surface-elevated: #ffffff;
+  --text: #1c1917;
+  --text-secondary: #57534e;
+  --text-muted: #a8a29e;
+  --text-on-primary: #ffffff;
+  --member: #6366f1;
+  --theme: #0d9488;
+  --ministry: #ea580c;
+  --backslider: #be185d;
+  --radius: 16px;
+  --shadow: 0 8px 24px rgba(28, 25, 23, 0.06);
+  /* Легче на маленьких экранах — меньше «грязи» при скролле */
+  --shadow-card: 0 2px 12px rgba(28, 25, 23, 0.05);
+  --nav-pill-shadow: 0 -8px 32px rgba(28, 25, 23, 0.09), 0 4px 16px rgba(28, 25, 23, 0.04);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  width: 100%;
+  min-height: 100%;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
+  /* На полноэкранных экранах входа без полос по краям */
+  background-color: var(--surface);
+}
+
+/* PWA с экрана «Домой» iOS/Android — тот же фон, что у splash и manifest */
+@media (display-mode: standalone) {
+  html {
+    background-color: var(--surface);
+  }
+}
+
+body {
+  margin: 0;
+  width: 100%;
+  min-height: 100%;
+  font-family:
+    system-ui,
+    -apple-system,
+    'Segoe UI',
+    Roboto,
+    'Helvetica Neue',
+    sans-serif;
+  background: var(--surface);
+  color: var(--text);
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  overscroll-behavior-y: contain;
+  /* Только вертикальные safe-area: боковые отступы дают «полосы» на full-bleed экранах */
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+@supports (padding: max(0px)) {
+  body {
+    padding-bottom: max(0px, env(safe-area-inset-bottom, 0px));
+    padding-top: max(0px, env(safe-area-inset-top, 0px));
+  }
+}
+
+#root {
+  width: 100%;
+  min-height: 100vh;
+  min-height: 100dvh;
+  min-height: -webkit-fill-available;
+}
+
+@layer utilities {
+  .tap-highlight-transparent {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .touch-manipulation {
+    touch-action: manipulation;
+  }
+
+  /** Страница «Молитва»: лёгкая сетка на фоне */
+  .prayer-page-bg {
+    background-color: var(--surface);
+    background-image:
+      radial-gradient(ellipse 120% 80% at 50% -30%, rgba(125, 54, 64, 0.07), transparent 55%),
+      radial-gradient(ellipse 60% 40% at 100% 20%, rgba(13, 148, 136, 0.04), transparent 45%);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .prayer-page-bg {
+      background-image: none;
+    }
+  }
+}
+
+/* react-icons (Lucide): SVG-контуры, не подменяются системными эмодзи */
+[data-web-nav='react-icons'] svg,
+nav[aria-label='Основная навигация'] svg {
+  display: block;
+  flex-shrink: 0;
+}
+
+button {
+  font: inherit;
+  cursor: pointer;
+}

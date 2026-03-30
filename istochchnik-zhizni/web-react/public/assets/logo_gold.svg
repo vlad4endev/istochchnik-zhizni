@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">Латинский крест — золотой вариант</title>
+  <desc id="desc">Геометрический латинский крест с золотым градиентом и скруглениями.</desc>
+  <defs>
+    <linearGradient id="goldCross" x1="256" y1="72" x2="256" y2="440" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#E8D4A0"/>
+      <stop offset="0.45" stop-color="#C8A858"/>
+      <stop offset="1" stop-color="#9A7A38"/>
+    </linearGradient>
+  </defs>
+  <!-- Вертикальная перекладина -->
+  <rect x="228" y="92" width="56" height="328" rx="28" fill="url(#goldCross)"/>
+  <!-- Горизонтальная (короче, в верхней зоне) -->
+  <rect x="120" y="180" width="272" height="56" rx="28" fill="url(#goldCross)"/>
+</svg>

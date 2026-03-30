@@ -1,0 +1,72 @@
+.update-notification {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: linear-gradient(135deg, #7d3640 0%, #9d4650 100%);
+  color: #f4f1ed;
+  padding: 1rem 1.25rem;
+  z-index: 1000;
+  box-shadow: 0 -2px 12px rgba(0, 0, 0, 0.15);
+  animation: slideUp 0.3s ease-out;
+}
+
+@keyframes slideUp {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+.update-notification__content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  max-width: 800px;
+  margin: 0 auto;
+  gap: 1rem;
+}
+
+.update-notification__message {
+  flex: 1;
+  font-weight: 500;
+  font-size: 0.95rem;
+}
+
+.update-notification__button {
+  background: rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  color: #f4f1ed;
+  padding: 0.5rem 1rem;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.update-notification__button:hover {
+  background: rgba(255, 255, 255, 0.3);
+  border-color: rgba(255, 255, 255, 0.5);
+}
+
+.update-notification__button:active {
+  transform: scale(0.98);
+}
+
+@media (max-width: 640px) {
+  .update-notification {
+    padding: 0.75rem 1rem;
+  }
+
+  .update-notification__content {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .update-notification__button {
+    width: 100%;
+  }
+}
