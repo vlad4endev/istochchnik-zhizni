@@ -7,6 +7,11 @@ type AuthReq = Request & { authUserId?: number };
 
 const router = Router();
 
+async function getConversationListItemForMember(memberId: number, convId: string) {
+  const list = await svc.listConversations(memberId);
+  return list.find((c) => String(c.id) === String(convId)) ?? null;
+}
+
 // All messenger routes require authentication
 router.use(requireAuthSession);
 
@@ -37,13 +42,14 @@ router.post('/conversations/personal', async (req: Request, res: Response) => {
     // Ensure both members join the WS room
     ensureMemberInRoom(userId, convId);
     ensureMemberInRoom(otherMemberId, convId);
-    const conversations = await svc.listConversations(userId);
-    const conv = conversations.find((c) => c.id === convId);
-    // Notify the other member about new conversation
-    if (conv) {
-      sendToMember(otherMemberId, { type: 'conv:created', conversation: conv });
+    const convKey = String(convId);
+    const convForMe = await getConversationListItemForMember(userId, convKey);
+    // Notify the other member about new conversation (shape must be from THEIR perspective)
+    const convForOther = await getConversationListItemForMember(otherMemberId, convKey);
+    if (convForOther) {
+      sendToMember(otherMemberId, { type: 'conv:created', conversation: convForOther });
     }
-    res.json({ conversationId: convId, conversation: conv ?? null });
+    res.json({ conversationId: convKey, conversation: convForMe ?? null });
   } catch (e: any) {
     console.error('[messenger] createPersonalConversation error:', e);
     res.status(400).json({ error: e.message || 'Failed to create conversation' });
@@ -62,18 +68,22 @@ router.post('/conversations/group', async (req: Request, res: Response) => {
   const ids: number[] = Array.isArray(memberIds) ? memberIds.filter((id: any) => typeof id === 'number') : [];
   try {
     const convId = await svc.createGroupConversation(userId, title, convType, ids);
+    const convKey = String(convId);
     // Ensure all members join the WS room
-    ensureMemberInRoom(userId, convId);
-    for (const mId of ids) ensureMemberInRoom(mId, convId);
-    const conversations = await svc.listConversations(userId);
-    const conv = conversations.find((c) => c.id === convId);
-    // Notify all members
-    if (conv) {
-      for (const mId of ids) {
-        sendToMember(mId, { type: 'conv:created', conversation: conv });
+    ensureMemberInRoom(userId, convKey);
+    for (const mId of ids) ensureMemberInRoom(mId, convKey);
+
+    const convForMe = await getConversationListItemForMember(userId, convKey);
+
+    // Notify all members (their perspective may differ)
+    for (const mId of ids) {
+      const convForMember = await getConversationListItemForMember(mId, convKey);
+      if (convForMember) {
+        sendToMember(mId, { type: 'conv:created', conversation: convForMember });
       }
     }
-    res.json({ conversationId: convId, conversation: conv ?? null });
+
+    res.json({ conversationId: convKey, conversation: convForMe ?? null });
   } catch (e) {
     console.error('[messenger] createGroupConversation error:', e);
     res.status(500).json({ error: 'Failed to create group' });
@@ -128,6 +138,11 @@ router.post('/conversations/:id/participants', async (req: Request, res: Respons
       return;
     }
     await svc.addParticipant(convId, memberId);
+    ensureMemberInRoom(memberId, String(convId));
+    const convForMember = await getConversationListItemForMember(memberId, String(convId));
+    if (convForMember) {
+      sendToMember(memberId, { type: 'conv:created', conversation: convForMember });
+    }
     res.json({ ok: true });
   } catch (e) {
     console.error('[messenger] addParticipant error:', e);
@@ -206,8 +221,9 @@ router.post('/conversations/:id/messages', async (req: Request, res: Response) =
     }
 
     const message = await svc.sendMessage(convId, userId, content, replyToMessageId);
-    // Broadcast to conversation room (all clients, sender sees via response)
-    sendToRoom(convId, { type: 'msg:new', conversationId: convId, message }, userId);
+    const convKey = String(convId);
+    // Всем участникам комнаты, включая другие вкладки отправителя (дедуп по id на клиенте)
+    sendToRoomAll(convKey, { type: 'msg:new', conversationId: convKey, message });
     res.json(message);
   } catch (e) {
     console.error('[messenger] sendMessage error:', e);
@@ -237,7 +253,14 @@ router.patch('/messages/:id', async (req: Request, res: Response) => {
       const msgRow = await dbQuery('SELECT conversation_id FROM messages WHERE id = $1', [msgId]);
       const cId = msgRow.rows[0]?.conversation_id;
       if (cId) {
-        sendToRoom(String(cId), { type: 'msg:edited', conversationId: String(cId), messageId: msgId, content: result.content, updatedAt: result.updated_at }, userId);
+        const ck = String(cId);
+        sendToRoomAll(ck, {
+          type: 'msg:edited',
+          conversationId: ck,
+          messageId: msgId,
+          content: result.content,
+          updatedAt: result.updated_at,
+        });
       }
     } catch { /* broadcast best-effort */ }
     res.json(result);
@@ -265,7 +288,8 @@ router.delete('/messages/:id', async (req: Request, res: Response) => {
       return;
     }
     if (cId) {
-      sendToRoom(cId, { type: 'msg:deleted', conversationId: cId, messageId: msgId }, userId);
+      const ck = String(cId);
+      sendToRoomAll(ck, { type: 'msg:deleted', conversationId: ck, messageId: msgId });
     }
     res.json({ ok: true });
   } catch (e) {
@@ -318,7 +342,21 @@ router.post('/messages/:id/reactions', async (req: Request, res: Response) => {
     return;
   }
   try {
-    await svc.addReaction(msgId, userId, emoji);
+    const inserted = await svc.addReaction(msgId, userId, emoji);
+    if (inserted) {
+      const cId = await svc.getMessageConversationId(msgId);
+      if (cId) {
+        const ck = String(cId);
+        sendToRoomAll(ck, {
+          type: 'msg:reaction',
+          conversationId: ck,
+          messageId: msgId,
+          emoji,
+          memberId: userId,
+          action: 'add',
+        });
+      }
+    }
     res.json({ ok: true });
   } catch (e) {
     console.error('[messenger] addReaction error:', e);
@@ -332,7 +370,21 @@ router.delete('/messages/:id/reactions/:emoji', async (req: Request, res: Respon
   const msgId = req.params.id;
   const emoji = decodeURIComponent(req.params.emoji);
   try {
-    await svc.removeReaction(msgId, userId, emoji);
+    const removed = await svc.removeReaction(msgId, userId, emoji);
+    if (removed) {
+      const cId = await svc.getMessageConversationId(msgId);
+      if (cId) {
+        const ck = String(cId);
+        sendToRoomAll(ck, {
+          type: 'msg:reaction',
+          conversationId: ck,
+          messageId: msgId,
+          emoji,
+          memberId: userId,
+          action: 'remove',
+        });
+      }
+    }
     res.json({ ok: true });
   } catch (e) {
     console.error('[messenger] removeReaction error:', e);

@@ -106,6 +106,101 @@ export async function listConversations(memberId: number): Promise<ConversationL
 }
 
 /**
+ * Fetch a single conversation list item shaped for a specific member.
+ * (Important: `other_member` for personal chats must be computed from the recipient's POV.)
+ */
+export async function getConversationListItem(
+  memberId: number,
+  conversationId: string,
+): Promise<ConversationListItem | null> {
+  const result = await dbQuery(
+    `
+    SELECT
+      c.id,
+      c.type,
+      c.title,
+      c.avatar_url,
+      c.updated_at,
+      -- last message
+      lm.id          AS lm_id,
+      lm.content     AS lm_content,
+      lm.sender_id   AS lm_sender_id,
+      lm.created_at  AS lm_created_at,
+      lm.is_deleted  AS lm_is_deleted,
+      COALESCE(lm_sender.first_name, '') || ' ' || COALESCE(lm_sender.last_name, '') AS lm_sender_name,
+      -- unread count
+      COALESCE(
+        (SELECT COUNT(*)::int FROM messages m2
+         WHERE m2.conversation_id = c.id
+           AND m2.id > COALESCE(rr.last_read_message_id, 0)),
+        0
+      ) AS unread_count,
+      -- other member for personal chats
+      om.id          AS om_id,
+      om.name        AS om_name,
+      om.first_name  AS om_first_name,
+      om.last_name   AS om_last_name
+    FROM conversation_participants cp
+    JOIN conversations c ON c.id = cp.conversation_id
+    LEFT JOIN LATERAL (
+      SELECT m.id, m.content, m.sender_id, m.created_at, m.is_deleted
+      FROM messages m
+      WHERE m.conversation_id = c.id
+      ORDER BY m.id DESC
+      LIMIT 1
+    ) lm ON TRUE
+    LEFT JOIN members lm_sender ON lm_sender.id = lm.sender_id
+    LEFT JOIN read_receipts rr ON rr.conversation_id = c.id AND rr.member_id = $1
+    LEFT JOIN LATERAL (
+      SELECT om2.id, om2.name, om2.first_name, om2.last_name
+      FROM conversation_participants op
+      JOIN members om2 ON om2.id = op.member_id
+      WHERE op.conversation_id = c.id
+        AND op.member_id != $1
+        AND op.left_at IS NULL
+        AND c.type = 'personal'
+      LIMIT 1
+    ) om ON TRUE
+    WHERE cp.member_id = $1
+      AND cp.left_at IS NULL
+      AND c.id = $2
+    LIMIT 1
+    `,
+    [memberId, conversationId],
+  );
+
+  const r = result.rows[0];
+  if (!r) return null;
+
+  return {
+    id: bigint(r.id),
+    type: r.type as ConversationType,
+    title: r.title,
+    avatar_url: r.avatar_url,
+    updated_at: r.updated_at,
+    last_message: r.lm_id
+      ? {
+          id: bigint(r.lm_id),
+          content: r.lm_content,
+          sender_id: r.lm_sender_id,
+          sender_name: r.lm_sender_name?.trim() || null,
+          created_at: r.lm_created_at,
+          is_deleted: r.lm_is_deleted,
+        }
+      : null,
+    unread_count: Number(r.unread_count),
+    other_member: r.om_id
+      ? {
+          id: r.om_id,
+          name: r.om_name,
+          first_name: r.om_first_name,
+          last_name: r.om_last_name,
+        }
+      : null,
+  };
+}
+
+/**
  * Find or create a personal (P2P) conversation between two members.
  */
 export async function findOrCreatePersonalConversation(
@@ -334,6 +429,9 @@ export async function sendMessage(
   content: string,
   replyToMessageId?: string | null,
 ): Promise<MessageWithSender> {
+  // For consistent ordering in `/conversations` across clients.
+  await dbQuery(`UPDATE conversations SET updated_at = NOW() WHERE id = $1`, [conversationId]);
+
   const result = await dbQuery(
     `
     WITH inserted AS (
@@ -529,6 +627,15 @@ export async function removeReaction(
   return result.rows.length > 0;
 }
 
+export async function getMessageConversationId(messageId: string): Promise<string | null> {
+  const result = await dbQuery(
+    `SELECT conversation_id FROM messages WHERE id = $1 LIMIT 1`,
+    [messageId],
+  );
+  const raw = result.rows[0]?.conversation_id;
+  return raw != null ? bigint(raw) : null;
+}
+
 // ─── Search members for new chat ──────────────────────────────
 
 export async function searchMembers(
@@ -537,9 +644,8 @@ export async function searchMembers(
   limit: number = 20,
 ) {
   const result = await dbQuery(
-    `SELECT DISTINCT m.id, m.name, m.first_name, m.last_name
+    `SELECT m.id, m.name, m.first_name, m.last_name
      FROM members m
-     INNER JOIN auth_sessions s ON s.member_id = m.id
      WHERE m.is_active = TRUE
        AND m.id != $1
        AND (
@@ -562,9 +668,8 @@ export async function listRegisteredMembers(
   limit: number = 50,
 ) {
   const result = await dbQuery(
-    `SELECT DISTINCT m.id, m.name, m.first_name, m.last_name
+    `SELECT m.id, m.name, m.first_name, m.last_name
      FROM members m
-     INNER JOIN auth_sessions s ON s.member_id = m.id
      WHERE m.is_active = TRUE
        AND m.id != $1
      ORDER BY m.first_name ASC, m.last_name ASC

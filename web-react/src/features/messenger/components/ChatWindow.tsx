@@ -1,10 +1,9 @@
-import { useEffect, useRef, useMemo, useCallback, useState } from 'react';
-import { FixedSizeList as List } from 'react-window';
+import { useEffect, useRef, useMemo, useCallback, useState, useLayoutEffect } from 'react';
 import { useChatStore, EMPTY_ARRAY } from '../chatStore';
 import { MessageBubble } from './MessageBubble';
 import { ChatInput } from './ChatInput';
 import { SearchChat } from './SearchChat';
-import { LuArrowLeft, LuInfo, LuSearch } from 'react-icons/lu';
+import { LuArrowLeft, LuSearch } from 'react-icons/lu';
 import './messenger.css';
 
 interface ChatWindowProps {
@@ -29,14 +28,16 @@ export function ChatWindow({
   const typingUsers = useChatStore((s) => s.typingByConv[conversationId] || EMPTY_ARRAY);
   const onlineMembers = useChatStore((s) => s.onlineMembers);
 
-  const scrollRef = useRef<List>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const nearBottomRef = useRef(true);
+  const restoreScrollRef = useRef<{ scrollHeight: number; scrollTop: number } | null>(null);
   const [showSearch, setShowSearch] = useState(false);
 
   const conv = useMemo(() => conversations.find((c) => c.id === conversationId), [conversations, conversationId]);
 
-  // Load messages on mount
   useEffect(() => {
+    nearBottomRef.current = true;
+    restoreScrollRef.current = null;
     void loadMessages(conversationId);
   }, [conversationId, loadMessages]);
 
@@ -46,18 +47,34 @@ export function ChatWindow({
     }
   }, [conversationId, messages.length, markRead]);
 
-  // Auto-scroll to newest message
-  useEffect(() => {
-    if (scrollRef.current && messages.length > 0) {
-      scrollRef.current.scrollToItem(messages.length - 1, 'end');
-    }
-  }, [messages.length]);
+  const handleScroll = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const pad = 140;
+    nearBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < pad;
 
-  const handleScroll = useCallback(({ scrollOffset }: { scrollOffset: number }) => {
-    if (scrollOffset === 0 && hasMore && !loading) {
+    if (el.scrollTop < 72 && hasMore && !loading && !restoreScrollRef.current) {
+      restoreScrollRef.current = { scrollHeight: el.scrollHeight, scrollTop: el.scrollTop };
       void loadMessages(conversationId, true);
     }
   }, [conversationId, hasMore, loading, loadMessages]);
+
+  useLayoutEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+
+    const restore = restoreScrollRef.current;
+    if (restore) {
+      restoreScrollRef.current = null;
+      const nextHeight = el.scrollHeight;
+      el.scrollTop = nextHeight - restore.scrollHeight + restore.scrollTop;
+      return;
+    }
+
+    if (nearBottomRef.current) {
+      el.scrollTop = el.scrollHeight;
+    }
+  }, [messages, conversationId]);
 
   const displayName = useMemo(() => {
     if (!conv) return 'Чат';
@@ -69,11 +86,22 @@ export function ChatWindow({
     return conv.title || 'Чат';
   }, [conv]);
 
+  const headerInitial = displayName.trim().charAt(0).toUpperCase() || '?';
+  const headerAvatarColor = useMemo(() => {
+    if (!conv?.id) return 'var(--tg-primary)';
+    let hash = 0;
+    for (let i = 0; i < conv.id.length; i++) {
+      hash = conv.id.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    const palette = ['#7d3640', '#0d9488', '#6366f1', '#c2410c', '#4f46e5', '#0e7490'];
+    return palette[Math.abs(hash) % palette.length];
+  }, [conv?.id]);
+
   const isOnline = conv?.type === 'personal' && conv.other_member && onlineMembers.has(conv.other_member.id);
 
   const headerSubtitle = useMemo(() => {
     if (typingUsers.length > 0) {
-      return `${typingUsers.map((u: any) => u.memberName.split(' ')[0]).join(', ')} печатает...`;
+      return `${typingUsers.map((u: { memberName: string }) => u.memberName.split(' ')[0]).join(', ')} печатает…`;
     }
     if (!conv) return '';
     if (conv.type === 'personal' && conv.other_member) {
@@ -83,82 +111,90 @@ export function ChatWindow({
   }, [conv, typingUsers, isOnline]);
 
   const groupedMessages = useMemo(() => {
-    return messages.map((msg: any, idx: number) => {
+    return messages.map((msg, idx) => {
       const prev = messages[idx - 1];
       const next = messages[idx + 1];
-      const isGroupedPrev = prev && prev.sender_id === msg.sender_id && 
-        (new Date(msg.created_at).getTime() - new Date(prev.created_at).getTime()) < 300000;
-      const isGroupedNext = next && next.sender_id === msg.sender_id && 
-        (new Date(next.created_at).getTime() - new Date(msg.created_at).getTime()) < 300000;
+      const isGroupedPrev =
+        !!prev &&
+        prev.sender_id === msg.sender_id &&
+        new Date(msg.created_at).getTime() - new Date(prev.created_at).getTime() < 300000;
+      const isGroupedNext =
+        !!next &&
+        next.sender_id === msg.sender_id &&
+        new Date(next.created_at).getTime() - new Date(msg.created_at).getTime() < 300000;
       const msgDate = new Date(msg.created_at).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' });
       const prevDate = prev ? new Date(prev.created_at).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' }) : null;
-      return { ...msg, isGroupedPrev: !!isGroupedPrev, isGroupedNext: !!isGroupedNext, showDate: msgDate !== prevDate, dateLabel: msgDate };
+      return {
+        ...msg,
+        isGroupedPrev,
+        isGroupedNext,
+        showDate: msgDate !== prevDate,
+        dateLabel: msgDate,
+      };
     });
   }, [messages]);
 
   return (
     <div className="tg-chat-window">
       <header className="tg-header">
-        <button className="tg-icon-btn tg-header-back" onClick={onBack} aria-label="Назад">
-          <LuArrowLeft size={24} />
+        <button type="button" className="tg-icon-btn tg-header-back" onClick={onBack} aria-label="Назад к списку чатов">
+          <LuArrowLeft size={22} strokeWidth={2.25} />
         </button>
+        <div className="tg-header-avatar" style={{ background: headerAvatarColor }} aria-hidden>
+          {headerInitial}
+        </div>
         <div className="tg-header-info">
           <div className="tg-header-name">{displayName}</div>
-          <div className={`tg-header-status ${typingUsers.length > 0 ? 'tg-header-status--typing' : ''}`}>
+          <div className={`tg-header-status ${typingUsers.length > 0 ? 'tg-header-status--typing' : ''}`} aria-live="polite">
             {headerSubtitle}
           </div>
         </div>
         <div className="tg-header-actions">
           <button
+            type="button"
             className="tg-icon-btn"
             onClick={() => setShowSearch(true)}
-            aria-label="Поиск"
+            aria-label="Поиск по сообщениям"
           >
-            <LuSearch size={22} />
-          </button>
-          <button className="tg-icon-btn"><LuInfo size={22} /></button>
-          <button className="tg-icon-btn">
-             <div style={{ width: 22, height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}>⋮</div>
+            <LuSearch size={20} strokeWidth={2.25} />
           </button>
         </div>
       </header>
 
-      <div className="tg-messages" ref={containerRef}>
+      <div
+        className="tg-messages tg-messages--native"
+        ref={scrollRef}
+        onScroll={handleScroll}
+        role="log"
+        aria-live="polite"
+        aria-relevant="additions"
+      >
+        {hasMore && (
+          <div className="tg-load-older">
+            {loading ? <span className="tg-load-older-text">Загрузка истории…</span> : <span className="tg-load-older-hint">↑ Ранние сообщения</span>}
+          </div>
+        )}
         {messages.length === 0 && !loading ? (
-          <div className="tg-empty-chat"><span>Нет сообщений</span></div>
+          <div className="tg-empty-chat">
+            <p className="tg-empty-chat-title">Пока тихо</p>
+            <p className="tg-empty-chat-sub">Напишите первое сообщение — оно появится здесь.</p>
+          </div>
         ) : (
-          <List
-            ref={scrollRef}
-            height={containerRef.current?.offsetHeight || 400}
-            itemCount={groupedMessages.length + (hasMore ? 1 : 0)}
-            itemSize={85}
-            width="100%"
-            onScroll={handleScroll}
-            className="tg-messages-virtual"
-          >
-            {({ index, style }: { index: number; style: React.CSSProperties }) => {
-              if (index === 0 && hasMore) {
-                return (
-                  <div style={style} className="tg-loading-older">
-                    {loading ? 'Загрузка...' : 'Потяните для загрузки'}
-                  </div>
-                );
-              }
-              const msgIndex = hasMore ? index - 1 : index;
-              const msg = groupedMessages[msgIndex];
-              return (
-                <div style={style} key={msg.id}>
-                  {msg.showDate && <div className="tg-date-divider"><span>{msg.dateLabel}</span></div>}
-                  <MessageBubble message={msg} isGroupedPrev={msg.isGroupedPrev} isGroupedNext={msg.isGroupedNext} />
+          groupedMessages.map((msg) => (
+            <div key={msg.id} className="tg-msg-row">
+              {msg.showDate ? (
+                <div className="tg-date-divider">
+                  <span>{msg.dateLabel}</span>
                 </div>
-              );
-            }}
-          </List>
+              ) : null}
+              <MessageBubble message={msg} isGroupedPrev={msg.isGroupedPrev} isGroupedNext={msg.isGroupedNext} />
+            </div>
+          ))
         )}
       </div>
       <ChatInput conversationId={conversationId} sendTypingStart={sendTypingStart} sendTypingStop={sendTypingStop} canSend={true} />
 
-      {showSearch && <SearchChat conversationId={conversationId} onClose={() => setShowSearch(false)} />}
+      {showSearch ? <SearchChat conversationId={conversationId} onClose={() => setShowSearch(false)} /> : null}
     </div>
   );
 }

@@ -9,6 +9,7 @@ dist
 coverage/
 *.tsbuildinfo
 supabase/.temp/
+istochchnik-zhizni/
 
 # Артефакты для Dockerfile.web.prebuilt (генерируются локально)
 release/web/*

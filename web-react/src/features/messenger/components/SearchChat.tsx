@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { LuSearch, LuX } from 'react-icons/lu';
 import { useChatStore } from '../chatStore';
 import { MessageBubble } from './MessageBubble';
-import '../messenger.css';
+import './messenger.css';
 
 interface SearchChatProps {
   conversationId: string;

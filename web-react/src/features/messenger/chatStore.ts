@@ -345,16 +345,17 @@ export const useChatStore = create<ChatState>((set, get) => ({
   // ─── WS event handlers ───────────────────────────────────
 
   handleNewMessage: (convId, msg) => {
+    const idKey = String(convId);
     set((s) => {
       // Don't add if already exists (sent by this client)
-      const existing = s.messagesByConv[convId] || [];
+      const existing = s.messagesByConv[idKey] || [];
       if (existing.some((m) => m.id === msg.id)) return s;
 
       const newMsgs = [...existing, msg];
 
       // Update conversation list
       const updatedConvs = s.conversations.map((c) => {
-        if (c.id !== convId) return c;
+        if (c.id !== idKey) return c;
         return {
           ...c,
           last_message: {
@@ -366,7 +367,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
             is_deleted: msg.is_deleted,
           },
           updated_at: msg.created_at,
-          unread_count: s.activeConversationId === convId ? c.unread_count : c.unread_count + 1,
+          unread_count: s.activeConversationId === idKey ? c.unread_count : c.unread_count + 1,
         };
       });
 
@@ -376,7 +377,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       const totalUnread = updatedConvs.reduce((sum, c) => sum + c.unread_count, 0);
 
       return {
-        messagesByConv: { ...s.messagesByConv, [convId]: newMsgs },
+        messagesByConv: { ...s.messagesByConv, [idKey]: newMsgs },
         conversations: updatedConvs,
         totalUnread,
       };
@@ -384,10 +385,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   handleMessageEdited: (convId, msgId, content, updatedAt) => {
+    const idKey = String(convId);
     set((s) => ({
       messagesByConv: {
         ...s.messagesByConv,
-        [convId]: (s.messagesByConv[convId] || []).map((m) =>
+        [idKey]: (s.messagesByConv[idKey] || []).map((m) =>
           m.id === msgId ? { ...m, content, is_edited: true, updated_at: updatedAt } : m,
         ),
       },
@@ -395,84 +397,96 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   handleMessageDeleted: (convId, msgId) => {
+    const idKey = String(convId);
     set((s) => ({
       messagesByConv: {
         ...s.messagesByConv,
-        [convId]: (s.messagesByConv[convId] || []).map((m) =>
+        [idKey]: (s.messagesByConv[idKey] || []).map((m) =>
           m.id === msgId ? { ...m, is_deleted: true, content: '' } : m,
         ),
       },
     }));
   },
 
-  handleReaction: (convId, msgId, emoji, _memberId, action) => {
-    set((s) => ({
-      messagesByConv: {
-        ...s.messagesByConv,
-        [convId]: (s.messagesByConv[convId] || []).map((m) => {
-          if (m.id !== msgId) return m;
-          let reactions = [...m.reactions];
-          const existingIdx = reactions.findIndex((r) => r.emoji === emoji);
-          if (action === 'add') {
-            if (existingIdx >= 0) {
-              reactions[existingIdx] = {
-                ...reactions[existingIdx],
-                count: reactions[existingIdx].count + 1,
-              };
-            } else {
-              reactions.push({ emoji, count: 1, reacted_by_me: false });
-            }
-          } else {
-            if (existingIdx >= 0) {
-              const newCount = reactions[existingIdx].count - 1;
-              if (newCount <= 0) {
-                reactions = reactions.filter((_, i) => i !== existingIdx);
+  handleReaction: (convId, msgId, emoji, memberId, action) => {
+    const idKey = String(convId);
+    set((s) => {
+      const me = s.currentMemberId;
+      return {
+        messagesByConv: {
+          ...s.messagesByConv,
+          [idKey]: (s.messagesByConv[idKey] || []).map((m) => {
+            if (m.id !== msgId) return m;
+            let reactions = [...m.reactions];
+            const existingIdx = reactions.findIndex((r) => r.emoji === emoji);
+            if (action === 'add') {
+              if (existingIdx >= 0) {
+                const prev = reactions[existingIdx];
+                reactions[existingIdx] = {
+                  ...prev,
+                  count: prev.count + 1,
+                  reacted_by_me: prev.reacted_by_me || memberId === me,
+                };
               } else {
-                reactions[existingIdx] = { ...reactions[existingIdx], count: newCount };
+                reactions.push({ emoji, count: 1, reacted_by_me: memberId === me });
+              }
+            } else {
+              if (existingIdx >= 0) {
+                const prev = reactions[existingIdx];
+                const newCount = prev.count - 1;
+                const reactedByMe = memberId === me ? false : prev.reacted_by_me;
+                if (newCount <= 0) {
+                  reactions = reactions.filter((_, i) => i !== existingIdx);
+                } else {
+                  reactions[existingIdx] = { ...prev, count: newCount, reacted_by_me: reactedByMe };
+                }
               }
             }
-          }
-          return { ...m, reactions };
-        }),
-      },
-    }));
+            return { ...m, reactions };
+          }),
+        },
+      };
+    });
   },
 
   handleTypingStart: (convId, memberId, memberName) => {
+    const idKey = String(convId);
     set((s) => {
-      const existing = s.typingByConv[convId] || [];
+      const existing = s.typingByConv[idKey] || [];
       // Clear existing timer for this member
       const old = existing.find((u) => u.memberId === memberId);
       if (old) clearTimeout(old.timer);
       // Auto-clear after 4s
       const timer = setTimeout(() => {
-        get().handleTypingStop(convId, memberId);
+        get().handleTypingStop(idKey, memberId);
       }, 4000);
       const filtered = existing.filter((u) => u.memberId !== memberId);
       return {
-        typingByConv: { ...s.typingByConv, [convId]: [...filtered, { memberId, memberName, timer }] },
+        typingByConv: { ...s.typingByConv, [idKey]: [...filtered, { memberId, memberName, timer }] },
       };
     });
   },
 
   handleTypingStop: (convId, memberId) => {
+    const idKey = String(convId);
     set((s) => {
-      const existing = s.typingByConv[convId] || [];
+      const existing = s.typingByConv[idKey] || [];
       const old = existing.find((u) => u.memberId === memberId);
       if (old) clearTimeout(old.timer);
       return {
         typingByConv: {
           ...s.typingByConv,
-          [convId]: existing.filter((u) => u.memberId !== memberId),
+          [idKey]: existing.filter((u) => u.memberId !== memberId),
         },
       };
     });
   },
 
   handleConvCreated: (conv) => {
+    const normalized = { ...conv, id: String(conv.id) };
     set((s) => {
-      if (s.conversations.some((c) => c.id === conv.id)) return s;
-      const updated = [conv, ...s.conversations];
+      if (s.conversations.some((c) => c.id === normalized.id)) return s;
+      const updated = [normalized, ...s.conversations];
       return { conversations: updated };
     });
   },

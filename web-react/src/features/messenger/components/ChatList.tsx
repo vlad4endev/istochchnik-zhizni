@@ -1,5 +1,3 @@
-import { useRef } from 'react';
-import { FixedSizeList as List } from 'react-window';
 import { useChatStore, EMPTY_ARRAY } from '../chatStore';
 import type { ConversationListItem } from '../api/messengerApi';
 
@@ -13,8 +11,7 @@ export function ChatList({ onSelect, activeId }: ChatListProps) {
   const conversationsLoading = useChatStore((s) => s.conversationsLoading);
   const conversationsLoaded = useChatStore((s) => s.conversationsLoaded);
   const onlineMembers = useChatStore((s) => s.onlineMembers);
-  const typingByConv = useChatStore((s) => s.typingByConv || EMPTY_ARRAY);
-  const scrollRef = useRef<HTMLDivElement>(null);
+  const typingByConv = useChatStore((s) => s.typingByConv);
 
   if (conversationsLoading && !conversationsLoaded) {
     return (
@@ -33,28 +30,17 @@ export function ChatList({ onSelect, activeId }: ChatListProps) {
   }
 
   return (
-    <div className="chatlist-scroll" ref={scrollRef}>
-      <List
-        height={scrollRef.current?.clientHeight || 500}
-        itemCount={conversations.length}
-        itemSize={70}
-        width="100%"
-      >
-        {({ index, style }: { index: number; style: React.CSSProperties }) => {
-          const conv = conversations[index];
-          return (
-            <div style={style} key={conv.id}>
-              <ChatListItem
-                conv={conv}
-                isActive={conv.id === activeId}
-                isOnline={conv.type === 'personal' && conv.other_member ? onlineMembers.has(conv.other_member.id) : false}
-                typingUsers={typingByConv[conv.id] || EMPTY_ARRAY}
-                onClick={() => onSelect(conv.id)}
-              />
-            </div>
-          );
-        }}
-      </List>
+    <div className="chatlist-scroll chatlist-scroll--native" role="list">
+      {conversations.map((conv) => (
+        <ChatListItem
+          key={conv.id}
+          conv={conv}
+          isActive={conv.id === activeId}
+          isOnline={conv.type === 'personal' && conv.other_member ? onlineMembers.has(conv.other_member.id) : false}
+          typingUsers={typingByConv[conv.id] || EMPTY_ARRAY}
+          onClick={() => onSelect(conv.id)}
+        />
+      ))}
     </div>
   );
 }
@@ -81,6 +67,7 @@ function ChatListItem({
   return (
     <button
       type="button"
+      role="listitem"
       className={`chatlist-item ${isActive ? 'chatlist-item--active' : ''}`}
       onClick={onClick}
     >
@@ -124,12 +111,9 @@ function ChatListItem({
           )}
         </div>
       </div>
-      
     </button>
   );
 }
-
-// ─── Helpers ──────────────────────────────────────────────────
 
 function getConversationName(conv: ConversationListItem): string {
   if (conv.type === 'personal' && conv.other_member) {

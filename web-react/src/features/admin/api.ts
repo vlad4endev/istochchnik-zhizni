@@ -56,7 +56,7 @@ export async function updateAdminMember(
 }
 
 export async function deleteAdminMember(id: number): Promise<void> {
-  await apiClient.delete(`${USERS}/${id}`, { validateStatus: (s) => s === 204 || (s != null && s < 500) });
+  await apiClient.delete(`${USERS}/${id}`);
 }
 
 /** Объединяет дубликаты участников (одинаковое ФИО), оставляя карточку с меньшим id. */

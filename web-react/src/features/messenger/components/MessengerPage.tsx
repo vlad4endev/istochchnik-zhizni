@@ -48,9 +48,12 @@ export function MessengerPage() {
   }, []);
 
   return (
-    <div className={`tg-messenger ${isTransitioning ? 'transitioning' : ''}`} ref={messengerRef}>
+    <div className="tg-messenger-page">
+      <div className={`tg-messenger ${isTransitioning ? 'transitioning' : ''}`} ref={messengerRef}>
       {/* Sidebar */}
-      <aside className={`tg-sidebar ${mobileView === 'chat' ? 'tg-sidebar--hidden' : ''}`}>
+      <aside
+        className={`tg-sidebar ${mobileView === 'list' ? 'tg-sidebar--visible' : ''} ${mobileView === 'chat' ? 'tg-sidebar--hidden' : ''}`}
+      >
         <div className="tg-sidebar-header">
           <h1 className="tg-sidebar-title">Мессенджер</h1>
           <button 
@@ -94,6 +97,7 @@ export function MessengerPage() {
           }}
         />
       )}
+      </div>
     </div>
   );
 }

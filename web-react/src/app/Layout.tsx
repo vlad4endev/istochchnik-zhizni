@@ -21,7 +21,7 @@ type NavItem = {
 const NAV_ITEMS: NavItem[] = [
   /** Контурные Lucide — не путать с цветными эмодзи / Font Awesome «картинками». */
   { to: '/prayer', label: 'Молитва', Icon: LuChurch },
-  { to: '/messenger', label: 'Чаты', Icon: LuMessageCircle, adminOnly: true },
+  { to: '/messenger', label: 'Чаты', Icon: LuMessageCircle },
   // { to: '/broadcast', label: 'Трансляции', Icon: LuTv },
   { to: '/profile', label: 'Профиль', Icon: LuUser },
   { to: '/admin', label: 'Админ', Icon: LuShield, adminOnly: true },
@@ -201,7 +201,7 @@ export function Layout() {
       </aside>
 
       {/* Main: отступ слева от сайдбара — на родителе (padding); снизу под нижний бар на мобильных */}
-      <main className="min-h-0 w-full min-w-0 max-w-full flex-1 overflow-x-clip pb-[max(7rem,calc(5rem+env(safe-area-inset-bottom)))] md:pb-0 2xl:px-8 min-[1920px]:px-12">
+      <main className="flex min-h-0 min-w-0 w-full max-w-full flex-1 flex-col overflow-x-clip pb-[max(7rem,calc(5rem+env(safe-area-inset-bottom)))] md:pb-0 2xl:px-8 min-[1920px]:px-12">
         <Outlet />
       </main>
 

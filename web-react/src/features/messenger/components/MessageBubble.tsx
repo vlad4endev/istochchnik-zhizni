@@ -1,4 +1,4 @@
-import { useState, useRef, useMemo } from 'react';
+import { useState, useRef, useMemo, useEffect } from 'react';
 import { useChatStore } from '../chatStore';
 import type { MessageWithSender } from '../api/messengerApi';
 
@@ -11,6 +11,7 @@ interface MessageBubbleProps {
 export function MessageBubble({ message, isGroupedPrev, isGroupedNext }: MessageBubbleProps) {
   const currentMemberId = useChatStore((s) => s.currentMemberId);
   const addReaction = useChatStore((s) => s.addReaction);
+  const removeReaction = useChatStore((s) => s.removeReaction);
   const setReplyTo = useChatStore((s) => s.setReplyTo);
   const setEditing = useChatStore((s) => s.setEditing);
   const deleteMessage = useChatStore((s) => s.deleteMessage);
@@ -50,12 +51,32 @@ export function MessageBubble({ message, isGroupedPrev, isGroupedNext }: Message
     }
   };
 
+  useEffect(() => {
+    if (!showActions) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setShowActions(false);
+        setShowReactions(false);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [showActions]);
+
   const QUICK_REACTIONS = ['❤️', '👍', '😂', '😮', '😢', '🙏', '😡', '😍', '🔥', '💯', '✨', '👏'];
+
+  const toggleReaction = (emoji: string, reactedByMe: boolean) => {
+    if (reactedByMe) {
+      void removeReaction(message.id, emoji);
+    } else {
+      void addReaction(message.id, emoji);
+    }
+  };
 
   if (isDeleted) {
     return (
       <div className={`tg-bubble-wrap ${isMine ? 'tg-bubble-wrap--out' : 'tg-bubble-wrap--in'}`}>
-        <div className="tg-bubble msg-bubble--deleted">
+        <div className={`tg-bubble msg-bubble--deleted ${isMine ? 'tg-bubble--out' : 'tg-bubble--in'}`}>
           <span className="msg-deleted-text">Сообщение удалено</span>
         </div>
       </div>
@@ -138,7 +159,7 @@ export function MessageBubble({ message, isGroupedPrev, isGroupedNext }: Message
               key={r.emoji}
               type="button"
               className={`msg-reaction-chip ${r.reacted_by_me ? 'msg-reaction-chip--active' : ''}`}
-              onClick={() => void addReaction(message.id, r.emoji)}
+              onClick={() => toggleReaction(r.emoji, r.reacted_by_me)}
             >
               <span>{r.emoji}</span>
               <span className="msg-reaction-count">{r.count}</span>
@@ -176,7 +197,12 @@ export function MessageBubble({ message, isGroupedPrev, isGroupedNext }: Message
                     type="button"
                     className="msg-quick-reaction"
                     onClick={() => {
-                      void addReaction(message.id, emoji);
+                      const row = message.reactions.find((x) => x.emoji === emoji);
+                      if (row?.reacted_by_me) {
+                        void removeReaction(message.id, emoji);
+                      } else {
+                        void addReaction(message.id, emoji);
+                      }
                       setShowActions(false);
                       setShowReactions(false);
                     }}
