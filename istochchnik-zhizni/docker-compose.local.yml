@@ -1,8 +1,0 @@
-# Локальная разработка: проброс Postgres на localhost для npm run dev на хосте.
-# Запуск только БД: docker compose -f docker-compose.yml -f docker-compose.local.yml up -d db
-# (npm run db:up уже подключает этот файл)
-
-services:
-  db:
-    ports:
-      - "${POSTGRES_HOST_PORT:-5432}:5432"

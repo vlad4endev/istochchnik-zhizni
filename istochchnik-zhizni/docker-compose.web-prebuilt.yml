@@ -1,8 +1,0 @@
-# Prebuilt React (без npm в Docker): положите артефакты в release/web/ (см. scripts/package-web-for-server.sh).
-#   docker compose -f docker-compose.yml -f docker-compose.prod.overlay.yml -f docker-compose.web-prebuilt.yml up -d --build
-
-services:
-  web:
-    build:
-      context: .
-      dockerfile: Dockerfile.web.prebuilt
