@@ -619,11 +619,11 @@ function mapMessageWithSender(r: any, currentMemberId: number): MessageWithSende
  */
 export async function searchMessages(
   conversationId: string,
-  query: string,
+  searchQuery: string,
   memberId: number,
   limit: number = 50,
 ): Promise<MessageWithSender[]> {
-  const searchTerm = `%${query.trim()}%`;
+  const searchTerm = `%${searchQuery.trim()}%`;
 
   const result = await query(
     `
