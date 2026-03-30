@@ -8,42 +8,6 @@ interface MessageBubbleProps {
   isGroupedNext: boolean;
 }
 
-const BUBBLE_STYLES = `
-  .tg-bubble-tail {
-    position: absolute;
-    bottom: 0;
-    width: 9px;
-    height: 12px;
-    z-index: 1;
-  }
-  .tg-bubble-tail--out {
-    right: -7px;
-    color: var(--tg-bubble-out);
-    transform: scaleX(-1);
-  }
-  .tg-bubble-tail--in {
-    left: -7px;
-    color: var(--tg-bubble-in);
-  }
-  
-  .tg-bubble--grouped-prev {
-    margin-top: 2px !important;
-  }
-  
-  .msg-reply-preview {
-    border-left: 2px solid var(--tg-primary);
-    padding-left: 8px;
-    margin-bottom: 4px;
-    background: rgba(0,0,0,0.03);
-    border-radius: 2px 4px 4px 2px;
-  }
-  
-  .tg-bubble--out .msg-reply-preview {
-    border-left-color: white;
-    background: rgba(255,255,255,0.1);
-  }
-`;
-
 export function MessageBubble({ message, isGroupedPrev, isGroupedNext }: MessageBubbleProps) {
   const currentMemberId = useChatStore((s) => s.currentMemberId);
   const addReaction = useChatStore((s) => s.addReaction);
@@ -102,8 +66,8 @@ export function MessageBubble({ message, isGroupedPrev, isGroupedNext }: Message
     'tg-bubble',
     isMine ? 'tg-bubble--out' : 'tg-bubble--in',
     isOptimistic ? 'msg-bubble--sending' : '',
-    isGroupedPrev ? (isMine ? 'tg-bubble--out tg-bubble--grouped-prev' : 'tg-bubble--in tg-bubble--grouped-prev') : '',
-    isGroupedNext ? (isMine ? 'tg-bubble--out tg-bubble--grouped-next' : 'tg-bubble--in tg-bubble--grouped-next') : '',
+    isGroupedPrev ? 'tg-bubble--grouped-prev' : '',
+    isGroupedNext ? 'tg-bubble--grouped-next' : '',
   ].filter(Boolean).join(' ');
 
   return (
@@ -119,14 +83,14 @@ export function MessageBubble({ message, isGroupedPrev, isGroupedNext }: Message
       }}
     >
       <div className={bubbleClasses}>
-        {/* Tail (only if first in group) */}
+        {/* Tail (only if first message in group / single message) */}
         {!isGroupedPrev && (
           <div className={`tg-bubble-tail ${isMine ? 'tg-bubble-tail--out' : 'tg-bubble-tail--in'}`}>
-            <svg width="9" height="12" viewBox="0 0 9 12" fill="currentColor">
+            <svg width="10" height="14" viewBox="0 0 10 14" fill="currentColor">
               {isMine ? (
-                <path d="M0 0C3 0 9 0 9 0V12C9 12 1 5 0 0Z" />
+                <path d="M0 14C3 14 10 14 10 14V0C10 0 1 7 0 14Z" />
               ) : (
-                <path d="M9 0C6 0 0 0 0 0V12C0 12 8 5 9 0Z" />
+                <path d="M10 14C7 14 0 14 0 14V0C0 0 9 7 10 14Z" />
               )}
             </svg>
           </div>
@@ -225,8 +189,6 @@ export function MessageBubble({ message, isGroupedPrev, isGroupedNext }: Message
           </div>
         </>
       )}
-
-      <style>{BUBBLE_STYLES}</style>
     </div>
   );
 }

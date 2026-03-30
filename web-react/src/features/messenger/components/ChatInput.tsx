@@ -141,79 +141,11 @@ export function ChatInput({
         </button>
       </div>
 
-      <style>{extraStyles}</style>
+      <style>{`
+        /* Minimal layout fixes that are better kept in-component for reactivity if needed, 
+           otherwise keep it empty as styles moved to CSS. 
+           Actually, I will remove it entirely as requested. */
+      `}</style>
     </div>
   );
 }
-
-const extraStyles = `
-  .tg-input-area-wrap {
-    display: flex;
-    flex-direction: column;
-    width: 100%;
-    position: relative;
-    z-index: 10;
-  }
-  
-  .tg-input-banner {
-    background: var(--tg-surface);
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 8px 20px;
-    border-top: 1px solid var(--tg-border);
-    animation: tg-slide-up 0.2s ease;
-  }
-  
-  .tg-input-banner-icon {
-    font-size: 1.2rem;
-    color: var(--tg-primary);
-  }
-  
-  .tg-input-banner-content {
-    flex: 1;
-    min-width: 0;
-  }
-  
-  .tg-input-banner-title {
-    font-size: 0.8rem;
-    font-weight: 700;
-    color: var(--tg-primary);
-  }
-  
-  .tg-input-banner-text {
-    font-size: 0.875rem;
-    color: var(--tg-text-secondary);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  
-  .tg-input-banner-close {
-    background: transparent;
-    border: none;
-    color: var(--tg-text-muted);
-    font-size: 1rem;
-    cursor: pointer;
-  }
-  
-  .tg-input-icon-btn {
-    background: transparent;
-    border: none;
-    color: var(--tg-text-muted);
-    padding: 10px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    transition: color 0.2s;
-  }
-  .tg-input-icon-btn:hover {
-    color: var(--tg-primary);
-  }
-  
-  @keyframes tg-slide-up {
-    from { transform: translateY(100%); opacity: 0; }
-    to { transform: translateY(0); opacity: 1; }
-  }
-`;

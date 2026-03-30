@@ -111,32 +111,6 @@ function ChatListItem({
         </div>
       </div>
       
-      <style>{`
-        .chatlist-online {
-          position: absolute;
-          bottom: 2px;
-          right: 2px;
-          width: 12px;
-          height: 12px;
-          border-radius: 50%;
-          border: 2px solid var(--tg-surface);
-          background: #a8a29e;
-        }
-        .chatlist-online--on {
-          background: #22c55e;
-        }
-        .chatlist-item--active .chatlist-online {
-          border-color: var(--tg-primary);
-        }
-        
-        .chatlist-typing {
-          color: var(--tg-primary);
-          font-style: italic;
-          font-size: 0.8125rem;
-          animation: typingPulse 1.5s infinite;
-        }
-        @keyframes typingPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
-      `}</style>
     </button>
   );
 }
