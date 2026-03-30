@@ -1,4 +1,5 @@
 import type { Request, Response, NextFunction } from 'express';
+import { query as dbQuery } from '../config/db';
 import * as svc from '../services/messengerService';
 import type { ParticipantRole, PermissionsJson, PermissionKey } from '../types/messenger';
 
@@ -77,12 +78,16 @@ function deny(res: Response, code: number, error: string) {
 
 export function checkChatPermission(action: Action) {
   return async (req: Request, res: Response, next: NextFunction) => {
+    const userIdEarly = (req as AuthReq).authUserId;
+    const convIdEarly = String(
+      req.params.id ?? req.params.conversationId ?? (req.body as { conversationId?: string } | undefined)?.conversationId ?? '',
+    );
     try {
-      const userId = (req as AuthReq).authUserId;
+      const userId = userIdEarly;
       if (!userId) {
         return deny(res, 401, 'Unauthorized');
       }
-      const convId = String(req.params.id ?? req.params.conversationId ?? req.body?.conversationId ?? '');
+      const convId = convIdEarly;
       if (!convId) {
         return deny(res, 400, 'conversationId is required');
       }
@@ -98,16 +103,13 @@ export function checkChatPermission(action: Action) {
       }
 
       // Load member override fields (permissions/mute)
-      const memberRow = await (async () => {
-        const { query } = await import('../config/db');
-        const r = await query(
-          `SELECT permissions, muted_until FROM conversation_participants
+      const memberRowRes = await dbQuery(
+        `SELECT permissions, muted_until FROM conversation_participants
            WHERE conversation_id = $1 AND member_id = $2 AND left_at IS NULL
            LIMIT 1`,
-          [convId, userId],
-        );
-        return r.rows[0] ?? null;
-      })();
+        [convId, userId],
+      );
+      const memberRow = memberRowRes.rows[0] ?? null;
 
       const mutedUntil = memberRow?.muted_until ?? null;
       const memberPermissions = (memberRow?.permissions ?? {}) as PermissionsJson;
@@ -162,7 +164,37 @@ export function checkChatPermission(action: Action) {
       req.chatAuth = { conversationId: convId, memberId: userId, role, effective, mutedUntil };
       next();
     } catch (e) {
-      console.error('[messenger] checkChatPermission error:', e);
+      const errObj = e && typeof e === 'object' ? (e as Record<string, unknown>) : null;
+      const pgCode = typeof errObj?.code === 'string' ? errObj.code : undefined;
+      const pgDetail = typeof errObj?.detail === 'string' ? errObj.detail : undefined;
+      const pgHint = typeof errObj?.hint === 'string' ? errObj.hint : undefined;
+      const pgColumn = typeof errObj?.column === 'string' ? errObj.column : undefined;
+      const message = e instanceof Error ? e.message : String(e);
+
+      console.error('[messenger] checkChatPermission FAILED', {
+        action,
+        method: req.method,
+        path: req.path,
+        originalUrl: req.originalUrl,
+        routeParamId: req.params.id,
+        routeParamConversationId: req.params.conversationId,
+        conversationIdUsed: convIdEarly || '(empty)',
+        userId: userIdEarly ?? '(missing — should have been 401)',
+        hasAuthHeader: Boolean(req.headers.authorization),
+        authHeaderScheme: req.headers.authorization?.split(' ')[0]?.toLowerCase() ?? null,
+        bodyKeys:
+          req.body && typeof req.body === 'object' && !Array.isArray(req.body)
+            ? Object.keys(req.body as object)
+            : [],
+        pgCode,
+        pgDetail,
+        pgHint,
+        pgColumn,
+        message,
+      });
+      if (e instanceof Error && e.stack) {
+        console.error('[messenger] checkChatPermission stack:', e.stack);
+      }
       return deny(res, 500, 'Failed to authorize chat action');
     }
   };

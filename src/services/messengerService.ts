@@ -117,25 +117,62 @@ export async function getConversationMeta(
   ConversationListItem,
   'id' | 'type' | 'title' | 'avatar_url' | 'updated_at' | 'default_permissions' | 'settings' | 'metadata'
 > | null> {
-  const result = await dbQuery(
-    `SELECT id, type, title, avatar_url, updated_at, default_permissions, settings, metadata
+  function mapMetaRow(
+    r: Record<string, unknown>,
+    metadata: Record<string, unknown> | undefined,
+  ): Pick<
+    ConversationListItem,
+    'id' | 'type' | 'title' | 'avatar_url' | 'updated_at' | 'default_permissions' | 'settings' | 'metadata'
+  > {
+    return {
+      id: bigint(r.id),
+      type: r.type as ConversationType,
+      title: r.title as string | null,
+      avatar_url: r.avatar_url as string | null,
+      updated_at: r.updated_at as string,
+      default_permissions: (r.default_permissions ?? undefined) as PermissionsJson | undefined,
+      settings: (r.settings ?? undefined) as Record<string, unknown> | undefined,
+      metadata,
+    };
+  }
+
+  try {
+    const result = await dbQuery(
+      `SELECT id, type, title, avatar_url, updated_at, default_permissions, settings, metadata
      FROM conversations
      WHERE id = $1
      LIMIT 1`,
-    [conversationId],
-  );
-  const r = result.rows[0];
-  if (!r) return null;
-  return {
-    id: bigint(r.id),
-    type: r.type as ConversationType,
-    title: r.title,
-    avatar_url: r.avatar_url,
-    updated_at: r.updated_at,
-    default_permissions: (r.default_permissions ?? undefined) as PermissionsJson | undefined,
-    settings: (r.settings ?? undefined) as Record<string, unknown> | undefined,
-    metadata: (r.metadata ?? undefined) as Record<string, unknown> | undefined,
-  };
+      [conversationId],
+    );
+    const rFull = result.rows[0];
+    if (!rFull) return null;
+    const meta = (rFull as { metadata?: unknown }).metadata;
+    const metadata =
+      meta && typeof meta === 'object' && !Array.isArray(meta)
+        ? (meta as Record<string, unknown>)
+        : undefined;
+    return mapMetaRow(rFull as Record<string, unknown>, metadata);
+  } catch (e) {
+    const code = typeof (e as { code?: string })?.code === 'string' ? (e as { code: string }).code : '';
+    // undefined_column — старая БД без колонки metadata (middleware падал с 500).
+    if (code === '42703') {
+      console.warn(
+        '[messenger] getConversationMeta: column error (42703), retrying without metadata. Run initDb/migrations to add conversations.metadata.',
+        (e as Error)?.message,
+      );
+      const result = await dbQuery(
+        `SELECT id, type, title, avatar_url, updated_at, default_permissions, settings
+         FROM conversations
+         WHERE id = $1
+         LIMIT 1`,
+        [conversationId],
+      );
+      const r = result.rows[0];
+      if (!r) return null;
+      return mapMetaRow(r as Record<string, unknown>, undefined);
+    }
+    throw e;
+  }
 }
 
 export async function updateConversationPermissionsAndSettings(

@@ -125,8 +125,9 @@ export async function sendMessage(
   payloadType?: MessagePayloadType,
   payload?: MessagePayload,
 ): Promise<MessageWithSender> {
+  // chat id — в path (`:id` на бэке). user id не передаём: apiClient добавляет Authorization: Bearer <token>.
   const { data } = await apiClient.post<MessageWithSender>(
-    `${BASE}/conversations/${conversationId}/messages`,
+    `${BASE}/conversations/${encodeURIComponent(conversationId)}/messages`,
     { content, replyToMessageId, clientMsgId, payloadType, payload },
   );
   return data;
