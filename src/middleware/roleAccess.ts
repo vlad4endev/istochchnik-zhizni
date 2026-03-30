@@ -34,6 +34,12 @@ export function resolveUserRole(req: Request, _res: Response, next: NextFunction
 const MEMBER_ALLOWED_PATCH =
   /^\/api\/calendar\/(?:cycle\/collection-claims|next-week\/collection|member-cycle-prayer)\/?$/;
 
+/** Участники с ролью member могут выполнять мутации в мессенджере (внутри него отдельные ACL). */
+const MEMBER_ALLOWED_MESSENGER_MUTATIONS = /^\/api\/messenger\/.+$/;
+
+/** Участники с ролью member могут обновлять свой профиль (внутри — валидация). */
+const MEMBER_ALLOWED_ME_MUTATIONS = /^\/api\/auth\/me(?:\/avatar)?\/?$/;
+
 export function enforceRoleAccess(req: Request, res: Response, next: NextFunction): void {
   const roleReq = req as RoleRequest;
   const role = roleReq.userRole ?? 'member';
@@ -46,6 +52,19 @@ export function enforceRoleAccess(req: Request, res: Response, next: NextFunctio
   if (req.method === 'PATCH' && MEMBER_ALLOWED_PATCH.test(req.path)) {
     next();
     return;
+  }
+
+  if (role === 'member') {
+    // Messenger: отдельные права на уровне чата (checkChatPermission), поэтому разрешаем мутации.
+    if (MEMBER_ALLOWED_MESSENGER_MUTATIONS.test(req.path)) {
+      next();
+      return;
+    }
+    // Profile: разрешаем PATCH/POST только для /auth/me (и /avatar).
+    if ((req.method === 'PATCH' || req.method === 'POST') && MEMBER_ALLOWED_ME_MUTATIONS.test(req.path)) {
+      next();
+      return;
+    }
   }
 
   if (role !== 'admin') {

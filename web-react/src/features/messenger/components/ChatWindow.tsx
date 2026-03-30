@@ -4,14 +4,12 @@ import { useChatStore, EMPTY_ARRAY } from '../chatStore';
 import { MessageBubble } from './MessageBubble';
 import { ChatInput } from './ChatInput';
 import { SearchChat } from './SearchChat';
-import { LuArrowLeft, LuChevronRight, LuSearch } from 'react-icons/lu';
+import { LuArrowLeft, LuSearch } from 'react-icons/lu';
 import './messenger.css';
 
 interface ChatWindowProps {
   conversationId: string;
   onBack: () => void;
-  sidebarCollapsed: boolean;
-  onToggleSidebarCollapsed: () => void;
   sendTypingStart: (id: string) => void;
   sendTypingStop: (id: string) => void;
 }
@@ -19,8 +17,6 @@ interface ChatWindowProps {
 export function ChatWindow({
   conversationId,
   onBack,
-  sidebarCollapsed,
-  onToggleSidebarCollapsed,
   sendTypingStart,
   sendTypingStop,
 }: ChatWindowProps) {
@@ -150,17 +146,6 @@ export function ChatWindow({
         <button type="button" className="tg-icon-btn tg-header-back" onClick={onBack} aria-label="Назад к списку чатов">
           <LuArrowLeft size={22} strokeWidth={2.25} />
         </button>
-        {sidebarCollapsed ? (
-          <button
-            type="button"
-            className="tg-icon-btn tg-sidebar-open"
-            onClick={onToggleSidebarCollapsed}
-            aria-label="Показать список чатов"
-            title="Показать список"
-          >
-            <LuChevronRight size={20} strokeWidth={2.25} />
-          </button>
-        ) : null}
         <div className="tg-header-avatar" style={{ background: headerAvatarColor }} aria-hidden>
           {headerAvatarUrl ? (
             <img

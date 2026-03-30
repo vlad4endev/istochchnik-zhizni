@@ -4,7 +4,6 @@
 
 :root {
   --tg-sidebar-width: min(400px, 100vw);
-  --tg-sidebar-collapsed-width: 76px;
   --tg-primary: #7d3640;
   --tg-primary-hover: #5c2830;
   --tg-primary-light: rgba(125, 54, 64, 0.12);
@@ -26,6 +25,10 @@
   --tg-bubble-radius: 18px;
   --tg-bubble-meta: rgba(255, 255, 255, 0.72);
   --tg-bubble-meta-in: #a8a29e;
+
+  /* Height of the global bottom tab bar (Layout.tsx).
+     Needed because messenger uses absolute layers on mobile. */
+  --app-bottom-nav-h: max(7rem, calc(5rem + env(safe-area-inset-bottom, 0px)));
 }
 
 /**
@@ -39,21 +42,7 @@
   max-width: 100%;
   min-height: 0;
   flex: 1 1 auto;
-  /* Высота доступной области под контент main (с учётом pb у main на телефоне) */
   height: 100%;
-  min-height: min(100%, 70vh);
-}
-
-@media (max-width: 767.98px) {
-  .tg-messenger-page {
-    min-height: calc(100dvh - 5.75rem - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
-  }
-}
-
-@media (min-width: 768px) {
-  .tg-messenger-page {
-    min-height: calc(100dvh - 2rem);
-  }
 }
 
 .tg-messenger {
@@ -93,65 +82,6 @@
   flex-shrink: 0;
   z-index: 10;
   box-shadow: 4px 0 32px rgba(28, 25, 23, 0.04);
-}
-
-.tg-sidebar-header-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.tg-sidebar-toggle {
-  width: 44px;
-  height: 44px;
-  border-radius: 14px;
-  color: var(--tg-text-muted);
-  background: rgba(0, 0, 0, 0.02);
-  border: 1px solid var(--tg-border);
-}
-
-.tg-sidebar-toggle:hover {
-  background: rgba(0, 0, 0, 0.04);
-  color: var(--tg-primary);
-}
-
-/* Desktop collapse: shrink sidebar, keep chat usable */
-.tg-messenger--sidebar-collapsed .tg-sidebar {
-  width: var(--tg-sidebar-collapsed-width);
-}
-
-.tg-messenger--sidebar-collapsed .tg-sidebar-header {
-  padding: 12px 10px;
-}
-
-.tg-messenger--sidebar-collapsed .chatlist-item {
-  padding: 10px 10px;
-  justify-content: center;
-}
-
-.tg-messenger--sidebar-collapsed .chatlist-content,
-.tg-messenger--sidebar-collapsed .chatlist-time,
-.tg-messenger--sidebar-collapsed .chatlist-unread,
-.tg-messenger--sidebar-collapsed .chatlist-preview,
-.tg-messenger--sidebar-collapsed .chatlist-typing,
-.tg-messenger--sidebar-collapsed .chatlist-top,
-.tg-messenger--sidebar-collapsed .chatlist-bottom {
-  display: none !important;
-}
-
-.tg-messenger--sidebar-collapsed .chatlist-avatar {
-  width: 46px;
-  height: 46px;
-}
-
-.tg-sidebar-open {
-  display: none;
-}
-
-@media (min-width: 769px) {
-  .tg-messenger--sidebar-collapsed .tg-sidebar-open {
-    display: inline-flex;
-  }
 }
 
 .chatlist-item {
@@ -402,6 +332,8 @@
   gap: 12px;
   flex-shrink: 0;
   z-index: 20;
+  position: sticky;
+  top: 0;
   background: var(--tg-glass);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
@@ -701,7 +633,8 @@
   display: flex;
   flex-direction: column;
   width: 100%;
-  position: relative;
+  position: sticky;
+  bottom: 0;
   z-index: 10;
   flex-shrink: 0;
 }
@@ -1225,8 +1158,9 @@
     position: absolute;
     left: 0;
     top: 0;
+    bottom: var(--app-bottom-nav-h);
     width: 100%;
-    height: 100%;
+    height: calc(100% - var(--app-bottom-nav-h));
     z-index: 130;
     transform: translateX(-100%);
     transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
@@ -1250,8 +1184,9 @@
     position: absolute;
     left: 0;
     top: 0;
+    bottom: var(--app-bottom-nav-h);
     width: 100%;
-    height: 100%;
+    height: calc(100% - var(--app-bottom-nav-h));
     z-index: 50;
     transform: translateX(100%);
     transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);

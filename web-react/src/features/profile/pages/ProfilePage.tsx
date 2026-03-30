@@ -1,558 +1,219 @@
-import { useCallback, useEffect, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { FiClock, FiLock, FiUser } from 'react-icons/fi';
-import { LuImagePlus, LuUser } from 'react-icons/lu';
-
-import { useAuthStore } from '../../auth/authStore';
-import { formatRuPhoneInput } from '../../auth/utils/formatRuPhone';
+import { type ComponentType } from 'react';
+import { Link } from 'react-router-dom';
 import {
-  changePassword,
-  fetchMe,
-  fetchPrayerRequestHistory,
-  patchProfile,
-  uploadMyAvatar,
-  type MeResponse,
-  type PrayerHistoryItem,
-} from '../api';
-import { PushSettings } from '../components/PushSettings';
+  LuBookOpen,
+  LuHeart,
+  LuMusic,
+  LuSend,
+  LuSparkles,
+  LuUser,
+  LuUsers,
+} from 'react-icons/lu';
 
-function displayName(user: MeResponse): string {
-  const fn = (user.first_name ?? '').trim();
-  const ln = (user.last_name ?? '').trim();
-  const combined = `${fn} ${ln}`.trim();
-  if (combined) return combined;
-  return (user.name ?? '').trim() || 'Профиль';
+/* ═══════════════════════════════════════════════════════════
+   Mock data — замените на реальные данные из API
+   ═══════════════════════════════════════════════════════════ */
+
+const mockUser = {
+  firstName: 'Анна',
+  lastName: 'Сидорова',
+  role: 'Лидер прославления',
+  avatarUrl: null as string | null,
+  reading: 'Послание к Римлянам, гл. 8',
+  prayerTarget: 'Единство церкви и новые семьи',
+};
+
+interface Badge {
+  id: number;
+  label: string;
+  Icon: ComponentType<{ className?: string }>;
+  bg: string;
+  ring: string;
+  iconColor: string;
 }
 
-function roleLabel(role: string): string {
-  const r = role.trim().toLowerCase();
-  if (r === 'admin') return 'Администратор';
-  return 'Участник';
+const mockBadges: Badge[] = [
+  { id: 1, label: 'Прославление', Icon: LuMusic, bg: 'bg-amber-50', ring: 'ring-amber-200/60', iconColor: 'text-amber-600' },
+  { id: 2, label: 'Малая группа', Icon: LuUsers, bg: 'bg-sky-50', ring: 'ring-sky-200/60', iconColor: 'text-sky-600' },
+  { id: 3, label: 'Молитва', Icon: LuHeart, bg: 'bg-rose-50', ring: 'ring-rose-200/60', iconColor: 'text-rose-500' },
+  { id: 4, label: 'Детское', Icon: LuSparkles, bg: 'bg-violet-50', ring: 'ring-violet-200/60', iconColor: 'text-violet-500' },
+];
+
+interface Highlight {
+  id: number;
+  label: string;
+  emoji: string;
+  from: string;
+  to: string;
 }
 
-function formatHistoryDate(iso: string): string {
-  try {
-    const d = new Date(iso);
-    if (Number.isNaN(d.getTime())) return iso;
-    return d.toLocaleString('ru-RU', {
-      day: 'numeric',
-      month: 'long',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-  } catch {
-    return iso;
-  }
-}
+const mockHighlights: Highlight[] = [
+  { id: 1, label: 'Свидетельства', emoji: '✨', from: '#f59e0b', to: '#ef4444' },
+  { id: 2, label: 'Отвеченные молитвы', emoji: '🙏', from: '#38bdf8', to: '#6366f1' },
+  { id: 3, label: 'Крещение', emoji: '💧', from: '#2dd4bf', to: '#10b981' },
+  { id: 4, label: 'Конференция', emoji: '🎤', from: '#a78bfa', to: '#ec4899' },
+  { id: 5, label: 'Рождество', emoji: '⭐', from: '#f87171', to: '#fb923c' },
+];
 
-function axiosMessage(err: unknown): string {
-  if (err && typeof err === 'object' && 'response' in err) {
-    const data = (err as { response?: { data?: { error?: string } } }).response?.data;
-    if (data?.error && typeof data.error === 'string') return data.error;
-  }
-  return 'Произошла ошибка';
-}
+/* ═══════════════════════════════════════════════════════════ */
+
+const SECTION_TITLE =
+  'text-[11px] font-bold uppercase tracking-[0.18em] text-stone-400';
 
 export function ProfilePage() {
-  const navigate = useNavigate();
-  const logout = useAuthStore((s) => s.logout);
-  const applyServerProfile = useAuthStore((s) => s.applyServerProfile);
-
-  const [user, setUser] = useState<MeResponse | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<unknown>(null);
-
-  const [draft, setDraft] = useState({
-    first_name: '',
-    last_name: '',
-    phone_number: '',
-    email: '',
-    birth_date: '',
-    prayer_request: '',
-  });
-  const [profileSaving, setProfileSaving] = useState(false);
-  const [profileMsg, setProfileMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
-
-  const [pwdCurrent, setPwdCurrent] = useState('');
-  const [pwdNew, setPwdNew] = useState('');
-  const [pwdConfirm, setPwdConfirm] = useState('');
-  const [pwdSaving, setPwdSaving] = useState(false);
-  const [pwdMsg, setPwdMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
-
-  const [history, setHistory] = useState<PrayerHistoryItem[]>([]);
-  const [historyLoading, setHistoryLoading] = useState(false);
-  const [historyError, setHistoryError] = useState<string | null>(null);
-
-  const [avatarUploading, setAvatarUploading] = useState(false);
-
-  const loadProfile = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    setProfileMsg(null);
-    try {
-      const me = await fetchMe();
-      setUser(me);
-      applyServerProfile({
-        firstName: me.first_name ?? '',
-        lastName: me.last_name ?? '',
-        role: me.app_role ?? 'member',
-      });
-      setDraft({
-        first_name: me.first_name ?? '',
-        last_name: me.last_name ?? '',
-        phone_number: me.phone_number ?? '',
-        email: me.email ?? '',
-        birth_date: me.birth_date ? me.birth_date.slice(0, 10) : '',
-        prayer_request: me.prayer_request ?? '',
-      });
-    } catch (e) {
-      setError(e);
-      setUser(null);
-    } finally {
-      setLoading(false);
-    }
-  }, [applyServerProfile]);
-
-  useEffect(() => {
-    void loadProfile();
-  }, [loadProfile]);
-
-  const onPickAvatar = async (file: File | null) => {
-    if (!file) return;
-    setAvatarUploading(true);
-    setProfileMsg(null);
-    try {
-      const next = await uploadMyAvatar(file);
-      setUser(next);
-      applyServerProfile({
-        firstName: next.first_name ?? '',
-        lastName: next.last_name ?? '',
-        role: next.app_role ?? 'member',
-      });
-      setProfileMsg({ kind: 'ok', text: 'Аватар обновлён' });
-    } catch (e) {
-      setProfileMsg({ kind: 'err', text: axiosMessage(e) });
-    } finally {
-      setAvatarUploading(false);
-    }
-  };
-
-  useEffect(() => {
-    if (!user?.id) return;
-    let cancelled = false;
-    setHistoryLoading(true);
-    setHistoryError(null);
-    void fetchPrayerRequestHistory(user.id, 50)
-      .then((rows) => {
-        if (!cancelled) setHistory(rows);
-      })
-      .catch(() => {
-        if (!cancelled) setHistoryError('Не удалось загрузить историю');
-      })
-      .finally(() => {
-        if (!cancelled) setHistoryLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [user?.id]);
-
-  async function handleSaveProfile() {
-    setProfileMsg(null);
-    if (!draft.first_name.trim() || !draft.last_name.trim()) {
-      setProfileMsg({ kind: 'err', text: 'Укажите имя и фамилию' });
-      return;
-    }
-    const phoneDigits = draft.phone_number.replace(/\D/g, '');
-    if (phoneDigits.length < 7 || phoneDigits.length > 20) {
-      setProfileMsg({ kind: 'err', text: 'Укажите корректный номер телефона (7–20 цифр)' });
-      return;
-    }
-    setProfileSaving(true);
-    try {
-      const updated = await patchProfile({
-        first_name: draft.first_name.trim(),
-        last_name: draft.last_name.trim(),
-        phone_number: draft.phone_number.trim(),
-        email: draft.email.trim(),
-        birth_date: draft.birth_date.trim() ? draft.birth_date.trim() : '',
-        prayer_request: draft.prayer_request,
-      });
-      setUser(updated);
-      applyServerProfile({
-        firstName: updated.first_name ?? '',
-        lastName: updated.last_name ?? '',
-        role: updated.app_role ?? 'member',
-      });
-      setDraft({
-        first_name: updated.first_name ?? '',
-        last_name: updated.last_name ?? '',
-        phone_number: updated.phone_number ?? '',
-        email: updated.email ?? '',
-        birth_date: updated.birth_date ? updated.birth_date.slice(0, 10) : '',
-        prayer_request: updated.prayer_request ?? '',
-      });
-      setProfileMsg({ kind: 'ok', text: 'Данные сохранены' });
-    } catch (e) {
-      setProfileMsg({ kind: 'err', text: axiosMessage(e) });
-    } finally {
-      setProfileSaving(false);
-    }
-  }
-
-  async function handleChangePassword() {
-    setPwdMsg(null);
-    if (pwdNew.length < 8) {
-      setPwdMsg({ kind: 'err', text: 'Новый пароль — не короче 8 символов' });
-      return;
-    }
-    if (pwdNew !== pwdConfirm) {
-      setPwdMsg({ kind: 'err', text: 'Новый пароль и подтверждение не совпадают' });
-      return;
-    }
-    setPwdSaving(true);
-    try {
-      await changePassword(pwdCurrent, pwdNew);
-      setPwdCurrent('');
-      setPwdNew('');
-      setPwdConfirm('');
-      setPwdMsg({ kind: 'ok', text: 'Пароль обновлён' });
-    } catch (e) {
-      setPwdMsg({ kind: 'err', text: axiosMessage(e) });
-    } finally {
-      setPwdSaving(false);
-    }
-  }
-
-  async function handleLogout() {
-    const ok = window.confirm('Завершить текущую сессию?');
-    if (!ok) return;
-    await logout();
-    navigate('/login', { replace: true });
-  }
-
-  const sectionClass =
-    'rounded-[1.35rem] border border-stone-200/70 bg-[var(--surface-elevated)] p-4 shadow-[var(--shadow-card)] sm:rounded-3xl sm:p-6 sm:shadow-[var(--shadow)] lg:p-8 shell:p-8';
-  const sectionTitleClass =
-    'flex items-center gap-2 text-base font-extrabold text-stone-900 sm:text-lg md:text-xl';
-  const labelClass = 'block text-sm font-semibold text-stone-700';
-  const inputClass =
-    'mt-1.5 min-h-[48px] w-full rounded-xl border border-stone-200 bg-white px-4 py-3 text-base text-stone-900 outline-none ring-primary/20 transition placeholder:text-stone-400 focus:border-primary focus:ring-2 sm:min-h-0 sm:text-[15px]';
-
   return (
-    <div className="min-h-full bg-[var(--surface)] pb-6 shell:pb-8">
-      <header className="bg-primary px-4 py-4 text-white shadow-[0_4px_24px_rgba(125,54,64,0.3)] sm:px-5 sm:py-5 md:rounded-none md:shadow-sm md:px-6 max-md:rounded-b-[1.75rem]">
-        <h1 className="text-xl font-extrabold tracking-tight sm:text-2xl md:text-3xl">Профиль</h1>
-        <p className="mt-1 max-w-3xl text-sm text-white/85 md:text-base">
-          Данные аккаунта, безопасность и история молитвенных записок
-        </p>
-      </header>
+    <div className="min-h-full bg-[var(--surface)] pb-24">
+      {/* ────────────────────────────────────────────────────
+          1. HEADER — градиентный баннер + аватар + имя
+         ──────────────────────────────────────────────────── */}
+      <div className="relative">
+        {/* Banner */}
+        <div className="relative h-44 overflow-hidden bg-gradient-to-br from-[#4a1e26] via-primary to-[#a25260] sm:h-52 md:h-56">
+          <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_50%_at_20%_-20%,rgba(255,255,255,0.13),transparent)]" />
+          <div className="absolute inset-0 bg-[radial-gradient(ellipse_60%_60%_at_90%_120%,rgba(255,255,255,0.08),transparent)]" />
+          {/* Subtle decorative circles */}
+          <div className="absolute -right-10 -top-10 h-40 w-40 rounded-full bg-white/[0.04]" />
+          <div className="absolute -bottom-6 left-1/4 h-24 w-24 rounded-full bg-white/[0.03]" />
+        </div>
 
-      <div className="px-3 py-6 sm:px-4 sm:py-8 md:px-6 lg:px-8 xl:px-10">
-        {loading ? (
-          <div className="flex flex-col items-center justify-center py-20 text-stone-500">
-            <div className="h-10 w-10 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-            <p className="mt-4 text-sm font-semibold">Загрузка…</p>
+        {/* Avatar + Name overlay */}
+        <div className="relative mx-auto -mt-16 flex max-w-lg flex-col items-center px-4 text-center sm:-mt-[4.5rem] sm:max-w-xl">
+          {/* Avatar */}
+          <div className="flex h-[7.5rem] w-[7.5rem] items-center justify-center overflow-hidden rounded-full border-4 border-white bg-[var(--surface)] shadow-[0_8px_30px_rgba(125,54,64,0.18)] sm:h-[8.5rem] sm:w-[8.5rem]">
+            {mockUser.avatarUrl ? (
+              <img
+                src={mockUser.avatarUrl}
+                alt={`${mockUser.firstName} ${mockUser.lastName}`}
+                className="h-full w-full object-cover"
+              />
+            ) : (
+              <LuUser
+                className="h-14 w-14 text-primary/40 sm:h-16 sm:w-16"
+                strokeWidth={1.4}
+                aria-hidden
+              />
+            )}
           </div>
-        ) : error ? (
-          <div className="mx-auto max-w-md rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] p-8 text-center shadow-[var(--shadow)]">
-            <p className="font-semibold text-stone-900">Не удалось загрузить профиль</p>
-            <button
-              type="button"
-              onClick={() => void loadProfile()}
-              className="mt-4 min-h-[44px] rounded-xl border-2 border-primary px-6 py-2.5 text-sm font-bold text-primary transition hover:bg-primary/5"
-            >
-              Повторить
-            </button>
-          </div>
-        ) : user ? (
-          <div className="mx-auto flex w-full max-w-lg flex-col gap-6 sm:gap-8 md:max-w-xl lg:max-w-2xl xl:max-w-3xl">
-            <div className="flex flex-col items-center text-center">
-              <div className="relative">
-                <div className="flex h-20 w-20 items-center justify-center overflow-hidden rounded-full bg-primary/[0.08] text-primary/80 ring-1 ring-primary/10">
-                  {user.avatar_url ? (
-                    <img
-                      src={user.avatar_url}
-                      alt="Аватар"
-                      className="h-full w-full object-cover"
-                      loading="lazy"
-                    />
-                  ) : (
-                    <LuUser className="h-10 w-10" strokeWidth={1.75} aria-hidden />
-                  )}
-                </div>
-                <label className="absolute -bottom-2 -right-2 grid h-9 w-9 cursor-pointer place-items-center rounded-full bg-white text-primary shadow-md ring-1 ring-stone-200 transition hover:bg-stone-50">
-                  <LuImagePlus className="h-5 w-5" aria-hidden />
-                  <span className="sr-only">Загрузить аватар</span>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    disabled={avatarUploading}
-                    onChange={(e) => void onPickAvatar(e.target.files?.[0] ?? null)}
-                  />
-                </label>
+
+          {/* Name & Role */}
+          <h1 className="mt-3.5 text-[1.6rem] font-extrabold leading-tight tracking-tight text-stone-900 sm:text-[1.85rem]">
+            {mockUser.firstName} {mockUser.lastName}
+          </h1>
+          <p className="mt-1 text-sm font-medium text-stone-500">
+            {mockUser.role}
+          </p>
+
+          {/* Message CTA */}
+          <Link
+            to="/messenger"
+            className="mt-4 inline-flex items-center gap-2.5 rounded-full bg-primary px-7 py-2.5 text-sm font-bold text-white shadow-lg shadow-primary/20 transition-all hover:bg-primary-dark active:scale-[0.97]"
+          >
+            <LuSend className="h-4 w-4 -rotate-12" aria-hidden />
+            Написать сообщение
+          </Link>
+        </div>
+      </div>
+
+      {/* ── Content below header ── */}
+      <div className="mx-auto mt-8 flex max-w-lg flex-col gap-7 px-4 sm:mt-10 sm:max-w-xl sm:gap-9 sm:px-5">
+
+        {/* ────────────────────────────────────────────────────
+            2. СЕЙЧАС В ФОКУСЕ — glassmorphism card
+           ──────────────────────────────────────────────────── */}
+        <section
+          className="rounded-2xl border border-white/50 bg-white/55 p-5 shadow-[0_8px_32px_rgba(125,54,64,0.07)] backdrop-blur-xl sm:rounded-3xl sm:p-6"
+        >
+          <h2 className={SECTION_TITLE}>Сейчас в фокусе</h2>
+
+          <div className="mt-4 space-y-3.5">
+            {/* Reading */}
+            <div className="flex items-center gap-3.5">
+              <div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-amber-50 text-amber-600 ring-1 ring-amber-100">
+                <LuBookOpen className="h-[1.2rem] w-[1.2rem]" aria-hidden />
               </div>
-              <h2 className="mt-4 text-xl font-extrabold tracking-tight text-stone-900">
-                {displayName(user)}
-              </h2>
-              <p className="mt-0.5 text-sm text-stone-500">Роль: {roleLabel(user.app_role)}</p>
-              {avatarUploading ? (
-                <p className="mt-2 text-xs font-semibold text-stone-500">Загружаем фото…</p>
-              ) : null}
+              <div className="min-w-0">
+                <p className="text-[10.5px] font-bold uppercase tracking-wider text-stone-400">
+                  Сейчас читаю
+                </p>
+                <p className="truncate text-[15px] font-semibold leading-snug text-stone-800">
+                  {mockUser.reading}
+                </p>
+              </div>
             </div>
 
-            {/* Данные */}
-            <section className={sectionClass} aria-labelledby="profile-data-heading">
-              <h2 id="profile-data-heading" className={sectionTitleClass}>
-                <FiUser className="h-5 w-5 text-primary" aria-hidden />
-                Данные
-              </h2>
-              <p className="mt-1 text-sm text-stone-500">
-                Имя, контакты и дата рождения хранятся в вашей учётной записи.
-              </p>
-
-              {user.app_role?.toLowerCase() === 'admin' ? (
-                <Link
-                  to="/admin"
-                  className="mt-4 inline-flex min-h-[44px] items-center justify-center rounded-xl bg-primary px-5 text-sm font-bold text-white shadow-md shadow-primary/20 transition hover:bg-primary-dark"
-                >
-                  Админ-панель
-                </Link>
-              ) : null}
-
-              <div className="mt-6 space-y-4">
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div>
-                    <label htmlFor="pf-first" className={labelClass}>
-                      Имя
-                    </label>
-                    <input
-                      id="pf-first"
-                      type="text"
-                      autoComplete="given-name"
-                      value={draft.first_name}
-                      onChange={(e) => setDraft((d) => ({ ...d, first_name: e.target.value }))}
-                      className={inputClass}
-                    />
-                  </div>
-                  <div>
-                    <label htmlFor="pf-last" className={labelClass}>
-                      Фамилия
-                    </label>
-                    <input
-                      id="pf-last"
-                      type="text"
-                      autoComplete="family-name"
-                      value={draft.last_name}
-                      onChange={(e) => setDraft((d) => ({ ...d, last_name: e.target.value }))}
-                      className={inputClass}
-                    />
-                  </div>
-                </div>
-                <div>
-                  <label htmlFor="pf-phone" className={labelClass}>
-                    Телефон
-                  </label>
-                  <input
-                    id="pf-phone"
-                    type="tel"
-                    inputMode="tel"
-                    autoComplete="tel"
-                    value={draft.phone_number}
-                    onChange={(e) =>
-                      setDraft((d) => ({
-                        ...d,
-                        phone_number: formatRuPhoneInput(e.target.value),
-                      }))
-                    }
-                    className={inputClass}
-                    placeholder="+7 (___) ___-__-__"
-                  />
-                </div>
-                <div>
-                  <label htmlFor="pf-email" className={labelClass}>
-                    Эл. почта
-                  </label>
-                  <input
-                    id="pf-email"
-                    type="email"
-                    autoComplete="email"
-                    value={draft.email}
-                    onChange={(e) => setDraft((d) => ({ ...d, email: e.target.value }))}
-                    className={inputClass}
-                    placeholder="you@example.com"
-                  />
-                </div>
-                <div>
-                  <label htmlFor="pf-birth" className={labelClass}>
-                    День рождения
-                  </label>
-                  <input
-                    id="pf-birth"
-                    type="date"
-                    value={draft.birth_date}
-                    onChange={(e) => setDraft((d) => ({ ...d, birth_date: e.target.value }))}
-                    className={inputClass}
-                  />
-                </div>
-                <div>
-                  <label htmlFor="pf-prayer" className={labelClass}>
-                    Молитвенная нужда
-                  </label>
-                  <p className="mt-0.5 text-xs text-stone-500">
-                    Текст показывается в календаре в день, когда назначена молитва за вас.
-                  </p>
-                  <textarea
-                    id="pf-prayer"
-                    value={draft.prayer_request}
-                    onChange={(e) => setDraft((d) => ({ ...d, prayer_request: e.target.value }))}
-                    rows={4}
-                    className={`${inputClass} resize-y`}
-                    placeholder="О чём просим молиться…"
-                    maxLength={8000}
-                  />
-                </div>
+            {/* Prayer */}
+            <div className="flex items-center gap-3.5">
+              <div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-rose-50 text-rose-500 ring-1 ring-rose-100">
+                <LuHeart className="h-[1.2rem] w-[1.2rem]" aria-hidden />
               </div>
-
-              {profileMsg ? (
-                <p
-                  className={`mt-4 text-sm font-medium ${profileMsg.kind === 'ok' ? 'text-teal-700' : 'text-red-600'}`}
-                  role="status"
-                >
-                  {profileMsg.text}
+              <div className="min-w-0">
+                <p className="text-[10.5px] font-bold uppercase tracking-wider text-stone-400">
+                  Молюсь за
                 </p>
-              ) : null}
-
-              <button
-                type="button"
-                disabled={profileSaving}
-                onClick={() => void handleSaveProfile()}
-                className="mt-5 min-h-[48px] w-full rounded-xl bg-primary px-6 text-sm font-bold text-white shadow-md shadow-primary/25 transition hover:bg-primary-dark disabled:opacity-60 sm:w-auto"
-              >
-                {profileSaving ? 'Сохранение…' : 'Сохранить данные'}
-              </button>
-              
-              <PushSettings />
-            </section>
-
-            {/* Безопасность */}
-            <section className={sectionClass} aria-labelledby="profile-security-heading">
-              <h2 id="profile-security-heading" className={sectionTitleClass}>
-                <FiLock className="h-5 w-5 text-primary" aria-hidden />
-                Безопасность
-              </h2>
-              <p className="mt-1 text-sm text-stone-500">Смена пароля и выход из аккаунта на этом устройстве.</p>
-
-              <div className="mt-6 space-y-4">
-                <div>
-                  <label htmlFor="pf-cur-pwd" className={labelClass}>
-                    Текущий пароль
-                  </label>
-                  <input
-                    id="pf-cur-pwd"
-                    type="password"
-                    autoComplete="current-password"
-                    value={pwdCurrent}
-                    onChange={(e) => setPwdCurrent(e.target.value)}
-                    className={inputClass}
-                  />
-                </div>
-                <div>
-                  <label htmlFor="pf-new-pwd" className={labelClass}>
-                    Новый пароль
-                  </label>
-                  <input
-                    id="pf-new-pwd"
-                    type="password"
-                    autoComplete="new-password"
-                    value={pwdNew}
-                    onChange={(e) => setPwdNew(e.target.value)}
-                    className={inputClass}
-                  />
-                </div>
-                <div>
-                  <label htmlFor="pf-confirm-pwd" className={labelClass}>
-                    Повторите новый пароль
-                  </label>
-                  <input
-                    id="pf-confirm-pwd"
-                    type="password"
-                    autoComplete="new-password"
-                    value={pwdConfirm}
-                    onChange={(e) => setPwdConfirm(e.target.value)}
-                    className={inputClass}
-                  />
-                </div>
+                <p className="truncate text-[15px] font-semibold leading-snug text-stone-800">
+                  {mockUser.prayerTarget}
+                </p>
               </div>
-
-              {pwdMsg ? (
-                <p
-                  className={`mt-4 text-sm font-medium ${pwdMsg.kind === 'ok' ? 'text-teal-700' : 'text-red-600'}`}
-                  role="status"
-                >
-                  {pwdMsg.text}
-                </p>
-              ) : null}
-
-              <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
-                <button
-                  type="button"
-                  disabled={pwdSaving}
-                  onClick={() => void handleChangePassword()}
-                  className="min-h-[48px] rounded-xl border-2 border-primary bg-white px-6 text-sm font-bold text-primary transition hover:bg-primary/5 disabled:opacity-60"
-                >
-                  {pwdSaving ? 'Сохранение…' : 'Сменить пароль'}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void handleLogout()}
-                  className="min-h-[48px] rounded-xl border-2 border-stone-300 bg-stone-50 px-6 text-sm font-bold text-stone-800 transition hover:bg-stone-100"
-                >
-                  Выйти из аккаунта
-                </button>
-              </div>
-            </section>
-
-            {/* История */}
-            <section className={sectionClass} aria-labelledby="profile-history-heading">
-              <h2 id="profile-history-heading" className={sectionTitleClass}>
-                <FiClock className="h-5 w-5 text-primary" aria-hidden />
-                История
-              </h2>
-              <p className="mt-1 text-sm text-stone-500">
-                Предыдущие тексты молитвенных записок (если вы меняли записку в календаре).
-              </p>
-
-              {historyLoading ? (
-                <p className="mt-6 text-sm text-stone-500">Загрузка…</p>
-              ) : historyError ? (
-                <p className="mt-6 text-sm text-red-600">{historyError}</p>
-              ) : history.length === 0 ? (
-                <p className="mt-6 rounded-2xl border border-dashed border-stone-200 bg-stone-50/80 px-4 py-8 text-center text-sm text-stone-500">
-                  Пока нет сохранённых записей в истории.
-                </p>
-              ) : (
-                <ul className="mt-6 space-y-4">
-                  {history.map((item) => (
-                    <li
-                      key={item.id}
-                      className="rounded-2xl border border-stone-100 bg-stone-50/80 p-4 text-left"
-                    >
-                      <p className="text-xs font-semibold uppercase tracking-wide text-stone-400">
-                        {formatHistoryDate(item.created_at)}
-                      </p>
-                      <p className="mt-2 whitespace-pre-wrap text-[15px] leading-relaxed text-stone-800">
-                        {item.prayer_request}
-                      </p>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </section>
+            </div>
           </div>
-        ) : null}
+        </section>
+
+        {/* ────────────────────────────────────────────────────
+            3. МОИ СЛУЖЕНИЯ — badge grid
+           ──────────────────────────────────────────────────── */}
+        <section>
+          <h2 className={SECTION_TITLE}>Мои служения</h2>
+
+          <div className="mt-4 grid grid-cols-4 gap-3 sm:gap-4">
+            {mockBadges.map((b) => (
+              <div key={b.id} className="flex flex-col items-center gap-2 text-center">
+                <div
+                  className={`grid h-14 w-14 place-items-center rounded-full shadow-sm ring-1 transition-transform hover:scale-105 sm:h-16 sm:w-16 ${b.bg} ${b.ring}`}
+                >
+                  <b.Icon
+                    className={`h-6 w-6 sm:h-7 sm:w-7 ${b.iconColor}`}
+                    aria-hidden
+                  />
+                </div>
+                <span className="max-w-[5rem] text-[11px] font-semibold leading-tight text-stone-600 sm:text-xs">
+                  {b.label}
+                </span>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        {/* ────────────────────────────────────────────────────
+            4. ХАЙЛАЙТЫ — horizontal stories scroll
+           ──────────────────────────────────────────────────── */}
+        <section>
+          <h2 className={SECTION_TITLE}>Хайлайты</h2>
+
+          <div className="-mx-4 mt-4 flex gap-4 overflow-x-auto px-4 pb-2 scrollbar-hide sm:-mx-5 sm:gap-5 sm:px-5">
+            {mockHighlights.map((h) => (
+              <button
+                key={h.id}
+                type="button"
+                className="flex shrink-0 flex-col items-center gap-1.5 outline-none transition-transform active:scale-95"
+              >
+                {/* Gradient ring */}
+                <div
+                  className="rounded-full p-[2.5px]"
+                  style={{
+                    background: `linear-gradient(135deg, ${h.from}, ${h.to})`,
+                  }}
+                >
+                  <div className="grid h-[4.25rem] w-[4.25rem] place-items-center rounded-full bg-[var(--surface)] text-2xl sm:h-[4.75rem] sm:w-[4.75rem]">
+                    {h.emoji}
+                  </div>
+                </div>
+                <span className="max-w-[4.5rem] text-center text-[11px] font-semibold leading-tight text-stone-500">
+                  {h.label}
+                </span>
+              </button>
+            ))}
+          </div>
+        </section>
       </div>
     </div>
   );

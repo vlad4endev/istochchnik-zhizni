@@ -1,7 +1,7 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import type { IconType } from 'react-icons';
-import { LuChurch, LuMessageCircle, LuShield, LuUser, LuWifiOff, LuX } from 'react-icons/lu';
+import { LuChevronLeft, LuChevronRight, LuChurch, LuMessageCircle, LuShield, LuUser, LuWifiOff, LuX } from 'react-icons/lu';
 
 import { useAuthStore } from '../features/auth/authStore';
 import { useBrandingStore } from '../features/branding/brandingStore';
@@ -127,6 +127,7 @@ export function Layout() {
   const role = useAuthStore((s) => s.role);
   const logout = useAuthStore((s) => s.logout);
   const updatePrompt = useServiceWorkerUpdate({ showPrompt: true });
+  const [navCollapsed, setNavCollapsed] = useState(false);
 
   const appName = useBrandingStore((s) => s.appName);
   const description = useBrandingStore((s) => s.description);
@@ -135,6 +136,11 @@ export function Layout() {
 
   const isAdmin = (role ?? 'member').toLowerCase() === 'admin';
   const items = NAV_ITEMS.filter((item) => !item.adminOnly || isAdmin);
+  const profileItem = items.find((i) => i.to === '/profile') ?? null;
+  const sidebarItems = profileItem ? items.filter((i) => i.to !== '/profile') : items;
+  const mobileItems = profileItem
+    ? [...items.filter((i) => i.to !== '/profile'), profileItem]
+    : items;
 
   async function handleLogout() {
     if (!window.confirm('Завершить текущую сессию?')) {
@@ -144,18 +150,48 @@ export function Layout() {
     navigate('/login', { replace: true });
   }
 
+  useEffect(() => {
+    try {
+      setNavCollapsed(localStorage.getItem('app_nav_collapsed') === '1');
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  function toggleNavCollapsed() {
+    setNavCollapsed((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem('app_nav_collapsed', next ? '1' : '0');
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
+  }
+
   return (
     <div className="flex min-h-[100dvh] min-h-screen w-full max-w-[100vw] flex-col overflow-x-clip bg-[var(--surface)] text-[var(--text)] [padding-left:env(safe-area-inset-left,0px)] [padding-right:env(safe-area-inset-right,0px)]">
-      <div className="flex min-h-0 min-w-0 w-full max-w-full flex-1 flex-col box-border md:pl-[260px] lg:pl-[272px]">
+      <div
+        className={[
+          'flex min-h-0 min-w-0 w-full max-w-full flex-1 flex-col box-border',
+          navCollapsed ? 'md:pl-[88px]' : 'md:pl-[260px] lg:pl-[272px]',
+        ].join(' ')}
+      >
       <div className="shrink-0">
         <ConnectivityBanner />
       </div>
       <div className="relative flex min-h-0 w-full min-w-0 flex-1 flex-col">
       {/* Планшет/десктоп: фиксированный сайдбар (не в потоке, не растягивается по ширине main). На узких — нижняя навигация. */}
-      <aside className="hidden w-[260px] max-w-[260px] shrink-0 flex-col overflow-y-auto overflow-x-hidden border-r border-stone-200/80 bg-[var(--surface-elevated)] shadow-[4px_0_16px_rgba(0,0,0,0.06)] md:fixed md:bottom-0 md:left-0 md:top-0 md:z-30 md:flex lg:w-[272px] lg:max-w-[272px] [padding-bottom:env(safe-area-inset-bottom,0px)] [padding-top:env(safe-area-inset-top,0px)]">
-        <div className="flex min-h-0 flex-1 flex-col gap-1 p-6">
-          <div className="mb-6 flex items-start gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden xl:rounded-[0.9rem] rounded-xl bg-primary/10 text-primary p-1">
+      <aside
+        className={[
+          'hidden shrink-0 flex-col overflow-y-auto overflow-x-hidden border-r border-stone-200/80 bg-[var(--surface-elevated)] shadow-[4px_0_16px_rgba(0,0,0,0.06)] md:fixed md:bottom-0 md:left-0 md:top-0 md:z-30 md:flex [padding-bottom:env(safe-area-inset-bottom,0px)] [padding-top:env(safe-area-inset-top,0px)]',
+          navCollapsed ? 'w-[88px] max-w-[88px]' : 'w-[260px] max-w-[260px] lg:w-[272px] lg:max-w-[272px]',
+        ].join(' ')}
+      >
+        <div className={navCollapsed ? 'flex min-h-0 flex-1 flex-col gap-1 p-4' : 'flex min-h-0 flex-1 flex-col gap-1 p-6'}>
+          <div className={navCollapsed ? 'mb-4 flex items-center justify-center' : 'mb-6 flex items-start gap-3'}>
+            <div className={navCollapsed ? 'flex h-11 w-11 items-center justify-center overflow-hidden rounded-2xl bg-primary/10 p-1 text-primary' : 'flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-primary/10 text-primary p-1 xl:rounded-[0.9rem]'}>
               {customLogoDataUrl ? (
                 <img
                   src={customLogoDataUrl}
@@ -167,21 +203,56 @@ export function Layout() {
                 <img src="/assets/logo.svg" alt="" className="h-full w-full object-contain drop-shadow-sm" />
               )}
             </div>
-            <div className="min-w-0">
-              <p className="text-base font-extrabold leading-tight text-stone-900">{appName}</p>
-              <p className="mt-0.5 text-xs text-stone-500">{description}</p>
-            </div>
+            {!navCollapsed ? (
+              <div className="min-w-0">
+                <p className="text-base font-extrabold leading-tight text-stone-900">{appName}</p>
+                <p className="mt-0.5 text-xs text-stone-500">{description}</p>
+              </div>
+            ) : null}
           </div>
 
-          <nav className="flex flex-col gap-1" data-web-nav="react-icons">
-            {items.map((item) => {
+          <button
+            type="button"
+            onClick={toggleNavCollapsed}
+            className={[
+              'mb-3 flex min-h-[44px] items-center justify-center rounded-2xl border border-stone-200/80 bg-white/60 text-stone-600 transition hover:bg-stone-50 hover:text-primary',
+              navCollapsed ? 'w-full' : 'w-full justify-between px-3',
+            ].join(' ')}
+            aria-label={navCollapsed ? 'Развернуть меню' : 'Свернуть меню'}
+            title={navCollapsed ? 'Развернуть меню' : 'Свернуть меню'}
+          >
+            {navCollapsed ? (
+              <LuChevronRight className="h-5 w-5" strokeWidth={2.25} aria-hidden />
+            ) : (
+              <>
+                <span className="text-xs font-extrabold uppercase tracking-[0.14em]">Меню</span>
+                <LuChevronLeft className="h-5 w-5" strokeWidth={2.25} aria-hidden />
+              </>
+            )}
+          </button>
+
+          <nav className={navCollapsed ? 'flex flex-col gap-2' : 'flex flex-col gap-1'} data-web-nav="react-icons">
+            {sidebarItems.map((item) => {
               const Icon = item.Icon;
               return (
-                <NavLink key={item.to} to={item.to} className={({ isActive }) => navClassName(isActive)}>
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  className={({ isActive }) =>
+                    navCollapsed
+                      ? [
+                          'group flex min-h-[52px] w-full items-center justify-center rounded-2xl transition-colors',
+                          isActive ? 'bg-primary text-white shadow-md shadow-primary/25' : 'text-stone-600 hover:bg-stone-100',
+                        ].join(' ')
+                      : navClassName(isActive)
+                  }
+                  title={navCollapsed ? item.label : undefined}
+                  aria-label={navCollapsed ? item.label : undefined}
+                >
                   {({ isActive }) => (
                     <>
-                      <Icon className={navIconClass(isActive, false)} strokeWidth={2} aria-hidden />
-                      {item.label}
+                      <Icon className={navIconClass(isActive, navCollapsed)} strokeWidth={2} aria-hidden />
+                      {!navCollapsed ? item.label : null}
                     </>
                   )}
                 </NavLink>
@@ -191,12 +262,36 @@ export function Layout() {
         </div>
 
         <div className="mt-auto border-t border-stone-200/80 p-4">
+          {profileItem ? (
+            <NavLink
+              to={profileItem.to}
+              className={({ isActive }) =>
+                [
+                  'mb-2 flex min-h-[44px] w-full items-center rounded-xl py-3 text-left text-sm font-semibold transition-colors',
+                  navCollapsed ? 'justify-center px-0' : 'px-4',
+                  isActive ? 'bg-primary text-white shadow-md shadow-primary/25' : 'text-stone-600 hover:bg-stone-100',
+                ].join(' ')
+              }
+              title={navCollapsed ? profileItem.label : undefined}
+              aria-label={navCollapsed ? profileItem.label : undefined}
+            >
+              {({ isActive }) => (
+                <>
+                  <profileItem.Icon className={navIconClass(isActive, navCollapsed)} strokeWidth={2} aria-hidden />
+                  {!navCollapsed ? profileItem.label : null}
+                </>
+              )}
+            </NavLink>
+          ) : null}
           <button
             type="button"
             onClick={() => void handleLogout()}
-            className="flex min-h-[44px] w-full items-center rounded-xl px-4 py-3 text-left text-sm font-semibold text-stone-600 transition-colors hover:bg-stone-100"
+            className={[
+              'flex min-h-[44px] w-full items-center rounded-xl py-3 text-left text-sm font-semibold text-stone-600 transition-colors hover:bg-stone-100',
+              navCollapsed ? 'justify-center px-0' : 'px-4',
+            ].join(' ')}
           >
-            Выйти
+            {navCollapsed ? '⎋' : 'Выйти'}
           </button>
         </div>
       </aside>
@@ -212,7 +307,7 @@ export function Layout() {
         aria-label="Основная навигация"
       >
         <div className="mx-auto flex max-w-md items-stretch justify-around px-2 pb-1 pt-1">
-          {items.map((item) => {
+          {mobileItems.map((item) => {
             const Icon = item.Icon;
             return (
               <NavLink

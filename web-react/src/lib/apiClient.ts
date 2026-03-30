@@ -19,6 +19,14 @@ function readResponseErrorMessage(data: unknown): string | null {
   return null;
 }
 
+function formatApiFailureHint(status: number | undefined, url: string, fallback: string): string {
+  const cleanUrl = (url || '').trim();
+  const code = typeof status === 'number' ? String(status) : '';
+  if (!code && !cleanUrl) return fallback;
+  const prefix = code ? `Ошибка ${code}` : 'Ошибка';
+  return cleanUrl ? `${prefix}: ${cleanUrl}` : `${prefix}. ${fallback}`;
+}
+
 function emitApiWarning(message: string): void {
   if (typeof window === 'undefined') return;
   window.dispatchEvent(new CustomEvent('app:api-warning', { detail: { message } }));
@@ -83,7 +91,7 @@ apiClient.interceptors.response.use(
     } else if (!error.response) {
       emitApiWarning('Нет связи с сервером. Проверьте интернет и доступность API.');
     } else if (status != null && status >= 500) {
-      emitApiWarning(bodyMsg ?? 'Сервер временно недоступен. Попробуйте через несколько минут.');
+      emitApiWarning(bodyMsg ?? formatApiFailureHint(status, url, 'Сервер временно недоступен. Попробуйте через несколько минут.'));
     } else if (status === 403) {
       emitApiWarning(
         bodyMsg ?? 'Недостаточно прав для действия. Если роль изменилась, обновите страницу.',

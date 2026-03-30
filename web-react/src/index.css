@@ -104,6 +104,14 @@ body {
       background-image: none;
     }
   }
+
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
 }
 
 /* react-icons (Lucide): SVG-контуры, не подменяются системными эмодзи */

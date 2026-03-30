@@ -5,6 +5,14 @@ import * as api from '../api/messengerApi';
 
 type PermKey = 'can_send_messages' | 'can_send_media' | 'can_add_users' | 'can_pin_messages' | 'can_manage_chat';
 
+function axiosMessage(err: unknown): string {
+  if (err && typeof err === 'object' && 'response' in err) {
+    const data = (err as { response?: { data?: { error?: string } } }).response?.data;
+    if (data?.error && typeof data.error === 'string' && data.error.trim()) return data.error.trim();
+  }
+  return 'Произошла ошибка';
+}
+
 const DEFAULTS: Record<PermKey, boolean> = {
   can_send_messages: true,
   can_send_media: true,
@@ -30,9 +38,9 @@ export function ChatPermissionsPage() {
         if (!alive) return;
         setMeta(m);
       })
-      .catch(() => {
+      .catch((e) => {
         if (!alive) return;
-        setErr('Не удалось загрузить разрешения');
+        setErr(`Не удалось загрузить разрешения: ${axiosMessage(e)}`);
       });
     return () => {
       alive = false;
@@ -60,8 +68,8 @@ export function ChatPermissionsPage() {
       await api.patchConversationPermissions(chatId, {
         default_permissions: (meta.default_permissions ?? {}) as Record<string, boolean>,
       });
-    } catch {
-      setErr('Не удалось сохранить');
+    } catch (e) {
+      setErr(`Не удалось сохранить: ${axiosMessage(e)}`);
     } finally {
       setSaving(false);
     }

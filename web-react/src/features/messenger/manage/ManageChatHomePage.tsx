@@ -4,6 +4,14 @@ import { LuCake, LuChevronRight, LuPhone, LuShield, LuSettings2, LuUsers, LuX } 
 import * as api from '../api/messengerApi';
 import { useChatStore } from '../chatStore';
 
+function axiosMessage(err: unknown): string {
+  if (err && typeof err === 'object' && 'response' in err) {
+    const data = (err as { response?: { data?: { error?: string } } }).response?.data;
+    if (data?.error && typeof data.error === 'string' && data.error.trim()) return data.error.trim();
+  }
+  return 'Произошла ошибка';
+}
+
 export function ManageChatHomePage() {
   const { chatId } = useParams<{ chatId: string }>();
   const navigate = useNavigate();
@@ -28,9 +36,9 @@ export function ManageChatHomePage() {
         if (!alive) return;
         setMeta(m);
       })
-      .catch(() => {
+      .catch((e) => {
         if (!alive) return;
-        setErr('Не удалось загрузить настройки чата');
+        setErr(`Не удалось загрузить настройки чата: ${axiosMessage(e)}`);
       })
       .finally(() => {
         if (!alive) return;
@@ -55,9 +63,9 @@ export function ManageChatHomePage() {
         if (!alive) return;
         setPrivateProfile(p);
       })
-      .catch(() => {
+      .catch((e) => {
         if (!alive) return;
-        setErr('Не удалось загрузить профиль');
+        setErr(`Не удалось загрузить профиль: ${axiosMessage(e)}`);
       });
     return () => {
       alive = false;
