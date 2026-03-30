@@ -613,3 +613,59 @@ function mapMessageWithSender(r: any, currentMemberId: number): MessageWithSende
     reactions,
   };
 }
+
+/**
+ * Search messages in a conversation by content.
+ */
+export async function searchMessages(
+  conversationId: string,
+  query: string,
+  memberId: number,
+  limit: number = 50,
+): Promise<MessageWithSender[]> {
+  const searchTerm = `%${query.trim()}%`;
+
+  const result = await query(
+    `
+    SELECT
+      msg.*,
+      m.name        AS sender_name,
+      m.first_name  AS sender_first_name,
+      m.last_name   AS sender_last_name,
+      -- reply preview
+      rm.id         AS rp_id,
+      rm.content    AS rp_content,
+      rm.is_deleted AS rp_is_deleted,
+      COALESCE(rm_s.first_name, '') || ' ' || COALESCE(rm_s.last_name, '') AS rp_sender_name,
+      -- reactions aggregated
+      (
+        SELECT COALESCE(json_agg(json_build_object(
+          'emoji', r.emoji,
+          'count', r.cnt,
+          'reacted_by_me', r.my_react
+        )), '[]'::json)
+        FROM (
+          SELECT
+            mr.emoji,
+            COUNT(*)::int AS cnt,
+            BOOL_OR(mr.member_id = $3) AS my_react
+          FROM message_reactions mr
+          WHERE mr.message_id = msg.id
+          GROUP BY mr.emoji
+        ) r
+      ) AS reactions_json
+    FROM messages msg
+    LEFT JOIN members m ON m.id = msg.sender_id
+    LEFT JOIN messages rm ON rm.id = msg.reply_to_message_id
+    LEFT JOIN members rm_s ON rm_s.id = rm.sender_id
+    WHERE msg.conversation_id = $1
+      AND msg.is_deleted = FALSE
+      AND msg.content ILIKE $2
+    ORDER BY msg.created_at DESC
+    LIMIT $4
+    `,
+    [conversationId, searchTerm, memberId, limit],
+  );
+
+  return result.rows.map((r: any) => mapMessageWithSender(r, memberId));
+}

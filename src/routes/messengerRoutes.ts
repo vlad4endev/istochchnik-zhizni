@@ -361,4 +361,32 @@ router.get('/members/search', async (req: Request, res: Response) => {
   }
 });
 
+// ─── Search Messages ──────────────────────────────────────────
+
+/** GET /api/messenger/conversations/:id/search?q=... */
+router.get('/conversations/:id/search', async (req: Request, res: Response) => {
+  const userId = (req as AuthReq).authUserId!;
+  const convId = req.params.id;
+  const searchQuery = (req.query.q as string || '').trim();
+  const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 50));
+
+  if (!searchQuery) {
+    res.status(400).json({ error: 'Search query is required' });
+    return;
+  }
+
+  try {
+    const isMember = await svc.isMemberInConversation(convId, userId);
+    if (!isMember) {
+      res.status(403).json({ error: 'Not a member of this conversation' });
+      return;
+    }
+    const messages = await svc.searchMessages(convId, searchQuery, userId, limit);
+    res.json(messages);
+  } catch (e) {
+    console.error('[messenger] searchMessages error:', e);
+    res.status(500).json({ error: 'Failed to search messages' });
+  }
+});
+
 export default router;

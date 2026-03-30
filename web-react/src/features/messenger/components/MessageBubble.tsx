@@ -50,7 +50,7 @@ export function MessageBubble({ message, isGroupedPrev, isGroupedNext }: Message
     }
   };
 
-  const QUICK_REACTIONS = ['❤️', '👍', '😂', '😮', '😢', '🙏'];
+  const QUICK_REACTIONS = ['❤️', '👍', '😂', '😮', '😢', '🙏', '😡', '😍', '🔥', '💯', '✨', '👏'];
 
   if (isDeleted) {
     return (

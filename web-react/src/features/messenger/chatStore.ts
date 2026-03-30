@@ -44,6 +44,17 @@ interface ChatState {
   // --- Edit state ---
   editingMessage: MessageWithSender | null;
 
+  // --- Search state ---
+  searchResults: MessageWithSender[];
+  searchQuery: string;
+  searchLoading: boolean;
+
+  // --- Drafts ---
+  drafts: Record<string, string>;
+  saveDraft: (conversationId: string, content: string) => void;
+  loadDrafts: () => void;
+  clearDraft: (conversationId: string) => void;
+
   // --- Actions ---
   loadConversations: () => Promise<void>;
   setActiveConversation: (id: string | null) => void;
@@ -60,6 +71,10 @@ interface ChatState {
 
   setReplyTo: (msg: MessageWithSender | null) => void;
   setEditing: (msg: MessageWithSender | null) => void;
+
+  // --- Search ---
+  searchMessages: (query: string, conversationId: string) => Promise<void>;
+  clearSearch: () => void;
 
   // --- WS event handlers (called by messengerWs hook) ---
   handleNewMessage: (convId: string, msg: MessageWithSender) => void;
@@ -97,6 +112,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
   totalUnread: 0,
   replyToMessage: null,
   editingMessage: null,
+  searchResults: [],
+  searchQuery: '',
+  searchLoading: false,
+  drafts: {},
 
   // ─── Load conversations ───────────────────────────────────
 
@@ -490,6 +509,75 @@ export const useChatStore = create<ChatState>((set, get) => ({
     try {
       const count = await api.fetchUnreadCount();
       set({ totalUnread: count });
+    } catch {
+      /* ignore */
+    }
+  },
+
+  // ─── Search ───────────────────────────────────────────────
+
+  searchMessages: async (query, conversationId) => {
+    set({ searchLoading: true, searchQuery: query });
+    try {
+      const results = await api.searchMessages(conversationId, query, 50);
+      set({ searchResults: results });
+    } catch (e) {
+      console.error('[chatStore] searchMessages error:', e);
+      set({ searchResults: [] });
+    } finally {
+      set({ searchLoading: false });
+    }
+  },
+
+  clearSearch: () => {
+    set({ searchResults: [], searchQuery: '' });
+  },
+
+  // ─── Drafts ───────────────────────────────────────────────
+
+  saveDraft: (conversationId, content) => {
+    const drafts = { ...get().drafts };
+    if (content.trim()) {
+      drafts[conversationId] = content;
+    } else {
+      delete drafts[conversationId];
+    }
+    set({ drafts });
+    // Persist to localStorage
+    try {
+      const userId = get().currentMemberId;
+      if (userId) {
+        localStorage.setItem(`messenger_drafts_${userId}`, JSON.stringify(drafts));
+      }
+    } catch {
+      /* ignore localStorage errors */
+    }
+  },
+
+  loadDrafts: () => {
+    try {
+      const userId = get().currentMemberId;
+      if (userId) {
+        const stored = localStorage.getItem(`messenger_drafts_${userId}`);
+        if (stored) {
+          const drafts = JSON.parse(stored);
+          set({ drafts });
+        }
+      }
+    } catch {
+      /* ignore localStorage errors */
+    }
+  },
+
+  clearDraft: (conversationId) => {
+    const drafts = { ...get().drafts };
+    delete drafts[conversationId];
+    set({ drafts });
+    try {
+      const userId = get().currentMemberId;
+      if (userId) {
+        localStorage.setItem(`messenger_drafts_${userId}`, JSON.stringify(drafts));
+      }
     } catch {
       /* ignore */
     }

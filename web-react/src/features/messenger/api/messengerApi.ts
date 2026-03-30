@@ -143,6 +143,14 @@ export async function searchMembers(q: string): Promise<SearchMember[]> {
   return data;
 }
 
+export async function searchMessages(conversationId: string, q: string, limit = 50): Promise<MessageWithSender[]> {
+  const { data } = await apiClient.get<MessageWithSender[]>(
+    `${BASE}/conversations/${conversationId}/search`,
+    { params: { q, limit } }
+  );
+  return data;
+}
+
 export async function fetchParticipants(conversationId: string): Promise<Participant[]> {
   const { data } = await apiClient.get<Participant[]>(`${BASE}/conversations/${conversationId}/participants`);
   return data;

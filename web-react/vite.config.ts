@@ -34,6 +34,10 @@ export default defineConfig(({ mode }) => {
       VitePWA({
         registerType: 'autoUpdate',
         injectRegister: 'auto',
+        // Автоматически проверяет обновления каждый раз при загрузке страницы
+        minInterval: 60000,
+        // Периодическая проверка обновлений даже если страница открыта
+        pollInterval: 60000,
         manifest: {
           id: './',
           name: 'МОЯ ЦЕРКОВЬ — молитвенный календарь',
@@ -78,9 +82,26 @@ export default defineConfig(({ mode }) => {
         },
         workbox: {
           globPatterns: ['**/*.{js,css,html,ico,png,svg,webp,woff2,woff,ttf}'],
+          // Активирует новый SW сразу без ожидания закрытия старых вкладок
+          skipWaiting: true,
+          clientsClaim: true,
           navigateFallback: 'index.html',
           navigateFallbackDenylist: [/^\/api\//],
-          importScripts: ['custom-sw.js']
+          importScripts: ['custom-sw.js'],
+          // Версионирование для инвалидации кэша
+          runtimeCaching: [
+            {
+              urlPattern: /^https:\/\/api\//,
+              handler: 'NetworkFirst',
+              options: {
+                cacheName: 'api-cache',
+                expiration: {
+                  maxEntries: 50,
+                  maxAgeSeconds: 3600, // 1 час
+                },
+              },
+            },
+          ],
         },
         devOptions: {
           enabled: false,

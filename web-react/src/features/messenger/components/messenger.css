@@ -288,17 +288,19 @@
 /* Messages List */
 .tg-messages {
   flex: 1;
-  overflow-y: auto;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
-  padding: 12px 16px;
-  scroll-behavior: smooth;
+  padding: 0;
+  background: var(--tg-bg);
+  position: relative;
+  min-height: 0;
 }
 
-.tg-messages-inner {
-  display: flex;
-  flex-direction: column;
-  min-height: min-content;
+.tg-messages-virtual {
+  padding: 12px 16px !important;
+  box-sizing: border-box;
+  overflow-y: auto !important;
 }
 
 /* Bubbles */
@@ -398,6 +400,11 @@
 .tg-input-area-wrap {
   background: transparent;
   padding: 0 16px 16px;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  position: relative;
+  z-index: 10;
 }
 
 .tg-input-area {
@@ -444,15 +451,7 @@
   cursor: pointer;
   box-shadow: 0 2px 4px rgba(125, 54, 64, 0.2);
   flex-shrink: 0;
-}
-
-/* Input Area Wrap */
-.tg-input-area-wrap {
-  display: flex;
-  flex-direction: column;
-  width: 100%;
-  position: relative;
-  z-index: 10;
+  transition: opacity 0.2s;
 }
 
 .tg-input-banner {
@@ -521,6 +520,173 @@
   to { transform: translateY(0); opacity: 1; }
 }
 
+@keyframes tg-fade-up {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes tg-scale-up {
+  from { transform: scale(0.8); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+@keyframes tg-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+/* Chat list container */
+.chatlist-scroll {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Search Panel */
+.tg-search-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.3);
+  display: flex;
+  align-items: flex-start;
+  z-index: 1000;
+  animation: tg-fade-up 0.2s ease-out;
+}
+
+.tg-search-panel {
+  width: 100%;
+  max-width: 600px;
+  max-height: 80vh;
+  background: var(--tg-surface);
+  border-radius: 12px 12px 0 0;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.1);
+  overflow: hidden;
+}
+
+.tg-search-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--tg-border);
+  flex-shrink: 0;
+}
+
+.tg-search-input-wrapper {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--tg-bg);
+  border-radius: 20px;
+  padding: 6px 12px;
+}
+
+.tg-search-icon {
+  color: var(--tg-text-muted);
+  flex-shrink: 0;
+}
+
+.tg-search-input {
+  flex: 1;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-size: 1rem;
+  color: var(--tg-text);
+  font-family: inherit;
+}
+
+.tg-search-input::placeholder {
+  color: var(--tg-text-muted);
+}
+
+.tg-search-clear {
+  background: none;
+  border: none;
+  color: var(--tg-text-muted);
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  transition: color 0.2s;
+}
+
+.tg-search-clear:hover {
+  color: var(--tg-primary);
+}
+
+.tg-search-results {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.tg-search-loading,
+.tg-search-empty {
+  text-align: center;
+  color: var(--tg-text-muted);
+  padding: 20px;
+  font-size: 0.9rem;
+}
+
+.tg-search-result-item {
+  margin: 4px 0;
+}
+
+/* Message Reactions & Actions */
+.msg-quick-reactions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px;
+  background: var(--tg-bg);
+  border-radius: 12px;
+  margin-top: 6px;
+}
+
+.msg-quick-reaction {
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  cursor: pointer;
+  padding: 6px;
+  border-radius: 8px;
+  transition: all 0.2s;
+}
+
+.msg-quick-reaction:hover {
+  background: rgba(0, 0, 0, 0.08);
+  transform: scale(1.15);
+}
+
+.tg-reaction-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--tg-bg);
+  border-radius: 12px;
+  padding: 4px 8px;
+  font-size: 0.75rem;
+  margin: 2px;
+  transition: all 0.2s ease;
+}
+
+.tg-reaction-badge:hover {
+  background: var(--tg-primary);
+  color: white;
+  transform: scale(1.05);
+}
+
 /* Animations */
 @keyframes tg-fade-up {
   from { opacity: 0; transform: translateY(10px); }
@@ -528,12 +694,243 @@
 }
 
 .tg-bubble-wrap {
-  animation: tg-fade-up 0.15s ease-out;
+  animation: tg-scale-up 0.2s ease-out;
 }
 
 /* Mobile Adjustments */
 @media (max-width: 768px) {
-  .tg-sidebar { width: 100%; }
-  .tg-chat-window { width: 100%; }
-  .tg-bubble-wrap { max-width: 90%; }
+  /* Desktop layout becomes mobile layout: list and chat stack vertically */
+  .tg-messenger {
+    position: relative;
+  }
+
+  .tg-main {
+    position: relative;
+  }
+
+  /* Sidebar (chat list) - slide in from left */
+  .tg-sidebar {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 100;
+    transform: translateX(-100%);
+    transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+    will-change: transform;
+    background: var(--tg-surface);
+  }
+
+  /* Show sidebar when viewing list */
+  .tg-sidebar--visible {
+    transform: translateX(0);
+  }
+
+  /* Hide sidebar when viewing chat */
+  .tg-sidebar--hidden {
+    transform: translateX(-100%);
+    pointer-events: none;
+  }
+
+  /* Chat window - slide in from right */
+  .tg-chat-window {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 50;
+    transform: translateX(100%);
+    transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+    will-change: transform;
+    background: var(--tg-surface);
+    pointer-events: none;
+  }
+
+  /* Show chat when viewing chat */
+  .tg-main--visible .tg-chat-window {
+    transform: translateX(0);
+    pointer-events: auto;
+  }
+
+  /* Overlay backdrop - appears when viewing chat on mobile */
+  .tg-main::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.2);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s ease;
+    z-index: 99;
+  }
+
+  .tg-main--visible::before {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  /* Disable scroll during transitions */
+  .tg-messenger.transitioning {
+    overflow: hidden;
+  }
+
+  .tg-bubble-wrap {
+    max-width: 90%;
+  }
+}
+
+@media (max-width: 640px) {
+  .tg-header {
+    height: 52px;
+    padding: 0 12px;
+    gap: 10px;
+  }
+
+  .tg-header-back {
+    margin-left: -8px;
+  }
+
+  .tg-icon-btn {
+    min-width: 48px;
+    min-height: 48px;
+    padding: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .tg-send-btn {
+    width: 48px;
+    height: 48px;
+    min-width: 48px;
+    min-height: 48px;
+    flex-shrink: 0;
+  }
+
+  .chatlist-item {
+    min-height: 56px;
+    padding: 10px 12px;
+  }
+
+  .chatlist-avatar {
+    width: 48px;
+    height: 48px;
+    font-size: 1rem;
+    flex-shrink: 0;
+  }
+
+  .tg-bubble-wrap {
+    max-width: 92%;
+    margin-bottom: 6px;
+  }
+
+  .tg-bubble {
+    padding: 8px 12px;
+    font-size: 0.95rem;
+    line-height: 1.4;
+  }
+
+  .tg-input-area-wrap {
+    padding: 0 10px 10px;
+  }
+
+  .tg-input-container {
+    border-radius: 18px;
+    padding: 4px 8px;
+  }
+
+  .tg-input-textarea {
+    padding: 8px 6px;
+    font-size: 1rem;
+    max-height: 150px;
+  }
+
+  .tg-input-area {
+    gap: 8px;
+  }
+
+  .tg-messages {
+    padding: 8px 12px;
+  }
+}
+
+@media (max-width: 480px) {
+  .tg-header {
+    height: 48px;
+    gap: 0;
+    padding: 0 10px;
+  }
+
+  .tg-header-name {
+    font-size: 0.9rem;
+    font-weight: 600;
+  }
+
+  .tg-header-status {
+    font-size: 0.7rem;
+  }
+
+  .tg-icon-btn {
+    padding: 6px;
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  .tg-send-btn {
+    width: 44px;
+    height: 44px;
+  }
+
+  .tg-bubble {
+    padding: 6px 10px;
+    font-size: 0.9rem;
+  }
+
+  .tg-input-textarea::placeholder {
+    font-size: 0.95rem;
+  }
+
+  .tg-input-textarea {
+    font-size: 1rem;
+  }
+}
+
+/* Accessibility & Mobile UX Polish */
+@media (max-width: 768px) {
+  /* Remove iOS tap highlight */
+  -webkit-tap-highlight-color: transparent;
+
+  .chatlist-item,
+  .tg-icon-btn,
+  .tg-send-btn,
+  .msg-quick-reaction {
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+  }
+
+  /* Prevent double-tap zoom on interactive elements */
+  .chatlist-item,
+  .tg-icon-btn,
+  .tg-send-btn {
+    touch-action: manipulation;
+  }
+
+  /* iOS input styling fixes */
+  .tg-input-textarea {
+    -webkit-appearance: none;
+    font-size: 16px;
+  }
+
+  /* Safe area insets for notched phones */
+  .tg-header {
+    padding-top: max(0px, env(safe-area-inset-top));
+    padding-right: max(12px, env(safe-area-inset-right));
+    padding-left: max(12px, env(safe-area-inset-left));
+  }
+
+  .tg-input-area-wrap {
+    padding-bottom: max(10px, env(safe-area-inset-bottom));
+  }
 }

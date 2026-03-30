@@ -21,10 +21,20 @@ export function ChatInput({
   const editing = useChatStore((s) => s.editingMessage);
   const setReplyTo = useChatStore((s) => s.setReplyTo);
   const setEditing = useChatStore((s) => s.setEditing);
+  const saveDraft = useChatStore((s) => s.saveDraft);
+  const drafts = useChatStore((s) => s.drafts);
+  const clearDraft = useChatStore((s) => s.clearDraft);
 
   const [content, setContent] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const typingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const draftSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Load draft on conversation change
+  useEffect(() => {
+    const draft = drafts[conversationId] || '';
+    setContent(draft);
+  }, [conversationId, drafts]);
 
   // Sync content with editing state
   useEffect(() => {
@@ -38,7 +48,8 @@ export function ChatInput({
     if (!content.trim()) return;
     const text = content.trim();
     setContent('');
-    
+    clearDraft(conversationId);
+
     if (editing) {
       const msgId = editing.id;
       setEditing(null);
@@ -48,7 +59,7 @@ export function ChatInput({
       setReplyTo(null);
       await sendMessage(conversationId, text, replyId);
     }
-    
+
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
     }
@@ -56,18 +67,25 @@ export function ChatInput({
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setContent(e.target.value);
-    
+    const value = e.target.value;
+    setContent(value);
+
     // Auto-resize
     e.target.style.height = 'auto';
     e.target.style.height = `${e.target.scrollHeight}px`;
-    
+
     // Typing indicator
     sendTypingStart(conversationId);
     if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
     typingTimerRef.current = setTimeout(() => {
       sendTypingStop(conversationId);
     }, 3000);
+
+    // Auto-save draft with debounce
+    if (draftSaveTimerRef.current) clearTimeout(draftSaveTimerRef.current);
+    draftSaveTimerRef.current = setTimeout(() => {
+      saveDraft(conversationId, value);
+    }, 500);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -130,8 +148,8 @@ export function ChatInput({
           <button type="button" className="tg-input-icon-btn"><LuSmile size={22} /></button>
         </div>
 
-        <button 
-          type="button" 
+        <button
+          type="button"
           className="tg-send-btn"
           onClick={() => void handleSend()}
           disabled={!content.trim()}
@@ -140,12 +158,6 @@ export function ChatInput({
           <LuSend size={24} style={{ marginLeft: content.trim() ? '2px' : '0' }} />
         </button>
       </div>
-
-      <style>{`
-        /* Minimal layout fixes that are better kept in-component for reactivity if needed, 
-           otherwise keep it empty as styles moved to CSS. 
-           Actually, I will remove it entirely as requested. */
-      `}</style>
     </div>
   );
 }

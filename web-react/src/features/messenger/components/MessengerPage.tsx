@@ -1,6 +1,7 @@
-import { useEffect, useCallback, useState } from 'react';
+import { useEffect, useCallback, useState, useRef } from 'react';
 import { useChatStore } from '../chatStore';
 import { useMessengerWs } from '../useMessengerWs';
+import { useSwipeGesture } from '../hooks/useSwipeGesture';
 import { ChatList } from './ChatList';
 import { ChatWindow } from './ChatWindow';
 import { NewChatDialog } from './NewChatDialog';
@@ -13,24 +14,41 @@ export function MessengerPage() {
   const loadConversations = useChatStore((s) => s.loadConversations);
   const [showNewChat, setShowNewChat] = useState(false);
   const [mobileView, setMobileView] = useState<'list' | 'chat'>('list');
+  const [isTransitioning, setIsTransitioning] = useState(false);
+  const messengerRef = useRef<HTMLDivElement>(null);
 
   const ws = useMessengerWs();
+
+  // Swipe right to go back from chat to list
+  useSwipeGesture(messengerRef, {
+    onSwipeRight: () => {
+      if (mobileView === 'chat' && !isTransitioning) {
+        handleBack();
+      }
+    },
+    minDistance: 50,
+    minVelocity: 100,
+  });
 
   useEffect(() => {
     void loadConversations();
   }, [loadConversations]);
 
   const handleSelectConversation = useCallback((id: string) => {
+    setIsTransitioning(true);
     setActive(id);
     setMobileView('chat');
+    setTimeout(() => setIsTransitioning(false), 350);
   }, [setActive]);
 
   const handleBack = useCallback(() => {
+    setIsTransitioning(true);
     setMobileView('list');
+    setTimeout(() => setIsTransitioning(false), 350);
   }, []);
 
   return (
-    <div className="tg-messenger">
+    <div className={`tg-messenger ${isTransitioning ? 'transitioning' : ''}`} ref={messengerRef}>
       {/* Sidebar */}
       <aside className={`tg-sidebar ${mobileView === 'chat' ? 'tg-sidebar--hidden' : ''}`}>
         <div className="tg-sidebar-header">

@@ -9,6 +9,7 @@ import { useRealtimeQuerySync } from '../hooks/useRealtimeQuerySync';
 import { useSyncServerRole } from '../hooks/useSyncServerRole';
 import { IOSInstallBanner } from '../components/IOSInstallBanner';
 import { AndroidInstallBanner } from '../components/AndroidInstallBanner';
+import { UpdateNotification } from '../features/pwa';
 
 type NavItem = {
   to: string;
@@ -235,6 +236,7 @@ export function Layout() {
       </div>
       <IOSInstallBanner />
       <AndroidInstallBanner />
+      <UpdateNotification autoReload={true} />
     </div>
   );
 }

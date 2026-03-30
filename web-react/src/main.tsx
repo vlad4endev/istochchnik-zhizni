@@ -19,6 +19,32 @@ const queryClient = new QueryClient({
   },
 });
 
+// Инициализация автоматического обновления Service Worker
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    console.log('[PWA] Service Worker обновлён, перезагружаем приложение');
+    // Перезагружаем страницу при обновлении Service Worker
+    window.location.reload();
+  });
+
+  // Проверяем обновления каждые 60 секунд
+  setInterval(async () => {
+    try {
+      const registration = await navigator.serviceWorker.getRegistration();
+      if (registration) {
+        await registration.update();
+      }
+    } catch (error) {
+      console.error('[PWA] Ошибка при проверке обновлений:', error);
+    }
+  }, 60000);
+
+  // Первоначальная проверка сразу
+  navigator.serviceWorker.ready.then(async (registration) => {
+    await registration.update();
+  });
+}
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
