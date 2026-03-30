@@ -1,13 +1,15 @@
-import { useEffect, useRef, useCallback, useMemo } from 'react';
-import { useChatStore } from '../chatStore';
+import { useEffect, useRef, useMemo } from 'react';
+import { useChatStore, EMPTY_ARRAY } from '../chatStore';
 import { MessageBubble } from './MessageBubble';
 import { ChatInput } from './ChatInput';
+import { LuArrowLeft, LuInfo } from 'react-icons/lu';
+import './messenger.css';
 
 interface ChatWindowProps {
   conversationId: string;
   onBack: () => void;
-  sendTypingStart: (convId: string) => void;
-  sendTypingStop: (convId: string) => void;
+  sendTypingStart: (id: string) => void;
+  sendTypingStop: (id: string) => void;
 }
 
 export function ChatWindow({
@@ -16,60 +18,44 @@ export function ChatWindow({
   sendTypingStart,
   sendTypingStop,
 }: ChatWindowProps) {
-  const messages = useChatStore((s) => s.messagesByConv[conversationId] || []);
+  const messages = useChatStore((s) => s.messagesByConv[conversationId] || EMPTY_ARRAY);
   const loading = useChatStore((s) => s.messagesLoading[conversationId] || false);
   const hasMore = useChatStore((s) => s.hasMore[conversationId] ?? true);
   const loadMessages = useChatStore((s) => s.loadMessages);
-  const conversations = useChatStore((s) => s.conversations);
-  const typingUsers = useChatStore((s) => s.typingByConv[conversationId] || []);
-  const onlineMembers = useChatStore((s) => s.onlineMembers);
   const markRead = useChatStore((s) => s.markRead);
+  const conversations = useChatStore((s) => s.conversations);
+  const typingUsers = useChatStore((s) => s.typingByConv[conversationId] || EMPTY_ARRAY);
+  const onlineMembers = useChatStore((s) => s.onlineMembers);
 
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-  const scrollContainerRef = useRef<HTMLDivElement>(null);
-  const prevLenRef = useRef(0);
+  const scrollRef = useRef<HTMLDivElement>(null);
 
-  const conv = conversations.find((c) => c.id === conversationId);
+  const conv = useMemo(() => conversations.find((c) => c.id === conversationId), [conversations, conversationId]);
 
   // Load messages on mount
   useEffect(() => {
     void loadMessages(conversationId);
   }, [conversationId, loadMessages]);
 
-  // Auto-scroll to bottom when new messages arrive
-  useEffect(() => {
-    if (messages.length > prevLenRef.current) {
-      const el = scrollContainerRef.current;
-      if (el) {
-        const isNearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 200;
-        if (isNearBottom || prevLenRef.current === 0) {
-          requestAnimationFrame(() => {
-            messagesEndRef.current?.scrollIntoView({ behavior: prevLenRef.current === 0 ? 'auto' : 'smooth' });
-          });
-        }
-      }
-    }
-    prevLenRef.current = messages.length;
-  }, [messages.length]);
-
-  // Mark as read when viewing
   useEffect(() => {
     if (messages.length > 0) {
       void markRead(conversationId);
     }
   }, [conversationId, messages.length, markRead]);
 
-  // Load older messages on scroll
-  const handleScroll = useCallback(() => {
-    const el = scrollContainerRef.current;
-    if (!el || loading || !hasMore) return;
-    if (el.scrollTop < 80) {
+  useEffect(() => {
+    if (scrollRef.current && messages.length > 0) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [messages.length]);
+
+  const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    if (e.currentTarget.scrollTop === 0 && hasMore && !loading) {
       void loadMessages(conversationId, true);
     }
-  }, [conversationId, loading, hasMore, loadMessages]);
+  };
 
-  const headerName = useMemo(() => {
-    if (!conv) return '...';
+  const displayName = useMemo(() => {
+    if (!conv) return 'Чат';
     if (conv.type === 'personal' && conv.other_member) {
       const fn = conv.other_member.first_name || '';
       const ln = conv.other_member.last_name || '';
@@ -81,84 +67,64 @@ export function ChatWindow({
   const isOnline = conv?.type === 'personal' && conv.other_member && onlineMembers.has(conv.other_member.id);
 
   const headerSubtitle = useMemo(() => {
-    if (!conv) return '';
     if (typingUsers.length > 0) {
-      const names = typingUsers.map((u) => u.memberName.split(' ')[0]);
-      return `${names.join(', ')} печатает…`;
+      return `${typingUsers.map((u: any) => u.memberName.split(' ')[0]).join(', ')} печатает...`;
     }
+    if (!conv) return '';
     if (conv.type === 'personal' && conv.other_member) {
-      return isOnline ? 'в сети' : 'не в сети';
+      return isOnline ? 'в сети' : 'был(а) недавно';
     }
     return conv.type === 'channel' ? 'канал' : 'группа';
   }, [conv, typingUsers, isOnline]);
 
+  const groupedMessages = useMemo(() => {
+    return messages.map((msg: any, idx: number) => {
+      const prev = messages[idx - 1];
+      const next = messages[idx + 1];
+      const isGroupedPrev = prev && prev.sender_id === msg.sender_id && 
+        (new Date(msg.created_at).getTime() - new Date(prev.created_at).getTime()) < 300000;
+      const isGroupedNext = next && next.sender_id === msg.sender_id && 
+        (new Date(next.created_at).getTime() - new Date(msg.created_at).getTime()) < 300000;
+      const msgDate = new Date(msg.created_at).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' });
+      const prevDate = prev ? new Date(prev.created_at).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' }) : null;
+      return { ...msg, isGroupedPrev: !!isGroupedPrev, isGroupedNext: !!isGroupedNext, showDate: msgDate !== prevDate, dateLabel: msgDate };
+    });
+  }, [messages]);
+
   return (
-    <div className="tg-main">
-      {/* Header */}
-      <header className="tg-chat-header">
-        <button type="button" className="tg-back-btn" onClick={onBack}>
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-            <polyline points="15 18 9 12 15 6" />
-          </svg>
+    <div className="tg-chat-window">
+      <header className="tg-header">
+        <button className="tg-icon-btn tg-header-back" onClick={onBack} aria-label="Назад">
+          <LuArrowLeft size={24} />
         </button>
         <div className="tg-header-info">
-          <div className="tg-header-name">{headerName}</div>
-          <div className={`tg-header-status ${isOnline || typingUsers.length > 0 ? 'tg-header-status--online' : ''}`}>
+          <div className="tg-header-name">{displayName}</div>
+          <div className={`tg-header-status ${typingUsers.length > 0 ? 'tg-header-status--typing' : ''}`}>
             {headerSubtitle}
           </div>
         </div>
+        <div className="tg-header-actions">
+          <button className="tg-icon-btn"><LuInfo size={22} /></button>
+          <button className="tg-icon-btn">
+             {/* Fallback to simple icon if Lucide fails */}
+             <div style={{ width: 22, height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}>⋮</div>
+          </button>
+        </div>
       </header>
 
-      {/* Message List */}
-      <div 
-        className="tg-message-list" 
-        ref={scrollContainerRef}
-        onScroll={handleScroll}
-      >
-        {loading && <div className="chatlist-loading"><div className="chatlist-spinner" /></div>}
-        
-        {messages.map((msg, idx) => {
-          const prev = messages[idx - 1];
-          const next = messages[idx + 1];
-          
-          const isGroupedPrev = prev && prev.sender_id === msg.sender_id && 
-            (new Date(msg.created_at).getTime() - new Date(prev.created_at).getTime()) < 300000;
-            
-          const isGroupedNext = next && next.sender_id === msg.sender_id && 
-            (new Date(next.created_at).getTime() - new Date(msg.created_at).getTime()) < 300000;
-
-          // Date divider
-          const msgDate = new Date(msg.created_at).toLocaleDateString('ru-RU', {
-            day: 'numeric', month: 'long',
-          });
-          const prevDate = prev ? new Date(prev.created_at).toLocaleDateString('ru-RU', {
-            day: 'numeric', month: 'long',
-          }) : null;
-          
-          return (
-            <div key={msg.id} style={{ display: 'contents' }}>
-              {msgDate !== prevDate && (
-                <div className="tg-date-divider">{msgDate}</div>
-              )}
-              <MessageBubble 
-                message={msg} 
-                isGroupedPrev={!!isGroupedPrev}
-                isGroupedNext={!!isGroupedNext}
-              />
+      <div className="tg-messages" ref={scrollRef} onScroll={handleScroll}>
+        <div className="tg-messages-inner">
+          {hasMore && (<div className="tg-loading-older">{loading ? 'Загрузка...' : 'Потяните для загрузки'}</div>)}
+          {groupedMessages.map((msg: any) => (
+            <div key={msg.id}>
+              {msg.showDate && <div className="tg-date-divider"><span>{msg.dateLabel}</span></div>}
+              <MessageBubble message={msg} isGroupedPrev={msg.isGroupedPrev} isGroupedNext={msg.isGroupedNext} />
             </div>
-          );
-        })}
-        
-        <div ref={messagesEndRef} />
+          ))}
+          {messages.length === 0 && !loading && <div className="tg-empty-chat"><span>Нет сообщений</span></div>}
+        </div>
       </div>
-
-      {/* Input area */}
-      <ChatInput
-        conversationId={conversationId}
-        sendTypingStart={sendTypingStart}
-        sendTypingStop={sendTypingStop}
-        canSend={conv?.type !== 'channel' || true /* TODO: logic */}
-      />
+      <ChatInput conversationId={conversationId} sendTypingStart={sendTypingStart} sendTypingStop={sendTypingStop} canSend={true} />
     </div>
   );
 }

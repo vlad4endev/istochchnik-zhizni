@@ -1,4 +1,4 @@
-import { useChatStore } from '../chatStore';
+import { useChatStore, EMPTY_ARRAY } from '../chatStore';
 import type { ConversationListItem } from '../api/messengerApi';
 
 interface ChatListProps {
@@ -7,11 +7,11 @@ interface ChatListProps {
 }
 
 export function ChatList({ onSelect, activeId }: ChatListProps) {
-  const conversations = useChatStore((s) => s.conversations);
+  const conversations = useChatStore((s) => s.conversations || EMPTY_ARRAY);
   const conversationsLoading = useChatStore((s) => s.conversationsLoading);
   const conversationsLoaded = useChatStore((s) => s.conversationsLoaded);
   const onlineMembers = useChatStore((s) => s.onlineMembers);
-  const typingByConv = useChatStore((s) => s.typingByConv);
+  const typingByConv = useChatStore((s) => s.typingByConv || EMPTY_ARRAY);
 
   if (conversationsLoading && !conversationsLoaded) {
     return (
@@ -37,7 +37,7 @@ export function ChatList({ onSelect, activeId }: ChatListProps) {
           conv={conv}
           isActive={conv.id === activeId}
           isOnline={conv.type === 'personal' && conv.other_member ? onlineMembers.has(conv.other_member.id) : false}
-          typingUsers={typingByConv[conv.id] || []}
+          typingUsers={typingByConv[conv.id] || EMPTY_ARRAY}
           onClick={() => onSelect(conv.id)}
         />
       ))}

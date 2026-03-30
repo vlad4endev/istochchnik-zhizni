@@ -8,12 +8,49 @@ interface MessageBubbleProps {
   isGroupedNext: boolean;
 }
 
+const BUBBLE_STYLES = `
+  .tg-bubble-tail {
+    position: absolute;
+    bottom: 0;
+    width: 9px;
+    height: 12px;
+    z-index: 1;
+  }
+  .tg-bubble-tail--out {
+    right: -7px;
+    color: var(--tg-bubble-out);
+    transform: scaleX(-1);
+  }
+  .tg-bubble-tail--in {
+    left: -7px;
+    color: var(--tg-bubble-in);
+  }
+  
+  .tg-bubble--grouped-prev {
+    margin-top: 2px !important;
+  }
+  
+  .msg-reply-preview {
+    border-left: 2px solid var(--tg-primary);
+    padding-left: 8px;
+    margin-bottom: 4px;
+    background: rgba(0,0,0,0.03);
+    border-radius: 2px 4px 4px 2px;
+  }
+  
+  .tg-bubble--out .msg-reply-preview {
+    border-left-color: white;
+    background: rgba(255,255,255,0.1);
+  }
+`;
+
 export function MessageBubble({ message, isGroupedPrev, isGroupedNext }: MessageBubbleProps) {
+  const currentMemberId = useChatStore((s) => s.currentMemberId);
+  const addReaction = useChatStore((s) => s.addReaction);
   const setReplyTo = useChatStore((s) => s.setReplyTo);
   const setEditing = useChatStore((s) => s.setEditing);
   const deleteMessage = useChatStore((s) => s.deleteMessage);
-  const addReaction = useChatStore((s) => s.addReaction);
-  const currentMemberId = useChatStore((s) => s.currentMemberId);
+
   const [showActions, setShowActions] = useState(false);
   const [showReactions, setShowReactions] = useState(false);
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -65,8 +102,8 @@ export function MessageBubble({ message, isGroupedPrev, isGroupedNext }: Message
     'tg-bubble',
     isMine ? 'tg-bubble--out' : 'tg-bubble--in',
     isOptimistic ? 'msg-bubble--sending' : '',
-    isGroupedPrev ? (isMine ? 'tg-bubble--out.tg-bubble--grouped-prev' : 'tg-bubble--in.tg-bubble--grouped-prev') : '',
-    isGroupedNext ? (isMine ? 'tg-bubble--out.tg-bubble--grouped-next' : 'tg-bubble--in.tg-bubble--grouped-next') : '',
+    isGroupedPrev ? (isMine ? 'tg-bubble--out tg-bubble--grouped-prev' : 'tg-bubble--in tg-bubble--grouped-prev') : '',
+    isGroupedNext ? (isMine ? 'tg-bubble--out tg-bubble--grouped-next' : 'tg-bubble--in tg-bubble--grouped-next') : '',
   ].filter(Boolean).join(' ');
 
   return (
@@ -189,42 +226,7 @@ export function MessageBubble({ message, isGroupedPrev, isGroupedNext }: Message
         </>
       )}
 
-      <style>{bubbleExtraStyles}</style>
+      <style>{BUBBLE_STYLES}</style>
     </div>
   );
 }
-
-const bubbleExtraStyles = `
-  .tg-bubble-tail {
-    position: absolute;
-    bottom: 0;
-    width: 9px;
-    height: 12px;
-    z-index: -1;
-  }
-  .tg-bubble-tail--out {
-    right: -7px;
-    color: var(--tg-bubble-out);
-  }
-  .tg-bubble-tail--in {
-    left: -7px;
-    color: var(--tg-bubble-in);
-  }
-  
-  .tg-bubble--grouped-prev {
-    margin-top: 2px !important;
-  }
-  
-  .msg-reply-preview {
-    border-left: 2px solid var(--tg-primary);
-    padding-left: 8px;
-    margin-bottom: 4px;
-    background: rgba(0,0,0,0.03);
-    border-radius: 2px 4px 4px 2px;
-  }
-  
-  .tg-bubble--out .msg-reply-preview {
-    border-left-color: white;
-    background: rgba(255,255,255,0.1);
-  }
-`;

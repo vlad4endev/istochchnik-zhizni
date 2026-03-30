@@ -78,6 +78,9 @@ interface ChatState {
   refreshUnread: () => Promise<void>;
 }
 
+export const EMPTY_ARRAY: any[] = [];
+export const EMPTY_OBJECT: any = {};
+
 // ─── Store ────────────────────────────────────────────────────
 
 export const useChatStore = create<ChatState>((set, get) => ({
