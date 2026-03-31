@@ -26,6 +26,8 @@ export interface AuthUser {
   name: string;
   avatar_url: string | null;
   phone_number: string | null;
+  ministry_role: string | null;
+  ministry_direction: string | null;
   birth_date: string | null;
   email: string | null;
   prayer_request: string | null;
@@ -80,6 +82,8 @@ type MemberRow = {
   name: string;
   avatar_url?: string | null;
   phone_number: string | null;
+  ministry_role?: string | null;
+  ministry_direction?: string | null;
   birth_date: string | null;
   email: string | null;
   prayer_request: string | null;
@@ -216,6 +220,8 @@ function mapAuthUser(row: MemberRow): AuthUser {
     name: row.name,
     avatar_url: (row.avatar_url ?? null) as string | null,
     phone_number: row.phone_number,
+    ministry_role: (row.ministry_role ?? null) as string | null,
+    ministry_direction: (row.ministry_direction ?? null) as string | null,
     birth_date: row.birth_date ?? null,
     email: row.email ?? null,
     prayer_request: row.prayer_request ?? null,
@@ -717,6 +723,8 @@ export async function getAuthUserById(userId: number): Promise<AuthUser | null> 
       m.name,
       m.avatar_url,
       m.phone_number,
+      m.ministry_role,
+      m.ministry_direction,
       m.birth_date,
       m.email,
       COALESCE(mpc.prayer_request, m.prayer_request) AS prayer_request,
@@ -761,6 +769,8 @@ export async function updateAuthUserProfile(
     first_name?: string;
     last_name?: string;
     phone_number?: string;
+    ministry_role?: string;
+    ministry_direction?: string;
     birth_date?: string;
     email?: string;
     prayer_request?: string;

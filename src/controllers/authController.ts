@@ -81,6 +81,16 @@ function isValidOptionalEmail(value: unknown): boolean {
   return t.length <= 255 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(t);
 }
 
+function isValidOptionalShortString(value: unknown, maxLength = 120): boolean {
+  if (value === undefined || value === null) {
+    return true;
+  }
+  if (typeof value !== 'string') {
+    return false;
+  }
+  return value.trim().length <= maxLength;
+}
+
 function normalizePhoneDigits(phone: string): string {
   return phone.replace(/\D+/g, '');
 }
@@ -245,6 +255,16 @@ export async function patchProfileHandler(req: Request, res: Response): Promise<
     return;
   }
 
+  if (!isValidOptionalShortString(body.ministry_role)) {
+    res.status(400).json({ error: 'Field "ministry_role" must be a short string' });
+    return;
+  }
+
+  if (!isValidOptionalShortString(body.ministry_direction)) {
+    res.status(400).json({ error: 'Field "ministry_direction" must be a short string' });
+    return;
+  }
+
   if (body.birth_date !== undefined && body.birth_date !== null) {
     if (typeof body.birth_date === 'string' && body.birth_date.trim() === '') {
       /* clear */
@@ -277,6 +297,8 @@ export async function patchProfileHandler(req: Request, res: Response): Promise<
     first_name?: string;
     last_name?: string;
     phone_number?: string;
+    ministry_role?: string;
+    ministry_direction?: string;
     birth_date?: string;
     email?: string;
     prayer_request?: string;
@@ -288,6 +310,12 @@ export async function patchProfileHandler(req: Request, res: Response): Promise<
   }
   if (typeof body.phone_number === 'string') {
     patch.phone_number = body.phone_number.trim();
+  }
+  if (typeof body.ministry_role === 'string') {
+    patch.ministry_role = body.ministry_role.trim();
+  }
+  if (typeof body.ministry_direction === 'string') {
+    patch.ministry_direction = body.ministry_direction.trim();
   }
   if (body.birth_date !== undefined) {
     if (body.birth_date === null || (typeof body.birth_date === 'string' && !body.birth_date.trim())) {

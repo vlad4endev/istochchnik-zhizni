@@ -54,6 +54,14 @@ CREATE TABLE IF NOT EXISTS ministry_direction_templates (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- ministry templates: roles <-> directions mapping
+CREATE TABLE IF NOT EXISTS ministry_direction_role_templates (
+  direction_template_id INTEGER NOT NULL REFERENCES ministry_direction_templates(id) ON DELETE CASCADE,
+  role_template_id INTEGER NOT NULL REFERENCES ministry_role_templates(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (direction_template_id, role_template_id)
+);
+
 CREATE TABLE IF NOT EXISTS global_settings (
   id INTEGER PRIMARY KEY CHECK (id = 1),
   start_date DATE NOT NULL,
@@ -691,6 +699,13 @@ VALUES
   ('Молодежный лидер'),
   ('Медиа менеджер')
 ON CONFLICT (title) DO NOTHING;
+
+-- Ensure every role is attached to every direction (if directions exist).
+INSERT INTO ministry_direction_role_templates (direction_template_id, role_template_id)
+SELECT d.id, r.id
+FROM ministry_direction_templates d
+CROSS JOIN ministry_role_templates r
+ON CONFLICT (direction_template_id, role_template_id) DO NOTHING;
 `;
 
 export async function initDb(): Promise<void> {

@@ -38,6 +38,7 @@ import {
   fetchGlobalThemes,
   fetchRoleTemplates,
   mergeDuplicateMembers,
+  setDirectionTemplateRoles,
   setMemberAppRole,
   setOneTimeMemberDate,
   startPrayerCycle,
@@ -45,6 +46,7 @@ import {
   updateBacksliderApi,
   updateGlobalThemeApi,
   updateMinistryApi,
+  type MinistryDirectionTemplate,
 } from '../api';
 import type { AppUser } from '../types';
 import { fetchPrayerRequestHistory, type PrayerHistoryItem } from '../../profile/api';
@@ -264,6 +266,8 @@ function MembersSection() {
     queryKey: Q_MEMBERS,
     queryFn: fetchAdminMembers,
   });
+  const dirsQ = useQuery({ queryKey: Q_DIRS, queryFn: fetchDirectionTemplates, staleTime: 30_000 });
+
   const [search, setSearch] = useState('');
   const [form, setForm] = useState({
     first_name: '',
@@ -304,6 +308,10 @@ function MembersSection() {
       return blob.includes(q);
     });
   }, [data, search]);
+
+  const dirs = (dirsQ.data ?? []) as MinistryDirectionTemplate[];
+  const rolesForDirection = (directionTitle: string) =>
+    (dirs.find((d) => d.title === directionTitle)?.roles ?? []).map((r) => r.title);
 
   const stats = useMemo(() => {
     const list = data ?? [];
@@ -782,22 +790,42 @@ function MembersSection() {
               />
             </div>
             <div>
-              <label className="mb-1 block text-xs font-semibold text-stone-600">Роль служения</label>
-              <input
+              <label className="mb-1 block text-xs font-semibold text-stone-600">Направление</label>
+              <select
                 className={fieldClass()}
-                placeholder="Необязательно"
-                value={form.ministry_role}
-                onChange={(e) => setForm((s) => ({ ...s, ministry_role: e.target.value }))}
-              />
+                value={form.ministry_direction}
+                onChange={(e) => {
+                  const nextDir = e.target.value;
+                  setForm((s) => {
+                    const allowed = new Set(rolesForDirection(nextDir));
+                    const nextRole = allowed.size === 0 || allowed.has(s.ministry_role) ? s.ministry_role : '';
+                    return { ...s, ministry_direction: nextDir, ministry_role: nextRole };
+                  });
+                }}
+              >
+                <option value="">—</option>
+                {dirs.map((d) => (
+                  <option key={d.id} value={d.title}>
+                    {d.title}
+                  </option>
+                ))}
+              </select>
             </div>
             <div>
-              <label className="mb-1 block text-xs font-semibold text-stone-600">Направление</label>
-              <input
+              <label className="mb-1 block text-xs font-semibold text-stone-600">Роль служения</label>
+              <select
                 className={fieldClass()}
-                placeholder="Необязательно"
-                value={form.ministry_direction}
-                onChange={(e) => setForm((s) => ({ ...s, ministry_direction: e.target.value }))}
-              />
+                value={form.ministry_role}
+                disabled={!form.ministry_direction}
+                onChange={(e) => setForm((s) => ({ ...s, ministry_role: e.target.value }))}
+              >
+                <option value="">—</option>
+                {rolesForDirection(form.ministry_direction).map((t) => (
+                  <option key={t} value={t}>
+                    {t}
+                  </option>
+                ))}
+              </select>
             </div>
             <div className="sm:col-span-2 lg:col-span-3">
               <button type="submit" disabled={createMut.isPending} className={btnPrimary()}>
@@ -1073,20 +1101,42 @@ function MembersSection() {
                 <p className="mb-3 text-[10px] font-extrabold uppercase tracking-[0.15em] text-stone-400">Служение</p>
                 <div className="grid gap-3 sm:grid-cols-2">
                   <div>
-                    <label className="mb-1 block text-xs font-semibold text-stone-600">Роль служения</label>
-                    <input
-                      className={fieldClass()}
-                      value={editForm.ministry_role}
-                      onChange={(e) => setEditForm((s) => ({ ...s, ministry_role: e.target.value }))}
-                    />
-                  </div>
-                  <div>
                     <label className="mb-1 block text-xs font-semibold text-stone-600">Направление</label>
-                    <input
+                    <select
                       className={fieldClass()}
                       value={editForm.ministry_direction}
-                      onChange={(e) => setEditForm((s) => ({ ...s, ministry_direction: e.target.value }))}
-                    />
+                      onChange={(e) => {
+                        const nextDir = e.target.value;
+                        setEditForm((s) => {
+                          const allowed = new Set(rolesForDirection(nextDir));
+                          const nextRole = allowed.size === 0 || allowed.has(s.ministry_role) ? s.ministry_role : '';
+                          return { ...s, ministry_direction: nextDir, ministry_role: nextRole };
+                        });
+                      }}
+                    >
+                      <option value="">—</option>
+                      {dirs.map((d) => (
+                        <option key={d.id} value={d.title}>
+                          {d.title}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold text-stone-600">Роль служения</label>
+                    <select
+                      className={fieldClass()}
+                      value={editForm.ministry_role}
+                      disabled={!editForm.ministry_direction}
+                      onChange={(e) => setEditForm((s) => ({ ...s, ministry_role: e.target.value }))}
+                    >
+                      <option value="">—</option>
+                      {rolesForDirection(editForm.ministry_direction).map((t) => (
+                        <option key={t} value={t}>
+                          {t}
+                        </option>
+                      ))}
+                    </select>
                   </div>
                 </div>
               </section>
@@ -1833,6 +1883,8 @@ function TemplatesSection() {
   const [roleTitle, setRoleTitle] = useState('');
   const [dirTitle, setDirTitle] = useState('');
   const [note, setNote] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
+  const [editingDirId, setEditingDirId] = useState<number | null>(null);
+  const [editingRoleIds, setEditingRoleIds] = useState<number[]>([]);
 
   const invRoles = () => void qc.invalidateQueries({ queryKey: Q_ROLES });
   const invDirs = () => void qc.invalidateQueries({ queryKey: Q_DIRS });
@@ -1875,7 +1927,24 @@ function TemplatesSection() {
     onError: (e) => setNote({ type: 'err', text: apiErrorMessage(e, 'Ошибка.') }),
   });
 
+  const saveDirRoles = useMutation({
+    mutationFn: () => {
+      if (!editingDirId) throw new Error('no direction');
+      return setDirectionTemplateRoles(editingDirId, editingRoleIds);
+    },
+    onSuccess: () => {
+      setNote({ type: 'ok', text: 'Связи сохранены.' });
+      setEditingDirId(null);
+      setEditingRoleIds([]);
+      invDirs();
+    },
+    onError: (e) => setNote({ type: 'err', text: apiErrorMessage(e, 'Не удалось сохранить связи.') }),
+  });
+
   const loading = roles.isLoading || dirs.isLoading;
+  const allRoles = roles.data ?? [];
+  const allDirs = (dirs.data ?? []) as MinistryDirectionTemplate[];
+  const editingDir = editingDirId ? (allDirs.find((d) => d.id === editingDirId) ?? null) : null;
 
   return (
     <div className="space-y-4">
@@ -1968,12 +2037,28 @@ function TemplatesSection() {
               </button>
             </div>
             <ul className="mt-4 max-h-72 space-y-1.5 overflow-y-auto">
-              {(dirs.data ?? []).map((t) => (
+              {allDirs.map((t) => (
                 <li
                   key={t.id}
                   className="flex items-center justify-between gap-2 rounded-xl border border-stone-100 bg-white px-3 py-2.5 text-sm"
                 >
-                  <span>{t.title}</span>
+                  <div className="min-w-0">
+                    <div className="truncate font-medium text-stone-900">{t.title}</div>
+                    <div className="mt-0.5 truncate text-[11px] text-stone-500">
+                      Ролей: {(t.roles ?? []).length}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    className="text-xs font-semibold text-stone-700 hover:underline"
+                    onClick={() => {
+                      setNote(null);
+                      setEditingDirId(t.id);
+                      setEditingRoleIds((t.roles ?? []).map((r) => r.id));
+                    }}
+                  >
+                    Роли…
+                  </button>
                   <button
                     type="button"
                     className="text-xs font-semibold text-red-600 hover:underline"
@@ -1990,6 +2075,95 @@ function TemplatesSection() {
           </section>
         </div>
       )}
+
+      {editingDir ? (
+        <div
+          className="fixed inset-0 z-[120] flex items-center justify-center bg-black/45 p-4"
+          role="dialog"
+          aria-modal="true"
+        >
+          <div className="w-full max-w-lg rounded-2xl bg-white p-5 shadow-2xl">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <h3 className="text-lg font-extrabold text-stone-900 truncate">
+                  Роли для: {editingDir.title}
+                </h3>
+                <p className="mt-1 text-xs text-stone-500">
+                  Отметь роли, которые будут доступны при выборе этого направления.
+                </p>
+              </div>
+              <button
+                type="button"
+                className="rounded-lg px-2 py-1 text-stone-500 hover:bg-black/5"
+                onClick={() => {
+                  setEditingDirId(null);
+                  setEditingRoleIds([]);
+                }}
+                aria-label="Закрыть"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="mt-4 max-h-[55vh] overflow-y-auto rounded-xl border border-stone-200/80 p-3">
+              {(allRoles.length === 0) ? (
+                <p className="py-6 text-center text-sm text-stone-500">Список ролей пуст.</p>
+              ) : (
+                <div className="space-y-2">
+                  {allRoles.map((r) => {
+                    const checked = editingRoleIds.includes(r.id);
+                    return (
+                      <label
+                        key={r.id}
+                        className="flex cursor-pointer items-center gap-2 rounded-xl border border-stone-100 bg-stone-50/40 px-3 py-2 text-sm text-stone-800 hover:bg-stone-50"
+                      >
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 rounded border-stone-300 text-primary"
+                          checked={checked}
+                          onChange={(e) => {
+                            const on = e.target.checked;
+                            setEditingRoleIds((prev) => {
+                              if (on) return prev.includes(r.id) ? prev : [...prev, r.id];
+                              return prev.filter((x) => x !== r.id);
+                            });
+                          }}
+                        />
+                        <span className="min-w-0 truncate">{r.title}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            <div className="mt-4 flex flex-wrap gap-2">
+              <button
+                type="button"
+                className={btnPrimary('flex-1')}
+                disabled={saveDirRoles.isPending}
+                onClick={() => {
+                  setNote(null);
+                  saveDirRoles.mutate();
+                }}
+              >
+                {saveDirRoles.isPending ? 'Сохранение…' : 'Сохранить'}
+              </button>
+              <button
+                type="button"
+                className={btnSecondary('flex-1')}
+                disabled={saveDirRoles.isPending}
+                onClick={() => {
+                  setEditingDirId(null);
+                  setEditingRoleIds([]);
+                }}
+              >
+                Отмена
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

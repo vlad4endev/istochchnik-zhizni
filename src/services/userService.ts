@@ -139,6 +139,10 @@ export interface MinistryDirectionTemplate {
   created_at: string;
 }
 
+export interface MinistryDirectionTemplateWithRoles extends MinistryDirectionTemplate {
+  roles: MinistryRoleTemplate[];
+}
+
 export interface PrayerRequestHistoryItem {
   id: number;
   member_id: number;
@@ -616,7 +620,18 @@ export async function createMinistryRoleTemplate(title: string): Promise<Ministr
     [title.trim()]
   );
 
-  return result.rows[0] as MinistryRoleTemplate;
+  const created = result.rows[0] as MinistryRoleTemplate;
+
+  // Attach the new role to all existing directions (templates).
+  await query(
+    `INSERT INTO ministry_direction_role_templates (direction_template_id, role_template_id)
+     SELECT d.id, $1
+     FROM ministry_direction_templates d
+     ON CONFLICT (direction_template_id, role_template_id) DO NOTHING`,
+    [created.id]
+  );
+
+  return created;
 }
 
 export async function deleteMinistryRoleTemplate(id: number): Promise<boolean> {
@@ -624,19 +639,43 @@ export async function deleteMinistryRoleTemplate(id: number): Promise<boolean> {
   return (result.rowCount ?? 0) > 0;
 }
 
-export async function listMinistryDirectionTemplates(): Promise<MinistryDirectionTemplate[]> {
+export async function listMinistryDirectionTemplates(): Promise<MinistryDirectionTemplateWithRoles[]> {
   const result = await query(
-    `SELECT id, title, created_at
-     FROM ministry_direction_templates
-     ORDER BY title ASC`
+    `SELECT
+       d.id,
+       d.title,
+       d.created_at,
+       COALESCE(
+         json_agg(
+           json_build_object('id', r.id, 'title', r.title, 'created_at', r.created_at)
+           ORDER BY r.title ASC
+         ) FILTER (WHERE r.id IS NOT NULL),
+         '[]'::json
+       ) AS roles
+     FROM ministry_direction_templates d
+     LEFT JOIN ministry_direction_role_templates dr
+       ON dr.direction_template_id = d.id
+     LEFT JOIN ministry_role_templates r
+       ON r.id = dr.role_template_id
+     GROUP BY d.id
+     ORDER BY d.title ASC`
   );
 
-  return result.rows as MinistryDirectionTemplate[];
+  return result.rows.map((row) => ({
+    id: Number(row.id),
+    title: String(row.title),
+    created_at: String(row.created_at),
+    roles: Array.isArray((row as { roles?: unknown }).roles)
+      ? ((row as { roles: MinistryRoleTemplate[] }).roles as MinistryRoleTemplate[])
+      : typeof (row as { roles?: unknown }).roles === 'string'
+        ? (JSON.parse((row as { roles: string }).roles) as MinistryRoleTemplate[])
+        : ((row as { roles: MinistryRoleTemplate[] }).roles ?? []),
+  }));
 }
 
 export async function createMinistryDirectionTemplate(
   title: string
-): Promise<MinistryDirectionTemplate> {
+): Promise<MinistryDirectionTemplateWithRoles> {
   const result = await query(
     `INSERT INTO ministry_direction_templates (title)
      VALUES ($1)
@@ -644,12 +683,89 @@ export async function createMinistryDirectionTemplate(
     [title.trim()]
   );
 
-  return result.rows[0] as MinistryDirectionTemplate;
+  const created = result.rows[0] as MinistryDirectionTemplate;
+
+  // Attach the new direction to all existing roles (templates).
+  await query(
+    `INSERT INTO ministry_direction_role_templates (direction_template_id, role_template_id)
+     SELECT $1, r.id
+     FROM ministry_role_templates r
+     ON CONFLICT (direction_template_id, role_template_id) DO NOTHING`,
+    [created.id]
+  );
+
+  const roles = await listMinistryRoleTemplates();
+  return { ...created, roles };
 }
 
 export async function deleteMinistryDirectionTemplate(id: number): Promise<boolean> {
   const result = await query('DELETE FROM ministry_direction_templates WHERE id = $1', [id]);
   return (result.rowCount ?? 0) > 0;
+}
+
+export async function setMinistryDirectionTemplateRoles(
+  directionTemplateId: number,
+  roleTemplateIds: number[]
+): Promise<MinistryDirectionTemplateWithRoles | null> {
+  const dirCheck = await query(
+    `SELECT id FROM ministry_direction_templates WHERE id = $1 LIMIT 1`,
+    [directionTemplateId]
+  );
+  if (!dirCheck.rows[0]?.id) {
+    return null;
+  }
+
+  const uniqRoleIds = Array.from(
+    new Set(
+      (roleTemplateIds ?? [])
+        .map((x) => Number(x))
+        .filter((n) => Number.isInteger(n) && n > 0)
+    )
+  );
+
+  if (uniqRoleIds.length === 0) {
+    await query(
+      `DELETE FROM ministry_direction_role_templates
+       WHERE direction_template_id = $1`,
+      [directionTemplateId]
+    );
+    const all = await listMinistryDirectionTemplates();
+    return all.find((d) => d.id === directionTemplateId) ?? null;
+  }
+
+  // Replace mapping (delete missing, insert new). Also ensures role ids exist.
+  await query(
+    `WITH input_roles AS (
+       SELECT UNNEST($2::int[]) AS role_id
+     ),
+     existing_roles AS (
+       SELECT r.id AS role_id
+       FROM ministry_role_templates r
+       JOIN input_roles i ON i.role_id = r.id
+     )
+     DELETE FROM ministry_direction_role_templates dr
+     WHERE dr.direction_template_id = $1
+       AND dr.role_template_id NOT IN (SELECT role_id FROM existing_roles)`,
+    [directionTemplateId, uniqRoleIds]
+  );
+
+  await query(
+    `WITH input_roles AS (
+       SELECT UNNEST($2::int[]) AS role_id
+     ),
+     existing_roles AS (
+       SELECT r.id AS role_id
+       FROM ministry_role_templates r
+       JOIN input_roles i ON i.role_id = r.id
+     )
+     INSERT INTO ministry_direction_role_templates (direction_template_id, role_template_id)
+     SELECT $1, role_id FROM existing_roles
+     ON CONFLICT (direction_template_id, role_template_id) DO NOTHING`,
+    [directionTemplateId, uniqRoleIds]
+  );
+
+  const all = await listMinistryDirectionTemplates();
+  return all.find((d) => d.id === directionTemplateId) ?? null;
 }
 
 /**

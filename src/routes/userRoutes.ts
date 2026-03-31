@@ -12,6 +12,7 @@ import {
   getPrayerRequestHistoryHandler,
   getUsers,
   linkUserAccountHandler,
+  setMinistryDirectionTemplateRolesHandler,
   setUserAppRoleHandler,
   setOneTimeMemberDateOverrideHandler,
   startPrayerCycleHandler,
@@ -27,6 +28,7 @@ router.delete('/templates/ministry-roles/:id', deleteMinistryRoleTemplateHandler
 router.get('/templates/ministry-directions', getMinistryDirectionTemplatesHandler);
 router.post('/templates/ministry-directions', createMinistryDirectionTemplateHandler);
 router.delete('/templates/ministry-directions/:id', deleteMinistryDirectionTemplateHandler);
+router.put('/templates/ministry-directions/:id/roles', setMinistryDirectionTemplateRolesHandler);
 
 router.get('/', getUsers);
 router.post('/merge-duplicates', mergeDuplicateMembersHandler);

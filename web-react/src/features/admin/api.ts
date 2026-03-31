@@ -89,6 +89,10 @@ export interface MinistryTemplate {
   created_at?: string;
 }
 
+export interface MinistryDirectionTemplate extends MinistryTemplate {
+  roles?: MinistryTemplate[];
+}
+
 export async function fetchRoleTemplates(): Promise<MinistryTemplate[]> {
   const { data } = await apiClient.get<MinistryTemplate[]>(`${USERS}/templates/ministry-roles`);
   return data;
@@ -107,8 +111,8 @@ export async function deleteRoleTemplate(id: number): Promise<void> {
   });
 }
 
-export async function fetchDirectionTemplates(): Promise<MinistryTemplate[]> {
-  const { data } = await apiClient.get<MinistryTemplate[]>(`${USERS}/templates/ministry-directions`);
+export async function fetchDirectionTemplates(): Promise<MinistryDirectionTemplate[]> {
+  const { data } = await apiClient.get<MinistryDirectionTemplate[]>(`${USERS}/templates/ministry-directions`);
   return data;
 }
 
@@ -123,6 +127,17 @@ export async function deleteDirectionTemplate(id: number): Promise<void> {
   await apiClient.delete(`${USERS}/templates/ministry-directions/${id}`, {
     validateStatus: (s) => s === 204 || (s != null && s < 500),
   });
+}
+
+export async function setDirectionTemplateRoles(
+  directionTemplateId: number,
+  roleIds: number[]
+): Promise<MinistryDirectionTemplate> {
+  const { data } = await apiClient.put<MinistryDirectionTemplate>(
+    `${USERS}/templates/ministry-directions/${directionTemplateId}/roles`,
+    { role_ids: roleIds },
+  );
+  return data;
 }
 
 export async function fetchGlobalThemes(): Promise<GlobalTheme[]> {

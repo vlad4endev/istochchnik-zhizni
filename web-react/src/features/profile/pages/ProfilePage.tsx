@@ -26,6 +26,7 @@ import {
   type MeResponse,
   type PrayerHistoryItem,
 } from '../api';
+import { fetchDirectionTemplates, type MinistryDirectionTemplate } from '../../admin/api';
 
 /* ── Helpers ─────────────────────────────────────────────── */
 
@@ -81,10 +82,14 @@ export function ProfilePage() {
     first_name: '',
     last_name: '',
     phone_number: '',
+    ministry_direction: '',
+    ministry_role: '',
     email: '',
     birth_date: '',
     prayer_request: '',
   });
+
+  const [ministryTemplates, setMinistryTemplates] = useState<MinistryDirectionTemplate[]>([]);
 
   /* ── Password ── */
   const [pwdCurrent, setPwdCurrent] = useState('');
@@ -122,6 +127,8 @@ export function ProfilePage() {
         first_name: me.first_name ?? '',
         last_name: me.last_name ?? '',
         phone_number: me.phone_number ?? '',
+        ministry_direction: me.ministry_direction ?? '',
+        ministry_role: me.ministry_role ?? '',
         email: me.email ?? '',
         birth_date: me.birth_date ? me.birth_date.slice(0, 10) : '',
         prayer_request: me.prayer_request ?? '',
@@ -139,6 +146,18 @@ export function ProfilePage() {
   useEffect(() => {
     void loadProfile();
   }, [loadProfile]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void fetchDirectionTemplates()
+      .then((dirs) => {
+        if (!cancelled) setMinistryTemplates(dirs);
+      })
+      .catch(() => {
+        if (!cancelled) setMinistryTemplates([]);
+      });
+    return () => { cancelled = true; };
+  }, []);
 
   useEffect(() => {
     if (!user?.id) return;
@@ -177,6 +196,8 @@ export function ProfilePage() {
         first_name: draft.first_name.trim(),
         last_name: draft.last_name.trim(),
         phone_number: draft.phone_number.trim(),
+        ministry_direction: draft.ministry_direction.trim(),
+        ministry_role: draft.ministry_role.trim(),
         email: draft.email.trim(),
         birth_date: draft.birth_date.trim() || null,
         prayer_request: draft.prayer_request,
@@ -186,6 +207,8 @@ export function ProfilePage() {
         first_name: next.first_name ?? '',
         last_name: next.last_name ?? '',
         phone_number: next.phone_number ?? '',
+        ministry_direction: next.ministry_direction ?? '',
+        ministry_role: next.ministry_role ?? '',
         email: next.email ?? '',
         birth_date: next.birth_date ? next.birth_date.slice(0, 10) : '',
         prayer_request: next.prayer_request ?? '',
@@ -446,6 +469,8 @@ export function ProfilePage() {
                       first_name: user?.first_name ?? '',
                       last_name: user?.last_name ?? '',
                       phone_number: user?.phone_number ?? '',
+                    ministry_direction: user?.ministry_direction ?? '',
+                    ministry_role: user?.ministry_role ?? '',
                       email: user?.email ?? '',
                       birth_date: user?.birth_date ? user.birth_date.slice(0, 10) : '',
                       prayer_request: user?.prayer_request ?? '',
@@ -468,6 +493,10 @@ export function ProfilePage() {
                 <InfoRow label="Телефон" value={user?.phone_number || '—'} />
                 <InfoRow label="Email" value={user?.email || '—'} />
               </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <InfoRow label="Направление" value={(user?.ministry_direction ?? '').trim() || '—'} />
+                <InfoRow label="Роль" value={(user?.ministry_role ?? '').trim() || '—'} />
+              </div>
               <InfoRow label="Дата рождения" value={user?.birth_date ? user.birth_date.slice(0, 10) : '—'} />
               <InfoRow label="Молитвенная нужда" value={user?.prayer_request?.trim() || '—'} pre />
             </div>
@@ -486,6 +515,47 @@ export function ProfilePage() {
               <div>
                 <label className={LABEL}>Телефон</label>
                 <input className={INPUT} value={draft.phone_number} onChange={(e) => setDraft((d) => ({ ...d, phone_number: formatRuPhoneInput(e.target.value) }))} />
+              </div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <label className={LABEL}>Направление</label>
+                  <select
+                    className={INPUT}
+                    value={draft.ministry_direction}
+                    onChange={(e) => {
+                      const nextDir = e.target.value;
+                      setDraft((d) => {
+                        const dir = ministryTemplates.find((x) => x.title === nextDir);
+                        const allowed = new Set((dir?.roles ?? []).map((r) => r.title));
+                        const nextRole = allowed.size === 0 || allowed.has(d.ministry_role) ? d.ministry_role : '';
+                        return { ...d, ministry_direction: nextDir, ministry_role: nextRole };
+                      });
+                    }}
+                  >
+                    <option value="">—</option>
+                    {ministryTemplates.map((d) => (
+                      <option key={d.id} value={d.title}>
+                        {d.title}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className={LABEL}>Роль</label>
+                  <select
+                    className={INPUT}
+                    value={draft.ministry_role}
+                    disabled={!draft.ministry_direction}
+                    onChange={(e) => setDraft((d) => ({ ...d, ministry_role: e.target.value }))}
+                  >
+                    <option value="">—</option>
+                    {(ministryTemplates.find((x) => x.title === draft.ministry_direction)?.roles ?? []).map((r) => (
+                      <option key={r.id} value={r.title}>
+                        {r.title}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
               <div>
                 <label className={LABEL}>Email</label>

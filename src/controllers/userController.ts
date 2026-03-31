@@ -14,6 +14,7 @@ import {
   listMinistryRoleTemplates,
   listUsers,
   MemberNameDuplicateError,
+  setMinistryDirectionTemplateRoles,
   setOneTimeMemberDateOverride,
   setUserAppRole,
   startPrayerCycle,
@@ -496,7 +497,7 @@ export async function getMinistryRoleTemplatesHandler(
   req: Request,
   res: Response
 ): Promise<void> {
-  if (!ensureAdmin(req, res)) {
+  if (!ensureAuthenticated(req, res)) {
     return;
   }
   try {
@@ -570,7 +571,7 @@ export async function getMinistryDirectionTemplatesHandler(
   req: Request,
   res: Response
 ): Promise<void> {
-  if (!ensureAdmin(req, res)) {
+  if (!ensureAuthenticated(req, res)) {
     return;
   }
   try {
@@ -636,6 +637,39 @@ export async function deleteMinistryDirectionTemplateHandler(
     res.status(204).send();
   } catch (error) {
     console.error('Failed to delete ministry direction template', error);
+    res.status(500).json({ error: 'Database error' });
+  }
+}
+
+export async function setMinistryDirectionTemplateRolesHandler(
+  req: Request,
+  res: Response
+): Promise<void> {
+  if (!ensureAdmin(req, res)) {
+    return;
+  }
+  const templateId = parseUserId(req.params.id);
+  if (!templateId) {
+    res.status(400).json({ error: 'Invalid template id' });
+    return;
+  }
+  const roleIdsRaw = (req.body as { role_ids?: unknown } | undefined)?.role_ids;
+  if (!Array.isArray(roleIdsRaw)) {
+    res.status(400).json({ error: 'Field "role_ids" must be an array of ids' });
+    return;
+  }
+  const roleIds = roleIdsRaw.map((x) => Number(x)).filter((n) => Number.isInteger(n) && n > 0);
+
+  try {
+    const updated = await setMinistryDirectionTemplateRoles(templateId, roleIds);
+    if (!updated) {
+      res.status(404).json({ error: 'Template not found' });
+      return;
+    }
+    notifyRealtime(['templates']);
+    res.json(updated);
+  } catch (error) {
+    console.error('Failed to set ministry direction roles', error);
     res.status(500).json({ error: 'Database error' });
   }
 }
