@@ -1,8 +1,10 @@
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { LuArrowUpRight, LuDownload, LuHeadphones, LuRefreshCw, LuSearch, LuShare2 } from 'react-icons/lu';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { LuArrowUpRight, LuCheck, LuDownload, LuHeadphones, LuRefreshCw, LuSearch, LuSettings, LuShare2, LuX } from 'react-icons/lu';
 
-import { fetchPodcastFeed, type PodcastEpisode } from '../../../api/resources';
+import { fetchPodcastFeed, fetchPodcastSettings, patchPodcastSettings, type PodcastEpisode } from '../../../api/resources';
+import { useAuthStore } from '../../auth/authStore';
 
 function formatDuration(sec: number | null): string | null {
   if (sec == null || !Number.isFinite(sec) || sec <= 0) return null;
@@ -31,10 +33,36 @@ function episodeSubtitle(ep: PodcastEpisode): string {
 }
 
 export function PodcastsPage() {
+  const qc = useQueryClient();
   const [query, setQuery] = useState('');
+  const role = useAuthStore((s) => s.role);
+  const isAdmin = (role ?? 'member').toLowerCase() === 'admin';
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [rssDraft, setRssDraft] = useState('');
+
   const q = useQuery({
     queryKey: ['resources', 'podcasts'],
     queryFn: () => fetchPodcastFeed({ limit: 120 }),
+  });
+
+  const settingsQ = useQuery({
+    queryKey: ['resources', 'podcasts', 'settings'],
+    queryFn: fetchPodcastSettings,
+    enabled: settingsOpen && isAdmin,
+    staleTime: 0,
+  });
+
+  const saveSettings = useMutation({
+    mutationFn: (rss_url: string | null) => patchPodcastSettings(rss_url),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['resources', 'podcasts'] });
+      qc.invalidateQueries({ queryKey: ['resources', 'podcasts', 'settings'] });
+      window.dispatchEvent(new CustomEvent('app:toast', { detail: { kind: 'success', message: 'RSS сохранён' } }));
+      setSettingsOpen(false);
+    },
+    onError: () => {
+      window.dispatchEvent(new CustomEvent('app:toast', { detail: { kind: 'error', message: 'Не удалось сохранить RSS' } }));
+    },
   });
 
   const feed = q.data?.feed ?? null;
@@ -121,6 +149,19 @@ export function PodcastsPage() {
                       Сайт
                     </a>
                   ) : null}
+                  {isAdmin ? (
+                    <button
+                      type="button"
+                      className="inline-flex h-10 items-center gap-2 rounded-xl bg-stone-100 px-4 text-sm font-bold text-stone-700 shadow-sm hover:bg-stone-200 hover:text-stone-900 active:scale-[0.98]"
+                      onClick={() => {
+                        setSettingsOpen(true);
+                        setRssDraft('');
+                      }}
+                    >
+                      <LuSettings className="h-4 w-4" strokeWidth={2} aria-hidden />
+                      Настройки
+                    </button>
+                  ) : null}
                   <button
                     type="button"
                     className="inline-flex h-10 items-center gap-2 rounded-xl border border-stone-200 bg-white px-4 text-sm font-bold text-stone-700 shadow-sm hover:bg-stone-50 active:scale-[0.98] disabled:opacity-50"
@@ -132,6 +173,82 @@ export function PodcastsPage() {
                   </button>
                 </div>
               </div>
+
+              {settingsOpen ? (
+                <div className="rounded-3xl border-2 border-primary/20 bg-primary/5 p-5 sm:p-6">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="min-w-0">
+                      <h3 className="text-sm font-extrabold text-stone-900">Настройка RSS подкастов</h3>
+                      <p className="mt-1 text-xs font-semibold leading-relaxed text-stone-600">
+                        Вставьте RSS URL (например, Simplecast/CastBox). Пустое значение — вернёт сервер к RSS по умолчанию.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setSettingsOpen(false)}
+                      className="inline-flex h-9 items-center justify-center rounded-xl border border-stone-200 bg-white px-3 text-xs font-extrabold text-stone-700 hover:bg-stone-50 self-start"
+                    >
+                      <LuX className="h-4 w-4" strokeWidth={2} aria-hidden />
+                      Закрыть
+                    </button>
+                  </div>
+
+                  <div className="mt-4">
+                    <label className="block text-xs font-extrabold uppercase tracking-wide text-stone-600">
+                      RSS URL
+                    </label>
+                    <input
+                      className="mt-2 h-11 w-full rounded-2xl border border-stone-200 bg-white px-3 text-sm font-semibold text-stone-900 shadow-sm outline-none transition focus:border-primary"
+                      placeholder="https://example.com/feed.xml"
+                      value={rssDraft}
+                      onChange={(e) => setRssDraft(e.target.value)}
+                      disabled={saveSettings.isPending}
+                    />
+                    <p className="mt-2 text-xs font-semibold text-stone-500">
+                      Текущее значение:{' '}
+                      <span className="font-mono">
+                        {settingsQ.isLoading
+                          ? 'загрузка…'
+                          : (settingsQ.data?.rss_url ?? feed?.rssUrl ?? '').trim() || '(по умолчанию)'}
+                      </span>
+                    </p>
+                  </div>
+
+                  <div className="mt-4 flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      className="inline-flex h-10 items-center gap-2 rounded-xl bg-primary px-4 text-sm font-extrabold text-white shadow-md shadow-primary/25 hover:bg-primary-dark disabled:opacity-50"
+                      disabled={saveSettings.isPending}
+                      onClick={() => {
+                        const v = rssDraft.trim();
+                        saveSettings.mutate(v ? v : null);
+                      }}
+                    >
+                      <LuCheck className="h-4 w-4" strokeWidth={2} aria-hidden />
+                      {saveSettings.isPending ? 'Сохранение…' : 'Сохранить'}
+                    </button>
+                    <button
+                      type="button"
+                      className="inline-flex h-10 items-center gap-2 rounded-xl border border-stone-200 bg-white px-4 text-sm font-extrabold text-stone-700 hover:bg-stone-50 disabled:opacity-50"
+                      disabled={saveSettings.isPending}
+                      onClick={() => {
+                        const current = (settingsQ.data?.rss_url ?? '').trim();
+                        setRssDraft(current);
+                      }}
+                    >
+                      Заполнить текущим
+                    </button>
+                    <button
+                      type="button"
+                      className="inline-flex h-10 items-center gap-2 rounded-xl border border-red-200 bg-white px-4 text-sm font-extrabold text-red-600 hover:bg-red-50 disabled:opacity-50"
+                      disabled={saveSettings.isPending}
+                      onClick={() => saveSettings.mutate(null)}
+                    >
+                      Сбросить
+                    </button>
+                  </div>
+                </div>
+              ) : null}
 
               <label className="group relative">
                 <span className="sr-only">Поиск по выпускам</span>

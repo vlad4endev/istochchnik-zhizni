@@ -1,6 +1,6 @@
 import { Router, type Request, type Response } from 'express';
 import { getBroadcastEmbed, updateBroadcastEmbed } from '../controllers/broadcastController';
-import { getPodcastEpisodes } from '../controllers/resourcesController';
+import { getPodcastEpisodes, getPodcastSettings, patchPodcastSettings } from '../controllers/resourcesController';
 import { requireAuthSession } from '../middleware/authSession';
 import * as messenger from '../services/messengerService';
 
@@ -11,6 +11,11 @@ router.patch('/broadcast', updateBroadcastEmbed);
 
 /** GET /api/resources/podcasts */
 router.get('/resources/podcasts', getPodcastEpisodes);
+
+/** GET /api/resources/podcasts/settings (admin) */
+router.get('/resources/podcasts/settings', requireAuthSession, getPodcastSettings);
+/** PATCH /api/resources/podcasts/settings { rss_url } (admin) */
+router.patch('/resources/podcasts/settings', requireAuthSession, patchPodcastSettings);
 
 type AuthReq = Request & { authUserId?: number };
 

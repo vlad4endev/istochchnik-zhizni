@@ -34,3 +34,13 @@ export async function fetchPodcastFeed(params?: { limit?: number }): Promise<Pod
   return data;
 }
 
+export async function fetchPodcastSettings(): Promise<{ rss_url: string | null }> {
+  const { data } = await apiClient.get<{ rss_url: string | null }>('/api/resources/podcasts/settings');
+  return data;
+}
+
+export async function patchPodcastSettings(rss_url: string | null): Promise<{ rss_url: string | null }> {
+  const { data } = await apiClient.patch<{ rss_url: string | null }>('/api/resources/podcasts/settings', { rss_url });
+  return data;
+}
+

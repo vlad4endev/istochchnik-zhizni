@@ -1,5 +1,6 @@
 import type { Request, Response } from 'express';
 import Parser from 'rss-parser';
+import { pool } from '../config/db';
 
 export type PodcastEpisode = {
   id: string;
@@ -126,12 +127,85 @@ function parseLimit(raw: unknown, fallback: number): number {
 const CACHE_TTL_MS = 5 * 60 * 1000;
 let cache: { fetchedAtMs: number; payload: PodcastFeedResponse } | null = null;
 
+type PodcastSettings = { rssUrl: string | null };
+
+async function ensureSettingsColumn(): Promise<void> {
+  if (!pool) return;
+  await pool.query('ALTER TABLE global_settings ADD COLUMN IF NOT EXISTS podcasts_rss_url TEXT;');
+}
+
+async function readPodcastSettings(): Promise<PodcastSettings> {
+  if (!pool) {
+    return { rssUrl: process.env.RESOURCES_PODCAST_RSS_URL?.trim() || null };
+  }
+  await ensureSettingsColumn();
+  const { rows } = await pool.query('SELECT podcasts_rss_url FROM global_settings WHERE id = 1');
+  const raw = rows[0]?.podcasts_rss_url;
+  const rssUrl = typeof raw === 'string' && raw.trim() ? raw.trim() : null;
+  return { rssUrl: rssUrl ?? (process.env.RESOURCES_PODCAST_RSS_URL?.trim() || null) };
+}
+
+function validateRssUrl(raw: unknown): { ok: true; url: string | null } | { ok: false; error: string } {
+  if (raw === null || raw === undefined || raw === '') return { ok: true, url: null };
+  if (typeof raw !== 'string') return { ok: false, error: 'rss_url must be a string' };
+  const v = raw.trim();
+  if (!v) return { ok: true, url: null };
+  let u: URL;
+  try {
+    u = new URL(v);
+  } catch {
+    return { ok: false, error: 'rss_url must be a valid URL' };
+  }
+  if (u.protocol !== 'https:' && u.protocol !== 'http:') {
+    return { ok: false, error: 'rss_url must start with http:// or https://' };
+  }
+  return { ok: true, url: u.toString() };
+}
+
+export async function getPodcastSettings(_req: Request, res: Response): Promise<void> {
+  try {
+    const s = await readPodcastSettings();
+    res.json({ rss_url: s.rssUrl });
+  } catch (e) {
+    console.error('[resources] getPodcastSettings error:', e);
+    res.status(500).json({ error: 'Failed to load podcast settings' });
+  }
+}
+
+export async function patchPodcastSettings(req: Request, res: Response): Promise<void> {
+  if (!pool) {
+    res.status(503).json({ error: 'Database pool is not initialized' });
+    return;
+  }
+  try {
+    const check = validateRssUrl((req.body as { rss_url?: unknown } | undefined)?.rss_url);
+    if (!check.ok) {
+      res.status(400).json({ error: check.error });
+      return;
+    }
+    await ensureSettingsColumn();
+    await pool.query(
+      `INSERT INTO global_settings (id, start_date, podcasts_rss_url)
+       VALUES (1, CURRENT_DATE, $1)
+       ON CONFLICT (id) DO UPDATE SET podcasts_rss_url = EXCLUDED.podcasts_rss_url`,
+      [check.url],
+    );
+    cache = null; // invalidate RSS cache
+    res.json({ rss_url: check.url });
+  } catch (e) {
+    console.error('[resources] patchPodcastSettings error:', e);
+    res.status(500).json({ error: 'Failed to update podcast settings' });
+  }
+}
+
 /**
  * GET /api/resources/podcasts
  * Сейчас: тестовый RSS URL-заглушка. Позже заменим на CastBox feed URL.
  */
 export async function getPodcastEpisodes(req: Request, res: Response): Promise<void> {
+  const settings = await readPodcastSettings().catch(() => ({ rssUrl: null }));
   const rssUrl =
+    settings.rssUrl ||
     process.env.RESOURCES_PODCAST_RSS_URL?.trim() ||
     'https://feeds.simplecast.com/54nAGcIl'; // TODO: заменить на CastBox RSS
   const limit = parseLimit(req.query.limit, 80);
