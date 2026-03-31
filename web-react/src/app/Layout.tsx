@@ -10,7 +10,8 @@ import { useSyncServerRole } from '../hooks/useSyncServerRole';
 import { IOSInstallBanner } from '../components/IOSInstallBanner';
 import { AndroidInstallBanner } from '../components/AndroidInstallBanner';
 import { UpdateNotification, useServiceWorkerUpdate } from '../features/pwa';
-import type { AppToastKind } from '../lib/uiFeedback';
+import type { AppToastAction, AppToastKind } from '../lib/uiFeedback';
+import { useChatStore } from '../features/messenger/chatStore';
 
 type NavItem = {
   to: string;
@@ -108,6 +109,10 @@ type UiToast = {
   id: number;
   message: string;
   kind: AppToastKind;
+  title?: string;
+  avatarUrl?: string | null;
+  avatarText?: string;
+  action?: AppToastAction;
 };
 
 function normalizeToastKind(kind: unknown): AppToastKind {
@@ -120,12 +125,28 @@ function AppToastHost() {
 
   useEffect(() => {
     const onToast = (e: Event) => {
-      const ce = e as CustomEvent<{ message?: string; kind?: AppToastKind }>;
+      const ce = e as CustomEvent<{
+        message?: string;
+        kind?: AppToastKind;
+        title?: string;
+        avatarUrl?: string | null;
+        avatarText?: string;
+        action?: AppToastAction;
+      }>;
       const message = String(ce.detail?.message ?? '').trim();
       if (!message) return;
       const kind = normalizeToastKind(ce.detail?.kind);
       const id = Date.now() + Math.floor(Math.random() * 1000);
-      setToasts((prev) => [...prev, { id, message, kind }].slice(-3));
+      const toast: UiToast = {
+        id,
+        message,
+        kind,
+        title: ce.detail?.title,
+        avatarUrl: ce.detail?.avatarUrl,
+        avatarText: ce.detail?.avatarText,
+        action: ce.detail?.action,
+      };
+      setToasts((prev) => [...prev, toast].slice(-3));
       window.setTimeout(() => {
         setToasts((prev) => prev.filter((t) => t.id !== id));
       }, 3600);
@@ -141,12 +162,23 @@ function AppToastHost() {
   return (
     <div className="pointer-events-none fixed inset-x-4 bottom-[calc(5.5rem+env(safe-area-inset-bottom))] z-[70] flex flex-col items-end gap-2 md:bottom-6 md:left-auto md:right-6 md:max-w-sm">
       {toasts.map((toast) => (
-        <div
+        <button
           key={toast.id}
+          type="button"
           role="status"
           aria-live="polite"
+          onClick={() => {
+            if (toast.action?.event) {
+              window.dispatchEvent(
+                new CustomEvent(toast.action.event, {
+                  detail: toast.action.detail,
+                }),
+              );
+            }
+            setToasts((prev) => prev.filter((t) => t.id !== toast.id));
+          }}
           className={[
-            'w-full rounded-xl border px-3 py-2 text-sm font-medium shadow-lg backdrop-blur',
+            'pointer-events-auto w-full rounded-xl border px-3 py-2 text-left text-sm font-medium shadow-lg backdrop-blur transition hover:shadow-xl',
             toast.kind === 'error'
               ? 'border-rose-300/70 bg-rose-50/95 text-rose-900'
               : toast.kind === 'success'
@@ -154,8 +186,22 @@ function AppToastHost() {
                 : 'border-sky-300/70 bg-sky-50/95 text-sky-900',
           ].join(' ')}
         >
-          {toast.message}
-        </div>
+          <div className="flex items-start gap-3">
+            <div className="grid h-9 w-9 shrink-0 place-items-center overflow-hidden rounded-full bg-white/60 text-xs font-extrabold text-stone-900">
+              {toast.avatarUrl ? (
+                <img src={toast.avatarUrl} alt="" className="h-full w-full object-cover" />
+              ) : (
+                <span>{(toast.avatarText || '?').slice(0, 1).toUpperCase()}</span>
+              )}
+            </div>
+            <div className="min-w-0 flex-1">
+              {toast.title ? (
+                <p className="truncate text-[13px] font-extrabold leading-tight">{toast.title}</p>
+              ) : null}
+              <p className="truncate text-[13px] leading-tight opacity-90">{toast.message}</p>
+            </div>
+          </div>
+        </button>
       ))}
     </div>
   );
@@ -182,6 +228,8 @@ export function Layout() {
   useSyncServerRole();
   useRealtimeQuerySync();
   const navigate = useNavigate();
+  const setActiveConversation = useChatStore((s) => s.setActiveConversation);
+  const unreadMessages = useChatStore((s) => s.totalUnread);
   const role = useAuthStore((s) => s.role);
   const logout = useAuthStore((s) => s.logout);
   const updatePrompt = useServiceWorkerUpdate({ showPrompt: true });
@@ -227,6 +275,20 @@ export function Layout() {
       return next;
     });
   }
+
+  useEffect(() => {
+    const onOpenConversation = (e: Event) => {
+      const ce = e as CustomEvent<{ conversationId?: string }>;
+      const conversationId = String(ce.detail?.conversationId ?? '').trim();
+      if (!conversationId) return;
+      setActiveConversation(conversationId);
+      navigate('/messenger');
+    };
+    window.addEventListener('app:open-conversation', onOpenConversation);
+    return () => {
+      window.removeEventListener('app:open-conversation', onOpenConversation);
+    };
+  }, [navigate, setActiveConversation]);
 
   return (
     <div className="flex min-h-[100dvh] min-h-screen w-full max-w-[100vw] flex-col overflow-x-clip bg-[var(--surface)] text-[var(--text)] [padding-left:env(safe-area-inset-left,0px)] [padding-right:env(safe-area-inset-right,0px)]">
@@ -309,8 +371,24 @@ export function Layout() {
                 >
                   {({ isActive }) => (
                     <>
-                      <Icon className={navIconClass(isActive, navCollapsed)} strokeWidth={2} aria-hidden />
-                      {!navCollapsed ? item.label : null}
+                      <div className="relative">
+                        <Icon className={navIconClass(isActive, navCollapsed)} strokeWidth={2} aria-hidden />
+                        {item.to === '/messenger' && unreadMessages > 0 && navCollapsed ? (
+                          <span className="absolute -right-1 -top-1 inline-flex min-w-[16px] items-center justify-center rounded-full bg-rose-500 px-1 text-[9px] font-extrabold leading-4 text-white">
+                            {unreadMessages > 99 ? '99+' : unreadMessages}
+                          </span>
+                        ) : null}
+                      </div>
+                      {!navCollapsed ? (
+                        <span className="flex min-w-0 flex-1 items-center justify-between gap-2">
+                          <span className="truncate">{item.label}</span>
+                          {item.to === '/messenger' && unreadMessages > 0 ? (
+                            <span className={['inline-flex min-w-[20px] items-center justify-center rounded-full px-1.5 py-0.5 text-[11px] font-extrabold', isActive ? 'bg-white/90 text-primary' : 'bg-primary text-white'].join(' ')}>
+                              {unreadMessages > 99 ? '99+' : unreadMessages}
+                            </span>
+                          ) : null}
+                        </span>
+                      ) : null}
                     </>
                   )}
                 </NavLink>
@@ -375,7 +453,14 @@ export function Layout() {
               >
                 {({ isActive }) => (
                   <>
-                    <Icon className={navIconClass(isActive, true)} strokeWidth={2} aria-hidden />
+                    <span className="relative">
+                      <Icon className={navIconClass(isActive, true)} strokeWidth={2} aria-hidden />
+                      {item.to === '/messenger' && unreadMessages > 0 ? (
+                        <span className="absolute -right-2 -top-1 inline-flex min-w-[16px] items-center justify-center rounded-full bg-rose-500 px-1 text-[9px] font-extrabold leading-4 text-white">
+                          {unreadMessages > 99 ? '99+' : unreadMessages}
+                        </span>
+                      ) : null}
+                    </span>
                     <span className="mt-1 truncate px-0.5 text-center text-[10px] font-semibold tracking-tight">
                       {item.label}
                     </span>

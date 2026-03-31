@@ -406,6 +406,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
     set((s) => {
       const existing = s.messagesByConv[idKey] || [];
       const msgClientId = msg.client_msg_id ? String(msg.client_msg_id) : null;
+      const isActiveConversation = s.activeConversationId === idKey;
+      const isOwnMessage =
+        s.currentMemberId != null &&
+        msg.sender_id != null &&
+        Number(msg.sender_id) === Number(s.currentMemberId);
+      const targetConversation = s.conversations.find((c) => c.id === idKey) || null;
 
       // Already present by definitive server id.
       if (existing.some((m) => m.id === msg.id)) return s;
@@ -435,7 +441,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
             is_deleted: msg.is_deleted,
           },
           updated_at: msg.created_at,
-          unread_count: s.activeConversationId === idKey ? c.unread_count : c.unread_count + 1,
+          unread_count: isActiveConversation ? c.unread_count : c.unread_count + 1,
         };
       });
 
@@ -443,6 +449,21 @@ export const useChatStore = create<ChatState>((set, get) => ({
       updatedConvs.sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime());
 
       const totalUnread = updatedConvs.reduce((sum, c) => sum + c.unread_count, 0);
+
+      if (!isActiveConversation && !isOwnMessage) {
+        const toastMeta = getConversationToastMeta(targetConversation, msg);
+        emitAppToast({
+          kind: 'info',
+          title: toastMeta.title,
+          avatarUrl: toastMeta.avatarUrl,
+          avatarText: toastMeta.avatarText,
+          message: truncateMessageForToast(msg.is_deleted ? 'Сообщение удалено' : msg.content),
+          action: {
+            event: 'app:open-conversation',
+            detail: { conversationId: idKey },
+          },
+        });
+      }
 
       return {
         messagesByConv: { ...s.messagesByConv, [idKey]: newMsgs },
@@ -674,4 +695,50 @@ function classifyConversation(conv: ConversationListItem): Exclude<ChatTab, 'all
   if (conv.type === 'private') return 'personal';
   if (conv.type === 'channel') return 'notifications';
   return 'services';
+}
+
+function truncateMessageForToast(content: string): string {
+  const normalized = String(content || '').replace(/\s+/g, ' ').trim();
+  if (!normalized) return 'Новое сообщение';
+  return normalized.length > 90 ? `${normalized.slice(0, 87)}...` : normalized;
+}
+
+function getConversationToastMeta(
+  conversation: ConversationListItem | null,
+  msg: MessageWithSender,
+): { title: string; avatarUrl: string | null; avatarText: string } {
+  if (conversation) {
+    const title = getConversationTitle(conversation) || msg.sender_name || 'Новый чат';
+    const avatarUrl =
+      conversation.type === 'private'
+        ? (conversation.other_member?.avatar_url ?? null)
+        : (conversation.avatar_url ?? null);
+    return {
+      title,
+      avatarUrl,
+      avatarText: getAvatarFallback(title),
+    };
+  }
+
+  const sender = msg.sender_name || msg.sender_first_name || 'Новое сообщение';
+  return {
+    title: sender,
+    avatarUrl: null,
+    avatarText: getAvatarFallback(sender),
+  };
+}
+
+function getConversationTitle(conversation: ConversationListItem): string {
+  if (conversation.type === 'private' && conversation.other_member) {
+    const firstName = (conversation.other_member.first_name || '').trim();
+    const lastName = (conversation.other_member.last_name || '').trim();
+    const fullName = `${firstName} ${lastName}`.trim();
+    return fullName || conversation.other_member.name || 'Личный чат';
+  }
+  return conversation.title || 'Групповой чат';
+}
+
+function getAvatarFallback(title: string): string {
+  const text = String(title || '').trim();
+  return (text.charAt(0) || '?').toUpperCase();
 }

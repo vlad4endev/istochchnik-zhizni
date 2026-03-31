@@ -72,6 +72,31 @@ npm run prod:deploy:prebuilt
 
 5. Снова `npx supabase@latest db push --db-url "$DATABASE_URL"` или `./scripts/supabase-db-push.sh`.
 
+### Web Push / VAPID keys
+
+Бэкенд использует переменные `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` (см. `src/services/pushService.ts`).  
+Если в логах есть `VAPID keys are not configured`, сгенерируйте ключи:
+
+```bash
+npm run push:vapid
+```
+
+Альтернатива:
+
+```bash
+npx web-push generate-vapid-keys
+```
+
+Вставьте значения в backend `.env`:
+
+```env
+VAPID_PUBLIC_KEY=...
+VAPID_PRIVATE_KEY=...
+VAPID_SUBJECT=mailto:your-support@domain.com
+```
+
+После обновления `.env` перезапустите API.
+
 ## Project Docs
 
 - [Logo and icon guidelines](docs/logo-guidelines.md)
