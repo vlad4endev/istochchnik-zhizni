@@ -1,7 +1,7 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { LuArrowUpRight, LuCheck, LuDownload, LuHeadphones, LuRefreshCw, LuSearch, LuSettings, LuShare2, LuX } from 'react-icons/lu';
+import { LuArrowUpRight, LuCheck, LuHeadphones, LuPlay, LuRefreshCw, LuSearch, LuSettings, LuShare2, LuX } from 'react-icons/lu';
 
 import { fetchPodcastFeed, fetchPodcastSettings, patchPodcastSettings, type PodcastEpisode } from '../../../api/resources';
 import { useAuthStore } from '../../auth/authStore';
@@ -39,6 +39,8 @@ export function PodcastsPage() {
   const isAdmin = (role ?? 'member').toLowerCase() === 'admin';
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [rssDraft, setRssDraft] = useState('');
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
 
   const q = useQuery({
     queryKey: ['resources', 'podcasts'],
@@ -67,6 +69,10 @@ export function PodcastsPage() {
 
   const feed = q.data?.feed ?? null;
   const episodes = useMemo(() => (Array.isArray(q.data?.episodes) ? q.data!.episodes : []), [q.data]);
+  const activeEpisode = useMemo(
+    () => (activeId ? episodes.find((e) => e.id === activeId) ?? null : null),
+    [activeId, episodes],
+  );
   const filtered = useMemo(() => {
     const t = query.trim().toLowerCase();
     if (!t) return episodes;
@@ -75,6 +81,26 @@ export function PodcastsPage() {
       return hay.includes(t);
     });
   }, [episodes, query]);
+
+  useEffect(() => {
+    if (!activeEpisode) return;
+    try {
+      if (!('mediaSession' in navigator)) return;
+      // @ts-expect-error mediaSession may be missing in TS lib
+      const ms = navigator.mediaSession as MediaSession | undefined;
+      if (!ms) return;
+      ms.metadata = new MediaMetadata({
+        title: activeEpisode.title,
+        artist: feed?.title ?? 'Подкаст',
+        album: feed?.title ?? undefined,
+        artwork: activeEpisode.imageUrl
+          ? [{ src: activeEpisode.imageUrl, sizes: '512x512', type: 'image/png' }]
+          : undefined,
+      });
+    } catch {
+      /* ignore */
+    }
+  }, [activeEpisode, feed?.title]);
 
   async function tryShare(title: string, url: string) {
     try {
@@ -90,6 +116,19 @@ export function PodcastsPage() {
       window.dispatchEvent(new CustomEvent('app:toast', { detail: { kind: 'success', message: 'Ссылка скопирована' } }));
     } catch {
       window.open(url, '_blank', 'noopener,noreferrer');
+    }
+  }
+
+  async function playEpisode(ep: PodcastEpisode) {
+    setActiveId(ep.id);
+    // Wait a tick so <audio src> updates before play()
+    await Promise.resolve();
+    const el = audioRef.current;
+    if (!el) return;
+    try {
+      await el.play();
+    } catch {
+      // Autoplay blocked until user gesture in some browsers — but this is invoked by a click.
     }
   }
 
@@ -298,6 +337,7 @@ export function PodcastsPage() {
               <div className="grid gap-3 sm:gap-4">
                 {filtered.map((ep) => {
                   const sub = episodeSubtitle(ep);
+                    const isActive = activeEpisode?.id === ep.id;
                   return (
                     <article
                       key={ep.id}
@@ -322,12 +362,20 @@ export function PodcastsPage() {
                           ) : (
                             <p className="mt-1 text-xs font-semibold text-stone-500"> </p>
                           )}
-                          {ep.description ? (
-                            <p className="mt-2 line-clamp-2 text-sm font-medium leading-snug text-stone-600">
-                              {ep.description}
-                            </p>
-                          ) : null}
                           <div className="mt-3 flex flex-wrap items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => void playEpisode(ep)}
+                              className={[
+                                'inline-flex h-10 items-center gap-2 rounded-2xl px-4 text-sm font-extrabold shadow-sm transition',
+                                isActive
+                                  ? 'bg-primary text-white shadow-primary/25'
+                                  : 'bg-stone-900 text-white hover:bg-stone-800',
+                              ].join(' ')}
+                            >
+                              <LuPlay className="h-4 w-4" strokeWidth={2.25} aria-hidden />
+                              {isActive ? 'В плеере' : 'Слушать'}
+                            </button>
                             {ep.pageUrl ? (
                               <button
                                 type="button"
@@ -338,14 +386,6 @@ export function PodcastsPage() {
                                 Поделиться
                               </button>
                             ) : null}
-                            <a
-                              href={ep.audioUrl}
-                              download
-                              className="inline-flex h-9 items-center gap-2 rounded-xl border border-stone-200 bg-white px-3 text-xs font-extrabold text-stone-700 hover:bg-stone-50"
-                            >
-                              <LuDownload className="h-4 w-4" strokeWidth={2} aria-hidden />
-                              Скачать
-                            </a>
                             {ep.pageUrl ? (
                               <a
                                 href={ep.pageUrl}
@@ -358,13 +398,12 @@ export function PodcastsPage() {
                               </a>
                             ) : null}
                           </div>
+                          {ep.description ? (
+                            <p className="mt-3 line-clamp-2 text-sm font-medium leading-snug text-stone-600">
+                              {ep.description}
+                            </p>
+                          ) : null}
                         </div>
-                      </div>
-
-                      <div className="mt-4">
-                        <audio controls preload="none" className="w-full">
-                          <source src={ep.audioUrl} />
-                        </audio>
                       </div>
                     </article>
                   );
@@ -374,6 +413,51 @@ export function PodcastsPage() {
           </section>
         </div>
       </div>
+
+      {/* Sticky player: keeps playing while browsing (mobile-first). */}
+      {activeEpisode ? (
+        <div className="fixed inset-x-3 bottom-[calc(5.5rem+env(safe-area-inset-bottom))] z-[60] md:inset-x-6 md:bottom-6">
+          <div className="rounded-3xl border border-stone-200/80 bg-white/90 p-4 shadow-[0_16px_60px_rgba(0,0,0,0.18)] backdrop-blur-xl">
+            <div className="flex items-start gap-3">
+              <div className="h-12 w-12 shrink-0 overflow-hidden rounded-2xl bg-stone-100 ring-1 ring-stone-200/70">
+                {activeEpisode.imageUrl ? (
+                  <img src={activeEpisode.imageUrl} alt="" className="h-full w-full object-cover" />
+                ) : (
+                  <div className="grid h-full w-full place-items-center text-stone-400">
+                    <LuHeadphones className="h-5 w-5" strokeWidth={1.8} aria-hidden />
+                  </div>
+                )}
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-[13px] font-extrabold text-stone-900">{activeEpisode.title}</p>
+                <p className="mt-0.5 truncate text-[11px] font-semibold text-stone-500">
+                  {episodeSubtitle(activeEpisode) || (feed?.title ?? 'Подкаст')}
+                </p>
+              </div>
+              <button
+                type="button"
+                className="inline-flex h-9 items-center justify-center rounded-2xl border border-stone-200 bg-white px-3 text-xs font-extrabold text-stone-700 hover:bg-stone-50"
+                onClick={() => setActiveId(null)}
+                aria-label="Закрыть плеер"
+              >
+                <LuX className="h-4 w-4" strokeWidth={2} aria-hidden />
+              </button>
+            </div>
+
+            <div className="mt-3">
+              <audio
+                ref={(el) => {
+                  audioRef.current = el;
+                }}
+                controls
+                preload="none"
+                className="w-full"
+                src={activeEpisode.audioUrl}
+              />
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
