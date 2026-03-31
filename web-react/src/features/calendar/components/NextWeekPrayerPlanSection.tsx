@@ -340,8 +340,8 @@ function NextWeekMembersPanel(props: {
         </ul>
       ) : (
         <div>
-          <div className="mb-3 grid gap-2 sm:grid-cols-2">
-            <label className="relative block sm:col-span-2">
+          <div className="mb-3 space-y-2">
+            <label className="relative block">
               <span className="sr-only">Поиск участника</span>
               <LuSearch className="pointer-events-none absolute left-3 top-1/2 h-4.5 w-4.5 -translate-y-1/2 text-stone-400" />
               <input
@@ -353,25 +353,28 @@ function NextWeekMembersPanel(props: {
               />
             </label>
 
-            {([
-              ['all', `Все (${days.length})`],
-              ['mine', `Мои (${myClaimsCount})`],
-              ['free', `Свободные (${freeCount})`],
-              ['busy', `Занятые (${busyCount})`],
-            ] as const).map(([mode, label]) => (
-              <button
-                key={mode}
-                type="button"
-                onClick={() => setFilterMode(mode)}
-                className={`min-h-[42px] rounded-xl border px-3 text-[13px] font-bold transition ${
-                  filterMode === mode
-                    ? 'border-primary/60 bg-primary/10 text-primary'
-                    : 'border-stone-200 bg-white text-stone-600 hover:text-stone-900'
-                }`}
-              >
-                {label}
-              </button>
-            ))}
+            <div className="flex items-center gap-2 overflow-x-auto pb-0.5 [-webkit-overflow-scrolling:touch]">
+              {([
+                ['all', `Все · ${days.length}`],
+                ['mine', `Мои · ${myClaimsCount}`],
+                ['free', `Свободные · ${freeCount}`],
+                ['busy', `Занятые · ${busyCount}`],
+              ] as const).map(([mode, label]) => (
+                <button
+                  key={mode}
+                  type="button"
+                  onClick={() => setFilterMode(mode)}
+                  className={[
+                    'shrink-0 rounded-full border px-3 py-2 text-[12px] font-extrabold uppercase tracking-[0.08em] transition',
+                    filterMode === mode
+                      ? 'border-primary/60 bg-primary/10 text-primary'
+                      : 'border-stone-200 bg-white text-stone-600 hover:text-stone-900',
+                  ].join(' ')}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
           </div>
 
           {listRows.length === 0 ? (
@@ -389,40 +392,94 @@ function NextWeekMembersPanel(props: {
                 const mid = row.member?.id;
                 const claimRow = claimsError ? undefined : mid != null ? claimByMemberId.get(mid) : undefined;
                 const mine = currentUserId != null && claimRow?.claimed_by?.id === currentUserId;
-                const disabled = mutPending || !claimRow?.can_toggle;
+                const canToggle = Boolean(claimRow && (claimRow.can_toggle || mine));
+                const disabled = mutPending || !canToggle;
+                const claimedByLabel = claimRow?.claimed_by
+                  ? mine
+                    ? 'Вы'
+                    : claimRow.claimed_by.name
+                  : null;
 
                 return (
                   <li
                     key={`claim-${row.date}`}
-                    className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-3 shell:px-5"
+                    className="group flex flex-col gap-2 px-4 py-3 transition-colors hover:bg-stone-50/70 sm:flex-row sm:items-center sm:justify-between sm:gap-3 shell:px-5"
                   >
                     <div className="flex min-w-0 flex-1 flex-col gap-0.5 sm:flex-row sm:items-baseline sm:gap-3">
-                      <span className="shrink-0 text-[13px] font-medium text-stone-600">{label}</span>
-                      <span className="min-w-0 text-[15px] font-semibold text-stone-900">{name ?? '—'}</span>
+                      <span className="shrink-0 text-[12px] font-semibold uppercase tracking-wide text-stone-500">
+                        {label}
+                      </span>
+                      <span className="min-w-0 text-[15px] font-extrabold tracking-tight text-stone-900">
+                        {name ?? '—'}
+                      </span>
                     </div>
                     {mid != null && claimRow && !claimsError ? (
                       <div className="flex flex-wrap items-center justify-end gap-2 sm:shrink-0">
-                        <label
-                          className={`inline-flex cursor-pointer items-center gap-2 ${!claimRow.can_toggle && !mine ? 'cursor-default opacity-90' : ''}`}
-                        >
-                          <input
-                            type="checkbox"
-                            className="h-5 w-5 shrink-0 rounded border-stone-300 text-primary focus:ring-primary/30 disabled:cursor-not-allowed"
-                            checked={mine}
-                            disabled={disabled}
-                            onChange={(e) => onToggle(mid, e.target.checked)}
-                          />
-                          <span className="sr-only">Сбор нужд для {name}</span>
-                        </label>
+                        {/* Статус */}
                         {claimRow.claimed_by ? (
-                          <span className="inline-flex max-w-full items-center rounded-full bg-amber-500/12 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-amber-950">
-                            {mine ? 'Вы' : claimRow.claimed_by.name}
+                          <span
+                            className={[
+                              'inline-flex max-w-full items-center rounded-full px-2.5 py-1 text-[11px] font-extrabold uppercase tracking-wide',
+                              mine
+                                ? 'bg-primary/10 text-primary'
+                                : 'bg-amber-500/12 text-amber-950',
+                            ].join(' ')}
+                          >
+                            {claimedByLabel}
                           </span>
                         ) : (
-                          <span className="inline-flex max-w-full items-center rounded-full bg-emerald-500/10 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-emerald-900">
+                          <span className="inline-flex max-w-full items-center rounded-full bg-emerald-500/10 px-2.5 py-1 text-[11px] font-extrabold uppercase tracking-wide text-emerald-900">
                             Свободно
                           </span>
                         )}
+
+                        {/* Современный выбор: toggle-кнопка */}
+                        <button
+                          type="button"
+                          disabled={disabled}
+                          aria-pressed={mine}
+                          aria-label={
+                            mine
+                              ? 'Снять отметку сбора нужд'
+                              : claimRow.claimed_by
+                                ? 'Недоступно: уже занято'
+                                : 'Взять сбор нужд на себя'
+                          }
+                          onClick={() => {
+                            if (disabled) return;
+                            onToggle(mid, !mine);
+                          }}
+                          className={[
+                            'relative inline-flex h-10 w-[72px] items-center rounded-full border transition',
+                            'focus:outline-none focus:ring-2 focus:ring-primary/25 focus:ring-offset-2 focus:ring-offset-[var(--surface)]',
+                            disabled
+                              ? 'cursor-not-allowed border-stone-200 bg-stone-100 opacity-60'
+                              : mine
+                                ? 'border-primary/40 bg-primary/10 hover:bg-primary/15'
+                                : 'border-stone-200 bg-white hover:border-stone-300 hover:bg-stone-50',
+                          ].join(' ')}
+                          title={
+                            disabled
+                              ? claimRow.claimed_by && !mine
+                                ? 'Уже занято другим ответственным'
+                                : 'Недоступно'
+                              : mine
+                                ? 'Снять отметку'
+                                : 'Взять на себя'
+                          }
+                        >
+                          <span
+                            className={[
+                              'absolute left-1 flex h-8 w-8 items-center justify-center rounded-full shadow-sm transition-transform',
+                              mine
+                                ? 'translate-x-[30px] bg-primary text-white'
+                                : 'translate-x-0 bg-stone-200 text-stone-600',
+                            ].join(' ')}
+                          >
+                            <LuCheck className={mine ? 'h-4 w-4' : 'h-4 w-4 opacity-0'} aria-hidden />
+                          </span>
+                          <span className="sr-only">{mine ? 'Выбрано' : 'Не выбрано'}</span>
+                        </button>
                       </div>
                     ) : null}
                   </li>
