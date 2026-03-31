@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import {
   approveAccessRequest,
+  changeMemberPhone,
   changeMemberPassword,
   getAuthUserById,
   listAccessRequests,
@@ -387,6 +388,51 @@ export async function changePasswordHandler(req: Request, res: Response): Promis
     res.status(400).json({ error: `Пароль должен быть не короче ${MIN_PASSWORD_LENGTH} символов` });
   } catch (error) {
     console.error('Failed to change password', error);
+    res.status(500).json({ error: 'Database error' });
+  }
+}
+
+export async function changePhoneHandler(req: Request, res: Response): Promise<void> {
+  const authReq = req as AuthRequest;
+  if (!authReq.authUserId) {
+    res.status(401).json({ error: 'Authentication required' });
+    return;
+  }
+
+  const currentPassword = readStringField(req.body.current_password);
+  const newPhoneNumber = readStringField(req.body.new_phone_number);
+  if (!currentPassword || !newPhoneNumber) {
+    res.status(400).json({ error: 'Fields "current_password" and "new_phone_number" are required' });
+    return;
+  }
+
+  if (!isValidPhoneForProfile(newPhoneNumber)) {
+    res.status(400).json({ error: 'Field "new_phone_number" must be valid' });
+    return;
+  }
+
+  try {
+    const result = await changeMemberPhone(authReq.authUserId, currentPassword, newPhoneNumber);
+    if (result === 'ok') {
+      notifyRealtime(['me', 'members']);
+      res.status(204).send();
+      return;
+    }
+    if (result === 'wrong_password') {
+      res.status(401).json({ error: 'Неверный текущий пароль' });
+      return;
+    }
+    if (result === 'no_password') {
+      res.status(409).json({ error: 'Для аккаунта не задан пароль' });
+      return;
+    }
+    if (result === 'phone_taken') {
+      res.status(409).json({ error: 'Этот номер уже используется другим аккаунтом' });
+      return;
+    }
+    res.status(400).json({ error: 'Неверный номер телефона' });
+  } catch (error) {
+    console.error('Failed to change phone number', error);
     res.status(500).json({ error: 'Database error' });
   }
 }

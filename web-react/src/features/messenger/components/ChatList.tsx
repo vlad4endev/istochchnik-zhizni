@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { useChatStore, EMPTY_ARRAY, type ChatTab } from '../chatStore';
 import type { ConversationListItem } from '../api/messengerApi';
+import { resolvePublicUrl } from '../../../lib/resolvePublicUrl';
 
 interface ChatListProps {
   onSelect: (id: string) => void;
@@ -148,6 +149,7 @@ function ChatListItem({
     conv.type === 'private'
       ? (conv.other_member?.avatar_url ?? null)
       : (conv.avatar_url ?? null);
+  const avatarSrc = resolvePublicUrl(avatarUrl);
   const lastMsg = conv.last_message;
   const isTyping = typingUsers.length > 0;
 
@@ -168,8 +170,8 @@ function ChatListItem({
           className="grid h-12 w-12 place-items-center overflow-hidden rounded-2xl text-white shadow-sm"
           style={{ background: avatarColor }}
         >
-          {avatarUrl ? (
-            <img src={avatarUrl} alt="" className="h-full w-full object-cover" loading="lazy" />
+          {avatarSrc ? (
+            <img src={avatarSrc} alt="" className="h-full w-full object-cover" loading="lazy" />
           ) : (
             <span className="text-[15px] font-extrabold">{avatarLetter}</span>
           )}
@@ -211,11 +213,12 @@ function ChatListItem({
                 : 'Нет сообщений'}
           </span>
 
-          {conv.unread_count > 0 ? (
+          {/* Hide unread badge for currently open chat (it is considered read). */}
+          {conv.unread_count > 0 && !isActive ? (
             <span
               className={[
                 'inline-flex min-w-[20px] items-center justify-center rounded-full px-1.5 py-0.5 text-[11px] font-extrabold',
-                isActive ? 'bg-white/90 text-primary' : 'bg-primary text-white',
+                'bg-primary text-white',
               ].join(' ')}
             >
               {conv.unread_count > 99 ? '99+' : conv.unread_count}

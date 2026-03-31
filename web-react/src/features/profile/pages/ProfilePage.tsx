@@ -1,15 +1,14 @@
 import { useCallback, useEffect, useState } from 'react';
-import { LuImagePlus, LuLogOut, LuSave, LuUser } from 'react-icons/lu';
+import { LuImagePlus, LuLogOut, LuShield, LuUser } from 'react-icons/lu';
 import { useAuthStore } from '../../auth/authStore';
 import { formatRuPhoneInput } from '../../auth/utils/formatRuPhone';
+import { resolvePublicUrl } from '../../../lib/resolvePublicUrl';
 import {
   changePassword,
+  changePhone,
   fetchMe,
-  fetchPrayerRequestHistory,
-  patchProfile,
   uploadMyAvatar,
   type MeResponse,
-  type PrayerHistoryItem,
 } from '../api';
 
 function displayName(user: MeResponse): string {
@@ -41,18 +40,8 @@ export function ProfilePage() {
   const [user, setUser] = useState<MeResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
   const [avatarUploading, setAvatarUploading] = useState(false);
   const [msg, setMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
-
-  const [draft, setDraft] = useState({
-    first_name: '',
-    last_name: '',
-    phone_number: '',
-    email: '',
-    birth_date: '',
-    prayer_request: '',
-  });
 
   const [pwdCurrent, setPwdCurrent] = useState('');
   const [pwdNew, setPwdNew] = useState('');
@@ -60,9 +49,10 @@ export function ProfilePage() {
   const [pwdSaving, setPwdSaving] = useState(false);
   const [pwdMsg, setPwdMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
 
-  const [history, setHistory] = useState<PrayerHistoryItem[]>([]);
-  const [historyLoading, setHistoryLoading] = useState(false);
-  const [historyError, setHistoryError] = useState<string | null>(null);
+  const [phoneNew, setPhoneNew] = useState('');
+  const [phonePwd, setPhonePwd] = useState('');
+  const [phoneSaving, setPhoneSaving] = useState(false);
+  const [phoneMsg, setPhoneMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
 
   const loadProfile = useCallback(async () => {
     setLoading(true);
@@ -76,14 +66,7 @@ export function ProfilePage() {
         lastName: me.last_name ?? '',
         role: me.app_role ?? 'member',
       });
-      setDraft({
-        first_name: me.first_name ?? '',
-        last_name: me.last_name ?? '',
-        phone_number: me.phone_number ?? '',
-        email: me.email ?? '',
-        birth_date: me.birth_date ? me.birth_date.slice(0, 10) : '',
-        prayer_request: me.prayer_request ?? '',
-      });
+      setPhoneNew(me.phone_number ?? '');
     } catch (e) {
       setError(axiosMessage(e));
       setUser(null);
@@ -95,29 +78,6 @@ export function ProfilePage() {
   useEffect(() => {
     void loadProfile();
   }, [loadProfile]);
-
-  useEffect(() => {
-    if (!user?.id) return;
-    let cancelled = false;
-    setHistoryLoading(true);
-    setHistoryError(null);
-    void fetchPrayerRequestHistory(user.id, 30)
-      .then((items) => {
-        if (cancelled) return;
-        setHistory(items);
-      })
-      .catch((e) => {
-        if (cancelled) return;
-        setHistoryError(axiosMessage(e));
-      })
-      .finally(() => {
-        if (cancelled) return;
-        setHistoryLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [user?.id]);
 
   const onPickAvatar = async (file: File | null) => {
     if (!file) return;
@@ -134,24 +94,21 @@ export function ProfilePage() {
     }
   };
 
-  const saveProfile = async () => {
-    setSaving(true);
-    setMsg(null);
+  const savePhone = async () => {
+    setPhoneSaving(true);
+    setPhoneMsg(null);
     try {
-      const next = await patchProfile({
-        first_name: draft.first_name.trim(),
-        last_name: draft.last_name.trim(),
-        phone_number: draft.phone_number.trim(),
-        email: draft.email.trim(),
-        birth_date: draft.birth_date.trim() ? draft.birth_date.trim() : null,
-        prayer_request: draft.prayer_request,
-      });
-      setUser(next);
-      setMsg({ kind: 'ok', text: 'Сохранено' });
+      const formatted = formatRuPhoneInput(phoneNew).trim();
+      if (!formatted) throw new Error('Введите новый номер');
+      if (!phonePwd.trim()) throw new Error('Введите текущий пароль');
+      await changePhone(phonePwd, formatted);
+      setPhonePwd('');
+      setPhoneMsg({ kind: 'ok', text: 'Номер обновлён' });
+      await loadProfile();
     } catch (e) {
-      setMsg({ kind: 'err', text: axiosMessage(e) });
+      setPhoneMsg({ kind: 'err', text: e instanceof Error ? e.message : axiosMessage(e) });
     } finally {
-      setSaving(false);
+      setPhoneSaving(false);
     }
   };
 
@@ -174,7 +131,7 @@ export function ProfilePage() {
   };
 
   const name = user ? displayName(user) : 'Профиль';
-  const avatarUrl = user?.avatar_url ?? null;
+  const avatarUrl = resolvePublicUrl(user?.avatar_url ?? null);
 
   const section = 'rounded-3xl bg-white/80 p-5 shadow-[0_10px_30px_rgba(28,25,23,0.08)] ring-1 ring-stone-200/70 backdrop-blur';
   const label = 'text-[11px] font-extrabold uppercase tracking-[0.14em] text-stone-500';
@@ -255,96 +212,68 @@ export function ProfilePage() {
 
       <div className="mt-4 grid gap-4">
         <div className={section}>
-          <p className={label}>Данные</p>
-          <div className="mt-4 grid gap-4">
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div>
-                <label className={label}>Имя</label>
-                <input className={input} value={draft.first_name} onChange={(e) => setDraft((d) => ({ ...d, first_name: e.target.value }))} />
-              </div>
-              <div>
-                <label className={label}>Фамилия</label>
-                <input className={input} value={draft.last_name} onChange={(e) => setDraft((d) => ({ ...d, last_name: e.target.value }))} />
-              </div>
+          <div className="flex items-center justify-between gap-3">
+            <p className={label}>Безопасность</p>
+            <div className="inline-flex items-center gap-2 rounded-2xl bg-stone-900 px-3 py-1.5 text-[11px] font-extrabold uppercase tracking-[0.12em] text-white">
+              <LuShield />
+              Аккаунт
             </div>
-            <div>
-              <label className={label}>Телефон</label>
-              <input
-                className={input}
-                value={draft.phone_number}
-                onChange={(e) => setDraft((d) => ({ ...d, phone_number: formatRuPhoneInput(e.target.value) }))}
-              />
-            </div>
-            <div>
-              <label className={label}>Email</label>
-              <input className={input} value={draft.email} onChange={(e) => setDraft((d) => ({ ...d, email: e.target.value }))} />
-            </div>
-            <div>
-              <label className={label}>Дата рождения</label>
-              <input className={input} value={draft.birth_date} placeholder="YYYY-MM-DD" onChange={(e) => setDraft((d) => ({ ...d, birth_date: e.target.value }))} />
-            </div>
-            <div>
-              <label className={label}>Молитвенная нужда</label>
-              <textarea
-                className={`${input} min-h-[120px]`}
-                value={draft.prayer_request}
-                onChange={(e) => setDraft((d) => ({ ...d, prayer_request: e.target.value }))}
-              />
-            </div>
-            <button
-              type="button"
-              disabled={saving}
-              onClick={() => void saveProfile()}
-              className="inline-flex min-h-[48px] items-center justify-center gap-2 rounded-2xl bg-primary px-5 py-3 text-sm font-extrabold text-white shadow-lg shadow-primary/25 disabled:opacity-60"
-            >
-              <LuSave />
-              {saving ? 'Сохраняем…' : 'Сохранить'}
-            </button>
           </div>
-        </div>
-
-        <div className={section}>
-          <p className={label}>Пароль</p>
-          <div className="mt-4 grid gap-3">
-            <input className={input} type="password" placeholder="Текущий пароль" value={pwdCurrent} onChange={(e) => setPwdCurrent(e.target.value)} />
-            <input className={input} type="password" placeholder="Новый пароль (мин. 8)" value={pwdNew} onChange={(e) => setPwdNew(e.target.value)} />
-            <input className={input} type="password" placeholder="Повторите новый пароль" value={pwdConfirm} onChange={(e) => setPwdConfirm(e.target.value)} />
-            {pwdMsg ? (
-              <p className={`text-sm font-semibold ${pwdMsg.kind === 'ok' ? 'text-emerald-700' : 'text-red-600'}`}>{pwdMsg.text}</p>
-            ) : null}
-            <button
-              type="button"
-              disabled={pwdSaving}
-              onClick={() => void savePassword()}
-              className="min-h-[48px] rounded-2xl bg-stone-900 px-5 py-3 text-sm font-extrabold text-white shadow-lg disabled:opacity-60"
-            >
-              {pwdSaving ? 'Обновляем…' : 'Обновить пароль'}
-            </button>
-          </div>
-        </div>
-
-        <div className={section}>
-          <p className={label}>История молитвенных записок</p>
-          <div className="mt-4">
-            {historyLoading ? (
-              <div className="space-y-3">
-                <div className="h-14 animate-pulse rounded-2xl bg-stone-100" />
-                <div className="h-14 animate-pulse rounded-2xl bg-stone-100" />
+          <div className="mt-4 grid gap-6">
+            <div className="rounded-3xl bg-white/70 p-4 ring-1 ring-stone-200/60">
+              <p className="text-sm font-extrabold text-stone-900">Смена номера</p>
+              <p className="mt-1 text-sm font-semibold text-stone-500">
+                Текущий: {user?.phone_number ? user.phone_number : 'не указан'}
+              </p>
+              <div className="mt-4 grid gap-3">
+                <input
+                  className={input}
+                  placeholder="Новый номер"
+                  value={phoneNew}
+                  onChange={(e) => setPhoneNew(formatRuPhoneInput(e.target.value))}
+                />
+                <input
+                  className={input}
+                  type="password"
+                  placeholder="Текущий пароль"
+                  value={phonePwd}
+                  onChange={(e) => setPhonePwd(e.target.value)}
+                />
+                {phoneMsg ? (
+                  <p className={`text-sm font-semibold ${phoneMsg.kind === 'ok' ? 'text-emerald-700' : 'text-red-600'}`}>
+                    {phoneMsg.text}
+                  </p>
+                ) : null}
+                <button
+                  type="button"
+                  disabled={phoneSaving}
+                  onClick={() => void savePhone()}
+                  className="min-h-[48px] rounded-2xl bg-primary px-5 py-3 text-sm font-extrabold text-white shadow-lg shadow-primary/25 disabled:opacity-60"
+                >
+                  {phoneSaving ? 'Обновляем…' : 'Обновить номер'}
+                </button>
               </div>
-            ) : historyError ? (
-              <p className="text-sm font-semibold text-red-600">{historyError}</p>
-            ) : history.length === 0 ? (
-              <p className="text-sm font-semibold text-stone-500">Пока пусто.</p>
-            ) : (
-              <div className="space-y-2">
-                {history.map((h) => (
-                  <div key={h.id} className="rounded-2xl bg-white/70 p-4 ring-1 ring-stone-200/60">
-                    <p className="text-sm font-semibold text-stone-900">{h.prayer_request}</p>
-                    <p className="mt-1 text-[12px] font-semibold text-stone-500">{new Date(h.created_at).toLocaleString('ru-RU')}</p>
-                  </div>
-                ))}
+            </div>
+
+            <div className="rounded-3xl bg-white/70 p-4 ring-1 ring-stone-200/60">
+              <p className="text-sm font-extrabold text-stone-900">Смена пароля</p>
+              <div className="mt-4 grid gap-3">
+                <input className={input} type="password" placeholder="Текущий пароль" value={pwdCurrent} onChange={(e) => setPwdCurrent(e.target.value)} />
+                <input className={input} type="password" placeholder="Новый пароль (мин. 8)" value={pwdNew} onChange={(e) => setPwdNew(e.target.value)} />
+                <input className={input} type="password" placeholder="Повторите новый пароль" value={pwdConfirm} onChange={(e) => setPwdConfirm(e.target.value)} />
+                {pwdMsg ? (
+                  <p className={`text-sm font-semibold ${pwdMsg.kind === 'ok' ? 'text-emerald-700' : 'text-red-600'}`}>{pwdMsg.text}</p>
+                ) : null}
+                <button
+                  type="button"
+                  disabled={pwdSaving}
+                  onClick={() => void savePassword()}
+                  className="min-h-[48px] rounded-2xl bg-stone-900 px-5 py-3 text-sm font-extrabold text-white shadow-lg disabled:opacity-60"
+                >
+                  {pwdSaving ? 'Обновляем…' : 'Обновить пароль'}
+                </button>
               </div>
-            )}
+            </div>
           </div>
         </div>
       </div>

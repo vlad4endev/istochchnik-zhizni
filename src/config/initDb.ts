@@ -511,6 +511,11 @@ CREATE TABLE IF NOT EXISTS message_interactions (
 -- Upgrades for DBs created before avatar_url
 ALTER TABLE members ADD COLUMN IF NOT EXISTS avatar_url TEXT;
 
+-- Upgrades for DBs created before read cursors
+-- Старые БД: conversation_participants могли быть без last_read_message_id — индекс ниже тогда падает.
+ALTER TABLE conversation_participants
+  ADD COLUMN IF NOT EXISTS last_read_message_id BIGINT REFERENCES messages(id) ON DELETE SET NULL;
+
 -- Indexes
 CREATE INDEX IF NOT EXISTS idx_conv_participants_member
   ON conversation_participants (member_id) WHERE left_at IS NULL;
@@ -559,7 +564,8 @@ ALTER TABLE messages
 ALTER TABLE messages ADD COLUMN IF NOT EXISTS payload JSONB NOT NULL DEFAULT '{}'::jsonb;
 ALTER TABLE messages ADD COLUMN IF NOT EXISTS interaction_count INTEGER NOT NULL DEFAULT 0;
 
-ALTER TABLE conversation_participants
+-- Upgrades for DBs created before read_receipts.last_read_message_id (CREATE TABLE IF NOT EXISTS doesn't add columns)
+ALTER TABLE read_receipts
   ADD COLUMN IF NOT EXISTS last_read_message_id BIGINT REFERENCES messages(id) ON DELETE SET NULL;
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_messages_client_dedupe

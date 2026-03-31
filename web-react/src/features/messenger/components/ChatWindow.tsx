@@ -5,6 +5,7 @@ import { MessageBubble } from './MessageBubble';
 import { ChatInput } from './ChatInput';
 import { SearchChat } from './SearchChat';
 import { LuArrowLeft, LuSearch } from 'react-icons/lu';
+import { resolvePublicUrl } from '../../../lib/resolvePublicUrl';
 import './messenger.css';
 
 interface ChatWindowProps {
@@ -159,6 +160,7 @@ export function ChatWindow({
     conv?.type === 'private'
       ? (conv.other_member?.avatar_url ?? null)
       : (conv?.avatar_url ?? null);
+  const headerAvatarSrc = useMemo(() => resolvePublicUrl(headerAvatarUrl), [headerAvatarUrl]);
   const headerAvatarColor = useMemo(() => {
     if (!conv?.id) return 'var(--tg-primary)';
     let hash = 0;
@@ -224,9 +226,9 @@ export function ChatWindow({
             style={{ background: headerAvatarColor }}
             aria-hidden
           >
-            {headerAvatarUrl ? (
+            {headerAvatarSrc ? (
               <img
-                src={headerAvatarUrl}
+                src={headerAvatarSrc}
                 alt=""
                 className="h-full w-full object-cover"
                 loading="lazy"

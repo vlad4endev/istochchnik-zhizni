@@ -74,6 +74,10 @@ export async function changePassword(current_password: string, new_password: str
   await apiClient.post('/api/auth/change-password', { current_password, new_password });
 }
 
+export async function changePhone(current_password: string, new_phone_number: string): Promise<void> {
+  await apiClient.post('/api/auth/change-phone', { current_password, new_phone_number });
+}
+
 export async function fetchPrayerRequestHistory(
   userId: number,
   limit = 40,

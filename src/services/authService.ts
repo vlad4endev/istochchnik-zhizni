@@ -803,6 +803,52 @@ export async function changeMemberPassword(
   return 'ok';
 }
 
+export async function changeMemberPhone(
+  userId: number,
+  currentPassword: string,
+  newPhoneNumber: string
+): Promise<'ok' | 'wrong_password' | 'no_password' | 'phone_taken' | 'invalid_phone'> {
+  try {
+    ensureValidPhone(newPhoneNumber);
+  } catch {
+    return 'invalid_phone';
+  }
+
+  const result = await query(
+    `SELECT password_hash FROM members WHERE id = $1 AND is_active = TRUE LIMIT 1`,
+    [userId]
+  );
+  const row = result.rows[0] as { password_hash: string | null } | undefined;
+  const hash = row?.password_hash;
+  if (!hash) {
+    return 'no_password';
+  }
+  if (!(await verifyPassword(currentPassword, hash))) {
+    return 'wrong_password';
+  }
+
+  const phoneDigits = normalizePhoneDigits(newPhoneNumber);
+  const phoneVariants = getPhoneDigitsVariants(phoneDigits);
+  const conflict = await query(
+    `SELECT id
+     FROM members
+     WHERE is_active = TRUE
+       AND id <> $2
+       AND regexp_replace(COALESCE(phone_number, ''), '\\D', '', 'g') = ANY($1::text[])
+     LIMIT 1`,
+    [phoneVariants, userId]
+  );
+  if (conflict.rows[0]?.id) {
+    return 'phone_taken';
+  }
+
+  await query(
+    `UPDATE members SET phone_number = $1, updated_at = NOW() WHERE id = $2 AND is_active = TRUE`,
+    [normalizePhoneInput(newPhoneNumber), userId]
+  );
+  return 'ok';
+}
+
 export async function listAccessRequests(status?: AccessRequestStatus): Promise<AccessRequestItem[]> {
   const params: unknown[] = [];
   let whereSql = '';

@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import {
   approveAccessRequestHandler,
+  changePhoneHandler,
   changePasswordHandler,
   listAccessRequestsHandler,
   loginHandler,
@@ -46,6 +47,7 @@ router.get('/me', requireAuthSession, meHandler);
 router.patch('/me', requireAuthSession, patchProfileHandler);
 router.post('/me/avatar', requireAuthSession, upload.single('file'), uploadAvatarHandler);
 router.post('/change-password', requireAuthSession, changePasswordHandler);
+router.post('/change-phone', requireAuthSession, changePhoneHandler);
 router.post('/logout', requireAuthSession, logoutHandler);
 router.get('/access-requests', requireAuthSession, listAccessRequestsHandler);
 router.post('/access-requests/:id/approve', requireAuthSession, approveAccessRequestHandler);
