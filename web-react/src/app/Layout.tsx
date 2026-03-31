@@ -1,7 +1,7 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import type { IconType } from 'react-icons';
-import { LuBookOpen, LuChevronLeft, LuChevronRight, LuChurch, LuMessageCircle, LuShield, LuUser, LuWifiOff, LuX } from 'react-icons/lu';
+import { LuChevronLeft, LuChevronRight, LuChurch, LuMessageCircle, LuMic, LuShield, LuUser, LuWifiOff, LuX } from 'react-icons/lu';
 
 import { useAuthStore } from '../features/auth/authStore';
 import { useBrandingStore } from '../features/branding/brandingStore';
@@ -23,10 +23,9 @@ type NavItem = {
 const NAV_ITEMS: NavItem[] = [
   /** Контурные Lucide — не путать с цветными эмодзи / Font Awesome «картинками». */
   { to: '/prayer', label: 'Молитва', Icon: LuChurch },
-  { to: '/resources', label: 'Ресурсы', Icon: LuBookOpen },
+  { to: '/sermons', label: 'Проповеди', Icon: LuMic },
   { to: '/messenger', label: 'Чаты', Icon: LuMessageCircle },
   // { to: '/broadcast', label: 'Трансляции', Icon: LuTv },
-  { to: '/profile', label: 'Профиль', Icon: LuUser },
   { to: '/admin', label: 'Админ', Icon: LuShield, adminOnly: true },
 ];
 
@@ -243,11 +242,8 @@ export function Layout() {
 
   const isAdmin = (role ?? 'member').toLowerCase() === 'admin';
   const items = NAV_ITEMS.filter((item) => !item.adminOnly || isAdmin);
-  const profileItem = items.find((i) => i.to === '/profile') ?? null;
-  const sidebarItems = profileItem ? items.filter((i) => i.to !== '/profile') : items;
-  const mobileItems = profileItem
-    ? [...items.filter((i) => i.to !== '/profile'), profileItem]
-    : items;
+  const sidebarItems = items;
+  const mobileItems = items;
 
   async function handleLogout() {
     if (!window.confirm('Завершить текущую сессию?')) {
@@ -303,6 +299,18 @@ export function Layout() {
         <ConnectivityBanner />
       </div>
       <div className="relative flex min-h-0 w-full min-w-0 flex-1 flex-col">
+      {/* Мобильная шапка: кнопка профиля справа сверху (вместо нижней панели). */}
+      <div className="pointer-events-none fixed right-3 top-3 z-[65] md:hidden [padding-top:env(safe-area-inset-top,0px)]">
+        <NavLink
+          to="/profile"
+          className="pointer-events-auto inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-stone-200/70 bg-white/85 text-stone-700 shadow-[0_10px_30px_rgba(0,0,0,0.12)] backdrop-blur-xl hover:bg-white"
+          aria-label="Профиль"
+          title="Профиль"
+        >
+          <LuUser className="h-5 w-5" strokeWidth={2} aria-hidden />
+        </NavLink>
+      </div>
+
       {/* Планшет/десктоп: фиксированный сайдбар (не в потоке, не растягивается по ширине main). На узких — нижняя навигация. */}
       <aside
         className={[
@@ -399,27 +407,25 @@ export function Layout() {
         </div>
 
         <div className="mt-auto border-t border-stone-200/80 p-4">
-          {profileItem ? (
-            <NavLink
-              to={profileItem.to}
-              className={({ isActive }) =>
-                [
-                  'mb-2 flex min-h-[44px] w-full items-center rounded-xl py-3 text-left text-sm font-semibold transition-colors',
-                  navCollapsed ? 'justify-center px-0' : 'px-4',
-                  isActive ? 'bg-primary text-white shadow-md shadow-primary/25' : 'text-stone-600 hover:bg-stone-100',
-                ].join(' ')
-              }
-              title={navCollapsed ? profileItem.label : undefined}
-              aria-label={navCollapsed ? profileItem.label : undefined}
-            >
-              {({ isActive }) => (
-                <>
-                  <profileItem.Icon className={navIconClass(isActive, navCollapsed)} strokeWidth={2} aria-hidden />
-                  {!navCollapsed ? profileItem.label : null}
-                </>
-              )}
-            </NavLink>
-          ) : null}
+          <NavLink
+            to="/profile"
+            className={({ isActive }) =>
+              [
+                'mb-2 flex min-h-[44px] w-full items-center rounded-xl py-3 text-left text-sm font-semibold transition-colors',
+                navCollapsed ? 'justify-center px-0' : 'px-4',
+                isActive ? 'bg-primary text-white shadow-md shadow-primary/25' : 'text-stone-600 hover:bg-stone-100',
+              ].join(' ')
+            }
+            title={navCollapsed ? 'Профиль' : undefined}
+            aria-label={navCollapsed ? 'Профиль' : undefined}
+          >
+            {({ isActive }) => (
+              <>
+                <LuUser className={navIconClass(isActive, navCollapsed)} strokeWidth={2} aria-hidden />
+                {!navCollapsed ? 'Профиль' : null}
+              </>
+            )}
+          </NavLink>
           <button
             type="button"
             onClick={() => void handleLogout()}

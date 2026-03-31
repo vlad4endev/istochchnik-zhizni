@@ -21,7 +21,7 @@ export interface BrandingStateSnapshot {
 }
 
 const DEFAULT_APP_NAME = 'МОЯ ЦЕРКОВЬ';
-const DEFAULT_DESCRIPTION = 'Молитвенный календарь церкви';
+const DEFAULT_DESCRIPTION = 'Цифровая платформа';
 const DEFAULT_LOGO_SCALE_PERCENT = 110;
 
 export const brandingDefaults: BrandingStateSnapshot = {

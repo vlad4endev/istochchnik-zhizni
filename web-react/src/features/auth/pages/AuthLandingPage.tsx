@@ -5,7 +5,7 @@ import { useAuthHydrated } from '../../../hooks/useAuthHydrated';
 import { useAuthStore } from '../authStore';
 
 const DEFAULT_APP_NAME = 'МОЯ ЦЕРКОВЬ';
-const DEFAULT_DESCRIPTION = 'Молитвенный календарь церкви';
+const DEFAULT_DESCRIPTION = 'Цифровая платформа';
 
 export function AuthLandingPage() {
   const navigate = useNavigate();

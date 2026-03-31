@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { LuArrowUpRight, LuCheck, LuHeadphones, LuPlay, LuRefreshCw, LuSearch, LuSettings, LuShare2, LuX } from 'react-icons/lu';
+import { LuArrowUpRight, LuCheck, LuHeadphones, LuHeart, LuPlay, LuRefreshCw, LuSearch, LuSettings, LuShare2, LuX } from 'react-icons/lu';
 
 import { fetchPodcastFeed, fetchPodcastSettings, patchPodcastSettings, type PodcastEpisode } from '../../../api/resources';
 import { useAuthStore } from '../../auth/authStore';
@@ -41,6 +41,7 @@ export function PodcastsPage() {
   const [rssDraft, setRssDraft] = useState('');
   const [activeId, setActiveId] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const saveTickRef = useRef(0);
 
   const q = useQuery({
     queryKey: ['resources', 'podcasts'],
@@ -73,6 +74,57 @@ export function PodcastsPage() {
     () => (activeId ? episodes.find((e) => e.id === activeId) ?? null : null),
     [activeId, episodes],
   );
+  const token = useAuthStore((s) => s.token);
+  const storageKey = useMemo(() => {
+    const suffix = (token ?? 'anon').slice(-12);
+    return `sermons_audio_v1:${suffix}`;
+  }, [token]);
+
+  type AudioState = {
+    favorites: Record<string, true>;
+    progress: Record<string, { position: number; duration: number | null; updatedAt: number }>;
+    listened: Record<string, true>;
+  };
+
+  const [audioState, setAudioState] = useState<AudioState>(() => {
+    try {
+      const raw = localStorage.getItem(storageKey);
+      if (!raw) return { favorites: {}, progress: {}, listened: {} };
+      const parsed = JSON.parse(raw) as Partial<AudioState>;
+      return {
+        favorites: (parsed.favorites ?? {}) as Record<string, true>,
+        progress: (parsed.progress ?? {}) as Record<string, { position: number; duration: number | null; updatedAt: number }>,
+        listened: (parsed.listened ?? {}) as Record<string, true>,
+      };
+    } catch {
+      return { favorites: {}, progress: {}, listened: {} };
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(storageKey, JSON.stringify(audioState));
+    } catch {
+      /* ignore */
+    }
+  }, [audioState, storageKey]);
+
+  function toggleFavorite(id: string) {
+    setAudioState((s) => {
+      const next = { ...s, favorites: { ...s.favorites } };
+      if (next.favorites[id]) {
+        delete next.favorites[id];
+      } else {
+        next.favorites[id] = true;
+      }
+      return next;
+    });
+  }
+
+  function markListened(id: string) {
+    setAudioState((s) => ({ ...s, listened: { ...s.listened, [id]: true } }));
+  }
+
   const filtered = useMemo(() => {
     const t = query.trim().toLowerCase();
     if (!t) return episodes;
@@ -85,9 +137,7 @@ export function PodcastsPage() {
   useEffect(() => {
     if (!activeEpisode) return;
     try {
-      if (!('mediaSession' in navigator)) return;
-      // @ts-expect-error mediaSession may be missing in TS lib
-      const ms = navigator.mediaSession as MediaSession | undefined;
+      const ms = (navigator as Navigator & { mediaSession?: MediaSession }).mediaSession;
       if (!ms) return;
       ms.metadata = new MediaMetadata({
         title: activeEpisode.title,
@@ -135,9 +185,9 @@ export function PodcastsPage() {
   return (
     <div className="min-h-full bg-[var(--surface)] pb-6 shell:pb-8">
       <header className="bg-primary px-4 py-4 text-white shadow-[0_4px_24px_rgba(125,54,64,0.3)] sm:px-5 sm:py-5 md:rounded-none md:shadow-sm md:px-6 max-md:rounded-b-[1.75rem]">
-        <h1 className="text-xl font-extrabold tracking-tight sm:text-2xl md:text-3xl">Ресурсы</h1>
+        <h1 className="text-xl font-extrabold tracking-tight sm:text-2xl md:text-3xl">Проповеди</h1>
         <p className="mt-1 max-w-3xl text-sm text-white/85 md:text-base">
-          Подкасты (загрузка по RSS{feed?.cached ? ' • кэш' : ''})
+          Аудио проповеди и удобное управление прослушиванием
         </p>
       </header>
 
@@ -157,16 +207,14 @@ export function PodcastsPage() {
                     )}
                   </div>
                   <div className="min-w-0">
-                    <h2 className="text-base font-extrabold text-stone-900 sm:text-lg md:text-xl">
-                      {feed?.title ?? 'Подкасты'}
-                    </h2>
+                    <h2 className="text-base font-extrabold text-stone-900 sm:text-lg md:text-xl">Аудио проповеди</h2>
                     {feed?.description ? (
                       <p className="mt-1 line-clamp-2 text-sm font-medium leading-snug text-stone-600">
                         {feed.description}
                       </p>
                     ) : (
                       <p className="mt-1 text-sm font-medium leading-snug text-stone-500">
-                        Все выпуски загружаются по RSS.
+                        Слушайте проповеди, добавляйте в избранное и продолжайте с того места, где остановились.
                       </p>
                     )}
                     <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs font-semibold text-stone-500">
@@ -338,6 +386,12 @@ export function PodcastsPage() {
                 {filtered.map((ep) => {
                   const sub = episodeSubtitle(ep);
                     const isActive = activeEpisode?.id === ep.id;
+                  const isFav = Boolean(audioState.favorites[ep.id]);
+                  const p = audioState.progress[ep.id];
+                  const dur = p?.duration ?? null;
+                  const pos = p?.position ?? 0;
+                  const ratio = dur && dur > 0 ? Math.max(0, Math.min(1, pos / dur)) : 0;
+                  const listened = Boolean(audioState.listened[ep.id]) || ratio >= 0.98;
                   return (
                     <article
                       key={ep.id}
@@ -362,6 +416,19 @@ export function PodcastsPage() {
                           ) : (
                             <p className="mt-1 text-xs font-semibold text-stone-500"> </p>
                           )}
+                          <div className="mt-2 flex items-center gap-2">
+                            <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-stone-100 ring-1 ring-stone-200/60">
+                              <div className="h-full bg-primary" style={{ width: `${Math.round(ratio * 100)}%` }} />
+                            </div>
+                            <span
+                              className={[
+                                'shrink-0 rounded-full px-2 py-0.5 text-[10px] font-extrabold',
+                                listened ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200/70' : 'bg-stone-50 text-stone-600 ring-1 ring-stone-200/70',
+                              ].join(' ')}
+                            >
+                              {listened ? 'ПРОСЛУШАНО' : ratio > 0 ? `${Math.round(ratio * 100)}%` : 'НОВОЕ'}
+                            </span>
+                          </div>
                           <div className="mt-3 flex flex-wrap items-center gap-2">
                             <button
                               type="button"
@@ -375,6 +442,21 @@ export function PodcastsPage() {
                             >
                               <LuPlay className="h-4 w-4" strokeWidth={2.25} aria-hidden />
                               {isActive ? 'В плеере' : 'Слушать'}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => toggleFavorite(ep.id)}
+                              className={[
+                                'inline-flex h-10 items-center gap-2 rounded-2xl px-4 text-sm font-extrabold shadow-sm transition',
+                                isFav
+                                  ? 'bg-rose-50 text-rose-700 ring-1 ring-rose-200/70 hover:bg-rose-100'
+                                  : 'border border-stone-200 bg-white text-stone-700 hover:bg-stone-50',
+                              ].join(' ')}
+                              aria-pressed={isFav}
+                              aria-label={isFav ? 'Убрать из избранного' : 'Добавить в избранное'}
+                            >
+                              <LuHeart className="h-4 w-4" strokeWidth={2} aria-hidden />
+                              {isFav ? 'В избранном' : 'В избранное'}
                             </button>
                             {ep.pageUrl ? (
                               <button
@@ -436,6 +518,19 @@ export function PodcastsPage() {
               </div>
               <button
                 type="button"
+                className={[
+                  'inline-flex h-9 items-center justify-center rounded-2xl px-3 text-xs font-extrabold transition',
+                  audioState.favorites[activeEpisode.id]
+                    ? 'bg-rose-50 text-rose-700 ring-1 ring-rose-200/70 hover:bg-rose-100'
+                    : 'border border-stone-200 bg-white text-stone-700 hover:bg-stone-50',
+                ].join(' ')}
+                onClick={() => toggleFavorite(activeEpisode.id)}
+                aria-label="Избранное"
+              >
+                <LuHeart className="h-4 w-4" strokeWidth={2} aria-hidden />
+              </button>
+              <button
+                type="button"
                 className="inline-flex h-9 items-center justify-center rounded-2xl border border-stone-200 bg-white px-3 text-xs font-extrabold text-stone-700 hover:bg-stone-50"
                 onClick={() => setActiveId(null)}
                 aria-label="Закрыть плеер"
@@ -453,6 +548,50 @@ export function PodcastsPage() {
                 preload="none"
                 className="w-full"
                 src={activeEpisode.audioUrl}
+                onLoadedMetadata={() => {
+                  const el = audioRef.current;
+                  if (!el) return;
+                  const saved = audioState.progress[activeEpisode.id];
+                  const savedPos = saved?.position ?? 0;
+                  // Seek to saved position if reasonable.
+                  if (Number.isFinite(savedPos) && savedPos > 2 && savedPos < el.duration - 2) {
+                    try {
+                      el.currentTime = savedPos;
+                    } catch {
+                      /* ignore */
+                    }
+                  }
+                }}
+                onTimeUpdate={() => {
+                  const el = audioRef.current;
+                  if (!el) return;
+                  const now = Date.now();
+                  // Throttle saves (about every 2 seconds)
+                  if (now - saveTickRef.current < 2000) return;
+                  saveTickRef.current = now;
+                  const position = Number.isFinite(el.currentTime) ? el.currentTime : 0;
+                  const duration = Number.isFinite(el.duration) && el.duration > 0 ? el.duration : null;
+                  setAudioState((s) => ({
+                    ...s,
+                    progress: {
+                      ...s.progress,
+                      [activeEpisode.id]: { position, duration, updatedAt: now },
+                    },
+                  }));
+                  if (duration && duration > 0 && position / duration >= 0.98) {
+                    markListened(activeEpisode.id);
+                  }
+                }}
+                onEnded={() => {
+                  markListened(activeEpisode.id);
+                  setAudioState((s) => ({
+                    ...s,
+                    progress: {
+                      ...s.progress,
+                      [activeEpisode.id]: { position: 0, duration: s.progress[activeEpisode.id]?.duration ?? null, updatedAt: Date.now() },
+                    },
+                  }));
+                }}
               />
             </div>
           </div>
