@@ -1,7 +1,7 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import type { IconType } from 'react-icons';
-import { LuChevronLeft, LuChevronRight, LuChurch, LuMessageCircle, LuShield, LuUser, LuWifiOff, LuX } from 'react-icons/lu';
+import { LuBookOpen, LuChevronLeft, LuChevronRight, LuChurch, LuMessageCircle, LuShield, LuUser, LuWifiOff, LuX } from 'react-icons/lu';
 
 import { useAuthStore } from '../features/auth/authStore';
 import { useBrandingStore } from '../features/branding/brandingStore';
@@ -23,6 +23,7 @@ type NavItem = {
 const NAV_ITEMS: NavItem[] = [
   /** Контурные Lucide — не путать с цветными эмодзи / Font Awesome «картинками». */
   { to: '/prayer', label: 'Молитва', Icon: LuChurch },
+  { to: '/resources', label: 'Ресурсы', Icon: LuBookOpen },
   { to: '/messenger', label: 'Чаты', Icon: LuMessageCircle },
   // { to: '/broadcast', label: 'Трансляции', Icon: LuTv },
   { to: '/profile', label: 'Профиль', Icon: LuUser },

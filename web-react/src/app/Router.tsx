@@ -16,6 +16,7 @@ import { DailyPrayerPage } from '../features/calendar/pages/DailyPrayerPage';
 import { ProfilePage } from '../features/profile/pages/ProfilePage';
 import { BroadcastPage } from '../features/broadcast/pages/BroadcastPage';
 import { MessengerRoutes } from '../features/messenger/routes/MessengerRoutes';
+import { PodcastsPage } from '../features/resources/pages/PodcastsPage';
 
 import { Layout } from './Layout';
 
@@ -71,6 +72,7 @@ export function AppRouter() {
         <Route path="prayer" element={<DailyPrayerPage />} />
         <Route path="messenger/*" element={<MessengerRoutes />} />
         <Route path="broadcast" element={<BroadcastPage />} />
+        <Route path="resources" element={<PodcastsPage />} />
         <Route path="profile" element={<ProfilePage />} />
         <Route
           path="admin"

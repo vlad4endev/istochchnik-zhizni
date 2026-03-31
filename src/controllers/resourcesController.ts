@@ -8,6 +8,8 @@ export type PodcastEpisode = {
   imageUrl: string | null;
   pubDate: string | null;
   duration: number | null;
+  description: string | null;
+  pageUrl: string | null;
 };
 
 type RssItemWithItunes = {
@@ -17,6 +19,8 @@ type RssItemWithItunes = {
   title?: string;
   pubDate?: string;
   isoDate?: string;
+  contentSnippet?: string;
+  content?: string;
   enclosure?: { url?: string };
   itunes?: { image?: string; duration?: string };
   image?: { url?: string };
@@ -28,6 +32,8 @@ type RssFeedWithItunes = {
   title?: string;
   link?: string;
   itunes?: { image?: string };
+  description?: string;
+  lastBuildDate?: string;
 };
 
 const parser: Parser<RssFeedWithItunes, RssItemWithItunes> = new Parser({
@@ -35,6 +41,20 @@ const parser: Parser<RssFeedWithItunes, RssItemWithItunes> = new Parser({
     item: ['itunes:image', 'itunes:duration'],
   },
 });
+
+export type PodcastFeedResponse = {
+  feed: {
+    title: string;
+    link: string | null;
+    imageUrl: string | null;
+    description: string | null;
+    lastBuildDate: string | null;
+    rssUrl: string;
+    cached: boolean;
+    fetchedAt: string;
+  };
+  episodes: PodcastEpisode[];
+};
 
 function parseDurationToSeconds(raw: unknown): number | null {
   if (!raw) return null;
@@ -80,6 +100,9 @@ function normalizeEpisode(item: RssItemWithItunes, idx: number, feed: RssFeedWit
   const id = String(item.guid ?? item.id ?? item.link ?? `${feed.link ?? 'feed'}#${idx}`);
   const pubDate = (item.isoDate ?? item.pubDate ?? null) ? String(item.isoDate ?? item.pubDate) : null;
   const durationRaw = item.itunes?.duration ?? item['itunes:duration'];
+  const pageUrl = (item.link ?? '').trim() || null;
+  const description =
+    (item.contentSnippet ?? item.content ?? '').toString().trim().replace(/\s+/g, ' ').slice(0, 600) || null;
 
   return {
     id,
@@ -88,26 +111,65 @@ function normalizeEpisode(item: RssItemWithItunes, idx: number, feed: RssFeedWit
     imageUrl: pickImageUrl(item, feed),
     pubDate,
     duration: parseDurationToSeconds(durationRaw),
+    description,
+    pageUrl,
   };
 }
+
+function parseLimit(raw: unknown, fallback: number): number {
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return fallback;
+  const i = Math.floor(n);
+  return Math.max(1, Math.min(200, i));
+}
+
+const CACHE_TTL_MS = 5 * 60 * 1000;
+let cache: { fetchedAtMs: number; payload: PodcastFeedResponse } | null = null;
 
 /**
  * GET /api/resources/podcasts
  * Сейчас: тестовый RSS URL-заглушка. Позже заменим на CastBox feed URL.
  */
-export async function getPodcastEpisodes(_req: Request, res: Response): Promise<void> {
+export async function getPodcastEpisodes(req: Request, res: Response): Promise<void> {
   const rssUrl =
     process.env.RESOURCES_PODCAST_RSS_URL?.trim() ||
     'https://feeds.simplecast.com/54nAGcIl'; // TODO: заменить на CastBox RSS
+  const limit = parseLimit(req.query.limit, 80);
 
   try {
+    const now = Date.now();
+    if (cache && now - cache.fetchedAtMs < CACHE_TTL_MS && cache.payload.feed.rssUrl === rssUrl) {
+      const cachedPayload: PodcastFeedResponse = {
+        ...cache.payload,
+        feed: { ...cache.payload.feed, cached: true },
+        episodes: cache.payload.episodes.slice(0, limit),
+      };
+      res.json(cachedPayload);
+      return;
+    }
+
     const feed = await parser.parseURL(rssUrl);
     const items = Array.isArray(feed.items) ? feed.items : [];
     const episodes = items
       .map((it, idx) => normalizeEpisode(it as RssItemWithItunes, idx, feed as RssFeedWithItunes))
       .filter((x): x is PodcastEpisode => Boolean(x));
 
-    res.json(episodes);
+    const payload: PodcastFeedResponse = {
+      feed: {
+        title: String((feed as RssFeedWithItunes).title ?? 'Подкаст').trim() || 'Подкаст',
+        link: (String((feed as RssFeedWithItunes).link ?? '').trim() || null) as string | null,
+        imageUrl: (feed as RssFeedWithItunes).itunes?.image?.trim() || null,
+        description: (String((feed as RssFeedWithItunes).description ?? '').trim() || null) as string | null,
+        lastBuildDate: (String((feed as RssFeedWithItunes).lastBuildDate ?? '').trim() || null) as string | null,
+        rssUrl,
+        cached: false,
+        fetchedAt: new Date().toISOString(),
+      },
+      episodes: episodes.slice(0, limit),
+    };
+
+    cache = { fetchedAtMs: now, payload };
+    res.json(payload);
   } catch (e) {
     console.error('[resources] podcasts parse error:', e);
     res.status(500).json({ error: 'Failed to load podcast feed' });
