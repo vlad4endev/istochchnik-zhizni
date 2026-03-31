@@ -215,6 +215,7 @@ export function ManageChatHomePage() {
             </div>
           </div>
         </div>
+      </div>
       ) : (
         <div className="mt-4 space-y-3">
           <SectionCard
