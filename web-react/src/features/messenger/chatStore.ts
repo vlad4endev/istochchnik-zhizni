@@ -31,6 +31,10 @@ interface ChatState {
   /** True means there are older messages to load */
   hasMore: Record<string, boolean>;
 
+  // --- Read cursors (read receipts) ---
+  /** conversationId -> memberId -> lastReadMessageId */
+  readCursorsByConv: Record<string, Record<number, string>>;
+
   // --- Typing indicator: convId → memberId[] ---
   typingByConv: Record<string, TypingUser[]>;
 
@@ -73,6 +77,7 @@ interface ChatState {
   editMessage: (messageId: string, content: string) => Promise<void>;
   deleteMessage: (messageId: string) => Promise<void>;
   markRead: (conversationId: string) => Promise<void>;
+  markReadUpTo: (conversationId: string, messageId: string) => Promise<void>;
 
   addReaction: (messageId: string, emoji: string) => Promise<void>;
   removeReaction: (messageId: string, emoji: string) => Promise<void>;
@@ -133,6 +138,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   messagesByConv: {},
   messagesLoading: {},
   hasMore: {},
+  readCursorsByConv: {},
   typingByConv: {},
   onlineMembers: new Set(),
   totalUnread: 0,
@@ -361,6 +367,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const lastMsg = msgs[msgs.length - 1];
     if (lastMsg.id.startsWith('temp-')) return;
 
+    await get().markReadUpTo(conversationId, lastMsg.id);
+  },
+
+  markReadUpTo: async (conversationId, messageId) => {
+    const normalizedId = String(messageId || '').trim();
+    if (!/^\d+$/.test(normalizedId)) return;
+
     // Optimistic: set unread to 0
     set((s) => ({
       conversations: s.conversations.map((c) =>
@@ -370,9 +383,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }));
 
     try {
-      await api.markConversationRead(conversationId, lastMsg.id);
+      await api.markConversationRead(conversationId, normalizedId);
     } catch (e) {
-      console.error('[chatStore] markRead error:', e);
+      console.error('[chatStore] markReadUpTo error:', e);
     }
   },
 
@@ -580,8 +593,34 @@ export const useChatStore = create<ChatState>((set, get) => ({
     });
   },
 
-  handleReadUpdated: (_convId, _memberId, _lastReadMsgId) => {
-    // Could update read receipts UI if we track per-member reads
+  handleReadUpdated: (convId, memberId, lastReadMsgId) => {
+    const convKey = String(convId);
+    const mid = Number(memberId);
+    const msgId = String(lastReadMsgId ?? '').trim();
+    if (!convKey || !Number.isFinite(mid) || mid <= 0 || !/^\d+$/.test(msgId)) {
+      return;
+    }
+    // Ignore my own cursor in receipts UI.
+    const me = get().currentMemberId;
+    if (me != null && Number(me) === mid) return;
+
+    set((s) => {
+      const existing = s.readCursorsByConv[convKey] || {};
+      const prev = existing[mid];
+      // Only move forward.
+      if (prev && /^\d+$/.test(prev) && BigInt(prev) >= BigInt(msgId)) {
+        return s;
+      }
+      return {
+        readCursorsByConv: {
+          ...s.readCursorsByConv,
+          [convKey]: {
+            ...existing,
+            [mid]: msgId,
+          },
+        },
+      };
+    });
   },
 
   handlePresenceOnline: (memberId) => {

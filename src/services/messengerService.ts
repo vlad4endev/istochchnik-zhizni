@@ -126,7 +126,7 @@ export async function listConversations(memberId: number): Promise<ConversationL
       COALESCE(
         (SELECT COUNT(*)::int FROM messages m2
          WHERE m2.conversation_id = c.id
-           AND m2.id > COALESCE(rr.last_read_message_id, 0)),
+           AND m2.id > COALESCE(cp.last_read_message_id, 0)),
         0
       ) AS unread_count,
       -- other member for private chats
@@ -146,8 +146,6 @@ export async function listConversations(memberId: number): Promise<ConversationL
       LIMIT 1
     ) lm ON TRUE
     LEFT JOIN members lm_sender ON lm_sender.id = lm.sender_id
-    -- read receipt
-    LEFT JOIN read_receipts rr ON rr.conversation_id = c.id AND rr.member_id = $1
     -- other member for private chats
     LEFT JOIN LATERAL (
       SELECT om2.id, om2.name, om2.first_name, om2.last_name, om2.avatar_url
@@ -392,7 +390,7 @@ export async function getConversationListItem(
       COALESCE(
         (SELECT COUNT(*)::int FROM messages m2
          WHERE m2.conversation_id = c.id
-           AND m2.id > COALESCE(rr.last_read_message_id, 0)),
+           AND m2.id > COALESCE(cp.last_read_message_id, 0)),
         0
       ) AS unread_count,
       -- other member for private chats
@@ -411,7 +409,6 @@ export async function getConversationListItem(
       LIMIT 1
     ) lm ON TRUE
     LEFT JOIN members lm_sender ON lm_sender.id = lm.sender_id
-    LEFT JOIN read_receipts rr ON rr.conversation_id = c.id AND rr.member_id = $1
     LEFT JOIN LATERAL (
       SELECT om2.id, om2.name, om2.first_name, om2.last_name, om2.avatar_url
       FROM conversation_participants op
@@ -930,14 +927,36 @@ export async function markRead(
   memberId: number,
   lastReadMessageId: string,
 ): Promise<void> {
-  await dbQuery(
-    `INSERT INTO read_receipts (conversation_id, member_id, last_read_message_id, read_at)
-     VALUES ($1, $2, $3, NOW())
-     ON CONFLICT (conversation_id, member_id) DO UPDATE
-     SET last_read_message_id = GREATEST(read_receipts.last_read_message_id, $3),
-         read_at = NOW()`,
-    [conversationId, memberId, lastReadMessageId],
+  const normalizedMessageId = String(lastReadMessageId || '').trim();
+  if (!/^\d+$/.test(normalizedMessageId)) {
+    throw new Error('Invalid messageId');
+  }
+
+  const result = await dbQuery(
+    `WITH target_message AS (
+       SELECT id
+       FROM messages
+       WHERE id = $3
+         AND conversation_id = $1
+       LIMIT 1
+     )
+     UPDATE conversation_participants cp
+     SET
+       last_read_message_id = CASE
+         WHEN cp.last_read_message_id IS NULL THEN (SELECT id FROM target_message)
+         ELSE GREATEST(cp.last_read_message_id, (SELECT id FROM target_message))
+       END
+     WHERE cp.conversation_id = $1
+       AND cp.member_id = $2
+       AND cp.left_at IS NULL
+       AND EXISTS (SELECT 1 FROM target_message)
+     RETURNING cp.last_read_message_id`,
+    [conversationId, memberId, normalizedMessageId],
   );
+
+  if (result.rows.length === 0) {
+    throw new Error('Message not found in this conversation or member is not in conversation');
+  }
 }
 
 /**
@@ -951,10 +970,9 @@ export async function getTotalUnreadCount(memberId: number): Promise<number> {
       SELECT COUNT(*) AS cnt
       FROM conversation_participants cp
       JOIN messages m ON m.conversation_id = cp.conversation_id
-      LEFT JOIN read_receipts rr ON rr.conversation_id = cp.conversation_id AND rr.member_id = $1
       WHERE cp.member_id = $1
         AND cp.left_at IS NULL
-        AND m.id > COALESCE(rr.last_read_message_id, 0)
+        AND m.id > COALESCE(cp.last_read_message_id, 0)
     ) sub
     `,
     [memberId],

@@ -3,7 +3,7 @@ import { requireAuthSession } from '../middleware/authSession';
 import { checkChatPermission } from '../middleware/chatPermission';
 import { ensureValidRequest, validateSendMessage } from '../middleware/messengerValidation';
 import * as svc from '../services/messengerService';
-import { sendToRoomAll, sendToMember, ensureMemberInRoom } from '../realtime/wsHub';
+import { sendToRoomAll, sendToRoom, sendToMember, ensureMemberInRoom } from '../realtime/wsHub';
 
 type AuthReq = Request & { authUserId?: number };
 
@@ -397,20 +397,44 @@ router.delete('/messages/:id', async (req: Request, res: Response) => {
 
 // ─── Read Receipts ────────────────────────────────────────────
 
-/** POST /api/messenger/conversations/:id/read { lastReadMessageId } */
+/** POST /api/messenger/conversations/:id/read { messageId } */
 router.post('/conversations/:id/read', async (req: Request, res: Response) => {
   const userId = (req as AuthReq).authUserId!;
   const convId = req.params.id;
-  const { lastReadMessageId } = req.body;
-  if (!lastReadMessageId) {
-    res.status(400).json({ error: 'lastReadMessageId is required' });
+  const rawMessageId = req.body?.messageId ?? req.body?.lastReadMessageId;
+  const messageId = String(rawMessageId ?? '').trim();
+  if (!messageId || !/^\d+$/.test(messageId)) {
+    res.status(400).json({ error: 'messageId must be a numeric string' });
     return;
   }
   try {
-    await svc.markRead(convId, userId, lastReadMessageId);
+    await svc.markRead(convId, userId, messageId);
+    // Notify other participants (Telegram-like read cursor).
+    sendToRoom(String(convId), {
+      type: 'messages_read',
+      chatId: String(convId),
+      userId,
+      lastReadMessageId: messageId,
+    }, userId);
+    // Backward compatibility for existing frontend handler.
+    sendToRoom(String(convId), {
+      type: 'read:updated',
+      conversationId: String(convId),
+      memberId: userId,
+      lastReadMessageId: messageId,
+    }, userId);
     res.json({ ok: true });
   } catch (e) {
     console.error('[messenger] markRead error:', e);
+    const message = e instanceof Error ? e.message : String(e);
+    if (message.includes('Message not found')) {
+      res.status(404).json({ error: message });
+      return;
+    }
+    if (message.includes('Invalid messageId')) {
+      res.status(400).json({ error: message });
+      return;
+    }
     res.status(500).json({ error: 'Failed to mark as read' });
   }
 });

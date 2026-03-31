@@ -138,6 +138,7 @@ export type WsMessengerEvent =
   | { type: 'typing:stop'; conversationId: string; memberId: number }
   | { type: 'conv:created'; conversation: ConversationListItem }
   | { type: 'conv:updated'; conversationId: string; title?: string; avatarUrl?: string }
+  | { type: 'messages_read'; chatId: string; userId: number; lastReadMessageId: string }
   | { type: 'read:updated'; conversationId: string; memberId: number; lastReadMessageId: string }
   | { type: 'presence:online'; memberId: number }
   | { type: 'presence:offline'; memberId: number };

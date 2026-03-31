@@ -1,6 +1,7 @@
 import { useState, useRef, useMemo, useEffect } from 'react';
 import { useChatStore } from '../chatStore';
 import type { MessageWithSender } from '../api/messengerApi';
+import { IoCheckmark, IoCheckmarkDone } from 'react-icons/io5';
 
 interface MessageBubbleProps {
   message: MessageWithSender;
@@ -10,6 +11,7 @@ interface MessageBubbleProps {
 
 export function MessageBubble({ message, isGroupedPrev, isGroupedNext }: MessageBubbleProps) {
   const currentMemberId = useChatStore((s) => s.currentMemberId);
+  const readCursorsByConv = useChatStore((s) => s.readCursorsByConv);
   const addReaction = useChatStore((s) => s.addReaction);
   const removeReaction = useChatStore((s) => s.removeReaction);
   const setReplyTo = useChatStore((s) => s.setReplyTo);
@@ -23,6 +25,24 @@ export function MessageBubble({ message, isGroupedPrev, isGroupedNext }: Message
   const isOptimistic = message.id.startsWith('temp-');
   const isMine = isOptimistic || (currentMemberId != null && message.sender_id === currentMemberId);
   const isDeleted = message.is_deleted;
+  const convReadCursors = readCursorsByConv[String(message.conversation_id)] || {};
+
+  const maxOtherReadId = useMemo(() => {
+    const ids = Object.values(convReadCursors);
+    let max: bigint = 0n;
+    for (const v of ids) {
+      if (typeof v !== 'string' || !/^\d+$/.test(v)) continue;
+      const b = BigInt(v);
+      if (b > max) max = b;
+    }
+    return max;
+  }, [convReadCursors]);
+
+  const isReadByOther = useMemo(() => {
+    if (!isMine || isOptimistic) return false;
+    if (!/^\d+$/.test(message.id)) return false;
+    return BigInt(message.id) <= maxOtherReadId;
+  }, [isMine, isOptimistic, message.id, maxOtherReadId]);
 
   const formattedTime = useMemo(() => {
     const d = new Date(message.created_at);
@@ -194,12 +214,13 @@ export function MessageBubble({ message, isGroupedPrev, isGroupedNext }: Message
         <div className="tg-bubble-meta">
           {message.is_edited && <span className="msg-edited">ред.</span>}
           <span>{formattedTime}</span>
-          {isMine && !isOptimistic && (
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="20 6 9 17 4 12" />
-              <polyline points="22 6 11 17 6 12" style={{ marginLeft: '-8px' }} />
-            </svg>
-          )}
+          {isMine && !isOptimistic ? (
+            isReadByOther ? (
+              <IoCheckmarkDone className="h-4 w-4 text-blue-500" aria-label="Прочитано" />
+            ) : (
+              <IoCheckmark className="h-4 w-4 text-gray-400" aria-label="Отправлено" />
+            )
+          ) : null}
           {isOptimistic && <span>⏳</span>}
         </div>
       </div>

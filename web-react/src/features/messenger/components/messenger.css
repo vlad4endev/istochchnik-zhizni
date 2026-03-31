@@ -1174,7 +1174,20 @@
   }
 
   .tg-main {
-    position: relative;
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: var(--app-bottom-nav-h);
+    width: 100%;
+    height: calc(100% - var(--app-bottom-nav-h));
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.22s ease;
+  }
+
+  .tg-main--visible {
+    opacity: 1;
+    pointer-events: auto;
   }
 
   .tg-sidebar {

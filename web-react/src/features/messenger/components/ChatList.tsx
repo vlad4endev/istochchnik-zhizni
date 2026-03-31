@@ -163,19 +163,21 @@ function ChatListItem({
       ].join(' ')}
       onClick={onClick}
     >
-      <div
-        className="relative grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-2xl text-white shadow-sm"
-        style={{ background: avatarColor }}
-      >
-        {avatarUrl ? (
-          <img src={avatarUrl} alt="" className="h-full w-full object-cover" loading="lazy" />
-        ) : (
-          <span className="text-[15px] font-extrabold">{avatarLetter}</span>
-        )}
+      <div className="relative h-12 w-12 shrink-0">
+        <div
+          className="grid h-12 w-12 place-items-center overflow-hidden rounded-2xl text-white shadow-sm"
+          style={{ background: avatarColor }}
+        >
+          {avatarUrl ? (
+            <img src={avatarUrl} alt="" className="h-full w-full object-cover" loading="lazy" />
+          ) : (
+            <span className="text-[15px] font-extrabold">{avatarLetter}</span>
+          )}
+        </div>
         {conv.type === 'private' ? (
           <span
             className={[
-              'absolute -bottom-1 -right-1 h-3.5 w-3.5 rounded-full border-2',
+              'pointer-events-none absolute -bottom-1 -right-1 z-10 h-3.5 w-3.5 rounded-full border-2',
               isActive ? 'border-primary' : 'border-white/80',
               isOnline ? 'bg-emerald-500' : 'bg-stone-300',
             ].join(' ')}

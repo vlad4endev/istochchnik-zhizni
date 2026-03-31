@@ -515,6 +515,9 @@ ALTER TABLE members ADD COLUMN IF NOT EXISTS avatar_url TEXT;
 CREATE INDEX IF NOT EXISTS idx_conv_participants_member
   ON conversation_participants (member_id) WHERE left_at IS NULL;
 
+CREATE INDEX IF NOT EXISTS idx_conv_participants_read_cursor
+  ON conversation_participants (conversation_id, last_read_message_id);
+
 CREATE INDEX IF NOT EXISTS idx_messages_conv_created
   ON messages (conversation_id, created_at DESC);
 
@@ -555,6 +558,9 @@ ALTER TABLE messages
   ADD COLUMN IF NOT EXISTS reply_to_message_id BIGINT REFERENCES messages(id) ON DELETE SET NULL;
 ALTER TABLE messages ADD COLUMN IF NOT EXISTS payload JSONB NOT NULL DEFAULT '{}'::jsonb;
 ALTER TABLE messages ADD COLUMN IF NOT EXISTS interaction_count INTEGER NOT NULL DEFAULT 0;
+
+ALTER TABLE conversation_participants
+  ADD COLUMN IF NOT EXISTS last_read_message_id BIGINT REFERENCES messages(id) ON DELETE SET NULL;
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_messages_client_dedupe
   ON messages (conversation_id, sender_id, client_msg_id)

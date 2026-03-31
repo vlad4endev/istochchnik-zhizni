@@ -25,15 +25,20 @@ export function ChatWindow({
   const loading = useChatStore((s) => s.messagesLoading[conversationId] || false);
   const hasMore = useChatStore((s) => s.hasMore[conversationId] ?? true);
   const loadMessages = useChatStore((s) => s.loadMessages);
-  const markRead = useChatStore((s) => s.markRead);
+  const markReadUpTo = useChatStore((s) => s.markReadUpTo);
   const conversations = useChatStore((s) => s.conversations);
   const typingUsers = useChatStore((s) => s.typingByConv[conversationId] || EMPTY_ARRAY);
   const onlineMembers = useChatStore((s) => s.onlineMembers);
+  const currentMemberId = useChatStore((s) => s.currentMemberId);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const nearBottomRef = useRef(true);
   const restoreScrollRef = useRef<{ scrollHeight: number; scrollTop: number } | null>(null);
   const [showSearch, setShowSearch] = useState(false);
+  const nodeByMsgIdRef = useRef<Map<string, HTMLElement>>(new Map());
+  const lastSentReadIdRef = useRef<bigint>(0n);
+  const visibleForeignIdsRef = useRef<Set<string>>(new Set());
+  const flushTimerRef = useRef<number | null>(null);
 
   const conv = useMemo(() => conversations.find((c) => c.id === conversationId), [conversations, conversationId]);
 
@@ -43,11 +48,72 @@ export function ChatWindow({
     void loadMessages(conversationId);
   }, [conversationId, loadMessages]);
 
-  useEffect(() => {
-    if (messages.length > 0) {
-      void markRead(conversationId);
+  const flushVisibleReads = useCallback(() => {
+    if (flushTimerRef.current != null) {
+      window.clearTimeout(flushTimerRef.current);
     }
-  }, [conversationId, messages.length, markRead]);
+    flushTimerRef.current = window.setTimeout(() => {
+      const ids = Array.from(visibleForeignIdsRef.current);
+      let max: bigint = 0n;
+      for (const id of ids) {
+        if (!/^\d+$/.test(id)) continue;
+        const b = BigInt(id);
+        if (b > max) max = b;
+      }
+      if (max > lastSentReadIdRef.current) {
+        lastSentReadIdRef.current = max;
+        void markReadUpTo(conversationId, String(max));
+      }
+    }, 120);
+  }, [conversationId, markReadUpTo]);
+
+  useEffect(() => {
+    const root = scrollRef.current;
+    if (!root) return;
+    if (typeof IntersectionObserver === 'undefined') return;
+
+    visibleForeignIdsRef.current.clear();
+    lastSentReadIdRef.current = 0n;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        let changed = false;
+        for (const entry of entries) {
+          const el = entry.target as HTMLElement;
+          const msgId = el.dataset.msgId || '';
+          if (!msgId) continue;
+          if (entry.isIntersecting) {
+            if (!visibleForeignIdsRef.current.has(msgId)) {
+              visibleForeignIdsRef.current.add(msgId);
+              changed = true;
+            }
+          } else {
+            if (visibleForeignIdsRef.current.delete(msgId)) {
+              changed = true;
+            }
+          }
+        }
+        if (changed) flushVisibleReads();
+      },
+      {
+        root,
+        threshold: 0.6,
+      },
+    );
+
+    // Observe current nodes
+    for (const [, node] of nodeByMsgIdRef.current) {
+      observer.observe(node);
+    }
+
+    return () => {
+      if (flushTimerRef.current != null) {
+        window.clearTimeout(flushTimerRef.current);
+        flushTimerRef.current = null;
+      }
+      observer.disconnect();
+    };
+  }, [conversationId, currentMemberId, flushVisibleReads]);
 
   const handleScroll = useCallback(() => {
     const el = scrollRef.current;
@@ -240,11 +306,27 @@ export function ChatWindow({
                   </span>
                 </div>
               ) : null}
-              <MessageBubble
-                message={msg}
-                isGroupedPrev={msg.isGroupedPrev}
-                isGroupedNext={msg.isGroupedNext}
-              />
+              <div
+                ref={(node) => {
+                  const map = nodeByMsgIdRef.current;
+                  if (!/^\d+$/.test(String(msg.id))) return;
+                  const isMine = currentMemberId != null && msg.sender_id === currentMemberId;
+                  // We only observe foreign messages for read cursor.
+                  if (isMine) return;
+                  if (node) {
+                    map.set(String(msg.id), node);
+                    node.dataset.msgId = String(msg.id);
+                  } else {
+                    map.delete(String(msg.id));
+                  }
+                }}
+              >
+                <MessageBubble
+                  message={msg}
+                  isGroupedPrev={msg.isGroupedPrev}
+                  isGroupedNext={msg.isGroupedNext}
+                />
+              </div>
             </div>
           ))
         )}

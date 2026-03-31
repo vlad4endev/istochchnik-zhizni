@@ -120,6 +120,16 @@ app.use('/api/users', userRoutes);
 app.use('/api/push', pushRoutes);
 app.use('/api/messenger', messengerRoutes);
 
+// Debug/version endpoint (helps verify that deploy updated)
+app.get('/api/version', (_req, res) => {
+  res.json({
+    api_build_stamp: process.env.BUILD_STAMP ?? null,
+    api_commit: process.env.GIT_SHA ?? process.env.VERCEL_GIT_COMMIT_SHA ?? null,
+    node_env: process.env.NODE_ENV ?? null,
+    server_time: new Date().toISOString(),
+  });
+});
+
 // ─── Static web (Vite dist) ──────────────────────────────────
 // В production раздаём собранный фронтенд как SPA:
 // - /assets/*, /manifest.webmanifest, /sw.js, etc.

@@ -185,6 +185,10 @@ function handleWsMessage(msg: any): void {
       store.handleReadUpdated(msg.conversationId, msg.memberId, msg.lastReadMessageId);
       break;
 
+    case 'messages_read':
+      store.handleReadUpdated(msg.chatId, msg.userId, msg.lastReadMessageId);
+      break;
+
     case 'presence:online':
       store.handlePresenceOnline(msg.memberId);
       break;

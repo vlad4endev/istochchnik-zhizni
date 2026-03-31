@@ -8,6 +8,15 @@ import { NewChatDialog } from './NewChatDialog';
 import { LuPlus, LuMessageSquare } from 'react-icons/lu';
 import './messenger.css';
 
+function blurActiveElement() {
+  try {
+    const el = document.activeElement as HTMLElement | null;
+    el?.blur?.();
+  } catch {
+    /* ignore */
+  }
+}
+
 export function MessengerPage() {
   const activeId = useChatStore((s) => s.activeConversationId);
   const setActive = useChatStore((s) => s.setActiveConversation);
@@ -43,6 +52,7 @@ export function MessengerPage() {
   }, [loadConversations]);
 
   const handleSelectConversation = useCallback((id: string) => {
+    blurActiveElement();
     setIsTransitioning(true);
     setActive(id);
     setMobileView('chat');
@@ -50,6 +60,7 @@ export function MessengerPage() {
   }, [setActive]);
 
   const handleBack = useCallback(() => {
+    blurActiveElement();
     setIsTransitioning(true);
     setMobileView('list');
     setTimeout(() => setIsTransitioning(false), 350);

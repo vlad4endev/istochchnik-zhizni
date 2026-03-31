@@ -209,8 +209,8 @@ export async function deleteMessage(messageId: string) {
   await apiClient.delete(`${BASE}/messages/${messageId}`);
 }
 
-export async function markConversationRead(conversationId: string, lastReadMessageId: string) {
-  await apiClient.post(`${BASE}/conversations/${conversationId}/read`, { lastReadMessageId });
+export async function markConversationRead(conversationId: string, messageId: string) {
+  await apiClient.post(`${BASE}/conversations/${conversationId}/read`, { messageId });
 }
 
 export async function fetchUnreadCount(): Promise<number> {
