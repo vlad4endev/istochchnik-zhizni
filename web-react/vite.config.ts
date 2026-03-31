@@ -10,6 +10,7 @@ import { VitePWA } from 'vite-plugin-pwa';
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
   const apiProxyTarget = env.VITE_DEV_API_PROXY || 'http://127.0.0.1:40978';
+  const enablePwaDev = String(env.VITE_PWA_DEV ?? '').trim() === 'true';
   /** Видно внизу админки — чтобы отличить свежий деплой от старой «Заглушки». */
   const buildStamp = new Date().toISOString().replace('T', ' ').slice(0, 16);
 
@@ -103,7 +104,9 @@ export default defineConfig(({ mode }) => {
           ],
         },
         devOptions: {
-          enabled: false,
+          // Push notifications require an installed Service Worker.
+          // In dev we keep it opt-in to avoid caching surprises: set VITE_PWA_DEV=true in web-react/.env
+          enabled: mode === 'development' && enablePwaDev,
         },
       }),
     ],

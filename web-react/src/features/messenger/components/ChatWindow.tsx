@@ -360,7 +360,7 @@ export function ChatWindow({
         )}
       </div>
 
-      <div className="sticky bottom-0 z-20 shrink-0 border-t bg-white p-3 [padding-bottom:max(0.75rem,env(safe-area-inset-bottom,0px))] [padding-left:max(0.75rem,env(safe-area-inset-left,0px))] [padding-right:max(0.75rem,env(safe-area-inset-right,0px))]">
+      <div className="sticky bottom-0 z-20 shrink-0 border-t bg-white p-3 [padding-bottom:max(0.75rem,env(safe-area-inset-bottom,0px))]">
         <ChatInput
           conversationId={conversationId}
           sendTypingStart={sendTypingStart}
