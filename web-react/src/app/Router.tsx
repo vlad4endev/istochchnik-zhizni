@@ -18,6 +18,7 @@ import { BroadcastPage } from '../features/broadcast/pages/BroadcastPage';
 import { MessengerRoutes } from '../features/messenger/routes/MessengerRoutes';
 import { ResourcesRoutes } from '../features/resources/routes/ResourcesRoutes';
 import { PodcastsPage } from '../features/resources/pages/PodcastsPage';
+import { ServiceFlowPage } from '../features/serviceFlow/pages/ServiceFlowPage';
 
 import { Layout } from './Layout';
 
@@ -75,6 +76,7 @@ export function AppRouter() {
         <Route path="broadcast" element={<BroadcastPage />} />
         <Route path="sermons" element={<PodcastsPage />} />
         <Route path="resources/*" element={<ResourcesRoutes />} />
+        <Route path="service-flow" element={<ServiceFlowPage />} />
         <Route path="profile" element={<ProfilePage />} />
         <Route
           path="admin"
