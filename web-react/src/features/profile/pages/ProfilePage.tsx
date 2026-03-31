@@ -1,18 +1,15 @@
-import { type ComponentType, useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   LuBookOpen,
   LuHeart,
   LuImagePlus,
   LuLogOut,
-  LuMusic,
   LuPencil,
   LuSave,
   LuSend,
   LuShield,
-  LuSparkles,
   LuUser,
-  LuUsers,
   LuX,
 } from 'react-icons/lu';
 
@@ -53,40 +50,6 @@ function axiosMessage(err: unknown): string {
   }
   return 'Произошла ошибка';
 }
-
-/* ── Static data for badges & highlights ─────────────────── */
-
-interface Badge {
-  id: number;
-  label: string;
-  Icon: ComponentType<{ className?: string }>;
-  bg: string;
-  ring: string;
-  iconColor: string;
-}
-
-const BADGES: Badge[] = [
-  { id: 1, label: 'Прославление', Icon: LuMusic, bg: 'bg-amber-50', ring: 'ring-amber-200/60', iconColor: 'text-amber-600' },
-  { id: 2, label: 'Малая группа', Icon: LuUsers, bg: 'bg-sky-50', ring: 'ring-sky-200/60', iconColor: 'text-sky-600' },
-  { id: 3, label: 'Молитва', Icon: LuHeart, bg: 'bg-rose-50', ring: 'ring-rose-200/60', iconColor: 'text-rose-500' },
-  { id: 4, label: 'Детское', Icon: LuSparkles, bg: 'bg-violet-50', ring: 'ring-violet-200/60', iconColor: 'text-violet-500' },
-];
-
-interface Highlight {
-  id: number;
-  label: string;
-  emoji: string;
-  from: string;
-  to: string;
-}
-
-const HIGHLIGHTS: Highlight[] = [
-  { id: 1, label: 'Свидетельства', emoji: '✨', from: '#f59e0b', to: '#ef4444' },
-  { id: 2, label: 'Отвеченные молитвы', emoji: '🙏', from: '#38bdf8', to: '#6366f1' },
-  { id: 3, label: 'Крещение', emoji: '💧', from: '#2dd4bf', to: '#10b981' },
-  { id: 4, label: 'Конференция', emoji: '🎤', from: '#a78bfa', to: '#ec4899' },
-  { id: 5, label: 'Рождество', emoji: '⭐', from: '#f87171', to: '#fb923c' },
-];
 
 /* ── Shared class names ──────────────────────────────────── */
 
@@ -449,54 +412,7 @@ export function ProfilePage() {
         )}
 
         {/* ═══════════════════════════════════════════════════
-            3. МОИ СЛУЖЕНИЯ — badge grid
-           ═══════════════════════════════════════════════════ */}
-        <section>
-          <h2 className={SECTION_TITLE}>Мои служения</h2>
-          <div className="mt-4 grid grid-cols-4 gap-3 sm:gap-4">
-            {BADGES.map((b) => (
-              <div key={b.id} className="flex flex-col items-center gap-2 text-center">
-                <div className={`grid h-14 w-14 place-items-center rounded-full shadow-sm ring-1 transition-transform hover:scale-105 sm:h-16 sm:w-16 ${b.bg} ${b.ring}`}>
-                  <b.Icon className={`h-6 w-6 sm:h-7 sm:w-7 ${b.iconColor}`} aria-hidden />
-                </div>
-                <span className="max-w-[5rem] text-[11px] font-semibold leading-tight text-stone-600 sm:text-xs">
-                  {b.label}
-                </span>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        {/* ═══════════════════════════════════════════════════
-            4. ХАЙЛАЙТЫ — horizontal stories scroll
-           ═══════════════════════════════════════════════════ */}
-        <section>
-          <h2 className={SECTION_TITLE}>Хайлайты</h2>
-          <div className="-mx-4 mt-4 flex gap-4 overflow-x-auto px-4 pb-2 scrollbar-hide sm:-mx-5 sm:gap-5 sm:px-5">
-            {HIGHLIGHTS.map((h) => (
-              <button
-                key={h.id}
-                type="button"
-                className="flex shrink-0 flex-col items-center gap-1.5 outline-none transition-transform active:scale-95"
-              >
-                <div
-                  className="rounded-full p-[2.5px]"
-                  style={{ background: `linear-gradient(135deg, ${h.from}, ${h.to})` }}
-                >
-                  <div className="grid h-[4.25rem] w-[4.25rem] place-items-center rounded-full bg-[var(--surface)] text-2xl sm:h-[4.75rem] sm:w-[4.75rem]">
-                    {h.emoji}
-                  </div>
-                </div>
-                <span className="max-w-[4.5rem] text-center text-[11px] font-semibold leading-tight text-stone-500">
-                  {h.label}
-                </span>
-              </button>
-            ))}
-          </div>
-        </section>
-
-        {/* ═══════════════════════════════════════════════════
-            5. ПРОФИЛЬ — данные / редактирование
+            3. ПРОФИЛЬ — данные / редактирование
            ═══════════════════════════════════════════════════ */}
         <section className={CARD}>
           <div className="flex items-center justify-between">
@@ -593,7 +509,7 @@ export function ProfilePage() {
         </section>
 
         {/* ═══════════════════════════════════════════════════
-            6. БЕЗОПАСНОСТЬ
+            4. БЕЗОПАСНОСТЬ
            ═══════════════════════════════════════════════════ */}
         <section className={CARD}>
           <div className="flex items-center justify-between gap-3">
@@ -665,7 +581,7 @@ export function ProfilePage() {
         </section>
 
         {/* ═══════════════════════════════════════════════════
-            7. ИСТОРИЯ МОЛИТВЕННЫХ ЗАПИСОК
+            5. ИСТОРИЯ МОЛИТВЕННЫХ ЗАПИСОК
            ═══════════════════════════════════════════════════ */}
         <section className={CARD}>
           <p className={LABEL}>История молитвенных записок</p>

@@ -699,6 +699,7 @@ export type PrivateChatProfile = {
   name: string;
   first_name: string | null;
   last_name: string | null;
+  avatar_url: string | null;
   phone_number: string | null;
   /** “Роль в проекте” */
   app_role: string | null;
@@ -718,6 +719,7 @@ export async function getPrivateChatProfile(
       m.name,
       m.first_name,
       m.last_name,
+      m.avatar_url,
       m.phone_number,
       m.app_role,
       m.ministry_role,
@@ -741,6 +743,7 @@ export async function getPrivateChatProfile(
     name: r.name,
     first_name: r.first_name ?? null,
     last_name: r.last_name ?? null,
+    avatar_url: r.avatar_url ?? null,
     phone_number: r.phone_number ?? null,
     app_role: r.app_role ?? null,
     ministry_role: r.ministry_role ?? null,

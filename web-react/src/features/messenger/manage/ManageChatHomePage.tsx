@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { LuCake, LuChevronRight, LuPhone, LuShield, LuSettings2, LuUsers, LuX } from 'react-icons/lu';
 import * as api from '../api/messengerApi';
 import { useChatStore } from '../chatStore';
+import { resolvePublicUrl } from '../../../lib/resolvePublicUrl';
 
 function axiosMessage(err: unknown): string {
   if (err && typeof err === 'object' && 'response' in err) {
@@ -85,6 +86,9 @@ export function ManageChatHomePage() {
   const fullName = privateProfile
     ? [privateProfile.first_name, privateProfile.last_name].filter(Boolean).join(' ').trim() || privateProfile.name
     : null;
+  const privateAvatarUrl =
+    resolvePublicUrl(privateProfile?.avatar_url ?? null) ??
+    resolvePublicUrl(conv?.other_member?.avatar_url ?? null);
 
   return (
     <div className="mx-auto w-full max-w-xl px-4 pt-4 pb-24">
@@ -129,14 +133,34 @@ export function ManageChatHomePage() {
       {isPrivate ? (
         <div className="mt-4 space-y-3">
           <div className="rounded-3xl bg-white/80 p-5 shadow-[0_10px_30px_rgba(28,25,23,0.07)] ring-1 ring-stone-200/70 backdrop-blur">
-            <p className="text-[15px] font-extrabold text-stone-900">Профиль</p>
-            <p className="mt-0.5 text-sm font-semibold text-stone-500">
-              Данные участника личного чата
-            </p>
+            <div className="flex items-center gap-4">
+              <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-3xl bg-primary/10 ring-1 ring-stone-200/70">
+                {privateAvatarUrl ? (
+                  <img src={privateAvatarUrl} alt="" className="h-full w-full object-cover" />
+                ) : (
+                  <div className="grid h-full w-full place-items-center text-xl font-extrabold text-primary">
+                    {(fullName ?? title).trim().charAt(0).toUpperCase() || 'U'}
+                  </div>
+                )}
+                <span
+                  className={[
+                    'absolute bottom-1.5 right-1.5 h-3.5 w-3.5 rounded-full border-2',
+                    isOnline ? 'bg-emerald-500 border-white' : 'bg-stone-300 border-white',
+                  ].join(' ')}
+                  aria-hidden
+                />
+              </div>
+
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-[17px] font-extrabold text-stone-900">{fullName ?? title}</p>
+                <p className="mt-0.5 text-xs font-semibold text-stone-500">{privateProfile ? statusText : '—'}</p>
+                {privateProfile?.phone_number ? (
+                  <p className="mt-1 text-sm font-semibold text-stone-700">{privateProfile.phone_number}</p>
+                ) : null}
+              </div>
+            </div>
 
             <div className="mt-4 space-y-3">
-              <InfoRow label="Имя и фамилия" value={fullName ?? '—'} />
-              <InfoRow label="Статус" value={privateProfile ? statusText : '—'} />
               <InfoRow
                 Icon={LuPhone}
                 label="Телефон"

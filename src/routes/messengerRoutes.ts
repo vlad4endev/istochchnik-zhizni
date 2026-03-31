@@ -217,28 +217,42 @@ router.patch('/conversations/:id', async (req: Request, res: Response) => {
 });
 
 /** POST /api/messenger/conversations/:id/participants { memberId } */
-router.post('/conversations/:id/participants', async (req: Request, res: Response) => {
-  const userId = (req as AuthReq).authUserId!;
-  const convId = req.params.id;
-  const { memberId } = req.body;
-  try {
-    const role = await svc.getParticipantRole(convId, userId);
-    if (!role || role === 'member') {
-      res.status(403).json({ error: 'Only admins can add participants' });
+router.post(
+  '/conversations/:id/participants',
+  checkChatPermission('add_users'),
+  async (req: Request, res: Response) => {
+    const convId = req.params.id;
+    const { memberId } = req.body ?? {};
+    const parsed = Number(memberId);
+    if (!Number.isFinite(parsed) || parsed < 1) {
+      res.status(400).json({ error: 'memberId must be a positive number' });
       return;
     }
-    await svc.addParticipant(convId, memberId);
-    ensureMemberInRoom(memberId, String(convId));
-    const convForMember = await getConversationListItemForMember(memberId, String(convId));
-    if (convForMember) {
-      sendToMember(memberId, { type: 'conv:created', conversation: convForMember });
+    try {
+      const type = await svc.getConversationType(String(convId));
+      if (!type) {
+        res.status(404).json({ error: 'Conversation not found' });
+        return;
+      }
+      if (type === 'private') {
+        res.status(400).json({ error: 'Cannot add participants to a private chat' });
+        return;
+      }
+
+      await svc.addParticipant(convId, parsed);
+      ensureMemberInRoom(parsed, String(convId));
+      const convForMember = await getConversationListItemForMember(parsed, String(convId));
+      if (convForMember) {
+        sendToMember(parsed, { type: 'conv:created', conversation: convForMember });
+      }
+      sendToRoomAll(String(convId), { type: 'conv:updated', conversationId: String(convId) });
+      res.json({ ok: true });
+    } catch (e) {
+      console.error('[messenger] addParticipant error:', e);
+      res.status(500).json({ error: 'Failed to add participant' });
     }
-    res.json({ ok: true });
-  } catch (e) {
-    console.error('[messenger] addParticipant error:', e);
-    res.status(500).json({ error: 'Failed to add participant' });
-  }
-});
+  },
+);
 
 /** DELETE /api/messenger/conversations/:id/participants/:memberId */
 router.delete('/conversations/:id/participants/:memberId', async (req: Request, res: Response) => {

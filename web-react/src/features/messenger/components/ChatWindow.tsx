@@ -221,37 +221,45 @@ export function ChatWindow({
             <LuArrowLeft size={22} strokeWidth={2.25} />
           </button>
 
-          <div
-            className="grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-full text-sm font-semibold text-white"
-            style={{ background: headerAvatarColor }}
-            aria-hidden
+          <button
+            type="button"
+            onClick={() => navigate(`/messenger/chat/${conversationId}/manage`)}
+            className="min-w-0 flex flex-1 items-center gap-3 rounded-2xl px-2 py-1 text-left hover:bg-stone-100 active:scale-[0.99]"
+            aria-label="Открыть настройки чата"
+            title="Настройки чата"
           >
-            {headerAvatarSrc ? (
-              <img
-                src={headerAvatarSrc}
-                alt=""
-                className="h-full w-full object-cover"
-                loading="lazy"
-              />
-            ) : (
-              headerInitial
-            )}
-          </div>
-
-          <div className="min-w-0 flex-1">
-            <div className="truncate text-lg font-semibold text-stone-900">
-              {displayName}
-            </div>
             <div
-              className={[
-                'truncate text-xs',
-                typingUsers.length > 0 ? 'text-primary font-medium' : 'text-gray-500',
-              ].join(' ')}
-              aria-live="polite"
+              className="grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-full text-sm font-semibold text-white"
+              style={{ background: headerAvatarColor }}
+              aria-hidden
             >
-              {headerSubtitle}
+              {headerAvatarSrc ? (
+                <img
+                  src={headerAvatarSrc}
+                  alt=""
+                  className="h-full w-full object-cover"
+                  loading="lazy"
+                />
+              ) : (
+                headerInitial
+              )}
             </div>
-          </div>
+
+            <div className="min-w-0 flex-1">
+              <div className="truncate text-lg font-semibold text-stone-900">
+                {displayName}
+              </div>
+              <div
+                className={[
+                  'truncate text-xs',
+                  typingUsers.length > 0 ? 'text-primary font-medium' : 'text-gray-500',
+                ].join(' ')}
+                aria-live="polite"
+              >
+                {headerSubtitle}
+              </div>
+            </div>
+          </button>
 
           <div className="flex shrink-0 items-center gap-1">
             <button

@@ -165,6 +165,7 @@ export type PrivateChatProfile = {
   name: string;
   first_name: string | null;
   last_name: string | null;
+  avatar_url: string | null;
   phone_number: string | null;
   app_role: string | null;
   ministry_role: string | null;
