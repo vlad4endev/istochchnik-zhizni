@@ -8,6 +8,7 @@ import {
   LuCheck,
   LuClipboardList,
   LuLoader,
+  LuSearch,
   LuUsers,
   LuX,
 } from 'react-icons/lu';
@@ -28,6 +29,11 @@ export function userCanViewNextWeekPrayerPlan(me: MeResponse | undefined): boole
   if (!me) return false;
   if (me.app_role?.trim().toLowerCase() === 'admin') return true;
   return Boolean(me.is_collection_coordinator);
+}
+
+export function userCanEditNextWeekPrayerNeeds(me: MeResponse | undefined): boolean {
+  if (!me) return false;
+  return me.app_role?.trim().toLowerCase() === 'admin';
 }
 
 function formatWeekRangeLabel(days: NextWeekMemberDay[]): string {
@@ -174,6 +180,7 @@ function DayPrayerNeedRow(props: {
 }
 
 function NextWeekMembersPanel(props: {
+  mode: 'collection' | 'fill';
   weekKind: WeekPlanKind;
   days: NextWeekMemberDay[] | undefined;
   isPending: boolean;
@@ -190,6 +197,7 @@ function NextWeekMembersPanel(props: {
 }) {
   const sectionId = useId();
   const {
+    mode,
     weekKind,
     days,
     isPending,
@@ -206,6 +214,9 @@ function NextWeekMembersPanel(props: {
   } = props;
 
   const claimByMemberId = useClaimByMemberId(claimsSnapshot);
+  const [filterMode, setFilterMode] = useState<'all' | 'mine' | 'free' | 'busy'>('all');
+  const [searchQuery, setSearchQuery] = useState('');
+  const isCollectionMode = mode === 'collection';
 
   const heading =
     weekKind === 'current' ? 'Текущая неделя — молитва за члена' : 'Следующая неделя — молитва за члена';
@@ -256,6 +267,39 @@ function NextWeekMembersPanel(props: {
   const cycleLabel =
     claimsSnapshot != null ? `Молитвенный цикл №${claimsSnapshot.cycle_number}` : null;
 
+  const normalizedSearch = searchQuery.trim().toLowerCase();
+  const listRows = days.filter((row) => {
+    const name = row.member?.name?.trim() || '';
+    if (normalizedSearch && !name.toLowerCase().includes(normalizedSearch)) return false;
+
+    if (claimsError) return filterMode === 'all';
+    const mid = row.member?.id;
+    const claimRow = mid != null ? claimByMemberId.get(mid) : undefined;
+    const mine = currentUserId != null && claimRow?.claimed_by?.id === currentUserId;
+
+    if (filterMode === 'mine') return mine;
+    if (filterMode === 'free') return Boolean(claimRow && !claimRow.claimed_by);
+    if (filterMode === 'busy') return Boolean(claimRow?.claimed_by && !mine);
+    return true;
+  });
+
+  const myClaimsCount = days.filter((row) => {
+    const mid = row.member?.id;
+    const claimRow = mid != null ? claimByMemberId.get(mid) : undefined;
+    return currentUserId != null && claimRow?.claimed_by?.id === currentUserId;
+  }).length;
+  const freeCount = days.filter((row) => {
+    const mid = row.member?.id;
+    const claimRow = mid != null ? claimByMemberId.get(mid) : undefined;
+    return Boolean(claimRow && !claimRow.claimed_by);
+  }).length;
+  const busyCount = days.filter((row) => {
+    const mid = row.member?.id;
+    const claimRow = mid != null ? claimByMemberId.get(mid) : undefined;
+    const mine = currentUserId != null && claimRow?.claimed_by?.id === currentUserId;
+    return Boolean(claimRow?.claimed_by && !mine);
+  }).length;
+
   return (
     <div aria-labelledby={sectionId}>
       <div className="mb-3 flex items-center gap-3 pl-0.5">
@@ -283,62 +327,111 @@ function NextWeekMembersPanel(props: {
       </div>
 
       <p className="mb-3 text-[13px] leading-snug text-stone-600">
-        Заполните нужды по дням — они сохраняются для участника в текущем молитвенном цикле и попадают в историю при
-        изменении текста.
+        {isCollectionMode
+          ? 'Список участников для сбора нужд: используйте поиск и фильтры, затем закрепляйте ответственного.'
+          : 'Заполняйте нужды по дням — они сохраняются для участника в текущем молитвенном цикле и попадают в историю при изменении текста.'}
       </p>
 
-      <ul className="mb-6 space-y-3">
-        {days.map((row) => (
-          <DayPrayerNeedRow key={row.date} row={row} onSaved={onPrayerSaved} />
-        ))}
-      </ul>
-
-      <div className="overflow-hidden rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] shadow-[var(--shadow)]">
-        <ul className="divide-y divide-stone-100">
-          {days.map((row) => {
-            const d = parse(row.date, 'yyyy-MM-dd', new Date());
-            const label = format(d, 'EEEE, d MMMM', { locale: ru });
-            const name = row.member?.name?.trim() || null;
-            const mid = row.member?.id;
-            const claimRow = claimsError ? undefined : mid != null ? claimByMemberId.get(mid) : undefined;
-            const mine = currentUserId != null && claimRow?.claimed_by?.id === currentUserId;
-            const disabled = mutPending || !claimRow?.can_toggle;
-
-            return (
-              <li
-                key={`claim-${row.date}`}
-                className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-3 shell:px-5"
-              >
-                <div className="flex min-w-0 flex-1 flex-col gap-0.5 sm:flex-row sm:items-baseline sm:gap-3">
-                  <span className="shrink-0 text-[13px] font-medium text-stone-600">{label}</span>
-                  <span className="min-w-0 text-[15px] font-semibold text-stone-900">{name ?? '—'}</span>
-                </div>
-                {mid != null && claimRow && !claimsError ? (
-                  <div className="flex flex-wrap items-center justify-end gap-2 sm:shrink-0">
-                    <label
-                      className={`inline-flex cursor-pointer items-center gap-2 ${!claimRow.can_toggle && !mine ? 'cursor-default opacity-90' : ''}`}
-                    >
-                      <input
-                        type="checkbox"
-                        className="h-5 w-5 shrink-0 rounded border-stone-300 text-primary focus:ring-primary/30 disabled:cursor-not-allowed"
-                        checked={mine}
-                        disabled={disabled}
-                        onChange={(e) => onToggle(mid, e.target.checked)}
-                      />
-                      <span className="sr-only">Сбор нужд для {name}</span>
-                    </label>
-                    {claimRow.claimed_by ? (
-                      <span className="inline-flex max-w-full items-center rounded-full bg-amber-500/12 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-amber-950">
-                        {mine ? 'Вы' : claimRow.claimed_by.name}
-                      </span>
-                    ) : null}
-                  </div>
-                ) : null}
-              </li>
-            );
-          })}
+      {!isCollectionMode ? (
+        <ul className="mb-6 space-y-3">
+          {days.map((row) => (
+            <DayPrayerNeedRow key={row.date} row={row} onSaved={onPrayerSaved} />
+          ))}
         </ul>
-      </div>
+      ) : (
+        <div>
+          <div className="mb-3 grid gap-2 sm:grid-cols-2">
+            <label className="relative block sm:col-span-2">
+              <span className="sr-only">Поиск участника</span>
+              <LuSearch className="pointer-events-none absolute left-3 top-1/2 h-4.5 w-4.5 -translate-y-1/2 text-stone-400" />
+              <input
+                type="search"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Поиск по имени участника"
+                className="min-h-[44px] w-full rounded-xl border border-stone-200 bg-white pl-10 pr-3 text-[14px] text-stone-800 outline-none ring-primary/15 focus:border-primary focus:ring-2"
+              />
+            </label>
+
+            {([
+              ['all', `Все (${days.length})`],
+              ['mine', `Мои (${myClaimsCount})`],
+              ['free', `Свободные (${freeCount})`],
+              ['busy', `Занятые (${busyCount})`],
+            ] as const).map(([mode, label]) => (
+              <button
+                key={mode}
+                type="button"
+                onClick={() => setFilterMode(mode)}
+                className={`min-h-[42px] rounded-xl border px-3 text-[13px] font-bold transition ${
+                  filterMode === mode
+                    ? 'border-primary/60 bg-primary/10 text-primary'
+                    : 'border-stone-200 bg-white text-stone-600 hover:text-stone-900'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
+          {listRows.length === 0 ? (
+            <p className="mb-3 rounded-xl border border-stone-200 bg-stone-50 px-3 py-3 text-[13px] text-stone-500">
+              Ничего не найдено по текущему фильтру.
+            </p>
+          ) : null}
+
+          <div className="overflow-hidden rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] shadow-[var(--shadow)]">
+            <ul className="divide-y divide-stone-100">
+              {listRows.map((row) => {
+                const d = parse(row.date, 'yyyy-MM-dd', new Date());
+                const label = format(d, 'EEEE, d MMMM', { locale: ru });
+                const name = row.member?.name?.trim() || null;
+                const mid = row.member?.id;
+                const claimRow = claimsError ? undefined : mid != null ? claimByMemberId.get(mid) : undefined;
+                const mine = currentUserId != null && claimRow?.claimed_by?.id === currentUserId;
+                const disabled = mutPending || !claimRow?.can_toggle;
+
+                return (
+                  <li
+                    key={`claim-${row.date}`}
+                    className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-3 shell:px-5"
+                  >
+                    <div className="flex min-w-0 flex-1 flex-col gap-0.5 sm:flex-row sm:items-baseline sm:gap-3">
+                      <span className="shrink-0 text-[13px] font-medium text-stone-600">{label}</span>
+                      <span className="min-w-0 text-[15px] font-semibold text-stone-900">{name ?? '—'}</span>
+                    </div>
+                    {mid != null && claimRow && !claimsError ? (
+                      <div className="flex flex-wrap items-center justify-end gap-2 sm:shrink-0">
+                        <label
+                          className={`inline-flex cursor-pointer items-center gap-2 ${!claimRow.can_toggle && !mine ? 'cursor-default opacity-90' : ''}`}
+                        >
+                          <input
+                            type="checkbox"
+                            className="h-5 w-5 shrink-0 rounded border-stone-300 text-primary focus:ring-primary/30 disabled:cursor-not-allowed"
+                            checked={mine}
+                            disabled={disabled}
+                            onChange={(e) => onToggle(mid, e.target.checked)}
+                          />
+                          <span className="sr-only">Сбор нужд для {name}</span>
+                        </label>
+                        {claimRow.claimed_by ? (
+                          <span className="inline-flex max-w-full items-center rounded-full bg-amber-500/12 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-amber-950">
+                            {mine ? 'Вы' : claimRow.claimed_by.name}
+                          </span>
+                        ) : (
+                          <span className="inline-flex max-w-full items-center rounded-full bg-emerald-500/10 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-emerald-900">
+                            Свободно
+                          </span>
+                        )}
+                      </div>
+                    ) : null}
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -407,13 +500,18 @@ function ModalFrame(props: {
 
 type Props = { canView: boolean; currentUserId: number | null };
 
-/** Кнопка и модалка: 7 дней недели по циклу, заполнение нужд и сбор отметок. */
-export function NextWeekPrayerPlanSection({ canView, currentUserId }: Props) {
+/** Кнопка и модалка: 7 дней недели по циклу в одном из режимов (сбор или заполнение). */
+export function NextWeekPrayerPlanSection({
+  canView,
+  currentUserId,
+  mode = 'collection',
+}: Props & { mode?: 'collection' | 'fill' }) {
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const titleId = useId();
   const [mutErr, setMutErr] = useState<string | null>(null);
   const [weekKind, setWeekKind] = useState<WeekPlanKind>('current');
+  const isCollectionMode = mode === 'collection';
 
   const enabled = canView && open;
 
@@ -481,16 +579,24 @@ export function NextWeekPrayerPlanSection({ canView, currentUserId }: Props) {
           <LuClipboardList className="h-5 w-5" strokeWidth={2} aria-hidden />
         </span>
         <span className="min-w-0 flex-1">
-          <span className="block text-[16px] font-extrabold text-stone-900">Нужды недели по циклу</span>
+          <span className="block text-[16px] font-extrabold text-stone-900">
+            {isCollectionMode ? 'Список сбора нужд недели' : 'Заполнение нужд недели'}
+          </span>
           <span className="mt-0.5 block text-[12px] leading-snug text-stone-600">
-            7 дней · текущая или следующая неделя · быстрое заполнение
+            {isCollectionMode
+              ? '7 дней · список участников · поиск и отбор'
+              : '7 дней · текущая или следующая неделя · ввод нужд'}
           </span>
         </span>
       </button>
 
       {open && typeof document !== 'undefined'
         ? createPortal(
-            <ModalFrame titleId={titleId} title="Нужды на неделю" onClose={() => setOpen(false)}>
+            <ModalFrame
+              titleId={titleId}
+              title={isCollectionMode ? 'Список сбора нужд' : 'Заполнение нужд на неделю'}
+              onClose={() => setOpen(false)}
+            >
               <div className="mb-4 flex rounded-2xl border border-stone-200/90 bg-stone-100/80 p-1">
                 <button
                   type="button"
@@ -545,6 +651,7 @@ export function NextWeekPrayerPlanSection({ canView, currentUserId }: Props) {
                 </p>
               ) : null}
               <NextWeekMembersPanel
+                mode={mode}
                 weekKind={weekKind}
                 days={weekDays}
                 isPending={weekPending}
