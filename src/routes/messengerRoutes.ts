@@ -174,6 +174,11 @@ router.patch('/conversations/:id/permissions', checkChatPermission('manage_chat'
     res.json({ ok: true });
   } catch (e) {
     console.error('[messenger] patchConversationPermissions error:', e);
+    const message = e instanceof Error ? e.message : String(e);
+    if (message.includes('DB schema is outdated')) {
+      res.status(503).json({ error: message });
+      return;
+    }
     res.status(500).json({ error: 'Failed to update permissions' });
   }
 });

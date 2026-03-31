@@ -296,11 +296,25 @@ export async function updateConversationPermissionsAndSettings(
   if (sets.length === 0) return;
   params.push(conversationId);
 
-  await dbQuery(`UPDATE conversations SET ${sets.join(', ')} WHERE id = $${i}`, params);
+  try {
+    await dbQuery(`UPDATE conversations SET ${sets.join(', ')} WHERE id = $${i}`, params);
+  } catch (e) {
+    if (isPgUndefinedColumnError(e)) {
+      // Old DB schema; surface a clear error instead of generic 500.
+      const msg =
+        'DB schema is outdated for messenger conversations. ' +
+        'Run DB init/migrations (initDb) to add columns default_permissions/settings/metadata.';
+      const err = new Error(msg);
+      (err as any).cause = e;
+      throw err;
+    }
+    throw e;
+  }
 }
 
 export async function listConversationMembers(conversationId: string): Promise<ConversationMember[]> {
-  const result = await dbQuery(
+  const attempts: string[] = [
+    // Modern schema
     `SELECT
         cp.member_id,
         cp.role,
@@ -317,18 +331,74 @@ export async function listConversationMembers(conversationId: string): Promise<C
      ORDER BY
        CASE cp.role WHEN 'owner' THEN 0 WHEN 'admin' THEN 1 ELSE 2 END,
        cp.joined_at ASC`,
-    [conversationId],
-  );
-  return result.rows.map((r: any) => ({
-    member_id: Number(r.member_id),
-    role: r.role as ParticipantRole,
-    joined_at: r.joined_at,
-    muted_until: r.muted_until ?? null,
-    permissions: (r.permissions ?? {}) as PermissionsJson,
-    name: r.name,
-    first_name: r.first_name ?? null,
-    last_name: r.last_name ?? null,
-  }));
+    // Missing `left_at`
+    `SELECT
+        cp.member_id,
+        cp.role,
+        cp.joined_at,
+        cp.muted_until,
+        cp.permissions,
+        m.name,
+        m.first_name,
+        m.last_name
+     FROM conversation_participants cp
+     JOIN members m ON m.id = cp.member_id
+     WHERE cp.conversation_id = $1
+     ORDER BY
+       CASE cp.role WHEN 'owner' THEN 0 WHEN 'admin' THEN 1 ELSE 2 END,
+       cp.joined_at ASC`,
+    // Missing permissions/mute columns
+    `SELECT
+        cp.member_id,
+        cp.role,
+        cp.joined_at,
+        m.name,
+        m.first_name,
+        m.last_name
+     FROM conversation_participants cp
+     JOIN members m ON m.id = cp.member_id
+     WHERE cp.conversation_id = $1
+     ORDER BY
+       CASE cp.role WHEN 'owner' THEN 0 WHEN 'admin' THEN 1 ELSE 2 END,
+       cp.joined_at ASC`,
+    // Very old schema: only member_id/role
+    `SELECT
+        cp.member_id,
+        cp.role,
+        m.name,
+        m.first_name,
+        m.last_name
+     FROM conversation_participants cp
+     JOIN members m ON m.id = cp.member_id
+     WHERE cp.conversation_id = $1
+     ORDER BY
+       CASE cp.role WHEN 'owner' THEN 0 WHEN 'admin' THEN 1 ELSE 2 END,
+       cp.member_id ASC`,
+  ];
+
+  let lastErr: unknown = null;
+  for (const sql of attempts) {
+    try {
+      const result = await dbQuery(sql, [conversationId]);
+      return result.rows.map((r: any) => ({
+        member_id: Number(r.member_id),
+        role: r.role as ParticipantRole,
+        joined_at: r.joined_at ?? new Date().toISOString(),
+        muted_until: r.muted_until ?? null,
+        permissions: (r.permissions ?? {}) as PermissionsJson,
+        name: r.name,
+        first_name: r.first_name ?? null,
+        last_name: r.last_name ?? null,
+      }));
+    } catch (e) {
+      lastErr = e;
+      if (!isPgUndefinedColumnError(e)) {
+        throw e;
+      }
+      console.warn('[messenger] listConversationMembers: fallback (42703 undefined column), retrying simpler SELECT', (e as Error)?.message);
+    }
+  }
+  throw lastErr ?? new Error('Failed to list conversation members');
 }
 
 export async function updateMemberRoleAndPermissions(

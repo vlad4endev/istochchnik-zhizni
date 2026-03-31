@@ -89,6 +89,7 @@ export function ManageChatHomePage() {
   const privateAvatarUrl =
     resolvePublicUrl(privateProfile?.avatar_url ?? null) ??
     resolvePublicUrl(conv?.other_member?.avatar_url ?? null);
+  const privateInitial = (fullName ?? title).trim().charAt(0).toUpperCase() || 'U';
 
   return (
     <div className="mx-auto w-full max-w-xl px-4 pt-4 pb-24">
@@ -111,56 +112,84 @@ export function ManageChatHomePage() {
         </button>
       </div>
 
-      <div className="mt-5 rounded-3xl bg-white/80 p-5 shadow-[0_10px_30px_rgba(28,25,23,0.08)] ring-1 ring-stone-200/70 backdrop-blur">
-        <div className="flex items-start gap-4">
-          <div className="grid h-14 w-14 place-items-center rounded-2xl bg-primary/10 text-primary">
-            <LuUsers size={26} />
+      {!isPrivate ? (
+        <div className="mt-5 rounded-3xl bg-white/80 p-5 shadow-[0_10px_30px_rgba(28,25,23,0.08)] ring-1 ring-stone-200/70 backdrop-blur">
+          <div className="flex items-start gap-4">
+            <div className="grid h-14 w-14 place-items-center rounded-2xl bg-primary/10 text-primary">
+              <LuUsers size={26} />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-lg font-extrabold text-stone-900">{title}</p>
+              <p className="mt-0.5 text-sm font-semibold text-stone-500">{subtitle}</p>
+              {me ? <p className="mt-1 text-xs text-stone-400">Ваш ID: {me}</p> : null}
+            </div>
           </div>
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-lg font-extrabold text-stone-900">{title}</p>
-            <p className="mt-0.5 text-sm font-semibold text-stone-500">{subtitle}</p>
-            {me ? <p className="mt-1 text-xs text-stone-400">Ваш ID: {me}</p> : null}
-          </div>
-        </div>
 
-        {loading ? (
-          <div className="mt-4 h-10 w-full animate-pulse rounded-2xl bg-stone-100" />
-        ) : err ? (
-          <p className="mt-4 text-sm font-semibold text-red-600">{err}</p>
-        ) : null}
-      </div>
+          {loading ? (
+            <div className="mt-4 h-10 w-full animate-pulse rounded-2xl bg-stone-100" />
+          ) : err ? (
+            <p className="mt-4 text-sm font-semibold text-red-600">{err}</p>
+          ) : null}
+        </div>
+      ) : null}
 
       {isPrivate ? (
         <div className="mt-4 space-y-3">
-          <div className="rounded-3xl bg-white/80 p-5 shadow-[0_10px_30px_rgba(28,25,23,0.07)] ring-1 ring-stone-200/70 backdrop-blur">
-            <div className="flex items-center gap-4">
-              <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-3xl bg-primary/10 ring-1 ring-stone-200/70">
-                {privateAvatarUrl ? (
-                  <img src={privateAvatarUrl} alt="" className="h-full w-full object-cover" />
-                ) : (
-                  <div className="grid h-full w-full place-items-center text-xl font-extrabold text-primary">
-                    {(fullName ?? title).trim().charAt(0).toUpperCase() || 'U'}
-                  </div>
-                )}
-                <span
-                  className={[
-                    'absolute bottom-1.5 right-1.5 h-3.5 w-3.5 rounded-full border-2',
-                    isOnline ? 'bg-emerald-500 border-white' : 'bg-stone-300 border-white',
-                  ].join(' ')}
-                  aria-hidden
-                />
-              </div>
-
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-[17px] font-extrabold text-stone-900">{fullName ?? title}</p>
-                <p className="mt-0.5 text-xs font-semibold text-stone-500">{privateProfile ? statusText : '—'}</p>
-                {privateProfile?.phone_number ? (
-                  <p className="mt-1 text-sm font-semibold text-stone-700">{privateProfile.phone_number}</p>
-                ) : null}
+          <div className="overflow-hidden rounded-3xl bg-white shadow-[0_14px_40px_rgba(28,25,23,0.10)] ring-1 ring-stone-200/70">
+            <div className="relative">
+              <div className="h-28 bg-gradient-to-br from-primary via-[#8b3d48] to-[#d18b96]" />
+              <div className="absolute inset-0 bg-[radial-gradient(ellipse_70%_60%_at_20%_-30%,rgba(255,255,255,0.20),transparent)]" />
+              <div className="absolute inset-0 bg-[radial-gradient(ellipse_60%_60%_at_100%_120%,rgba(255,255,255,0.12),transparent)]" />
+              <div className="absolute left-5 top-16">
+                <div className="relative h-20 w-20 overflow-hidden rounded-3xl border-4 border-white bg-white shadow-[0_10px_30px_rgba(0,0,0,0.10)]">
+                  {privateAvatarUrl ? (
+                    <img
+                      src={privateAvatarUrl}
+                      alt=""
+                      className="h-full w-full object-cover"
+                      loading="lazy"
+                      onError={(e) => {
+                        (e.currentTarget as HTMLImageElement).style.display = 'none';
+                      }}
+                    />
+                  ) : null}
+                  {!privateAvatarUrl ? (
+                    <div className="grid h-full w-full place-items-center bg-primary/10 text-2xl font-extrabold text-primary">
+                      {privateInitial}
+                    </div>
+                  ) : null}
+                  <span
+                    className={[
+                      'absolute bottom-1.5 right-1.5 h-3.5 w-3.5 rounded-full border-2 border-white',
+                      isOnline ? 'bg-emerald-500' : 'bg-stone-300',
+                    ].join(' ')}
+                    aria-hidden
+                  />
+                </div>
               </div>
             </div>
 
-            <div className="mt-4 space-y-3">
+            <div className="px-5 pb-5 pt-12">
+              <p className="text-[18px] font-extrabold tracking-tight text-stone-900">{fullName ?? title}</p>
+              <div className="mt-1 flex flex-wrap items-center gap-2">
+                <span className="inline-flex items-center rounded-full bg-stone-900/5 px-3 py-1 text-xs font-semibold text-stone-600">
+                  {privateProfile ? statusText : '—'}
+                </span>
+                {privateProfile?.app_role ? (
+                  <span className="inline-flex items-center rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
+                    {privateProfile.app_role}
+                  </span>
+                ) : null}
+              </div>
+
+              {privateProfile?.phone_number ? (
+                <div className="mt-3 rounded-2xl bg-stone-50 px-4 py-3 ring-1 ring-stone-200/60">
+                  <p className="text-[11px] font-extrabold uppercase tracking-[0.12em] text-stone-500">Телефон</p>
+                  <p className="mt-1 text-[15px] font-extrabold text-stone-900">{privateProfile.phone_number}</p>
+                </div>
+              ) : null}
+
+              <div className="mt-4 space-y-3">
               <InfoRow
                 Icon={LuPhone}
                 label="Телефон"

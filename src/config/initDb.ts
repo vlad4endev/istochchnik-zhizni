@@ -511,6 +511,24 @@ CREATE TABLE IF NOT EXISTS message_interactions (
 -- Upgrades for DBs created before avatar_url
 ALTER TABLE members ADD COLUMN IF NOT EXISTS avatar_url TEXT;
 
+-- Upgrades for older messenger DBs (columns added after initial rollout)
+-- These are safe no-ops on fresh DBs, and prevent 42703 errors (missing columns) on old ones.
+ALTER TABLE conversations
+  ADD COLUMN IF NOT EXISTS default_permissions JSONB NOT NULL DEFAULT jsonb_build_object(
+    'can_send_messages', true,
+    'can_send_media',    true,
+    'can_add_users',     false,
+    'can_pin_messages',  false,
+    'can_manage_chat',   false
+  );
+ALTER TABLE conversations ADD COLUMN IF NOT EXISTS settings JSONB NOT NULL DEFAULT '{}'::jsonb;
+ALTER TABLE conversations ADD COLUMN IF NOT EXISTS metadata JSONB NOT NULL DEFAULT '{}'::jsonb;
+
+ALTER TABLE conversation_participants ADD COLUMN IF NOT EXISTS permissions JSONB NOT NULL DEFAULT '{}'::jsonb;
+ALTER TABLE conversation_participants ADD COLUMN IF NOT EXISTS joined_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+ALTER TABLE conversation_participants ADD COLUMN IF NOT EXISTS muted_until TIMESTAMPTZ;
+ALTER TABLE conversation_participants ADD COLUMN IF NOT EXISTS left_at TIMESTAMPTZ;
+
 -- Upgrades for DBs created before read cursors
 -- Старые БД: conversation_participants могли быть без last_read_message_id — индекс ниже тогда падает.
 ALTER TABLE conversation_participants
