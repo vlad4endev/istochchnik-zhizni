@@ -106,6 +106,22 @@ export type ChatTab = 'all' | 'personal' | 'services' | 'notifications';
 export const EMPTY_ARRAY: any[] = [];
 export const EMPTY_OBJECT: any = {};
 
+function dedupeMessages(messages: MessageWithSender[]): MessageWithSender[] {
+  const byId = new Set<string>();
+  const byClientMsgId = new Set<string>();
+  const out: MessageWithSender[] = [];
+  for (const msg of messages) {
+    const idKey = String(msg.id);
+    if (byId.has(idKey)) continue;
+    const clientKey = msg.client_msg_id ? String(msg.client_msg_id) : null;
+    if (clientKey && byClientMsgId.has(clientKey)) continue;
+    byId.add(idKey);
+    if (clientKey) byClientMsgId.add(clientKey);
+    out.push(msg);
+  }
+  return out;
+}
+
 // ─── Store ────────────────────────────────────────────────────
 
 export const useChatStore = create<ChatState>((set, get) => ({
@@ -255,12 +271,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
     try {
       const real = await api.sendMessage(conversationId, content, serverReplyId, clientMsgId, 'text', { text: content });
-      // Replace temp with real
+      // Replace temp with real and dedupe against WS echo by id/client_msg_id.
       set((s) => ({
         messagesByConv: {
           ...s.messagesByConv,
-          [conversationId]: (s.messagesByConv[conversationId] || []).map((m) =>
-            m.id === tempId ? real : m,
+          [conversationId]: dedupeMessages(
+            (s.messagesByConv[conversationId] || []).map((m) => (m.id === tempId ? real : m)),
           ),
         },
       }));
@@ -388,11 +404,22 @@ export const useChatStore = create<ChatState>((set, get) => ({
   handleNewMessage: (convId, msg) => {
     const idKey = String(convId);
     set((s) => {
-      // Don't add if already exists (sent by this client)
       const existing = s.messagesByConv[idKey] || [];
+      const msgClientId = msg.client_msg_id ? String(msg.client_msg_id) : null;
+
+      // Already present by definitive server id.
       if (existing.some((m) => m.id === msg.id)) return s;
 
-      const newMsgs = [...existing, msg];
+      // If optimistic temp exists with same client_msg_id, replace it (no append).
+      const hasOptimisticTwin =
+        msgClientId != null &&
+        existing.some((m) => m.id.startsWith('temp-') && m.client_msg_id === msgClientId);
+      const merged = hasOptimisticTwin
+        ? existing.map((m) =>
+            m.id.startsWith('temp-') && m.client_msg_id === msgClientId ? msg : m,
+          )
+        : [...existing, msg];
+      const newMsgs = dedupeMessages(merged);
 
       // Update conversation list
       const updatedConvs = s.conversations.map((c) => {
