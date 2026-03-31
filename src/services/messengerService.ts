@@ -16,8 +16,16 @@ function bigint(v: unknown): string {
   return String(v);
 }
 
+function pgErrorCode(e: unknown): string | undefined {
+  const c =
+    e && typeof e === 'object' && 'code' in e ? (e as { code: unknown }).code : undefined;
+  if (typeof c === 'string') return c;
+  if (typeof c === 'number') return String(c);
+  return undefined;
+}
+
 function isPgUndefinedColumnError(e: unknown): boolean {
-  return typeof e === 'object' && e !== null && (e as { code?: string }).code === '42703';
+  return pgErrorCode(e) === '42703';
 }
 
 /**
@@ -193,62 +201,63 @@ export async function getConversationMeta(
   ConversationListItem,
   'id' | 'type' | 'title' | 'avatar_url' | 'updated_at' | 'default_permissions' | 'settings' | 'metadata'
 > | null> {
-  function mapMetaRow(
-    r: Record<string, unknown>,
-    metadata: Record<string, unknown> | undefined,
-  ): Pick<
+  function mapMetaRowFromDbRow(r: Record<string, unknown>): Pick<
     ConversationListItem,
     'id' | 'type' | 'title' | 'avatar_url' | 'updated_at' | 'default_permissions' | 'settings' | 'metadata'
   > {
+    const metaRaw = r.metadata;
+    const metadata =
+      metaRaw && typeof metaRaw === 'object' && !Array.isArray(metaRaw)
+        ? (metaRaw as Record<string, unknown>)
+        : undefined;
+    const dp = r.default_permissions;
+    const default_permissions =
+      dp && typeof dp === 'object' && !Array.isArray(dp) ? (dp as PermissionsJson) : undefined;
+    const st = r.settings;
+    const settings =
+      st && typeof st === 'object' && !Array.isArray(st) ? (st as Record<string, unknown>) : undefined;
     return {
       id: bigint(r.id),
       type: r.type as ConversationType,
       title: r.title as string | null,
       avatar_url: r.avatar_url as string | null,
       updated_at: r.updated_at as string,
-      default_permissions: (r.default_permissions ?? undefined) as PermissionsJson | undefined,
-      settings: (r.settings ?? undefined) as Record<string, unknown> | undefined,
+      default_permissions,
+      settings,
       metadata,
     };
   }
 
-  try {
-    const result = await dbQuery(
-      `SELECT id, type, title, avatar_url, updated_at, default_permissions, settings, metadata
-     FROM conversations
-     WHERE id = $1
-     LIMIT 1`,
-      [conversationId],
-    );
-    const rFull = result.rows[0];
-    if (!rFull) return null;
-    const meta = (rFull as { metadata?: unknown }).metadata;
-    const metadata =
-      meta && typeof meta === 'object' && !Array.isArray(meta)
-        ? (meta as Record<string, unknown>)
-        : undefined;
-    return mapMetaRow(rFull as Record<string, unknown>, metadata);
-  } catch (e) {
-    const code = typeof (e as { code?: string })?.code === 'string' ? (e as { code: string }).code : '';
-    // undefined_column — старая БД без колонки metadata (middleware падал с 500).
-    if (code === '42703') {
+  const sqlAttempts = [
+    `SELECT id, type, title, avatar_url, updated_at, default_permissions, settings, metadata
+     FROM conversations WHERE id = $1 LIMIT 1`,
+    `SELECT id, type, title, avatar_url, updated_at, default_permissions, settings
+     FROM conversations WHERE id = $1 LIMIT 1`,
+    `SELECT id, type, title, avatar_url, updated_at, default_permissions
+     FROM conversations WHERE id = $1 LIMIT 1`,
+    `SELECT id, type, title, avatar_url, updated_at
+     FROM conversations WHERE id = $1 LIMIT 1`,
+  ];
+
+  let lastErr: unknown;
+  for (let i = 0; i < sqlAttempts.length; i++) {
+    try {
+      const result = await dbQuery(sqlAttempts[i], [conversationId]);
+      const row = result.rows[0];
+      if (!row) return null;
+      return mapMetaRowFromDbRow(row as Record<string, unknown>);
+    } catch (e) {
+      lastErr = e;
+      if (pgErrorCode(e) !== '42703') {
+        throw e;
+      }
       console.warn(
-        '[messenger] getConversationMeta: column error (42703), retrying without metadata. Run initDb/migrations to add conversations.metadata.',
+        `[messenger] getConversationMeta: 42703 on attempt ${i + 1}/${sqlAttempts.length}, retrying simpler SELECT`,
         (e as Error)?.message,
       );
-      const result = await dbQuery(
-        `SELECT id, type, title, avatar_url, updated_at, default_permissions, settings
-         FROM conversations
-         WHERE id = $1
-         LIMIT 1`,
-        [conversationId],
-      );
-      const r = result.rows[0];
-      if (!r) return null;
-      return mapMetaRow(r as Record<string, unknown>, undefined);
     }
-    throw e;
   }
+  throw lastErr instanceof Error ? lastErr : new Error(String(lastErr));
 }
 
 export async function updateConversationPermissionsAndSettings(

@@ -40,8 +40,10 @@ const DEFAULTS: Required<Record<PermissionKey, boolean>> = {
 };
 
 function mergePermissions(base: PermissionsJson | undefined, override: PermissionsJson | undefined) {
-  const out: any = { ...DEFAULTS, ...(base ?? {}) };
-  if (override) {
+  const safeBase =
+    base && typeof base === 'object' && !Array.isArray(base) ? (base as PermissionsJson) : {};
+  const out: Record<string, boolean> = { ...DEFAULTS, ...safeBase };
+  if (override && typeof override === 'object' && !Array.isArray(override)) {
     for (const [k, v] of Object.entries(override)) {
       if (typeof v === 'boolean') out[k] = v;
     }
@@ -49,7 +51,7 @@ function mergePermissions(base: PermissionsJson | undefined, override: Permissio
   return out as Required<Record<PermissionKey, boolean>>;
 }
 
-function superpowers(role: ParticipantRole) {
+function superpowers(role: string) {
   if (role === 'owner') {
     return {
       can_send_messages: true,
@@ -81,9 +83,10 @@ export function checkChatPermission(action: Action) {
     const convIdEarly = String(
       req.params.id ?? req.params.conversationId ?? (req.body as { conversationId?: string } | undefined)?.conversationId ?? '',
     );
+    let step = 'init';
     try {
-      const userId = userIdEarly;
-      if (!userId) {
+      const userId = Number(userIdEarly);
+      if (!userIdEarly || !Number.isFinite(userId) || userId < 1) {
         return deny(res, 401, 'Unauthorized');
       }
       const convId = convIdEarly;
@@ -91,22 +94,26 @@ export function checkChatPermission(action: Action) {
         return deny(res, 400, 'conversationId is required');
       }
 
+      step = 'getParticipantRole';
       const role = await svc.getParticipantRole(convId, userId);
       if (!role) {
         return deny(res, 403, 'Not a member of this conversation');
       }
 
+      step = 'getConversationMeta';
       const meta = await svc.getConversationMeta(convId);
       if (!meta) {
         return deny(res, 404, 'Conversation not found');
       }
 
+      step = 'getParticipantChatAuthRow';
       // Load member override fields (permissions/mute) — устойчиво к старым схемам БД
       const { permissions: memberPermissions, muted_until: mutedUntil } =
         await svc.getParticipantChatAuthRow(convId, userId);
 
+      step = 'mergePermissions';
       // base from chat + role superpowers (then allow override to restrict)
-      const roleBase = superpowers(role);
+      const roleBase = superpowers(String(role));
       const base = roleBase ?? (meta.default_permissions ?? {});
       const effective = mergePermissions(base, memberPermissions);
 
@@ -152,17 +159,26 @@ export function checkChatPermission(action: Action) {
         // we still require membership
       }
 
+      step = 'done';
       req.chatAuth = { conversationId: convId, memberId: userId, role, effective, mutedUntil };
       next();
     } catch (e) {
       const errObj = e && typeof e === 'object' ? (e as Record<string, unknown>) : null;
-      const pgCode = typeof errObj?.code === 'string' ? errObj.code : undefined;
+      const rawCode = errObj?.code;
+      const pgCode =
+        typeof rawCode === 'string'
+          ? rawCode
+          : typeof rawCode === 'number'
+            ? String(rawCode)
+            : undefined;
       const pgDetail = typeof errObj?.detail === 'string' ? errObj.detail : undefined;
       const pgHint = typeof errObj?.hint === 'string' ? errObj.hint : undefined;
       const pgColumn = typeof errObj?.column === 'string' ? errObj.column : undefined;
       const message = e instanceof Error ? e.message : String(e);
+      const cause = message.length > 400 ? `${message.slice(0, 400)}…` : message;
 
       console.error('[messenger] checkChatPermission FAILED', {
+        step,
         action,
         method: req.method,
         path: req.path,
@@ -188,6 +204,8 @@ export function checkChatPermission(action: Action) {
       }
       res.status(500).json({
         error: 'Failed to authorize chat action',
+        step,
+        cause,
         ...(pgCode ? { dbCode: pgCode } : {}),
         ...(pgDetail ? { dbDetail: pgDetail.slice(0, 500) } : {}),
         ...(pgHint ? { dbHint: pgHint.slice(0, 300) } : {}),
