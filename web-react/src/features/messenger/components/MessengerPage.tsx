@@ -1,4 +1,5 @@
 import { useEffect, useCallback, useState, useRef } from 'react';
+import { useLocation } from 'react-router-dom';
 import { useChatStore } from '../chatStore';
 import { useMessengerWs } from '../useMessengerWs';
 import { useSwipeGesture } from '../hooks/useSwipeGesture';
@@ -7,6 +8,7 @@ import { ChatWindow } from './ChatWindow';
 import { NewChatDialog } from './NewChatDialog';
 import { LuPlus, LuMessageSquare } from 'react-icons/lu';
 import './messenger.css';
+import { initMessengerPushNotifications } from '../push/webPush';
 
 function blurActiveElement() {
   try {
@@ -25,8 +27,14 @@ export function MessengerPage() {
   const [mobileView, setMobileView] = useState<'list' | 'chat'>('list');
   const [isTransitioning, setIsTransitioning] = useState(false);
   const messengerRef = useRef<HTMLDivElement>(null);
+  const location = useLocation();
 
   const ws = useMessengerWs();
+
+  useEffect(() => {
+    document.documentElement.dataset.messengerOpen = '1';
+    return () => { delete document.documentElement.dataset.messengerOpen; };
+  }, []);
 
   useEffect(() => {
     if (mobileView === 'chat') {
@@ -50,6 +58,21 @@ export function MessengerPage() {
   useEffect(() => {
     void loadConversations();
   }, [loadConversations]);
+
+  // Deep-link from push notification: /messenger?conversationId=123
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const convId = params.get('conversationId');
+    if (convId && convId.trim()) {
+      setActive(convId.trim());
+      setMobileView('chat');
+    }
+  }, [location.search, setActive]);
+
+  // If user already granted push permission earlier — ensure subscription is synced for messenger pushes.
+  useEffect(() => {
+    void initMessengerPushNotifications();
+  }, []);
 
   const handleSelectConversation = useCallback((id: string) => {
     blurActiveElement();

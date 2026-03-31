@@ -13,10 +13,13 @@ self.addEventListener('push', function (event) {
   const title = data.title || 'Уведомление';
   const options = {
     body: data.body || '',
-    icon: '/assets/pwa-192x192.png',
+    icon: '/assets/logo_minimal.svg',
     badge: '/assets/pwa-64x64.png',
-    data: data.url ? { url: data.url } : { url: '/' },
-    vibrate: [200, 100, 200, 100, 200, 100, 200],
+    data: {
+      url: data.url || '/',
+      conversationId: data.conversationId || null,
+    },
+    vibrate: [200, 100, 200],
   };
 
   event.waitUntil(self.registration.showNotification(title, options));
@@ -29,21 +32,19 @@ self.addEventListener('notificationclick', function (event) {
 
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
-      let matchingClient = null;
-
-      for (let i = 0; i < windowClients.length; i++) {
-        const windowClient = windowClients[i];
-        if (windowClient.url === urlToOpen) {
-          matchingClient = windowClient;
-          break;
+      // Prefer focusing any existing app window/tab.
+      const client = windowClients && windowClients.length ? windowClients[0] : null;
+      if (client) {
+        client.focus();
+        // If app is already open, let it navigate to the chat (best-effort).
+        try {
+          client.postMessage({ type: 'push:navigate', url: urlToOpen, conversationId: event.notification.data.conversationId || null });
+        } catch {
+          /* ignore */
         }
+        return;
       }
-
-      if (matchingClient) {
-        return matchingClient.focus();
-      } else {
-        return clients.openWindow(urlToOpen);
-      }
+      return clients.openWindow(urlToOpen);
     })
   );
 });

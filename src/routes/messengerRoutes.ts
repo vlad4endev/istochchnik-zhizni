@@ -5,6 +5,7 @@ import { ensureValidRequest, validateSendMessage } from '../middleware/messenger
 import { upload } from '../middleware/upload';
 import * as svc from '../services/messengerService';
 import { sendToRoomAll, sendToRoom, sendToMember, ensureMemberInRoom } from '../realtime/wsHub';
+import { sendPushNotification } from '../services/pushService';
 
 type AuthReq = Request & { authUserId?: number };
 
@@ -347,6 +348,33 @@ router.post(
       const convKey = String(convId);
       // Всем участникам комнаты, включая другие вкладки отправителя (дедуп по id на клиенте)
       sendToRoomAll(convKey, { type: 'msg:new', conversationId: convKey, message });
+
+      // Push-уведомления: всем участникам, кроме отправителя.
+      // Пуши приходят даже при закрытом приложении (если подписка активна и браузер разрешил).
+      try {
+        const memberIds = await svc.getConversationMemberIds(convKey);
+        const recipients = memberIds.filter((id) => Number(id) !== Number(userId));
+        const senderName = (message as any)?.sender_name ?? 'Новое сообщение';
+        const bodyText =
+          String((message as any)?.content ?? '').trim() ||
+          ((message as any)?.payload_type && (message as any).payload_type !== 'text' ? 'Вложение' : 'Новое сообщение');
+        const payload = {
+          title: senderName,
+          body: bodyText,
+          conversationId: convKey,
+          messageId: String((message as any)?.id ?? ''),
+          url: `/messenger?conversationId=${encodeURIComponent(convKey)}`,
+        };
+
+        for (const rid of recipients) {
+          // best-effort per recipient
+          // eslint-disable-next-line no-await-in-loop
+          await sendPushNotification(Number(rid), payload);
+        }
+      } catch (e) {
+        console.warn('[messenger] push notify failed (best-effort):', e);
+      }
+
       res.json(message);
     } catch (e) {
       const obj: Record<string, unknown> | null = e && typeof e === 'object' ? (e as Record<string, unknown>) : null;

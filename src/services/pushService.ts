@@ -120,3 +120,11 @@ export async function sendNotificationToMember(memberId: number, payload: any): 
     await sendNotificationToSubscription(sub, payload);
   }
 }
+
+/**
+ * Messenger-oriented alias (requested by spec).
+ * Sends payload to all subscriptions of a member.
+ */
+export async function sendPushNotification(memberId: number, payload: any): Promise<void> {
+  await sendNotificationToMember(memberId, payload);
+}

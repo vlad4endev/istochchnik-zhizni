@@ -562,7 +562,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
         s.currentMemberId != null &&
         msg.sender_id != null &&
         Number(msg.sender_id) === Number(s.currentMemberId);
-      const shouldCountUnread = msg.is_read === false && !isOwnMessage && !isActiveConversation;
+      // WS payload often omits `is_read`; treat omitted as unread.
+      // Count only incoming messages and only when chat is not active.
+      const shouldCountUnread = msg.is_read !== true && !isOwnMessage && !isActiveConversation;
       const targetConversation = s.conversations.find((c) => c.id === idKey) || null;
 
       // Already present by definitive server id.

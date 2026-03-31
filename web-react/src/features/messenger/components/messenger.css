@@ -1166,6 +1166,14 @@
 
 /* Mobile: hide bottom nav & go full-screen when chat is open */
 @media (max-width: 768px) {
+  html[data-messenger-open="1"],
+  html[data-messenger-open="1"] body,
+  html[data-messenger-open="1"] #root {
+    height: 100dvh;
+    overflow: hidden !important;
+    overscroll-behavior: none;
+  }
+
   html[data-chat-open="1"],
   html[data-chat-open="1"] body,
   html[data-chat-open="1"] #root {
@@ -1282,18 +1290,57 @@
    fixed chat viewport + safe-areas + keyboard-friendly height fallback */
 @supports (-webkit-touch-callout: none) {
   @media (max-width: 768px) {
+    /* Chat list stabilization on iOS */
+    html[data-messenger-open="1"] .tg-sidebar {
+      position: fixed !important;
+      left: 0;
+      right: 0;
+      top: 0;
+      bottom: var(--app-bottom-nav-h);
+      width: auto;
+      height: auto;
+      max-width: 100%;
+      box-sizing: border-box;
+      transform: translate3d(-100%, 0, 0);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      background: var(--tg-surface);
+      padding-left: env(safe-area-inset-left, 0px);
+      padding-right: env(safe-area-inset-right, 0px);
+    }
+
+    html[data-messenger-open="1"] .tg-sidebar--visible {
+      transform: translate3d(0, 0, 0);
+    }
+
+    html[data-messenger-open="1"] .tg-sidebar-header {
+      position: sticky;
+      top: 0;
+      z-index: 40;
+      padding-top: max(12px, env(safe-area-inset-top, 0px));
+    }
+
+    html[data-messenger-open="1"] .tg-sidebar > .flex {
+      min-height: 0;
+      flex: 1;
+      overflow: hidden;
+    }
+
     html[data-chat-open="1"] .tg-main--visible .tg-chat-window {
       position: fixed !important;
       left: 0;
       right: 0;
       top: 0;
       bottom: 0;
-      width: 100vw;
+      width: auto;
       height: 100dvh;
       min-height: -webkit-fill-available;
       max-height: 100dvh;
       transform: none !important;
       overflow: hidden;
+      overflow-x: clip;
+      box-sizing: border-box;
       display: grid;
       grid-template-rows: auto minmax(0, 1fr) auto;
       background: var(--tg-bg);
@@ -1312,6 +1359,8 @@
       position: sticky;
       bottom: 0;
       z-index: 40;
+      padding-left: max(0.75rem, env(safe-area-inset-left, 0px));
+      padding-right: max(0.75rem, env(safe-area-inset-right, 0px));
       padding-bottom: max(0.75rem, env(safe-area-inset-bottom, 0px));
       background: #fff;
     }

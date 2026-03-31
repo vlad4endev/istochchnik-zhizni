@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { useChatStore } from '../chatStore';
-import { LuPaperclip, LuPlus, LuSmile, LuSend, LuX } from 'react-icons/lu';
+import { LuPaperclip, LuSmile, LuSend, LuX } from 'react-icons/lu';
 import * as api from '../api/messengerApi';
 
 type PendingAttachment = {
@@ -213,7 +213,7 @@ export function ChatInput({
   }
 
   return (
-    <div className="w-full">
+    <div className="w-full min-w-0">
       {/* Reply/Edit Banners */}
       {(replyTo || editing) && (
         <div className="tg-input-banner">
@@ -360,8 +360,8 @@ export function ChatInput({
         <p className="mb-2 text-sm font-semibold text-red-600">{uploadErr}</p>
       ) : null}
 
-      <div className="tg-input-area">
-        <div className="tg-input-container">
+      <div className="tg-input-area min-w-0">
+        <div className="tg-input-container min-w-0">
           <input
             ref={fileInputRef}
             type="file"
@@ -371,9 +371,6 @@ export function ChatInput({
           />
           <button type="button" className="tg-input-icon-btn" onClick={handlePickFile} aria-label="Прикрепить файл">
             <LuPaperclip size={22} />
-          </button>
-          <button type="button" className="tg-input-icon-btn" aria-label="Ещё">
-            <LuPlus size={22} />
           </button>
           <textarea
             ref={textareaRef}
