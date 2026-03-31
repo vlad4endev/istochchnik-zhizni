@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import axios from 'axios';
 import type { ConversationListItem, MessageWithSender } from './api/messengerApi';
 import * as api from './api/messengerApi';
+import { emitAppToast } from '../../lib/uiFeedback';
 
 // ─── Types ────────────────────────────────────────────────────
 
@@ -282,6 +283,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
           ),
         },
       }));
+      emitAppToast('Не удалось отправить сообщение', 'error');
     }
   },
 

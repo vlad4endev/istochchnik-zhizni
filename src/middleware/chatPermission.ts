@@ -3,6 +3,7 @@ import * as svc from '../services/messengerService';
 import type { ParticipantRole, PermissionsJson, PermissionKey } from '../types/messenger';
 
 type AuthReq = Request & { authUserId?: number };
+type ReqWithUser = Request & { user?: { id?: number | string } };
 
 type Action =
   | 'view'
@@ -77,18 +78,36 @@ function deny(res: Response, code: number, error: string) {
   res.status(code).json({ error });
 }
 
+function resolveAuthUserId(req: Request): number | null {
+  const fromAuth = (req as AuthReq).authUserId;
+  const fromUser = (req as ReqWithUser).user?.id;
+  const raw = fromAuth ?? fromUser;
+  const parsed = Number(raw);
+  if (!raw || !Number.isFinite(parsed) || parsed < 1) {
+    return null;
+  }
+  return parsed;
+}
+
+function resolveConversationId(req: Request): string {
+  const raw =
+    req.params.id ??
+    req.params.conversationId ??
+    (req.body as { conversationId?: string | number } | undefined)?.conversationId ??
+    '';
+  return String(raw).trim();
+}
+
 export function checkChatPermission(action: Action) {
   return async (req: Request, res: Response, next: NextFunction) => {
-    const userIdEarly = (req as AuthReq).authUserId;
-    const convIdEarly = String(
-      req.params.id ?? req.params.conversationId ?? (req.body as { conversationId?: string } | undefined)?.conversationId ?? '',
-    );
+    const userIdEarly = resolveAuthUserId(req);
+    const convIdEarly = resolveConversationId(req);
     let step = 'init';
     try {
-      const userId = Number(userIdEarly);
-      if (!userIdEarly || !Number.isFinite(userId) || userId < 1) {
+      if (!userIdEarly) {
         return deny(res, 401, 'Unauthorized');
       }
+      const userId = userIdEarly;
       const convId = convIdEarly;
       if (!convId) {
         return deny(res, 400, 'conversationId is required');
@@ -177,6 +196,8 @@ export function checkChatPermission(action: Action) {
       const message = e instanceof Error ? e.message : String(e);
       const cause = message.length > 400 ? `${message.slice(0, 400)}…` : message;
 
+      // SQL/runtime issues are system errors and must not be mapped to 403.
+      console.error(e);
       console.error('[messenger] checkChatPermission FAILED', {
         step,
         action,

@@ -10,6 +10,7 @@ import { useSyncServerRole } from '../hooks/useSyncServerRole';
 import { IOSInstallBanner } from '../components/IOSInstallBanner';
 import { AndroidInstallBanner } from '../components/AndroidInstallBanner';
 import { UpdateNotification, useServiceWorkerUpdate } from '../features/pwa';
+import type { AppToastKind } from '../lib/uiFeedback';
 
 type NavItem = {
   to: string;
@@ -99,6 +100,63 @@ function ConnectivityBanner() {
           <LuX className="h-5 w-5" strokeWidth={2} aria-hidden />
         </button>
       ) : null}
+    </div>
+  );
+}
+
+type UiToast = {
+  id: number;
+  message: string;
+  kind: AppToastKind;
+};
+
+function normalizeToastKind(kind: unknown): AppToastKind {
+  if (kind === 'success' || kind === 'info') return kind;
+  return 'error';
+}
+
+function AppToastHost() {
+  const [toasts, setToasts] = useState<UiToast[]>([]);
+
+  useEffect(() => {
+    const onToast = (e: Event) => {
+      const ce = e as CustomEvent<{ message?: string; kind?: AppToastKind }>;
+      const message = String(ce.detail?.message ?? '').trim();
+      if (!message) return;
+      const kind = normalizeToastKind(ce.detail?.kind);
+      const id = Date.now() + Math.floor(Math.random() * 1000);
+      setToasts((prev) => [...prev, { id, message, kind }].slice(-3));
+      window.setTimeout(() => {
+        setToasts((prev) => prev.filter((t) => t.id !== id));
+      }, 3600);
+    };
+    window.addEventListener('app:toast', onToast);
+    return () => {
+      window.removeEventListener('app:toast', onToast);
+    };
+  }, []);
+
+  if (toasts.length === 0) return null;
+
+  return (
+    <div className="pointer-events-none fixed inset-x-4 bottom-[calc(5.5rem+env(safe-area-inset-bottom))] z-[70] flex flex-col items-end gap-2 md:bottom-6 md:left-auto md:right-6 md:max-w-sm">
+      {toasts.map((toast) => (
+        <div
+          key={toast.id}
+          role="status"
+          aria-live="polite"
+          className={[
+            'w-full rounded-xl border px-3 py-2 text-sm font-medium shadow-lg backdrop-blur',
+            toast.kind === 'error'
+              ? 'border-rose-300/70 bg-rose-50/95 text-rose-900'
+              : toast.kind === 'success'
+                ? 'border-emerald-300/70 bg-emerald-50/95 text-emerald-900'
+                : 'border-sky-300/70 bg-sky-50/95 text-sky-900',
+          ].join(' ')}
+        >
+          {toast.message}
+        </div>
+      ))}
     </div>
   );
 }
@@ -332,6 +390,7 @@ export function Layout() {
       </div>
       <IOSInstallBanner />
       <AndroidInstallBanner />
+      <AppToastHost />
       {updatePrompt.show ? (
         <UpdateNotification onUpdate={updatePrompt.onUpdate} onDismiss={() => updatePrompt.onDismiss?.()} />
       ) : null}

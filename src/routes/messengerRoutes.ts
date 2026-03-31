@@ -1,6 +1,7 @@
 import { Router, type Request, type Response } from 'express';
 import { requireAuthSession } from '../middleware/authSession';
 import { checkChatPermission } from '../middleware/chatPermission';
+import { ensureValidRequest, validateSendMessage } from '../middleware/messengerValidation';
 import * as svc from '../services/messengerService';
 import { sendToRoomAll, sendToMember, ensureMemberInRoom } from '../realtime/wsHub';
 
@@ -285,45 +286,47 @@ router.get('/conversations/:id/messages', async (req: Request, res: Response) =>
 });
 
 /** POST /api/messenger/conversations/:id/messages { content, replyToMessageId? } */
-router.post('/conversations/:id/messages', checkChatPermission('send_message'), async (req: Request, res: Response) => {
-  const userId = (req as AuthReq).authUserId!;
-  const convId = req.params.id;
-  const { content, replyToMessageId, clientMsgId, payloadType, payload } = req.body;
-  if (!content || typeof content !== 'string' || !content.trim()) {
-    res.status(400).json({ error: 'Message content is required' });
-    return;
-  }
-  const pt =
-    payloadType === 'prayer_request' || payloadType === 'text' || payloadType === 'audio'
-      ? payloadType
-      : 'text';
-  const pl =
-    payload != null && typeof payload === 'object' && !Array.isArray(payload)
-      ? (payload as Record<string, unknown>)
-      : {};
-  const replyId = normalizeOptionalBigintId(replyToMessageId);
-  try {
-    const message = await svc.sendMessage(convId, userId, content, replyId, clientMsgId, pt, pl);
-    const convKey = String(convId);
-    // Всем участникам комнаты, включая другие вкладки отправителя (дедуп по id на клиенте)
-    sendToRoomAll(convKey, { type: 'msg:new', conversationId: convKey, message });
-    res.json(message);
-  } catch (e) {
-    const obj: Record<string, unknown> | null = e && typeof e === 'object' ? (e as Record<string, unknown>) : null;
-    const message =
-      e instanceof Error ? e.message : (typeof obj?.message === 'string' ? obj.message : String(e));
-    const code = typeof obj?.code === 'string' ? obj.code : undefined;
-    const detail = typeof obj?.detail === 'string' ? obj.detail : undefined;
-    const hint = typeof obj?.hint === 'string' ? obj.hint : undefined;
+router.post(
+  '/conversations/:id/messages',
+  validateSendMessage,
+  ensureValidRequest,
+  checkChatPermission('send_message'),
+  async (req: Request, res: Response) => {
+    const userId = (req as AuthReq).authUserId!;
+    const convId = req.params.id;
+    const { content, replyToMessageId, clientMsgId, payloadType, payload } = req.body;
+    const pt =
+      payloadType === 'prayer_request' || payloadType === 'text' || payloadType === 'audio'
+        ? payloadType
+        : 'text';
+    const pl =
+      payload != null && typeof payload === 'object' && !Array.isArray(payload)
+        ? (payload as Record<string, unknown>)
+        : {};
+    const replyId = normalizeOptionalBigintId(replyToMessageId);
+    try {
+      const message = await svc.sendMessage(convId, userId, content, replyId, clientMsgId, pt, pl);
+      const convKey = String(convId);
+      // Всем участникам комнаты, включая другие вкладки отправителя (дедуп по id на клиенте)
+      sendToRoomAll(convKey, { type: 'msg:new', conversationId: convKey, message });
+      res.json(message);
+    } catch (e) {
+      const obj: Record<string, unknown> | null = e && typeof e === 'object' ? (e as Record<string, unknown>) : null;
+      const message =
+        e instanceof Error ? e.message : (typeof obj?.message === 'string' ? obj.message : String(e));
+      const code = typeof obj?.code === 'string' ? obj.code : undefined;
+      const detail = typeof obj?.detail === 'string' ? obj.detail : undefined;
+      const hint = typeof obj?.hint === 'string' ? obj.hint : undefined;
 
-    // Helpful for DB errors without leaking request body contents.
-    console.error('[messenger] sendMessage error:', { message, code, detail, hint });
-    res.status(500).json({
-      error: 'Failed to send message',
-      ...(code ? { dbCode: code } : {}),
-    });
-  }
-});
+      // Helpful for DB errors without leaking request body contents.
+      console.error('[messenger] sendMessage error:', { message, code, detail, hint });
+      res.status(500).json({
+        error: 'Failed to send message',
+        ...(code ? { dbCode: code } : {}),
+      });
+    }
+  },
+);
 
 /** PATCH /api/messenger/messages/:id { content } */
 router.patch('/messages/:id', async (req: Request, res: Response) => {

@@ -60,6 +60,9 @@ apiClient.interceptors.request.use((config) => {
   const token = getTokenForRequest();
   if (token) {
     next.headers.Authorization = `Bearer ${token}`;
+  } else if (next.headers && 'Authorization' in next.headers) {
+    // Prevent stale bearer token after logout/session clear.
+    delete (next.headers as Record<string, unknown>).Authorization;
   }
   return next;
 });

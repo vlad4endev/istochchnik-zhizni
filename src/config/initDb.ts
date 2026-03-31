@@ -551,6 +551,8 @@ ALTER TABLE conversations ADD CONSTRAINT conversations_type_check
 ALTER TABLE conversations ALTER COLUMN type SET DEFAULT 'private';
 
 ALTER TABLE messages ADD COLUMN IF NOT EXISTS client_msg_id TEXT;
+ALTER TABLE messages
+  ADD COLUMN IF NOT EXISTS reply_to_message_id BIGINT REFERENCES messages(id) ON DELETE SET NULL;
 ALTER TABLE messages ADD COLUMN IF NOT EXISTS payload JSONB NOT NULL DEFAULT '{}'::jsonb;
 ALTER TABLE messages ADD COLUMN IF NOT EXISTS interaction_count INTEGER NOT NULL DEFAULT 0;
 
