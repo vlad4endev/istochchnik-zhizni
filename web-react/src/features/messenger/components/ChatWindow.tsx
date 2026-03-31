@@ -229,8 +229,8 @@ export function ChatWindow({
   }, [messages]);
 
   return (
-    <div className="flex h-[100dvh] w-full flex-col overflow-hidden bg-gray-50">
-      <header className="shrink-0 bg-white shadow-sm z-10">
+    <div className="tg-chat-window flex h-[100dvh] w-full min-h-0 flex-col overflow-hidden bg-gray-50">
+      <header className="sticky top-0 z-20 shrink-0 bg-white shadow-sm">
         <div className="flex items-center gap-3 px-3 py-2.5">
           <button
             type="button"
@@ -304,7 +304,7 @@ export function ChatWindow({
       </header>
 
       <div
-        className="flex flex-1 flex-col gap-3 overflow-y-auto p-4"
+        className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-4"
         ref={scrollRef}
         onScroll={handleScroll}
         role="log"
@@ -360,7 +360,7 @@ export function ChatWindow({
         )}
       </div>
 
-      <div className="shrink-0 bg-white border-t p-3 [padding-bottom:max(0.75rem,env(safe-area-inset-bottom,0px))]">
+      <div className="sticky bottom-0 z-20 shrink-0 border-t bg-white p-3 [padding-bottom:max(0.75rem,env(safe-area-inset-bottom,0px))]">
         <ChatInput
           conversationId={conversationId}
           sendTypingStart={sendTypingStart}

@@ -653,6 +653,7 @@
   align-items: flex-end;
   gap: 10px;
   position: relative;
+  min-width: 0;
 }
 
 .tg-input-container {
@@ -664,6 +665,8 @@
   padding: 4px 10px;
   border: none;
   transition: background 0.2s ease, box-shadow 0.2s ease;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .tg-input-container:focus-within {
@@ -700,6 +703,7 @@
   box-shadow: 0 3px 10px rgba(125, 54, 64, 0.3);
   flex-shrink: 0;
   transition: transform 0.18s ease, opacity 0.2s ease, box-shadow 0.2s ease;
+  margin-right: 0;
 }
 
 .tg-send-btn:hover:not(:disabled) {
@@ -1162,12 +1166,22 @@
 
 /* Mobile: hide bottom nav & go full-screen when chat is open */
 @media (max-width: 768px) {
+  html[data-chat-open="1"],
+  html[data-chat-open="1"] body,
+  html[data-chat-open="1"] #root {
+    height: 100dvh;
+    overflow: hidden !important;
+    overscroll-behavior: none;
+  }
+
   html[data-chat-open="1"] .app-bottom-nav {
     display: none !important;
   }
 
   html[data-chat-open="1"] .app-main-content {
     padding-bottom: 0 !important;
+    height: 100dvh;
+    overflow: hidden !important;
   }
 
   html[data-chat-open="1"] {
@@ -1179,6 +1193,8 @@
 @media (max-width: 768px) {
   .tg-messenger {
     position: relative;
+    height: 100dvh;
+    overflow: hidden;
   }
 
   .tg-main {
@@ -1191,6 +1207,7 @@
     opacity: 0;
     pointer-events: none;
     transition: opacity 0.22s ease;
+    overflow: hidden;
   }
 
   .tg-main--visible {
@@ -1261,6 +1278,56 @@
   }
 }
 
+/* iOS Safari / PWA stabilization:
+   fixed chat viewport + safe-areas + keyboard-friendly height fallback */
+@supports (-webkit-touch-callout: none) {
+  @media (max-width: 768px) {
+    html[data-chat-open="1"] .tg-main--visible .tg-chat-window {
+      position: fixed !important;
+      left: 0;
+      right: 0;
+      top: 0;
+      bottom: 0;
+      width: 100vw;
+      height: 100dvh;
+      min-height: -webkit-fill-available;
+      max-height: 100dvh;
+      transform: none !important;
+      overflow: hidden;
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr) auto;
+      background: var(--tg-bg);
+      padding-top: env(safe-area-inset-top, 0px);
+      padding-left: env(safe-area-inset-left, 0px);
+      padding-right: env(safe-area-inset-right, 0px);
+    }
+
+    html[data-chat-open="1"] .tg-main--visible .tg-chat-window > header {
+      position: sticky;
+      top: 0;
+      z-index: 40;
+    }
+
+    html[data-chat-open="1"] .tg-main--visible .tg-chat-window > .shrink-0:last-of-type {
+      position: sticky;
+      bottom: 0;
+      z-index: 40;
+      padding-bottom: max(0.75rem, env(safe-area-inset-bottom, 0px));
+      background: #fff;
+    }
+
+    html[data-chat-open="1"] .tg-main--visible .tg-chat-window .tg-messages,
+    html[data-chat-open="1"] .tg-main--visible .tg-chat-window [role="log"] {
+      min-height: 0;
+      height: 100%;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      overscroll-behavior-y: contain;
+      touch-action: pan-y;
+    }
+  }
+}
+
 @media (max-width: 640px) {
   .tg-header {
     min-height: 52px;
@@ -1328,7 +1395,7 @@
   }
 
   .tg-input-area {
-    gap: 8px;
+    gap: 6px;
   }
 
   .tg-messages.tg-messages--native {
