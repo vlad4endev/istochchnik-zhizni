@@ -825,7 +825,7 @@ export async function getPrivateChatProfile(
 // ─── Messages ─────────────────────────────────────────────────
 
 function normalizePayloadType(raw: unknown): MessagePayloadType {
-  if (raw === 'prayer_request' || raw === 'audio') return raw;
+  if (raw === 'prayer_request' || raw === 'audio' || raw === 'image' || raw === 'file') return raw;
   return 'text';
 }
 

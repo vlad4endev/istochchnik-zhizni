@@ -2,29 +2,43 @@ import { useState, useRef, useMemo, useEffect } from 'react';
 import { useChatStore } from '../chatStore';
 import type { MessageWithSender } from '../api/messengerApi';
 import { IoCheckmark, IoCheckmarkDone } from 'react-icons/io5';
+import { LuDownload, LuFileText } from 'react-icons/lu';
+import { IoAlertCircleOutline, IoTimeOutline } from 'react-icons/io5';
+import { resolvePublicUrl } from '../../../lib/resolvePublicUrl';
+import { motion, useMotionValue, useTransform, animate } from 'framer-motion';
+import { LuReply } from 'react-icons/lu';
 
 interface MessageBubbleProps {
   message: MessageWithSender;
   isGroupedPrev: boolean;
   isGroupedNext: boolean;
+  onJumpToMessage?: (messageId: string) => void;
 }
 
-export function MessageBubble({ message, isGroupedPrev, isGroupedNext }: MessageBubbleProps) {
+export function MessageBubble({ message, isGroupedPrev, isGroupedNext, onJumpToMessage }: MessageBubbleProps) {
   const currentMemberId = useChatStore((s) => s.currentMemberId);
   const readCursorsByConv = useChatStore((s) => s.readCursorsByConv);
   const addReaction = useChatStore((s) => s.addReaction);
   const removeReaction = useChatStore((s) => s.removeReaction);
   const setReplyTo = useChatStore((s) => s.setReplyTo);
+  const setReplyingTo = useChatStore((s) => s.setReplyingTo);
   const setEditing = useChatStore((s) => s.setEditing);
   const deleteMessage = useChatStore((s) => s.deleteMessage);
+  const retrySendMessage = useChatStore((s) => s.retrySendMessage);
 
   const [showActions, setShowActions] = useState(false);
   const [showReactions, setShowReactions] = useState(false);
+  const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const x = useMotionValue(0);
+  const replyOpacity = useTransform(x, [-90, -50, 0], [1, 0.9, 0]);
+  const replyScale = useTransform(x, [-90, -50, 0], [1, 0.98, 0.9]);
 
   const isOptimistic = message.id.startsWith('temp-');
   const isMine = isOptimistic || (currentMemberId != null && message.sender_id === currentMemberId);
   const isDeleted = message.is_deleted;
+  const status = message.status ?? (isOptimistic ? 'sending' : 'sent');
   const convReadCursors = readCursorsByConv[String(message.conversation_id)] || {};
 
   const maxOtherReadId = useMemo(() => {
@@ -98,9 +112,70 @@ export function MessageBubble({ message, isGroupedPrev, isGroupedNext }: Message
       );
     }
 
+    if (payloadType === 'image') {
+      const rawUrl = String(payload.url ?? '').trim();
+      const src = resolvePublicUrl(rawUrl) ?? rawUrl;
+      return src ? (
+        <button
+          type="button"
+          onClick={() => setLightboxSrc(src)}
+          className="block w-full max-w-[250px] overflow-hidden rounded-lg bg-black/5"
+          aria-label="Открыть изображение"
+        >
+          <img src={src} alt="" className="h-48 w-full object-cover" loading="lazy" />
+        </button>
+      ) : (
+        <span>Изображение недоступно</span>
+      );
+    }
+
+    if (payloadType === 'file') {
+      const rawUrl = String(payload.url ?? '').trim();
+      const href = resolvePublicUrl(rawUrl) ?? rawUrl;
+      const name = String(payload.name ?? payload.filename ?? message.content ?? 'Файл').trim() || 'Файл';
+      const sizeRaw = Number(payload.size ?? 0);
+      const sizeLabel = Number.isFinite(sizeRaw) && sizeRaw > 0 ? formatBytes(sizeRaw) : null;
+      return (
+        <a
+          href={href || undefined}
+          target="_blank"
+          rel="noreferrer"
+          className="flex max-w-[20rem] items-center justify-between gap-3 rounded-2xl bg-white/10 px-3 py-2 ring-1 ring-white/10 hover:bg-white/14"
+        >
+          <span className="flex min-w-0 items-center gap-3">
+            <span className="grid h-10 w-10 place-items-center rounded-xl bg-white/12 text-white">
+              <LuFileText size={18} />
+            </span>
+            <span className="min-w-0">
+              <span className="block truncate text-[14px] font-semibold text-white/95">{name}</span>
+              <span className="mt-0.5 block text-[11px] font-semibold text-white/70">
+                {sizeLabel ?? 'Файл'}
+              </span>
+            </span>
+          </span>
+          <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-white/12 px-3 py-1 text-[11px] font-extrabold text-white/90">
+            <LuDownload size={14} />
+            Скачать
+          </span>
+        </a>
+      );
+    }
+
     // text (default)
     return <>{message.content}</>;
   };
+
+  function formatBytes(bytes: number): string {
+    const units = ['B', 'KB', 'MB', 'GB'];
+    let v = bytes;
+    let i = 0;
+    while (v >= 1024 && i < units.length - 1) {
+      v /= 1024;
+      i += 1;
+    }
+    const fixed = i === 0 ? String(Math.round(v)) : v.toFixed(v >= 10 ? 0 : 1);
+    return `${fixed} ${units[i]}`;
+  }
 
   const handleContextMenu = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -165,6 +240,7 @@ export function MessageBubble({ message, isGroupedPrev, isGroupedNext }: Message
   ].filter(Boolean).join(' ');
 
   return (
+    <>
     <div
       className={`tg-bubble-wrap ${isMine ? 'tg-bubble-wrap--out' : 'tg-bubble-wrap--in'}`}
       onContextMenu={handleContextMenu}
@@ -176,7 +252,34 @@ export function MessageBubble({ message, isGroupedPrev, isGroupedNext }: Message
         marginBottom: isGroupedNext ? '0' : '4px'
       }}
     >
-      <div className={bubbleClasses}>
+      <div className="relative">
+        <motion.div
+          className="absolute right-2 top-1/2 -translate-y-1/2"
+          style={{ opacity: replyOpacity, scale: replyScale }}
+          aria-hidden
+        >
+          <div className="grid h-9 w-9 place-items-center rounded-full bg-primary/10 text-primary ring-1 ring-primary/20">
+            <LuReply size={18} />
+          </div>
+        </motion.div>
+
+        <motion.div
+          className={bubbleClasses}
+          drag="x"
+          dragConstraints={{ left: 0, right: 0 }}
+          dragElastic={0.2}
+          style={{ x }}
+          onDragEnd={(_e, info) => {
+            const dx = info.offset.x;
+            if (dx < -50) {
+              setReplyingTo(message);
+              if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
+                navigator.vibrate(50);
+              }
+            }
+            animate(x, 0, { type: 'spring', stiffness: 420, damping: 32 });
+          }}
+        >
         {/* Tail (only if first message in group / single message) */}
         {!isGroupedPrev && (
           <div className={`tg-bubble-tail ${isMine ? 'tg-bubble-tail--out' : 'tg-bubble-tail--in'}`}>
@@ -195,16 +298,26 @@ export function MessageBubble({ message, isGroupedPrev, isGroupedNext }: Message
           <div className="tg-bubble-sender">{message.sender_name}</div>
         )}
 
-        {/* Reply preview */}
+        {/* Reply preview (tap to jump) */}
         {message.reply_preview && (
-          <div className="msg-reply-preview">
+          <button
+            type="button"
+            className="msg-reply-preview"
+            onClick={(e) => {
+              e.stopPropagation();
+              const id = String(message.reply_preview?.id ?? '').trim();
+              if (id && /^\d+$/.test(id)) onJumpToMessage?.(id);
+            }}
+            aria-label="Перейти к сообщению"
+            title="Перейти к сообщению"
+          >
             <div className="msg-reply-author">
               {message.reply_preview.sender_name || 'Удалённый пользователь'}
             </div>
             <div className="msg-reply-text">
               {message.reply_preview.is_deleted ? 'Сообщение удалено' : message.reply_preview.content}
             </div>
-          </div>
+          </button>
         )}
 
         {/* Content */}
@@ -214,16 +327,36 @@ export function MessageBubble({ message, isGroupedPrev, isGroupedNext }: Message
         <div className="tg-bubble-meta">
           {message.is_edited && <span className="msg-edited">ред.</span>}
           <span>{formattedTime}</span>
-          {isMine && !isOptimistic ? (
-            isReadByOther ? (
-              <IoCheckmarkDone className="h-4 w-4 text-blue-500" aria-label="Прочитано" />
+          {isMine ? (
+            status === 'sending' ? (
+              <IoTimeOutline className="h-4 w-4 text-gray-400" aria-label="Отправляется" />
+            ) : status === 'error' ? (
+              <IoAlertCircleOutline className="h-4 w-4 text-red-500" aria-label="Ошибка отправки" />
             ) : (
-              <IoCheckmark className="h-4 w-4 text-gray-400" aria-label="Отправлено" />
+              <>
+                {isReadByOther ? (
+                  <IoCheckmarkDone className="h-4 w-4 text-blue-500" aria-label="Прочитано" />
+                ) : (
+                  <IoCheckmark className="h-4 w-4 text-gray-400" aria-label="Отправлено" />
+                )}
+              </>
             )
           ) : null}
-          {isOptimistic && <span>⏳</span>}
         </div>
+        </motion.div>
       </div>
+
+      {isMine && status === 'error' ? (
+        <div className="mt-1 flex justify-end">
+          <button
+            type="button"
+            onClick={() => void retrySendMessage(String(message.conversation_id), String(message.id))}
+            className="inline-flex items-center rounded-full bg-red-50 px-3 py-1 text-[11px] font-extrabold text-red-700 ring-1 ring-red-200/70"
+          >
+            Повторить отправку
+          </button>
+        </div>
+      ) : null}
 
       {/* Reactions Display */}
       {message.reactions.length > 0 && (
@@ -290,5 +423,24 @@ export function MessageBubble({ message, isGroupedPrev, isGroupedNext }: Message
         </>
       )}
     </div>
+
+    {lightboxSrc ? (
+      <div
+        className="fixed inset-0 z-[5000] bg-black/80 p-4"
+        onClick={() => setLightboxSrc(null)}
+        role="dialog"
+        aria-modal="true"
+      >
+        <div className="mx-auto flex h-full max-w-2xl items-center justify-center">
+          <img
+            src={lightboxSrc}
+            alt=""
+            className="max-h-full max-w-full rounded-2xl object-contain shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      </div>
+    ) : null}
+    </>
   );
 }

@@ -8,9 +8,16 @@ export type ConversationType = 'private' | 'group' | 'channel';
 export type ParticipantRole = 'owner' | 'admin' | 'member';
 
 /** Rich message kinds (mirrors server `message_payload_type`). */
-export type MessagePayloadType = 'text' | 'prayer_request' | 'audio';
+export type MessagePayloadType = 'text' | 'prayer_request' | 'audio' | 'image' | 'file';
 
 export type MessagePayload = Record<string, unknown>;
+
+export type UploadedFile = {
+  url: string;
+  originalName: string;
+  mimeType: string;
+  size: number;
+};
 
 export interface ConversationListItem {
   id: string;
@@ -43,6 +50,8 @@ export interface MessageWithSender {
   id: string;
   conversation_id: string;
   sender_id: number | null;
+  /** Если сервер/WS передаёт флаг прочитанности. */
+  is_read?: boolean;
   client_msg_id?: string | null;
   content: string;
   payload_type?: MessagePayloadType;
@@ -66,6 +75,8 @@ export interface MessageWithSender {
     is_deleted: boolean;
   } | null;
   reactions: { emoji: string; count: number; reacted_by_me: boolean }[];
+  /** Local-only optimistic status (not persisted in DB). */
+  status?: 'sending' | 'sent' | 'error';
 }
 
 export interface Participant {
@@ -130,6 +141,26 @@ export async function sendMessage(
     `${BASE}/conversations/${encodeURIComponent(conversationId)}/messages`,
     { content, replyToMessageId, clientMsgId, payloadType, payload },
   );
+  return data;
+}
+
+export async function uploadFile(
+  file: File,
+  opts?: { onProgress?: (pct: number) => void; signal?: AbortSignal },
+): Promise<UploadedFile> {
+  const form = new FormData();
+  form.append('file', file);
+  const { data } = await apiClient.post<UploadedFile>(`/api/messenger/upload`, form, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+    signal: opts?.signal,
+    onUploadProgress: (e) => {
+      const total = e.total ?? 0;
+      const loaded = e.loaded ?? 0;
+      if (!total) return;
+      const pct = Math.max(0, Math.min(100, Math.round((loaded / total) * 100)));
+      opts?.onProgress?.(pct);
+    },
+  });
   return data;
 }
 

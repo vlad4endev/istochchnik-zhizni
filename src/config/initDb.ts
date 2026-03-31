@@ -453,7 +453,24 @@ CREATE TABLE IF NOT EXISTS conversation_participants (
 
 DO $$ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'message_payload_type') THEN
-    CREATE TYPE message_payload_type AS ENUM ('text', 'prayer_request', 'audio');
+    CREATE TYPE message_payload_type AS ENUM ('text', 'prayer_request', 'audio', 'image', 'file');
+  END IF;
+END $$;
+
+-- Extend enum on older DBs (add values if missing)
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_type WHERE typname = 'message_payload_type') THEN
+    BEGIN
+      ALTER TYPE message_payload_type ADD VALUE IF NOT EXISTS 'image';
+    EXCEPTION WHEN duplicate_object THEN
+      NULL;
+    END;
+    BEGIN
+      ALTER TYPE message_payload_type ADD VALUE IF NOT EXISTS 'file';
+    EXCEPTION WHEN duplicate_object THEN
+      NULL;
+    END;
   END IF;
 END $$;
 

@@ -3,6 +3,7 @@ import axios from 'axios';
 import type { ConversationListItem, MessageWithSender } from './api/messengerApi';
 import * as api from './api/messengerApi';
 import { emitAppToast } from '../../lib/uiFeedback';
+import { playAudio } from '../../utils/audio';
 
 // ─── Types ────────────────────────────────────────────────────
 
@@ -52,6 +53,8 @@ interface ChatState {
 
   // --- Reply state ---
   replyToMessage: MessageWithSender | null;
+  /** Swipe-to-reply target (native gesture) */
+  replyingTo: MessageWithSender | null;
 
   // --- Edit state ---
   editingMessage: MessageWithSender | null;
@@ -73,16 +76,27 @@ interface ChatState {
   loadMessages: (conversationId: string, older?: boolean) => Promise<void>;
 
   /** Optimistic send: message appears instantly, then confirmed by server */
-  sendMessage: (conversationId: string, content: string, replyToId?: string | null) => Promise<void>;
+  sendMessage: (
+    conversationId: string,
+    content: string,
+    replyToId?: string | null,
+    payloadType?: api.MessagePayloadType,
+    payload?: api.MessagePayload,
+  ) => Promise<void>;
+  retrySendMessage: (conversationId: string, tempId: string) => Promise<void>;
+  retryAllFailed: () => Promise<void>;
   editMessage: (messageId: string, content: string) => Promise<void>;
   deleteMessage: (messageId: string) => Promise<void>;
   markRead: (conversationId: string) => Promise<void>;
   markReadUpTo: (conversationId: string, messageId: string) => Promise<void>;
+  /** Mark chat as read on open (server + local unread reset). */
+  markAsRead: (conversationId: string) => Promise<void>;
 
   addReaction: (messageId: string, emoji: string) => Promise<void>;
   removeReaction: (messageId: string, emoji: string) => Promise<void>;
 
   setReplyTo: (msg: MessageWithSender | null) => void;
+  setReplyingTo: (msg: MessageWithSender | null) => void;
   setEditing: (msg: MessageWithSender | null) => void;
 
   // --- Search ---
@@ -110,6 +124,39 @@ export type ChatTab = 'all' | 'personal' | 'services' | 'notifications';
 
 export const EMPTY_ARRAY: any[] = [];
 export const EMPTY_OBJECT: any = {};
+
+let onlineRetryBound = false;
+let retryInFlight = false;
+
+async function runRetryAllFailed(get: () => ChatState) {
+  if (retryInFlight) return;
+  retryInFlight = true;
+  try {
+    const state = get();
+    const entries = Object.entries(state.messagesByConv);
+    // Build a stable queue (oldest first) to preserve conversation history order.
+    const queue: Array<{ convId: string; tempId: string; createdAt: string }> = [];
+    for (const [convId, msgs] of entries) {
+      for (const m of msgs) {
+        if (m.status === 'error') {
+          queue.push({ convId, tempId: String(m.id), createdAt: String(m.created_at ?? '') });
+        }
+      }
+    }
+    queue.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+    for (const item of queue) {
+      // Stop if we went offline again.
+      if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
+      // Small spacing to avoid burst on reconnect.
+      // eslint-disable-next-line no-await-in-loop
+      await get().retrySendMessage(item.convId, item.tempId);
+      // eslint-disable-next-line no-await-in-loop
+      await new Promise((r) => setTimeout(r, 250));
+    }
+  } finally {
+    retryInFlight = false;
+  }
+}
 
 function dedupeMessages(messages: MessageWithSender[]): MessageWithSender[] {
   const byId = new Set<string>();
@@ -144,6 +191,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   totalUnread: 0,
   activeTab: 'all',
   replyToMessage: null,
+  replyingTo: null,
   editingMessage: null,
   setActiveTab: (tab) => set({ activeTab: tab }),
 
@@ -232,25 +280,32 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   // ─── Send message (optimistic) ────────────────────────────
 
-  sendMessage: async (conversationId, content, replyToId) => {
+  sendMessage: async (conversationId, content, replyToId, payloadType = 'text', payload = {}) => {
+    playAudio('send');
     const tempId = `temp-${Date.now()}-${Math.random().toString(36).slice(2)}`;
     const clientMsgId = `c-${Date.now()}-${Math.random().toString(36).slice(2)}`;
     const serverReplyId =
       replyToId != null && /^\d+$/.test(String(replyToId)) ? replyToId : null;
 
+    const pt: api.MessagePayloadType =
+      payloadType === 'image' || payloadType === 'file' || payloadType === 'audio' || payloadType === 'prayer_request'
+        ? payloadType
+        : 'text';
+
     // Optimistic: add temp message immediately
     const optimistic: MessageWithSender = {
       id: tempId,
       conversation_id: conversationId,
-      sender_id: null, // Will be set properly when confirmed
+      sender_id: get().currentMemberId ?? null,
       client_msg_id: clientMsgId,
       content,
-      payload_type: 'text',
-      payload: { text: content },
+      payload_type: pt,
+      payload: pt === 'text' ? { text: content } : payload,
       interaction_count: 0,
       reply_to_message_id: replyToId || null,
       is_edited: false,
       is_deleted: false,
+      status: 'sending',
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
       sender_name: 'Вы',
@@ -276,13 +331,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }));
 
     try {
-      const real = await api.sendMessage(conversationId, content, serverReplyId, clientMsgId, 'text', { text: content });
+      const real = await api.sendMessage(conversationId, content, serverReplyId, clientMsgId, pt, payload);
       // Replace temp with real and dedupe against WS echo by id/client_msg_id.
       set((s) => ({
         messagesByConv: {
           ...s.messagesByConv,
           [conversationId]: dedupeMessages(
-            (s.messagesByConv[conversationId] || []).map((m) => (m.id === tempId ? real : m)),
+            (s.messagesByConv[conversationId] || []).map((m) => (m.id === tempId ? { ...real, status: 'sent' } : m)),
           ),
         },
       }));
@@ -296,17 +351,66 @@ export const useChatStore = create<ChatState>((set, get) => ({
       } else {
         console.error('[chatStore] sendMessage error:', e);
       }
-      // Remove failed optimistic message
+      // Mark failed optimistic message
       set((s) => ({
         messagesByConv: {
           ...s.messagesByConv,
-          [conversationId]: (s.messagesByConv[conversationId] || []).filter(
-            (m) => m.id !== tempId,
+          [conversationId]: (s.messagesByConv[conversationId] || []).map((m) =>
+            m.id === tempId ? { ...m, status: 'error' } : m,
           ),
         },
       }));
       emitAppToast('Не удалось отправить сообщение', 'error');
     }
+  },
+
+  retrySendMessage: async (conversationId, tempId) => {
+    const state = get();
+    const list = state.messagesByConv[conversationId] || [];
+    const msg = list.find((m) => m.id === tempId) || null;
+    if (!msg || msg.status !== 'error') return;
+    const pt = (msg.payload_type ?? 'text') as api.MessagePayloadType;
+    const payload = (msg.payload ?? {}) as api.MessagePayload;
+    const replyId =
+      msg.reply_to_message_id != null && /^\d+$/.test(String(msg.reply_to_message_id))
+        ? String(msg.reply_to_message_id)
+        : null;
+    const clientMsgId = msg.client_msg_id ?? `c-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+    set((s) => ({
+      messagesByConv: {
+        ...s.messagesByConv,
+        [conversationId]: (s.messagesByConv[conversationId] || []).map((m) =>
+          m.id === tempId ? { ...m, status: 'sending', client_msg_id: clientMsgId } : m,
+        ),
+      },
+    }));
+
+    try {
+      const real = await api.sendMessage(conversationId, msg.content ?? '', replyId, clientMsgId, pt, payload);
+      set((s) => ({
+        messagesByConv: {
+          ...s.messagesByConv,
+          [conversationId]: dedupeMessages(
+            (s.messagesByConv[conversationId] || []).map((m) => (m.id === tempId ? { ...real, status: 'sent' } : m)),
+          ),
+        },
+      }));
+    } catch (e) {
+      console.error('[chatStore] retrySendMessage error:', e);
+      set((s) => ({
+        messagesByConv: {
+          ...s.messagesByConv,
+          [conversationId]: (s.messagesByConv[conversationId] || []).map((m) =>
+            m.id === tempId ? { ...m, status: 'error' } : m,
+          ),
+        },
+      }));
+    }
+  },
+
+  retryAllFailed: async () => {
+    await runRetryAllFailed(get);
   },
 
   // ─── Edit message ─────────────────────────────────────────
@@ -370,6 +474,26 @@ export const useChatStore = create<ChatState>((set, get) => ({
     await get().markReadUpTo(conversationId, lastMsg.id);
   },
 
+  markAsRead: async (conversationId) => {
+    // Always clear local counter immediately on open.
+    set((s) => ({
+      conversations: s.conversations.map((c) =>
+        c.id === conversationId ? { ...c, unread_count: 0 } : c,
+      ),
+      totalUnread: Math.max(
+        0,
+        s.totalUnread -
+          (s.conversations.find((c) => c.id === conversationId)?.unread_count ?? 0),
+      ),
+    }));
+    // Best-effort: update server read cursor to the last known message.
+    try {
+      await get().markRead(conversationId);
+    } catch (e) {
+      console.error('[chatStore] markAsRead error:', e);
+    }
+  },
+
   markReadUpTo: async (conversationId, messageId) => {
     const normalizedId = String(messageId || '').trim();
     if (!/^\d+$/.test(normalizedId)) return;
@@ -410,20 +534,35 @@ export const useChatStore = create<ChatState>((set, get) => ({
   // ─── Reply / Edit state ───────────────────────────────────
 
   setReplyTo: (msg) => set({ replyToMessage: msg, editingMessage: null }),
+  setReplyingTo: (msg) => set({ replyingTo: msg, editingMessage: null }),
   setEditing: (msg) => set({ editingMessage: msg, replyToMessage: null }),
 
   // ─── WS event handlers ───────────────────────────────────
 
   handleNewMessage: (convId, msg) => {
     const idKey = String(convId);
+    const state = get();
+    const existingNow = state.messagesByConv[idKey] || [];
+    const msgClientId = msg.client_msg_id ? String(msg.client_msg_id) : null;
+    const isOwnNow =
+      state.currentMemberId != null &&
+      msg.sender_id != null &&
+      Number(msg.sender_id) === Number(state.currentMemberId);
+    const alreadyPresent =
+      existingNow.some((m) => m.id === msg.id) ||
+      (msgClientId != null &&
+        existingNow.some((m) => m.id.startsWith('temp-') && m.client_msg_id === msgClientId));
+    if (!isOwnNow && !alreadyPresent) {
+      playAudio('receive');
+    }
     set((s) => {
       const existing = s.messagesByConv[idKey] || [];
-      const msgClientId = msg.client_msg_id ? String(msg.client_msg_id) : null;
       const isActiveConversation = s.activeConversationId === idKey;
       const isOwnMessage =
         s.currentMemberId != null &&
         msg.sender_id != null &&
         Number(msg.sender_id) === Number(s.currentMemberId);
+      const shouldCountUnread = msg.is_read === false && !isOwnMessage && !isActiveConversation;
       const targetConversation = s.conversations.find((c) => c.id === idKey) || null;
 
       // Already present by definitive server id.
@@ -454,7 +593,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
             is_deleted: msg.is_deleted,
           },
           updated_at: msg.created_at,
-          unread_count: isActiveConversation ? c.unread_count : c.unread_count + 1,
+          unread_count: shouldCountUnread ? c.unread_count + 1 : c.unread_count,
         };
       });
 
@@ -725,6 +864,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
   },
 }));
+
+// Auto-retry failed optimistic messages when network is back.
+if (typeof window !== 'undefined' && !onlineRetryBound) {
+  onlineRetryBound = true;
+  window.addEventListener('online', () => {
+    void runRetryAllFailed(useChatStore.getState);
+  });
+}
 
 function classifyConversation(conv: ConversationListItem): Exclude<ChatTab, 'all'> {
   // Heuristic v1:

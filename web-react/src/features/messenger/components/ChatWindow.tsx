@@ -27,6 +27,7 @@ export function ChatWindow({
   const hasMore = useChatStore((s) => s.hasMore[conversationId] ?? true);
   const loadMessages = useChatStore((s) => s.loadMessages);
   const markReadUpTo = useChatStore((s) => s.markReadUpTo);
+  const markAsRead = useChatStore((s) => s.markAsRead);
   const conversations = useChatStore((s) => s.conversations);
   const typingUsers = useChatStore((s) => s.typingByConv[conversationId] || EMPTY_ARRAY);
   const onlineMembers = useChatStore((s) => s.onlineMembers);
@@ -49,6 +50,11 @@ export function ChatWindow({
     void loadMessages(conversationId);
   }, [conversationId, loadMessages]);
 
+  // On open: mark chat as read (server cursor + local unread reset)
+  useEffect(() => {
+    void markAsRead(conversationId);
+  }, [conversationId, markAsRead]);
+
   const flushVisibleReads = useCallback(() => {
     if (flushTimerRef.current != null) {
       window.clearTimeout(flushTimerRef.current);
@@ -67,6 +73,20 @@ export function ChatWindow({
       }
     }, 120);
   }, [conversationId, markReadUpTo]);
+
+  const jumpToMessage = useCallback((messageId: string) => {
+    const id = String(messageId || '').trim();
+    if (!/^\d+$/.test(id)) return;
+    const el = nodeByMsgIdRef.current.get(id) ?? null;
+    if (!el) return;
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    el.classList.remove('msg-jump-highlight');
+    // next frame ensures animation restarts
+    requestAnimationFrame(() => {
+      el.classList.add('msg-jump-highlight');
+      window.setTimeout(() => el.classList.remove('msg-jump-highlight'), 900);
+    });
+  }, []);
 
   useEffect(() => {
     const root = scrollRef.current;
@@ -320,9 +340,6 @@ export function ChatWindow({
                 ref={(node) => {
                   const map = nodeByMsgIdRef.current;
                   if (!/^\d+$/.test(String(msg.id))) return;
-                  const isMine = currentMemberId != null && msg.sender_id === currentMemberId;
-                  // We only observe foreign messages for read cursor.
-                  if (isMine) return;
                   if (node) {
                     map.set(String(msg.id), node);
                     node.dataset.msgId = String(msg.id);
@@ -335,6 +352,7 @@ export function ChatWindow({
                   message={msg}
                   isGroupedPrev={msg.isGroupedPrev}
                   isGroupedNext={msg.isGroupedNext}
+                  onJumpToMessage={jumpToMessage}
                 />
               </div>
             </div>

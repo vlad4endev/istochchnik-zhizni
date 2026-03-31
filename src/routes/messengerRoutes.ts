@@ -2,6 +2,7 @@ import { Router, type Request, type Response } from 'express';
 import { requireAuthSession } from '../middleware/authSession';
 import { checkChatPermission } from '../middleware/chatPermission';
 import { ensureValidRequest, validateSendMessage } from '../middleware/messengerValidation';
+import { upload } from '../middleware/upload';
 import * as svc from '../services/messengerService';
 import { sendToRoomAll, sendToRoom, sendToMember, ensureMemberInRoom } from '../realtime/wsHub';
 
@@ -25,6 +26,20 @@ async function getConversationListItemForMember(memberId: number, convId: string
 
 // All messenger routes require authentication
 router.use(requireAuthSession);
+
+/** POST /api/messenger/upload (form-data: file) -> { url, name, size } */
+router.post('/upload', upload.single('file'), async (req: Request, res: Response) => {
+  const file = (req as Request & { file?: Express.Multer.File }).file;
+  if (!file) {
+    res.status(400).json({ error: 'File is required' });
+    return;
+  }
+  res.json({
+    url: `/uploads/${file.filename}`,
+    name: file.originalname,
+    size: file.size,
+  });
+});
 
 // ─── Conversations ────────────────────────────────────────────
 
@@ -315,7 +330,11 @@ router.post(
     const convId = req.params.id;
     const { content, replyToMessageId, clientMsgId, payloadType, payload } = req.body;
     const pt =
-      payloadType === 'prayer_request' || payloadType === 'text' || payloadType === 'audio'
+      payloadType === 'prayer_request' ||
+      payloadType === 'text' ||
+      payloadType === 'audio' ||
+      payloadType === 'image' ||
+      payloadType === 'file'
         ? payloadType
         : 'text';
     const pl =

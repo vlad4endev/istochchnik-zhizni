@@ -25,7 +25,7 @@ export interface ConversationRow {
   updated_at: string;
 }
 
-export type MessagePayloadType = 'text' | 'prayer_request' | 'audio';
+export type MessagePayloadType = 'text' | 'prayer_request' | 'audio' | 'image' | 'file';
 
 export interface ParticipantRow {
   conversation_id: string;
