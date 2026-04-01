@@ -44,6 +44,8 @@ interface ChatState {
 
   // --- Total unread ---
   totalUnread: number;
+  degradedMode: boolean;
+  outboxSize: number;
 
   // --- Smart tabs ---
   activeTab: ChatTab;
@@ -74,6 +76,7 @@ interface ChatState {
   loadConversations: () => Promise<void>;
   setActiveConversation: (id: string | null) => void;
   loadMessages: (conversationId: string, older?: boolean) => Promise<void>;
+  hydrateFromCache: () => void;
 
   /** Optimistic send: message appears instantly, then confirmed by server */
   sendMessage: (
@@ -127,6 +130,96 @@ export const EMPTY_OBJECT: any = {};
 
 let onlineRetryBound = false;
 let retryInFlight = false;
+let outboxRetryTimer: number | null = null;
+let inMemoryOutbox: OutboxItem[] = [];
+
+type OutboxItem = {
+  queueId: string;
+  tempId: string;
+  conversationId: string;
+  content: string;
+  replyToId: string | null;
+  clientMsgId: string | null;
+  payloadType: api.MessagePayloadType;
+  payload: api.MessagePayload;
+  createdAt: string;
+};
+
+type MessengerSnapshot = {
+  conversations: ConversationListItem[];
+  messagesByConv: Record<string, MessageWithSender[]>;
+  hasMore: Record<string, boolean>;
+  totalUnread: number;
+  outbox: OutboxItem[];
+  savedAt: string;
+};
+
+function getSnapshotKey(userId: number | null): string {
+  return userId ? `messenger_snapshot_v2_${userId}` : 'messenger_snapshot_v2_guest';
+}
+
+function saveSnapshot(state: ChatState): void {
+  try {
+    if (typeof localStorage === 'undefined') return;
+    const snap: MessengerSnapshot = {
+      conversations: state.conversations || [],
+      messagesByConv: state.messagesByConv || {},
+      hasMore: state.hasMore || {},
+      totalUnread: Number(state.totalUnread || 0),
+      outbox: [],
+      savedAt: new Date().toISOString(),
+    };
+    localStorage.setItem(getSnapshotKey(state.currentMemberId), JSON.stringify(snap));
+  } catch {
+    /* ignore localStorage quota/errors */
+  }
+}
+
+function saveOutboxSnapshot(get: () => ChatState, outbox: OutboxItem[]): void {
+  try {
+    if (typeof localStorage === 'undefined') return;
+    const s = get();
+    const snapRaw = localStorage.getItem(getSnapshotKey(s.currentMemberId));
+    const snap: MessengerSnapshot = snapRaw ? JSON.parse(snapRaw) : {
+      conversations: s.conversations || [],
+      messagesByConv: s.messagesByConv || {},
+      hasMore: s.hasMore || {},
+      totalUnread: Number(s.totalUnread || 0),
+      outbox: [],
+      savedAt: new Date().toISOString(),
+    };
+    snap.outbox = outbox;
+    snap.savedAt = new Date().toISOString();
+    localStorage.setItem(getSnapshotKey(s.currentMemberId), JSON.stringify(snap));
+  } catch {
+    /* ignore */
+  }
+}
+
+function enqueueOutbox(get: () => ChatState, item: OutboxItem): number {
+  inMemoryOutbox = [...inMemoryOutbox, item];
+  saveOutboxSnapshot(get, inMemoryOutbox);
+  return inMemoryOutbox.length;
+}
+
+function dequeueOutbox(get: () => ChatState, queueId: string): number {
+  inMemoryOutbox = inMemoryOutbox.filter((q) => q.queueId !== queueId);
+  saveOutboxSnapshot(get, inMemoryOutbox);
+  return inMemoryOutbox.length;
+}
+
+function readSnapshot(userId: number | null): MessengerSnapshot | null {
+  try {
+    if (typeof localStorage === 'undefined') return null;
+    const raw = localStorage.getItem(getSnapshotKey(userId));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as MessengerSnapshot;
+    if (!parsed || typeof parsed !== 'object') return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
 
 async function runRetryAllFailed(get: () => ChatState) {
   if (retryInFlight) return;
@@ -156,6 +249,46 @@ async function runRetryAllFailed(get: () => ChatState) {
   } finally {
     retryInFlight = false;
   }
+}
+
+async function flushOutbox(get: () => ChatState) {
+  if (inMemoryOutbox.length === 0) return;
+  const queue = [...inMemoryOutbox].sort(
+    (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+  );
+  for (const item of queue) {
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
+    // eslint-disable-next-line no-await-in-loop
+    await get().retrySendMessage(item.conversationId, item.tempId);
+    // eslint-disable-next-line no-await-in-loop
+    await new Promise((r) => setTimeout(r, 180));
+  }
+}
+
+function ensureOutboxPump(get: () => ChatState) {
+  if (typeof window === 'undefined') return;
+  if (outboxRetryTimer) return;
+  outboxRetryTimer = window.setInterval(() => {
+    if (navigator.onLine === false) return;
+    void flushOutbox(get);
+  }, 7000);
+}
+
+function hydrateFromCacheIntoStore(set: (partial: Partial<ChatState>) => void, get: () => ChatState) {
+  const s = get();
+  const snap = readSnapshot(s.currentMemberId);
+  if (!snap) return;
+  inMemoryOutbox = Array.isArray(snap.outbox) ? snap.outbox : [];
+  set({
+    conversations: snap.conversations || [],
+    conversationsLoaded: (snap.conversations || []).length > 0,
+    messagesByConv: snap.messagesByConv || {},
+    hasMore: snap.hasMore || {},
+    totalUnread: Number(snap.totalUnread || 0),
+    degradedMode: true,
+    outboxSize: inMemoryOutbox.length,
+  });
+  ensureOutboxPump(get);
 }
 
 function dedupeMessages(messages: MessageWithSender[]): MessageWithSender[] {
@@ -189,6 +322,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
   typingByConv: {},
   onlineMembers: new Set(),
   totalUnread: 0,
+  degradedMode: false,
+  outboxSize: 0,
   activeTab: 'all',
   replyToMessage: null,
   replyingTo: null,
@@ -212,6 +347,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
   searchLoading: false,
   drafts: {},
 
+  hydrateFromCache: () => {
+    hydrateFromCacheIntoStore(set, get);
+  },
+
   // ─── Load conversations ───────────────────────────────────
 
   loadConversations: async () => {
@@ -220,9 +359,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
     try {
       const conversations = await api.fetchConversations();
       const totalUnread = conversations.reduce((sum, c) => sum + c.unread_count, 0);
-      set({ conversations, conversationsLoaded: true, totalUnread });
+      set({ conversations, conversationsLoaded: true, totalUnread, degradedMode: false });
+      saveSnapshot(get());
     } catch (e) {
       console.error('[chatStore] loadConversations error:', e);
+      // Offline/backend down: use cached snapshot.
+      hydrateFromCacheIntoStore(set, get);
     } finally {
       set({ conversationsLoading: false });
     }
@@ -269,8 +411,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
           hasMore: { ...s.hasMore, [conversationId]: messages.length >= limit },
         };
       });
+      set({ degradedMode: false });
+      saveSnapshot(get());
     } catch (e) {
       console.error('[chatStore] loadMessages error:', e);
+      set({ degradedMode: true });
     } finally {
       set((s) => ({
         messagesLoading: { ...s.messagesLoading, [conversationId]: false },
@@ -341,6 +486,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
           ),
         },
       }));
+      set({ degradedMode: false });
+      saveSnapshot(get());
     } catch (e) {
       if (axios.isAxiosError(e)) {
         console.error('[chatStore] sendMessage error:', {
@@ -360,6 +507,22 @@ export const useChatStore = create<ChatState>((set, get) => ({
           ),
         },
       }));
+      // Queue for background retry (offline / backend down).
+      const queueId = `q-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      const outboxItem: OutboxItem = {
+        queueId,
+        tempId,
+        conversationId,
+        content,
+        replyToId: serverReplyId,
+        clientMsgId,
+        payloadType: pt,
+        payload,
+        createdAt: new Date().toISOString(),
+      };
+      const size = enqueueOutbox(get, outboxItem);
+      set({ degradedMode: true, outboxSize: size });
+      ensureOutboxPump(get);
       emitAppToast('Не удалось отправить сообщение', 'error');
     }
   },
@@ -396,6 +559,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
           ),
         },
       }));
+      // Remove from outbox if present.
+      const q = inMemoryOutbox.find((x) => x.tempId === tempId) || null;
+      if (q) {
+        const size = dequeueOutbox(get, q.queueId);
+        set({ outboxSize: size });
+      }
+      set({ degradedMode: false });
+      saveSnapshot(get());
     } catch (e) {
       console.error('[chatStore] retrySendMessage error:', e);
       set((s) => ({
@@ -786,6 +957,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   setCurrentMemberId: (id) => {
     set({ currentMemberId: id });
+    // Load cached snapshot for resilience (offline-first startup).
+    hydrateFromCacheIntoStore(set, get);
   },
 
   refreshUnread: async () => {

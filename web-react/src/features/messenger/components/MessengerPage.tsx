@@ -23,6 +23,9 @@ export function MessengerPage() {
   const activeId = useChatStore((s) => s.activeConversationId);
   const setActive = useChatStore((s) => s.setActiveConversation);
   const loadConversations = useChatStore((s) => s.loadConversations);
+  const degradedMode = useChatStore((s) => s.degradedMode);
+  const outboxSize = useChatStore((s) => s.outboxSize);
+  const retryAllFailed = useChatStore((s) => s.retryAllFailed);
   const [showNewChat, setShowNewChat] = useState(false);
   const [mobileView, setMobileView] = useState<'list' | 'chat'>('list');
   const [isTransitioning, setIsTransitioning] = useState(false);
@@ -91,6 +94,32 @@ export function MessengerPage() {
 
   return (
     <div className="tg-messenger-page">
+      {(degradedMode || outboxSize > 0 || (typeof navigator !== 'undefined' && navigator.onLine === false)) && (
+        <div className="sticky top-0 z-[500] md:hidden">
+          <div className="mx-auto w-full bg-amber-50 px-3 py-2 text-amber-900 shadow-[0_2px_10px_rgba(0,0,0,0.06)] ring-1 ring-amber-200/70 [padding-top:max(0.5rem,env(safe-area-inset-top,0px))]">
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <div className="truncate text-xs font-extrabold">
+                  {typeof navigator !== 'undefined' && navigator.onLine === false ? 'Нет сети' : 'Автономный режим'}
+                  {outboxSize > 0 ? ` · В очереди: ${outboxSize}` : ''}
+                </div>
+                <div className="truncate text-[11px] font-semibold text-amber-800/90">
+                  Мессенджер продолжит работу и отправит сообщения, когда связь восстановится.
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => void retryAllFailed()}
+                className="inline-flex shrink-0 items-center justify-center rounded-full bg-amber-200/70 px-3 py-1.5 text-[11px] font-extrabold text-amber-950 hover:bg-amber-200 active:scale-[0.99]"
+                aria-label="Отправить сейчас"
+                title="Отправить сейчас"
+              >
+                Отправить
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       <div className={`tg-messenger ${isTransitioning ? 'transitioning' : ''}`} ref={messengerRef}>
       {/* Sidebar */}
       <aside

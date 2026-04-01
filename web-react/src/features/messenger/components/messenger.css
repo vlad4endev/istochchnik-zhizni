@@ -676,6 +676,8 @@
 
 .tg-input-textarea {
   flex: 1;
+  min-width: 0;
+  width: 100%;
   border: none !important;
   outline: none !important;
   background: transparent;
@@ -762,6 +764,7 @@
   border: none;
   color: var(--tg-text-muted);
   padding: 8px;
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1363,6 +1366,27 @@
       padding-right: max(0.75rem, env(safe-area-inset-right, 0px));
       padding-bottom: max(0.75rem, env(safe-area-inset-bottom, 0px));
       background: #fff;
+    }
+
+    /* Keep composer actions inside viewport on iOS (keyboard/safe-area edge cases). */
+    html[data-chat-open="1"] .tg-main--visible .tg-chat-window .tg-input-area {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      column-gap: 6px;
+      align-items: flex-end;
+      width: 100%;
+      max-width: 100%;
+      overflow: hidden;
+    }
+
+    html[data-chat-open="1"] .tg-main--visible .tg-chat-window .tg-input-container {
+      width: 100%;
+      min-width: 0;
+      max-width: 100%;
+    }
+
+    html[data-chat-open="1"] .tg-main--visible .tg-chat-window .tg-send-btn {
+      justify-self: end;
     }
 
     html[data-chat-open="1"] .tg-main--visible .tg-chat-window .tg-messages,
