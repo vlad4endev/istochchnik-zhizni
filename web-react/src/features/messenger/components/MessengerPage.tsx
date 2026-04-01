@@ -23,6 +23,7 @@ export function MessengerPage() {
   const activeId = useChatStore((s) => s.activeConversationId);
   const setActive = useChatStore((s) => s.setActiveConversation);
   const loadConversations = useChatStore((s) => s.loadConversations);
+  const degradedMode = useChatStore((s) => s.degradedMode);
   const outboxSize = useChatStore((s) => s.outboxSize);
   const retryAllFailed = useChatStore((s) => s.retryAllFailed);
   const [showNewChat, setShowNewChat] = useState(false);
@@ -107,7 +108,7 @@ export function MessengerPage() {
 
   return (
     <div className="tg-messenger-page">
-      {(outboxSize > 0 || !isOnline) && (
+      {(degradedMode || outboxSize > 0 || !isOnline) && (
         <div className="sticky top-0 z-[500] md:hidden">
           <div className="mx-auto w-full bg-amber-50 px-3 py-2 text-amber-900 shadow-[0_2px_10px_rgba(0,0,0,0.06)] ring-1 ring-amber-200/70 [padding-top:max(0.5rem,env(safe-area-inset-top,0px))]">
             <div className="flex items-center justify-between gap-3">

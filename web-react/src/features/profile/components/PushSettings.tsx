@@ -1,94 +1,46 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { FiBell, FiBellOff } from 'react-icons/fi';
-import { fetchVapidPublicKey, subscribeToPushApi, unsubscribeFromPushApi } from '../api';
-
-function urlBase64ToUint8Array(base64String: string) {
-  const padding = '='.repeat((4 - base64String.length % 4) % 4);
-  const base64 = (base64String + padding)
-    .replace(/\\-/g, '+')
-    .replace(/_/g, '/');
-
-  const rawData = window.atob(base64);
-  const outputArray = new Uint8Array(rawData.length);
-
-  for (let i = 0; i < rawData.length; ++i) {
-    outputArray[i] = rawData.charCodeAt(i);
-  }
-  return outputArray;
-}
+import { unsubscribeFromPushApi } from '../api';
+import { useNotificationManager } from '../../pwa';
 
 export function PushSettings() {
-  const [isSubscribed, setIsSubscribed] = useState(false);
-  const [isSupported, setIsSupported] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const { isSubscribed, status, subscribe, loading: managerLoading, error: managerError, checkStatus } = useNotificationManager();
+  const [localLoading, setLocalLoading] = useState(false);
   const [msg, setMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
 
-  useEffect(() => {
-    if ('serviceWorker' in navigator && 'PushManager' in window) {
-      setIsSupported(true);
-      checkSubscription();
-    } else {
-      setIsSupported(false);
-      setLoading(false);
-    }
-  }, []);
-
-  async function checkSubscription() {
-    try {
-      const registration = await navigator.serviceWorker.ready;
-      const subscription = await registration.pushManager.getSubscription();
-      setIsSubscribed(subscription !== null);
-    } catch (e) {
-      console.error('Ошибка проверки подписки:', e);
-    } finally {
-      setLoading(false);
-    }
-  }
+  const loading = managerLoading || localLoading;
 
   async function handleToggleSubscription() {
     setMsg(null);
-    setLoading(true);
-
+    
     try {
       if (!isSubscribed) {
-        // Подписаться
-        const permission = await Notification.requestPermission();
-        if (permission !== 'granted') {
-          throw new Error('Разрешение на уведомления не предоставлено');
+        const success = await subscribe();
+        if (success) {
+          setMsg({ kind: 'ok', text: 'Уведомления включены!' });
+        } else if (managerError) {
+          setMsg({ kind: 'err', text: managerError });
         }
-
-        const vapidPublicKey = await fetchVapidPublicKey();
-        const convertedVapidKey = urlBase64ToUint8Array(vapidPublicKey);
-
-        const registration = await navigator.serviceWorker.ready;
-        const subscription = await registration.pushManager.subscribe({
-          userVisibleOnly: true,
-          applicationServerKey: convertedVapidKey
-        });
-
-        await subscribeToPushApi(subscription);
-        setIsSubscribed(true);
-        setMsg({ kind: 'ok', text: 'Уведомления включены!' });
       } else {
-        // Отписаться
+        setLocalLoading(true);
         const registration = await navigator.serviceWorker.ready;
         const subscription = await registration.pushManager.getSubscription();
         if (subscription) {
           await unsubscribeFromPushApi(subscription.endpoint);
           await subscription.unsubscribe();
         }
-        setIsSubscribed(false);
+        await checkStatus();
         setMsg({ kind: 'ok', text: 'Уведомления отключены.' });
       }
     } catch (error: any) {
       console.error('Push Error:', error);
       setMsg({ kind: 'err', text: error.message || 'Произошла ошибка при настройке уведомлений' });
     } finally {
-      setLoading(false);
+      setLocalLoading(false);
     }
   }
 
-  if (!isSupported) {
+  if (status === 'unsupported') {
     return (
       <div className="mt-4 p-4 border border-stone-200 rounded-xl bg-stone-50">
         <p className="text-sm text-stone-500">
@@ -143,6 +95,12 @@ export function PushSettings() {
           {msg.text}
         </p>
       ) : null}
+      
+      {status === 'denied' && (
+        <p className="mt-3 text-xs text-red-500">
+          Уведомления заблокированы в настройках браузера. Пожалуйста, разрешите их вручную для получения оповещений.
+        </p>
+      )}
     </div>
   );
 }

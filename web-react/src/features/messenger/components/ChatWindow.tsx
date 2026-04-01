@@ -231,8 +231,8 @@ export function ChatWindow({
   return (
     <div className="tg-chat-window box-border flex h-[100dvh] w-full max-w-full min-w-0 min-h-0 flex-col overflow-hidden overflow-x-clip bg-gray-50">
       {/* Safe-area только на корне (.tg-chat-window) в messenger.css для iOS — не дублировать здесь */}
-      <header className="sticky top-0 z-20 w-full shrink-0 border-b border-gray-100 bg-white shadow-sm">
-        <div className="flex w-full min-w-0 items-center gap-2.5 px-3 py-2.5 sm:gap-3 sm:px-4">
+      <header className="sticky top-0 z-[100] w-full shrink-0 border-b border-gray-100 bg-white shadow-sm">
+        <div className="mx-auto flex h-14 w-full min-w-0 items-center justify-between gap-1.5 px-2 py-2 sm:h-16 sm:gap-3 sm:px-4 md:px-6">
           <button
             type="button"
             onClick={onBack}
@@ -242,47 +242,45 @@ export function ChatWindow({
             <LuArrowLeft size={22} strokeWidth={2.25} />
           </button>
 
-          <button
-            type="button"
+          {/* Middle: Main info (Avatar + Name & Subtitle) - Stricly capped via flex-1 min-w-0 */}
+          <div
+            role="button"
+            tabIndex={0}
             onClick={() => navigate(`/messenger/chat/${conversationId}/manage`)}
-            className="flex min-w-0 flex-1 items-center gap-3 rounded-2xl px-2 py-1 text-left transition-colors duration-200 hover:bg-stone-100 active:scale-[0.99]"
-            aria-label="Открыть настройки чата"
-            title="Настройки чата"
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') navigate(`/messenger/chat/${conversationId}/manage`); }}
+            className="flex min-w-0 flex-1 cursor-pointer items-center gap-2.5 rounded-2xl px-2 py-1 text-left transition-colors duration-200 hover:bg-stone-50 active:scale-[0.99] sm:gap-3 sm:px-3"
           >
             <div
-              className="grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-full text-sm font-semibold text-white"
-              style={{ background: headerAvatarColor }}
-              aria-hidden
+              className="grid h-9 w-9 shrink-0 place-items-center overflow-hidden rounded-full font-semibold text-white sm:h-10 sm:w-10"
+              style={{
+                backgroundColor: headerAvatarColor,
+                fontSize: 'clamp(0.75rem, 2vw, 0.9rem)',
+              }}
             >
               {headerAvatarSrc ? (
-                <img
-                  src={headerAvatarSrc}
-                  alt=""
-                  className="h-full w-full object-cover"
-                  loading="lazy"
-                />
+                <img src={headerAvatarSrc} alt={displayName} className="h-full w-full object-cover" />
               ) : (
-                headerInitial
+                <span>{headerInitial}</span>
               )}
             </div>
 
-            <div className="flex min-w-0 flex-1 flex-col justify-center overflow-hidden">
-              <div className="w-full truncate text-base font-semibold leading-tight text-stone-900 sm:text-lg">
+            <div className="flex min-w-0 flex-1 flex-col justify-center">
+              <div className="w-full truncate text-[15px] font-semibold leading-tight text-stone-900 sm:text-[17px]">
                 {displayName}
               </div>
               <div
                 className={[
                   'w-full truncate text-[11px] leading-tight sm:text-xs',
-                  typingUsers.length > 0 ? 'text-primary font-medium' : 'text-gray-500',
+                  typingUsers.length > 0 ? 'text-primary font-medium' : 'text-stone-500',
                 ].join(' ')}
-                aria-live="polite"
               >
                 {headerSubtitle}
               </div>
             </div>
-          </button>
+          </div>
 
-          <div className="flex shrink-0 items-center gap-1">
+          {/* Right: Actions */}
+          <div className="flex shrink-0 items-center gap-0.5 sm:gap-1">
             <button
               type="button"
               onClick={() => navigate(`/messenger/chat/${conversationId}/manage`)}

@@ -188,9 +188,9 @@ function ChatListItem({
         ) : null}
       </div>
 
-      <div className="min-w-0 flex-1">
+      <div className="flex min-w-0 flex-1 flex-col justify-center">
         <div className="flex min-w-0 items-center justify-between gap-2">
-          <div className={['truncate text-[15px] font-semibold', isActive ? 'text-white' : 'text-gray-900'].join(' ')}>
+          <div className={['truncate text-[15px] font-semibold tracking-tight', isActive ? 'text-white' : 'text-stone-900'].join(' ')}>
             {displayName}
           </div>
           {lastMsg ? (

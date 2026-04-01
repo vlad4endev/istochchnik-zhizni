@@ -317,6 +317,7 @@ function hydrateFromCacheIntoStore(set: (partial: Partial<ChatState>) => void, g
     messagesByConv: snap.messagesByConv || {},
     hasMore: snap.hasMore || {},
     totalUnread: Number(snap.totalUnread || 0),
+    degradedMode: true,
     outboxSize: inMemoryOutbox.length,
   });
   ensureOutboxPump(get);
@@ -407,10 +408,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
       console.error('[chatStore] loadConversations error:', e);
       // Offline/backend down: use cached snapshot.
       hydrateFromCacheIntoStore(set, get);
-      // Only show top-level degraded banner if it seems like a connectivity/server issue.
-      if (axios.isAxiosError(e) && (!e.response || e.response.status >= 500)) {
-        set({ degradedMode: true });
-      }
     } finally {
       set({ conversationsLoading: false });
     }
@@ -463,9 +460,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       saveSnapshot(get());
     } catch (e) {
       console.error('[chatStore] loadMessages error:', e);
-      if (axios.isAxiosError(e) && (!e.response || e.response.status >= 500)) {
-        set({ degradedMode: true });
-      }
+      set({ degradedMode: true });
     } finally {
       set((s) => ({
         messagesLoading: { ...s.messagesLoading, [conversationId]: false },

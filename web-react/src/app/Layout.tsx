@@ -9,7 +9,7 @@ import { useRealtimeQuerySync } from '../hooks/useRealtimeQuerySync';
 import { useSyncServerRole } from '../hooks/useSyncServerRole';
 import { IOSInstallBanner } from '../components/IOSInstallBanner';
 import { AndroidInstallBanner } from '../components/AndroidInstallBanner';
-import { UpdateNotification, useServiceWorkerUpdate } from '../features/pwa';
+import { UpdateNotification, useServiceWorkerUpdate, NotificationPrompt } from '../features/pwa';
 import type { AppToastAction, AppToastKind } from '../lib/uiFeedback';
 import { useChatStore } from '../features/messenger/chatStore';
 
@@ -524,6 +524,7 @@ export function Layout() {
       {updatePrompt.show ? (
         <UpdateNotification onUpdate={updatePrompt.onUpdate} onDismiss={() => updatePrompt.onDismiss?.()} />
       ) : null}
+      <NotificationPrompt />
     </div>
   );
 }
