@@ -189,10 +189,10 @@ function ChatListItem({
       </div>
 
       <div className="min-w-0 flex-1">
-        <div className="flex items-center justify-between gap-2">
-          <span className={['truncate text-[15px] font-semibold', isActive ? 'text-white' : 'text-gray-900'].join(' ')}>
+        <div className="flex min-w-0 items-center justify-between gap-2">
+          <div className={['truncate text-[15px] font-semibold', isActive ? 'text-white' : 'text-gray-900'].join(' ')}>
             {displayName}
-          </span>
+          </div>
           {lastMsg ? (
             <span className={['shrink-0 text-xs font-medium', isActive ? 'text-white/80' : 'text-gray-400'].join(' ')}>
               {formatTime(lastMsg.created_at)}

@@ -38,8 +38,8 @@ const DIALOG_STYLES = `
   .tg-member-item:hover { background: rgba(0,0,0,0.03); }
   .tg-member-avatar { width: 40px; height: 40px; border-radius: 50%; background: var(--tg-primary); color: white; display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 0.875rem; }
   .tg-member-info { flex: 1; min-width: 0; }
-  .tg-member-name { font-weight: 600; font-size: 0.9375rem; color: var(--tg-text); }
-  .tg-member-status { font-size: 0.8125rem; color: var(--tg-text-muted); }
+  .tg-member-name { font-weight: 600; font-size: 0.9375rem; color: var(--tg-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tg-member-status { font-size: 0.8125rem; color: var(--tg-text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .tg-dialog-sections { padding: 8px; display: flex; flex-direction: column; gap: 4px; border-bottom: 1px solid var(--tg-border); }
   .tg-section-btn { display: flex; align-items: center; gap: 12px; width: 100%; padding: 10px 12px; border: none; background: transparent; border-radius: 8px; cursor: pointer; transition: background 0.15s; color: var(--tg-primary); font-weight: 600; }
   .tg-section-btn:hover { background: var(--tg-primary-light); }

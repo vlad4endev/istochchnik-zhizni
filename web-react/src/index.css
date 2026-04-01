@@ -75,11 +75,15 @@ body {
   }
 }
 
+/* Единая колонка: дочерний layout с flex-1 + min-h-0 получает ограниченную высоту
+   и может скроллиться внутри <main>, иначе при h-[100dvh] контент «режется» без скролла. */
 #root {
   width: 100%;
   min-height: 100vh;
   min-height: 100dvh;
   min-height: -webkit-fill-available;
+  display: flex;
+  flex-direction: column;
 }
 
 @layer utilities {

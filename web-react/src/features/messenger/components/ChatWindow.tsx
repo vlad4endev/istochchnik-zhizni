@@ -229,9 +229,10 @@ export function ChatWindow({
   }, [messages]);
 
   return (
-    <div className="tg-chat-window flex h-[100dvh] w-full min-h-0 flex-col overflow-hidden bg-gray-50">
-      <header className="sticky top-0 z-20 shrink-0 border-b border-gray-100 bg-white pt-[env(safe-area-inset-top)] shadow-sm">
-        <div className="flex items-center gap-2.5 px-3 py-2.5 sm:gap-3 sm:px-4">
+    <div className="tg-chat-window box-border flex h-[100dvh] w-full max-w-full min-w-0 min-h-0 flex-col overflow-hidden overflow-x-clip bg-gray-50">
+      {/* Safe-area только на корне (.tg-chat-window) в messenger.css для iOS — не дублировать здесь */}
+      <header className="sticky top-0 z-20 w-full shrink-0 border-b border-gray-100 bg-white shadow-sm">
+        <div className="flex w-full min-w-0 items-center gap-2.5 px-3 py-2.5 sm:gap-3 sm:px-4">
           <button
             type="button"
             onClick={onBack}
@@ -244,7 +245,7 @@ export function ChatWindow({
           <button
             type="button"
             onClick={() => navigate(`/messenger/chat/${conversationId}/manage`)}
-            className="min-w-0 flex flex-1 items-center gap-3 rounded-2xl px-2 py-1 text-left transition-colors duration-200 hover:bg-stone-100 active:scale-[0.99]"
+            className="flex min-w-0 flex-1 items-center gap-3 rounded-2xl px-2 py-1 text-left transition-colors duration-200 hover:bg-stone-100 active:scale-[0.99]"
             aria-label="Открыть настройки чата"
             title="Настройки чата"
           >
@@ -265,13 +266,13 @@ export function ChatWindow({
               )}
             </div>
 
-            <div className="min-w-0 flex-1">
-              <div className="truncate text-lg font-semibold text-stone-900">
+            <div className="flex min-w-0 flex-1 flex-col justify-center overflow-hidden">
+              <div className="w-full truncate text-base font-semibold leading-tight text-stone-900 sm:text-lg">
                 {displayName}
               </div>
               <div
                 className={[
-                  'truncate text-xs',
+                  'w-full truncate text-[11px] leading-tight sm:text-xs',
                   typingUsers.length > 0 ? 'text-primary font-medium' : 'text-gray-500',
                 ].join(' ')}
                 aria-live="polite"
@@ -360,7 +361,7 @@ export function ChatWindow({
         )}
       </div>
 
-      <div className="sticky bottom-0 z-20 shrink-0 border-t bg-white p-3 [padding-bottom:env(safe-area-inset-bottom,16px)]">
+      <div className="sticky bottom-0 z-20 w-full min-w-0 max-w-full shrink-0 border-t bg-white p-3 [padding-bottom:env(safe-area-inset-bottom,16px)]">
         <ChatInput
           conversationId={conversationId}
           sendTypingStart={sendTypingStart}
