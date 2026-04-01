@@ -1250,6 +1250,7 @@
   html[data-messenger-open="1"],
   html[data-messenger-open="1"] body,
   html[data-messenger-open="1"] #root {
+    height: 100svh;
     height: 100dvh;
     overflow: hidden !important;
     overscroll-behavior: none;
@@ -1258,6 +1259,7 @@
   html[data-chat-open="1"],
   html[data-chat-open="1"] body,
   html[data-chat-open="1"] #root {
+    height: 100svh;
     height: 100dvh;
     overflow: hidden !important;
     overscroll-behavior: none;
@@ -1269,6 +1271,7 @@
 
   html[data-chat-open="1"] .app-main-content {
     padding-bottom: 0 !important;
+    height: 100svh;
     height: 100dvh;
     overflow: hidden !important;
   }
@@ -1282,6 +1285,7 @@
 @media (max-width: 768px) {
   .tg-messenger {
     position: relative;
+    height: 100svh;
     height: 100dvh;
     overflow: hidden;
   }
@@ -1367,6 +1371,47 @@
   }
 }
 
+/* Android Chrome/WebView stabilization:
+   mirrors iOS fixed-layout behavior without iOS-specific hacks */
+@supports not (-webkit-touch-callout: none) {
+  @media (max-width: 768px) {
+    html[data-chat-open="1"] .tg-main--visible .tg-chat-window {
+      position: fixed !important;
+      left: 0;
+      right: 0;
+      top: 0;
+      bottom: 0;
+      width: auto;
+      height: 100svh;
+      height: 100dvh;
+      max-height: 100dvh;
+      transform: none !important;
+      overflow: hidden;
+      box-sizing: border-box;
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr) auto;
+      background: var(--tg-bg);
+      padding-left: env(safe-area-inset-left, 0px);
+      padding-right: env(safe-area-inset-right, 0px);
+    }
+
+    html[data-chat-open="1"] .tg-main--visible .tg-chat-window > .shrink-0:last-of-type {
+      padding-bottom: max(16px, env(safe-area-inset-bottom, 16px));
+      background: #fff;
+    }
+
+    html[data-chat-open="1"] .tg-main--visible .tg-chat-window .tg-messages,
+    html[data-chat-open="1"] .tg-main--visible .tg-chat-window [role="log"] {
+      min-height: 0;
+      height: 100%;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      overscroll-behavior-y: contain;
+      touch-action: pan-y;
+    }
+  }
+}
+
 /* iOS Safari / PWA stabilization:
    fixed chat viewport + safe-areas + keyboard-friendly height fallback */
 @supports (-webkit-touch-callout: none) {
@@ -1442,7 +1487,7 @@
       z-index: 40;
       padding-left: max(0.75rem, env(safe-area-inset-left, 0px));
       padding-right: max(0.75rem, env(safe-area-inset-right, 0px));
-      padding-bottom: max(0.75rem, env(safe-area-inset-bottom, 0px));
+      padding-bottom: max(16px, env(safe-area-inset-bottom, 16px));
       background: #fff;
     }
 
@@ -1510,10 +1555,10 @@
   }
 
   .tg-send-btn {
-    width: 40px;
-    height: 40px;
-    min-width: 40px;
-    min-height: 40px;
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+    min-height: 44px;
     flex-shrink: 0;
   }
 
@@ -1582,15 +1627,15 @@
 
   .tg-icon-btn {
     padding: 6px;
-    min-width: 40px;
-    min-height: 40px;
+    min-width: 44px;
+    min-height: 44px;
   }
 
   .tg-send-btn {
-    width: 38px;
-    height: 38px;
-    min-width: 38px;
-    min-height: 38px;
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+    min-height: 44px;
   }
 
   .tg-bubble {
@@ -1612,7 +1657,9 @@
   .chatlist-item,
   .tg-icon-btn,
   .tg-send-btn,
-  .msg-quick-reaction {
+  .msg-quick-reaction,
+  .app-bottom-nav a,
+  .app-bottom-nav button {
     -webkit-tap-highlight-color: transparent;
     touch-action: manipulation;
   }
@@ -1620,7 +1667,9 @@
   /* Prevent double-tap zoom on interactive elements */
   .chatlist-item,
   .tg-icon-btn,
-  .tg-send-btn {
+  .tg-send-btn,
+  .app-bottom-nav a,
+  .app-bottom-nav button {
     touch-action: manipulation;
   }
 

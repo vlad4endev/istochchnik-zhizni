@@ -94,14 +94,14 @@ export async function fetchPrayerRequestHistory(
 }
 
 export async function fetchVapidPublicKey(): Promise<string> {
-  const { data } = await apiClient.get<{ publicKey: string }>('/api/push/vapid-public-key');
+  const { data } = await apiClient.get<{ publicKey: string }>('/api/notifications/vapid-public-key');
   return data.publicKey;
 }
 
 export async function subscribeToPushApi(subscription: PushSubscription): Promise<void> {
-  await apiClient.post('/api/push/subscribe', subscription);
+  await apiClient.post('/api/notifications/subscribe', subscription);
 }
 
 export async function unsubscribeFromPushApi(endpoint: string): Promise<void> {
-  await apiClient.post('/api/push/unsubscribe', { endpoint });
+  await apiClient.post('/api/notifications/unsubscribe', { endpoint });
 }

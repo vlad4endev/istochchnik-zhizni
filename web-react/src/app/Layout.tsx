@@ -31,9 +31,9 @@ const NAV_ITEMS: NavItem[] = [
 
 function navIconClass(isActive: boolean, compact: boolean) {
   return [
-    compact ? 'h-6 w-6' : 'h-5 w-5',
-    'shrink-0 transition-[transform,color] duration-150',
-    isActive && compact ? 'text-primary' : isActive ? 'text-white' : 'text-stone-400 group-hover:text-primary',
+    compact ? 'h-5 w-5' : 'h-5 w-5',
+    'shrink-0 transition-colors duration-200',
+    isActive && compact ? 'text-primary' : isActive ? 'text-white' : 'text-gray-400 group-hover:text-primary',
   ].join(' ');
 }
 
@@ -209,17 +209,17 @@ function AppToastHost() {
 
 function navClassName(isActive: boolean, compact = false): string {
   const base = compact
-    ? 'group relative flex min-w-0 flex-1 flex-col items-center justify-center rounded-xl px-1 py-1.5 transition-[color,transform] duration-150 tap-highlight-transparent touch-manipulation active:scale-[0.92]'
-    : 'group flex w-full items-center justify-start gap-3 rounded-2xl px-4 py-3 text-left text-sm font-semibold transition-colors tap-highlight-transparent';
+    ? 'group relative flex min-w-0 flex-1 flex-col items-center justify-center rounded-2xl px-1.5 py-1.5 transition-colors duration-200 tap-highlight-transparent touch-manipulation active:scale-[0.96]'
+    : 'group flex w-full items-center justify-start gap-3 rounded-2xl px-4 py-3 text-left text-sm font-semibold transition-colors duration-200 tap-highlight-transparent';
   const size = compact
-    ? 'min-h-[48px]'
+    ? 'min-h-[52px]'
     : '';
   const active = isActive
     ? compact
-      ? 'text-primary'
+      ? 'bg-primary/10 text-primary'
       : 'bg-primary text-white shadow-md shadow-primary/25'
     : compact
-      ? 'text-stone-400 hover:text-stone-700'
+      ? 'text-gray-400 hover:bg-gray-50 hover:text-gray-700'
       : 'text-stone-600 hover:bg-stone-100 shell:hover:bg-stone-50';
   return `${base} ${size} ${active}`.replace(/\s+/g, ' ').trim();
 }
@@ -287,8 +287,46 @@ export function Layout() {
     };
   }, [navigate, setActiveConversation]);
 
+  useEffect(() => {
+    if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) {
+      return;
+    }
+
+    const onServiceWorkerMessage = (e: MessageEvent) => {
+      const payload = e.data as
+        | { type?: string; url?: string; conversationId?: string | null }
+        | undefined;
+      if (!payload || payload.type !== 'push:navigate') {
+        return;
+      }
+
+      const conversationId = String(payload.conversationId ?? '').trim();
+      if (conversationId) {
+        setActiveConversation(conversationId);
+        navigate(`/messenger?conversationId=${encodeURIComponent(conversationId)}`);
+        return;
+      }
+
+      const targetUrl = String(payload.url ?? '').trim();
+      if (!targetUrl) return;
+
+      try {
+        const parsed = new URL(targetUrl, window.location.origin);
+        const nextPath = `${parsed.pathname}${parsed.search}${parsed.hash}`;
+        if (nextPath) navigate(nextPath);
+      } catch {
+        /* ignore malformed URLs from SW */
+      }
+    };
+
+    navigator.serviceWorker.addEventListener('message', onServiceWorkerMessage);
+    return () => {
+      navigator.serviceWorker.removeEventListener('message', onServiceWorkerMessage);
+    };
+  }, [navigate, setActiveConversation]);
+
   return (
-    <div className="flex min-h-[100dvh] min-h-screen w-full max-w-[100vw] flex-col overflow-x-clip bg-[var(--surface)] text-[var(--text)] [padding-left:env(safe-area-inset-left,0px)] [padding-right:env(safe-area-inset-right,0px)]">
+    <div className="flex h-[100dvh] min-h-[100dvh] w-full max-w-[100vw] flex-col overflow-x-clip bg-[var(--surface)] text-[var(--text)] [padding-left:env(safe-area-inset-left,0px)] [padding-right:env(safe-area-inset-right,0px)]">
       <div
         className={[
           'flex min-h-0 min-w-0 w-full max-w-full flex-1 flex-col box-border',
@@ -446,10 +484,10 @@ export function Layout() {
 
       {/* Телефон: нижняя навигация (иконка + подпись, как в нативных приложениях) */}
       <nav
-        className="app-bottom-nav fixed bottom-0 left-0 right-0 z-50 border-t border-stone-200/70 bg-[var(--surface-elevated)]/90 pb-[env(safe-area-inset-bottom)] shadow-[0_-4px_24px_rgba(0,0,0,0.04)] backdrop-blur-xl supports-[backdrop-filter]:bg-[var(--surface-elevated)]/80 md:hidden"
+        className="app-bottom-nav fixed bottom-0 left-0 right-0 z-50 border-t border-gray-100 bg-white/95 pb-[env(safe-area-inset-bottom,16px)] shadow-sm backdrop-blur-xl supports-[backdrop-filter]:bg-white/90 md:hidden"
         aria-label="Основная навигация"
       >
-        <div className="mx-auto flex max-w-md items-stretch justify-around px-2 pb-1 pt-1">
+        <div className="mx-auto flex max-w-md items-center justify-around px-2 pb-1 pt-1">
           {mobileItems.map((item) => {
             const Icon = item.Icon;
             return (
@@ -468,7 +506,7 @@ export function Layout() {
                         </span>
                       ) : null}
                     </span>
-                    <span className="mt-1 truncate px-0.5 text-center text-[10px] font-semibold tracking-tight">
+                    <span className="mt-1 truncate px-0.5 text-center text-[11px] font-medium tracking-tight">
                       {item.label}
                     </span>
                   </>

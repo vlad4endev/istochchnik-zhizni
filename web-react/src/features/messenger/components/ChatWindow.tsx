@@ -230,13 +230,13 @@ export function ChatWindow({
 
   return (
     <div className="tg-chat-window flex h-[100dvh] w-full min-h-0 flex-col overflow-hidden bg-gray-50">
-      <header className="sticky top-0 z-20 shrink-0 bg-white shadow-sm">
-        <div className="flex items-center gap-3 px-3 py-2.5">
+      <header className="sticky top-0 z-20 shrink-0 border-b border-gray-100 bg-white pt-[env(safe-area-inset-top)] shadow-sm">
+        <div className="flex items-center gap-2.5 px-3 py-2.5 sm:gap-3 sm:px-4">
           <button
             type="button"
             onClick={onBack}
             aria-label="Назад к списку чатов"
-            className="shrink-0 inline-flex h-10 w-10 items-center justify-center rounded-full text-stone-600 hover:bg-stone-100 active:scale-[0.98]"
+            className="shrink-0 inline-flex h-10 w-10 items-center justify-center rounded-full text-stone-600 transition-colors duration-200 hover:bg-stone-100 active:scale-[0.98]"
           >
             <LuArrowLeft size={22} strokeWidth={2.25} />
           </button>
@@ -244,7 +244,7 @@ export function ChatWindow({
           <button
             type="button"
             onClick={() => navigate(`/messenger/chat/${conversationId}/manage`)}
-            className="min-w-0 flex flex-1 items-center gap-3 rounded-2xl px-2 py-1 text-left hover:bg-stone-100 active:scale-[0.99]"
+            className="min-w-0 flex flex-1 items-center gap-3 rounded-2xl px-2 py-1 text-left transition-colors duration-200 hover:bg-stone-100 active:scale-[0.99]"
             aria-label="Открыть настройки чата"
             title="Настройки чата"
           >
@@ -287,7 +287,7 @@ export function ChatWindow({
               onClick={() => navigate(`/messenger/chat/${conversationId}/manage`)}
               aria-label="Управление чатом"
               title="Управление"
-              className="inline-flex h-10 w-10 items-center justify-center rounded-full text-stone-600 hover:bg-stone-100 active:scale-[0.98]"
+            className="inline-flex h-10 w-10 items-center justify-center rounded-full text-stone-600 transition-colors duration-200 hover:bg-stone-100 active:scale-[0.98]"
             >
               <span className="text-lg font-black leading-none" aria-hidden>⋮</span>
             </button>
@@ -295,7 +295,7 @@ export function ChatWindow({
               type="button"
               onClick={() => setShowSearch(true)}
               aria-label="Поиск по сообщениям"
-              className="inline-flex h-10 w-10 items-center justify-center rounded-full text-stone-600 hover:bg-stone-100 active:scale-[0.98]"
+            className="inline-flex h-10 w-10 items-center justify-center rounded-full text-stone-600 transition-colors duration-200 hover:bg-stone-100 active:scale-[0.98]"
             >
               <LuSearch size={20} strokeWidth={2.25} />
             </button>
@@ -304,7 +304,7 @@ export function ChatWindow({
       </header>
 
       <div
-        className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-4"
+        className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto bg-slate-50 px-3 py-3 sm:gap-3 sm:p-4"
         ref={scrollRef}
         onScroll={handleScroll}
         role="log"
@@ -360,7 +360,7 @@ export function ChatWindow({
         )}
       </div>
 
-      <div className="sticky bottom-0 z-20 shrink-0 border-t bg-white p-3 [padding-bottom:max(0.75rem,env(safe-area-inset-bottom,0px))]">
+      <div className="sticky bottom-0 z-20 shrink-0 border-t bg-white p-3 [padding-bottom:env(safe-area-inset-bottom,16px)]">
         <ChatInput
           conversationId={conversationId}
           sendTypingStart={sendTypingStart}

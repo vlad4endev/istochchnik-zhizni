@@ -144,11 +144,11 @@ export function App() {
       </main>
 
       <style>{`
-        .app { min-height: 100vh; display: flex; flex-direction: column; }
+        .app { min-height: 100dvh; display: flex; flex-direction: column; }
         .header {
           background: var(--primary);
           color: var(--text-on-primary);
-          padding: 1.25rem 1.5rem;
+          padding: calc(1.25rem + env(safe-area-inset-top, 0px)) 1.5rem 1.25rem;
           box-shadow: var(--shadow);
         }
         .title { margin: 0; font-size: 1.375rem; font-weight: 800; letter-spacing: -0.03em; }

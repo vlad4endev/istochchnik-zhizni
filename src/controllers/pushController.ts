@@ -1,24 +1,53 @@
 import { Request, Response } from 'express';
 import { saveSubscription, removeSubscription } from '../services/pushService';
 
+type AuthReq = Request & { authUserId?: number };
+type PushSubscriptionBody = {
+  endpoint?: string;
+  keys?: {
+    p256dh?: string;
+    auth?: string;
+  };
+};
+
+type NormalizedPushSubscription = {
+  endpoint: string;
+  keys: {
+    p256dh: string;
+    auth: string;
+  };
+};
+
 export const getVapidPublicKey = (req: Request, res: Response) => {
-  res.json({ publicKey: process.env.VAPID_PUBLIC_KEY });
+  const publicKey = String(process.env.VAPID_PUBLIC_KEY ?? '').trim();
+  if (!publicKey) {
+    res.status(503).json({ error: 'VAPID public key is not configured' });
+    return;
+  }
+  res.json({ publicKey });
 };
 
 export const subscribeToPush = async (req: Request, res: Response) => {
-  const memberId = (req as any).authUserId;
+  const memberId = (req as AuthReq).authUserId;
   if (!memberId) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
 
-  const subscription = req.body;
+  const subscription = req.body as PushSubscriptionBody;
   
-  if (!subscription || !subscription.endpoint || !subscription.keys) {
+  if (!subscription || !subscription.endpoint || !subscription.keys?.p256dh || !subscription.keys?.auth) {
     return res.status(400).json({ error: 'Invalid subscription data' });
   }
 
   try {
-    await saveSubscription(memberId, subscription);
+    const normalized: NormalizedPushSubscription = {
+      endpoint: String(subscription.endpoint),
+      keys: {
+        p256dh: String(subscription.keys.p256dh),
+        auth: String(subscription.keys.auth),
+      },
+    };
+    await saveSubscription(memberId, normalized);
     res.status(201).json({ message: 'Subscribed successfully.' });
   } catch (error) {
     console.error('Failed to subscribe:', error);
@@ -27,7 +56,7 @@ export const subscribeToPush = async (req: Request, res: Response) => {
 };
 
 export const unsubscribeFromPush = async (req: Request, res: Response) => {
-  const memberId = (req as any).authUserId;
+  const memberId = (req as AuthReq).authUserId;
   if (!memberId) {
     return res.status(401).json({ error: 'Unauthorized' });
   }

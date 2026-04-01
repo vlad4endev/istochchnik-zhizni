@@ -69,6 +69,10 @@ export function useMessengerWs(): {
     const scheduleReconnect = () => {
       if (stoppedRef.current) return;
       clearTimers();
+      if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+        // Wait for the browser online event to reconnect immediately.
+        return;
+      }
       attempt += 1;
       const delay = Math.min(30_000, 1000 * 2 ** Math.min(attempt, 5));
       reconnectTimer = setTimeout(connect, delay);
@@ -88,8 +92,29 @@ export function useMessengerWs(): {
       wsRef.current = ws;
 
       ws.onopen = () => {
+        const wasReconnected = attempt > 0;
         attempt = 0;
         ws.send(JSON.stringify({ type: 'auth', token }));
+
+        const store = useChatStore.getState();
+        const activeConversationId = store.activeConversationId;
+        const activeMessages = activeConversationId
+          ? (store.messagesByConv[activeConversationId] || [])
+          : [];
+
+        // Resync after reconnect, and also after first open when app started offline/degraded.
+        const shouldResyncConversations =
+          wasReconnected || store.degradedMode || !store.conversationsLoaded;
+        const shouldResyncActiveMessages =
+          Boolean(activeConversationId) &&
+          (wasReconnected || store.degradedMode || activeMessages.length === 0);
+
+        if (shouldResyncConversations) {
+          void store.loadConversations();
+        }
+        if (activeConversationId && shouldResyncActiveMessages) {
+          void store.loadMessages(activeConversationId);
+        }
 
         // Keep-alive ping every 25s
         pingInterval = setInterval(() => {
@@ -119,12 +144,34 @@ export function useMessengerWs(): {
       };
     }
 
+    const handleOnline = () => {
+      if (stoppedRef.current) return;
+      const ws = wsRef.current;
+      if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
+        return;
+      }
+      clearTimers();
+      connect();
+    };
+
+    const handleOffline = () => {
+      const ws = wsRef.current;
+      if (!ws) return;
+      if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
+        ws.close();
+      }
+    };
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
     connect();
 
     return () => {
       stoppedRef.current = true;
       clearTimers();
       if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
       wsRef.current?.close();
       wsRef.current = null;
     };
@@ -144,8 +191,7 @@ function handleWsMessage(msg: any): void {
       if (Array.isArray(msg.onlineMembers)) {
         store.setOnlineMembers(msg.onlineMembers);
       }
-      // Load conversations when WS is ready
-      void store.loadConversations();
+      // Conversation list bootstrap is handled by MessengerPage.
       break;
 
     case 'msg:new':

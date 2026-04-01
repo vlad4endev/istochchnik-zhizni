@@ -82,13 +82,18 @@ export function MessageBubble({ message, isGroupedPrev, isGroupedNext, onJumpToM
 
       return (
         <div className="w-full max-w-[22rem]">
-          <div className="rounded-2xl border border-white/10 bg-white/8 p-3 shadow-[0_12px_30px_rgba(0,0,0,0.10)] backdrop-blur-sm">
+          <div
+            className={[
+              'rounded-2xl border p-3 shadow-sm',
+              isMine ? 'border-white/10 bg-white/10 backdrop-blur-sm' : 'border-gray-100 bg-gray-50',
+            ].join(' ')}
+          >
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0">
-                <div className="text-[12px] font-extrabold tracking-wide text-white/75">
+                <div className={['text-[12px] font-extrabold tracking-wide', isMine ? 'text-white/75' : 'text-gray-500'].join(' ')}>
                   Молитвенная нужда
                 </div>
-                <div className="mt-1 whitespace-pre-wrap break-words text-[14px] leading-5 text-white/95">
+                <div className={['mt-1 whitespace-pre-wrap break-words text-[14px] leading-5', isMine ? 'text-white/95' : 'text-gray-900'].join(' ')}>
                   {text || '—'}
                 </div>
               </div>
@@ -98,11 +103,16 @@ export function MessageBubble({ message, isGroupedPrev, isGroupedNext, onJumpToM
               <button
                 type="button"
                 onClick={handlePrayClick}
-                className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-2 text-[13px] font-semibold text-white/95 transition hover:bg-white/14 active:scale-[0.99]"
+                className={[
+                  'inline-flex items-center gap-2 rounded-full px-3 py-2 text-[13px] font-semibold transition-colors duration-200 active:scale-[0.99]',
+                  isMine
+                    ? 'bg-white/10 text-white/95 hover:bg-white/15'
+                    : 'bg-primary/10 text-primary hover:bg-primary/15',
+                ].join(' ')}
               >
                 <span aria-hidden>🙏</span>
                 <span>Я молюсь</span>
-                <span className="rounded-full bg-white/12 px-2 py-0.5 text-[12px] font-bold">
+                <span className={['rounded-full px-2 py-0.5 text-[12px] font-bold', isMine ? 'bg-white/15' : 'bg-primary/15'].join(' ')}>
                   {Number.isFinite(count) ? count : 0}
                 </span>
               </button>
@@ -140,20 +150,25 @@ export function MessageBubble({ message, isGroupedPrev, isGroupedNext, onJumpToM
           href={href || undefined}
           target="_blank"
           rel="noreferrer"
-          className="flex max-w-[20rem] items-center justify-between gap-3 rounded-2xl bg-white/10 px-3 py-2 ring-1 ring-white/10 hover:bg-white/14"
+          className={[
+            'flex max-w-[20rem] items-center justify-between gap-3 rounded-2xl px-3 py-2 ring-1 transition-colors duration-200',
+            isMine
+              ? 'bg-white/10 ring-white/10 hover:bg-white/15'
+              : 'bg-gray-50 ring-gray-100 hover:bg-gray-100',
+          ].join(' ')}
         >
           <span className="flex min-w-0 items-center gap-3">
-            <span className="grid h-10 w-10 place-items-center rounded-xl bg-white/12 text-white">
+            <span className={['grid h-10 w-10 place-items-center rounded-xl', isMine ? 'bg-white/12 text-white' : 'bg-white text-gray-600 ring-1 ring-gray-100'].join(' ')}>
               <LuFileText size={18} />
             </span>
             <span className="min-w-0">
-              <span className="block truncate text-[14px] font-semibold text-white/95">{name}</span>
-              <span className="mt-0.5 block text-[11px] font-semibold text-white/70">
+              <span className={['block truncate text-[14px] font-semibold', isMine ? 'text-white/95' : 'text-gray-900'].join(' ')}>{name}</span>
+              <span className={['mt-0.5 block text-[11px] font-semibold', isMine ? 'text-white/70' : 'text-gray-500'].join(' ')}>
                 {sizeLabel ?? 'Файл'}
               </span>
             </span>
           </span>
-          <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-white/12 px-3 py-1 text-[11px] font-extrabold text-white/90">
+          <span className={['inline-flex shrink-0 items-center gap-1 rounded-full px-3 py-1 text-[11px] font-extrabold', isMine ? 'bg-white/12 text-white/90' : 'bg-primary/10 text-primary'].join(' ')}>
             <LuDownload size={14} />
             Скачать
           </span>
@@ -223,8 +238,18 @@ export function MessageBubble({ message, isGroupedPrev, isGroupedNext, onJumpToM
 
   if (isDeleted) {
     return (
-      <div className={`tg-bubble-wrap ${isMine ? 'tg-bubble-wrap--out' : 'tg-bubble-wrap--in'}`}>
-        <div className={`tg-bubble msg-bubble--deleted ${isMine ? 'tg-bubble--out' : 'tg-bubble--in'}`}>
+      <div
+        className={[
+          'flex w-fit max-w-[min(88%,20.5rem)] flex-col sm:max-w-[min(84%,24rem)]',
+          isMine ? 'ml-auto items-end' : 'mr-auto items-start',
+        ].join(' ')}
+      >
+        <div
+          className={[
+            'msg-bubble--deleted rounded-2xl px-4 py-2 text-sm',
+            isMine ? 'rounded-br-sm bg-primary/20 text-white/80' : 'rounded-bl-sm bg-gray-100 text-gray-500',
+          ].join(' ')}
+        >
           <span className="msg-deleted-text">Сообщение удалено</span>
         </div>
       </div>
@@ -232,17 +257,23 @@ export function MessageBubble({ message, isGroupedPrev, isGroupedNext, onJumpToM
   }
 
   const bubbleClasses = [
-    'tg-bubble',
-    isMine ? 'tg-bubble--out' : 'tg-bubble--in',
+    'relative rounded-2xl px-3.5 py-2 shadow-sm sm:px-4 sm:py-2.5',
+    isMine
+      ? 'rounded-br-sm bg-primary text-white'
+      : 'rounded-bl-sm border border-gray-100 bg-white text-gray-900',
     isOptimistic ? 'msg-bubble--sending' : '',
-    isGroupedPrev ? 'tg-bubble--grouped-prev' : '',
-    isGroupedNext ? 'tg-bubble--grouped-next' : '',
-  ].filter(Boolean).join(' ');
+    isGroupedPrev ? (isMine ? 'rounded-br-2xl' : 'rounded-bl-2xl') : '',
+  ]
+    .filter(Boolean)
+    .join(' ');
 
   return (
     <>
     <div
-      className={`tg-bubble-wrap ${isMine ? 'tg-bubble-wrap--out' : 'tg-bubble-wrap--in'}`}
+      className={[
+        'flex w-fit max-w-[min(88%,20.5rem)] flex-col sm:max-w-[min(84%,24rem)]',
+        isMine ? 'ml-auto items-end' : 'mr-auto items-start',
+      ].join(' ')}
       onContextMenu={handleContextMenu}
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
@@ -280,22 +311,9 @@ export function MessageBubble({ message, isGroupedPrev, isGroupedNext, onJumpToM
             animate(x, 0, { type: 'spring', stiffness: 420, damping: 32 });
           }}
         >
-        {/* Tail (only if first message in group / single message) */}
-        {!isGroupedPrev && (
-          <div className={`tg-bubble-tail ${isMine ? 'tg-bubble-tail--out' : 'tg-bubble-tail--in'}`}>
-            <svg width="10" height="14" viewBox="0 0 10 14" fill="currentColor">
-              {isMine ? (
-                <path d="M0 14C3 14 10 14 10 14V0C10 0 1 7 0 14Z" />
-              ) : (
-                <path d="M10 14C7 14 0 14 0 14V0C0 0 9 7 10 14Z" />
-              )}
-            </svg>
-          </div>
-        )}
-
         {/* Sender name (only if first message in group and not mine) */}
         {!isMine && !isGroupedPrev && message.sender_name && (
-          <div className="tg-bubble-sender">{message.sender_name}</div>
+          <div className="mb-1.5 px-1 text-xs font-semibold text-gray-500">{message.sender_name}</div>
         )}
 
         {/* Reply preview (tap to jump) */}
@@ -321,23 +339,23 @@ export function MessageBubble({ message, isGroupedPrev, isGroupedNext, onJumpToM
         )}
 
         {/* Content */}
-        <div className="msg-content">{renderContent()}</div>
+        <div className="msg-content whitespace-pre-wrap break-words text-[14px] leading-relaxed sm:text-[15px]">{renderContent()}</div>
 
         {/* Meta */}
-        <div className="tg-bubble-meta">
+        <div className={['mt-1 flex items-center justify-end gap-1 text-[11px]', isMine ? 'text-white/70' : 'text-gray-400'].join(' ')}>
           {message.is_edited && <span className="msg-edited">ред.</span>}
           <span>{formattedTime}</span>
           {isMine ? (
             status === 'sending' ? (
-              <IoTimeOutline className="h-4 w-4 text-gray-400" aria-label="Отправляется" />
+              <IoTimeOutline className="h-3.5 w-3.5 text-white/70" aria-label="Отправляется" />
             ) : status === 'error' ? (
               <IoAlertCircleOutline className="h-4 w-4 text-red-500" aria-label="Ошибка отправки" />
             ) : (
               <>
                 {isReadByOther ? (
-                  <IoCheckmarkDone className="h-4 w-4 text-blue-500" aria-label="Прочитано" />
+                  <IoCheckmarkDone className="h-3.5 w-3.5 text-sky-200" aria-label="Прочитано" />
                 ) : (
-                  <IoCheckmark className="h-4 w-4 text-gray-400" aria-label="Отправлено" />
+                  <IoCheckmark className="h-3.5 w-3.5 text-white/70" aria-label="Отправлено" />
                 )}
               </>
             )
@@ -351,7 +369,7 @@ export function MessageBubble({ message, isGroupedPrev, isGroupedNext, onJumpToM
           <button
             type="button"
             onClick={() => void retrySendMessage(String(message.conversation_id), String(message.id))}
-            className="inline-flex items-center rounded-full bg-red-50 px-3 py-1 text-[11px] font-extrabold text-red-700 ring-1 ring-red-200/70"
+            className="inline-flex items-center rounded-full bg-red-50 px-3 py-1 text-[11px] font-extrabold text-red-700 ring-1 ring-red-200/70 transition-colors duration-200 hover:bg-red-100"
           >
             Повторить отправку
           </button>

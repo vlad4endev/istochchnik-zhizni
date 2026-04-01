@@ -34,6 +34,10 @@ export async function initMessengerPushNotifications(): Promise<void> {
 
   const envKey = (import.meta as any).env?.VITE_VAPID_PUBLIC_KEY as string | undefined;
   const vapidPublicKey = (envKey && envKey.trim()) ? envKey.trim() : await fetchVapidPublicKey();
+  if (!vapidPublicKey) {
+    console.warn('[push] VAPID public key is missing, skipping push subscribe.');
+    return;
+  }
   const convertedVapidKey = urlBase64ToUint8Array(vapidPublicKey);
 
   const subscription = await registration.pushManager.subscribe({

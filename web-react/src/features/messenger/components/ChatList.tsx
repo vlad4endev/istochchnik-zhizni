@@ -38,8 +38,8 @@ export function ChatList({ onSelect, activeId }: ChatListProps) {
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      <div className="px-3 pt-3">
+    <div className="flex min-h-0 flex-1 flex-col bg-slate-50">
+      <div className="shrink-0 px-3 pt-3">
         <SmartTabs
           activeTab={activeTab}
           onChange={setActiveTab}
@@ -50,7 +50,7 @@ export function ChatList({ onSelect, activeId }: ChatListProps) {
         />
       </div>
 
-      <div className="mt-1 min-h-0 flex-1 overflow-y-auto px-2 pb-2 [scrollbar-gutter:stable]">
+      <div className="mt-1 min-h-0 flex-1 overflow-y-auto px-2 pb-2 sm:px-3 [scrollbar-gutter:stable]">
         <div className="space-y-1">
           {filtered.map((conv: ConversationListItem) => (
             <ChatListItem
@@ -96,7 +96,7 @@ function SmartTabs({
   ];
 
   return (
-    <div className="flex items-center gap-1 rounded-xl bg-stone-200/60 p-1">
+    <div className="flex items-center gap-1 rounded-2xl border border-gray-100 bg-white p-1 shadow-sm">
       {tabs.map((t) => {
         const isActive = t.id === activeTab;
         return (
@@ -105,10 +105,10 @@ function SmartTabs({
             type="button"
             onClick={() => onChange(t.id)}
             className={[
-              'relative inline-flex min-h-[32px] flex-1 items-center justify-center gap-1.5 rounded-lg px-2 py-1.5 text-[11px] font-semibold transition-all duration-200',
+              'relative inline-flex min-h-[32px] flex-1 items-center justify-center gap-1.5 rounded-xl px-2 py-1.5 text-[11px] font-semibold transition-colors duration-200',
               isActive
-                ? 'bg-white text-stone-900 shadow-sm'
-                : 'text-stone-500 hover:text-stone-700',
+                ? 'bg-gray-900 text-white shadow-sm'
+                : 'text-gray-500 hover:bg-gray-50 hover:text-gray-700',
             ].join(' ')}
           >
             <span className="truncate">{t.label}</span>
@@ -116,7 +116,7 @@ function SmartTabs({
               <span
                 className={[
                   'inline-flex min-w-[18px] items-center justify-center rounded-full px-1 py-px text-[10px] font-bold',
-                  isActive ? 'bg-primary text-white' : 'bg-primary/10 text-primary',
+                  isActive ? 'bg-white/20 text-white' : 'bg-primary/10 text-primary',
                 ].join(' ')}
               >
                 {t.unread > 99 ? '99+' : t.unread}
@@ -158,22 +158,22 @@ function ChatListItem({
       type="button"
       role="listitem"
       className={[
-        'group flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left ring-1 transition',
+        'group flex w-full items-center gap-3.5 rounded-2xl border px-3.5 py-2.5 text-left shadow-sm transition-colors duration-200 sm:py-3',
         isActive
-          ? 'bg-primary text-white shadow-md shadow-primary/25 ring-primary/20'
-          : 'bg-white/70 text-stone-800 ring-stone-200/70 hover:bg-white/90 hover:shadow-sm',
+          ? 'border-primary/20 bg-primary/95 text-white shadow-md shadow-primary/20'
+          : 'border-gray-100 bg-white text-gray-800 hover:border-gray-200 hover:bg-gray-50',
       ].join(' ')}
       onClick={onClick}
     >
-      <div className="relative h-12 w-12 shrink-0">
+      <div className="relative h-11 w-11 shrink-0 sm:h-12 sm:w-12">
         <div
-          className="grid h-12 w-12 place-items-center overflow-hidden rounded-2xl text-white shadow-sm"
+          className="grid h-11 w-11 place-items-center overflow-hidden rounded-full text-white shadow-sm sm:h-12 sm:w-12"
           style={{ background: avatarColor }}
         >
           {avatarSrc ? (
             <img src={avatarSrc} alt="" className="h-full w-full object-cover" loading="lazy" />
           ) : (
-            <span className="text-[15px] font-extrabold">{avatarLetter}</span>
+            <span className="text-sm font-extrabold sm:text-[15px]">{avatarLetter}</span>
           )}
         </div>
         {conv.type === 'private' ? (
@@ -189,19 +189,19 @@ function ChatListItem({
       </div>
 
       <div className="min-w-0 flex-1">
-        <div className="flex items-baseline justify-between gap-2">
-          <span className={['truncate text-sm font-extrabold', isActive ? 'text-white' : 'text-stone-900'].join(' ')}>
+        <div className="flex items-center justify-between gap-2">
+          <span className={['truncate text-[15px] font-semibold', isActive ? 'text-white' : 'text-gray-900'].join(' ')}>
             {displayName}
           </span>
           {lastMsg ? (
-            <span className={['shrink-0 text-[11px] font-bold', isActive ? 'text-white/80' : 'text-stone-400'].join(' ')}>
+            <span className={['shrink-0 text-xs font-medium', isActive ? 'text-white/80' : 'text-gray-400'].join(' ')}>
               {formatTime(lastMsg.created_at)}
             </span>
           ) : null}
         </div>
 
         <div className="mt-1 flex items-center justify-between gap-2">
-          <span className={['min-w-0 flex-1 truncate text-xs font-semibold', isActive ? 'text-white/85' : 'text-stone-500'].join(' ')}>
+          <span className={['min-w-0 flex-1 truncate text-xs font-medium', isActive ? 'text-white/85' : 'text-gray-500'].join(' ')}>
             {isTyping
               ? `${typingUsers.map((u) => u.memberName.split(' ')[0]).join(', ')} печатает…`
               : lastMsg

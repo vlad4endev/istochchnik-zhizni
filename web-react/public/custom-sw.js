@@ -14,7 +14,7 @@ self.addEventListener('push', function (event) {
   const options = {
     body: data.body || '',
     icon: '/assets/logo_minimal.svg',
-    badge: '/assets/pwa-64x64.png',
+    badge: '/assets/logo_minimal.svg',
     data: {
       url: data.url || '/',
       conversationId: data.conversationId || null,
@@ -28,7 +28,8 @@ self.addEventListener('push', function (event) {
 self.addEventListener('notificationclick', function (event) {
   event.notification.close();
 
-  const urlToOpen = new URL(event.notification.data.url, self.location.origin).href;
+  const safeUrl = event.notification?.data?.url || '/';
+  const urlToOpen = new URL(safeUrl, self.location.origin).href;
 
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {

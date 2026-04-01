@@ -205,6 +205,9 @@ function enqueueOutbox(get: () => ChatState, item: OutboxItem): number {
 function dequeueOutbox(get: () => ChatState, queueId: string): number {
   inMemoryOutbox = inMemoryOutbox.filter((q) => q.queueId !== queueId);
   saveOutboxSnapshot(get, inMemoryOutbox);
+  if (inMemoryOutbox.length === 0) {
+    stopOutboxPump();
+  }
   return inMemoryOutbox.length;
 }
 
@@ -252,7 +255,10 @@ async function runRetryAllFailed(get: () => ChatState) {
 }
 
 async function flushOutbox(get: () => ChatState) {
-  if (inMemoryOutbox.length === 0) return;
+  if (inMemoryOutbox.length === 0) {
+    stopOutboxPump();
+    return;
+  }
   const queue = [...inMemoryOutbox].sort(
     (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
   );
@@ -267,11 +273,33 @@ async function flushOutbox(get: () => ChatState) {
 
 function ensureOutboxPump(get: () => ChatState) {
   if (typeof window === 'undefined') return;
+  if (inMemoryOutbox.length === 0) return;
   if (outboxRetryTimer) return;
   outboxRetryTimer = window.setInterval(() => {
     if (navigator.onLine === false) return;
     void flushOutbox(get);
   }, 7000);
+}
+
+function stopOutboxPump() {
+  if (typeof window === 'undefined') return;
+  if (outboxRetryTimer != null) {
+    window.clearInterval(outboxRetryTimer);
+    outboxRetryTimer = null;
+  }
+}
+
+function clearTypingForConversation(typingByConv: Record<string, TypingUser[]>, convId: string): void {
+  const list = typingByConv[String(convId)] || [];
+  for (const user of list) {
+    clearTimeout(user.timer);
+  }
+}
+
+function clearAllTypingTimers(typingByConv: Record<string, TypingUser[]>): void {
+  for (const convId of Object.keys(typingByConv)) {
+    clearTypingForConversation(typingByConv, convId);
+  }
 }
 
 function hydrateFromCacheIntoStore(set: (partial: Partial<ChatState>) => void, get: () => ChatState) {
@@ -398,13 +426,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
       set((s) => {
         const prev = older ? (s.messagesByConv[conversationId] || []) : [];
         const merged = older ? [...messages, ...prev] : messages;
-        // Deduplicate by id
-        const seen = new Set<string>();
-        const deduped = merged.filter((m) => {
-          if (seen.has(m.id)) return false;
-          seen.add(m.id);
-          return true;
-        });
+        // Keep the same dedupe policy as optimistic/WS merge.
+        const deduped = dedupeMessages(merged);
 
         return {
           messagesByConv: { ...s.messagesByConv, [conversationId]: deduped },
@@ -712,6 +735,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   handleNewMessage: (convId, msg) => {
     const idKey = String(convId);
+    const serverMsgId = String(msg.id);
     const state = get();
     const existingNow = state.messagesByConv[idKey] || [];
     const msgClientId = msg.client_msg_id ? String(msg.client_msg_id) : null;
@@ -720,9 +744,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
       msg.sender_id != null &&
       Number(msg.sender_id) === Number(state.currentMemberId);
     const alreadyPresent =
-      existingNow.some((m) => m.id === msg.id) ||
+      existingNow.some((m) => String(m.id) === serverMsgId) ||
       (msgClientId != null &&
-        existingNow.some((m) => m.id.startsWith('temp-') && m.client_msg_id === msgClientId));
+        existingNow.some((m) => String(m.id).startsWith('temp-') && m.client_msg_id === msgClientId));
+    const shouldAutoReadNow =
+      state.activeConversationId === idKey &&
+      !isOwnNow &&
+      /^\d+$/.test(serverMsgId) &&
+      !alreadyPresent;
     if (!isOwnNow && !alreadyPresent) {
       playAudio('receive');
     }
@@ -739,15 +768,15 @@ export const useChatStore = create<ChatState>((set, get) => ({
       const targetConversation = s.conversations.find((c) => c.id === idKey) || null;
 
       // Already present by definitive server id.
-      if (existing.some((m) => m.id === msg.id)) return s;
+      if (existing.some((m) => String(m.id) === serverMsgId)) return s;
 
       // If optimistic temp exists with same client_msg_id, replace it (no append).
       const hasOptimisticTwin =
         msgClientId != null &&
-        existing.some((m) => m.id.startsWith('temp-') && m.client_msg_id === msgClientId);
+        existing.some((m) => String(m.id).startsWith('temp-') && m.client_msg_id === msgClientId);
       const merged = hasOptimisticTwin
         ? existing.map((m) =>
-            m.id.startsWith('temp-') && m.client_msg_id === msgClientId ? msg : m,
+            String(m.id).startsWith('temp-') && m.client_msg_id === msgClientId ? msg : m,
           )
         : [...existing, msg];
       const newMsgs = dedupeMessages(merged);
@@ -758,7 +787,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         return {
           ...c,
           last_message: {
-            id: msg.id,
+            id: serverMsgId,
             content: msg.content,
             sender_id: msg.sender_id,
             sender_name: msg.sender_name,
@@ -796,15 +825,22 @@ export const useChatStore = create<ChatState>((set, get) => ({
         totalUnread,
       };
     });
+
+    // If user is currently inside this chat, sync read cursor immediately
+    // so server-side unread_count does not drift.
+    if (shouldAutoReadNow) {
+      void get().markReadUpTo(idKey, serverMsgId);
+    }
   },
 
   handleMessageEdited: (convId, msgId, content, updatedAt) => {
     const idKey = String(convId);
+    const messageId = String(msgId);
     set((s) => ({
       messagesByConv: {
         ...s.messagesByConv,
         [idKey]: (s.messagesByConv[idKey] || []).map((m) =>
-          m.id === msgId ? { ...m, content, is_edited: true, updated_at: updatedAt } : m,
+          String(m.id) === messageId ? { ...m, content, is_edited: true, updated_at: updatedAt } : m,
         ),
       },
     }));
@@ -812,11 +848,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   handleMessageDeleted: (convId, msgId) => {
     const idKey = String(convId);
+    const messageId = String(msgId);
     set((s) => ({
       messagesByConv: {
         ...s.messagesByConv,
         [idKey]: (s.messagesByConv[idKey] || []).map((m) =>
-          m.id === msgId ? { ...m, is_deleted: true, content: '' } : m,
+          String(m.id) === messageId ? { ...m, is_deleted: true, content: '' } : m,
         ),
       },
     }));
@@ -824,13 +861,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   handleReaction: (convId, msgId, emoji, memberId, action) => {
     const idKey = String(convId);
+    const messageId = String(msgId);
     set((s) => {
       const me = s.currentMemberId;
       return {
         messagesByConv: {
           ...s.messagesByConv,
           [idKey]: (s.messagesByConv[idKey] || []).map((m) => {
-            if (m.id !== msgId) return m;
+            if (String(m.id) !== messageId) return m;
             let reactions = [...m.reactions];
             const existingIdx = reactions.findIndex((r) => r.emoji === emoji);
             if (action === 'add') {
@@ -956,6 +994,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   setCurrentMemberId: (id) => {
+    const prev = get().currentMemberId;
+    if (prev != null && prev !== id) {
+      const currentTyping = get().typingByConv;
+      clearAllTypingTimers(currentTyping);
+      stopOutboxPump();
+      inMemoryOutbox = [];
+      set({ typingByConv: {} });
+    }
     set({ currentMemberId: id });
     // Load cached snapshot for resilience (offline-first startup).
     hydrateFromCacheIntoStore(set, get);

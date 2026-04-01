@@ -361,21 +361,21 @@ export function ChatInput({
 
       {/* Swipe-to-reply preview */}
       {replyingTo ? (
-        <div className="mb-2 overflow-hidden rounded-2xl bg-white/80 ring-1 ring-stone-200/70">
+        <div className="mb-2 overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
           <div className="flex items-start gap-3 p-3">
             <div className="w-1 self-stretch rounded-full bg-blue-500" aria-hidden />
             <div className="min-w-0 flex-1">
-              <p className="truncate text-xs font-extrabold text-stone-900">
+              <p className="truncate text-xs font-semibold text-gray-900">
                 {replyingTo.sender_name || 'Сообщение'}
               </p>
-              <p className="mt-0.5 truncate text-sm font-semibold text-stone-600">
+              <p className="mt-0.5 truncate text-sm text-gray-500">
                 {String(replyingTo.content || '').trim() || '—'}
               </p>
             </div>
             <button
               type="button"
               onClick={() => setReplyingTo(null)}
-              className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-stone-600 hover:bg-stone-100"
+              className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-gray-500 transition-colors duration-200 hover:bg-gray-100"
               aria-label="Отменить ответ"
               title="Отменить"
             >
@@ -386,10 +386,10 @@ export function ChatInput({
       ) : null}
 
       {pending ? (
-        <div className="mb-2 overflow-hidden rounded-2xl bg-white/80 ring-1 ring-stone-200/70">
+        <div className="mb-2 overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
           <div className="flex items-start gap-3 p-3">
             {pending.isImage && pending.previewUrl ? (
-              <div className="h-14 w-14 overflow-hidden rounded-xl bg-stone-100 ring-1 ring-stone-200/60">
+              <div className="h-14 w-14 overflow-hidden rounded-xl bg-gray-100 ring-1 ring-gray-200/70">
                 <button
                   type="button"
                   onClick={() => setShowPreview(true)}
@@ -400,17 +400,17 @@ export function ChatInput({
                 </button>
               </div>
             ) : (
-              <div className="grid h-14 w-14 place-items-center rounded-xl bg-stone-100 text-stone-600 ring-1 ring-stone-200/60">
+              <div className="grid h-14 w-14 place-items-center rounded-xl bg-gray-100 text-gray-600 ring-1 ring-gray-200/70">
                 <LuPaperclip />
               </div>
             )}
 
             <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-extrabold text-stone-900">{pending.file.name}</p>
-              <p className="mt-0.5 text-xs font-semibold text-stone-500">
+              <p className="truncate text-sm font-semibold text-gray-900">{pending.file.name}</p>
+              <p className="mt-0.5 text-xs text-gray-500">
                 {pending.isImage ? 'Фото' : 'Файл'} · {formatBytes(pending.file.size)}
               </p>
-              <p className="mt-1 text-[11px] font-semibold text-stone-400">
+              <p className="mt-1 text-[11px] text-gray-400">
                 Можно добавить подпись и нажать «Отправить»
               </p>
             </div>
@@ -423,7 +423,7 @@ export function ChatInput({
                 setShowPreview(false);
                 if (fileInputRef.current) fileInputRef.current.value = '';
               }}
-              className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-stone-600 hover:bg-stone-100"
+              className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-gray-500 transition-colors duration-200 hover:bg-gray-100"
               aria-label="Убрать вложение"
               title="Убрать вложение"
             >
@@ -447,13 +447,13 @@ export function ChatInput({
       ) : null}
 
       {uploading ? (
-        <div className="mb-2 flex items-center justify-between gap-3 rounded-2xl bg-stone-50 px-4 py-3 ring-1 ring-stone-200/60">
+        <div className="mb-2 flex items-center justify-between gap-3 rounded-2xl border border-gray-100 bg-white px-4 py-3 shadow-sm">
           <div className="min-w-0">
-            <p className="truncate text-sm font-extrabold text-stone-900">Загрузка файла…</p>
-            <p className="mt-0.5 truncate text-xs font-semibold text-stone-500">
+            <p className="truncate text-sm font-semibold text-gray-900">Загрузка файла…</p>
+            <p className="mt-0.5 truncate text-xs text-gray-500">
               {uploading.name}{uploadPct ? ` · ${uploadPct}%` : ''}
             </p>
-            <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-stone-200">
+            <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-gray-200">
               <div
                 className="h-full rounded-full bg-primary transition-[width] duration-200"
                 style={{ width: `${Math.max(2, uploadPct)}%` }}
@@ -468,7 +468,7 @@ export function ChatInput({
               setUploadPct(0);
               if (fileInputRef.current) fileInputRef.current.value = '';
             }}
-            className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-stone-600 hover:bg-stone-100"
+            className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-gray-500 transition-colors duration-200 hover:bg-gray-100"
             aria-label="Отменить"
             title="Отменить"
           >
@@ -481,8 +481,8 @@ export function ChatInput({
         <p className="mb-2 text-sm font-semibold text-red-600">{uploadErr}</p>
       ) : null}
 
-      <div className="tg-input-area min-w-0">
-        <div className="tg-input-container min-w-0">
+      <div className="tg-input-area min-w-0 items-center gap-2 sm:gap-2.5">
+        <div className="tg-input-container min-w-0 rounded-3xl border border-gray-200 bg-white shadow-sm">
           <input
             ref={fileInputRef}
             type="file"
@@ -493,7 +493,7 @@ export function ChatInput({
           <div ref={attachMenuRef} className="relative">
             <button
               type="button"
-              className="tg-input-icon-btn"
+              className="tg-input-icon-btn transition-colors duration-200"
               onClick={() => {
                 haptic(8);
                 setAttachMenuOpen((v) => !v);
@@ -509,7 +509,7 @@ export function ChatInput({
               <div
                 role="menu"
                 className={[
-                  'tg-popover absolute bottom-[46px] left-0 z-[3000] w-56 overflow-hidden rounded-2xl bg-white shadow-[0_14px_40px_rgba(0,0,0,0.16)] ring-1 ring-black/10',
+                  'tg-popover absolute bottom-[46px] left-0 z-[3000] w-56 overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-md',
                   attachMenuExiting ? 'tg-popover--out' : '',
                 ].join(' ')}
               >
@@ -517,7 +517,7 @@ export function ChatInput({
                   type="button"
                   role="menuitem"
                   onClick={() => pickFile('image')}
-                  className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm font-semibold text-stone-900 hover:bg-stone-50 active:bg-stone-100"
+                  className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm font-semibold text-gray-900 transition-colors duration-200 hover:bg-gray-50 active:bg-gray-100"
                 >
                   <span className="grid h-9 w-9 place-items-center rounded-xl bg-blue-50 text-blue-600 ring-1 ring-blue-100">
                     <LuImage size={18} />
@@ -528,7 +528,7 @@ export function ChatInput({
                   type="button"
                   role="menuitem"
                   onClick={() => pickFile('file')}
-                  className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm font-semibold text-stone-900 hover:bg-stone-50 active:bg-stone-100"
+                  className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm font-semibold text-gray-900 transition-colors duration-200 hover:bg-gray-50 active:bg-gray-100"
                 >
                   <span className="grid h-9 w-9 place-items-center rounded-xl bg-stone-50 text-stone-700 ring-1 ring-stone-200/70">
                     <LuFileText size={18} />
@@ -540,7 +540,7 @@ export function ChatInput({
           </div>
           <textarea
             ref={textareaRef}
-            className="tg-input-textarea"
+            className="tg-input-textarea text-gray-900 placeholder:text-gray-400"
             placeholder="Сообщение..."
             rows={1}
             value={content}
@@ -550,7 +550,7 @@ export function ChatInput({
           <div ref={emojiRef} className="relative">
             <button
               type="button"
-              className="tg-input-icon-btn"
+              className="tg-input-icon-btn transition-colors duration-200"
               onClick={() => {
                 haptic(8);
                 setEmojiOpen((v) => !v);
@@ -565,7 +565,7 @@ export function ChatInput({
             {emojiPresent ? (
               <div
                 className={[
-                  'tg-popover absolute bottom-[46px] right-0 z-[3500] w-[min(360px,calc(100vw-1.5rem))] overflow-hidden rounded-2xl bg-white shadow-[0_18px_60px_rgba(0,0,0,0.2)] ring-1 ring-black/10',
+                  'tg-popover absolute bottom-[46px] right-0 z-[3500] w-[min(360px,calc(100vw-1.5rem))] overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-md',
                   emojiExiting ? 'tg-popover--out' : '',
                 ].join(' ')}
                 role="dialog"
@@ -590,7 +590,7 @@ export function ChatInput({
 
         <button
           type="button"
-          className="tg-send-btn"
+          className="tg-send-btn transition-colors duration-200"
           onClick={() => void handleSend()}
           disabled={(!content.trim() && !pending) || uploading != null}
           style={{ opacity: (content.trim() || pending) && !uploading ? 1 : 0.5 }}
