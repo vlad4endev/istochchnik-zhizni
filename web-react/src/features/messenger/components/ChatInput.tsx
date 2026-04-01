@@ -1,7 +1,9 @@
 import { useState, useRef, useEffect } from 'react';
 import { useChatStore } from '../chatStore';
-import { LuPaperclip, LuSmile, LuSend, LuX } from 'react-icons/lu';
+import { LuPaperclip, LuPlus, LuSmile, LuSend, LuX, LuImage, LuFileText } from 'react-icons/lu';
 import * as api from '../api/messengerApi';
+import Picker from '@emoji-mart/react';
+import emojiData from '@emoji-mart/data';
 
 type PendingAttachment = {
   file: File;
@@ -40,8 +42,16 @@ export function ChatInput({
   const [uploadPct, setUploadPct] = useState<number>(0);
   const [uploadErr, setUploadErr] = useState<string | null>(null);
   const [showPreview, setShowPreview] = useState(false);
+  const [attachMenuOpen, setAttachMenuOpen] = useState(false);
+  const [emojiOpen, setEmojiOpen] = useState(false);
+  const [attachMenuPresent, setAttachMenuPresent] = useState(false);
+  const [attachMenuExiting, setAttachMenuExiting] = useState(false);
+  const [emojiPresent, setEmojiPresent] = useState(false);
+  const [emojiExiting, setEmojiExiting] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const attachMenuRef = useRef<HTMLDivElement>(null);
+  const emojiRef = useRef<HTMLDivElement>(null);
   const uploadAbortRef = useRef<AbortController | null>(null);
   const typingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const draftSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -66,7 +76,110 @@ export function ChatInput({
     };
   }, [pending?.previewUrl]);
 
+  useEffect(() => {
+    if (!attachMenuOpen) return;
+    const onDoc = (e: MouseEvent | TouchEvent) => {
+      const el = attachMenuRef.current;
+      if (!el) return;
+      if (e.target instanceof Node && el.contains(e.target)) return;
+      setAttachMenuOpen(false);
+    };
+    document.addEventListener('mousedown', onDoc, { passive: true });
+    document.addEventListener('touchstart', onDoc, { passive: true });
+    return () => {
+      document.removeEventListener('mousedown', onDoc);
+      document.removeEventListener('touchstart', onDoc);
+    };
+  }, [attachMenuOpen]);
+
+  useEffect(() => {
+    if (attachMenuOpen) {
+      setAttachMenuPresent(true);
+      setAttachMenuExiting(false);
+      return;
+    }
+    if (!attachMenuPresent) return;
+    setAttachMenuExiting(true);
+    const t = window.setTimeout(() => {
+      setAttachMenuPresent(false);
+      setAttachMenuExiting(false);
+    }, 170);
+    return () => window.clearTimeout(t);
+  }, [attachMenuOpen, attachMenuPresent]);
+
+  useEffect(() => {
+    if (!emojiOpen) return;
+    const onDoc = (e: MouseEvent | TouchEvent) => {
+      const el = emojiRef.current;
+      if (!el) return;
+      if (e.target instanceof Node && el.contains(e.target)) return;
+      setEmojiOpen(false);
+    };
+    document.addEventListener('mousedown', onDoc, { passive: true });
+    document.addEventListener('touchstart', onDoc, { passive: true });
+    return () => {
+      document.removeEventListener('mousedown', onDoc);
+      document.removeEventListener('touchstart', onDoc);
+    };
+  }, [emojiOpen]);
+
+  useEffect(() => {
+    if (emojiOpen) {
+      setEmojiPresent(true);
+      setEmojiExiting(false);
+      return;
+    }
+    if (!emojiPresent) return;
+    setEmojiExiting(true);
+    const t = window.setTimeout(() => {
+      setEmojiPresent(false);
+      setEmojiExiting(false);
+    }, 170);
+    return () => window.clearTimeout(t);
+  }, [emojiOpen, emojiPresent]);
+
+  const haptic = (ms = 12) => {
+    try {
+      if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
+        navigator.vibrate(ms);
+      }
+    } catch {
+      /* ignore */
+    }
+  };
+
+  const insertEmoji = (native: string) => {
+    const el = textareaRef.current;
+    if (!el) {
+      setContent((v) => v + native);
+      return;
+    }
+    const start = el.selectionStart ?? content.length;
+    const end = el.selectionEnd ?? content.length;
+    const next = content.slice(0, start) + native + content.slice(end);
+    setContent(next);
+    requestAnimationFrame(() => {
+      try {
+        el.focus();
+        const caret = start + native.length;
+        el.setSelectionRange(caret, caret);
+        // Recompute height after insertion (iOS-friendly).
+        el.style.height = 'auto';
+        el.style.height = `${el.scrollHeight}px`;
+      } catch {
+        /* ignore */
+      }
+    });
+    // Persist draft quickly after emoji insertion.
+    try {
+      saveDraft(conversationId, next);
+    } catch {
+      /* ignore */
+    }
+  };
+
   const handleSend = async () => {
+    haptic(10);
     const text = content.trim();
     if (pending) {
       setUploadErr(null);
@@ -132,9 +245,17 @@ export function ChatInput({
     sendTypingStop(conversationId);
   };
 
-  const handlePickFile = () => {
+  const pickFile = (kind: 'image' | 'file') => {
     setUploadErr(null);
-    fileInputRef.current?.click();
+    setAttachMenuOpen(false);
+    haptic(12);
+    const input = fileInputRef.current;
+    if (!input) return;
+    input.accept =
+      kind === 'image'
+        ? 'image/*'
+        : 'application/pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt';
+    input.click();
   };
 
   const handleFileSelected = async (file: File | null) => {
@@ -366,12 +487,57 @@ export function ChatInput({
             ref={fileInputRef}
             type="file"
             className="hidden"
-            accept="image/*,application/pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt"
+            accept="image/*"
             onChange={(e) => void handleFileSelected(e.target.files?.[0] ?? null)}
           />
-          <button type="button" className="tg-input-icon-btn" onClick={handlePickFile} aria-label="Прикрепить файл">
-            <LuPaperclip size={22} />
-          </button>
+          <div ref={attachMenuRef} className="relative">
+            <button
+              type="button"
+              className="tg-input-icon-btn"
+              onClick={() => {
+                haptic(8);
+                setAttachMenuOpen((v) => !v);
+              }}
+              aria-label="Вложения"
+              aria-expanded={attachMenuOpen}
+              aria-haspopup="menu"
+              title="Вложения"
+            >
+              <LuPlus size={22} />
+            </button>
+            {attachMenuPresent ? (
+              <div
+                role="menu"
+                className={[
+                  'tg-popover absolute bottom-[46px] left-0 z-[3000] w-56 overflow-hidden rounded-2xl bg-white shadow-[0_14px_40px_rgba(0,0,0,0.16)] ring-1 ring-black/10',
+                  attachMenuExiting ? 'tg-popover--out' : '',
+                ].join(' ')}
+              >
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => pickFile('image')}
+                  className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm font-semibold text-stone-900 hover:bg-stone-50 active:bg-stone-100"
+                >
+                  <span className="grid h-9 w-9 place-items-center rounded-xl bg-blue-50 text-blue-600 ring-1 ring-blue-100">
+                    <LuImage size={18} />
+                  </span>
+                  <span className="min-w-0 flex-1">Изображение</span>
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => pickFile('file')}
+                  className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm font-semibold text-stone-900 hover:bg-stone-50 active:bg-stone-100"
+                >
+                  <span className="grid h-9 w-9 place-items-center rounded-xl bg-stone-50 text-stone-700 ring-1 ring-stone-200/70">
+                    <LuFileText size={18} />
+                  </span>
+                  <span className="min-w-0 flex-1">Файл</span>
+                </button>
+              </div>
+            ) : null}
+          </div>
           <textarea
             ref={textareaRef}
             className="tg-input-textarea"
@@ -381,7 +547,45 @@ export function ChatInput({
             onChange={handleChange}
             onKeyDown={handleKeyDown}
           />
-          <button type="button" className="tg-input-icon-btn"><LuSmile size={22} /></button>
+          <div ref={emojiRef} className="relative">
+            <button
+              type="button"
+              className="tg-input-icon-btn"
+              onClick={() => {
+                haptic(8);
+                setEmojiOpen((v) => !v);
+              }}
+              aria-label="Эмодзи"
+              aria-expanded={emojiOpen}
+              aria-haspopup="dialog"
+              title="Эмодзи"
+            >
+              <LuSmile size={22} />
+            </button>
+            {emojiPresent ? (
+              <div
+                className={[
+                  'tg-popover absolute bottom-[46px] right-0 z-[3500] w-[min(360px,calc(100vw-1.5rem))] overflow-hidden rounded-2xl bg-white shadow-[0_18px_60px_rgba(0,0,0,0.2)] ring-1 ring-black/10',
+                  emojiExiting ? 'tg-popover--out' : '',
+                ].join(' ')}
+                role="dialog"
+                aria-label="Выбор эмодзи"
+              >
+                <Picker
+                  data={emojiData as any}
+                  onEmojiSelect={(e: any) => insertEmoji(String(e?.native ?? ''))}
+                  theme="light"
+                  searchPosition="sticky"
+                  previewPosition="none"
+                  navPosition="bottom"
+                  dynamicWidth={true}
+                  perLine={8}
+                  maxFrequentRows={2}
+                  locale="ru"
+                />
+              </div>
+            ) : null}
+          </div>
         </div>
 
         <button
