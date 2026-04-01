@@ -565,7 +565,7 @@ export function ChatInput({
             {emojiPresent ? (
               <div
                 className={[
-                  'tg-popover absolute bottom-[46px] right-0 z-[3500] w-[min(360px,calc(100vw-1.5rem))] overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-md',
+                  'tg-popover tg-emoji-picker-popover absolute bottom-[46px] right-0 z-[3500] overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-md',
                   emojiExiting ? 'tg-popover--out' : '',
                 ].join(' ')}
                 role="dialog"

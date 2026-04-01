@@ -42,7 +42,7 @@
   max-width: 100%;
   min-height: 0;
   flex: 1 1 auto;
-  height: 100%;
+  /* Не используем height: 100%: у процента «ломается» контейнер до фикса flex+min-h-0 на <main>. */
 }
 
 .tg-messenger {
@@ -870,6 +870,18 @@
   pointer-events: none;
 }
 
+/* Emoji picker: 100vw на iOS PWA часто шире видимой области → горизонтальный «разъезд» */
+.tg-emoji-picker-popover {
+  box-sizing: border-box;
+  width: min(360px, calc(100vw - 1.5rem));
+  max-width: calc(100vw - 1.5rem);
+}
+
+.tg-emoji-picker-popover {
+  width: min(360px, calc(100dvi - 1.5rem));
+  max-width: calc(100dvi - 1.5rem);
+}
+
 @keyframes tg-pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.6; }
@@ -1396,6 +1408,9 @@
     }
 
     html[data-chat-open="1"] .tg-main--visible .tg-chat-window > .shrink-0:last-of-type {
+      /* Safe-area слева/справа только на корне чата; здесь оставляем как у Tailwind `p-3` */
+      padding-left: 0.75rem;
+      padding-right: 0.75rem;
       padding-bottom: max(16px, env(safe-area-inset-bottom, 16px));
       background: #fff;
     }
@@ -1487,8 +1502,8 @@
       position: sticky;
       bottom: 0;
       z-index: 40;
-      padding-left: max(0.75rem, env(safe-area-inset-left, 0px));
-      padding-right: max(0.75rem, env(safe-area-inset-right, 0px));
+      padding-left: 0.75rem;
+      padding-right: 0.75rem;
       padding-bottom: max(16px, env(safe-area-inset-bottom, 16px));
       background: #fff;
     }
