@@ -14,6 +14,7 @@ interface UpdatePrompt {
 export function useServiceWorkerUpdate(options?: { showPrompt?: boolean }) {
   const [updatePrompt, setUpdatePrompt] = useState<UpdatePrompt>({ show: false, onUpdate: () => {} });
   const dismissedForThisSession = useRef(false);
+  const reloadOnceRef = useRef(false);
 
   useEffect(() => {
     if (!('serviceWorker' in navigator)) return;
@@ -59,7 +60,20 @@ export function useServiceWorkerUpdate(options?: { showPrompt?: boolean }) {
     };
 
     const handleControllerChange = () => {
-      // New SW took control -> safe to reload once.
+      // New SW took control -> reload at most once per tab session.
+      try {
+        if (reloadOnceRef.current) return;
+        if (typeof sessionStorage !== 'undefined') {
+          const already = sessionStorage.getItem('pwa:reloaded-once');
+          if (already === '1') return;
+          sessionStorage.setItem('pwa:reloaded-once', '1');
+        }
+        reloadOnceRef.current = true;
+      } catch {
+        // ignore storage issues; still avoid multiple reloads in-memory
+        if (reloadOnceRef.current) return;
+        reloadOnceRef.current = true;
+      }
       window.location.reload();
     };
 

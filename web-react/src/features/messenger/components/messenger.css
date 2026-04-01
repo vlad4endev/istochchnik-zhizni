@@ -1475,13 +1475,15 @@
       padding-right: env(safe-area-inset-right, 0px);
     }
 
-    html[data-chat-open="1"] .tg-main--visible .tg-chat-window > header {
+    html[data-chat-open="1"] .tg-main--visible .tg-chat-window > header,
+    html[data-chat-open="1"] .tg-chat-window > header {
       position: sticky;
       top: 0;
       z-index: 40;
     }
 
-    html[data-chat-open="1"] .tg-main--visible .tg-chat-window > .shrink-0:last-of-type {
+    html[data-chat-open="1"] .tg-main--visible .tg-chat-window > .shrink-0:last-of-type,
+    html[data-chat-open="1"] .tg-chat-window > .shrink-0:last-of-type {
       position: sticky;
       bottom: 0;
       z-index: 40;
@@ -1492,7 +1494,8 @@
     }
 
     /* Keep composer actions inside viewport on iOS (keyboard/safe-area edge cases). */
-    html[data-chat-open="1"] .tg-main--visible .tg-chat-window .tg-input-area {
+    html[data-chat-open="1"] .tg-main--visible .tg-chat-window .tg-input-area,
+    html[data-chat-open="1"] .tg-chat-window .tg-input-area {
       display: grid;
       grid-template-columns: minmax(0, 1fr) auto;
       column-gap: 6px;
@@ -1502,7 +1505,8 @@
       overflow: visible;
     }
 
-    html[data-chat-open="1"] .tg-main--visible .tg-chat-window .tg-input-container {
+    html[data-chat-open="1"] .tg-main--visible .tg-chat-window .tg-input-container,
+    html[data-chat-open="1"] .tg-chat-window .tg-input-container {
       display: grid;
       grid-template-columns: auto minmax(0, 1fr) auto;
       column-gap: 2px;
@@ -1513,12 +1517,14 @@
       overflow: hidden;
     }
 
-    html[data-chat-open="1"] .tg-main--visible .tg-chat-window .tg-input-textarea {
+    html[data-chat-open="1"] .tg-main--visible .tg-chat-window .tg-input-textarea,
+    html[data-chat-open="1"] .tg-chat-window .tg-input-textarea {
       min-width: 0;
       width: 100%;
     }
 
-    html[data-chat-open="1"] .tg-main--visible .tg-chat-window .tg-send-btn {
+    html[data-chat-open="1"] .tg-main--visible .tg-chat-window .tg-send-btn,
+    html[data-chat-open="1"] .tg-chat-window .tg-send-btn {
       justify-self: end;
     }
 

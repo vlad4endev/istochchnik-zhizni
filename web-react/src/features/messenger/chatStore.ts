@@ -22,6 +22,8 @@ interface ChatState {
   conversations: ConversationListItem[];
   conversationsLoaded: boolean;
   conversationsLoading: boolean;
+  /** Timestamp of last successful conversations fetch (ms) */
+  conversationsLastLoadedAt: number;
 
   // --- Active chat ---
   activeConversationId: string | null;
@@ -29,6 +31,8 @@ interface ChatState {
   // --- Messages cache: conversationId → messages ---
   messagesByConv: Record<string, MessageWithSender[]>;
   messagesLoading: Record<string, boolean>;
+  /** conversationId -> last successful loadMessages timestamp (ms) */
+  messagesLastLoadedAt: Record<string, number>;
   /** True means there are older messages to load */
   hasMore: Record<string, boolean>;
 
@@ -342,9 +346,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
   conversations: [],
   conversationsLoaded: false,
   conversationsLoading: false,
+  conversationsLastLoadedAt: 0,
   activeConversationId: null,
   messagesByConv: {},
   messagesLoading: {},
+  messagesLastLoadedAt: {},
   hasMore: {},
   readCursorsByConv: {},
   typingByConv: {},
@@ -383,11 +389,20 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   loadConversations: async () => {
     if (get().conversationsLoading) return;
+    // Guard against rapid refetch loops (WS flaps / repeated events).
+    // 1.5s cooldown is enough to prevent UI flicker while staying responsive.
+    if (Date.now() - (get().conversationsLastLoadedAt || 0) < 1500) return;
     set({ conversationsLoading: true });
     try {
       const conversations = await api.fetchConversations();
       const totalUnread = conversations.reduce((sum, c) => sum + c.unread_count, 0);
-      set({ conversations, conversationsLoaded: true, totalUnread, degradedMode: false });
+      set({
+        conversations,
+        conversationsLoaded: true,
+        totalUnread,
+        degradedMode: false,
+        conversationsLastLoadedAt: Date.now(),
+      });
       saveSnapshot(get());
     } catch (e) {
       console.error('[chatStore] loadConversations error:', e);
@@ -412,6 +427,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
   loadMessages: async (conversationId, older = false) => {
     const state = get();
     if (state.messagesLoading[conversationId]) return;
+    if (!older) {
+      const last = state.messagesLastLoadedAt[conversationId] || 0;
+      if (Date.now() - last < 1500) return;
+    }
 
     set((s) => ({
       messagesLoading: { ...s.messagesLoading, [conversationId]: true },
@@ -432,6 +451,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
         return {
           messagesByConv: { ...s.messagesByConv, [conversationId]: deduped },
           hasMore: { ...s.hasMore, [conversationId]: messages.length >= limit },
+          messagesLastLoadedAt: older
+            ? s.messagesLastLoadedAt
+            : { ...s.messagesLastLoadedAt, [conversationId]: Date.now() },
         };
       });
       set({ degradedMode: false });
