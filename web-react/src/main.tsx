@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
+import { registerSW } from 'virtual:pwa-register';
 
 import { AppRouter } from './app/Router';
 import './index.css';
@@ -18,6 +19,36 @@ const queryClient = new QueryClient({
     },
   },
 });
+
+// PWA (iOS Safari) update hardening:
+// iOS PWAs may keep serving stale cached assets unless we aggressively update + reload.
+if (import.meta.env.PROD) {
+  try {
+    const updateSW = registerSW({
+      immediate: true,
+      onNeedRefresh: () => {
+        // Activate waiting SW and reload the app.
+        void updateSW(true);
+      },
+      onRegisteredSW: (_swUrl, reg) => {
+        if (!reg) return;
+        // Periodically re-check updates (iOS sometimes delays update checks).
+        window.setInterval(() => void reg.update(), 60_000);
+        // Also re-check when returning to the app.
+        document.addEventListener('visibilitychange', () => {
+          if (document.visibilityState === 'visible') void reg.update();
+        });
+      },
+    });
+
+    navigator.serviceWorker?.addEventListener?.('controllerchange', () => {
+      // Ensure the new SW takes effect immediately.
+      window.location.reload();
+    });
+  } catch {
+    /* ignore */
+  }
+}
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
