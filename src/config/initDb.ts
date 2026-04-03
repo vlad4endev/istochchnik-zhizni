@@ -55,6 +55,23 @@ CREATE TABLE IF NOT EXISTS church_events (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- Старые БД: таблица church_events уже есть без event_date/event_time (CREATE IF NOT EXISTS не меняет схему)
+ALTER TABLE church_events ADD COLUMN IF NOT EXISTS title VARCHAR(255);
+ALTER TABLE church_events ADD COLUMN IF NOT EXISTS description TEXT;
+ALTER TABLE church_events ADD COLUMN IF NOT EXISTS event_date DATE;
+ALTER TABLE church_events ADD COLUMN IF NOT EXISTS event_time TIME;
+ALTER TABLE church_events ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE;
+ALTER TABLE church_events ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+ALTER TABLE church_events ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+
+UPDATE church_events SET title = 'Событие' WHERE title IS NULL;
+UPDATE church_events SET event_date = CURRENT_DATE WHERE event_date IS NULL;
+UPDATE church_events SET event_time = '12:00'::time WHERE event_time IS NULL;
+
+ALTER TABLE church_events ALTER COLUMN title SET NOT NULL;
+ALTER TABLE church_events ALTER COLUMN event_date SET NOT NULL;
+ALTER TABLE church_events ALTER COLUMN event_time SET NOT NULL;
+
 CREATE TABLE IF NOT EXISTS ministry_role_templates (
   id SERIAL PRIMARY KEY,
   title VARCHAR(120) NOT NULL UNIQUE,
@@ -678,6 +695,10 @@ CREATE INDEX IF NOT EXISTS idx_conv_type
 -- Upgrades for DBs created before metadata / payload / interactions
 ALTER TABLE conversations ADD COLUMN IF NOT EXISTS metadata JSONB NOT NULL DEFAULT '{}'::jsonb;
 ALTER TABLE conversations DROP CONSTRAINT IF EXISTS conversations_type_check;
+-- Старые/битые значения type ломают CHECK при деплое
+UPDATE conversations
+SET type = 'private'
+WHERE type IS NULL OR trim(type::text) NOT IN ('personal', 'private', 'group', 'channel');
 UPDATE conversations SET type = 'private' WHERE type = 'personal';
 ALTER TABLE conversations ADD CONSTRAINT conversations_type_check
   CHECK (type IN ('personal', 'private', 'group', 'channel'));
@@ -688,6 +709,19 @@ ALTER TABLE messages
   ADD COLUMN IF NOT EXISTS reply_to_message_id BIGINT REFERENCES messages(id) ON DELETE SET NULL;
 ALTER TABLE messages ADD COLUMN IF NOT EXISTS payload JSONB NOT NULL DEFAULT '{}'::jsonb;
 ALTER TABLE messages ADD COLUMN IF NOT EXISTS interaction_count INTEGER NOT NULL DEFAULT 0;
+
+-- Дубликаты (conversation_id, sender_id, client_msg_id) ломают UNIQUE INDEX ниже
+UPDATE messages m
+SET client_msg_id = NULL
+WHERE m.client_msg_id IS NOT NULL
+  AND EXISTS (
+    SELECT 1
+    FROM messages m2
+    WHERE m2.conversation_id = m.conversation_id
+      AND m2.sender_id IS NOT DISTINCT FROM m.sender_id
+      AND m2.client_msg_id = m.client_msg_id
+      AND m2.id < m.id
+  );
 
 -- Upgrades for DBs created before read_receipts.last_read_message_id (CREATE TABLE IF NOT EXISTS doesn't add columns)
 ALTER TABLE read_receipts

@@ -1,4 +1,27 @@
-import * as admin from 'firebase-admin';
+import type { messaging, ServiceAccount } from 'firebase-admin';
+
+type FirebaseAdminModule = typeof import('firebase-admin');
+
+/** Lazy require: если пакет не грузится (редкие окружения), API всё равно поднимается без FCM. */
+let firebaseAdminModule: FirebaseAdminModule | null | undefined;
+
+function loadFirebaseAdmin(): FirebaseAdminModule | null {
+  if (firebaseAdminModule !== undefined) {
+    return firebaseAdminModule;
+  }
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-var-requires
+    firebaseAdminModule = require('firebase-admin') as FirebaseAdminModule;
+    return firebaseAdminModule;
+  } catch (e) {
+    firebaseAdminModule = null;
+    console.warn(
+      '[fcm] firebase-admin failed to load (FCM disabled):',
+      e instanceof Error ? e.message : e,
+    );
+    return null;
+  }
+}
 
 let initAttempted = false;
 
@@ -6,7 +29,11 @@ let initAttempted = false;
  * Firebase Admin для FCM. Задайте FIREBASE_SERVICE_ACCOUNT_JSON (полный JSON ключа)
  * или стандартные учётные данные приложения (GOOGLE_APPLICATION_CREDENTIALS и т.д.).
  */
-export function getFirebaseMessaging(): admin.messaging.Messaging | null {
+export function getFirebaseMessaging(): messaging.Messaging | null {
+  const admin = loadFirebaseAdmin();
+  if (!admin) {
+    return null;
+  }
   if (admin.apps.length > 0) {
     return admin.messaging();
   }
@@ -17,7 +44,7 @@ export function getFirebaseMessaging(): admin.messaging.Messaging | null {
   const jsonRaw = process.env.FIREBASE_SERVICE_ACCOUNT_JSON?.trim();
   if (jsonRaw) {
     try {
-      const creds = JSON.parse(jsonRaw) as admin.ServiceAccount;
+      const creds = JSON.parse(jsonRaw) as ServiceAccount;
       admin.initializeApp({ credential: admin.credential.cert(creds) });
       initAttempted = true;
       return admin.messaging();
