@@ -47,8 +47,8 @@ export default defineConfig(({ mode }) => {
         injectRegister: 'auto',
         manifest: {
           id: base,
-          name: 'МОЯ ЦЕРКОВЬ — молитвенный календарь',
-          short_name: 'Молитва',
+          name: 'Моя церковь — молитвенный календарь',
+          short_name: 'Моя церковь',
           description:
             'Цифровая платформа: дневные темы, служения, молитва за членов и профиль.',
           theme_color: '#7d3640',
