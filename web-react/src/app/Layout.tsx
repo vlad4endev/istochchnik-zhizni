@@ -337,17 +337,7 @@ export function Layout() {
         <ConnectivityBanner />
       </div>
       <div className="relative flex min-h-0 w-full min-w-0 flex-1 flex-col">
-      {/* Мобильная шапка: кнопка профиля справа сверху (вместо нижней панели). */}
-      <div className="pointer-events-none fixed right-3 top-3 z-[65] md:hidden [padding-top:env(safe-area-inset-top,0px)]">
-        <NavLink
-          to="/profile"
-          className="pointer-events-auto inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-stone-200/70 bg-white/85 text-stone-700 shadow-[0_10px_30px_rgba(0,0,0,0.12)] backdrop-blur-xl hover:bg-white"
-          aria-label="Профиль"
-          title="Профиль"
-        >
-          <LuUser className="h-5 w-5" strokeWidth={2} aria-hidden />
-        </NavLink>
-      </div>
+      {/* Мобильная шапка: кнопка профиля справа сверху убрана — мешала контенту (особенно iOS PWA). */}
 
       {/* Планшет/десктоп: фиксированный сайдбар (не в потоке, не растягивается по ширине main). На узких — нижняя навигация. */}
       <aside
@@ -478,7 +468,7 @@ export function Layout() {
       </aside>
 
       {/* Main: отступ слева от сайдбара — на родителе (padding); снизу под нижний бар на мобильных */}
-      <main className="app-main-content flex min-h-0 min-w-0 w-full max-w-full flex-1 flex-col overflow-x-clip overflow-y-auto overscroll-y-contain pb-[max(7.5rem,calc(5.25rem+env(safe-area-inset-bottom,16px)))] [-webkit-overflow-scrolling:touch] md:pb-0 2xl:px-8 min-[1920px]:px-12">
+      <main className="app-main-content flex min-h-0 min-w-0 w-full max-w-full flex-1 flex-col overflow-x-clip pb-[max(7.5rem,calc(5.25rem+env(safe-area-inset-bottom,16px)))] md:pb-0 2xl:px-8 min-[1920px]:px-12">
         <Outlet />
       </main>
 

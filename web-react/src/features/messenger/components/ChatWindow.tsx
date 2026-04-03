@@ -244,7 +244,7 @@ export function ChatWindow({
   }, [messages]);
 
   return (
-    <div className="tg-chat-window box-border flex w-full max-w-full min-w-0 min-h-0 flex-1 flex-col overflow-hidden overflow-x-clip bg-gray-50">
+    <div className="tg-chat-window box-border flex w-full max-w-full min-w-0 min-h-0 flex-1 flex-col overflow-hidden overflow-x-hidden bg-gray-50">
       {/* Safe-area только на корне (.tg-chat-window) в messenger.css для iOS — не дублировать здесь */}
       <header className="sticky top-0 z-[100] w-full shrink-0 border-b border-gray-100 bg-white shadow-sm">
         <div className="mx-auto flex h-14 w-full min-w-0 items-center justify-between gap-1.5 px-2 py-2 sm:h-16 sm:gap-3 sm:px-4 md:px-6">

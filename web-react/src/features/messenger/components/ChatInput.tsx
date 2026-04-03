@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useChatStore, isDraftPrivateConversationId } from '../chatStore';
 import { LuPaperclip, LuPlus, LuSmile, LuSend, LuX, LuImage, LuFileText } from 'react-icons/lu';
 import * as api from '../api/messengerApi';
@@ -10,6 +11,10 @@ type PendingAttachment = {
   isImage: boolean;
   previewUrl: string | null;
 };
+
+type PopoverPos =
+  | { bottomPx: number; leftPx?: number; rightPx?: number }
+  | null;
 
 interface ChatInputProps {
   conversationId: string;
@@ -52,6 +57,12 @@ export function ChatInput({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const attachMenuRef = useRef<HTMLDivElement>(null);
   const emojiRef = useRef<HTMLDivElement>(null);
+  const attachBtnRef = useRef<HTMLButtonElement>(null);
+  const emojiBtnRef = useRef<HTMLButtonElement>(null);
+  const attachPopoverRef = useRef<HTMLDivElement>(null);
+  const emojiPopoverRef = useRef<HTMLDivElement>(null);
+  const [attachPos, setAttachPos] = useState<PopoverPos>(null);
+  const [emojiPos, setEmojiPos] = useState<PopoverPos>(null);
   const uploadAbortRef = useRef<AbortController | null>(null);
   const typingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const draftSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -80,8 +91,11 @@ export function ChatInput({
     if (!attachMenuOpen) return;
     const onDoc = (e: MouseEvent | TouchEvent) => {
       const el = attachMenuRef.current;
-      if (!el) return;
-      if (e.target instanceof Node && el.contains(e.target)) return;
+      const pop = attachPopoverRef.current;
+      if (e.target instanceof Node) {
+        if (el && el.contains(e.target)) return;
+        if (pop && pop.contains(e.target)) return;
+      }
       setAttachMenuOpen(false);
     };
     document.addEventListener('mousedown', onDoc, { passive: true });
@@ -111,8 +125,11 @@ export function ChatInput({
     if (!emojiOpen) return;
     const onDoc = (e: MouseEvent | TouchEvent) => {
       const el = emojiRef.current;
-      if (!el) return;
-      if (e.target instanceof Node && el.contains(e.target)) return;
+      const pop = emojiPopoverRef.current;
+      if (e.target instanceof Node) {
+        if (el && el.contains(e.target)) return;
+        if (pop && pop.contains(e.target)) return;
+      }
       setEmojiOpen(false);
     };
     document.addEventListener('mousedown', onDoc, { passive: true });
@@ -137,6 +154,32 @@ export function ChatInput({
     }, 170);
     return () => window.clearTimeout(t);
   }, [emojiOpen, emojiPresent]);
+
+  const computeAnchorPos = (rect: DOMRect, align: 'left' | 'right'): PopoverPos => {
+    const pad = 12;
+    const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
+    const bottomPx = Math.max(pad, Math.round(window.innerHeight - rect.top + 8));
+    if (align === 'left') {
+      const leftPx = clamp(Math.round(rect.left), pad, Math.max(pad, window.innerWidth - pad - 240));
+      return { bottomPx, leftPx };
+    }
+    const rightPx = clamp(Math.round(window.innerWidth - rect.right), pad, window.innerWidth - pad);
+    return { bottomPx, rightPx };
+  };
+
+  useEffect(() => {
+    if (!attachMenuOpen) return;
+    const btn = attachBtnRef.current;
+    if (!btn) return;
+    setAttachPos(computeAnchorPos(btn.getBoundingClientRect(), 'left'));
+  }, [attachMenuOpen]);
+
+  useEffect(() => {
+    if (!emojiOpen) return;
+    const btn = emojiBtnRef.current;
+    if (!btn) return;
+    setEmojiPos(computeAnchorPos(btn.getBoundingClientRect(), 'right'));
+  }, [emojiOpen]);
 
   const haptic = (ms = 12) => {
     try {
@@ -496,6 +539,7 @@ export function ChatInput({
           />
           <div ref={attachMenuRef} className="relative z-[5000]">
             <button
+              ref={attachBtnRef}
               type="button"
               className="tg-input-icon-btn transition-colors duration-200"
               onClick={() => {
@@ -509,38 +553,6 @@ export function ChatInput({
             >
               <LuPlus size={22} />
             </button>
-            {attachMenuPresent ? (
-              <div
-                role="menu"
-                className={[
-                  'tg-popover absolute bottom-[46px] left-0 z-[6000] w-56 overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-md',
-                  attachMenuExiting ? 'tg-popover--out' : '',
-                ].join(' ')}
-              >
-                <button
-                  type="button"
-                  role="menuitem"
-                  onClick={() => pickFile('image')}
-                  className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm font-semibold text-gray-900 transition-colors duration-200 hover:bg-gray-50 active:bg-gray-100"
-                >
-                  <span className="grid h-9 w-9 place-items-center rounded-xl bg-blue-50 text-blue-600 ring-1 ring-blue-100">
-                    <LuImage size={18} />
-                  </span>
-                  <span className="min-w-0 flex-1">Изображение</span>
-                </button>
-                <button
-                  type="button"
-                  role="menuitem"
-                  onClick={() => pickFile('file')}
-                  className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm font-semibold text-gray-900 transition-colors duration-200 hover:bg-gray-50 active:bg-gray-100"
-                >
-                  <span className="grid h-9 w-9 place-items-center rounded-xl bg-stone-50 text-stone-700 ring-1 ring-stone-200/70">
-                    <LuFileText size={18} />
-                  </span>
-                  <span className="min-w-0 flex-1">Файл</span>
-                </button>
-              </div>
-            ) : null}
           </div>
           <textarea
             ref={textareaRef}
@@ -553,6 +565,7 @@ export function ChatInput({
           />
           <div ref={emojiRef} className="relative z-[5000]">
             <button
+              ref={emojiBtnRef}
               type="button"
               className="tg-input-icon-btn transition-colors duration-200"
               onClick={() => {
@@ -566,29 +579,6 @@ export function ChatInput({
             >
               <LuSmile size={22} />
             </button>
-            {emojiPresent ? (
-              <div
-                className={[
-                  'tg-popover tg-emoji-picker-popover absolute bottom-[46px] right-0 z-[6500] overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-md',
-                  emojiExiting ? 'tg-popover--out' : '',
-                ].join(' ')}
-                role="dialog"
-                aria-label="Выбор эмодзи"
-              >
-                <Picker
-                  data={emojiData as any}
-                  onEmojiSelect={(e: any) => insertEmoji(String(e?.native ?? ''))}
-                  theme="light"
-                  searchPosition="sticky"
-                  previewPosition="none"
-                  navPosition="bottom"
-                  dynamicWidth={true}
-                  perLine={8}
-                  maxFrequentRows={2}
-                  locale="ru"
-                />
-              </div>
-            ) : null}
           </div>
         </div>
 
@@ -602,6 +592,85 @@ export function ChatInput({
           <LuSend size={18} style={{ marginLeft: '1px' }} />
         </button>
       </div>
+
+      {typeof document !== 'undefined' && attachMenuPresent && attachPos
+        ? createPortal(
+            <div
+              ref={attachPopoverRef}
+              role="menu"
+              style={{
+                position: 'fixed',
+                bottom: `${attachPos.bottomPx}px`,
+                left: attachPos.leftPx != null ? `${attachPos.leftPx}px` : undefined,
+                right: attachPos.rightPx != null ? `${attachPos.rightPx}px` : undefined,
+                zIndex: 100000,
+              }}
+              className={[
+                'tg-popover w-56 overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-md',
+                attachMenuExiting ? 'tg-popover--out' : '',
+              ].join(' ')}
+            >
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => pickFile('image')}
+                className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm font-semibold text-gray-900 transition-colors duration-200 hover:bg-gray-50 active:bg-gray-100"
+              >
+                <span className="grid h-9 w-9 place-items-center rounded-xl bg-blue-50 text-blue-600 ring-1 ring-blue-100">
+                  <LuImage size={18} />
+                </span>
+                <span className="min-w-0 flex-1">Изображение</span>
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => pickFile('file')}
+                className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm font-semibold text-gray-900 transition-colors duration-200 hover:bg-gray-50 active:bg-gray-100"
+              >
+                <span className="grid h-9 w-9 place-items-center rounded-xl bg-stone-50 text-stone-700 ring-1 ring-stone-200/70">
+                  <LuFileText size={18} />
+                </span>
+                <span className="min-w-0 flex-1">Файл</span>
+              </button>
+            </div>,
+            document.body,
+          )
+        : null}
+
+      {typeof document !== 'undefined' && emojiPresent && emojiPos
+        ? createPortal(
+            <div
+              ref={emojiPopoverRef}
+              className={[
+                'tg-popover tg-emoji-picker-popover overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-md',
+                emojiExiting ? 'tg-popover--out' : '',
+              ].join(' ')}
+              role="dialog"
+              aria-label="Выбор эмодзи"
+              style={{
+                position: 'fixed',
+                bottom: `${emojiPos.bottomPx}px`,
+                left: emojiPos.leftPx != null ? `${emojiPos.leftPx}px` : undefined,
+                right: emojiPos.rightPx != null ? `${emojiPos.rightPx}px` : undefined,
+                zIndex: 100000,
+              }}
+            >
+              <Picker
+                data={emojiData as any}
+                onEmojiSelect={(e: any) => insertEmoji(String(e?.native ?? ''))}
+                theme="light"
+                searchPosition="sticky"
+                previewPosition="none"
+                navPosition="bottom"
+                dynamicWidth={true}
+                perLine={8}
+                maxFrequentRows={2}
+                locale="ru"
+              />
+            </div>,
+            document.body,
+          )
+        : null}
     </div>
   );
 }
