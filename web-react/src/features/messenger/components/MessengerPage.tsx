@@ -1,6 +1,6 @@
 import { useEffect, useCallback, useState, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
-import { useChatStore } from '../chatStore';
+import { useChatStore, isDraftPrivateConversationId } from '../chatStore';
 import { useMessengerWs } from '../useMessengerWs';
 import { useSwipeGesture } from '../hooks/useSwipeGesture';
 import { ChatList } from './ChatList';
@@ -102,9 +102,12 @@ export function MessengerPage() {
   const handleBack = useCallback(() => {
     blurActiveElement();
     setIsTransitioning(true);
+    if (activeId && isDraftPrivateConversationId(activeId)) {
+      setActive(null);
+    }
     setMobileView('list');
     setTimeout(() => setIsTransitioning(false), 350);
-  }, []);
+  }, [activeId, setActive]);
 
   return (
     <div className="tg-messenger-page">

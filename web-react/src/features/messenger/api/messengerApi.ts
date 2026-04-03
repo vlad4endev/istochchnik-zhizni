@@ -93,6 +93,7 @@ export interface SearchMember {
   name: string;
   first_name: string | null;
   last_name: string | null;
+  avatar_url?: string | null;
 }
 
 // ─── API calls ────────────────────────────────────────────────

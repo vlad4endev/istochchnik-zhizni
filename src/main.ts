@@ -21,6 +21,7 @@ import userRoutes from './routes/userRoutes';
 import pushRoutes from './routes/pushRoutes';
 import messengerRoutes from './routes/messengerRoutes';
 import notificationsRoutes from './routes/notificationsRoutes';
+import telegramRoutes from './routes/telegramRoutes';
 import { attachRealtimeWebSocket } from './realtime/wsHub';
 import { initPushCronJobs } from './cron/pushJobs';
 
@@ -121,6 +122,7 @@ app.use('/api/users', userRoutes);
 app.use('/api/push', pushRoutes);
 app.use('/api/notifications', notificationsRoutes);
 app.use('/api/messenger', messengerRoutes);
+app.use('/api/telegram', telegramRoutes);
 
 // Debug/version endpoint (helps verify that deploy updated)
 app.get('/api/version', (_req, res) => {

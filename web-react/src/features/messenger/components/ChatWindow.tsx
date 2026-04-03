@@ -1,6 +1,6 @@
 import { useEffect, useRef, useMemo, useCallback, useState, useLayoutEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useChatStore, EMPTY_ARRAY } from '../chatStore';
+import { useChatStore, EMPTY_ARRAY, isDraftPrivateConversationId } from '../chatStore';
 import { MessageBubble } from './MessageBubble';
 import { ChatInput } from './ChatInput';
 import { SearchChat } from './SearchChat';
@@ -22,6 +22,7 @@ export function ChatWindow({
   sendTypingStop,
 }: ChatWindowProps) {
   const navigate = useNavigate();
+  const isDraft = isDraftPrivateConversationId(conversationId);
   const messages = useChatStore((s) => s.messagesByConv[conversationId] || EMPTY_ARRAY);
   const loading = useChatStore((s) => s.messagesLoading[conversationId] || false);
   const hasMore = useChatStore((s) => s.hasMore[conversationId] ?? true);
@@ -29,6 +30,7 @@ export function ChatWindow({
   const markReadUpTo = useChatStore((s) => s.markReadUpTo);
   const markAsRead = useChatStore((s) => s.markAsRead);
   const conversations = useChatStore((s) => s.conversations);
+  const draftPeer = useChatStore((s) => s.privateDraftPeer);
   const typingUsers = useChatStore((s) => s.typingByConv[conversationId] || EMPTY_ARRAY);
   const onlineMembers = useChatStore((s) => s.onlineMembers);
   const currentMemberId = useChatStore((s) => s.currentMemberId);
@@ -47,12 +49,16 @@ export function ChatWindow({
   useEffect(() => {
     nearBottomRef.current = true;
     restoreScrollRef.current = null;
-    void loadMessages(conversationId);
+    if (!isDraft) {
+      void loadMessages(conversationId);
+    }
   }, [conversationId, loadMessages]);
 
   // On open: mark chat as read (server cursor + local unread reset)
   useEffect(() => {
-    void markAsRead(conversationId);
+    if (!isDraft) {
+      void markAsRead(conversationId);
+    }
   }, [conversationId, markAsRead]);
 
   const flushVisibleReads = useCallback(() => {
@@ -91,6 +97,7 @@ export function ChatWindow({
   useEffect(() => {
     const root = scrollRef.current;
     if (!root) return;
+    if (isDraft) return;
     if (typeof IntersectionObserver === 'undefined') return;
 
     visibleForeignIdsRef.current.clear();
@@ -134,7 +141,7 @@ export function ChatWindow({
       }
       observer.disconnect();
     };
-  }, [conversationId, currentMemberId, flushVisibleReads]);
+  }, [conversationId, currentMemberId, flushVisibleReads, isDraft]);
 
   const handleScroll = useCallback(() => {
     const el = scrollRef.current;
@@ -166,6 +173,11 @@ export function ChatWindow({
   }, [messages, conversationId]);
 
   const displayName = useMemo(() => {
+    if (isDraft && draftPeer) {
+      const fn = draftPeer.first_name || '';
+      const ln = draftPeer.last_name || '';
+      return `${fn} ${ln}`.trim() || draftPeer.name || 'Чат';
+    }
     if (!conv) return 'Чат';
     if (conv.type === 'private' && conv.other_member) {
       const fn = conv.other_member.first_name || '';
@@ -173,15 +185,17 @@ export function ChatWindow({
       return `${fn} ${ln}`.trim() || conv.other_member.name;
     }
     return conv.title || 'Чат';
-  }, [conv]);
+  }, [conv, draftPeer, isDraft]);
 
   const headerInitial = displayName.trim().charAt(0).toUpperCase() || '?';
-  const headerAvatarUrl =
-    conv?.type === 'private'
+  const headerAvatarUrl = isDraft
+    ? (draftPeer?.avatar_url ?? null)
+    : conv?.type === 'private'
       ? (conv.other_member?.avatar_url ?? null)
       : (conv?.avatar_url ?? null);
   const headerAvatarSrc = useMemo(() => resolvePublicUrl(headerAvatarUrl), [headerAvatarUrl]);
   const headerAvatarColor = useMemo(() => {
+    if (isDraft && draftPeer) return 'var(--tg-primary)';
     if (!conv?.id) return 'var(--tg-primary)';
     let hash = 0;
     for (let i = 0; i < conv.id.length; i++) {
@@ -189,7 +203,7 @@ export function ChatWindow({
     }
     const palette = ['#7d3640', '#0d9488', '#6366f1', '#c2410c', '#4f46e5', '#0e7490'];
     return palette[Math.abs(hash) % palette.length];
-  }, [conv?.id]);
+  }, [conv?.id, draftPeer, isDraft]);
 
   const isOnline = conv?.type === 'private' && conv.other_member && onlineMembers.has(conv.other_member.id);
 
@@ -197,12 +211,13 @@ export function ChatWindow({
     if (typingUsers.length > 0) {
       return `${typingUsers.map((u: { memberName: string }) => u.memberName.split(' ')[0]).join(', ')} печатает…`;
     }
+    if (isDraft) return 'черновик · чат появится после 1 сообщения';
     if (!conv) return '';
     if (conv.type === 'private' && conv.other_member) {
       return isOnline ? 'в сети' : 'был(а) недавно';
     }
     return conv.type === 'channel' ? 'канал' : 'группа';
-  }, [conv, typingUsers, isOnline]);
+  }, [conv, typingUsers, isOnline, isDraft]);
 
   const groupedMessages = useMemo(() => {
     return messages.map((msg, idx) => {
@@ -229,7 +244,7 @@ export function ChatWindow({
   }, [messages]);
 
   return (
-    <div className="tg-chat-window box-border flex h-[100dvh] w-full max-w-full min-w-0 min-h-0 flex-col overflow-hidden overflow-x-clip bg-gray-50">
+    <div className="tg-chat-window box-border flex w-full max-w-full min-w-0 min-h-0 flex-1 flex-col overflow-hidden overflow-x-clip bg-gray-50">
       {/* Safe-area только на корне (.tg-chat-window) в messenger.css для iOS — не дублировать здесь */}
       <header className="sticky top-0 z-[100] w-full shrink-0 border-b border-gray-100 bg-white shadow-sm">
         <div className="mx-auto flex h-14 w-full min-w-0 items-center justify-between gap-1.5 px-2 py-2 sm:h-16 sm:gap-3 sm:px-4 md:px-6">
@@ -244,11 +259,11 @@ export function ChatWindow({
 
           {/* Middle: Main info (Avatar + Name & Subtitle) - Stricly capped via flex-1 min-w-0 */}
           <div
-            role="button"
-            tabIndex={0}
-            onClick={() => navigate(`/messenger/chat/${conversationId}/manage`)}
-            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') navigate(`/messenger/chat/${conversationId}/manage`); }}
-            className="flex min-w-0 flex-1 cursor-pointer items-center gap-2.5 rounded-2xl px-2 py-1 text-left transition-colors duration-200 hover:bg-stone-50 active:scale-[0.99] sm:gap-3 sm:px-3"
+            role={isDraft ? undefined : 'button'}
+            tabIndex={isDraft ? -1 : 0}
+            onClick={isDraft ? undefined : () => navigate(`/messenger/chat/${conversationId}/manage`)}
+            onKeyDown={isDraft ? undefined : (e) => { if (e.key === 'Enter' || e.key === ' ') navigate(`/messenger/chat/${conversationId}/manage`); }}
+            className="flex min-w-0 flex-1 items-center gap-2 rounded-2xl px-1.5 py-1 text-left transition-colors duration-200 hover:bg-stone-50 active:scale-[0.99] sm:gap-3 sm:px-3"
           >
             <div
               className="grid h-9 w-9 shrink-0 place-items-center overflow-hidden rounded-full font-semibold text-white sm:h-10 sm:w-10"
@@ -359,7 +374,7 @@ export function ChatWindow({
         )}
       </div>
 
-      <div className="sticky bottom-0 z-20 w-full min-w-0 max-w-full shrink-0 border-t bg-white p-3 [padding-bottom:env(safe-area-inset-bottom,16px)]">
+      <div className="sticky bottom-0 z-20 w-full min-w-0 max-w-full shrink-0 border-t bg-white p-3">
         <ChatInput
           conversationId={conversationId}
           sendTypingStart={sendTypingStart}

@@ -65,7 +65,12 @@ CREATE TABLE IF NOT EXISTS ministry_direction_role_templates (
 CREATE TABLE IF NOT EXISTS global_settings (
   id INTEGER PRIMARY KEY CHECK (id = 1),
   start_date DATE NOT NULL,
-  rutube_embed_code TEXT
+  rutube_embed_code TEXT,
+  telegram_bot_token TEXT,
+  telegram_prayer_chat_id TEXT,
+  telegram_coordinator_chat_id TEXT,
+  telegram_default_chat_id TEXT,
+  telegram_enabled BOOLEAN NOT NULL DEFAULT FALSE
 );
 
 CREATE TABLE IF NOT EXISTS member_cycle_overrides (
@@ -168,6 +173,11 @@ ALTER TABLE members ADD CONSTRAINT members_app_role_check CHECK (app_role IN ('m
 ALTER TABLE members ADD COLUMN IF NOT EXISTS is_collection_coordinator BOOLEAN NOT NULL DEFAULT FALSE;
 
 ALTER TABLE global_settings ADD COLUMN IF NOT EXISTS rutube_embed_code TEXT;
+ALTER TABLE global_settings ADD COLUMN IF NOT EXISTS telegram_bot_token TEXT;
+ALTER TABLE global_settings ADD COLUMN IF NOT EXISTS telegram_prayer_chat_id TEXT;
+ALTER TABLE global_settings ADD COLUMN IF NOT EXISTS telegram_coordinator_chat_id TEXT;
+ALTER TABLE global_settings ADD COLUMN IF NOT EXISTS telegram_default_chat_id TEXT;
+ALTER TABLE global_settings ADD COLUMN IF NOT EXISTS telegram_enabled BOOLEAN NOT NULL DEFAULT FALSE;
 
 CREATE TABLE IF NOT EXISTS cycle_collection_claims (
   cycle_index INTEGER NOT NULL,

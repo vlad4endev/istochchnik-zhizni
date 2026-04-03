@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { useChatStore } from '../chatStore';
+import { useChatStore, isDraftPrivateConversationId } from '../chatStore';
 import { LuPaperclip, LuPlus, LuSmile, LuSend, LuX, LuImage, LuFileText } from 'react-icons/lu';
 import * as api from '../api/messengerApi';
 import Picker from '@emoji-mart/react';
@@ -242,7 +242,9 @@ export function ChatInput({
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
     }
-    sendTypingStop(conversationId);
+    if (!isDraftPrivateConversationId(conversationId)) {
+      sendTypingStop(conversationId);
+    }
   };
 
   const pickFile = (kind: 'image' | 'file') => {
@@ -301,11 +303,13 @@ export function ChatInput({
     e.target.style.height = `${e.target.scrollHeight}px`;
 
     // Typing indicator
-    sendTypingStart(conversationId);
-    if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
-    typingTimerRef.current = setTimeout(() => {
-      sendTypingStop(conversationId);
-    }, 3000);
+    if (!isDraftPrivateConversationId(conversationId)) {
+      sendTypingStart(conversationId);
+      if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
+      typingTimerRef.current = setTimeout(() => {
+        sendTypingStop(conversationId);
+      }, 3000);
+    }
 
     // Auto-save draft with debounce
     if (draftSaveTimerRef.current) clearTimeout(draftSaveTimerRef.current);
@@ -490,7 +494,7 @@ export function ChatInput({
             accept="image/*"
             onChange={(e) => void handleFileSelected(e.target.files?.[0] ?? null)}
           />
-          <div ref={attachMenuRef} className="relative">
+          <div ref={attachMenuRef} className="relative z-[5000]">
             <button
               type="button"
               className="tg-input-icon-btn transition-colors duration-200"
@@ -509,7 +513,7 @@ export function ChatInput({
               <div
                 role="menu"
                 className={[
-                  'tg-popover absolute bottom-[46px] left-0 z-[3000] w-56 overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-md',
+                  'tg-popover absolute bottom-[46px] left-0 z-[6000] w-56 overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-md',
                   attachMenuExiting ? 'tg-popover--out' : '',
                 ].join(' ')}
               >
@@ -547,7 +551,7 @@ export function ChatInput({
             onChange={handleChange}
             onKeyDown={handleKeyDown}
           />
-          <div ref={emojiRef} className="relative">
+          <div ref={emojiRef} className="relative z-[5000]">
             <button
               type="button"
               className="tg-input-icon-btn transition-colors duration-200"
@@ -565,7 +569,7 @@ export function ChatInput({
             {emojiPresent ? (
               <div
                 className={[
-                  'tg-popover tg-emoji-picker-popover absolute bottom-[46px] right-0 z-[3500] overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-md',
+                  'tg-popover tg-emoji-picker-popover absolute bottom-[46px] right-0 z-[6500] overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-md',
                   emojiExiting ? 'tg-popover--out' : '',
                 ].join(' ')}
                 role="dialog"

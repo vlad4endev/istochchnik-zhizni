@@ -1,7 +1,8 @@
 import * as api from '../api/messengerApi';
 import type { SearchMember } from '../api/messengerApi';
-import { useEffect, useRef, useCallback, useState } from 'react';
+import { useEffect, useRef, useCallback, useMemo, useState } from 'react';
 import { LuSearch, LuX, LuUsers, LuMegaphone } from 'react-icons/lu';
+import { useChatStore, DRAFT_PRIVATE_PREFIX } from '../chatStore';
 
 interface NewChatDialogProps {
   onClose: () => void;
@@ -53,6 +54,8 @@ export function NewChatDialog({ onClose, onCreated }: NewChatDialogProps) {
   const [mode, setMode] = useState<'contact' | 'group' | 'channel'>('contact');
   const [title, setTitle] = useState('');
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const conversations = useChatStore((s) => s.conversations);
+  const openPrivateDraft = useChatStore((s) => s.openPrivateDraft);
 
   const performSearch = useCallback(async (q: string) => {
     setSearching(true);
@@ -78,13 +81,35 @@ export function NewChatDialog({ onClose, onCreated }: NewChatDialogProps) {
     return () => { if (searchTimerRef.current) clearTimeout(searchTimerRef.current); };
   }, [searchQuery, performSearch]);
 
-  const handleCreateChat = async (member: SearchMember) => {
-    try {
-      const result = await api.createPersonalChat(member.id);
-      onCreated(result.conversationId);
-    } catch (e) {
-      alert('Ошибка при создании чата');
+  const sortedContacts = useMemo(() => {
+    const byMemberId = new Map<number, { convId: string; updatedAt: string }>();
+    for (const c of conversations) {
+      if (c.type !== 'private' || !c.other_member) continue;
+      byMemberId.set(c.other_member.id, { convId: c.id, updatedAt: c.updated_at });
     }
+    const norm = (s: string) => s.trim().toLowerCase();
+    const displayName = (m: SearchMember) =>
+      norm(m.first_name ? `${m.first_name} ${m.last_name || ''}` : m.name);
+
+    return [...searchResults].sort((a, b) => {
+      const aConv = byMemberId.get(a.id);
+      const bConv = byMemberId.get(b.id);
+      if (aConv && !bConv) return -1;
+      if (!aConv && bConv) return 1;
+      if (aConv && bConv) {
+        // newer first
+        const at = Date.parse(aConv.updatedAt);
+        const bt = Date.parse(bConv.updatedAt);
+        if (Number.isFinite(at) && Number.isFinite(bt) && at !== bt) return bt - at;
+      }
+      return displayName(a).localeCompare(displayName(b), 'ru');
+    });
+  }, [conversations, searchResults]);
+
+  const handleOpenChat = (member: SearchMember) => {
+    // Не создаём чат в списке до первого сообщения — открываем "черновик" private-чата.
+    openPrivateDraft(member);
+    onCreated(`${DRAFT_PRIVATE_PREFIX}${member.id}`);
   };
 
   const handleCreateGroup = async () => {
@@ -137,18 +162,27 @@ export function NewChatDialog({ onClose, onCreated }: NewChatDialogProps) {
 
               {searching ? (
                 <div className="tg-empty-state">Поиск...</div>
-              ) : searchResults.map((u) => (
+              ) : sortedContacts.map((u) => (
                 <button 
                   key={u.id} 
                   className="tg-member-item"
-                  onClick={() => handleCreateChat(u)}
+                  onClick={() => handleOpenChat(u)}
                 >
                   <div className="tg-member-avatar" style={{ background: getAvatarColor(String(u.id)) }}>
-                    {u.first_name?.[0] || u.name[0]}
+                    {u.avatar_url ? (
+                      <img
+                        src={u.avatar_url}
+                        alt=""
+                        className="h-full w-full rounded-full object-cover"
+                        loading="lazy"
+                      />
+                    ) : (
+                      (u.first_name?.[0] || u.name[0])
+                    )}
                   </div>
                   <div className="tg-member-info">
                     <div className="tg-member-name">{u.first_name ? `${u.first_name} ${u.last_name || ''}` : u.name}</div>
-                    <div className="tg-member-status">зарегистрирован</div>
+                    <div className="tg-member-status">Откроется как черновик · появится в списке после 1 сообщения</div>
                   </div>
                 </button>
               ))}

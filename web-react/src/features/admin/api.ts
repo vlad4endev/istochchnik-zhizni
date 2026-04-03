@@ -249,3 +249,40 @@ export async function rejectAccessRequest(id: number, review_note?: string): Pro
     review_note: review_note?.trim() || undefined,
   });
 }
+
+export interface TelegramSettingsResponse {
+  enabled: boolean;
+  bot_token_masked: string | null;
+  prayer_chat_id: string | null;
+  coordinator_chat_id: string | null;
+  default_chat_id: string | null;
+  has_bot_token: boolean;
+}
+
+export async function fetchTelegramSettings(): Promise<TelegramSettingsResponse> {
+  const { data } = await apiClient.get<TelegramSettingsResponse>('/api/telegram/settings');
+  return data;
+}
+
+export async function patchTelegramSettings(body: {
+  enabled?: boolean;
+  bot_token?: string | null;
+  prayer_chat_id?: string | null;
+  coordinator_chat_id?: string | null;
+  default_chat_id?: string | null;
+}): Promise<TelegramSettingsResponse> {
+  const { data } = await apiClient.patch<TelegramSettingsResponse>('/api/telegram/settings', body);
+  return data;
+}
+
+export async function sendTelegramMessage(body: {
+  kind: 'prayer_today' | 'next_week' | 'custom';
+  chat_id?: string;
+  text?: string;
+}): Promise<{ ok: boolean; kind: string; chat_id: string }> {
+  const { data } = await apiClient.post<{ ok: boolean; kind: string; chat_id: string }>(
+    '/api/telegram/send',
+    body,
+  );
+  return data;
+}

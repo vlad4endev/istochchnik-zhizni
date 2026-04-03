@@ -6,6 +6,7 @@ import { LuDownload, LuFileText } from 'react-icons/lu';
 import { IoAlertCircleOutline, IoTimeOutline } from 'react-icons/io5';
 import { resolvePublicUrl } from '../../../lib/resolvePublicUrl';
 import { motion, useMotionValue, useTransform, animate } from 'framer-motion';
+import type { PanInfo } from 'framer-motion';
 import { LuReply } from 'react-icons/lu';
 
 interface MessageBubbleProps {
@@ -300,7 +301,7 @@ export function MessageBubble({ message, isGroupedPrev, isGroupedNext, onJumpToM
           dragConstraints={{ left: 0, right: 0 }}
           dragElastic={0.2}
           style={{ x }}
-          onDragEnd={(_e, info) => {
+          onDragEnd={(_e: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
             const dx = info.offset.x;
             if (dx < -50) {
               setReplyingTo(message);

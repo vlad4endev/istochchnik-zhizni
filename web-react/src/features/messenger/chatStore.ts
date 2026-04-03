@@ -1,9 +1,22 @@
 import { create } from 'zustand';
 import axios from 'axios';
-import type { ConversationListItem, MessageWithSender } from './api/messengerApi';
+import type { ConversationListItem, MessageWithSender, SearchMember } from './api/messengerApi';
 import * as api from './api/messengerApi';
 import { emitAppToast } from '../../lib/uiFeedback';
 import { playAudio } from '../../utils/audio';
+
+/** Личный чат до первого сообщения: нет строки в БД, пока пользователь не отправит сообщение. */
+export const DRAFT_PRIVATE_PREFIX = 'draft:';
+
+export function isDraftPrivateConversationId(id: string | null | undefined): boolean {
+  return typeof id === 'string' && id.startsWith(DRAFT_PRIVATE_PREFIX);
+}
+
+export function parseDraftPrivateMemberId(id: string): number | null {
+  if (!isDraftPrivateConversationId(id)) return null;
+  const n = Number(id.slice(DRAFT_PRIVATE_PREFIX.length));
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
 
 // ─── Types ────────────────────────────────────────────────────
 
@@ -27,6 +40,8 @@ interface ChatState {
 
   // --- Active chat ---
   activeConversationId: string | null;
+  /** Собеседник для черновика личного чата (пока нет conversation в API). */
+  privateDraftPeer: SearchMember | null;
 
   // --- Messages cache: conversationId → messages ---
   messagesByConv: Record<string, MessageWithSender[]>;
@@ -79,8 +94,15 @@ interface ChatState {
   // --- Actions ---
   loadConversations: () => Promise<void>;
   setActiveConversation: (id: string | null) => void;
+  openPrivateDraft: (peer: SearchMember) => void;
   loadMessages: (conversationId: string, older?: boolean) => Promise<void>;
   hydrateFromCache: () => void;
+
+  /**
+   * Черновик личного чата → реальный id в БД (один раз перед первым сообщением/вложением).
+   * Если id не draft — возвращает его же.
+   */
+  promoteDraftToRealConversation: (conversationId: string) => Promise<string | null>;
 
   /** Optimistic send: message appears instantly, then confirmed by server */
   sendMessage: (
@@ -348,6 +370,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   conversationsLoading: false,
   conversationsLastLoadedAt: 0,
   activeConversationId: null,
+  privateDraftPeer: null,
   messagesByConv: {},
   messagesLoading: {},
   messagesLastLoadedAt: {},
@@ -416,15 +439,36 @@ export const useChatStore = create<ChatState>((set, get) => ({
   // ─── Active conversation ──────────────────────────────────
 
   setActiveConversation: (id) => {
-    set({ activeConversationId: id, replyToMessage: null, editingMessage: null });
-    if (id && !get().messagesByConv[id]) {
+    set((s) => ({
+      activeConversationId: id,
+      replyToMessage: null,
+      editingMessage: null,
+      privateDraftPeer: id && isDraftPrivateConversationId(id) ? s.privateDraftPeer : null,
+    }));
+    if (id && !get().messagesByConv[id] && !isDraftPrivateConversationId(id)) {
       void get().loadMessages(id);
     }
+  },
+
+  openPrivateDraft: (peer) => {
+    const draftId = `${DRAFT_PRIVATE_PREFIX}${peer.id}`;
+    set((s) => ({
+      privateDraftPeer: peer,
+      activeConversationId: draftId,
+      replyToMessage: null,
+      editingMessage: null,
+      messagesByConv: {
+        ...s.messagesByConv,
+        [draftId]: s.messagesByConv[draftId] || [],
+      },
+      hasMore: { ...s.hasMore, [draftId]: false },
+    }));
   },
 
   // ─── Load messages ────────────────────────────────────────
 
   loadMessages: async (conversationId, older = false) => {
+    if (isDraftPrivateConversationId(conversationId)) return;
     const state = get();
     if (state.messagesLoading[conversationId]) return;
     if (!older) {
@@ -468,9 +512,56 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
   },
 
+  promoteDraftToRealConversation: async (conversationId) => {
+    if (!isDraftPrivateConversationId(conversationId)) return conversationId;
+    const otherId = parseDraftPrivateMemberId(conversationId);
+    if (otherId == null) return null;
+    const peer = get().privateDraftPeer;
+    if (!peer || peer.id !== otherId) {
+      emitAppToast('Не удалось определить собеседника', 'error');
+      return null;
+    }
+    try {
+      const created = await api.createPersonalChat(otherId);
+      const realId = created.conversationId;
+      const draftKey = conversationId;
+      set((s) => {
+        const nextMsgs = { ...s.messagesByConv };
+        const carry = nextMsgs[draftKey];
+        delete nextMsgs[draftKey];
+        let convs = s.conversations;
+        if (created.conversation) {
+          const rest = s.conversations.filter((c) => c.id !== created.conversation!.id);
+          convs = [created.conversation, ...rest];
+        }
+        return {
+          activeConversationId: realId,
+          privateDraftPeer: null,
+          messagesByConv: carry?.length ? { ...nextMsgs, [realId]: carry } : nextMsgs,
+          conversations: convs,
+          totalUnread: convs.reduce((sum, c) => sum + c.unread_count, 0),
+        };
+      });
+      if (!created.conversation) {
+        await get().loadConversations();
+      }
+      return realId;
+    } catch (e) {
+      if (axios.isAxiosError(e)) {
+        console.error('[chatStore] createPersonalChat (draft) error:', e.response?.data, e.message);
+      } else {
+        console.error('[chatStore] createPersonalChat (draft) error:', e);
+      }
+      emitAppToast('Не удалось начать диалог', 'error');
+      return null;
+    }
+  },
+
   // ─── Send message (optimistic) ────────────────────────────
 
   sendMessage: async (conversationId, content, replyToId, payloadType = 'text', payload = {}) => {
+    const convId = await get().promoteDraftToRealConversation(conversationId);
+    if (convId == null) return;
     playAudio('send');
     const tempId = `temp-${Date.now()}-${Math.random().toString(36).slice(2)}`;
     const clientMsgId = `c-${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -485,7 +576,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     // Optimistic: add temp message immediately
     const optimistic: MessageWithSender = {
       id: tempId,
-      conversation_id: conversationId,
+      conversation_id: convId,
       sender_id: get().currentMemberId ?? null,
       client_msg_id: clientMsgId,
       content,
@@ -515,19 +606,19 @@ export const useChatStore = create<ChatState>((set, get) => ({
     set((s) => ({
       messagesByConv: {
         ...s.messagesByConv,
-        [conversationId]: [...(s.messagesByConv[conversationId] || []), optimistic],
+        [convId]: [...(s.messagesByConv[convId] || []), optimistic],
       },
       replyToMessage: null,
     }));
 
     try {
-      const real = await api.sendMessage(conversationId, content, serverReplyId, clientMsgId, pt, payload);
+      const real = await api.sendMessage(convId, content, serverReplyId, clientMsgId, pt, payload);
       // Replace temp with real and dedupe against WS echo by id/client_msg_id.
       set((s) => ({
         messagesByConv: {
           ...s.messagesByConv,
-          [conversationId]: dedupeMessages(
-            (s.messagesByConv[conversationId] || []).map((m) => (m.id === tempId ? { ...real, status: 'sent' } : m)),
+          [convId]: dedupeMessages(
+            (s.messagesByConv[convId] || []).map((m) => (m.id === tempId ? { ...real, status: 'sent' } : m)),
           ),
         },
       }));
@@ -547,7 +638,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       set((s) => ({
         messagesByConv: {
           ...s.messagesByConv,
-          [conversationId]: (s.messagesByConv[conversationId] || []).map((m) =>
+          [convId]: (s.messagesByConv[convId] || []).map((m) =>
             m.id === tempId ? { ...m, status: 'error' } : m,
           ),
         },
@@ -557,7 +648,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       const outboxItem: OutboxItem = {
         queueId,
         tempId,
-        conversationId,
+        conversationId: convId,
         content,
         replyToId: serverReplyId,
         clientMsgId,

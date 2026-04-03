@@ -10,7 +10,14 @@ import {
 } from 'react';
 import { createPortal } from 'react-dom';
 
-import { LuCalendarDays, LuChevronDown, LuHistory, LuImage, LuPenLine } from 'react-icons/lu';
+import {
+  LuCalendarDays,
+  LuChevronDown,
+  LuHistory,
+  LuImage,
+  LuPenLine,
+  LuSend,
+} from 'react-icons/lu';
 import { format } from 'date-fns';
 import { ru } from 'date-fns/locale';
 
@@ -37,7 +44,10 @@ import {
   fetchGlobalMinistries,
   fetchGlobalThemes,
   fetchRoleTemplates,
+  fetchTelegramSettings,
   mergeDuplicateMembers,
+  patchTelegramSettings,
+  sendTelegramMessage,
   setDirectionTemplateRoles,
   setMemberAppRole,
   setOneTimeMemberDate,
@@ -47,6 +57,7 @@ import {
   updateGlobalThemeApi,
   updateMinistryApi,
   type MinistryDirectionTemplate,
+  type TelegramSettingsResponse,
 } from '../api';
 import type { AppUser } from '../types';
 import { fetchPrayerRequestHistory, type PrayerHistoryItem } from '../../profile/api';
@@ -57,6 +68,7 @@ const Q_DIRS = ['admin', 'templates', 'directions'] as const;
 const Q_GT = ['admin', 'global', 'themes'] as const;
 const Q_GM = ['admin', 'global', 'ministries'] as const;
 const Q_GB = ['admin', 'global', 'backsliders'] as const;
+const Q_TG = ['admin', 'telegram', 'settings'] as const;
 
 function displayName(u: AppUser): string {
   const f = (u.first_name ?? '').trim();
@@ -256,6 +268,7 @@ export function AdminPage() {
       {tab === 'calendar' && <CalendarSection />}
       {tab === 'templates' && <TemplatesSection />}
       {tab === 'project' && <ProjectSection />}
+      {tab === 'telegram' && <TelegramSection />}
     </div>
   );
 }
@@ -2166,6 +2179,250 @@ function TemplatesSection() {
       ) : null}
     </div>
   );
+}
+
+function TelegramSection() {
+  const qc = useQueryClient();
+  const { data, isLoading, error } = useQuery({
+    queryKey: Q_TG,
+    queryFn: fetchTelegramSettings,
+  });
+  const [form, setForm] = useState({
+    enabled: false,
+    bot_token: '',
+    prayer_chat_id: '',
+    coordinator_chat_id: '',
+    default_chat_id: '',
+  });
+  const [customText, setCustomText] = useState('');
+  const [customChatId, setCustomChatId] = useState('');
+  const [note, setNote] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
+
+  useEffect(() => {
+    if (!data) return;
+    setForm({
+      enabled: data.enabled,
+      bot_token: '',
+      prayer_chat_id: data.prayer_chat_id ?? '',
+      coordinator_chat_id: data.coordinator_chat_id ?? '',
+      default_chat_id: data.default_chat_id ?? '',
+    });
+  }, [data]);
+
+  const saveMut = useMutation({
+    mutationFn: () =>
+      patchTelegramSettings({
+        enabled: form.enabled,
+        bot_token: normalizeUiString(form.bot_token),
+        prayer_chat_id: normalizeUiString(form.prayer_chat_id),
+        coordinator_chat_id: normalizeUiString(form.coordinator_chat_id),
+        default_chat_id: normalizeUiString(form.default_chat_id),
+      }),
+    onSuccess: (next) => {
+      setNote({ type: 'ok', text: 'Telegram настройки сохранены.' });
+      qc.setQueryData(Q_TG, next);
+      setForm((prev) => ({ ...prev, bot_token: '' }));
+    },
+    onError: (e) => setNote({ type: 'err', text: apiErrorMessage(e, 'Не удалось сохранить Telegram настройки.') }),
+  });
+
+  const sendMut = useMutation({
+    mutationFn: (payload: { kind: 'prayer_today' | 'next_week' | 'custom'; text?: string; chat_id?: string }) =>
+      sendTelegramMessage(payload),
+    onSuccess: (r) => {
+      setNote({ type: 'ok', text: `Сообщение отправлено в чат ${r.chat_id}.` });
+    },
+    onError: (e) => setNote({ type: 'err', text: apiErrorMessage(e, 'Ошибка отправки в Telegram.') }),
+  });
+
+  if (isLoading) {
+    return <div className="h-44 animate-pulse rounded-2xl bg-stone-200/50" />;
+  }
+
+  if (error) {
+    return (
+      <div className="rounded-2xl border border-red-200 bg-red-50/80 p-6 text-center">
+        <p className="font-semibold text-red-900">Не удалось загрузить Telegram настройки</p>
+        <p className="mt-2 text-sm text-red-800">{apiErrorMessage(error, 'Ошибка сети или сервера.')}</p>
+        <button
+          type="button"
+          className={`${btnPrimary('mt-4')}`}
+          onClick={() => void qc.invalidateQueries({ queryKey: Q_TG })}
+        >
+          Обновить
+        </button>
+      </div>
+    );
+  }
+
+  const settings = (data ?? {
+    enabled: false,
+    bot_token_masked: null,
+    prayer_chat_id: null,
+    coordinator_chat_id: null,
+    default_chat_id: null,
+    has_bot_token: false,
+  }) satisfies TelegramSettingsResponse;
+
+  return (
+    <div className="max-w-3xl space-y-5">
+      {note ? (
+        <div
+          className={
+            note.type === 'ok'
+              ? 'rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900'
+              : 'rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900'
+          }
+        >
+          {note.text}
+        </div>
+      ) : null}
+
+      <section className="rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] p-5 shadow-[var(--shadow)]">
+        <h3 className="flex items-center gap-2 text-base font-extrabold text-stone-900">
+          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary">
+            <LuSend className="h-5 w-5" />
+          </span>
+          Telegram интеграция
+        </h3>
+        <p className="mt-2 text-sm text-stone-600">
+          Раздел доступен только администраторам. Отправка идёт через Telegram Bot API в указанные chat_id.
+        </p>
+
+        <label className="mt-4 flex items-center gap-2 text-sm font-semibold text-stone-700">
+          <input
+            type="checkbox"
+            className="h-4 w-4 rounded border-stone-300 text-primary"
+            checked={form.enabled}
+            onChange={(e) => setForm((s) => ({ ...s, enabled: e.target.checked }))}
+          />
+          Включить Telegram-модуль
+        </label>
+
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          <div className="sm:col-span-2">
+            <label className="mb-1 block text-xs font-semibold text-stone-600">Bot Token</label>
+            <input
+              className={fieldClass()}
+              value={form.bot_token}
+              onChange={(e) => setForm((s) => ({ ...s, bot_token: e.target.value }))}
+              placeholder={settings.bot_token_masked ? `Текущий: ${settings.bot_token_masked}` : '123456:ABC...'}
+            />
+            <p className="mt-1 text-xs text-stone-500">
+              Оставьте пустым, чтобы не менять токен. Токен можно также хранить в `TELEGRAM_BOT_TOKEN`.
+            </p>
+          </div>
+
+          <div>
+            <label className="mb-1 block text-xs font-semibold text-stone-600">chat_id для молитв</label>
+            <input
+              className={fieldClass()}
+              value={form.prayer_chat_id}
+              onChange={(e) => setForm((s) => ({ ...s, prayer_chat_id: e.target.value }))}
+              placeholder="-1001234567890"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-semibold text-stone-600">chat_id для координаторов</label>
+            <input
+              className={fieldClass()}
+              value={form.coordinator_chat_id}
+              onChange={(e) => setForm((s) => ({ ...s, coordinator_chat_id: e.target.value }))}
+              placeholder="-1001234567890"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-semibold text-stone-600">chat_id по умолчанию</label>
+            <input
+              className={fieldClass()}
+              value={form.default_chat_id}
+              onChange={(e) => setForm((s) => ({ ...s, default_chat_id: e.target.value }))}
+              placeholder="-1001234567890"
+            />
+          </div>
+        </div>
+
+        <button
+          type="button"
+          className={`${btnPrimary('mt-4')}`}
+          disabled={saveMut.isPending}
+          onClick={() => {
+            setNote(null);
+            saveMut.mutate();
+          }}
+        >
+          {saveMut.isPending ? 'Сохранение…' : 'Сохранить настройки'}
+        </button>
+      </section>
+
+      <section className="rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] p-5 shadow-[var(--shadow)]">
+        <h3 className="text-base font-extrabold text-stone-900">Быстрые отправки</h3>
+        <p className="mt-1 text-sm text-stone-600">
+          Можно отправить сегодняшнюю молитву, план на следующую неделю или произвольное уведомление.
+        </p>
+        <div className="mt-4 flex flex-wrap gap-2">
+          <button
+            type="button"
+            className={btnSecondary()}
+            disabled={sendMut.isPending}
+            onClick={() => {
+              setNote(null);
+              sendMut.mutate({ kind: 'prayer_today' });
+            }}
+          >
+            Сегодняшняя молитва
+          </button>
+          <button
+            type="button"
+            className={btnSecondary()}
+            disabled={sendMut.isPending}
+            onClick={() => {
+              setNote(null);
+              sendMut.mutate({ kind: 'next_week' });
+            }}
+          >
+            Список на следующую неделю
+          </button>
+        </div>
+
+        <div className="mt-4 space-y-3 rounded-xl border border-stone-200/80 bg-white p-3">
+          <label className="block text-xs font-semibold text-stone-600">Произвольное уведомление</label>
+          <textarea
+            className={`${fieldClass()} min-h-[110px]`}
+            placeholder="Текст уведомления для Telegram…"
+            value={customText}
+            onChange={(e) => setCustomText(e.target.value)}
+          />
+          <input
+            className={fieldClass()}
+            placeholder="chat_id (необязательно, если есть чат по умолчанию)"
+            value={customChatId}
+            onChange={(e) => setCustomChatId(e.target.value)}
+          />
+          <button
+            type="button"
+            className={btnPrimary('w-full sm:w-auto')}
+            disabled={sendMut.isPending || customText.trim().length === 0}
+            onClick={() => {
+              setNote(null);
+              sendMut.mutate({
+                kind: 'custom',
+                text: customText,
+                chat_id: customChatId.trim() || undefined,
+              });
+            }}
+          >
+            {sendMut.isPending ? 'Отправка…' : 'Отправить уведомление'}
+          </button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function normalizeUiString(value: string): string | null {
+  const t = value.trim();
+  return t.length > 0 ? t : null;
 }
 
 function ProjectSection() {

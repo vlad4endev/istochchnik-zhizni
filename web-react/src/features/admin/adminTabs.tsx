@@ -1,8 +1,15 @@
 import type { IconType } from 'react-icons';
-import { LuCalendarDays, LuInbox, LuPalette, LuSparkles, LuUsersRound } from 'react-icons/lu';
+import {
+  LuCalendarDays,
+  LuInbox,
+  LuPalette,
+  LuSend,
+  LuSparkles,
+  LuUsersRound,
+} from 'react-icons/lu';
 
 export interface AdminTabConfig {
-  id: 'members' | 'requests' | 'calendar' | 'templates' | 'project';
+  id: 'members' | 'requests' | 'calendar' | 'templates' | 'project' | 'telegram';
   label: string;
   Icon: IconType;
   short: string;
@@ -46,6 +53,13 @@ export const ADMIN_TABS: readonly AdminTabConfig[] = [
     short: 'Вид',
     description:
       'Название и логотип в меню хранятся только в этом браузере — тот же формат, что в мобильном приложении.',
+  },
+  {
+    id: 'telegram',
+    label: 'Telegram',
+    Icon: LuSend,
+    short: 'Бот',
+    description: 'Скрытый админ-модуль для отправки молитв и недельных списков в Telegram.',
   },
 ];
 
