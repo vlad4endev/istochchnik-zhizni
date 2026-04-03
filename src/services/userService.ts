@@ -39,6 +39,7 @@ export interface CreateUserInput {
   is_active?: boolean;
   app_role?: 'member' | 'admin';
   is_collection_coordinator?: boolean;
+  merge_if_duplicate?: boolean;
 }
 
 export interface UpdateUserInput {
@@ -256,6 +257,50 @@ export async function getUserById(id: number): Promise<AppUser | null> {
 export async function createUser(input: CreateUserInput): Promise<AppUser> {
   const dupId = await findMemberIdConflictingName(input.first_name, input.last_name);
   if (dupId !== null) {
+    if (input.merge_if_duplicate) {
+      const existing = await getUserById(dupId);
+      if (!existing) {
+        throw new Error('User not found');
+      }
+
+      const pickNonEmpty = (current: string | null | undefined, incoming: string | undefined): string => {
+        const c = (current ?? '').trim();
+        if (c) return c;
+        return (incoming ?? '').trim();
+      };
+
+      const mergedFirstName = pickNonEmpty(existing.first_name, input.first_name);
+      const mergedLastName = pickNonEmpty(existing.last_name, input.last_name);
+      const mergedPhone = pickNonEmpty(existing.phone_number, input.phone_number);
+      const mergedBirthDate = pickNonEmpty(existing.birth_date, input.birth_date);
+      const mergedMinistryRole = pickNonEmpty(existing.ministry_role, input.ministry_role);
+      const mergedMinistryDirection = pickNonEmpty(existing.ministry_direction, input.ministry_direction);
+      const mergedPrayerRequest = pickNonEmpty(existing.prayer_request, input.prayer_request);
+      const mergedEmail = pickNonEmpty(existing.email, input.email);
+      const mergedAccountProvider = pickNonEmpty(existing.account_provider, input.account_provider);
+      const mergedAccountId = pickNonEmpty(existing.account_id, input.account_id);
+
+      const updated = await updateUser(dupId, {
+        first_name: mergedFirstName,
+        last_name: mergedLastName,
+        phone_number: mergedPhone,
+        birth_date: mergedBirthDate,
+        ...(mergedMinistryRole ? { ministry_role: mergedMinistryRole } : {}),
+        ...(mergedMinistryDirection ? { ministry_direction: mergedMinistryDirection } : {}),
+        ...(mergedPrayerRequest ? { prayer_request: mergedPrayerRequest } : {}),
+        ...(mergedEmail ? { email: mergedEmail } : {}),
+        ...(mergedAccountProvider ? { account_provider: mergedAccountProvider } : {}),
+        ...(mergedAccountId ? { account_id: mergedAccountId } : {}),
+        is_active: existing.is_active || (input.is_active ?? true),
+        app_role: existing.app_role === 'admin' || input.app_role === 'admin' ? 'admin' : 'member',
+        is_collection_coordinator:
+          existing.is_collection_coordinator || (input.is_collection_coordinator ?? false),
+      });
+      if (!updated) {
+        throw new Error('User not found');
+      }
+      return updated;
+    }
     throw new MemberNameDuplicateError();
   }
 

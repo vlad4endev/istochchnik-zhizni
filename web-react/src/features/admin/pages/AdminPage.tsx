@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import axios from 'axios';
 import {
   type FormEvent,
   useEffect,
@@ -24,18 +25,21 @@ import {
   apiErrorMessage,
   createAdminMember,
   createBacksliderApi,
+  createAdminEvent,
   createDirectionTemplate,
   createGlobalThemeApi,
   createMinistryApi,
   createRoleTemplate,
   deleteAdminMember,
   deleteBacksliderApi,
+  deleteAdminEvent,
   deleteDirectionTemplate,
   deleteGlobalThemeApi,
   deleteMinistryApi,
   deleteRoleTemplate,
   fetchAdminMembers,
   fetchDirectionTemplates,
+  fetchAdminEvents,
   fetchGlobalBacksliders,
   fetchGlobalMinistries,
   fetchGlobalThemes,
@@ -48,11 +52,13 @@ import {
   setMemberAppRole,
   setOneTimeMemberDate,
   startPrayerCycle,
+  updateAdminEvent,
   updateAdminMember,
   updateBacksliderApi,
   updateGlobalThemeApi,
   updateMinistryApi,
   type MinistryDirectionTemplate,
+  type ChurchEventItem,
   type TelegramSettingsResponse,
 } from '../api';
 import type { AppUser } from '../types';
@@ -64,6 +70,7 @@ const Q_DIRS = ['admin', 'templates', 'directions'] as const;
 const Q_GT = ['admin', 'global', 'themes'] as const;
 const Q_GM = ['admin', 'global', 'ministries'] as const;
 const Q_GB = ['admin', 'global', 'backsliders'] as const;
+const Q_EVENTS = ['admin', 'events'] as const;
 const Q_TG = ['admin', 'telegram', 'settings'] as const;
 
 function displayName(u: AppUser): string {
@@ -238,6 +245,7 @@ export function AdminPage() {
       {tab === 'members' && <MembersSection />}
       {tab === 'requests' && <AccessRequestsSection />}
       {tab === 'calendar' && <CalendarSection />}
+      {tab === 'events' && <EventsSection />}
       {tab === 'templates' && <TemplatesSection />}
       {tab === 'project' && <ProjectSection />}
       {tab === 'telegram' && <TelegramSection />}
@@ -306,18 +314,17 @@ function MembersSection() {
     };
   }, [data]);
 
+  const createPayload = () => ({
+    first_name: form.first_name.trim(),
+    last_name: form.last_name.trim(),
+    phone_number: form.phone_number.trim(),
+    birth_date: form.birth_date.trim(),
+    ...(form.ministry_role.trim() ? { ministry_role: form.ministry_role.trim() } : {}),
+    ...(form.ministry_direction.trim() ? { ministry_direction: form.ministry_direction.trim() } : {}),
+  });
+
   const createMut = useMutation({
-    mutationFn: () =>
-      createAdminMember({
-        first_name: form.first_name.trim(),
-        last_name: form.last_name.trim(),
-        phone_number: form.phone_number.trim(),
-        birth_date: form.birth_date.trim(),
-        ...(form.ministry_role.trim() ? { ministry_role: form.ministry_role.trim() } : {}),
-        ...(form.ministry_direction.trim()
-          ? { ministry_direction: form.ministry_direction.trim() }
-          : {}),
-      }),
+    mutationFn: () => createAdminMember(createPayload()),
     onSuccess: () => {
       setBanner({ type: 'ok', text: 'Участник создан.' });
       setForm({
@@ -330,7 +337,43 @@ function MembersSection() {
       });
       invalidate();
     },
-    onError: (e) => setBanner({ type: 'err', text: apiErrorMessage(e, 'Не удалось создать.') }),
+    onError: (e) => {
+      const msg = apiErrorMessage(e, 'Не удалось создать.');
+      const duplicateByCode =
+        axios.isAxiosError(e) &&
+        !!e.response?.data &&
+        typeof e.response.data === 'object' &&
+        (e.response.data as { code?: unknown }).code === 'member_name_duplicate';
+      const duplicateByText = /Участник с таким именем и фамилией уже есть/i.test(msg);
+      if (duplicateByCode || duplicateByText) {
+        const agree = window.confirm(
+          'Участник с таким именем и фамилией уже есть. Объединить введённые данные с существующей карточкой?',
+        );
+        if (agree) {
+          mergeOnCreateMut.mutate();
+          return;
+        }
+      }
+      setBanner({ type: 'err', text: msg });
+    },
+  });
+
+  const mergeOnCreateMut = useMutation({
+    mutationFn: () => createAdminMember({ ...createPayload(), merge_if_duplicate: true }),
+    onSuccess: () => {
+      setBanner({ type: 'ok', text: 'Данные объединены с существующей карточкой участника.' });
+      setForm({
+        first_name: '',
+        last_name: '',
+        phone_number: '',
+        birth_date: '',
+        ministry_role: '',
+        ministry_direction: '',
+      });
+      invalidate();
+    },
+    onError: (e) =>
+      setBanner({ type: 'err', text: apiErrorMessage(e, 'Не удалось объединить с существующей карточкой.') }),
   });
 
   const saveEditMut = useMutation({
@@ -629,8 +672,14 @@ function MembersSection() {
               </select>
             </div>
             <div className="sm:col-span-2 lg:col-span-3">
-              <button type="submit" disabled={createMut.isPending} className={btnPrimary()}>
-                {createMut.isPending ? 'Создание…' : 'Создать участника'}
+              <button
+                type="submit"
+                disabled={createMut.isPending || mergeOnCreateMut.isPending}
+                className={btnPrimary()}
+              >
+                {createMut.isPending || mergeOnCreateMut.isPending
+                  ? 'Сохранение…'
+                  : 'Создать участника'}
               </button>
             </div>
           </form>
@@ -1289,6 +1338,368 @@ function CalendarSection() {
         </div>
         <GlobalNeedsSection />
       </div>
+    </div>
+  );
+}
+
+function EventsSection() {
+  const qc = useQueryClient();
+  const eventsQ = useQuery({ queryKey: Q_EVENTS, queryFn: fetchAdminEvents });
+  const weekDays = [
+    { value: 0, label: 'Воскресенье' },
+    { value: 1, label: 'Понедельник' },
+    { value: 2, label: 'Вторник' },
+    { value: 3, label: 'Среда' },
+    { value: 4, label: 'Четверг' },
+    { value: 5, label: 'Пятница' },
+    { value: 6, label: 'Суббота' },
+  ] as const;
+  const [note, setNote] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
+  const [form, setForm] = useState({
+    title: '',
+    description: '',
+    event_date: new Date().toISOString().slice(0, 10),
+    event_time: '11:00',
+    recurrence_type: 'once' as 'once' | 'weekly',
+    weekly_day: 0,
+    is_active: true,
+  });
+  const [editing, setEditing] = useState<ChurchEventItem | null>(null);
+
+  const invalidate = () => void qc.invalidateQueries({ queryKey: Q_EVENTS });
+
+  const createMut = useMutation({
+    mutationFn: () =>
+      createAdminEvent({
+        title: form.title.trim(),
+        description: form.description.trim(),
+        event_date: form.event_date,
+        event_time: form.event_time,
+        recurrence_type: form.recurrence_type,
+        weekly_day: form.recurrence_type === 'weekly' ? form.weekly_day : null,
+        is_active: form.is_active,
+      }),
+    onSuccess: () => {
+      setForm((s) => ({ ...s, title: '', description: '' }));
+      setNote({ type: 'ok', text: 'Событие добавлено.' });
+      invalidate();
+    },
+    onError: (e) => setNote({ type: 'err', text: apiErrorMessage(e, 'Не удалось добавить событие.') }),
+  });
+
+  const updateMut = useMutation({
+    mutationFn: (payload: ChurchEventItem) =>
+      updateAdminEvent(payload.id, {
+        title: payload.title.trim(),
+        description: payload.description,
+        event_date: payload.event_date,
+        event_time: payload.event_time,
+        recurrence_type: payload.recurrence_type,
+        weekly_day: payload.recurrence_type === 'weekly' ? payload.weekly_day ?? 0 : null,
+        is_active: payload.is_active,
+      }),
+    onSuccess: () => {
+      setNote({ type: 'ok', text: 'Событие обновлено.' });
+      setEditing(null);
+      invalidate();
+    },
+    onError: (e) => setNote({ type: 'err', text: apiErrorMessage(e, 'Не удалось обновить событие.') }),
+  });
+
+  const deleteMut = useMutation({
+    mutationFn: (id: number) => deleteAdminEvent(id),
+    onSuccess: () => {
+      setNote({ type: 'ok', text: 'Событие удалено.' });
+      invalidate();
+    },
+    onError: (e) => setNote({ type: 'err', text: apiErrorMessage(e, 'Не удалось удалить событие.') }),
+  });
+
+  return (
+    <div className="space-y-5">
+      {note ? (
+        <div
+          className={
+            note.type === 'ok'
+              ? 'flex justify-between gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900'
+              : 'flex justify-between gap-2 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900'
+          }
+        >
+          <span>{note.text}</span>
+          <button type="button" onClick={() => setNote(null)} className="text-stone-500">
+            ✕
+          </button>
+        </div>
+      ) : null}
+
+      <section className="rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] p-5 shadow-[var(--shadow)]">
+        <h3 className="text-base font-extrabold text-stone-900">Новое событие</h3>
+        <p className="mt-1 text-sm text-stone-600">Эти события автоматически отображаются на дашборде.</p>
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          <div className="sm:col-span-2">
+            <label className="mb-1 block text-xs font-semibold text-stone-600">Название</label>
+            <input
+              className={fieldClass()}
+              value={form.title}
+              onChange={(e) => setForm((s) => ({ ...s, title: e.target.value }))}
+              placeholder="Воскресное служение"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-semibold text-stone-600">Тип события</label>
+            <select
+              className={fieldClass()}
+              value={form.recurrence_type}
+              onChange={(e) =>
+                setForm((s) => ({ ...s, recurrence_type: e.target.value as 'once' | 'weekly' }))
+              }
+            >
+              <option value="once">Единоразовое (конкретная дата)</option>
+              <option value="weekly">Постоянное (каждую неделю)</option>
+            </select>
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-semibold text-stone-600">Дата</label>
+            <input
+              className={fieldClass()}
+              type="date"
+              value={form.event_date}
+              disabled={form.recurrence_type === 'weekly'}
+              onChange={(e) => setForm((s) => ({ ...s, event_date: e.target.value }))}
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-semibold text-stone-600">День недели</label>
+            <select
+              className={fieldClass()}
+              value={String(form.weekly_day)}
+              disabled={form.recurrence_type !== 'weekly'}
+              onChange={(e) => setForm((s) => ({ ...s, weekly_day: Number(e.target.value) }))}
+            >
+              {weekDays.map((d) => (
+                <option key={d.value} value={d.value}>
+                  {d.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-semibold text-stone-600">Время</label>
+            <input
+              className={fieldClass()}
+              type="time"
+              value={form.event_time}
+              onChange={(e) => setForm((s) => ({ ...s, event_time: e.target.value }))}
+            />
+          </div>
+          <div className="sm:col-span-2">
+            <label className="mb-1 block text-xs font-semibold text-stone-600">Описание</label>
+            <textarea
+              className={`${fieldClass()} min-h-[96px] resize-y`}
+              value={form.description}
+              onChange={(e) => setForm((s) => ({ ...s, description: e.target.value }))}
+              placeholder="Краткое описание события"
+            />
+          </div>
+          <label className="sm:col-span-2 flex items-center gap-2 text-sm font-semibold text-stone-700">
+            <input
+              type="checkbox"
+              className="h-4 w-4 rounded border-stone-300 text-primary"
+              checked={form.is_active}
+              onChange={(e) => setForm((s) => ({ ...s, is_active: e.target.checked }))}
+            />
+            Активное событие (видно в дашборде)
+          </label>
+        </div>
+        <button
+          type="button"
+          className={`${btnPrimary('mt-4')}`}
+          disabled={
+            !form.title.trim() ||
+            !form.event_time ||
+            (form.recurrence_type === 'once' && !form.event_date) ||
+            createMut.isPending
+          }
+          onClick={() => {
+            setNote(null);
+            createMut.mutate();
+          }}
+        >
+          {createMut.isPending ? 'Сохранение…' : 'Добавить событие'}
+        </button>
+      </section>
+
+      <section className="rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] p-5 shadow-[var(--shadow)]">
+        <h3 className="text-base font-extrabold text-stone-900">Список событий</h3>
+        {eventsQ.isLoading ? (
+          <div className="mt-3 h-40 animate-pulse rounded-2xl bg-stone-100" />
+        ) : eventsQ.isError ? (
+          <p className="mt-3 text-sm text-red-600">{apiErrorMessage(eventsQ.error, 'Не удалось загрузить список событий.')}</p>
+        ) : (eventsQ.data ?? []).length === 0 ? (
+          <p className="mt-3 text-sm text-stone-500">Событий пока нет.</p>
+        ) : (
+          <div className="mt-3 space-y-3">
+            {(eventsQ.data ?? []).map((ev) => {
+              const isEdit = editing?.id === ev.id;
+              const row = isEdit ? editing : ev;
+              return (
+                <article key={ev.id} className="rounded-2xl border border-stone-200/80 bg-white p-4">
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="sm:col-span-2">
+                      <label className="mb-1 block text-xs font-semibold text-stone-600">Название</label>
+                      <input
+                        className={fieldClass()}
+                        value={row.title}
+                        disabled={!isEdit}
+                        onChange={(e) =>
+                          setEditing((s) => (s ? { ...s, title: e.target.value } : s))
+                        }
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs font-semibold text-stone-600">Тип события</label>
+                      <select
+                        className={fieldClass()}
+                        value={row.recurrence_type}
+                        disabled={!isEdit}
+                        onChange={(e) =>
+                          setEditing((s) =>
+                            s
+                              ? {
+                                  ...s,
+                                  recurrence_type: e.target.value as 'once' | 'weekly',
+                                  weekly_day:
+                                    e.target.value === 'weekly'
+                                      ? (s.weekly_day ?? 0)
+                                      : null,
+                                }
+                              : s,
+                          )
+                        }
+                      >
+                        <option value="once">Единоразовое</option>
+                        <option value="weekly">Еженедельное</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs font-semibold text-stone-600">Дата</label>
+                      <input
+                        type="date"
+                        className={fieldClass()}
+                        value={row.event_date}
+                        disabled={!isEdit || row.recurrence_type === 'weekly'}
+                        onChange={(e) =>
+                          setEditing((s) => (s ? { ...s, event_date: e.target.value } : s))
+                        }
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs font-semibold text-stone-600">День недели</label>
+                      <select
+                        className={fieldClass()}
+                        value={String(row.weekly_day ?? 0)}
+                        disabled={!isEdit || row.recurrence_type !== 'weekly'}
+                        onChange={(e) =>
+                          setEditing((s) =>
+                            s ? { ...s, weekly_day: Number(e.target.value) } : s,
+                          )
+                        }
+                      >
+                        {weekDays.map((d) => (
+                          <option key={d.value} value={d.value}>
+                            {d.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs font-semibold text-stone-600">Время</label>
+                      <input
+                        type="time"
+                        className={fieldClass()}
+                        value={row.event_time}
+                        disabled={!isEdit}
+                        onChange={(e) =>
+                          setEditing((s) => (s ? { ...s, event_time: e.target.value } : s))
+                        }
+                      />
+                    </div>
+                    <div className="sm:col-span-2">
+                      <label className="mb-1 block text-xs font-semibold text-stone-600">Описание</label>
+                      <textarea
+                        className={`${fieldClass()} min-h-[84px] resize-y`}
+                        value={row.description ?? ''}
+                        disabled={!isEdit}
+                        onChange={(e) =>
+                          setEditing((s) => (s ? { ...s, description: e.target.value } : s))
+                        }
+                      />
+                    </div>
+                    <label className="sm:col-span-2 flex items-center gap-2 text-sm font-semibold text-stone-700">
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 rounded border-stone-300 text-primary"
+                        checked={row.is_active}
+                        disabled={!isEdit}
+                        onChange={(e) =>
+                          setEditing((s) => (s ? { ...s, is_active: e.target.checked } : s))
+                        }
+                      />
+                      Активно
+                    </label>
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {!isEdit ? (
+                      <button
+                        type="button"
+                        className={btnSecondary()}
+                        onClick={() => setEditing({ ...ev })}
+                      >
+                        Изменить
+                      </button>
+                    ) : (
+                      <>
+                        <button
+                          type="button"
+                          className={btnPrimary()}
+                          disabled={updateMut.isPending || !row.title.trim()}
+                          onClick={() => {
+                            setNote(null);
+                            updateMut.mutate(row);
+                          }}
+                        >
+                          {updateMut.isPending ? 'Сохранение…' : 'Сохранить'}
+                        </button>
+                        <button
+                          type="button"
+                          className={btnSecondary()}
+                          disabled={updateMut.isPending}
+                          onClick={() => setEditing(null)}
+                        >
+                          Отмена
+                        </button>
+                      </>
+                    )}
+                    <button
+                      type="button"
+                      className={btnDangerOutline()}
+                      disabled={deleteMut.isPending}
+                      onClick={() => {
+                        if (!window.confirm(`Удалить событие «${ev.title}»?`)) return;
+                        setNote(null);
+                        if (isEdit) setEditing(null);
+                        deleteMut.mutate(ev.id);
+                      }}
+                    >
+                      Удалить
+                    </button>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        )}
+      </section>
     </div>
   );
 }

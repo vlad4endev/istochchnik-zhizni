@@ -1,6 +1,7 @@
 import type { IconType } from 'react-icons';
 import {
   LuCalendarDays,
+  LuCalendarRange,
   LuInbox,
   LuPalette,
   LuSend,
@@ -9,7 +10,7 @@ import {
 } from 'react-icons/lu';
 
 export interface AdminTabConfig {
-  id: 'members' | 'requests' | 'calendar' | 'templates' | 'project' | 'telegram';
+  id: 'members' | 'requests' | 'calendar' | 'events' | 'templates' | 'project' | 'telegram';
   label: string;
   Icon: IconType;
   short: string;
@@ -38,6 +39,13 @@ export const ADMIN_TABS: readonly AdminTabConfig[] = [
     Icon: LuCalendarDays,
     short: 'Цикл',
     description: 'Старт недельного цикла и общие темы, служения, имена для молитвы.',
+  },
+  {
+    id: 'events',
+    label: 'События',
+    Icon: LuCalendarRange,
+    short: 'Анонсы',
+    description: 'Управление событиями, которые отображаются в дашборде.',
   },
   {
     id: 'templates',

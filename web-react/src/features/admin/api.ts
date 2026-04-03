@@ -8,6 +8,19 @@ import type { AppUser } from './types';
 const USERS = '/api/users';
 const CAL = '/api/calendar';
 
+export interface ChurchEventItem {
+  id: number;
+  title: string;
+  description: string | null;
+  event_date: string;
+  event_time: string;
+  recurrence_type: 'once' | 'weekly';
+  weekly_day: number | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
 export function apiErrorMessage(err: unknown, fallback: string): string {
   if (axios.isAxiosError(err)) {
     const data = err.response?.data;
@@ -32,6 +45,7 @@ export async function createAdminMember(body: {
   birth_date: string;
   ministry_role?: string;
   ministry_direction?: string;
+  merge_if_duplicate?: boolean;
 }): Promise<AppUser> {
   const { data } = await apiClient.post<AppUser>(USERS, body);
   return data;
@@ -212,6 +226,46 @@ export async function updateBacksliderApi(id: number, name: string): Promise<Bac
 
 export async function deleteBacksliderApi(id: number): Promise<void> {
   await apiClient.delete(`${CAL}/global/backsliders/${id}`, {
+    validateStatus: (s) => s === 204 || (s != null && s < 500),
+  });
+}
+
+export async function fetchAdminEvents(): Promise<ChurchEventItem[]> {
+  const { data } = await apiClient.get<ChurchEventItem[]>(`${CAL}/events/admin`);
+  return data;
+}
+
+export async function createAdminEvent(body: {
+  title: string;
+  description?: string;
+  event_date: string;
+  event_time: string;
+  recurrence_type: 'once' | 'weekly';
+  weekly_day?: number | null;
+  is_active?: boolean;
+}): Promise<ChurchEventItem> {
+  const { data } = await apiClient.post<ChurchEventItem>(`${CAL}/events`, body);
+  return data;
+}
+
+export async function updateAdminEvent(
+  id: number,
+  body: Partial<{
+    title: string;
+    description: string | null;
+    event_date: string;
+    event_time: string;
+    recurrence_type: 'once' | 'weekly';
+    weekly_day: number | null;
+    is_active: boolean;
+  }>,
+): Promise<ChurchEventItem> {
+  const { data } = await apiClient.patch<ChurchEventItem>(`${CAL}/events/${id}`, body);
+  return data;
+}
+
+export async function deleteAdminEvent(id: number): Promise<void> {
+  await apiClient.delete(`${CAL}/events/${id}`, {
     validateStatus: (s) => s === 204 || (s != null && s < 500),
   });
 }

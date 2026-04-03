@@ -46,6 +46,19 @@ function normalizeNextWeekDay(raw: unknown): NextWeekMemberDay | null {
 
 export type WeekPlanKind = 'current' | 'next';
 
+export interface ChurchEventItem {
+  id: number;
+  title: string;
+  description: string | null;
+  event_date: string;
+  event_time: string;
+  recurrence_type: 'once' | 'weekly';
+  weekly_day: number | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
 /**
  * GET `/api/calendar/next-week/members` — 7 дней (пн–вс) выбранной недели, по члену на день.
  * @param week `current` — текущая календарная неделя, `next` — следующая (по умолчанию).
@@ -83,6 +96,11 @@ export async function patchMemberCyclePrayer(
     target_date: targetDate,
     prayer_request: prayerRequest,
   });
+}
+
+export async function getActiveEvents(): Promise<ChurchEventItem[]> {
+  const { data } = await apiClient.get<ChurchEventItem[]>('/api/calendar/events');
+  return Array.isArray(data) ? data : [];
 }
 
 function normalizePrayerCycle(raw: unknown): PrayerCycleInfo | null {

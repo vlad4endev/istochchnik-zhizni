@@ -5,6 +5,7 @@ import { LuChevronLeft, LuChevronRight, LuChurch, LuLayoutDashboard, LuMessageCi
 
 import { useAuthStore } from '../features/auth/authStore';
 import { useBrandingStore } from '../features/branding/brandingStore';
+import { useFCM } from '../hooks/useFCM';
 import { useRealtimeQuerySync } from '../hooks/useRealtimeQuerySync';
 import { useSyncServerRole } from '../hooks/useSyncServerRole';
 import { IOSInstallBanner } from '../components/IOSInstallBanner';
@@ -227,6 +228,7 @@ function navClassName(isActive: boolean, compact = false): string {
 
 export function Layout() {
   useSyncServerRole();
+  useFCM();
   useRealtimeQuerySync();
   const navigate = useNavigate();
   const setActiveConversation = useChatStore((s) => s.setActiveConversation);

@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { PushNotifications } from '@capacitor/push-notifications';
 
@@ -40,7 +40,6 @@ function showForegroundNotification(title: string, body: string): void {
  */
 export function useFCM(): void {
   const token = useAuthStore((s) => s.token);
-  const startedRef = useRef(false);
 
   useEffect(() => {
     if (!Capacitor.isNativePlatform()) {
@@ -49,10 +48,6 @@ export function useFCM(): void {
     if (!token?.trim()) {
       return;
     }
-    if (startedRef.current) {
-      return;
-    }
-    startedRef.current = true;
 
     const deviceId = getOrCreateDeviceId();
 
@@ -108,7 +103,6 @@ export function useFCM(): void {
 
     return () => {
       cancelled = true;
-      startedRef.current = false;
       void regListener.then((h) => h.remove());
       void regErrorListener.then((h) => h.remove());
       void receivedListener.then((h) => h.remove());

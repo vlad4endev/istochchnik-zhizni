@@ -1,5 +1,6 @@
 import { Router, type Request, type Response } from 'express';
 import { requireAuthSession } from '../middleware/authSession';
+import { saveFcmToken } from '../services/fcmSubscriptionService';
 import { removeSubscription, saveSubscription } from '../services/pushService';
 
 type AuthReq = Request & { authUserId?: number };
@@ -91,6 +92,37 @@ router.post('/unsubscribe', requireAuthSession, async (req: Request, res: Respon
   } catch (e) {
     console.error('[notifications] unsubscribe error:', e);
     res.status(500).json({ error: 'Failed to remove subscription' });
+  }
+});
+
+/**
+ * POST /api/notifications/save-token
+ * Body: { fcm_token: string, device_id: string } — нативное FCM (Capacitor).
+ */
+router.post('/save-token', requireAuthSession, async (req: Request, res: Response) => {
+  const memberId = (req as AuthReq).authUserId;
+  if (!memberId) {
+    res.status(401).json({ error: 'Unauthorized' });
+    return;
+  }
+
+  const fcm_token = typeof req.body?.fcm_token === 'string' ? req.body.fcm_token.trim() : '';
+  const device_id = typeof req.body?.device_id === 'string' ? req.body.device_id.trim() : '';
+  if (!fcm_token || !device_id) {
+    res.status(400).json({ error: 'Fields fcm_token and device_id are required' });
+    return;
+  }
+  if (fcm_token.length > 4096 || device_id.length > 512) {
+    res.status(400).json({ error: 'Invalid field length' });
+    return;
+  }
+
+  try {
+    await saveFcmToken(memberId, device_id, fcm_token);
+    res.status(201).json({ ok: true });
+  } catch (e) {
+    console.error('[notifications] save-token error:', e);
+    res.status(500).json({ error: 'Failed to save token' });
   }
 });
 

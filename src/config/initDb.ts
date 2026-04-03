@@ -42,6 +42,19 @@ CREATE TABLE IF NOT EXISTS backsliders (
   name VARCHAR(255) NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS church_events (
+  id BIGSERIAL PRIMARY KEY,
+  title VARCHAR(255) NOT NULL,
+  description TEXT,
+  event_date DATE NOT NULL,
+  event_time TIME NOT NULL,
+  recurrence_type VARCHAR(16) NOT NULL DEFAULT 'once' CHECK (recurrence_type IN ('once', 'weekly')),
+  weekly_day SMALLINT CHECK (weekly_day BETWEEN 0 AND 6),
+  is_active BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 CREATE TABLE IF NOT EXISTS ministry_role_templates (
   id SERIAL PRIMARY KEY,
   title VARCHAR(120) NOT NULL UNIQUE,
@@ -189,6 +202,21 @@ ALTER TABLE global_settings ADD COLUMN IF NOT EXISTS telegram_coordinator_chat_i
 ALTER TABLE global_settings ADD COLUMN IF NOT EXISTS telegram_default_chat_id TEXT;
 ALTER TABLE global_settings ADD COLUMN IF NOT EXISTS telegram_enabled BOOLEAN NOT NULL DEFAULT FALSE;
 
+ALTER TABLE church_events ADD COLUMN IF NOT EXISTS recurrence_type VARCHAR(16);
+UPDATE church_events
+SET recurrence_type = 'once'
+WHERE recurrence_type IS NULL OR recurrence_type NOT IN ('once', 'weekly');
+ALTER TABLE church_events ALTER COLUMN recurrence_type SET DEFAULT 'once';
+ALTER TABLE church_events ALTER COLUMN recurrence_type SET NOT NULL;
+ALTER TABLE church_events DROP CONSTRAINT IF EXISTS church_events_recurrence_type_check;
+ALTER TABLE church_events ADD CONSTRAINT church_events_recurrence_type_check
+  CHECK (recurrence_type IN ('once', 'weekly'));
+
+ALTER TABLE church_events ADD COLUMN IF NOT EXISTS weekly_day SMALLINT;
+ALTER TABLE church_events DROP CONSTRAINT IF EXISTS church_events_weekly_day_check;
+ALTER TABLE church_events ADD CONSTRAINT church_events_weekly_day_check
+  CHECK (weekly_day IS NULL OR (weekly_day BETWEEN 0 AND 6));
+
 CREATE TABLE IF NOT EXISTS cycle_collection_claims (
   cycle_index INTEGER NOT NULL,
   member_id INTEGER NOT NULL REFERENCES members(id) ON DELETE CASCADE,
@@ -254,6 +282,18 @@ CREATE TABLE IF NOT EXISTS push_subscriptions (
 
 CREATE INDEX IF NOT EXISTS idx_push_subs_member_id
   ON push_subscriptions (member_id);
+
+CREATE TABLE IF NOT EXISTS user_subscriptions (
+  id SERIAL PRIMARY KEY,
+  member_id INTEGER NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+  device_id TEXT NOT NULL,
+  fcm_token TEXT NOT NULL,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (member_id, device_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_user_subscriptions_member_id
+  ON user_subscriptions (member_id);
 
 
 -- RPC aligned with src/services/calendarService.ts (overrides + is_active + per-cycle prayer_request).
@@ -628,6 +668,9 @@ CREATE INDEX IF NOT EXISTS idx_message_interactions_member
 
 CREATE INDEX IF NOT EXISTS idx_message_interactions_message
   ON message_interactions (message_id);
+
+CREATE INDEX IF NOT EXISTS idx_church_events_date_time
+  ON church_events (event_date ASC, event_time ASC);
 
 CREATE INDEX IF NOT EXISTS idx_conv_type
   ON conversations (type);

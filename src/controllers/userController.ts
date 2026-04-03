@@ -237,6 +237,10 @@ export async function createUserHandler(req: Request, res: Response): Promise<vo
     res.status(400).json({ error: 'Field "app_role" must be "member" or "admin"' });
     return;
   }
+  if (req.body.merge_if_duplicate !== undefined && typeof req.body.merge_if_duplicate !== 'boolean') {
+    res.status(400).json({ error: 'Field "merge_if_duplicate" must be boolean' });
+    return;
+  }
 
   try {
     const user = await createUser({
@@ -250,7 +254,7 @@ export async function createUserHandler(req: Request, res: Response): Promise<vo
     res.status(201).json(user);
   } catch (error) {
     if (error instanceof MemberNameDuplicateError) {
-      res.status(409).json({ error: error.message });
+      res.status(409).json({ error: error.message, code: 'member_name_duplicate' });
       return;
     }
     console.error('Failed to create user', error);

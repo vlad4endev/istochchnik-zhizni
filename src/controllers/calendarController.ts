@@ -11,6 +11,7 @@ import {
   setCycleCollectionClaim,
 } from '../services/cycleCollectionClaimsService';
 import { notifyRealtime } from '../realtime/notify';
+import { sendPush } from '../services/pushService';
 
 function isValidDateInput(value: unknown): value is string {
   if (typeof value !== 'string') {
@@ -195,6 +196,16 @@ export async function patchMemberCyclePrayer(req: Request, res: Response): Promi
   try {
     await setCoordinatorPrayerNeedForDate(memberId, targetDate, prayerRaw);
     notifyRealtime(['calendar']);
+    try {
+      await sendPush(
+        memberId,
+        'Молитвенная нужда обновлена',
+        'Координатор обновил вашу молитвенную нужду на выбранную дату.',
+        { url: '/prayer', type: 'prayer_coordinator_update' },
+      );
+    } catch (pushErr) {
+      console.warn('[calendar] prayer push notify failed (best-effort):', pushErr);
+    }
     res.json({ ok: true });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);

@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "93057601077",
+    "project_id": "mychurch-29bce",
+    "storage_bucket": "mychurch-29bce.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:93057601077:android:1ede7fe01298c19a2a2b7c",
+        "android_client_info": {
+          "package_name": "com.istochnikzhizni.molitva"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBBRmpz20U18Nj7-y-j6G_N3a36-_y2iYQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

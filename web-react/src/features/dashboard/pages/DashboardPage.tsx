@@ -15,7 +15,12 @@ import {
 
 import { fetchBroadcastEmbed } from '../../../api/broadcast';
 import { fetchPodcastFeed, type PodcastEpisode } from '../../../api/resources';
-import { formatCalendarDayKey, getCalendarDay } from '../../calendar/api';
+import {
+  formatCalendarDayKey,
+  getActiveEvents,
+  getCalendarDay,
+  type ChurchEventItem,
+} from '../../calendar/api';
 import { fetchMe } from '../../profile/api';
 import { resolvePublicUrl } from '../../../lib/resolvePublicUrl';
 import {
@@ -44,39 +49,91 @@ function pickLatestEpisode(episodes: PodcastEpisode[]): PodcastEpisode | null {
   })[0] ?? null;
 }
 
-function upcomingEvent(now = new Date()): DashboardEvent {
-  const isSundayToday = now.getDay() === 0;
+function sameDate(a: Date, b: Date): boolean {
+  return (
+    a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate()
+  );
+}
+
+function parseOnceEventDateTime(item: ChurchEventItem): Date | null {
+  const ts = `${item.event_date}T${item.event_time}:00`;
+  const d = new Date(ts);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+function nextWeeklyDate(now: Date, weeklyDay: number, hhmm: string): Date {
+  const [h, m] = hhmm.split(':').map((x) => Number(x) || 0);
+  const base = new Date(now);
+  const diff = (weeklyDay - base.getDay() + 7) % 7;
+  base.setDate(base.getDate() + diff);
+  base.setHours(h, m, 0, 0);
+  if (base.getTime() < now.getTime()) {
+    base.setDate(base.getDate() + 7);
+  }
+  return base;
+}
+
+function eventNextOccurrence(now: Date, item: ChurchEventItem): Date | null {
+  if (item.recurrence_type === 'weekly') {
+    const weeklyDay = typeof item.weekly_day === 'number' ? item.weekly_day : 0;
+    return nextWeeklyDate(now, weeklyDay, item.event_time);
+  }
+  return parseOnceEventDateTime(item);
+}
+
+function toDashboardEvent(now: Date, item: ChurchEventItem, date: Date): DashboardEvent {
   const tomorrow = new Date(now);
   tomorrow.setDate(now.getDate() + 1);
-  const isSundayTomorrow = tomorrow.getDay() === 0;
-
-  if (isSundayToday) {
-    return {
-      id: 'sunday-today',
-      title: 'Событие сегодня',
-      description:
-        'Воскресное богослужение в 10:30. После служения — общение и молитва.',
-      whenLabel: 'Сегодня, 10:30',
-    };
-  }
-
-  if (isSundayTomorrow) {
-    return {
-      id: 'sunday-tomorrow',
-      title: 'Событие завтра',
-      description:
-        'Завтра воскресное богослужение в 10:30. Приходите заранее, чтобы занять места и подготовиться к служению.',
-      whenLabel: 'Завтра, 10:30',
-    };
-  }
-
+  const timeLabel = format(date, 'HH:mm');
+  const whenLabel = sameDate(date, now)
+    ? `Сегодня в ${timeLabel}`
+    : sameDate(date, tomorrow)
+      ? `Завтра в ${timeLabel}`
+      : `${format(date, 'EEEE', { locale: ru })} в ${timeLabel}`;
   return {
-    id: 'next-service',
-    title: 'Ближайшее событие',
-    description:
-      'Ближайшее воскресное богослужение состоится в 10:30. Подробное расписание доступно в разделе плана служения.',
-    whenLabel: 'Воскресенье, 10:30',
+    id: String(item.id),
+    title: item.title.trim() || 'Событие',
+    description: (item.description ?? '').trim() || 'Подробное описание скоро появится.',
+    whenLabel,
   };
+}
+
+function pickUpcomingEvent(now: Date, items: ChurchEventItem[]): DashboardEvent {
+  const rows = items
+    .map((item) => {
+      const dt = eventNextOccurrence(now, item);
+      return dt ? { item, dt } : null;
+    })
+    .filter((x): x is { item: ChurchEventItem; dt: Date } => x != null)
+    .sort((a, b) => a.dt.getTime() - b.dt.getTime());
+
+  if (rows.length === 0) {
+    return {
+      id: 'no-events',
+      title: 'Событий пока нет',
+      description: 'Администратор скоро добавит новые события.',
+      whenLabel: 'Следите за обновлениями',
+    };
+  }
+
+  const todayRow = rows.find((x) => sameDate(x.dt, now) && x.dt.getTime() >= now.getTime())
+    ?? rows.find((x) => sameDate(x.dt, now));
+  if (todayRow) return toDashboardEvent(now, todayRow.item, todayRow.dt);
+
+  const tomorrow = new Date(now);
+  tomorrow.setDate(now.getDate() + 1);
+  const tomorrowRow = rows.find((x) => sameDate(x.dt, tomorrow));
+  if (tomorrowRow) return toDashboardEvent(now, tomorrowRow.item, tomorrowRow.dt);
+
+  const weekEnd = new Date(now);
+  weekEnd.setDate(now.getDate() + 7);
+  const nearestWeek = rows.find((x) => x.dt.getTime() > now.getTime() && x.dt.getTime() <= weekEnd.getTime());
+  if (nearestWeek) return toDashboardEvent(now, nearestWeek.item, nearestWeek.dt);
+
+  const nearestAny = rows.find((x) => x.dt.getTime() > now.getTime()) ?? rows[0];
+  return toDashboardEvent(now, nearestAny.item, nearestAny.dt);
 }
 
 export function DashboardPage() {
@@ -152,6 +209,12 @@ export function DashboardPage() {
     staleTime: 60_000,
   });
 
+  const eventsQ = useQuery({
+    queryKey: ['calendar', 'events', 'dashboard'],
+    queryFn: getActiveEvents,
+    staleTime: 60_000,
+  });
+
   const me = meQ.data ?? null;
   const fullName = `${me?.first_name ?? ''} ${me?.last_name ?? ''}`.trim() || me?.name || 'Профиль';
   const avatarUrl = resolvePublicUrl(me?.avatar_url ?? null);
@@ -163,7 +226,7 @@ export function DashboardPage() {
   const broadcastDateLabel = extractBroadcastDateLabel(broadcastQ.data?.rutube_embed_code) ?? 'Сегодня, 10:30';
 
   const latestEpisode = pickLatestEpisode(sermonsQ.data?.episodes ?? []);
-  const event = upcomingEvent(now);
+  const event = pickUpcomingEvent(now, eventsQ.data ?? []);
 
   function onToggleFavorite(id: string) {
     setFavorites((prev) => {

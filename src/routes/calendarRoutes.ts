@@ -23,6 +23,13 @@ import {
   deleteBacksliderHandler,
   getNextWeekGlobal,
 } from '../controllers/globalNeedsController';
+import {
+  deleteEvent,
+  getActiveEvents,
+  getAdminEvents,
+  patchEvent,
+  postEvent,
+} from '../controllers/eventsController';
 
 const router = Router();
 
@@ -34,6 +41,11 @@ router.patch('/cycle/collection-claims', patchCycleCollectionClaims);
 router.get('/next-week/collection', getCycleCollectionClaims);
 router.patch('/next-week/collection', patchCycleCollectionClaims);
 router.get('/next-week/global', getNextWeekGlobal);
+router.get('/events', getActiveEvents);
+router.get('/events/admin', getAdminEvents);
+router.post('/events', postEvent);
+router.patch('/events/:id', patchEvent);
+router.delete('/events/:id', deleteEvent);
 router.get('/bot-message/today', getTodayPrayerBotMessage);
 router.get('/bot-message/:date', getPrayerBotMessage);
 

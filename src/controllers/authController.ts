@@ -14,6 +14,8 @@ import {
   updateAuthUserProfile,
 } from '../services/authService';
 import { notifyRealtime } from '../realtime/notify';
+import { getCoordinatorMemberIdsWithPush } from '../services/fcmSubscriptionService';
+import { sendPush } from '../services/pushService';
 import { MemberNameDuplicateError } from '../services/userService';
 
 type AuthRequest = Request & {
@@ -377,6 +379,12 @@ export async function patchProfileHandler(req: Request, res: Response): Promise<
   }
 
   try {
+    let previousPrayerTrimmed: string | null = null;
+    if (typeof body.prayer_request === 'string') {
+      const before = await getAuthUserById(authReq.authUserId);
+      previousPrayerTrimmed = (before?.prayer_request ?? '').trim();
+    }
+
     const user = await updateAuthUserProfile(authReq.authUserId, patch);
     if (!user) {
       res.status(404).json({ error: 'User not found' });
@@ -387,6 +395,26 @@ export async function patchProfileHandler(req: Request, res: Response): Promise<
       rt.push('calendar');
     }
     notifyRealtime(rt);
+
+    if (typeof body.prayer_request === 'string') {
+      const nextPrayer = String(body.prayer_request).trim();
+      if (nextPrayer !== (previousPrayerTrimmed ?? '')) {
+        try {
+          const coordIds = await getCoordinatorMemberIdsWithPush();
+          const name = user.name?.trim() || 'Участник';
+          for (const cid of coordIds) {
+            if (cid === authReq.authUserId) continue;
+            void sendPush(cid, 'Молитвенная нужда', `${name} обновил(а) свою молитвенную нужду.`, {
+              url: '/calendar',
+              type: 'prayer_member_update',
+            });
+          }
+        } catch (pushErr) {
+          console.warn('[auth] prayer coordinator push notify failed (best-effort):', pushErr);
+        }
+      }
+    }
+
     res.json(user);
   } catch (error: unknown) {
     if (error instanceof MemberNameDuplicateError) {

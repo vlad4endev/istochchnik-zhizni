@@ -6,6 +6,9 @@ import { VitePWA } from 'vite-plugin-pwa';
  * Локальный бэкенд: `PORT` в корневом `.env` (в `src/main.ts` дефолт 40978).
  * Задаётся в web-react/.env: VITE_DEV_API_PROXY=http://127.0.0.1:40978
  * Прокси действует и для `vite dev`, и для `vite preview` (иначе /api не доходит до Express).
+ *
+ * Важно: аватарки отдаются как `/uploads/avatars/...` с API. Без прокси `/uploads` запросы
+ * в dev попадают на Vite и дают 404 — фото «сохранилось», но не отображается.
  */
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
@@ -19,6 +22,10 @@ export default defineConfig(({ mode }) => {
       target: apiProxyTarget,
       changeOrigin: true,
       ws: true,
+    },
+    '/uploads': {
+      target: apiProxyTarget,
+      changeOrigin: true,
     },
     '/health': {
       target: apiProxyTarget,
@@ -86,7 +93,7 @@ export default defineConfig(({ mode }) => {
           skipWaiting: true,
           clientsClaim: true,
           navigateFallback: 'index.html',
-          navigateFallbackDenylist: [/^\/api\//],
+          navigateFallbackDenylist: [/^\/api\//, /^\/uploads\//],
           importScripts: ['custom-sw.js'],
           // Версионирование для инвалидации кэша
           runtimeCaching: [
