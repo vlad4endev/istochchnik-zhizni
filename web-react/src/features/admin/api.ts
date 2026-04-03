@@ -222,6 +222,7 @@ export interface AccessRequestItem {
   first_name: string;
   last_name: string;
   phone_number: string;
+  request_type: 'registration' | 'password_reset';
   status: 'pending' | 'approved' | 'rejected';
   member_id: number | null;
   review_note: string | null;

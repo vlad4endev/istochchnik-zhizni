@@ -9,14 +9,289 @@ import { motion, useMotionValue, useTransform, animate } from 'framer-motion';
 import type { PanInfo } from 'framer-motion';
 import { LuReply } from 'react-icons/lu';
 
+function MentionRichText({
+  text,
+  namesById,
+  isMine,
+}: {
+  text: string;
+  namesById?: Record<number, string>;
+  isMine: boolean;
+}) {
+  const parts = text.split(/(@\[[^\]]+\]\(\d+\)|@\[\d+\])/g);
+  return (
+    <>
+      {parts.map((part, i) => {
+        const mFriendly = part.match(/^@\[([^\]]+)\]\((\d+)\)$/);
+        if (mFriendly) {
+          const id = Number(mFriendly[2]);
+          const embedded = String(mFriendly[1] || '').trim();
+          const name = embedded || namesById?.[id] || `участник ${id}`;
+          return (
+            <span
+              key={i}
+              className={['font-semibold', isMine ? 'text-sky-100 underline decoration-white/40' : 'text-primary'].join(
+                ' ',
+              )}
+            >
+              @{name}
+            </span>
+          );
+        }
+        const m = part.match(/^@\[(\d+)\]$/);
+        if (!m) {
+          return <span key={i}>{part}</span>;
+        }
+        const id = Number(m[1]);
+        const name = namesById?.[id] ?? `участник ${id}`;
+        return (
+          <span
+            key={i}
+            className={['font-semibold', isMine ? 'text-sky-100 underline decoration-white/40' : 'text-primary'].join(' ')}
+          >
+            @{name}
+          </span>
+        );
+      })}
+    </>
+  );
+}
+
+function MessengerPollCard({
+  message,
+  isMine,
+  isOptimistic,
+}: {
+  message: MessageWithSender;
+  isMine: boolean;
+  isOptimistic: boolean;
+}) {
+  const votePoll = useChatStore((s) => s.votePoll);
+  const payload = (message.payload ?? {}) as Record<string, unknown>;
+  const options = Array.isArray(payload.options) ? payload.options.map((x) => String(x ?? '')) : [];
+  const allowsMultiple = Boolean(payload.allows_multiple);
+  const tallies =
+    message.poll_tallies?.length === options.length ? message.poll_tallies! : options.map(() => 0);
+  const myVotes = message.poll_my_options ?? [];
+  const mySet = new Set(myVotes);
+  const total = tallies.reduce((a, b) => a + b, 0);
+  const hasMyVote = mySet.size > 0;
+  const [multiEdit, setMultiEdit] = useState(false);
+  const [multiPick, setMultiPick] = useState<Set<number>>(() => new Set());
+
+  const toggleMulti = (i: number) => {
+    setMultiPick((prev) => {
+      const next = new Set(prev);
+      if (next.has(i)) next.delete(i);
+      else next.add(i);
+      return next;
+    });
+  };
+
+  const startMultiEdit = () => {
+    setMultiPick(new Set(myVotes));
+    setMultiEdit(true);
+  };
+
+  const submitMulti = () => {
+    void votePoll(message.id, [...multiPick].sort((a, b) => a - b));
+    setMultiEdit(false);
+  };
+
+  const muted = isMine ? 'text-white/80' : 'text-gray-500';
+  const qCls = isMine ? 'text-white' : 'text-gray-900';
+  const barBg = isMine ? 'bg-white/20' : 'bg-gray-200';
+  const barFill = isMine ? 'bg-white' : 'bg-primary';
+
+  if (!options.length) {
+    return <span className={qCls}>Опрос недоступен</span>;
+  }
+
+  if (isOptimistic) {
+    return (
+      <div className="w-full max-w-[20rem] space-y-2">
+        <div className={['text-[12px] font-extrabold tracking-wide', muted].join(' ')}>Опрос</div>
+        <p className={['text-[15px] font-semibold leading-snug', qCls].join(' ')}>{message.content || '—'}</p>
+        <ul className="space-y-1.5">
+          {options.map((label, i) => (
+            <li
+              key={i}
+              className={[
+                'rounded-xl px-3 py-2 text-[14px] font-medium',
+                isMine ? 'bg-white/10 text-white/95' : 'bg-gray-100 text-gray-800',
+              ].join(' ')}
+            >
+              {label || `Вариант ${i + 1}`}
+            </li>
+          ))}
+        </ul>
+      </div>
+    );
+  }
+
+  const showMultiPicker = allowsMultiple && (!hasMyVote || multiEdit);
+  const showSinglePicker = !allowsMultiple && !hasMyVote;
+
+  return (
+    <div className="w-full max-w-[20rem] space-y-2">
+      <div className={['text-[12px] font-extrabold tracking-wide', muted].join(' ')}>Опрос</div>
+      <p className={['text-[15px] font-semibold leading-snug', qCls].join(' ')}>{message.content || '—'}</p>
+
+      <ul className="space-y-2">
+        {options.map((label, i) => {
+          const count = tallies[i] ?? 0;
+          const pct = total > 0 ? Math.round((count / total) * 100) : 0;
+          const picked = mySet.has(i);
+
+          if (showSinglePicker) {
+            return (
+              <li key={i}>
+                <button
+                  type="button"
+                  onClick={() => void votePoll(message.id, [i])}
+                  className={[
+                    'w-full rounded-xl px-3 py-2.5 text-left text-[14px] font-semibold transition-colors active:scale-[0.99]',
+                    isMine
+                      ? 'bg-white/12 text-white hover:bg-white/18'
+                      : 'bg-gray-100 text-gray-900 hover:bg-gray-200/90',
+                  ].join(' ')}
+                >
+                  {label}
+                </button>
+              </li>
+            );
+          }
+
+          if (allowsMultiple && showMultiPicker) {
+            const checked = multiPick.has(i);
+            return (
+              <li key={i}>
+                <button
+                  type="button"
+                  onClick={() => toggleMulti(i)}
+                  className={[
+                    'flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-[14px] font-semibold transition-colors',
+                    isMine
+                      ? checked
+                        ? 'bg-white/20 text-white ring-1 ring-white/35'
+                        : 'bg-white/10 text-white/95 hover:bg-white/14'
+                      : checked
+                        ? 'bg-primary/12 text-primary ring-1 ring-primary/25'
+                        : 'bg-gray-100 text-gray-900 hover:bg-gray-200/90',
+                  ].join(' ')}
+                >
+                  <span
+                    className={[
+                      'grid h-5 w-5 shrink-0 place-items-center rounded border-2 text-[11px]',
+                      isMine ? 'border-white/50' : 'border-gray-300',
+                      checked ? (isMine ? 'bg-white text-primary' : 'bg-primary text-white') : '',
+                    ].join(' ')}
+                    aria-hidden
+                  >
+                    {checked ? '✓' : ''}
+                  </span>
+                  <span className="min-w-0 flex-1">{label}</span>
+                </button>
+              </li>
+            );
+          }
+
+          return (
+            <li key={i}>
+              <button
+                type="button"
+                disabled={allowsMultiple}
+                onClick={() => {
+                  if (!allowsMultiple) void votePoll(message.id, [i]);
+                }}
+                className={[
+                  'w-full rounded-xl px-3 py-2 text-left',
+                  allowsMultiple ? 'cursor-default' : 'transition-colors active:scale-[0.99]',
+                  isMine ? 'bg-white/10 hover:bg-white/14' : 'bg-gray-50 hover:bg-gray-100',
+                ].join(' ')}
+              >
+                <div className="flex items-center justify-between gap-2 text-[13px] font-semibold">
+                  <span className={['min-w-0 flex-1', qCls].join(' ')}>{label}</span>
+                  <span className={muted}>{pct}%</span>
+                </div>
+                <div className={['mt-1.5 h-2 overflow-hidden rounded-full', barBg].join(' ')}>
+                  <div
+                    className={['h-full rounded-full transition-[width] duration-300', barFill].join(' ')}
+                    style={{ width: `${pct}%`, opacity: picked ? 1 : 0.85 }}
+                  />
+                </div>
+                <div className={['mt-0.5 text-[11px] font-bold', muted].join(' ')}>{count} голосов</div>
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+
+      {allowsMultiple && showMultiPicker ? (
+        <div className="flex flex-wrap gap-2 pt-1">
+          {hasMyVote && multiEdit ? (
+            <button
+              type="button"
+              onClick={() => setMultiEdit(false)}
+              className={[
+                'rounded-full px-3 py-1.5 text-xs font-bold',
+                isMine ? 'bg-white/15 text-white' : 'bg-gray-200 text-gray-800',
+              ].join(' ')}
+            >
+              Отмена
+            </button>
+          ) : null}
+          <button
+            type="button"
+            onClick={() => void submitMulti()}
+            disabled={multiPick.size === 0}
+            className={[
+              'rounded-full px-4 py-2 text-xs font-extrabold disabled:opacity-40',
+              isMine ? 'bg-white text-primary' : 'bg-primary text-white',
+            ].join(' ')}
+          >
+            {hasMyVote ? 'Сохранить' : 'Голосовать'}
+          </button>
+        </div>
+      ) : null}
+
+      {allowsMultiple && hasMyVote && !multiEdit ? (
+        <button
+          type="button"
+          onClick={startMultiEdit}
+          className={['text-xs font-bold underline-offset-2 hover:underline', muted].join(' ')}
+        >
+          Изменить голос
+        </button>
+      ) : null}
+
+      {!allowsMultiple && hasMyVote ? (
+        <p className={['text-[11px] font-semibold', muted].join(' ')}>Нажмите другой вариант, чтобы изменить голос</p>
+      ) : null}
+    </div>
+  );
+}
+
 interface MessageBubbleProps {
   message: MessageWithSender;
   isGroupedPrev: boolean;
   isGroupedNext: boolean;
   onJumpToMessage?: (messageId: string) => void;
+  /** Подписи для отображения `@[id]` как @Имя. */
+  participantLabelById?: Record<number, string>;
+  canPinMessages?: boolean;
+  onPinToggle?: (messageId: string, nextPinned: boolean) => void | Promise<void>;
 }
 
-export function MessageBubble({ message, isGroupedPrev, isGroupedNext, onJumpToMessage }: MessageBubbleProps) {
+export function MessageBubble({
+  message,
+  isGroupedPrev,
+  isGroupedNext,
+  onJumpToMessage,
+  participantLabelById,
+  canPinMessages = false,
+  onPinToggle,
+}: MessageBubbleProps) {
   const currentMemberId = useChatStore((s) => s.currentMemberId);
   const readCursorsByConv = useChatStore((s) => s.readCursorsByConv);
   const addReaction = useChatStore((s) => s.addReaction);
@@ -75,6 +350,10 @@ export function MessageBubble({ message, isGroupedPrev, isGroupedNext, onJumpToM
   };
 
   const renderContent = () => {
+    if (payloadType === 'poll') {
+      return <MessengerPollCard message={message} isMine={isMine} isOptimistic={isOptimistic} />;
+    }
+
     if (payloadType === 'prayer_request') {
       const text = String(
         payload.text ?? payload.request ?? payload.content ?? message.content ?? '',
@@ -178,7 +457,9 @@ export function MessageBubble({ message, isGroupedPrev, isGroupedNext, onJumpToM
     }
 
     // text (default)
-    return <>{message.content}</>;
+    return (
+      <MentionRichText text={message.content} namesById={participantLabelById} isMine={isMine} />
+    );
   };
 
   function formatBytes(bytes: number): string {
@@ -342,6 +623,12 @@ export function MessageBubble({ message, isGroupedPrev, isGroupedNext, onJumpToM
         {/* Content */}
         <div className="msg-content whitespace-pre-wrap break-words text-[14px] leading-relaxed sm:text-[15px]">{renderContent()}</div>
 
+        {message.is_pinned ? (
+          <div className={['mt-1 text-[10px] font-bold uppercase tracking-wide', isMine ? 'text-white/60' : 'text-amber-600'].join(' ')}>
+            📌 Закреплено
+          </div>
+        ) : null}
+
         {/* Meta */}
         <div className={['mt-1 flex items-center justify-end gap-1 text-[11px]', isMine ? 'text-white/70' : 'text-gray-400'].join(' ')}>
           {message.is_edited && <span className="msg-edited">ред.</span>}
@@ -402,7 +689,18 @@ export function MessageBubble({ message, isGroupedPrev, isGroupedNext, onJumpToM
             <button type="button" onClick={() => { setReplyTo(message); setShowActions(false); }}>
               <span>↩️</span> Ответить
             </button>
-            {isMine && (
+            {canPinMessages && !isOptimistic && /^\d+$/.test(String(message.id)) ? (
+              <button
+                type="button"
+                onClick={() => {
+                  void onPinToggle?.(String(message.id), !message.is_pinned);
+                  setShowActions(false);
+                }}
+              >
+                <span>{message.is_pinned ? '📍' : '📌'}</span> {message.is_pinned ? 'Открепить' : 'Закрепить'}
+              </button>
+            ) : null}
+            {isMine && payloadType !== 'poll' && (
               <button type="button" onClick={() => { setEditing(message); setShowActions(false); }}>
                 <span>✏️</span> Редактировать
               </button>

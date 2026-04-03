@@ -8,7 +8,7 @@ export type ConversationType = 'private' | 'group' | 'channel';
 export type ParticipantRole = 'owner' | 'admin' | 'member';
 
 /** Rich message kinds (mirrors server `message_payload_type`). */
-export type MessagePayloadType = 'text' | 'prayer_request' | 'audio' | 'image' | 'file';
+export type MessagePayloadType = 'text' | 'prayer_request' | 'audio' | 'image' | 'file' | 'poll';
 
 export type MessagePayload = Record<string, unknown>;
 
@@ -75,6 +75,10 @@ export interface MessageWithSender {
     is_deleted: boolean;
   } | null;
   reactions: { emoji: string; count: number; reacted_by_me: boolean }[];
+  /** For polls: counts per option (same order as `payload.options`). */
+  poll_tallies?: number[];
+  /** Option indexes the current member voted for. */
+  poll_my_options?: number[];
   /** Local-only optimistic status (not persisted in DB). */
   status?: 'sending' | 'sent' | 'error';
 }
@@ -165,6 +169,8 @@ export async function uploadFile(
   return data;
 }
 
+export type EffectivePermissions = Record<string, boolean>;
+
 export type ConversationMeta = {
   id: string;
   type: ConversationType;
@@ -174,11 +180,33 @@ export type ConversationMeta = {
   default_permissions?: Record<string, boolean>;
   settings?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
+  /** С ручки meta: роль текущего пользователя в этом чате. */
+  my_role?: ParticipantRole;
+  /** Эффективные права (учёт роли, настроек чата и персональных ограничений). */
+  my_effective_permissions?: EffectivePermissions;
 };
 
 export async function fetchConversationMeta(conversationId: string): Promise<ConversationMeta> {
   const { data } = await apiClient.get<ConversationMeta>(`${BASE}/conversations/${conversationId}/meta`);
   return data;
+}
+
+export async function fetchPinnedMessages(conversationId: string, limit = 15): Promise<MessageWithSender[]> {
+  const { data } = await apiClient.get<MessageWithSender[]>(
+    `${BASE}/conversations/${encodeURIComponent(conversationId)}/pinned-messages`,
+    { params: { limit } },
+  );
+  return data;
+}
+
+export async function pinChatMessage(conversationId: string, messageId: string): Promise<void> {
+  await apiClient.post(`${BASE}/conversations/${encodeURIComponent(conversationId)}/pins`, { messageId });
+}
+
+export async function unpinChatMessage(conversationId: string, messageId: string): Promise<void> {
+  await apiClient.delete(
+    `${BASE}/conversations/${encodeURIComponent(conversationId)}/pins/${encodeURIComponent(messageId)}`,
+  );
 }
 
 export type ConversationMember = {
@@ -257,6 +285,17 @@ export async function addReaction(messageId: string, emoji: string) {
 
 export async function removeReaction(messageId: string, emoji: string) {
   await apiClient.delete(`${BASE}/messages/${messageId}/reactions/${encodeURIComponent(emoji)}`);
+}
+
+export async function votePoll(
+  messageId: string,
+  optionIndexes: number[],
+): Promise<{ tallies: number[]; my_options: number[] }> {
+  const { data } = await apiClient.post<{ tallies: number[]; my_options: number[] }>(
+    `${BASE}/messages/${encodeURIComponent(messageId)}/poll-vote`,
+    { optionIndexes },
+  );
+  return data;
 }
 
 export async function searchMembers(q: string): Promise<SearchMember[]> {

@@ -20,6 +20,7 @@
     "@capacitor/android": "^7.2.0",
     "@capacitor/core": "^7.2.0",
     "@capacitor/ios": "^7.2.0",
+    "@capacitor/push-notifications": "^7.0.6",
     "@emoji-mart/data": "^1.2.1",
     "@emoji-mart/react": "^1.1.1",
     "@hello-pangea/dnd": "^18.0.1",

@@ -26,6 +26,13 @@ type RegisterResponse = {
   error?: string;
 };
 
+type ForgotPasswordResponse = {
+  status?: string;
+  request_id?: number;
+  message?: string;
+  error?: string;
+};
+
 export function LoginPage() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -46,6 +53,14 @@ export function LoginPage() {
   const [submitting, setSubmitting] = useState(false);
   const [showPassword, setShowPassword] = useState(true);
   const [showConfirm, setShowConfirm] = useState(true);
+  const [showResetForm, setShowResetForm] = useState(false);
+  const [resetFirstName, setResetFirstName] = useState('');
+  const [resetLastName, setResetLastName] = useState('');
+  const [resetPhone, setResetPhone] = useState('');
+  const [resetPassword, setResetPassword] = useState('');
+  const [resetConfirmPassword, setResetConfirmPassword] = useState('');
+  const [showResetPassword, setShowResetPassword] = useState(true);
+  const [showResetConfirm, setShowResetConfirm] = useState(true);
 
   const apiMismatch = isApiUrlProbablyWrongForWeb();
 
@@ -241,6 +256,80 @@ export function LoginPage() {
     }
   }
 
+  async function submitForgotPassword() {
+    const fn = resetFirstName.trim();
+    const ln = resetLastName.trim();
+    const p = resetPhone.trim();
+    const pw = resetPassword;
+    const cpw = resetConfirmPassword;
+
+    if (!fn || !ln || !p || !pw) {
+      setStatusText('Для сброса пароля заполните ФИО, телефон и новый пароль.');
+      setStatusIsError(true);
+      return;
+    }
+    if (pw.length < 8) {
+      setStatusText('Новый пароль должен быть не менее 8 символов.');
+      setStatusIsError(true);
+      return;
+    }
+    if (pw !== cpw) {
+      setStatusText('Пароли не совпадают.');
+      setStatusIsError(true);
+      return;
+    }
+
+    setSubmitting(true);
+    clearStatus();
+    try {
+      const response = await apiClient.post<ForgotPasswordResponse>(
+        '/api/auth/forgot-password-request',
+        {
+          first_name: fn,
+          last_name: ln,
+          phone_number: p,
+          password: pw,
+        },
+        { validateStatus: (s) => s != null && s < 600 },
+      );
+
+      const data = response.data ?? {};
+      if (response.status === 202 && data.status === 'pending') {
+        setShowResetForm(false);
+        setResetFirstName('');
+        setResetLastName('');
+        setResetPhone('');
+        setResetPassword('');
+        setResetConfirmPassword('');
+        setStatusText(
+          data.message ??
+            'Заявка на сброс отправлена. После подтверждения администратором войдите с новым паролем.',
+        );
+        setStatusIsError(false);
+        return;
+      }
+
+      if (response.status === 400 || response.status === 409) {
+        const raw = typeof data.error === 'string' ? data.error : 'Не удалось отправить заявку.';
+        setStatusText(humanizeServerError(raw.trim()));
+        setStatusIsError(true);
+        return;
+      }
+
+      const fallback =
+        typeof data.error === 'string'
+          ? data.error
+          : 'Не удалось отправить заявку на сброс пароля. Попробуйте позже.';
+      setStatusText(humanizeServerError(fallback));
+      setStatusIsError(true);
+    } catch (e) {
+      setStatusText(mapAxiosAuthError(e));
+      setStatusIsError(true);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   const title = isRegisterMode ? 'Создание аккаунта' : 'Вход в систему';
   const subtitle = isRegisterMode
     ? 'Заполните данные для регистрации'
@@ -302,6 +391,7 @@ export function LoginPage() {
                   }`}
                   onClick={() => {
                     setIsRegisterMode(false);
+                    setShowResetForm(false);
                     clearStatus();
                   }}
                 >
@@ -316,6 +406,7 @@ export function LoginPage() {
                   }`}
                   onClick={() => {
                     setIsRegisterMode(true);
+                    setShowResetForm(false);
                     clearStatus();
                   }}
                 >
@@ -390,6 +481,21 @@ export function LoginPage() {
                 </div>
               </label>
 
+              {!isRegisterMode && (
+                <div className="mt-1 flex justify-start">
+                  <button
+                    type="button"
+                    className="text-xs font-semibold text-primary hover:underline"
+                    onClick={() => {
+                      setShowResetForm((v) => !v);
+                      clearStatus();
+                    }}
+                  >
+                    {showResetForm ? 'Скрыть форму сброса' : 'Забыли пароль?'}
+                  </button>
+                </div>
+              )}
+
               {isRegisterMode && (
                 <label className="block">
                   <span className="mb-1 block text-xs font-semibold text-stone-600">
@@ -417,6 +523,112 @@ export function LoginPage() {
                     </button>
                   </div>
                 </label>
+              )}
+
+              {!isRegisterMode && showResetForm && (
+                <div className="rounded-xl border border-primary/20 bg-primary/[0.04] p-3">
+                  <p className="text-xs font-semibold text-stone-700">
+                    Сброс через администратора: заполните данные и задайте новый пароль.
+                  </p>
+                  <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                    <label className="block">
+                      <span className="mb-1 block text-xs font-semibold text-stone-600">Имя</span>
+                      <input
+                        className={inputClass}
+                        value={resetFirstName}
+                        onChange={(e) => setResetFirstName(e.target.value)}
+                        placeholder="Имя из карточки"
+                        autoComplete="given-name"
+                      />
+                    </label>
+                    <label className="block">
+                      <span className="mb-1 block text-xs font-semibold text-stone-600">Фамилия</span>
+                      <input
+                        className={inputClass}
+                        value={resetLastName}
+                        onChange={(e) => setResetLastName(e.target.value)}
+                        placeholder="Фамилия из карточки"
+                        autoComplete="family-name"
+                      />
+                    </label>
+                  </div>
+                  <label className="mt-3 block">
+                    <span className="mb-1 block text-xs font-semibold text-stone-600">Телефон</span>
+                    <input
+                      className={inputClass}
+                      value={resetPhone}
+                      onChange={(e) => setResetPhone(formatRuPhoneInput(e.target.value))}
+                      onKeyDown={(e) => {
+                        if (!phoneInputAllowedKeys(e)) e.preventDefault();
+                      }}
+                      placeholder="+7..."
+                      inputMode="tel"
+                      autoComplete="tel"
+                    />
+                  </label>
+                  <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                    <label className="block">
+                      <span className="mb-1 block text-xs font-semibold text-stone-600">Новый пароль</span>
+                      <div className="relative">
+                        <input
+                          className={`${inputClass} pr-11`}
+                          type={showResetPassword ? 'password' : 'text'}
+                          value={resetPassword}
+                          onChange={(e) => setResetPassword(e.target.value)}
+                          autoComplete="new-password"
+                        />
+                        <button
+                          type="button"
+                          className="absolute right-1.5 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-lg text-stone-500 transition-colors hover:bg-stone-100 hover:text-primary"
+                          onClick={() => setShowResetPassword((v) => !v)}
+                          aria-label={showResetPassword ? 'Показать пароль' : 'Скрыть пароль'}
+                        >
+                          {showResetPassword ? (
+                            <LuEye className="h-5 w-5" strokeWidth={2} aria-hidden />
+                          ) : (
+                            <LuEyeOff className="h-5 w-5" strokeWidth={2} aria-hidden />
+                          )}
+                        </button>
+                      </div>
+                    </label>
+                    <label className="block">
+                      <span className="mb-1 block text-xs font-semibold text-stone-600">
+                        Повторите пароль
+                      </span>
+                      <div className="relative">
+                        <input
+                          className={`${inputClass} pr-11`}
+                          type={showResetConfirm ? 'password' : 'text'}
+                          value={resetConfirmPassword}
+                          onChange={(e) => setResetConfirmPassword(e.target.value)}
+                          autoComplete="new-password"
+                        />
+                        <button
+                          type="button"
+                          className="absolute right-1.5 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-lg text-stone-500 transition-colors hover:bg-stone-100 hover:text-primary"
+                          onClick={() => setShowResetConfirm((v) => !v)}
+                          aria-label={showResetConfirm ? 'Показать пароль' : 'Скрыть пароль'}
+                        >
+                          {showResetConfirm ? (
+                            <LuEye className="h-5 w-5" strokeWidth={2} aria-hidden />
+                          ) : (
+                            <LuEyeOff className="h-5 w-5" strokeWidth={2} aria-hidden />
+                          )}
+                        </button>
+                      </div>
+                    </label>
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      disabled={submitting}
+                      onClick={() => void submitForgotPassword()}
+                      className="rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-white shadow-md shadow-primary/20 disabled:opacity-50"
+                    >
+                      Отправить заявку на сброс
+                    </button>
+                  </div>
+                </div>
               )}
             </div>
 

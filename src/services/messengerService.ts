@@ -824,9 +824,80 @@ export async function getPrivateChatProfile(
 
 // ─── Messages ─────────────────────────────────────────────────
 
+/** Клиент может слать `@[Имя](id)` или уже нормализованный `@[id]`. */
+function normalizeFriendlyMentionsToCanonical(content: string): string {
+  return content.replace(/@\[([^\]]+)\]\((\d+)\)/g, (_m, _label, id) => {
+    const digits = String(id).replace(/\D/g, '');
+    return digits ? `@[${digits}]` : '';
+  });
+}
+
+/** После нормализации остаётся только `@[memberId]`. */
+function extractMentionMemberIdsFromContent(content: string): number[] {
+  const normalized = normalizeFriendlyMentionsToCanonical(content);
+  if (!normalized) return [];
+  const re = /@\[(\d+)\]/g;
+  const ids: number[] = [];
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(normalized)) !== null) {
+    const n = Number(m[1]);
+    if (Number.isFinite(n) && n > 0) ids.push(n);
+  }
+  return [...new Set(ids)];
+}
+
 function normalizePayloadType(raw: unknown): MessagePayloadType {
-  if (raw === 'prayer_request' || raw === 'audio' || raw === 'image' || raw === 'file') return raw;
+  if (
+    raw === 'prayer_request' ||
+    raw === 'audio' ||
+    raw === 'image' ||
+    raw === 'file' ||
+    raw === 'poll'
+  ) {
+    return raw;
+  }
   return 'text';
+}
+
+function pollOptionsLength(payload: MessagePayload): number {
+  const o = payload.options;
+  return Array.isArray(o) ? o.length : 0;
+}
+
+/** Normalize and validate poll payload; `content` is the poll question. */
+function normalizePollPayloadForSend(question: string, plRaw: MessagePayload): MessagePayload {
+  const q = String(question ?? '').trim();
+  if (!q || q.length > 500) {
+    throw new Error('Poll question is required (max 500 characters)');
+  }
+  const optionsRaw = plRaw.options;
+  if (!Array.isArray(optionsRaw)) {
+    throw new Error('Poll requires payload.options as an array');
+  }
+  const options = optionsRaw
+    .map((x) => String(x ?? '').trim())
+    .filter((s) => s.length > 0);
+  if (options.length < 2 || options.length > 10) {
+    throw new Error('Poll must have between 2 and 10 non-empty options');
+  }
+  for (const o of options) {
+    if (o.length > 200) throw new Error('Poll option too long (max 200 characters)');
+  }
+  return {
+    options,
+    allows_multiple: Boolean(plRaw.allows_multiple),
+  };
+}
+
+function parseIntJsonArray(raw: unknown): number[] {
+  if (raw == null) return [];
+  try {
+    const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+    if (!Array.isArray(parsed)) return [];
+    return parsed.map((x) => Number(x)).filter((n) => Number.isFinite(n));
+  } catch {
+    return [];
+  }
 }
 
 function normalizePayload(raw: unknown): MessagePayload {
@@ -848,9 +919,26 @@ export async function sendMessage(
 ): Promise<MessageWithSender> {
   const pt = normalizePayloadType(payloadType);
   const plRaw = normalizePayload(payload);
-  const pl: MessagePayload = pt === 'text' && Object.keys(plRaw).length === 0
-    ? { text: content.trim() }
-    : plRaw;
+  const contentTrimmed = content.trim();
+  const contentStored = normalizeFriendlyMentionsToCanonical(contentTrimmed);
+  let pl: MessagePayload;
+  if (pt === 'poll') {
+    pl = normalizePollPayloadForSend(contentStored, plRaw);
+  } else if (pt === 'text' && Object.keys(plRaw).length === 0) {
+    pl = { text: contentStored };
+  } else {
+    pl = plRaw;
+  }
+
+  const mentionRaw = extractMentionMemberIdsFromContent(contentStored);
+  if (mentionRaw.length > 0) {
+    const memberSet = new Set(await getConversationMemberIds(conversationId));
+    const valid = mentionRaw.filter((id) => memberSet.has(id) && id !== senderId);
+    if (valid.length > 0) {
+      pl = { ...pl, mention_member_ids: valid };
+    }
+  }
+
   const payloadJson = JSON.stringify(pl);
 
   // For consistent ordering in `/conversations` across clients.
@@ -878,13 +966,41 @@ export async function sendMessage(
       rm.id         AS rp_id,
       rm.content    AS rp_content,
       rm.is_deleted AS rp_is_deleted,
-      COALESCE(rm_s.first_name, '') || ' ' || COALESCE(rm_s.last_name, '') AS rp_sender_name
+      COALESCE(rm_s.first_name, '') || ' ' || COALESCE(rm_s.last_name, '') AS rp_sender_name,
+      (
+        SELECT COALESCE(json_agg(sub.c ORDER BY sub.i), '[]'::json)
+        FROM (
+          SELECT gs.i AS i,
+            COALESCE((
+              SELECT COUNT(*)::int FROM message_poll_votes v
+              WHERE v.message_id = ins.id AND v.option_index = gs.i
+            ), 0) AS c
+          FROM generate_series(
+            0,
+            GREATEST(0, jsonb_array_length(COALESCE(ins.payload->'options', '[]'::jsonb)) - 1)
+          ) AS gs(i)
+        ) sub
+      ) AS poll_tallies_json,
+      (
+        SELECT COALESCE(json_agg(v.option_index ORDER BY v.option_index), '[]'::json)
+        FROM message_poll_votes v
+        WHERE v.message_id = ins.id AND v.member_id = $8
+      ) AS poll_my_options_json
     FROM inserted ins
     LEFT JOIN members m ON m.id = ins.sender_id
     LEFT JOIN messages rm ON rm.id = ins.reply_to_message_id
     LEFT JOIN members rm_s ON rm_s.id = rm.sender_id
     `,
-    [conversationId, senderId, content.trim(), replyToMessageId || null, clientMsgId || null, pt, payloadJson],
+    [
+      conversationId,
+      senderId,
+      contentStored,
+      replyToMessageId || null,
+      clientMsgId || null,
+      pt,
+      payloadJson,
+      senderId,
+    ],
   );
 
   return mapMessageWithSender(result.rows[0], senderId);
@@ -936,7 +1052,26 @@ export async function loadMessages(
           WHERE mr.message_id = msg.id
           GROUP BY mr.emoji
         ) r
-      ) AS reactions_json
+      ) AS reactions_json,
+      (
+        SELECT COALESCE(json_agg(sub.c ORDER BY sub.i), '[]'::json)
+        FROM (
+          SELECT gs.i AS i,
+            COALESCE((
+              SELECT COUNT(*)::int FROM message_poll_votes v
+              WHERE v.message_id = msg.id AND v.option_index = gs.i
+            ), 0) AS c
+          FROM generate_series(
+            0,
+            GREATEST(0, jsonb_array_length(COALESCE(msg.payload->'options', '[]'::jsonb)) - 1)
+          ) AS gs(i)
+        ) sub
+      ) AS poll_tallies_json,
+      (
+        SELECT COALESCE(json_agg(v.option_index ORDER BY v.option_index), '[]'::json)
+        FROM message_poll_votes v
+        WHERE v.message_id = msg.id AND v.member_id = $${params.length + 1}
+      ) AS poll_my_options_json
     FROM messages msg
     LEFT JOIN members m ON m.id = msg.sender_id
     LEFT JOIN messages rm ON rm.id = msg.reply_to_message_id
@@ -952,6 +1087,114 @@ export async function loadMessages(
 }
 
 /**
+ * Pinned messages (newest pin first), same shape as `loadMessages` rows.
+ */
+export async function listPinnedMessages(
+  conversationId: string,
+  memberId: number,
+  limit: number = 15,
+): Promise<MessageWithSender[]> {
+  const lim = Math.min(30, Math.max(1, limit));
+  const result = await dbQuery(
+    `
+    SELECT
+      msg.*,
+      m.name        AS sender_name,
+      m.first_name  AS sender_first_name,
+      m.last_name   AS sender_last_name,
+      rm.id         AS rp_id,
+      rm.content    AS rp_content,
+      rm.is_deleted AS rp_is_deleted,
+      COALESCE(rm_s.first_name, '') || ' ' || COALESCE(rm_s.last_name, '') AS rp_sender_name,
+      (
+        SELECT COALESCE(json_agg(json_build_object(
+          'emoji', r.emoji,
+          'count', r.cnt,
+          'reacted_by_me', r.my_react
+        )), '[]'::json)
+        FROM (
+          SELECT
+            mr.emoji,
+            COUNT(*)::int AS cnt,
+            BOOL_OR(mr.member_id = $2) AS my_react
+          FROM message_reactions mr
+          WHERE mr.message_id = msg.id
+          GROUP BY mr.emoji
+        ) r
+      ) AS reactions_json,
+      (
+        SELECT COALESCE(json_agg(sub.c ORDER BY sub.i), '[]'::json)
+        FROM (
+          SELECT gs.i AS i,
+            COALESCE((
+              SELECT COUNT(*)::int FROM message_poll_votes v
+              WHERE v.message_id = msg.id AND v.option_index = gs.i
+            ), 0) AS c
+          FROM generate_series(
+            0,
+            GREATEST(0, jsonb_array_length(COALESCE(msg.payload->'options', '[]'::jsonb)) - 1)
+          ) AS gs(i)
+        ) sub
+      ) AS poll_tallies_json,
+      (
+        SELECT COALESCE(json_agg(v.option_index ORDER BY v.option_index), '[]'::json)
+        FROM message_poll_votes v
+        WHERE v.message_id = msg.id AND v.member_id = $2
+      ) AS poll_my_options_json
+    FROM chat_pins p
+    JOIN messages msg ON msg.id = p.message_id
+    LEFT JOIN members m ON m.id = msg.sender_id
+    LEFT JOIN messages rm ON rm.id = msg.reply_to_message_id
+    LEFT JOIN members rm_s ON rm_s.id = rm.sender_id
+    WHERE p.conversation_id = $1
+      AND msg.is_deleted = FALSE
+    ORDER BY p.pinned_at DESC
+    LIMIT $3
+    `,
+    [conversationId, memberId, lim],
+  );
+
+  return result.rows.map((r: any) => mapMessageWithSender(r, memberId));
+}
+
+export async function pinMessageInConversation(
+  conversationId: string,
+  messageId: string,
+  pinnedBy: number,
+): Promise<void> {
+  const mid = String(messageId || '').trim();
+  if (!/^\d+$/.test(mid)) {
+    throw new Error('Invalid message id');
+  }
+  const check = await dbQuery(
+    `SELECT 1 FROM messages WHERE id = $1 AND conversation_id = $2 AND is_deleted = FALSE LIMIT 1`,
+    [mid, conversationId],
+  );
+  if (!check.rows[0]) {
+    throw new Error('Message not found');
+  }
+  await dbQuery(
+    `INSERT INTO chat_pins (conversation_id, message_id, pinned_by)
+     VALUES ($1, $2, $3)
+     ON CONFLICT (conversation_id, message_id) DO UPDATE SET pinned_at = NOW(), pinned_by = EXCLUDED.pinned_by`,
+    [conversationId, mid, pinnedBy],
+  );
+  await dbQuery(`UPDATE messages SET is_pinned = TRUE WHERE id = $1`, [mid]);
+}
+
+export async function unpinMessageInConversation(conversationId: string, messageId: string): Promise<void> {
+  const mid = String(messageId || '').trim();
+  if (!/^\d+$/.test(mid)) {
+    throw new Error('Invalid message id');
+  }
+  await dbQuery(`DELETE FROM chat_pins WHERE conversation_id = $1 AND message_id = $2`, [
+    conversationId,
+    mid,
+  ]);
+  await dbQuery(`UPDATE messages SET is_pinned = FALSE WHERE id = $1`, [mid]);
+}
+
+/**
  * Edit message content (only by sender).
  */
 export async function editMessage(
@@ -959,19 +1202,129 @@ export async function editMessage(
   senderId: number,
   newContent: string,
 ): Promise<{ content: string; updated_at: string } | null> {
+  const sel = await dbQuery(
+    `SELECT conversation_id, payload_type::text AS payload_type, payload
+     FROM messages
+     WHERE id = $1 AND sender_id = $2 AND is_deleted = FALSE`,
+    [messageId, senderId],
+  );
+  const row = sel.rows[0] as
+    | { conversation_id: string; payload_type: string; payload: unknown }
+    | undefined;
+  if (!row) return null;
+
+  const convId = String(row.conversation_id);
+  const pt = String(row.payload_type);
+  const normalized = normalizeFriendlyMentionsToCanonical(newContent.trim());
+
+  const mentionRaw = extractMentionMemberIdsFromContent(normalized);
+  const memberSet = new Set(await getConversationMemberIds(convId));
+  const valid = mentionRaw.filter((id) => memberSet.has(id) && id !== senderId);
+
+  if (pt === 'text') {
+    const pl: MessagePayload = {
+      text: normalized,
+      ...(valid.length ? { mention_member_ids: valid } : {}),
+    };
+    const payloadJson = JSON.stringify(pl);
+    const result = await dbQuery(
+      `UPDATE messages
+       SET content = $1, payload = $2::jsonb, updated_at = NOW()
+       WHERE id = $3 AND sender_id = $4 AND is_deleted = FALSE
+       RETURNING content, updated_at`,
+      [normalized, payloadJson, messageId, senderId],
+    );
+    return result.rows[0] ?? null;
+  }
+
+  const pl0 = normalizePayload(row.payload);
+  const pl: MessagePayload = { ...pl0 };
+  if (valid.length) pl.mention_member_ids = valid;
+  else delete pl.mention_member_ids;
+  const payloadJson = JSON.stringify(pl);
+
   const result = await dbQuery(
     `UPDATE messages
-     SET
-       content = $1,
-       payload = CASE
-         WHEN payload_type::text = 'text' THEN jsonb_build_object('text', $1)
-         ELSE payload
-       END
-     WHERE id = $2 AND sender_id = $3 AND is_deleted = FALSE
+     SET content = $1, payload = $2::jsonb, updated_at = NOW()
+     WHERE id = $3 AND sender_id = $4 AND is_deleted = FALSE
      RETURNING content, updated_at`,
-    [newContent.trim(), messageId, senderId],
+    [normalized, payloadJson, messageId, senderId],
   );
   return result.rows[0] ?? null;
+}
+
+/**
+ * Vote on a poll (or clear vote with empty `optionIndexes`). Replaces previous votes for this user.
+ */
+export async function votePollMessage(
+  messageId: string,
+  memberId: number,
+  optionIndexes: number[],
+): Promise<{ conversationId: string; tallies: number[]; my_options: number[] }> {
+  const mid = String(messageId || '').trim();
+  if (!/^\d+$/.test(mid)) {
+    throw new Error('Invalid message id');
+  }
+
+  const rows = await dbQuery(
+    `SELECT id, conversation_id, payload_type, payload, is_deleted FROM messages WHERE id = $1 LIMIT 1`,
+    [mid],
+  );
+  const row = rows.rows[0];
+  if (!row || row.is_deleted) {
+    throw new Error('Message not found');
+  }
+  if (String(row.payload_type) !== 'poll') {
+    throw new Error('Not a poll message');
+  }
+
+  const payload = normalizePayload(row.payload);
+  const options = Array.isArray(payload.options) ? payload.options : [];
+  const n = options.length;
+  if (n < 2) {
+    throw new Error('Invalid poll');
+  }
+  const allowsMultiple = Boolean(payload.allows_multiple);
+
+  const uniq = [
+    ...new Set(
+      optionIndexes
+        .map((i) => Number(i))
+        .filter((i) => Number.isInteger(i) && i >= 0 && i < n),
+    ),
+  ].sort((a, b) => a - b);
+
+  if (!allowsMultiple && uniq.length > 1) {
+    throw new Error('This poll allows only one answer');
+  }
+
+  const convId = String(row.conversation_id);
+  const ok = await isMemberInConversation(convId, memberId);
+  if (!ok) {
+    throw new Error('Forbidden');
+  }
+
+  await dbQuery(`DELETE FROM message_poll_votes WHERE message_id = $1 AND member_id = $2`, [mid, memberId]);
+  for (const idx of uniq) {
+    // eslint-disable-next-line no-await-in-loop
+    await dbQuery(
+      `INSERT INTO message_poll_votes (message_id, member_id, option_index) VALUES ($1, $2, $3)`,
+      [mid, memberId, idx],
+    );
+  }
+
+  const talliesRows = await dbQuery(
+    `SELECT option_index, COUNT(*)::int AS c FROM message_poll_votes WHERE message_id = $1 GROUP BY option_index`,
+    [mid],
+  );
+  const tallies = Array(n).fill(0);
+  for (const tr of talliesRows.rows) {
+    const i = Number((tr as { option_index: unknown }).option_index);
+    const c = Number((tr as { c: unknown }).c);
+    if (i >= 0 && i < n) tallies[i] = c;
+  }
+
+  return { conversationId: convId, tallies, my_options: uniq };
 }
 
 /**
@@ -1189,14 +1542,17 @@ function mapMessageWithSender(r: any, currentMemberId: number): MessageWithSende
     } catch { /* ignore */ }
   }
 
-  return {
+  const payloadNorm = normalizePayload(r.payload);
+  const pt = normalizePayloadType(r.payload_type);
+
+  const base: MessageWithSender = {
     id: bigint(r.id),
     conversation_id: bigint(r.conversation_id),
     sender_id: r.sender_id,
     client_msg_id: r.client_msg_id ?? null,
     content: r.content,
-    payload_type: normalizePayloadType(r.payload_type),
-    payload: normalizePayload(r.payload),
+    payload_type: pt,
+    payload: payloadNorm,
     interaction_count: Number(r.interaction_count ?? 0),
     reply_to_message_id: r.reply_to_message_id ? bigint(r.reply_to_message_id) : null,
     forwarded_from: r.forwarded_from ?? null,
@@ -1218,6 +1574,18 @@ function mapMessageWithSender(r: any, currentMemberId: number): MessageWithSende
       : null,
     reactions,
   };
+
+  if (pt === 'poll') {
+    const optsLen = pollOptionsLength(payloadNorm);
+    let tallies = parseIntJsonArray(r.poll_tallies_json);
+    if (tallies.length !== optsLen) {
+      tallies = Array(Math.max(0, optsLen)).fill(0);
+    }
+    base.poll_tallies = tallies;
+    base.poll_my_options = parseIntJsonArray(r.poll_my_options_json);
+  }
+
+  return base;
 }
 
 /**
@@ -1259,7 +1627,26 @@ export async function searchMessages(
           WHERE mr.message_id = msg.id
           GROUP BY mr.emoji
         ) r
-      ) AS reactions_json
+      ) AS reactions_json,
+      (
+        SELECT COALESCE(json_agg(sub.c ORDER BY sub.i), '[]'::json)
+        FROM (
+          SELECT gs.i AS i,
+            COALESCE((
+              SELECT COUNT(*)::int FROM message_poll_votes v
+              WHERE v.message_id = msg.id AND v.option_index = gs.i
+            ), 0) AS c
+          FROM generate_series(
+            0,
+            GREATEST(0, jsonb_array_length(COALESCE(msg.payload->'options', '[]'::jsonb)) - 1)
+          ) AS gs(i)
+        ) sub
+      ) AS poll_tallies_json,
+      (
+        SELECT COALESCE(json_agg(v.option_index ORDER BY v.option_index), '[]'::json)
+        FROM message_poll_votes v
+        WHERE v.message_id = msg.id AND v.member_id = $3
+      ) AS poll_my_options_json
     FROM messages msg
     LEFT JOIN members m ON m.id = msg.sender_id
     LEFT JOIN messages rm ON rm.id = msg.reply_to_message_id

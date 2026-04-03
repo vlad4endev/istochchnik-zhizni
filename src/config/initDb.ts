@@ -117,6 +117,7 @@ CREATE TABLE IF NOT EXISTS access_requests (
   phone_number VARCHAR(32) NOT NULL,
   phone_digits VARCHAR(20) NOT NULL,
   password_hash TEXT NOT NULL,
+  request_type VARCHAR(32) NOT NULL DEFAULT 'registration' CHECK (request_type IN ('registration', 'password_reset')),
   status VARCHAR(20) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
   member_id INTEGER REFERENCES members(id) ON DELETE SET NULL,
   reviewed_by_member_id INTEGER REFERENCES members(id) ON DELETE SET NULL,
@@ -144,6 +145,15 @@ ALTER TABLE access_requests ADD CONSTRAINT access_requests_member_id_fkey FOREIG
 
 ALTER TABLE access_requests DROP CONSTRAINT IF EXISTS access_requests_reviewed_by_member_id_fkey;
 ALTER TABLE access_requests ADD CONSTRAINT access_requests_reviewed_by_member_id_fkey FOREIGN KEY (reviewed_by_member_id) REFERENCES members(id) ON DELETE SET NULL;
+
+ALTER TABLE access_requests ADD COLUMN IF NOT EXISTS request_type VARCHAR(32);
+UPDATE access_requests
+SET request_type = 'registration'
+WHERE request_type IS NULL OR request_type NOT IN ('registration', 'password_reset');
+ALTER TABLE access_requests ALTER COLUMN request_type SET DEFAULT 'registration';
+ALTER TABLE access_requests ALTER COLUMN request_type SET NOT NULL;
+ALTER TABLE access_requests DROP CONSTRAINT IF EXISTS access_requests_request_type_check;
+ALTER TABLE access_requests ADD CONSTRAINT access_requests_request_type_check CHECK (request_type IN ('registration', 'password_reset'));
 
 -- global_settings: строка (id=1) создаётся в ensurePrayerCycleAnchor() после initDb — не затирать якорь при обновлениях.
 
@@ -225,6 +235,9 @@ CREATE INDEX IF NOT EXISTS access_requests_status_idx
 
 CREATE INDEX IF NOT EXISTS access_requests_phone_digits_idx
   ON access_requests (phone_digits);
+
+CREATE INDEX IF NOT EXISTS access_requests_request_type_idx
+  ON access_requests (request_type);
 
 CREATE INDEX IF NOT EXISTS idx_member_cycle_overrides_member_id
   ON member_cycle_overrides (member_id);
@@ -489,6 +502,11 @@ BEGIN
     EXCEPTION WHEN duplicate_object THEN
       NULL;
     END;
+    BEGIN
+      ALTER TYPE message_payload_type ADD VALUE IF NOT EXISTS 'poll';
+    EXCEPTION WHEN duplicate_object THEN
+      NULL;
+    END;
   END IF;
 END $$;
 
@@ -525,6 +543,17 @@ CREATE TABLE IF NOT EXISTS message_reactions (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   PRIMARY KEY (message_id, member_id, emoji)
 );
+
+CREATE TABLE IF NOT EXISTS message_poll_votes (
+  message_id BIGINT NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+  member_id INTEGER NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+  option_index SMALLINT NOT NULL CHECK (option_index >= 0),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (message_id, member_id, option_index)
+);
+
+CREATE INDEX IF NOT EXISTS idx_message_poll_votes_message
+  ON message_poll_votes (message_id);
 
 CREATE TABLE IF NOT EXISTS chat_pins (
   conversation_id BIGINT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,

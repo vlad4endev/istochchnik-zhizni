@@ -19,6 +19,7 @@ import { MessengerRoutes } from '../features/messenger/routes/MessengerRoutes';
 import { ResourcesRoutes } from '../features/resources/routes/ResourcesRoutes';
 import { PodcastsPage } from '../features/resources/pages/PodcastsPage';
 import { ServiceFlowPage } from '../features/serviceFlow/pages/ServiceFlowPage';
+import { DashboardPage } from '../features/dashboard/pages/DashboardPage';
 
 import { Layout } from './Layout';
 
@@ -70,7 +71,8 @@ export function AppRouter() {
           </RequireAuth>
         }
       >
-        <Route index element={<Navigate to="/prayer" replace />} />
+        <Route index element={<Navigate to="/dashboard" replace />} />
+        <Route path="dashboard" element={<DashboardPage />} />
         <Route path="prayer" element={<DailyPrayerPage />} />
         <Route path="messenger/*" element={<MessengerRoutes />} />
         <Route path="broadcast" element={<BroadcastPage />} />
@@ -86,7 +88,7 @@ export function AppRouter() {
             </RequireAdmin>
           }
         />
-        <Route path="*" element={<Navigate to="/prayer" replace />} />
+        <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Route>
     </Routes>
   );

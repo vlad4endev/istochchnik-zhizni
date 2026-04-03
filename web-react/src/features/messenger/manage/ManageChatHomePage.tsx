@@ -1,9 +1,104 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { LuCake, LuChevronRight, LuPhone, LuShield, LuSettings2, LuUsers, LuX } from 'react-icons/lu';
+import { LuCake, LuCamera, LuChevronRight, LuPhone, LuPencil, LuShield, LuSettings2, LuUsers, LuX } from 'react-icons/lu';
 import * as api from '../api/messengerApi';
 import { useChatStore } from '../chatStore';
 import { resolvePublicUrl } from '../../../lib/resolvePublicUrl';
+import { emitAppToast } from '../../../lib/uiFeedback';
+
+function GroupManageControls({
+  chatId,
+  initialTitle,
+  onSaved,
+}: {
+  chatId: string;
+  initialTitle: string;
+  onSaved: () => Promise<void> | void;
+}) {
+  const [draftTitle, setDraftTitle] = useState(initialTitle);
+  const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    setDraftTitle(initialTitle);
+  }, [initialTitle]);
+
+  const saveTitle = async () => {
+    const t = draftTitle.trim();
+    if (!t) return;
+    setSaving(true);
+    try {
+      await api.updateConversation(chatId, { title: t });
+      await onSaved();
+      emitAppToast('Название сохранено', 'success');
+    } catch {
+      emitAppToast('Не удалось сохранить название', 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const onPickPhoto = async (file: File | null) => {
+    if (!file || !file.type.startsWith('image/')) return;
+    setUploading(true);
+    try {
+      const up = await api.uploadFile(file);
+      await api.updateConversation(chatId, { avatar_url: up.url });
+      await onSaved();
+      emitAppToast('Фото чата обновлено', 'success');
+    } catch {
+      emitAppToast('Не удалось загрузить фото', 'error');
+    } finally {
+      setUploading(false);
+      if (fileRef.current) fileRef.current.value = '';
+    }
+  };
+
+  const titleChanged = draftTitle.trim() !== (initialTitle || '').trim();
+
+  return (
+    <div className="mt-3 space-y-2">
+      <input
+        ref={fileRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={(e) => void onPickPhoto(e.target.files?.[0] ?? null)}
+      />
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          onClick={() => fileRef.current?.click()}
+          disabled={uploading}
+          className="inline-flex min-h-[40px] items-center gap-2 rounded-xl bg-stone-100 px-3 py-2 text-xs font-extrabold text-stone-800 ring-1 ring-stone-200/80 transition hover:bg-stone-200/80 disabled:opacity-50"
+        >
+          <LuCamera size={18} />
+          {uploading ? 'Загрузка…' : 'Сменить фото'}
+        </button>
+      </div>
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+        <input
+          value={draftTitle}
+          onChange={(e) => setDraftTitle(e.target.value)}
+          placeholder="Название чата"
+          maxLength={120}
+          className="min-h-[44px] min-w-0 flex-1 rounded-xl border border-stone-200 bg-white px-3 py-2 text-sm font-semibold text-stone-900 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+        />
+        <button
+          type="button"
+          onClick={() => void saveTitle()}
+          disabled={saving || !titleChanged || !draftTitle.trim()}
+          className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-extrabold text-white shadow-sm transition disabled:opacity-45"
+        >
+          <LuPencil size={18} />
+          {saving ? 'Сохранение…' : 'Сохранить название'}
+        </button>
+      </div>
+      <p className="text-[11px] font-semibold text-stone-400">Менять название и фото могут только администраторы с правом «управление чатом».</p>
+    </div>
+  );
+}
 
 function axiosMessage(err: unknown): string {
   if (err && typeof err === 'object' && 'response' in err) {
@@ -81,6 +176,11 @@ export function ManageChatHomePage() {
 
   const subtitle = meta?.type === 'channel' ? 'Канал' : meta?.type === 'group' ? 'Группа' : 'Личный чат';
   const isPrivate = conv?.type === 'private';
+  const canManageGroup =
+    !isPrivate &&
+    Boolean(meta?.my_effective_permissions?.can_manage_chat === true);
+  const groupAvatarSrc =
+    resolvePublicUrl(conv?.avatar_url ?? meta?.avatar_url ?? null) ?? null;
   const isOnline = privateProfile ? onlineMembers.has(privateProfile.id) : false;
   const statusText = isOnline ? 'в сети' : 'был(а) недавно';
   const fullName = privateProfile
@@ -115,13 +215,35 @@ export function ManageChatHomePage() {
       {!isPrivate ? (
         <div className="mt-5 rounded-3xl bg-white/80 p-5 shadow-[0_10px_30px_rgba(28,25,23,0.08)] ring-1 ring-stone-200/70 backdrop-blur">
           <div className="flex items-start gap-4">
-            <div className="grid h-14 w-14 place-items-center rounded-2xl bg-primary/10 text-primary">
-              <LuUsers size={26} />
+            <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-2xl bg-primary/10 ring-1 ring-stone-200/70">
+              {groupAvatarSrc ? (
+                <img src={groupAvatarSrc} alt="" className="h-full w-full object-cover" loading="lazy" />
+              ) : (
+                <div className="grid h-full w-full place-items-center text-primary">
+                  <LuUsers size={26} />
+                </div>
+              )}
             </div>
             <div className="min-w-0 flex-1">
               <p className="truncate text-lg font-extrabold text-stone-900">{title}</p>
               <p className="mt-0.5 text-sm font-semibold text-stone-500">{subtitle}</p>
-              {me ? <p className="mt-1 text-xs text-stone-400">Ваш ID: {me}</p> : null}
+              {canManageGroup && chatId ? (
+                <GroupManageControls
+                  chatId={chatId}
+                  initialTitle={meta?.title ?? conv?.title ?? ''}
+                  onSaved={async () => {
+                    void useChatStore.getState().loadConversations();
+                    try {
+                      const m = await api.fetchConversationMeta(chatId);
+                      setMeta(m);
+                    } catch {
+                      /* ignore */
+                    }
+                  }}
+                />
+              ) : me ? (
+                <p className="mt-1 text-xs text-stone-400">Ваш ID: {me}</p>
+              ) : null}
             </div>
           </div>
 

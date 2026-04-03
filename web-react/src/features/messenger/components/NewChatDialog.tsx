@@ -53,8 +53,11 @@ export function NewChatDialog({ onClose, onCreated }: NewChatDialogProps) {
   const [searching, setSearching] = useState(false);
   const [mode, setMode] = useState<'contact' | 'group' | 'channel'>('contact');
   const [title, setTitle] = useState('');
+  /** Участники группы/канала при создании (id → карточка поиска). */
+  const [groupPick, setGroupPick] = useState<Record<number, SearchMember>>({});
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const conversations = useChatStore((s) => s.conversations);
+  const currentMemberId = useChatStore((s) => s.currentMemberId);
   const openPrivateDraft = useChatStore((s) => s.openPrivateDraft);
 
   const performSearch = useCallback(async (q: string) => {
@@ -112,11 +115,26 @@ export function NewChatDialog({ onClose, onCreated }: NewChatDialogProps) {
     onCreated(`${DRAFT_PRIVATE_PREFIX}${member.id}`);
   };
 
+  const toggleGroupMember = (m: SearchMember) => {
+    if (currentMemberId != null && m.id === currentMemberId) return;
+    setGroupPick((prev) => {
+      const next = { ...prev };
+      if (next[m.id]) delete next[m.id];
+      else next[m.id] = m;
+      return next;
+    });
+  };
+
   const handleCreateGroup = async () => {
     if (!title.trim()) return;
     try {
       const type = mode === 'group' ? 'group' : 'channel';
-      const result = await api.createGroupChat(title.trim(), type, []);
+      const memberIds = Object.keys(groupPick)
+        .map(Number)
+        .filter((id) => currentMemberId == null || id !== currentMemberId);
+      const result = await api.createGroupChat(title.trim(), type, memberIds);
+      setGroupPick({});
+      setTitle('');
       onCreated(result.conversationId);
     } catch (e) {
       alert('Ошибка при создании');
@@ -193,23 +211,91 @@ export function NewChatDialog({ onClose, onCreated }: NewChatDialogProps) {
             </div>
           </>
         ) : (
-          <div className="tg-dialog-results" style={{ padding: '20px' }}>
-            <div className="tg-dialog-search" style={{ border: '1px solid var(--tg-border)', borderRadius: '8px', marginBottom: '20px' }}>
-              <input 
+          <div
+            className="tg-dialog-results"
+            style={{ padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: '12px', maxHeight: '72vh' }}
+          >
+            <p className="text-sm font-semibold text-stone-600" style={{ margin: 0 }}>
+              Выберите участников и укажите название. Вы будете владельцем чата.
+            </p>
+            <div className="tg-dialog-search" style={{ border: '1px solid var(--tg-border)', borderRadius: '8px' }}>
+              <LuSearch size={20} className="text-stone-400" />
+              <input
+                className="tg-dialog-input"
+                placeholder="Поиск людей для добавления…"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+            </div>
+            <div style={{ flex: 1, minHeight: '120px', maxHeight: '240px', overflowY: 'auto' }}>
+              {searching ? (
+                <div className="tg-empty-state">Поиск…</div>
+              ) : (
+                sortedContacts.map((u) => {
+                  const isSelf = currentMemberId != null && u.id === currentMemberId;
+                  const picked = Boolean(groupPick[u.id]);
+                  return (
+                    <button
+                      key={u.id}
+                      type="button"
+                      className="tg-member-item"
+                      onClick={() => !isSelf && toggleGroupMember(u)}
+                      style={{ opacity: isSelf ? 0.45 : 1, cursor: isSelf ? 'default' : 'pointer' }}
+                    >
+                      <div
+                        className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-sm font-bold ring-2 ring-stone-200"
+                        style={{
+                          background: picked ? 'var(--tg-primary)' : 'transparent',
+                          color: picked ? 'white' : 'var(--tg-text-muted)',
+                        }}
+                        aria-hidden
+                      >
+                        {picked ? '✓' : ''}
+                      </div>
+                      <div className="tg-member-avatar" style={{ background: getAvatarColor(String(u.id)) }}>
+                        {u.avatar_url ? (
+                          <img src={u.avatar_url} alt="" className="h-full w-full rounded-full object-cover" loading="lazy" />
+                        ) : (
+                          u.first_name?.[0] || u.name[0]
+                        )}
+                      </div>
+                      <div className="tg-member-info">
+                        <div className="tg-member-name">
+                          {u.first_name ? `${u.first_name} ${u.last_name || ''}` : u.name}
+                          {isSelf ? ' (вы)' : ''}
+                        </div>
+                        <div className="tg-member-status">{picked ? 'Будет добавлен(а)' : 'Нажмите, чтобы выбрать'}</div>
+                      </div>
+                    </button>
+                  );
+                })
+              )}
+            </div>
+            <div className="tg-dialog-search" style={{ border: '1px solid var(--tg-border)', borderRadius: '8px' }}>
+              <input
                 autoFocus
-                className="tg-dialog-input" 
-                placeholder={mode === 'group' ? "Название группы" : "Название канала"} 
+                className="tg-dialog-input"
+                placeholder={mode === 'group' ? 'Название группы' : 'Название канала'}
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
               />
             </div>
-            <button 
-              className="tg-compose-btn" 
-              style={{ width: '100%', padding: '12px', background: 'var(--tg-primary)', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold' }}
-              onClick={handleCreateGroup}
+            <button
+              className="tg-compose-btn"
+              style={{
+                width: '100%',
+                padding: '12px',
+                background: 'var(--tg-primary)',
+                color: 'white',
+                border: 'none',
+                borderRadius: '8px',
+                fontWeight: 'bold',
+              }}
+              type="button"
+              onClick={() => void handleCreateGroup()}
               disabled={!title.trim()}
             >
-              Создать
+              Создать{Object.keys(groupPick).length ? ` (${Object.keys(groupPick).length})` : ''}
             </button>
           </div>
         )}

@@ -50,10 +50,10 @@ export function AccessRequestsSection() {
   return (
     <div className="space-y-6">
       <div className="rounded-2xl border border-amber-200/80 bg-amber-50/90 px-4 py-3 text-sm text-amber-950">
-        <p className="font-semibold">Заявки на регистрацию</p>
+        <p className="font-semibold">Заявки на регистрацию и сброс пароля</p>
         <p className="mt-1 text-amber-900/90">
-          Если ФИО и телефон не совпали с карточкой участника, пользователь остаётся в ожидании, пока администратор
-          не одобрит заявку. После одобрения участник сможет войти с выбранным паролем.
+          Здесь появляются две категории заявок: новая регистрация и «Забыл пароль». После одобрения регистрации
+          участник получит доступ в приложение, а после одобрения сброса начнёт действовать новый пароль.
         </p>
       </div>
 
@@ -66,7 +66,7 @@ export function AccessRequestsSection() {
           <LuInbox className="h-12 w-12 text-stone-300" strokeWidth={1.5} aria-hidden />
           <p className="mt-4 text-sm font-semibold text-stone-700">Нет ожидающих заявок</p>
           <p className="mt-1 text-xs text-stone-500">
-            Новые заявки появятся здесь после регистрации с несовпадением с базой.
+            Новые заявки появятся здесь после регистрации или запроса на сброс пароля.
           </p>
         </div>
       ) : (
@@ -121,7 +121,7 @@ function AccessRequestRow(props: {
           <p className="mt-2 text-xs text-stone-400">{formatWhen(item.created_at)}</p>
         </div>
         <span className="shrink-0 rounded-full bg-amber-100 px-3 py-1 text-[10px] font-extrabold uppercase tracking-wider text-amber-900">
-          Ожидает
+          {item.request_type === 'password_reset' ? 'Сброс пароля' : 'Регистрация'}
         </span>
       </div>
       <label className="mt-4 block">
@@ -141,7 +141,7 @@ function AccessRequestRow(props: {
           onClick={onApprove}
           className="rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-white shadow-md shadow-primary/20 disabled:opacity-50"
         >
-          Одобрить
+          {item.request_type === 'password_reset' ? 'Подтвердить сброс' : 'Одобрить'}
         </button>
         <button
           type="button"

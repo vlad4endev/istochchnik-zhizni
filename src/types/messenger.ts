@@ -25,7 +25,7 @@ export interface ConversationRow {
   updated_at: string;
 }
 
-export type MessagePayloadType = 'text' | 'prayer_request' | 'audio' | 'image' | 'file';
+export type MessagePayloadType = 'text' | 'prayer_request' | 'audio' | 'image' | 'file' | 'poll';
 
 export interface ParticipantRow {
   conversation_id: string;
@@ -106,6 +106,10 @@ export interface MessageWithSender extends MessageRow {
   sender_name: string | null;
   sender_first_name: string | null;
   sender_last_name: string | null;
+  /** For `payload_type === 'poll'`: vote counts per option (same order as `payload.options`). */
+  poll_tallies?: number[];
+  /** Option indexes the current user voted for. */
+  poll_my_options?: number[];
   /** Replied message preview (if reply) */
   reply_preview: {
     id: string;
@@ -134,6 +138,7 @@ export type WsMessengerEvent =
   | { type: 'msg:edited'; conversationId: string; messageId: string; content: string; updatedAt: string }
   | { type: 'msg:deleted'; conversationId: string; messageId: string }
   | { type: 'msg:reaction'; conversationId: string; messageId: string; emoji: string; memberId: number; action: 'add' | 'remove' }
+  | { type: 'msg:poll'; conversationId: string; messageId: string; tallies: number[] }
   | { type: 'typing:start'; conversationId: string; memberId: number; memberName: string }
   | { type: 'typing:stop'; conversationId: string; memberId: number }
   | { type: 'conv:created'; conversation: ConversationListItem }

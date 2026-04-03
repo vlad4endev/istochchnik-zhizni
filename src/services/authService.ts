@@ -18,6 +18,7 @@ const PHONE_DIGITS_MAX = 20;
 
 export type AuthRole = 'member' | 'admin';
 export type AccessRequestStatus = 'pending' | 'approved' | 'rejected';
+export type AccessRequestType = 'registration' | 'password_reset';
 
 export interface AuthUser {
   id: number;
@@ -47,6 +48,13 @@ export interface RegisterInput {
   phone_number: string;
 }
 
+export interface PasswordResetRequestInput {
+  password: string;
+  first_name: string;
+  last_name: string;
+  phone_number: string;
+}
+
 export interface LoginResult {
   token: string;
   expires_at: string;
@@ -68,6 +76,7 @@ export interface AccessRequestItem {
   first_name: string;
   last_name: string;
   phone_number: string;
+  request_type: AccessRequestType;
   status: AccessRequestStatus;
   member_id: number | null;
   review_note: string | null;
@@ -433,7 +442,8 @@ async function createPendingAccessRequest(
   lastName: string,
   phoneNumber: string,
   phoneDigits: string,
-  passwordHash: string
+  passwordHash: string,
+  requestType: AccessRequestType
 ): Promise<number> {
   const duplicatePending = await query(
     `SELECT id
@@ -441,9 +451,10 @@ async function createPendingAccessRequest(
      WHERE first_name = $1
        AND last_name = $2
        AND phone_digits = $3
+       AND request_type = $4
        AND status = 'pending'
      LIMIT 1`,
-    [firstName, lastName, phoneDigits]
+    [firstName, lastName, phoneDigits, requestType]
   );
 
   if (duplicatePending.rows[0]?.id) {
@@ -452,10 +463,18 @@ async function createPendingAccessRequest(
 
   const inserted = await query(
     `INSERT INTO access_requests
-      (first_name, last_name, full_name, phone_number, phone_digits, password_hash, status)
-     VALUES ($1, $2, $3, $4, $5, $6, 'pending')
+      (first_name, last_name, full_name, phone_number, phone_digits, password_hash, request_type, status)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending')
      RETURNING id`,
-    [firstName, lastName, `${firstName} ${lastName}`.trim(), phoneNumber, phoneDigits, passwordHash]
+    [
+      firstName,
+      lastName,
+      `${firstName} ${lastName}`.trim(),
+      phoneNumber,
+      phoneDigits,
+      passwordHash,
+      requestType,
+    ]
   );
 
   return Number(inserted.rows[0].id);
@@ -601,13 +620,45 @@ export async function registerUser(input: RegisterInput): Promise<RegisterResult
     lastName,
     phoneNumber,
     phoneDigits,
-    passwordHash
+    passwordHash,
+    'registration'
   );
 
   return {
     status: 'pending',
     request_id: requestId,
     message: 'Заявка отправлена администратору. Доступ будет открыт после подтверждения.',
+  };
+}
+
+export async function requestPasswordReset(input: PasswordResetRequestInput): Promise<{
+  status: 'pending';
+  request_id: number;
+  message: string;
+}> {
+  const firstName = input.first_name.trim();
+  const lastName = input.last_name.trim();
+  const phoneNumber = normalizePhoneInput(input.phone_number);
+  const phoneDigits = normalizePhoneDigits(phoneNumber);
+  ensureValidName(firstName, lastName);
+  ensureValidPhone(phoneNumber);
+  ensureValidPassword(input.password);
+
+  const passwordHash = await hashPassword(input.password);
+  const requestId = await createPendingAccessRequest(
+    firstName,
+    lastName,
+    phoneNumber,
+    phoneDigits,
+    passwordHash,
+    'password_reset'
+  );
+
+  return {
+    status: 'pending',
+    request_id: requestId,
+    message:
+      'Заявка на сброс пароля отправлена администратору. Новый пароль начнёт работать после подтверждения.',
   };
 }
 
@@ -873,6 +924,7 @@ export async function listAccessRequests(status?: AccessRequestStatus): Promise<
       first_name,
       last_name,
       phone_number,
+      request_type,
       status,
       member_id,
       review_note,
@@ -887,46 +939,12 @@ export async function listAccessRequests(status?: AccessRequestStatus): Promise<
   return result.rows as AccessRequestItem[];
 }
 
-export async function approveAccessRequest(
-  requestId: number,
-  reviewerId: number,
-  reviewNote?: string
-): Promise<AuthUser | null> {
-  const requestResult = await query(
-    `SELECT
-      id,
-      first_name,
-      last_name,
-      full_name,
-      phone_number,
-      phone_digits,
-      password_hash,
-      status,
-      member_id
-    FROM access_requests
-    WHERE id = $1
-    LIMIT 1`,
-    [requestId]
-  );
-
-  const requestRow = requestResult.rows[0] as
-    | {
-        id: number;
-        first_name: string;
-        last_name: string;
-        full_name: string;
-        phone_number: string;
-        phone_digits: string;
-        password_hash: string;
-        status: AccessRequestStatus;
-        member_id: number | null;
-      }
-    | undefined;
-
-  if (!requestRow || requestRow.status !== 'pending') {
-    return null;
-  }
-
+async function resolveMemberForAccessRequestIdentity(requestRow: {
+  first_name: string;
+  last_name: string;
+  full_name: string;
+  phone_digits: string;
+}): Promise<MemberRow | null> {
   let existingMember: MemberRow | null = await findMemberByIdentity(
     requestRow.first_name,
     requestRow.last_name,
@@ -935,10 +953,7 @@ export async function approveAccessRequest(
   );
 
   if (!existingMember) {
-    const conflictId = await findMemberIdConflictingName(
-      requestRow.first_name,
-      requestRow.last_name
-    );
+    const conflictId = await findMemberIdConflictingName(requestRow.first_name, requestRow.last_name);
     if (conflictId != null) {
       const conflictResult = await query(
         `SELECT
@@ -968,8 +983,83 @@ export async function approveAccessRequest(
     }
   }
 
+  return existingMember;
+}
+
+export async function approveAccessRequest(
+  requestId: number,
+  reviewerId: number,
+  reviewNote?: string
+): Promise<AuthUser | null> {
+  const requestResult = await query(
+    `SELECT
+      id,
+      first_name,
+      last_name,
+      full_name,
+      phone_number,
+      phone_digits,
+      password_hash,
+      request_type,
+      status,
+      member_id
+    FROM access_requests
+    WHERE id = $1
+    LIMIT 1`,
+    [requestId]
+  );
+
+  const requestRow = requestResult.rows[0] as
+    | {
+        id: number;
+        first_name: string;
+        last_name: string;
+        full_name: string;
+        phone_number: string;
+        phone_digits: string;
+        password_hash: string;
+        request_type: AccessRequestType;
+        status: AccessRequestStatus;
+        member_id: number | null;
+      }
+    | undefined;
+
+  if (!requestRow || requestRow.status !== 'pending') {
+    return null;
+  }
+
+  const existingMember = await resolveMemberForAccessRequestIdentity(requestRow);
+
   let member: MemberRow;
-  if (existingMember) {
+  if (requestRow.request_type === 'password_reset') {
+    if (!existingMember) {
+      return null;
+    }
+    const updated = await query(
+      `UPDATE members
+       SET
+        password_hash = $1,
+        is_active = TRUE,
+        updated_at = NOW()
+       WHERE id = $2
+       RETURNING
+        id,
+        first_name,
+        last_name,
+        name,
+        phone_number,
+        birth_date,
+        email,
+        prayer_request,
+        app_role,
+        is_active,
+        is_collection_coordinator,
+        created_at,
+        updated_at`,
+      [requestRow.password_hash, existingMember.id]
+    );
+    member = updated.rows[0] as MemberRow;
+  } else if (existingMember) {
     const updated = await query(
       `UPDATE members
        SET

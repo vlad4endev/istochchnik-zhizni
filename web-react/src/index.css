@@ -116,6 +116,41 @@ body {
   .scrollbar-hide::-webkit-scrollbar {
     display: none;
   }
+
+  .dashboard-backdrop {
+    animation: dashboard-fade-in 180ms ease-out both;
+  }
+
+  .dashboard-sheet {
+    animation: dashboard-sheet-up 260ms cubic-bezier(0.2, 0.85, 0.22, 1) both;
+  }
+
+  @keyframes dashboard-fade-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+
+  @keyframes dashboard-sheet-up {
+    from {
+      opacity: 0;
+      transform: translateY(18px) scale(0.985);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .dashboard-backdrop,
+    .dashboard-sheet {
+      animation: none !important;
+    }
+  }
 }
 
 /* react-icons (Lucide): SVG-контуры, не подменяются системными эмодзи */

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { LuChevronRight, LuImage, LuLock, LuMessageSquare, LuUserPlus, LuX } from 'react-icons/lu';
+import { LuChevronRight, LuImage, LuLock, LuMessageSquare, LuPin, LuShield, LuUserPlus, LuX } from 'react-icons/lu';
 import * as api from '../api/messengerApi';
 
 type PermKey = 'can_send_messages' | 'can_send_media' | 'can_add_users' | 'can_pin_messages' | 'can_manage_chat';
@@ -131,6 +131,20 @@ export function ChatPermissionsPage() {
           description="Кто может приглашать новых людей"
           value={!!perms.can_add_users}
           onChange={(v) => setPerm('can_add_users', v)}
+        />
+        <ToggleRow
+          Icon={LuPin}
+          title="Закреплять сообщения"
+          description="Кто может закреплять сообщения в шапке чата"
+          value={!!perms.can_pin_messages}
+          onChange={(v) => setPerm('can_pin_messages', v)}
+        />
+        <ToggleRow
+          Icon={LuShield}
+          title="Управление чатом"
+          description="Смена названия, фото, разрешений (для доверенных участников)"
+          value={!!perms.can_manage_chat}
+          onChange={(v) => setPerm('can_manage_chat', v)}
         />
       </div>
 

@@ -3,6 +3,7 @@ import {
   approveAccessRequestHandler,
   changePhoneHandler,
   changePasswordHandler,
+  forgotPasswordRequestHandler,
   listAccessRequestsHandler,
   loginHandler,
   logoutHandler,
@@ -43,6 +44,7 @@ const upload = multer({
 
 router.post('/register', registerHandler);
 router.post('/login', loginHandler);
+router.post('/forgot-password-request', forgotPasswordRequestHandler);
 router.get('/me', requireAuthSession, meHandler);
 router.patch('/me', requireAuthSession, patchProfileHandler);
 router.post('/me/avatar', requireAuthSession, upload.single('file'), uploadAvatarHandler);

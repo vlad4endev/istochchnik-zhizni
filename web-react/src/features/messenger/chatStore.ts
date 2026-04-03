@@ -4,6 +4,7 @@ import type { ConversationListItem, MessageWithSender, SearchMember } from './ap
 import * as api from './api/messengerApi';
 import { emitAppToast } from '../../lib/uiFeedback';
 import { playAudio } from '../../utils/audio';
+import { extractMentionMemberIdsFromText, normalizeMentionsToCanonical } from './mentionUtils';
 
 /** Личный чат до первого сообщения: нет строки в БД, пока пользователь не отправит сообщение. */
 export const DRAFT_PRIVATE_PREFIX = 'draft:';
@@ -57,6 +58,10 @@ interface ChatState {
 
   // --- Typing indicator: convId → memberId[] ---
   typingByConv: Record<string, TypingUser[]>;
+
+  /** Счётчик для перезагрузки закреплённых сообщений (WS `conv:updated`). */
+  pinnedBumpByConv: Record<string, number>;
+  bumpPinnedRevision: (conversationId: string) => void;
 
   // --- Online presence ---
   onlineMembers: Set<number>;
@@ -137,6 +142,9 @@ interface ChatState {
   handleMessageEdited: (convId: string, msgId: string, content: string, updatedAt: string) => void;
   handleMessageDeleted: (convId: string, msgId: string) => void;
   handleReaction: (convId: string, msgId: string, emoji: string, memberId: number, action: 'add' | 'remove') => void;
+  /** Merge poll vote counts from WebSocket (all clients) or after local vote. */
+  handlePollTallies: (convId: string, messageId: string, tallies: number[], myOptions?: number[]) => void;
+  votePoll: (messageId: string, optionIndexes: number[]) => Promise<void>;
   handleTypingStart: (convId: string, memberId: number, memberName: string) => void;
   handleTypingStop: (convId: string, memberId: number) => void;
   handleConvCreated: (conv: ConversationListItem) => void;
@@ -377,6 +385,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   hasMore: {},
   readCursorsByConv: {},
   typingByConv: {},
+  pinnedBumpByConv: {},
   onlineMembers: new Set(),
   totalUnread: 0,
   degradedMode: false,
@@ -562,6 +571,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   sendMessage: async (conversationId, content, replyToId, payloadType = 'text', payload = {}) => {
     const convId = await get().promoteDraftToRealConversation(conversationId);
     if (convId == null) return;
+    const textForSend = normalizeMentionsToCanonical(String(content ?? '').trim());
     playAudio('send');
     const tempId = `temp-${Date.now()}-${Math.random().toString(36).slice(2)}`;
     const clientMsgId = `c-${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -569,9 +579,18 @@ export const useChatStore = create<ChatState>((set, get) => ({
       replyToId != null && /^\d+$/.test(String(replyToId)) ? replyToId : null;
 
     const pt: api.MessagePayloadType =
-      payloadType === 'image' || payloadType === 'file' || payloadType === 'audio' || payloadType === 'prayer_request'
+      payloadType === 'image' ||
+      payloadType === 'file' ||
+      payloadType === 'audio' ||
+      payloadType === 'prayer_request' ||
+      payloadType === 'poll'
         ? payloadType
         : 'text';
+
+    const pollOptsLen =
+      pt === 'poll' && Array.isArray((payload as { options?: unknown }).options)
+        ? (payload as { options: unknown[] }).options.length
+        : 0;
 
     // Optimistic: add temp message immediately
     const optimistic: MessageWithSender = {
@@ -579,9 +598,17 @@ export const useChatStore = create<ChatState>((set, get) => ({
       conversation_id: convId,
       sender_id: get().currentMemberId ?? null,
       client_msg_id: clientMsgId,
-      content,
+      content: textForSend,
       payload_type: pt,
-      payload: pt === 'text' ? { text: content } : payload,
+      payload:
+        pt === 'text'
+          ? (() => {
+              const mids = extractMentionMemberIdsFromText(textForSend);
+              return mids.length ? { text: textForSend, mention_member_ids: mids } : { text: textForSend };
+            })()
+          : payload,
+      poll_tallies: pt === 'poll' && pollOptsLen > 0 ? Array(pollOptsLen).fill(0) : undefined,
+      poll_my_options: pt === 'poll' ? [] : undefined,
       interaction_count: 0,
       reply_to_message_id: replyToId || null,
       is_edited: false,
@@ -612,7 +639,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }));
 
     try {
-      const real = await api.sendMessage(convId, content, serverReplyId, clientMsgId, pt, payload);
+      const real = await api.sendMessage(convId, textForSend, serverReplyId, clientMsgId, pt, payload);
       // Replace temp with real and dedupe against WS echo by id/client_msg_id.
       set((s) => ({
         messagesByConv: {
@@ -649,7 +676,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         queueId,
         tempId,
         conversationId: convId,
-        content,
+        content: textForSend,
         replyToId: serverReplyId,
         clientMsgId,
         payloadType: pt,
@@ -726,19 +753,21 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const convId = get().activeConversationId;
     if (!convId) return;
 
+    const canonical = normalizeMentionsToCanonical(String(content ?? '').trim());
+
     // Optimistic edit
     set((s) => ({
       messagesByConv: {
         ...s.messagesByConv,
         [convId]: (s.messagesByConv[convId] || []).map((m) =>
-          m.id === messageId ? { ...m, content, is_edited: true } : m,
+          m.id === messageId ? { ...m, content: canonical, is_edited: true } : m,
         ),
       },
       editingMessage: null,
     }));
 
     try {
-      await api.editMessage(messageId, content);
+      await api.editMessage(messageId, canonical);
     } catch (e) {
       console.error('[chatStore] editMessage error:', e);
       // Rollback by reloading
@@ -972,6 +1001,47 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }));
   },
 
+  handlePollTallies: (convId, messageId, tallies, myOptions) => {
+    const idKey = String(convId);
+    const mid = String(messageId);
+    set((s) => ({
+      messagesByConv: {
+        ...s.messagesByConv,
+        [idKey]: (s.messagesByConv[idKey] || []).map((m) => {
+          if (String(m.id) !== mid) return m;
+          const next: MessageWithSender = { ...m, poll_tallies: [...tallies] };
+          if (myOptions !== undefined) next.poll_my_options = [...myOptions];
+          return next;
+        }),
+      },
+    }));
+  },
+
+  votePoll: async (messageId, optionIndexes) => {
+    try {
+      const { tallies, my_options } = await api.votePoll(messageId, optionIndexes);
+      const mid = String(messageId);
+      set((s) => {
+        const next = { ...s.messagesByConv };
+        for (const cid of Object.keys(next)) {
+          const list = next[cid];
+          if (!list.some((m) => String(m.id) === mid)) continue;
+          next[cid] = list.map((m) =>
+            String(m.id) === mid ? { ...m, poll_tallies: tallies, poll_my_options: my_options } : m,
+          );
+        }
+        return { messagesByConv: next };
+      });
+    } catch (e) {
+      if (axios.isAxiosError(e)) {
+        const err = e.response?.data as { error?: string } | undefined;
+        emitAppToast(err?.error ?? 'Не удалось сохранить голос', 'error');
+      } else {
+        emitAppToast('Не удалось сохранить голос', 'error');
+      }
+    }
+  },
+
   handleReaction: (convId, msgId, emoji, memberId, action) => {
     const idKey = String(convId);
     const messageId = String(msgId);
@@ -1012,6 +1082,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
         },
       };
     });
+  },
+
+  bumpPinnedRevision: (conversationId) => {
+    const k = String(conversationId);
+    set((s) => ({
+      pinnedBumpByConv: { ...s.pinnedBumpByConv, [k]: (s.pinnedBumpByConv[k] || 0) + 1 },
+    }));
   },
 
   handleTypingStart: (convId, memberId, memberName) => {

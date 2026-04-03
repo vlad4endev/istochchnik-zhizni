@@ -9,6 +9,7 @@ import {
   logoutByToken,
   rejectAccessRequest,
   registerUser,
+  requestPasswordReset,
   updateAuthUserAvatar,
   updateAuthUserProfile,
 } from '../services/authService';
@@ -201,6 +202,45 @@ export async function loginHandler(req: Request, res: Response): Promise<void> {
       return;
     }
     console.error('Failed to login user', error);
+    res.status(500).json({ error: 'Database error' });
+  }
+}
+
+export async function forgotPasswordRequestHandler(req: Request, res: Response): Promise<void> {
+  const password = readStringField(req.body.password);
+  const firstName = readStringField(req.body.first_name);
+  const lastName = readStringField(req.body.last_name);
+  const phoneNumber = readStringField(req.body.phone_number);
+
+  const credentialsError = ensureCredentialsShape(phoneNumber, password);
+  if (credentialsError) {
+    res.status(400).json({ error: credentialsError });
+    return;
+  }
+
+  if (!firstName || !lastName) {
+    res.status(400).json({ error: 'Fields "first_name" and "last_name" are required' });
+    return;
+  }
+
+  try {
+    const result = await requestPasswordReset({
+      password,
+      first_name: firstName,
+      last_name: lastName,
+      phone_number: phoneNumber,
+    });
+    res.status(202).json(result);
+  } catch (error) {
+    if (error instanceof Error && error.message === 'Invalid phone number') {
+      res.status(400).json({ error: 'Неверный номер телефона' });
+      return;
+    }
+    if (error instanceof Error && /^Invalid /.test(error.message)) {
+      res.status(400).json({ error: error.message });
+      return;
+    }
+    console.error('Failed to create password reset request', error);
     res.status(500).json({ error: 'Database error' });
   }
 }

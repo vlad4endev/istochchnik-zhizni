@@ -1,10 +1,12 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { useChatStore, isDraftPrivateConversationId } from '../chatStore';
-import { LuPaperclip, LuPlus, LuSmile, LuSend, LuX, LuImage, LuFileText } from 'react-icons/lu';
+import { LuPaperclip, LuPlus, LuSmile, LuSend, LuX, LuImage, LuFileText, LuChartColumn } from 'react-icons/lu';
 import * as api from '../api/messengerApi';
 import Picker from '@emoji-mart/react';
 import emojiData from '@emoji-mart/data';
+import { PollCreateModal } from './PollCreateModal';
+import { buildMentionToken, denormalizeMentionsForEditor } from '../mentionUtils';
 
 type PendingAttachment = {
   file: File;
@@ -21,6 +23,39 @@ interface ChatInputProps {
   sendTypingStart: (convId: string) => void;
   sendTypingStop: (convId: string) => void;
   canSend: boolean;
+  /** Участники для @-упоминаний (группы/каналы). */
+  mentionParticipants?: { id: number; label: string }[];
+  /** Имена по id — чтобы при редактировании показывать @Имя, а не @[цифры]. */
+  participantLabelById?: Record<number, string>;
+}
+
+/** Ширина меню вложений ≈ Tailwind `w-56` (14rem). */
+const ATTACH_MENU_WIDTH_PX = 224;
+/** Совпадает с max-шириной `.tg-emoji-picker-popover` в messenger.css. */
+const EMOJI_PICKER_MAX_WIDTH_PX = 360;
+
+function computeAttachPopoverPos(rect: DOMRect): PopoverPos {
+  const pad = 12;
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+  const w = Math.min(ATTACH_MENU_WIDTH_PX, vw - 2 * pad);
+  const bottomPx = Math.max(pad, Math.round(vh - rect.top + 8));
+  const leftRaw = Math.round(rect.left);
+  const leftPx = Math.max(pad, Math.min(leftRaw, vw - pad - w));
+  return { bottomPx, leftPx };
+}
+
+/** Правый край у кнопки, вся панель в пределах экрана (не уезжает влево). */
+function computeEmojiPopoverPos(rect: DOMRect): PopoverPos {
+  const pad = 12;
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+  const w = Math.min(EMOJI_PICKER_MAX_WIDTH_PX, vw - 2 * pad);
+  const bottomPx = Math.max(pad, Math.round(vh - rect.top + 8));
+  const anchorRight = Math.min(rect.right, vw - pad);
+  let leftPx = Math.round(anchorRight - w);
+  leftPx = Math.max(pad, Math.min(leftPx, vw - pad - w));
+  return { bottomPx, leftPx };
 }
 
 export function ChatInput({
@@ -28,6 +63,8 @@ export function ChatInput({
   sendTypingStart,
   sendTypingStop,
   canSend,
+  mentionParticipants = [],
+  participantLabelById = {},
 }: ChatInputProps) {
   const sendMessage = useChatStore((s) => s.sendMessage);
   const editMessage = useChatStore((s) => s.editMessage);
@@ -53,6 +90,7 @@ export function ChatInput({
   const [attachMenuExiting, setAttachMenuExiting] = useState(false);
   const [emojiPresent, setEmojiPresent] = useState(false);
   const [emojiExiting, setEmojiExiting] = useState(false);
+  const [pollModalOpen, setPollModalOpen] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const attachMenuRef = useRef<HTMLDivElement>(null);
@@ -66,6 +104,11 @@ export function ChatInput({
   const uploadAbortRef = useRef<AbortController | null>(null);
   const typingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const draftSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [mentionOpen, setMentionOpen] = useState(false);
+  const [mentionStart, setMentionStart] = useState(0);
+  const [mentionFiltered, setMentionFiltered] = useState<{ id: number; label: string }[]>([]);
+  const [mentionHighlight, setMentionHighlight] = useState(0);
+  const lastOpenedEditIdRef = useRef<string | null>(null);
 
   // Load draft on conversation change
   useEffect(() => {
@@ -73,13 +116,18 @@ export function ChatInput({
     setContent(draft);
   }, [conversationId, drafts]);
 
-  // Sync content with editing state
+  // Sync content with editing state (читаемые @Имя вместо @[id])
   useEffect(() => {
-    if (editing) {
-      setContent(editing.content);
+    if (!editing) {
+      lastOpenedEditIdRef.current = null;
+      return;
+    }
+    if (lastOpenedEditIdRef.current !== editing.id) {
+      lastOpenedEditIdRef.current = editing.id;
+      setContent(denormalizeMentionsForEditor(editing.content, participantLabelById));
       textareaRef.current?.focus();
     }
-  }, [editing]);
+  }, [editing, participantLabelById]);
 
   useEffect(() => {
     return () => {
@@ -155,31 +203,48 @@ export function ChatInput({
     return () => window.clearTimeout(t);
   }, [emojiOpen, emojiPresent]);
 
-  const computeAnchorPos = (rect: DOMRect, align: 'left' | 'right'): PopoverPos => {
-    const pad = 12;
-    const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
-    const bottomPx = Math.max(pad, Math.round(window.innerHeight - rect.top + 8));
-    if (align === 'left') {
-      const leftPx = clamp(Math.round(rect.left), pad, Math.max(pad, window.innerWidth - pad - 240));
-      return { bottomPx, leftPx };
+  const repositionPopovers = useCallback(() => {
+    if (attachMenuOpen && attachBtnRef.current) {
+      setAttachPos(computeAttachPopoverPos(attachBtnRef.current.getBoundingClientRect()));
     }
-    const rightPx = clamp(Math.round(window.innerWidth - rect.right), pad, window.innerWidth - pad);
-    return { bottomPx, rightPx };
-  };
+    if (emojiOpen && emojiBtnRef.current) {
+      setEmojiPos(computeEmojiPopoverPos(emojiBtnRef.current.getBoundingClientRect()));
+    }
+  }, [attachMenuOpen, emojiOpen]);
 
   useEffect(() => {
     if (!attachMenuOpen) return;
     const btn = attachBtnRef.current;
     if (!btn) return;
-    setAttachPos(computeAnchorPos(btn.getBoundingClientRect(), 'left'));
+    const apply = () => setAttachPos(computeAttachPopoverPos(btn.getBoundingClientRect()));
+    apply();
+    const id = requestAnimationFrame(apply);
+    return () => cancelAnimationFrame(id);
   }, [attachMenuOpen]);
 
   useEffect(() => {
     if (!emojiOpen) return;
     const btn = emojiBtnRef.current;
     if (!btn) return;
-    setEmojiPos(computeAnchorPos(btn.getBoundingClientRect(), 'right'));
+    const apply = () => setEmojiPos(computeEmojiPopoverPos(btn.getBoundingClientRect()));
+    apply();
+    const id = requestAnimationFrame(apply);
+    return () => cancelAnimationFrame(id);
   }, [emojiOpen]);
+
+  useEffect(() => {
+    if (!attachMenuOpen && !emojiOpen) return;
+    const vv = window.visualViewport;
+    const onResize = () => repositionPopovers();
+    window.addEventListener('resize', onResize);
+    vv?.addEventListener('resize', onResize);
+    vv?.addEventListener('scroll', onResize);
+    return () => {
+      window.removeEventListener('resize', onResize);
+      vv?.removeEventListener('resize', onResize);
+      vv?.removeEventListener('scroll', onResize);
+    };
+  }, [attachMenuOpen, emojiOpen, repositionPopovers]);
 
   const haptic = (ms = 12) => {
     try {
@@ -337,6 +402,36 @@ export function ChatInput({
     textareaRef.current?.focus();
   };
 
+  const pickMention = (memberId: number) => {
+    const el = textareaRef.current;
+    if (!el) return;
+    const caret = el.selectionStart ?? content.length;
+    const before = content.slice(0, mentionStart);
+    const after = content.slice(caret);
+    const label = mentionParticipants.find((p) => p.id === memberId)?.label ?? `участник ${memberId}`;
+    const insert = buildMentionToken(label, memberId);
+    const spacer = after.startsWith(' ') || after === '' ? '' : ' ';
+    const next = before + insert + spacer + after;
+    const pos = before.length + insert.length + (spacer ? 1 : 0);
+    setContent(next);
+    setMentionOpen(false);
+    requestAnimationFrame(() => {
+      try {
+        el.focus();
+        el.setSelectionRange(pos, pos);
+        el.style.height = 'auto';
+        el.style.height = `${el.scrollHeight}px`;
+      } catch {
+        /* ignore */
+      }
+    });
+    try {
+      saveDraft(conversationId, next);
+    } catch {
+      /* ignore */
+    }
+  };
+
   const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const value = e.target.value;
     setContent(value);
@@ -344,6 +439,54 @@ export function ChatInput({
     // Auto-resize
     e.target.style.height = 'auto';
     e.target.style.height = `${e.target.scrollHeight}px`;
+
+    if (mentionParticipants.length > 0) {
+      const caret = e.target.selectionStart ?? value.length;
+      const before = value.slice(0, caret);
+      const at = before.lastIndexOf('@');
+      if (at < 0) {
+        setMentionOpen(false);
+      } else {
+        const frag = before.slice(at + 1);
+        if (frag.includes('\n')) {
+          setMentionOpen(false);
+        } else if (/^\[[^\]]*\]\(/.test(frag)) {
+          // Уже внутри или после `@[Имя](` — не показываем меню
+          setMentionOpen(false);
+        } else {
+          let query = '';
+          let badBracket = false;
+          if (frag.startsWith('[')) {
+            const closeIdx = frag.indexOf(']');
+            if (closeIdx === -1) {
+              query = frag.slice(1);
+            } else {
+              badBracket = true;
+            }
+          } else {
+            query = frag.trim();
+          }
+          if (badBracket) {
+            setMentionOpen(false);
+          } else if (query || frag.startsWith('[')) {
+            const q = query.toLowerCase();
+            const list = mentionParticipants.filter((p) =>
+              q ? p.label.toLowerCase().includes(q) : true,
+            );
+            setMentionStart(at);
+            setMentionFiltered(list.slice(0, 10));
+            setMentionHighlight(0);
+            setMentionOpen(list.length > 0);
+          } else {
+            const list = mentionParticipants.slice(0, 10);
+            setMentionStart(at);
+            setMentionFiltered(list);
+            setMentionHighlight(0);
+            setMentionOpen(list.length > 0);
+          }
+        }
+      }
+    }
 
     // Typing indicator
     if (!isDraftPrivateConversationId(conversationId)) {
@@ -362,11 +505,35 @@ export function ChatInput({
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (mentionOpen && mentionFiltered.length > 0) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setMentionHighlight((h) => Math.min(mentionFiltered.length - 1, h + 1));
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setMentionHighlight((h) => Math.max(0, h - 1));
+        return;
+      }
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        const sel = mentionFiltered[mentionHighlight];
+        if (sel) pickMention(sel.id);
+        return;
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setMentionOpen(false);
+        return;
+      }
+    }
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       void handleSend();
     }
     if (e.key === 'Escape') {
+      if (mentionOpen) setMentionOpen(false);
       if (editing) setEditing(null);
       if (replyTo) setReplyTo(null);
     }
@@ -375,7 +542,7 @@ export function ChatInput({
   if (!canSend) {
     return (
       <div className="tg-input-area" style={{ justifyContent: 'center' }}>
-        <p className="tg-empty-sub">Вы не можете писать в этот канал</p>
+        <p className="tg-empty-sub px-2 text-center">В этом чате для вас отключена отправка сообщений</p>
       </div>
     );
   }
@@ -529,7 +696,31 @@ export function ChatInput({
       ) : null}
 
       <div className="tg-input-area min-w-0 items-center gap-2 sm:gap-2.5">
-        <div className="tg-input-container min-w-0 rounded-3xl border border-gray-200 bg-white shadow-sm">
+        {mentionOpen && mentionFiltered.length > 0 ? (
+          <div
+            className="mb-1 max-h-40 w-full overflow-y-auto rounded-2xl border border-gray-200 bg-white py-1 shadow-md"
+            role="listbox"
+            aria-label="Упоминание участника"
+          >
+            {mentionFiltered.map((p, idx) => (
+              <button
+                key={p.id}
+                type="button"
+                role="option"
+                aria-selected={idx === mentionHighlight}
+                onMouseDown={(ev) => ev.preventDefault()}
+                onClick={() => pickMention(p.id)}
+                className={[
+                  'flex w-full px-3 py-2 text-left text-sm font-semibold',
+                  idx === mentionHighlight ? 'bg-primary/10 text-primary' : 'text-gray-900 hover:bg-gray-50',
+                ].join(' ')}
+              >
+                @{p.label}
+              </button>
+            ))}
+          </div>
+        ) : null}
+        <div className="tg-input-container relative min-w-0 rounded-3xl border border-gray-200 bg-white shadow-sm">
           <input
             ref={fileInputRef}
             type="file"
@@ -557,7 +748,9 @@ export function ChatInput({
           <textarea
             ref={textareaRef}
             className="tg-input-textarea text-gray-900 placeholder:text-gray-400"
-            placeholder="Сообщение..."
+            placeholder={
+              mentionParticipants.length > 0 ? 'Сообщение… (наберите @ — позвать человека)' : 'Сообщение…'
+            }
             rows={1}
             value={content}
             onChange={handleChange}
@@ -624,6 +817,21 @@ export function ChatInput({
               <button
                 type="button"
                 role="menuitem"
+                onClick={() => {
+                  haptic(12);
+                  setAttachMenuOpen(false);
+                  setPollModalOpen(true);
+                }}
+                className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm font-semibold text-gray-900 transition-colors duration-200 hover:bg-gray-50 active:bg-gray-100"
+              >
+                <span className="grid h-9 w-9 place-items-center rounded-xl bg-violet-50 text-violet-600 ring-1 ring-violet-100">
+                  <LuChartColumn size={18} />
+                </span>
+                <span className="min-w-0 flex-1">Опрос</span>
+              </button>
+              <button
+                type="button"
+                role="menuitem"
                 onClick={() => pickFile('file')}
                 className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm font-semibold text-gray-900 transition-colors duration-200 hover:bg-gray-50 active:bg-gray-100"
               >
@@ -671,6 +879,12 @@ export function ChatInput({
             document.body,
           )
         : null}
+
+      <PollCreateModal
+        open={pollModalOpen}
+        onClose={() => setPollModalOpen(false)}
+        conversationId={conversationId}
+      />
     </div>
   );
 }

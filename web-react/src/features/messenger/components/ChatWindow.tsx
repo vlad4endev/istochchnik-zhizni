@@ -1,6 +1,7 @@
 import { useEffect, useRef, useMemo, useCallback, useState, useLayoutEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useChatStore, EMPTY_ARRAY, isDraftPrivateConversationId } from '../chatStore';
+import * as api from '../api/messengerApi';
 import { MessageBubble } from './MessageBubble';
 import { ChatInput } from './ChatInput';
 import { SearchChat } from './SearchChat';
@@ -34,6 +35,11 @@ export function ChatWindow({
   const typingUsers = useChatStore((s) => s.typingByConv[conversationId] || EMPTY_ARRAY);
   const onlineMembers = useChatStore((s) => s.onlineMembers);
   const currentMemberId = useChatStore((s) => s.currentMemberId);
+  const pinnedBump = useChatStore((s) => s.pinnedBumpByConv[conversationId] ?? 0);
+
+  const [chatMeta, setChatMeta] = useState<api.ConversationMeta | null>(null);
+  const [pinnedMessages, setPinnedMessages] = useState<api.MessageWithSender[]>([]);
+  const [mentionList, setMentionList] = useState<{ id: number; label: string }[]>([]);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const nearBottomRef = useRef(true);
@@ -45,6 +51,86 @@ export function ChatWindow({
   const flushTimerRef = useRef<number | null>(null);
 
   const conv = useMemo(() => conversations.find((c) => c.id === conversationId), [conversations, conversationId]);
+
+  useEffect(() => {
+    if (isDraft) {
+      setChatMeta(null);
+      setPinnedMessages([]);
+      setMentionList([]);
+      return;
+    }
+    let alive = true;
+    void api.fetchConversationMeta(conversationId).then((m) => {
+      if (alive) setChatMeta(m);
+    }).catch(() => {
+      if (alive) setChatMeta(null);
+    });
+    if (conv && conv.type !== 'private') {
+      void api.fetchPinnedMessages(conversationId).then((pins) => {
+        if (alive) setPinnedMessages(pins);
+      }).catch(() => {
+        if (alive) setPinnedMessages([]);
+      });
+      void api.fetchParticipants(conversationId).then((parts) => {
+        if (!alive) return;
+        const me = useChatStore.getState().currentMemberId;
+        setMentionList(
+          parts
+            .filter((p) => me == null || p.member_id !== me)
+            .map((p) => ({
+              id: p.member_id,
+              label:
+                (p.first_name ? `${p.first_name} ${p.last_name ?? ''}`.trim() : p.name) ||
+                `Участник ${p.member_id}`,
+            })),
+        );
+      }).catch(() => {
+        if (alive) setMentionList([]);
+      });
+    } else {
+      setPinnedMessages([]);
+      setMentionList([]);
+    }
+    return () => {
+      alive = false;
+    };
+  }, [conversationId, isDraft, conv?.type, pinnedBump]);
+
+  const participantLabelById = useMemo(() => {
+    const m: Record<number, string> = {};
+    for (const p of mentionList) {
+      m[p.id] = p.label;
+    }
+    return m;
+  }, [mentionList]);
+
+  const canPostMessages = isDraft || chatMeta?.my_effective_permissions?.can_send_messages !== false;
+  const canPinMessages = chatMeta?.my_effective_permissions?.can_pin_messages === true;
+
+  const handlePinToggle = useCallback(
+    async (messageId: string, nextPinned: boolean) => {
+      try {
+        if (nextPinned) {
+          await api.pinChatMessage(conversationId, messageId);
+        } else {
+          await api.unpinChatMessage(conversationId, messageId);
+        }
+        const pins = await api.fetchPinnedMessages(conversationId);
+        setPinnedMessages(pins);
+        useChatStore.setState((s) => ({
+          messagesByConv: {
+            ...s.messagesByConv,
+            [conversationId]: (s.messagesByConv[conversationId] || []).map((msg) =>
+              String(msg.id) === String(messageId) ? { ...msg, is_pinned: nextPinned } : msg,
+            ),
+          },
+        }));
+      } catch {
+        /* ignore */
+      }
+    },
+    [conversationId],
+  );
 
   useEffect(() => {
     nearBottomRef.current = true;
@@ -317,6 +403,24 @@ export function ChatWindow({
         </div>
       </header>
 
+      {!isDraft && pinnedMessages.length > 0 ? (
+        <div className="shrink-0 border-b border-amber-200/80 bg-amber-50/90 px-3 py-2">
+          <p className="text-[10px] font-extrabold uppercase tracking-wider text-amber-900/80">Закреплено</p>
+          <div className="mt-1 space-y-1">
+            {pinnedMessages.map((pm) => (
+              <button
+                key={pm.id}
+                type="button"
+                onClick={() => jumpToMessage(String(pm.id))}
+                className="block w-full truncate rounded-lg px-2 py-1 text-left text-[13px] font-semibold text-stone-800 transition hover:bg-amber-100/80"
+              >
+                {String(pm.content || '').trim().slice(0, 100) || 'Сообщение'}
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
       <div
         className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto bg-slate-50 px-3 py-3 sm:gap-3 sm:p-4"
         ref={scrollRef}
@@ -367,6 +471,9 @@ export function ChatWindow({
                   isGroupedPrev={msg.isGroupedPrev}
                   isGroupedNext={msg.isGroupedNext}
                   onJumpToMessage={jumpToMessage}
+                  participantLabelById={participantLabelById}
+                  canPinMessages={canPinMessages}
+                  onPinToggle={handlePinToggle}
                 />
               </div>
             </div>
@@ -379,7 +486,9 @@ export function ChatWindow({
           conversationId={conversationId}
           sendTypingStart={sendTypingStart}
           sendTypingStop={sendTypingStop}
-          canSend={true}
+          canSend={canPostMessages}
+          mentionParticipants={conv && conv.type !== 'private' ? mentionList : []}
+          participantLabelById={participantLabelById}
         />
       </div>
 

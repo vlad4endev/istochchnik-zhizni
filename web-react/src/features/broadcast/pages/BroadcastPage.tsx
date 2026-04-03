@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react';
 import { LuTv, LuSettings, LuCheck, LuX } from 'react-icons/lu';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Link, useLocation } from 'react-router-dom';
 import { fetchBroadcastEmbed, patchBroadcastEmbed } from '../../../api/broadcast';
 import { useAuthStore } from '../../auth/authStore';
+import { grantBroadcastAccess, hasBroadcastAccess } from '../liveAccess';
 
 function btnPrimary(c = '') { return `flex h-10 items-center justify-center rounded-xl bg-primary px-4 text-sm font-bold text-white shadow hover:border-transparent hover:!bg-[#e34254] disabled:pointer-events-none disabled:opacity-50 transition-colors ${c}`; }
 function btnSecondary(c = '') { return `flex h-10 items-center justify-center rounded-xl border border-stone-200 bg-white px-4 text-sm font-bold text-stone-700 hover:bg-stone-50 disabled:pointer-events-none disabled:opacity-50 transition-colors ${c}`; }
@@ -11,18 +13,30 @@ function fieldClass() { return 'w-full rounded-xl border border-stone-200 bg-sto
 
 export function BroadcastPage() {
   const qc = useQueryClient();
+  const location = useLocation();
   const role = useAuthStore((s) => s.role);
   const isAdmin = role === 'admin';
+  const [canViewPage, setCanViewPage] = useState(() => hasBroadcastAccess());
 
   const { data, isLoading: broadcastLoading, error } = useQuery({
     queryKey: ['broadcast'],
     queryFn: fetchBroadcastEmbed,
+    enabled: canViewPage,
   });
 
   const [isEditing, setIsEditing] = useState(false);
   const [rutubeCode, setRutubeCode] = useState('');
 
   const embedCode = data?.rutube_embed_code;
+
+  useEffect(() => {
+    if ((location.state as { fromDashboard?: boolean } | null)?.fromDashboard) {
+      grantBroadcastAccess();
+      setCanViewPage(true);
+    } else {
+      setCanViewPage(hasBroadcastAccess());
+    }
+  }, [location.state]);
 
   useEffect(() => {
     if (data) {
@@ -41,6 +55,28 @@ export function BroadcastPage() {
       alert('Ошибка при сохранении кода трансляции.');
     }
   });
+
+  if (!canViewPage) {
+    return (
+      <div className="min-h-full bg-[var(--surface)] px-4 py-8">
+        <div className="mx-auto max-w-lg rounded-3xl border border-stone-200/80 bg-white/90 p-6 text-center shadow-[var(--shadow)]">
+          <div className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-primary/10 text-primary">
+            <LuTv className="h-7 w-7" strokeWidth={2} aria-hidden />
+          </div>
+          <h1 className="mt-4 text-xl font-extrabold text-stone-900">Трансляция доступна с дашборда</h1>
+          <p className="mt-2 text-sm font-medium text-stone-600">
+            Откройте блок «Трансляция» на главной странице, чтобы перейти к эфиру.
+          </p>
+          <Link
+            to="/dashboard"
+            className="mt-5 inline-flex h-11 items-center justify-center rounded-2xl bg-primary px-5 text-sm font-extrabold text-white hover:bg-primary-dark"
+          >
+            Перейти на главную
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-full bg-[var(--surface)] pb-6 shell:pb-8">

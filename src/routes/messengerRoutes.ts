@@ -144,7 +144,12 @@ router.get('/conversations/:id/meta', checkChatPermission('view'), async (req: R
       res.status(404).json({ error: 'Conversation not found' });
       return;
     }
-    res.json(meta);
+    const auth = req.chatAuth!;
+    res.json({
+      ...meta,
+      my_role: auth.role,
+      my_effective_permissions: auth.effective,
+    });
   } catch (e) {
     console.error('[messenger] getConversationMeta error:', e);
     res.status(500).json({ error: 'Failed to load conversation' });
@@ -219,17 +224,12 @@ router.patch('/conversations/:id/members/:memberId', checkChatPermission('set_pe
   }
 });
 
-/** PATCH /api/messenger/conversations/:id  { title?, avatar_url? } */
-router.patch('/conversations/:id', async (req: Request, res: Response) => {
-  const userId = (req as AuthReq).authUserId!;
+/** PATCH /api/messenger/conversations/:id  { title?, avatar_url? } — только с правом «управлять чатом» */
+router.patch('/conversations/:id', checkChatPermission('manage_chat'), async (req: Request, res: Response) => {
   const convId = req.params.id;
   try {
-    const role = await svc.getParticipantRole(convId, userId);
-    if (!role || role === 'member') {
-      res.status(403).json({ error: 'Only admins can edit conversations' });
-      return;
-    }
     await svc.updateConversation(convId, req.body);
+    sendToRoomAll(String(convId), { type: 'conv:updated', conversationId: String(convId) });
     res.json({ ok: true });
   } catch (e) {
     console.error('[messenger] updateConversation error:', e);
@@ -298,6 +298,66 @@ router.delete('/conversations/:id/participants/:memberId', async (req: Request, 
   }
 });
 
+/** GET /api/messenger/conversations/:id/pinned-messages */
+router.get('/conversations/:id/pinned-messages', checkChatPermission('view'), async (req: Request, res: Response) => {
+  const userId = (req as AuthReq).authUserId!;
+  const convId = String(req.params.id);
+  const limit = Math.min(30, Math.max(1, Number(req.query.limit) || 15));
+  try {
+    const list = await svc.listPinnedMessages(convId, userId, limit);
+    res.json(list);
+  } catch (e) {
+    console.error('[messenger] listPinnedMessages error:', e);
+    res.status(500).json({ error: 'Failed to load pinned messages' });
+  }
+});
+
+/** POST /api/messenger/conversations/:id/pins { messageId } */
+router.post('/conversations/:id/pins', checkChatPermission('pin_messages'), async (req: Request, res: Response) => {
+  const userId = (req as AuthReq).authUserId!;
+  const convId = String(req.params.id);
+  const messageId = req.body?.messageId;
+  if (messageId == null || !/^\d+$/.test(String(messageId).trim())) {
+    res.status(400).json({ error: 'messageId is required' });
+    return;
+  }
+  try {
+    await svc.pinMessageInConversation(convId, String(messageId).trim(), userId);
+    sendToRoomAll(String(convId), { type: 'conv:updated', conversationId: String(convId) });
+    res.json({ ok: true });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (msg === 'Message not found') {
+      res.status(404).json({ error: msg });
+      return;
+    }
+    console.error('[messenger] pinMessage error:', e);
+    res.status(500).json({ error: 'Failed to pin message' });
+  }
+});
+
+/** DELETE /api/messenger/conversations/:id/pins/:messageId */
+router.delete(
+  '/conversations/:id/pins/:messageId',
+  checkChatPermission('pin_messages'),
+  async (req: Request, res: Response) => {
+    const convId = String(req.params.id);
+    const msgId = String(req.params.messageId || '').trim();
+    if (!/^\d+$/.test(msgId)) {
+      res.status(400).json({ error: 'Invalid messageId' });
+      return;
+    }
+    try {
+      await svc.unpinMessageInConversation(convId, msgId);
+      sendToRoomAll(String(convId), { type: 'conv:updated', conversationId: String(convId) });
+      res.json({ ok: true });
+    } catch (e) {
+      console.error('[messenger] unpinMessage error:', e);
+      res.status(500).json({ error: 'Failed to unpin message' });
+    }
+  },
+);
+
 // ─── Messages ─────────────────────────────────────────────────
 
 /** GET /api/messenger/conversations/:id/messages?before=<id>&limit=50 */
@@ -335,7 +395,8 @@ router.post(
       payloadType === 'text' ||
       payloadType === 'audio' ||
       payloadType === 'image' ||
-      payloadType === 'file'
+      payloadType === 'file' ||
+      payloadType === 'poll'
         ? payloadType
         : 'text';
     const pl =
@@ -355,21 +416,46 @@ router.post(
         const memberIds = await svc.getConversationMemberIds(convKey);
         const recipients = memberIds.filter((id) => Number(id) !== Number(userId));
         const senderName = (message as any)?.sender_name ?? 'Новое сообщение';
+        const ptype = String((message as any)?.payload_type ?? 'text');
         const bodyText =
           String((message as any)?.content ?? '').trim() ||
-          ((message as any)?.payload_type && (message as any).payload_type !== 'text' ? 'Вложение' : 'Новое сообщение');
-        const payload = {
-          title: senderName,
-          body: bodyText,
-          conversationId: convKey,
-          messageId: String((message as any)?.id ?? ''),
-          url: `/messenger?conversationId=${encodeURIComponent(convKey)}`,
-        };
+          (ptype === 'poll'
+            ? '📊 Опрос'
+            : ptype !== 'text'
+              ? 'Вложение'
+              : 'Новое сообщение');
+        const mpl = (message as any)?.payload as Record<string, unknown> | undefined;
+        const mentionIds = Array.isArray(mpl?.mention_member_ids)
+          ? (mpl.mention_member_ids as unknown[])
+              .map((x) => Number(x))
+              .filter((n) => Number.isFinite(n) && n > 0)
+          : [];
+        const mentionSet = new Set(mentionIds);
+        let chatLabel = 'Чат';
+        try {
+          const cmeta = await svc.getConversationMeta(convKey);
+          if (cmeta?.title?.trim()) chatLabel = cmeta.title.trim();
+          else if (cmeta?.type === 'group') chatLabel = 'Группа';
+          else if (cmeta?.type === 'channel') chatLabel = 'Канал';
+        } catch {
+          /* ignore */
+        }
+        const previewShort =
+          bodyText.length > 160 ? `${bodyText.slice(0, 157).trim()}…` : bodyText;
 
         for (const rid of recipients) {
+          const r = Number(rid);
+          const mentioned = mentionSet.has(r);
+          const payload = {
+            title: mentioned ? `Вас упомянули в «${chatLabel}»` : senderName,
+            body: mentioned ? `${senderName}: ${previewShort || 'Сообщение'}` : bodyText,
+            conversationId: convKey,
+            messageId: String((message as any)?.id ?? ''),
+            url: `/messenger?conversationId=${encodeURIComponent(convKey)}`,
+          };
           // best-effort per recipient
           // eslint-disable-next-line no-await-in-loop
-          await sendPushNotification(Number(rid), payload);
+          await sendPushNotification(r, payload);
         }
       } catch (e) {
         console.warn('[messenger] push notify failed (best-effort):', e);
@@ -384,12 +470,69 @@ router.post(
       const detail = typeof obj?.detail === 'string' ? obj.detail : undefined;
       const hint = typeof obj?.hint === 'string' ? obj.hint : undefined;
 
+      if (
+        e instanceof Error &&
+        (/^Poll\b|^Invalid poll/i.test(message) ||
+          message.includes('option') ||
+          message.includes('question'))
+      ) {
+        res.status(400).json({ error: message });
+        return;
+      }
+
       // Helpful for DB errors without leaking request body contents.
       console.error('[messenger] sendMessage error:', { message, code, detail, hint });
       res.status(500).json({
         error: 'Failed to send message',
         ...(code ? { dbCode: code } : {}),
       });
+    }
+  },
+);
+
+/** POST /api/messenger/messages/:id/poll-vote { optionIndexes: number[] } */
+router.post(
+  '/messages/:id/poll-vote',
+  checkChatPermission('send_message'),
+  async (req: Request, res: Response) => {
+    const userId = (req as AuthReq).authUserId!;
+    const msgId = req.params.id;
+    const raw = req.body?.optionIndexes;
+    const optionIndexes = Array.isArray(raw) ? raw.map((x) => Number(x)) : [];
+    if (raw != null && !Array.isArray(raw)) {
+      res.status(400).json({ error: 'optionIndexes must be an array' });
+      return;
+    }
+    try {
+      const result = await svc.votePollMessage(msgId, userId, optionIndexes);
+      const ck = result.conversationId;
+      sendToRoomAll(ck, {
+        type: 'msg:poll',
+        conversationId: ck,
+        messageId: String(msgId),
+        tallies: result.tallies,
+      });
+      res.json({ tallies: result.tallies, my_options: result.my_options });
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      if (message === 'Forbidden') {
+        res.status(403).json({ error: 'Forbidden' });
+        return;
+      }
+      if (message === 'Message not found' || message === 'Not a poll message' || message === 'Invalid message id') {
+        res.status(404).json({ error: message });
+        return;
+      }
+      if (
+        message === 'Invalid poll' ||
+        message === 'This poll allows only one answer' ||
+        message.includes('answer')
+      ) {
+        res.status(400).json({ error: message });
+        return;
+      }
+      console.error('[messenger] poll-vote error:', e);
+      res.status(500).json({ error: 'Failed to record vote' });
     }
   },
 );

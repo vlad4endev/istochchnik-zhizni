@@ -210,6 +210,12 @@ function handleWsMessage(msg: any): void {
       store.handleReaction(msg.conversationId, msg.messageId, msg.emoji, msg.memberId, msg.action);
       break;
 
+    case 'msg:poll':
+      if (Array.isArray(msg.tallies)) {
+        store.handlePollTallies(msg.conversationId, msg.messageId, msg.tallies);
+      }
+      break;
+
     case 'typing:start':
       store.handleTypingStart(msg.conversationId, msg.memberId, msg.memberName);
       break;
@@ -225,6 +231,9 @@ function handleWsMessage(msg: any): void {
     case 'conv:updated':
       // Reload conversation list to get updated info
       void store.loadConversations();
+      if (typeof msg.conversationId === 'string' && msg.conversationId) {
+        store.bumpPinnedRevision(msg.conversationId);
+      }
       break;
 
     case 'read:updated':

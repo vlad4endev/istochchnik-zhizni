@@ -1,14 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   type FormEvent,
-  type MouseEvent,
   useEffect,
-  useLayoutEffect,
   useMemo,
-  useRef,
   useState,
 } from 'react';
-import { createPortal } from 'react-dom';
 
 import {
   LuCalendarDays,
@@ -157,30 +153,6 @@ function btnDangerOutline(className = '') {
   return `rounded-xl border border-red-200 bg-white px-3 py-2 text-sm font-semibold text-red-700 transition hover:bg-red-50 ${className}`;
 }
 
-/** Позиция fixed-меню у якоря; не обрезается родителями с overflow-x-auto / overflow-hidden. */
-const MEMBER_MENU_MIN_W = 224;
-const MEMBER_MENU_GAP = 4;
-const MEMBER_MENU_PAD = 8;
-
-function computeMemberMenuPosition(anchor: DOMRect): { top: number; left: number } {
-  let left = anchor.right - MEMBER_MENU_MIN_W;
-  left = Math.max(
-    MEMBER_MENU_PAD,
-    Math.min(left, window.innerWidth - MEMBER_MENU_MIN_W - MEMBER_MENU_PAD),
-  );
-  const estHeight = 340;
-  let top = anchor.bottom + MEMBER_MENU_GAP;
-  const spaceBelow = window.innerHeight - anchor.bottom - MEMBER_MENU_PAD;
-  const spaceAbove = anchor.top - MEMBER_MENU_PAD;
-  if (spaceBelow < estHeight && spaceAbove > spaceBelow) {
-    top = anchor.top - estHeight - MEMBER_MENU_GAP;
-  }
-  return {
-    top: Math.max(MEMBER_MENU_PAD, Math.min(top, window.innerHeight - MEMBER_MENU_PAD - 48)),
-    left,
-  };
-}
-
 export function AdminPage() {
   const [tab, setTab] = useState<AdminTabId>('members');
   const meta = ADMIN_TABS.find((t) => t.id === tab)!;
@@ -305,10 +277,6 @@ function MembersSection() {
   const [oneTimeId, setOneTimeId] = useState<number | null>(null);
   const [oneTimeDate, setOneTimeDate] = useState('');
   const [banner, setBanner] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
-  const [menuOpenFor, setMenuOpenFor] = useState<number | null>(null);
-  const [menuVariant, setMenuVariant] = useState<'card' | 'table' | null>(null);
-  const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null);
-  const menuTriggerRef = useRef<HTMLButtonElement | null>(null);
 
   const invalidate = () => void qc.invalidateQueries({ queryKey: Q_MEMBERS });
 
@@ -390,6 +358,7 @@ function MembersSection() {
   const deleteMut = useMutation({
     mutationFn: (id: number) => deleteAdminMember(id),
     onSuccess: () => {
+      setEditing(null);
       setBanner({ type: 'ok', text: 'Удалено.' });
       invalidate();
     },
@@ -398,7 +367,8 @@ function MembersSection() {
 
   const roleMut = useMutation({
     mutationFn: ({ id, role }: { id: number; role: 'member' | 'admin' }) => setMemberAppRole(id, role),
-    onSuccess: () => {
+    onSuccess: (updated) => {
+      setEditing((prev) => (prev && prev.id === updated.id ? updated : prev));
       setBanner({ type: 'ok', text: 'Роль обновлена.' });
       invalidate();
     },
@@ -434,32 +404,7 @@ function MembersSection() {
     onError: (e) => setBanner({ type: 'err', text: apiErrorMessage(e, 'Ошибка.') }),
   });
 
-  function refreshMemberMenuPosition() {
-    const el = menuTriggerRef.current;
-    if (!el) return;
-    setMenuPos(computeMemberMenuPosition(el.getBoundingClientRect()));
-  }
-
-  function closeMenu() {
-    setMenuOpenFor(null);
-    setMenuVariant(null);
-    setMenuPos(null);
-    menuTriggerRef.current = null;
-  }
-
-  function toggleMemberMenu(u: AppUser, e: MouseEvent<HTMLButtonElement>, variant: 'card' | 'table') {
-    if (menuOpenFor === u.id) {
-      closeMenu();
-      return;
-    }
-    menuTriggerRef.current = e.currentTarget;
-    setMenuVariant(variant);
-    setMenuOpenFor(u.id);
-    setMenuPos(computeMemberMenuPosition(e.currentTarget.getBoundingClientRect()));
-  }
-
   function openEdit(u: AppUser) {
-    closeMenu();
     setEditing(u);
     const { first_name: ef, last_name: el } = splitNameForEditForm(u);
     setEditForm({
@@ -479,31 +424,6 @@ function MembersSection() {
     setBanner(null);
     createMut.mutate();
   }
-
-  useLayoutEffect(() => {
-    if (menuOpenFor == null) return;
-    refreshMemberMenuPosition();
-  }, [menuOpenFor]);
-
-  useEffect(() => {
-    if (menuOpenFor == null) return;
-    const onScrollOrResize = () => refreshMemberMenuPosition();
-    window.addEventListener('scroll', onScrollOrResize, true);
-    window.addEventListener('resize', onScrollOrResize);
-    return () => {
-      window.removeEventListener('scroll', onScrollOrResize, true);
-      window.removeEventListener('resize', onScrollOrResize);
-    };
-  }, [menuOpenFor]);
-
-  useEffect(() => {
-    if (menuOpenFor == null) return;
-    const onKey = (ev: KeyboardEvent) => {
-      if (ev.key === 'Escape') closeMenu();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [menuOpenFor]);
 
   const oneTimeSubject =
     oneTimeId != null ? ((data ?? []).find((u) => u.id === oneTimeId) ?? null) : null;
@@ -528,140 +448,8 @@ function MembersSection() {
     );
   }
 
-  const menuUser = menuOpenFor != null ? (filtered.find((x) => x.id === menuOpenFor) ?? null) : null;
-
   return (
     <div className="space-y-5">
-      {menuOpenFor != null ? (
-        <button
-          type="button"
-          className="fixed inset-0 z-[100] cursor-default bg-transparent"
-          aria-label="Закрыть меню"
-          onClick={closeMenu}
-        />
-      ) : null}
-
-      {menuOpenFor != null &&
-        menuPos &&
-        menuVariant &&
-        menuUser &&
-        createPortal(
-          <ul
-            className="fixed z-[110] max-h-[min(70vh,calc(100dvh-16px))] min-w-[14rem] overflow-y-auto overflow-x-hidden rounded-xl border border-stone-200 bg-white py-1 text-sm shadow-xl"
-            style={{ top: menuPos.top, left: menuPos.left, minWidth: MEMBER_MENU_MIN_W }}
-            role="menu"
-          >
-            <li>
-              <button
-                type="button"
-                className="block w-full px-3 py-2.5 text-left hover:bg-stone-50 sm:py-2"
-                role="menuitem"
-                onClick={() => openEdit(menuUser)}
-              >
-                Изменить данные
-              </button>
-            </li>
-            <li>
-              <button
-                type="button"
-                className="block w-full px-3 py-2.5 text-left hover:bg-stone-50 sm:py-2"
-                role="menuitem"
-                onClick={() => {
-                  closeMenu();
-                  setBanner(null);
-                  roleMut.mutate({
-                    id: menuUser.id,
-                    role: menuUser.app_role === 'admin' ? 'member' : 'admin',
-                  });
-                }}
-              >
-                {menuVariant === 'card'
-                  ? menuUser.app_role === 'admin'
-                    ? 'Снять права админа'
-                    : 'Сделать администратором'
-                  : menuUser.app_role === 'admin'
-                    ? 'Снять права администратора'
-                    : 'Назначить администратором'}
-              </button>
-            </li>
-            <li>
-              <button
-                type="button"
-                className="block w-full px-3 py-2.5 text-left hover:bg-stone-50 sm:py-2"
-                role="menuitem"
-                onClick={() => {
-                  closeMenu();
-                  setBanner(null);
-                  void updateAdminMember(menuUser.id, {
-                    is_collection_coordinator: !menuUser.is_collection_coordinator,
-                  }).then(
-                    () => {
-                      setBanner({ type: 'ok', text: 'Роль «сбор» обновлена.' });
-                      invalidate();
-                    },
-                    (e) => setBanner({ type: 'err', text: apiErrorMessage(e, 'Ошибка.') }),
-                  );
-                }}
-              >
-                {menuUser.is_collection_coordinator
-                  ? 'Снять ответственного за сбор'
-                  : 'Назначить ответственным за сбор'}
-              </button>
-            </li>
-            <li>
-              <button
-                type="button"
-                className="block w-full px-3 py-2.5 text-left hover:bg-stone-50 sm:py-2"
-                role="menuitem"
-                onClick={() => {
-                  closeMenu();
-                  setBanner(null);
-                  void updateAdminMember(menuUser.id, { is_active: !menuUser.is_active }).then(
-                    () => {
-                      setBanner({ type: 'ok', text: 'Статус обновлён.' });
-                      invalidate();
-                    },
-                    (e) => setBanner({ type: 'err', text: apiErrorMessage(e, 'Ошибка.') }),
-                  );
-                }}
-              >
-                {menuUser.is_active ? 'Деактивировать' : 'Активировать'}
-              </button>
-            </li>
-            <li>
-              <button
-                type="button"
-                className="block w-full px-3 py-2.5 text-left hover:bg-stone-50 sm:py-2"
-                role="menuitem"
-                onClick={() => {
-                  closeMenu();
-                  setOneTimeId(menuUser.id);
-                  setOneTimeDate('');
-                  setBanner(null);
-                }}
-              >
-                Разовая дата в цикле
-              </button>
-            </li>
-            <li className="border-t border-stone-100">
-              <button
-                type="button"
-                className="block w-full px-3 py-2.5 text-left font-semibold text-red-700 hover:bg-red-50 sm:py-2"
-                role="menuitem"
-                onClick={() => {
-                  closeMenu();
-                  if (!window.confirm(`Удалить ${displayName(menuUser)}?`)) return;
-                  setBanner(null);
-                  deleteMut.mutate(menuUser.id);
-                }}
-              >
-                {menuVariant === 'card' ? 'Удалить' : 'Удалить из базы'}
-              </button>
-            </li>
-          </ul>,
-          document.body,
-        )}
-
       {banner && (
         <div
           className={
@@ -859,24 +647,25 @@ function MembersSection() {
           filtered.map((u) => (
             <article
               key={u.id}
-              className="rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] p-4 shadow-[var(--shadow)]"
+              className="cursor-pointer rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] p-4 shadow-[var(--shadow)] transition hover:border-primary/40 hover:shadow-md"
+              role="button"
+              tabIndex={0}
+              onClick={() => openEdit(u)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  openEdit(u);
+                }
+              }}
             >
               <div className="flex items-start justify-between gap-2">
                 <div>
                   <p className="font-bold text-stone-900">{displayName(u)}</p>
                   <p className="mt-0.5 text-sm text-stone-600">{u.phone_number ?? '—'}</p>
                 </div>
-                <div className="relative shrink-0">
-                  <button
-                    type="button"
-                    className={btnSecondary('px-3 py-1.5 text-xs')}
-                    onClick={(e) => toggleMemberMenu(u, e, 'card')}
-                    aria-expanded={menuOpenFor === u.id}
-                    aria-haspopup="menu"
-                  >
-                    Действия ▾
-                  </button>
-                </div>
+                <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-[11px] font-bold text-primary">
+                  Карточка
+                </span>
               </div>
               <div className="mt-3 flex flex-wrap items-center gap-2">
                 <MemberRegistrationBadge u={u} />
@@ -920,19 +709,30 @@ function MembersSection() {
                 <th className="px-4 py-3">Телефон</th>
                 <th className="px-4 py-3">Роль в приложении</th>
                 <th className="px-4 py-3">Статус</th>
-                <th className="px-4 py-3 text-right">Действия</th>
               </tr>
             </thead>
             <tbody>
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-4 py-10 text-center text-stone-500">
+                  <td colSpan={5} className="px-4 py-10 text-center text-stone-500">
                     {search.trim() ? 'Никого не найдено.' : 'Список пуст.'}
                   </td>
                 </tr>
               ) : (
                 filtered.map((u) => (
-                  <tr key={u.id} className="border-b border-stone-100/90 last:border-0">
+                  <tr
+                    key={u.id}
+                    className="cursor-pointer border-b border-stone-100/90 transition hover:bg-primary/[0.04] last:border-0"
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => openEdit(u)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        openEdit(u);
+                      }
+                    }}
+                  >
                     <td className="px-4 py-3 font-semibold text-stone-900">{displayName(u)}</td>
                     <td className="px-4 py-3 align-middle">
                       <MemberRegistrationBadge u={u} />
@@ -955,17 +755,6 @@ function MembersSection() {
                       ) : (
                         <span className="text-stone-500">Неактивен</span>
                       )}
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <button
-                        type="button"
-                        className={btnSecondary('text-xs')}
-                        onClick={(e) => toggleMemberMenu(u, e, 'table')}
-                        aria-expanded={menuOpenFor === u.id}
-                        aria-haspopup="menu"
-                      >
-                        Меню ▾
-                      </button>
                     </td>
                   </tr>
                 ))
@@ -1165,6 +954,113 @@ function MembersSection() {
                   />
                   Активен (может войти в приложение)
                 </label>
+              </section>
+
+              {/* Admin controls */}
+              <section>
+                <p className="mb-3 text-[10px] font-extrabold uppercase tracking-[0.15em] text-stone-400">
+                  Действия администратора
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    className={btnSecondary()}
+                    disabled={roleMut.isPending}
+                    onClick={() => {
+                      setBanner(null);
+                      roleMut.mutate({
+                        id: editing.id,
+                        role: editing.app_role === 'admin' ? 'member' : 'admin',
+                      });
+                    }}
+                  >
+                    {editing.app_role === 'admin'
+                      ? 'Снять права администратора'
+                      : 'Назначить администратором'}
+                  </button>
+                  <button
+                    type="button"
+                    className={btnSecondary()}
+                    onClick={() => {
+                      setBanner(null);
+                      void updateAdminMember(editing.id, {
+                        is_collection_coordinator: !editing.is_collection_coordinator,
+                      }).then(
+                        (updated) => {
+                          setEditing(updated);
+                          setBanner({ type: 'ok', text: 'Роль «сбор» обновлена.' });
+                          invalidate();
+                        },
+                        (e) => setBanner({ type: 'err', text: apiErrorMessage(e, 'Ошибка.') }),
+                      );
+                    }}
+                  >
+                    {editing.is_collection_coordinator
+                      ? 'Снять ответственного за сбор'
+                      : 'Назначить ответственным за сбор'}
+                  </button>
+                  <button
+                    type="button"
+                    className={btnSecondary()}
+                    onClick={() => {
+                      setBanner(null);
+                      void updateAdminMember(editing.id, { is_active: !editing.is_active }).then(
+                        (updated) => {
+                          setEditing(updated);
+                          setEditForm((s) => ({ ...s, is_active: updated.is_active }));
+                          setBanner({ type: 'ok', text: 'Статус обновлён.' });
+                          invalidate();
+                        },
+                        (e) => setBanner({ type: 'err', text: apiErrorMessage(e, 'Ошибка.') }),
+                      );
+                    }}
+                  >
+                    {editing.is_active ? 'Деактивировать' : 'Активировать'}
+                  </button>
+                  <button
+                    type="button"
+                    className={btnSecondary()}
+                    onClick={() => {
+                      setOneTimeId(editing.id);
+                      setOneTimeDate('');
+                      setBanner(null);
+                    }}
+                  >
+                    Разовая дата в цикле
+                  </button>
+                  <button
+                    type="button"
+                    className={btnDangerOutline()}
+                    disabled={deleteMut.isPending}
+                    onClick={() => {
+                      if (!window.confirm(`Удалить ${displayName(editing)}?`)) return;
+                      setBanner(null);
+                      deleteMut.mutate(editing.id);
+                    }}
+                  >
+                    {deleteMut.isPending ? 'Удаление…' : 'Удалить участника'}
+                  </button>
+                </div>
+              </section>
+
+              {/* Access transparency */}
+              <section className="rounded-2xl border border-sky-200/60 bg-gradient-to-br from-sky-50 to-indigo-50/40 p-4">
+                <p className="text-[10px] font-extrabold uppercase tracking-[0.15em] text-sky-900/70">
+                  Прозрачность входа
+                </p>
+                <div className="mt-2 space-y-1.5 text-sm text-stone-700">
+                  <p>
+                    Статус входа:{' '}
+                    <strong>{editing.has_registered ? 'пароль создан, вход доступен' : 'вход не оформлен'}</strong>
+                  </p>
+                  <p>
+                    Логин: <strong>{editing.phone_number?.trim() || '—'}</strong>
+                  </p>
+                  <p className="text-xs text-stone-500">
+                    Открытый пароль система не хранит, поэтому показать «придуманный пароль» невозможно.
+                    Для безопасности доступен только факт регистрации и управление доступом.
+                  </p>
+                </div>
               </section>
 
               {/* Prayer request */}

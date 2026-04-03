@@ -12,6 +12,13 @@ export const validateSendMessage = [
       if (v.length > 4000) throw new Error('Message content must be between 0 and 4000 characters');
       return true;
     }
+    if (pt === 'poll') {
+      if (typeof value !== 'string' || !v) {
+        throw new Error('Poll question is required');
+      }
+      if (v.length > 500) throw new Error('Poll question must be at most 500 characters');
+      return true;
+    }
     if (!v) throw new Error('Message content is required');
     if (v.length < 1 || v.length > 4000) {
       throw new Error('Message content must be between 1 and 4000 characters');
@@ -37,8 +44,8 @@ export const validateSendMessage = [
 
   body('payloadType')
     .optional({ nullable: true })
-    .isIn(['text', 'prayer_request', 'audio', 'image', 'file'])
-    .withMessage('payloadType must be one of: text, prayer_request, audio, image, file'),
+    .isIn(['text', 'prayer_request', 'audio', 'image', 'file', 'poll'])
+    .withMessage('payloadType must be one of: text, prayer_request, audio, image, file, poll'),
 
   body('payload')
     .optional({ nullable: true })
@@ -52,6 +59,21 @@ export const validateSendMessage = [
       const url = v && typeof v === 'object' && !Array.isArray(v) ? v.url : null;
       if (typeof url !== 'string' || !url.trim()) {
         throw new Error('payload.url is required for attachments');
+      }
+    }
+    if (pt === 'poll') {
+      const v = value as Record<string, unknown> | null | undefined;
+      if (!v || typeof v !== 'object' || Array.isArray(v)) {
+        throw new Error('payload object is required for polls');
+      }
+      const opts = v.options;
+      if (!Array.isArray(opts) || opts.length < 2 || opts.length > 10) {
+        throw new Error('Poll requires between 2 and 10 options');
+      }
+      for (const o of opts) {
+        const s = String(o ?? '').trim();
+        if (!s) throw new Error('Poll options must be non-empty strings');
+        if (s.length > 200) throw new Error('Each poll option must be at most 200 characters');
       }
     }
     return true;
