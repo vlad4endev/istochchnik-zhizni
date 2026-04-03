@@ -13,7 +13,69 @@ export interface ChurchEvent {
   updated_at: string;
 }
 
+let ensureSchemaOnce: Promise<void> | null = null;
+
+async function ensureChurchEventsSchema(): Promise<void> {
+  if (!ensureSchemaOnce) {
+    ensureSchemaOnce = (async () => {
+      await query(`
+        CREATE TABLE IF NOT EXISTS church_events (
+          id BIGSERIAL PRIMARY KEY,
+          title VARCHAR(255) NOT NULL,
+          description TEXT,
+          event_date DATE NOT NULL,
+          event_time TIME NOT NULL,
+          recurrence_type VARCHAR(16) NOT NULL DEFAULT 'once' CHECK (recurrence_type IN ('once', 'weekly')),
+          weekly_day SMALLINT CHECK (weekly_day BETWEEN 0 AND 6),
+          is_active BOOLEAN NOT NULL DEFAULT TRUE,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+      `);
+
+      await query(`
+        ALTER TABLE church_events
+          ADD COLUMN IF NOT EXISTS recurrence_type VARCHAR(16),
+          ADD COLUMN IF NOT EXISTS weekly_day SMALLINT
+      `);
+      await query(`
+        UPDATE church_events
+        SET recurrence_type = 'once'
+        WHERE recurrence_type IS NULL OR recurrence_type NOT IN ('once', 'weekly')
+      `);
+      await query(`
+        ALTER TABLE church_events
+          ALTER COLUMN recurrence_type SET DEFAULT 'once',
+          ALTER COLUMN recurrence_type SET NOT NULL
+      `);
+      await query(`
+        ALTER TABLE church_events
+          DROP CONSTRAINT IF EXISTS church_events_recurrence_type_check
+      `);
+      await query(`
+        ALTER TABLE church_events
+          ADD CONSTRAINT church_events_recurrence_type_check
+          CHECK (recurrence_type IN ('once', 'weekly'))
+      `);
+      await query(`
+        ALTER TABLE church_events
+          DROP CONSTRAINT IF EXISTS church_events_weekly_day_check
+      `);
+      await query(`
+        ALTER TABLE church_events
+          ADD CONSTRAINT church_events_weekly_day_check
+          CHECK (weekly_day IS NULL OR (weekly_day BETWEEN 0 AND 6))
+      `);
+    })().catch((err) => {
+      ensureSchemaOnce = null;
+      throw err;
+    });
+  }
+  await ensureSchemaOnce;
+}
+
 export async function listActiveEvents(): Promise<ChurchEvent[]> {
+  await ensureChurchEventsSchema();
   const result = await query(
     `SELECT
       id,
@@ -34,6 +96,7 @@ export async function listActiveEvents(): Promise<ChurchEvent[]> {
 }
 
 export async function listAllEventsAdmin(): Promise<ChurchEvent[]> {
+  await ensureChurchEventsSchema();
   const result = await query(
     `SELECT
       id,
@@ -61,6 +124,7 @@ export async function createChurchEvent(input: {
   weekly_day?: number | null;
   is_active?: boolean;
 }): Promise<ChurchEvent> {
+  await ensureChurchEventsSchema();
   const result = await query(
     `INSERT INTO church_events (title, description, event_date, event_time, recurrence_type, weekly_day, is_active)
      VALUES ($1, $2, $3::date, $4::time, $5, $6, COALESCE($7, TRUE))
@@ -102,6 +166,7 @@ export async function updateChurchEvent(
     is_active: boolean;
   }>,
 ): Promise<ChurchEvent | null> {
+  await ensureChurchEventsSchema();
   const updates: string[] = [];
   const values: unknown[] = [];
   let i = 1;
@@ -183,11 +248,13 @@ export async function updateChurchEvent(
 }
 
 export async function deleteChurchEvent(id: number): Promise<boolean> {
+  await ensureChurchEventsSchema();
   const result = await query('DELETE FROM church_events WHERE id = $1 RETURNING id', [id]);
   return (result.rowCount ?? 0) > 0;
 }
 
 export async function deleteAllChurchEvents(): Promise<number> {
+  await ensureChurchEventsSchema();
   const result = await query('DELETE FROM church_events');
   return result.rowCount ?? 0;
 }
