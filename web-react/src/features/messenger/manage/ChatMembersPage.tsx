@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { LuChevronRight, LuCrown, LuPlus, LuSearch, LuSettings2, LuShield, LuUser, LuX } from 'react-icons/lu';
+import { resolvePublicUrl } from '../../../lib/resolvePublicUrl';
 import * as api from '../api/messengerApi';
 
 export function ChatMembersPage() {
@@ -174,6 +175,7 @@ function MemberRow({
   onEditPermissions: () => void;
 }) {
   const displayName = (m.first_name ? `${m.first_name} ${m.last_name ?? ''}`.trim() : m.name) || `Участник ${m.member_id}`;
+  const avatarSrc = resolvePublicUrl(m.avatar_url ?? null);
   const badge =
     m.role === 'owner' ? { text: 'Владелец', Icon: LuCrown, cls: 'bg-amber-50 text-amber-700 ring-amber-200/70' } :
     m.role === 'admin' ? { text: 'Админ', Icon: LuShield, cls: 'bg-indigo-50 text-indigo-700 ring-indigo-200/70' } :
@@ -181,8 +183,12 @@ function MemberRow({
 
   return (
     <div className="flex items-center gap-3 rounded-3xl bg-white/80 px-4 py-4 shadow-[0_10px_30px_rgba(28,25,23,0.07)] ring-1 ring-stone-200/70 backdrop-blur sm:gap-4 sm:px-5">
-      <div className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-primary/10 text-primary font-extrabold">
-        {displayName[0]?.toUpperCase() ?? 'U'}
+      <div className="grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-2xl bg-primary/10 text-primary font-extrabold">
+        {avatarSrc ? (
+          <img src={avatarSrc} alt="" className="h-full w-full object-cover" loading="lazy" />
+        ) : (
+          displayName[0]?.toUpperCase() ?? 'U'
+        )}
       </div>
       <div className="min-w-0 flex-1">
         <p className="truncate text-[15px] font-extrabold text-stone-900">{displayName}</p>

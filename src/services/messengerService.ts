@@ -323,7 +323,8 @@ export async function listConversationMembers(conversationId: string): Promise<C
         cp.permissions,
         m.name,
         m.first_name,
-        m.last_name
+        m.last_name,
+        m.avatar_url
      FROM conversation_participants cp
      JOIN members m ON m.id = cp.member_id
      WHERE cp.conversation_id = $1
@@ -340,7 +341,8 @@ export async function listConversationMembers(conversationId: string): Promise<C
         cp.permissions,
         m.name,
         m.first_name,
-        m.last_name
+        m.last_name,
+        m.avatar_url
      FROM conversation_participants cp
      JOIN members m ON m.id = cp.member_id
      WHERE cp.conversation_id = $1
@@ -354,7 +356,8 @@ export async function listConversationMembers(conversationId: string): Promise<C
         cp.joined_at,
         m.name,
         m.first_name,
-        m.last_name
+        m.last_name,
+        m.avatar_url
      FROM conversation_participants cp
      JOIN members m ON m.id = cp.member_id
      WHERE cp.conversation_id = $1
@@ -367,7 +370,8 @@ export async function listConversationMembers(conversationId: string): Promise<C
         cp.role,
         m.name,
         m.first_name,
-        m.last_name
+        m.last_name,
+        m.avatar_url
      FROM conversation_participants cp
      JOIN members m ON m.id = cp.member_id
      WHERE cp.conversation_id = $1
@@ -389,6 +393,7 @@ export async function listConversationMembers(conversationId: string): Promise<C
         name: r.name,
         first_name: r.first_name ?? null,
         last_name: r.last_name ?? null,
+        avatar_url: r.avatar_url ?? null,
       }));
     } catch (e) {
       lastErr = e;
@@ -1492,7 +1497,7 @@ export async function searchMembers(
   limit: number = 20,
 ) {
   const result = await dbQuery(
-    `SELECT m.id, m.name, m.first_name, m.last_name
+    `SELECT m.id, m.name, m.first_name, m.last_name, m.avatar_url
      FROM members m
      WHERE m.is_active = TRUE
        AND m.id != $1
@@ -1516,7 +1521,7 @@ export async function listRegisteredMembers(
   limit: number = 50,
 ) {
   const result = await dbQuery(
-    `SELECT m.id, m.name, m.first_name, m.last_name
+    `SELECT m.id, m.name, m.first_name, m.last_name, m.avatar_url
      FROM members m
      WHERE m.is_active = TRUE
        AND m.id != $1

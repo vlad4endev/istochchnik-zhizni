@@ -25,6 +25,9 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    # Аватары и вложения мессенджера: общий том, чтобы файлы переживали restart и были видны всем репликам.
+    volumes:
+      - app_uploads:/app/uploads
     environment:
       # Внутри контейнера всегда 40978 (nginx → api). PORT в .env — порт на хосте.
       PORT: "40978"
@@ -81,3 +84,4 @@ services:
 
 volumes:
   postgres_data:
+  app_uploads:

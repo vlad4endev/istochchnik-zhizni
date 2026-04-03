@@ -217,6 +217,7 @@ export type ConversationMember = {
   name: string;
   first_name: string | null;
   last_name: string | null;
+  avatar_url?: string | null;
 };
 
 export type PrivateChatProfile = {

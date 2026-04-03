@@ -181,16 +181,18 @@ export function NewChatDialog({ onClose, onCreated }: NewChatDialogProps) {
 
               {searching ? (
                 <div className="tg-empty-state">Поиск...</div>
-              ) : sortedContacts.map((u) => (
+              ) : sortedContacts.map((u) => {
+                const avatarSrc = resolvePublicUrl(u.avatar_url);
+                return (
                 <button 
                   key={u.id} 
                   className="tg-member-item"
                   onClick={() => handleOpenChat(u)}
                 >
                   <div className="tg-member-avatar" style={{ background: getAvatarColor(String(u.id)) }}>
-                    {resolvePublicUrl(u.avatar_url) ? (
+                    {avatarSrc ? (
                       <img
-                        src={resolvePublicUrl(u.avatar_url)!}
+                        src={avatarSrc}
                         alt=""
                         className="h-full w-full rounded-full object-cover"
                         loading="lazy"
@@ -204,7 +206,8 @@ export function NewChatDialog({ onClose, onCreated }: NewChatDialogProps) {
                     <div className="tg-member-status">Откроется как черновик · появится в списке после 1 сообщения</div>
                   </div>
                 </button>
-              ))}
+              );
+              })}
 
               {!searching && searchQuery && searchResults.length === 0 && (
                 <div className="tg-empty-state">Участники не найдены</div>
@@ -235,6 +238,7 @@ export function NewChatDialog({ onClose, onCreated }: NewChatDialogProps) {
                 sortedContacts.map((u) => {
                   const isSelf = currentMemberId != null && u.id === currentMemberId;
                   const picked = Boolean(groupPick[u.id]);
+                  const avatarSrc = resolvePublicUrl(u.avatar_url);
                   return (
                     <button
                       key={u.id}
@@ -254,9 +258,9 @@ export function NewChatDialog({ onClose, onCreated }: NewChatDialogProps) {
                         {picked ? '✓' : ''}
                       </div>
                       <div className="tg-member-avatar" style={{ background: getAvatarColor(String(u.id)) }}>
-                        {resolvePublicUrl(u.avatar_url) ? (
+                        {avatarSrc ? (
                           <img
-                            src={resolvePublicUrl(u.avatar_url)!}
+                            src={avatarSrc}
                             alt=""
                             className="h-full w-full rounded-full object-cover"
                             loading="lazy"
