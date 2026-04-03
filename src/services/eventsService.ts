@@ -186,3 +186,8 @@ export async function deleteChurchEvent(id: number): Promise<boolean> {
   const result = await query('DELETE FROM church_events WHERE id = $1 RETURNING id', [id]);
   return (result.rowCount ?? 0) > 0;
 }
+
+export async function deleteAllChurchEvents(): Promise<number> {
+  const result = await query('DELETE FROM church_events');
+  return result.rowCount ?? 0;
+}

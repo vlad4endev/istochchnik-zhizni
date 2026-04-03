@@ -39,6 +39,15 @@ html {
   background-color: var(--surface);
 }
 
+/* PWA standalone / Capacitor: без pinch-zoom и без «вебового» double-tap zoom */
+html.app-native-shell {
+  touch-action: manipulation;
+}
+
+html.app-native-shell body {
+  touch-action: manipulation;
+}
+
 /* PWA с экрана «Домой» iOS/Android — тот же фон, что у splash и manifest */
 @media (display-mode: standalone) {
   html {

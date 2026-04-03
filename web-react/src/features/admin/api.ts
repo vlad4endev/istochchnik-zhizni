@@ -270,6 +270,11 @@ export async function deleteAdminEvent(id: number): Promise<void> {
   });
 }
 
+export async function deleteAllAdminEvents(): Promise<{ ok: boolean; deleted: number }> {
+  const { data } = await apiClient.delete<{ ok: boolean; deleted: number }>(`${CAL}/events`);
+  return data;
+}
+
 /** Заявки на доступ (регистрация без автоматического совпадения с карточкой). */
 export interface AccessRequestItem {
   id: number;

@@ -4,8 +4,12 @@ import { createRoot } from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
 import { registerSW } from 'virtual:pwa-register';
 
+import { applyNativeShellViewportLock } from './lib/nativeShellViewport';
 import { AppRouter } from './app/Router';
 import './index.css';
+
+applyNativeShellViewportLock();
+window.addEventListener('load', () => applyNativeShellViewportLock());
 
 const queryClient = new QueryClient({
   defaultOptions: {

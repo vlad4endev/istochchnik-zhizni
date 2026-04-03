@@ -24,6 +24,7 @@ import {
   getNextWeekGlobal,
 } from '../controllers/globalNeedsController';
 import {
+  deleteAllEvents,
   deleteEvent,
   getActiveEvents,
   getAdminEvents,
@@ -44,6 +45,7 @@ router.get('/next-week/global', getNextWeekGlobal);
 router.get('/events', getActiveEvents);
 router.get('/events/admin', getAdminEvents);
 router.post('/events', postEvent);
+router.delete('/events', deleteAllEvents);
 router.patch('/events/:id', patchEvent);
 router.delete('/events/:id', deleteEvent);
 router.get('/bot-message/today', getTodayPrayerBotMessage);

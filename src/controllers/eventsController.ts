@@ -1,6 +1,7 @@
 import type { Request, Response } from 'express';
 import {
   createChurchEvent,
+  deleteAllChurchEvents,
   deleteChurchEvent,
   listActiveEvents,
   listAllEventsAdmin,
@@ -202,6 +203,18 @@ export async function deleteEvent(req: Request, res: Response): Promise<void> {
     res.status(204).send();
   } catch (err) {
     console.error('deleteEvent error', err);
+    res.status(500).json({ error: 'Database error' });
+  }
+}
+
+export async function deleteAllEvents(req: Request, res: Response): Promise<void> {
+  if (!ensureAdmin(req, res)) return;
+  try {
+    const deletedCount = await deleteAllChurchEvents();
+    notifyRealtime(['calendar']);
+    res.json({ ok: true, deleted: deletedCount });
+  } catch (err) {
+    console.error('deleteAllEvents error', err);
     res.status(500).json({ error: 'Database error' });
   }
 }

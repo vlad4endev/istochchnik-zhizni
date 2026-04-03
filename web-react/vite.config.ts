@@ -54,7 +54,8 @@ export default defineConfig(({ mode }) => {
           theme_color: '#7d3640',
           background_color: '#f4f1ed',
           display: 'standalone',
-          display_override: ['standalone', 'minimal-ui', 'browser'],
+          /* Только полноэкранный режим приложения — без fallback в minimal-ui / browser. */
+          display_override: ['standalone'],
           start_url: base,
           scope: base,
           lang: 'ru',

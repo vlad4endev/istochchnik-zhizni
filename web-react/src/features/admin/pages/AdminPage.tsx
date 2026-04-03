@@ -33,6 +33,7 @@ import {
   deleteAdminMember,
   deleteBacksliderApi,
   deleteAdminEvent,
+  deleteAllAdminEvents,
   deleteDirectionTemplate,
   deleteGlobalThemeApi,
   deleteMinistryApi,
@@ -1415,6 +1416,17 @@ function EventsSection() {
     onError: (e) => setNote({ type: 'err', text: apiErrorMessage(e, 'Не удалось удалить событие.') }),
   });
 
+  const deleteAllMut = useMutation({
+    mutationFn: () => deleteAllAdminEvents(),
+    onSuccess: (res) => {
+      setEditing(null);
+      setNote({ type: 'ok', text: `Удалено событий: ${res.deleted}` });
+      invalidate();
+    },
+    onError: (e) =>
+      setNote({ type: 'err', text: apiErrorMessage(e, 'Не удалось удалить все события.') }),
+  });
+
   return (
     <div className="space-y-5">
       {note ? (
@@ -1530,7 +1542,26 @@ function EventsSection() {
       </section>
 
       <section className="rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] p-5 shadow-[var(--shadow)]">
-        <h3 className="text-base font-extrabold text-stone-900">Список событий</h3>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h3 className="text-base font-extrabold text-stone-900">Список событий</h3>
+          <button
+            type="button"
+            className={btnDangerOutline()}
+            disabled={deleteAllMut.isPending || deleteMut.isPending || updateMut.isPending}
+            onClick={() => {
+              const total = (eventsQ.data ?? []).length;
+              if (total === 0) {
+                setNote({ type: 'err', text: 'Список уже пуст.' });
+                return;
+              }
+              if (!window.confirm(`Удалить все события (${total})? Действие нельзя отменить.`)) return;
+              setNote(null);
+              deleteAllMut.mutate();
+            }}
+          >
+            {deleteAllMut.isPending ? 'Удаление всех…' : 'Удалить все события'}
+          </button>
+        </div>
         {eventsQ.isLoading ? (
           <div className="mt-3 h-40 animate-pulse rounded-2xl bg-stone-100" />
         ) : eventsQ.isError ? (

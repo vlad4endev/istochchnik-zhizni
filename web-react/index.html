@@ -6,6 +6,27 @@
       name="viewport"
       content="width=device-width, initial-scale=1.0, maximum-scale=5, viewport-fit=cover"
     />
+    <!-- Ранний lock zoom для PWA «с экрана Домой» до загрузки бандла (pinch / double-tap). -->
+    <script>
+      (function () {
+        try {
+          var standalone =
+            window.matchMedia('(display-mode: standalone)').matches ||
+            window.matchMedia('(display-mode: fullscreen)').matches ||
+            window.matchMedia('(display-mode: minimal-ui)').matches ||
+            window.navigator.standalone === true;
+          if (!standalone) return;
+          var m = document.querySelector('meta[name="viewport"]');
+          if (m) {
+            m.setAttribute(
+              'content',
+              'width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=1, viewport-fit=cover, user-scalable=no',
+            );
+          }
+          document.documentElement.classList.add('app-native-shell');
+        } catch (e) {}
+      })();
+    </script>
     <meta name="color-scheme" content="light dark" />
     <meta name="application-name" content="Молитва" />
     <meta name="theme-color" content="#7d3640" media="(prefers-color-scheme: light)" />
@@ -16,7 +37,6 @@
     <!-- default: статус-бар как у нативных светлых приложений; контент с safe-area в CSS -->
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="format-detection" content="telephone=no" />
-    <meta name="x-app-frontend" content="web-react-vite" />
     <title>МОЯ ЦЕРКОВЬ — молитвенный календарь</title>
     <!-- Иконки и favicon (public/assets; см. npm run pwa:icons) -->
     <link rel="icon" href="/assets/favicon.ico" sizes="any" />
