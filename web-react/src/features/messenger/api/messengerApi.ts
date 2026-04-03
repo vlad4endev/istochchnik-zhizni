@@ -156,7 +156,6 @@ export async function uploadFile(
   const form = new FormData();
   form.append('file', file);
   const { data } = await apiClient.post<UploadedFile>(`/api/messenger/upload`, form, {
-    headers: { 'Content-Type': 'multipart/form-data' },
     signal: opts?.signal,
     onUploadProgress: (e) => {
       const total = e.total ?? 0;

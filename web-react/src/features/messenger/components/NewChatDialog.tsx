@@ -3,6 +3,7 @@ import type { SearchMember } from '../api/messengerApi';
 import { useEffect, useRef, useCallback, useMemo, useState } from 'react';
 import { LuSearch, LuX, LuUsers, LuMegaphone } from 'react-icons/lu';
 import { useChatStore, DRAFT_PRIVATE_PREFIX } from '../chatStore';
+import { resolvePublicUrl } from '../../../lib/resolvePublicUrl';
 
 interface NewChatDialogProps {
   onClose: () => void;
@@ -187,9 +188,9 @@ export function NewChatDialog({ onClose, onCreated }: NewChatDialogProps) {
                   onClick={() => handleOpenChat(u)}
                 >
                   <div className="tg-member-avatar" style={{ background: getAvatarColor(String(u.id)) }}>
-                    {u.avatar_url ? (
+                    {resolvePublicUrl(u.avatar_url) ? (
                       <img
-                        src={u.avatar_url}
+                        src={resolvePublicUrl(u.avatar_url)!}
                         alt=""
                         className="h-full w-full rounded-full object-cover"
                         loading="lazy"
@@ -253,8 +254,13 @@ export function NewChatDialog({ onClose, onCreated }: NewChatDialogProps) {
                         {picked ? '✓' : ''}
                       </div>
                       <div className="tg-member-avatar" style={{ background: getAvatarColor(String(u.id)) }}>
-                        {u.avatar_url ? (
-                          <img src={u.avatar_url} alt="" className="h-full w-full rounded-full object-cover" loading="lazy" />
+                        {resolvePublicUrl(u.avatar_url) ? (
+                          <img
+                            src={resolvePublicUrl(u.avatar_url)!}
+                            alt=""
+                            className="h-full w-full rounded-full object-cover"
+                            loading="lazy"
+                          />
                         ) : (
                           u.first_name?.[0] || u.name[0]
                         )}

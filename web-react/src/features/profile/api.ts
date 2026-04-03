@@ -68,9 +68,8 @@ export async function patchProfile(body: PatchProfileBody): Promise<MeResponse> 
 export async function uploadMyAvatar(file: File): Promise<MeResponse> {
   const form = new FormData();
   form.append('file', file);
-  const { data } = await apiClient.post<MeResponse>('/api/auth/me/avatar', form, {
-    headers: { 'Content-Type': 'multipart/form-data' },
-  });
+  // Не задавать Content-Type вручную: браузер/axios подставит multipart с boundary.
+  const { data } = await apiClient.post<MeResponse>('/api/auth/me/avatar', form);
   return data;
 }
 

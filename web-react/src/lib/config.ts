@@ -15,7 +15,7 @@ function trimTrailingSlash(url: string): string {
 }
 
 export function getApiBaseUrlFromEnv(): string {
-  const raw = import.meta.env.VITE_API_BASE_URL;
+  const raw = import.meta.env.VITE_API_BASE_URL ?? import.meta.env.VITE_API_URL;
   if (raw === undefined || raw === null) {
     return '';
   }
