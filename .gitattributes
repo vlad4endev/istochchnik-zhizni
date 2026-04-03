@@ -1,0 +1,2 @@
+# Скрипты в образе должны быть LF (иначе в контейнере: bad interpreter)
+*.sh text eol=lf
