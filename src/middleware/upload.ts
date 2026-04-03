@@ -4,7 +4,11 @@ import fs from 'node:fs';
 import { v4 as uuidv4 } from 'uuid';
 
 const uploadsDir = path.join(process.cwd(), 'uploads');
-fs.mkdirSync(uploadsDir, { recursive: true });
+try {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+} catch (e) {
+  console.warn('[uploads] cannot create messenger uploads dir (check permissions on /app/uploads):', e);
+}
 
 const storage = multer.diskStorage({
   destination: (_req, _file, cb) => cb(null, uploadsDir),
