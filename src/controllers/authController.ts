@@ -446,6 +446,10 @@ export async function uploadAvatarHandler(req: Request, res: Response): Promise<
   try {
     const user = await updateAuthUserAvatar(authReq.authUserId, avatarUrl);
     notifyRealtime(['me', 'members']);
+    if (!user) {
+      res.status(500).json({ error: 'Не удалось обновить профиль после загрузки' });
+      return;
+    }
     res.json(user);
   } catch (error) {
     console.error('Failed to upload avatar', error);
