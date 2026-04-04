@@ -21,6 +21,9 @@ type EventsSchemaState = {
   /** Только recurrence_type (без weekly_day) — иначе INSERT без recurrence ломает NOT NULL */
   hasRecurrenceTypeColumn: boolean;
   hasWeeklyDayColumn: boolean;
+  /** Чужая схема (Supabase и т.д.): NOT NULL без значения в нашем INSERT */
+  hasStartsAtColumn: boolean;
+  hasEndsAtColumn: boolean;
 };
 
 let schemaStateOnce: Promise<EventsSchemaState> | null = null;
@@ -42,6 +45,18 @@ function tableRefForSchema(schema: string): string {
 /** В старых БД `description` часто NOT NULL — в БД храним пустую строку; в API пустое → null. */
 function descriptionForInsert(raw: string | null | undefined): string {
   return typeof raw === 'string' && raw.trim().length > 0 ? raw.trim() : '';
+}
+
+/** Supabase/legacy: starts_at / ends_at NOT NULL — заполняем из тех же $3 date и $4 time, что и event_date/event_time. */
+function insertTimestampExtras(schema: EventsSchemaState): { columns: string; valuesSql: string } {
+  if (!schema.hasStartsAtColumn) return { columns: '', valuesSql: '' };
+  if (!schema.hasEndsAtColumn) {
+    return { columns: ', starts_at', valuesSql: ', ($3::date + $4::time)' };
+  }
+  return {
+    columns: ', starts_at, ends_at',
+    valuesSql: `, ($3::date + $4::time), (($3::date + $4::time) + interval '2 hours')`,
+  };
 }
 
 function selectEventProjection(schema: Pick<EventsSchemaState, 'hasFullRecurrenceShape' | 'hasRecurrenceTypeColumn'>): string {
@@ -119,6 +134,8 @@ async function readEventsSchemaState(): Promise<EventsSchemaState> {
       hasFullRecurrenceShape: false,
       hasRecurrenceTypeColumn: false,
       hasWeeklyDayColumn: false,
+      hasStartsAtColumn: false,
+      hasEndsAtColumn: false,
     };
   }
 
@@ -134,6 +151,8 @@ async function readEventsSchemaState(): Promise<EventsSchemaState> {
     hasFullRecurrenceShape,
     hasRecurrenceTypeColumn,
     hasWeeklyDayColumn,
+    hasStartsAtColumn: names.has('starts_at'),
+    hasEndsAtColumn: names.has('ends_at'),
   };
 }
 
@@ -218,6 +237,24 @@ async function ensureChurchEventsSchema(): Promise<EventsSchemaState> {
         } catch (descErr) {
           console.warn('[events] church_events description compatibility skipped:', descErr);
         }
+
+        try {
+          await query(`
+            UPDATE ${targetTableRef}
+            SET starts_at = event_date + event_time
+            WHERE starts_at IS NULL
+              AND event_date IS NOT NULL
+              AND event_time IS NOT NULL
+          `);
+          await query(`
+            UPDATE ${targetTableRef}
+            SET ends_at = starts_at + interval '2 hours'
+            WHERE ends_at IS NULL
+              AND starts_at IS NOT NULL
+          `);
+        } catch (tsErr) {
+          console.warn('[events] church_events starts_at/ends_at backfill skipped:', tsErr);
+        }
       } catch (err) {
         if (!isInsufficientPrivilegeError(err)) {
           throw err;
@@ -277,12 +314,13 @@ export async function createChurchEvent(input: {
   const description = descriptionForInsert(input.description);
   const isActive = input.is_active ?? true;
   const returning = selectEventProjection(schema);
+  const ts = insertTimestampExtras(schema);
 
   let result;
   if (schema.hasFullRecurrenceShape) {
     result = await query(
-      `INSERT INTO ${schema.tableRef} (title, description, event_date, event_time, recurrence_type, weekly_day, is_active)
-       VALUES ($1, $2, $3::date, $4::time, $5, $6, COALESCE($7, TRUE))
+      `INSERT INTO ${schema.tableRef} (title, description, event_date, event_time, recurrence_type, weekly_day, is_active${ts.columns})
+       VALUES ($1, $2, $3::date, $4::time, $5, $6, COALESCE($7, TRUE)${ts.valuesSql})
        RETURNING ${returning}`,
       [
         title,
@@ -296,15 +334,15 @@ export async function createChurchEvent(input: {
     );
   } else if (schema.hasRecurrenceTypeColumn) {
     result = await query(
-      `INSERT INTO ${schema.tableRef} (title, description, event_date, event_time, recurrence_type, is_active)
-       VALUES ($1, $2, $3::date, $4::time, $5, COALESCE($6, TRUE))
+      `INSERT INTO ${schema.tableRef} (title, description, event_date, event_time, recurrence_type, is_active${ts.columns})
+       VALUES ($1, $2, $3::date, $4::time, $5, COALESCE($6, TRUE)${ts.valuesSql})
        RETURNING ${returning}`,
       [title, description, input.event_date, input.event_time, input.recurrence_type, isActive],
     );
   } else {
     result = await query(
-      `INSERT INTO ${schema.tableRef} (title, description, event_date, event_time, is_active)
-       VALUES ($1, $2, $3::date, $4::time, COALESCE($5, TRUE))
+      `INSERT INTO ${schema.tableRef} (title, description, event_date, event_time, is_active${ts.columns})
+       VALUES ($1, $2, $3::date, $4::time, COALESCE($5, TRUE)${ts.valuesSql})
        RETURNING ${returning}`,
       [title, description, input.event_date, input.event_time, isActive],
     );
@@ -356,6 +394,27 @@ export async function updateChurchEvent(
   if (typeof input.is_active === 'boolean') {
     updates.push(`is_active = $${i++}`);
     values.push(input.is_active);
+  }
+
+  if (schema.hasStartsAtColumn && (typeof input.event_date === 'string' || typeof input.event_time === 'string')) {
+    const cur = await query(
+      `SELECT event_date::text AS event_date, to_char(event_time, 'HH24:MI') AS event_time
+       FROM ${schema.tableRef} WHERE id = $1`,
+      [id],
+    );
+    const row = cur.rows[0] as { event_date: string; event_time: string } | undefined;
+    if (!row) {
+      return null;
+    }
+    const d = typeof input.event_date === 'string' ? input.event_date : row.event_date;
+    const tm = typeof input.event_time === 'string' ? input.event_time : row.event_time;
+    const pi = i;
+    updates.push(`starts_at = $${pi}::date + $${pi + 1}::time`);
+    if (schema.hasEndsAtColumn) {
+      updates.push(`ends_at = $${pi}::date + $${pi + 1}::time + interval '2 hours'`);
+    }
+    values.push(d, tm);
+    i += 2;
   }
 
   if (updates.length === 0) {
