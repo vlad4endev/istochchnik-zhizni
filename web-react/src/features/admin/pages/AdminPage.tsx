@@ -595,20 +595,20 @@ function MembersSection() {
           </p>
           <form onSubmit={onCreate} className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             <div>
-              <label className="mb-1 block text-xs font-semibold text-stone-600">Имя</label>
-              <input
-                className={fieldClass()}
-                value={form.first_name}
-                onChange={(e) => setForm((s) => ({ ...s, first_name: e.target.value }))}
-                required
-              />
-            </div>
-            <div>
               <label className="mb-1 block text-xs font-semibold text-stone-600">Фамилия</label>
               <input
                 className={fieldClass()}
                 value={form.last_name}
                 onChange={(e) => setForm((s) => ({ ...s, last_name: e.target.value }))}
+                required
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-stone-600">Имя</label>
+              <input
+                className={fieldClass()}
+                value={form.first_name}
+                onChange={(e) => setForm((s) => ({ ...s, first_name: e.target.value }))}
                 required
               />
             </div>
@@ -926,19 +926,19 @@ function MembersSection() {
                 <p className="mb-3 text-[10px] font-extrabold uppercase tracking-[0.15em] text-stone-400">Личные данные</p>
                 <div className="grid gap-3 sm:grid-cols-2">
                   <div>
-                    <label className="mb-1 block text-xs font-semibold text-stone-600">Имя</label>
-                    <input
-                      className={fieldClass()}
-                      value={editForm.first_name}
-                      onChange={(e) => setEditForm((s) => ({ ...s, first_name: e.target.value }))}
-                    />
-                  </div>
-                  <div>
                     <label className="mb-1 block text-xs font-semibold text-stone-600">Фамилия</label>
                     <input
                       className={fieldClass()}
                       value={editForm.last_name}
                       onChange={(e) => setEditForm((s) => ({ ...s, last_name: e.target.value }))}
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold text-stone-600">Имя</label>
+                    <input
+                      className={fieldClass()}
+                      value={editForm.first_name}
+                      onChange={(e) => setEditForm((s) => ({ ...s, first_name: e.target.value }))}
                     />
                   </div>
                   <div>

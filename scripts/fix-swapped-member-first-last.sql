@@ -1,6 +1,5 @@
--- Одноразовая правка: в first_name и last_name были перепутаны имя и фамилия.
--- Выполните один раз (или перезапустите сервер — то же самое поднимется из initDb).
--- Повторный запуск безопасен: сначала создаётся app_data_patches и ставится метка.
+-- Одноразово: в members меняются местами first_name и last_name, поле name пересобирается.
+-- Повторный запуск безопасен (метка в app_data_patches).
 
 CREATE TABLE IF NOT EXISTS app_data_patches (
   patch_id TEXT PRIMARY KEY,
@@ -33,22 +32,6 @@ BEGIN
     )
   WHERE NULLIF(TRIM(COALESCE(m.first_name, '')), '') IS NOT NULL
      OR NULLIF(TRIM(COALESCE(m.last_name, '')), '') IS NOT NULL;
-
-  UPDATE access_requests r SET
-    first_name = r.last_name,
-    last_name = r.first_name,
-    full_name = TRIM(
-      REGEXP_REPLACE(
-        CONCAT_WS(
-          ' ',
-          NULLIF(TRIM(r.last_name), ''),
-          NULLIF(TRIM(r.first_name), '')
-        ),
-        '[[:space:]]+',
-        ' ',
-        'g'
-      )
-    );
 
   INSERT INTO app_data_patches (patch_id) VALUES ('members_fix_first_last_columns_2026_04_06');
   RAISE NOTICE 'Applied members_fix_first_last_columns_2026_04_06.';

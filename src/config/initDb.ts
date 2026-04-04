@@ -219,8 +219,7 @@ ALTER TABLE members ADD COLUMN IF NOT EXISTS is_collection_coordinator BOOLEAN N
 ALTER TABLE members ADD COLUMN IF NOT EXISTS in_prayer_cycle BOOLEAN NOT NULL DEFAULT TRUE;
 ALTER TABLE members ALTER COLUMN in_prayer_cycle SET DEFAULT FALSE;
 
--- Одноразово: в части карточек в колонке first_name оказалась фамилия, в last_name — имя.
--- Меняем местами и пересобираем name / full_name из прежних значений (строки только с name не трогаем).
+-- Одноразово: меняем местами имя и фамилию (значения в first_name и last_name), пересобираем name.
 CREATE TABLE IF NOT EXISTS app_data_patches (
   patch_id TEXT PRIMARY KEY,
   applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -251,22 +250,6 @@ BEGIN
     )
   WHERE NULLIF(TRIM(COALESCE(m.first_name, '')), '') IS NOT NULL
      OR NULLIF(TRIM(COALESCE(m.last_name, '')), '') IS NOT NULL;
-
-  UPDATE access_requests r SET
-    first_name = r.last_name,
-    last_name = r.first_name,
-    full_name = TRIM(
-      REGEXP_REPLACE(
-        CONCAT_WS(
-          ' ',
-          NULLIF(TRIM(r.last_name), ''),
-          NULLIF(TRIM(r.first_name), '')
-        ),
-        '[[:space:]]+',
-        ' ',
-        'g'
-      )
-    );
 
   INSERT INTO app_data_patches (patch_id) VALUES ('members_fix_first_last_columns_2026_04_06');
 END;
