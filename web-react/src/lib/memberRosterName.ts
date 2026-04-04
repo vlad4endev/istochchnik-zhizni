@@ -2,6 +2,7 @@
  * Разбор ФИО для отображения и сортировки (как в админке: колонки или одно поле `name`).
  * — 3+ слова в `name`: «Фамилия Имя Отчество».
  * — 2 слова в `name`: «Имя Фамилия» (как при создании в админке).
+ * Сортировка списков: по полю «имя» (first), затем «фамилия» (last).
  */
 export function splitMemberNameParts(input: {
   name: string;
@@ -40,15 +41,16 @@ export function memberRosterName(input: {
   return input.name.trim() || (input.id != null ? `#${input.id}` : '');
 }
 
-export function compareMembersBySurname(
+/** Сортировка А–Я по имени (given name), при равенстве — по фамилии. */
+export function compareMembersByFirstName(
   a: { id: number; name: string; first_name?: string | null; last_name?: string | null },
   b: typeof a,
 ): number {
   const aa = splitMemberNameParts(a);
   const bb = splitMemberNameParts(b);
-  const lCmp = aa.last.localeCompare(bb.last, 'ru', { sensitivity: 'base' });
-  if (lCmp !== 0) return lCmp;
   const fCmp = aa.first.localeCompare(bb.first, 'ru', { sensitivity: 'base' });
   if (fCmp !== 0) return fCmp;
+  const lCmp = aa.last.localeCompare(bb.last, 'ru', { sensitivity: 'base' });
+  if (lCmp !== 0) return lCmp;
   return a.id - b.id;
 }

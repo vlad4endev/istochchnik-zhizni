@@ -416,8 +416,8 @@ BEGIN
   LEFT JOIN member_prayer_by_cycle mpc ON mpc.member_id = m.id AND mpc.cycle_index = v_cycle_index
   WHERE m.is_active = TRUE AND m.in_prayer_cycle = TRUE
   ORDER BY
-    LOWER(COALESCE(NULLIF(trim(m.last_name), ''), split_part(trim(m.name), ' ', 1))) ASC,
-    LOWER(COALESCE(NULLIF(trim(m.first_name), ''), m.name)) ASC,
+    LOWER(COALESCE(NULLIF(trim(m.first_name), ''), split_part(trim(m.name), ' ', 1))) ASC,
+    LOWER(COALESCE(NULLIF(trim(m.last_name), ''), NULLIF(trim(split_part(trim(m.name), ' ', 2)), ''), trim(m.name))) ASC,
     m.id ASC
   LIMIT 1 OFFSET v_index;
 
@@ -492,8 +492,8 @@ BEGIN
       AND m.is_active = TRUE
       AND m.in_prayer_cycle = TRUE
     ORDER BY
-      LOWER(COALESCE(NULLIF(trim(m.last_name), ''), split_part(trim(m.name), ' ', 1))) ASC,
-      LOWER(COALESCE(NULLIF(trim(m.first_name), ''), m.name)) ASC,
+      LOWER(COALESCE(NULLIF(trim(m.first_name), ''), split_part(trim(m.name), ' ', 1))) ASC,
+      LOWER(COALESCE(NULLIF(trim(m.last_name), ''), NULLIF(trim(split_part(trim(m.name), ' ', 2)), ''), trim(m.name))) ASC,
       m.id ASC
     LIMIT 1
     OFFSET v_old_index;
@@ -509,8 +509,8 @@ BEGIN
         m.id,
         ROW_NUMBER() OVER (
           ORDER BY
-            LOWER(COALESCE(NULLIF(trim(m.last_name), ''), split_part(trim(m.name), ' ', 1))) ASC,
-            LOWER(COALESCE(NULLIF(trim(m.first_name), ''), m.name)) ASC,
+            LOWER(COALESCE(NULLIF(trim(m.first_name), ''), split_part(trim(m.name), ' ', 1))) ASC,
+            LOWER(COALESCE(NULLIF(trim(m.last_name), ''), NULLIF(trim(split_part(trim(m.name), ' ', 2)), ''), trim(m.name))) ASC,
             m.id ASC
         ) - 1 AS idx
       FROM members m

@@ -3,6 +3,7 @@ import axios from 'axios';
 import {
   type FormEvent,
   useEffect,
+  useId,
   useMemo,
   useState,
 } from 'react';
@@ -14,6 +15,7 @@ import {
   LuImage,
   LuPenLine,
   LuSend,
+  LuX,
 } from 'react-icons/lu';
 import { format } from 'date-fns';
 import { ru } from 'date-fns/locale';
@@ -65,7 +67,7 @@ import {
 } from '../api';
 import { dateInputValueFromApi } from '../../../lib/dateInputValueFromApi';
 import {
-  compareMembersBySurname,
+  compareMembersByFirstName,
   memberRosterName,
   splitMemberNameParts,
 } from '../../../lib/memberRosterName';
@@ -279,6 +281,21 @@ function MembersSection() {
   const [oneTimeId, setOneTimeId] = useState<number | null>(null);
   const [oneTimeDate, setOneTimeDate] = useState('');
   const [banner, setBanner] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
+  const memberEditTitleId = useId();
+
+  useEffect(() => {
+    if (!editing) return;
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setEditing(null);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => {
+      document.body.style.overflow = prevOverflow;
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [editing]);
 
   const invalidate = () => void qc.invalidateQueries({ queryKey: Q_MEMBERS });
 
@@ -292,7 +309,7 @@ function MembersSection() {
             `${memberRosterName(u)} ${displayName(u)} ${u.phone_number ?? ''} ${u.email ?? ''}`.toLowerCase();
           return blob.includes(q);
         });
-    return [...matched].sort(compareMembersBySurname);
+    return [...matched].sort(compareMembersByFirstName);
   }, [data, search]);
 
   const dirs = (dirsQ.data ?? []) as MinistryDirectionTemplate[];
@@ -945,18 +962,26 @@ function MembersSection() {
       {editing && (
         <div
           className="fixed inset-0 z-[120] flex items-center justify-center bg-black/45 p-4"
-          role="dialog"
-          aria-modal="true"
+          role="presentation"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) setEditing(null);
+          }}
         >
-          <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white shadow-2xl">
+          <div
+            className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white shadow-2xl"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={memberEditTitleId}
+          >
             {/* Header */}
             <div className="sticky top-0 z-10 border-b border-stone-100 bg-gradient-to-r from-primary/[0.06] via-white to-stone-50/80 px-5 py-4 backdrop-blur-sm">
-              <div className="flex items-center gap-3">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex min-w-0 flex-1 items-center gap-3">
                 <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary/12 text-primary">
                   <LuPenLine className="h-5 w-5" />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <h3 className="text-lg font-extrabold tracking-tight text-stone-900">
+                  <h3 id={memberEditTitleId} className="text-lg font-extrabold tracking-tight text-stone-900">
                     {memberRosterName(editing)}
                   </h3>
                   <div className="mt-1 flex flex-wrap items-center gap-2">
@@ -986,6 +1011,16 @@ function MembersSection() {
                     ) : null}
                   </div>
                 </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setEditing(null)}
+                  className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-stone-500 transition hover:bg-stone-100 hover:text-stone-800"
+                  aria-label="Закрыть карточку"
+                  title="Закрыть"
+                >
+                  <LuX className="h-6 w-6" strokeWidth={2} aria-hidden />
+                </button>
               </div>
             </div>
 

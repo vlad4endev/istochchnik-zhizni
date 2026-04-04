@@ -2,7 +2,7 @@ import { useState, useRef, useMemo, useEffect } from 'react';
 import { useChatStore } from '../chatStore';
 import type { MessageWithSender } from '../api/messengerApi';
 import { IoCheckmark, IoCheckmarkDone } from 'react-icons/io5';
-import { LuDownload, LuFileText } from 'react-icons/lu';
+import { LuDownload, LuFileText, LuX } from 'react-icons/lu';
 import { IoAlertCircleOutline, IoTimeOutline } from 'react-icons/io5';
 import { resolvePublicUrl } from '../../../lib/resolvePublicUrl';
 import { motion, useMotionValue, useTransform, animate } from 'framer-motion';
@@ -306,6 +306,15 @@ export function MessageBubble({
   const [showReactions, setShowReactions] = useState(false);
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (!lightboxSrc) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setLightboxSrc(null);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [lightboxSrc]);
 
   const x = useMotionValue(0);
   const replyOpacity = useTransform(x, [-90, -50, 0], [1, 0.9, 0]);
@@ -747,7 +756,19 @@ export function MessageBubble({
         onClick={() => setLightboxSrc(null)}
         role="dialog"
         aria-modal="true"
+        aria-label="Просмотр изображения"
       >
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            setLightboxSrc(null);
+          }}
+          className="absolute right-4 top-4 z-[5001] flex h-11 w-11 items-center justify-center rounded-full bg-white/10 text-white backdrop-blur-sm transition hover:bg-white/20"
+          aria-label="Закрыть"
+        >
+          <LuX className="h-6 w-6" strokeWidth={2} aria-hidden />
+        </button>
         <div className="mx-auto flex h-full max-w-2xl items-center justify-center">
           <img
             src={lightboxSrc}

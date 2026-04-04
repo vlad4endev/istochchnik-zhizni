@@ -145,6 +145,15 @@ export function ChatInput({
   }, [pending?.previewUrl]);
 
   useEffect(() => {
+    if (!showPreview) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setShowPreview(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [showPreview]);
+
+  useEffect(() => {
     if (!attachMenuOpen) return;
     const onDoc = (e: MouseEvent | TouchEvent) => {
       const el = attachMenuRef.current;
@@ -650,7 +659,24 @@ export function ChatInput({
       ) : null}
 
       {showPreview && pending?.isImage && pending.previewUrl ? (
-        <div className="fixed inset-0 z-[4000] bg-black/70 p-4" onClick={() => setShowPreview(false)}>
+        <div
+          className="fixed inset-0 z-[4000] bg-black/70 p-4"
+          onClick={() => setShowPreview(false)}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Превью перед отправкой"
+        >
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setShowPreview(false);
+            }}
+            className="absolute right-4 top-4 z-[4001] flex h-11 w-11 items-center justify-center rounded-full bg-white/15 text-white backdrop-blur-sm transition hover:bg-white/25"
+            aria-label="Закрыть превью"
+          >
+            <LuX className="h-6 w-6" strokeWidth={2} aria-hidden />
+          </button>
           <div className="mx-auto flex h-full max-w-xl items-center justify-center">
             <img
               src={pending.previewUrl}

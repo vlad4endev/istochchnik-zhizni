@@ -1,8 +1,8 @@
 import { query } from '../config/db';
 import { getPrayerCycleSnapshotForDate, PRAYER_CYCLE_MEMBERS_WHERE_M } from './prayerCycleService';
 
-const MEMBER_ORDER_SQL = `LOWER(COALESCE(NULLIF(trim(m.last_name), ''), split_part(trim(m.name), ' ', 1))) ASC,
-  LOWER(COALESCE(NULLIF(trim(m.first_name), ''), m.name)) ASC,
+const MEMBER_ORDER_SQL = `LOWER(COALESCE(NULLIF(trim(m.first_name), ''), split_part(trim(m.name), ' ', 1))) ASC,
+  LOWER(COALESCE(NULLIF(trim(m.last_name), ''), NULLIF(trim(split_part(trim(m.name), ' ', 2)), ''), trim(m.name))) ASC,
   m.id ASC`;
 
 export interface CycleCollectionClaimRow {

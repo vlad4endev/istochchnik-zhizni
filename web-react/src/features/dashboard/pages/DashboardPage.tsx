@@ -258,13 +258,13 @@ export function DashboardPage() {
   }
 
   return (
-    <div className="min-h-full bg-[var(--surface)] px-3 pb-[max(2rem,env(safe-area-inset-bottom,0px))] pt-3 sm:px-4 sm:pt-4 shell:px-6 md:px-8 xl:px-10">
+    <div className="min-h-full bg-[var(--surface)] px-3 pb-[max(2rem,env(safe-area-inset-bottom,0px))] pt-2 sm:px-4 sm:pt-3 shell:px-6 md:px-8 xl:px-10">
       <div className="mx-auto w-full max-w-7xl 2xl:max-w-[1480px]">
-        <header className="mb-4 rounded-3xl bg-gradient-to-br from-primary via-[#7f3842] to-primary-dark p-4 text-white shadow-[0_16px_40px_rgba(92,40,48,0.35)] sm:mb-5 sm:p-6 lg:p-7">
-          <p className="text-xs font-extrabold uppercase tracking-[0.14em] text-white/80">Главная</p>
-          <h1 className="mt-2 text-xl font-extrabold tracking-tight sm:text-3xl lg:text-[2rem]">Добро пожаловать</h1>
-          <p className="mt-1 text-sm font-medium text-white/85 sm:text-base lg:max-w-3xl">Удобный доступ к профилю, молитве, медиа и событиям дня.</p>
-        </header>
+        <div className="sticky top-0 z-40 pb-2 bg-[var(--surface)]/95 shadow-[0_4px_16px_rgba(0,0,0,0.02)] backdrop-blur-md supports-[backdrop-filter]:bg-[var(--surface)]/80">
+          <header className="mb-3 rounded-3xl bg-gradient-to-br from-primary via-[#7f3842] to-primary-dark p-4 text-white shadow-[0_12px_30px_rgba(92,40,48,0.3)] sm:mb-4 sm:p-5">
+            <h1 className="text-xl font-extrabold tracking-tight sm:text-2xl">Главная</h1>
+          </header>
+        </div>
 
         <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 sm:gap-4 xl:grid-cols-12">
           <button
