@@ -47,6 +47,7 @@ import {
   fetchRoleTemplates,
   fetchTelegramSettings,
   mergeDuplicateMembers,
+  swapAllMembersFirstLastNames,
   patchTelegramSettings,
   sendTelegramMessage,
   setDirectionTemplateRoles,
@@ -396,6 +397,22 @@ function MembersSection() {
     onError: (e) => setBanner({ type: 'err', text: apiErrorMessage(e, 'Ошибка сохранения.') }),
   });
 
+  const swapNameFieldsMut = useMutation({
+    mutationFn: () => {
+      if (!editing) throw new Error('no edit');
+      return updateAdminMember(editing.id, { swap_first_and_last_name: true });
+    },
+    onSuccess: (updated) => {
+      setEditing(updated);
+      const { first_name: ef, last_name: el } = splitNameForEditForm(updated);
+      setEditForm((s) => ({ ...s, first_name: ef, last_name: el }));
+      setBanner({ type: 'ok', text: 'В базе имя и фамилия поменяны местами.' });
+      invalidate();
+    },
+    onError: (e) =>
+      setBanner({ type: 'err', text: apiErrorMessage(e, 'Не удалось поменять поля имени.') }),
+  });
+
   const deleteMut = useMutation({
     mutationFn: (id: number) => deleteAdminMember(id),
     onSuccess: () => {
@@ -429,6 +446,23 @@ function MembersSection() {
       invalidate();
     },
     onError: (e) => setBanner({ type: 'err', text: apiErrorMessage(e, 'Не удалось объединить.') }),
+  });
+
+  const swapAllNamesMut = useMutation({
+    mutationFn: () => swapAllMembersFirstLastNames(),
+    onSuccess: (r) => {
+      setEditing(null);
+      setBanner({
+        type: 'ok',
+        text:
+          r.updated > 0
+            ? `Обновлено карточек: ${r.updated}. Поля «имя» и «фамилия» поменяны местами.`
+            : 'Нет участников с заполненным именем или фамилией.',
+      });
+      invalidate();
+    },
+    onError: (e) =>
+      setBanner({ type: 'err', text: apiErrorMessage(e, 'Не удалось выполнить массовую замену.') }),
   });
 
   const oneTimeMut = useMutation({
@@ -551,7 +585,7 @@ function MembersSection() {
         <button
           type="button"
           className={btnSecondary('shrink-0 text-xs')}
-          disabled={mergeDupesMut.isPending}
+          disabled={mergeDupesMut.isPending || swapAllNamesMut.isPending}
           title="Слить в одну карточку записи с одинаковым именем и фамилией (безопаснее, если создавались дубликаты)"
           onClick={() => {
             if (
@@ -566,6 +600,25 @@ function MembersSection() {
           }}
         >
           {mergeDupesMut.isPending ? 'Объединение…' : 'Объединить дубликаты'}
+        </button>
+        <button
+          type="button"
+          className={btnSecondary('shrink-0 border-amber-200 text-xs text-amber-950 hover:bg-amber-50/80')}
+          disabled={mergeDupesMut.isPending || swapAllNamesMut.isPending}
+          title="Одно действие для всех: поменять местами колонки имени и фамилии. Повторное нажатие отменит эффект."
+          onClick={() => {
+            if (
+              !window.confirm(
+                'Поменять местами поля «имя» и «фамилия» у ВСЕХ участников сразу? Используйте только если данные были занесены в перепутанные колонки. Повторный запуск снова меняет местами всё (откат).',
+              )
+            ) {
+              return;
+            }
+            setBanner(null);
+            swapAllNamesMut.mutate();
+          }}
+        >
+          {swapAllNamesMut.isPending ? 'Обновление…' : 'Поменять имя/фамилию у всех'}
         </button>
       </div>
 
@@ -940,6 +993,26 @@ function MembersSection() {
                       value={editForm.first_name}
                       onChange={(e) => setEditForm((s) => ({ ...s, first_name: e.target.value }))}
                     />
+                  </div>
+                  <div className="sm:col-span-2">
+                    <button
+                      type="button"
+                      className={btnSecondary('text-xs')}
+                      disabled={swapNameFieldsMut.isPending}
+                      onClick={() => {
+                        if (
+                          !window.confirm(
+                            'Поменять в базе местами поля «имя» и «фамилия» у этого участника? Используйте, если данные оказались в неправильных колонках.',
+                          )
+                        ) {
+                          return;
+                        }
+                        setBanner(null);
+                        swapNameFieldsMut.mutate();
+                      }}
+                    >
+                      {swapNameFieldsMut.isPending ? 'Меняем…' : 'Поменять имя и фамилию местами в базе'}
+                    </button>
                   </div>
                   <div>
                     <label className="mb-1 block text-xs font-semibold text-stone-600">Телефон</label>

@@ -64,6 +64,7 @@ export async function updateAdminMember(
     is_active: boolean;
     is_collection_coordinator: boolean;
     in_prayer_cycle: boolean;
+    swap_first_and_last_name: boolean;
   }>,
 ): Promise<AppUser> {
   const { data } = await apiClient.patch<AppUser>(`${USERS}/${id}`, body);
@@ -78,6 +79,13 @@ export async function deleteAdminMember(id: number): Promise<void> {
 export async function mergeDuplicateMembers(): Promise<{ ok: boolean; mergedPairs: number }> {
   const { data } = await apiClient.post<{ ok: boolean; mergedPairs: number }>(
     `${USERS}/merge-duplicates`,
+  );
+  return data;
+}
+
+export async function swapAllMembersFirstLastNames(): Promise<{ ok: boolean; updated: number }> {
+  const { data } = await apiClient.post<{ ok: boolean; updated: number }>(
+    `${USERS}/swap-all-first-last-names`,
   );
   return data;
 }

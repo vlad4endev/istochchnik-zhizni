@@ -259,6 +259,65 @@ export async function getUserById(id: number): Promise<AppUser | null> {
   return result.rows[0] ? mapUser(result.rows[0] as AppUser) : null;
 }
 
+/**
+ * Меняет местами значения `first_name` и `last_name` и пересобирает `name` («Имя Фамилия»).
+ * Для исправления записей, где колонки были заполнены наоборот.
+ */
+export async function swapMemberFirstLastName(id: number): Promise<AppUser | null> {
+  const existing = await getUserById(id);
+  if (!existing) {
+    return null;
+  }
+  const fn = (existing.first_name ?? '').trim();
+  const ln = (existing.last_name ?? '').trim();
+  if (!fn && !ln) {
+    return existing;
+  }
+
+  const newFirst = ln;
+  const newLast = fn;
+  if (newFirst && newLast) {
+    const dupId = await findMemberIdConflictingName(newFirst, newLast, id);
+    if (dupId !== null) {
+      throw new MemberNameDuplicateError();
+    }
+  }
+
+  const nameVal = `${newFirst} ${newLast}`.trim();
+  await query(
+    `UPDATE members
+     SET first_name = $1, last_name = $2, name = $3, updated_at = NOW()
+     WHERE id = $4`,
+    [newFirst, newLast, nameVal || existing.name, id]
+  );
+
+  return getUserById(id);
+}
+
+/** Массово меняет местами `first_name` и `last_name` у всех участников с непустым именем (как одноразовый патч в initDb). */
+export async function swapAllMembersFirstLastNames(): Promise<{ updated: number }> {
+  const result = await query(
+    `UPDATE members m SET
+      first_name = m.last_name,
+      last_name = m.first_name,
+      name = TRIM(
+        REGEXP_REPLACE(
+          CONCAT_WS(
+            ' ',
+            NULLIF(TRIM(m.last_name), ''),
+            NULLIF(TRIM(m.first_name), '')
+          ),
+          '[[:space:]]+',
+          ' ',
+          'g'
+        )
+      )
+    WHERE NULLIF(TRIM(COALESCE(m.first_name, '')), '') IS NOT NULL
+       OR NULLIF(TRIM(COALESCE(m.last_name, '')), '') IS NOT NULL`
+  );
+  return { updated: result.rowCount ?? 0 };
+}
+
 export async function createUser(input: CreateUserInput): Promise<AppUser> {
   const dupId = await findMemberIdConflictingName(input.first_name, input.last_name);
   if (dupId !== null) {

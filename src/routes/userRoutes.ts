@@ -18,6 +18,7 @@ import {
   startPrayerCycleHandler,
   updateUserHandler,
   mergeDuplicateMembersHandler,
+  swapAllMembersFirstLastNamesHandler,
 } from '../controllers/userController';
 
 const router = Router();
@@ -32,6 +33,7 @@ router.put('/templates/ministry-directions/:id/roles', setMinistryDirectionTempl
 
 router.get('/', getUsers);
 router.post('/merge-duplicates', mergeDuplicateMembersHandler);
+router.post('/swap-all-first-last-names', swapAllMembersFirstLastNamesHandler);
 router.get('/:id', getUser);
 router.get('/:id/prayer-requests/history', getPrayerRequestHistoryHandler);
 router.post('/', createUserHandler);

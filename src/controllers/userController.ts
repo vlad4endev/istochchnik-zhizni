@@ -18,6 +18,8 @@ import {
   setOneTimeMemberDateOverride,
   setUserAppRole,
   startPrayerCycle,
+  swapAllMembersFirstLastNames,
+  swapMemberFirstLastName,
   updateUser,
 } from '../services/userService';
 import { notifyRealtime, type RealtimeScope } from '../realtime/notify';
@@ -129,6 +131,24 @@ export async function mergeDuplicateMembersHandler(req: Request, res: Response):
   } catch (error) {
     console.error('Failed to merge duplicate members', error);
     res.status(500).json({ error: 'Не удалось объединить дубликаты' });
+  }
+}
+
+/** Меняет местами имя и фамилию у всех участников. Повторный запуск откатывает изменение. Только админ. */
+export async function swapAllMembersFirstLastNamesHandler(
+  req: Request,
+  res: Response
+): Promise<void> {
+  if (!ensureAdmin(req, res)) {
+    return;
+  }
+  try {
+    const { updated } = await swapAllMembersFirstLastNames();
+    notifyRealtime(['members', 'calendar']);
+    res.json({ ok: true, updated });
+  } catch (error) {
+    console.error('Failed to swap all member name columns', error);
+    res.status(500).json({ error: 'Не удалось обновить участников' });
   }
 }
 
@@ -270,6 +290,42 @@ export async function updateUserHandler(req: Request, res: Response): Promise<vo
   if (!userId) {
     res.status(400).json({ error: 'Invalid user id' });
     return;
+  }
+
+  if (req.body.swap_first_and_last_name !== undefined) {
+    if (typeof req.body.swap_first_and_last_name !== 'boolean') {
+      res.status(400).json({ error: 'Field "swap_first_and_last_name" must be boolean' });
+      return;
+    }
+    if (req.body.swap_first_and_last_name === true) {
+      const extraKeys = Object.keys(req.body).filter(
+        (k) => k !== 'swap_first_and_last_name' && req.body[k] !== undefined
+      );
+      if (extraKeys.length > 0) {
+        res.status(400).json({
+          error:
+            'Для смены местами имя/фамилия отправьте только { "swap_first_and_last_name": true }',
+        });
+        return;
+      }
+      try {
+        const updated = await swapMemberFirstLastName(userId);
+        if (!updated) {
+          res.status(404).json({ error: 'User not found' });
+          return;
+        }
+        notifyRealtime(['members', 'calendar']);
+        res.json(updated);
+      } catch (error) {
+        if (error instanceof MemberNameDuplicateError) {
+          res.status(409).json({ error: error.message });
+          return;
+        }
+        console.error('Failed to swap member name fields', error);
+        res.status(500).json({ error: 'Database error' });
+      }
+      return;
+    }
   }
 
   if (req.body.birth_date !== undefined) {
