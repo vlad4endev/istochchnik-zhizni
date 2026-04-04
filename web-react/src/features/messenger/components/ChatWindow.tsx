@@ -49,6 +49,7 @@ export function ChatWindow({
   const lastSentReadIdRef = useRef<bigint>(0n);
   const visibleForeignIdsRef = useRef<Set<string>>(new Set());
   const flushTimerRef = useRef<number | null>(null);
+  const scrollMeasureRafRef = useRef<number | null>(null);
 
   const conv = useMemo(() => conversations.find((c) => c.id === conversationId), [conversations, conversationId]);
 
@@ -230,16 +231,29 @@ export function ChatWindow({
   }, [conversationId, currentMemberId, flushVisibleReads, isDraft]);
 
   const handleScroll = useCallback(() => {
-    const el = scrollRef.current;
-    if (!el) return;
-    const pad = 140;
-    nearBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < pad;
+    if (scrollMeasureRafRef.current != null) return;
+    scrollMeasureRafRef.current = requestAnimationFrame(() => {
+      scrollMeasureRafRef.current = null;
+      const el = scrollRef.current;
+      if (!el) return;
+      const pad = 140;
+      nearBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < pad;
 
-    if (el.scrollTop < 72 && hasMore && !loading && !restoreScrollRef.current) {
-      restoreScrollRef.current = { scrollHeight: el.scrollHeight, scrollTop: el.scrollTop };
-      void loadMessages(conversationId, true);
-    }
+      if (el.scrollTop < 72 && hasMore && !loading && !restoreScrollRef.current) {
+        restoreScrollRef.current = { scrollHeight: el.scrollHeight, scrollTop: el.scrollTop };
+        void loadMessages(conversationId, true);
+      }
+    });
   }, [conversationId, hasMore, loading, loadMessages]);
+
+  useEffect(() => {
+    return () => {
+      if (scrollMeasureRafRef.current != null) {
+        cancelAnimationFrame(scrollMeasureRafRef.current);
+        scrollMeasureRafRef.current = null;
+      }
+    };
+  }, []);
 
   useLayoutEffect(() => {
     const el = scrollRef.current;

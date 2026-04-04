@@ -31,6 +31,7 @@ services:
     environment:
       # Внутри контейнера всегда 40978 (nginx → api). PORT в .env — порт на хосте.
       PORT: "40978"
+      UPLOADS_DIR: ${UPLOADS_DIR:-}
       DATABASE_URL: ${DATABASE_URL:?DATABASE_URL must be set}
       DB_SSL: ${DB_SSL:-false}
       DB_SSL_REJECT_UNAUTHORIZED: ${DB_SSL_REJECT_UNAUTHORIZED:-false}

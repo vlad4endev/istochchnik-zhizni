@@ -24,6 +24,7 @@ import notificationsRoutes from './routes/notificationsRoutes';
 import telegramRoutes from './routes/telegramRoutes';
 import { attachRealtimeWebSocket } from './realtime/wsHub';
 import { initPushCronJobs } from './cron/pushJobs';
+import { ensureUploadsDirs, getUploadsRoot } from './config/uploadsRoot';
 
 dotenv.config();
 
@@ -90,8 +91,11 @@ app.use(cors(corsOptions()));
 app.use(express.json());
 app.use(resolveAuthSession);
 
-// User-uploaded files (avatars, etc.)
-app.use('/uploads', express.static(path.join(process.cwd(), 'uploads'), { fallthrough: false }));
+// User-uploaded files (мессенджер, аватары). Путь: UPLOADS_DIR или ./uploads — том Docker обязателен в проде.
+ensureUploadsDirs();
+const uploadsAbs = getUploadsRoot();
+console.log(`[uploads] serving static files from: ${uploadsAbs}`);
+app.use('/uploads', express.static(uploadsAbs, { fallthrough: false }));
 
 app.use('/api/auth', authRoutes);
 

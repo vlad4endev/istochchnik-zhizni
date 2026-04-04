@@ -1,9 +1,11 @@
 #!/bin/sh
-# Именованный том /app/uploads в Docker часто root:root; процесс API — app (uid 1001).
+# Именованный том для загрузок: по умолчанию /app/uploads. Задайте UPLOADS_DIR — тогда том монтируйте туда.
+# Процесс API — app (uid 1001); каталог должен быть доступен на запись.
 if [ "$(id -u)" = "0" ]; then
-  mkdir -p /app/uploads/avatars
-  if ! chown -R app:app /app/uploads 2>/dev/null; then
-    echo "[entrypoint] warning: chown /app/uploads failed (NFS/special FS?); uploads may break for user app"
+  UPLOADS_ROOT="${UPLOADS_DIR:-/app/uploads}"
+  mkdir -p "$UPLOADS_ROOT/avatars"
+  if ! chown -R app:app "$UPLOADS_ROOT" 2>/dev/null; then
+    echo "[entrypoint] warning: chown $UPLOADS_ROOT failed (NFS/special FS?); uploads may break for user app"
   fi
   exec su-exec app "$@"
 fi

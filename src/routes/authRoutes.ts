@@ -17,15 +17,9 @@ import { requireAuthSession } from '../middleware/authSession';
 import multer from 'multer';
 import path from 'node:path';
 import fs from 'node:fs';
+import { getAvatarsDir } from '../config/uploadsRoot';
 
 const router = Router();
-
-const avatarsDir = path.join(process.cwd(), 'uploads', 'avatars');
-try {
-  fs.mkdirSync(avatarsDir, { recursive: true });
-} catch (e) {
-  console.warn('[uploads] cannot create avatars dir (check permissions on /app/uploads):', e);
-}
 
 const AVATAR_IMAGE_EXTENSIONS = new Set([
   '.jpg',
@@ -59,7 +53,15 @@ function avatarFileFilter(
 }
 
 const storage = multer.diskStorage({
-  destination: (_req, _file, cb) => cb(null, avatarsDir),
+  destination: (_req, _file, cb) => {
+    const dir = getAvatarsDir();
+    try {
+      fs.mkdirSync(dir, { recursive: true });
+    } catch (e) {
+      console.warn('[uploads] cannot create avatars dir:', dir, e);
+    }
+    cb(null, dir);
+  },
   filename: (req, file, cb) => {
     const userId = (req as unknown as { authUserId?: number }).authUserId ?? 'anon';
     const ext = path.extname(file.originalname || '') || '';

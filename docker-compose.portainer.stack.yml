@@ -6,6 +6,23 @@
 # Обязательные переменные:
 #   DATABASE_URL, WEB_PORT (например 8080)
 # Опционально: PORT (внутренний порт API, по умолчанию 40978)
+#
+# ─── Постоянные файлы (чат, аватары) — ОБЯЗАТЕЛЬНО на проде ─────────────────
+# Вариант A (ниже по умолчанию): именованный том `istochnik_app_uploads` → в контейнере /app/uploads.
+#   Файлы переживают перезапуск контейнера. Docker хранит их на диске сервера (обычно
+#   /var/lib/docker/volumes/<имя_стека>_istochnik_app_uploads/_data).
+#   НЕ удаляйте том: в Portainer при удалении стека не включайте опции, которые сносят volumes;
+#   не используйте `docker stack rm` / `compose down -v` с удалением volumes.
+#
+# Вариант B (удобнее бэкапить с хоста): каталог на VPS вместо именованного тома.
+#   1) На сервере: sudo mkdir -p /var/lib/istochnik/uploads && sudo chown 1001:1001 /var/lib/istochnik/uploads
+#      (uid 1001 = пользователь `app` внутри образа API)
+#   2) В services.api.volumes замените строку с именованным томом на:
+#        - /var/lib/istochnik/uploads:/app/uploads
+#   3) Удалите из секции `volumes:` внизу файла неиспользуемое имя `istochnik_app_uploads:`.
+#   4) В Environment стека можно задать UPLOADS_DIR=/app/uploads (или не задавать — это значение по умолчанию).
+#
+# Проверка: в логах контейнера api при старте строка [uploads] serving static files from: ...
 
 services:
   api:
@@ -18,6 +35,7 @@ services:
       - istochnik_app_uploads:/app/uploads
     environment:
       PORT: "40978"
+      UPLOADS_DIR: ${UPLOADS_DIR:-}
       DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL in Portainer}
       DB_SSL: ${DB_SSL:-true}
       DB_SSL_REJECT_UNAUTHORIZED: ${DB_SSL_REJECT_UNAUTHORIZED:-false}

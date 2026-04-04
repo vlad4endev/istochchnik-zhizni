@@ -29,6 +29,15 @@ interface ChatInputProps {
   participantLabelById?: Record<number, string>;
 }
 
+/** Высоту textarea считаем в следующем кадре после `height: auto`, чтобы реже ловить forced reflow. */
+function scheduleTextareaAutosize(el: HTMLTextAreaElement | null) {
+  if (!el) return;
+  el.style.height = 'auto';
+  requestAnimationFrame(() => {
+    el.style.height = `${el.scrollHeight}px`;
+  });
+}
+
 /** Ширина меню вложений ≈ Tailwind `w-56` (14rem). */
 const ATTACH_MENU_WIDTH_PX = 224;
 /** Совпадает с max-шириной `.tg-emoji-picker-popover` в messenger.css. */
@@ -271,9 +280,7 @@ export function ChatInput({
         el.focus();
         const caret = start + native.length;
         el.setSelectionRange(caret, caret);
-        // Recompute height after insertion (iOS-friendly).
-        el.style.height = 'auto';
-        el.style.height = `${el.scrollHeight}px`;
+        scheduleTextareaAutosize(el);
       } catch {
         /* ignore */
       }
@@ -347,9 +354,7 @@ export function ChatInput({
       await sendMessage(conversationId, text, replyId);
     }
 
-    if (textareaRef.current) {
-      textareaRef.current.style.height = 'auto';
-    }
+    scheduleTextareaAutosize(textareaRef.current);
     if (!isDraftPrivateConversationId(conversationId)) {
       sendTypingStop(conversationId);
     }
@@ -419,8 +424,7 @@ export function ChatInput({
       try {
         el.focus();
         el.setSelectionRange(pos, pos);
-        el.style.height = 'auto';
-        el.style.height = `${el.scrollHeight}px`;
+        scheduleTextareaAutosize(el);
       } catch {
         /* ignore */
       }
@@ -436,9 +440,7 @@ export function ChatInput({
     const value = e.target.value;
     setContent(value);
 
-    // Auto-resize
-    e.target.style.height = 'auto';
-    e.target.style.height = `${e.target.scrollHeight}px`;
+    scheduleTextareaAutosize(e.target);
 
     if (mentionParticipants.length > 0) {
       const caret = e.target.selectionStart ?? value.length;

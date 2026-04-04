@@ -16,6 +16,7 @@ export interface ChurchEvent {
 type EventsSchemaState = {
   hasTable: boolean;
   hasRecurrenceColumns: boolean;
+  tableRef: string;
 };
 
 let schemaStateOnce: Promise<EventsSchemaState> | null = null;
@@ -24,6 +25,14 @@ function isInsufficientPrivilegeError(err: unknown): boolean {
   if (!err || typeof err !== 'object') return false;
   const code = 'code' in err ? String((err as { code?: unknown }).code ?? '') : '';
   return code === '42501';
+}
+
+function quoteIdent(name: string): string {
+  return `"${name.replace(/"/g, '""')}"`;
+}
+
+function tableRefForSchema(schema: string): string {
+  return `${quoteIdent(schema)}."church_events"`;
 }
 
 function selectEventProjection(hasRecurrenceColumns: boolean): string {
@@ -55,28 +64,61 @@ function selectEventProjection(hasRecurrenceColumns: boolean): string {
 }
 
 async function readEventsSchemaState(): Promise<EventsSchemaState> {
+  const currentSchemaRes = await query('SELECT current_schema() AS schema_name');
+  const currentSchema =
+    (currentSchemaRes.rows[0] as { schema_name?: unknown } | undefined)?.schema_name;
+  const preferredSchema =
+    typeof currentSchema === 'string' && currentSchema.trim() ? currentSchema : 'public';
+
   const columns = await query(
-    `SELECT column_name
+    `SELECT table_schema, column_name
      FROM information_schema.columns
-     WHERE table_schema = current_schema()
-       AND table_name = 'church_events'`,
+     WHERE table_name = 'church_events'
+       AND table_schema NOT IN ('pg_catalog', 'information_schema')`,
   );
-  const names = new Set(
-    columns.rows
-      .map((r) => (r as { column_name?: unknown }).column_name)
-      .filter((v): v is string => typeof v === 'string'),
-  );
-  const hasTable = names.size > 0;
-  const hasRecurrenceColumns = hasTable && names.has('recurrence_type') && names.has('weekly_day');
-  return { hasTable, hasRecurrenceColumns };
+  const bySchema = new Map<string, Set<string>>();
+  for (const row of columns.rows) {
+    const tableSchema = (row as { table_schema?: unknown }).table_schema;
+    const columnName = (row as { column_name?: unknown }).column_name;
+    if (typeof tableSchema !== 'string' || typeof columnName !== 'string') continue;
+    const key = tableSchema.trim();
+    if (!key) continue;
+    if (!bySchema.has(key)) bySchema.set(key, new Set<string>());
+    bySchema.get(key)!.add(columnName);
+  }
+
+  if (bySchema.size === 0) {
+    return {
+      hasTable: false,
+      hasRecurrenceColumns: false,
+      tableRef: tableRefForSchema(preferredSchema),
+    };
+  }
+
+  const chosenSchema =
+    bySchema.has(preferredSchema) ? preferredSchema : bySchema.has('public') ? 'public' : Array.from(bySchema.keys())[0];
+  const names = bySchema.get(chosenSchema) ?? new Set<string>();
+  const hasRecurrenceColumns = names.has('recurrence_type') && names.has('weekly_day');
+  return {
+    hasTable: true,
+    hasRecurrenceColumns,
+    tableRef: tableRefForSchema(chosenSchema),
+  };
 }
 
 async function ensureChurchEventsSchema(): Promise<EventsSchemaState> {
   if (!schemaStateOnce) {
     schemaStateOnce = (async () => {
       try {
+        const currentSchemaRes = await query('SELECT current_schema() AS schema_name');
+        const currentSchema =
+          (currentSchemaRes.rows[0] as { schema_name?: unknown } | undefined)?.schema_name;
+        const targetSchema =
+          typeof currentSchema === 'string' && currentSchema.trim() ? currentSchema : 'public';
+        const targetTableRef = tableRefForSchema(targetSchema);
+
         await query(`
-          CREATE TABLE IF NOT EXISTS church_events (
+          CREATE TABLE IF NOT EXISTS ${targetTableRef} (
             id BIGSERIAL PRIMARY KEY,
             title VARCHAR(255) NOT NULL,
             description TEXT,
@@ -91,35 +133,35 @@ async function ensureChurchEventsSchema(): Promise<EventsSchemaState> {
         `);
 
         await query(`
-          ALTER TABLE church_events
+          ALTER TABLE ${targetTableRef}
             ADD COLUMN IF NOT EXISTS recurrence_type VARCHAR(16),
             ADD COLUMN IF NOT EXISTS weekly_day SMALLINT
         `);
         await query(`
-          UPDATE church_events
+          UPDATE ${targetTableRef}
           SET recurrence_type = 'once'
           WHERE recurrence_type IS NULL OR recurrence_type NOT IN ('once', 'weekly')
         `);
         await query(`
-          ALTER TABLE church_events
+          ALTER TABLE ${targetTableRef}
             ALTER COLUMN recurrence_type SET DEFAULT 'once',
             ALTER COLUMN recurrence_type SET NOT NULL
         `);
         await query(`
-          ALTER TABLE church_events
+          ALTER TABLE ${targetTableRef}
             DROP CONSTRAINT IF EXISTS church_events_recurrence_type_check
         `);
         await query(`
-          ALTER TABLE church_events
+          ALTER TABLE ${targetTableRef}
             ADD CONSTRAINT church_events_recurrence_type_check
             CHECK (recurrence_type IN ('once', 'weekly'))
         `);
         await query(`
-          ALTER TABLE church_events
+          ALTER TABLE ${targetTableRef}
             DROP CONSTRAINT IF EXISTS church_events_weekly_day_check
         `);
         await query(`
-          ALTER TABLE church_events
+          ALTER TABLE ${targetTableRef}
             ADD CONSTRAINT church_events_weekly_day_check
             CHECK (weekly_day IS NULL OR (weekly_day BETWEEN 0 AND 6))
         `);
@@ -150,7 +192,7 @@ export async function listActiveEvents(): Promise<ChurchEvent[]> {
   const result = await query(
     `SELECT
       ${selectEventProjection(schema.hasRecurrenceColumns)}
-     FROM church_events
+     FROM ${schema.tableRef}
      WHERE is_active = TRUE
      ORDER BY event_date ASC, event_time ASC, id ASC`,
   );
@@ -162,7 +204,7 @@ export async function listAllEventsAdmin(): Promise<ChurchEvent[]> {
   const result = await query(
     `SELECT
       ${selectEventProjection(schema.hasRecurrenceColumns)}
-     FROM church_events
+     FROM ${schema.tableRef}
      ORDER BY event_date ASC, event_time ASC, id ASC`,
   );
   return result.rows as ChurchEvent[];
@@ -189,7 +231,7 @@ export async function createChurchEvent(input: {
   ];
   const result = schema.hasRecurrenceColumns
     ? await query(
-        `INSERT INTO church_events (title, description, event_date, event_time, recurrence_type, weekly_day, is_active)
+        `INSERT INTO ${schema.tableRef} (title, description, event_date, event_time, recurrence_type, weekly_day, is_active)
          VALUES ($1, $2, $3::date, $4::time, $5, $6, COALESCE($7, TRUE))
          RETURNING
            ${selectEventProjection(true)}`,
@@ -201,7 +243,7 @@ export async function createChurchEvent(input: {
         ],
       )
     : await query(
-        `INSERT INTO church_events (title, description, event_date, event_time, is_active)
+        `INSERT INTO ${schema.tableRef} (title, description, event_date, event_time, is_active)
          VALUES ($1, $2, $3::date, $4::time, COALESCE($5, TRUE))
          RETURNING
            ${selectEventProjection(false)}`,
@@ -265,7 +307,7 @@ export async function updateChurchEvent(
     const current = await query(
       `SELECT
         ${selectEventProjection(schema.hasRecurrenceColumns)}
-       FROM church_events
+       FROM ${schema.tableRef}
        WHERE id = $1`,
       [id],
     );
@@ -275,7 +317,7 @@ export async function updateChurchEvent(
   updates.push('updated_at = NOW()');
   values.push(id);
   const result = await query(
-    `UPDATE church_events
+    `UPDATE ${schema.tableRef}
      SET ${updates.join(', ')}
      WHERE id = $${values.length}
      RETURNING
@@ -286,13 +328,13 @@ export async function updateChurchEvent(
 }
 
 export async function deleteChurchEvent(id: number): Promise<boolean> {
-  await ensureChurchEventsSchema();
-  const result = await query('DELETE FROM church_events WHERE id = $1 RETURNING id', [id]);
+  const schema = await ensureChurchEventsSchema();
+  const result = await query(`DELETE FROM ${schema.tableRef} WHERE id = $1 RETURNING id`, [id]);
   return (result.rowCount ?? 0) > 0;
 }
 
 export async function deleteAllChurchEvents(): Promise<number> {
-  await ensureChurchEventsSchema();
-  const result = await query('DELETE FROM church_events');
+  const schema = await ensureChurchEventsSchema();
+  const result = await query(`DELETE FROM ${schema.tableRef}`);
   return result.rowCount ?? 0;
 }

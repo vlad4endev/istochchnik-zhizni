@@ -2,16 +2,18 @@ import multer from 'multer';
 import path from 'node:path';
 import fs from 'node:fs';
 import { v4 as uuidv4 } from 'uuid';
-
-const uploadsDir = path.join(process.cwd(), 'uploads');
-try {
-  fs.mkdirSync(uploadsDir, { recursive: true });
-} catch (e) {
-  console.warn('[uploads] cannot create messenger uploads dir (check permissions on /app/uploads):', e);
-}
+import { getUploadsRoot } from '../config/uploadsRoot';
 
 const storage = multer.diskStorage({
-  destination: (_req, _file, cb) => cb(null, uploadsDir),
+  destination: (_req, _file, cb) => {
+    const dir = getUploadsRoot();
+    try {
+      fs.mkdirSync(dir, { recursive: true });
+    } catch (e) {
+      console.warn('[uploads] cannot create messenger uploads dir:', dir, e);
+    }
+    cb(null, dir);
+  },
   filename: (_req, file, cb) => {
     const ext = path.extname(file.originalname || '') || '';
     const safeExt = ext && ext.length <= 12 ? ext : '';

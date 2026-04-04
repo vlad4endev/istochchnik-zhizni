@@ -4,7 +4,9 @@
 # 1. cp .env.production .env  — задайте POSTGRES_PASSWORD, DATABASE_URL, CORS_ALLOWED_ORIGINS
 # 2. DATABASE_URL внутри Docker-сети: postgresql://USER:PASSWORD@db:5432/DBNAME
 #    Пример: postgresql://postgres:ВАШ_ПАРОЛЬ@db:5432/istochik_db
-# 3. Том api_uploads_prod: аватары и файлы мессенджера в /app/uploads (иначе только один инстанс API «видит» загрузки).
+# 3. Том api_uploads_prod: аватары и файлы мессенджера в /app/uploads. Без тома файлы пропадут при обновлении
+#    образа / пересоздании контейнера (в чате останутся ссылки — 404). Не используйте `docker compose down -v`.
+#    Альтернатива: bind-mount хоста + UPLOADS_DIR (см. .env.example).
 # 4. Запуск: docker compose -f docker-compose.prod.yml up -d --build
 # 5. Остановка: docker compose -f docker-compose.prod.yml down
 #
@@ -40,6 +42,8 @@ services:
         condition: service_healthy
     volumes:
       - api_uploads_prod:/app/uploads
+      # Либо каталог на VPS (проще бэкапить): раскомментируйте и задайте UPLOADS_DIR=/data/uploads
+      # - /var/lib/istochnik/uploads:/data/uploads
     environment:
       NODE_ENV: production
       PORT: "40978"
@@ -55,6 +59,8 @@ services:
       TRUST_PROXY: ${TRUST_PROXY:-true}
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-}
       CORS_ORIGIN: ${CORS_ORIGIN:-}
+      # Если монтируете не /app/uploads, а например /data/uploads — задайте: UPLOADS_DIR=/data/uploads
+      UPLOADS_DIR: ${UPLOADS_DIR:-}
     ports:
       # Снаружи: ${API_PUBLISH:-127.0.0.1}:${PORT:-40978} -> 40978 в контейнере.
       # Для TLS nginx на этом же VPS оставьте 127.0.0.1. Прямой доступ: API_PUBLISH=0.0.0.0
