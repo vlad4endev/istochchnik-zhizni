@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { LuBookOpen, LuHeart, LuMapPin, LuWrench } from 'react-icons/lu';
 import { fetchPrayerByDate } from './api/prayer';
+import { memberRosterName } from './lib/memberRosterName';
 import type { DayPrayerData } from './types';
 
 function formatDisplayDate(iso: string): string {
@@ -99,7 +100,7 @@ export function App() {
           <div className="cards">
             <article className="card card-member">
               <h2 className="card-label">Член церкви</h2>
-              <p className="card-title">{member?.name ?? 'Не назначен'}</p>
+              <p className="card-title">{member ? memberRosterName(member) : 'Не назначен'}</p>
               <p className="card-body">
                 {(member?.prayer_request?.trim() || 'Нужда не указана').trim()}
               </p>

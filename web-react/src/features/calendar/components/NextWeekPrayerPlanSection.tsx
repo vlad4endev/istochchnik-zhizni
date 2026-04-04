@@ -13,6 +13,7 @@ import {
   LuX,
 } from 'react-icons/lu';
 
+import { memberRosterName } from '../../../lib/memberRosterName';
 import type { MeResponse } from '../../profile/api';
 import type { NextWeekMemberDay } from '../../../types';
 import type { CycleCollectionClaimRow, CycleCollectionClaimsSnapshot } from '../collectionTypes';
@@ -97,7 +98,7 @@ function DayPrayerNeedRow(props: {
   const d = parse(row.date, 'yyyy-MM-dd', new Date());
   const weekday = format(d, 'EEEE', { locale: ru });
   const dayShort = format(d, 'd MMM', { locale: ru });
-  const name = row.member?.name?.trim() || null;
+  const name = row.member ? memberRosterName(row.member) : null;
   const updatedLabel = formatUpdatedAt(row.member?.prayer_need_updated_at);
 
   if (mid == null) {
@@ -269,8 +270,11 @@ function NextWeekMembersPanel(props: {
 
   const normalizedSearch = searchQuery.trim().toLowerCase();
   const listRows = days.filter((row) => {
-    const name = row.member?.name?.trim() || '';
-    if (normalizedSearch && !name.toLowerCase().includes(normalizedSearch)) return false;
+    const m = row.member;
+    const searchBlob = m
+      ? `${memberRosterName(m)} ${m.name} ${m.first_name ?? ''} ${m.last_name ?? ''}`.toLowerCase()
+      : '';
+    if (normalizedSearch && !searchBlob.includes(normalizedSearch)) return false;
 
     if (claimsError) return filterMode === 'all';
     const mid = row.member?.id;
@@ -388,7 +392,8 @@ function NextWeekMembersPanel(props: {
               {listRows.map((row) => {
                 const d = parse(row.date, 'yyyy-MM-dd', new Date());
                 const label = format(d, 'EEEE, d MMMM', { locale: ru });
-                const name = row.member?.name?.trim() || null;
+                const mem = row.member;
+                const name = mem ? memberRosterName(mem) : null;
                 const mid = row.member?.id;
                 const claimRow = claimsError ? undefined : mid != null ? claimByMemberId.get(mid) : undefined;
                 const mine = currentUserId != null && claimRow?.claimed_by?.id === currentUserId;
@@ -397,7 +402,12 @@ function NextWeekMembersPanel(props: {
                 const claimedByLabel = claimRow?.claimed_by
                   ? mine
                     ? 'Вы'
-                    : claimRow.claimed_by.name
+                    : memberRosterName({
+                        id: claimRow.claimed_by.id,
+                        name: claimRow.claimed_by.name,
+                        first_name: claimRow.claimed_by.first_name,
+                        last_name: claimRow.claimed_by.last_name,
+                      })
                   : null;
 
                 return (

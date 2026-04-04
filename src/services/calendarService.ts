@@ -13,6 +13,8 @@ import {
 interface Member {
   id: number;
   name: string;
+  first_name: string | null;
+  last_name: string | null;
   prayer_request: string | null;
   /** Когда последний раз меняли молитвенную нужду для этого цикла (member_prayer_by_cycle). */
   prayer_need_updated_at: string | null;
@@ -21,6 +23,8 @@ interface Member {
 interface MemberOverrideRow {
   id: number;
   name: string;
+  first_name: string | null;
+  last_name: string | null;
   prayer_request: string | null;
   prayer_need_updated_at: string | null;
 }
@@ -136,7 +140,8 @@ export async function getPrayerDataByDate(targetDate: string): Promise<PrayerDat
     totalMembers > 0 ? computeCycleIndex(diffDays, totalMembers) : 0;
 
   const overridePromise = query(
-    `SELECT m.id, m.name, COALESCE(mpc.prayer_request, m.prayer_request) AS prayer_request,
+    `SELECT m.id, m.name, m.first_name, m.last_name,
+            COALESCE(mpc.prayer_request, m.prayer_request) AS prayer_request,
             mpc.updated_at::text AS prayer_need_updated_at
      FROM member_cycle_overrides o
      JOIN members m ON m.id = o.member_id
@@ -159,7 +164,8 @@ export async function getPrayerDataByDate(targetDate: string): Promise<PrayerDat
     }
 
     const result = await query(
-      `SELECT m.id, m.name, COALESCE(mpc.prayer_request, m.prayer_request) AS prayer_request,
+      `SELECT m.id, m.name, m.first_name, m.last_name,
+              COALESCE(mpc.prayer_request, m.prayer_request) AS prayer_request,
               mpc.updated_at::text AS prayer_need_updated_at
        FROM members m
        LEFT JOIN member_prayer_by_cycle mpc
@@ -219,11 +225,11 @@ async function getMemberAssignmentsForDates(dates: string[]): Promise<NextWeekMe
   }
 
   const sortedBase = await query(
-    `SELECT m.id, m.name
+    `SELECT m.id, m.name, m.first_name, m.last_name
      FROM members m
      WHERE ${PRAYER_CYCLE_MEMBERS_WHERE_M}
      ORDER BY ${MEMBER_ORDER_SQL}`
-  ).then((result) => result.rows as { id: number; name: string }[]);
+  ).then((result) => result.rows as { id: number; name: string; first_name: string | null; last_name: string | null }[]);
 
   const overrides = await query(
     `SELECT o.target_date::text AS target_date, m.id
@@ -244,7 +250,8 @@ async function getMemberAssignmentsForDates(dates: string[]): Promise<NextWeekMe
     const diffD = getDiffDays(targetDate, cycleStartDate);
     const cIdx = computeCycleIndex(diffD, totalMembers);
     const r = await query(
-      `SELECT m.id, m.name, COALESCE(mpc.prayer_request, m.prayer_request) AS prayer_request,
+      `SELECT m.id, m.name, m.first_name, m.last_name,
+              COALESCE(mpc.prayer_request, m.prayer_request) AS prayer_request,
               mpc.updated_at::text AS prayer_need_updated_at
        FROM members m
        LEFT JOIN member_prayer_by_cycle mpc ON mpc.member_id = m.id AND mpc.cycle_index = $2
@@ -291,6 +298,8 @@ async function getMemberAssignmentsForDates(dates: string[]): Promise<NextWeekMe
       member: {
         id: base.id,
         name: base.name,
+        first_name: base.first_name,
+        last_name: base.last_name,
         prayer_request: prayerRequest,
         prayer_need_updated_at: updatedAt,
       },

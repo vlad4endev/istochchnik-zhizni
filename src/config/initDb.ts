@@ -219,6 +219,59 @@ ALTER TABLE members ADD COLUMN IF NOT EXISTS is_collection_coordinator BOOLEAN N
 ALTER TABLE members ADD COLUMN IF NOT EXISTS in_prayer_cycle BOOLEAN NOT NULL DEFAULT TRUE;
 ALTER TABLE members ALTER COLUMN in_prayer_cycle SET DEFAULT FALSE;
 
+-- Одноразово: в части карточек в колонке first_name оказалась фамилия, в last_name — имя.
+-- Меняем местами и пересобираем name / full_name из прежних значений (строки только с name не трогаем).
+CREATE TABLE IF NOT EXISTS app_data_patches (
+  patch_id TEXT PRIMARY KEY,
+  applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+DO $swap_member_name_columns$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM app_data_patches WHERE patch_id = 'members_fix_first_last_columns_2026_04_06'
+  ) THEN
+    RETURN;
+  END IF;
+
+  UPDATE members m SET
+    first_name = m.last_name,
+    last_name = m.first_name,
+    name = TRIM(
+      REGEXP_REPLACE(
+        CONCAT_WS(
+          ' ',
+          NULLIF(TRIM(m.last_name), ''),
+          NULLIF(TRIM(m.first_name), '')
+        ),
+        '[[:space:]]+',
+        ' ',
+        'g'
+      )
+    )
+  WHERE NULLIF(TRIM(COALESCE(m.first_name, '')), '') IS NOT NULL
+     OR NULLIF(TRIM(COALESCE(m.last_name, '')), '') IS NOT NULL;
+
+  UPDATE access_requests r SET
+    first_name = r.last_name,
+    last_name = r.first_name,
+    full_name = TRIM(
+      REGEXP_REPLACE(
+        CONCAT_WS(
+          ' ',
+          NULLIF(TRIM(r.last_name), ''),
+          NULLIF(TRIM(r.first_name), '')
+        ),
+        '[[:space:]]+',
+        ' ',
+        'g'
+      )
+    );
+
+  INSERT INTO app_data_patches (patch_id) VALUES ('members_fix_first_last_columns_2026_04_06');
+END;
+$swap_member_name_columns$;
+
 ALTER TABLE global_settings ADD COLUMN IF NOT EXISTS rutube_embed_code TEXT;
 ALTER TABLE global_settings ADD COLUMN IF NOT EXISTS telegram_bot_token TEXT;
 ALTER TABLE global_settings ADD COLUMN IF NOT EXISTS telegram_prayer_chat_id TEXT;

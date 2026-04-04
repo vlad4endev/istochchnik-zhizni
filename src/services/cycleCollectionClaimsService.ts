@@ -8,7 +8,14 @@ const MEMBER_ORDER_SQL = `LOWER(COALESCE(NULLIF(trim(m.last_name), ''), split_pa
 export interface CycleCollectionClaimRow {
   id: number;
   name: string;
-  claimed_by: { id: number; name: string } | null;
+  first_name: string | null;
+  last_name: string | null;
+  claimed_by: {
+    id: number;
+    name: string;
+    first_name: string | null;
+    last_name: string | null;
+  } | null;
   /** Можно поставить/снять галочку (не занято другим или занято мной). */
   can_toggle: boolean;
 }
@@ -32,29 +39,37 @@ export async function getCycleCollectionClaimsSnapshot(
   const cycleIndex = snap.cycle_index;
 
   const membersResult = await query(
-    `SELECT m.id, m.name FROM members m
+    `SELECT m.id, m.name, m.first_name, m.last_name FROM members m
      WHERE ${PRAYER_CYCLE_MEMBERS_WHERE_M}
      ORDER BY ${MEMBER_ORDER_SQL}`,
     []
   );
 
   const claimsResult = await query(
-    `SELECT c.member_id, c.claimed_by_member_id, cb.name AS claimer_name
+    `SELECT c.member_id, c.claimed_by_member_id,
+            cb.name AS claimer_name, cb.first_name AS claimer_first_name, cb.last_name AS claimer_last_name
      FROM cycle_collection_claims c
      JOIN members cb ON cb.id = c.claimed_by_member_id
      WHERE c.cycle_index = $1`,
     [cycleIndex]
   );
 
-  const claimByMember = new Map<number, { id: number; name: string }>();
+  const claimByMember = new Map<
+    number,
+    { id: number; name: string; first_name: string | null; last_name: string | null }
+  >();
   for (const row of claimsResult.rows as {
     member_id: number;
     claimed_by_member_id: number;
     claimer_name: string;
+    claimer_first_name: string | null;
+    claimer_last_name: string | null;
   }[]) {
     claimByMember.set(row.member_id, {
       id: row.claimed_by_member_id,
       name: String(row.claimer_name ?? ''),
+      first_name: row.claimer_first_name,
+      last_name: row.claimer_last_name,
     });
   }
 
@@ -71,19 +86,25 @@ export async function getCycleCollectionClaimsSnapshot(
     }
   }
 
-  const members: CycleCollectionClaimRow[] = (membersResult.rows as { id: number; name: string }[]).map(
-    (m) => {
-      const claimed = claimByMember.get(m.id) ?? null;
-      const can_toggle =
-        canManage && (claimed == null || claimed.id === authUserId);
-      return {
-        id: m.id,
-        name: m.name,
-        claimed_by: claimed,
-        can_toggle,
-      };
-    }
-  );
+  const members: CycleCollectionClaimRow[] = (
+    membersResult.rows as {
+      id: number;
+      name: string;
+      first_name: string | null;
+      last_name: string | null;
+    }[]
+  ).map((m) => {
+    const claimed = claimByMember.get(m.id) ?? null;
+    const can_toggle = canManage && (claimed == null || claimed.id === authUserId);
+    return {
+      id: m.id,
+      name: m.name,
+      first_name: m.first_name,
+      last_name: m.last_name,
+      claimed_by: claimed,
+      can_toggle,
+    };
+  });
 
   return {
     cycle_index: cycleIndex,

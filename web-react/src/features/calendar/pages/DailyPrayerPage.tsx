@@ -36,6 +36,7 @@ import {
   isApiUrlProbablyWrongForWeb,
   resolveAxiosBaseURL,
 } from '../../../lib/config';
+import { memberRosterName } from '../../../lib/memberRosterName';
 import type { Backslider, DayPrayerData, GlobalTheme, Member, Ministry } from '../../../types';
 import { fetchMe, patchProfile } from '../../profile/api';
 import {
@@ -183,7 +184,7 @@ function MemberCard({
   return (
     <PrayerCard
       Icon={LuHeartHandshake}
-      title={member.name}
+      title={memberRosterName(member)}
       accentVar="var(--member)"
       cardIndex={cardIndex}
     >

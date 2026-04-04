@@ -25,9 +25,13 @@ function normalizeMemberRow(raw: unknown): Member | null {
   if (!Number.isFinite(idNum)) return null;
   const pr = raw.prayer_request;
   const pu = raw.prayer_need_updated_at;
+  const fn = raw.first_name;
+  const ln = raw.last_name;
   return {
     id: idNum,
     name: String(name),
+    first_name: typeof fn === 'string' || fn === null ? fn : undefined,
+    last_name: typeof ln === 'string' || ln === null ? ln : undefined,
     prayer_request: typeof pr === 'string' ? pr : pr == null ? null : String(pr),
     prayer_need_updated_at:
       typeof pu === 'string' ? pu : pu == null || pu === undefined ? null : String(pu),
@@ -161,17 +165,33 @@ function normalizeClaimRow(raw: unknown): import('./collectionTypes').CycleColle
   const name = raw.name;
   const can_toggle = raw.can_toggle;
   if (typeof id !== 'number' || typeof name !== 'string' || typeof can_toggle !== 'boolean') return null;
-  let claimed_by: { id: number; name: string } | null = null;
+  const fn = raw.first_name;
+  const ln = raw.last_name;
+  let claimed_by: import('./collectionTypes').CycleCollectionClaimRow['claimed_by'] = null;
   if (raw.claimed_by === null) {
     claimed_by = null;
   } else if (isRecord(raw.claimed_by)) {
     const cid = raw.claimed_by.id;
     const cname = raw.claimed_by.name;
+    const cfn = raw.claimed_by.first_name;
+    const cln = raw.claimed_by.last_name;
     if (typeof cid === 'number' && typeof cname === 'string') {
-      claimed_by = { id: cid, name: cname };
+      claimed_by = {
+        id: cid,
+        name: cname,
+        first_name: typeof cfn === 'string' || cfn === null ? cfn : undefined,
+        last_name: typeof cln === 'string' || cln === null ? cln : undefined,
+      };
     }
   }
-  return { id, name, claimed_by, can_toggle };
+  return {
+    id,
+    name,
+    first_name: typeof fn === 'string' || fn === null ? fn : undefined,
+    last_name: typeof ln === 'string' || ln === null ? ln : undefined,
+    claimed_by,
+    can_toggle,
+  };
 }
 
 function normalizeCycleCollectionSnapshot(raw: unknown): CycleCollectionClaimsSnapshot {

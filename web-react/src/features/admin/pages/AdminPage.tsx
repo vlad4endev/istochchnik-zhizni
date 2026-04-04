@@ -62,6 +62,11 @@ import {
   type ChurchEventItem,
   type TelegramSettingsResponse,
 } from '../api';
+import {
+  compareMembersBySurname,
+  memberRosterName,
+  splitMemberNameParts,
+} from '../../../lib/memberRosterName';
 import type { AppUser } from '../types';
 import { fetchPrayerRequestHistory, type PrayerHistoryItem } from '../../profile/api';
 
@@ -123,41 +128,8 @@ function MemberRegistrationBadge({ u }: { u: AppUser }) {
 }
 
 function splitNameForEditForm(u: AppUser): { first_name: string; last_name: string } {
-  let f = (u.first_name ?? '').trim();
-  let l = (u.last_name ?? '').trim();
-  if (f || l) {
-    return { first_name: f, last_name: l };
-  }
-  const raw = (u.name ?? '').trim();
-  if (!raw) {
-    return { first_name: '', last_name: '' };
-  }
-  const parts = raw.split(/\s+/).filter(Boolean);
-  if (parts.length >= 3) {
-    return { first_name: parts.slice(1).join(' '), last_name: parts[0] };
-  }
-  if (parts.length === 2) {
-    return { first_name: parts[0], last_name: parts[1] };
-  }
-  return { first_name: parts[0], last_name: '' };
-}
-
-/** Для списка участников: «Фамилия Имя» (и отчество в хвосте имени, если было в `name`). */
-function memberRosterDisplayName(u: AppUser): string {
-  const { first_name: f, last_name: l } = splitNameForEditForm(u);
-  const s = `${l} ${f}`.trim();
-  if (s) return s;
-  return u.name.trim() || `#${u.id}`;
-}
-
-function compareMembersBySurname(a: AppUser, b: AppUser): number {
-  const aa = splitNameForEditForm(a);
-  const bb = splitNameForEditForm(b);
-  const lCmp = aa.last_name.localeCompare(bb.last_name, 'ru', { sensitivity: 'base' });
-  if (lCmp !== 0) return lCmp;
-  const fCmp = aa.first_name.localeCompare(bb.first_name, 'ru', { sensitivity: 'base' });
-  if (fCmp !== 0) return fCmp;
-  return a.id - b.id;
+  const p = splitMemberNameParts(u);
+  return { first_name: p.first, last_name: p.last };
 }
 
 function fieldClass() {
@@ -315,7 +287,7 @@ function MembersSection() {
       ? list
       : list.filter((u) => {
           const blob =
-            `${memberRosterDisplayName(u)} ${displayName(u)} ${u.phone_number ?? ''} ${u.email ?? ''}`.toLowerCase();
+            `${memberRosterName(u)} ${displayName(u)} ${u.phone_number ?? ''} ${u.email ?? ''}`.toLowerCase();
           return blob.includes(q);
         });
     return [...matched].sort(compareMembersBySurname);
@@ -736,7 +708,7 @@ function MembersSection() {
             >
               <div className="flex items-start justify-between gap-2">
                 <div>
-                  <p className="font-bold text-stone-900">{memberRosterDisplayName(u)}</p>
+                  <p className="font-bold text-stone-900">{memberRosterName(u)}</p>
                   <p className="mt-0.5 text-sm text-stone-600">{u.phone_number ?? '—'}</p>
                 </div>
                 <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-[11px] font-bold text-primary">
@@ -818,7 +790,7 @@ function MembersSection() {
                       }
                     }}
                   >
-                    <td className="px-4 py-3 font-semibold text-stone-900">{memberRosterDisplayName(u)}</td>
+                    <td className="px-4 py-3 font-semibold text-stone-900">{memberRosterName(u)}</td>
                     <td className="px-4 py-3 align-middle">
                       <MemberRegistrationBadge u={u} />
                     </td>
@@ -869,7 +841,7 @@ function MembersSection() {
             </h3>
             <p className="mt-1 text-sm text-stone-600">
               Участник:{' '}
-              <strong>{oneTimeSubject ? memberRosterDisplayName(oneTimeSubject) : `#${oneTimeId}`}</strong>
+              <strong>{oneTimeSubject ? memberRosterName(oneTimeSubject) : `#${oneTimeId}`}</strong>
             </p>
             <p className="mt-2 text-xs text-stone-500">
               Назначение на один день без сдвига общего расписания цикла.
@@ -916,7 +888,7 @@ function MembersSection() {
                 </div>
                 <div className="min-w-0 flex-1">
                   <h3 className="text-lg font-extrabold tracking-tight text-stone-900">
-                    {memberRosterDisplayName(editing)}
+                    {memberRosterName(editing)}
                   </h3>
                   <div className="mt-1 flex flex-wrap items-center gap-2">
                     <MemberRegistrationBadge u={editing} />
@@ -1139,7 +1111,7 @@ function MembersSection() {
                     className={btnDangerOutline()}
                     disabled={deleteMut.isPending}
                     onClick={() => {
-                      if (!window.confirm(`Удалить ${memberRosterDisplayName(editing)}?`)) return;
+                      if (!window.confirm(`Удалить ${memberRosterName(editing)}?`)) return;
                       setBanner(null);
                       deleteMut.mutate(editing.id);
                     }}

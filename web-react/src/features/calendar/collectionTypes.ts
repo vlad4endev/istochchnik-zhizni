@@ -2,7 +2,14 @@
 export interface CycleCollectionClaimRow {
   id: number;
   name: string;
-  claimed_by: { id: number; name: string } | null;
+  first_name?: string | null;
+  last_name?: string | null;
+  claimed_by: {
+    id: number;
+    name: string;
+    first_name?: string | null;
+    last_name?: string | null;
+  } | null;
   can_toggle: boolean;
 }
 
