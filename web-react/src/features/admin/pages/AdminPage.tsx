@@ -63,6 +63,7 @@ import {
   type ChurchEventItem,
   type TelegramSettingsResponse,
 } from '../api';
+import { dateInputValueFromApi } from '../../../lib/dateInputValueFromApi';
 import {
   compareMembersBySurname,
   memberRosterName,
@@ -314,7 +315,7 @@ function MembersSection() {
     first_name: form.first_name.trim(),
     last_name: form.last_name.trim(),
     phone_number: form.phone_number.trim(),
-    birth_date: form.birth_date.trim(),
+    birth_date: dateInputValueFromApi(form.birth_date.trim()),
     ...(form.ministry_role.trim() ? { ministry_role: form.ministry_role.trim() } : {}),
     ...(form.ministry_direction.trim() ? { ministry_direction: form.ministry_direction.trim() } : {}),
   });
@@ -379,7 +380,7 @@ function MembersSection() {
         first_name: editForm.first_name.trim(),
         last_name: editForm.last_name.trim(),
         phone_number: editForm.phone_number.trim(),
-        birth_date: editForm.birth_date.trim(),
+        birth_date: dateInputValueFromApi(editForm.birth_date.trim()),
         ministry_role: editForm.ministry_role.trim(),
         ministry_direction: editForm.ministry_direction.trim(),
         prayer_request: editForm.prayer_request.trim(),
@@ -452,13 +453,28 @@ function MembersSection() {
     mutationFn: () => swapAllMembersFirstLastNames(),
     onSuccess: (r) => {
       setEditing(null);
-      setBanner({
-        type: 'ok',
-        text:
-          r.updated > 0
-            ? `Обновлено карточек: ${r.updated}. Поля «имя» и «фамилия» поменяны местами.`
-            : 'Нет участников с заполненным именем или фамилией.',
-      });
+      if (r.updated === 0) {
+        setBanner({
+          type: 'ok',
+          text:
+            'Нечего обновить: нет участников с заполненными колонками имени/фамилии и нет карточек, где в name ровно два слова при пустых колонках.',
+        });
+      } else {
+        const bits: string[] = [];
+        if (r.swapped > 0) {
+          bits.push(`колонки имени и фамилии поменяны местами: ${r.swapped}`);
+        }
+        if (r.filledFromName > 0) {
+          bits.push(`из поля name перенесены имя и фамилия (два слова): ${r.filledFromName}`);
+        }
+        let text = `${bits.join('. ')}. Всего карточек: ${r.updated}.`;
+        if (r.swapped > 0) {
+          text += ' Повторное нажатие снова меняет колонки местами у тех же строк.';
+        } else if (r.filledFromName > 0) {
+          text += ' Если порядок всё ещё неверный, нажмите ещё раз — теперь сработает обмен колонок.';
+        }
+        setBanner({ type: 'ok', text });
+      }
       invalidate();
     },
     onError: (e) =>
@@ -486,7 +502,7 @@ function MembersSection() {
       first_name: ef,
       last_name: el,
       phone_number: (u.phone_number ?? '').trim(),
-      birth_date: (u.birth_date ?? '').trim(),
+      birth_date: dateInputValueFromApi(u.birth_date),
       ministry_role: (u.ministry_role ?? '').trim(),
       ministry_direction: (u.ministry_direction ?? '').trim(),
       prayer_request: (u.prayer_request ?? '').trim(),
@@ -1785,7 +1801,9 @@ function EventsSection() {
                       <button
                         type="button"
                         className={btnSecondary()}
-                        onClick={() => setEditing({ ...ev })}
+                        onClick={() =>
+                          setEditing({ ...ev, event_date: dateInputValueFromApi(ev.event_date) })
+                        }
                       >
                         Изменить
                       </button>

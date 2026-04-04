@@ -59,6 +59,15 @@ function isValidDateYmd(value: unknown): boolean {
   );
 }
 
+function coerceBirthDateToYmd(value: string): string | null {
+  const t = value.trim();
+  if (t.length < 10) {
+    return null;
+  }
+  const ymd = t.slice(0, 10);
+  return isValidDateYmd(ymd) ? ymd : null;
+}
+
 function isValidPhoneForProfile(value: unknown): boolean {
   if (typeof value !== 'string') {
     return false;
@@ -307,15 +316,6 @@ export async function patchProfileHandler(req: Request, res: Response): Promise<
     return;
   }
 
-  if (body.birth_date !== undefined && body.birth_date !== null) {
-    if (typeof body.birth_date === 'string' && body.birth_date.trim() === '') {
-      /* clear */
-    } else if (!isValidDateYmd(body.birth_date)) {
-      res.status(400).json({ error: 'Field "birth_date" must be YYYY-MM-DD or empty' });
-      return;
-    }
-  }
-
   if (!isValidOptionalEmail(body.email)) {
     res.status(400).json({ error: 'Field "email" must be a valid address or empty' });
     return;
@@ -363,7 +363,15 @@ export async function patchProfileHandler(req: Request, res: Response): Promise<
     if (body.birth_date === null || (typeof body.birth_date === 'string' && !body.birth_date.trim())) {
       patch.birth_date = '';
     } else if (typeof body.birth_date === 'string') {
-      patch.birth_date = body.birth_date.trim();
+      const ymd = coerceBirthDateToYmd(body.birth_date);
+      if (!ymd) {
+        res.status(400).json({ error: 'Field "birth_date" must be YYYY-MM-DD or empty' });
+        return;
+      }
+      patch.birth_date = ymd;
+    } else {
+      res.status(400).json({ error: 'Field "birth_date" must be YYYY-MM-DD or empty' });
+      return;
     }
   }
   if (typeof body.email === 'string') {

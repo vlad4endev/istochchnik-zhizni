@@ -295,8 +295,13 @@ export async function swapMemberFirstLastName(id: number): Promise<AppUser | nul
 }
 
 /** Массово меняет местами `first_name` и `last_name` у всех участников с непустым именем (как одноразовый патч в initDb). */
-export async function swapAllMembersFirstLastNames(): Promise<{ updated: number }> {
-  const result = await query(
+export async function swapAllMembersFirstLastNames(): Promise<{
+  updated: number;
+  swapped: number;
+  filledFromName: number;
+}> {
+  // Считаем по RETURNING: rowCount в node-pg иногда null (pooler/драйвер).
+  const swapped = await query(
     `UPDATE members m SET
       first_name = m.last_name,
       last_name = m.first_name,
@@ -313,9 +318,42 @@ export async function swapAllMembersFirstLastNames(): Promise<{ updated: number 
         )
       )
     WHERE NULLIF(TRIM(COALESCE(m.first_name, '')), '') IS NOT NULL
-       OR NULLIF(TRIM(COALESCE(m.last_name, '')), '') IS NOT NULL`
+       OR NULLIF(TRIM(COALESCE(m.last_name, '')), '') IS NOT NULL
+    RETURNING m.id`
   );
-  return { updated: result.rowCount ?? 0 };
+  const nSwap = swapped.rows.length;
+
+  // Только поле name, ровно 2 слова (как в админке): переносим в колонки без смены порядка слов —
+  // иначе массовый UPDATE выше не трогает такие строки.
+  const filled = await query(
+    `UPDATE members m SET
+      first_name = s.parts[1],
+      last_name = s.parts[2],
+      name = s.n
+    FROM (
+      SELECT
+        id,
+        TRIM(REGEXP_REPLACE(COALESCE(name, ''), E'\\\\s+', ' ', 'g')) AS n,
+        regexp_split_to_array(
+          TRIM(REGEXP_REPLACE(COALESCE(name, ''), E'\\\\s+', ' ', 'g')),
+          ' '
+        ) AS parts
+      FROM members
+    ) s
+    WHERE m.id = s.id
+      AND NULLIF(TRIM(COALESCE(m.first_name, '')), '') IS NULL
+      AND NULLIF(TRIM(COALESCE(m.last_name, '')), '') IS NULL
+      AND s.n <> ''
+      AND CARDINALITY(s.parts) = 2
+    RETURNING m.id`
+  );
+
+  const filledFromName = filled.rows.length;
+  return {
+    updated: nSwap + filledFromName,
+    swapped: nSwap,
+    filledFromName,
+  };
 }
 
 export async function createUser(input: CreateUserInput): Promise<AppUser> {

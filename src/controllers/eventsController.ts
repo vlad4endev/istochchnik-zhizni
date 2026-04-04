@@ -47,6 +47,18 @@ function isValidDateInput(value: unknown): value is string {
   return date.getUTCFullYear() === y && date.getUTCMonth() === m - 1 && date.getUTCDate() === d;
 }
 
+function coerceEventDateToYmd(value: unknown): string | null {
+  if (typeof value !== 'string') {
+    return null;
+  }
+  const t = value.trim();
+  if (t.length < 10) {
+    return null;
+  }
+  const ymd = t.slice(0, 10);
+  return isValidDateInput(ymd) ? ymd : null;
+}
+
 function isValidTimeInput(value: unknown): value is string {
   if (typeof value !== 'string') return false;
   const t = value.trim();
@@ -111,7 +123,8 @@ export async function postEvent(req: Request, res: Response): Promise<void> {
     res.status(400).json({ error: 'Field "recurrence_type" must be "once" or "weekly"' });
     return;
   }
-  if (!isValidDateInput(eventDate)) {
+  const eventYmd = coerceEventDateToYmd(eventDate);
+  if (!eventYmd) {
     res.status(400).json({ error: 'Field "event_date" must be YYYY-MM-DD' });
     return;
   }
@@ -132,7 +145,7 @@ export async function postEvent(req: Request, res: Response): Promise<void> {
     const created = await createChurchEvent({
       title,
       description,
-      event_date: eventDate,
+      event_date: eventYmd,
       event_time: eventTime,
       recurrence_type: recurrenceType,
       weekly_day: recurrenceType === 'weekly' ? parseWeeklyDay(weeklyDay) : null,
@@ -159,9 +172,14 @@ export async function patchEvent(req: Request, res: Response): Promise<void> {
     res.status(400).json({ error: 'Field "title" must be non-empty string' });
     return;
   }
-  if (body.event_date !== undefined && !isValidDateInput(body.event_date)) {
-    res.status(400).json({ error: 'Field "event_date" must be YYYY-MM-DD' });
-    return;
+  let patchEventYmd: string | undefined;
+  if (body.event_date !== undefined) {
+    const ymd = coerceEventDateToYmd(body.event_date);
+    if (!ymd) {
+      res.status(400).json({ error: 'Field "event_date" must be YYYY-MM-DD' });
+      return;
+    }
+    patchEventYmd = ymd;
   }
   if (body.event_time !== undefined && !isValidTimeInput(body.event_time)) {
     res.status(400).json({ error: 'Field "event_time" must be HH:mm' });
@@ -189,7 +207,7 @@ export async function patchEvent(req: Request, res: Response): Promise<void> {
           : typeof body.description === 'string'
             ? body.description
             : null,
-      event_date: typeof body.event_date === 'string' ? body.event_date : undefined,
+      event_date: patchEventYmd,
       event_time: typeof body.event_time === 'string' ? body.event_time : undefined,
       recurrence_type: isValidRecurrenceType(body.recurrence_type) ? body.recurrence_type : undefined,
       weekly_day: body.weekly_day !== undefined ? parseWeeklyDay(body.weekly_day) : undefined,

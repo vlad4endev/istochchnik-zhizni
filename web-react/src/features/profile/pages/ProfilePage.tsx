@@ -15,6 +15,7 @@ import {
 
 import { useAuthStore } from '../../auth/authStore';
 import { formatRuPhoneInput } from '../../auth/utils/formatRuPhone';
+import { dateInputValueFromApi } from '../../../lib/dateInputValueFromApi';
 import { resolvePublicUrl } from '../../../lib/resolvePublicUrl';
 import {
   changePassword,
@@ -130,7 +131,7 @@ export function ProfilePage() {
         ministry_direction: me.ministry_direction ?? '',
         ministry_role: me.ministry_role ?? '',
         email: me.email ?? '',
-        birth_date: me.birth_date ? me.birth_date.slice(0, 10) : '',
+        birth_date: dateInputValueFromApi(me.birth_date),
         prayer_request: me.prayer_request ?? '',
       };
       setDraft(nextDraft);
@@ -199,7 +200,10 @@ export function ProfilePage() {
         ministry_direction: draft.ministry_direction.trim(),
         ministry_role: draft.ministry_role.trim(),
         email: draft.email.trim(),
-        birth_date: draft.birth_date.trim() || null,
+        birth_date: (() => {
+          const y = dateInputValueFromApi(draft.birth_date.trim());
+          return y.length > 0 ? y : null;
+        })(),
         prayer_request: draft.prayer_request,
       });
       setUser(next);
@@ -210,7 +214,7 @@ export function ProfilePage() {
         ministry_direction: next.ministry_direction ?? '',
         ministry_role: next.ministry_role ?? '',
         email: next.email ?? '',
-        birth_date: next.birth_date ? next.birth_date.slice(0, 10) : '',
+        birth_date: dateInputValueFromApi(next.birth_date),
         prayer_request: next.prayer_request ?? '',
       });
       setPhoneNew(next.phone_number ?? '');
@@ -472,7 +476,7 @@ export function ProfilePage() {
                     ministry_direction: user?.ministry_direction ?? '',
                     ministry_role: user?.ministry_role ?? '',
                       email: user?.email ?? '',
-                      birth_date: user?.birth_date ? user.birth_date.slice(0, 10) : '',
+                      birth_date: dateInputValueFromApi(user?.birth_date),
                       prayer_request: user?.prayer_request ?? '',
                     });
                     setMsg(null);
@@ -497,7 +501,10 @@ export function ProfilePage() {
                 <InfoRow label="Направление" value={(user?.ministry_direction ?? '').trim() || '—'} />
                 <InfoRow label="Роль" value={(user?.ministry_role ?? '').trim() || '—'} />
               </div>
-              <InfoRow label="Дата рождения" value={user?.birth_date ? user.birth_date.slice(0, 10) : '—'} />
+              <InfoRow
+                label="Дата рождения"
+                value={dateInputValueFromApi(user?.birth_date) || '—'}
+              />
               <InfoRow label="Молитвенная нужда" value={user?.prayer_request?.trim() || '—'} pre />
             </div>
           ) : (

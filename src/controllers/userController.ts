@@ -78,6 +78,16 @@ function isValidDateInput(value: unknown): boolean {
   );
 }
 
+/** Принимает YYYY-MM-DD или ISO (…T00:00:00.000Z); возвращает проверенную YYYY-MM-DD или null. */
+function coerceToYmd(value: string): string | null {
+  const t = value.trim();
+  if (t.length < 10) {
+    return null;
+  }
+  const ymd = t.slice(0, 10);
+  return isValidDateInput(ymd) ? ymd : null;
+}
+
 function isValidPhoneInput(value: unknown): boolean {
   if (typeof value !== 'string') {
     return false;
@@ -143,9 +153,10 @@ export async function swapAllMembersFirstLastNamesHandler(
     return;
   }
   try {
-    const { updated } = await swapAllMembersFirstLastNames();
+    const { updated, swapped, filledFromName } = await swapAllMembersFirstLastNames();
+    console.info('[users] swap-all-first-last-names:', { updated, swapped, filledFromName });
     notifyRealtime(['members', 'calendar']);
-    res.json({ ok: true, updated });
+    res.json({ ok: true, updated, swapped, filledFromName });
   } catch (error) {
     console.error('Failed to swap all member name columns', error);
     res.status(500).json({ error: 'Не удалось обновить участников' });
@@ -238,7 +249,11 @@ export async function createUserHandler(req: Request, res: Response): Promise<vo
     return;
   }
 
-  if (!isValidDateInput(birth_date)) {
+  const birthYmd =
+    typeof birth_date === 'string' && birth_date.trim().length > 0
+      ? coerceToYmd(birth_date as string)
+      : null;
+  if (!birthYmd) {
     res.status(400).json({ error: 'Field "birth_date" is required and must be YYYY-MM-DD' });
     return;
   }
@@ -268,7 +283,7 @@ export async function createUserHandler(req: Request, res: Response): Promise<vo
       first_name: (first_name as string).trim(),
       last_name: (last_name as string).trim(),
       phone_number: (phone_number as string).trim(),
-      birth_date: (birth_date as string).trim(),
+      birth_date: birthYmd,
     });
     notifyRealtime(['members', 'calendar']);
     res.status(201).json(user);
@@ -330,8 +345,21 @@ export async function updateUserHandler(req: Request, res: Response): Promise<vo
 
   if (req.body.birth_date !== undefined) {
     const bdRaw = req.body.birth_date;
-    const bd = typeof bdRaw === 'string' ? bdRaw.trim() : '';
-    if (bd.length > 0 && !isValidDateInput(bdRaw)) {
+    if (bdRaw === null) {
+      req.body.birth_date = '';
+    } else if (typeof bdRaw === 'string') {
+      const bd = bdRaw.trim();
+      if (bd.length === 0) {
+        req.body.birth_date = '';
+      } else {
+        const ymd = coerceToYmd(bdRaw);
+        if (!ymd) {
+          res.status(400).json({ error: 'Field "birth_date" must be YYYY-MM-DD or empty' });
+          return;
+        }
+        req.body.birth_date = ymd;
+      }
+    } else {
       res.status(400).json({ error: 'Field "birth_date" must be YYYY-MM-DD or empty' });
       return;
     }
@@ -509,14 +537,14 @@ export async function startPrayerCycleHandler(req: Request, res: Response): Prom
     return;
   }
   const startDateRaw = typeof req.body.start_date === 'string' ? req.body.start_date.trim() : '';
-
-  if (!isValidDateInput(startDateRaw)) {
+  const startYmd = coerceToYmd(startDateRaw);
+  if (!startYmd) {
     res.status(400).json({ error: 'Field "start_date" is required and must be YYYY-MM-DD' });
     return;
   }
 
   try {
-    const result = await startPrayerCycle(startDateRaw);
+    const result = await startPrayerCycle(startYmd);
     notifyRealtime(['calendar', 'members', 'me']);
     res.json(result);
   } catch (error) {
@@ -539,13 +567,14 @@ export async function setOneTimeMemberDateOverrideHandler(
   }
 
   const targetDate = typeof req.body.target_date === 'string' ? req.body.target_date.trim() : '';
-  if (!isValidDateInput(targetDate)) {
+  const targetYmd = coerceToYmd(targetDate);
+  if (!targetYmd) {
     res.status(400).json({ error: 'Field "target_date" is required and must be YYYY-MM-DD' });
     return;
   }
 
   try {
-    const result = await setOneTimeMemberDateOverride(userId, targetDate);
+    const result = await setOneTimeMemberDateOverride(userId, targetYmd);
     notifyRealtime(['calendar']);
     res.json(result);
   } catch (error) {

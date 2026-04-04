@@ -120,9 +120,10 @@ app.get('/health', async (_req, res) => {
   }
 });
 
-app.use('/api', routes);
-app.use('/api/calendar', calendarRoutes);
+// /api/users — раньше общего /api, чтобы спец-маршруты (merge-duplicates, swap-all-…) не пересекались с будущими catch-all.
 app.use('/api/users', userRoutes);
+app.use('/api/calendar', calendarRoutes);
+app.use('/api', routes);
 app.use('/api/push', pushRoutes);
 app.use('/api/notifications', notificationsRoutes);
 app.use('/api/messenger', messengerRoutes);

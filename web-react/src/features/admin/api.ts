@@ -83,10 +83,18 @@ export async function mergeDuplicateMembers(): Promise<{ ok: boolean; mergedPair
   return data;
 }
 
-export async function swapAllMembersFirstLastNames(): Promise<{ ok: boolean; updated: number }> {
-  const { data } = await apiClient.post<{ ok: boolean; updated: number }>(
-    `${USERS}/swap-all-first-last-names`,
-  );
+export async function swapAllMembersFirstLastNames(): Promise<{
+  ok: boolean;
+  updated: number;
+  swapped: number;
+  filledFromName: number;
+}> {
+  const { data } = await apiClient.post<{
+    ok: boolean;
+    updated: number;
+    swapped: number;
+    filledFromName: number;
+  }>(`${USERS}/swap-all-first-last-names`, {});
   return data;
 }
 
