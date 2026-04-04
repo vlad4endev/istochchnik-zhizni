@@ -39,12 +39,18 @@ function tableRefForSchema(schema: string): string {
   return `${quoteIdent(schema)}."church_events"`;
 }
 
+/** В старых БД `description` часто NOT NULL — в БД храним пустую строку; в API пустое → null. */
+function descriptionForInsert(raw: string | null | undefined): string {
+  return typeof raw === 'string' && raw.trim().length > 0 ? raw.trim() : '';
+}
+
 function selectEventProjection(schema: Pick<EventsSchemaState, 'hasFullRecurrenceShape' | 'hasRecurrenceTypeColumn'>): string {
+  const descExpr = `NULLIF(BTRIM(description), '') AS description`;
   if (schema.hasFullRecurrenceShape) {
     return `
       id,
       title,
-      description,
+      ${descExpr},
       event_date::text AS event_date,
       to_char(event_time, 'HH24:MI') AS event_time,
       recurrence_type,
@@ -58,7 +64,7 @@ function selectEventProjection(schema: Pick<EventsSchemaState, 'hasFullRecurrenc
     return `
       id,
       title,
-      description,
+      ${descExpr},
       event_date::text AS event_date,
       to_char(event_time, 'HH24:MI') AS event_time,
       recurrence_type,
@@ -71,7 +77,7 @@ function selectEventProjection(schema: Pick<EventsSchemaState, 'hasFullRecurrenc
   return `
       id,
       title,
-      description,
+      ${descExpr},
       event_date::text AS event_date,
       to_char(event_time, 'HH24:MI') AS event_time,
       'once'::text AS recurrence_type,
@@ -246,10 +252,7 @@ export async function createChurchEvent(input: {
 }): Promise<ChurchEvent> {
   const schema = await ensureChurchEventsSchema();
   const title = input.title.trim();
-  const description =
-    typeof input.description === 'string' && input.description.trim().length > 0
-      ? input.description.trim()
-      : null;
+  const description = descriptionForInsert(input.description);
   const isActive = input.is_active ?? true;
   const returning = selectEventProjection(schema);
 
@@ -309,13 +312,8 @@ export async function updateChurchEvent(
     values.push(input.title.trim());
   }
   if (input.description !== undefined) {
-    if (typeof input.description === 'string') {
-      updates.push(`description = $${i++}`);
-      values.push(input.description.trim() || null);
-    } else {
-      updates.push(`description = $${i++}`);
-      values.push(null);
-    }
+    updates.push(`description = $${i++}`);
+    values.push(descriptionForInsert(input.description ?? ''));
   }
   if (typeof input.event_date === 'string') {
     updates.push(`event_date = $${i++}::date`);

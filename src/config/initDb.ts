@@ -72,6 +72,9 @@ ALTER TABLE church_events ALTER COLUMN title SET NOT NULL;
 ALTER TABLE church_events ALTER COLUMN event_date SET NOT NULL;
 ALTER TABLE church_events ALTER COLUMN event_time SET NOT NULL;
 
+-- Старые схемы (Supabase и др.): description мог быть NOT NULL — API допускает пустое описание.
+ALTER TABLE church_events ALTER COLUMN description DROP NOT NULL;
+
 CREATE TABLE IF NOT EXISTS ministry_role_templates (
   id SERIAL PRIMARY KEY,
   title VARCHAR(120) NOT NULL UNIQUE,
