@@ -63,6 +63,7 @@ export async function updateAdminMember(
     prayer_request: string;
     is_active: boolean;
     is_collection_coordinator: boolean;
+    in_prayer_cycle: boolean;
   }>,
 ): Promise<AppUser> {
   const { data } = await apiClient.patch<AppUser>(`${USERS}/${id}`, body);

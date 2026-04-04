@@ -19,6 +19,8 @@ export interface AppUser {
   app_role: 'member' | 'admin';
   /** Ответственный за сбор — может назначать участников на дни следующей недели. */
   is_collection_coordinator: boolean;
+  /** Участвует в общем молитвенном цикле (очередь по дням). */
+  in_prayer_cycle: boolean;
   /** Есть пароль для входа в приложение (прошёл регистрацию). */
   has_registered: boolean;
   created_at: string;
@@ -56,6 +58,7 @@ export interface UpdateUserInput {
   is_active?: boolean;
   app_role?: 'member' | 'admin';
   is_collection_coordinator?: boolean;
+  in_prayer_cycle?: boolean;
 }
 
 export interface LinkAccountInput {
@@ -212,6 +215,7 @@ export async function listUsers(): Promise<AppUser[]> {
       m.is_active,
       m.app_role,
       m.is_collection_coordinator,
+      m.in_prayer_cycle,
       (m.password_hash IS NOT NULL) AS has_registered,
       m.created_at,
       m.updated_at
@@ -242,6 +246,7 @@ export async function getUserById(id: number): Promise<AppUser | null> {
       m.is_active,
       m.app_role,
       m.is_collection_coordinator,
+      m.in_prayer_cycle,
       (m.password_hash IS NOT NULL) AS has_registered,
       m.created_at,
       m.updated_at
@@ -306,8 +311,8 @@ export async function createUser(input: CreateUserInput): Promise<AppUser> {
 
   const result = await query(
     `INSERT INTO members
-      (first_name, last_name, name, phone_number, ministry_role, ministry_direction, prayer_request, birth_date, email, account_provider, account_id, is_active, app_role, is_collection_coordinator, updated_at)
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, COALESCE($12, TRUE), COALESCE($13, 'member'), COALESCE($14, FALSE), NOW())
+      (first_name, last_name, name, phone_number, ministry_role, ministry_direction, prayer_request, birth_date, email, account_provider, account_id, is_active, app_role, is_collection_coordinator, in_prayer_cycle, updated_at)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, COALESCE($12, TRUE), COALESCE($13, 'member'), COALESCE($14, FALSE), FALSE, NOW())
     RETURNING
       id,
       first_name,
@@ -324,6 +329,7 @@ export async function createUser(input: CreateUserInput): Promise<AppUser> {
       is_active,
       app_role,
       is_collection_coordinator,
+      in_prayer_cycle,
       (password_hash IS NOT NULL) AS has_registered,
       created_at,
       updated_at`,
@@ -461,6 +467,20 @@ export async function updateUser(id: number, input: UpdateUserInput): Promise<Ap
     values.push(input.is_collection_coordinator);
   }
 
+  if (typeof input.in_prayer_cycle === 'boolean') {
+    updates.push(`in_prayer_cycle = $${values.length + 1}`);
+    values.push(input.in_prayer_cycle);
+  }
+
+  let previousInPrayerCycle: boolean | undefined;
+  if (typeof input.in_prayer_cycle === 'boolean') {
+    const cur = await getUserById(id);
+    if (!cur) {
+      return null;
+    }
+    previousInPrayerCycle = cur.in_prayer_cycle;
+  }
+
   if (updates.length === 0) {
     return getUserById(id);
   }
@@ -488,6 +508,7 @@ export async function updateUser(id: number, input: UpdateUserInput): Promise<Ap
       is_active,
       app_role,
       is_collection_coordinator,
+      in_prayer_cycle,
       (password_hash IS NOT NULL) AS has_registered,
       created_at,
       updated_at`,
@@ -497,6 +518,14 @@ export async function updateUser(id: number, input: UpdateUserInput): Promise<Ap
   const updated = result.rows[0] ? mapUser(result.rows[0] as AppUser) : null;
   if (!updated) {
     return null;
+  }
+
+  if (
+    typeof input.in_prayer_cycle === 'boolean' &&
+    previousInPrayerCycle !== undefined &&
+    previousInPrayerCycle !== input.in_prayer_cycle
+  ) {
+    await resetCycleStartToCurrentDate();
   }
 
   if (hasPrayerRequestUpdate) {
@@ -542,6 +571,7 @@ export async function linkUserAccount(id: number, input: LinkAccountInput): Prom
       is_active,
       app_role,
       is_collection_coordinator,
+      in_prayer_cycle,
       (password_hash IS NOT NULL) AS has_registered,
       created_at,
       updated_at`,
@@ -589,6 +619,7 @@ export async function setUserAppRole(id: number, appRole: AppRole): Promise<AppU
       is_active,
       app_role,
       is_collection_coordinator,
+      in_prayer_cycle,
       (password_hash IS NOT NULL) AS has_registered,
       created_at,
       updated_at`,

@@ -154,6 +154,12 @@ interface ChatState {
   setOnlineMembers: (ids: number[]) => void;
   setCurrentMemberId: (id: number) => void;
 
+  /** WS: история чата очищена на сервере. */
+  handleConvHistoryCleared: (conversationId: string) => void;
+  patchChatMyUi: (conversationId: string, body: api.PatchMyConversationUiBody) => Promise<void>;
+  clearChatHistory: (conversationId: string) => Promise<void>;
+  leaveChat: (conversationId: string) => Promise<void>;
+
   refreshUnread: () => Promise<void>;
 }
 
@@ -1197,6 +1203,64 @@ export const useChatStore = create<ChatState>((set, get) => ({
     hydrateFromCacheIntoStore(set, get);
   },
 
+  handleConvHistoryCleared: (conversationId) => {
+    set((s) => {
+      const conversations = s.conversations.map((c) =>
+        c.id === conversationId ? { ...c, last_message: null, unread_count: 0 } : c,
+      );
+      const totalUnread = conversations.reduce((sum, c) => sum + (c.unread_count ?? 0), 0);
+      return {
+        messagesByConv: { ...s.messagesByConv, [conversationId]: [] },
+        conversations,
+        totalUnread,
+      };
+    });
+    saveSnapshot(get());
+  },
+
+  patchChatMyUi: async (conversationId, body) => {
+    try {
+      await api.patchMyConversationUi(conversationId, body);
+      await get().loadConversations();
+    } catch {
+      emitAppToast('Не удалось сохранить настройки чата', 'error');
+    }
+  },
+
+  clearChatHistory: async (conversationId) => {
+    try {
+      await api.clearConversationHistory(conversationId);
+      get().handleConvHistoryCleared(conversationId);
+      await get().loadConversations();
+    } catch {
+      emitAppToast('Не удалось очистить переписку', 'error');
+    }
+  },
+
+  leaveChat: async (conversationId) => {
+    const me = get().currentMemberId;
+    if (me == null) return;
+    try {
+      await api.removeParticipant(conversationId, me);
+      set((s) => {
+        const conversations = s.conversations.filter((c) => c.id !== conversationId);
+        const totalUnread = conversations.reduce((sum, c) => sum + (c.unread_count ?? 0), 0);
+        const nextMsgs = { ...s.messagesByConv };
+        delete nextMsgs[conversationId];
+        return {
+          conversations,
+          totalUnread,
+          messagesByConv: nextMsgs,
+          activeConversationId:
+            s.activeConversationId === conversationId ? null : s.activeConversationId,
+        };
+      });
+      saveSnapshot(get());
+    } catch {
+      emitAppToast('Не удалось удалить чат', 'error');
+    }
+  },
+
   refreshUnread: async () => {
     try {
       const count = await api.fetchUnreadCount();
@@ -1285,10 +1349,8 @@ if (typeof window !== 'undefined' && !onlineRetryBound) {
 }
 
 function classifyConversation(conv: ConversationListItem): Exclude<ChatTab, 'all'> {
-  // Heuristic v1:
-  // - private → personal
-  // - group → services
-  // - channel → notifications
+  if (conv.my_ui_folder === 'personal') return 'personal';
+  if (conv.my_ui_folder === 'ministry') return 'services';
   if (conv.type === 'private') return 'personal';
   if (conv.type === 'channel') return 'notifications';
   return 'services';

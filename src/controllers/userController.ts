@@ -327,6 +327,11 @@ export async function updateUserHandler(req: Request, res: Response): Promise<vo
     return;
   }
 
+  if (req.body.in_prayer_cycle !== undefined && typeof req.body.in_prayer_cycle !== 'boolean') {
+    res.status(400).json({ error: 'Field "in_prayer_cycle" must be boolean' });
+    return;
+  }
+
   try {
     const updated = await updateUser(userId, req.body);
     if (!updated) {

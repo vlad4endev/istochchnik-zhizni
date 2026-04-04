@@ -1,6 +1,10 @@
 import { query } from '../config/db';
 import { addUtcDaysToIsoDate, getDiffDays } from '../utils/isoDates';
 
+/** Участники с этим флагом входят в расчёт длины цикла и очереди «день за днём». */
+export const PRAYER_CYCLE_MEMBERS_WHERE = 'is_active = TRUE AND in_prayer_cycle = TRUE';
+export const PRAYER_CYCLE_MEMBERS_WHERE_M = 'm.is_active = TRUE AND m.in_prayer_cycle = TRUE';
+
 /** Метаданные молитвенного цикла: полный проход по активным участникам (M дней). */
 export interface PrayerCycleSnapshot {
   /** 0-based индекс цикла относительно start_date */
@@ -38,7 +42,9 @@ export async function getCycleStartDate(): Promise<string> {
 }
 
 export async function getActiveMemberCount(): Promise<number> {
-  const result = await query('SELECT COUNT(*)::int AS c FROM members WHERE is_active = TRUE');
+  const result = await query(
+    `SELECT COUNT(*)::int AS c FROM members WHERE ${PRAYER_CYCLE_MEMBERS_WHERE}`,
+  );
   return result.rows[0]?.c ?? 0;
 }
 

@@ -58,8 +58,8 @@ WITH source_members(full_name) AS (
     ('Шкирский Геннадий'),
     ('Юрьева Надежда')
 )
-INSERT INTO members (name, prayer_request)
-SELECT s.full_name, NULL
+INSERT INTO members (name, prayer_request, in_prayer_cycle)
+SELECT s.full_name, NULL, TRUE
 FROM source_members s
 WHERE NOT EXISTS (
   SELECT 1

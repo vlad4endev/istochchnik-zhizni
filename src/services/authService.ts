@@ -35,6 +35,8 @@ export interface AuthUser {
   app_role: AuthRole;
   is_active: boolean;
   is_collection_coordinator: boolean;
+  /** Участвует в общем молитвенном цикле (назначение дней молитвы). */
+  in_prayer_cycle: boolean;
   created_at: string;
   updated_at: string;
   /** Текущий молитвенный цикл (на «сегодня» по UTC); нужда в профиле относится к этому циклу. */
@@ -99,6 +101,7 @@ type MemberRow = {
   app_role: string;
   is_active: boolean;
   is_collection_coordinator?: boolean;
+  in_prayer_cycle?: boolean;
   created_at: string;
   updated_at: string;
   password_hash?: string | null;
@@ -237,6 +240,7 @@ function mapAuthUser(row: MemberRow): AuthUser {
     app_role: normalizeRole(row.app_role),
     is_active: row.is_active,
     is_collection_coordinator: Boolean(row.is_collection_coordinator),
+    in_prayer_cycle: Boolean(row.in_prayer_cycle),
     created_at: row.created_at,
     updated_at: row.updated_at,
   };
@@ -542,6 +546,7 @@ export async function registerUser(input: RegisterInput): Promise<RegisterResult
         app_role,
         is_active,
         is_collection_coordinator,
+        in_prayer_cycle,
         created_at,
         updated_at`,
       [firstName, lastName, fullName, phoneNumber, passwordHash, matchedMember.id]
@@ -593,11 +598,12 @@ export async function registerUser(input: RegisterInput): Promise<RegisterResult
           birth_date,
           email,
           prayer_request,
-          app_role,
-          is_active,
-          is_collection_coordinator,
-          created_at,
-          updated_at`,
+        app_role,
+        is_active,
+        is_collection_coordinator,
+        in_prayer_cycle,
+        created_at,
+        updated_at`,
         [firstName, lastName, fullName, phoneNumber, passwordHash, dupRow.id]
       );
       const member = mergedResult.rows[0] as MemberRow;
@@ -681,6 +687,7 @@ export async function loginUser(phoneInput: string, password: string): Promise<L
       app_role,
       is_active,
       is_collection_coordinator,
+      in_prayer_cycle,
       created_at,
       updated_at,
       password_hash
@@ -782,6 +789,7 @@ export async function getAuthUserById(userId: number): Promise<AuthUser | null> 
       m.app_role,
       m.is_active,
       m.is_collection_coordinator,
+      m.in_prayer_cycle,
       m.created_at,
       m.updated_at
     FROM members m
@@ -1054,6 +1062,7 @@ export async function approveAccessRequest(
         app_role,
         is_active,
         is_collection_coordinator,
+        in_prayer_cycle,
         created_at,
         updated_at`,
       [requestRow.password_hash, existingMember.id]
@@ -1084,6 +1093,7 @@ export async function approveAccessRequest(
         app_role,
         is_active,
         is_collection_coordinator,
+        in_prayer_cycle,
         created_at,
         updated_at`,
       [
@@ -1113,6 +1123,7 @@ export async function approveAccessRequest(
         app_role,
         is_active,
         is_collection_coordinator,
+        in_prayer_cycle,
         created_at,
         updated_at`,
       [

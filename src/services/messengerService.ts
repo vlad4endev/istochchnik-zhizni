@@ -102,6 +102,34 @@ export async function getParticipantChatAuthRow(
 
 // ─── Conversations ────────────────────────────────────────────
 
+const MUTE_UNTIL_FAR = '2099-12-31T23:59:59.999Z';
+
+function mapParticipantUiExtras(r: {
+  muted_until?: unknown;
+  ui_pinned?: unknown;
+  ui_pinned_at?: unknown;
+  ui_folder?: unknown;
+}): Pick<
+  ConversationListItem,
+  'my_muted' | 'my_muted_until' | 'my_ui_pinned' | 'my_ui_pinned_at' | 'my_ui_folder'
+> {
+  const mutedUntil = r.muted_until != null ? String(r.muted_until) : null;
+  const muted =
+    mutedUntil != null &&
+    !Number.isNaN(new Date(mutedUntil).getTime()) &&
+    new Date(mutedUntil).getTime() > Date.now();
+  const folderRaw = r.ui_folder != null ? String(r.ui_folder) : null;
+  const my_ui_folder =
+    folderRaw === 'personal' || folderRaw === 'ministry' ? folderRaw : null;
+  return {
+    my_muted: muted,
+    my_muted_until: mutedUntil,
+    my_ui_pinned: Boolean(r.ui_pinned),
+    my_ui_pinned_at: r.ui_pinned_at != null ? String(r.ui_pinned_at) : null,
+    my_ui_folder,
+  };
+}
+
 /**
  * List conversations the member participates in, sorted by last activity.
  * Includes last message preview and unread count.
@@ -115,6 +143,10 @@ export async function listConversations(memberId: number): Promise<ConversationL
       c.title,
       c.avatar_url,
       c.updated_at,
+      cp.muted_until,
+      cp.ui_pinned,
+      cp.ui_pinned_at,
+      cp.ui_folder,
       -- last message
       lm.id          AS lm_id,
       lm.content     AS lm_content,
@@ -159,7 +191,10 @@ export async function listConversations(memberId: number): Promise<ConversationL
     ) om ON TRUE
     WHERE cp.member_id = $1
       AND cp.left_at IS NULL
-    ORDER BY c.updated_at DESC
+    ORDER BY
+      CASE WHEN COALESCE(cp.ui_pinned, FALSE) THEN 0 ELSE 1 END,
+      cp.ui_pinned_at DESC NULLS LAST,
+      c.updated_at DESC
     `,
     [memberId],
   );
@@ -190,6 +225,12 @@ export async function listConversations(memberId: number): Promise<ConversationL
           avatar_url: r.om_avatar_url ?? null,
         }
       : null,
+    ...mapParticipantUiExtras({
+      muted_until: r.muted_until,
+      ui_pinned: r.ui_pinned,
+      ui_pinned_at: r.ui_pinned_at,
+      ui_folder: r.ui_folder,
+    }),
   }));
 }
 
@@ -454,6 +495,10 @@ export async function getConversationListItem(
       c.title,
       c.avatar_url,
       c.updated_at,
+      cp.muted_until,
+      cp.ui_pinned,
+      cp.ui_pinned_at,
+      cp.ui_folder,
       -- last message
       lm.id          AS lm_id,
       lm.content     AS lm_content,
@@ -531,7 +576,86 @@ export async function getConversationListItem(
           avatar_url: r.om_avatar_url ?? null,
         }
       : null,
+    ...mapParticipantUiExtras({
+      muted_until: r.muted_until,
+      ui_pinned: r.ui_pinned,
+      ui_pinned_at: r.ui_pinned_at,
+      ui_folder: r.ui_folder,
+    }),
   };
+}
+
+/** Push: не слать, если у получателя muted_until в будущем. */
+export async function isConversationMutedForMember(
+  conversationId: string,
+  memberId: number,
+): Promise<boolean> {
+  const result = await dbQuery(
+    `SELECT muted_until FROM conversation_participants
+     WHERE conversation_id = $1 AND member_id = $2 AND left_at IS NULL`,
+    [conversationId, memberId],
+  );
+  const row = result.rows[0] as { muted_until?: unknown } | undefined;
+  const mu = row?.muted_until != null ? String(row.muted_until) : null;
+  if (!mu) return false;
+  const t = new Date(mu).getTime();
+  return !Number.isNaN(t) && t > Date.now();
+}
+
+export async function patchMyConversationUi(
+  conversationId: string,
+  memberId: number,
+  patch: {
+    muted?: boolean;
+    uiPinned?: boolean;
+    uiFolder?: 'personal' | 'ministry' | null;
+  },
+): Promise<void> {
+  const ok = await isMemberInConversation(conversationId, memberId);
+  if (!ok) throw new Error('Forbidden');
+
+  if (patch.muted !== undefined) {
+    await dbQuery(
+      `UPDATE conversation_participants
+       SET muted_until = $3
+       WHERE conversation_id = $1 AND member_id = $2 AND left_at IS NULL`,
+      [conversationId, memberId, patch.muted ? MUTE_UNTIL_FAR : null],
+    );
+  }
+  if (patch.uiPinned === true) {
+    await dbQuery(
+      `UPDATE conversation_participants
+       SET ui_pinned = TRUE, ui_pinned_at = NOW()
+       WHERE conversation_id = $1 AND member_id = $2 AND left_at IS NULL`,
+      [conversationId, memberId],
+    );
+  } else if (patch.uiPinned === false) {
+    await dbQuery(
+      `UPDATE conversation_participants
+       SET ui_pinned = FALSE, ui_pinned_at = NULL
+       WHERE conversation_id = $1 AND member_id = $2 AND left_at IS NULL`,
+      [conversationId, memberId],
+    );
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, 'uiFolder')) {
+    await dbQuery(
+      `UPDATE conversation_participants
+       SET ui_folder = $3
+       WHERE conversation_id = $1 AND member_id = $2 AND left_at IS NULL`,
+      [conversationId, memberId, patch.uiFolder ?? null],
+    );
+  }
+}
+
+/** Удаляет все сообщения в чате (для всех участников). */
+export async function clearConversationHistory(
+  conversationId: string,
+  memberId: number,
+): Promise<void> {
+  const ok = await isMemberInConversation(conversationId, memberId);
+  if (!ok) throw new Error('Forbidden');
+  await dbQuery(`DELETE FROM messages WHERE conversation_id = $1`, [conversationId]);
+  await dbQuery(`UPDATE conversations SET updated_at = NOW() WHERE id = $1`, [conversationId]);
 }
 
 /**

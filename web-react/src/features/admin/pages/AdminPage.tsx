@@ -142,6 +142,24 @@ function splitNameForEditForm(u: AppUser): { first_name: string; last_name: stri
   return { first_name: parts[0], last_name: '' };
 }
 
+/** Для списка участников: «Фамилия Имя» (и отчество в хвосте имени, если было в `name`). */
+function memberRosterDisplayName(u: AppUser): string {
+  const { first_name: f, last_name: l } = splitNameForEditForm(u);
+  const s = `${l} ${f}`.trim();
+  if (s) return s;
+  return u.name.trim() || `#${u.id}`;
+}
+
+function compareMembersBySurname(a: AppUser, b: AppUser): number {
+  const aa = splitNameForEditForm(a);
+  const bb = splitNameForEditForm(b);
+  const lCmp = aa.last_name.localeCompare(bb.last_name, 'ru', { sensitivity: 'base' });
+  if (lCmp !== 0) return lCmp;
+  const fCmp = aa.first_name.localeCompare(bb.first_name, 'ru', { sensitivity: 'base' });
+  if (fCmp !== 0) return fCmp;
+  return a.id - b.id;
+}
+
 function fieldClass() {
   return (
     'w-full rounded-xl border border-stone-200/90 bg-white px-3 py-2.5 text-sm text-stone-900 outline-none ' +
@@ -282,6 +300,7 @@ function MembersSection() {
     ministry_direction: '',
     prayer_request: '',
     is_active: true,
+    in_prayer_cycle: false,
   });
   const [oneTimeId, setOneTimeId] = useState<number | null>(null);
   const [oneTimeDate, setOneTimeDate] = useState('');
@@ -292,11 +311,14 @@ function MembersSection() {
   const filtered = useMemo(() => {
     const list = data ?? [];
     const q = search.trim().toLowerCase();
-    if (!q) return list;
-    return list.filter((u) => {
-      const blob = `${displayName(u)} ${u.phone_number ?? ''} ${u.email ?? ''}`.toLowerCase();
-      return blob.includes(q);
-    });
+    const matched = !q
+      ? list
+      : list.filter((u) => {
+          const blob =
+            `${memberRosterDisplayName(u)} ${displayName(u)} ${u.phone_number ?? ''} ${u.email ?? ''}`.toLowerCase();
+          return blob.includes(q);
+        });
+    return [...matched].sort(compareMembersBySurname);
   }, [data, search]);
 
   const dirs = (dirsQ.data ?? []) as MinistryDirectionTemplate[];
@@ -389,6 +411,9 @@ function MembersSection() {
         ministry_direction: editForm.ministry_direction.trim(),
         prayer_request: editForm.prayer_request.trim(),
         is_active: editForm.is_active,
+        ...(editForm.in_prayer_cycle !== editing.in_prayer_cycle
+          ? { in_prayer_cycle: editForm.in_prayer_cycle }
+          : {}),
       });
     },
     onSuccess: () => {
@@ -460,6 +485,7 @@ function MembersSection() {
       ministry_direction: (u.ministry_direction ?? '').trim(),
       prayer_request: (u.prayer_request ?? '').trim(),
       is_active: u.is_active,
+      in_prayer_cycle: u.in_prayer_cycle,
     });
   }
 
@@ -710,7 +736,7 @@ function MembersSection() {
             >
               <div className="flex items-start justify-between gap-2">
                 <div>
-                  <p className="font-bold text-stone-900">{displayName(u)}</p>
+                  <p className="font-bold text-stone-900">{memberRosterDisplayName(u)}</p>
                   <p className="mt-0.5 text-sm text-stone-600">{u.phone_number ?? '—'}</p>
                 </div>
                 <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-[11px] font-bold text-primary">
@@ -742,6 +768,15 @@ function MembersSection() {
                     Сбор
                   </span>
                 ) : null}
+                {u.in_prayer_cycle ? (
+                  <span className="rounded-full bg-sky-100 px-2.5 py-0.5 text-xs font-semibold text-sky-900">
+                    В цикле
+                  </span>
+                ) : (
+                  <span className="rounded-full bg-stone-100 px-2.5 py-0.5 text-xs font-semibold text-stone-500">
+                    Вне цикла
+                  </span>
+                )}
               </div>
             </article>
           ))
@@ -783,7 +818,7 @@ function MembersSection() {
                       }
                     }}
                   >
-                    <td className="px-4 py-3 font-semibold text-stone-900">{displayName(u)}</td>
+                    <td className="px-4 py-3 font-semibold text-stone-900">{memberRosterDisplayName(u)}</td>
                     <td className="px-4 py-3 align-middle">
                       <MemberRegistrationBadge u={u} />
                     </td>
@@ -800,11 +835,18 @@ function MembersSection() {
                       </span>
                     </td>
                     <td className="px-4 py-3">
-                      {u.is_active ? (
-                        <span className="text-emerald-700">Активен</span>
-                      ) : (
-                        <span className="text-stone-500">Неактивен</span>
-                      )}
+                      <div className="flex flex-col gap-1">
+                        {u.is_active ? (
+                          <span className="text-emerald-700">Активен</span>
+                        ) : (
+                          <span className="text-stone-500">Неактивен</span>
+                        )}
+                        {u.in_prayer_cycle ? (
+                          <span className="text-xs font-semibold text-sky-800">В молитвенном цикле</span>
+                        ) : (
+                          <span className="text-xs font-semibold text-stone-400">Вне цикла</span>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -827,7 +869,7 @@ function MembersSection() {
             </h3>
             <p className="mt-1 text-sm text-stone-600">
               Участник:{' '}
-              <strong>{oneTimeSubject ? displayName(oneTimeSubject) : `#${oneTimeId}`}</strong>
+              <strong>{oneTimeSubject ? memberRosterDisplayName(oneTimeSubject) : `#${oneTimeId}`}</strong>
             </p>
             <p className="mt-2 text-xs text-stone-500">
               Назначение на один день без сдвига общего расписания цикла.
@@ -874,7 +916,7 @@ function MembersSection() {
                 </div>
                 <div className="min-w-0 flex-1">
                   <h3 className="text-lg font-extrabold tracking-tight text-stone-900">
-                    {displayName(editing)}
+                    {memberRosterDisplayName(editing)}
                   </h3>
                   <div className="mt-1 flex flex-wrap items-center gap-2">
                     <MemberRegistrationBadge u={editing} />
@@ -994,7 +1036,7 @@ function MembersSection() {
               </section>
 
               {/* Status */}
-              <section>
+              <section className="space-y-3">
                 <label className="flex items-center gap-2 text-sm text-stone-700">
                   <input
                     type="checkbox"
@@ -1003,6 +1045,20 @@ function MembersSection() {
                     onChange={(e) => setEditForm((s) => ({ ...s, is_active: e.target.checked }))}
                   />
                   Активен (может войти в приложение)
+                </label>
+                <label className="flex cursor-pointer items-start gap-2 text-sm text-stone-700">
+                  <input
+                    type="checkbox"
+                    className="mt-0.5 h-4 w-4 shrink-0 rounded border-stone-300 text-primary"
+                    checked={editForm.in_prayer_cycle}
+                    onChange={(e) => setEditForm((s) => ({ ...s, in_prayer_cycle: e.target.checked }))}
+                  />
+                  <span>
+                    <span className="font-semibold text-stone-900">В молитвенном цикле</span>
+                    <span className="mt-0.5 block text-xs font-normal text-stone-500">
+                      Включите вручную: новый участник по умолчанию не попадает в очередь «день за днём».
+                    </span>
+                  </span>
                 </label>
               </section>
 
@@ -1083,7 +1139,7 @@ function MembersSection() {
                     className={btnDangerOutline()}
                     disabled={deleteMut.isPending}
                     onClick={() => {
-                      if (!window.confirm(`Удалить ${displayName(editing)}?`)) return;
+                      if (!window.confirm(`Удалить ${memberRosterDisplayName(editing)}?`)) return;
                       setBanner(null);
                       deleteMut.mutate(editing.id);
                     }}

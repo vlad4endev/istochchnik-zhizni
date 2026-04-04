@@ -93,6 +93,7 @@ export async function mergeMemberInto(keepId: number, dropId: number): Promise<v
            ELSE 'member'
          END,
          is_collection_coordinator = k.is_collection_coordinator OR d.is_collection_coordinator,
+         in_prayer_cycle = k.in_prayer_cycle OR d.in_prayer_cycle,
          is_active = k.is_active OR d.is_active,
          account_provider = COALESCE(k.account_provider, d.account_provider),
          account_id = COALESCE(k.account_id, d.account_id),

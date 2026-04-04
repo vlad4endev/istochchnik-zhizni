@@ -237,6 +237,60 @@ router.patch('/conversations/:id', checkChatPermission('manage_chat'), async (re
   }
 });
 
+/** PATCH /api/messenger/conversations/:id/my-ui — закрепить в списке, папка, без звука (только для себя) */
+router.patch('/conversations/:id/my-ui', checkChatPermission('view'), async (req: Request, res: Response) => {
+  const userId = (req as AuthReq).authUserId!;
+  const convId = String(req.params.id);
+  const body = req.body ?? {};
+  const patch: {
+    muted?: boolean;
+    uiPinned?: boolean;
+    uiFolder?: 'personal' | 'ministry' | null;
+  } = {};
+  if (typeof body.muted === 'boolean') patch.muted = body.muted;
+  if (typeof body.uiPinned === 'boolean') patch.uiPinned = body.uiPinned;
+  if ('uiFolder' in body) {
+    const v = body.uiFolder;
+    patch.uiFolder = v === 'personal' || v === 'ministry' ? v : null;
+  }
+  if (Object.keys(patch).length === 0) {
+    res.status(400).json({ error: 'No valid fields: muted, uiPinned, uiFolder' });
+    return;
+  }
+  try {
+    await svc.patchMyConversationUi(convId, userId, patch);
+    res.json({ ok: true });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (msg === 'Forbidden') {
+      res.status(403).json({ error: msg });
+      return;
+    }
+    console.error('[messenger] patchMyConversationUi error:', e);
+    res.status(500).json({ error: 'Failed to update chat preferences' });
+  }
+});
+
+/** POST /api/messenger/conversations/:id/clear-history — удалить все сообщения для всех */
+router.post('/conversations/:id/clear-history', checkChatPermission('view'), async (req: Request, res: Response) => {
+  const userId = (req as AuthReq).authUserId!;
+  const convId = String(req.params.id);
+  try {
+    await svc.clearConversationHistory(convId, userId);
+    sendToRoomAll(convId, { type: 'conv:history_cleared', conversationId: convId });
+    sendToRoomAll(convId, { type: 'conv:updated', conversationId: convId });
+    res.json({ ok: true });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (msg === 'Forbidden') {
+      res.status(403).json({ error: msg });
+      return;
+    }
+    console.error('[messenger] clearConversationHistory error:', e);
+    res.status(500).json({ error: 'Failed to clear history' });
+  }
+});
+
 /** POST /api/messenger/conversations/:id/participants { memberId } */
 router.post(
   '/conversations/:id/participants',
@@ -291,6 +345,7 @@ router.delete('/conversations/:id/participants/:memberId', async (req: Request, 
       }
     }
     await svc.removeParticipant(convId, targetId);
+    sendToRoomAll(String(convId), { type: 'conv:updated', conversationId: String(convId) });
     res.json({ ok: true });
   } catch (e) {
     console.error('[messenger] removeParticipant error:', e);
@@ -445,6 +500,8 @@ router.post(
 
         for (const rid of recipients) {
           const r = Number(rid);
+          // eslint-disable-next-line no-await-in-loop
+          if (await svc.isConversationMutedForMember(convKey, r)) continue;
           const mentioned = mentionSet.has(r);
           const payload = {
             title: mentioned ? `Вас упомянули в «${chatLabel}»` : senderName,

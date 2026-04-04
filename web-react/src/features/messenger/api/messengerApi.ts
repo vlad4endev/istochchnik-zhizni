@@ -44,6 +44,11 @@ export interface ConversationListItem {
     last_name: string | null;
     avatar_url?: string | null;
   } | null;
+  my_muted?: boolean;
+  my_muted_until?: string | null;
+  my_ui_pinned?: boolean;
+  my_ui_pinned_at?: string | null;
+  my_ui_folder?: 'personal' | 'ministry' | null;
 }
 
 export interface MessageWithSender {
@@ -326,4 +331,18 @@ export async function addParticipant(conversationId: string, memberId: number) {
 
 export async function removeParticipant(conversationId: string, memberId: number) {
   await apiClient.delete(`${BASE}/conversations/${conversationId}/participants/${memberId}`);
+}
+
+export type PatchMyConversationUiBody = {
+  muted?: boolean;
+  uiPinned?: boolean;
+  uiFolder?: 'personal' | 'ministry' | null;
+};
+
+export async function patchMyConversationUi(conversationId: string, body: PatchMyConversationUiBody) {
+  await apiClient.patch(`${BASE}/conversations/${encodeURIComponent(conversationId)}/my-ui`, body);
+}
+
+export async function clearConversationHistory(conversationId: string) {
+  await apiClient.post(`${BASE}/conversations/${encodeURIComponent(conversationId)}/clear-history`);
 }

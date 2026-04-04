@@ -215,6 +215,10 @@ ALTER TABLE members ADD CONSTRAINT members_app_role_check CHECK (app_role IN ('m
 
 ALTER TABLE members ADD COLUMN IF NOT EXISTS is_collection_coordinator BOOLEAN NOT NULL DEFAULT FALSE;
 
+-- Участие в общем молитвенном цикле: новые записи по умолчанию вне цикла, существующие при добавлении колонки — в цикле.
+ALTER TABLE members ADD COLUMN IF NOT EXISTS in_prayer_cycle BOOLEAN NOT NULL DEFAULT TRUE;
+ALTER TABLE members ALTER COLUMN in_prayer_cycle SET DEFAULT FALSE;
+
 ALTER TABLE global_settings ADD COLUMN IF NOT EXISTS rutube_embed_code TEXT;
 ALTER TABLE global_settings ADD COLUMN IF NOT EXISTS telegram_bot_token TEXT;
 ALTER TABLE global_settings ADD COLUMN IF NOT EXISTS telegram_prayer_chat_id TEXT;
@@ -340,7 +344,7 @@ BEGIN
 
   SELECT COUNT(*)::integer INTO v_total_members
   FROM members
-  WHERE is_active = TRUE;
+  WHERE is_active = TRUE AND in_prayer_cycle = TRUE;
 
   IF v_total_members = 0 THEN
     RETURN json_build_object('date', target_date, 'member', NULL);
@@ -374,7 +378,7 @@ BEGIN
   INTO v_member_json
   FROM members m
   LEFT JOIN member_prayer_by_cycle mpc ON mpc.member_id = m.id AND mpc.cycle_index = v_cycle_index
-  WHERE m.is_active = TRUE
+  WHERE m.is_active = TRUE AND m.in_prayer_cycle = TRUE
   ORDER BY
     LOWER(COALESCE(NULLIF(trim(m.last_name), ''), split_part(trim(m.name), ' ', 1))) ASC,
     LOWER(COALESCE(NULLIF(trim(m.first_name), ''), m.name)) ASC,
@@ -426,14 +430,14 @@ BEGIN
   WHERE id = 1;
 
   IF TG_OP = 'INSERT' THEN
-    IF NEW.is_active IS DISTINCT FROM TRUE THEN
+    IF NEW.is_active IS DISTINCT FROM TRUE OR NEW.in_prayer_cycle IS DISTINCT FROM TRUE THEN
       RETURN NULL;
     END IF;
 
     SELECT COUNT(*)::int
       INTO v_new_total
     FROM members
-    WHERE is_active = TRUE;
+    WHERE is_active = TRUE AND in_prayer_cycle = TRUE;
 
     v_old_total := v_new_total - 1;
     IF v_old_total <= 0 THEN
@@ -450,6 +454,7 @@ BEGIN
     FROM members m
     WHERE m.id <> NEW.id
       AND m.is_active = TRUE
+      AND m.in_prayer_cycle = TRUE
     ORDER BY
       LOWER(COALESCE(NULLIF(trim(m.last_name), ''), split_part(trim(m.name), ' ', 1))) ASC,
       LOWER(COALESCE(NULLIF(trim(m.first_name), ''), m.name)) ASC,
@@ -473,7 +478,7 @@ BEGIN
             m.id ASC
         ) - 1 AS idx
       FROM members m
-      WHERE m.is_active = TRUE
+      WHERE m.is_active = TRUE AND m.in_prayer_cycle = TRUE
     ) ranked
     WHERE ranked.id = v_old_member_id;
 
@@ -487,11 +492,11 @@ BEGIN
     RETURN NULL;
   END IF;
 
-  IF OLD.is_active IS DISTINCT FROM TRUE THEN
+  IF OLD.is_active IS DISTINCT FROM TRUE OR OLD.in_prayer_cycle IS DISTINCT FROM TRUE THEN
     RETURN NULL;
   END IF;
 
-  -- Deleting an active member intentionally restarts cycle from current day.
+  -- Deleting участника из молитвенного цикла: якорь на сегодня.
   UPDATE global_settings
   SET start_date = v_today
   WHERE id = 1;
@@ -652,6 +657,11 @@ ALTER TABLE conversation_participants ADD COLUMN IF NOT EXISTS permissions JSONB
 ALTER TABLE conversation_participants ADD COLUMN IF NOT EXISTS joined_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
 ALTER TABLE conversation_participants ADD COLUMN IF NOT EXISTS muted_until TIMESTAMPTZ;
 ALTER TABLE conversation_participants ADD COLUMN IF NOT EXISTS left_at TIMESTAMPTZ;
+
+-- Персональные настройки списка чатов (закрепление, папка «Личное/Служение», без звука через muted_until)
+ALTER TABLE conversation_participants ADD COLUMN IF NOT EXISTS ui_pinned BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE conversation_participants ADD COLUMN IF NOT EXISTS ui_pinned_at TIMESTAMPTZ;
+ALTER TABLE conversation_participants ADD COLUMN IF NOT EXISTS ui_folder VARCHAR(16) NULL;
 
 -- Upgrades for DBs created before read cursors
 -- Старые БД: conversation_participants могли быть без last_read_message_id — индекс ниже тогда падает.

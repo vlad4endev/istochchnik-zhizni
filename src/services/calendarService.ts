@@ -4,6 +4,8 @@ import {
   computeCycleIndex,
   getCycleStartDate,
   getPrayerCycleSnapshotForDate,
+  PRAYER_CYCLE_MEMBERS_WHERE,
+  PRAYER_CYCLE_MEMBERS_WHERE_M,
   toPublicCycleInfo,
   type PrayerCyclePublic,
 } from './prayerCycleService';
@@ -48,7 +50,7 @@ export interface PrayerDataByDate {
   global_themes: GlobalTheme[];
   ministries: Ministry[];
   backsliders: Backslider[];
-  /** Молитвенный цикл для этой даты (один полный круг по активным участникам = member_count дней). */
+  /** Молитвенный цикл для этой даты (один полный круг по участникам с флагом «в цикле» = member_count дней). */
   prayer_cycle: PrayerCyclePublic | null;
 }
 
@@ -110,7 +112,7 @@ export async function getPrayerDataByDate(targetDate: string): Promise<PrayerDat
 
   const [membersCount, themesCount, ministriesCount, backslidersCount, cycleSnap] =
     await Promise.all([
-      query('SELECT COUNT(*)::int FROM members WHERE is_active = TRUE'),
+      query(`SELECT COUNT(*)::int FROM members WHERE ${PRAYER_CYCLE_MEMBERS_WHERE}`),
       query('SELECT COUNT(*)::int FROM global_themes'),
       query('SELECT COUNT(*)::int FROM ministries'),
       query('SELECT COUNT(*)::int FROM backsliders'),
@@ -162,7 +164,7 @@ export async function getPrayerDataByDate(targetDate: string): Promise<PrayerDat
        FROM members m
        LEFT JOIN member_prayer_by_cycle mpc
          ON mpc.member_id = m.id AND mpc.cycle_index = $2
-       WHERE m.is_active = TRUE
+       WHERE ${PRAYER_CYCLE_MEMBERS_WHERE_M}
        ORDER BY ${MEMBER_ORDER_SQL}
        LIMIT 1 OFFSET $1`,
       [memberIndex, cycleIndexForDate]
@@ -207,7 +209,9 @@ async function getMemberAssignmentsForDates(dates: string[]): Promise<NextWeekMe
   const lastDate = dates[dates.length - 1];
 
   const cycleStartDate = await getCycleStartDate();
-  const totalMembersResult = await query('SELECT COUNT(*)::int AS count FROM members WHERE is_active = TRUE');
+  const totalMembersResult = await query(
+    `SELECT COUNT(*)::int AS count FROM members WHERE ${PRAYER_CYCLE_MEMBERS_WHERE}`,
+  );
   const totalMembers = totalMembersResult.rows[0]?.count ?? 0;
 
   if (totalMembers <= 0) {
@@ -217,7 +221,7 @@ async function getMemberAssignmentsForDates(dates: string[]): Promise<NextWeekMe
   const sortedBase = await query(
     `SELECT m.id, m.name
      FROM members m
-     WHERE m.is_active = TRUE
+     WHERE ${PRAYER_CYCLE_MEMBERS_WHERE_M}
      ORDER BY ${MEMBER_ORDER_SQL}`
   ).then((result) => result.rows as { id: number; name: string }[]);
 

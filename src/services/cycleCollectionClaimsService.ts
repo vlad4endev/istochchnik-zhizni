@@ -1,5 +1,5 @@
 import { query } from '../config/db';
-import { getPrayerCycleSnapshotForDate } from './prayerCycleService';
+import { getPrayerCycleSnapshotForDate, PRAYER_CYCLE_MEMBERS_WHERE_M } from './prayerCycleService';
 
 const MEMBER_ORDER_SQL = `LOWER(COALESCE(NULLIF(trim(m.last_name), ''), split_part(trim(m.name), ' ', 1))) ASC,
   LOWER(COALESCE(NULLIF(trim(m.first_name), ''), m.name)) ASC,
@@ -33,7 +33,7 @@ export async function getCycleCollectionClaimsSnapshot(
 
   const membersResult = await query(
     `SELECT m.id, m.name FROM members m
-     WHERE m.is_active = TRUE
+     WHERE ${PRAYER_CYCLE_MEMBERS_WHERE_M}
      ORDER BY ${MEMBER_ORDER_SQL}`,
     []
   );
@@ -125,9 +125,10 @@ export async function setCycleCollectionClaim(params: {
   }
   const cycleIndex = snap.cycle_index;
 
-  const memCheck = await query(`SELECT 1 FROM members WHERE id = $1 AND is_active = TRUE LIMIT 1`, [
-    memberId,
-  ]);
+  const memCheck = await query(
+    `SELECT 1 FROM members m WHERE m.id = $1 AND ${PRAYER_CYCLE_MEMBERS_WHERE_M} LIMIT 1`,
+    [memberId],
+  );
   if ((memCheck.rowCount ?? 0) === 0) {
     throw new Error('invalid_member');
   }

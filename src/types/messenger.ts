@@ -100,6 +100,13 @@ export interface ConversationListItem {
     last_name: string | null;
     avatar_url?: string | null;
   } | null;
+  /** Персонально для текущего пользователя (из conversation_participants). */
+  my_muted?: boolean;
+  my_muted_until?: string | null;
+  my_ui_pinned?: boolean;
+  my_ui_pinned_at?: string | null;
+  /** Ручная папка: переопределяет вкладку «Личные» / «Служения»; null = авто по типу чата. */
+  my_ui_folder?: 'personal' | 'ministry' | null;
 }
 
 export interface MessageWithSender extends MessageRow {
@@ -144,6 +151,7 @@ export type WsMessengerEvent =
   | { type: 'typing:stop'; conversationId: string; memberId: number }
   | { type: 'conv:created'; conversation: ConversationListItem }
   | { type: 'conv:updated'; conversationId: string; title?: string; avatarUrl?: string }
+  | { type: 'conv:history_cleared'; conversationId: string }
   | { type: 'messages_read'; chatId: string; userId: number; lastReadMessageId: string }
   | { type: 'read:updated'; conversationId: string; memberId: number; lastReadMessageId: string }
   | { type: 'presence:online'; memberId: number }

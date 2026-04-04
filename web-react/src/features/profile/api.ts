@@ -29,6 +29,8 @@ export interface MeResponse {
   app_role: string;
   /** Ответственный за сбор — может редактировать назначения на следующую неделю. */
   is_collection_coordinator: boolean;
+  /** Участвует в общем молитвенном цикле. */
+  in_prayer_cycle?: boolean;
   is_active: boolean;
   created_at: string;
   updated_at: string;

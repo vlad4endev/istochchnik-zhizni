@@ -236,6 +236,13 @@ function handleWsMessage(msg: any): void {
       }
       break;
 
+    case 'conv:history_cleared':
+      if (typeof msg.conversationId === 'string' && msg.conversationId) {
+        store.handleConvHistoryCleared(msg.conversationId);
+        void store.loadConversations();
+      }
+      break;
+
     case 'read:updated':
       store.handleReadUpdated(msg.conversationId, msg.memberId, msg.lastReadMessageId);
       break;
