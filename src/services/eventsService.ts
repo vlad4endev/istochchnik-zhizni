@@ -196,6 +196,28 @@ async function ensureChurchEventsSchema(): Promise<EventsSchemaState> {
             ADD CONSTRAINT church_events_weekly_day_check
             CHECK (weekly_day IS NULL OR (weekly_day BETWEEN 0 AND 6))
         `);
+
+        try {
+          await query(`
+            ALTER TABLE ${targetTableRef}
+              ADD COLUMN IF NOT EXISTS description TEXT
+          `);
+          await query(`
+            UPDATE ${targetTableRef}
+            SET description = ''
+            WHERE description IS NULL
+          `);
+          await query(`
+            ALTER TABLE ${targetTableRef}
+              ALTER COLUMN description SET DEFAULT ''
+          `);
+          await query(`
+            ALTER TABLE ${targetTableRef}
+              ALTER COLUMN description DROP NOT NULL
+          `);
+        } catch (descErr) {
+          console.warn('[events] church_events description compatibility skipped:', descErr);
+        }
       } catch (err) {
         if (!isInsufficientPrivilegeError(err)) {
           throw err;

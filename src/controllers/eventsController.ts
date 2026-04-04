@@ -1,4 +1,14 @@
 import type { Request, Response } from 'express';
+
+function pgErrorMeta(err: unknown): { db_code?: string; db_column?: string; db_constraint?: string } {
+  if (!err || typeof err !== 'object') return {};
+  const o = err as Record<string, unknown>;
+  const out: { db_code?: string; db_column?: string; db_constraint?: string } = {};
+  if (typeof o.code === 'string') out.db_code = o.code;
+  if (typeof o.column === 'string') out.db_column = o.column;
+  if (typeof o.constraint === 'string') out.db_constraint = o.constraint;
+  return out;
+}
 import {
   createChurchEvent,
   deleteAllChurchEvents,
@@ -132,7 +142,7 @@ export async function postEvent(req: Request, res: Response): Promise<void> {
     res.status(201).json(created);
   } catch (err) {
     console.error('postEvent error', err);
-    res.status(500).json({ error: 'Database error' });
+    res.status(500).json({ error: 'Database error', ...pgErrorMeta(err) });
   }
 }
 
