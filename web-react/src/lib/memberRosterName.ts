@@ -27,7 +27,7 @@ export function splitMemberNameParts(input: {
   return { first: parts[0] ?? '', last: '' };
 }
 
-/** Отображение в списках: «Фамилия Имя …». */
+/** Отображение в списках и молитве: «Имя Фамилия» (как колонки в админке). */
 export function memberRosterName(input: {
   id?: number;
   name: string;
@@ -35,7 +35,7 @@ export function memberRosterName(input: {
   last_name?: string | null;
 }): string {
   const { first, last } = splitMemberNameParts(input);
-  const s = `${last} ${first}`.trim();
+  const s = `${first} ${last}`.trim();
   if (s) return s;
   return input.name.trim() || (input.id != null ? `#${input.id}` : '');
 }
