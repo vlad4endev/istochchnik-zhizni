@@ -15,8 +15,12 @@ export interface ChurchEvent {
 
 type EventsSchemaState = {
   hasTable: boolean;
-  hasRecurrenceColumns: boolean;
   tableRef: string;
+  /** Есть оба столбца — полный SELECT/RETURNING как в актуальной схеме */
+  hasFullRecurrenceShape: boolean;
+  /** Только recurrence_type (без weekly_day) — иначе INSERT без recurrence ломает NOT NULL */
+  hasRecurrenceTypeColumn: boolean;
+  hasWeeklyDayColumn: boolean;
 };
 
 let schemaStateOnce: Promise<EventsSchemaState> | null = null;
@@ -35,9 +39,9 @@ function tableRefForSchema(schema: string): string {
   return `${quoteIdent(schema)}."church_events"`;
 }
 
-function selectEventProjection(hasRecurrenceColumns: boolean): string {
-  return hasRecurrenceColumns
-    ? `
+function selectEventProjection(schema: Pick<EventsSchemaState, 'hasFullRecurrenceShape' | 'hasRecurrenceTypeColumn'>): string {
+  if (schema.hasFullRecurrenceShape) {
+    return `
       id,
       title,
       description,
@@ -48,8 +52,23 @@ function selectEventProjection(hasRecurrenceColumns: boolean): string {
       is_active,
       created_at::text AS created_at,
       updated_at::text AS updated_at
-    `
-    : `
+    `;
+  }
+  if (schema.hasRecurrenceTypeColumn) {
+    return `
+      id,
+      title,
+      description,
+      event_date::text AS event_date,
+      to_char(event_time, 'HH24:MI') AS event_time,
+      recurrence_type,
+      NULL::smallint AS weekly_day,
+      is_active,
+      created_at::text AS created_at,
+      updated_at::text AS updated_at
+    `;
+  }
+  return `
       id,
       title,
       description,
@@ -90,19 +109,25 @@ async function readEventsSchemaState(): Promise<EventsSchemaState> {
   if (bySchema.size === 0) {
     return {
       hasTable: false,
-      hasRecurrenceColumns: false,
       tableRef: tableRefForSchema(preferredSchema),
+      hasFullRecurrenceShape: false,
+      hasRecurrenceTypeColumn: false,
+      hasWeeklyDayColumn: false,
     };
   }
 
   const chosenSchema =
     bySchema.has(preferredSchema) ? preferredSchema : bySchema.has('public') ? 'public' : Array.from(bySchema.keys())[0];
   const names = bySchema.get(chosenSchema) ?? new Set<string>();
-  const hasRecurrenceColumns = names.has('recurrence_type') && names.has('weekly_day');
+  const hasRecurrenceTypeColumn = names.has('recurrence_type');
+  const hasWeeklyDayColumn = names.has('weekly_day');
+  const hasFullRecurrenceShape = hasRecurrenceTypeColumn && hasWeeklyDayColumn;
   return {
     hasTable: true,
-    hasRecurrenceColumns,
     tableRef: tableRefForSchema(chosenSchema),
+    hasFullRecurrenceShape,
+    hasRecurrenceTypeColumn,
+    hasWeeklyDayColumn,
   };
 }
 
@@ -191,7 +216,7 @@ export async function listActiveEvents(): Promise<ChurchEvent[]> {
   const schema = await ensureChurchEventsSchema();
   const result = await query(
     `SELECT
-      ${selectEventProjection(schema.hasRecurrenceColumns)}
+      ${selectEventProjection(schema)}
      FROM ${schema.tableRef}
      WHERE is_active = TRUE
      ORDER BY event_date ASC, event_time ASC, id ASC`,
@@ -203,7 +228,7 @@ export async function listAllEventsAdmin(): Promise<ChurchEvent[]> {
   const schema = await ensureChurchEventsSchema();
   const result = await query(
     `SELECT
-      ${selectEventProjection(schema.hasRecurrenceColumns)}
+      ${selectEventProjection(schema)}
      FROM ${schema.tableRef}
      ORDER BY event_date ASC, event_time ASC, id ASC`,
   );
@@ -220,35 +245,45 @@ export async function createChurchEvent(input: {
   is_active?: boolean;
 }): Promise<ChurchEvent> {
   const schema = await ensureChurchEventsSchema();
-  const baseValues: unknown[] = [
-    input.title.trim(),
+  const title = input.title.trim();
+  const description =
     typeof input.description === 'string' && input.description.trim().length > 0
       ? input.description.trim()
-      : null,
-    input.event_date,
-    input.event_time,
-    input.is_active ?? true,
-  ];
-  const result = schema.hasRecurrenceColumns
-    ? await query(
-        `INSERT INTO ${schema.tableRef} (title, description, event_date, event_time, recurrence_type, weekly_day, is_active)
-         VALUES ($1, $2, $3::date, $4::time, $5, $6, COALESCE($7, TRUE))
-         RETURNING
-           ${selectEventProjection(true)}`,
-        [
-          ...baseValues.slice(0, 4),
-          input.recurrence_type,
-          input.weekly_day ?? null,
-          baseValues[4],
-        ],
-      )
-    : await query(
-        `INSERT INTO ${schema.tableRef} (title, description, event_date, event_time, is_active)
-         VALUES ($1, $2, $3::date, $4::time, COALESCE($5, TRUE))
-         RETURNING
-           ${selectEventProjection(false)}`,
-        baseValues,
-      );
+      : null;
+  const isActive = input.is_active ?? true;
+  const returning = selectEventProjection(schema);
+
+  let result;
+  if (schema.hasFullRecurrenceShape) {
+    result = await query(
+      `INSERT INTO ${schema.tableRef} (title, description, event_date, event_time, recurrence_type, weekly_day, is_active)
+       VALUES ($1, $2, $3::date, $4::time, $5, $6, COALESCE($7, TRUE))
+       RETURNING ${returning}`,
+      [
+        title,
+        description,
+        input.event_date,
+        input.event_time,
+        input.recurrence_type,
+        input.weekly_day ?? null,
+        isActive,
+      ],
+    );
+  } else if (schema.hasRecurrenceTypeColumn) {
+    result = await query(
+      `INSERT INTO ${schema.tableRef} (title, description, event_date, event_time, recurrence_type, is_active)
+       VALUES ($1, $2, $3::date, $4::time, $5, COALESCE($6, TRUE))
+       RETURNING ${returning}`,
+      [title, description, input.event_date, input.event_time, input.recurrence_type, isActive],
+    );
+  } else {
+    result = await query(
+      `INSERT INTO ${schema.tableRef} (title, description, event_date, event_time, is_active)
+       VALUES ($1, $2, $3::date, $4::time, COALESCE($5, TRUE))
+       RETURNING ${returning}`,
+      [title, description, input.event_date, input.event_time, isActive],
+    );
+  }
   return result.rows[0] as ChurchEvent;
 }
 
@@ -290,11 +325,11 @@ export async function updateChurchEvent(
     updates.push(`event_time = $${i++}::time`);
     values.push(input.event_time);
   }
-  if (schema.hasRecurrenceColumns && typeof input.recurrence_type === 'string') {
+  if (schema.hasRecurrenceTypeColumn && typeof input.recurrence_type === 'string') {
     updates.push(`recurrence_type = $${i++}`);
     values.push(input.recurrence_type);
   }
-  if (schema.hasRecurrenceColumns && input.weekly_day !== undefined) {
+  if (schema.hasWeeklyDayColumn && input.weekly_day !== undefined) {
     updates.push(`weekly_day = $${i++}`);
     values.push(input.weekly_day);
   }
@@ -306,7 +341,7 @@ export async function updateChurchEvent(
   if (updates.length === 0) {
     const current = await query(
       `SELECT
-        ${selectEventProjection(schema.hasRecurrenceColumns)}
+        ${selectEventProjection(schema)}
        FROM ${schema.tableRef}
        WHERE id = $1`,
       [id],
@@ -321,7 +356,7 @@ export async function updateChurchEvent(
      SET ${updates.join(', ')}
      WHERE id = $${values.length}
      RETURNING
-       ${selectEventProjection(schema.hasRecurrenceColumns)}`,
+       ${selectEventProjection(schema)}`,
     values,
   );
   return (result.rows[0] as ChurchEvent | undefined) ?? null;

@@ -38,7 +38,18 @@ function isValidDateInput(value: unknown): value is string {
 }
 
 function isValidTimeInput(value: unknown): value is string {
-  return typeof value === 'string' && /^([01]\d|2[0-3]):([0-5]\d)$/.test(value.trim());
+  if (typeof value !== 'string') return false;
+  const t = value.trim();
+  const m = /^(\d{1,2}):([0-5]\d)(?::([0-5]\d))?$/.exec(t);
+  if (!m) return false;
+  const h = Number(m[1]);
+  const min = Number(m[2]);
+  if (!Number.isInteger(h) || h < 0 || h > 23 || !Number.isInteger(min) || min < 0 || min > 59) return false;
+  if (m[3] !== undefined) {
+    const s = Number(m[3]);
+    if (!Number.isInteger(s) || s < 0 || s > 59) return false;
+  }
+  return true;
 }
 
 function isValidRecurrenceType(value: unknown): value is 'once' | 'weekly' {
