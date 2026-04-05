@@ -1415,8 +1415,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
       set({ typingByConv: {}, memberLastSeenAt: {} });
     }
     set({ currentMemberId: id });
-    // Load cached snapshot for resilience (offline-first startup).
-    hydrateFromCacheIntoStore(set, get);
+    // Кэш и degraded только при первом id или смене пользователя. Сообщение WS `ready` приходит
+    // при каждом переподключении с тем же memberId — повторный hydrate ставил degradedMode: true
+    // и баннер «Автономный режим» не исчезал, хотя сеть и API в порядке.
+    if (prev == null || prev !== id) {
+      hydrateFromCacheIntoStore(set, get);
+    }
   },
 
   handleConvHistoryCleared: (conversationId) => {
