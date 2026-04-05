@@ -1,7 +1,7 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { useAuthStore } from '../auth/authStore';
 import { resolveRealtimeWebSocketUrl } from '../../lib/config';
-import { useChatStore } from './chatStore';
+import { useChatStore, isDraftPrivateConversationId } from './chatStore';
 
 /**
  * Hook that connects to the WS server and routes messenger events
@@ -54,6 +54,14 @@ export function useMessengerWs(): {
     let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
     let attempt = 0;
     let pingInterval: ReturnType<typeof setInterval> | undefined;
+    let pongDeadlineTimer: ReturnType<typeof setTimeout> | undefined;
+
+    const clearPongDeadline = () => {
+      if (pongDeadlineTimer !== undefined) {
+        clearTimeout(pongDeadlineTimer);
+        pongDeadlineTimer = undefined;
+      }
+    };
 
     const clearTimers = () => {
       if (reconnectTimer !== undefined) {
@@ -64,6 +72,7 @@ export function useMessengerWs(): {
         clearInterval(pingInterval);
         pingInterval = undefined;
       }
+      clearPongDeadline();
     };
 
     const scheduleReconnect = () => {
@@ -105,28 +114,46 @@ export function useMessengerWs(): {
         // Resync after reconnect, and also after first open when app started offline/degraded.
         const shouldResyncConversations =
           wasReconnected || store.degradedMode || !store.conversationsLoaded;
-        const shouldResyncActiveMessages =
-          Boolean(activeConversationId) &&
-          (wasReconnected || store.degradedMode || activeMessages.length === 0);
 
         if (shouldResyncConversations) {
           void store.loadConversations();
         }
-        if (activeConversationId && shouldResyncActiveMessages) {
-          void store.loadMessages(activeConversationId);
+
+        const actId = activeConversationId;
+        const isDraft = actId != null && isDraftPrivateConversationId(actId);
+        if (actId && !isDraft) {
+          if (wasReconnected && activeMessages.length > 0) {
+            void store.catchUpMessagesAfter(actId);
+          } else if (wasReconnected || store.degradedMode || activeMessages.length === 0) {
+            void store.loadMessages(actId);
+          }
         }
 
-        // Keep-alive ping every 25s
+        // Heartbeat: ping every 15s; if no pong within 10s, close to force reconnect.
         pingInterval = setInterval(() => {
-          if (ws.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify({ type: 'ping' }));
-          }
-        }, 25_000);
+          if (ws.readyState !== WebSocket.OPEN) return;
+          clearPongDeadline();
+          ws.send(JSON.stringify({ type: 'ping' }));
+          pongDeadlineTimer = setTimeout(() => {
+            pongDeadlineTimer = undefined;
+            if (ws.readyState === WebSocket.OPEN && wsRef.current === ws) {
+              try {
+                ws.close(4000, 'heartbeat');
+              } catch {
+                /* ignore */
+              }
+            }
+          }, 10_000);
+        }, 15_000);
       };
 
       ws.onmessage = (ev) => {
         try {
           const msg = JSON.parse(String(ev.data));
+          if (msg && msg.type === 'pong') {
+            clearPongDeadline();
+            return;
+          }
           handleWsMessage(msg);
         } catch {
           /* malformed message */
@@ -223,13 +250,36 @@ function handleWsMessage(msg: any): void {
       break;
     }
 
-    case 'msg:edited':
-      store.handleMessageEdited(msg.conversationId, msg.messageId, msg.content, msg.updatedAt);
+    case 'msg:edited': {
+      const cid =
+        msg.conversationId != null && String(msg.conversationId).trim() !== ''
+          ? String(msg.conversationId)
+          : null;
+      const mid =
+        msg.messageId != null && String(msg.messageId).trim() !== '' ? String(msg.messageId) : null;
+      if (
+        cid &&
+        mid &&
+        typeof msg.content === 'string' &&
+        typeof msg.updatedAt === 'string'
+      ) {
+        store.handleMessageEdited(cid, mid, msg.content, msg.updatedAt);
+      }
       break;
+    }
 
-    case 'msg:deleted':
-      store.handleMessageDeleted(msg.conversationId, msg.messageId);
+    case 'msg:deleted': {
+      const cid =
+        msg.conversationId != null && String(msg.conversationId).trim() !== ''
+          ? String(msg.conversationId)
+          : null;
+      const mid =
+        msg.messageId != null && String(msg.messageId).trim() !== '' ? String(msg.messageId) : null;
+      if (cid && mid) {
+        store.handleMessageDeleted(cid, mid);
+      }
       break;
+    }
 
     case 'msg:reaction':
       store.handleReaction(msg.conversationId, msg.messageId, msg.emoji, msg.memberId, msg.action);
@@ -281,7 +331,10 @@ function handleWsMessage(msg: any): void {
       break;
 
     case 'presence:offline':
-      store.handlePresenceOffline(msg.memberId);
+      store.handlePresenceOffline(
+        msg.memberId,
+        typeof msg.lastSeenAt === 'string' ? msg.lastSeenAt : undefined,
+      );
       break;
 
     case 'invalidate':

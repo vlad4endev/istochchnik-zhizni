@@ -16,7 +16,7 @@ export function BroadcastPage() {
   const location = useLocation();
   const role = useAuthStore((s) => s.role);
   const isAdmin = role === 'admin';
-  const [canViewPage, setCanViewPage] = useState(() => hasBroadcastAccess());
+  const [canViewPage, setCanViewPage] = useState(() => isAdmin || hasBroadcastAccess());
 
   const { data, isLoading: broadcastLoading, error } = useQuery({
     queryKey: ['broadcast'],
@@ -30,13 +30,17 @@ export function BroadcastPage() {
   const embedCode = data?.rutube_embed_code;
 
   useEffect(() => {
+    if (isAdmin) {
+      setCanViewPage(true);
+      return;
+    }
     if ((location.state as { fromDashboard?: boolean } | null)?.fromDashboard) {
       grantBroadcastAccess();
       setCanViewPage(true);
     } else {
       setCanViewPage(hasBroadcastAccess());
     }
-  }, [location.state]);
+  }, [isAdmin, location.state]);
 
   useEffect(() => {
     if (data) {

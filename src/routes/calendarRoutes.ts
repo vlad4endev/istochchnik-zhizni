@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import {
   getCycleCollectionClaims,
+  getWeekBirthdays,
   getNextWeekMembers,
   getPrayerBotMessage,
   getPrayerData,
@@ -42,6 +43,7 @@ router.patch('/cycle/collection-claims', patchCycleCollectionClaims);
 router.get('/next-week/collection', getCycleCollectionClaims);
 router.patch('/next-week/collection', patchCycleCollectionClaims);
 router.get('/next-week/global', getNextWeekGlobal);
+router.get('/birthdays/week', getWeekBirthdays);
 router.get('/events', getActiveEvents);
 router.get('/events/admin', getAdminEvents);
 router.post('/events', postEvent);

@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
-import { LuChevronRight, LuImage, LuLock, LuMessageSquare, LuPin, LuShield, LuUserPlus, LuX } from 'react-icons/lu';
+import { useParams } from 'react-router-dom';
+import { LuImage, LuLock, LuMessageSquare, LuPin, LuShield, LuUserPlus } from 'react-icons/lu';
 import * as api from '../api/messengerApi';
+import { ManageScreenShell, ManageSettingsGroup } from './ManageScreenShell';
 
 type PermKey = 'can_send_messages' | 'can_send_media' | 'can_add_users' | 'can_pin_messages' | 'can_manage_chat';
 
@@ -23,7 +24,6 @@ const DEFAULTS: Record<PermKey, boolean> = {
 
 export function ChatPermissionsPage() {
   const { chatId } = useParams<{ chatId: string }>();
-  const navigate = useNavigate();
   const [meta, setMeta] = useState<api.ConversationMeta | null>(null);
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -76,91 +76,69 @@ export function ChatPermissionsPage() {
   };
 
   return (
-    <div className="mx-auto w-full max-w-xl px-4 pt-4 pb-24">
-      <div className="flex items-center justify-between gap-3">
-        <button
-          type="button"
-          onClick={() => navigate(-1)}
-          className="inline-flex min-h-[44px] items-center gap-2 rounded-xl bg-white/70 px-3 py-2 text-sm font-bold text-stone-700 shadow-sm ring-1 ring-stone-200/70 backdrop-blur"
-        >
-          <LuChevronRight className="rotate-180" />
-          Назад
-        </button>
-        <button
-          type="button"
-          onClick={() => navigate('/messenger')}
-          className="inline-flex min-h-[44px] items-center gap-2 rounded-xl bg-white/70 px-3 py-2 text-sm font-bold text-stone-700 shadow-sm ring-1 ring-stone-200/70 backdrop-blur"
-        >
-          <LuX />
-          Закрыть
-        </button>
-      </div>
-
-      <div className="mt-6 rounded-3xl bg-white/80 p-5 shadow-[0_10px_30px_rgba(28,25,23,0.08)] ring-1 ring-stone-200/70 backdrop-blur">
-        <div className="flex items-start gap-3">
-          <div className="grid h-12 w-12 place-items-center rounded-2xl bg-primary/10 text-primary">
-            <LuLock size={22} />
+    <ManageScreenShell>
+      <ManageSettingsGroup className="mt-4 divide-y divide-gray-200/70">
+        <div className="flex items-start gap-3 p-4">
+          <div className="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-primary/10 text-primary">
+            <LuLock size={18} />
           </div>
           <div className="min-w-0 flex-1">
-            <p className="text-lg font-extrabold text-stone-900">Разрешения</p>
-            <p className="mt-1 text-sm font-semibold text-stone-500">
-              Эти настройки применяются ко всем участникам по умолчанию (кроме владельца и админов).
+            <p className="text-[17px] font-semibold text-gray-900">Разрешения</p>
+            <p className="mt-1 text-[13px] leading-snug text-gray-500">
+              По умолчанию для участников (кроме владельца и админов).
             </p>
           </div>
         </div>
-      </div>
-
-      <div className="mt-4 space-y-3">
         <ToggleRow
           Icon={LuMessageSquare}
-          title="Разрешить отправку сообщений"
+          title="Отправка сообщений"
           description="Обычные участники смогут писать"
           value={!!perms.can_send_messages}
           onChange={(v) => setPerm('can_send_messages', v)}
         />
         <ToggleRow
           Icon={LuImage}
-          title="Разрешить медиа"
+          title="Медиа"
           description="Фото, файлы, голосовые (в будущем)"
           value={!!perms.can_send_media}
           onChange={(v) => setPerm('can_send_media', v)}
         />
         <ToggleRow
           Icon={LuUserPlus}
-          title="Разрешить добавление участников"
-          description="Кто может приглашать новых людей"
+          title="Добавление участников"
+          description="Кто может приглашать людей"
           value={!!perms.can_add_users}
           onChange={(v) => setPerm('can_add_users', v)}
         />
         <ToggleRow
           Icon={LuPin}
-          title="Закреплять сообщения"
-          description="Кто может закреплять сообщения в шапке чата"
+          title="Закрепление сообщений"
+          description="В шапке чата"
           value={!!perms.can_pin_messages}
           onChange={(v) => setPerm('can_pin_messages', v)}
         />
         <ToggleRow
           Icon={LuShield}
           title="Управление чатом"
-          description="Смена названия, фото, разрешений (для доверенных участников)"
+          description="Название, фото, разрешения"
           value={!!perms.can_manage_chat}
           onChange={(v) => setPerm('can_manage_chat', v)}
         />
-      </div>
+      </ManageSettingsGroup>
 
-      {err ? <p className="mt-4 text-sm font-semibold text-red-600">{err}</p> : null}
+      {err ? <p className="mt-3 text-sm font-medium text-red-600">{err}</p> : null}
 
-      <div className="mt-6">
+      <div className="mt-5 px-0.5">
         <button
           type="button"
           disabled={!meta || saving}
           onClick={() => void save()}
-          className="w-full min-h-[48px] rounded-2xl bg-primary px-5 py-3 text-sm font-extrabold text-white shadow-lg shadow-primary/25 transition active:scale-[0.99] disabled:opacity-60 motion-reduce:active:scale-100"
+          className="w-full min-h-[48px] rounded-xl bg-primary px-5 py-3 text-[16px] font-semibold text-white shadow-sm transition active:opacity-90 disabled:opacity-50"
         >
           {saving ? 'Сохраняем…' : 'Сохранить'}
         </button>
       </div>
-    </div>
+    </ManageScreenShell>
   );
 }
 
@@ -178,13 +156,13 @@ function ToggleRow({
   onChange: (v: boolean) => void;
 }) {
   return (
-    <div className="flex items-center gap-4 rounded-3xl bg-white/80 px-5 py-4 shadow-[0_10px_30px_rgba(28,25,23,0.07)] ring-1 ring-stone-200/70 backdrop-blur">
-      <div className="grid h-12 w-12 place-items-center rounded-2xl bg-stone-100 text-stone-700">
-        <Icon size={22} />
+    <div className="flex items-center gap-3 px-4 py-3">
+      <div className="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-gray-100 text-gray-600">
+        <Icon size={18} />
       </div>
       <div className="min-w-0 flex-1">
-        <p className="text-[15px] font-extrabold text-stone-900">{title}</p>
-        <p className="mt-0.5 text-sm font-semibold text-stone-500">{description}</p>
+        <p className="text-[15px] font-normal text-gray-900">{title}</p>
+        <p className="mt-0.5 text-[13px] text-gray-500">{description}</p>
       </div>
       <button
         type="button"

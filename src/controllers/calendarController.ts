@@ -125,6 +125,119 @@ export async function getTodayPrayerBotMessage(req: Request, res: Response): Pro
   }
 }
 
+type BirthdayWeekRow = {
+  id: number;
+  name: string;
+  birth_date: string;
+  week_date: string;
+};
+
+function formatYmdLocal(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+function fullNameOrFallback(row: {
+  first_name?: string | null;
+  last_name?: string | null;
+  name?: string | null;
+}): string {
+  const fn = (row.first_name ?? '').trim();
+  const ln = (row.last_name ?? '').trim();
+  const full = `${fn} ${ln}`.trim();
+  if (full) return full;
+  return (row.name ?? '').trim() || 'Участник';
+}
+
+function birthdayForYear(birthDateYmd: string, year: number): Date | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(birthDateYmd);
+  if (!m) return null;
+  const month = Number(m[2]);
+  const day = Number(m[3]);
+  const d = new Date(year, month - 1, day);
+  if (d.getFullYear() !== year || d.getMonth() !== month - 1 || d.getDate() !== day) {
+    return null;
+  }
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+function startOfWeekMonday(base: Date): Date {
+  const d = new Date(base);
+  d.setHours(0, 0, 0, 0);
+  const day = d.getDay(); // 0 Sun ... 6 Sat
+  const diff = day === 0 ? -6 : 1 - day;
+  d.setDate(d.getDate() + diff);
+  return d;
+}
+
+export async function getWeekBirthdays(_req: Request, res: Response): Promise<void> {
+  try {
+    const now = new Date();
+    const weekStart = startOfWeekMonday(now);
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekStart.getDate() + 6);
+    weekEnd.setHours(23, 59, 59, 999);
+
+    const years = Array.from(new Set([weekStart.getFullYear(), weekEnd.getFullYear()]));
+    const result = await query(
+      `SELECT id, first_name, last_name, name, birth_date::text AS birth_date
+       FROM members
+       WHERE is_active = TRUE
+         AND birth_date IS NOT NULL`,
+    );
+
+    const out: BirthdayWeekRow[] = [];
+    for (const rowRaw of result.rows) {
+      const row = rowRaw as {
+        id?: unknown;
+        first_name?: string | null;
+        last_name?: string | null;
+        name?: string | null;
+        birth_date?: unknown;
+      };
+      if (typeof row.id !== 'number') continue;
+      if (typeof row.birth_date !== 'string') continue;
+      const personName = fullNameOrFallback(row);
+
+      let hit: Date | null = null;
+      for (const y of years) {
+        const b = birthdayForYear(row.birth_date, y);
+        if (!b) continue;
+        if (b.getTime() >= weekStart.getTime() && b.getTime() <= weekEnd.getTime()) {
+          hit = b;
+          break;
+        }
+      }
+      if (!hit) continue;
+
+      out.push({
+        id: row.id,
+        name: personName,
+        birth_date: row.birth_date,
+        week_date: formatYmdLocal(hit),
+      });
+    }
+
+    out.sort((a, b) => {
+      const byDate = a.week_date.localeCompare(b.week_date);
+      if (byDate !== 0) return byDate;
+      return a.name.localeCompare(b.name, 'ru');
+    });
+
+    res.json({
+      week_start: formatYmdLocal(weekStart),
+      week_end: formatYmdLocal(weekEnd),
+      items: out,
+    });
+  } catch (err) {
+    console.error('Calendar birthdays-week error:', err);
+    res.status(500).json({ error: 'Database error' });
+  }
+}
+
 type AuthReq = Request & { authUserId?: number; authUserRole?: 'member' | 'admin' };
 
 /** План на след. неделю и назначения сбора — только администраторы и ответственные за сбор. */

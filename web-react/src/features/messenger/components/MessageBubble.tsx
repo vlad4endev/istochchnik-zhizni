@@ -351,6 +351,13 @@ export function MessageBubble({
   const payloadType = message.payload_type ?? 'text';
   const payload = (message.payload ?? {}) as Record<string, unknown>;
 
+  /** Время и галочки в одной строке с текстом (как в Telegram), если нет цитаты и не «особый» контент. */
+  const useInlineTextMeta =
+    !isDeleted &&
+    !message.reply_preview &&
+    payloadType === 'text' &&
+    !message.is_pinned;
+
   const handlePrayClick = () => {
     // Этап 2: заглушка для интерактивной карточки
     // В Этапе 3/следующих этапах подключим API + WS синк.
@@ -548,15 +555,38 @@ export function MessageBubble({
   }
 
   const bubbleClasses = [
-    'relative rounded-2xl px-3.5 py-2 shadow-sm sm:px-4 sm:py-2.5',
+    'relative rounded-2xl px-3 py-2 sm:px-3.5 sm:py-2',
     isMine
-      ? 'rounded-br-sm bg-primary text-white'
-      : 'rounded-bl-sm border border-gray-100 bg-white text-gray-900',
+      ? 'rounded-br-[4px] bg-primary text-white'
+      : 'rounded-bl-[4px] bg-white text-gray-900 shadow-[0_1px_0.5px_rgba(0,0,0,0.06)]',
     isOptimistic ? 'msg-bubble--sending' : '',
     isGroupedPrev ? (isMine ? 'rounded-br-2xl' : 'rounded-bl-2xl') : '',
   ]
     .filter(Boolean)
     .join(' ');
+
+  const metaRowClass = [
+    'inline-flex shrink-0 items-center gap-0.5 whitespace-nowrap text-[11px] leading-none',
+    isMine ? 'text-white/70' : 'text-gray-400',
+  ].join(' ');
+
+  const bubbleMeta = (
+    <div className={metaRowClass}>
+      {message.is_edited ? <span className="msg-edited">ред.</span> : null}
+      <span className="tabular-nums">{formattedTime}</span>
+      {isMine ? (
+        status === 'sending' ? (
+          <IoTimeOutline className="h-3.5 w-3.5 shrink-0 text-white/70" aria-label="Отправляется" />
+        ) : status === 'error' ? (
+          <IoAlertCircleOutline className="h-4 w-4 shrink-0 text-red-200" aria-label="Ошибка отправки" />
+        ) : isReadByOther ? (
+          <IoCheckmarkDone className="h-3.5 w-3.5 shrink-0 text-sky-200" aria-label="Прочитано" />
+        ) : (
+          <IoCheckmark className="h-3.5 w-3.5 shrink-0 text-white/70" aria-label="Отправлено" />
+        )
+      ) : null}
+    </div>
+  );
 
   return (
     <>
@@ -629,35 +659,26 @@ export function MessageBubble({
           </button>
         )}
 
-        {/* Content */}
-        <div className="msg-content whitespace-pre-wrap break-words text-[14px] leading-relaxed sm:text-[15px]">{renderContent()}</div>
-
-        {message.is_pinned ? (
-          <div className={['mt-1 text-[10px] font-bold uppercase tracking-wide', isMine ? 'text-white/60' : 'text-amber-600'].join(' ')}>
-            📌 Закреплено
+        {useInlineTextMeta ? (
+          <div className="flex min-w-0 flex-row flex-wrap items-end gap-x-2 gap-y-0.5">
+            <div className="msg-content min-w-0 flex-1 whitespace-pre-wrap break-words text-[14px] leading-relaxed sm:text-[15px]">
+              {renderContent()}
+            </div>
+            <div className="ml-auto">{bubbleMeta}</div>
           </div>
-        ) : null}
-
-        {/* Meta */}
-        <div className={['mt-1 flex items-center justify-end gap-1 text-[11px]', isMine ? 'text-white/70' : 'text-gray-400'].join(' ')}>
-          {message.is_edited && <span className="msg-edited">ред.</span>}
-          <span>{formattedTime}</span>
-          {isMine ? (
-            status === 'sending' ? (
-              <IoTimeOutline className="h-3.5 w-3.5 text-white/70" aria-label="Отправляется" />
-            ) : status === 'error' ? (
-              <IoAlertCircleOutline className="h-4 w-4 text-red-500" aria-label="Ошибка отправки" />
-            ) : (
-              <>
-                {isReadByOther ? (
-                  <IoCheckmarkDone className="h-3.5 w-3.5 text-sky-200" aria-label="Прочитано" />
-                ) : (
-                  <IoCheckmark className="h-3.5 w-3.5 text-white/70" aria-label="Отправлено" />
-                )}
-              </>
-            )
-          ) : null}
-        </div>
+        ) : (
+          <>
+            <div className="msg-content whitespace-pre-wrap break-words text-[14px] leading-relaxed sm:text-[15px]">{renderContent()}</div>
+            {message.is_pinned ? (
+              <div
+                className={['mt-1 text-[10px] font-bold uppercase tracking-wide', isMine ? 'text-white/60' : 'text-amber-600'].join(' ')}
+              >
+                📌 Закреплено
+              </div>
+            ) : null}
+            <div className="mt-1 flex w-full items-center justify-end">{bubbleMeta}</div>
+          </>
+        )}
         </motion.div>
       </div>
 

@@ -63,6 +63,19 @@ export interface ChurchEventItem {
   updated_at: string;
 }
 
+export interface BirthdayWeekItem {
+  id: number;
+  name: string;
+  birth_date: string;
+  week_date: string;
+}
+
+export interface BirthdayWeekResponse {
+  week_start: string;
+  week_end: string;
+  items: BirthdayWeekItem[];
+}
+
 /**
  * GET `/api/calendar/next-week/members` — 7 дней (пн–вс) выбранной недели, по члену на день.
  * @param week `current` — текущая календарная неделя, `next` — следующая (по умолчанию).
@@ -105,6 +118,31 @@ export async function patchMemberCyclePrayer(
 export async function getActiveEvents(): Promise<ChurchEventItem[]> {
   const { data } = await apiClient.get<ChurchEventItem[]>('/api/calendar/events');
   return Array.isArray(data) ? data : [];
+}
+
+export async function getWeekBirthdays(): Promise<BirthdayWeekResponse> {
+  const { data } = await apiClient.get<unknown>('/api/calendar/birthdays/week');
+  if (!isRecord(data)) {
+    return { week_start: '', week_end: '', items: [] };
+  }
+  const itemsRaw = Array.isArray(data.items) ? data.items : [];
+  const items: BirthdayWeekItem[] = itemsRaw
+    .map((row) => {
+      if (!isRecord(row)) return null;
+      const id = typeof row.id === 'number' ? row.id : Number(row.id);
+      const name = typeof row.name === 'string' ? row.name.trim() : '';
+      const birthDate = typeof row.birth_date === 'string' ? row.birth_date : '';
+      const weekDate = typeof row.week_date === 'string' ? row.week_date : '';
+      if (!Number.isFinite(id) || !name || !/^\d{4}-\d{2}-\d{2}$/.test(weekDate)) return null;
+      return { id, name, birth_date: birthDate, week_date: weekDate };
+    })
+    .filter((x): x is BirthdayWeekItem => x != null);
+
+  return {
+    week_start: typeof data.week_start === 'string' ? data.week_start : '',
+    week_end: typeof data.week_end === 'string' ? data.week_end : '',
+    items,
+  };
 }
 
 function normalizePrayerCycle(raw: unknown): PrayerCycleInfo | null {

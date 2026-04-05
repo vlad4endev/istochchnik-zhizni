@@ -167,7 +167,8 @@ export async function listConversations(memberId: number): Promise<ConversationL
       om.name        AS om_name,
       om.first_name  AS om_first_name,
       om.last_name   AS om_last_name,
-      om.avatar_url  AS om_avatar_url
+      om.avatar_url  AS om_avatar_url,
+      om.last_seen_at AS om_last_seen_at
     FROM conversation_participants cp
     JOIN conversations c ON c.id = cp.conversation_id
     -- last message via lateral
@@ -181,7 +182,7 @@ export async function listConversations(memberId: number): Promise<ConversationL
     LEFT JOIN members lm_sender ON lm_sender.id = lm.sender_id
     -- other member for private chats
     LEFT JOIN LATERAL (
-      SELECT om2.id, om2.name, om2.first_name, om2.last_name, om2.avatar_url
+      SELECT om2.id, om2.name, om2.first_name, om2.last_name, om2.avatar_url, om2.last_seen_at
       FROM conversation_participants op
       JOIN members om2 ON om2.id = op.member_id
       WHERE op.conversation_id = c.id
@@ -224,6 +225,10 @@ export async function listConversations(memberId: number): Promise<ConversationL
           first_name: r.om_first_name,
           last_name: r.om_last_name,
           avatar_url: r.om_avatar_url ?? null,
+          last_seen_at:
+            r.om_last_seen_at != null
+              ? new Date(r.om_last_seen_at as string | Date).toISOString()
+              : null,
         }
       : null,
     ...mapParticipantUiExtras({
@@ -520,7 +525,8 @@ export async function getConversationListItem(
       om.name        AS om_name,
       om.first_name  AS om_first_name,
       om.last_name   AS om_last_name,
-      om.avatar_url  AS om_avatar_url
+      om.avatar_url  AS om_avatar_url,
+      om.last_seen_at AS om_last_seen_at
     FROM conversation_participants cp
     JOIN conversations c ON c.id = cp.conversation_id
     LEFT JOIN LATERAL (
@@ -532,7 +538,7 @@ export async function getConversationListItem(
     ) lm ON TRUE
     LEFT JOIN members lm_sender ON lm_sender.id = lm.sender_id
     LEFT JOIN LATERAL (
-      SELECT om2.id, om2.name, om2.first_name, om2.last_name, om2.avatar_url
+      SELECT om2.id, om2.name, om2.first_name, om2.last_name, om2.avatar_url, om2.last_seen_at
       FROM conversation_participants op
       JOIN members om2 ON om2.id = op.member_id
       WHERE op.conversation_id = c.id
@@ -576,6 +582,10 @@ export async function getConversationListItem(
           first_name: r.om_first_name,
           last_name: r.om_last_name,
           avatar_url: r.om_avatar_url ?? null,
+          last_seen_at:
+            r.om_last_seen_at != null
+              ? new Date(r.om_last_seen_at as string | Date).toISOString()
+              : null,
         }
       : null,
     ...mapParticipantUiExtras({
@@ -907,6 +917,7 @@ export type PrivateChatProfile = {
   ministry_role: string | null;
   ministry_direction: string | null;
   birth_date: string | null;
+  last_seen_at: string | null;
 };
 
 export async function getPrivateChatProfile(
@@ -925,7 +936,8 @@ export async function getPrivateChatProfile(
       m.app_role,
       m.ministry_role,
       m.ministry_direction,
-      m.birth_date
+      m.birth_date,
+      m.last_seen_at
     FROM conversation_participants cp
     JOIN conversations c ON c.id = cp.conversation_id
     JOIN members m ON m.id = cp.member_id
@@ -950,6 +962,8 @@ export async function getPrivateChatProfile(
     ministry_role: r.ministry_role ?? null,
     ministry_direction: r.ministry_direction ?? null,
     birth_date: r.birth_date ? new Date(r.birth_date).toISOString().slice(0, 10) : null,
+    last_seen_at:
+      r.last_seen_at != null ? new Date(r.last_seen_at as string | Date).toISOString() : null,
   };
 }
 
@@ -1215,6 +1229,78 @@ export async function loadMessages(
   );
 
   return result.rows.map((r: any) => mapMessageWithSender(r, memberId)).reverse();
+}
+
+/**
+ * Messages strictly newer than `afterId` (for reconnect catch-up). Chronological ascending.
+ */
+export async function loadMessagesAfter(
+  conversationId: string,
+  memberId: number,
+  afterId: string,
+  limit: number = 100,
+): Promise<MessageWithSender[]> {
+  const lim = Math.min(100, Math.max(1, limit));
+  const params: unknown[] = [conversationId, lim, afterId];
+
+  const result = await dbQuery(
+    `
+    SELECT
+      msg.*,
+      m.name        AS sender_name,
+      m.first_name  AS sender_first_name,
+      m.last_name   AS sender_last_name,
+      rm.id         AS rp_id,
+      rm.content    AS rp_content,
+      rm.is_deleted AS rp_is_deleted,
+      COALESCE(rm_s.first_name, '') || ' ' || COALESCE(rm_s.last_name, '') AS rp_sender_name,
+      (
+        SELECT COALESCE(json_agg(json_build_object(
+          'emoji', r.emoji,
+          'count', r.cnt,
+          'reacted_by_me', r.my_react
+        )), '[]'::json)
+        FROM (
+          SELECT
+            mr.emoji,
+            COUNT(*)::int AS cnt,
+            BOOL_OR(mr.member_id = $${params.length + 1}) AS my_react
+          FROM message_reactions mr
+          WHERE mr.message_id = msg.id
+          GROUP BY mr.emoji
+        ) r
+      ) AS reactions_json,
+      (
+        SELECT COALESCE(json_agg(sub.c ORDER BY sub.i), '[]'::json)
+        FROM (
+          SELECT gs.i AS i,
+            COALESCE((
+              SELECT COUNT(*)::int FROM message_poll_votes v
+              WHERE v.message_id = msg.id AND v.option_index = gs.i
+            ), 0) AS c
+          FROM generate_series(
+            0,
+            GREATEST(0, jsonb_array_length(COALESCE(msg.payload->'options', '[]'::jsonb)) - 1)
+          ) AS gs(i)
+        ) sub
+      ) AS poll_tallies_json,
+      (
+        SELECT COALESCE(json_agg(v.option_index ORDER BY v.option_index), '[]'::json)
+        FROM message_poll_votes v
+        WHERE v.message_id = msg.id AND v.member_id = $${params.length + 1}
+      ) AS poll_my_options_json
+    FROM messages msg
+    LEFT JOIN members m ON m.id = msg.sender_id
+    LEFT JOIN messages rm ON rm.id = msg.reply_to_message_id
+    LEFT JOIN members rm_s ON rm_s.id = rm.sender_id
+    WHERE msg.conversation_id = $1 AND msg.id > $3
+    ORDER BY msg.id ASC
+    LIMIT $2
+    `,
+    [...params, memberId],
+  );
+
+  return result.rows.map((r: any) => mapMessageWithSender(r, memberId));
 }
 
 /**

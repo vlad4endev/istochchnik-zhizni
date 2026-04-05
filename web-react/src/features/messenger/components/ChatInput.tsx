@@ -7,6 +7,7 @@ import Picker from '@emoji-mart/react';
 import emojiData from '@emoji-mart/data';
 import { PollCreateModal } from './PollCreateModal';
 import { buildMentionToken, denormalizeMentionsForEditor } from '../mentionUtils';
+import { compressImageForMessengerUpload } from '../compressImageForUpload';
 
 type PendingAttachment = {
   file: File;
@@ -112,6 +113,7 @@ export function ChatInput({
   const [emojiPos, setEmojiPos] = useState<PopoverPos>(null);
   const uploadAbortRef = useRef<AbortController | null>(null);
   const typingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const typingStartDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const draftSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [mentionOpen, setMentionOpen] = useState(false);
   const [mentionStart, setMentionStart] = useState(0);
@@ -124,6 +126,22 @@ export function ChatInput({
     const draft = drafts[conversationId] || '';
     setContent(draft);
   }, [conversationId, drafts]);
+
+  useEffect(() => {
+    return () => {
+      if (typingStartDebounceRef.current) {
+        clearTimeout(typingStartDebounceRef.current);
+        typingStartDebounceRef.current = null;
+      }
+      if (typingTimerRef.current) {
+        clearTimeout(typingTimerRef.current);
+        typingTimerRef.current = null;
+      }
+      if (!isDraftPrivateConversationId(conversationId)) {
+        sendTypingStop(conversationId);
+      }
+    };
+  }, [conversationId, sendTypingStop]);
 
   // Sync content with editing state (читаемые @Имя вместо @[id])
   useEffect(() => {
@@ -310,10 +328,11 @@ export function ChatInput({
       setUploadPct(0);
       setUploading({ name: pending.file.name, size: pending.file.size });
       try {
-        // Compress images before upload (mobile-friendly).
-        const fileToUpload = pending.isImage ? await compressImage(pending.file) : pending.file;
         const ctrl = new AbortController();
         uploadAbortRef.current = ctrl;
+        const fileToUpload = pending.isImage
+          ? await compressImageForMessengerUpload(pending.file, ctrl.signal)
+          : pending.file;
         const uploaded = await api.uploadFile(fileToUpload, {
           onProgress: (pct) => setUploadPct(pct),
           signal: ctrl.signal,
@@ -499,13 +518,28 @@ export function ChatInput({
       }
     }
 
-    // Typing indicator
+    // Typing indicator: debounce start (~450ms), не спамим WS на каждый символ.
     if (!isDraftPrivateConversationId(conversationId)) {
-      sendTypingStart(conversationId);
-      if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
-      typingTimerRef.current = setTimeout(() => {
+      if (typingStartDebounceRef.current) {
+        clearTimeout(typingStartDebounceRef.current);
+        typingStartDebounceRef.current = null;
+      }
+      if (typingTimerRef.current) {
+        clearTimeout(typingTimerRef.current);
+        typingTimerRef.current = null;
+      }
+      if (value.trim()) {
+        typingStartDebounceRef.current = setTimeout(() => {
+          typingStartDebounceRef.current = null;
+          sendTypingStart(conversationId);
+        }, 450);
+        typingTimerRef.current = setTimeout(() => {
+          sendTypingStop(conversationId);
+          typingTimerRef.current = null;
+        }, 3000);
+      } else {
         sendTypingStop(conversationId);
-      }, 3000);
+      }
     }
 
     // Auto-save draft with debounce
@@ -929,57 +963,3 @@ function formatBytes(bytes: number): string {
   return `${fixed} ${units[i]}`;
 }
 
-async function compressImage(file: File): Promise<File> {
-  // Only compress images; keep originals for non-images.
-  if (!file.type.startsWith('image/')) return file;
-  // Already small enough.
-  if (file.size <= 900 * 1024) return file;
-
-  const MAX_DIM = 1600;
-  const QUALITY = 0.82;
-
-  const canvas = document.createElement('canvas');
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return file;
-
-  type ImgLike = { width: number; height: number };
-
-  const draw = async (img: ImageBitmap | HTMLImageElement) => {
-    const w0 = (img as unknown as ImgLike).width;
-    const h0 = (img as unknown as ImgLike).height;
-    const scale = Math.min(1, MAX_DIM / Math.max(w0, h0));
-    const w = Math.max(1, Math.round(w0 * scale));
-    const h = Math.max(1, Math.round(h0 * scale));
-    canvas.width = w;
-    canvas.height = h;
-    ctx.drawImage(img as any, 0, 0, w, h);
-  };
-
-  try {
-    // Fast path (Chrome/modern Safari)
-    const bitmap = await createImageBitmap(file);
-    await draw(bitmap);
-  } catch {
-    // Fallback (older iOS WebViews): load via <img>
-    const url = URL.createObjectURL(file);
-    try {
-      const img = await new Promise<HTMLImageElement>((resolve, reject) => {
-        const el = new Image();
-        el.onload = () => resolve(el);
-        el.onerror = () => reject(new Error('Image decode failed'));
-        el.src = url;
-      });
-      await draw(img);
-    } finally {
-      URL.revokeObjectURL(url);
-    }
-  }
-
-  const blob: Blob | null = await new Promise((resolve) =>
-    canvas.toBlob((b) => resolve(b), 'image/jpeg', QUALITY),
-  );
-  if (!blob) return file;
-
-  const name = (file.name || 'photo').replace(/\.\w+$/, '') + '.jpg';
-  return new File([blob], name, { type: 'image/jpeg' });
-}

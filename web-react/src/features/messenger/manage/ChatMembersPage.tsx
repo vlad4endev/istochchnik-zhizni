@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
-import { LuChevronRight, LuCrown, LuPlus, LuSearch, LuSettings2, LuShield, LuUser, LuX } from 'react-icons/lu';
+import { useParams } from 'react-router-dom';
+import { LuCrown, LuPlus, LuSearch, LuSettings2, LuShield, LuUser, LuX } from 'react-icons/lu';
 import { resolvePublicUrl } from '../../../lib/resolvePublicUrl';
 import * as api from '../api/messengerApi';
+import { ManageScreenShell, ManageSettingsGroup } from './ManageScreenShell';
 
 export function ChatMembersPage() {
   const { chatId } = useParams<{ chatId: string }>();
-  const navigate = useNavigate();
   const [members, setMembers] = useState<api.ConversationMember[]>([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
@@ -57,71 +57,57 @@ export function ChatMembersPage() {
   const canManageMembers = meta?.my_effective_permissions?.can_manage_chat === true;
 
   return (
-    <div className="mx-auto w-full max-w-xl px-4 pt-4 pb-24">
-      <div className="flex items-center justify-between gap-3">
-        <button
-          type="button"
-          onClick={() => navigate(-1)}
-          className="inline-flex min-h-[44px] items-center gap-2 rounded-xl bg-white/70 px-3 py-2 text-sm font-bold text-stone-700 shadow-sm ring-1 ring-stone-200/70 backdrop-blur"
-        >
-          <LuChevronRight className="rotate-180" />
-          Назад
-        </button>
-        <div className="flex items-center gap-2">
-          {canAddMembers ? (
-            <button
-              type="button"
-              onClick={() => setShowAdd(true)}
-              className="inline-flex min-h-[44px] items-center gap-2 rounded-xl bg-primary px-3 py-2 text-sm font-extrabold text-white shadow-md shadow-primary/20 ring-1 ring-primary/30"
-            >
-              <LuPlus />
-              Добавить
-            </button>
-          ) : null}
+    <ManageScreenShell
+      trailing={
+        canAddMembers ? (
           <button
             type="button"
-            onClick={() => navigate('/messenger')}
-            className="inline-flex min-h-[44px] items-center gap-2 rounded-xl bg-white/70 px-3 py-2 text-sm font-bold text-stone-700 shadow-sm ring-1 ring-stone-200/70 backdrop-blur"
+            onClick={() => setShowAdd(true)}
+            className="inline-flex min-h-[44px] items-center gap-1 rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-white shadow-sm active:opacity-90"
           >
-            <LuX />
-            Закрыть
+            <LuPlus className="h-4 w-4" aria-hidden />
+            <span className="hidden min-[380px]:inline">Добавить</span>
           </button>
+        ) : null
+      }
+    >
+      <ManageSettingsGroup className="mt-4">
+        <div className="flex items-center gap-3 px-3 py-2.5">
+          <LuSearch className="h-5 w-5 shrink-0 text-gray-400" aria-hidden />
+          <input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Поиск участника…"
+            className="min-h-[40px] w-full bg-transparent text-[16px] text-gray-900 outline-none placeholder:text-gray-400"
+          />
         </div>
-      </div>
+      </ManageSettingsGroup>
 
-      <div className="mt-5 flex items-center gap-3 rounded-3xl bg-white/80 px-4 py-3 shadow-[0_10px_30px_rgba(28,25,23,0.07)] ring-1 ring-stone-200/70 backdrop-blur">
-        <LuSearch className="text-stone-400" />
-        <input
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder="Поиск участника…"
-          className="w-full bg-transparent text-[15px] font-semibold text-stone-800 outline-none placeholder:text-stone-400"
-        />
-      </div>
-
-      <div className="mt-4">
+      <div className="mt-3">
         {loading ? (
-          <div className="space-y-3">
-            <div className="h-16 animate-pulse rounded-3xl bg-stone-100" />
-            <div className="h-16 animate-pulse rounded-3xl bg-stone-100" />
-            <div className="h-16 animate-pulse rounded-3xl bg-stone-100" />
-          </div>
+          <ManageSettingsGroup className="p-4">
+            <div className="space-y-2">
+              <div className="h-12 animate-pulse rounded-lg bg-gray-100" />
+              <div className="h-12 animate-pulse rounded-lg bg-gray-100" />
+              <div className="h-12 animate-pulse rounded-lg bg-gray-100" />
+            </div>
+          </ManageSettingsGroup>
         ) : err ? (
-          <p className="text-sm font-semibold text-red-600">{err}</p>
+          <p className="mt-2 text-sm font-medium text-red-600">{err}</p>
+        ) : filtered.length === 0 ? (
+          <p className="mt-8 text-center text-sm text-gray-500">Никого не нашли</p>
         ) : (
-          <div className="space-y-3">
-            {filtered.map((m) => (
+          <ManageSettingsGroup>
+            {filtered.map((m, i) => (
               <MemberRow
                 key={m.member_id}
                 m={m}
+                isLast={i === filtered.length - 1}
                 canEditPermissions={canManageMembers && m.role !== 'owner'}
                 onEditPermissions={() => setPermTarget(m)}
               />
             ))}
-            {filtered.length === 0 ? (
-              <p className="mt-6 text-center text-sm font-semibold text-stone-500">Никого не нашли</p>
-            ) : null}
-          </div>
+          </ManageSettingsGroup>
         )}
       </div>
 
@@ -150,7 +136,7 @@ export function ChatMembersPage() {
           }}
         />
       ) : null}
-    </div>
+    </ManageScreenShell>
   );
 }
 
@@ -167,10 +153,12 @@ const PERM_DEFAULTS: Record<
 
 function MemberRow({
   m,
+  isLast,
   canEditPermissions,
   onEditPermissions,
 }: {
   m: api.ConversationMember;
+  isLast?: boolean;
   canEditPermissions: boolean;
   onEditPermissions: () => void;
 }) {
@@ -182,8 +170,15 @@ function MemberRow({
     { text: 'Участник', Icon: LuUser, cls: 'bg-stone-50 text-stone-600 ring-stone-200/70' };
 
   return (
-    <div className="flex items-center gap-3 rounded-3xl bg-white/80 px-4 py-4 shadow-[0_10px_30px_rgba(28,25,23,0.07)] ring-1 ring-stone-200/70 backdrop-blur sm:gap-4 sm:px-5">
-      <div className="grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-2xl bg-primary/10 text-primary font-extrabold">
+    <div
+      className={[
+        'flex items-center gap-3 px-4 py-3 sm:gap-4',
+        !isLast ? 'border-b border-gray-200/70' : '',
+      ]
+        .filter(Boolean)
+        .join(' ')}
+    >
+      <div className="grid h-11 w-11 shrink-0 place-items-center overflow-hidden rounded-full bg-primary/10 text-sm font-semibold text-primary">
         {avatarSrc ? (
           <img src={avatarSrc} alt="" className="h-full w-full object-cover" loading="lazy" />
         ) : (
@@ -191,21 +186,21 @@ function MemberRow({
         )}
       </div>
       <div className="min-w-0 flex-1">
-        <p className="truncate text-[15px] font-extrabold text-stone-900">{displayName}</p>
-        <p className="mt-0.5 text-xs font-semibold text-stone-500">ID: {m.member_id}</p>
+        <p className="truncate text-[15px] font-medium text-gray-900">{displayName}</p>
+        <p className="mt-0.5 text-xs text-gray-500">ID: {m.member_id}</p>
       </div>
       <div className="flex shrink-0 flex-col items-end gap-2 sm:flex-row sm:items-center">
         {canEditPermissions ? (
           <button
             type="button"
             onClick={onEditPermissions}
-            className="inline-flex items-center gap-1 rounded-full bg-stone-100 px-3 py-1.5 text-[11px] font-extrabold text-stone-700 ring-1 ring-stone-200/80"
+            className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2.5 py-1 text-[11px] font-semibold text-gray-700"
           >
             <LuSettings2 size={14} />
             Права
           </button>
         ) : null}
-        <div className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-extrabold ring-1 ${badge.cls}`}>
+        <div className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-semibold ring-1 ${badge.cls}`}>
           <badge.Icon size={14} />
           {badge.text}
         </div>

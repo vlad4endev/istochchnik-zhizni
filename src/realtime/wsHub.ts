@@ -257,7 +257,7 @@ function removeClient(ws: WebSocket): void {
     if (memberClients.size === 0) {
       clientsByMember.delete(client.memberId);
       onlineMembers.delete(client.memberId);
-      broadcastPresence({ type: 'presence:offline', memberId: client.memberId });
+      persistLastSeenAndBroadcastOffline(client.memberId);
     }
   }
 
@@ -350,6 +350,30 @@ function broadcastPresence(event: WsMessengerEvent): void {
   for (const [, client] of clientsByWs) {
     safeSend(client.ws, data);
   }
+}
+
+/** Последнее отключение всех вкладок: пишем last_seen_at и шлём клиентам ISO-время. */
+function persistLastSeenAndBroadcastOffline(memberId: number): void {
+  void (async () => {
+    let lastSeenAt: string | undefined;
+    try {
+      const { query } = await import('../config/db');
+      const res = await query(
+        `UPDATE members SET last_seen_at = NOW(), updated_at = NOW() WHERE id = $1 RETURNING last_seen_at`,
+        [memberId],
+      );
+      const raw = res.rows[0]?.last_seen_at as string | Date | undefined;
+      if (raw != null) {
+        lastSeenAt = raw instanceof Date ? raw.toISOString() : new Date(raw).toISOString();
+      }
+    } catch {
+      /* колонка может отсутствовать на старых БД */
+    }
+    const event: WsMessengerEvent = lastSeenAt
+      ? { type: 'presence:offline', memberId, lastSeenAt }
+      : { type: 'presence:offline', memberId };
+    broadcastPresence(event);
+  })();
 }
 
 function safeSend(ws: WebSocket, data: string): void {

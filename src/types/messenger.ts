@@ -99,6 +99,8 @@ export interface ConversationListItem {
     first_name: string | null;
     last_name: string | null;
     avatar_url?: string | null;
+    /** ISO time of last disconnect (WS), optional until backfill */
+    last_seen_at?: string | null;
   } | null;
   /** Персонально для текущего пользователя (из conversation_participants). */
   my_muted?: boolean;
@@ -155,4 +157,4 @@ export type WsMessengerEvent =
   | { type: 'messages_read'; chatId: string; userId: number; lastReadMessageId: string }
   | { type: 'read:updated'; conversationId: string; memberId: number; lastReadMessageId: string }
   | { type: 'presence:online'; memberId: number }
-  | { type: 'presence:offline'; memberId: number };
+  | { type: 'presence:offline'; memberId: number; lastSeenAt?: string };

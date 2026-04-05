@@ -16,9 +16,11 @@ import {
 import { fetchBroadcastEmbed } from '../../../api/broadcast';
 import { fetchPodcastFeed, type PodcastEpisode } from '../../../api/resources';
 import {
+  getWeekBirthdays,
   formatCalendarDayKey,
   getActiveEvents,
   getCalendarDay,
+  type BirthdayWeekItem,
   type ChurchEventItem,
 } from '../../calendar/api';
 import { fetchMe } from '../../profile/api';
@@ -28,6 +30,7 @@ import {
   grantBroadcastAccess,
   isBroadcastLiveNow,
 } from '../../broadcast/liveAccess';
+import { useAuthStore } from '../../auth/authStore';
 
 type DashboardEvent = {
   id: string;
@@ -136,9 +139,17 @@ function pickUpcomingEvent(now: Date, items: ChurchEventItem[]): DashboardEvent 
   return toDashboardEvent(now, nearestAny.item, nearestAny.dt);
 }
 
+function formatBirthdayChipDate(ymd: string): string {
+  const d = new Date(`${ymd}T00:00:00`);
+  if (Number.isNaN(d.getTime())) return '';
+  return format(d, 'EEE, d MMM', { locale: ru });
+}
+
 export function DashboardPage() {
   const [now, setNow] = useState(() => new Date());
   const navigate = useNavigate();
+  const role = useAuthStore((s) => s.role);
+  const isAdmin = role === 'admin';
   const todayDateKey = useMemo(() => formatCalendarDayKey(now), [now]);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
@@ -214,6 +225,11 @@ export function DashboardPage() {
     queryFn: getActiveEvents,
     staleTime: 60_000,
   });
+  const birthdaysQ = useQuery({
+    queryKey: ['calendar', 'birthdays', 'week'],
+    queryFn: getWeekBirthdays,
+    staleTime: 300_000,
+  });
 
   const me = meQ.data ?? null;
   const fullName = `${me?.first_name ?? ''} ${me?.last_name ?? ''}`.trim() || me?.name || 'Профиль';
@@ -222,11 +238,12 @@ export function DashboardPage() {
   const memberToday = prayerQ.data?.members?.[0] ?? null;
   const todayLabel = formatTodayLabel(now);
 
-  const showBroadcastCard = isBroadcastLiveNow(now);
+  const showBroadcastCard = isAdmin || isBroadcastLiveNow(now);
   const broadcastDateLabel = extractBroadcastDateLabel(broadcastQ.data?.rutube_embed_code) ?? 'Сегодня, 10:30';
 
   const latestEpisode = pickLatestEpisode(sermonsQ.data?.episodes ?? []);
   const event = pickUpcomingEvent(now, eventsQ.data ?? []);
+  const birthdaysThisWeek: BirthdayWeekItem[] = birthdaysQ.data?.items ?? [];
 
   function onToggleFavorite(id: string) {
     setFavorites((prev) => {
@@ -267,6 +284,26 @@ export function DashboardPage() {
         </div>
 
         <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 sm:gap-4 xl:grid-cols-12">
+          {birthdaysThisWeek.length > 0 ? (
+            <section className="overflow-hidden rounded-3xl border border-violet-200/70 bg-gradient-to-br from-violet-50/80 via-white to-fuchsia-50/70 p-4 shadow-[var(--shadow-card)] sm:col-span-2 sm:p-5 xl:col-span-12">
+              <p className="text-[11px] font-extrabold uppercase tracking-[0.14em] text-violet-700">
+                День рождения на этой неделе
+              </p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {birthdaysThisWeek.map((row) => (
+                  <span
+                    key={`${row.id}-${row.week_date}`}
+                    className="inline-flex items-center gap-2 rounded-2xl border border-violet-200/70 bg-white/90 px-3 py-2 text-sm font-bold text-stone-800"
+                  >
+                    <span aria-hidden>🎉</span>
+                    <span>{row.name}</span>
+                    <span className="text-violet-700">{formatBirthdayChipDate(row.week_date)}</span>
+                  </span>
+                ))}
+              </div>
+            </section>
+          ) : null}
+
           <button
             type="button"
             onClick={() => navigate('/profile')}

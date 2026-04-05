@@ -43,6 +43,7 @@ export interface ConversationListItem {
     first_name: string | null;
     last_name: string | null;
     avatar_url?: string | null;
+    last_seen_at?: string | null;
   } | null;
   my_muted?: boolean;
   my_muted_until?: string | null;
@@ -128,9 +129,15 @@ export async function createGroupChat(title: string, type: ConversationType, mem
   return data;
 }
 
-export async function fetchMessages(conversationId: string, beforeId?: string, limit = 50): Promise<MessageWithSender[]> {
+export async function fetchMessages(
+  conversationId: string,
+  beforeId?: string,
+  limit = 50,
+  afterId?: string,
+): Promise<MessageWithSender[]> {
   const params: Record<string, string> = { limit: String(limit) };
   if (beforeId) params.before = beforeId;
+  if (afterId) params.after = afterId;
   const { data } = await apiClient.get<MessageWithSender[]>(
     `${BASE}/conversations/${conversationId}/messages`,
     { params },
@@ -236,6 +243,7 @@ export type PrivateChatProfile = {
   ministry_role: string | null;
   ministry_direction: string | null;
   birth_date: string | null; // YYYY-MM-DD
+  last_seen_at: string | null;
 };
 
 export async function fetchConversationMembers(conversationId: string): Promise<ConversationMember[]> {

@@ -1,4 +1,4 @@
-import { type ReactNode } from 'react';
+import { lazy, Suspense, type ReactNode } from 'react';
 import {
   Navigate,
   Route,
@@ -11,11 +11,9 @@ import { LoginPage } from '../features/auth/pages/LoginPage';
 import { useAuthStore } from '../features/auth/authStore';
 import { useAuthHydrated } from '../hooks/useAuthHydrated';
 
-import { AdminPage } from '../features/admin/pages/AdminPage';
 import { DailyPrayerPage } from '../features/calendar/pages/DailyPrayerPage';
 import { ProfilePage } from '../features/profile/pages/ProfilePage';
 import { BroadcastPage } from '../features/broadcast/pages/BroadcastPage';
-import { MessengerRoutes } from '../features/messenger/routes/MessengerRoutes';
 import { ResourcesRoutes } from '../features/resources/routes/ResourcesRoutes';
 import { PodcastsPage } from '../features/resources/pages/PodcastsPage';
 import { ServiceFlowPage } from '../features/serviceFlow/pages/ServiceFlowPage';
@@ -23,7 +21,25 @@ import { DashboardPage } from '../features/dashboard/pages/DashboardPage';
 
 import { Layout } from './Layout';
 
+const MessengerRoutes = lazy(async () => {
+  const m = await import('../features/messenger/routes/MessengerRoutes');
+  return { default: m.MessengerRoutes };
+});
+
+const AdminPage = lazy(async () => {
+  const m = await import('../features/admin/pages/AdminPage');
+  return { default: m.AdminPage };
+});
+
 const LOGIN_PATH = '/login';
+
+function RouteFallback(): ReactNode {
+  return (
+    <div className="flex min-h-[50dvh] w-full flex-1 items-center justify-center bg-[var(--surface)] text-stone-500">
+      <p className="text-sm font-medium">Загрузка…</p>
+    </div>
+  );
+}
 
 function HydrateSplash(): ReactNode {
   return (
@@ -74,7 +90,14 @@ export function AppRouter() {
         <Route index element={<Navigate to="/dashboard" replace />} />
         <Route path="dashboard" element={<DashboardPage />} />
         <Route path="prayer" element={<DailyPrayerPage />} />
-        <Route path="messenger/*" element={<MessengerRoutes />} />
+        <Route
+          path="messenger/*"
+          element={
+            <Suspense fallback={<RouteFallback />}>
+              <MessengerRoutes />
+            </Suspense>
+          }
+        />
         <Route path="broadcast" element={<BroadcastPage />} />
         <Route path="sermons" element={<PodcastsPage />} />
         <Route path="resources/*" element={<ResourcesRoutes />} />
@@ -84,7 +107,9 @@ export function AppRouter() {
           path="admin"
           element={
             <RequireAdmin>
-              <AdminPage />
+              <Suspense fallback={<RouteFallback />}>
+                <AdminPage />
+              </Suspense>
             </RequireAdmin>
           }
         />

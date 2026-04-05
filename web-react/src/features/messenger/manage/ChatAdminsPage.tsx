@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
-import { LuChevronRight, LuCrown, LuShield, LuX } from 'react-icons/lu';
+import { useParams } from 'react-router-dom';
+import { LuCrown, LuShield } from 'react-icons/lu';
 import * as api from '../api/messengerApi';
+import { ManageScreenShell, ManageSettingsGroup } from './ManageScreenShell';
 
 export function ChatAdminsPage() {
   const { chatId } = useParams<{ chatId: string }>();
-  const navigate = useNavigate();
   const [members, setMembers] = useState<api.ConversationMember[]>([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
@@ -37,55 +37,36 @@ export function ChatAdminsPage() {
   const owner = useMemo(() => members.find((m) => m.role === 'owner') ?? null, [members]);
   const admins = useMemo(() => members.filter((m) => m.role === 'admin'), [members]);
 
+  const rows: { m: api.ConversationMember; kind: 'owner' | 'admin' }[] = [
+    ...(owner ? [{ m: owner, kind: 'owner' as const }] : []),
+    ...admins.map((a) => ({ m: a, kind: 'admin' as const })),
+  ];
+
   return (
-    <div className="mx-auto w-full max-w-xl px-4 pt-4 pb-24">
-      <div className="flex items-center justify-between gap-3">
-        <button
-          type="button"
-          onClick={() => navigate(-1)}
-          className="inline-flex min-h-[44px] items-center gap-2 rounded-xl bg-white/70 px-3 py-2 text-sm font-bold text-stone-700 shadow-sm ring-1 ring-stone-200/70 backdrop-blur"
-        >
-          <LuChevronRight className="rotate-180" />
-          Назад
-        </button>
-        <button
-          type="button"
-          onClick={() => navigate('/messenger')}
-          className="inline-flex min-h-[44px] items-center gap-2 rounded-xl bg-white/70 px-3 py-2 text-sm font-bold text-stone-700 shadow-sm ring-1 ring-stone-200/70 backdrop-blur"
-        >
-          <LuX />
-          Закрыть
-        </button>
-      </div>
-
-      <div className="mt-6 rounded-3xl bg-white/80 p-5 shadow-[0_10px_30px_rgba(28,25,23,0.08)] ring-1 ring-stone-200/70 backdrop-blur">
-        <p className="text-lg font-extrabold text-stone-900">Администраторы</p>
-        <p className="mt-1 text-sm font-semibold text-stone-500">
-          Владелец всегда имеет полный доступ. Админам можно выдавать ограничения через персональные права.
-        </p>
-      </div>
-
-      <div className="mt-4 space-y-3">
+    <ManageScreenShell>
+      <ManageSettingsGroup className="mt-4 divide-y divide-gray-200/70">
+        <div className="p-4">
+          <p className="text-[17px] font-semibold text-gray-900">Администраторы</p>
+          <p className="mt-1 text-[13px] leading-snug text-gray-500">
+            Владелец с полным доступом. Для админов — персональные права в списке участников.
+          </p>
+        </div>
         {loading ? (
-          <>
-            <div className="h-16 animate-pulse rounded-3xl bg-stone-100" />
-            <div className="h-16 animate-pulse rounded-3xl bg-stone-100" />
-          </>
+          <div className="space-y-0 p-4">
+            <div className="h-12 animate-pulse rounded-lg bg-gray-100" />
+            <div className="mt-2 h-12 animate-pulse rounded-lg bg-gray-100" />
+          </div>
         ) : err ? (
-          <p className="text-sm font-semibold text-red-600">{err}</p>
+          <div className="p-4">
+            <p className="text-sm font-medium text-red-600">{err}</p>
+          </div>
+        ) : rows.length === 0 ? (
+          <div className="p-6 text-center text-sm text-gray-500">Администраторов нет</div>
         ) : (
-          <>
-            {owner ? <RoleRow m={owner} kind="owner" /> : null}
-            {admins.map((a) => (
-              <RoleRow key={a.member_id} m={a} kind="admin" />
-            ))}
-            {owner == null && admins.length === 0 ? (
-              <p className="mt-6 text-center text-sm font-semibold text-stone-500">Администраторов нет</p>
-            ) : null}
-          </>
+          rows.map((row) => <RoleRow key={row.m.member_id} m={row.m} kind={row.kind} />)
         )}
-      </div>
-    </div>
+      </ManageSettingsGroup>
+    </ManageScreenShell>
   );
 }
 
@@ -97,15 +78,15 @@ function RoleRow({ m, kind }: { m: api.ConversationMember; kind: 'owner' | 'admi
       : { text: 'Админ', Icon: LuShield, cls: 'bg-indigo-50 text-indigo-700 ring-indigo-200/70' };
 
   return (
-    <div className="flex items-center gap-4 rounded-3xl bg-white/80 px-5 py-4 shadow-[0_10px_30px_rgba(28,25,23,0.07)] ring-1 ring-stone-200/70 backdrop-blur">
-      <div className="grid h-12 w-12 place-items-center rounded-2xl bg-primary/10 text-primary font-extrabold">
+    <div className="flex items-center gap-3 px-4 py-3">
+      <div className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-primary/10 text-sm font-semibold text-primary">
         {displayName[0]?.toUpperCase() ?? 'U'}
       </div>
       <div className="min-w-0 flex-1">
-        <p className="truncate text-[15px] font-extrabold text-stone-900">{displayName}</p>
-        <p className="mt-0.5 text-xs font-semibold text-stone-500">ID: {m.member_id}</p>
+        <p className="truncate text-[15px] font-medium text-gray-900">{displayName}</p>
+        <p className="mt-0.5 text-xs text-gray-500">ID: {m.member_id}</p>
       </div>
-      <div className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-extrabold ring-1 ${badge.cls}`}>
+      <div className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-semibold ring-1 ${badge.cls}`}>
         <badge.Icon size={14} />
         {badge.text}
       </div>

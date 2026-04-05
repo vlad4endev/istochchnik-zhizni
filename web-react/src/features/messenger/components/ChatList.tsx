@@ -4,6 +4,7 @@ import { useChatStore, EMPTY_ARRAY, type ChatTab } from '../chatStore';
 import type { ConversationListItem, PatchMyConversationUiBody } from '../api/messengerApi';
 import { resolvePublicUrl } from '../../../lib/resolvePublicUrl';
 import { LuPin, LuVolume2, LuVolumeX, LuFolderOpen, LuEraser, LuTrash2 } from 'react-icons/lu';
+import { IoCheckmarkDone } from 'react-icons/io5';
 
 interface ChatListProps {
   onSelect: (id: string) => void;
@@ -40,8 +41,8 @@ export function ChatList({ onSelect, activeId }: ChatListProps) {
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col bg-slate-50">
-      <div className="shrink-0 px-3 pt-3">
+    <div className="flex min-h-0 flex-1 flex-col bg-white">
+      <div className="shrink-0 border-b border-gray-200/60 px-3 pt-2 pb-2">
         <SmartTabs
           activeTab={activeTab}
           onChange={setActiveTab}
@@ -52,22 +53,24 @@ export function ChatList({ onSelect, activeId }: ChatListProps) {
         />
       </div>
 
-      <div className="mt-1 min-h-0 flex-1 overflow-y-auto px-2 pb-2 sm:px-3 [scrollbar-gutter:stable]">
-        <div className="space-y-1">
-          {filtered.map((conv: ConversationListItem) => (
-            <ChatListItem
-              key={conv.id}
-              conv={conv}
-              isActive={conv.id === activeId}
-              isOnline={conv.type === 'private' && conv.other_member ? onlineMembers.has(conv.other_member.id) : false}
-              typingUsers={typingByConv[conv.id] || EMPTY_ARRAY}
-              onClick={() => onSelect(conv.id)}
-            />
+      <div className="min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable]">
+        <ul className="list-none" role="list">
+          {filtered.map((conv: ConversationListItem, index: number) => (
+            <li key={conv.id}>
+              <ChatListItem
+                conv={conv}
+                isActive={conv.id === activeId}
+                isLast={index === filtered.length - 1}
+                isOnline={conv.type === 'private' && conv.other_member ? onlineMembers.has(conv.other_member.id) : false}
+                typingUsers={typingByConv[conv.id] || EMPTY_ARRAY}
+                onClick={() => onSelect(conv.id)}
+              />
+            </li>
           ))}
-        </div>
+        </ul>
         {filtered.length === 0 ? (
           <div className="px-4 py-10 text-center">
-            <p className="text-sm font-semibold text-stone-500">Здесь пока пусто</p>
+            <p className="text-sm font-semibold text-gray-500">Здесь пока пусто</p>
           </div>
         ) : null}
       </div>
@@ -137,16 +140,20 @@ const MOVE_CANCEL_PX = 14;
 function ChatListItem({
   conv,
   isActive,
+  isLast,
   isOnline,
   typingUsers,
   onClick,
 }: {
   conv: ConversationListItem;
   isActive: boolean;
+  /** Последняя строка — без нижнего разделителя у текстовой колонки. */
+  isLast: boolean;
   isOnline: boolean;
   typingUsers: { memberId: number; memberName: string }[];
   onClick: () => void;
 }) {
+  const currentMemberId = useChatStore((s) => s.currentMemberId);
   const patchChatMyUi = useChatStore((s) => s.patchChatMyUi);
   const clearChatHistory = useChatStore((s) => s.clearChatHistory);
   const leaveChat = useChatStore((s) => s.leaveChat);
@@ -257,6 +264,21 @@ function ChatListItem({
   const isTyping = typingUsers.length > 0;
   const isPinned = conv.my_ui_pinned === true;
   const isMuted = conv.my_muted === true;
+  const lastFromMe =
+    lastMsg?.sender_id != null &&
+    currentMemberId != null &&
+    Number(lastMsg.sender_id) === Number(currentMemberId);
+  const previewLine = isTyping
+    ? `${typingUsers.map((u) => u.memberName.split(' ')[0]).join(', ')} печатает…`
+    : lastMsg
+      ? lastMsg.is_deleted
+        ? 'Сообщение удалено'
+        : lastMsg.sender_name
+          ? `${lastMsg.sender_name.split(' ')[0]}: ${lastMsg.content}`
+          : lastMsg.content
+      : 'Нет сообщений';
+  const showUnreadBadge = conv.unread_count > 0 && !isActive;
+  const showOutgoingChecks = lastFromMe && !showUnreadBadge && !isTyping;
 
   const menu = menuPos ? (
     <ChatRowContextMenu
@@ -278,10 +300,9 @@ function ChatListItem({
         type="button"
         role="listitem"
         className={[
-          'group flex w-full touch-manipulation items-center gap-3.5 rounded-2xl border px-3.5 py-2.5 text-left shadow-sm transition-colors duration-200 sm:py-3',
-          isActive
-            ? 'border-primary/20 bg-primary/95 text-white shadow-md shadow-primary/20'
-            : 'border-gray-100 bg-white text-gray-800 hover:border-gray-200 hover:bg-gray-50',
+          'tg-chat-row flex w-full touch-manipulation text-left transition-colors duration-150',
+          'active:bg-gray-100',
+          isActive ? 'bg-primary/[0.07]' : 'bg-white hover:bg-gray-50/90',
         ].join(' ')}
         onClick={handleRowClick}
         onPointerDown={onPointerDown}
@@ -290,78 +311,82 @@ function ChatListItem({
         onPointerCancel={onPointerEnd}
         onContextMenu={onContextMenu}
       >
-      <div className="relative h-11 w-11 shrink-0 sm:h-12 sm:w-12">
-        <div
-          className="grid h-11 w-11 place-items-center overflow-hidden rounded-full text-white shadow-sm sm:h-12 sm:w-12"
-          style={{ background: avatarColor }}
-        >
-          {avatarSrc ? (
-            <img src={avatarSrc} alt="" className="h-full w-full object-cover" loading="lazy" />
-          ) : (
-            <span className="text-sm font-extrabold sm:text-[15px]">{avatarLetter}</span>
-          )}
-        </div>
-        {conv.type === 'private' ? (
-          <span
-            className={[
-              'pointer-events-none absolute -bottom-1 -right-1 z-10 h-3.5 w-3.5 rounded-full border-2',
-              isActive ? 'border-primary' : 'border-white/80',
-              isOnline ? 'bg-emerald-500' : 'bg-stone-300',
-            ].join(' ')}
-            aria-hidden
-          />
-        ) : null}
-      </div>
-
-        <div className="flex min-w-0 flex-1 flex-col justify-center">
-        <div className="flex min-w-0 items-center justify-between gap-2">
-          <div
-            className={['flex min-w-0 items-center gap-1.5 truncate text-[15px] font-semibold tracking-tight', isActive ? 'text-white' : 'text-stone-900'].join(
-              ' ',
-            )}
-          >
-            {isPinned ? (
-              <LuPin className={['h-3.5 w-3.5 shrink-0', isActive ? 'text-amber-200' : 'text-amber-600'].join(' ')} aria-hidden />
+        {/* Колонка аватара: без нижней линии (как в Telegram). */}
+        <div className="flex shrink-0 items-center py-2 pl-3 pr-2">
+          <div className="relative h-12 w-12 shrink-0">
+            <div
+              className="grid h-12 w-12 place-items-center overflow-hidden rounded-full text-[15px] font-bold text-white"
+              style={{ background: avatarColor }}
+            >
+              {avatarSrc ? (
+                <img src={avatarSrc} alt="" className="h-full w-full object-cover" loading="lazy" />
+              ) : (
+                <span>{avatarLetter}</span>
+              )}
+            </div>
+            {conv.type === 'private' ? (
+              <span
+                className={[
+                  'pointer-events-none absolute bottom-0 right-0 z-10 h-3 w-3 rounded-full border-[2px] border-white',
+                  isOnline ? 'bg-emerald-500' : 'bg-gray-300',
+                ].join(' ')}
+                aria-hidden
+              />
             ) : null}
-            {isMuted ? (
-              <LuVolumeX className={['h-3.5 w-3.5 shrink-0', isActive ? 'text-white/70' : 'text-gray-400'].join(' ')} aria-hidden />
-            ) : null}
-            <span className="truncate">{displayName}</span>
           </div>
-          {lastMsg ? (
-            <span className={['shrink-0 text-xs font-medium', isActive ? 'text-white/80' : 'text-gray-400'].join(' ')}>
-              {formatTime(lastMsg.created_at)}
-            </span>
-          ) : null}
         </div>
 
-        <div className="mt-1 flex items-center justify-between gap-2">
-          <span className={['min-w-0 flex-1 truncate text-xs font-medium', isActive ? 'text-white/85' : 'text-gray-500'].join(' ')}>
-            {isTyping
-              ? `${typingUsers.map((u) => u.memberName.split(' ')[0]).join(', ')} печатает…`
-              : lastMsg
-                ? lastMsg.is_deleted
-                  ? 'Сообщение удалено'
-                  : lastMsg.sender_name
-                    ? `${lastMsg.sender_name.split(' ')[0]}: ${lastMsg.content}`
-                    : lastMsg.content
-                : 'Нет сообщений'}
-          </span>
+        {/* Текст: разделитель только здесь — от левого края текста до правого края экрана. */}
+        <div
+          className={[
+            'flex min-w-0 flex-1 flex-col justify-center py-2 pr-3',
+            !isLast ? 'border-b border-gray-200/60' : '',
+          ].join(' ')}
+        >
+          <div className="flex min-w-0 items-baseline justify-between gap-2">
+            <div className="flex min-w-0 flex-1 items-center gap-1">
+              {isPinned ? (
+                <LuPin className="h-3.5 w-3.5 shrink-0 text-amber-600" aria-hidden />
+              ) : null}
+              {isMuted ? (
+                <LuVolumeX className="h-3.5 w-3.5 shrink-0 text-gray-400" aria-hidden />
+              ) : null}
+              <span className="truncate font-semibold text-gray-900">{displayName}</span>
+            </div>
+            {lastMsg ? (
+              <time
+                className="shrink-0 whitespace-nowrap text-xs text-gray-500 tabular-nums"
+                dateTime={lastMsg.created_at}
+              >
+                {formatTime(lastMsg.created_at)}
+              </time>
+            ) : null}
+          </div>
 
-          {/* Hide unread badge for currently open chat (it is considered read). */}
-          {conv.unread_count > 0 && !isActive ? (
-            <span
+          <div className="mt-0.5 flex min-w-0 items-center gap-2">
+            <p
               className={[
-                'inline-flex min-w-[20px] items-center justify-center rounded-full px-1.5 py-0.5 text-[11px] font-extrabold',
-                'bg-primary text-white',
+                'min-w-0 flex-1 truncate text-sm leading-snug',
+                isTyping ? 'font-medium text-primary' : 'text-gray-500',
               ].join(' ')}
             >
-              {conv.unread_count > 99 ? '99+' : conv.unread_count}
-            </span>
-          ) : null}
+              {previewLine}
+            </p>
+            <div className="flex shrink-0 items-center justify-end">
+              {showUnreadBadge ? (
+                <span className="flex h-[22px] min-w-[22px] items-center justify-center rounded-full bg-primary px-1.5 text-xs font-bold text-white">
+                  {conv.unread_count > 99 ? '99+' : conv.unread_count}
+                </span>
+              ) : showOutgoingChecks ? (
+                <IoCheckmarkDone
+                  className="h-[18px] w-[18px] shrink-0 text-primary/70"
+                  aria-label="Исходящее сообщение"
+                />
+              ) : null}
+            </div>
+          </div>
         </div>
-      </div>
-    </button>
+      </button>
       {typeof document !== 'undefined' && menuPos ? createPortal(menu, document.body) : null}
     </>
   );

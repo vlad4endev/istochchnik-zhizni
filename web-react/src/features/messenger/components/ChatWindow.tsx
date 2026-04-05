@@ -1,4 +1,5 @@
 import { useEffect, useRef, useMemo, useCallback, useState, useLayoutEffect } from 'react';
+import { useVirtualizer } from '@tanstack/react-virtual';
 import { useNavigate } from 'react-router-dom';
 import { useChatStore, EMPTY_ARRAY, isDraftPrivateConversationId } from '../chatStore';
 import * as api from '../api/messengerApi';
@@ -7,6 +8,7 @@ import { ChatInput } from './ChatInput';
 import { SearchChat } from './SearchChat';
 import { LuArrowLeft, LuSearch } from 'react-icons/lu';
 import { resolvePublicUrl } from '../../../lib/resolvePublicUrl';
+import { formatMessengerLastSeen } from '../lastSeenUtils';
 import './messenger.css';
 
 interface ChatWindowProps {
@@ -34,6 +36,7 @@ export function ChatWindow({
   const draftPeer = useChatStore((s) => s.privateDraftPeer);
   const typingUsers = useChatStore((s) => s.typingByConv[conversationId] || EMPTY_ARRAY);
   const onlineMembers = useChatStore((s) => s.onlineMembers);
+  const memberLastSeenAt = useChatStore((s) => s.memberLastSeenAt);
   const currentMemberId = useChatStore((s) => s.currentMemberId);
   const pinnedBump = useChatStore((s) => s.pinnedBumpByConv[conversationId] ?? 0);
 
@@ -50,6 +53,7 @@ export function ChatWindow({
   const visibleForeignIdsRef = useRef<Set<string>>(new Set());
   const flushTimerRef = useRef<number | null>(null);
   const scrollMeasureRafRef = useRef<number | null>(null);
+  const readObserverRef = useRef<IntersectionObserver | null>(null);
 
   const conv = useMemo(() => conversations.find((c) => c.id === conversationId), [conversations, conversationId]);
 
@@ -167,19 +171,74 @@ export function ChatWindow({
     }, 120);
   }, [conversationId, markReadUpTo]);
 
-  const jumpToMessage = useCallback((messageId: string) => {
-    const id = String(messageId || '').trim();
-    if (!/^\d+$/.test(id)) return;
-    const el = nodeByMsgIdRef.current.get(id) ?? null;
-    if (!el) return;
-    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    el.classList.remove('msg-jump-highlight');
-    // next frame ensures animation restarts
-    requestAnimationFrame(() => {
-      el.classList.add('msg-jump-highlight');
-      window.setTimeout(() => el.classList.remove('msg-jump-highlight'), 900);
+  const groupedMessages = useMemo(() => {
+    return messages.map((msg, idx) => {
+      const prev = messages[idx - 1];
+      const next = messages[idx + 1];
+      const isGroupedPrev =
+        !!prev &&
+        prev.sender_id === msg.sender_id &&
+        new Date(msg.created_at).getTime() - new Date(prev.created_at).getTime() < 300000;
+      const isGroupedNext =
+        !!next &&
+        next.sender_id === msg.sender_id &&
+        new Date(next.created_at).getTime() - new Date(msg.created_at).getTime() < 300000;
+      const msgDate = new Date(msg.created_at).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' });
+      const prevDate = prev ? new Date(prev.created_at).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' }) : null;
+      return {
+        ...msg,
+        isGroupedPrev,
+        isGroupedNext,
+        showDate: msgDate !== prevDate,
+        dateLabel: msgDate,
+      };
     });
-  }, []);
+  }, [messages]);
+
+  const listCount = groupedMessages.length;
+  const rowVirtualizer = useVirtualizer({
+    count: listCount,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: (index) => {
+      const row = groupedMessages[index];
+      if (!row) return 80;
+      return row.showDate ? 100 : 76;
+    },
+    overscan: 12,
+    gap: 10,
+    getItemKey: (index) => {
+      const row = groupedMessages[index];
+      return row ? String(row.id) : index;
+    },
+  });
+
+  const jumpToMessage = useCallback(
+    (messageId: string) => {
+      const id = String(messageId || '').trim();
+      if (!/^\d+$/.test(id)) return;
+      const idx = groupedMessages.findIndex((m) => String(m.id) === id);
+      if (idx >= 0) {
+        rowVirtualizer.scrollToIndex(idx, { align: 'center', behavior: 'smooth' });
+      }
+      const highlight = () => {
+        const el = nodeByMsgIdRef.current.get(id) ?? null;
+        if (!el) return false;
+        el.classList.remove('msg-jump-highlight');
+        requestAnimationFrame(() => {
+          el.classList.add('msg-jump-highlight');
+          window.setTimeout(() => el.classList.remove('msg-jump-highlight'), 900);
+        });
+        return true;
+      };
+      requestAnimationFrame(() => {
+        if (highlight()) return;
+        window.setTimeout(() => {
+          highlight();
+        }, 450);
+      });
+    },
+    [groupedMessages, rowVirtualizer],
+  );
 
   useEffect(() => {
     const root = scrollRef.current;
@@ -216,12 +275,14 @@ export function ChatWindow({
       },
     );
 
-    // Observe current nodes
+    readObserverRef.current = observer;
+
     for (const [, node] of nodeByMsgIdRef.current) {
       observer.observe(node);
     }
 
     return () => {
+      readObserverRef.current = null;
       if (flushTimerRef.current != null) {
         window.clearTimeout(flushTimerRef.current);
         flushTimerRef.current = null;
@@ -255,6 +316,8 @@ export function ChatWindow({
     };
   }, []);
 
+  const virtualListTotalSize = rowVirtualizer.getTotalSize();
+
   useLayoutEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
@@ -267,10 +330,15 @@ export function ChatWindow({
       return;
     }
 
-    if (nearBottomRef.current) {
+    if (nearBottomRef.current && listCount > 0) {
+      rowVirtualizer.scrollToIndex(listCount - 1, { align: 'end', behavior: 'auto' });
+      return;
+    }
+
+    if (nearBottomRef.current && listCount === 0) {
       el.scrollTop = el.scrollHeight;
     }
-  }, [messages, conversationId]);
+  }, [messages, conversationId, listCount, virtualListTotalSize, rowVirtualizer]);
 
   const displayName = useMemo(() => {
     if (isDraft && draftPeer) {
@@ -314,102 +382,91 @@ export function ChatWindow({
     if (isDraft) return 'черновик · чат появится после 1 сообщения';
     if (!conv) return '';
     if (conv.type === 'private' && conv.other_member) {
-      return isOnline ? 'в сети' : 'был(а) недавно';
+      if (isOnline) return 'в сети';
+      const pid = conv.other_member.id;
+      const iso = memberLastSeenAt[pid] ?? conv.other_member.last_seen_at ?? null;
+      return formatMessengerLastSeen(iso);
     }
     return conv.type === 'channel' ? 'канал' : 'группа';
-  }, [conv, typingUsers, isOnline, isDraft]);
+  }, [conv, typingUsers, isOnline, isDraft, memberLastSeenAt]);
 
-  const groupedMessages = useMemo(() => {
-    return messages.map((msg, idx) => {
-      const prev = messages[idx - 1];
-      const next = messages[idx + 1];
-      const isGroupedPrev =
-        !!prev &&
-        prev.sender_id === msg.sender_id &&
-        new Date(msg.created_at).getTime() - new Date(prev.created_at).getTime() < 300000;
-      const isGroupedNext =
-        !!next &&
-        next.sender_id === msg.sender_id &&
-        new Date(next.created_at).getTime() - new Date(msg.created_at).getTime() < 300000;
-      const msgDate = new Date(msg.created_at).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' });
-      const prevDate = prev ? new Date(prev.created_at).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' }) : null;
-      return {
-        ...msg,
-        isGroupedPrev,
-        isGroupedNext,
-        showDate: msgDate !== prevDate,
-        dateLabel: msgDate,
-      };
-    });
-  }, [messages]);
+  const headerStatusClass =
+    typingUsers.length > 0
+      ? 'font-medium text-primary'
+      : isDraft || (conv && conv.type !== 'private')
+        ? 'text-gray-500'
+        : 'text-blue-500';
 
   return (
-    <div className="tg-chat-window box-border flex w-full max-w-full min-w-0 min-h-0 flex-1 flex-col overflow-hidden overflow-x-hidden bg-gray-50">
+    <div className="tg-chat-window box-border flex w-full max-w-full min-w-0 min-h-0 flex-1 flex-col overflow-hidden overflow-x-hidden">
       {/* Safe-area только на корне (.tg-chat-window) в messenger.css для iOS — не дублировать здесь */}
-      <header className="sticky top-0 z-[100] w-full shrink-0 border-b border-gray-100 bg-white shadow-sm">
-        <div className="mx-auto flex h-14 w-full min-w-0 items-center justify-between gap-1.5 px-2 py-2 sm:h-16 sm:gap-3 sm:px-4 md:px-6">
-          <button
-            type="button"
-            onClick={onBack}
-            aria-label="Назад к списку чатов"
-            className="shrink-0 inline-flex h-10 w-10 items-center justify-center rounded-full text-stone-600 transition-colors duration-200 hover:bg-stone-100 active:scale-[0.98]"
-          >
-            <LuArrowLeft size={22} strokeWidth={2.25} />
-          </button>
+      <header className="sticky top-0 z-[100] w-full shrink-0 border-b border-gray-200/60 bg-white">
+        <div className="mx-auto flex h-[52px] min-h-[52px] w-full min-w-0 max-w-full items-stretch px-1 sm:px-2">
+          {/* Слева: как в iOS — стрелка + «Назад» (синий акцент как в Telegram). */}
+          <div className="flex shrink-0 items-center">
+            <button
+              type="button"
+              onClick={onBack}
+              aria-label="Назад к списку чатов"
+              className="flex max-w-[120px] items-center gap-0.5 rounded-lg py-2 pl-1.5 pr-2 text-[17px] leading-none text-blue-500 transition-colors active:bg-gray-100 sm:pl-2"
+            >
+              <LuArrowLeft className="h-[22px] w-[22px] shrink-0" strokeWidth={2.2} aria-hidden />
+              <span className="truncate font-normal">Назад</span>
+            </button>
+          </div>
 
-          {/* Middle: Main info (Avatar + Name & Subtitle) - Stricly capped via flex-1 min-w-0 */}
+          {/* По центру: аватар 32px, имя, статус (личные чаты — text-blue-500 как в ТГ). */}
           <div
             role={isDraft ? undefined : 'button'}
             tabIndex={isDraft ? -1 : 0}
             onClick={isDraft ? undefined : () => navigate(`/messenger/chat/${conversationId}/manage`)}
-            onKeyDown={isDraft ? undefined : (e) => { if (e.key === 'Enter' || e.key === ' ') navigate(`/messenger/chat/${conversationId}/manage`); }}
-            className="flex min-w-0 flex-1 items-center gap-2 rounded-2xl px-1.5 py-1 text-left transition-colors duration-200 hover:bg-stone-50 active:scale-[0.99] sm:gap-3 sm:px-3"
+            onKeyDown={
+              isDraft
+                ? undefined
+                : (e) => {
+                    if (e.key === 'Enter' || e.key === ' ') navigate(`/messenger/chat/${conversationId}/manage`);
+                  }
+            }
+            className="flex min-w-0 flex-1 flex-col items-center justify-center px-1 py-1 text-center transition-colors active:bg-gray-100 sm:px-2"
           >
-            <div
-              className="grid h-9 w-9 shrink-0 place-items-center overflow-hidden rounded-full font-semibold text-white sm:h-10 sm:w-10"
-              style={{
-                backgroundColor: headerAvatarColor,
-                fontSize: 'clamp(0.75rem, 2vw, 0.9rem)',
-              }}
-            >
-              {headerAvatarSrc ? (
-                <img src={headerAvatarSrc} alt={displayName} className="h-full w-full object-cover" />
-              ) : (
-                <span>{headerInitial}</span>
-              )}
-            </div>
-
-            <div className="flex min-w-0 flex-1 flex-col justify-center">
-              <div className="w-full truncate text-[15px] font-semibold leading-tight text-stone-900 sm:text-[17px]">
+            <div className="flex max-w-full min-w-0 flex-col items-center gap-0.5">
+              <div
+                className="grid h-8 w-8 shrink-0 place-items-center overflow-hidden rounded-full text-[13px] font-semibold text-white"
+                style={{ backgroundColor: headerAvatarColor }}
+              >
+                {headerAvatarSrc ? (
+                  <img src={headerAvatarSrc} alt="" className="h-full w-full object-cover" />
+                ) : (
+                  <span>{headerInitial}</span>
+                )}
+              </div>
+              <div className="w-full max-w-[min(100%,220px)] truncate text-[17px] font-semibold leading-tight text-gray-900">
                 {displayName}
               </div>
-              <div
-                className={[
-                  'w-full truncate text-[11px] leading-tight sm:text-xs',
-                  typingUsers.length > 0 ? 'text-primary font-medium' : 'text-stone-500',
-                ].join(' ')}
-              >
+              <div className={['w-full max-w-[min(100%,260px)] truncate text-xs leading-tight', headerStatusClass].join(' ')}>
                 {headerSubtitle}
               </div>
             </div>
           </div>
 
-          {/* Right: Actions */}
-          <div className="flex shrink-0 items-center gap-0.5 sm:gap-1">
+          {/* Справа: действия (фиксированная ширина — центр остаётся визуально ровным). */}
+          <div className="flex w-[88px] shrink-0 items-center justify-end gap-0 sm:w-[92px] sm:gap-0.5">
             <button
               type="button"
               onClick={() => navigate(`/messenger/chat/${conversationId}/manage`)}
               aria-label="Управление чатом"
               title="Управление"
-            className="inline-flex h-10 w-10 items-center justify-center rounded-full text-stone-600 transition-colors duration-200 hover:bg-stone-100 active:scale-[0.98]"
+              className="inline-flex h-10 w-10 items-center justify-center rounded-full text-gray-600 transition-colors active:bg-gray-100"
             >
-              <span className="text-lg font-black leading-none" aria-hidden>⋮</span>
+              <span className="text-lg font-black leading-none" aria-hidden>
+                ⋮
+              </span>
             </button>
             <button
               type="button"
               onClick={() => setShowSearch(true)}
               aria-label="Поиск по сообщениям"
-            className="inline-flex h-10 w-10 items-center justify-center rounded-full text-stone-600 transition-colors duration-200 hover:bg-stone-100 active:scale-[0.98]"
+              className="inline-flex h-10 w-10 items-center justify-center rounded-full text-gray-600 transition-colors active:bg-gray-100"
             >
               <LuSearch size={20} strokeWidth={2.25} />
             </button>
@@ -436,7 +493,7 @@ export function ChatWindow({
       ) : null}
 
       <div
-        className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto bg-slate-50 px-3 py-3 sm:gap-3 sm:p-4"
+        className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto bg-transparent px-3 py-3 sm:gap-3 sm:p-4"
         ref={scrollRef}
         onScroll={handleScroll}
         role="log"
@@ -445,7 +502,7 @@ export function ChatWindow({
       >
         {hasMore ? (
           <div className="flex justify-center">
-            <div className="rounded-full bg-white/80 px-3 py-1 text-[11px] font-semibold text-stone-500 shadow-sm ring-1 ring-stone-200/60">
+            <div className="rounded-full bg-white/90 px-3 py-1 text-[11px] font-semibold text-stone-600 shadow-sm ring-1 ring-stone-200/50">
               {loading ? 'Загрузка истории…' : '↑ Ранние сообщения'}
             </div>
           </div>
@@ -459,39 +516,71 @@ export function ChatWindow({
             </p>
           </div>
         ) : (
-          groupedMessages.map((msg) => (
-            <div key={msg.id} className="flex flex-col gap-3">
-              {msg.showDate ? (
-                <div className="flex justify-center">
-                  <span className="rounded-full bg-white/80 px-3 py-1 text-[11px] font-semibold text-stone-600 shadow-sm ring-1 ring-stone-200/60">
-                    {msg.dateLabel}
-                  </span>
+          <div
+            key={conversationId}
+            className="relative w-full"
+            style={{ height: `${rowVirtualizer.getTotalSize()}px` }}
+          >
+            {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+              const msg = groupedMessages[virtualRow.index];
+              if (!msg) return null;
+              return (
+                <div
+                  key={virtualRow.key}
+                  data-index={virtualRow.index}
+                  ref={rowVirtualizer.measureElement}
+                  className="left-0 top-0 w-full"
+                  style={{
+                    position: 'absolute',
+                    transform: `translateY(${virtualRow.start}px)`,
+                  }}
+                >
+                  <div className="flex flex-col gap-3">
+                    {msg.showDate ? (
+                      <div className="flex justify-center">
+                        <span className="rounded-full bg-white/90 px-3 py-1 text-[11px] font-semibold text-stone-600 shadow-sm ring-1 ring-stone-200/50">
+                          {msg.dateLabel}
+                        </span>
+                      </div>
+                    ) : null}
+                    <div
+                      ref={(node) => {
+                        const map = nodeByMsgIdRef.current;
+                        const obs = readObserverRef.current;
+                        const idStr = String(msg.id);
+                        if (!/^\d+$/.test(idStr)) return;
+                        const prev = map.get(idStr) ?? null;
+                        if (prev && obs) {
+                          try {
+                            obs.unobserve(prev);
+                          } catch {
+                            /* ignore */
+                          }
+                        }
+                        if (node) {
+                          map.set(idStr, node);
+                          node.dataset.msgId = idStr;
+                          if (obs) obs.observe(node);
+                        } else {
+                          map.delete(idStr);
+                        }
+                      }}
+                    >
+                      <MessageBubble
+                        message={msg}
+                        isGroupedPrev={msg.isGroupedPrev}
+                        isGroupedNext={msg.isGroupedNext}
+                        onJumpToMessage={jumpToMessage}
+                        participantLabelById={participantLabelById}
+                        canPinMessages={canPinMessages}
+                        onPinToggle={handlePinToggle}
+                      />
+                    </div>
+                  </div>
                 </div>
-              ) : null}
-              <div
-                ref={(node) => {
-                  const map = nodeByMsgIdRef.current;
-                  if (!/^\d+$/.test(String(msg.id))) return;
-                  if (node) {
-                    map.set(String(msg.id), node);
-                    node.dataset.msgId = String(msg.id);
-                  } else {
-                    map.delete(String(msg.id));
-                  }
-                }}
-              >
-                <MessageBubble
-                  message={msg}
-                  isGroupedPrev={msg.isGroupedPrev}
-                  isGroupedNext={msg.isGroupedNext}
-                  onJumpToMessage={jumpToMessage}
-                  participantLabelById={participantLabelById}
-                  canPinMessages={canPinMessages}
-                  onPinToggle={handlePinToggle}
-                />
-              </div>
-            </div>
-          ))
+              );
+            })}
+          </div>
         )}
       </div>
 

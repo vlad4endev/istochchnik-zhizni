@@ -65,6 +65,8 @@ interface ChatState {
 
   // --- Online presence ---
   onlineMembers: Set<number>;
+  /** ISO last disconnect (WS + список чатов), для подписи «был(а) …». */
+  memberLastSeenAt: Record<number, string>;
 
   // --- Total unread ---
   totalUnread: number;
@@ -101,6 +103,8 @@ interface ChatState {
   setActiveConversation: (id: string | null) => void;
   openPrivateDraft: (peer: SearchMember) => void;
   loadMessages: (conversationId: string, older?: boolean) => Promise<void>;
+  /** После reconnect: догрузить сообщения новее max(реальный id) без сброса истории. */
+  catchUpMessagesAfter: (conversationId: string) => Promise<void>;
   hydrateFromCache: () => void;
 
   /**
@@ -150,7 +154,7 @@ interface ChatState {
   handleConvCreated: (conv: ConversationListItem) => void;
   handleReadUpdated: (convId: string, memberId: number, lastReadMsgId: string) => void;
   handlePresenceOnline: (memberId: number) => void;
-  handlePresenceOffline: (memberId: number) => void;
+  handlePresenceOffline: (memberId: number, lastSeenAt?: string) => void;
   setOnlineMembers: (ids: number[]) => void;
   setCurrentMemberId: (id: number) => void;
 
@@ -388,6 +392,108 @@ function dedupeMessages(messages: MessageWithSender[]): MessageWithSender[] {
   return out;
 }
 
+/** Максимальный числовой id сообщения (без temp-*), для catch-up после reconnect. */
+function maxRealServerMessageId(messages: MessageWithSender[]): string | null {
+  let best: bigint | null = null;
+  let bestStr: string | null = null;
+  for (const m of messages) {
+    const idKey = String(m.id);
+    if (idKey.startsWith('temp-')) continue;
+    if (!/^\d+$/.test(idKey)) continue;
+    try {
+      const b = BigInt(idKey);
+      if (best === null || b > best) {
+        best = b;
+        bestStr = idKey;
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+  return bestStr;
+}
+
+function sortMessagesByNumericIdAsc(messages: MessageWithSender[]): MessageWithSender[] {
+  const decorated = messages.map((m, i) => {
+    const idKey = String(m.id);
+    if (idKey.startsWith('temp-') || !/^\d+$/.test(idKey)) {
+      return { m, rank: null as bigint | null, i };
+    }
+    try {
+      return { m, rank: BigInt(idKey), i };
+    } catch {
+      return { m, rank: null, i };
+    }
+  });
+  decorated.sort((a, b) => {
+    if (a.rank !== null && b.rank !== null) {
+      if (a.rank < b.rank) return -1;
+      if (a.rank > b.rank) return 1;
+      return 0;
+    }
+    if (a.rank !== null) return -1;
+    if (b.rank !== null) return 1;
+    return a.i - b.i;
+  });
+  return decorated.map((x) => x.m);
+}
+
+function findConversationIdContainingMessage(
+  messagesByConv: Record<string, MessageWithSender[]>,
+  messageId: string,
+): string | null {
+  const mid = String(messageId);
+  for (const [cid, list] of Object.entries(messagesByConv)) {
+    if (list.some((m) => String(m.id) === mid)) return cid;
+  }
+  return null;
+}
+
+function listPreviewFromMessage(tail: MessageWithSender): NonNullable<ConversationListItem['last_message']> {
+  return {
+    id: String(tail.id),
+    content: tail.content,
+    sender_id: tail.sender_id,
+    sender_name: tail.sender_name,
+    created_at: tail.created_at,
+    is_deleted: tail.is_deleted,
+  };
+}
+
+/** Если правили/удалили текущее превью в списке чатов — обновить с учётом нового хвоста треда. */
+function syncConversationLastMessageAfterMutation(
+  conversations: ConversationListItem[],
+  convId: string,
+  newMsgs: MessageWithSender[],
+  touchedMessageId: string,
+): ConversationListItem[] {
+  const conv = conversations.find((c) => c.id === convId);
+  if (!conv?.last_message || String(conv.last_message.id) !== String(touchedMessageId)) {
+    return conversations;
+  }
+  if (!newMsgs.length) {
+    return conversations.map((c) => (c.id === convId ? { ...c, last_message: null } : c));
+  }
+  const tail = newMsgs[newMsgs.length - 1];
+  return conversations.map((c) =>
+    c.id === convId ? { ...c, last_message: listPreviewFromMessage(tail) } : c,
+  );
+}
+
+function syncConversationLastMessageOnEdit(
+  conversations: ConversationListItem[],
+  convId: string,
+  messageId: string,
+  content: string,
+): ConversationListItem[] {
+  return conversations.map((c) => {
+    if (c.id !== convId || !c.last_message || String(c.last_message.id) !== String(messageId)) {
+      return c;
+    }
+    return { ...c, last_message: { ...c.last_message, content } };
+  });
+}
+
 // ─── Store ────────────────────────────────────────────────────
 
 export const useChatStore = create<ChatState>((set, get) => ({
@@ -406,6 +512,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   typingByConv: {},
   pinnedBumpByConv: {},
   onlineMembers: new Set(),
+  memberLastSeenAt: {},
   totalUnread: 0,
   degradedMode: false,
   outboxSize: 0,
@@ -447,12 +554,20 @@ export const useChatStore = create<ChatState>((set, get) => ({
     try {
       const conversations = await api.fetchConversations();
       const totalUnread = conversations.reduce((sum, c) => sum + c.unread_count, 0);
+      const prevSeen = get().memberLastSeenAt;
+      const memberLastSeenAt = { ...prevSeen };
+      for (const c of conversations) {
+        const om = c.other_member;
+        const ls = om?.last_seen_at;
+        if (om && ls) memberLastSeenAt[om.id] = ls;
+      }
       set({
         conversations,
         conversationsLoaded: true,
         totalUnread,
         degradedMode: false,
         conversationsLastLoadedAt: Date.now(),
+        memberLastSeenAt,
       });
       saveSnapshot(get());
     } catch (e) {
@@ -532,6 +647,67 @@ export const useChatStore = create<ChatState>((set, get) => ({
       saveSnapshot(get());
     } catch (e) {
       console.error('[chatStore] loadMessages error:', e);
+      set({ degradedMode: true });
+    } finally {
+      set((s) => ({
+        messagesLoading: { ...s.messagesLoading, [conversationId]: false },
+      }));
+    }
+  },
+
+  catchUpMessagesAfter: async (conversationId) => {
+    if (isDraftPrivateConversationId(conversationId)) return;
+    const state = get();
+    if (state.messagesLoading[conversationId]) return;
+
+    const existing = state.messagesByConv[conversationId] || [];
+    const afterSeed = maxRealServerMessageId(existing);
+    if (afterSeed == null) {
+      set((s) => ({
+        messagesLastLoadedAt: { ...s.messagesLastLoadedAt, [conversationId]: 0 },
+      }));
+      await get().loadMessages(conversationId);
+      return;
+    }
+
+    set((s) => ({
+      messagesLoading: { ...s.messagesLoading, [conversationId]: true },
+    }));
+
+    try {
+      const limit = 100;
+      const batch: MessageWithSender[] = [];
+      let cursor = afterSeed;
+      for (let round = 0; round < 20; round += 1) {
+        const page = await api.fetchMessages(conversationId, undefined, limit, cursor);
+        if (!page.length) break;
+        batch.push(...page);
+        const last = page[page.length - 1];
+        const lastId = String(last.id);
+        if (!/^\d+$/.test(lastId)) break;
+        if (BigInt(lastId) <= BigInt(cursor)) break;
+        if (page.length < limit) break;
+        cursor = lastId;
+      }
+
+      if (batch.length === 0) {
+        set({ degradedMode: false });
+        return;
+      }
+
+      set((s) => {
+        const prev = s.messagesByConv[conversationId] || [];
+        const merged = dedupeMessages([...prev, ...batch]);
+        const sorted = sortMessagesByNumericIdAsc(merged);
+        return {
+          messagesByConv: { ...s.messagesByConv, [conversationId]: sorted },
+          messagesLastLoadedAt: { ...s.messagesLastLoadedAt, [conversationId]: Date.now() },
+          degradedMode: false,
+        };
+      });
+      saveSnapshot(get());
+    } catch (e) {
+      console.error('[chatStore] catchUpMessagesAfter error:', e);
       set({ degradedMode: true });
     } finally {
       set((s) => ({
@@ -769,21 +945,25 @@ export const useChatStore = create<ChatState>((set, get) => ({
   // ─── Edit message ─────────────────────────────────────────
 
   editMessage: async (messageId, content) => {
-    const convId = get().activeConversationId;
+    const state = get();
+    const mid = String(messageId);
+    const convId =
+      findConversationIdContainingMessage(state.messagesByConv, mid) ?? state.activeConversationId;
     if (!convId) return;
 
     const canonical = normalizeMentionsToCanonical(String(content ?? '').trim());
 
     // Optimistic edit
-    set((s) => ({
-      messagesByConv: {
-        ...s.messagesByConv,
-        [convId]: (s.messagesByConv[convId] || []).map((m) =>
-          m.id === messageId ? { ...m, content: canonical, is_edited: true } : m,
-        ),
-      },
-      editingMessage: null,
-    }));
+    set((s) => {
+      const nextMsgs = (s.messagesByConv[convId] || []).map((m) =>
+        String(m.id) === mid ? { ...m, content: canonical, is_edited: true } : m,
+      );
+      return {
+        messagesByConv: { ...s.messagesByConv, [convId]: nextMsgs },
+        conversations: syncConversationLastMessageOnEdit(s.conversations, convId, mid, canonical),
+        editingMessage: null,
+      };
+    });
 
     try {
       await api.editMessage(messageId, canonical);
@@ -797,18 +977,27 @@ export const useChatStore = create<ChatState>((set, get) => ({
   // ─── Delete message ───────────────────────────────────────
 
   deleteMessage: async (messageId) => {
-    const convId = get().activeConversationId;
+    const state = get();
+    const mid = String(messageId);
+    const convId =
+      findConversationIdContainingMessage(state.messagesByConv, mid) ?? state.activeConversationId;
     if (!convId) return;
 
     // Optimistic delete
-    set((s) => ({
-      messagesByConv: {
-        ...s.messagesByConv,
-        [convId]: (s.messagesByConv[convId] || []).map((m) =>
-          m.id === messageId ? { ...m, is_deleted: true, content: '' } : m,
+    set((s) => {
+      const nextMsgs = (s.messagesByConv[convId] || []).map((m) =>
+        String(m.id) === mid ? { ...m, is_deleted: true, content: '' } : m,
+      );
+      return {
+        messagesByConv: { ...s.messagesByConv, [convId]: nextMsgs },
+        conversations: syncConversationLastMessageAfterMutation(
+          s.conversations,
+          convId,
+          nextMsgs,
+          mid,
         ),
-      },
-    }));
+      };
+    });
 
     try {
       await api.deleteMessage(messageId);
@@ -996,27 +1185,34 @@ export const useChatStore = create<ChatState>((set, get) => ({
   handleMessageEdited: (convId, msgId, content, updatedAt) => {
     const idKey = String(convId);
     const messageId = String(msgId);
-    set((s) => ({
-      messagesByConv: {
-        ...s.messagesByConv,
-        [idKey]: (s.messagesByConv[idKey] || []).map((m) =>
-          String(m.id) === messageId ? { ...m, content, is_edited: true, updated_at: updatedAt } : m,
-        ),
-      },
-    }));
+    set((s) => {
+      const nextMsgs = (s.messagesByConv[idKey] || []).map((m) =>
+        String(m.id) === messageId ? { ...m, content, is_edited: true, updated_at: updatedAt } : m,
+      );
+      return {
+        messagesByConv: { ...s.messagesByConv, [idKey]: nextMsgs },
+        conversations: syncConversationLastMessageOnEdit(s.conversations, idKey, messageId, content),
+      };
+    });
   },
 
   handleMessageDeleted: (convId, msgId) => {
     const idKey = String(convId);
     const messageId = String(msgId);
-    set((s) => ({
-      messagesByConv: {
-        ...s.messagesByConv,
-        [idKey]: (s.messagesByConv[idKey] || []).map((m) =>
-          String(m.id) === messageId ? { ...m, is_deleted: true, content: '' } : m,
+    set((s) => {
+      const nextMsgs = (s.messagesByConv[idKey] || []).map((m) =>
+        String(m.id) === messageId ? { ...m, is_deleted: true, content: '' } : m,
+      );
+      return {
+        messagesByConv: { ...s.messagesByConv, [idKey]: nextMsgs },
+        conversations: syncConversationLastMessageAfterMutation(
+          s.conversations,
+          idKey,
+          nextMsgs,
+          messageId,
         ),
-      },
-    }));
+      };
+    });
   },
 
   handlePollTallies: (convId, messageId, tallies, myOptions) => {
@@ -1147,7 +1343,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
     set((s) => {
       if (s.conversations.some((c) => c.id === normalized.id)) return s;
       const updated = [normalized, ...s.conversations];
-      return { conversations: updated };
+      const om = normalized.other_member;
+      const ls = om?.last_seen_at;
+      const memberLastSeenAt =
+        om && ls ? { ...s.memberLastSeenAt, [om.id]: ls } : s.memberLastSeenAt;
+      return { conversations: updated, memberLastSeenAt };
     });
   },
 
@@ -1189,11 +1389,15 @@ export const useChatStore = create<ChatState>((set, get) => ({
     });
   },
 
-  handlePresenceOffline: (memberId) => {
+  handlePresenceOffline: (memberId, lastSeenAt) => {
     set((s) => {
       const next = new Set(s.onlineMembers);
       next.delete(memberId);
-      return { onlineMembers: next };
+      const memberLastSeenAt =
+        lastSeenAt != null && String(lastSeenAt).trim() !== ''
+          ? { ...s.memberLastSeenAt, [memberId]: String(lastSeenAt) }
+          : s.memberLastSeenAt;
+      return { onlineMembers: next, memberLastSeenAt };
     });
   },
 
@@ -1208,7 +1412,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       clearAllTypingTimers(currentTyping);
       stopOutboxPump();
       inMemoryOutbox = [];
-      set({ typingByConv: {} });
+      set({ typingByConv: {}, memberLastSeenAt: {} });
     }
     set({ currentMemberId: id });
     // Load cached snapshot for resilience (offline-first startup).

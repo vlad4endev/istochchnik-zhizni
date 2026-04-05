@@ -415,19 +415,26 @@ router.delete(
 
 // ─── Messages ─────────────────────────────────────────────────
 
-/** GET /api/messenger/conversations/:id/messages?before=<id>&limit=50 */
+/** GET /api/messenger/conversations/:id/messages?before=<id>|after=<id>&limit=50 */
 router.get('/conversations/:id/messages', async (req: Request, res: Response) => {
   const userId = (req as AuthReq).authUserId!;
   const convId = req.params.id;
   const before = (req.query.before as string) || undefined;
+  const after = (req.query.after as string) || undefined;
   const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 50));
   try {
+    if (before && after) {
+      res.status(400).json({ error: 'Use either before or after, not both' });
+      return;
+    }
     const isMember = await svc.isMemberInConversation(convId, userId);
     if (!isMember) {
       res.status(403).json({ error: 'Not a member of this conversation' });
       return;
     }
-    const messages = await svc.loadMessages(convId, userId, limit, before);
+    const messages = after
+      ? await svc.loadMessagesAfter(convId, userId, after, limit)
+      : await svc.loadMessages(convId, userId, limit, before);
     res.json(messages);
   } catch (e) {
     console.error('[messenger] loadMessages error:', e);

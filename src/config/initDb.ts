@@ -215,6 +215,9 @@ ALTER TABLE members ADD CONSTRAINT members_app_role_check CHECK (app_role IN ('m
 
 ALTER TABLE members ADD COLUMN IF NOT EXISTS is_collection_coordinator BOOLEAN NOT NULL DEFAULT FALSE;
 
+-- Мессенджер: время последнего ухода из сети (для «был(а) …»).
+ALTER TABLE members ADD COLUMN IF NOT EXISTS last_seen_at TIMESTAMPTZ;
+
 -- Участие в общем молитвенном цикле: новые записи по умолчанию вне цикла, существующие при добавлении колонки — в цикле.
 ALTER TABLE members ADD COLUMN IF NOT EXISTS in_prayer_cycle BOOLEAN NOT NULL DEFAULT TRUE;
 ALTER TABLE members ALTER COLUMN in_prayer_cycle SET DEFAULT FALSE;
