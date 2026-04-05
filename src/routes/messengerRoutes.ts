@@ -462,8 +462,10 @@ router.post(
     try {
       const message = await svc.sendMessage(convId, userId, content, replyId, clientMsgId, pt, pl);
       const convKey = String(convId);
+      // Явный флаг для клиентского счётчика: только is_read === false считается непрочитанным.
+      const messageForRealtime = { ...message, is_read: false as const };
       // Всем участникам комнаты, включая другие вкладки отправителя (дедуп по id на клиенте)
-      sendToRoomAll(convKey, { type: 'msg:new', conversationId: convKey, message });
+      sendToRoomAll(convKey, { type: 'msg:new', conversationId: convKey, message: messageForRealtime });
 
       // Push-уведомления: всем участникам, кроме отправителя.
       // Пуши приходят даже при закрытом приложении (если подписка активна и браузер разрешил).
@@ -518,7 +520,7 @@ router.post(
         console.warn('[messenger] push notify failed (best-effort):', e);
       }
 
-      res.json(message);
+      res.json(messageForRealtime);
     } catch (e) {
       const obj: Record<string, unknown> | null = e && typeof e === 'object' ? (e as Record<string, unknown>) : null;
       const message =

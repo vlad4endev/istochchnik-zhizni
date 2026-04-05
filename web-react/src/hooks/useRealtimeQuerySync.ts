@@ -110,11 +110,44 @@ export function useRealtimeQuerySync(): void {
       };
     }
 
+    const handleOnline = () => {
+      if (stopped) return;
+      if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
+        return;
+      }
+      clearTimer();
+      connect();
+    };
+
+    const handleOffline = () => {
+      if (!ws) return;
+      if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
+        ws.close();
+      }
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState !== 'visible') return;
+      if (stopped) return;
+      if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
+        return;
+      }
+      if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
+      clearTimer();
+      connect();
+    };
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
     connect();
 
     return () => {
       stopped = true;
       clearTimer();
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
       ws?.close();
     };
   }, [token]);

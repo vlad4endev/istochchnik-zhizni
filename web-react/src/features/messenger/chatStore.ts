@@ -168,6 +168,19 @@ export type ChatTab = 'all' | 'personal' | 'services' | 'notifications';
 export const EMPTY_ARRAY: any[] = [];
 export const EMPTY_OBJECT: any = {};
 
+/**
+ * Учёт в бейдже непрочитанного: только явно непрочитанное и не от текущего пользователя.
+ * Без `sender_id` не считаем (нет надёжного отличия «своё / чужое»).
+ */
+function messageCountsAsUnreadForCurrentUser(
+  msg: Pick<MessageWithSender, 'is_read' | 'sender_id'>,
+  currentMemberId: number | null,
+): boolean {
+  if (currentMemberId == null || msg.sender_id == null) return false;
+  if (Number(msg.sender_id) === Number(currentMemberId)) return false;
+  return msg.is_read === false;
+}
+
 let onlineRetryBound = false;
 let retryInFlight = false;
 let outboxRetryTimer: number | null = null;
@@ -910,9 +923,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
         s.currentMemberId != null &&
         msg.sender_id != null &&
         Number(msg.sender_id) === Number(s.currentMemberId);
-      // WS payload often omits `is_read`; treat omitted as unread.
-      // Count only incoming messages and only when chat is not active.
-      const shouldCountUnread = msg.is_read !== true && !isOwnMessage && !isActiveConversation;
+      const shouldCountUnread =
+        messageCountsAsUnreadForCurrentUser(msg, s.currentMemberId) && !isActiveConversation;
       const targetConversation = s.conversations.find((c) => c.id === idKey) || null;
 
       // Already present by definitive server id.

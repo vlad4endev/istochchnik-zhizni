@@ -154,6 +154,18 @@ export function useMessengerWs(): {
       connect();
     };
 
+    const handleVisibilityChange = () => {
+      if (document.visibilityState !== 'visible') return;
+      if (stoppedRef.current) return;
+      const ws = wsRef.current;
+      if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
+        return;
+      }
+      if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
+      clearTimers();
+      connect();
+    };
+
     const handleOffline = () => {
       const ws = wsRef.current;
       if (!ws) return;
@@ -164,6 +176,7 @@ export function useMessengerWs(): {
 
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
     connect();
 
     return () => {
@@ -172,6 +185,7 @@ export function useMessengerWs(): {
       if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
       wsRef.current?.close();
       wsRef.current = null;
     };
@@ -194,9 +208,20 @@ function handleWsMessage(msg: any): void {
       // Conversation list bootstrap is handled by MessengerPage.
       break;
 
-    case 'msg:new':
-      store.handleNewMessage(msg.conversationId, msg.message);
+    case 'msg:new': {
+      const convId =
+        msg.conversationId != null && String(msg.conversationId).trim() !== ''
+          ? String(msg.conversationId)
+          : null;
+      const payload = msg.message;
+      if (convId && payload && typeof payload === 'object' && payload.id != null) {
+        store.handleNewMessage(convId, payload);
+      } else if (convId) {
+        void store.loadMessages(convId);
+        void store.loadConversations();
+      }
       break;
+    }
 
     case 'msg:edited':
       store.handleMessageEdited(msg.conversationId, msg.messageId, msg.content, msg.updatedAt);

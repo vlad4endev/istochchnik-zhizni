@@ -158,7 +158,8 @@ export async function listConversations(memberId: number): Promise<ConversationL
       COALESCE(
         (SELECT COUNT(*)::int FROM messages m2
          WHERE m2.conversation_id = c.id
-           AND m2.id > COALESCE(cp.last_read_message_id, 0)),
+           AND m2.id > COALESCE(cp.last_read_message_id, 0)
+           AND m2.sender_id IS DISTINCT FROM $1),
         0
       ) AS unread_count,
       -- other member for private chats
@@ -510,7 +511,8 @@ export async function getConversationListItem(
       COALESCE(
         (SELECT COUNT(*)::int FROM messages m2
          WHERE m2.conversation_id = c.id
-           AND m2.id > COALESCE(cp.last_read_message_id, 0)),
+           AND m2.id > COALESCE(cp.last_read_message_id, 0)
+           AND m2.sender_id IS DISTINCT FROM $1),
         0
       ) AS unread_count,
       -- other member for private chats
@@ -1528,6 +1530,7 @@ export async function getTotalUnreadCount(memberId: number): Promise<number> {
       WHERE cp.member_id = $1
         AND cp.left_at IS NULL
         AND m.id > COALESCE(cp.last_read_message_id, 0)
+        AND m.sender_id IS DISTINCT FROM cp.member_id
     ) sub
     `,
     [memberId],
