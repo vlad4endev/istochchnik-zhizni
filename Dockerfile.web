@@ -2,9 +2,13 @@
 FROM node:22-alpine AS build
 WORKDIR /app
 
-# iOS PWA: абсолютный start_url/scope в manifest (docker-compose: build.args VITE_PWA_ORIGIN)
+# Vite: только переменные с префиксом VITE_ доступны в import.meta.env при сборке.
 ARG VITE_PWA_ORIGIN=
 ENV VITE_PWA_ORIGIN=$VITE_PWA_ORIGIN
+ARG VITE_API_URL=
+ENV VITE_API_URL=$VITE_API_URL
+ARG VITE_API_BASE_URL=
+ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
 
 COPY web-react/package.json web-react/package-lock.json ./web-react/
 RUN cd web-react && npm ci

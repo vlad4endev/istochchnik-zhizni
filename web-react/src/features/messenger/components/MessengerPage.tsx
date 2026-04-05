@@ -1,7 +1,7 @@
 import { useEffect, useCallback, useState, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useChatStore, isDraftPrivateConversationId } from '../chatStore';
-import { useMessengerWs } from '../useMessengerWs';
+import { useMessengerWsContext } from '../MessengerWsContext';
 import { useSwipeGesture } from '../hooks/useSwipeGesture';
 import { ChatList } from './ChatList';
 import { ChatWindow } from './ChatWindow';
@@ -27,7 +27,7 @@ export function MessengerPage() {
   const messengerRef = useRef<HTMLDivElement>(null);
   const location = useLocation();
 
-  const ws = useMessengerWs();
+  const ws = useMessengerWsContext();
 
   useEffect(() => {
     document.documentElement.dataset.messengerOpen = '1';

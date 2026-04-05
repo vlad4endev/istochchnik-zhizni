@@ -72,6 +72,8 @@ services:
       dockerfile: Dockerfile.web
       args:
         VITE_PWA_ORIGIN: ${VITE_PWA_ORIGIN:-}
+        VITE_API_URL: ${VITE_API_URL:-}
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-}
     container_name: istochnik-web
     restart: unless-stopped
     depends_on:

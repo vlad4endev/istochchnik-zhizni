@@ -14,6 +14,7 @@ import { AndroidInstallBanner } from '../components/AndroidInstallBanner';
 import { UpdateNotification, useServiceWorkerUpdate, NotificationPrompt } from '../features/pwa';
 import type { AppToastAction, AppToastKind } from '../lib/uiFeedback';
 import { useChatStore } from '../features/messenger/chatStore';
+import { MessengerWsProvider } from '../features/messenger/MessengerWsContext';
 
 type NavItem = {
   to: string;
@@ -212,7 +213,7 @@ function AppToastHost() {
 
 function navClassName(isActive: boolean, compact = false): string {
   const base = compact
-    ? 'group relative flex min-w-0 flex-1 flex-col items-center justify-center rounded-2xl px-1.5 py-1.5 transition-colors duration-200 tap-highlight-transparent touch-manipulation active:scale-[0.96]'
+    ? 'group relative flex min-w-0 flex-1 flex-col items-center justify-center overflow-visible rounded-2xl px-1.5 py-1.5 transition-colors duration-200 tap-highlight-transparent touch-manipulation active:scale-[0.96]'
     : 'group flex w-full items-center justify-start gap-3 rounded-2xl px-4 py-3 text-left text-sm font-semibold transition-colors duration-200 tap-highlight-transparent';
   const size = compact
     ? 'min-h-[52px]'
@@ -233,7 +234,10 @@ export function Layout() {
   useWebPushSync();
   useRealtimeQuerySync();
   const navigate = useNavigate();
+  const token = useAuthStore((s) => s.token);
   const setActiveConversation = useChatStore((s) => s.setActiveConversation);
+  const loadConversations = useChatStore((s) => s.loadConversations);
+  const refreshUnread = useChatStore((s) => s.refreshUnread);
   const unreadMessages = useChatStore((s) => s.totalUnread);
   const role = useAuthStore((s) => s.role);
   const logout = useAuthStore((s) => s.logout);
@@ -292,6 +296,22 @@ export function Layout() {
     };
   }, [navigate, setActiveConversation]);
 
+  /** Список чатов и totalUnread для бейджа в таббаре — не только после захода в «Чаты». */
+  useEffect(() => {
+    if (!token) return;
+    void loadConversations();
+  }, [token, loadConversations]);
+
+  useEffect(() => {
+    if (!token) return;
+    const onVis = () => {
+      if (document.visibilityState !== 'visible') return;
+      void refreshUnread();
+    };
+    document.addEventListener('visibilitychange', onVis);
+    return () => document.removeEventListener('visibilitychange', onVis);
+  }, [token, refreshUnread]);
+
   useEffect(() => {
     if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) {
       return;
@@ -331,6 +351,7 @@ export function Layout() {
   }, [navigate, setActiveConversation]);
 
   return (
+    <MessengerWsProvider>
     <div className="flex min-h-0 w-full max-w-[100vw] flex-1 flex-col overflow-x-clip bg-[var(--surface)] text-[var(--text)] [padding-left:env(safe-area-inset-left,0px)] [padding-right:env(safe-area-inset-right,0px)]">
       <div
         className={[
@@ -416,7 +437,7 @@ export function Layout() {
                       <div className="relative">
                         <Icon className={navIconClass(isActive, navCollapsed)} strokeWidth={2} aria-hidden />
                         {item.to === '/messenger' && unreadMessages > 0 && navCollapsed ? (
-                          <span className="absolute -right-1 -top-1 inline-flex min-w-[16px] items-center justify-center rounded-full bg-rose-500 px-1 text-[9px] font-extrabold leading-4 text-white">
+                          <span className="absolute -right-1 -top-1 z-[5] inline-flex min-h-[17px] min-w-[17px] items-center justify-center rounded-full bg-rose-500 px-0.5 text-[9px] font-extrabold leading-none text-white shadow-sm ring-2 ring-white">
                             {unreadMessages > 99 ? '99+' : unreadMessages}
                           </span>
                         ) : null}
@@ -490,13 +511,18 @@ export function Layout() {
                 key={item.to}
                 to={item.to}
                 className={({ isActive }) => navClassName(isActive, true)}
+                aria-label={
+                  item.to === '/messenger' && unreadMessages > 0
+                    ? `Чаты, непрочитанных сообщений: ${unreadMessages > 99 ? 'более 99' : unreadMessages}`
+                    : undefined
+                }
               >
                 {({ isActive }) => (
                   <>
-                    <span className="relative">
+                    <span className="relative z-10 inline-flex overflow-visible">
                       <Icon className={navIconClass(isActive, true)} strokeWidth={2} aria-hidden />
                       {item.to === '/messenger' && unreadMessages > 0 ? (
-                        <span className="absolute -right-2 -top-1 inline-flex min-w-[16px] items-center justify-center rounded-full bg-rose-500 px-1 text-[9px] font-extrabold leading-4 text-white">
+                        <span className="absolute -right-2.5 top-0 z-[5] inline-flex min-h-[18px] min-w-[18px] items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-extrabold leading-none text-white shadow-sm ring-2 ring-white">
                           {unreadMessages > 99 ? '99+' : unreadMessages}
                         </span>
                       ) : null}
@@ -521,5 +547,6 @@ export function Layout() {
       ) : null}
       <NotificationPrompt />
     </div>
+    </MessengerWsProvider>
   );
 }
