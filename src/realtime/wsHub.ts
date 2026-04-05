@@ -1,4 +1,5 @@
 import type { Server } from 'node:http';
+import { existsSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { createClient, type RedisClientType } from 'redis';
 import { WebSocketServer, WebSocket } from 'ws';
@@ -22,6 +23,34 @@ function shouldConnectRedisFanout(): boolean {
 
 function resolveRedisUrl(): string {
   return process.env.REDIS_URL?.trim() || 'redis://127.0.0.1:6379';
+}
+
+/**
+ * В Docker `127.0.0.1` / `localhost` — это контейнер API, а не хост с `docker run -p 6380:6379`.
+ * Подменяем на host.docker.internal (в compose нужен extra_hosts: host.docker.internal:host-gateway).
+ */
+function rewriteLocalRedisUrlIfInsideDocker(url: string): string {
+  if (!existsSync('/.dockerenv')) {
+    return url;
+  }
+  try {
+    const u = new URL(url);
+    if (u.hostname !== '127.0.0.1' && u.hostname !== 'localhost') {
+      return url;
+    }
+    const prev = url.trim();
+    u.hostname = 'host.docker.internal';
+    const next = u.toString().replace(/\/$/, '');
+    if (next !== prev) {
+      console.warn(
+        `[realtime] Docker: REDIS_URL был «${prev}» (из контейнера это не хост). Подключаюсь к «${next}». ` +
+          'В docker-compose у сервиса api должно быть: extra_hosts: ["host.docker.internal:host-gateway"].',
+      );
+    }
+    return next;
+  } catch {
+    return url;
+  }
 }
 
 let pubClient: RedisClientType | null = null;
@@ -439,7 +468,7 @@ export async function initRealtimeRedis(): Promise<void> {
     return;
   }
 
-  const redisUrl = resolveRedisUrl();
+  let redisUrl = rewriteLocalRedisUrlIfInsideDocker(resolveRedisUrl());
   if (process.env.REDIS_REALTIME_ENABLED === 'true' && !(process.env.REDIS_URL?.trim())) {
     console.warn(
       '[realtime] REDIS_REALTIME_ENABLED=true, но REDIS_URL пуст — подключаемся к redis://127.0.0.1:6379. ' +
