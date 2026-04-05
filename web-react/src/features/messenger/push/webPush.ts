@@ -1,4 +1,5 @@
 import { apiClient } from '../../../lib/apiClient';
+import { emitAppToast } from '../../../lib/uiFeedback';
 import { fetchVapidPublicKey } from '../../profile/api';
 
 /** Последний известный публичный VAPID с сервера — чтобы при смене ключей пересоздать подписку. */
@@ -42,6 +43,17 @@ function urlBase64ToUint8Array(base64String: string) {
  * - разрешение default/denied — выходим (запрос прав — через баннер NotificationPrompt или профиль);
  * - разрешение granted — создаём подписку при необходимости и POST /api/notifications/subscribe.
  */
+function readPushSubscribeError(err: unknown): string {
+  if (err && typeof err === 'object' && 'response' in err) {
+    const r = (err as { response?: { status?: number; data?: { error?: string } } }).response;
+    const msg = r?.data && typeof r.data.error === 'string' ? r.data.error : '';
+    if (r?.status === 401) return 'Войдите снова, чтобы сохранить подписку на уведомления.';
+    if (msg) return msg;
+  }
+  if (err instanceof Error && err.message) return err.message;
+  return 'Не удалось сохранить подписку на сервере.';
+}
+
 export async function initMessengerPushNotifications(): Promise<void> {
   if (!('serviceWorker' in navigator)) return;
   if (!('PushManager' in window)) return;
@@ -49,49 +61,73 @@ export async function initMessengerPushNotifications(): Promise<void> {
   // Не инициируем системный prompt сами — это должно быть пользовательское действие.
   if (Notification.permission !== 'granted') return;
 
-  const registration = await navigator.serviceWorker.ready;
-
-  const envKey = (import.meta as any).env?.VITE_VAPID_PUBLIC_KEY as string | undefined;
-  let serverVapidKey = '';
   try {
-    serverVapidKey = (await fetchVapidPublicKey()).trim();
-  } catch {
-    /* офлайн / CORS — fallback на ключ из сборки */
-  }
-  const vapidPublicKey =
-    serverVapidKey || (envKey && envKey.trim() ? envKey.trim() : '');
-  if (!vapidPublicKey) {
-    console.warn('[push] VAPID public key is missing, skipping push subscribe.');
-    return;
-  }
+    const registration = await navigator.serviceWorker.ready;
 
-  const storedKey = localStorage.getItem(LS_VAPID_PUBLIC_KEY);
-  let existing = await registration.pushManager.getSubscription();
-
-  if (existing && storedKey && storedKey !== vapidPublicKey) {
+    const envKey = (import.meta as any).env?.VITE_VAPID_PUBLIC_KEY as string | undefined;
+    let serverVapidKey = '';
     try {
-      await existing.unsubscribe();
+      serverVapidKey = (await fetchVapidPublicKey()).trim();
     } catch {
-      /* ignore */
+      /* офлайн / CORS — fallback на ключ из сборки */
     }
-    existing = null;
-    localStorage.removeItem(LS_VAPID_PUBLIC_KEY);
-  }
+    const vapidPublicKey =
+      serverVapidKey || (envKey && envKey.trim() ? envKey.trim() : '');
+    if (!vapidPublicKey) {
+      console.warn('[push] VAPID public key is missing, skipping push subscribe.');
+      return;
+    }
 
-  if (existing) {
-    await apiClient.post('/api/notifications/subscribe', subscriptionToJsonBody(existing));
+    const storedKey = localStorage.getItem(LS_VAPID_PUBLIC_KEY);
+    let existing = await registration.pushManager.getSubscription();
+
+    if (existing && storedKey && storedKey !== vapidPublicKey) {
+      try {
+        await existing.unsubscribe();
+      } catch {
+        /* ignore */
+      }
+      existing = null;
+      localStorage.removeItem(LS_VAPID_PUBLIC_KEY);
+    }
+
+    if (existing) {
+      try {
+        await apiClient.post('/api/notifications/subscribe', subscriptionToJsonBody(existing));
+        localStorage.setItem(LS_VAPID_PUBLIC_KEY, vapidPublicKey);
+      } catch (err) {
+        console.error('[push] POST /subscribe (sync existing) failed:', err);
+        emitAppToast(readPushSubscribeError(err), 'error');
+      }
+      return;
+    }
+
+    const convertedVapidKey = urlBase64ToUint8Array(vapidPublicKey);
+
+    const subscription = await registration.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: convertedVapidKey,
+    });
+
     localStorage.setItem(LS_VAPID_PUBLIC_KEY, vapidPublicKey);
-    return;
+    try {
+      await apiClient.post('/api/notifications/subscribe', subscriptionToJsonBody(subscription));
+    } catch (err) {
+      console.error('[push] POST /subscribe (new) failed:', err);
+      emitAppToast(readPushSubscribeError(err), 'error');
+      try {
+        await subscription.unsubscribe();
+      } catch {
+        /* ignore */
+      }
+      localStorage.removeItem(LS_VAPID_PUBLIC_KEY);
+    }
+  } catch (err) {
+    console.error('[push] initMessengerPushNotifications failed:', err);
+    emitAppToast(
+      'Не удалось включить push в браузере. Проверьте интернет и откройте сайт по HTTPS; на iPhone — ярлык с экрана «Домой».',
+      'error',
+    );
   }
-
-  const convertedVapidKey = urlBase64ToUint8Array(vapidPublicKey);
-
-  const subscription = await registration.pushManager.subscribe({
-    userVisibleOnly: true,
-    applicationServerKey: convertedVapidKey,
-  });
-
-  localStorage.setItem(LS_VAPID_PUBLIC_KEY, vapidPublicKey);
-  await apiClient.post('/api/notifications/subscribe', subscriptionToJsonBody(subscription));
 }
 

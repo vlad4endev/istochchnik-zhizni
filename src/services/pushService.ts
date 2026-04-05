@@ -9,11 +9,37 @@ import {
 
 const { VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, VAPID_SUBJECT } = process.env;
 
-if (VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY && VAPID_SUBJECT) {
+const vapidConfigured = Boolean(
+  VAPID_PUBLIC_KEY?.trim() && VAPID_PRIVATE_KEY?.trim() && VAPID_SUBJECT?.trim(),
+);
+
+/** Таймаут HTTP к FCM/Web Push (мс). На VPS с жёстким firewall иногда нужен больший срок. */
+const WEB_PUSH_HTTP_TIMEOUT_MS = Math.min(
+  Math.max(Number(process.env.PUSH_REQUEST_TIMEOUT_MS ?? '25000') || 25000, 5000),
+  120_000,
+);
+
+let lastPushNetworkErrLogMs = 0;
+const PUSH_NETWORK_ERR_LOG_INTERVAL_MS = 60_000;
+
+function isPushNetworkTimeoutErr(err: unknown): boolean {
+  if (!err || typeof err !== 'object') return false;
+  const o = err as { code?: string; message?: string };
+  const c = typeof o.code === 'string' ? o.code : '';
+  const m = typeof o.message === 'string' ? o.message : '';
+  return (
+    c === 'ETIMEDOUT' ||
+    c === 'ESOCKETTIMEDOUT' ||
+    c === 'ECONNRESET' ||
+    /ETIMEDOUT|timeout|ECONNRESET/i.test(m)
+  );
+}
+
+if (vapidConfigured) {
   webpush.setVapidDetails(
-    VAPID_SUBJECT,
-    VAPID_PUBLIC_KEY,
-    VAPID_PRIVATE_KEY
+    VAPID_SUBJECT!,
+    VAPID_PUBLIC_KEY!,
+    VAPID_PRIVATE_KEY!,
   );
 } else {
   console.warn('VAPID keys are not configured. Web Push will not work.');
@@ -111,13 +137,17 @@ export async function sendNotificationToSubscription(
   sub: PushSubscriptionData,
   payload: unknown,
 ): Promise<void> {
+  if (!vapidConfigured) {
+    return;
+  }
   try {
     await webpush.sendNotification(
       {
         endpoint: sub.endpoint,
         keys: sub.keys,
       },
-      JSON.stringify(payload)
+      JSON.stringify(payload),
+      { timeout: WEB_PUSH_HTTP_TIMEOUT_MS },
     );
   } catch (err: unknown) {
     const statusCode =
@@ -126,6 +156,15 @@ export async function sendNotificationToSubscription(
       // Subscription has expired or is no longer valid
       console.log('Subscription expired. Removing from DB.', sub.endpoint);
       await query(`DELETE FROM push_subscriptions WHERE endpoint = $1`, [sub.endpoint]);
+    } else if (isPushNetworkTimeoutErr(err)) {
+      const now = Date.now();
+      if (now - lastPushNetworkErrLogMs >= PUSH_NETWORK_ERR_LOG_INTERVAL_MS) {
+        lastPushNetworkErrLogMs = now;
+        console.warn(
+          '[push] Сеть: таймаут/обрыв при отправке в push-сервис (FCM/Web Push). Проверьте исходящий HTTPS с контейнера API, DNS и firewall. Можно увеличить PUSH_REQUEST_TIMEOUT_MS.',
+          err instanceof Error ? err.message : err,
+        );
+      }
     } else {
       console.error('Error sending push notification', err);
     }
@@ -133,7 +172,13 @@ export async function sendNotificationToSubscription(
 }
 
 export async function sendNotificationToMember(memberId: number, payload: unknown): Promise<void> {
+  if (!vapidConfigured) {
+    return;
+  }
   const subs = await getSubscriptionsForMember(memberId);
+  if (subs.length === 0) {
+    return;
+  }
   for (const sub of subs) {
     await sendNotificationToSubscription(sub, payload);
   }

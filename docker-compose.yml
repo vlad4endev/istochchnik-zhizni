@@ -49,6 +49,9 @@ services:
       # WebSocket fan-out; из контейнера 127.0.0.1 — не хост. Redis на хосте: REDIS_URL=redis://host.docker.internal:6380
       REDIS_REALTIME_ENABLED: ${REDIS_REALTIME_ENABLED:-false}
       REDIS_URL: ${REDIS_URL:-}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-}
+      CORS_ORIGIN: ${CORS_ORIGIN:-}
+      PUSH_REQUEST_TIMEOUT_MS: ${PUSH_REQUEST_TIMEOUT_MS:-}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ports:

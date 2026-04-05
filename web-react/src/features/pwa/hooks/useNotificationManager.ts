@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { fetchVapidPublicKey, subscribeToPushApi } from '../../profile/api';
 
 function urlBase64ToUint8Array(base64String: string) {
@@ -23,9 +23,6 @@ export function useNotificationManager() {
   const [isSubscribed, setIsSubscribed] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  
-  // Track if we've already tried to auto-subscribe in this session
-  const autoTriedRef = useRef(false);
 
   const checkStatus = useCallback(async () => {
     if (!('Notification' in window) || !('serviceWorker' in navigator) || !('PushManager' in window)) {
@@ -49,6 +46,13 @@ export function useNotificationManager() {
 
   useEffect(() => {
     void checkStatus();
+  }, [checkStatus]);
+
+  /** После фоновой синхронизации из useWebPushSync обновляем «подписан ли браузер». */
+  useEffect(() => {
+    const onFocus = () => void checkStatus();
+    window.addEventListener('focus', onFocus);
+    return () => window.removeEventListener('focus', onFocus);
   }, [checkStatus]);
 
   const subscribe = useCallback(async () => {
@@ -82,14 +86,6 @@ export function useNotificationManager() {
       setLoading(false);
     }
   }, []);
-
-  // Auto-subscribe if permission is already granted but not subscribed
-  useEffect(() => {
-    if (status === 'granted' && !isSubscribed && !loading && !autoTriedRef.current) {
-      autoTriedRef.current = true;
-      void subscribe();
-    }
-  }, [status, isSubscribed, loading, subscribe]);
 
   return {
     status,

@@ -62,6 +62,12 @@ router.post('/subscribe', requireAuthSession, async (req: Request, res: Response
       },
     };
     await saveSubscription(memberId, normalized);
+    try {
+      const host = new URL(normalized.endpoint).host;
+      console.log('[notifications] web push subscribe ok', { memberId, pushHost: host });
+    } catch {
+      console.log('[notifications] web push subscribe ok', { memberId });
+    }
     res.status(201).json({ ok: true });
   } catch (e) {
     console.error('[notifications] subscribe error:', e);

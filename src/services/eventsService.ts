@@ -240,6 +240,11 @@ async function ensureChurchEventsSchema(): Promise<EventsSchemaState> {
 
         try {
           await query(`
+            ALTER TABLE ${targetTableRef}
+              ADD COLUMN IF NOT EXISTS starts_at TIMESTAMPTZ,
+              ADD COLUMN IF NOT EXISTS ends_at TIMESTAMPTZ
+          `);
+          await query(`
             UPDATE ${targetTableRef}
             SET starts_at = event_date + event_time
             WHERE starts_at IS NULL
