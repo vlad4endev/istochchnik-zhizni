@@ -46,6 +46,11 @@ services:
       VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
       VAPID_SUBJECT: ${VAPID_SUBJECT:-}
       TRUST_PROXY: ${TRUST_PROXY:-true}
+      # WebSocket fan-out; из контейнера 127.0.0.1 — не хост. Redis на хосте: REDIS_URL=redis://host.docker.internal:6380
+      REDIS_REALTIME_ENABLED: ${REDIS_REALTIME_ENABLED:-false}
+      REDIS_URL: ${REDIS_URL:-}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
       # Один проброс: Compose склеивает ports из нескольких файлов — дубль того же ${PORT} даёт bind error.
       # Снаружи: API_PUBLISH:PORT → 40978 в контейнере. Прод на том же хосте: API_PUBLISH=127.0.0.1 в .env

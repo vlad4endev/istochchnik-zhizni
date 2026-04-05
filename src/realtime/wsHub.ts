@@ -9,13 +9,39 @@ import type { WsMessengerEvent } from '../types/messenger';
 // ─── Redis pub/sub (горизонтальное масштабирование, без Socket.io) ──
 // Проект использует пакет `ws`, а не socket.io — @socket.io/redis-adapter сюда не подключается.
 
-const REDIS_URL = process.env.REDIS_URL || 'redis://127.0.0.1:6379';
 const FANOUT_CHANNEL = 'realtime:fanout';
 const INSTANCE_ID = randomUUID();
+
+/** Fan-out через Redis только если явно включили (иначе каждый старт бил бы 127.0.0.1:6379 и забивал лог). */
+function shouldConnectRedisFanout(): boolean {
+  if (process.env.REDIS_REALTIME_ENABLED === 'false') return false;
+  if (process.env.REDIS_REALTIME_ENABLED === 'true') return true;
+  const url = process.env.REDIS_URL;
+  return typeof url === 'string' && url.trim() !== '';
+}
+
+function resolveRedisUrl(): string {
+  return process.env.REDIS_URL?.trim() || 'redis://127.0.0.1:6379';
+}
 
 let pubClient: RedisClientType | null = null;
 let subClient: RedisClientType | null = null;
 let redisFanoutEnabled = false;
+
+function makeThrottledRedisErrorLog(role: 'pub' | 'sub'): (err: unknown) => void {
+  let lastLogMs = 0;
+  const intervalMs = 20_000;
+  return (err: unknown) => {
+    const now = Date.now();
+    if (now - lastLogMs < intervalMs) return;
+    lastLogMs = now;
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(
+      `[realtime][redis ${role}] ${msg} (повторы не чаще раз в ${intervalMs / 1000} с). ` +
+        'Нет Redis — уберите REDIS_URL или задайте REDIS_REALTIME_ENABLED=false. В Docker укажите хост сервиса, не 127.0.0.1.',
+    );
+  };
+}
 
 type FanoutPayload =
   | { kind: 'room'; conversationId: string; event: WsMessengerEvent; excludeMemberId?: number }
@@ -406,10 +432,32 @@ export async function initRealtimeRedis(): Promise<void> {
     return;
   }
 
-  const pub = createClient({ url: REDIS_URL });
-  const sub = createClient({ url: REDIS_URL });
-  pub.on('error', (err) => console.error('[realtime][redis pub] error:', err));
-  sub.on('error', (err) => console.error('[realtime][redis sub] error:', err));
+  if (!shouldConnectRedisFanout()) {
+    console.log(
+      '[realtime] Redis fan-out skipped (задайте REDIS_REALTIME_ENABLED=true или non-empty REDIS_URL). In-process only.',
+    );
+    return;
+  }
+
+  const redisUrl = resolveRedisUrl();
+  if (process.env.REDIS_REALTIME_ENABLED === 'true' && !(process.env.REDIS_URL?.trim())) {
+    console.warn(
+      '[realtime] REDIS_REALTIME_ENABLED=true, но REDIS_URL пуст — подключаемся к redis://127.0.0.1:6379. ' +
+        'Если Redis в Docker на другом порту, задайте, например: REDIS_URL=redis://127.0.0.1:6380',
+    );
+  }
+
+  const socketOpts = {
+    reconnectStrategy(retries: number): false | number {
+      if (retries > 6) return false;
+      return Math.min(retries * 400, 2500);
+    },
+  };
+
+  const pub = createClient({ url: redisUrl, socket: socketOpts });
+  const sub = createClient({ url: redisUrl, socket: socketOpts });
+  pub.on('error', makeThrottledRedisErrorLog('pub'));
+  sub.on('error', makeThrottledRedisErrorLog('sub'));
 
   try {
     await pub.connect();
@@ -421,21 +469,15 @@ export async function initRealtimeRedis(): Promise<void> {
     subClient = sub as RedisClientType;
     redisFanoutEnabled = true;
     console.log(
-      `[realtime] Redis pub/sub OK → ${FANOUT_CHANNEL} (${REDIS_URL}) instance=${INSTANCE_ID.slice(0, 8)}…`,
+      `[realtime] Redis pub/sub OK → ${FANOUT_CHANNEL} (${redisUrl}) instance=${INSTANCE_ID.slice(0, 8)}…`,
     );
   } catch (e) {
     console.error('[realtime] Redis connect/subscribe failed — fan-out local-only:', e);
     redisFanoutEnabled = false;
-    try {
-      await sub.quit();
-    } catch {
-      /* ignore */
-    }
-    try {
-      await pub.quit();
-    } catch {
-      /* ignore */
-    }
+    pub.removeAllListeners('error');
+    sub.removeAllListeners('error');
+    await sub.disconnect().catch(() => {});
+    await pub.disconnect().catch(() => {});
     pubClient = null;
     subClient = null;
   }
