@@ -68,6 +68,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.web
+      args:
+        VITE_PWA_ORIGIN: ${VITE_PWA_ORIGIN:-}
     container_name: istochnik-web
     restart: unless-stopped
     depends_on:

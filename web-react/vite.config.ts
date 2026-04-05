@@ -38,6 +38,13 @@ export default defineConfig(({ mode }) => {
   /** Стабильный id манифеста: не привязывать к `base` (./ vs /), иначе после сборки PWA «другая» иконка на главном экране. */
   const pwaManifestId =
     String(env.VITE_PWA_MANIFEST_ID ?? '').trim() || 'istochchnik-zhizni-pwa';
+  /**
+   * iOS (Safari) стабильнее открывает «с экрана Домой» в standalone, если start_url/scope — абсолютный URL того же origin.
+   * Пример: VITE_PWA_ORIGIN=https://app.church-tambov.ru
+   */
+  const pwaOrigin = String(env.VITE_PWA_ORIGIN ?? '').trim().replace(/\/+$/, '');
+  const pwaStartUrl = pwaOrigin ? `${pwaOrigin}/` : base;
+  const pwaScope = pwaOrigin ? `${pwaOrigin}/` : base;
 
   return {
     define: {
@@ -57,10 +64,9 @@ export default defineConfig(({ mode }) => {
           theme_color: '#7d3640',
           background_color: '#f4f1ed',
           display: 'standalone',
-          /* Только полноэкранный режим приложения — без fallback в minimal-ui / browser. */
-          display_override: ['standalone'],
-          start_url: base,
-          scope: base,
+          /* Не задаём display_override: на iOS WebKit это часто игнорируется или ведёт себя иначе, чем один display. */
+          start_url: pwaStartUrl,
+          scope: pwaScope,
           lang: 'ru',
           dir: 'ltr',
           categories: ['lifestyle', 'utilities'],
