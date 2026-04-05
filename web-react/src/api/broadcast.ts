@@ -5,11 +5,11 @@ export interface BroadcastData {
 }
 
 export async function fetchBroadcastEmbed(): Promise<BroadcastData> {
-  const { data } = await apiClient.get<BroadcastData>('/broadcast');
+  const { data } = await apiClient.get<BroadcastData>('/api/broadcast');
   return data;
 }
 
 export async function patchBroadcastEmbed(rutube_embed_code: string | null): Promise<BroadcastData> {
-  const { data } = await apiClient.patch<BroadcastData>('/broadcast', { rutube_embed_code });
+  const { data } = await apiClient.patch<BroadcastData>('/api/broadcast', { rutube_embed_code });
   return data;
 }

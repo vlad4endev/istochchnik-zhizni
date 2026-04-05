@@ -8,8 +8,6 @@ import { ChatWindow } from './ChatWindow';
 import { NewChatDialog } from './NewChatDialog';
 import { LuPlus, LuMessageSquare } from 'react-icons/lu';
 import './messenger.css';
-import { initMessengerPushNotifications } from '../push/webPush';
-
 function blurActiveElement() {
   try {
     const el = document.activeElement as HTMLElement | null;
@@ -85,11 +83,6 @@ export function MessengerPage() {
       setMobileView('chat');
     }
   }, [location.search, setActive]);
-
-  // If user already granted push permission earlier — ensure subscription is synced for messenger pushes.
-  useEffect(() => {
-    void initMessengerPushNotifications();
-  }, []);
 
   const handleSelectConversation = useCallback((id: string) => {
     blurActiveElement();

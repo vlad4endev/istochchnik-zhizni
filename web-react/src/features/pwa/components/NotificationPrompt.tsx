@@ -1,28 +1,30 @@
 import { useState, useEffect } from 'react';
 import { FiBell, FiX } from 'react-icons/fi';
 import { useNotificationManager } from '../hooks/useNotificationManager';
+import { isAppleMobileWeb, isInstalledPwa } from '../utils/pwaEnvironment';
 
 export function NotificationPrompt() {
   const { status, subscribe, loading, isSubscribed } = useNotificationManager();
   const [visible, setVisible] = useState(false);
+  const [iosBrowserHint, setIosBrowserHint] = useState(false);
   const [dismissed, setDismissed] = useState(false);
 
   useEffect(() => {
-    // Show prompt only if permission is 'default' and not already subscribed
-    if (status === 'default' && !isSubscribed && !loading && !dismissed) {
-      // Check if it's iOS and if it's standalone
-      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
-      const isStandalone = window.matchMedia('(display-mode: standalone)').matches;
+    const appleTouch = isAppleMobileWeb();
+    const installed = isInstalledPwa();
 
-      if (isIOS && !isStandalone) {
-        // iOS requires PWA installation first for push notifications
+    if (status === 'default' && !isSubscribed && !loading && !dismissed) {
+      // Только вкладка Safari: веб-пуш для чатов недоступен. Ярлык с «Домой» = installed → показываем обычный запрос.
+      if (appleTouch && !installed) {
+        setIosBrowserHint(true);
         setVisible(false);
       } else {
-        // On Android or standalone iOS, show the prompt immediately
+        setIosBrowserHint(false);
         setVisible(true);
       }
     } else {
       setVisible(false);
+      setIosBrowserHint(false);
     }
   }, [status, isSubscribed, loading, dismissed]);
 
@@ -36,7 +38,36 @@ export function NotificationPrompt() {
   const handleDismiss = () => {
     setDismissed(true);
     setVisible(false);
+    setIosBrowserHint(false);
   };
+
+  if (iosBrowserHint) {
+    return (
+      <div className="fixed top-4 left-4 right-4 z-[100] md:left-auto md:right-6 md:max-w-md animate-in fade-in slide-in-from-top-4 duration-500">
+        <div className="rounded-2xl border border-amber-200/90 bg-amber-50/95 p-4 shadow-lg">
+          <div className="flex items-start gap-3">
+            <FiBell className="mt-0.5 h-5 w-5 shrink-0 text-amber-800" aria-hidden />
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-extrabold text-amber-950">Уведомления о чатах на iPhone</p>
+              <p className="mt-1 text-[13px] leading-relaxed text-amber-900/85">
+                В Safari без установки на главный экран веб-уведомления недоступны. Нажмите «Поделиться» и
+                добавьте сайт на экран «Домой», откройте ярлык и включите уведомления — тогда придут сообщения в
+                чаты, даже когда приложение свёрнуто.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={handleDismiss}
+              className="shrink-0 rounded-full p-1 text-amber-800/70 hover:bg-amber-200/50"
+              aria-label="Закрыть"
+            >
+              <FiX className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (!visible) return null;
 
@@ -52,7 +83,8 @@ export function NotificationPrompt() {
               Включить уведомления?
             </h3>
             <p className="mt-1 text-[13px] leading-relaxed text-stone-500">
-              Получайте ежедневные темы молитвы и важные сообщения от координаторов прямо на ваше устройство.
+              Для PWA на Android и для ярлыка с главного экрана на iPhone: сообщения в чатах и напоминания — в том
+              числе при блокировке экрана. Нужно один раз разрешить уведомления в системе.
             </p>
           </div>
           <button 

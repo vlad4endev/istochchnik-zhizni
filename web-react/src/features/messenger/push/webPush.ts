@@ -11,11 +11,11 @@ function urlBase64ToUint8Array(base64String: string) {
 }
 
 /**
- * Инициализация Web Push для мессенджера.
+ * Синхронизация Web Push с бэкендом (мессенджер, календарь и т.д.).
+ * Вызывается из `useWebPushSync` в Layout после входа (веб/PWA, не Capacitor).
  *
- * Поведение по умолчанию безопасное:
- * - если разрешение не выдано (default/denied) — ничего не ломаем, просто выходим;
- * - если разрешение уже granted — гарантируем, что подписка создана и отправлена на бэкенд.
+ * - разрешение default/denied — выходим (запрос прав — через баннер NotificationPrompt или профиль);
+ * - разрешение granted — создаём подписку при необходимости и POST /api/notifications/subscribe.
  */
 export async function initMessengerPushNotifications(): Promise<void> {
   if (!('serviceWorker' in navigator)) return;

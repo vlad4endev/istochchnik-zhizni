@@ -176,6 +176,11 @@ export async function sendPush(
       tokens: slice,
       notification: { title, body },
       data: dataStrings,
+      android: { priority: 'high' },
+      apns: {
+        headers: { 'apns-priority': '10' },
+        payload: { aps: { sound: 'default' } },
+      },
     });
     for (let j = 0; j < res.responses.length; j++) {
       const r = res.responses[j];
