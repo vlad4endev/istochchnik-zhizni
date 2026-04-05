@@ -400,22 +400,22 @@ export function ChatWindow({
   return (
     <div className="tg-chat-window box-border flex w-full max-w-full min-w-0 min-h-0 flex-1 flex-col overflow-hidden overflow-x-hidden">
       {/* Safe-area только на корне (.tg-chat-window) в messenger.css для iOS — не дублировать здесь */}
-      <header className="sticky top-0 z-[100] w-full shrink-0 border-b border-gray-200/60 bg-white">
-        <div className="mx-auto flex h-[52px] min-h-[52px] w-full min-w-0 max-w-full items-stretch px-1 sm:px-2">
-          {/* Слева: как в iOS — стрелка + «Назад» (синий акцент как в Telegram). */}
+      <header className="sticky top-0 z-[100] w-full min-w-0 shrink-0 border-b border-gray-200/60 bg-white">
+        <div className="mx-auto flex min-h-[52px] w-full min-w-0 max-w-full items-center gap-1 px-1 py-1.5 sm:gap-2 sm:px-2 sm:py-2">
+          {/* Слева: «Назад» (как в Telegram / iOS). */}
           <div className="flex shrink-0 items-center">
             <button
               type="button"
               onClick={onBack}
               aria-label="Назад к списку чатов"
-              className="flex max-w-[120px] items-center gap-0.5 rounded-lg py-2 pl-1.5 pr-2 text-[17px] leading-none text-blue-500 transition-colors active:bg-gray-100 sm:pl-2"
+              className="flex max-w-[min(7rem,28vw)] items-center gap-0.5 rounded-lg py-1.5 pl-1 pr-1 text-[17px] leading-none text-blue-500 transition-colors active:bg-gray-100 sm:max-w-[7.5rem] sm:pl-1.5 sm:pr-2"
             >
               <LuArrowLeft className="h-[22px] w-[22px] shrink-0" strokeWidth={2.2} aria-hidden />
               <span className="truncate font-normal">Назад</span>
             </button>
           </div>
 
-          {/* По центру: аватар 32px, имя, статус (личные чаты — text-blue-500 как в ТГ). */}
+          {/* Рядом с «Назад»: аватар + имя/статус в одну линию по горизонтали (как в Telegram). */}
           <div
             role={isDraft ? undefined : 'button'}
             tabIndex={isDraft ? -1 : 0}
@@ -427,30 +427,30 @@ export function ChatWindow({
                     if (e.key === 'Enter' || e.key === ' ') navigate(`/messenger/chat/${conversationId}/manage`);
                   }
             }
-            className="flex min-w-0 flex-1 flex-col items-center justify-center px-1 py-1 text-center transition-colors active:bg-gray-100 sm:px-2"
+            className="flex min-w-0 flex-1 items-center gap-2.5 rounded-lg py-0.5 pl-0.5 pr-1 text-left transition-colors active:bg-gray-100/80 sm:gap-3 sm:pr-2"
           >
-            <div className="flex max-w-full min-w-0 flex-col items-center gap-0.5">
-              <div
-                className="grid h-8 w-8 shrink-0 place-items-center overflow-hidden rounded-full text-[13px] font-semibold text-white"
-                style={{ backgroundColor: headerAvatarColor }}
-              >
-                {headerAvatarSrc ? (
-                  <img src={headerAvatarSrc} alt="" className="h-full w-full object-cover" />
-                ) : (
-                  <span>{headerInitial}</span>
-                )}
-              </div>
-              <div className="w-full max-w-[min(100%,220px)] truncate text-[17px] font-semibold leading-tight text-gray-900">
-                {displayName}
-              </div>
-              <div className={['w-full max-w-[min(100%,260px)] truncate text-xs leading-tight', headerStatusClass].join(' ')}>
-                {headerSubtitle}
-              </div>
+            <div
+              className="grid h-9 w-9 shrink-0 place-items-center overflow-hidden rounded-full text-[13px] font-semibold text-white sm:h-10 sm:w-10"
+              style={{ backgroundColor: headerAvatarColor }}
+            >
+              {headerAvatarSrc ? (
+                <img src={headerAvatarSrc} alt="" className="h-full w-full object-cover" />
+              ) : (
+                <span>{headerInitial}</span>
+              )}
+            </div>
+            <div className="min-w-0 flex-1 overflow-hidden">
+              <div className="truncate text-[16px] font-semibold leading-[1.2] text-gray-900 sm:text-[17px]">{displayName}</div>
+              {headerSubtitle ? (
+                <div className={['truncate text-xs leading-tight sm:text-[13px]', headerStatusClass].join(' ')}>
+                  {headerSubtitle}
+                </div>
+              ) : null}
             </div>
           </div>
 
-          {/* Справа: действия (фиксированная ширина — центр остаётся визуально ровным). */}
-          <div className="flex w-[88px] shrink-0 items-center justify-end gap-0 sm:w-[92px] sm:gap-0.5">
+          {/* Справа: действия */}
+          <div className="flex shrink-0 items-center justify-end gap-0.5 sm:gap-1">
             <button
               type="button"
               onClick={() => navigate(`/messenger/chat/${conversationId}/manage`)}
