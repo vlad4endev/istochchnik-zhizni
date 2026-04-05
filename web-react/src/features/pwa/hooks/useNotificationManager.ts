@@ -71,7 +71,7 @@ export function useNotificationManager() {
         applicationServerKey: convertedVapidKey
       });
 
-      await subscribeToPushApi(JSON.parse(JSON.stringify(subscription)));
+      await subscribeToPushApi(subscription);
       setIsSubscribed(true);
       return true;
     } catch (err: any) {

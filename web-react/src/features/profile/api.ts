@@ -100,7 +100,11 @@ export async function fetchVapidPublicKey(): Promise<string> {
 }
 
 export async function subscribeToPushApi(subscription: PushSubscription): Promise<void> {
-  await apiClient.post('/api/notifications/subscribe', subscription);
+  const body =
+    typeof subscription.toJSON === 'function'
+      ? (subscription.toJSON() as Record<string, unknown>)
+      : (subscription as unknown as Record<string, unknown>);
+  await apiClient.post('/api/notifications/subscribe', body);
 }
 
 export async function unsubscribeFromPushApi(endpoint: string): Promise<void> {
