@@ -34,6 +34,10 @@ export function resolveUserRole(req: Request, _res: Response, next: NextFunction
 const MEMBER_ALLOWED_PATCH =
   /^\/api\/calendar\/(?:cycle\/collection-claims|next-week\/collection|member-cycle-prayer)\/?$/;
 
+/** Web Push / FCM: мутации привязаны к member_id из сессии (requireAuthSession в роутере). */
+const MEMBER_NOTIFICATIONS_POST =
+  /^\/api\/notifications\/(?:subscribe|unsubscribe|save-token)\/?$/;
+
 function fullUrlPath(req: Request): string {
   // IMPORTANT: app.use('/api/messenger', ...) меняет req.path (без префикса),
   // поэтому используем originalUrl для RBAC-исключений.
@@ -63,6 +67,11 @@ export function enforceRoleAccess(req: Request, res: Response, next: NextFunctio
     }
     // Profile: разрешаем PATCH/POST только для /auth/me (и /avatar).
     if ((req.method === 'PATCH' || req.method === 'POST') && (fullPath === '/api/auth/me' || fullPath === '/api/auth/me/avatar')) {
+      next();
+      return;
+    }
+    // Уведомления (PWA / натив): подписка и FCM-токен — только для текущего пользователя.
+    if (req.method === 'POST' && MEMBER_NOTIFICATIONS_POST.test(fullPath)) {
       next();
       return;
     }
