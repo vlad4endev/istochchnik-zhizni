@@ -467,11 +467,32 @@ router.post(
         : {};
     const replyId = normalizeOptionalBigintId(replyToMessageId);
     try {
-      const message = await svc.sendMessage(convId, userId, content, replyId, clientMsgId, pt, pl);
       const convKey = String(convId);
+      const prepared = await svc.prepareMessageForSend(convId, userId, content, replyId, clientMsgId, pt, pl);
+      const pendingRealtime = { ...prepared.pendingMessage, is_read: false as const };
+      // Low-latency: fan-out до INSERT; клиенты сливают pending → финальный id по client_msg_id.
+      sendToRoomAll(convKey, { type: 'msg:new', conversationId: convKey, message: pendingRealtime });
+
+      let message: Awaited<ReturnType<typeof svc.persistPreparedMessage>>;
+      try {
+        message = await svc.persistPreparedMessage(prepared);
+      } catch (persistErr) {
+        console.error('[messenger] persistPreparedMessage failed:', persistErr);
+        const cid = String(prepared.pendingMessage.client_msg_id ?? '').trim();
+        if (cid) {
+          sendToRoomAll(convKey, {
+            type: 'msg:send_failed',
+            conversationId: convKey,
+            clientMsgId: cid,
+            reason: 'db_error',
+          });
+        }
+        res.status(503).json({ error: 'Failed to save message' });
+        return;
+      }
+
       // Явный флаг для клиентского счётчика: только is_read === false считается непрочитанным.
       const messageForRealtime = { ...message, is_read: false as const };
-      // Всем участникам комнаты, включая другие вкладки отправителя (дедуп по id на клиенте)
       sendToRoomAll(convKey, { type: 'msg:new', conversationId: convKey, message: messageForRealtime });
 
       // Push-уведомления: всем участникам, кроме отправителя.

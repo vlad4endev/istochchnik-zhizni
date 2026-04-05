@@ -35,6 +35,9 @@ export default defineConfig(({ mode }) => {
 
   const useRelativeBase = String(env.VITE_RELATIVE_BASE ?? '').trim() === 'true';
   const base = mode === 'production' && !useRelativeBase ? '/' : './';
+  /** Стабильный id манифеста: не привязывать к `base` (./ vs /), иначе после сборки PWA «другая» иконка на главном экране. */
+  const pwaManifestId =
+    String(env.VITE_PWA_MANIFEST_ID ?? '').trim() || 'istochchnik-zhizni-pwa';
 
   return {
     define: {
@@ -46,7 +49,7 @@ export default defineConfig(({ mode }) => {
         registerType: 'autoUpdate',
         injectRegister: 'auto',
         manifest: {
-          id: base,
+          id: pwaManifestId,
           name: 'Моя церковь — молитвенный календарь',
           short_name: 'Моя церковь',
           description:

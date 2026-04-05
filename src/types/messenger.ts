@@ -145,6 +145,8 @@ export interface ConversationMember {
 
 export type WsMessengerEvent =
   | { type: 'msg:new'; conversationId: string; message: MessageWithSender }
+  /** Сохранение в БД не удалось после раннего fan-out; клиент снимает pending/temp по client_msg_id. */
+  | { type: 'msg:send_failed'; conversationId: string; clientMsgId: string; reason?: string }
   | { type: 'msg:edited'; conversationId: string; messageId: string; content: string; updatedAt: string }
   | { type: 'msg:deleted'; conversationId: string; messageId: string }
   | { type: 'msg:reaction'; conversationId: string; messageId: string; emoji: string; memberId: number; action: 'add' | 'remove' }

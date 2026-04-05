@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+
 import { query as dbQuery } from '../config/db';
 import type {
   ConversationListItem,
@@ -1052,8 +1054,64 @@ function normalizePayload(raw: unknown): MessagePayload {
   return {};
 }
 
-/** Send a message. Returns the full message with sender info. */
-export async function sendMessage(
+async function fetchMemberDisplayRow(memberId: number): Promise<{
+  sender_name: string | null;
+  sender_first_name: string | null;
+  sender_last_name: string | null;
+}> {
+  const r = await dbQuery(
+    `SELECT name, first_name, last_name FROM members WHERE id = $1 LIMIT 1`,
+    [memberId],
+  );
+  const row = r.rows[0];
+  return {
+    sender_name: row?.name?.trim() || null,
+    sender_first_name: row?.first_name ?? null,
+    sender_last_name: row?.last_name ?? null,
+  };
+}
+
+async function fetchReplyPreviewForMessage(
+  conversationId: string,
+  replyToMessageId: string | null | undefined,
+): Promise<MessageWithSender['reply_preview']> {
+  if (!replyToMessageId || !/^\d+$/.test(String(replyToMessageId))) return null;
+  const r = await dbQuery(
+    `SELECT m.id, m.content, m.is_deleted,
+            TRIM(COALESCE(mb.first_name, '') || ' ' || COALESCE(mb.last_name, '')) AS sender_name
+     FROM messages m
+     LEFT JOIN members mb ON mb.id = m.sender_id
+     WHERE m.id = $1 AND m.conversation_id = $2
+     LIMIT 1`,
+    [replyToMessageId, conversationId],
+  );
+  const row = r.rows[0];
+  if (!row) return null;
+  return {
+    id: bigint(row.id),
+    content: row.content,
+    sender_name: row.sender_name?.trim() || null,
+    is_deleted: row.is_deleted,
+  };
+}
+
+/** Контекст после валидации + объект для немедленного fan-out по WebSocket (ещё без id в БД). */
+export type PreparedMessageSend = {
+  conversationId: string;
+  senderId: number;
+  contentStored: string;
+  replyToMessageId: string | null;
+  clientMsgId: string | null;
+  pt: MessagePayloadType;
+  payloadJson: string;
+  pendingMessage: MessageWithSender;
+};
+
+/**
+ * Валидация, упоминания, превью ответа и «конверт» с id `pending-<uuid>` для мгновенной доставки по WS.
+ * Запись в БД — отдельно через `persistPreparedMessage`.
+ */
+export async function prepareMessageForSend(
   conversationId: string,
   senderId: number,
   content: string,
@@ -1061,7 +1119,7 @@ export async function sendMessage(
   clientMsgId?: string | null,
   payloadType: MessagePayloadType = 'text',
   payload: MessagePayload = {},
-): Promise<MessageWithSender> {
+): Promise<PreparedMessageSend> {
   const pt = normalizePayloadType(payloadType);
   const plRaw = normalizePayload(payload);
   const contentTrimmed = content.trim();
@@ -1085,8 +1143,62 @@ export async function sendMessage(
   }
 
   const payloadJson = JSON.stringify(pl);
+  const replyNorm = replyToMessageId || null;
+  const clientNorm = clientMsgId || null;
 
-  // For consistent ordering in `/conversations` across clients.
+  const [senderDisp, reply_preview] = await Promise.all([
+    fetchMemberDisplayRow(senderId),
+    fetchReplyPreviewForMessage(conversationId, replyNorm),
+  ]);
+
+  const createdAt = new Date().toISOString();
+  const pendingId = `pending-${randomUUID()}`;
+
+  const pendingMessage: MessageWithSender = {
+    id: pendingId,
+    conversation_id: String(conversationId),
+    sender_id: senderId,
+    client_msg_id: clientNorm,
+    content: contentStored,
+    payload_type: pt,
+    payload: pl,
+    interaction_count: 0,
+    reply_to_message_id: replyNorm && /^\d+$/.test(String(replyNorm)) ? String(replyNorm) : null,
+    forwarded_from: null,
+    is_edited: false,
+    is_deleted: false,
+    is_pinned: false,
+    created_at: createdAt,
+    updated_at: createdAt,
+    sender_name: senderDisp.sender_name,
+    sender_first_name: senderDisp.sender_first_name,
+    sender_last_name: senderDisp.sender_last_name,
+    reply_preview,
+    reactions: [],
+  };
+
+  if (pt === 'poll') {
+    const optsLen = pollOptionsLength(pl);
+    pendingMessage.poll_tallies = Array(Math.max(0, optsLen)).fill(0);
+    pendingMessage.poll_my_options = [];
+  }
+
+  return {
+    conversationId: String(conversationId),
+    senderId,
+    contentStored,
+    replyToMessageId: replyNorm,
+    clientMsgId: clientNorm,
+    pt,
+    payloadJson,
+    pendingMessage,
+  };
+}
+
+/** INSERT + обновление списка чатов (после раннего WS fan-out). */
+export async function persistPreparedMessage(prep: PreparedMessageSend): Promise<MessageWithSender> {
+  const { conversationId, senderId, contentStored, replyToMessageId, clientMsgId, pt, payloadJson } = prep;
+
   await dbQuery(`UPDATE conversations SET updated_at = NOW() WHERE id = $1`, [conversationId]);
 
   const result = await dbQuery(
@@ -1094,7 +1206,6 @@ export async function sendMessage(
     WITH inserted AS (
       INSERT INTO messages (conversation_id, sender_id, content, reply_to_message_id, client_msg_id, payload_type, payload)
       VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb)
-      -- Match partial unique index idx_messages_client_dedupe (WHERE client_msg_id IS NOT NULL).
       ON CONFLICT (conversation_id, sender_id, client_msg_id) WHERE client_msg_id IS NOT NULL
       DO UPDATE SET
         content = EXCLUDED.content,
@@ -1107,7 +1218,6 @@ export async function sendMessage(
       m.name        AS sender_name,
       m.first_name  AS sender_first_name,
       m.last_name   AS sender_last_name,
-      -- reply preview
       rm.id         AS rp_id,
       rm.content    AS rp_content,
       rm.is_deleted AS rp_is_deleted,
@@ -1140,8 +1250,8 @@ export async function sendMessage(
       conversationId,
       senderId,
       contentStored,
-      replyToMessageId || null,
-      clientMsgId || null,
+      replyToMessageId,
+      clientMsgId,
       pt,
       payloadJson,
       senderId,
@@ -1149,6 +1259,28 @@ export async function sendMessage(
   );
 
   return mapMessageWithSender(result.rows[0], senderId);
+}
+
+/** Send a message. Returns the full message with sender info. */
+export async function sendMessage(
+  conversationId: string,
+  senderId: number,
+  content: string,
+  replyToMessageId?: string | null,
+  clientMsgId?: string | null,
+  payloadType: MessagePayloadType = 'text',
+  payload: MessagePayload = {},
+): Promise<MessageWithSender> {
+  const prep = await prepareMessageForSend(
+    conversationId,
+    senderId,
+    content,
+    replyToMessageId,
+    clientMsgId,
+    payloadType,
+    payload,
+  );
+  return persistPreparedMessage(prep);
 }
 
 /**
@@ -1162,10 +1294,15 @@ export async function loadMessages(
   beforeId?: string | null,
 ): Promise<MessageWithSender[]> {
   const params: unknown[] = [conversationId, limit];
+  /** Ключевой путь для индекса (conversation_id, created_at DESC): сортировка по времени, курсор через якорь. */
   let whereCursor = '';
-
   if (beforeId) {
-    whereCursor = 'AND msg.id < $3';
+    whereCursor = `AND EXISTS (
+      SELECT 1 FROM messages anchor
+      WHERE anchor.id = $3::bigint
+        AND anchor.conversation_id = $1::bigint
+        AND (msg.created_at, msg.id) < (anchor.created_at, anchor.id)
+    )`;
     params.push(beforeId);
   }
 
@@ -1221,8 +1358,8 @@ export async function loadMessages(
     LEFT JOIN members m ON m.id = msg.sender_id
     LEFT JOIN messages rm ON rm.id = msg.reply_to_message_id
     LEFT JOIN members rm_s ON rm_s.id = rm.sender_id
-    WHERE msg.conversation_id = $1 ${whereCursor}
-    ORDER BY msg.id DESC
+    WHERE msg.conversation_id = $1::bigint ${whereCursor}
+    ORDER BY msg.created_at DESC, msg.id DESC
     LIMIT $2
     `,
     [...params, memberId],

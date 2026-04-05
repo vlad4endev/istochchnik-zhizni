@@ -1102,10 +1102,6 @@
   font-style: italic;
 }
 
-.msg-bubble--sending {
-  opacity: 0.88;
-}
-
 /* Reactions row */
 .msg-reactions {
   display: flex;

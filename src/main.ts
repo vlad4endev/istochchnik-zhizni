@@ -22,7 +22,7 @@ import pushRoutes from './routes/pushRoutes';
 import messengerRoutes from './routes/messengerRoutes';
 import notificationsRoutes from './routes/notificationsRoutes';
 import telegramRoutes from './routes/telegramRoutes';
-import { attachRealtimeWebSocket } from './realtime/wsHub';
+import { attachRealtimeWebSocket, initRealtimeRedis } from './realtime/wsHub';
 import { initPushCronJobs } from './cron/pushJobs';
 import { ensureUploadsDirs, getUploadsRoot } from './config/uploadsRoot';
 
@@ -179,6 +179,7 @@ async function start(): Promise<void> {
     }
   }
   const server = http.createServer(app);
+  await initRealtimeRedis();
   attachRealtimeWebSocket(server);
   
   initPushCronJobs();

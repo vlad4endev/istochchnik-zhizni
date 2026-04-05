@@ -70,8 +70,6 @@ interface ChatState {
 
   // --- Total unread ---
   totalUnread: number;
-  degradedMode: boolean;
-  outboxSize: number;
 
   // --- Smart tabs ---
   activeTab: ChatTab;
@@ -122,7 +120,6 @@ interface ChatState {
     payload?: api.MessagePayload,
   ) => Promise<void>;
   retrySendMessage: (conversationId: string, tempId: string) => Promise<void>;
-  retryAllFailed: () => Promise<void>;
   editMessage: (messageId: string, content: string) => Promise<void>;
   deleteMessage: (messageId: string) => Promise<void>;
   markRead: (conversationId: string) => Promise<void>;
@@ -143,6 +140,7 @@ interface ChatState {
 
   // --- WS event handlers (called by messengerWs hook) ---
   handleNewMessage: (convId: string, msg: MessageWithSender) => void;
+  handleMessageSendFailed: (convId: string, clientMsgId: string) => void;
   handleMessageEdited: (convId: string, msgId: string, content: string, updatedAt: string) => void;
   handleMessageDeleted: (convId: string, msgId: string) => void;
   handleReaction: (convId: string, msgId: string, emoji: string, memberId: number, action: 'add' | 'remove') => void;
@@ -370,8 +368,6 @@ function hydrateFromCacheIntoStore(set: (partial: Partial<ChatState>) => void, g
     messagesByConv: snap.messagesByConv || {},
     hasMore: snap.hasMore || {},
     totalUnread: Number(snap.totalUnread || 0),
-    degradedMode: true,
-    outboxSize: inMemoryOutbox.length,
   });
   ensureOutboxPump(get);
 }
@@ -514,8 +510,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
   onlineMembers: new Set(),
   memberLastSeenAt: {},
   totalUnread: 0,
-  degradedMode: false,
-  outboxSize: 0,
   activeTab: 'all',
   replyToMessage: null,
   replyingTo: null,
@@ -565,7 +559,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
         conversations,
         conversationsLoaded: true,
         totalUnread,
-        degradedMode: false,
         conversationsLastLoadedAt: Date.now(),
         memberLastSeenAt,
       });
@@ -643,11 +636,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
             : { ...s.messagesLastLoadedAt, [conversationId]: Date.now() },
         };
       });
-      set({ degradedMode: false });
       saveSnapshot(get());
     } catch (e) {
       console.error('[chatStore] loadMessages error:', e);
-      set({ degradedMode: true });
     } finally {
       set((s) => ({
         messagesLoading: { ...s.messagesLoading, [conversationId]: false },
@@ -691,7 +682,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
       }
 
       if (batch.length === 0) {
-        set({ degradedMode: false });
         return;
       }
 
@@ -702,13 +692,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
         return {
           messagesByConv: { ...s.messagesByConv, [conversationId]: sorted },
           messagesLastLoadedAt: { ...s.messagesLastLoadedAt, [conversationId]: Date.now() },
-          degradedMode: false,
         };
       });
       saveSnapshot(get());
     } catch (e) {
       console.error('[chatStore] catchUpMessagesAfter error:', e);
-      set({ degradedMode: true });
     } finally {
       set((s) => ({
         messagesLoading: { ...s.messagesLoading, [conversationId]: false },
@@ -844,7 +832,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
           ),
         },
       }));
-      set({ degradedMode: false });
       saveSnapshot(get());
     } catch (e) {
       if (axios.isAxiosError(e)) {
@@ -865,7 +852,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
           ),
         },
       }));
-      // Queue for background retry (offline / backend down).
+      // Фоновая очередь: при появлении сети уходит сама (pump + online).
       const queueId = `q-${Date.now()}-${Math.random().toString(36).slice(2)}`;
       const outboxItem: OutboxItem = {
         queueId,
@@ -878,10 +865,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
         payload,
         createdAt: new Date().toISOString(),
       };
-      const size = enqueueOutbox(get, outboxItem);
-      set({ degradedMode: true, outboxSize: size });
+      enqueueOutbox(get, outboxItem);
       ensureOutboxPump(get);
-      emitAppToast('Не удалось отправить сообщение', 'error');
     }
   },
 
@@ -920,10 +905,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
       // Remove from outbox if present.
       const q = inMemoryOutbox.find((x) => x.tempId === tempId) || null;
       if (q) {
-        const size = dequeueOutbox(get, q.queueId);
-        set({ outboxSize: size });
+        dequeueOutbox(get, q.queueId);
       }
-      set({ degradedMode: false });
       saveSnapshot(get());
     } catch (e) {
       console.error('[chatStore] retrySendMessage error:', e);
@@ -936,10 +919,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
         },
       }));
     }
-  },
-
-  retryAllFailed: async () => {
-    await runRetryAllFailed(get);
   },
 
   // ─── Edit message ─────────────────────────────────────────
@@ -1093,10 +1072,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
       state.currentMemberId != null &&
       msg.sender_id != null &&
       Number(msg.sender_id) === Number(state.currentMemberId);
+    const isProvisionalLocalId = (mid: string) =>
+      mid.startsWith('temp-') || mid.startsWith('pending-');
     const alreadyPresent =
       existingNow.some((m) => String(m.id) === serverMsgId) ||
       (msgClientId != null &&
-        existingNow.some((m) => String(m.id).startsWith('temp-') && m.client_msg_id === msgClientId));
+        existingNow.some(
+          (m) => isProvisionalLocalId(String(m.id)) && m.client_msg_id === msgClientId,
+        ));
     const shouldAutoReadNow =
       state.activeConversationId === idKey &&
       !isOwnNow &&
@@ -1119,13 +1102,15 @@ export const useChatStore = create<ChatState>((set, get) => ({
       // Already present by definitive server id.
       if (existing.some((m) => String(m.id) === serverMsgId)) return s;
 
-      // If optimistic temp exists with same client_msg_id, replace it (no append).
-      const hasOptimisticTwin =
+      // temp- / pending- с тем же client_msg_id заменяем на новый этап (WS раньше БД).
+      const hasProvisionalTwin =
         msgClientId != null &&
-        existing.some((m) => String(m.id).startsWith('temp-') && m.client_msg_id === msgClientId);
-      const merged = hasOptimisticTwin
+        existing.some(
+          (m) => isProvisionalLocalId(String(m.id)) && m.client_msg_id === msgClientId,
+        );
+      const merged = hasProvisionalTwin
         ? existing.map((m) =>
-            String(m.id).startsWith('temp-') && m.client_msg_id === msgClientId ? msg : m,
+            isProvisionalLocalId(String(m.id)) && m.client_msg_id === msgClientId ? msg : m,
           )
         : [...existing, msg];
       const newMsgs = dedupeMessages(merged);
@@ -1180,6 +1165,22 @@ export const useChatStore = create<ChatState>((set, get) => ({
     if (shouldAutoReadNow) {
       void get().markReadUpTo(idKey, serverMsgId);
     }
+  },
+
+  handleMessageSendFailed: (convId, clientMsgId) => {
+    const idKey = String(convId);
+    const cid = String(clientMsgId || '').trim();
+    if (!cid) return;
+    set((s) => {
+      const list = s.messagesByConv[idKey] || [];
+      const next = list.map((m) =>
+        m.client_msg_id === cid &&
+        (String(m.id).startsWith('temp-') || String(m.id).startsWith('pending-'))
+          ? { ...m, status: 'error' as const }
+          : m,
+      );
+      return { messagesByConv: { ...s.messagesByConv, [idKey]: next } };
+    });
   },
 
   handleMessageEdited: (convId, msgId, content, updatedAt) => {
@@ -1415,9 +1416,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       set({ typingByConv: {}, memberLastSeenAt: {} });
     }
     set({ currentMemberId: id });
-    // Кэш и degraded только при первом id или смене пользователя. Сообщение WS `ready` приходит
-    // при каждом переподключении с тем же memberId — повторный hydrate ставил degradedMode: true
-    // и баннер «Автономный режим» не исчезал, хотя сеть и API в порядке.
+    // Кэш только при первом id или смене пользователя (не при каждом WS reconnect).
     if (prev == null || prev !== id) {
       hydrateFromCacheIntoStore(set, get);
     }
@@ -1564,7 +1563,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
 if (typeof window !== 'undefined' && !onlineRetryBound) {
   onlineRetryBound = true;
   window.addEventListener('online', () => {
-    void runRetryAllFailed(useChatStore.getState);
+    void (async () => {
+      const getState = useChatStore.getState;
+      await flushOutbox(getState);
+      await runRetryAllFailed(getState);
+    })();
   });
 }
 

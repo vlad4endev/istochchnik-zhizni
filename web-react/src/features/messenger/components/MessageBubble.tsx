@@ -2,8 +2,7 @@ import { useState, useRef, useMemo, useEffect } from 'react';
 import { useChatStore } from '../chatStore';
 import type { MessageWithSender } from '../api/messengerApi';
 import { IoCheckmark, IoCheckmarkDone } from 'react-icons/io5';
-import { LuDownload, LuFileText, LuX } from 'react-icons/lu';
-import { IoAlertCircleOutline, IoTimeOutline } from 'react-icons/io5';
+import { LuDownload, LuFileText, LuLoader, LuX } from 'react-icons/lu';
 import { resolvePublicUrl } from '../../../lib/resolvePublicUrl';
 import { motion, useMotionValue, useTransform, animate } from 'framer-motion';
 import type { PanInfo } from 'framer-motion';
@@ -300,8 +299,6 @@ export function MessageBubble({
   const setReplyingTo = useChatStore((s) => s.setReplyingTo);
   const setEditing = useChatStore((s) => s.setEditing);
   const deleteMessage = useChatStore((s) => s.deleteMessage);
-  const retrySendMessage = useChatStore((s) => s.retrySendMessage);
-
   const [showActions, setShowActions] = useState(false);
   const [showReactions, setShowReactions] = useState(false);
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
@@ -559,7 +556,6 @@ export function MessageBubble({
     isMine
       ? 'rounded-br-[4px] bg-primary text-white'
       : 'rounded-bl-[4px] bg-white text-gray-900 shadow-[0_1px_0.5px_rgba(0,0,0,0.06)]',
-    isOptimistic ? 'msg-bubble--sending' : '',
     isGroupedPrev ? (isMine ? 'rounded-br-2xl' : 'rounded-bl-2xl') : '',
   ]
     .filter(Boolean)
@@ -575,10 +571,11 @@ export function MessageBubble({
       {message.is_edited ? <span className="msg-edited">ред.</span> : null}
       <span className="tabular-nums">{formattedTime}</span>
       {isMine ? (
-        status === 'sending' ? (
-          <IoTimeOutline className="h-3.5 w-3.5 shrink-0 text-white/70" aria-label="Отправляется" />
-        ) : status === 'error' ? (
-          <IoAlertCircleOutline className="h-4 w-4 shrink-0 text-red-200" aria-label="Ошибка отправки" />
+        status === 'sending' || status === 'error' ? (
+          <LuLoader
+            className="h-3.5 w-3.5 shrink-0 animate-spin text-white/85"
+            aria-label={status === 'error' ? 'Ожидание сети' : 'Отправляется'}
+          />
         ) : isReadByOther ? (
           <IoCheckmarkDone className="h-3.5 w-3.5 shrink-0 text-sky-200" aria-label="Прочитано" />
         ) : (
@@ -681,18 +678,6 @@ export function MessageBubble({
         )}
         </motion.div>
       </div>
-
-      {isMine && status === 'error' ? (
-        <div className="mt-1 flex justify-end">
-          <button
-            type="button"
-            onClick={() => void retrySendMessage(String(message.conversation_id), String(message.id))}
-            className="inline-flex items-center rounded-full bg-red-50 px-3 py-1 text-[11px] font-extrabold text-red-700 ring-1 ring-red-200/70 transition-colors duration-200 hover:bg-red-100"
-          >
-            Повторить отправку
-          </button>
-        </div>
-      ) : null}
 
       {/* Reactions Display */}
       {message.reactions.length > 0 && (

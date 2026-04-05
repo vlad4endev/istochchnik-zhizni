@@ -112,8 +112,7 @@ export function useMessengerWs(): {
           : [];
 
         // Resync after reconnect, and also after first open when app started offline/degraded.
-        const shouldResyncConversations =
-          wasReconnected || store.degradedMode || !store.conversationsLoaded;
+        const shouldResyncConversations = wasReconnected || !store.conversationsLoaded;
 
         if (shouldResyncConversations) {
           void store.loadConversations();
@@ -124,7 +123,7 @@ export function useMessengerWs(): {
         if (actId && !isDraft) {
           if (wasReconnected && activeMessages.length > 0) {
             void store.catchUpMessagesAfter(actId);
-          } else if (wasReconnected || store.degradedMode || activeMessages.length === 0) {
+          } else if (wasReconnected || activeMessages.length === 0) {
             void store.loadMessages(actId);
           }
         }
@@ -246,6 +245,21 @@ function handleWsMessage(msg: any): void {
       } else if (convId) {
         void store.loadMessages(convId);
         void store.loadConversations();
+      }
+      break;
+    }
+
+    case 'msg:send_failed': {
+      const convId =
+        msg.conversationId != null && String(msg.conversationId).trim() !== ''
+          ? String(msg.conversationId)
+          : null;
+      const clientMsgId =
+        msg.clientMsgId != null && String(msg.clientMsgId).trim() !== ''
+          ? String(msg.clientMsgId).trim()
+          : '';
+      if (convId && clientMsgId) {
+        store.handleMessageSendFailed(convId, clientMsgId);
       }
       break;
     }

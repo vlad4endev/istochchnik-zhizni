@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { Capacitor } from '@capacitor/core';
 
 import { useAuthStore } from '../features/auth/authStore';
@@ -10,6 +10,7 @@ import { initMessengerPushNotifications } from '../features/messenger/push/webPu
  */
 export function useWebPushSync(): void {
   const token = useAuthStore((s) => s.token);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   useEffect(() => {
     if (!token?.trim()) return;
@@ -17,5 +18,22 @@ export function useWebPushSync(): void {
     if (typeof window === 'undefined') return;
 
     void initMessengerPushNotifications();
+
+    const sw = navigator.serviceWorker;
+    if (!sw?.addEventListener) return;
+
+    const resync = () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+      debounceRef.current = setTimeout(() => {
+        debounceRef.current = undefined;
+        void initMessengerPushNotifications();
+      }, 800);
+    };
+
+    sw.addEventListener('controllerchange', resync);
+    return () => {
+      sw.removeEventListener('controllerchange', resync);
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
   }, [token]);
 }
