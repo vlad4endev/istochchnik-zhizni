@@ -1,6 +1,7 @@
 import type { Request, Response } from 'express';
 import Parser from 'rss-parser';
 import { pool } from '../config/db';
+import { notifyRealtime } from '../realtime/notify';
 
 export type PodcastEpisode = {
   id: string;
@@ -191,6 +192,7 @@ export async function patchPodcastSettings(req: Request, res: Response): Promise
       [check.url],
     );
     cache = null; // invalidate RSS cache
+    notifyRealtime(['resources']);
     res.json({ rss_url: check.url });
   } catch (e) {
     console.error('[resources] patchPodcastSettings error:', e);

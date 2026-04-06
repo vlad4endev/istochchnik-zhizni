@@ -14,15 +14,25 @@ function applyScopes(scopes: string[], invalidate: QueryClient['invalidateQuerie
   for (const s of scopes) {
     if (s === 'calendar') {
       void invalidate({ queryKey: ['calendar'] });
+      void invalidate({ queryKey: ['admin', 'events'] });
     } else if (s === 'members') {
       void invalidate({ queryKey: ['admin', 'members'] });
       void invalidate({ queryKey: ['admin', 'access-requests'] });
+      void invalidate({ queryKey: ['admin', 'prayer-history'] });
     } else if (s === 'global') {
       void invalidate({ queryKey: ['admin', 'global'] });
     } else if (s === 'templates') {
       void invalidate({ queryKey: ['admin', 'templates'] });
     } else if (s === 'me') {
       void invalidate({ queryKey: ['auth', 'me'] });
+    } else if (s === 'broadcast') {
+      void invalidate({ queryKey: ['broadcast'] });
+    } else if (s === 'resources') {
+      void invalidate({ queryKey: ['resources'] });
+    } else if (s === 'notification-settings') {
+      void invalidate({ queryKey: ['notification-settings'] });
+    } else if (s === 'admin') {
+      void invalidate({ queryKey: ['admin'] });
     }
   }
 }

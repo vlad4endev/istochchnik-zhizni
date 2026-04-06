@@ -5,6 +5,7 @@ import {
   publicNotificationPayload,
 } from '../types/notificationSettings';
 import { loadNotificationSettings, saveNotificationSettings } from '../services/notificationSettingsService';
+import { notifyRealtime } from '../realtime/notify';
 
 type AuthRequest = Request & { authUserRole?: string };
 
@@ -70,6 +71,7 @@ export async function patchNotificationSettings(req: Request, res: Response): Pr
     });
 
     await saveNotificationSettings(out);
+    notifyRealtime(['notification-settings']);
     res.json(publicNotificationPayload(out));
   } catch (e) {
     console.error('[notification-settings] PATCH error', e);

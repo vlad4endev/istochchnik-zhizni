@@ -1,5 +1,6 @@
 import type { Request, Response } from 'express';
 import { pool } from '../config/db';
+import { notifyRealtime } from '../realtime/notify';
 
 export async function getBroadcastEmbed(req: Request, res: Response): Promise<void> {
   if (!pool) {
@@ -41,6 +42,7 @@ export async function updateBroadcastEmbed(req: Request, res: Response): Promise
       [rutube_embed_code]
     );
 
+    notifyRealtime(['broadcast']);
     res.json({ rutube_embed_code });
   } catch (error) {
     console.error('updateBroadcastEmbed error:', error);

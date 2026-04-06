@@ -6,6 +6,7 @@ import {
   sendTelegramByPurpose,
   updateTelegramSettings,
 } from '../services/telegramService';
+import { notifyRealtime } from '../realtime/notify';
 
 type AuthRequest = Request & { authUserId?: number; authUserRole?: string };
 
@@ -98,6 +99,7 @@ export async function patchTelegramSettingsHandler(req: Request, res: Response):
       coordinator_chat_id: body?.coordinator_chat_id as string | null | undefined,
       default_chat_id: body?.default_chat_id as string | null | undefined,
     });
+    notifyRealtime(['admin']);
     res.json(settings);
   } catch (error) {
     console.error('[telegram] patch settings failed:', error);

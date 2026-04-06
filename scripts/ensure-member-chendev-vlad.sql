@@ -15,6 +15,7 @@ SET
   name = 'Чендев Влад',
   phone_number = '+79027330094',
   app_role = 'admin',
+  is_collection_coordinator = TRUE,
   is_active = TRUE,
   updated_at = NOW()
 WHERE regexp_replace(COALESCE(phone_number, ''), '\D', '', 'g') = '79027330094'
@@ -31,6 +32,7 @@ INSERT INTO members (
   name,
   phone_number,
   app_role,
+  is_collection_coordinator,
   is_active
 )
 SELECT
@@ -39,6 +41,7 @@ SELECT
   'Чендев Влад',
   '+79027330094',
   'admin',
+  TRUE,
   TRUE
 WHERE NOT EXISTS (
   SELECT 1

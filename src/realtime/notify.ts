@@ -1,6 +1,15 @@
 import { broadcastRealtime } from './wsHub';
 
-export type RealtimeScope = 'calendar' | 'members' | 'global' | 'templates' | 'me';
+export type RealtimeScope =
+  | 'calendar'
+  | 'members'
+  | 'global'
+  | 'templates'
+  | 'me'
+  | 'broadcast'
+  | 'resources'
+  | 'notification-settings'
+  | 'admin';
 
 export function notifyRealtime(scopes: RealtimeScope[]): void {
   const unique = [...new Set(scopes)];
