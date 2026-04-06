@@ -24,9 +24,22 @@ export interface ChurchEventItem {
 export function apiErrorMessage(err: unknown, fallback: string): string {
   if (axios.isAxiosError(err)) {
     const data = err.response?.data;
-    if (data && typeof data === 'object' && 'error' in data) {
-      const m = (data as { error?: unknown }).error;
-      if (typeof m === 'string' && m.trim()) return m.trim();
+    if (data && typeof data === 'object') {
+      const o = data as {
+        error?: unknown;
+        db_detail?: unknown;
+        db_code?: unknown;
+        db_column?: unknown;
+        db_constraint?: unknown;
+      };
+      const base = typeof o.error === 'string' && o.error.trim() ? o.error.trim() : '';
+      const detail = typeof o.db_detail === 'string' && o.db_detail.trim() ? o.db_detail.trim() : '';
+      const code = typeof o.db_code === 'string' && o.db_code.trim() ? o.db_code.trim() : '';
+      const parts: string[] = [];
+      if (base) parts.push(base);
+      if (detail) parts.push(detail);
+      else if (code) parts.push(`код ${code}`);
+      if (parts.length) return parts.join(': ');
     }
   }
   if (err instanceof Error && err.message) return err.message;

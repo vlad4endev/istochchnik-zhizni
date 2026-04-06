@@ -26,7 +26,8 @@ type EventsSchemaState = {
   hasEndsAtColumn: boolean;
 };
 
-let schemaStateOnce: Promise<EventsSchemaState> | null = null;
+/** DDL для church_events — один раз за процесс (идемпотентно). Снимок колонок не кэшируем: после миграций БД старый кэш ломал INSERT. */
+let churchEventsDdlOnce: Promise<void> | null = null;
 
 function isInsufficientPrivilegeError(err: unknown): boolean {
   if (!err || typeof err !== 'object') return false;
@@ -165,9 +166,9 @@ async function readEventsSchemaState(): Promise<EventsSchemaState> {
   };
 }
 
-async function ensureChurchEventsSchema(): Promise<EventsSchemaState> {
-  if (!schemaStateOnce) {
-    schemaStateOnce = (async () => {
+async function runChurchEventsDdlOnce(): Promise<void> {
+  if (!churchEventsDdlOnce) {
+    churchEventsDdlOnce = (async () => {
       try {
         const currentSchemaRes = await query('SELECT current_schema() AS schema_name');
         const currentSchema =
@@ -277,18 +278,61 @@ async function ensureChurchEventsSchema(): Promise<EventsSchemaState> {
           '[events] No DDL permissions for church_events schema auto-fix; using available columns only.',
         );
       }
-
-      const state = await readEventsSchemaState();
-      if (!state.hasTable) {
-        throw new Error('Table church_events does not exist and cannot be created with current DB role.');
-      }
-      return state;
     })().catch((err) => {
-      schemaStateOnce = null;
+      churchEventsDdlOnce = null;
       throw err;
     });
   }
-  return await schemaStateOnce;
+  await churchEventsDdlOnce;
+}
+
+async function ensureChurchEventsSchema(): Promise<EventsSchemaState> {
+  await runChurchEventsDdlOnce();
+  const state = await readEventsSchemaState();
+  if (!state.hasTable) {
+    throw new Error('Table church_events does not exist and cannot be created with current DB role.');
+  }
+  return state;
+}
+
+function rowToChurchEvent(row: unknown): ChurchEvent {
+  if (!row || typeof row !== 'object') {
+    throw new Error('church_events query returned no row');
+  }
+  const r = row as Record<string, unknown>;
+  const idRaw = r.id;
+  const id =
+    typeof idRaw === 'bigint'
+      ? Number(idRaw)
+      : typeof idRaw === 'string'
+        ? Number(idRaw)
+        : Number(idRaw);
+  if (!Number.isFinite(id)) {
+    throw new Error('church_events row has invalid id');
+  }
+  const wd = r.weekly_day;
+  let weeklyDay: number | null = null;
+  if (wd !== null && wd !== undefined && wd !== '') {
+    const n = Number(wd);
+    if (Number.isInteger(n) && n >= 0 && n <= 6) {
+      weeklyDay = n;
+    }
+  }
+  const rt = r.recurrence_type === 'weekly' ? 'weekly' : 'once';
+  const ca = r.created_at;
+  const ua = r.updated_at;
+  return {
+    id,
+    title: String(r.title ?? ''),
+    description: r.description === null || r.description === undefined ? null : String(r.description),
+    event_date: String(r.event_date ?? ''),
+    event_time: String(r.event_time ?? ''),
+    recurrence_type: rt,
+    weekly_day: weeklyDay,
+    is_active: Boolean(r.is_active),
+    created_at: ca instanceof Date ? ca.toISOString() : String(ca ?? ''),
+    updated_at: ua instanceof Date ? ua.toISOString() : String(ua ?? ''),
+  };
 }
 
 export async function listActiveEvents(): Promise<ChurchEvent[]> {
@@ -300,7 +344,7 @@ export async function listActiveEvents(): Promise<ChurchEvent[]> {
      WHERE is_active = TRUE
      ORDER BY event_date ASC, event_time ASC, id ASC`,
   );
-  return result.rows as ChurchEvent[];
+  return result.rows.map(rowToChurchEvent);
 }
 
 export async function listAllEventsAdmin(): Promise<ChurchEvent[]> {
@@ -311,7 +355,7 @@ export async function listAllEventsAdmin(): Promise<ChurchEvent[]> {
      FROM ${schema.tableRef}
      ORDER BY event_date ASC, event_time ASC, id ASC`,
   );
-  return result.rows as ChurchEvent[];
+  return result.rows.map(rowToChurchEvent);
 }
 
 export async function createChurchEvent(input: {
@@ -361,7 +405,11 @@ export async function createChurchEvent(input: {
       [title, description, input.event_date, input.event_time, isActive],
     );
   }
-  return result.rows[0] as ChurchEvent;
+  const inserted = result.rows[0];
+  if (!inserted) {
+    throw new Error('church_events INSERT returned no row');
+  }
+  return rowToChurchEvent(inserted);
 }
 
 export async function updateChurchEvent(
@@ -444,7 +492,8 @@ export async function updateChurchEvent(
        WHERE id = $1`,
       [id],
     );
-    return (current.rows[0] as ChurchEvent | undefined) ?? null;
+    const curRow = current.rows[0];
+    return curRow ? rowToChurchEvent(curRow) : null;
   }
 
   updates.push('updated_at = NOW()');
@@ -457,7 +506,8 @@ export async function updateChurchEvent(
        ${selectEventProjection(schema)}`,
     values,
   );
-  return (result.rows[0] as ChurchEvent | undefined) ?? null;
+  const upd = result.rows[0];
+  return upd ? rowToChurchEvent(upd) : null;
 }
 
 export async function deleteChurchEvent(id: number): Promise<boolean> {

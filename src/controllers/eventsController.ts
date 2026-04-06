@@ -1,12 +1,28 @@
 import type { Request, Response } from 'express';
 
-function pgErrorMeta(err: unknown): { db_code?: string; db_column?: string; db_constraint?: string } {
+function pgErrorMeta(err: unknown): {
+  db_code?: string;
+  db_column?: string;
+  db_constraint?: string;
+  db_detail?: string;
+  db_table?: string;
+} {
   if (!err || typeof err !== 'object') return {};
   const o = err as Record<string, unknown>;
-  const out: { db_code?: string; db_column?: string; db_constraint?: string } = {};
+  const out: {
+    db_code?: string;
+    db_column?: string;
+    db_constraint?: string;
+    db_detail?: string;
+    db_table?: string;
+  } = {};
   if (typeof o.code === 'string') out.db_code = o.code;
   if (typeof o.column === 'string') out.db_column = o.column;
   if (typeof o.constraint === 'string') out.db_constraint = o.constraint;
+  if (typeof o.table === 'string') out.db_table = o.table;
+  if (typeof o.detail === 'string' && o.detail.trim()) {
+    out.db_detail = o.detail.trim().slice(0, 600);
+  }
   return out;
 }
 import {
