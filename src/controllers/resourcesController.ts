@@ -134,7 +134,7 @@ async function ensureSettingsColumn(): Promise<void> {
   await pool.query('ALTER TABLE global_settings ADD COLUMN IF NOT EXISTS podcasts_rss_url TEXT;');
 }
 
-async function readPodcastSettings(): Promise<PodcastSettings> {
+export async function readPodcastSettings(): Promise<PodcastSettings> {
   if (!pool) {
     return { rssUrl: process.env.RESOURCES_PODCAST_RSS_URL?.trim() || null };
   }

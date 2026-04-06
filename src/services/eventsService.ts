@@ -49,14 +49,23 @@ function descriptionForInsert(raw: string | null | undefined): string {
 
 /** Supabase/legacy: starts_at / ends_at NOT NULL — заполняем из тех же $3 date и $4 time, что и event_date/event_time. */
 function insertTimestampExtras(schema: EventsSchemaState): { columns: string; valuesSql: string } {
-  if (!schema.hasStartsAtColumn) return { columns: '', valuesSql: '' };
-  if (!schema.hasEndsAtColumn) {
-    return { columns: ', starts_at', valuesSql: ', ($3::date + $4::time)' };
+  const startAt = '($3::date + $4::time)';
+  if (schema.hasStartsAtColumn && schema.hasEndsAtColumn) {
+    return {
+      columns: ', starts_at, ends_at',
+      valuesSql: `, ${startAt}, (${startAt} + interval '2 hours')`,
+    };
   }
-  return {
-    columns: ', starts_at, ends_at',
-    valuesSql: `, ($3::date + $4::time), (($3::date + $4::time) + interval '2 hours')`,
-  };
+  if (schema.hasStartsAtColumn) {
+    return { columns: ', starts_at', valuesSql: `, ${startAt}` };
+  }
+  if (schema.hasEndsAtColumn) {
+    return {
+      columns: ', ends_at',
+      valuesSql: `, (${startAt} + interval '2 hours')`,
+    };
+  }
+  return { columns: '', valuesSql: '' };
 }
 
 function selectEventProjection(schema: Pick<EventsSchemaState, 'hasFullRecurrenceShape' | 'hasRecurrenceTypeColumn'>): string {
@@ -401,7 +410,10 @@ export async function updateChurchEvent(
     values.push(input.is_active);
   }
 
-  if (schema.hasStartsAtColumn && (typeof input.event_date === 'string' || typeof input.event_time === 'string')) {
+  if (
+    (schema.hasStartsAtColumn || schema.hasEndsAtColumn) &&
+    (typeof input.event_date === 'string' || typeof input.event_time === 'string')
+  ) {
     const cur = await query(
       `SELECT event_date::text AS event_date, to_char(event_time, 'HH24:MI') AS event_time
        FROM ${schema.tableRef} WHERE id = $1`,
@@ -414,7 +426,9 @@ export async function updateChurchEvent(
     const d = typeof input.event_date === 'string' ? input.event_date : row.event_date;
     const tm = typeof input.event_time === 'string' ? input.event_time : row.event_time;
     const pi = i;
-    updates.push(`starts_at = $${pi}::date + $${pi + 1}::time`);
+    if (schema.hasStartsAtColumn) {
+      updates.push(`starts_at = $${pi}::date + $${pi + 1}::time`);
+    }
     if (schema.hasEndsAtColumn) {
       updates.push(`ends_at = $${pi}::date + $${pi + 1}::time + interval '2 hours'`);
     }

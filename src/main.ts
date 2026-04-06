@@ -22,6 +22,7 @@ import pushRoutes from './routes/pushRoutes';
 import messengerRoutes from './routes/messengerRoutes';
 import notificationsRoutes from './routes/notificationsRoutes';
 import telegramRoutes from './routes/telegramRoutes';
+import settingsRoutes from './routes/settingsRoutes';
 import { attachRealtimeWebSocket, initRealtimeRedis } from './realtime/wsHub';
 import { initPushCronJobs } from './cron/pushJobs';
 import { ensureUploadsDirs, getUploadsRoot } from './config/uploadsRoot';
@@ -123,6 +124,7 @@ app.get('/health', async (_req, res) => {
 // /api/users — раньше общего /api, чтобы спец-маршруты (merge-duplicates, swap-all-…) не пересекались с будущими catch-all.
 app.use('/api/users', userRoutes);
 app.use('/api/calendar', calendarRoutes);
+app.use('/api/settings', settingsRoutes);
 app.use('/api', routes);
 app.use('/api/push', pushRoutes);
 app.use('/api/notifications', notificationsRoutes);

@@ -1,0 +1,260 @@
+import Parser from 'rss-parser';
+import { pool } from '../config/db';
+import type { NotificationRule, NotificationSettingsDocument } from '../types/notificationSettings';
+import { getZonedNow, isoWeekKeyFromYmd, parseHm, type ZonedNow } from '../utils/zonedTime';
+import { readPodcastSettings } from '../controllers/resourcesController';
+import { getNextWeekMemberAssignments } from './calendarService';
+import { getBirthdayNamesForCalendarDay, getBirthdayNamesForWeekAroundDate } from './notificationBirthdayQueries';
+import { loadNotificationSettings, patchNotificationRuntimeState } from './notificationSettingsService';
+import { getCoordinatorMemberIdsWithPush, getMemberIdsWithAnyPushSubscription } from './fcmSubscriptionService';
+import { sendPush } from './pushService';
+
+const parser = new Parser();
+
+function hashStr(s: string): string {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) {
+    h = (Math.imul(31, h) + s.charCodeAt(i)) | 0;
+  }
+  return String(h);
+}
+
+const lastFiredPeriod = new Map<string, string>();
+
+function repeatMatches(rule: NotificationRule, z: ZonedNow): boolean {
+  switch (rule.repeat) {
+    case 'day':
+      return true;
+    case 'week':
+      return z.weekDay === rule.weekDay;
+    case 'month':
+      return z.day === rule.monthDay;
+    case 'year':
+      return z.month === rule.yearMonth && z.day === rule.yearDay;
+    default:
+      return true;
+  }
+}
+
+function periodKey(rule: NotificationRule, z: ZonedNow): string {
+  switch (rule.repeat) {
+    case 'day':
+      return `${z.year}-${String(z.month).padStart(2, '0')}-${String(z.day).padStart(2, '0')}`;
+    case 'week':
+      return isoWeekKeyFromYmd(z.year, z.month, z.day);
+    case 'month':
+      return `${z.year}-${String(z.month).padStart(2, '0')}`;
+    case 'year':
+      return `${z.year}`;
+    default:
+      return `${z.year}-${z.month}-${z.day}`;
+  }
+}
+
+async function pushToAllMembers(title: string, body: string, url: string): Promise<void> {
+  const ids = await getMemberIdsWithAnyPushSubscription();
+  for (const id of ids) {
+    await sendPush(id, title, body, { url });
+  }
+}
+
+async function pushToCoordinators(title: string, body: string, url: string): Promise<void> {
+  const ids = await getCoordinatorMemberIdsWithPush();
+  for (const id of ids) {
+    await sendPush(id, title, body, { url });
+  }
+}
+
+async function readRutubeEmbed(): Promise<string | null> {
+  if (!pool) return null;
+  const { rows } = await pool.query('SELECT rutube_embed_code FROM global_settings WHERE id = 1');
+  const code = rows[0]?.rutube_embed_code;
+  return typeof code === 'string' ? code : null;
+}
+
+async function readLatestEventCreatedAt(): Promise<string | null> {
+  if (!pool) return null;
+  const { rows } = await pool.query(
+    `SELECT created_at::text AS c FROM church_events WHERE is_active = TRUE ORDER BY created_at DESC NULLS LAST LIMIT 1`,
+  );
+  const c = rows[0]?.c;
+  return typeof c === 'string' ? c : null;
+}
+
+async function fetchFirstPodcastEpisodeId(): Promise<string | null> {
+  try {
+    const settings = await readPodcastSettings().catch(() => ({ rssUrl: null as string | null }));
+    const rssUrl =
+      settings.rssUrl ||
+      process.env.RESOURCES_PODCAST_RSS_URL?.trim() ||
+      'https://feeds.simplecast.com/54nAGcIl';
+    const feed = await parser.parseURL(rssUrl);
+    const items = Array.isArray(feed.items) ? feed.items : [];
+    const first = items[0] as { guid?: string; id?: string; link?: string } | undefined;
+    if (!first) return null;
+    return String(first.guid ?? first.id ?? first.link ?? '').trim() || null;
+  } catch (e) {
+    console.warn('[notifications] RSS read failed', e);
+    return null;
+  }
+}
+
+async function handleRule(rule: NotificationRule, doc: NotificationSettingsDocument, z: ZonedNow): Promise<void> {
+  const rs = doc.runtimeState ?? {};
+
+  switch (rule.id) {
+    case 'prayer_reminder': {
+      await pushToAllMembers(
+        'Время молитвы',
+        'Напоминание: уделите время молитве за нужды церкви.',
+        '/prayer',
+      );
+      return;
+    }
+    case 'birthday_today': {
+      const names = await getBirthdayNamesForCalendarDay(z.month, z.day);
+      if (names.length === 0) return;
+      await pushToAllMembers(
+        'Дни рождения сегодня',
+        names.join(', '),
+        '/dashboard',
+      );
+      return;
+    }
+    case 'birthday_week': {
+      const names = await getBirthdayNamesForWeekAroundDate(z.year, z.month, z.day);
+      if (names.length === 0) return;
+      await pushToAllMembers(
+        'Дни рождения на этой неделе',
+        names.join(', '),
+        '/dashboard',
+      );
+      return;
+    }
+    case 'broadcast_start': {
+      const embed = await readRutubeEmbed();
+      const code = embed?.trim() ?? '';
+      const h = hashStr(code);
+      if (!rs.broadcastInitialized) {
+        await patchNotificationRuntimeState((d) => ({
+          ...d,
+          runtimeState: {
+            ...d.runtimeState,
+            lastBroadcastHash: h,
+            broadcastInitialized: true,
+          },
+        }));
+        return;
+      }
+      if (!code) return;
+      if (rs.lastBroadcastHash === h) return;
+      await pushToAllMembers('Трансляция', 'Обновлён код плеера — эфир доступен в приложении.', '/dashboard');
+      await patchNotificationRuntimeState((d) => ({
+        ...d,
+        runtimeState: { ...d.runtimeState, lastBroadcastHash: h },
+      }));
+      return;
+    }
+    case 'system_update': {
+      const stamp =
+        String(process.env.BUILD_STAMP ?? process.env.GIT_SHA ?? process.env.VERCEL_GIT_COMMIT_SHA ?? '').trim() ||
+        null;
+      if (!stamp) return;
+      if (!rs.lastApiBuildStamp) {
+        await patchNotificationRuntimeState((d) => ({
+          ...d,
+          runtimeState: { ...d.runtimeState, lastApiBuildStamp: stamp },
+        }));
+        return;
+      }
+      if (rs.lastApiBuildStamp === stamp) return;
+      await pushToAllMembers(
+        'Обновление',
+        'Вышла новая версия приложения. Обновите страницу или установите свежую сборку.',
+        '/dashboard',
+      );
+      await patchNotificationRuntimeState((d) => ({
+        ...d,
+        runtimeState: { ...d.runtimeState, lastApiBuildStamp: stamp },
+      }));
+      return;
+    }
+    case 'new_sermon': {
+      const epId = await fetchFirstPodcastEpisodeId();
+      if (!epId) return;
+      if (!rs.lastSermonEpisodeId) {
+        await patchNotificationRuntimeState((d) => ({
+          ...d,
+          runtimeState: { ...d.runtimeState, lastSermonEpisodeId: epId },
+        }));
+        return;
+      }
+      if (rs.lastSermonEpisodeId === epId) return;
+      await pushToAllMembers('Новая проповедь', 'В ленте появилась новая запись.', '/sermons');
+      await patchNotificationRuntimeState((d) => ({
+        ...d,
+        runtimeState: { ...d.runtimeState, lastSermonEpisodeId: epId },
+      }));
+      return;
+    }
+    case 'new_event': {
+      const created = await readLatestEventCreatedAt();
+      if (!created) return;
+      if (!rs.lastEventCreatedAtIso) {
+        await patchNotificationRuntimeState((d) => ({
+          ...d,
+          runtimeState: { ...d.runtimeState, lastEventCreatedAtIso: created },
+        }));
+        return;
+      }
+      if (rs.lastEventCreatedAtIso === created) return;
+      await pushToAllMembers('Новое событие', 'В календаре церкви добавлено или обновлено событие.', '/dashboard');
+      await patchNotificationRuntimeState((d) => ({
+        ...d,
+        runtimeState: { ...d.runtimeState, lastEventCreatedAtIso: created },
+      }));
+      return;
+    }
+    case 'coordinator_week_digest': {
+      const nextWeekPlan = await getNextWeekMemberAssignments();
+      const participantsList = nextWeekPlan
+        .filter((item) => item.member !== null)
+        .map((item) => item.member!.name)
+        .join(', ');
+      const body = participantsList
+        ? `Участники: ${participantsList}`
+        : 'На следующую неделю нет распределённых участников.';
+      await pushToCoordinators('Сбор нужд на следующую неделю', body, '/calendar');
+      return;
+    }
+    default:
+      return;
+  }
+}
+
+/**
+ * Вызывается из минутного крона: при совпадении времени и периода шлёт push по правилам.
+ */
+export async function runNotificationRulesTick(): Promise<void> {
+  const doc = await loadNotificationSettings();
+  const tz = doc.timezone || 'Europe/Moscow';
+  const z = getZonedNow(tz);
+
+  for (const rule of doc.rules) {
+    if (!rule.enabled) continue;
+    const hm = parseHm(rule.time);
+    if (!hm || z.hour !== hm.hour || z.minute !== hm.minute) continue;
+    if (!repeatMatches(rule, z)) continue;
+
+    const pk = `${rule.id}:${periodKey(rule, z)}`;
+    if (lastFiredPeriod.get(rule.id) === pk) continue;
+
+    try {
+      const fresh = await loadNotificationSettings();
+      await handleRule(rule, fresh, z);
+      lastFiredPeriod.set(rule.id, pk);
+    } catch (e) {
+      console.error('[notifications] rule error', rule.id, e);
+    }
+  }
+}

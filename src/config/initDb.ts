@@ -267,6 +267,7 @@ ALTER TABLE global_settings ADD COLUMN IF NOT EXISTS telegram_prayer_chat_id TEX
 ALTER TABLE global_settings ADD COLUMN IF NOT EXISTS telegram_coordinator_chat_id TEXT;
 ALTER TABLE global_settings ADD COLUMN IF NOT EXISTS telegram_default_chat_id TEXT;
 ALTER TABLE global_settings ADD COLUMN IF NOT EXISTS telegram_enabled BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE global_settings ADD COLUMN IF NOT EXISTS notification_settings_json TEXT;
 
 ALTER TABLE church_events ADD COLUMN IF NOT EXISTS recurrence_type VARCHAR(16);
 UPDATE church_events

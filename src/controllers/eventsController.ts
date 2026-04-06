@@ -59,9 +59,16 @@ function coerceEventDateToYmd(value: unknown): string | null {
   return isValidDateInput(ymd) ? ymd : null;
 }
 
+/** Некоторые клиенты шлют время с долями секунды (`11:00:00.000`) — для PG и проверки достаточно `HH:mm` / `HH:mm:ss`. */
+function normalizeEventTimeString(raw: string): string {
+  const t = raw.trim();
+  const noFrac = t.includes('.') ? t.split('.')[0]! : t;
+  return noFrac.trim();
+}
+
 function isValidTimeInput(value: unknown): value is string {
   if (typeof value !== 'string') return false;
-  const t = value.trim();
+  const t = normalizeEventTimeString(value);
   const m = /^(\d{1,2}):([0-5]\d)(?::([0-5]\d))?$/.exec(t);
   if (!m) return false;
   const h = Number(m[1]);
@@ -110,7 +117,8 @@ export async function postEvent(req: Request, res: Response): Promise<void> {
   const title = typeof req.body?.title === 'string' ? req.body.title.trim() : '';
   const description = typeof req.body?.description === 'string' ? req.body.description : null;
   const eventDate = req.body?.event_date;
-  const eventTime = typeof req.body?.event_time === 'string' ? req.body.event_time.trim() : '';
+  const eventTime =
+    typeof req.body?.event_time === 'string' ? normalizeEventTimeString(req.body.event_time) : '';
   const recurrenceType = req.body?.recurrence_type;
   const weeklyDay = req.body?.weekly_day;
   const isActive = req.body?.is_active;
@@ -181,9 +189,14 @@ export async function patchEvent(req: Request, res: Response): Promise<void> {
     }
     patchEventYmd = ymd;
   }
-  if (body.event_time !== undefined && !isValidTimeInput(body.event_time)) {
-    res.status(400).json({ error: 'Field "event_time" must be HH:mm' });
-    return;
+  if (body.event_time !== undefined) {
+    const t =
+      typeof body.event_time === 'string' ? normalizeEventTimeString(body.event_time) : body.event_time;
+    if (!isValidTimeInput(t)) {
+      res.status(400).json({ error: 'Field "event_time" must be HH:mm' });
+      return;
+    }
+    body.event_time = t;
   }
   if (body.recurrence_type !== undefined && !isValidRecurrenceType(body.recurrence_type)) {
     res.status(400).json({ error: 'Field "recurrence_type" must be "once" or "weekly"' });
@@ -208,7 +221,8 @@ export async function patchEvent(req: Request, res: Response): Promise<void> {
             ? body.description
             : null,
       event_date: patchEventYmd,
-      event_time: typeof body.event_time === 'string' ? body.event_time : undefined,
+      event_time:
+        typeof body.event_time === 'string' ? normalizeEventTimeString(body.event_time) : undefined,
       recurrence_type: isValidRecurrenceType(body.recurrence_type) ? body.recurrence_type : undefined,
       weekly_day: body.weekly_day !== undefined ? parseWeeklyDay(body.weekly_day) : undefined,
       is_active: typeof body.is_active === 'boolean' ? body.is_active : undefined,

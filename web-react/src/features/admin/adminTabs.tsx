@@ -1,5 +1,6 @@
 import type { IconType } from 'react-icons';
 import {
+  LuBell,
   LuCalendarDays,
   LuCalendarRange,
   LuInbox,
@@ -10,7 +11,7 @@ import {
 } from 'react-icons/lu';
 
 export interface AdminTabConfig {
-  id: 'members' | 'requests' | 'calendar' | 'events' | 'templates' | 'project' | 'telegram';
+  id: 'members' | 'requests' | 'calendar' | 'events' | 'templates' | 'project' | 'notifications' | 'telegram';
   label: string;
   Icon: IconType;
   short: string;
@@ -61,6 +62,14 @@ export const ADMIN_TABS: readonly AdminTabConfig[] = [
     short: 'Вид',
     description:
       'Название и логотип в меню хранятся только в этом браузере — тот же формат, что в мобильном приложении.',
+  },
+  {
+    id: 'notifications',
+    label: 'Уведомления',
+    Icon: LuBell,
+    short: 'Пуш',
+    description:
+      'Расписание напоминаний: молитва, дни рождения, трансляция, обновления, проповеди и события — время, важность и периодичность.',
   },
   {
     id: 'telegram',

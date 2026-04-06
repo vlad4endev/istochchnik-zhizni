@@ -15,6 +15,7 @@ import { UpdateNotification, useServiceWorkerUpdate, NotificationPrompt } from '
 import type { AppToastAction, AppToastKind } from '../lib/uiFeedback';
 import { useChatStore } from '../features/messenger/chatStore';
 import { MessengerWsProvider } from '../features/messenger/MessengerWsContext';
+import { useBrowserNotificationScheduler } from '../features/notifications/useBrowserNotificationScheduler';
 
 type NavItem = {
   to: string;
@@ -233,6 +234,7 @@ export function Layout() {
   useFCM();
   useWebPushSync();
   useRealtimeQuerySync();
+  useBrowserNotificationScheduler();
   const navigate = useNavigate();
   const token = useAuthStore((s) => s.token);
   const setActiveConversation = useChatStore((s) => s.setActiveConversation);

@@ -22,6 +22,7 @@ import { ru } from 'date-fns/locale';
 
 import { ADMIN_TABS, type AdminTabId } from '../adminTabs';
 import { AccessRequestsSection } from '../AccessRequestsSection';
+import { NotificationsSettingsSection } from '../NotificationsSettingsSection';
 import { useBrandingStore } from '../../branding/brandingStore';
 import {
   apiErrorMessage,
@@ -243,6 +244,7 @@ export function AdminPage() {
       {tab === 'events' && <EventsSection />}
       {tab === 'templates' && <TemplatesSection />}
       {tab === 'project' && <ProjectSection />}
+      {tab === 'notifications' && <NotificationsSettingsSection />}
       {tab === 'telegram' && <TelegramSection />}
     </div>
   );
