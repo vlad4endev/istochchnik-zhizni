@@ -9,13 +9,17 @@ const LS_TOKEN = 'auth_access_token';
 const LS_FIRST = 'auth_first_name';
 const LS_LAST = 'auth_last_name';
 const LS_ROLE = 'auth_role';
+const LS_REG = 'auth_registration_status';
 
 export type AuthRole = 'member' | 'admin' | (string & {});
+
+export type RegistrationStatus = 'active' | 'pending_review' | 'rejected';
 
 export interface AuthProfile {
   firstName: string;
   lastName: string;
   role: AuthRole;
+  registrationStatus: RegistrationStatus;
 }
 
 interface AuthState extends AuthProfile {
@@ -43,8 +47,14 @@ function normalizeRole(raw: string | undefined): AuthRole {
   return r.toLowerCase() === 'admin' ? 'admin' : r;
 }
 
+export function normalizeRegistrationStatus(raw: string | undefined | null): RegistrationStatus {
+  const s = (raw ?? 'active').trim().toLowerCase();
+  if (s === 'pending_review' || s === 'rejected') return s;
+  return 'active';
+}
+
 function readLegacyFlutterKeys(): Partial<
-  Pick<AuthState, 'token' | 'firstName' | 'lastName' | 'role'>
+  Pick<AuthState, 'token' | 'firstName' | 'lastName' | 'role' | 'registrationStatus'>
 > | null {
   if (typeof localStorage === 'undefined') return null;
   const token = localStorage.getItem(LS_TOKEN);
@@ -54,6 +64,7 @@ function readLegacyFlutterKeys(): Partial<
     firstName: localStorage.getItem(LS_FIRST) ?? '',
     lastName: localStorage.getItem(LS_LAST) ?? '',
     role: normalizeRole(localStorage.getItem(LS_ROLE) ?? undefined),
+    registrationStatus: normalizeRegistrationStatus(localStorage.getItem(LS_REG)),
   };
 }
 
@@ -72,6 +83,9 @@ const flutterCompatibleStorage: StateStorage = {
         firstName: legacy?.firstName ?? localStorage.getItem(LS_FIRST) ?? '',
         lastName: legacy?.lastName ?? localStorage.getItem(LS_LAST) ?? '',
         role: legacy?.role ?? normalizeRole(localStorage.getItem(LS_ROLE) ?? undefined),
+        registrationStatus: normalizeRegistrationStatus(
+          legacy?.registrationStatus ?? localStorage.getItem(LS_REG),
+        ),
       },
       version: 0,
     });
@@ -90,6 +104,7 @@ const flutterCompatibleStorage: StateStorage = {
       localStorage.setItem(LS_FIRST, s.firstName ?? '');
       localStorage.setItem(LS_LAST, s.lastName ?? '');
       localStorage.setItem(LS_ROLE, normalizeRole(s.role as string));
+      localStorage.setItem(LS_REG, normalizeRegistrationStatus(s.registrationStatus as string));
     } catch {
       /* ignore */
     }
@@ -100,6 +115,7 @@ const flutterCompatibleStorage: StateStorage = {
     localStorage.removeItem(LS_FIRST);
     localStorage.removeItem(LS_LAST);
     localStorage.removeItem(LS_ROLE);
+    localStorage.removeItem(LS_REG);
   },
 };
 
@@ -119,22 +135,25 @@ export const useAuthStore = create<AuthState>()(
       firstName: '',
       lastName: '',
       role: 'member',
+      registrationStatus: 'active',
 
-      setSession: ({ token, firstName, lastName, role }) => {
+      setSession: ({ token, firstName, lastName, role, registrationStatus }) => {
         set({
           token,
           firstName: firstName.trim(),
           lastName: lastName.trim(),
           role: normalizeRole(role),
+          registrationStatus: normalizeRegistrationStatus(registrationStatus),
         });
       },
 
-      applyServerProfile: ({ firstName, lastName, role }) => {
+      applyServerProfile: ({ firstName, lastName, role, registrationStatus }) => {
         if (!get().token) return;
         set({
           firstName: firstName.trim(),
           lastName: lastName.trim(),
           role: normalizeRole(role),
+          registrationStatus: normalizeRegistrationStatus(registrationStatus),
         });
       },
 
@@ -144,6 +163,7 @@ export const useAuthStore = create<AuthState>()(
           firstName: '',
           lastName: '',
           role: 'member',
+          registrationStatus: 'active',
         });
       },
 
@@ -156,6 +176,7 @@ export const useAuthStore = create<AuthState>()(
               first_name?: string;
               last_name?: string;
               app_role?: string;
+              registration_status?: string;
             };
             error?: string;
           }>(
@@ -186,6 +207,7 @@ export const useAuthStore = create<AuthState>()(
             firstName: (user.first_name ?? '').trim(),
             lastName: (user.last_name ?? '').trim(),
             role: (user.app_role ?? 'member').trim() || 'member',
+            registrationStatus: normalizeRegistrationStatus(user.registration_status),
           });
 
           return { ok: true };
@@ -230,6 +252,7 @@ export const useAuthStore = create<AuthState>()(
         firstName: s.firstName,
         lastName: s.lastName,
         role: s.role,
+        registrationStatus: s.registrationStatus,
       }),
     },
   ),

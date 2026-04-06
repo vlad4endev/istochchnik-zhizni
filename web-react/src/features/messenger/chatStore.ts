@@ -142,6 +142,12 @@ interface ChatState {
   handleNewMessage: (convId: string, msg: MessageWithSender) => void;
   handleMessageSendFailed: (convId: string, clientMsgId: string) => void;
   handleMessageEdited: (convId: string, msgId: string, content: string, updatedAt: string) => void;
+  handleMessagePayloadUpdated: (
+    convId: string,
+    msgId: string,
+    payload: Record<string, unknown>,
+    updatedAt: string,
+  ) => void;
   handleMessageDeleted: (convId: string, msgId: string) => void;
   handleReaction: (convId: string, msgId: string, emoji: string, memberId: number, action: 'add' | 'remove') => void;
   /** Merge poll vote counts from WebSocket (all clients) or after local vote. */
@@ -178,8 +184,8 @@ function messageCountsAsUnreadForCurrentUser(
   msg: Pick<MessageWithSender, 'is_read' | 'sender_id'>,
   currentMemberId: number | null,
 ): boolean {
-  if (currentMemberId == null || msg.sender_id == null) return false;
-  if (Number(msg.sender_id) === Number(currentMemberId)) return false;
+  if (currentMemberId == null) return false;
+  if (msg.sender_id != null && Number(msg.sender_id) === Number(currentMemberId)) return false;
   return msg.is_read === false;
 }
 
@@ -1194,6 +1200,17 @@ export const useChatStore = create<ChatState>((set, get) => ({
         messagesByConv: { ...s.messagesByConv, [idKey]: nextMsgs },
         conversations: syncConversationLastMessageOnEdit(s.conversations, idKey, messageId, content),
       };
+    });
+  },
+
+  handleMessagePayloadUpdated: (convId, msgId, payload, updatedAt) => {
+    const idKey = String(convId);
+    const messageId = String(msgId);
+    set((s) => {
+      const nextMsgs = (s.messagesByConv[idKey] || []).map((m) =>
+        String(m.id) === messageId ? { ...m, payload, updated_at: updatedAt } : m,
+      );
+      return { messagesByConv: { ...s.messagesByConv, [idKey]: nextMsgs } };
     });
   },
 

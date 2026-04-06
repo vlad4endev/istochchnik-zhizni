@@ -282,6 +282,27 @@ function handleWsMessage(msg: any): void {
       break;
     }
 
+    case 'msg:payload_updated': {
+      const cid =
+        msg.conversationId != null && String(msg.conversationId).trim() !== ''
+          ? String(msg.conversationId)
+          : null;
+      const mid =
+        msg.messageId != null && String(msg.messageId).trim() !== '' ? String(msg.messageId) : null;
+      const pl = msg.payload;
+      if (
+        cid &&
+        mid &&
+        pl &&
+        typeof pl === 'object' &&
+        !Array.isArray(pl) &&
+        typeof msg.updatedAt === 'string'
+      ) {
+        store.handleMessagePayloadUpdated(cid, mid, pl as Record<string, unknown>, msg.updatedAt);
+      }
+      break;
+    }
+
     case 'msg:deleted': {
       const cid =
         msg.conversationId != null && String(msg.conversationId).trim() !== ''

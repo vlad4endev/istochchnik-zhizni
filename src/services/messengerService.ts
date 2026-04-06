@@ -11,6 +11,7 @@ import type {
   ParticipantRole,
   PermissionsJson,
 } from '../types/messenger';
+import { sendPushNotification } from './pushService';
 
 // ─── Helpers ──────────────────────────────────────────────────
 
@@ -155,7 +156,10 @@ export async function listConversations(memberId: number): Promise<ConversationL
       lm.sender_id   AS lm_sender_id,
       lm.created_at  AS lm_created_at,
       lm.is_deleted  AS lm_is_deleted,
-      COALESCE(lm_sender.first_name, '') || ' ' || COALESCE(lm_sender.last_name, '') AS lm_sender_name,
+      COALESCE(
+        NULLIF(TRIM(COALESCE(lm_sender.first_name, '') || ' ' || COALESCE(lm_sender.last_name, '')), ''),
+        CASE WHEN lm.payload_type::text = 'access_request' THEN 'Заявки' ELSE NULL END
+      ) AS lm_sender_name,
       -- unread count
       COALESCE(
         (SELECT COUNT(*)::int FROM messages m2
@@ -175,7 +179,7 @@ export async function listConversations(memberId: number): Promise<ConversationL
     JOIN conversations c ON c.id = cp.conversation_id
     -- last message via lateral
     LEFT JOIN LATERAL (
-      SELECT m.id, m.content, m.sender_id, m.created_at, m.is_deleted
+      SELECT m.id, m.content, m.sender_id, m.created_at, m.is_deleted, m.payload_type
       FROM messages m
       WHERE m.conversation_id = c.id
       ORDER BY m.id DESC
@@ -513,7 +517,10 @@ export async function getConversationListItem(
       lm.sender_id   AS lm_sender_id,
       lm.created_at  AS lm_created_at,
       lm.is_deleted  AS lm_is_deleted,
-      COALESCE(lm_sender.first_name, '') || ' ' || COALESCE(lm_sender.last_name, '') AS lm_sender_name,
+      COALESCE(
+        NULLIF(TRIM(COALESCE(lm_sender.first_name, '') || ' ' || COALESCE(lm_sender.last_name, '')), ''),
+        CASE WHEN lm.payload_type::text = 'access_request' THEN 'Заявки' ELSE NULL END
+      ) AS lm_sender_name,
       -- unread count
       COALESCE(
         (SELECT COUNT(*)::int FROM messages m2
@@ -532,7 +539,7 @@ export async function getConversationListItem(
     FROM conversation_participants cp
     JOIN conversations c ON c.id = cp.conversation_id
     LEFT JOIN LATERAL (
-      SELECT m.id, m.content, m.sender_id, m.created_at, m.is_deleted
+      SELECT m.id, m.content, m.sender_id, m.created_at, m.is_deleted, m.payload_type
       FROM messages m
       WHERE m.conversation_id = c.id
       ORDER BY m.id DESC
@@ -999,7 +1006,8 @@ function normalizePayloadType(raw: unknown): MessagePayloadType {
     raw === 'audio' ||
     raw === 'image' ||
     raw === 'file' ||
-    raw === 'poll'
+    raw === 'poll' ||
+    raw === 'access_request'
   ) {
     return raw;
   }
@@ -1857,6 +1865,7 @@ export async function searchMembers(
     `SELECT m.id, m.name, m.first_name, m.last_name, m.avatar_url
      FROM members m
      WHERE m.is_active = TRUE
+       AND COALESCE(m.registration_status, 'active') = 'active'
        AND m.id != $1
        AND (
          LOWER(m.name) LIKE '%' || LOWER($2) || '%'
@@ -1881,12 +1890,231 @@ export async function listRegisteredMembers(
     `SELECT m.id, m.name, m.first_name, m.last_name, m.avatar_url
      FROM members m
      WHERE m.is_active = TRUE
+       AND COALESCE(m.registration_status, 'active') = 'active'
        AND m.id != $1
      ORDER BY m.first_name ASC, m.last_name ASC
      LIMIT $2`,
     [excludeMemberId, limit],
   );
   return result.rows;
+}
+
+// ─── Канал «Заявки» (уведомления админам о регистрации) ───────
+
+const ACCESS_REQUESTS_CHANNEL_KIND = 'access_requests';
+const ACCESS_REQUESTS_CHANNEL_TITLE = 'Заявки';
+/** Для SELECT как у истории чата; для access_request блоки опроса пустые. */
+const FANOUT_VIEWER_MEMBER_ID = 0;
+
+async function fetchMessageByIdForFanout(messageId: string): Promise<MessageWithSender | null> {
+  if (!/^\d+$/.test(messageId)) return null;
+  const result = await dbQuery(
+    `
+    SELECT
+      msg.*,
+      m.name        AS sender_name,
+      m.first_name  AS sender_first_name,
+      m.last_name   AS sender_last_name,
+      rm.id         AS rp_id,
+      rm.content    AS rp_content,
+      rm.is_deleted AS rp_is_deleted,
+      COALESCE(rm_s.first_name, '') || ' ' || COALESCE(rm_s.last_name, '') AS rp_sender_name,
+      (
+        SELECT COALESCE(json_agg(json_build_object(
+          'emoji', r.emoji,
+          'count', r.cnt,
+          'reacted_by_me', r.my_react
+        )), '[]'::json)
+        FROM (
+          SELECT
+            mr.emoji,
+            COUNT(*)::int AS cnt,
+            BOOL_OR(mr.member_id = $2) AS my_react
+          FROM message_reactions mr
+          WHERE mr.message_id = msg.id
+          GROUP BY mr.emoji
+        ) r
+      ) AS reactions_json,
+      (
+        SELECT COALESCE(json_agg(sub.c ORDER BY sub.i), '[]'::json)
+        FROM (
+          SELECT gs.i AS i,
+            COALESCE((
+              SELECT COUNT(*)::int FROM message_poll_votes v
+              WHERE v.message_id = msg.id AND v.option_index = gs.i
+            ), 0) AS c
+          FROM generate_series(
+            0,
+            GREATEST(0, jsonb_array_length(COALESCE(msg.payload->'options', '[]'::jsonb)) - 1)
+          ) AS gs(i)
+        ) sub
+      ) AS poll_tallies_json,
+      (
+        SELECT COALESCE(json_agg(v.option_index ORDER BY v.option_index), '[]'::json)
+        FROM message_poll_votes v
+        WHERE v.message_id = msg.id AND v.member_id = $2
+      ) AS poll_my_options_json
+    FROM messages msg
+    LEFT JOIN members m ON m.id = msg.sender_id
+    LEFT JOIN messages rm ON rm.id = msg.reply_to_message_id
+    LEFT JOIN members rm_s ON rm_s.id = rm.sender_id
+    WHERE msg.id = $1::bigint
+    LIMIT 1
+    `,
+    [messageId, FANOUT_VIEWER_MEMBER_ID],
+  );
+  const row = result.rows[0];
+  return row ? mapMessageWithSender(row, FANOUT_VIEWER_MEMBER_ID) : null;
+}
+
+async function syncAdminParticipantsToAccessRequestsChannel(conversationId: string): Promise<void> {
+  const admins = await dbQuery(
+    `SELECT id FROM members WHERE app_role = 'admin' AND COALESCE(is_active, TRUE)`,
+  );
+  for (const row of admins.rows) {
+    const mId = Number((row as { id: unknown }).id);
+    if (!Number.isFinite(mId)) continue;
+    await addParticipant(conversationId, mId, 'member');
+  }
+}
+
+/**
+ * Создаёт канал «Заявки» и подписывает всех админов. Идемпотентно.
+ */
+export async function ensureAccessRequestsMessengerChannel(): Promise<string | null> {
+  try {
+    const found = await dbQuery(
+      `SELECT id FROM conversations
+       WHERE type = 'channel'
+         AND metadata->>'kind' = $1
+       LIMIT 1`,
+      [ACCESS_REQUESTS_CHANNEL_KIND],
+    );
+    let convId: string;
+    if (found.rows[0]?.id != null) {
+      convId = bigint((found.rows[0] as { id: unknown }).id);
+    } else {
+      const ins = await dbQuery(
+        `INSERT INTO conversations (type, title, metadata)
+         VALUES ('channel', $1, jsonb_build_object('kind', $2))
+         RETURNING id`,
+        [ACCESS_REQUESTS_CHANNEL_TITLE, ACCESS_REQUESTS_CHANNEL_KIND],
+      );
+      convId = bigint((ins.rows[0] as { id: unknown }).id);
+    }
+    await syncAdminParticipantsToAccessRequestsChannel(convId);
+    return convId;
+  } catch (e) {
+    console.error('[messenger] ensureAccessRequestsMessengerChannel:', e);
+    return null;
+  }
+}
+
+/**
+ * Сообщение в канал о новой заявке на регистрацию (бот «Заявки», sender_id NULL).
+ */
+export async function postRegistrationAccessRequestMessengerNotification(input: {
+  accessRequestId: number;
+  firstName: string;
+  lastName: string;
+  fullName: string;
+  phoneNumber: string;
+}): Promise<void> {
+  const convId = await ensureAccessRequestsMessengerChannel();
+  if (!convId) return;
+
+  const content = `Новая заявка: ${input.fullName}`.trim();
+  const payload: MessagePayload = {
+    access_request_id: input.accessRequestId,
+    kind: 'registration',
+    first_name: input.firstName,
+    last_name: input.lastName,
+    full_name: input.fullName,
+    phone_number: input.phoneNumber,
+  };
+
+  await dbQuery(`UPDATE conversations SET updated_at = NOW() WHERE id = $1`, [convId]);
+
+  const ins = await dbQuery(
+    `INSERT INTO messages (conversation_id, sender_id, content, payload_type, payload)
+     VALUES ($1::bigint, NULL, $2, 'access_request'::message_payload_type, $3::jsonb)
+     RETURNING id`,
+    [convId, content, JSON.stringify(payload)],
+  );
+  const rawId = (ins.rows[0] as { id?: unknown } | undefined)?.id;
+  if (rawId == null) return;
+  const messageId = bigint(rawId);
+
+  const full = await fetchMessageByIdForFanout(messageId);
+  if (!full) return;
+
+  const { sendToRoomAll } = await import('../realtime/wsHub');
+  sendToRoomAll(convId, {
+    type: 'msg:new',
+    conversationId: convId,
+    message: { ...full, is_read: false as const },
+  });
+
+  try {
+    const memberIds = await getConversationMemberIds(convId);
+    const meta = await getConversationMeta(convId);
+    const chatLabel = meta?.title?.trim() || ACCESS_REQUESTS_CHANNEL_TITLE;
+    const previewShort =
+      content.length > 160 ? `${content.slice(0, 157).trim()}…` : content;
+    for (const rid of memberIds) {
+      const r = Number(rid);
+      if (!Number.isFinite(r)) continue;
+      if (await isConversationMutedForMember(convId, r)) continue;
+      await sendPushNotification(r, {
+        title: chatLabel,
+        body: previewShort,
+        conversationId: convId,
+        messageId,
+        url: `/messenger?conversationId=${encodeURIComponent(convId)}`,
+      });
+    }
+  } catch (e) {
+    console.warn('[messenger] access-request push notify failed:', e);
+  }
+}
+
+/**
+ * После approve/reject в админке — обновить карточку в чате и разослать по WS.
+ */
+export async function markAccessRequestMessengerResolved(
+  accessRequestId: number,
+  resolution: 'approved' | 'rejected',
+): Promise<void> {
+  const upd = await dbQuery(
+    `UPDATE messages
+     SET
+       payload = payload || jsonb_build_object('resolution', to_jsonb($2::text)),
+       updated_at = NOW()
+     WHERE payload_type = 'access_request'::message_payload_type
+       AND (payload->>'access_request_id')::bigint = $1::bigint
+     RETURNING id, conversation_id, payload, updated_at`,
+    [accessRequestId, resolution],
+  );
+  const row = upd.rows[0] as
+    | { id: unknown; conversation_id: unknown; payload: unknown; updated_at: string }
+    | undefined;
+  if (!row?.id || row.conversation_id == null) return;
+
+  const messageId = bigint(row.id);
+  const convId = bigint(row.conversation_id);
+  const payloadObj =
+    row.payload && typeof row.payload === 'object' && !Array.isArray(row.payload)
+      ? (row.payload as Record<string, unknown>)
+      : {};
+
+  const { sendToRoomAll } = await import('../realtime/wsHub');
+  sendToRoomAll(convId, {
+    type: 'msg:payload_updated',
+    conversationId: convId,
+    messageId,
+    payload: payloadObj,
+    updatedAt: row.updated_at,
+  });
 }
 
 // ─── Map helper ───────────────────────────────────────────────
@@ -1923,7 +2151,7 @@ function mapMessageWithSender(r: any, currentMemberId: number): MessageWithSende
     is_pinned: r.is_pinned ?? false,
     created_at: r.created_at,
     updated_at: r.updated_at,
-    sender_name: r.sender_name?.trim() || null,
+    sender_name: r.sender_name?.trim() || (pt === 'access_request' ? 'Заявки' : null),
     sender_first_name: r.sender_first_name || null,
     sender_last_name: r.sender_last_name || null,
     reply_preview: r.rp_id

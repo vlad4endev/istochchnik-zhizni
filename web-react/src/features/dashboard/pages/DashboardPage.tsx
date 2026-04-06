@@ -31,6 +31,7 @@ import {
   isBroadcastLiveNow,
 } from '../../broadcast/liveAccess';
 import { useAuthStore } from '../../auth/authStore';
+import { LimitedRegistrationDashboard } from '../components/LimitedRegistrationDashboard';
 
 type DashboardEvent = {
   id: string;
@@ -145,7 +146,7 @@ function formatBirthdayChipDate(ymd: string): string {
   return format(d, 'EEE, d MMM', { locale: ru });
 }
 
-export function DashboardPage() {
+function DashboardMain() {
   const [now, setNow] = useState(() => new Date());
   const navigate = useNavigate();
   const role = useAuthStore((s) => s.role);
@@ -481,4 +482,17 @@ export function DashboardPage() {
       ) : null}
     </div>
   );
+}
+
+export function DashboardPage() {
+  const registrationStatus = useAuthStore((s) => s.registrationStatus ?? 'active');
+  const firstName = useAuthStore((s) => s.firstName);
+
+  if (registrationStatus === 'pending_review' || registrationStatus === 'rejected') {
+    return (
+      <LimitedRegistrationDashboard registrationStatus={registrationStatus} firstName={firstName} />
+    );
+  }
+
+  return <DashboardMain />;
 }

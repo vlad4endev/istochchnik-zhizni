@@ -26,6 +26,10 @@ function pgErrorMeta(err: unknown): {
   return out;
 }
 import {
+  getChurchEventCategoryOptionsForApi,
+  isAllowedChurchEventCategory,
+} from '../constants/churchEventCategories';
+import {
   createChurchEvent,
   deleteAllChurchEvents,
   deleteChurchEvent,
@@ -107,6 +111,29 @@ function parseWeeklyDay(value: unknown): number | null {
   return n;
 }
 
+/** Тело запроса: пустая строка → не передано; иначе id из разрешённого списка. */
+function parseChurchEventCategoryBody(raw: unknown): { ok: true; value?: string } | { ok: false; message: string } {
+  if (raw === undefined || raw === null) {
+    return { ok: true, value: undefined };
+  }
+  if (typeof raw !== 'string') {
+    return { ok: false, message: 'Field "category" must be a string' };
+  }
+  const t = raw.trim();
+  if (!t) {
+    return { ok: true, value: undefined };
+  }
+  if (!isAllowedChurchEventCategory(t)) {
+    return { ok: false, message: 'Field "category" is not an allowed value' };
+  }
+  return { ok: true, value: t };
+}
+
+export async function getEventCategoryOptions(req: Request, res: Response): Promise<void> {
+  if (!ensureAdmin(req, res)) return;
+  res.json({ options: getChurchEventCategoryOptionsForApi() });
+}
+
 export async function getActiveEvents(_req: Request, res: Response): Promise<void> {
   try {
     const items = await listActiveEvents();
@@ -138,6 +165,11 @@ export async function postEvent(req: Request, res: Response): Promise<void> {
   const recurrenceType = req.body?.recurrence_type;
   const weeklyDay = req.body?.weekly_day;
   const isActive = req.body?.is_active;
+  const catParsed = parseChurchEventCategoryBody(req.body?.category);
+  if (!catParsed.ok) {
+    res.status(400).json({ error: catParsed.message });
+    return;
+  }
 
   if (!title) {
     res.status(400).json({ error: 'Field "title" is required' });
@@ -174,6 +206,7 @@ export async function postEvent(req: Request, res: Response): Promise<void> {
       recurrence_type: recurrenceType,
       weekly_day: recurrenceType === 'weekly' ? parseWeeklyDay(weeklyDay) : null,
       is_active: typeof isActive === 'boolean' ? isActive : true,
+      category: catParsed.value,
     });
     notifyRealtime(['calendar']);
     res.status(201).json(created);
@@ -226,6 +259,20 @@ export async function patchEvent(req: Request, res: Response): Promise<void> {
     res.status(400).json({ error: 'Field "is_active" must be boolean' });
     return;
   }
+  /** null / пустая строка после parse → «сброс»; при NOT NULL в БД сервис подставит DEFAULT или defaultChurchEventCategory(). */
+  let patchCategory: string | null | undefined;
+  if (body.category !== undefined) {
+    if (body.category === null) {
+      patchCategory = null;
+    } else {
+      const pc = parseChurchEventCategoryBody(body.category);
+      if (!pc.ok) {
+        res.status(400).json({ error: pc.message });
+        return;
+      }
+      patchCategory = pc.value === undefined ? null : pc.value;
+    }
+  }
 
   try {
     const updated = await updateChurchEvent(id, {
@@ -242,6 +289,7 @@ export async function patchEvent(req: Request, res: Response): Promise<void> {
       recurrence_type: isValidRecurrenceType(body.recurrence_type) ? body.recurrence_type : undefined,
       weekly_day: body.weekly_day !== undefined ? parseWeeklyDay(body.weekly_day) : undefined,
       is_active: typeof body.is_active === 'boolean' ? body.is_active : undefined,
+      category: patchCategory,
     });
     if (!updated) {
       res.status(404).json({ error: 'Event not found' });
@@ -251,7 +299,7 @@ export async function patchEvent(req: Request, res: Response): Promise<void> {
     res.json(updated);
   } catch (err) {
     console.error('patchEvent error', err);
-    res.status(500).json({ error: 'Database error' });
+    res.status(500).json({ error: 'Database error', ...pgErrorMeta(err) });
   }
 }
 

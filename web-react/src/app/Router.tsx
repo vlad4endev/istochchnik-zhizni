@@ -74,6 +74,15 @@ function RequireAdmin({ children }: { children: ReactNode }) {
   return <>{children}</>;
 }
 
+/** Полный доступ к разделам приложения только после одобрения заявки (active). */
+function RequireFullMember({ children }: { children: ReactNode }) {
+  const registrationStatus = useAuthStore((s) => s.registrationStatus ?? 'active');
+  if (registrationStatus !== 'active') {
+    return <Navigate to="/dashboard" replace />;
+  }
+  return <>{children}</>;
+}
+
 export function AppRouter() {
   return (
     <Routes>
@@ -89,7 +98,14 @@ export function AppRouter() {
       >
         <Route index element={<Navigate to="/dashboard" replace />} />
         <Route path="dashboard" element={<DashboardPage />} />
-        <Route path="prayer" element={<DailyPrayerPage />} />
+        <Route
+          path="prayer"
+          element={
+            <RequireFullMember>
+              <DailyPrayerPage />
+            </RequireFullMember>
+          }
+        />
         <Route
           path="messenger/*"
           element={
@@ -98,11 +114,46 @@ export function AppRouter() {
             </Suspense>
           }
         />
-        <Route path="broadcast" element={<BroadcastPage />} />
-        <Route path="sermons" element={<PodcastsPage />} />
-        <Route path="resources/*" element={<ResourcesRoutes />} />
-        <Route path="service-flow" element={<ServiceFlowPage />} />
-        <Route path="profile" element={<ProfilePage />} />
+        <Route
+          path="broadcast"
+          element={
+            <RequireFullMember>
+              <BroadcastPage />
+            </RequireFullMember>
+          }
+        />
+        <Route
+          path="sermons"
+          element={
+            <RequireFullMember>
+              <PodcastsPage />
+            </RequireFullMember>
+          }
+        />
+        <Route
+          path="resources/*"
+          element={
+            <RequireFullMember>
+              <ResourcesRoutes />
+            </RequireFullMember>
+          }
+        />
+        <Route
+          path="service-flow"
+          element={
+            <RequireFullMember>
+              <ServiceFlowPage />
+            </RequireFullMember>
+          }
+        />
+        <Route
+          path="profile"
+          element={
+            <RequireFullMember>
+              <ProfilePage />
+            </RequireFullMember>
+          }
+        />
         <Route
           path="admin"
           element={

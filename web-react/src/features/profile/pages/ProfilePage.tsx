@@ -13,7 +13,7 @@ import {
   LuX,
 } from 'react-icons/lu';
 
-import { useAuthStore } from '../../auth/authStore';
+import { normalizeRegistrationStatus, useAuthStore } from '../../auth/authStore';
 import { formatRuPhoneInput } from '../../auth/utils/formatRuPhone';
 import { dateInputValueFromApi } from '../../../lib/dateInputValueFromApi';
 import { resolvePublicUrl } from '../../../lib/resolvePublicUrl';
@@ -123,6 +123,7 @@ export function ProfilePage() {
         firstName: me.first_name ?? '',
         lastName: me.last_name ?? '',
         role: me.app_role ?? 'member',
+        registrationStatus: normalizeRegistrationStatus(me.registration_status),
       });
       const nextDraft = {
         first_name: me.first_name ?? '',

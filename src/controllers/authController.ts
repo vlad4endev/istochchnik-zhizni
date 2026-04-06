@@ -14,6 +14,7 @@ import {
   updateAuthUserProfile,
 } from '../services/authService';
 import { notifyRealtime } from '../realtime/notify';
+import { markAccessRequestMessengerResolved } from '../services/messengerService';
 import { getCoordinatorMemberIdsWithPush } from '../services/fcmSubscriptionService';
 import { sendPush } from '../services/pushService';
 import { MemberNameDuplicateError } from '../services/userService';
@@ -606,6 +607,9 @@ export async function approveAccessRequestHandler(req: Request, res: Response): 
       return;
     }
     notifyRealtime(['members', 'calendar']);
+    void markAccessRequestMessengerResolved(requestId, 'approved').catch((e) =>
+      console.warn('[auth] markAccessRequestMessengerResolved(approved):', e),
+    );
     res.json({ status: 'approved', user });
   } catch (error) {
     console.error('Failed to approve access request', error);
@@ -634,6 +638,9 @@ export async function rejectAccessRequestHandler(req: Request, res: Response): P
       return;
     }
     notifyRealtime(['members']);
+    void markAccessRequestMessengerResolved(requestId, 'rejected').catch((e) =>
+      console.warn('[auth] markAccessRequestMessengerResolved(rejected):', e),
+    );
     res.json({ status: 'rejected' });
   } catch (error) {
     console.error('Failed to reject access request', error);

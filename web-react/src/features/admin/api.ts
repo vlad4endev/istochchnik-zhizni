@@ -17,6 +17,7 @@ export interface ChurchEventItem {
   recurrence_type: 'once' | 'weekly';
   weekly_day: number | null;
   is_active: boolean;
+  category?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -265,6 +266,13 @@ export async function fetchAdminEvents(): Promise<ChurchEventItem[]> {
   return data;
 }
 
+export async function fetchChurchEventCategoryOptions(): Promise<{ id: string; label: string }[]> {
+  const { data } = await apiClient.get<{ options: { id: string; label: string }[] }>(
+    `${CAL}/events/category-options`,
+  );
+  return Array.isArray(data?.options) ? data.options : [];
+}
+
 export async function createAdminEvent(body: {
   title: string;
   description?: string;
@@ -273,6 +281,7 @@ export async function createAdminEvent(body: {
   recurrence_type: 'once' | 'weekly';
   weekly_day?: number | null;
   is_active?: boolean;
+  category?: string;
 }): Promise<ChurchEventItem> {
   const { data } = await apiClient.post<ChurchEventItem>(`${CAL}/events`, body);
   return data;
@@ -288,6 +297,7 @@ export async function updateAdminEvent(
     recurrence_type: 'once' | 'weekly';
     weekly_day: number | null;
     is_active: boolean;
+    category: string | null;
   }>,
 ): Promise<ChurchEventItem> {
   const { data } = await apiClient.patch<ChurchEventItem>(`${CAL}/events/${id}`, body);

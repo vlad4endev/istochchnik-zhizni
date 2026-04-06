@@ -25,7 +25,14 @@ export interface ConversationRow {
   updated_at: string;
 }
 
-export type MessagePayloadType = 'text' | 'prayer_request' | 'audio' | 'image' | 'file' | 'poll';
+export type MessagePayloadType =
+  | 'text'
+  | 'prayer_request'
+  | 'audio'
+  | 'image'
+  | 'file'
+  | 'poll'
+  | 'access_request';
 
 export interface ParticipantRow {
   conversation_id: string;
@@ -112,6 +119,8 @@ export interface ConversationListItem {
 }
 
 export interface MessageWithSender extends MessageRow {
+  /** Для WS fan-out: клиентский счётчик непрочитанного. */
+  is_read?: boolean;
   sender_name: string | null;
   sender_first_name: string | null;
   sender_last_name: string | null;
@@ -148,6 +157,14 @@ export type WsMessengerEvent =
   /** Сохранение в БД не удалось после раннего fan-out; клиент снимает pending/temp по client_msg_id. */
   | { type: 'msg:send_failed'; conversationId: string; clientMsgId: string; reason?: string }
   | { type: 'msg:edited'; conversationId: string; messageId: string; content: string; updatedAt: string }
+  /** Слияние полей payload (например карточка заявки после принятия/отклонения). */
+  | {
+      type: 'msg:payload_updated';
+      conversationId: string;
+      messageId: string;
+      payload: Record<string, unknown>;
+      updatedAt: string;
+    }
   | { type: 'msg:deleted'; conversationId: string; messageId: string }
   | { type: 'msg:reaction'; conversationId: string; messageId: string; emoji: string; memberId: number; action: 'add' | 'remove' }
   | { type: 'msg:poll'; conversationId: string; messageId: string; tallies: number[] }

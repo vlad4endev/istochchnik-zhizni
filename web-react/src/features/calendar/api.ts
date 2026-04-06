@@ -59,6 +59,7 @@ export interface ChurchEventItem {
   recurrence_type: 'once' | 'weekly';
   weekly_day: number | null;
   is_active: boolean;
+  category?: string | null;
   created_at: string;
   updated_at: string;
 }

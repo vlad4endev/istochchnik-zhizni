@@ -7,21 +7,31 @@ import { useAuthHydrated } from '../../../hooks/useAuthHydrated';
 import { apiClient } from '../../../lib/apiClient';
 import { isApiUrlProbablyWrongForWeb } from '../../../lib/config';
 import { humanizeServerError, mapAxiosAuthError } from '../authErrors';
-import { useAuthStore } from '../authStore';
+import { normalizeRegistrationStatus, useAuthStore } from '../authStore';
 import { formatRuPhoneInput, phoneInputAllowedKeys } from '../utils/formatRuPhone';
 
 type LocationState = { mode?: 'signIn' | 'signUp' };
 
 type LoginResponse = {
   token?: string;
-  user?: { first_name?: string; last_name?: string; app_role?: string };
+  user?: {
+    first_name?: string;
+    last_name?: string;
+    app_role?: string;
+    registration_status?: string;
+  };
   error?: string;
 };
 
 type RegisterResponse = {
   status?: string;
   token?: string;
-  user?: { first_name?: string; last_name?: string; app_role?: string };
+  user?: {
+    first_name?: string;
+    last_name?: string;
+    app_role?: string;
+    registration_status?: string;
+  };
   message?: string;
   error?: string;
 };
@@ -141,6 +151,7 @@ export function LoginPage() {
         firstName: (user.first_name ?? '').trim(),
         lastName: (user.last_name ?? '').trim(),
         role: (user.app_role ?? 'member').trim() || 'member',
+        registrationStatus: normalizeRegistrationStatus(user.registration_status),
       });
       navigate('/', { replace: true });
     } catch (e) {
@@ -229,12 +240,28 @@ export function LoginPage() {
           firstName: (user.first_name ?? '').trim(),
           lastName: (user.last_name ?? '').trim(),
           role: (user.app_role ?? 'member').trim() || 'member',
+          registrationStatus: normalizeRegistrationStatus(user.registration_status),
         });
         navigate('/', { replace: true });
         return;
       }
 
       if (response.status === 202 && data.status === 'pending') {
+        const t = data.token;
+        const user = data.user;
+        if (t && user) {
+          setSession({
+            token: t,
+            firstName: (user.first_name ?? '').trim(),
+            lastName: (user.last_name ?? '').trim(),
+            role: (user.app_role ?? 'member').trim() || 'member',
+            registrationStatus: normalizeRegistrationStatus(
+              user.registration_status ?? 'pending_review',
+            ),
+          });
+          navigate('/dashboard', { replace: true });
+          return;
+        }
         setIsRegisterMode(false);
         const msg =
           data.message ??

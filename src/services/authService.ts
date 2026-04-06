@@ -4,6 +4,7 @@ import { query } from '../config/db';
 import type { PrayerCyclePublic } from './prayerCycleService';
 import { getPrayerCycleSnapshotForDate, toPublicCycleInfo } from './prayerCycleService';
 import { findMemberIdConflictingName, updateUser } from './userService';
+import { postRegistrationAccessRequestMessengerNotification } from './messengerService';
 
 const scrypt = promisify(scryptCallback);
 const MIN_PASSWORD_LENGTH = 8;
@@ -20,6 +21,8 @@ export type AuthRole = 'member' | 'admin';
 export type AccessRequestStatus = 'pending' | 'approved' | 'rejected';
 export type AccessRequestType = 'registration' | 'password_reset';
 
+export type RegistrationStatus = 'active' | 'pending_review' | 'rejected';
+
 export interface AuthUser {
   id: number;
   first_name: string | null;
@@ -34,6 +37,8 @@ export interface AuthUser {
   prayer_request: string | null;
   app_role: AuthRole;
   is_active: boolean;
+  /** Ожидание подтверждения регистрации или отказ; для обычных участников — active. */
+  registration_status: RegistrationStatus;
   is_collection_coordinator: boolean;
   /** Участвует в общем молитвенном цикле (назначение дней молитвы). */
   in_prayer_cycle: boolean;
@@ -65,7 +70,15 @@ export interface LoginResult {
 
 export type RegisterResult =
   | ({ status: 'approved' } & LoginResult)
-  | { status: 'pending'; request_id: number; message: string };
+  | {
+      status: 'pending';
+      request_id: number;
+      message: string;
+      /** Есть после создания заявки с предварительной записью участника (новый поток). */
+      token?: string;
+      expires_at?: string;
+      user?: AuthUser;
+    };
 
 export interface SessionPrincipal {
   userId: number;
@@ -100,12 +113,21 @@ type MemberRow = {
   prayer_request: string | null;
   app_role: string;
   is_active: boolean;
+  registration_status?: string | null;
   is_collection_coordinator?: boolean;
   in_prayer_cycle?: boolean;
   created_at: string;
   updated_at: string;
   password_hash?: string | null;
 };
+
+function normalizeRegistrationStatus(raw: unknown): RegistrationStatus {
+  const s = typeof raw === 'string' ? raw.trim().toLowerCase() : '';
+  if (s === 'pending_review' || s === 'rejected' || s === 'active') {
+    return s;
+  }
+  return 'active';
+}
 
 function normalizeRole(rawRole: unknown): AuthRole {
   if (typeof rawRole !== 'string') {
@@ -239,6 +261,7 @@ function mapAuthUser(row: MemberRow): AuthUser {
     prayer_request: row.prayer_request ?? null,
     app_role: normalizeRole(row.app_role),
     is_active: row.is_active,
+    registration_status: normalizeRegistrationStatus(row.registration_status),
     is_collection_coordinator: Boolean(row.is_collection_coordinator),
     in_prayer_cycle: Boolean(row.in_prayer_cycle),
     created_at: row.created_at,
@@ -385,6 +408,7 @@ async function findAlreadyRegisteredMemberByName(
       OR LOWER(TRIM(name)) = LOWER($4)
     )
       AND password_hash IS NOT NULL
+      AND COALESCE(registration_status, 'active') IS DISTINCT FROM 'pending_review'
     ORDER BY id ASC
     LIMIT 1`,
     [firstName, lastName, fullName, reverseFullName]
@@ -447,10 +471,11 @@ async function createPendingAccessRequest(
   phoneNumber: string,
   phoneDigits: string,
   passwordHash: string,
-  requestType: AccessRequestType
-): Promise<number> {
+  requestType: AccessRequestType,
+  linkedMemberId: number | null = null
+): Promise<{ id: number; created: boolean }> {
   const duplicatePending = await query(
-    `SELECT id
+    `SELECT id, member_id
      FROM access_requests
      WHERE first_name = $1
        AND last_name = $2
@@ -462,13 +487,13 @@ async function createPendingAccessRequest(
   );
 
   if (duplicatePending.rows[0]?.id) {
-    return Number(duplicatePending.rows[0].id);
+    return { id: Number(duplicatePending.rows[0].id), created: false };
   }
 
   const inserted = await query(
     `INSERT INTO access_requests
-      (first_name, last_name, full_name, phone_number, phone_digits, password_hash, request_type, status)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending')
+      (first_name, last_name, full_name, phone_number, phone_digits, password_hash, request_type, status, member_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending', $8)
      RETURNING id`,
     [
       firstName,
@@ -478,10 +503,11 @@ async function createPendingAccessRequest(
       phoneDigits,
       passwordHash,
       requestType,
+      linkedMemberId,
     ]
   );
 
-  return Number(inserted.rows[0].id);
+  return { id: Number(inserted.rows[0].id), created: true };
 }
 
 export async function registerUser(input: RegisterInput): Promise<RegisterResult> {
@@ -621,19 +647,104 @@ export async function registerUser(input: RegisterInput): Promise<RegisterResult
     }
   }
 
-  const requestId = await createPendingAccessRequest(
+  const duplicatePending = await query(
+    `SELECT ar.id, ar.member_id
+     FROM access_requests ar
+     WHERE ar.first_name = $1
+       AND ar.last_name = $2
+       AND ar.phone_digits = $3
+       AND ar.request_type = 'registration'
+       AND ar.status = 'pending'
+     LIMIT 1`,
+    [firstName, lastName, phoneDigits]
+  );
+
+  const dupPending = duplicatePending.rows[0] as { id: unknown; member_id: unknown } | undefined;
+  if (dupPending?.id != null) {
+    const rid = Number(dupPending.id);
+    const mid =
+      dupPending.member_id != null && dupPending.member_id !== ''
+        ? Number(dupPending.member_id)
+        : NaN;
+    const dupMsg =
+      'Заявка уже отправлена. Ожидайте подтверждения администратора. Доступны главная страница и чаты.';
+    if (Number.isFinite(mid)) {
+      const mPw = await query(
+        `SELECT password_hash FROM members WHERE id = $1 AND registration_status = 'pending_review' LIMIT 1`,
+        [mid]
+      );
+      const storedHash = mPw.rows[0]?.password_hash as string | undefined;
+      if (storedHash && (await verifyPassword(input.password, storedHash))) {
+        const { token, expiresAt } = await createSessionForUser(mid);
+        const user = await getAuthUserById(mid);
+        if (user) {
+          return {
+            status: 'pending',
+            request_id: rid,
+            message: dupMsg,
+            token,
+            expires_at: expiresAt,
+            user,
+          };
+        }
+      }
+    }
+    return {
+      status: 'pending',
+      request_id: rid,
+      message:
+        'Заявка уже была отправлена ранее. Дождитесь ответа администратора или войдите с тем же телефоном и паролем.',
+    };
+  }
+
+  const provisional = await query(
+    `INSERT INTO members (
+       first_name, last_name, name, phone_number, password_hash, app_role,
+       is_active, registration_status, in_prayer_cycle, updated_at
+     )
+     VALUES ($1, $2, $3, $4, $5, 'member', TRUE, 'pending_review', FALSE, NOW())
+     RETURNING id`,
+    [firstName, lastName, fullName, phoneNumber, passwordHash]
+  );
+  const provisionalId = Number((provisional.rows[0] as { id?: unknown } | undefined)?.id);
+  if (!Number.isFinite(provisionalId)) {
+    throw new Error('Database error');
+  }
+
+  const { id: requestId, created } = await createPendingAccessRequest(
     firstName,
     lastName,
     phoneNumber,
     phoneDigits,
     passwordHash,
-    'registration'
+    'registration',
+    provisionalId
   );
+
+  if (created) {
+    void postRegistrationAccessRequestMessengerNotification({
+      accessRequestId: requestId,
+      firstName,
+      lastName,
+      fullName,
+      phoneNumber,
+    }).catch((e) => console.error('[auth] messenger registration notify:', e));
+  }
+
+  const { token, expiresAt } = await createSessionForUser(provisionalId);
+  const user = await getAuthUserById(provisionalId);
+  if (!user) {
+    throw new Error('Member not found after provisional registration');
+  }
 
   return {
     status: 'pending',
     request_id: requestId,
-    message: 'Заявка отправлена администратору. Доступ будет открыт после подтверждения.',
+    message:
+      'Заявка отправлена администратору. Пока её рассматривают, доступны главная страница (события церкви) и чаты — там можно написать в поддержку.',
+    token,
+    expires_at: expiresAt,
+    user,
   };
 }
 
@@ -651,7 +762,7 @@ export async function requestPasswordReset(input: PasswordResetRequestInput): Pr
   ensureValidPassword(input.password);
 
   const passwordHash = await hashPassword(input.password);
-  const requestId = await createPendingAccessRequest(
+  const { id: requestId } = await createPendingAccessRequest(
     firstName,
     lastName,
     phoneNumber,
@@ -686,6 +797,7 @@ export async function loginUser(phoneInput: string, password: string): Promise<L
       prayer_request,
       app_role,
       is_active,
+      registration_status,
       is_collection_coordinator,
       in_prayer_cycle,
       created_at,
@@ -704,7 +816,14 @@ export async function loginUser(phoneInput: string, password: string): Promise<L
   }
 
   const row = result.rows[0] as (MemberRow & { password_hash: string | null }) | undefined;
-  if (!row || !row.password_hash || !row.is_active) {
+  if (!row?.password_hash) {
+    return null;
+  }
+
+  const reg = normalizeRegistrationStatus(row.registration_status);
+  const mayAuthenticate =
+    reg === 'rejected' || (row.is_active && (reg === 'active' || reg === 'pending_review'));
+  if (!mayAuthenticate) {
     return null;
   }
 
@@ -741,7 +860,10 @@ export async function resolveSessionByToken(token: string): Promise<SessionPrinc
      WHERE s.member_id = m.id
        AND s.token_hash = $1
        AND s.expires_at > NOW()
-       AND m.is_active = TRUE
+       AND (
+         m.is_active = TRUE
+         OR m.registration_status = 'rejected'
+       )
      RETURNING m.id AS user_id, m.app_role`,
     [tokenHash, refreshedExpiresAt.toISOString()]
   );
@@ -788,6 +910,7 @@ export async function getAuthUserById(userId: number): Promise<AuthUser | null> 
       COALESCE(mpc.prayer_request, m.prayer_request) AS prayer_request,
       m.app_role,
       m.is_active,
+      m.registration_status,
       m.is_collection_coordinator,
       m.in_prayer_cycle,
       m.created_at,
@@ -795,7 +918,10 @@ export async function getAuthUserById(userId: number): Promise<AuthUser | null> 
     FROM members m
     LEFT JOIN member_prayer_by_cycle mpc ON mpc.member_id = m.id AND mpc.cycle_index = $2
     WHERE m.id = $1
-      AND m.is_active = TRUE
+      AND (
+        m.is_active = TRUE
+        OR m.registration_status = 'rejected'
+      )
     LIMIT 1`,
     [userId, ci]
   );
@@ -1061,11 +1187,52 @@ export async function approveAccessRequest(
         prayer_request,
         app_role,
         is_active,
+        registration_status,
         is_collection_coordinator,
         in_prayer_cycle,
         created_at,
         updated_at`,
       [requestRow.password_hash, existingMember.id]
+    );
+    member = updated.rows[0] as MemberRow;
+  } else if (requestRow.request_type === 'registration' && requestRow.member_id != null) {
+    const updated = await query(
+      `UPDATE members
+       SET
+        first_name = $1,
+        last_name = $2,
+        name = $3,
+        phone_number = $4,
+        password_hash = $5,
+        registration_status = 'active',
+        is_active = TRUE,
+        app_role = COALESCE(NULLIF(app_role, ''), 'member'),
+        updated_at = NOW()
+       WHERE id = $6
+       RETURNING
+        id,
+        first_name,
+        last_name,
+        name,
+        phone_number,
+        birth_date,
+        email,
+        prayer_request,
+        app_role,
+        is_active,
+        registration_status,
+        is_collection_coordinator,
+        in_prayer_cycle,
+        created_at,
+        updated_at`,
+      [
+        requestRow.first_name,
+        requestRow.last_name,
+        requestRow.full_name,
+        requestRow.phone_number,
+        requestRow.password_hash,
+        requestRow.member_id,
+      ]
     );
     member = updated.rows[0] as MemberRow;
   } else if (existingMember) {
@@ -1078,6 +1245,7 @@ export async function approveAccessRequest(
         phone_number = $4,
         password_hash = $5,
         app_role = COALESCE(NULLIF(app_role, ''), 'member'),
+        registration_status = 'active',
         is_active = TRUE,
         updated_at = NOW()
        WHERE id = $6
@@ -1092,6 +1260,7 @@ export async function approveAccessRequest(
         prayer_request,
         app_role,
         is_active,
+        registration_status,
         is_collection_coordinator,
         in_prayer_cycle,
         created_at,
@@ -1109,8 +1278,8 @@ export async function approveAccessRequest(
   } else {
     const inserted = await query(
       `INSERT INTO members
-        (first_name, last_name, name, phone_number, password_hash, app_role, is_active, updated_at)
-       VALUES ($1, $2, $3, $4, $5, 'member', TRUE, NOW())
+        (first_name, last_name, name, phone_number, password_hash, app_role, is_active, registration_status, updated_at)
+       VALUES ($1, $2, $3, $4, $5, 'member', TRUE, 'active', NOW())
        RETURNING
         id,
         first_name,
@@ -1122,6 +1291,7 @@ export async function approveAccessRequest(
         prayer_request,
         app_role,
         is_active,
+        registration_status,
         is_collection_coordinator,
         in_prayer_cycle,
         created_at,
@@ -1162,6 +1332,12 @@ export async function rejectAccessRequest(
   reviewerId: number,
   reviewNote?: string
 ): Promise<boolean> {
+  const pendingRow = await query(
+    `SELECT member_id FROM access_requests WHERE id = $1 AND status = 'pending' LIMIT 1`,
+    [requestId]
+  );
+  const linkedMemberId = pendingRow.rows[0]?.member_id as number | null | undefined;
+
   const result = await query(
     `UPDATE access_requests
      SET
@@ -1175,5 +1351,15 @@ export async function rejectAccessRequest(
     [reviewerId, reviewNote?.trim() || null, requestId]
   );
 
-  return (result.rowCount ?? 0) > 0;
+  const ok = (result.rowCount ?? 0) > 0;
+  if (ok && linkedMemberId != null && Number.isFinite(Number(linkedMemberId))) {
+    await query(
+      `UPDATE members
+       SET registration_status = 'rejected', is_active = FALSE, updated_at = NOW()
+       WHERE id = $1`,
+      [linkedMemberId]
+    );
+  }
+
+  return ok;
 }

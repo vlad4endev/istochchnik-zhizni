@@ -44,6 +44,7 @@ import {
   fetchAdminMembers,
   fetchDirectionTemplates,
   fetchAdminEvents,
+  fetchChurchEventCategoryOptions,
   fetchGlobalBacksliders,
   fetchGlobalMinistries,
   fetchGlobalThemes,
@@ -66,7 +67,9 @@ import {
   type ChurchEventItem,
   type TelegramSettingsResponse,
 } from '../api';
+import { CHURCH_EVENT_CATEGORY_OPTIONS_FALLBACK } from '../churchEventCategoryOptions';
 import { dateInputValueFromApi } from '../../../lib/dateInputValueFromApi';
+import { nextOccurrenceLocalYmd } from '../../../lib/weekdayAnchor';
 import {
   compareMembersByFirstName,
   memberRosterName,
@@ -82,6 +85,7 @@ const Q_GT = ['admin', 'global', 'themes'] as const;
 const Q_GM = ['admin', 'global', 'ministries'] as const;
 const Q_GB = ['admin', 'global', 'backsliders'] as const;
 const Q_EVENTS = ['admin', 'events'] as const;
+const Q_EVENT_CATEGORY_OPTIONS = ['admin', 'church-event-category-options'] as const;
 const Q_TG = ['admin', 'telegram', 'settings'] as const;
 
 function displayName(u: AppUser): string {
@@ -1500,6 +1504,15 @@ function CalendarSection() {
 function EventsSection() {
   const qc = useQueryClient();
   const eventsQ = useQuery({ queryKey: Q_EVENTS, queryFn: fetchAdminEvents });
+  const categoryOptsQ = useQuery({
+    queryKey: Q_EVENT_CATEGORY_OPTIONS,
+    queryFn: fetchChurchEventCategoryOptions,
+    staleTime: 300_000,
+  });
+  const categoryOptions =
+    categoryOptsQ.data && categoryOptsQ.data.length > 0
+      ? categoryOptsQ.data
+      : CHURCH_EVENT_CATEGORY_OPTIONS_FALLBACK;
   const weekDays = [
     { value: 0, label: 'Воскресенье' },
     { value: 1, label: 'Понедельник' },
@@ -1518,10 +1531,24 @@ function EventsSection() {
     recurrence_type: 'once' as 'once' | 'weekly',
     weekly_day: 0,
     is_active: true,
+    category: 'service',
   });
   const [editing, setEditing] = useState<ChurchEventItem | null>(null);
 
   const invalidate = () => void qc.invalidateQueries({ queryKey: Q_EVENTS });
+
+  useEffect(() => {
+    if (form.recurrence_type !== 'weekly') return;
+    const ymd = nextOccurrenceLocalYmd(form.weekly_day);
+    setForm((s) => (s.event_date === ymd ? s : { ...s, event_date: ymd }));
+  }, [form.recurrence_type, form.weekly_day]);
+
+  useEffect(() => {
+    const opts = categoryOptions;
+    if (!opts.length) return;
+    const ids = new Set(opts.map((o) => o.id));
+    setForm((s) => (ids.has(s.category) ? s : { ...s, category: opts[0].id }));
+  }, [categoryOptions]);
 
   const createMut = useMutation({
     mutationFn: () =>
@@ -1533,6 +1560,7 @@ function EventsSection() {
         recurrence_type: form.recurrence_type,
         weekly_day: form.recurrence_type === 'weekly' ? form.weekly_day : null,
         is_active: form.is_active,
+        category: form.category.trim() || undefined,
       }),
     onSuccess: () => {
       setForm((s) => ({ ...s, title: '', description: '' }));
@@ -1552,6 +1580,7 @@ function EventsSection() {
         recurrence_type: payload.recurrence_type,
         weekly_day: payload.recurrence_type === 'weekly' ? payload.weekly_day ?? 0 : null,
         is_active: payload.is_active,
+        ...(payload.category !== undefined ? { category: payload.category } : {}),
       }),
     onSuccess: () => {
       setNote({ type: 'ok', text: 'Событие обновлено.' });
@@ -1600,7 +1629,10 @@ function EventsSection() {
 
       <section className="rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] p-5 shadow-[var(--shadow)]">
         <h3 className="text-base font-extrabold text-stone-900">Новое событие</h3>
-        <p className="mt-1 text-sm text-stone-600">Эти события автоматически отображаются на дашборде.</p>
+        <p className="mt-1 text-sm text-stone-600">
+          События показываются на дашборде. Время и повтор задаются здесь; при еженедельном режиме дата —
+          ближайший такой день недели (можно сменить вручную).
+        </p>
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
           <div className="sm:col-span-2">
             <label className="mb-1 block text-xs font-semibold text-stone-600">Название</label>
@@ -1612,7 +1644,7 @@ function EventsSection() {
             />
           </div>
           <div>
-            <label className="mb-1 block text-xs font-semibold text-stone-600">Тип события</label>
+            <label className="mb-1 block text-xs font-semibold text-stone-600">Повтор</label>
             <select
               className={fieldClass()}
               value={form.recurrence_type}
@@ -1620,19 +1652,23 @@ function EventsSection() {
                 setForm((s) => ({ ...s, recurrence_type: e.target.value as 'once' | 'weekly' }))
               }
             >
-              <option value="once">Единоразовое (конкретная дата)</option>
-              <option value="weekly">Постоянное (каждую неделю)</option>
+              <option value="once">Один раз (конкретная дата)</option>
+              <option value="weekly">Каждую неделю</option>
             </select>
           </div>
           <div>
-            <label className="mb-1 block text-xs font-semibold text-stone-600">Дата</label>
+            <label className="mb-1 block text-xs font-semibold text-stone-600">
+              {form.recurrence_type === 'weekly' ? 'Дата-ориентир' : 'Дата'}
+            </label>
             <input
               className={fieldClass()}
               type="date"
               value={form.event_date}
-              disabled={form.recurrence_type === 'weekly'}
               onChange={(e) => setForm((s) => ({ ...s, event_date: e.target.value }))}
             />
+            {form.recurrence_type === 'weekly' ? (
+              <p className="mt-1 text-xs text-stone-500">Обновляется при смене дня недели.</p>
+            ) : null}
           </div>
           <div>
             <label className="mb-1 block text-xs font-semibold text-stone-600">День недели</label>
@@ -1657,6 +1693,23 @@ function EventsSection() {
               value={form.event_time}
               onChange={(e) => setForm((s) => ({ ...s, event_time: e.target.value }))}
             />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-semibold text-stone-600">Категория</label>
+            <select
+              className={fieldClass()}
+              value={categoryOptions.some((o) => o.id === form.category) ? form.category : categoryOptions[0].id}
+              onChange={(e) => setForm((s) => ({ ...s, category: e.target.value }))}
+            >
+              {categoryOptions.map((o) => (
+                <option key={o.id} value={o.id}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+            <p className="mt-1 text-xs text-stone-500">
+              Список задаётся на сервере. Колонка в БД может отсутствовать — тогда значение не сохраняется.
+            </p>
           </div>
           <div className="sm:col-span-2">
             <label className="mb-1 block text-xs font-semibold text-stone-600">Описание</label>
@@ -1742,37 +1795,41 @@ function EventsSection() {
                       />
                     </div>
                     <div>
-                      <label className="mb-1 block text-xs font-semibold text-stone-600">Тип события</label>
+                      <label className="mb-1 block text-xs font-semibold text-stone-600">Повтор</label>
                       <select
                         className={fieldClass()}
                         value={row.recurrence_type}
                         disabled={!isEdit}
                         onChange={(e) =>
-                          setEditing((s) =>
-                            s
-                              ? {
-                                  ...s,
-                                  recurrence_type: e.target.value as 'once' | 'weekly',
-                                  weekly_day:
-                                    e.target.value === 'weekly'
-                                      ? (s.weekly_day ?? 0)
-                                      : null,
-                                }
-                              : s,
-                          )
+                          setEditing((s) => {
+                            if (!s) return s;
+                            const rt = e.target.value as 'once' | 'weekly';
+                            if (rt === 'weekly') {
+                              const wd = s.weekly_day ?? 0;
+                              return {
+                                ...s,
+                                recurrence_type: rt,
+                                weekly_day: wd,
+                                event_date: nextOccurrenceLocalYmd(wd),
+                              };
+                            }
+                            return { ...s, recurrence_type: rt, weekly_day: null };
+                          })
                         }
                       >
-                        <option value="once">Единоразовое</option>
-                        <option value="weekly">Еженедельное</option>
+                        <option value="once">Один раз</option>
+                        <option value="weekly">Каждую неделю</option>
                       </select>
                     </div>
                     <div>
-                      <label className="mb-1 block text-xs font-semibold text-stone-600">Дата</label>
+                      <label className="mb-1 block text-xs font-semibold text-stone-600">
+                        {row.recurrence_type === 'weekly' ? 'Дата-ориентир' : 'Дата'}
+                      </label>
                       <input
                         type="date"
                         className={fieldClass()}
                         value={row.event_date}
-                        disabled={!isEdit || row.recurrence_type === 'weekly'}
+                        disabled={!isEdit}
                         onChange={(e) =>
                           setEditing((s) => (s ? { ...s, event_date: e.target.value } : s))
                         }
@@ -1785,9 +1842,18 @@ function EventsSection() {
                         value={String(row.weekly_day ?? 0)}
                         disabled={!isEdit || row.recurrence_type !== 'weekly'}
                         onChange={(e) =>
-                          setEditing((s) =>
-                            s ? { ...s, weekly_day: Number(e.target.value) } : s,
-                          )
+                          setEditing((s) => {
+                            if (!s) return s;
+                            const wd = Number(e.target.value);
+                            return {
+                              ...s,
+                              weekly_day: wd,
+                              event_date:
+                                s.recurrence_type === 'weekly'
+                                  ? nextOccurrenceLocalYmd(wd)
+                                  : s.event_date,
+                            };
+                          })
                         }
                       >
                         {weekDays.map((d) => (
@@ -1808,6 +1874,27 @@ function EventsSection() {
                           setEditing((s) => (s ? { ...s, event_time: e.target.value } : s))
                         }
                       />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs font-semibold text-stone-600">Категория</label>
+                      <select
+                        className={fieldClass()}
+                        disabled={!isEdit}
+                        value={
+                          categoryOptions.some((o) => o.id === (row.category ?? ''))
+                            ? (row.category ?? categoryOptions[0].id)
+                            : categoryOptions[0].id
+                        }
+                        onChange={(e) =>
+                          setEditing((s) => (s ? { ...s, category: e.target.value } : s))
+                        }
+                      >
+                        {categoryOptions.map((o) => (
+                          <option key={o.id} value={o.id}>
+                            {o.label}
+                          </option>
+                        ))}
+                      </select>
                     </div>
                     <div className="sm:col-span-2">
                       <label className="mb-1 block text-xs font-semibold text-stone-600">Описание</label>
@@ -1838,9 +1925,17 @@ function EventsSection() {
                       <button
                         type="button"
                         className={btnSecondary()}
-                        onClick={() =>
-                          setEditing({ ...ev, event_date: dateInputValueFromApi(ev.event_date) })
-                        }
+                        onClick={() => {
+                          const raw = ev.category ?? '';
+                          const category = categoryOptions.some((o) => o.id === raw)
+                            ? raw
+                            : categoryOptions[0].id;
+                          setEditing({
+                            ...ev,
+                            event_date: dateInputValueFromApi(ev.event_date),
+                            category,
+                          });
+                        }}
                       >
                         Изменить
                       </button>

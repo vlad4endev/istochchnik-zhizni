@@ -26,6 +26,7 @@ import settingsRoutes from './routes/settingsRoutes';
 import { attachRealtimeWebSocket, initRealtimeRedis } from './realtime/wsHub';
 import { initPushCronJobs } from './cron/pushJobs';
 import { ensureUploadsDirs, getUploadsRoot } from './config/uploadsRoot';
+import { ensureAccessRequestsMessengerChannel } from './services/messengerService';
 
 dotenv.config();
 
@@ -169,6 +170,9 @@ async function start(): Promise<void> {
         throw new Error('Internal: pool is null after initDb');
       }
       await ensurePrayerCycleAnchor(pool);
+      void ensureAccessRequestsMessengerChannel().catch((e) =>
+        console.warn('[messenger] ensureAccessRequestsMessengerChannel on boot:', e),
+      );
       const cnt = await pool.query('SELECT COUNT(*)::int AS c FROM members');
       const n = Number(cnt.rows[0]?.c ?? 0);
       if (n === 0) {

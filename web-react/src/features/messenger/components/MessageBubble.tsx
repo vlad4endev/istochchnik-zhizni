@@ -1,6 +1,8 @@
 import { useState, useRef, useMemo, useEffect } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useChatStore } from '../chatStore';
 import type { MessageWithSender } from '../api/messengerApi';
+import { apiErrorMessage, approveAccessRequest, rejectAccessRequest } from '../../admin/api';
 import { IoCheckmark, IoCheckmarkDone } from 'react-icons/io5';
 import { LuDownload, LuFileText, LuLoader, LuX } from 'react-icons/lu';
 import { resolvePublicUrl } from '../../../lib/resolvePublicUrl';
@@ -271,6 +273,116 @@ function MessengerPollCard({
   );
 }
 
+function AccessRequestMessengerCard({
+  message,
+  isMine,
+  isOptimistic,
+}: {
+  message: MessageWithSender;
+  isMine: boolean;
+  isOptimistic: boolean;
+}) {
+  const qc = useQueryClient();
+  const payload = (message.payload ?? {}) as Record<string, unknown>;
+  const requestId = Number(payload.access_request_id);
+  const kind = String(payload.kind ?? '');
+  const resolution = String(payload.resolution ?? '').trim();
+  const fn = String(payload.first_name ?? '').trim();
+  const ln = String(payload.last_name ?? '').trim();
+  const nameFromParts = `${fn} ${ln}`.trim();
+  const full = String(payload.full_name ?? '').trim() || nameFromParts || '—';
+  const phone = String(payload.phone_number ?? '').trim() || '—';
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const isRegistration = kind === 'registration';
+  const isPending = resolution !== 'approved' && resolution !== 'rejected';
+
+  const run = async (action: 'approve' | 'reject') => {
+    if (!Number.isFinite(requestId)) return;
+    setBusy(true);
+    setErr(null);
+    try {
+      if (action === 'approve') await approveAccessRequest(requestId);
+      else await rejectAccessRequest(requestId);
+      void qc.invalidateQueries({ queryKey: ['admin', 'access-requests'] });
+    } catch (e) {
+      setErr(
+        apiErrorMessage(e, action === 'approve' ? 'Не удалось принять' : 'Не удалось отклонить'),
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const muted = isMine ? 'text-white/80' : 'text-gray-500';
+  const qCls = isMine ? 'text-white' : 'text-gray-900';
+
+  if (isOptimistic) {
+    return <span className={qCls}>Заявка…</span>;
+  }
+
+  return (
+    <div className="w-full max-w-[22rem] space-y-3">
+      <div className={['text-[12px] font-extrabold tracking-wide', muted].join(' ')}>Новый пользователь</div>
+      <div
+        className={[
+          'space-y-2 rounded-2xl border p-3 text-[14px] leading-snug shadow-sm',
+          isMine ? 'border-white/10 bg-white/10 backdrop-blur-sm' : 'border-gray-100 bg-gray-50',
+        ].join(' ')}
+      >
+        <div className={['font-semibold', qCls].join(' ')}>{full}</div>
+        <div className={muted}>
+          <span className={['font-bold', isMine ? 'text-white/90' : 'text-gray-600'].join(' ')}>
+            Телефон:
+          </span>{' '}
+          {phone}
+        </div>
+        {isRegistration ? (
+          <div className={['text-[12px]', muted].join(' ')}>Регистрация в приложении</div>
+        ) : null}
+      </div>
+
+      {isPending ? (
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            disabled={busy || !Number.isFinite(requestId)}
+            onClick={() => void run('approve')}
+            className={[
+              'rounded-full px-4 py-2 text-[13px] font-extrabold transition-colors disabled:opacity-40',
+              isMine ? 'bg-white text-primary' : 'bg-emerald-600 text-white hover:bg-emerald-700',
+            ].join(' ')}
+          >
+            Принять
+          </button>
+          <button
+            type="button"
+            disabled={busy || !Number.isFinite(requestId)}
+            onClick={() => void run('reject')}
+            className={[
+              'rounded-full px-4 py-2 text-[13px] font-extrabold transition-colors disabled:opacity-40',
+              isMine ? 'bg-white/20 text-white hover:bg-white/28' : 'bg-stone-200 text-stone-800 hover:bg-stone-300',
+            ].join(' ')}
+          >
+            Отклонить
+          </button>
+        </div>
+      ) : (
+        <p
+          className={[
+            'text-[13px] font-bold',
+            resolution === 'approved' ? 'text-emerald-600' : 'text-red-600',
+          ].join(' ')}
+        >
+          {resolution === 'approved' ? 'Заявка принята' : 'Заявка отклонена'}
+        </p>
+      )}
+      {err ? <p className="text-[12px] font-semibold text-red-600">{err}</p> : null}
+    </div>
+  );
+}
+
 interface MessageBubbleProps {
   message: MessageWithSender;
   isGroupedPrev: boolean;
@@ -365,6 +477,10 @@ export function MessageBubble({
   const renderContent = () => {
     if (payloadType === 'poll') {
       return <MessengerPollCard message={message} isMine={isMine} isOptimistic={isOptimistic} />;
+    }
+
+    if (payloadType === 'access_request') {
+      return <AccessRequestMessengerCard message={message} isMine={isMine} isOptimistic={isOptimistic} />;
     }
 
     if (payloadType === 'prayer_request') {

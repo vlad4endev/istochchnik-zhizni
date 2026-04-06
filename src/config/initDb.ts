@@ -206,6 +206,11 @@ ALTER TABLE members ADD COLUMN IF NOT EXISTS email VARCHAR(255);
 ALTER TABLE members ADD COLUMN IF NOT EXISTS account_provider VARCHAR(100);
 ALTER TABLE members ADD COLUMN IF NOT EXISTS account_id VARCHAR(255);
 ALTER TABLE members ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE;
+ALTER TABLE members ADD COLUMN IF NOT EXISTS registration_status VARCHAR(32) NOT NULL DEFAULT 'active';
+UPDATE members SET registration_status = 'active' WHERE registration_status IS NULL OR trim(registration_status) = '';
+ALTER TABLE members DROP CONSTRAINT IF EXISTS members_registration_status_check;
+ALTER TABLE members ADD CONSTRAINT members_registration_status_check
+  CHECK (registration_status IN ('active', 'pending_review', 'rejected'));
 ALTER TABLE members ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
 ALTER TABLE members ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
 UPDATE members
@@ -612,6 +617,11 @@ BEGIN
     END;
     BEGIN
       ALTER TYPE message_payload_type ADD VALUE IF NOT EXISTS 'poll';
+    EXCEPTION WHEN duplicate_object THEN
+      NULL;
+    END;
+    BEGIN
+      ALTER TYPE message_payload_type ADD VALUE IF NOT EXISTS 'access_request';
     EXCEPTION WHEN duplicate_object THEN
       NULL;
     END;

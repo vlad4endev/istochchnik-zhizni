@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 
-import { useAuthStore } from '../features/auth/authStore';
+import { normalizeRegistrationStatus, useAuthStore } from '../features/auth/authStore';
 import { fetchMe } from '../features/profile/api';
 
 import { useAuthHydrated } from './useAuthHydrated';
@@ -35,6 +35,7 @@ export function useSyncServerRole(): void {
           firstName: me.first_name ?? '',
           lastName: me.last_name ?? '',
           role: me.app_role ?? 'member',
+          registrationStatus: normalizeRegistrationStatus(me.registration_status),
         });
         doneForToken.current = token;
       } catch (e: unknown) {

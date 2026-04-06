@@ -252,7 +252,13 @@ export function Layout() {
   const logoScalePercent = useBrandingStore((s) => s.logoScalePercent);
 
   const isAdmin = (role ?? 'member').toLowerCase() === 'admin';
-  const items = NAV_ITEMS.filter((item) => !item.adminOnly || isAdmin);
+  const registrationStatus = useAuthStore((s) => s.registrationStatus ?? 'active');
+  const isLimitedMember = registrationStatus !== 'active';
+
+  const navBase = isLimitedMember
+    ? NAV_ITEMS.filter((item) => item.to === '/dashboard' || item.to === '/messenger')
+    : NAV_ITEMS;
+  const items = navBase.filter((item) => !item.adminOnly || isAdmin);
   const sidebarItems = items;
   const mobileItems = items;
 
@@ -463,25 +469,27 @@ export function Layout() {
         </div>
 
         <div className="mt-auto border-t border-stone-200/80 p-4">
-          <NavLink
-            to="/profile"
-            className={({ isActive }) =>
-              [
-                'mb-2 flex min-h-[44px] w-full items-center rounded-xl py-3 text-left text-sm font-semibold transition-colors',
-                navCollapsed ? 'justify-center px-0' : 'px-4',
-                isActive ? 'bg-primary text-white shadow-md shadow-primary/25' : 'text-stone-600 hover:bg-stone-100',
-              ].join(' ')
-            }
-            title={navCollapsed ? 'Профиль' : undefined}
-            aria-label={navCollapsed ? 'Профиль' : undefined}
-          >
-            {({ isActive }) => (
-              <>
-                <LuUser className={navIconClass(isActive, navCollapsed)} strokeWidth={2} aria-hidden />
-                {!navCollapsed ? 'Профиль' : null}
-              </>
-            )}
-          </NavLink>
+          {!isLimitedMember ? (
+            <NavLink
+              to="/profile"
+              className={({ isActive }) =>
+                [
+                  'mb-2 flex min-h-[44px] w-full items-center rounded-xl py-3 text-left text-sm font-semibold transition-colors',
+                  navCollapsed ? 'justify-center px-0' : 'px-4',
+                  isActive ? 'bg-primary text-white shadow-md shadow-primary/25' : 'text-stone-600 hover:bg-stone-100',
+                ].join(' ')
+              }
+              title={navCollapsed ? 'Профиль' : undefined}
+              aria-label={navCollapsed ? 'Профиль' : undefined}
+            >
+              {({ isActive }) => (
+                <>
+                  <LuUser className={navIconClass(isActive, navCollapsed)} strokeWidth={2} aria-hidden />
+                  {!navCollapsed ? 'Профиль' : null}
+                </>
+              )}
+            </NavLink>
+          ) : null}
           <button
             type="button"
             onClick={() => void handleLogout()}

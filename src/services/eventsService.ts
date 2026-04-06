@@ -1,5 +1,7 @@
+import { defaultChurchEventCategory } from '../constants/churchEventCategories';
 import { query } from '../config/db';
 
+/** Публичная модель события (API / дашборд). */
 export interface ChurchEvent {
   id: number;
   title: string;
@@ -9,46 +11,176 @@ export interface ChurchEvent {
   recurrence_type: 'once' | 'weekly';
   weekly_day: number | null;
   is_active: boolean;
+  category?: string | null;
   created_at: string;
   updated_at: string;
+}
+
+/** Вход создания события: одна «ось» дата+время + повторяемость + опции. */
+export interface CreateChurchEventInput {
+  title: string;
+  description?: string | null;
+  /** Для `weekly` — якорная календарная дата (ближайший такой день недели в UI). */
+  event_date: string;
+  event_time: string;
+  recurrence_type: 'once' | 'weekly';
+  weekly_day?: number | null;
+  is_active?: boolean;
+  /** Если в БД есть колонка `category`. Иначе игнорируется. */
+  category?: string | null;
 }
 
 type EventsSchemaState = {
   hasTable: boolean;
   tableRef: string;
-  /** Есть оба столбца — полный SELECT/RETURNING как в актуальной схеме */
   hasFullRecurrenceShape: boolean;
-  /** Только recurrence_type (без weekly_day) — иначе INSERT без recurrence ломает NOT NULL */
   hasRecurrenceTypeColumn: boolean;
   hasWeeklyDayColumn: boolean;
-  /** Чужая схема (Supabase и т.д.): NOT NULL без значения в нашем INSERT */
   hasStartsAtColumn: boolean;
   hasEndsAtColumn: boolean;
-  /**
-   * Внешние БД: колонка `category` NOT NULL без DEFAULT — подставляем значение в INSERT.
-   * Переопределение: `CHURCH_EVENT_DEFAULT_CATEGORY` (иначе `service`).
-   */
-  categoryInsertValue: string | null;
+  columnNames: Set<string>;
+  columnMeta: Map<string, ColumnMeta>;
 };
 
-type ColumnMeta = { is_nullable: string; column_default: string | null };
+type ColumnMeta = {
+  is_nullable: string;
+  column_default: string | null;
+  data_type: string;
+  udt_name: string;
+};
 
-function categoryValueRequiredForInsert(meta: Map<string, ColumnMeta> | undefined): string | null {
-  if (!meta?.has('category')) {
-    return null;
-  }
-  const m = meta.get('category')!;
-  if (m.is_nullable === 'YES') {
-    return null;
-  }
-  if (m.column_default != null && String(m.column_default).trim() !== '') {
-    return null;
-  }
-  const fromEnv = process.env.CHURCH_EVENT_DEFAULT_CATEGORY?.trim();
-  return fromEnv && fromEnv.length > 0 ? fromEnv : 'service';
+type ExtraInsertSpec =
+  | { kind: 'param'; column: string; value: unknown }
+  | { kind: 'sql'; column: string; sqlExpr: string };
+
+/** Уже заполняем осознанно в assembleCreateInsert; остальное — только gap-fill для чужих NOT NULL. */
+const LEGACY_GAP_SKIP = new Set([
+  'id',
+  'title',
+  'description',
+  'event_date',
+  'event_time',
+  'recurrence_type',
+  'weekly_day',
+  'is_active',
+  'category',
+  'starts_at',
+  'ends_at',
+]);
+
+function hasDbDefault(m: Pick<ColumnMeta, 'column_default'>): boolean {
+  return m.column_default != null && String(m.column_default).trim() !== '';
 }
 
-/** DDL для church_events — один раз за процесс (идемпотентно). Снимок колонок не кэшируем: после миграций БД старый кэш ломал INSERT. */
+function computeLegacyNotNullGap(
+  colMeta: Map<string, ColumnMeta> | undefined,
+  alreadyWritten: Set<string>,
+): ExtraInsertSpec[] {
+  if (!colMeta || colMeta.size === 0) {
+    return [];
+  }
+  const specs: ExtraInsertSpec[] = [];
+  for (const [col, m] of colMeta) {
+    if (alreadyWritten.has(col) || LEGACY_GAP_SKIP.has(col)) {
+      continue;
+    }
+    if (m.is_nullable === 'YES') {
+      continue;
+    }
+    if (hasDbDefault(m)) {
+      continue;
+    }
+    const dt = m.data_type.toLowerCase();
+    if (col === 'created_at' || col === 'updated_at') {
+      specs.push({ kind: 'sql', column: col, sqlExpr: 'NOW()' });
+      continue;
+    }
+    if (dt === 'boolean') {
+      specs.push({ kind: 'sql', column: col, sqlExpr: 'FALSE' });
+      continue;
+    }
+    if (dt === 'smallint' || dt === 'integer' || dt === 'bigint') {
+      specs.push({ kind: 'param', column: col, value: 0 });
+      continue;
+    }
+    if (dt === 'real' || dt === 'double precision' || dt === 'numeric') {
+      specs.push({ kind: 'sql', column: col, sqlExpr: '0' });
+      continue;
+    }
+    if (dt === 'character varying' || dt === 'text' || dt === 'character') {
+      specs.push({ kind: 'param', column: col, value: '' });
+      continue;
+    }
+    if (dt === 'uuid') {
+      specs.push({ kind: 'sql', column: col, sqlExpr: 'gen_random_uuid()' });
+      continue;
+    }
+    if (dt === 'jsonb') {
+      specs.push({ kind: 'sql', column: col, sqlExpr: "'{}'::jsonb" });
+      continue;
+    }
+    if (dt === 'json') {
+      specs.push({ kind: 'sql', column: col, sqlExpr: "'{}'::json" });
+      continue;
+    }
+    if (dt === 'timestamp with time zone' || dt === 'timestamp without time zone') {
+      specs.push({ kind: 'sql', column: col, sqlExpr: '($3::date + $4::time)' });
+      continue;
+    }
+    if (dt === 'date') {
+      specs.push({ kind: 'sql', column: col, sqlExpr: '$3::date' });
+      continue;
+    }
+    if (dt === 'time without time zone') {
+      specs.push({ kind: 'sql', column: col, sqlExpr: '$4::time' });
+      continue;
+    }
+    if (dt === 'USER-DEFINED') {
+      const envVal = process.env[`CHURCH_EVENT_DEFAULT_${col.toUpperCase()}`]?.trim();
+      specs.push({ kind: 'param', column: col, value: envVal && envVal.length > 0 ? envVal : '' });
+      continue;
+    }
+    specs.push({ kind: 'param', column: col, value: '' });
+  }
+  specs.sort((a, b) => a.column.localeCompare(b.column));
+  return specs;
+}
+
+const SCHEMA_CACHE_TTL_MS = 60_000;
+let churchEventsSchemaCache: { state: EventsSchemaState; loadedAt: number } | null = null;
+
+export function invalidateChurchEventsSchemaCache(): void {
+  churchEventsSchemaCache = null;
+}
+
+function buildExtraInsertSql(
+  specs: ExtraInsertSpec[],
+  startParam: number,
+): { columns: string; valuesSql: string; params: unknown[] } {
+  if (specs.length === 0) {
+    return { columns: '', valuesSql: '', params: [] };
+  }
+  const params: unknown[] = [];
+  let p = startParam;
+  const colParts: string[] = [];
+  const valParts: string[] = [];
+  for (const s of specs) {
+    colParts.push(quoteIdent(s.column));
+    if (s.kind === 'sql') {
+      valParts.push(s.sqlExpr);
+    } else {
+      valParts.push(`$${p++}`);
+      params.push(s.value);
+    }
+  }
+  return {
+    columns: `, ${colParts.join(', ')}`,
+    valuesSql: `, ${valParts.join(', ')}`,
+    params,
+  };
+}
+
+/** DDL для church_events — один раз за процесс (идемпотентно). */
 let churchEventsDdlOnce: Promise<void> | null = null;
 
 function isInsufficientPrivilegeError(err: unknown): boolean {
@@ -70,29 +202,11 @@ function descriptionForInsert(raw: string | null | undefined): string {
   return typeof raw === 'string' && raw.trim().length > 0 ? raw.trim() : '';
 }
 
-/** Supabase/legacy: starts_at / ends_at NOT NULL — заполняем из тех же $3 date и $4 time, что и event_date/event_time. */
-function insertTimestampExtras(schema: EventsSchemaState): { columns: string; valuesSql: string } {
-  const startAt = '($3::date + $4::time)';
-  if (schema.hasStartsAtColumn && schema.hasEndsAtColumn) {
-    return {
-      columns: ', starts_at, ends_at',
-      valuesSql: `, ${startAt}, (${startAt} + interval '2 hours')`,
-    };
-  }
-  if (schema.hasStartsAtColumn) {
-    return { columns: ', starts_at', valuesSql: `, ${startAt}` };
-  }
-  if (schema.hasEndsAtColumn) {
-    return {
-      columns: ', ends_at',
-      valuesSql: `, (${startAt} + interval '2 hours')`,
-    };
-  }
-  return { columns: '', valuesSql: '' };
-}
-
-function selectEventProjection(schema: Pick<EventsSchemaState, 'hasFullRecurrenceShape' | 'hasRecurrenceTypeColumn'>): string {
+function selectEventProjection(
+  schema: Pick<EventsSchemaState, 'hasFullRecurrenceShape' | 'hasRecurrenceTypeColumn' | 'columnNames'>,
+): string {
   const descExpr = `NULLIF(BTRIM(description), '') AS description`;
+  const catSql = schema.columnNames.has('category') ? ', category' : '';
   if (schema.hasFullRecurrenceShape) {
     return `
       id,
@@ -102,7 +216,7 @@ function selectEventProjection(schema: Pick<EventsSchemaState, 'hasFullRecurrenc
       to_char(event_time, 'HH24:MI') AS event_time,
       recurrence_type,
       weekly_day,
-      is_active,
+      is_active${catSql},
       created_at::text AS created_at,
       updated_at::text AS updated_at
     `;
@@ -116,7 +230,7 @@ function selectEventProjection(schema: Pick<EventsSchemaState, 'hasFullRecurrenc
       to_char(event_time, 'HH24:MI') AS event_time,
       recurrence_type,
       NULL::smallint AS weekly_day,
-      is_active,
+      is_active${catSql},
       created_at::text AS created_at,
       updated_at::text AS updated_at
     `;
@@ -129,7 +243,7 @@ function selectEventProjection(schema: Pick<EventsSchemaState, 'hasFullRecurrenc
       to_char(event_time, 'HH24:MI') AS event_time,
       'once'::text AS recurrence_type,
       NULL::smallint AS weekly_day,
-      is_active,
+      is_active${catSql},
       created_at::text AS created_at,
       updated_at::text AS updated_at
     `;
@@ -143,7 +257,7 @@ async function readEventsSchemaState(): Promise<EventsSchemaState> {
     typeof currentSchema === 'string' && currentSchema.trim() ? currentSchema : 'public';
 
   const columns = await query(
-    `SELECT table_schema, column_name, is_nullable, column_default
+    `SELECT table_schema, column_name, is_nullable, column_default, data_type, udt_name
      FROM information_schema.columns
      WHERE table_name = 'church_events'
        AND table_schema NOT IN ('pg_catalog', 'information_schema')`,
@@ -160,11 +274,15 @@ async function readEventsSchemaState(): Promise<EventsSchemaState> {
     bySchema.get(key)!.add(columnName);
     const nullableRaw = (row as { is_nullable?: unknown }).is_nullable;
     const defRaw = (row as { column_default?: unknown }).column_default;
+    const dataTypeRaw = (row as { data_type?: unknown }).data_type;
+    const udtRaw = (row as { udt_name?: unknown }).udt_name;
     if (!metaBySchema.has(key)) metaBySchema.set(key, new Map());
     metaBySchema.get(key)!.set(columnName, {
       is_nullable: typeof nullableRaw === 'string' ? nullableRaw : String(nullableRaw ?? ''),
       column_default:
         defRaw === null || defRaw === undefined ? null : typeof defRaw === 'string' ? defRaw : String(defRaw),
+      data_type: typeof dataTypeRaw === 'string' ? dataTypeRaw : String(dataTypeRaw ?? ''),
+      udt_name: typeof udtRaw === 'string' ? udtRaw : String(udtRaw ?? ''),
     });
   }
 
@@ -177,7 +295,8 @@ async function readEventsSchemaState(): Promise<EventsSchemaState> {
       hasWeeklyDayColumn: false,
       hasStartsAtColumn: false,
       hasEndsAtColumn: false,
-      categoryInsertValue: null,
+      columnNames: new Set(),
+      columnMeta: new Map(),
     };
   }
 
@@ -187,7 +306,7 @@ async function readEventsSchemaState(): Promise<EventsSchemaState> {
   const hasRecurrenceTypeColumn = names.has('recurrence_type');
   const hasWeeklyDayColumn = names.has('weekly_day');
   const hasFullRecurrenceShape = hasRecurrenceTypeColumn && hasWeeklyDayColumn;
-  const colMeta = metaBySchema.get(chosenSchema);
+  const colMeta = metaBySchema.get(chosenSchema) ?? new Map<string, ColumnMeta>();
   return {
     hasTable: true,
     tableRef: tableRefForSchema(chosenSchema),
@@ -196,7 +315,8 @@ async function readEventsSchemaState(): Promise<EventsSchemaState> {
     hasWeeklyDayColumn,
     hasStartsAtColumn: names.has('starts_at'),
     hasEndsAtColumn: names.has('ends_at'),
-    categoryInsertValue: categoryValueRequiredForInsert(colMeta),
+    columnNames: names,
+    columnMeta: colMeta,
   };
 }
 
@@ -319,6 +439,7 @@ async function runChurchEventsDdlOnce(): Promise<void> {
         } catch (tsErr) {
           console.warn('[events] church_events ends_at backfill skipped:', tsErr);
         }
+        invalidateChurchEventsSchemaCache();
       } catch (err) {
         if (!isInsufficientPrivilegeError(err)) {
           throw err;
@@ -337,11 +458,91 @@ async function runChurchEventsDdlOnce(): Promise<void> {
 
 async function ensureChurchEventsSchema(): Promise<EventsSchemaState> {
   await runChurchEventsDdlOnce();
+  const now = Date.now();
+  if (churchEventsSchemaCache && now - churchEventsSchemaCache.loadedAt < SCHEMA_CACHE_TTL_MS) {
+    return churchEventsSchemaCache.state;
+  }
   const state = await readEventsSchemaState();
   if (!state.hasTable) {
     throw new Error('Table church_events does not exist and cannot be created with current DB role.');
   }
+  churchEventsSchemaCache = { state, loadedAt: now };
   return state;
+}
+
+function assembleCreateInsert(
+  state: EventsSchemaState,
+  input: CreateChurchEventInput,
+): { sql: string; params: unknown[] } {
+  const names = state.columnNames;
+  const meta = state.columnMeta;
+  const cols: string[] = [];
+  const vals: string[] = [];
+  const params: unknown[] = [];
+  let n = 0;
+  const written = new Set<string>();
+
+  const pushParam = (col: string, value: unknown, cast = '') => {
+    if (!names.has(col)) return;
+    n += 1;
+    params.push(value);
+    cols.push(quoteIdent(col));
+    vals.push(cast ? `$${n}${cast}` : `$${n}`);
+    written.add(col);
+  };
+
+  const pushSql = (col: string, sqlExpr: string) => {
+    if (!names.has(col)) return;
+    cols.push(quoteIdent(col));
+    vals.push(sqlExpr);
+    written.add(col);
+  };
+
+  pushParam('title', input.title.trim());
+  pushParam('description', descriptionForInsert(input.description));
+  pushParam('event_date', input.event_date, '::date');
+  pushParam('event_time', input.event_time, '::time');
+
+  if (names.has('recurrence_type')) {
+    pushParam('recurrence_type', input.recurrence_type);
+  }
+  if (names.has('weekly_day')) {
+    pushParam(
+      'weekly_day',
+      input.recurrence_type === 'weekly' ? input.weekly_day ?? null : null,
+    );
+  }
+  if (names.has('is_active')) {
+    n += 1;
+    params.push(input.is_active ?? true);
+    cols.push(quoteIdent('is_active'));
+    vals.push(`COALESCE($${n}, TRUE)`);
+    written.add('is_active');
+  }
+
+  if (names.has('category')) {
+    const raw = input.category != null ? String(input.category).trim() : '';
+    const c = raw || defaultChurchEventCategory();
+    pushParam('category', c);
+  }
+
+  const startAt = '($3::date + $4::time)';
+  if (names.has('starts_at')) {
+    pushSql('starts_at', startAt);
+  }
+  if (names.has('ends_at')) {
+    pushSql('ends_at', `(${startAt} + interval '2 hours')`);
+  }
+
+  const gap = computeLegacyNotNullGap(meta, written);
+  const extra = buildExtraInsertSql(gap, n + 1);
+  const returning = selectEventProjection(state);
+
+  const sql = `INSERT INTO ${state.tableRef} (${cols.join(', ')}${extra.columns})
+       VALUES (${vals.join(', ')}${extra.valuesSql})
+       RETURNING ${returning}`;
+
+  return { sql, params: [...params, ...extra.params] };
 }
 
 function rowToChurchEvent(row: unknown): ChurchEvent {
@@ -370,7 +571,8 @@ function rowToChurchEvent(row: unknown): ChurchEvent {
   const rt = r.recurrence_type === 'weekly' ? 'weekly' : 'once';
   const ca = r.created_at;
   const ua = r.updated_at;
-  return {
+  const cat = r.category;
+  const out: ChurchEvent = {
     id,
     title: String(r.title ?? ''),
     description: r.description === null || r.description === undefined ? null : String(r.description),
@@ -382,6 +584,10 @@ function rowToChurchEvent(row: unknown): ChurchEvent {
     created_at: ca instanceof Date ? ca.toISOString() : String(ca ?? ''),
     updated_at: ua instanceof Date ? ua.toISOString() : String(ua ?? ''),
   };
+  if (cat !== undefined) {
+    out.category = cat === null ? null : String(cat);
+  }
+  return out;
 }
 
 export async function listActiveEvents(): Promise<ChurchEvent[]> {
@@ -407,67 +613,27 @@ export async function listAllEventsAdmin(): Promise<ChurchEvent[]> {
   return result.rows.map(rowToChurchEvent);
 }
 
-export async function createChurchEvent(input: {
-  title: string;
-  description?: string | null;
-  event_date: string;
-  event_time: string;
-  recurrence_type: 'once' | 'weekly';
-  weekly_day?: number | null;
-  is_active?: boolean;
-}): Promise<ChurchEvent> {
-  const schema = await ensureChurchEventsSchema();
-  const title = input.title.trim();
-  const description = descriptionForInsert(input.description);
-  const isActive = input.is_active ?? true;
-  const returning = selectEventProjection(schema);
-  const ts = insertTimestampExtras(schema);
-  const cat = schema.categoryInsertValue;
-  const catCol = cat !== null ? ', category' : '';
-  const catPlFull = cat !== null ? ', $8' : '';
-  const catPlRec = cat !== null ? ', $7' : '';
-  const catPlBase = cat !== null ? ', $6' : '';
+export async function createChurchEvent(input: CreateChurchEventInput): Promise<ChurchEvent> {
+  const tryInsert = async () => {
+    const schema = await ensureChurchEventsSchema();
+    const { sql, params } = assembleCreateInsert(schema, input);
+    return await query(sql, params);
+  };
 
   let result;
-  if (schema.hasFullRecurrenceShape) {
-    result = await query(
-      `INSERT INTO ${schema.tableRef} (title, description, event_date, event_time, recurrence_type, weekly_day, is_active${catCol}${ts.columns})
-       VALUES ($1, $2, $3::date, $4::time, $5, $6, COALESCE($7, TRUE)${catPlFull}${ts.valuesSql})
-       RETURNING ${returning}`,
-      [
-        title,
-        description,
-        input.event_date,
-        input.event_time,
-        input.recurrence_type,
-        input.weekly_day ?? null,
-        isActive,
-        ...(cat !== null ? [cat] : []),
-      ],
-    );
-  } else if (schema.hasRecurrenceTypeColumn) {
-    result = await query(
-      `INSERT INTO ${schema.tableRef} (title, description, event_date, event_time, recurrence_type, is_active${catCol}${ts.columns})
-       VALUES ($1, $2, $3::date, $4::time, $5, COALESCE($6, TRUE)${catPlRec}${ts.valuesSql})
-       RETURNING ${returning}`,
-      [
-        title,
-        description,
-        input.event_date,
-        input.event_time,
-        input.recurrence_type,
-        isActive,
-        ...(cat !== null ? [cat] : []),
-      ],
-    );
-  } else {
-    result = await query(
-      `INSERT INTO ${schema.tableRef} (title, description, event_date, event_time, is_active${catCol}${ts.columns})
-       VALUES ($1, $2, $3::date, $4::time, COALESCE($5, TRUE)${catPlBase}${ts.valuesSql})
-       RETURNING ${returning}`,
-      [title, description, input.event_date, input.event_time, isActive, ...(cat !== null ? [cat] : [])],
-    );
+  try {
+    result = await tryInsert();
+  } catch (err) {
+    const code =
+      err && typeof err === 'object' && 'code' in err ? String((err as { code?: unknown }).code ?? '') : '';
+    if (code === '42703' || code === '42P01') {
+      invalidateChurchEventsSchemaCache();
+      result = await tryInsert();
+    } else {
+      throw err;
+    }
   }
+
   const inserted = result.rows[0];
   if (!inserted) {
     throw new Error('church_events INSERT returned no row');
@@ -485,6 +651,7 @@ export async function updateChurchEvent(
     recurrence_type: 'once' | 'weekly';
     weekly_day: number | null;
     is_active: boolean;
+    category: string | null;
   }>,
 ): Promise<ChurchEvent | null> {
   const schema = await ensureChurchEventsSchema();
@@ -519,6 +686,25 @@ export async function updateChurchEvent(
   if (typeof input.is_active === 'boolean') {
     updates.push(`is_active = $${i++}`);
     values.push(input.is_active);
+  }
+  if (schema.columnNames.has('category') && input.category !== undefined) {
+    const catMeta = schema.columnMeta.get('category');
+    const raw = input.category;
+    const wantsClear = raw === null || String(raw).trim() === '';
+    if (wantsClear) {
+      if (!catMeta || catMeta.is_nullable === 'YES') {
+        updates.push(`category = $${i++}`);
+        values.push(null);
+      } else if (hasDbDefault(catMeta)) {
+        updates.push('category = DEFAULT');
+      } else {
+        updates.push(`category = $${i++}`);
+        values.push(defaultChurchEventCategory());
+      }
+    } else {
+      updates.push(`category = $${i++}`);
+      values.push(String(raw).trim());
+    }
   }
 
   if (

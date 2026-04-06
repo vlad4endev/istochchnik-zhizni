@@ -29,6 +29,7 @@ import {
   deleteEvent,
   getActiveEvents,
   getAdminEvents,
+  getEventCategoryOptions,
   patchEvent,
   postEvent,
 } from '../controllers/eventsController';
@@ -45,6 +46,7 @@ router.patch('/next-week/collection', patchCycleCollectionClaims);
 router.get('/next-week/global', getNextWeekGlobal);
 router.get('/birthdays/week', getWeekBirthdays);
 router.get('/events', getActiveEvents);
+router.get('/events/category-options', getEventCategoryOptions);
 router.get('/events/admin', getAdminEvents);
 router.post('/events', postEvent);
 router.delete('/events', deleteAllEvents);

@@ -8,7 +8,14 @@ export type ConversationType = 'private' | 'group' | 'channel';
 export type ParticipantRole = 'owner' | 'admin' | 'member';
 
 /** Rich message kinds (mirrors server `message_payload_type`). */
-export type MessagePayloadType = 'text' | 'prayer_request' | 'audio' | 'image' | 'file' | 'poll';
+export type MessagePayloadType =
+  | 'text'
+  | 'prayer_request'
+  | 'audio'
+  | 'image'
+  | 'file'
+  | 'poll'
+  | 'access_request';
 
 export type MessagePayload = Record<string, unknown>;
 
