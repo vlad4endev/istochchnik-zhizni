@@ -704,29 +704,27 @@ router.post('/conversations/:id/read', async (req: Request, res: Response) => {
     return;
   }
   try {
-    await svc.markRead(convId, userId, messageId);
-    // Notify other participants (Telegram-like read cursor).
-    sendToRoom(String(convId), {
-      type: 'messages_read',
-      chatId: String(convId),
-      userId,
-      lastReadMessageId: messageId,
-    }, userId);
-    // Backward compatibility for existing frontend handler.
-    sendToRoom(String(convId), {
-      type: 'read:updated',
-      conversationId: String(convId),
-      memberId: userId,
-      lastReadMessageId: messageId,
-    }, userId);
-    res.json({ ok: true });
+    const updated = await svc.markRead(convId, userId, messageId);
+    if (updated) {
+      // Notify other participants (Telegram-like read cursor).
+      sendToRoom(String(convId), {
+        type: 'messages_read',
+        chatId: String(convId),
+        userId,
+        lastReadMessageId: messageId,
+      }, userId);
+      // Backward compatibility for existing frontend handler.
+      sendToRoom(String(convId), {
+        type: 'read:updated',
+        conversationId: String(convId),
+        memberId: userId,
+        lastReadMessageId: messageId,
+      }, userId);
+    }
+    res.json({ ok: true, updated });
   } catch (e) {
     console.error('[messenger] markRead error:', e);
     const message = e instanceof Error ? e.message : String(e);
-    if (message.includes('Message not found')) {
-      res.status(404).json({ error: message });
-      return;
-    }
     if (message.includes('Invalid messageId')) {
       res.status(400).json({ error: message });
       return;

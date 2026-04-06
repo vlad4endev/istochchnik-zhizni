@@ -1701,12 +1701,13 @@ export async function deleteMessage(
 
 /**
  * Mark messages as read up to a given message ID.
+ * @returns false если строка не обновлена (сообщения нет в этом чате, участник вышел, гонка с кэшем) — не ошибка.
  */
 export async function markRead(
   conversationId: string,
   memberId: number,
   lastReadMessageId: string,
-): Promise<void> {
+): Promise<boolean> {
   const normalizedMessageId = String(lastReadMessageId || '').trim();
   if (!/^\d+$/.test(normalizedMessageId)) {
     throw new Error('Invalid messageId');
@@ -1716,8 +1717,8 @@ export async function markRead(
     `WITH target_message AS (
        SELECT id
        FROM messages
-       WHERE id = $3
-         AND conversation_id = $1
+       WHERE id = $3::bigint
+         AND conversation_id = $1::bigint
        LIMIT 1
      )
      UPDATE conversation_participants cp
@@ -1726,7 +1727,7 @@ export async function markRead(
          WHEN cp.last_read_message_id IS NULL THEN (SELECT id FROM target_message)
          ELSE GREATEST(cp.last_read_message_id, (SELECT id FROM target_message))
        END
-     WHERE cp.conversation_id = $1
+     WHERE cp.conversation_id = $1::bigint
        AND cp.member_id = $2
        AND cp.left_at IS NULL
        AND EXISTS (SELECT 1 FROM target_message)
@@ -1735,8 +1736,14 @@ export async function markRead(
   );
 
   if (result.rows.length === 0) {
-    throw new Error('Message not found in this conversation or member is not in conversation');
+    console.warn('[messenger] markRead skipped (no matching message or not a participant)', {
+      conversationId,
+      memberId,
+      messageId: normalizedMessageId,
+    });
+    return false;
   }
+  return true;
 }
 
 /**

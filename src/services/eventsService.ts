@@ -24,7 +24,29 @@ type EventsSchemaState = {
   /** Чужая схема (Supabase и т.д.): NOT NULL без значения в нашем INSERT */
   hasStartsAtColumn: boolean;
   hasEndsAtColumn: boolean;
+  /**
+   * Внешние БД: колонка `category` NOT NULL без DEFAULT — подставляем значение в INSERT.
+   * Переопределение: `CHURCH_EVENT_DEFAULT_CATEGORY` (иначе `service`).
+   */
+  categoryInsertValue: string | null;
 };
+
+type ColumnMeta = { is_nullable: string; column_default: string | null };
+
+function categoryValueRequiredForInsert(meta: Map<string, ColumnMeta> | undefined): string | null {
+  if (!meta?.has('category')) {
+    return null;
+  }
+  const m = meta.get('category')!;
+  if (m.is_nullable === 'YES') {
+    return null;
+  }
+  if (m.column_default != null && String(m.column_default).trim() !== '') {
+    return null;
+  }
+  const fromEnv = process.env.CHURCH_EVENT_DEFAULT_CATEGORY?.trim();
+  return fromEnv && fromEnv.length > 0 ? fromEnv : 'service';
+}
 
 /** DDL для church_events — один раз за процесс (идемпотентно). Снимок колонок не кэшируем: после миграций БД старый кэш ломал INSERT. */
 let churchEventsDdlOnce: Promise<void> | null = null;
@@ -121,12 +143,13 @@ async function readEventsSchemaState(): Promise<EventsSchemaState> {
     typeof currentSchema === 'string' && currentSchema.trim() ? currentSchema : 'public';
 
   const columns = await query(
-    `SELECT table_schema, column_name
+    `SELECT table_schema, column_name, is_nullable, column_default
      FROM information_schema.columns
      WHERE table_name = 'church_events'
        AND table_schema NOT IN ('pg_catalog', 'information_schema')`,
   );
   const bySchema = new Map<string, Set<string>>();
+  const metaBySchema = new Map<string, Map<string, ColumnMeta>>();
   for (const row of columns.rows) {
     const tableSchema = (row as { table_schema?: unknown }).table_schema;
     const columnName = (row as { column_name?: unknown }).column_name;
@@ -135,6 +158,14 @@ async function readEventsSchemaState(): Promise<EventsSchemaState> {
     if (!key) continue;
     if (!bySchema.has(key)) bySchema.set(key, new Set<string>());
     bySchema.get(key)!.add(columnName);
+    const nullableRaw = (row as { is_nullable?: unknown }).is_nullable;
+    const defRaw = (row as { column_default?: unknown }).column_default;
+    if (!metaBySchema.has(key)) metaBySchema.set(key, new Map());
+    metaBySchema.get(key)!.set(columnName, {
+      is_nullable: typeof nullableRaw === 'string' ? nullableRaw : String(nullableRaw ?? ''),
+      column_default:
+        defRaw === null || defRaw === undefined ? null : typeof defRaw === 'string' ? defRaw : String(defRaw),
+    });
   }
 
   if (bySchema.size === 0) {
@@ -146,6 +177,7 @@ async function readEventsSchemaState(): Promise<EventsSchemaState> {
       hasWeeklyDayColumn: false,
       hasStartsAtColumn: false,
       hasEndsAtColumn: false,
+      categoryInsertValue: null,
     };
   }
 
@@ -155,6 +187,7 @@ async function readEventsSchemaState(): Promise<EventsSchemaState> {
   const hasRecurrenceTypeColumn = names.has('recurrence_type');
   const hasWeeklyDayColumn = names.has('weekly_day');
   const hasFullRecurrenceShape = hasRecurrenceTypeColumn && hasWeeklyDayColumn;
+  const colMeta = metaBySchema.get(chosenSchema);
   return {
     hasTable: true,
     tableRef: tableRefForSchema(chosenSchema),
@@ -163,6 +196,7 @@ async function readEventsSchemaState(): Promise<EventsSchemaState> {
     hasWeeklyDayColumn,
     hasStartsAtColumn: names.has('starts_at'),
     hasEndsAtColumn: names.has('ends_at'),
+    categoryInsertValue: categoryValueRequiredForInsert(colMeta),
   };
 }
 
@@ -251,9 +285,20 @@ async function runChurchEventsDdlOnce(): Promise<void> {
         try {
           await query(`
             ALTER TABLE ${targetTableRef}
-              ADD COLUMN IF NOT EXISTS starts_at TIMESTAMPTZ,
+              ADD COLUMN IF NOT EXISTS starts_at TIMESTAMPTZ
+          `);
+        } catch (tsErr) {
+          console.warn('[events] church_events starts_at column skipped:', tsErr);
+        }
+        try {
+          await query(`
+            ALTER TABLE ${targetTableRef}
               ADD COLUMN IF NOT EXISTS ends_at TIMESTAMPTZ
           `);
+        } catch (tsErr) {
+          console.warn('[events] church_events ends_at column skipped:', tsErr);
+        }
+        try {
           await query(`
             UPDATE ${targetTableRef}
             SET starts_at = event_date + event_time
@@ -261,6 +306,10 @@ async function runChurchEventsDdlOnce(): Promise<void> {
               AND event_date IS NOT NULL
               AND event_time IS NOT NULL
           `);
+        } catch (tsErr) {
+          console.warn('[events] church_events starts_at backfill skipped:', tsErr);
+        }
+        try {
           await query(`
             UPDATE ${targetTableRef}
             SET ends_at = starts_at + interval '2 hours'
@@ -268,7 +317,7 @@ async function runChurchEventsDdlOnce(): Promise<void> {
               AND starts_at IS NOT NULL
           `);
         } catch (tsErr) {
-          console.warn('[events] church_events starts_at/ends_at backfill skipped:', tsErr);
+          console.warn('[events] church_events ends_at backfill skipped:', tsErr);
         }
       } catch (err) {
         if (!isInsufficientPrivilegeError(err)) {
@@ -373,12 +422,17 @@ export async function createChurchEvent(input: {
   const isActive = input.is_active ?? true;
   const returning = selectEventProjection(schema);
   const ts = insertTimestampExtras(schema);
+  const cat = schema.categoryInsertValue;
+  const catCol = cat !== null ? ', category' : '';
+  const catPlFull = cat !== null ? ', $8' : '';
+  const catPlRec = cat !== null ? ', $7' : '';
+  const catPlBase = cat !== null ? ', $6' : '';
 
   let result;
   if (schema.hasFullRecurrenceShape) {
     result = await query(
-      `INSERT INTO ${schema.tableRef} (title, description, event_date, event_time, recurrence_type, weekly_day, is_active${ts.columns})
-       VALUES ($1, $2, $3::date, $4::time, $5, $6, COALESCE($7, TRUE)${ts.valuesSql})
+      `INSERT INTO ${schema.tableRef} (title, description, event_date, event_time, recurrence_type, weekly_day, is_active${catCol}${ts.columns})
+       VALUES ($1, $2, $3::date, $4::time, $5, $6, COALESCE($7, TRUE)${catPlFull}${ts.valuesSql})
        RETURNING ${returning}`,
       [
         title,
@@ -388,21 +442,30 @@ export async function createChurchEvent(input: {
         input.recurrence_type,
         input.weekly_day ?? null,
         isActive,
+        ...(cat !== null ? [cat] : []),
       ],
     );
   } else if (schema.hasRecurrenceTypeColumn) {
     result = await query(
-      `INSERT INTO ${schema.tableRef} (title, description, event_date, event_time, recurrence_type, is_active${ts.columns})
-       VALUES ($1, $2, $3::date, $4::time, $5, COALESCE($6, TRUE)${ts.valuesSql})
+      `INSERT INTO ${schema.tableRef} (title, description, event_date, event_time, recurrence_type, is_active${catCol}${ts.columns})
+       VALUES ($1, $2, $3::date, $4::time, $5, COALESCE($6, TRUE)${catPlRec}${ts.valuesSql})
        RETURNING ${returning}`,
-      [title, description, input.event_date, input.event_time, input.recurrence_type, isActive],
+      [
+        title,
+        description,
+        input.event_date,
+        input.event_time,
+        input.recurrence_type,
+        isActive,
+        ...(cat !== null ? [cat] : []),
+      ],
     );
   } else {
     result = await query(
-      `INSERT INTO ${schema.tableRef} (title, description, event_date, event_time, is_active${ts.columns})
-       VALUES ($1, $2, $3::date, $4::time, COALESCE($5, TRUE)${ts.valuesSql})
+      `INSERT INTO ${schema.tableRef} (title, description, event_date, event_time, is_active${catCol}${ts.columns})
+       VALUES ($1, $2, $3::date, $4::time, COALESCE($5, TRUE)${catPlBase}${ts.valuesSql})
        RETURNING ${returning}`,
-      [title, description, input.event_date, input.event_time, isActive],
+      [title, description, input.event_date, input.event_time, isActive, ...(cat !== null ? [cat] : [])],
     );
   }
   const inserted = result.rows[0];
