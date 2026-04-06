@@ -1,9 +1,9 @@
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
 import { ru } from 'date-fns/locale';
-import { LuCalendarDays, LuHeart, LuMessageCircle, LuSparkles } from 'react-icons/lu';
+import { LuCalendarDays, LuHeart, LuLogOut, LuMessageCircle, LuSparkles } from 'react-icons/lu';
 
 import { getActiveEvents, type ChurchEventItem } from '../../calendar/api';
 import { normalizeRegistrationStatus, useAuthStore, type RegistrationStatus } from '../../auth/authStore';
@@ -43,7 +43,17 @@ type Props = {
 export function LimitedRegistrationDashboard({ registrationStatus, firstName }: Props) {
   const [now] = useState(() => new Date());
   const greeting = firstName.trim() || 'друг';
+  const navigate = useNavigate();
+  const logout = useAuthStore((s) => s.logout);
   const applyServerProfile = useAuthStore((s) => s.applyServerProfile);
+
+  async function handleLogout() {
+    if (!window.confirm('Выйти из аккаунта? Текущая сессия будет завершена.')) {
+      return;
+    }
+    await logout();
+    navigate('/login', { replace: true });
+  }
 
   useQuery({
     queryKey: ['auth', 'me', 'limited-dashboard'],
@@ -209,6 +219,17 @@ export function LimitedRegistrationDashboard({ registrationStatus, firstName }: 
             </Link>
           </section>
         ) : null}
+
+        <div className="border-t border-stone-200/80 pt-5">
+          <button
+            type="button"
+            onClick={() => void handleLogout()}
+            className="flex w-full min-h-[48px] items-center justify-center gap-2 rounded-2xl border border-stone-300/90 bg-white px-4 text-sm font-extrabold text-stone-700 shadow-sm transition hover:bg-stone-50 active:scale-[0.99]"
+          >
+            <LuLogOut className="h-5 w-5 shrink-0" strokeWidth={2} aria-hidden />
+            Выйти из аккаунта
+          </button>
+        </div>
       </div>
     </div>
   );
