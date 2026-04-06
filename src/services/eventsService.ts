@@ -383,6 +383,15 @@ async function runChurchEventsDdlOnce(): Promise<void> {
         try {
           await query(`
             ALTER TABLE ${targetTableRef}
+              DROP CONSTRAINT IF EXISTS church_events_category_check
+          `);
+        } catch (catCheckErr) {
+          console.warn('[events] church_events_category_check drop skipped:', catCheckErr);
+        }
+
+        try {
+          await query(`
+            ALTER TABLE ${targetTableRef}
               ADD COLUMN IF NOT EXISTS description TEXT
           `);
           await query(`

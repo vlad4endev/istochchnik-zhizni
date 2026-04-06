@@ -83,6 +83,15 @@ function RequireFullMember({ children }: { children: ReactNode }) {
   return <>{children}</>;
 }
 
+/** Чаты недоступны, пока заявка на регистрацию не одобрена (отклонённым — для поддержки). */
+function RequireMessengerAccess({ children }: { children: ReactNode }) {
+  const registrationStatus = useAuthStore((s) => s.registrationStatus ?? 'active');
+  if (registrationStatus === 'pending_review') {
+    return <Navigate to="/dashboard" replace />;
+  }
+  return <>{children}</>;
+}
+
 export function AppRouter() {
   return (
     <Routes>
@@ -109,9 +118,11 @@ export function AppRouter() {
         <Route
           path="messenger/*"
           element={
-            <Suspense fallback={<RouteFallback />}>
-              <MessengerRoutes />
-            </Suspense>
+            <RequireMessengerAccess>
+              <Suspense fallback={<RouteFallback />}>
+                <MessengerRoutes />
+              </Suspense>
+            </RequireMessengerAccess>
           }
         />
         <Route

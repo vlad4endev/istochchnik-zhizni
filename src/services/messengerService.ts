@@ -1996,9 +1996,9 @@ export async function ensureAccessRequestsMessengerChannel(): Promise<string | n
     } else {
       const ins = await dbQuery(
         `INSERT INTO conversations (type, title, metadata)
-         VALUES ('channel', $1, jsonb_build_object('kind', $2))
+         VALUES ('channel', $1, $2::jsonb)
          RETURNING id`,
-        [ACCESS_REQUESTS_CHANNEL_TITLE, ACCESS_REQUESTS_CHANNEL_KIND],
+        [ACCESS_REQUESTS_CHANNEL_TITLE, JSON.stringify({ kind: ACCESS_REQUESTS_CHANNEL_KIND })],
       );
       convId = bigint((ins.rows[0] as { id: unknown }).id);
     }

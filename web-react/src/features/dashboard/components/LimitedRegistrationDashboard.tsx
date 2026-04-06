@@ -124,11 +124,6 @@ export function LimitedRegistrationDashboard({ registrationStatus, firstName }: 
                   </>
                 )}
               </p>
-              {isPending ? (
-                <p className="mt-3 text-xs font-semibold text-amber-900/80">
-                  Совет: откройте раздел «Чаты», если нужно уточнить что-то до подтверждения.
-                </p>
-              ) : null}
             </div>
           </div>
         </section>
@@ -142,14 +137,19 @@ export function LimitedRegistrationDashboard({ registrationStatus, firstName }: 
           <h2 className="mt-2 text-xl font-extrabold text-stone-900">Источник жизни</h2>
           <p className="mt-3 text-sm font-medium leading-relaxed text-stone-600">
             Мы рады, что вы с нами. «Источник жизни» — община верующих, где важны молитва, Слово Божье и
-            поддержка друг друга. Здесь вы найдёте расписание встреч и сможете связаться с нами через чаты
-            приложения.
+            поддержка друг друга. Здесь вы найдёте расписание встреч
+            {isPending ? '.' : ' и сможете связаться с нами через чаты приложения.'}
           </p>
+          {isPending ? (
+            <p className="mt-3 text-sm font-medium leading-relaxed text-stone-600">
+              Связь через чаты откроется после подтверждения заявки администратором.
+            </p>
+          ) : null}
           <div className="mt-4 flex items-start gap-2 rounded-2xl bg-primary/[0.06] px-3 py-2.5 text-sm text-stone-700">
             <LuSparkles className="mt-0.5 h-4 w-4 shrink-0 text-primary" aria-hidden />
             <span>
-              После одобрения заявки откроются молитвенный календарь, проповеди, ресурсы и остальные разделы —
-              как у всех участников.
+              После одобрения заявки откроются молитвенный календарь, проповеди, ресурсы, чаты и остальные
+              разделы — как у всех участников.
             </span>
           </div>
         </section>
@@ -190,25 +190,25 @@ export function LimitedRegistrationDashboard({ registrationStatus, firstName }: 
           )}
         </section>
 
-        {/* Поддержка */}
-        <section className="rounded-3xl border border-sky-200/80 bg-gradient-to-br from-sky-50/90 to-white p-5 sm:p-6">
-          <div className="flex items-center gap-2 text-sky-800">
-            <LuMessageCircle className="h-5 w-5 shrink-0" strokeWidth={2} aria-hidden />
-            <span className="text-[11px] font-extrabold uppercase tracking-[0.14em]">Связь</span>
-          </div>
-          <h2 className="mt-2 text-lg font-extrabold text-stone-900">Чаты и поддержка</h2>
-          <p className="mt-2 text-sm font-medium text-stone-600">
-            {isRejected
-              ? 'Напишите в общий чат или администратору — мы ответим и поможем с вопросами.'
-              : 'Если что-то срочное, напишите в чатах — администратор увидит сообщение.'}
-          </p>
-          <Link
-            to="/messenger"
-            className="mt-4 inline-flex min-h-[48px] items-center justify-center rounded-2xl bg-primary px-5 text-sm font-extrabold text-white shadow-md shadow-primary/25 transition hover:opacity-95 active:scale-[0.99]"
-          >
-            Открыть чаты
-          </Link>
-        </section>
+        {/* Поддержка — только после отказа (ожидающим чаты скрыты до одобрения) */}
+        {isRejected ? (
+          <section className="rounded-3xl border border-sky-200/80 bg-gradient-to-br from-sky-50/90 to-white p-5 sm:p-6">
+            <div className="flex items-center gap-2 text-sky-800">
+              <LuMessageCircle className="h-5 w-5 shrink-0" strokeWidth={2} aria-hidden />
+              <span className="text-[11px] font-extrabold uppercase tracking-[0.14em]">Связь</span>
+            </div>
+            <h2 className="mt-2 text-lg font-extrabold text-stone-900">Чаты и поддержка</h2>
+            <p className="mt-2 text-sm font-medium text-stone-600">
+              Напишите в общий чат или администратору — мы ответим и поможем с вопросами.
+            </p>
+            <Link
+              to="/messenger"
+              className="mt-4 inline-flex min-h-[48px] items-center justify-center rounded-2xl bg-primary px-5 text-sm font-extrabold text-white shadow-md shadow-primary/25 transition hover:opacity-95 active:scale-[0.99]"
+            >
+              Открыть чаты
+            </Link>
+          </section>
+        ) : null}
       </div>
     </div>
   );

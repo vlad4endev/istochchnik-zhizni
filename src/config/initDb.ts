@@ -289,6 +289,9 @@ ALTER TABLE church_events DROP CONSTRAINT IF EXISTS church_events_weekly_day_che
 ALTER TABLE church_events ADD CONSTRAINT church_events_weekly_day_check
   CHECK (weekly_day IS NULL OR (weekly_day BETWEEN 0 AND 6));
 
+-- Сторонние схемы (Supabase и др.): свой CHECK по category несовместим с id из API (service, worship, …).
+ALTER TABLE church_events DROP CONSTRAINT IF EXISTS church_events_category_check;
+
 CREATE TABLE IF NOT EXISTS cycle_collection_claims (
   cycle_index INTEGER NOT NULL,
   member_id INTEGER NOT NULL REFERENCES members(id) ON DELETE CASCADE,

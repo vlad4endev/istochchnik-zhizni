@@ -253,11 +253,12 @@ export function Layout() {
 
   const isAdmin = (role ?? 'member').toLowerCase() === 'admin';
   const registrationStatus = useAuthStore((s) => s.registrationStatus ?? 'active');
-  const isLimitedMember = registrationStatus !== 'active';
-
-  const navBase = isLimitedMember
-    ? NAV_ITEMS.filter((item) => item.to === '/dashboard' || item.to === '/messenger')
-    : NAV_ITEMS;
+  const navBase =
+    registrationStatus === 'pending_review'
+      ? NAV_ITEMS.filter((item) => item.to === '/dashboard')
+      : registrationStatus === 'rejected'
+        ? NAV_ITEMS.filter((item) => item.to === '/dashboard' || item.to === '/messenger')
+        : NAV_ITEMS;
   const items = navBase.filter((item) => !item.adminOnly || isAdmin);
   const sidebarItems = items;
   const mobileItems = items;
@@ -469,7 +470,7 @@ export function Layout() {
         </div>
 
         <div className="mt-auto border-t border-stone-200/80 p-4">
-          {!isLimitedMember ? (
+          {registrationStatus === 'active' ? (
             <NavLink
               to="/profile"
               className={({ isActive }) =>
