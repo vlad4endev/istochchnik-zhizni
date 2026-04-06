@@ -1,6 +1,6 @@
 {
-  "appId": "com.istochnikzhizni.molitva",
-  "appName": "Молитва",
+  "appId": "ru.church.tambov",
+  "appName": "Источник жизни",
   "webDir": "dist",
   "server": {
     "androidScheme": "https"

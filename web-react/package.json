@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "build:prod": "tsc -b && vite build --mode production && cap sync android",
     "preview": "vite preview",
     "package:server": "bash ../scripts/package-web-for-server.sh",
     "pwa:icons": "npx @vite-pwa/assets-generator assets/logo.svg -r ./public -p minimal -o",
