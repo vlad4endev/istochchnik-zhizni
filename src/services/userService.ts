@@ -4,6 +4,8 @@ import { getCurrentCycleIndexForUpsert, upsertMemberPrayerForCycle } from './pra
 
 export interface AppUser {
   id: number;
+  /** Публичный UUID, стабильный при жизни записи (не числовой id). */
+  user_id: string;
   first_name: string | null;
   last_name: string | null;
   name: string;
@@ -166,8 +168,12 @@ function normalizeOptionalString(value: unknown): string | null {
   return trimmed.length > 0 ? trimmed : null;
 }
 
-function mapUser(row: AppUser): AppUser {
-  return row;
+function mapUser(row: AppUser & { user_id?: unknown }): AppUser {
+  const uid = row.user_id;
+  return {
+    ...row,
+    user_id: uid != null && String(uid).trim() !== '' ? String(uid) : '',
+  };
 }
 
 async function appendPrayerRequestHistory(
@@ -201,6 +207,7 @@ export async function listUsers(): Promise<AppUser[]> {
   const result = await query(
     `SELECT
       m.id,
+      m.user_id,
       m.first_name,
       m.last_name,
       m.name,
@@ -232,6 +239,7 @@ export async function getUserById(id: number): Promise<AppUser | null> {
   const result = await query(
     `SELECT
       m.id,
+      m.user_id,
       m.first_name,
       m.last_name,
       m.name,
@@ -412,6 +420,7 @@ export async function createUser(input: CreateUserInput): Promise<AppUser> {
     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, COALESCE($12, TRUE), COALESCE($13, 'member'), COALESCE($14, FALSE), FALSE, NOW())
     RETURNING
       id,
+      user_id,
       first_name,
       last_name,
       name,
@@ -457,6 +466,34 @@ export async function createUser(input: CreateUserInput): Promise<AppUser> {
   }
 
   return created;
+}
+
+export interface BulkCreateUsersOutcome {
+  users: AppUser[];
+  errors: { index: number; message: string }[];
+}
+
+/**
+ * Создаёт участников по очереди; при ошибке по строке пишет в errors и продолжает.
+ */
+export async function bulkCreateUsers(items: CreateUserInput[]): Promise<BulkCreateUsersOutcome> {
+  const users: AppUser[] = [];
+  const errors: { index: number; message: string }[] = [];
+  for (let i = 0; i < items.length; i++) {
+    const input = items[i]!;
+    try {
+      users.push(await createUser(input));
+    } catch (e) {
+      if (e instanceof MemberNameDuplicateError) {
+        errors.push({ index: i, message: e.message });
+      } else if (e instanceof Error && e.message) {
+        errors.push({ index: i, message: e.message });
+      } else {
+        errors.push({ index: i, message: 'Ошибка базы данных' });
+      }
+    }
+  }
+  return { users, errors };
 }
 
 export async function updateUser(id: number, input: UpdateUserInput): Promise<AppUser | null> {
@@ -591,6 +628,7 @@ export async function updateUser(id: number, input: UpdateUserInput): Promise<Ap
     WHERE id = $${values.length}
     RETURNING
       id,
+      user_id,
       first_name,
       last_name,
       name,
@@ -654,6 +692,7 @@ export async function linkUserAccount(id: number, input: LinkAccountInput): Prom
      WHERE id = $3
      RETURNING
       id,
+      user_id,
       first_name,
       last_name,
       name,
@@ -702,6 +741,7 @@ export async function setUserAppRole(id: number, appRole: AppRole): Promise<AppU
      WHERE id = $2
      RETURNING
       id,
+      user_id,
       first_name,
       last_name,
       name,

@@ -3,6 +3,7 @@ import {
   AppRole,
   createMinistryDirectionTemplate,
   createMinistryRoleTemplate,
+  bulkCreateUsers,
   createUser,
   deleteMinistryDirectionTemplate,
   deleteMinistryRoleTemplate,
@@ -293,6 +294,131 @@ export async function createUserHandler(req: Request, res: Response): Promise<vo
       return;
     }
     console.error('Failed to create user', error);
+    res.status(500).json({ error: 'Database error' });
+  }
+}
+
+const BULK_CREATE_MAX = 150;
+
+export async function bulkCreateUsersHandler(req: Request, res: Response): Promise<void> {
+  if (!ensureAdmin(req, res)) {
+    return;
+  }
+
+  const raw = req.body as { members?: unknown; merge_if_duplicate?: unknown };
+  if (!Array.isArray(raw.members) || raw.members.length === 0) {
+    res.status(400).json({ error: 'Ожидается непустой массив "members"' });
+    return;
+  }
+  if (raw.members.length > BULK_CREATE_MAX) {
+    res.status(400).json({ error: `Не больше ${BULK_CREATE_MAX} строк за один запрос` });
+    return;
+  }
+  if (raw.merge_if_duplicate !== undefined && typeof raw.merge_if_duplicate !== 'boolean') {
+    res.status(400).json({ error: 'Поле "merge_if_duplicate" должно быть boolean' });
+    return;
+  }
+  const mergeIfDuplicate = raw.merge_if_duplicate === true;
+
+  type RowPayload = {
+    first_name: string;
+    last_name: string;
+    phone_number: string;
+    birth_date: string;
+    ministry_role?: string;
+    ministry_direction?: string;
+    merge_if_duplicate?: boolean;
+  };
+
+  const payloads: RowPayload[] = [];
+  const validationErrors: { index: number; message: string }[] = [];
+
+  for (let i = 0; i < raw.members.length; i++) {
+    const row = raw.members[i];
+    if (!row || typeof row !== 'object') {
+      validationErrors.push({ index: i, message: 'Строка должна быть объектом с полями' });
+      continue;
+    }
+    const o = row as Record<string, unknown>;
+    const first_name = o.first_name;
+    const last_name = o.last_name;
+    const phone_number = o.phone_number;
+    const birth_date = o.birth_date;
+
+    if (typeof first_name !== 'string' || first_name.trim().length === 0) {
+      validationErrors.push({ index: i, message: 'Нужно поле "first_name" (имя)' });
+      continue;
+    }
+    if (typeof last_name !== 'string' || last_name.trim().length === 0) {
+      validationErrors.push({ index: i, message: 'Нужно поле "last_name" (фамилия)' });
+      continue;
+    }
+    if (!isValidPhoneInput(phone_number)) {
+      validationErrors.push({ index: i, message: 'Поле "phone_number": укажите корректный телефон (7–20 символов, цифры и +-() )' });
+      continue;
+    }
+    const birthYmd =
+      typeof birth_date === 'string' && birth_date.trim().length > 0
+        ? coerceToYmd(birth_date as string)
+        : null;
+    if (!birthYmd) {
+      validationErrors.push({
+        index: i,
+        message: 'Поле "birth_date": нужна дата в формате ГГГГ-ММ-ДД',
+      });
+      continue;
+    }
+    if (!isValidOptionalShortString(o.ministry_role)) {
+      validationErrors.push({ index: i, message: 'Поле "ministry_role" — строка не длиннее 120 символов' });
+      continue;
+    }
+    if (!isValidOptionalShortString(o.ministry_direction)) {
+      validationErrors.push({
+        index: i,
+        message: 'Поле "ministry_direction" — строка не длиннее 120 символов',
+      });
+      continue;
+    }
+
+    const ministryRole =
+      typeof o.ministry_role === 'string' && o.ministry_role.trim() ? o.ministry_role.trim() : undefined;
+    const ministryDirection =
+      typeof o.ministry_direction === 'string' && o.ministry_direction.trim()
+        ? o.ministry_direction.trim()
+        : undefined;
+
+    payloads.push({
+      first_name: (first_name as string).trim(),
+      last_name: (last_name as string).trim(),
+      phone_number: (phone_number as string).trim(),
+      birth_date: birthYmd,
+      ...(ministryRole ? { ministry_role: ministryRole } : {}),
+      ...(ministryDirection ? { ministry_direction: ministryDirection } : {}),
+      ...(mergeIfDuplicate ? { merge_if_duplicate: true } : {}),
+    });
+  }
+
+  if (validationErrors.length > 0) {
+    res.status(400).json({
+      error: 'Ошибки в данных строк',
+      validation_errors: validationErrors,
+    });
+    return;
+  }
+
+  try {
+    const { users, errors } = await bulkCreateUsers(payloads);
+    if (users.length > 0) {
+      notifyRealtime(['members', 'calendar']);
+    }
+    res.status(201).json({
+      created: users.length,
+      users,
+      errors,
+      ok: errors.length === 0,
+    });
+  } catch (error) {
+    console.error('Failed bulk create users', error);
     res.status(500).json({ error: 'Database error' });
   }
 }

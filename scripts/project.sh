@@ -11,6 +11,51 @@ WEB_STACK_PID="${PID_DIR}/stack-web.pid"
 LOG_WEB="${PID_DIR}/stack-web.log"
 UPDATE_LOG_DIR="${PID_DIR}/updates"
 
+_database_url_from_dotenv() {
+  [[ -f "${ROOT}/.env" ]] || return 0
+  # Первая строка DATABASE_URL=… (без полного source .env)
+  local line
+  line="$(grep -E '^[[:space:]]*DATABASE_URL=' "${ROOT}/.env" | head -1)" || true
+  [[ -n "$line" ]] || return 0
+  line="${line#DATABASE_URL=}"
+  line="${line#"${line%%[![:space:]]*}"}"
+  line="${line%\"}"
+  line="${line#\"}"
+  line="${line%\'}"
+  line="${line#\'}"
+  printf '%s' "$line"
+}
+
+# Локальный Postgres в Docker (npm run db:up): @db:, localhost, 127.0.0.1. Иначе — удалённая БД (Supabase и т.д.).
+is_local_dev_database_url() {
+  if [[ "${LOCAL_DOCKER_DB:-}" == "1" ]]; then
+    return 0
+  fi
+  if [[ "${LOCAL_DOCKER_DB:-}" == "0" ]]; then
+    return 1
+  fi
+  local url
+  url="$(_database_url_from_dotenv)"
+  [[ -z "$url" ]] && return 0
+  case "$url" in
+    *"@db:"*) return 0 ;;
+    *"127.0.0.1"*|*"localhost"*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+run_db_up_if_needed() {
+  if [[ "${SKIP_DB:-0}" == "1" ]]; then
+    echo "[project] SKIP_DB=1 — контейнер Postgres локально не поднимаем."
+    return 0
+  fi
+  if ! is_local_dev_database_url; then
+    echo "[project] DATABASE_URL указывает на удалённую БД — npm run db:up пропускаем."
+    return 0
+  fi
+  npm run db:up 2>/dev/null || echo "[project] db:up пропущен или с ошибкой (Docker/БД)."
+}
+
 usage() {
   echo "Использование: $(basename "$0") start | update | stop"
   echo ""
@@ -18,9 +63,14 @@ usage() {
   echo "  update  — полное обновление: git pull, зависимости, сборки, Docker (лог в ${UPDATE_LOG_DIR}/)"
   echo "  stop    — остановить API+Vite и прочие процессы разработки из scripts/dev-stop.sh"
   echo ""
+  echo "База: если в .env DATABASE_URL на Supabase/удалённый хост — db:up и (при update) docker compose не трогают локальный Postgres."
+  echo "  LOCAL_DOCKER_DB=1 — всегда поднимать локальный контейнер (db:up)."
+  echo "  LOCAL_DOCKER_DB=0 — никогда не вызывать db:up."
+  echo ""
   echo "Переменные для update:"
   echo "  OFFLINE=1          — без git pull"
-  echo "  SKIP_DOCKER=1      — без docker compose (только локальная сборка; в конце db:up для dev-БД)"
+  echo "  SKIP_DOCKER=1      — без docker compose (только локальная сборка; в конце db:up при локальной БД)"
+  echo "  SKIP_DOCKER=0      — принудительно полный docker compose даже при удалённой DATABASE_URL"
   echo "  UPDATE_COMPOSE_FILES=\"-f a.yml -f b.yml\"  — доп. compose-файлы к docker compose up -d --build"
 }
 
@@ -45,9 +95,7 @@ start_web_background() {
   export API_PORT
   export VITE_DEV_API_PROXY="${VITE_DEV_API_PROXY:-http://127.0.0.1:${api_port}}"
 
-  if [[ "${SKIP_DB:-0}" != "1" ]]; then
-    npm run db:up 2>/dev/null || echo "[project] db:up пропущен или с ошибкой (Docker/БД)."
-  fi
+  run_db_up_if_needed
 
   echo "[project] Запуск API + Vite (web-react), лог: $LOG_WEB"
   : >"$LOG_WEB"
@@ -90,7 +138,7 @@ cmd_update() {
     section "Начало полного обновления"
     echo "[$( _ts )] Каталог: $ROOT"
     echo "[$( _ts )] Лог-файл: $log_file"
-    echo "[$( _ts )] OFFLINE=${OFFLINE:-0}  SKIP_DOCKER=${SKIP_DOCKER:-0}"
+    echo "[$( _ts )] OFFLINE=${OFFLINE:-0}  SKIP_DOCKER=${SKIP_DOCKER:-<не задан>}"
 
     if [[ "${OFFLINE:-0}" != "1" ]] && command -v git >/dev/null 2>&1 && [[ -d .git ]]; then
       section "Git: связь с GitHub и pull"
@@ -125,6 +173,13 @@ cmd_update() {
       echo "[$( _ts )] ✓ .env на месте"
     fi
 
+    if [[ -z "${SKIP_DOCKER+x}" ]] && ! is_local_dev_database_url; then
+      SKIP_DOCKER=1
+      export SKIP_DOCKER
+      echo "[$( _ts )] Удалённая DATABASE_URL — SKIP_DOCKER=1 (без полного docker compose). Нужны образы: SKIP_DOCKER=0"
+    fi
+    echo "[$( _ts )] SKIP_DOCKER=${SKIP_DOCKER:-0} (итог для Docker-шага)"
+
     section "Остановка локальной разработки (освобождение портов перед Docker)"
     cmd_stop || true
     echo "[$( _ts )] ✓ Локальные dev-процессы остановлены"
@@ -150,8 +205,8 @@ cmd_update() {
     if [[ "${SKIP_DOCKER:-0}" == "1" ]]; then
       section "Docker: пропуск (SKIP_DOCKER=1)"
       if [[ "${SKIP_DB:-0}" != "1" ]]; then
-        echo "[$( _ts )] Локальная БД для dev: npm run db:up"
-        npm run db:up 2>/dev/null || echo "[$( _ts )] ⚠ db:up не выполнен (нет Docker или ошибка)"
+        echo "[$( _ts )] Локальная БД для dev (если DATABASE_URL локальная): npm run db:up"
+        run_db_up_if_needed
       fi
     else
       section "Docker: пересборка образов и перезапуск контейнеров"

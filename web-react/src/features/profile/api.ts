@@ -13,6 +13,7 @@ export interface MePrayerCycle {
 /** Ответ GET/PATCH `/api/auth/me`. */
 export interface MeResponse {
   id: number;
+  user_id: string;
   first_name: string | null;
   last_name: string | null;
   name: string;

@@ -25,6 +25,8 @@ export type RegistrationStatus = 'active' | 'pending_review' | 'rejected';
 
 export interface AuthUser {
   id: number;
+  /** Публичный UUID (не числовой id). */
+  user_id: string;
   first_name: string | null;
   last_name: string | null;
   name: string;
@@ -101,6 +103,7 @@ export interface AccessRequestItem {
 
 type MemberRow = {
   id: number;
+  user_id?: string | null;
   first_name: string | null;
   last_name: string | null;
   name: string;
@@ -249,6 +252,7 @@ function getMaxActiveSessionsPerUser(): number {
 function mapAuthUser(row: MemberRow): AuthUser {
   return {
     id: row.id,
+    user_id: row.user_id != null && String(row.user_id).trim() !== '' ? String(row.user_id) : '',
     first_name: row.first_name,
     last_name: row.last_name,
     name: row.name,
@@ -317,6 +321,7 @@ async function findMemberByIdentity(
   const result = await query(
     `SELECT
       id,
+      user_id,
       first_name,
       last_name,
       name,
@@ -353,6 +358,7 @@ async function findMemberByNameWithoutPhone(
   const result = await query(
     `SELECT
       id,
+      user_id,
       first_name,
       last_name,
       name,
@@ -389,6 +395,7 @@ async function findAlreadyRegisteredMemberByName(
   const result = await query(
     `SELECT
       id,
+      user_id,
       first_name,
       last_name,
       name,
@@ -422,6 +429,7 @@ async function findMemberByPhoneDigits(phoneDigits: string): Promise<MemberRow |
   const result = await query(
     `SELECT
       id,
+      user_id,
       first_name,
       last_name,
       name,
@@ -562,6 +570,7 @@ export async function registerUser(input: RegisterInput): Promise<RegisterResult
        WHERE id = $6
        RETURNING
         id,
+        user_id,
         first_name,
         last_name,
         name,
@@ -617,6 +626,7 @@ export async function registerUser(input: RegisterInput): Promise<RegisterResult
          WHERE id = $6
          RETURNING
           id,
+          user_id,
           first_name,
           last_name,
           name,
@@ -864,17 +874,17 @@ export async function resolveSessionByToken(token: string): Promise<SessionPrinc
          m.is_active = TRUE
          OR m.registration_status = 'rejected'
        )
-     RETURNING m.id AS user_id, m.app_role`,
+     RETURNING m.id AS member_pk, m.app_role`,
     [tokenHash, refreshedExpiresAt.toISOString()]
   );
 
-  const row = result.rows[0] as { user_id: number; app_role: string } | undefined;
+  const row = result.rows[0] as { member_pk: number; app_role: string } | undefined;
   if (!row) {
     return null;
   }
 
   return {
-    userId: row.user_id,
+    userId: row.member_pk,
     role: normalizeRole(row.app_role),
     tokenHash,
   };
@@ -898,6 +908,7 @@ export async function getAuthUserById(userId: number): Promise<AuthUser | null> 
   const result = await query(
     `SELECT
       m.id,
+      m.user_id,
       m.first_name,
       m.last_name,
       m.name,
@@ -1092,6 +1103,7 @@ async function resolveMemberForAccessRequestIdentity(requestRow: {
       const conflictResult = await query(
         `SELECT
           id,
+          user_id,
           first_name,
           last_name,
           name,
@@ -1178,6 +1190,7 @@ export async function approveAccessRequest(
        WHERE id = $2
        RETURNING
         id,
+        user_id,
         first_name,
         last_name,
         name,
@@ -1211,6 +1224,7 @@ export async function approveAccessRequest(
        WHERE id = $6
        RETURNING
         id,
+        user_id,
         first_name,
         last_name,
         name,
@@ -1251,6 +1265,7 @@ export async function approveAccessRequest(
        WHERE id = $6
        RETURNING
         id,
+        user_id,
         first_name,
         last_name,
         name,
@@ -1282,6 +1297,7 @@ export async function approveAccessRequest(
        VALUES ($1, $2, $3, $4, $5, 'member', TRUE, 'active', NOW())
        RETURNING
         id,
+        user_id,
         first_name,
         last_name,
         name,

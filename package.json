@@ -48,10 +48,11 @@
     "push:vapid": "node scripts/generate-vapid-keys.mjs",
     "quickstart": "bash scripts/quickstart.sh",
     "start-all": "bash ./start-all",
-    "go": "bash scripts/project.sh",
-    "go:start": "bash scripts/project.sh start",
-    "go:update": "bash scripts/project.sh update",
-    "go:stop": "bash scripts/project.sh stop",
+    "go": "echo \"Команды: go:start | go:update | go:stop | go:restart — Docker-сервисы api + web (БД Supabase отдельно)\"",
+    "go:start": "docker compose up -d --no-deps api web && docker compose logs -f --tail=50 api",
+    "go:update": "git pull && docker compose up -d --build --no-deps api web && docker compose logs -f --tail=100 api",
+    "go:stop": "docker compose stop api web",
+    "go:restart": "docker compose restart api web && docker compose logs -f api",
     "docker:web:rebuild": "docker compose build --no-cache web && docker compose up -d web"
   },
   "keywords": [],
@@ -87,6 +88,7 @@
     "eslint": "^8.57.0",
     "eslint-config-prettier": "^9.1.0",
     "prettier": "^3.3.3",
+    "prisma": "^6.19.0",
     "ts-node": "^10.9.2",
     "ts-node-dev": "^2.0.0",
     "typescript": "^5.5.4"

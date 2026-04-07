@@ -15,6 +15,7 @@ import {
   LuImage,
   LuPenLine,
   LuSend,
+  LuTable2,
   LuX,
 } from 'react-icons/lu';
 import { format } from 'date-fns';
@@ -26,6 +27,7 @@ import { NotificationsSettingsSection } from '../NotificationsSettingsSection';
 import { useBrandingStore } from '../../branding/brandingStore';
 import {
   apiErrorMessage,
+  bulkCreateAdminMembers,
   createAdminMember,
   createBacksliderApi,
   createAdminEvent,
@@ -87,6 +89,65 @@ const Q_GB = ['admin', 'global', 'backsliders'] as const;
 const Q_EVENTS = ['admin', 'events'] as const;
 const Q_EVENT_CATEGORY_OPTIONS = ['admin', 'church-event-category-options'] as const;
 const Q_TG = ['admin', 'telegram', 'settings'] as const;
+
+type BulkMemberRow = {
+  key: string;
+  last_name: string;
+  first_name: string;
+  phone_number: string;
+  birth_date: string;
+  ministry_direction: string;
+  ministry_role: string;
+};
+
+function makeBulkRowKey(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return `bulk-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+}
+
+function emptyBulkRow(): BulkMemberRow {
+  return {
+    key: makeBulkRowKey(),
+    last_name: '',
+    first_name: '',
+    phone_number: '',
+    birth_date: '',
+    ministry_direction: '',
+    ministry_role: '',
+  };
+}
+
+/** Tab или `;`: фамилия, имя, телефон, дата ГГГГ-ММ-ДД, опц. направление, опц. роль. */
+function parseBulkMemberPaste(text: string): Omit<BulkMemberRow, 'key'>[] {
+  const lines = text
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0);
+  const rows: Omit<BulkMemberRow, 'key'>[] = [];
+  for (const line of lines) {
+    const cells = line.includes('\t')
+      ? line.split('\t').map((c) => c.trim())
+      : line.split(';').map((c) => c.trim());
+    if (cells.length < 4) continue;
+    const last_name = cells[0] ?? '';
+    const first_name = cells[1] ?? '';
+    const phone_number = cells[2] ?? '';
+    const birthRaw = cells[3] ?? '';
+    const ministry_direction = cells[4] ?? '';
+    const ministry_role = cells[5] ?? '';
+    rows.push({
+      last_name,
+      first_name,
+      phone_number,
+      birth_date: birthRaw.slice(0, 10),
+      ministry_direction,
+      ministry_role,
+    });
+  }
+  return rows;
+}
 
 function displayName(u: AppUser): string {
   const f = (u.first_name ?? '').trim();
@@ -287,6 +348,14 @@ function MembersSection() {
   const [oneTimeId, setOneTimeId] = useState<number | null>(null);
   const [oneTimeDate, setOneTimeDate] = useState('');
   const [banner, setBanner] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
+  const [showBulkCreate, setShowBulkCreate] = useState(false);
+  const [bulkRows, setBulkRows] = useState<BulkMemberRow[]>(() => [
+    emptyBulkRow(),
+    emptyBulkRow(),
+    emptyBulkRow(),
+  ]);
+  const [bulkMergeDupes, setBulkMergeDupes] = useState(false);
+  const [bulkPasteText, setBulkPasteText] = useState('');
   const memberEditTitleId = useId();
 
   useEffect(() => {
@@ -394,6 +463,68 @@ function MembersSection() {
     },
     onError: (e) =>
       setBanner({ type: 'err', text: apiErrorMessage(e, 'Не удалось объединить с существующей карточкой.') }),
+  });
+
+  const bulkCreateMut = useMutation({
+    mutationFn: async () => {
+      const partialRows: number[] = [];
+      bulkRows.forEach((r, i) => {
+        const f = [r.first_name, r.last_name, r.phone_number, r.birth_date].map((x) => x.trim().length > 0);
+        const any = f.some(Boolean);
+        const all = f.every(Boolean);
+        if (any && !all) partialRows.push(i + 1);
+      });
+      if (partialRows.length > 0) {
+        throw new Error(
+          `Заполните все обязательные поля в строках ${partialRows.join(', ')} или очистите их.`,
+        );
+      }
+
+      const eligible = bulkRows
+        .map((r, displayIdx) => ({ r, displayIdx }))
+        .filter(({ r }) =>
+          [r.first_name, r.last_name, r.phone_number, r.birth_date].every((x) => x.trim().length > 0),
+        );
+
+      if (eligible.length === 0) {
+        throw new Error('Добавьте хотя бы одну полностью заполненную строку.');
+      }
+
+      const members = eligible.map(({ r }) => ({
+        first_name: r.first_name.trim(),
+        last_name: r.last_name.trim(),
+        phone_number: r.phone_number.trim(),
+        birth_date: dateInputValueFromApi(r.birth_date.trim()),
+        ...(r.ministry_role.trim() ? { ministry_role: r.ministry_role.trim() } : {}),
+        ...(r.ministry_direction.trim() ? { ministry_direction: r.ministry_direction.trim() } : {}),
+      }));
+
+      return bulkCreateAdminMembers({
+        members,
+        merge_if_duplicate: bulkMergeDupes,
+      }).then((res) => ({ res, eligible }));
+    },
+    onSuccess: ({ res, eligible }) => {
+      invalidate();
+      if (res.errors.length === 0) {
+        setBanner({ type: 'ok', text: `Создано участников: ${res.created}.` });
+        setBulkRows([emptyBulkRow(), emptyBulkRow(), emptyBulkRow()]);
+        setBulkPasteText('');
+      } else {
+        const lines = res.errors.map((e) => {
+          const rowNum = eligible[e.index] ? eligible[e.index]!.displayIdx + 1 : e.index + 1;
+          return `Строка ${rowNum}: ${e.message}`;
+        });
+        setBanner({
+          type: res.created > 0 ? 'ok' : 'err',
+          text:
+            `${res.created > 0 ? `Создано: ${res.created}. ` : ''}` +
+            `Не удалось: ${res.errors.length}. ` +
+            lines.join('; '),
+        });
+      }
+    },
+    onError: (e) => setBanner({ type: 'err', text: apiErrorMessage(e, 'Массовое создание не выполнено.') }),
   });
 
   const saveEditMut = useMutation({
@@ -670,14 +801,245 @@ function MembersSection() {
           onChange={(e) => setSearch(e.target.value)}
           aria-label="Поиск участников"
         />
-        <button
-          type="button"
-          className={btnSecondary('self-start sm:self-auto')}
-          onClick={() => setShowCreate((v) => !v)}
-        >
-          {showCreate ? 'Скрыть форму добавления' : 'Добавить участника'}
-        </button>
+        <div className="flex flex-wrap gap-2 self-start sm:self-auto">
+          <button
+            type="button"
+            className={btnSecondary('')}
+            onClick={() => setShowCreate((v) => !v)}
+          >
+            {showCreate ? 'Скрыть форму добавления' : 'Добавить участника'}
+          </button>
+          <button
+            type="button"
+            className={
+              showBulkCreate
+                ? `${btnPrimary('')} inline-flex items-center gap-2`
+                : `${btnSecondary('')} inline-flex items-center gap-2`
+            }
+            onClick={() => setShowBulkCreate((v) => !v)}
+          >
+            <LuTable2 className="h-4 w-4 shrink-0" aria-hidden />
+            Массово из таблицы
+          </button>
+        </div>
       </div>
+
+      {showBulkCreate ? (
+        <section className="rounded-2xl border border-indigo-200/80 bg-gradient-to-br from-indigo-50/90 via-white to-violet-50/40 p-4 shadow-[var(--shadow)] shell:p-5">
+          <h3 className="flex items-center gap-2 text-sm font-extrabold text-stone-900">
+            <LuTable2 className="h-4 w-4 text-indigo-700" aria-hidden />
+            Массовое создание участников
+          </h3>
+          <p className="mt-1 text-xs text-stone-600">
+            Заполните строки в таблице. Обязательны фамилия, имя, телефон и дата рождения (ГГГГ-ММ-ДД).
+            Пустые строки не отправляются. Можно вставить фрагмент из Excel: колонки через Tab — фамилия,
+            имя, телефон, дата, по желанию направление и роль служения.
+          </p>
+          <div className="mt-3 flex flex-wrap items-center gap-3">
+            <label className="inline-flex cursor-pointer items-center gap-2 text-xs font-semibold text-stone-700">
+              <input
+                type="checkbox"
+                className="h-4 w-4 rounded border-stone-300 text-primary focus:ring-primary/30"
+                checked={bulkMergeDupes}
+                onChange={(e) => setBulkMergeDupes(e.target.checked)}
+              />
+              При совпадении имени и фамилии — объединить с существующей карточкой
+            </label>
+          </div>
+          <div className="mt-4 grid gap-2 lg:grid-cols-[1fr_auto] lg:items-end">
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-stone-600">
+                Вставка из таблицы (Tab или «;» между колонками)
+              </label>
+              <textarea
+                className={`${fieldClass()} min-h-[88px] font-mono text-xs`}
+                placeholder={
+                  'Иванов\tИван\t+79001234567\t2000-05-12\nПетрова\tМария\t89161234567\t1995-01-30\tПрославление\tВокал'
+                }
+                value={bulkPasteText}
+                onChange={(e) => setBulkPasteText(e.target.value)}
+              />
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                className={btnSecondary('text-xs')}
+                onClick={() => {
+                  const parsed = parseBulkMemberPaste(bulkPasteText);
+                  if (parsed.length === 0) {
+                    setBanner({
+                      type: 'err',
+                      text: 'Не удалось разобрать текст: нужно минимум 4 колонки (фамилия, имя, телефон, дата).',
+                    });
+                    return;
+                  }
+                  setBanner(null);
+                  setBulkRows(
+                    parsed.map((p) => ({
+                      ...p,
+                      key: makeBulkRowKey(),
+                    })),
+                  );
+                }}
+              >
+                Заполнить таблицу из текста
+              </button>
+              <button
+                type="button"
+                className={btnSecondary('text-xs')}
+                onClick={() => {
+                  setBulkRows([emptyBulkRow(), emptyBulkRow(), emptyBulkRow()]);
+                  setBulkPasteText('');
+                }}
+              >
+                Очистить
+              </button>
+            </div>
+          </div>
+          <div className="mt-4 overflow-x-auto rounded-xl border border-stone-200/80 bg-white/90">
+            <table className="min-w-[920px] w-full border-collapse text-left text-xs">
+              <thead>
+                <tr className="border-b border-stone-200 bg-stone-50/95 font-extrabold uppercase tracking-wide text-stone-500">
+                  <th className="whitespace-nowrap px-2 py-2">#</th>
+                  <th className="px-2 py-2">Фамилия</th>
+                  <th className="px-2 py-2">Имя</th>
+                  <th className="px-2 py-2">Телефон</th>
+                  <th className="whitespace-nowrap px-2 py-2">Дата</th>
+                  <th className="min-w-[8rem] px-2 py-2">Направление</th>
+                  <th className="min-w-[8rem] px-2 py-2">Роль</th>
+                  <th className="px-2 py-2" />
+                </tr>
+              </thead>
+              <tbody>
+                {bulkRows.map((row, idx) => (
+                  <tr key={row.key} className="border-b border-stone-100 last:border-0">
+                    <td className="px-2 py-1.5 align-middle text-stone-400">{idx + 1}</td>
+                    <td className="px-2 py-1.5 align-middle">
+                      <input
+                        className={`${fieldClass()} py-1.5 text-xs`}
+                        value={row.last_name}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          setBulkRows((rs) => rs.map((r) => (r.key === row.key ? { ...r, last_name: v } : r)));
+                        }}
+                      />
+                    </td>
+                    <td className="px-2 py-1.5 align-middle">
+                      <input
+                        className={`${fieldClass()} py-1.5 text-xs`}
+                        value={row.first_name}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          setBulkRows((rs) => rs.map((r) => (r.key === row.key ? { ...r, first_name: v } : r)));
+                        }}
+                      />
+                    </td>
+                    <td className="px-2 py-1.5 align-middle">
+                      <input
+                        className={`${fieldClass()} py-1.5 text-xs`}
+                        inputMode="tel"
+                        value={row.phone_number}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          setBulkRows((rs) =>
+                            rs.map((r) => (r.key === row.key ? { ...r, phone_number: v } : r)),
+                          );
+                        }}
+                      />
+                    </td>
+                    <td className="whitespace-nowrap px-2 py-1.5 align-middle">
+                      <input
+                        className={`${fieldClass()} py-1.5 text-xs`}
+                        type="date"
+                        value={row.birth_date}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          setBulkRows((rs) => rs.map((r) => (r.key === row.key ? { ...r, birth_date: v } : r)));
+                        }}
+                      />
+                    </td>
+                    <td className="px-2 py-1.5 align-middle">
+                      <select
+                        className={`${fieldClass()} py-1.5 text-xs`}
+                        value={row.ministry_direction}
+                        onChange={(e) => {
+                          const nextDir = e.target.value;
+                          setBulkRows((rs) =>
+                            rs.map((r) => {
+                              if (r.key !== row.key) return r;
+                              const allowed = new Set(rolesForDirection(nextDir));
+                              const nextRole =
+                                allowed.size === 0 || allowed.has(r.ministry_role) ? r.ministry_role : '';
+                              return { ...r, ministry_direction: nextDir, ministry_role: nextRole };
+                            }),
+                          );
+                        }}
+                      >
+                        <option value="">—</option>
+                        {dirs.map((d) => (
+                          <option key={d.id} value={d.title}>
+                            {d.title}
+                          </option>
+                        ))}
+                      </select>
+                    </td>
+                    <td className="px-2 py-1.5 align-middle">
+                      <select
+                        className={`${fieldClass()} py-1.5 text-xs`}
+                        value={row.ministry_role}
+                        disabled={!row.ministry_direction}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          setBulkRows((rs) => rs.map((r) => (r.key === row.key ? { ...r, ministry_role: v } : r)));
+                        }}
+                      >
+                        <option value="">—</option>
+                        {rolesForDirection(row.ministry_direction).map((t) => (
+                          <option key={t} value={t}>
+                            {t}
+                          </option>
+                        ))}
+                      </select>
+                    </td>
+                    <td className="px-2 py-1.5 align-middle text-right">
+                      <button
+                        type="button"
+                        className="rounded-lg px-2 py-1 text-xs font-semibold text-red-700 hover:bg-red-50"
+                        onClick={() =>
+                          setBulkRows((rs) => (rs.length <= 1 ? rs : rs.filter((r) => r.key !== row.key)))
+                        }
+                        aria-label="Удалить строку"
+                      >
+                        Удалить
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="mt-4 flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              className={btnSecondary('text-xs')}
+              onClick={() => setBulkRows((rs) => [...rs, emptyBulkRow()])}
+            >
+              + Строка
+            </button>
+            <button
+              type="button"
+              className={btnPrimary('')}
+              disabled={bulkCreateMut.isPending}
+              onClick={() => {
+                setBanner(null);
+                bulkCreateMut.mutate();
+              }}
+            >
+              {bulkCreateMut.isPending ? 'Создание…' : 'Создать всех из таблицы'}
+            </button>
+          </div>
+        </section>
+      ) : null}
 
       {showCreate ? (
         <section className="rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] p-4 shadow-[var(--shadow)] shell:p-5">

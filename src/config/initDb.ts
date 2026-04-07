@@ -223,6 +223,13 @@ ALTER TABLE members ADD CONSTRAINT members_app_role_check CHECK (app_role IN ('m
 
 ALTER TABLE members ADD COLUMN IF NOT EXISTS is_collection_coordinator BOOLEAN NOT NULL DEFAULT FALSE;
 
+-- Публичный UUID пользователя (генерируется при INSERT, в т.ч. при регистрации).
+ALTER TABLE members ADD COLUMN IF NOT EXISTS user_id UUID;
+UPDATE members SET user_id = gen_random_uuid() WHERE user_id IS NULL;
+ALTER TABLE members ALTER COLUMN user_id SET DEFAULT gen_random_uuid();
+CREATE UNIQUE INDEX IF NOT EXISTS members_user_id_uidx ON members (user_id);
+ALTER TABLE members ALTER COLUMN user_id SET NOT NULL;
+
 -- Мессенджер: время последнего ухода из сети (для «был(а) …»).
 ALTER TABLE members ADD COLUMN IF NOT EXISTS last_seen_at TIMESTAMPTZ;
 

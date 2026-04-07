@@ -65,6 +65,31 @@ export async function createAdminMember(body: {
   return data;
 }
 
+export async function bulkCreateAdminMembers(body: {
+  members: {
+    first_name: string;
+    last_name: string;
+    phone_number: string;
+    birth_date: string;
+    ministry_role?: string;
+    ministry_direction?: string;
+  }[];
+  merge_if_duplicate?: boolean;
+}): Promise<{
+  ok: boolean;
+  created: number;
+  users: AppUser[];
+  errors: { index: number; message: string }[];
+}> {
+  const { data } = await apiClient.post<{
+    ok: boolean;
+    created: number;
+    users: AppUser[];
+    errors: { index: number; message: string }[];
+  }>(`${USERS}/bulk`, body);
+  return data;
+}
+
 export async function updateAdminMember(
   id: number,
   body: Partial<{

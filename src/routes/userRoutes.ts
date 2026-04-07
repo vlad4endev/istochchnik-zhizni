@@ -17,6 +17,7 @@ import {
   setOneTimeMemberDateOverrideHandler,
   startPrayerCycleHandler,
   updateUserHandler,
+  bulkCreateUsersHandler,
   mergeDuplicateMembersHandler,
   swapAllMembersFirstLastNamesHandler,
 } from '../controllers/userController';
@@ -32,6 +33,7 @@ router.delete('/templates/ministry-directions/:id', deleteMinistryDirectionTempl
 router.put('/templates/ministry-directions/:id/roles', setMinistryDirectionTemplateRolesHandler);
 
 router.get('/', getUsers);
+router.post('/bulk', bulkCreateUsersHandler);
 router.post('/merge-duplicates', mergeDuplicateMembersHandler);
 router.post('/swap-all-first-last-names', swapAllMembersFirstLastNamesHandler);
 router.get('/:id', getUser);

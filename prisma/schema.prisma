@@ -1,0 +1,7 @@
+// Минимальная схема для применения SQL-миграций (migrate deploy).
+// Модели приложения описаны в коде и supabase/migrations — здесь datasource достаточно.
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}

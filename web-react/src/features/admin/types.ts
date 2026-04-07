@@ -1,6 +1,8 @@
 /** Формат записи участника из GET `/api/users` (совпадает с `AppUser` на бэкенде). */
 export interface AppUser {
   id: number;
+  /** Публичный UUID участника (стабильный, не числовой id). */
+  user_id: string;
   first_name: string | null;
   last_name: string | null;
   name: string;
