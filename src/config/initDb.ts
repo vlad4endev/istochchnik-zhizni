@@ -425,6 +425,7 @@ BEGIN
   LEFT JOIN member_prayer_by_cycle mpc ON mpc.member_id = m.id AND mpc.cycle_index = v_cycle_index
   WHERE o.target_date = target_date
     AND m.is_active = TRUE
+    AND m.in_prayer_cycle = TRUE
   LIMIT 1;
 
   IF FOUND THEN

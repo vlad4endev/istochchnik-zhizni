@@ -264,10 +264,12 @@ export function PublicProfilePage() {
             </div>
           </div>
         </div>
-        <div className={styles.fbFeed}>
-          {Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className={styles.fbSkelCard} aria-hidden />
-          ))}
+        <div className={styles.igFeedSection}>
+          <div className={styles.fbFeed}>
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className={styles.fbSkelCard} aria-hidden />
+            ))}
+          </div>
         </div>
       </div>
     );
@@ -290,7 +292,7 @@ export function PublicProfilePage() {
     <div className={profileRootCn} data-profile-root>
       <header className={styles.igHeader}>
         <div className={styles.igHeaderInner}>
-          <div className={styles.igHero}>
+          <div className={`${styles.igHero} ${styles.igHeroLayout}`}>
             <div className={styles.igAvatarBlock}>
               <div className={styles.igAvatar}>
                 {avatarSrc ? (
@@ -335,12 +337,15 @@ export function PublicProfilePage() {
               </div>
 
               <div className={styles.igStats}>
-                <div className={styles.igStat}>
+                <div className={styles.igStatPill}>
                   <span className={styles.igStatNum}>{posts.length}</span>
                   <span className={styles.igStatLabel}>публикаций</span>
                 </div>
                 {data.profile.is_private ? (
-                  <span className={styles.igLock}>Закрытый профиль</span>
+                  <span className={styles.igPrivacyBadge} title="Контент виден только подписчикам или по решению владельца">
+                    <span className={styles.igPrivacyDot} aria-hidden />
+                    Закрытый профиль
+                  </span>
                 ) : null}
               </div>
 
@@ -371,14 +376,17 @@ export function PublicProfilePage() {
         </div>
       </header>
 
-      <div className={styles.igTabs}>
-        <span className={styles.igTabActive}>
-          <LuLayoutGrid className="h-4 w-4" aria-hidden />
-          Публикации
-        </span>
-      </div>
+      <div className={styles.igFeedSection}>
+        <div className={styles.igTabs}>
+          <h2 className={styles.igFeedHeading}>
+            <span className={styles.igTabActive}>
+              <LuLayoutGrid className="h-4 w-4 shrink-0" aria-hidden />
+              Публикации
+            </span>
+          </h2>
+        </div>
 
-      <div className={styles.fbFeed}>
+        <main className={styles.fbFeed}>
         {data.profile.is_private && !isOwner ? (
           <div className={styles.igEmpty}>Этот профиль закрыт. Публикации доступны только владельцу.</div>
         ) : posts.length === 0 ? (
@@ -400,14 +408,18 @@ export function PublicProfilePage() {
             return (
               <article key={post.id} className={styles.fbCard}>
                 <div className={styles.fbCardHead}>
-                  <div className={styles.fbCardMeta}>
+                  <div className={styles.fbCardHeadRow}>
                     {post.shared_post ? (
                       <p className={styles.fbRepostBadge}>
-                        <LuRepeat2 className="h-3.5 w-3.5" aria-hidden />
-                        Поделился публикацией
+                        <LuRepeat2 className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                        Репост
                       </p>
-                    ) : null}
-                    <p className={styles.fbCardSub}>{formatPostDate(post.created_at)}</p>
+                    ) : (
+                      <span className={styles.fbCardHeadSpacer} aria-hidden />
+                    )}
+                    <time className={styles.fbCardTime} dateTime={post.created_at}>
+                      {formatPostDate(post.created_at)}
+                    </time>
                   </div>
                 </div>
                 {post.caption?.trim() ? <p className={styles.fbCaption}>{post.caption.trim()}</p> : null}
@@ -447,6 +459,7 @@ export function PublicProfilePage() {
             );
           })
         )}
+        </main>
       </div>
 
       {isOwner ? (

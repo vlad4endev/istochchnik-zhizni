@@ -107,7 +107,9 @@ function DayPrayerNeedRow(props: {
         <p className="text-[13px] font-medium text-stone-500">
           {weekday}, {dayShort}
         </p>
-        <p className="mt-1 text-[14px] text-stone-400">Нет назначенного участника</p>
+        <p className="mt-1 text-[14px] text-stone-400">
+          В очереди молитвенного цикла на этот день никого не назначено
+        </p>
       </li>
     );
   }
@@ -220,7 +222,9 @@ function NextWeekMembersPanel(props: {
   const isCollectionMode = mode === 'collection';
 
   const heading =
-    weekKind === 'current' ? 'Текущая неделя — молитва за члена' : 'Следующая неделя — молитва за члена';
+    weekKind === 'current'
+      ? 'Текущая неделя — очередь молитвенного цикла'
+      : 'Следующая неделя — очередь молитвенного цикла';
 
   if (isPending || claimsPending) {
     return (
@@ -324,7 +328,7 @@ function NextWeekMembersPanel(props: {
             </p>
           ) : cycleLabel ? (
             <p className="mt-1 text-[12px] leading-snug text-stone-500">
-              {cycleLabel}. Отметьте, за кого вы собираете нужды: один участник — только у одного ответственного.
+              {cycleLabel}. Отметьте, за кого из очереди цикла вы собираете нужды: один человек — только у одного ответственного.
             </p>
           ) : null}
         </div>
@@ -332,8 +336,8 @@ function NextWeekMembersPanel(props: {
 
       <p className="mb-3 text-[13px] leading-snug text-stone-600">
         {isCollectionMode
-          ? 'Список участников для сбора нужд: используйте поиск и фильтры, затем закрепляйте ответственного.'
-          : 'Заполняйте нужды по дням — они сохраняются для участника в текущем молитвенном цикле и попадают в историю при изменении текста.'}
+          ? 'Список той же очереди, что на экране «Молитва»: поиск, фильтры и закрепление ответственного за сбор.'
+          : 'Заполняйте нужды по дням для людей из очереди молитвенного цикла — текст хранится по циклу и в истории при изменении.'}
       </p>
 
       {!isCollectionMode ? (
@@ -346,13 +350,13 @@ function NextWeekMembersPanel(props: {
         <div>
           <div className="mb-3 space-y-2">
             <label className="relative block">
-              <span className="sr-only">Поиск участника</span>
+              <span className="sr-only">Поиск по очереди молитвенного цикла</span>
               <LuSearch className="pointer-events-none absolute left-3 top-1/2 h-4.5 w-4.5 -translate-y-1/2 text-stone-400" />
               <input
                 type="search"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Поиск по имени участника"
+                placeholder="Поиск по имени (очередь цикла)"
                 className="min-h-[44px] w-full rounded-xl border border-stone-200 bg-white pl-10 pr-3 text-[14px] text-stone-800 outline-none ring-primary/15 focus:border-primary focus:ring-2"
               />
             </label>
@@ -604,18 +608,18 @@ export function NextWeekPrayerPlanSection({
     error: claimsErr,
     refetch: refetchClaims,
   } = useQuery({
-    queryKey: ['calendar', 'cycle', 'collection-claims'],
-    queryFn: getCycleCollectionClaims,
+    queryKey: ['calendar', 'cycle', 'collection-claims', weekKind],
+    queryFn: () => getCycleCollectionClaims(weekKind),
     enabled,
     staleTime: 30_000,
   });
 
   const mut = useMutation({
     mutationFn: ({ memberId, claim }: { memberId: number; claim: boolean }) =>
-      patchCycleCollectionClaim(memberId, claim),
+      patchCycleCollectionClaim(memberId, claim, weekKind),
     onSuccess: (data) => {
       setMutErr(null);
-      qc.setQueryData(['calendar', 'cycle', 'collection-claims'], data);
+      qc.setQueryData(['calendar', 'cycle', 'collection-claims', weekKind], data);
       void qc.invalidateQueries({ queryKey: ['calendar', 'week-members'] });
     },
     onError: (e: unknown) => {
@@ -651,7 +655,7 @@ export function NextWeekPrayerPlanSection({
           </span>
           <span className="mt-0.5 block text-[12px] leading-snug text-stone-600">
             {isCollectionMode
-              ? '7 дней · список участников · поиск и отбор'
+              ? '7 дней · очередь молитвенного цикла · поиск и отбор'
               : '7 дней · текущая или следующая неделя · ввод нужд'}
           </span>
         </span>

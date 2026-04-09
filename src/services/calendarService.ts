@@ -149,6 +149,7 @@ export async function getPrayerDataByDate(targetDate: string): Promise<PrayerDat
      LEFT JOIN member_prayer_by_cycle mpc
        ON mpc.member_id = m.id AND mpc.cycle_index = $2
      WHERE m.is_active = TRUE
+       AND m.in_prayer_cycle = TRUE
        AND o.target_date = $1::date
      LIMIT 1`,
     [targetDate, cycleIndexForDate]
@@ -199,6 +200,12 @@ export async function getPrayerDataByDate(targetDate: string): Promise<PrayerDat
 
 export type WeekPlanKind = 'current' | 'next';
 
+/** Понедельник выбранной календарной недели — та же привязка, что у `/api/calendar/next-week/members?week=`. */
+export function getCalendarWeekStartDate(kind: WeekPlanKind): string {
+  const dates = kind === 'next' ? getNextWeekDates() : getCurrentWeekDates();
+  return dates[0] ?? new Date().toISOString().slice(0, 10);
+}
+
 export async function getMemberAssignmentsForWeek(kind: WeekPlanKind): Promise<NextWeekMemberAssignment[]> {
   const dates = kind === 'next' ? getNextWeekDates() : getCurrentWeekDates();
   return getMemberAssignmentsForDates(dates);
@@ -237,6 +244,7 @@ async function getMemberAssignmentsForDates(dates: string[]): Promise<NextWeekMe
      FROM member_cycle_overrides o
      JOIN members m ON m.id = o.member_id
      WHERE m.is_active = TRUE
+       AND m.in_prayer_cycle = TRUE
        AND o.target_date BETWEEN $1::date AND $2::date`,
     [firstDate, lastDate]
   );

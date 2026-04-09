@@ -358,7 +358,17 @@ function DashboardMain() {
             </section>
           ) : null}
 
-          <section className="overflow-hidden rounded-3xl border border-stone-200/70 bg-white/85 p-4 shadow-[var(--shadow-card)] sm:min-h-[152px] sm:p-5 xl:col-span-4">
+          <button
+            type="button"
+            onClick={() =>
+              navigate(
+                publicProfileSlug
+                  ? `/profile/${encodeURIComponent(publicProfileSlug)}`
+                  : '/profile',
+              )
+            }
+            className="tap-highlight-transparent touch-manipulation overflow-hidden rounded-3xl border border-stone-200/70 bg-white/85 p-4 text-left shadow-[var(--shadow-card)] transition hover:-translate-y-0.5 hover:shadow-[var(--shadow)] sm:min-h-[152px] sm:p-5 xl:col-span-4"
+          >
             <div className="flex items-start justify-between gap-2">
               <p className="text-[11px] font-extrabold uppercase tracking-[0.14em] text-stone-500">Мой профиль</p>
               {hasProfilePostDraft ? (
@@ -399,7 +409,7 @@ function DashboardMain() {
                 </div>
               </div>
             </div>
-          </section>
+          </button>
 
           <button
             type="button"

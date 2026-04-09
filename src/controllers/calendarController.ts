@@ -274,6 +274,13 @@ function parseWeekPlanKind(value: unknown): WeekPlanKind {
   return value === 'current' ? 'current' : 'next';
 }
 
+function parseOptionalWeekKind(value: unknown): WeekPlanKind | undefined {
+  if (value === 'current' || value === 'next') {
+    return value;
+  }
+  return undefined;
+}
+
 export async function getNextWeekMembers(req: Request, res: Response): Promise<void> {
   if (!(await assertAdminOrCollectionCoordinator(req, res))) {
     return;
@@ -342,7 +349,8 @@ export async function getCycleCollectionClaims(req: Request, res: Response): Pro
   try {
     const authReq = req as AuthReq;
     const isAdmin = authReq.authUserRole === 'admin';
-    const snapshot = await getCycleCollectionClaimsSnapshot(authReq.authUserId ?? null, isAdmin);
+    const week = parseOptionalWeekKind(req.query?.week);
+    const snapshot = await getCycleCollectionClaimsSnapshot(authReq.authUserId ?? null, isAdmin, week);
     res.json(snapshot);
   } catch (err) {
     console.error('Calendar cycle collection-claims GET error:', err);
@@ -376,15 +384,18 @@ export async function patchCycleCollectionClaims(req: Request, res: Response): P
   }
 
   try {
+    const week = parseOptionalWeekKind(req.body?.week);
     await setCycleCollectionClaim({
       authUserId: authReq.authUserId,
       authIsAdmin: authReq.authUserRole === 'admin',
       memberId,
       claim,
+      weekKind: week,
     });
     const snapshot = await getCycleCollectionClaimsSnapshot(
       authReq.authUserId,
-      authReq.authUserRole === 'admin'
+      authReq.authUserRole === 'admin',
+      week
     );
     notifyRealtime(['calendar']);
     res.json(snapshot);

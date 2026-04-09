@@ -3,7 +3,6 @@ import {
   LuBell,
   LuCalendarDays,
   LuCalendarRange,
-  LuHeartHandshake,
   LuInbox,
   LuPalette,
   LuSend,
@@ -12,16 +11,7 @@ import {
 } from 'react-icons/lu';
 
 export interface AdminTabConfig {
-  id:
-    | 'members'
-    | 'requests'
-    | 'calendar'
-    | 'cycle_participants'
-    | 'events'
-    | 'templates'
-    | 'project'
-    | 'notifications'
-    | 'telegram';
+  id: 'members' | 'requests' | 'calendar' | 'events' | 'templates' | 'project' | 'notifications' | 'telegram';
   label: string;
   Icon: IconType;
   short: string;
@@ -46,18 +36,11 @@ export const ADMIN_TABS: readonly AdminTabConfig[] = [
   },
   {
     id: 'calendar',
-    label: 'Календарь',
+    label: 'Молитвенный календарь',
     Icon: LuCalendarDays,
-    short: 'Цикл',
-    description: 'Старт недельного цикла и общие темы, служения, имена для молитвы.',
-  },
-  {
-    id: 'cycle_participants',
-    label: 'Участники молитвенного цикла',
-    Icon: LuHeartHandshake,
-    short: 'Круг',
+    short: 'Молитва',
     description:
-      'Список тех, кто участвует в ежедневной ротации молитвенного календаря. Добавление и исключение только вручную.',
+      'Дата старта цикла, кто в ежедневной очереди на молитву, глобальные темы, служения и отступники в приложении.',
   },
   {
     id: 'events',

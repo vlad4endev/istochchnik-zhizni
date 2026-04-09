@@ -255,18 +255,22 @@ function normalizeCycleCollectionSnapshot(raw: unknown): CycleCollectionClaimsSn
   return { cycle_index, cycle_number, members: rows };
 }
 
-export async function getCycleCollectionClaims(): Promise<CycleCollectionClaimsSnapshot> {
-  const { data } = await apiClient.get<unknown>('/api/calendar/cycle/collection-claims');
+export async function getCycleCollectionClaims(week?: WeekPlanKind): Promise<CycleCollectionClaimsSnapshot> {
+  const { data } = await apiClient.get<unknown>('/api/calendar/cycle/collection-claims', {
+    params: week ? { week } : {},
+  });
   return normalizeCycleCollectionSnapshot(data);
 }
 
 export async function patchCycleCollectionClaim(
   memberId: number,
   claim: boolean,
+  week?: WeekPlanKind,
 ): Promise<CycleCollectionClaimsSnapshot> {
   const { data } = await apiClient.patch<unknown>('/api/calendar/cycle/collection-claims', {
     member_id: memberId,
     claim,
+    ...(week ? { week } : {}),
   });
   return normalizeCycleCollectionSnapshot(data);
 }

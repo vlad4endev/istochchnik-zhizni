@@ -1,4 +1,5 @@
 import { query } from '../config/db';
+import { getCalendarWeekStartDate, type WeekPlanKind } from './calendarService';
 import { getPrayerCycleSnapshotForDate, PRAYER_CYCLE_MEMBERS_WHERE_M } from './prayerCycleService';
 
 const MEMBER_ORDER_SQL = `LOWER(COALESCE(NULLIF(trim(m.first_name), ''), split_part(trim(m.name), ' ', 1))) ASC,
@@ -28,10 +29,13 @@ export interface CycleCollectionClaimsSnapshot {
 
 export async function getCycleCollectionClaimsSnapshot(
   authUserId: number | null,
-  authIsAdmin: boolean
+  authIsAdmin: boolean,
+  /** Какую неделю смотрим: цикл и отметки сбора считаются от понедельника этой недели (как план недели). Без параметра — по-прежнему от сегодняшней даты. */
+  weekKind?: WeekPlanKind
 ): Promise<CycleCollectionClaimsSnapshot> {
-  const today = new Date().toISOString().slice(0, 10);
-  const snap = await getPrayerCycleSnapshotForDate(today);
+  const refDate =
+    weekKind === undefined ? new Date().toISOString().slice(0, 10) : getCalendarWeekStartDate(weekKind);
+  const snap = await getPrayerCycleSnapshotForDate(refDate);
   if (!snap) {
     return { cycle_index: 0, cycle_number: 1, members: [] };
   }
@@ -122,8 +126,10 @@ export async function setCycleCollectionClaim(params: {
   authIsAdmin: boolean;
   memberId: number;
   claim: boolean;
+  /** Тот же week, что при GET snapshot — иначе отметка попадёт в цикл «сегодня». */
+  weekKind?: WeekPlanKind;
 }): Promise<void> {
-  const { authUserId, authIsAdmin, memberId, claim } = params;
+  const { authUserId, authIsAdmin, memberId, claim, weekKind } = params;
 
   let canManage = false;
   if (authIsAdmin) {
@@ -139,8 +145,9 @@ export async function setCycleCollectionClaim(params: {
     throw new Error('not_allowed');
   }
 
-  const today = new Date().toISOString().slice(0, 10);
-  const snap = await getPrayerCycleSnapshotForDate(today);
+  const refDate =
+    weekKind === undefined ? new Date().toISOString().slice(0, 10) : getCalendarWeekStartDate(weekKind);
+  const snap = await getPrayerCycleSnapshotForDate(refDate);
   if (!snap) {
     throw new Error('invalid_member');
   }
