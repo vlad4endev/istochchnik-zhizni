@@ -9,62 +9,245 @@
   color: var(--profile-text-body);
 }
 
+/* Тёмная лента в духе Instagram: контрастная шапка и читаемая лента */
+.igPageThemeIg {
+  --profile-surface: #000000;
+  --profile-surface-elevated: #0a0a0a;
+  --profile-text-heading: #fafaf9;
+  --profile-text-body: #e7e5e4;
+  --profile-text-muted: #a8a29e;
+  --profile-text-soft: #d6d3d1;
+  --profile-text-faint: #78716c;
+  --profile-border: rgba(255, 255, 255, 0.12);
+  --profile-card-bg: rgba(18, 18, 18, 0.92);
+  --profile-card-ring: rgba(255, 255, 255, 0.06);
+  --profile-media-placeholder: #292524;
+  --profile-media-placeholder-mid: #3f3a36;
+}
+
+.igTopBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  min-height: 3.25rem;
+  padding: 0.35rem 0.75rem;
+  padding-top: calc(0.35rem + env(safe-area-inset-top, 0px));
+  background: #000;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  position: sticky;
+  top: 0;
+  z-index: 50;
+}
+
+.igTopBarIconBtn {
+  display: grid;
+  place-items: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  border-radius: 0.75rem;
+  color: #fafaf9;
+  text-decoration: none;
+  transition: background 0.15s ease;
+}
+
+.igTopBarIconBtn:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.igTopBarTitle {
+  flex: 1;
+  min-width: 0;
+  text-align: center;
+  font-size: 0.9375rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: #fafaf9;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.igTopBarRight {
+  width: 2.75rem;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.igTopBarRightPad {
+  display: block;
+  width: 2.75rem;
+  height: 2.75rem;
+}
+
 .igHeader {
   position: relative;
-  background: linear-gradient(
-    180deg,
-    color-mix(in srgb, var(--profile-surface-elevated) 100%, transparent) 0%,
-    var(--profile-surface) 100%
-  );
-  border-bottom: 1px solid var(--profile-border);
+  background: #000;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .igHeaderInner {
   margin: 0 auto;
   max-width: 42rem;
-  padding: 1.5rem 1.25rem 1.75rem;
+  padding: 1rem 1rem 1.25rem;
 }
 
 @media (min-width: 640px) {
   .igHeaderInner {
-    padding: 2rem 1.5rem 2.25rem;
+    padding: 1.25rem 1.25rem 1.5rem;
   }
 }
 
-.igHero {
+.igProfileMainRow {
   display: flex;
+  flex-direction: row;
   align-items: flex-start;
-  gap: 1.5rem;
+  gap: 1.25rem;
   width: 100%;
   min-width: 0;
 }
 
-/* Мобильный: аватар и текст по центру; от tablet — классическая строка */
-.igHeroLayout {
-  flex-direction: column;
-  align-items: center;
-  text-align: center;
+@media (min-width: 640px) {
+  .igProfileMainRow {
+    gap: 1.75rem;
+  }
 }
 
-.igHeroLayout .igHeroMain {
-  width: 100%;
-  max-width: 28rem;
+.igAvatarRing {
+  padding: 2px;
+  border-radius: 9999px;
+  background: linear-gradient(
+    135deg,
+    #f09433 0%,
+    #e6683c 25%,
+    #dc2743 50%,
+    #cc2366 75%,
+    #bc1888 100%
+  );
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35);
+}
+
+.igAvatarRing .igAvatar {
+  width: 5.5rem;
+  height: 5.5rem;
+  box-shadow: none;
 }
 
 @media (min-width: 640px) {
-  .igHero {
-    gap: 2rem;
+  .igAvatarRing .igAvatar {
+    width: 7.5rem;
+    height: 7.5rem;
   }
+}
 
-  .igHeroLayout {
-    flex-direction: row;
-    align-items: flex-start;
-    text-align: left;
-  }
+.igProfileRight {
+  flex: 1;
+  min-width: 0;
+  padding-top: 0.125rem;
+}
 
-  .igHeroLayout .igHeroMain {
-    max-width: none;
+.igDisplayNameTitle {
+  margin: 0;
+  font-size: 0.9375rem;
+  font-weight: 800;
+  line-height: 1.25;
+  letter-spacing: -0.02em;
+  color: var(--profile-text-heading);
+}
+
+@media (min-width: 640px) {
+  .igDisplayNameTitle {
+    font-size: 1.0625rem;
   }
+}
+
+.igStatColumns {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.35rem;
+  margin-top: 0.75rem;
+  max-width: 16rem;
+}
+
+@media (min-width: 640px) {
+  .igStatColumns {
+    max-width: 18rem;
+    margin-top: 0.875rem;
+  }
+}
+
+.igStatCell,
+.igStatCellMuted {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 0.1rem;
+}
+
+.igStatCellNum {
+  font-size: 1rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: var(--profile-text-heading);
+  line-height: 1.2;
+}
+
+.igStatCellLabel {
+  font-size: 0.625rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--profile-text-muted);
+  line-height: 1.2;
+}
+
+.igStatCellMuted .igStatCellNum {
+  color: var(--profile-text-faint);
+}
+
+.igPrivacyInline {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin: 0.65rem 0 0;
+  font-size: 0.6875rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--profile-text-muted);
+}
+
+.igBioSection {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.igPrimaryActions {
+  margin-top: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.igBtnEditProfile {
+  display: block;
+  width: 100%;
+  text-align: center;
+  padding: 0.55rem 1rem;
+  border-radius: 0.5rem;
+  font-size: 0.8125rem;
+  font-weight: 800;
+  color: var(--profile-text-heading);
+  text-decoration: none;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  transition: background 0.15s ease;
+}
+
+.igBtnEditProfile:hover {
+  background: rgba(255, 255, 255, 0.14);
 }
 
 .igAvatarBlock {
@@ -137,50 +320,16 @@
   width: 2.5rem;
   height: 2.5rem;
   border-radius: 9999px;
-  border: 2px solid var(--profile-surface-elevated);
-  background: var(--profile-text-heading);
-  color: #fff;
+  border: 2px solid #000;
+  background: #262626;
+  color: #fafaf9;
   cursor: pointer;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
 }
 
 .igAvatarCam:disabled {
   opacity: 0.5;
   cursor: not-allowed;
-}
-
-.igHeroMain {
-  flex: 1;
-  min-width: 0;
-}
-
-.igNameRow {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.75rem 1rem;
-  margin-bottom: 0.25rem;
-}
-
-.igHandle {
-  margin: 0;
-  font-size: 1.375rem;
-  font-weight: 800;
-  line-height: 1.2;
-  letter-spacing: -0.035em;
-  color: var(--profile-text-heading);
-}
-
-@media (min-width: 640px) {
-  .igHandle {
-    font-size: 1.625rem;
-    letter-spacing: -0.04em;
-  }
-}
-
-.igTitleBlock {
-  min-width: 0;
-  flex: 1;
 }
 
 .igHandleSub {
@@ -323,8 +472,8 @@
 
 .igBioText {
   margin: 0;
-  font-size: 0.9375rem;
-  line-height: 1.6;
+  font-size: 0.875rem;
+  line-height: 1.55;
   font-weight: 500;
   white-space: pre-wrap;
   word-break: break-word;
@@ -348,19 +497,21 @@
   text-decoration: underline;
 }
 
-/* Обёртка секции ленты: визуально отделяем от шапки */
+/* Секция ленты — тот же тёмный фон, что у шапки */
 .igFeedSection {
   margin: 0 auto;
   max-width: 42rem;
   padding: 0 0 0.5rem;
+  background: #000;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 .igTabs {
   display: flex;
   justify-content: center;
   padding: 0 1.25rem;
-  border-bottom: 1px solid var(--profile-border);
-  background: color-mix(in srgb, var(--profile-surface-elevated) 65%, var(--profile-surface));
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  background: #000;
 }
 
 .igFeedHeading {
@@ -550,6 +701,43 @@
   }
 }
 
+.igTopBarSkelBtn {
+  width: 2.75rem;
+  height: 2.75rem;
+  border-radius: 0.75rem;
+  flex-shrink: 0;
+  background: linear-gradient(
+    90deg,
+    var(--profile-media-placeholder) 0%,
+    var(--profile-media-placeholder-mid) 45%,
+    var(--profile-media-placeholder) 90%
+  );
+  background-size: 200% 100%;
+  animation: igShimmer 1.2s ease-in-out infinite;
+}
+
+.igTopBarSkelTitleWrap {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.igTopBarSkelTitle {
+  width: min(42%, 10rem);
+  height: 1rem;
+  border-radius: 0.25rem;
+  background: linear-gradient(
+    90deg,
+    var(--profile-media-placeholder) 0%,
+    var(--profile-media-placeholder-mid) 45%,
+    var(--profile-media-placeholder) 90%
+  );
+  background-size: 200% 100%;
+  animation: igShimmer 1.2s ease-in-out infinite;
+}
+
 .igSkelRow {
   display: flex;
   gap: 1.5rem;
@@ -630,17 +818,91 @@
 }
 
 .fbCard {
+  position: relative;
   border-radius: 1.125rem;
   background: var(--profile-card-bg);
   border: 1px solid color-mix(in srgb, var(--profile-border) 100%, transparent);
   box-shadow:
-    0 1px 2px rgba(28, 25, 23, 0.04),
-    0 4px 12px rgba(28, 25, 23, 0.04);
-  overflow: hidden;
+    0 1px 2px rgba(0, 0, 0, 0.2),
+    0 4px 12px rgba(0, 0, 0, 0.15);
+  overflow: visible;
   backdrop-filter: blur(8px);
 }
 
+.fbCardMenuAnchor {
+  position: absolute;
+  top: 0.35rem;
+  right: 0.35rem;
+  z-index: 5;
+}
+
+.fbCardMenuBtn {
+  display: grid;
+  place-items: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border: none;
+  border-radius: 0.5rem;
+  background: color-mix(in srgb, var(--profile-surface-elevated) 85%, transparent);
+  color: var(--profile-text-heading);
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.fbCardMenuBtn:hover {
+  background: color-mix(in srgb, var(--profile-text-heading) 12%, transparent);
+}
+
+.fbCardMenu {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 0.25rem;
+  min-width: 11rem;
+  padding: 0.35rem;
+  border-radius: 0.75rem;
+  background: color-mix(in srgb, var(--profile-surface-elevated) 96%, #000);
+  border: 1px solid var(--profile-border);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+}
+
+.fbCardMenuItem,
+.fbCardMenuItemDanger {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.55rem 0.65rem;
+  border: none;
+  border-radius: 0.5rem;
+  background: transparent;
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: var(--profile-text-heading);
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.12s ease;
+}
+
+.fbCardMenuItem:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.fbCardMenuItemDanger {
+  color: #f87171;
+}
+
+.fbCardMenuItemDanger:hover:not(:disabled) {
+  background: rgba(248, 113, 113, 0.12);
+}
+
+.fbCardMenuItemDanger:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 .fbCardHead {
+  position: relative;
   padding: 0;
   border-bottom: 1px solid color-mix(in srgb, var(--profile-border) 55%, transparent);
   background: color-mix(in srgb, var(--profile-surface-elevated) 40%, transparent);

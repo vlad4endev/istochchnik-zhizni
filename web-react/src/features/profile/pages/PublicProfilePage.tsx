@@ -2,16 +2,22 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import {
   LuCamera,
+  LuChevronLeft,
+  LuEllipsis,
   LuHeart,
   LuLayoutGrid,
   LuMessageCircle,
+  LuPencil,
   LuPlus,
   LuRepeat2,
+  LuSettings,
+  LuTrash2,
   LuUser,
 } from 'react-icons/lu';
 
 import { fetchMe, uploadMyAvatar, type MeResponse } from '../api';
 import {
+  deleteProfilePost,
   fetchProfileByUsername,
   likeProfilePost,
   repostProfilePost,
@@ -22,11 +28,12 @@ import {
 } from '../publicProfileApi';
 import { resolvePublicUrl } from '../../../lib/resolvePublicUrl';
 import { ProfileComposeModal } from '../components/ProfileComposeModal';
+import { EditPostModal } from '../components/EditPostModal';
 
 import profileShell from '../profileShell.module.css';
 import styles from './PublicProfilePage.module.css';
 
-const profileRootCn = `${profileShell.profileRoot} ${styles.igPage}`;
+const profileRootCn = `${profileShell.profileRoot} ${styles.igPage} ${styles.igPageThemeIg}`;
 
 function axiosMessage(err: unknown): string {
   if (err && typeof err === 'object' && 'response' in err) {
@@ -110,9 +117,12 @@ export function PublicProfilePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [composeOpen, setComposeOpen] = useState(false);
+  const [editPost, setEditPost] = useState<ProfileFeedPost | null>(null);
+  const [postMenuId, setPostMenuId] = useState<string | null>(null);
   const [avatarBusy, setAvatarBusy] = useState(false);
   const [postBusy, setPostBusy] = useState<Record<string, string | undefined>>({});
   const avatarInputRef = useRef<HTMLInputElement | null>(null);
+  const postMenuRef = useRef<HTMLDivElement | null>(null);
 
   const load = useCallback(async () => {
     if (!decoded.trim()) {
@@ -140,6 +150,18 @@ export function PublicProfilePage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    if (!postMenuId) return;
+    const onDown = (e: MouseEvent) => {
+      const el = postMenuRef.current;
+      if (el && !el.contains(e.target as Node)) {
+        setPostMenuId(null);
+      }
+    };
+    document.addEventListener('mousedown', onDown);
+    return () => document.removeEventListener('mousedown', onDown);
+  }, [postMenuId]);
 
   const isOwner = me != null && data != null && me.id === data.profile.member_id;
   const postsVisible = data && (!data.profile.is_private || isOwner);
@@ -187,6 +209,35 @@ export function PublicProfilePage() {
       };
     });
   }, []);
+
+  const removePost = useCallback((postId: string) => {
+    setData((prev) => {
+      if (!prev) return prev;
+      return { ...prev, posts: prev.posts.filter((p) => p.id !== postId) };
+    });
+  }, []);
+
+  const onDeletePost = useCallback(
+    async (post: ProfileFeedPost) => {
+      if (!window.confirm('Удалить эту публикацию? Действие необратимо.')) return;
+      setPostMenuId(null);
+      const key = `del-${post.id}`;
+      setPostBusy((b) => ({ ...b, [key]: '1' }));
+      try {
+        await deleteProfilePost(post.id);
+        removePost(post.id);
+      } catch {
+        /* ignore */
+      } finally {
+        setPostBusy((b) => {
+          const n = { ...b };
+          delete n[key];
+          return n;
+        });
+      }
+    },
+    [removePost],
+  );
 
   const onToggleLike = useCallback(
     async (post: ProfileFeedPost) => {
@@ -253,6 +304,13 @@ export function PublicProfilePage() {
   if (loading) {
     return (
       <div className={profileRootCn} data-profile-root>
+        <div className={styles.igTopBar} aria-hidden>
+          <div className={styles.igTopBarSkelBtn} />
+          <div className={styles.igTopBarSkelTitleWrap}>
+            <div className={styles.igTopBarSkelTitle} />
+          </div>
+          <div className={styles.igTopBarSkelBtn} />
+        </div>
         <div className={styles.igHeader}>
           <div className={styles.igHeaderInner}>
             <div className={styles.igSkelRow}>
@@ -288,20 +346,43 @@ export function PublicProfilePage() {
     );
   }
 
+  const topBarHandle =
+    isPlaceholderUsername || !data.profile.username?.trim()
+      ? displayName
+      : `@${data.profile.username.trim()}`;
+
   return (
     <div className={profileRootCn} data-profile-root>
+      <div className={styles.igTopBar}>
+        <Link to="/dashboard" className={styles.igTopBarIconBtn} aria-label="Назад на главную">
+          <LuChevronLeft className="h-6 w-6" strokeWidth={2.25} aria-hidden />
+        </Link>
+        <span className={styles.igTopBarTitle}>{topBarHandle}</span>
+        <div className={styles.igTopBarRight}>
+          {isOwner ? (
+            <Link to="/profile" className={styles.igTopBarIconBtn} aria-label="Настройки профиля" title="Настройки">
+              <LuSettings className="h-5 w-5" strokeWidth={2} aria-hidden />
+            </Link>
+          ) : (
+            <span className={styles.igTopBarRightPad} aria-hidden />
+          )}
+        </div>
+      </div>
+
       <header className={styles.igHeader}>
         <div className={styles.igHeaderInner}>
-          <div className={`${styles.igHero} ${styles.igHeroLayout}`}>
+          <div className={styles.igProfileMainRow}>
             <div className={styles.igAvatarBlock}>
-              <div className={styles.igAvatar}>
-                {avatarSrc ? (
-                  <img src={avatarSrc} alt="" />
-                ) : (
-                  <div className={styles.igAvatarPh}>
-                    <LuUser className={styles.igAvatarPhIcon} strokeWidth={1.25} aria-hidden />
-                  </div>
-                )}
+              <div className={styles.igAvatarRing}>
+                <div className={styles.igAvatar}>
+                  {avatarSrc ? (
+                    <img src={avatarSrc} alt="" />
+                  ) : (
+                    <div className={styles.igAvatarPh}>
+                      <LuUser className={styles.igAvatarPhIcon} strokeWidth={1.25} aria-hidden />
+                    </div>
+                  )}
+                </div>
               </div>
               {isOwner ? (
                 <>
@@ -326,53 +407,63 @@ export function PublicProfilePage() {
               ) : null}
             </div>
 
-            <div className={styles.igHeroMain}>
-              <div className={styles.igNameRow}>
-                <div className={styles.igTitleBlock}>
-                  <h1 className={styles.igHandle}>{displayName}</h1>
-                  {headerHandleLine ? (
-                    <p className={styles.igHandleSub}>{headerHandleLine}</p>
-                  ) : null}
+            <div className={styles.igProfileRight}>
+              <h1 className={styles.igDisplayNameTitle}>{displayName}</h1>
+              {headerHandleLine ? <p className={styles.igHandleSub}>{headerHandleLine}</p> : null}
+
+              <div className={styles.igStatColumns} role="group" aria-label="Статистика профиля">
+                <div className={styles.igStatCell}>
+                  <span className={styles.igStatCellNum}>{posts.length}</span>
+                  <span className={styles.igStatCellLabel}>публикации</span>
+                </div>
+                <div className={styles.igStatCellMuted} title="Скоро">
+                  <span className={styles.igStatCellNum}>—</span>
+                  <span className={styles.igStatCellLabel}>подписчики</span>
+                </div>
+                <div className={styles.igStatCellMuted} title="Скоро">
+                  <span className={styles.igStatCellNum}>—</span>
+                  <span className={styles.igStatCellLabel}>подписки</span>
                 </div>
               </div>
 
-              <div className={styles.igStats}>
-                <div className={styles.igStatPill}>
-                  <span className={styles.igStatNum}>{posts.length}</span>
-                  <span className={styles.igStatLabel}>публикаций</span>
-                </div>
-                {data.profile.is_private ? (
-                  <span className={styles.igPrivacyBadge} title="Контент виден только подписчикам или по решению владельца">
-                    <span className={styles.igPrivacyDot} aria-hidden />
-                    Закрытый профиль
-                  </span>
-                ) : null}
-              </div>
-
-              <div className={styles.igDisplayBlock}>
-                <div className={styles.igBioBlock}>
-                  <span className={styles.igBioLabel}>О себе</span>
-                  {data.profile.bio?.trim() ? (
-                    <p className={styles.igBioText}>{data.profile.bio.trim()}</p>
-                  ) : (
-                    <p className={styles.igBioEmpty}>
-                      {isOwner ? (
-                        <>
-                          Расскажите о себе в{' '}
-                          <Link to="/profile" className={styles.igInlineLink}>
-                            настройках профиля
-                          </Link>
-                          .
-                        </>
-                      ) : (
-                        'Пользователь пока ничего не написал.'
-                      )}
-                    </p>
-                  )}
-                </div>
-              </div>
+              {data.profile.is_private ? (
+                <p className={styles.igPrivacyInline}>
+                  <span className={styles.igPrivacyDot} aria-hidden />
+                  Закрытый профиль
+                </p>
+              ) : null}
             </div>
           </div>
+
+          <div className={styles.igBioSection}>
+            <div className={styles.igBioBlock}>
+              {data.profile.bio?.trim() ? (
+                <p className={styles.igBioText}>{data.profile.bio.trim()}</p>
+              ) : (
+                <p className={styles.igBioEmpty}>
+                  {isOwner ? (
+                    <>
+                      Расскажите о себе в{' '}
+                      <Link to="/profile" className={styles.igInlineLink}>
+                        настройках профиля
+                      </Link>
+                      .
+                    </>
+                  ) : (
+                    'Пользователь пока ничего не написал.'
+                  )}
+                </p>
+              )}
+            </div>
+          </div>
+
+          {isOwner ? (
+            <div className={styles.igPrimaryActions}>
+              <Link to="/profile" className={styles.igBtnEditProfile}>
+                Редактировать профиль
+              </Link>
+            </div>
+          ) : null}
         </div>
       </header>
 
@@ -408,6 +499,52 @@ export function PublicProfilePage() {
             return (
               <article key={post.id} className={styles.fbCard}>
                 <div className={styles.fbCardHead}>
+                  {isOwner ? (
+                    <div
+                      className={styles.fbCardMenuAnchor}
+                      ref={postMenuId === post.id ? postMenuRef : undefined}
+                    >
+                      <button
+                        type="button"
+                        className={styles.fbCardMenuBtn}
+                        aria-expanded={postMenuId === post.id}
+                        aria-haspopup="menu"
+                        aria-label="Действия с публикацией"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setPostMenuId((id) => (id === post.id ? null : post.id));
+                        }}
+                      >
+                        <LuEllipsis className="h-5 w-5" strokeWidth={2.25} aria-hidden />
+                      </button>
+                      {postMenuId === post.id ? (
+                        <div className={styles.fbCardMenu} role="menu">
+                          <button
+                            type="button"
+                            role="menuitem"
+                            className={styles.fbCardMenuItem}
+                            onClick={() => {
+                              setEditPost(post);
+                              setPostMenuId(null);
+                            }}
+                          >
+                            <LuPencil className="h-4 w-4 shrink-0 opacity-80" aria-hidden />
+                            Редактировать
+                          </button>
+                          <button
+                            type="button"
+                            role="menuitem"
+                            className={styles.fbCardMenuItemDanger}
+                            disabled={!!postBusy[`del-${post.id}`]}
+                            onClick={() => void onDeletePost(post)}
+                          >
+                            <LuTrash2 className="h-4 w-4 shrink-0 opacity-90" aria-hidden />
+                            Удалить
+                          </button>
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
                   <div className={styles.fbCardHeadRow}>
                     {post.shared_post ? (
                       <p className={styles.fbRepostBadge}>
@@ -477,6 +614,13 @@ export function PublicProfilePage() {
         open={composeOpen}
         onClose={() => setComposeOpen(false)}
         onPublished={() => void load()}
+      />
+
+      <EditPostModal
+        open={editPost != null}
+        post={editPost}
+        onClose={() => setEditPost(null)}
+        onSaved={(postId, caption) => patchPost(postId, { caption })}
       />
     </div>
   );

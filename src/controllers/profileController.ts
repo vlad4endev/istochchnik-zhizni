@@ -3,11 +3,13 @@ import {
   addComment,
   createPost,
   createRepost,
+  deletePostAsOwner,
   getProfileWithFeed,
   getProfileWithFeedByUsername,
   likePost,
   patchMyProfileSettings,
   unlikePost,
+  updatePostCaptionAsOwner,
   type MediaType,
 } from '../services/profileService';
 
@@ -259,6 +261,56 @@ export async function postComment(req: Request, res: Response): Promise<void> {
     res.status(201).json({ ok: true, id: created.id, created_at: created.created_at });
   } catch (e) {
     console.error('[profile] comment error:', e);
+    res.status(500).json({ error: 'Database error' });
+  }
+}
+
+export async function patchPost(req: Request, res: Response): Promise<void> {
+  const authUserId = (req as AuthReq).authUserId;
+  if (!authUserId) {
+    res.status(401).json({ error: 'Authentication required' });
+    return;
+  }
+  const postId = String(req.params.id ?? '').trim();
+  if (!postId) {
+    res.status(400).json({ error: 'Invalid post id' });
+    return;
+  }
+  try {
+    const caption = req.body?.caption;
+    await updatePostCaptionAsOwner(postId, authUserId, caption);
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('[profile] patchPost error:', e);
+    const msg = e instanceof Error ? e.message : 'Ошибка сохранения';
+    if (msg.includes('не найден') || msg.includes('нет доступа')) {
+      res.status(404).json({ error: msg });
+      return;
+    }
+    res.status(400).json({ error: msg });
+  }
+}
+
+export async function deletePost(req: Request, res: Response): Promise<void> {
+  const authUserId = (req as AuthReq).authUserId;
+  if (!authUserId) {
+    res.status(401).json({ error: 'Authentication required' });
+    return;
+  }
+  const postId = String(req.params.id ?? '').trim();
+  if (!postId) {
+    res.status(400).json({ error: 'Invalid post id' });
+    return;
+  }
+  try {
+    const ok = await deletePostAsOwner(postId, authUserId);
+    if (!ok) {
+      res.status(404).json({ error: 'Публикация не найдена или нет доступа' });
+      return;
+    }
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('[profile] deletePost error:', e);
     res.status(500).json({ error: 'Database error' });
   }
 }

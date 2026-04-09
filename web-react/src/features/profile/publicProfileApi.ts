@@ -104,3 +104,11 @@ export async function unlikeProfilePost(postId: string): Promise<{ like_count: n
 export async function repostProfilePost(postId: string, caption?: string): Promise<void> {
   await apiClient.post(`/api/posts/${encodeURIComponent(postId)}/repost`, caption?.trim() ? { caption: caption.trim() } : {});
 }
+
+export async function patchProfilePostCaption(postId: string, caption: string): Promise<void> {
+  await apiClient.patch(`/api/posts/${encodeURIComponent(postId)}`, { caption });
+}
+
+export async function deleteProfilePost(postId: string): Promise<void> {
+  await apiClient.delete(`/api/posts/${encodeURIComponent(postId)}`);
+}

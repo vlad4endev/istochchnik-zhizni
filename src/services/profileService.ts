@@ -607,3 +607,40 @@ export async function addComment(
   if (!row?.id) throw new Error('Failed to add comment');
   return { id: row.id, created_at: String(row.created_at ?? new Date().toISOString()) };
 }
+
+/** Удалить свою публикацию (каскадно снимаются лайки, комментарии, медиа). */
+export async function deletePostAsOwner(postId: string, memberId: number): Promise<boolean> {
+  const r = await query(`DELETE FROM profile_posts WHERE id = $1::bigint AND member_id = $2`, [postId, memberId]);
+  return (r.rowCount ?? 0) > 0;
+}
+
+/** Изменить подпись к своей публикации (в т.ч. комментарий к репосту). */
+export async function updatePostCaptionAsOwner(
+  postId: string,
+  memberId: number,
+  captionRaw: unknown,
+): Promise<void> {
+  const meta = await query(
+    `SELECT
+       (SELECT COUNT(*)::int FROM profile_post_media m WHERE m.post_id = p.id) AS media_count
+     FROM profile_posts p
+     WHERE p.id = $1::bigint AND p.member_id = $2`,
+    [postId, memberId],
+  );
+  if (meta.rows.length === 0) {
+    throw new Error('Публикация не найдена или нет доступа');
+  }
+  const mediaCount = Number((meta.rows[0] as { media_count?: number }).media_count ?? 0);
+  const cap = typeof captionRaw === 'string' ? normalizeCaption(captionRaw) : null;
+  if (mediaCount === 0 && !cap) {
+    throw new Error('Для публикации без фото или видео нужен текст');
+  }
+  if (cap !== null && cap.length > CAPTION_MAX_LEN) {
+    throw new Error(`Текст слишком длинный (макс. ${CAPTION_MAX_LEN} символов)`);
+  }
+  await query(`UPDATE profile_posts SET caption = $1 WHERE id = $2::bigint AND member_id = $3`, [
+    cap,
+    postId,
+    memberId,
+  ]);
+}

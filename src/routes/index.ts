@@ -4,8 +4,10 @@ import { getPodcastEpisodes, getPodcastSettings, patchPodcastSettings } from '..
 import { requireAuthSession } from '../middleware/authSession';
 import {
   deleteLike,
+  deletePost,
   getProfile,
   getProfileByUsername,
+  patchPost,
   patchProfileSettings,
   postComment,
   postCreatePost,
@@ -41,6 +43,8 @@ router.post('/posts', requireAuthSession, profilePostUploadIfMultipart, postCrea
 router.post('/posts/:id/like', requireAuthSession, postLike);
 router.delete('/posts/:id/like', requireAuthSession, deleteLike);
 router.post('/posts/:id/repost', requireAuthSession, postRepost);
+router.patch('/posts/:id', requireAuthSession, patchPost);
+router.delete('/posts/:id', requireAuthSession, deletePost);
 router.post('/posts/:id/comment', requireAuthSession, postComment);
 
 type AuthReq = Request & { authUserId?: number };
