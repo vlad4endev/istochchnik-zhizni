@@ -19,6 +19,25 @@ export interface ProfileFeedProfile {
   updated_at: string;
 }
 
+export interface ProfileFeedPostAuthor {
+  member_id: number;
+  username: string;
+  display_name: string | null;
+  avatar_url: string | null;
+}
+
+export interface ProfileFeedPostEmbedded {
+  id: string;
+  member_id: number;
+  author: ProfileFeedPostAuthor;
+  caption: string | null;
+  created_at: string;
+  media: Array<{ url: string; type: ProfileFeedMediaType; order: number }>;
+  like_count: number;
+  comment_count: number;
+  repost_count: number;
+}
+
 export interface ProfileFeedPost {
   id: string;
   member_id: number;
@@ -27,6 +46,10 @@ export interface ProfileFeedPost {
   media: Array<{ url: string; type: ProfileFeedMediaType; order: number }>;
   like_count: number;
   comment_count: number;
+  repost_count: number;
+  liked_by_me: boolean;
+  reposted_by_me: boolean;
+  shared_post: ProfileFeedPostEmbedded | null;
 }
 
 export interface ProfileFeedResponse {
@@ -54,10 +77,30 @@ export async function patchPublicProfileSettings(body: {
 }
 
 export async function createProfilePost(params: { files: File[]; caption: string }): Promise<void> {
+  const cap = params.caption.trim();
+  if (params.files.length === 0) {
+    if (!cap) throw new Error('Пустая публикация');
+    await apiClient.post('/api/posts', { caption: cap }, { timeout: 60_000 });
+    return;
+  }
   const form = new FormData();
-  if (params.caption.trim()) form.append('caption', params.caption.trim());
+  if (cap) form.append('caption', cap);
   for (const f of params.files) form.append('media', f);
   await apiClient.post('/api/posts', form, {
     timeout: 120_000,
   });
+}
+
+export async function likeProfilePost(postId: string): Promise<{ like_count: number }> {
+  const { data } = await apiClient.post<{ like_count: number }>(`/api/posts/${encodeURIComponent(postId)}/like`);
+  return { like_count: data.like_count };
+}
+
+export async function unlikeProfilePost(postId: string): Promise<{ like_count: number }> {
+  const { data } = await apiClient.delete<{ like_count: number }>(`/api/posts/${encodeURIComponent(postId)}/like`);
+  return { like_count: data.like_count };
+}
+
+export async function repostProfilePost(postId: string, caption?: string): Promise<void> {
+  await apiClient.post(`/api/posts/${encodeURIComponent(postId)}/repost`, caption?.trim() ? { caption: caption.trim() } : {});
 }

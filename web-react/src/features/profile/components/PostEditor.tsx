@@ -4,6 +4,7 @@ import { LuGripHorizontal, LuImagePlus, LuPlay, LuTrash2 } from 'react-icons/lu'
 
 import { useProfileDraftStore } from '../profileDraftStore';
 import profileShell from '../profileShell.module.css';
+import igStyles from './PostEditor.module.css';
 
 type MediaKind = 'image' | 'video';
 
@@ -11,7 +12,7 @@ type MediaDraftItem = {
   id: string;
   file: File;
   kind: MediaKind;
-  previewUrl: string; // object URL
+  previewUrl: string;
 };
 
 function isSupportedFile(file: File): boolean {
@@ -31,8 +32,6 @@ function reorder<T>(list: T[], startIndex: number, endIndex: number): T[] {
 }
 
 function renderHashtags(text: string): Array<string | { tag: string }> {
-  // Keep it simple: hashtags start with # and contain letters/numbers/_ (Unicode aware).
-  // This returns a token stream that preserves original text.
   const re = /#[\p{L}\p{N}_]+/gu;
   const out: Array<string | { tag: string }> = [];
   let last = 0;
@@ -49,8 +48,11 @@ function renderHashtags(text: string): Array<string | { tag: string }> {
 export function PostEditor(props: {
   maxFiles?: number;
   onChange?: (draft: { caption: string; files: File[] }) => void;
+  /** Компоновка как в Instagram: квадрат медиа + колонка подписи (для модалки). */
+  instagramLayout?: boolean;
 }) {
   const maxFiles = props.maxFiles ?? 10;
+  const instagramLayout = props.instagramLayout ?? false;
   const [items, setItems] = useState<MediaDraftItem[]>([]);
   const [activeIdx, setActiveIdx] = useState(0);
   const [caption, setCaption] = useState('');
@@ -72,7 +74,6 @@ export function PostEditor(props: {
   }, [caption, items, props]);
 
   useEffect(() => {
-    // Cleanup object URLs
     return () => {
       for (const it of items) URL.revokeObjectURL(it.previewUrl);
     };
@@ -81,8 +82,8 @@ export function PostEditor(props: {
 
   const active = items[activeIdx] ?? null;
   const gridPreview = items[0] ?? null;
-
   const canAddMore = items.length < maxFiles;
+  const hashtagTokens = useMemo(() => renderHashtags(caption), [caption]);
 
   const onPickFiles = (filesLike: FileList | File[] | null | undefined) => {
     if (!filesLike) return;
@@ -122,8 +123,7 @@ export function PostEditor(props: {
     setItems((prev) => {
       const it = prev[idx];
       if (it) URL.revokeObjectURL(it.previewUrl);
-      const next = prev.filter((_, i) => i !== idx);
-      return next;
+      return prev.filter((_, i) => i !== idx);
     });
     setActiveIdx((cur) => {
       if (idx < cur) return Math.max(0, cur - 1);
@@ -140,14 +140,11 @@ export function PostEditor(props: {
     setItems((prev) => reorder(prev, from, to));
     setActiveIdx((cur) => {
       if (cur === from) return to;
-      // adjust for shift around active index
       if (from < cur && to >= cur) return cur - 1;
       if (from > cur && to <= cur) return cur + 1;
       return cur;
     });
   };
-
-  const hashtagTokens = useMemo(() => renderHashtags(caption), [caption]);
 
   const syncScroll = () => {
     const ta = taRef.current;
@@ -157,6 +154,198 @@ export function PostEditor(props: {
     mirror.scrollLeft = ta.scrollLeft;
   };
 
+  /* ─── Instagram layout (модалка) ─── */
+  if (instagramLayout) {
+    return (
+      <div className={igStyles.igRoot} data-profile-root>
+        <div className={igStyles.igGrid}>
+          <div className={igStyles.igMediaPane}>
+            <div
+              className={igStyles.igPreviewSquare}
+              onDrop={onDrop}
+              onDragOver={onDragOver}
+              role="presentation"
+            >
+              {items.length === 0 ? (
+                <button
+                  type="button"
+                  className={igStyles.igEmpty}
+                  onClick={() => inputRef.current?.click()}
+                >
+                  <LuImagePlus className={igStyles.igEmptyIcon} strokeWidth={1} aria-hidden />
+                  <span className={igStyles.igEmptyTitle}>Перетащите фото и видео сюда</span>
+                  <span className={igStyles.igEmptyHint}>или нажмите, чтобы выбрать</span>
+                </button>
+              ) : active ? (
+                <>
+                  {active.kind === 'video' ? (
+                    <video
+                      src={active.previewUrl}
+                      className={igStyles.igVideo}
+                      controls
+                      playsInline
+                    />
+                  ) : (
+                    <img
+                      src={active.previewUrl}
+                      alt=""
+                      className={igStyles.igPreviewMedia}
+                    />
+                  )}
+                  {items.length > 1 ? (
+                    <div className={igStyles.igDots}>
+                      {items.map((it, i) => (
+                        <span
+                          key={it.id}
+                          className={i === activeIdx ? `${igStyles.igDot} ${igStyles.igDotActive}` : igStyles.igDot}
+                        />
+                      ))}
+                    </div>
+                  ) : null}
+                </>
+              ) : null}
+            </div>
+
+            <input
+              ref={inputRef}
+              type="file"
+              accept="image/*,video/*"
+              multiple
+              className="hidden"
+              onChange={(e) => {
+                onPickFiles(e.target.files);
+                e.currentTarget.value = '';
+              }}
+            />
+
+            {items.length > 0 ? (
+              <DragDropContext onDragEnd={onReorder}>
+                <Droppable droppableId="ig-media" direction="horizontal">
+                  {(dropProvided) => (
+                    <div
+                      ref={dropProvided.innerRef}
+                      {...dropProvided.droppableProps}
+                      className={igStyles.igThumbRow}
+                    >
+                      {items.map((it, idx) => (
+                        <Draggable key={it.id} draggableId={it.id} index={idx}>
+                          {(dragProvided, snapshot) => (
+                            <div
+                              ref={dragProvided.innerRef}
+                              {...dragProvided.draggableProps}
+                              role="button"
+                              tabIndex={0}
+                              className={[
+                                igStyles.igThumb,
+                                idx === activeIdx ? igStyles.igThumbActive : '',
+                                snapshot.isDragging ? 'opacity-90' : '',
+                              ]
+                                .filter(Boolean)
+                                .join(' ')}
+                              onClick={() => setActiveIdx(idx)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter' || e.key === ' ') {
+                                  e.preventDefault();
+                                  setActiveIdx(idx);
+                                }
+                              }}
+                              aria-label={`Кадр ${idx + 1}`}
+                            >
+                              <div className="relative h-full w-full">
+                                {it.kind === 'video' ? (
+                                  <>
+                                    <video
+                                      src={it.previewUrl}
+                                      className={igStyles.igThumbImg}
+                                      muted
+                                      playsInline
+                                    />
+                                    <div className="absolute inset-0 grid place-items-center bg-black/15">
+                                      <LuPlay className="h-4 w-4 text-white drop-shadow" aria-hidden />
+                                    </div>
+                                  </>
+                                ) : (
+                                  <img src={it.previewUrl} alt="" className={igStyles.igThumbImg} />
+                                )}
+                                <span
+                                  {...dragProvided.dragHandleProps}
+                                  className={igStyles.igThumbGrip}
+                                  title="Порядок"
+                                >
+                                  <LuGripHorizontal className="h-3 w-3" aria-hidden />
+                                  {idx + 1}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    removeAt(idx);
+                                  }}
+                                  className={igStyles.igThumbRemove}
+                                  aria-label="Удалить"
+                                >
+                                  <LuTrash2 className="h-3 w-3" aria-hidden />
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                        </Draggable>
+                      ))}
+                      {dropProvided.placeholder}
+                      {canAddMore ? (
+                        <button
+                          type="button"
+                          className={igStyles.igAddTile}
+                          onClick={() => inputRef.current?.click()}
+                          aria-label="Добавить ещё"
+                        >
+                          <LuImagePlus className="h-5 w-5" aria-hidden />
+                        </button>
+                      ) : null}
+                    </div>
+                  )}
+                </Droppable>
+              </DragDropContext>
+            ) : null}
+          </div>
+
+          <div className={igStyles.igCaptionPane}>
+            <div className={igStyles.igCaptionHeader}>Подпись</div>
+            <div className={igStyles.igCaptionInner}>
+              <div ref={mirrorScrollRef} aria-hidden className={igStyles.igMirror}>
+                {hashtagTokens.map((t, i) =>
+                  typeof t === 'string' ? (
+                    <span key={i}>{t}</span>
+                  ) : (
+                    <span key={i} className={igStyles.igTag}>
+                      {t.tag}
+                    </span>
+                  ),
+                )}
+                {caption.length === 0 ? <span style={{ color: '#c7c7c7' }}>Напишите подпись…</span> : null}
+              </div>
+              <textarea
+                ref={taRef}
+                value={caption}
+                onChange={(e) => setCaption(e.target.value)}
+                onScroll={syncScroll}
+                className={igStyles.igTextarea}
+                maxLength={2200}
+                autoComplete="off"
+                spellCheck
+              />
+            </div>
+            <div className={igStyles.igCaptionFooter}>
+              <span>#хештеги подсвечиваются</span>
+              <span>{caption.length} / 2200</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  /* ─── Полная форма (страница) ─── */
   return (
     <section
       className={`${profileShell.profileRoot} rounded-3xl bg-[color:var(--profile-card-bg)] p-5 shadow-[0_10px_30px_rgba(28,25,23,0.08)] ring-1 ring-[color:var(--profile-card-ring)] backdrop-blur`}
@@ -196,9 +385,7 @@ export function PostEditor(props: {
       </div>
 
       <div className="mt-5 grid gap-5 lg:grid-cols-[1.25fr_0.75fr]">
-        {/* Left: upload + carousel */}
         <div className="space-y-4">
-          {/* Drop zone */}
           <div
             onDrop={onDrop}
             onDragOver={onDragOver}
@@ -214,20 +401,19 @@ export function PostEditor(props: {
                 или нажми, чтобы выбрать файлы (до {maxFiles})
               </p>
               {!canAddMore && (
-                <p className="mt-2 text-xs font-semibold text-amber-700">
-                  Достигнут лимит файлов
-                </p>
+                <p className="mt-2 text-xs font-semibold text-amber-700">Достигнут лимит файлов</p>
               )}
             </div>
           </div>
 
-          {/* Carousel preview */}
           <div className="rounded-3xl bg-[color:color-mix(in_srgb,var(--profile-card-bg)_72%,var(--profile-surface))] p-4 ring-1 ring-[color:var(--profile-card-ring)]">
             <div className="flex items-center justify-between">
               <p className="text-xs font-extrabold uppercase tracking-[0.12em] text-[color:var(--profile-text-soft)]">
                 Предпросмотр
               </p>
-              <p className="text-xs font-semibold text-[color:var(--profile-text-muted)]">{items.length} / {maxFiles}</p>
+              <p className="text-xs font-semibold text-[color:var(--profile-text-muted)]">
+                {items.length} / {maxFiles}
+              </p>
             </div>
 
             <div className="mt-3">
@@ -246,12 +432,13 @@ export function PostEditor(props: {
                 </div>
               ) : (
                 <div className="grid aspect-square place-items-center rounded-2xl bg-[color:var(--profile-media-placeholder-mid)] text-center">
-                  <p className="text-sm font-semibold text-[color:var(--profile-text-muted)]">Добавь медиа, чтобы увидеть карусель.</p>
+                  <p className="text-sm font-semibold text-[color:var(--profile-text-muted)]">
+                    Добавь медиа, чтобы увидеть карусель.
+                  </p>
                 </div>
               )}
             </div>
 
-            {/* Reorderable thumbnails */}
             {items.length > 0 && (
               <div className="mt-4">
                 <DragDropContext onDragEnd={onReorder}>
@@ -332,14 +519,12 @@ export function PostEditor(props: {
             )}
           </div>
 
-          {/* Caption with hashtag highlight */}
           <div className="rounded-3xl bg-[color:color-mix(in_srgb,var(--profile-card-bg)_72%,var(--profile-surface))] p-4 ring-1 ring-[color:var(--profile-card-ring)]">
             <p className="text-xs font-extrabold uppercase tracking-[0.12em] text-[color:var(--profile-text-soft)]">
               Подпись (хештеги подсвечиваются)
             </p>
 
             <div className="relative mt-3">
-              {/* Mirror (highlight layer) */}
               <div
                 ref={mirrorScrollRef}
                 aria-hidden
@@ -357,13 +542,11 @@ export function PostEditor(props: {
                     </span>
                   ),
                 )}
-                {/* keep height when empty */}
                 {caption.length === 0 ? (
                   <span className="text-[color:var(--profile-text-faint)]">Напиши подпись…</span>
                 ) : null}
               </div>
 
-              {/* Actual textarea */}
               <textarea
                 ref={taRef}
                 value={caption}
@@ -385,7 +568,6 @@ export function PostEditor(props: {
           </div>
         </div>
 
-        {/* Right: Live preview (profile grid tile) */}
         <aside className="space-y-4">
           <div className="rounded-3xl bg-[color:color-mix(in_srgb,var(--profile-card-bg)_72%,var(--profile-surface))] p-4 ring-1 ring-[color:var(--profile-card-ring)]">
             <p className="text-xs font-extrabold uppercase tracking-[0.12em] text-[color:var(--profile-text-soft)]">
@@ -397,12 +579,10 @@ export function PostEditor(props: {
 
             <div className="mt-4 rounded-3xl bg-[color:var(--profile-surface)] p-4 ring-1 ring-[color:var(--profile-card-ring)]">
               <div className="grid grid-cols-3 gap-2">
-                {/* fake surrounding tiles */}
                 <div className="aspect-square rounded-2xl bg-[color:color-mix(in_srgb,var(--profile-media-placeholder)_50%,transparent)]" />
                 <div className="aspect-square rounded-2xl bg-[color:color-mix(in_srgb,var(--profile-media-placeholder)_50%,transparent)]" />
                 <div className="aspect-square rounded-2xl bg-[color:color-mix(in_srgb,var(--profile-media-placeholder)_50%,transparent)]" />
 
-                {/* our live tile */}
                 <div className="relative aspect-square overflow-hidden rounded-2xl ring-2 ring-[color:var(--profile-primary)] shadow-[0_10px_22px_color-mix(in_srgb,var(--profile-primary)_18%,transparent)]">
                   {gridPreview ? (
                     gridPreview.kind === 'video' ? (
@@ -448,4 +628,3 @@ export function PostEditor(props: {
     </section>
   );
 }
-

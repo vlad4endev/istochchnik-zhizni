@@ -149,6 +149,18 @@
   }
 }
 
+.igTitleBlock {
+  min-width: 0;
+  flex: 1;
+}
+
+.igHandleSub {
+  margin: 0.2rem 0 0;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--profile-text-muted);
+}
+
 .igActions {
   display: flex;
   flex-wrap: wrap;
@@ -508,6 +520,206 @@
 
 .igSkelCell {
   aspect-ratio: 1 / 1;
+  background: linear-gradient(
+    90deg,
+    var(--profile-media-placeholder) 0%,
+    var(--profile-media-placeholder-mid) 45%,
+    var(--profile-media-placeholder) 90%
+  );
+  background-size: 200% 100%;
+  animation: igShimmer 1.2s ease-in-out infinite;
+}
+
+/* Лента (Facebook-style) */
+.fbFeed {
+  margin: 0 auto;
+  max-width: 36rem;
+  padding: 0 1rem 2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+@media (min-width: 640px) {
+  .fbFeed {
+    padding: 0 1.5rem 2.5rem;
+  }
+}
+
+.fbCard {
+  border-radius: 1rem;
+  background: var(--profile-card-bg);
+  border: 1px solid var(--profile-border);
+  box-shadow: 0 1px 2px rgba(28, 25, 23, 0.06);
+  overflow: hidden;
+}
+
+.fbCardHead {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.875rem 1rem 0.5rem;
+}
+
+.fbCardAvatar {
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 9999px;
+  overflow: hidden;
+  flex-shrink: 0;
+  background: var(--profile-media-placeholder);
+}
+
+.fbCardAvatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.fbCardMeta {
+  min-width: 0;
+  flex: 1;
+}
+
+.fbCardName {
+  margin: 0;
+  font-size: 0.9375rem;
+  font-weight: 800;
+  color: var(--profile-text-heading);
+  line-height: 1.25;
+}
+
+.fbCardSub {
+  margin: 0;
+  font-size: 0.8125rem;
+  color: color-mix(in srgb, var(--profile-text-body) 72%, transparent);
+}
+
+.fbRepostBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: color-mix(in srgb, var(--profile-text-body) 75%, transparent);
+  margin-bottom: 0.25rem;
+}
+
+.fbCaption {
+  margin: 0;
+  padding: 0 1rem 0.75rem;
+  font-size: 0.9375rem;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--profile-text-body);
+}
+
+.fbEmbed {
+  margin: 0 0.75rem 0.75rem;
+  padding: 0.75rem;
+  border-radius: 0.75rem;
+  border: 1px solid var(--profile-border);
+  background: color-mix(in srgb, var(--profile-surface) 88%, var(--profile-border));
+}
+
+.fbEmbedHead {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.fbEmbedAvatar {
+  width: 2rem;
+  height: 2rem;
+  border-radius: 9999px;
+  overflow: hidden;
+  flex-shrink: 0;
+  background: var(--profile-media-placeholder);
+}
+
+.fbEmbedAvatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.fbEmbedWho {
+  font-size: 0.8125rem;
+  font-weight: 800;
+  color: var(--profile-text-heading);
+}
+
+.fbEmbedCaption {
+  margin: 0 0 0.5rem;
+  font-size: 0.875rem;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--profile-text-body);
+}
+
+.fbMedia {
+  margin: 0;
+  padding: 0 0 0.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.fbMedia img,
+.fbMedia video {
+  width: 100%;
+  max-height: min(70vh, 32rem);
+  object-fit: contain;
+  background: #0f0f0f;
+  display: block;
+}
+
+.fbEmbed .fbMedia {
+  padding-bottom: 0;
+}
+
+.fbActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.25rem 0.5rem 0.75rem;
+  border-top: 1px solid color-mix(in srgb, var(--profile-border) 70%, transparent);
+}
+
+.fbActionBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.5rem 0.75rem;
+  border: none;
+  border-radius: 0.5rem;
+  background: transparent;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  color: color-mix(in srgb, var(--profile-text-body) 88%, transparent);
+  cursor: pointer;
+}
+
+.fbActionBtn:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--profile-primary) 8%, var(--profile-surface));
+}
+
+.fbActionBtn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.fbActionBtnActive {
+  color: var(--profile-danger);
+}
+
+.fbSkelCard {
+  height: 14rem;
+  border-radius: 1rem;
   background: linear-gradient(
     90deg,
     var(--profile-media-placeholder) 0%,

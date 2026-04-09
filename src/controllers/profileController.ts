@@ -2,10 +2,12 @@ import type { Request, Response } from 'express';
 import {
   addComment,
   createPost,
+  createRepost,
   getProfileWithFeed,
   getProfileWithFeedByUsername,
   likePost,
   patchMyProfileSettings,
+  unlikePost,
   type MediaType,
 } from '../services/profileService';
 
@@ -36,7 +38,8 @@ export async function getProfile(req: Request, res: Response): Promise<void> {
     return;
   }
   try {
-    const data = await getProfileWithFeed(id);
+    const viewerId = (req as AuthReq).authUserId;
+    const data = await getProfileWithFeed(id, viewerId);
     if (!data) {
       res.status(404).json({ error: 'Profile not found' });
       return;
@@ -60,7 +63,8 @@ export async function getProfileByUsername(req: Request, res: Response): Promise
     return;
   }
   try {
-    const data = await getProfileWithFeedByUsername(raw);
+    const viewerId = (req as AuthReq).authUserId;
+    const data = await getProfileWithFeedByUsername(raw, viewerId);
     if (!data) {
       res.status(404).json({ error: 'Profile not found' });
       return;
@@ -101,22 +105,30 @@ export async function postCreatePost(req: Request, res: Response): Promise<void>
     }
 
     const mediaRaw = req.body?.media;
-    if (!Array.isArray(mediaRaw)) {
+    if (mediaRaw !== undefined && !Array.isArray(mediaRaw)) {
       res.status(400).json({ error: 'Field "media" must be an array (or upload files as multipart field "media")' });
       return;
     }
-    const media = mediaRaw
-      .map((m: any, idx: number) => {
-        const url = typeof m?.url === 'string' ? m.url.trim() : '';
-        const type = m?.type === 'video' ? 'video' : m?.type === 'image' ? 'image' : null;
-        const order = parsePositiveInt(m?.order) ?? idx;
-        if (!url || !type) return null;
-        return { url, type, order };
-      })
-      .filter(Boolean) as Array<{ url: string; type: MediaType; order: number }>;
+    const media = Array.isArray(mediaRaw)
+      ? mediaRaw
+          .map((m: any, idx: number) => {
+            const url = typeof m?.url === 'string' ? m.url.trim() : '';
+            const type = m?.type === 'video' ? 'video' : m?.type === 'image' ? 'image' : null;
+            const order = parsePositiveInt(m?.order) ?? idx;
+            if (!url || !type) return null;
+            return { url, type, order };
+          })
+          .filter((x): x is { url: string; type: MediaType; order: number } => x !== null)
+      : [];
 
     if (media.length === 0) {
-      res.status(400).json({ error: 'At least one valid media item is required' });
+      const textBody = typeof req.body?.caption === 'string' ? req.body.caption.trim() : '';
+      if (textBody.length > 0) {
+        const created = await createPost({ kind: 'text', memberId: authUserId, caption: textBody });
+        res.status(201).json({ id: created.id });
+        return;
+      }
+      res.status(400).json({ error: 'Добавьте текст, медиа или загрузите файлы' });
       return;
     }
 
@@ -155,6 +167,49 @@ export async function patchProfileSettings(req: Request, res: Response): Promise
     res.json({ ok: true });
   } catch (e) {
     console.error('[profile] patchProfileSettings error:', e);
+    res.status(500).json({ error: 'Database error' });
+  }
+}
+
+export async function postRepost(req: Request, res: Response): Promise<void> {
+  const authUserId = (req as AuthReq).authUserId;
+  if (!authUserId) {
+    res.status(401).json({ error: 'Authentication required' });
+    return;
+  }
+  const postId = String(req.params.id ?? '').trim();
+  if (!postId) {
+    res.status(400).json({ error: 'Invalid post id' });
+    return;
+  }
+  const caption = normalizeCaption(req.body?.caption);
+  try {
+    const created = await createRepost(authUserId, postId, caption);
+    res.status(201).json({ ok: true, id: created.id });
+  } catch (e) {
+    console.error('[profile] repost error:', e);
+    const msg = e instanceof Error ? e.message : 'Failed to repost';
+    const code = msg.includes('не найден') ? 404 : msg.includes('уже') ? 409 : 400;
+    res.status(code).json({ error: msg });
+  }
+}
+
+export async function deleteLike(req: Request, res: Response): Promise<void> {
+  const authUserId = (req as AuthReq).authUserId;
+  if (!authUserId) {
+    res.status(401).json({ error: 'Authentication required' });
+    return;
+  }
+  const postId = String(req.params.id ?? '').trim();
+  if (!postId) {
+    res.status(400).json({ error: 'Invalid post id' });
+    return;
+  }
+  try {
+    const r = await unlikePost(postId, authUserId);
+    res.json({ ok: true, like_count: r.like_count, removed: r.removed });
+  } catch (e) {
+    console.error('[profile] unlike error:', e);
     res.status(500).json({ error: 'Database error' });
   }
 }

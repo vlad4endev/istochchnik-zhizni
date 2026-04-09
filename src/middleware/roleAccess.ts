@@ -43,8 +43,9 @@ function isMemberProfileMutation(method: string, path: string): boolean {
   if (method === 'PATCH' && /^\/api\/profile\/settings\/?$/.test(path)) return true;
   if (method === 'POST') {
     if (path === '/api/posts' || path === '/api/posts/') return true;
-    if (/^\/api\/posts\/\d+\/(like|comment)\/?$/.test(path)) return true;
+    if (/^\/api\/posts\/\d+\/(like|comment|repost)\/?$/.test(path)) return true;
   }
+  if (method === 'DELETE' && /^\/api\/posts\/\d+\/like\/?$/.test(path)) return true;
   return false;
 }
 

@@ -3,15 +3,17 @@ import { getBroadcastEmbed, updateBroadcastEmbed } from '../controllers/broadcas
 import { getPodcastEpisodes, getPodcastSettings, patchPodcastSettings } from '../controllers/resourcesController';
 import { requireAuthSession } from '../middleware/authSession';
 import {
+  deleteLike,
   getProfile,
   getProfileByUsername,
   patchProfileSettings,
   postComment,
   postCreatePost,
   postLike,
+  postRepost,
 } from '../controllers/profileController';
 import * as messenger from '../services/messengerService';
-import { profileMediaUploadMiddleware } from '../middleware/profileMediaUpload';
+import { profilePostUploadIfMultipart } from '../middleware/profileMediaUpload';
 
 const router = Router();
 
@@ -35,8 +37,10 @@ router.get('/profile/:id', getProfile);
 router.patch('/profile/settings', requireAuthSession, patchProfileSettings);
 
 // Create post supports JSON or multipart uploads (field: media)
-router.post('/posts', requireAuthSession, profileMediaUploadMiddleware, postCreatePost);
+router.post('/posts', requireAuthSession, profilePostUploadIfMultipart, postCreatePost);
 router.post('/posts/:id/like', requireAuthSession, postLike);
+router.delete('/posts/:id/like', requireAuthSession, deleteLike);
+router.post('/posts/:id/repost', requireAuthSession, postRepost);
 router.post('/posts/:id/comment', requireAuthSession, postComment);
 
 type AuthReq = Request & { authUserId?: number };

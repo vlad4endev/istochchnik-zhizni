@@ -397,6 +397,28 @@ export function ChatWindow({
         ? 'text-gray-500'
         : 'text-blue-500';
 
+  /** Публичная «Моя страница» собеседника: `/profile/member-:id` (как в API профиля). */
+  const interlocutorProfilePath = useMemo(() => {
+    if (isDraft && draftPeer) {
+      return `/profile/member-${draftPeer.id}`;
+    }
+    if (conv?.type === 'private' && conv.other_member) {
+      return `/profile/member-${conv.other_member.id}`;
+    }
+    return null;
+  }, [isDraft, draftPeer, conv]);
+
+  const onHeaderInfoClick = useCallback(() => {
+    if (interlocutorProfilePath) {
+      navigate(interlocutorProfilePath);
+      return;
+    }
+    navigate(`/messenger/chat/${conversationId}/manage`);
+  }, [interlocutorProfilePath, navigate, conversationId]);
+
+  const headerInfoAriaLabel =
+    interlocutorProfilePath != null ? 'Открыть страницу собеседника' : 'Сведения о чате';
+
   return (
     <div className="tg-chat-window box-border flex w-full max-w-full min-w-0 min-h-0 flex-1 flex-col overflow-hidden overflow-x-hidden">
       {/* Safe-area только на корне (.tg-chat-window) в messenger.css для iOS — не дублировать здесь */}
@@ -417,17 +439,18 @@ export function ChatWindow({
 
           {/* Рядом с «Назад»: аватар + имя/статус в одну линию по горизонтали (как в Telegram). */}
           <div
-            role={isDraft ? undefined : 'button'}
-            tabIndex={isDraft ? -1 : 0}
-            onClick={isDraft ? undefined : () => navigate(`/messenger/chat/${conversationId}/manage`)}
-            onKeyDown={
-              isDraft
-                ? undefined
-                : (e) => {
-                    if (e.key === 'Enter' || e.key === ' ') navigate(`/messenger/chat/${conversationId}/manage`);
-                  }
-            }
-            className="flex min-w-0 flex-1 items-center gap-2.5 rounded-lg py-0.5 pl-0.5 pr-1 text-left transition-colors active:bg-gray-100/80 sm:gap-3 sm:pr-2"
+            role="button"
+            tabIndex={0}
+            onClick={onHeaderInfoClick}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                onHeaderInfoClick();
+              }
+            }}
+            aria-label={headerInfoAriaLabel}
+            title={interlocutorProfilePath != null ? 'Открыть страницу пользователя' : undefined}
+            className="flex min-w-0 flex-1 cursor-pointer items-center gap-2.5 rounded-lg py-0.5 pl-0.5 pr-1 text-left transition-colors active:bg-gray-100/80 sm:gap-3 sm:pr-2"
           >
             <div
               className="grid h-9 w-9 shrink-0 place-items-center overflow-hidden rounded-full text-[13px] font-semibold text-white sm:h-10 sm:w-10"

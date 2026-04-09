@@ -38,6 +38,16 @@ const upload = multer({
   },
 });
 
+/** Только для `multipart/form-data`; JSON-тело для текстовых постов не трогаем. */
+export function profilePostUploadIfMultipart(req: Request, res: Response, next: NextFunction): void {
+  const ct = String(req.headers['content-type'] ?? '');
+  if (ct.includes('multipart/form-data')) {
+    profileMediaUploadMiddleware(req, res, next);
+    return;
+  }
+  next();
+}
+
 export function profileMediaUploadMiddleware(req: Request, res: Response, next: NextFunction): void {
   upload.array('media', 10)(req, res, (err: unknown) => {
     if (!err) {

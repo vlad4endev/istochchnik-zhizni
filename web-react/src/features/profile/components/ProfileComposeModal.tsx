@@ -1,10 +1,8 @@
 import { useCallback, useState } from 'react';
-import { LuSend, LuX } from 'react-icons/lu';
 
 import { createProfilePost } from '../publicProfileApi';
 import { PostEditor } from './PostEditor';
 
-import profileShell from '../profileShell.module.css';
 import styles from './ProfileComposeModal.module.css';
 
 type Props = {
@@ -32,8 +30,8 @@ export function ProfileComposeModal({ open, onClose, onPublished }: Props) {
   }, [submitting, onClose, reset]);
 
   const submit = useCallback(async () => {
-    if (files.length === 0) {
-      setError('Добавьте хотя бы одно фото или видео.');
+    if (files.length === 0 && !caption.trim()) {
+      setError('Напишите текст или добавьте фото или видео.');
       return;
     }
     setSubmitting(true);
@@ -59,34 +57,32 @@ export function ProfileComposeModal({ open, onClose, onPublished }: Props) {
   return (
     <div className={styles.overlay} role="dialog" aria-modal="true" aria-labelledby="compose-title">
       <button type="button" className={styles.backdrop} aria-label="Закрыть" onClick={handleClose} />
-      <div className={`${profileShell.profileRoot} ${styles.panel}`}>
-        <div className={styles.head}>
-          <h2 id="compose-title" className={styles.title}>
-            Новая публикация
-          </h2>
-          <button type="button" className={styles.iconBtn} onClick={handleClose} aria-label="Закрыть">
-            <LuX className="h-5 w-5" strokeWidth={2} />
+      <div className={styles.panel}>
+        <header className={styles.head}>
+          <button type="button" className={styles.headSideBtn} onClick={handleClose} disabled={submitting}>
+            Отмена
           </button>
-        </div>
+          <h2 id="compose-title" className={styles.headTitle}>
+            Создать публикацию
+          </h2>
+          <button
+            type="button"
+            className={styles.headShare}
+            disabled={submitting || (files.length === 0 && !caption.trim())}
+            onClick={() => void submit()}
+          >
+            {submitting ? 'Публикация…' : 'Поделиться'}
+          </button>
+        </header>
         <div className={styles.body}>
           <PostEditor
+            instagramLayout
             onChange={({ caption: c, files: f }) => {
               setCaption(c);
               setFiles(f);
             }}
           />
           {error ? <p className={styles.err}>{error}</p> : null}
-        </div>
-        <div className={styles.footer}>
-          <button
-            type="button"
-            className={styles.publishBtn}
-            disabled={submitting || files.length === 0}
-            onClick={() => void submit()}
-          >
-            <LuSend className="h-4 w-4" aria-hidden />
-            {submitting ? 'Публикация…' : 'Опубликовать'}
-          </button>
         </div>
       </div>
     </div>

@@ -6,12 +6,20 @@ import {
   LuLayoutGrid,
   LuMessageCircle,
   LuPlus,
-  LuSettings,
+  LuRepeat2,
   LuUser,
 } from 'react-icons/lu';
 
 import { fetchMe, uploadMyAvatar, type MeResponse } from '../api';
-import { fetchProfileByUsername, type ProfileFeedResponse } from '../publicProfileApi';
+import {
+  fetchProfileByUsername,
+  likeProfilePost,
+  repostProfilePost,
+  type ProfileFeedPost,
+  type ProfileFeedPostEmbedded,
+  type ProfileFeedResponse,
+  unlikeProfilePost,
+} from '../publicProfileApi';
 import { resolvePublicUrl } from '../../../lib/resolvePublicUrl';
 import { ProfileComposeModal } from '../components/ProfileComposeModal';
 
@@ -28,22 +36,69 @@ function axiosMessage(err: unknown): string {
   return 'Не удалось загрузить профиль';
 }
 
-function firstMediaUrl(post: ProfileFeedResponse['posts'][0]): string | null {
-  const sorted = [...post.media].sort((a, b) => a.order - b.order);
-  const m = sorted[0];
-  return m ? resolvePublicUrl(m.url) : null;
+function sortMedia(post: Pick<ProfileFeedPost, 'media'>): ProfileFeedPost['media'] {
+  return [...post.media].sort((a, b) => a.order - b.order);
 }
 
-function firstMediaType(post: ProfileFeedResponse['posts'][0]): 'image' | 'video' {
-  const sorted = [...post.media].sort((a, b) => a.order - b.order);
-  const m = sorted[0];
-  return m?.type === 'video' ? 'video' : 'image';
+function formatPostDate(iso: string): string {
+  try {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return '';
+    return d.toLocaleString('ru-RU', {
+      day: 'numeric',
+      month: 'short',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  } catch {
+    return '';
+  }
 }
 
 function formatMeName(me: MeResponse): string {
   const a = `${me.first_name ?? ''} ${me.last_name ?? ''}`.trim();
   if (a) return a;
   return me.name?.trim() || '';
+}
+
+function ProfilePostMediaBlock({ post }: { post: Pick<ProfileFeedPost, 'media'> }) {
+  const items = sortMedia(post);
+  if (items.length === 0) return null;
+  return (
+    <div className={styles.fbMedia}>
+      {items.map((m, idx) => {
+        const url = resolvePublicUrl(m.url) ?? '';
+        if (!url) return null;
+        if (m.type === 'video') {
+          return (
+            <video key={`${m.url}-${idx}`} src={url} controls playsInline preload="metadata" />
+          );
+        }
+        return <img key={`${m.url}-${idx}`} src={url} alt="" loading="lazy" />;
+      })}
+    </div>
+  );
+}
+
+function EmbeddedPostCard({ embed }: { embed: ProfileFeedPostEmbedded }) {
+  const av = resolvePublicUrl(embed.author.avatar_url) ?? undefined;
+  const uname = (embed.author.username ?? '').trim();
+  const isPlaceholderUsername = /^member-\d+$/i.test(uname);
+  const name =
+    embed.author.display_name?.trim() ||
+    (!isPlaceholderUsername && uname ? `@${uname}` : `Участник #${embed.member_id}`);
+  return (
+    <div className={styles.fbEmbed}>
+      <div className={styles.fbEmbedHead}>
+        <div className={styles.fbEmbedAvatar}>
+          {av ? <img src={av} alt="" /> : <LuUser className="h-4 w-4 m-1 opacity-40" aria-hidden />}
+        </div>
+        <span className={styles.fbEmbedWho}>{name}</span>
+      </div>
+      {embed.caption?.trim() ? <p className={styles.fbEmbedCaption}>{embed.caption.trim()}</p> : null}
+      <ProfilePostMediaBlock post={embed} />
+    </div>
+  );
 }
 
 export function PublicProfilePage() {
@@ -56,6 +111,7 @@ export function PublicProfilePage() {
   const [error, setError] = useState<string | null>(null);
   const [composeOpen, setComposeOpen] = useState(false);
   const [avatarBusy, setAvatarBusy] = useState(false);
+  const [postBusy, setPostBusy] = useState<Record<string, string | undefined>>({});
   const avatarInputRef = useRef<HTMLInputElement | null>(null);
 
   const load = useCallback(async () => {
@@ -100,11 +156,85 @@ export function PublicProfilePage() {
     return data.profile.username || decoded;
   }, [data, decoded, isOwner, me]);
 
+  const isPlaceholderUsername = useMemo(() => {
+    const u = data?.profile.username?.trim() ?? '';
+    return u.length > 0 && /^member-\d+$/i.test(u);
+  }, [data?.profile.username]);
+
+  /** Подпись @username под именем — только если это не дублирует заголовок. */
+  const headerHandleLine = useMemo(() => {
+    if (!data || isPlaceholderUsername) return null;
+    const u = data.profile.username?.trim();
+    if (!u) return null;
+    const at = `@${u}`;
+    const t = displayName.trim();
+    if (t.toLowerCase() === at.toLowerCase() || t.toLowerCase() === u.toLowerCase()) return null;
+    return at;
+  }, [data, isPlaceholderUsername, displayName]);
+
   const avatarSrc = useMemo(() => {
     if (!data) return null;
     const u = data.profile.avatar_url ?? null;
     return resolvePublicUrl(u);
   }, [data]);
+
+  const patchPost = useCallback((postId: string, patch: Partial<ProfileFeedPost>) => {
+    setData((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        posts: prev.posts.map((p) => (p.id === postId ? { ...p, ...patch } : p)),
+      };
+    });
+  }, []);
+
+  const onToggleLike = useCallback(
+    async (post: ProfileFeedPost) => {
+      if (!me) return;
+      const busyKey = `like-${post.id}`;
+      setPostBusy((b) => ({ ...b, [busyKey]: '1' }));
+      const liked = post.liked_by_me ?? false;
+      try {
+        if (liked) {
+          const r = await unlikeProfilePost(post.id);
+          patchPost(post.id, { liked_by_me: false, like_count: r.like_count });
+        } else {
+          const r = await likeProfilePost(post.id);
+          patchPost(post.id, { liked_by_me: true, like_count: r.like_count });
+        }
+      } catch {
+        /* ignore */
+      } finally {
+        setPostBusy((b) => {
+          const next = { ...b };
+          delete next[busyKey];
+          return next;
+        });
+      }
+    },
+    [me, patchPost],
+  );
+
+  const onRepost = useCallback(
+    async (post: ProfileFeedPost) => {
+      if (!me || post.reposted_by_me) return;
+      const busyKey = `repost-${post.id}`;
+      setPostBusy((b) => ({ ...b, [busyKey]: '1' }));
+      try {
+        await repostProfilePost(post.id);
+        await load();
+      } catch {
+        /* ignore */
+      } finally {
+        setPostBusy((b) => {
+          const next = { ...b };
+          delete next[busyKey];
+          return next;
+        });
+      }
+    },
+    [me, patchPost, load],
+  );
 
   const onPickAvatar = async (file: File | null) => {
     if (!file || !isOwner) return;
@@ -114,7 +244,7 @@ export function PublicProfilePage() {
       setMe(next);
       await load();
     } catch {
-      /* ignore — можно добавить toast */
+      /* ignore */
     } finally {
       setAvatarBusy(false);
     }
@@ -134,12 +264,10 @@ export function PublicProfilePage() {
             </div>
           </div>
         </div>
-        <div className={styles.igGridWrap}>
-          <div className={styles.igGrid} aria-busy="true" aria-label="Загрузка постов">
-            {Array.from({ length: 9 }).map((_, i) => (
-              <div key={i} className={styles.igSkelCell} />
-            ))}
-          </div>
+        <div className={styles.fbFeed}>
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className={styles.fbSkelCard} aria-hidden />
+          ))}
         </div>
       </div>
     );
@@ -198,23 +326,10 @@ export function PublicProfilePage() {
 
             <div className={styles.igHeroMain}>
               <div className={styles.igNameRow}>
-                <h1 className={styles.igHandle}>@{data.profile.username}</h1>
-                <div className={styles.igActions}>
-                  {isOwner ? (
-                    <>
-                      <button
-                        type="button"
-                        className={styles.igBtnSecondary}
-                        onClick={() => setComposeOpen(true)}
-                      >
-                        <LuPlus className="h-4 w-4" aria-hidden />
-                        Создать
-                      </button>
-                      <Link to="/profile" className={styles.igBtnSecondary}>
-                        <LuSettings className="h-4 w-4" aria-hidden />
-                        Изменить
-                      </Link>
-                    </>
+                <div className={styles.igTitleBlock}>
+                  <h1 className={styles.igHandle}>{displayName}</h1>
+                  {headerHandleLine ? (
+                    <p className={styles.igHandleSub}>{headerHandleLine}</p>
                   ) : null}
                 </div>
               </div>
@@ -230,7 +345,6 @@ export function PublicProfilePage() {
               </div>
 
               <div className={styles.igDisplayBlock}>
-                <p className={styles.igDisplayName}>{displayName}</p>
                 <div className={styles.igBioBlock}>
                   <span className={styles.igBioLabel}>О себе</span>
                   {data.profile.bio?.trim() ? (
@@ -264,50 +378,75 @@ export function PublicProfilePage() {
         </span>
       </div>
 
-      <div className={styles.igGridWrap}>
-        <div className={styles.igGrid}>
-          {data.profile.is_private && !isOwner ? (
-            <div className={styles.igEmpty}>Этот профиль закрыт. Публикации доступны только владельцу.</div>
-          ) : posts.length === 0 ? (
-            <div className={styles.igEmpty}>
-              <p>Пока нет публикаций.</p>
-              {isOwner ? (
-                <button type="button" className={styles.igEmptyCta} onClick={() => setComposeOpen(true)}>
-                  <LuPlus className="h-5 w-5" aria-hidden />
-                  Создать первую публикацию
-                </button>
-              ) : null}
-            </div>
-          ) : (
-            posts.map((post) => {
-              const url = firstMediaUrl(post);
-              const kind = firstMediaType(post);
-              return (
-                <div key={post.id} className={styles.igCell}>
-                  {url && kind === 'video' ? (
-                    <video src={url} muted playsInline preload="metadata" />
-                  ) : url ? (
-                    <img src={url} alt="" loading="lazy" />
-                  ) : (
-                    <div className={styles.igCellFallback}>Нет медиа</div>
-                  )}
-                  <div className={styles.igCellOverlay}>
-                    <div className={styles.igCellStats}>
-                      <span>
-                        <LuHeart className="inline h-4 w-4" strokeWidth={2} aria-hidden />
-                        {post.like_count}
-                      </span>
-                      <span>
-                        <LuMessageCircle className="inline h-4 w-4" strokeWidth={2} aria-hidden />
-                        {post.comment_count}
-                      </span>
-                    </div>
+      <div className={styles.fbFeed}>
+        {data.profile.is_private && !isOwner ? (
+          <div className={styles.igEmpty}>Этот профиль закрыт. Публикации доступны только владельцу.</div>
+        ) : posts.length === 0 ? (
+          <div className={styles.igEmpty}>
+            <p>Пока нет публикаций.</p>
+            {isOwner ? (
+              <button type="button" className={styles.igEmptyCta} onClick={() => setComposeOpen(true)}>
+                <LuPlus className="h-5 w-5" aria-hidden />
+                Создать первую публикацию
+              </button>
+            ) : null}
+          </div>
+        ) : (
+          posts.map((post) => {
+            const liked = post.liked_by_me ?? false;
+            const likeBusy = !!postBusy[`like-${post.id}`];
+            const repostBusy = !!postBusy[`repost-${post.id}`];
+            const reposted = post.reposted_by_me ?? false;
+            return (
+              <article key={post.id} className={styles.fbCard}>
+                <div className={styles.fbCardHead}>
+                  <div className={styles.fbCardMeta}>
+                    {post.shared_post ? (
+                      <p className={styles.fbRepostBadge}>
+                        <LuRepeat2 className="h-3.5 w-3.5" aria-hidden />
+                        Поделился публикацией
+                      </p>
+                    ) : null}
+                    <p className={styles.fbCardSub}>{formatPostDate(post.created_at)}</p>
                   </div>
                 </div>
-              );
-            })
-          )}
-        </div>
+                {post.caption?.trim() ? <p className={styles.fbCaption}>{post.caption.trim()}</p> : null}
+                {post.shared_post ? <EmbeddedPostCard embed={post.shared_post} /> : <ProfilePostMediaBlock post={post} />}
+                <div className={styles.fbActions}>
+                  <button
+                    type="button"
+                    className={`${styles.fbActionBtn} ${liked ? styles.fbActionBtnActive : ''}`}
+                    disabled={!me || likeBusy}
+                    onClick={() => void onToggleLike(post)}
+                    aria-pressed={liked}
+                  >
+                    <LuHeart
+                      className="h-4 w-4"
+                      strokeWidth={liked ? 2.5 : 2}
+                      fill={liked ? 'currentColor' : 'none'}
+                      aria-hidden
+                    />
+                    {post.like_count ?? 0}
+                  </button>
+                  <button
+                    type="button"
+                    className={styles.fbActionBtn}
+                    disabled={!me || repostBusy || reposted}
+                    onClick={() => void onRepost(post)}
+                    title={reposted ? 'Уже в вашей ленте' : 'Поделиться у себя'}
+                  >
+                    <LuRepeat2 className="h-4 w-4" aria-hidden />
+                    {post.repost_count ?? 0}
+                  </button>
+                  <span className={`${styles.fbActionBtn}`} style={{ cursor: 'default' }}>
+                    <LuMessageCircle className="h-4 w-4" aria-hidden />
+                    {post.comment_count ?? 0}
+                  </span>
+                </div>
+              </article>
+            );
+          })
+        )}
       </div>
 
       {isOwner ? (

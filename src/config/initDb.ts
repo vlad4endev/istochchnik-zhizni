@@ -928,6 +928,14 @@ CREATE TABLE IF NOT EXISTS profile_posts (
 CREATE INDEX IF NOT EXISTS idx_profile_posts_member_created
   ON profile_posts (member_id, created_at DESC);
 
+ALTER TABLE profile_posts ADD COLUMN IF NOT EXISTS shared_post_id BIGINT REFERENCES profile_posts(id) ON DELETE CASCADE;
+CREATE INDEX IF NOT EXISTS idx_profile_posts_shared_post_id
+  ON profile_posts (shared_post_id)
+  WHERE shared_post_id IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS uq_profile_posts_one_repost_per_user_root
+  ON profile_posts (member_id, shared_post_id)
+  WHERE shared_post_id IS NOT NULL;
+
 CREATE TABLE IF NOT EXISTS profile_post_media (
   id BIGSERIAL PRIMARY KEY,
   post_id BIGINT NOT NULL REFERENCES profile_posts(id) ON DELETE CASCADE,

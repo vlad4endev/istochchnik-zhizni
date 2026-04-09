@@ -25,6 +25,7 @@ import {
   type ChurchEventItem,
 } from '../../calendar/api';
 import { fetchMe } from '../../profile/api';
+import { fetchProfileByUsername } from '../../profile/publicProfileApi';
 import { resolvePublicUrl } from '../../../lib/resolvePublicUrl';
 import {
   extractBroadcastDateLabel,
@@ -208,6 +209,18 @@ function DashboardMain() {
     staleTime: 60_000,
   });
 
+  const profileUsername = useAuthStore((s) => s.username ?? '');
+  const profileMemberId = useAuthStore((s) => s.memberId);
+  const publicProfileSlug =
+    profileUsername.trim() || (profileMemberId != null ? `member-${profileMemberId}` : '');
+
+  const myPublicProfileQ = useQuery({
+    queryKey: ['profile', 'dashboard-public', publicProfileSlug],
+    queryFn: () => fetchProfileByUsername(publicProfileSlug),
+    enabled: publicProfileSlug.length > 0,
+    staleTime: 60_000,
+  });
+
   const prayerQ = useQuery({
     queryKey: ['calendar', 'day', todayDateKey],
     queryFn: () => getCalendarDay(todayDateKey),
@@ -239,16 +252,34 @@ function DashboardMain() {
 
   const me = meQ.data ?? null;
   const fullName = `${me?.first_name ?? ''} ${me?.last_name ?? ''}`.trim() || me?.name || 'Профиль';
-  const avatarUrl = resolvePublicUrl(me?.avatar_url ?? null);
+  const pf = myPublicProfileQ.data ?? null;
 
-  const profileUsername = useAuthStore((s) => s.username ?? '');
-  const profileMemberId = useAuthStore((s) => s.memberId);
+  const profileDisplayTitle = useMemo(() => {
+    if (!pf) return fullName;
+    const fromProfile = pf.profile.display_name?.trim();
+    if (fromProfile) return fromProfile;
+    return fullName || pf.profile.username || 'Профиль';
+  }, [pf, fullName]);
+
+  const isPlaceholderUsername = Boolean(
+    pf?.profile.username?.trim() && /^member-\d+$/i.test(pf.profile.username.trim()),
+  );
+
+  const profileHandleLine = useMemo(() => {
+    if (!pf || isPlaceholderUsername) return null;
+    const u = pf.profile.username?.trim();
+    if (!u) return null;
+    const at = `@${u}`;
+    const t = profileDisplayTitle.trim();
+    if (t.toLowerCase() === at.toLowerCase() || t.toLowerCase() === u.toLowerCase()) return null;
+    return at;
+  }, [pf, isPlaceholderUsername, profileDisplayTitle]);
+
+  const avatarUrl = resolvePublicUrl(pf?.profile.avatar_url ?? me?.avatar_url ?? null);
+  const publicationsCount = pf?.posts?.length ?? 0;
+  const bioText = pf?.profile.bio?.trim() ?? '';
+
   const hasProfilePostDraft = useProfileDraftStore((s) => s.hasActivePostDraft);
-  const publicProfileSlug =
-    profileUsername.trim() || (profileMemberId != null ? `member-${profileMemberId}` : '');
-  const publicProfileTo = publicProfileSlug
-    ? `/profile/${encodeURIComponent(publicProfileSlug)}`
-    : '/dashboard';
 
   const memberToday = prayerQ.data?.members?.[0] ?? null;
   const todayLabel = formatTodayLabel(now);
@@ -293,8 +324,16 @@ function DashboardMain() {
     <div className="min-h-full bg-[var(--surface)] px-3 pb-[max(2rem,env(safe-area-inset-bottom,0px))] pt-2 sm:px-4 sm:pt-3 shell:px-6 md:px-8 xl:px-10">
       <div className="mx-auto w-full max-w-7xl 2xl:max-w-[1480px]">
         <div className="sticky top-0 z-40 pb-2 bg-[var(--surface)]/95 shadow-[0_4px_16px_rgba(0,0,0,0.02)] backdrop-blur-md supports-[backdrop-filter]:bg-[var(--surface)]/80">
-          <header className="mb-3 rounded-3xl bg-gradient-to-br from-primary via-[#7f3842] to-primary-dark p-4 text-white shadow-[0_12px_30px_rgba(92,40,48,0.3)] sm:mb-4 sm:p-5">
-            <h1 className="text-xl font-extrabold tracking-tight sm:text-2xl">Главная</h1>
+          <header className="mb-3 flex items-center justify-between gap-3 rounded-3xl bg-gradient-to-br from-primary via-[#7f3842] to-primary-dark p-4 text-white shadow-[0_12px_30px_rgba(92,40,48,0.3)] sm:mb-4 sm:p-5">
+            <h1 className="min-w-0 text-xl font-extrabold tracking-tight sm:text-2xl">Главная</h1>
+            <Link
+              to="/profile"
+              className="tap-highlight-transparent flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-white/25 bg-white/15 text-white shadow-sm transition hover:bg-white/25 active:scale-[0.98] md:hidden"
+              aria-label="Настройки профиля"
+              title="Настройки"
+            >
+              <LuSettings className="h-5 w-5" strokeWidth={2} aria-hidden />
+            </Link>
           </header>
         </div>
 
@@ -320,41 +359,45 @@ function DashboardMain() {
           ) : null}
 
           <section className="overflow-hidden rounded-3xl border border-stone-200/70 bg-white/85 p-4 shadow-[var(--shadow-card)] sm:min-h-[152px] sm:p-5 xl:col-span-4">
-            <p className="text-[11px] font-extrabold uppercase tracking-[0.14em] text-stone-500">Мой профиль</p>
-            <div className="mt-4 flex items-center gap-3">
-              <div className="h-14 w-14 shrink-0 overflow-hidden rounded-2xl bg-stone-100 ring-1 ring-stone-200/70">
+            <div className="flex items-start justify-between gap-2">
+              <p className="text-[11px] font-extrabold uppercase tracking-[0.14em] text-stone-500">Мой профиль</p>
+              {hasProfilePostDraft ? (
+                <span
+                  className="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wide text-amber-900"
+                  title="Есть черновик поста на странице"
+                >
+                  Черновик
+                </span>
+              ) : null}
+            </div>
+            <div className="mt-4 flex flex-col gap-4 sm:flex-row sm:items-start">
+              <div className="mx-auto h-[4.5rem] w-[4.5rem] shrink-0 overflow-hidden rounded-2xl bg-stone-100 ring-1 ring-stone-200/70 sm:mx-0">
                 {avatarUrl ? (
                   <img src={avatarUrl} alt="" className="h-full w-full object-cover" />
                 ) : (
                   <div className="grid h-full w-full place-items-center text-stone-500">
-                    <LuUser className="h-6 w-6" strokeWidth={2} aria-hidden />
+                    <LuUser className="h-8 w-8" strokeWidth={2} aria-hidden />
                   </div>
                 )}
               </div>
-              <div className="min-w-0">
-                <p className="truncate text-base font-extrabold text-stone-900">{fullName}</p>
-                <p className="text-sm font-semibold text-stone-500">Публичная лента и настройки</p>
-              </div>
-            </div>
-            <div className="mt-4 flex flex-wrap gap-2">
-              <Link
-                to={publicProfileTo}
-                className="tap-highlight-transparent inline-flex min-h-[44px] flex-1 items-center justify-center gap-2 rounded-2xl border border-stone-200 bg-white px-4 text-sm font-extrabold text-stone-800 shadow-sm transition hover:bg-stone-50 sm:flex-none"
-                aria-label={hasProfilePostDraft ? 'Моя страница, есть черновик поста' : 'Моя страница'}
-              >
-                <LuUser className="h-4 w-4 shrink-0 text-primary" strokeWidth={2} aria-hidden />
-                Моя страница
-                {hasProfilePostDraft ? (
-                  <span className="h-2 w-2 shrink-0 rounded-full bg-amber-500" title="Черновик поста" aria-hidden />
+              <div className="min-w-0 flex-1 text-center sm:text-left">
+                <p className="text-lg font-extrabold leading-tight text-stone-900">{profileDisplayTitle}</p>
+                {profileHandleLine ? (
+                  <p className="mt-0.5 text-sm font-semibold text-stone-500">{profileHandleLine}</p>
                 ) : null}
-              </Link>
-              <Link
-                to="/profile"
-                className="tap-highlight-transparent inline-flex min-h-[44px] flex-1 items-center justify-center gap-2 rounded-2xl border border-stone-200 bg-white px-4 text-sm font-extrabold text-stone-800 shadow-sm transition hover:bg-stone-50 sm:flex-none"
-              >
-                <LuSettings className="h-4 w-4 shrink-0 text-primary" strokeWidth={2} aria-hidden />
-                Настройки
-              </Link>
+                <div className="mt-3 flex flex-wrap items-baseline justify-center gap-x-2 gap-y-1 border-t border-stone-100/90 pt-3 sm:justify-start">
+                  <span className="text-base font-extrabold tabular-nums text-stone-900">{publicationsCount}</span>
+                  <span className="text-sm font-semibold text-stone-500">публикаций</span>
+                </div>
+                <div className="mt-3 text-left">
+                  <p className="text-[11px] font-extrabold uppercase tracking-[0.12em] text-stone-400">О себе</p>
+                  {bioText ? (
+                    <p className="mt-1 line-clamp-4 text-sm font-medium leading-relaxed text-stone-700">{bioText}</p>
+                  ) : (
+                    <p className="mt-1 text-sm font-medium text-stone-400">Пока без описания.</p>
+                  )}
+                </div>
+              </div>
             </div>
           </section>
 

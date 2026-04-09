@@ -1,0 +1,297 @@
+/* Режим «как в Instagram» внутри модалки: две колонки, нейтральные границы. */
+
+.igRoot {
+  --ig-border: #dbdbdb;
+  --ig-bg: #ffffff;
+  --ig-muted: #8e8e8e;
+  --ig-text: #262626;
+  --ig-link: #0095f6;
+  width: 100%;
+}
+
+.igGrid {
+  display: flex;
+  flex-direction: column;
+  min-height: 280px;
+}
+
+@media (min-width: 768px) {
+  .igGrid {
+    flex-direction: row;
+    align-items: stretch;
+    min-height: min(60vh, 520px);
+    max-height: min(85vh, 640px);
+  }
+}
+
+.igMediaPane {
+  flex: 1;
+  min-width: 0;
+  background: var(--ig-bg);
+  display: flex;
+  flex-direction: column;
+}
+
+@media (min-width: 768px) {
+  .igMediaPane {
+    flex: 1.15;
+    border-right: 1px solid var(--ig-border);
+  }
+}
+
+.igPreviewSquare {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1;
+  max-height: min(55vh, 420px);
+  margin: 0 auto;
+  background: #fafafa;
+  overflow: hidden;
+}
+
+@media (min-width: 768px) {
+  .igPreviewSquare {
+    max-height: none;
+    flex: 1;
+    min-height: 0;
+    margin: 0;
+  }
+}
+
+.igEmpty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  padding: 1.5rem;
+  text-align: center;
+  cursor: pointer;
+  border: none;
+  background: transparent;
+  font: inherit;
+  color: var(--ig-muted);
+}
+
+.igEmptyIcon {
+  width: 4rem;
+  height: 4rem;
+  color: var(--ig-muted);
+  opacity: 0.85;
+}
+
+.igEmptyTitle {
+  font-size: 1.35rem;
+  font-weight: 300;
+  color: var(--ig-text);
+  letter-spacing: -0.02em;
+}
+
+.igEmptyHint {
+  font-size: 0.875rem;
+  font-weight: 400;
+  color: var(--ig-link);
+}
+
+.igPreviewMedia {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.igVideo {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.igDots {
+  position: absolute;
+  bottom: 0.75rem;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: center;
+  gap: 0.35rem;
+  pointer-events: none;
+}
+
+.igDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.55);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.12);
+}
+
+.igDotActive {
+  background: #fff;
+  transform: scale(1.15);
+}
+
+.igThumbRow {
+  display: flex;
+  gap: 0.5rem;
+  padding: 0.65rem 0.75rem;
+  overflow-x: auto;
+  border-top: 1px solid var(--ig-border);
+  background: var(--ig-bg);
+  -webkit-overflow-scrolling: touch;
+}
+
+.igThumb {
+  position: relative;
+  flex-shrink: 0;
+  width: 3.5rem;
+  height: 3.5rem;
+  border-radius: 4px;
+  overflow: hidden;
+  border: 2px solid transparent;
+  padding: 0;
+  cursor: pointer;
+  background: #efefef;
+  outline: none;
+}
+
+.igThumbActive {
+  border-color: var(--ig-text);
+}
+
+.igThumbImg {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.igThumbGrip {
+  position: absolute;
+  bottom: 2px;
+  left: 2px;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 1px 4px;
+  border-radius: 2px;
+  background: rgba(0, 0, 0, 0.45);
+  font-size: 9px;
+  font-weight: 700;
+  color: #fff;
+}
+
+.igThumbRemove {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 1.35rem;
+  height: 1.35rem;
+  display: grid;
+  place-items: center;
+  border: none;
+  border-radius: 9999px;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  cursor: pointer;
+  padding: 0;
+}
+
+.igAddTile {
+  flex-shrink: 0;
+  width: 3.5rem;
+  height: 3.5rem;
+  border-radius: 4px;
+  border: 1px dashed var(--ig-border);
+  display: grid;
+  place-items: center;
+  background: #fafafa;
+  cursor: pointer;
+  color: var(--ig-text);
+}
+
+.igAddTile:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.igCaptionPane {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--ig-bg);
+  min-height: 180px;
+  border-top: 1px solid var(--ig-border);
+}
+
+@media (min-width: 768px) {
+  .igCaptionPane {
+    flex: 0.85;
+    max-width: 340px;
+    border-top: none;
+  }
+}
+
+.igCaptionHeader {
+  padding: 0.75rem 1rem 0.25rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--ig-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.igCaptionInner {
+  position: relative;
+  flex: 1;
+  min-height: 140px;
+  margin: 0 1rem 0.5rem;
+}
+
+.igMirror {
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  overflow: auto;
+  padding: 0.75rem 0;
+  font-size: 0.9375rem;
+  line-height: 1.5;
+  color: var(--ig-text);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.igTextarea {
+  position: relative;
+  z-index: 1;
+  display: block;
+  width: 100%;
+  min-height: 140px;
+  resize: none;
+  border: none;
+  padding: 0.75rem 0;
+  font-size: 0.9375rem;
+  line-height: 1.5;
+  background: transparent;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  caret-color: var(--ig-text);
+  outline: none;
+}
+
+.igCaptionFooter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 0 1rem 0.75rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid #efefef;
+  font-size: 0.75rem;
+  color: var(--ig-muted);
+}
+
+.igTag {
+  color: var(--ig-link);
+}
+
+/* Полная страница (старый вид) — без изменений классов, используется только вне модалки */
