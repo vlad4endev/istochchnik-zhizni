@@ -1,171 +1,343 @@
 /*
- * CSS Modules: только локальные классы (ps*).
- * Цвета фона/текста — через унаследованные --profile-* с родителя .profileRoot (profileShell.module.css).
+ * Публичный профиль — нейтральная «лента» (светлый фон, сетка 3×N, типографика).
  */
 
-.psPage {
+.igPage {
   min-height: 100%;
-  padding-bottom: 5rem;
+  padding-bottom: calc(5rem + env(safe-area-inset-bottom, 0px));
+  background: var(--profile-surface);
+  color: var(--profile-text-body);
 }
 
-.psHeader {
-  position: relative;
+.igHeader {
+  background: var(--profile-surface-elevated);
   border-bottom: 1px solid var(--profile-border);
-  background: linear-gradient(
-    135deg,
-    color-mix(in srgb, var(--profile-gradient-from) 10%, var(--profile-surface)) 0%,
-    color-mix(in srgb, var(--profile-primary) 12%, var(--profile-surface)) 100%
-  );
 }
 
-.psHeaderInner {
+.igHeaderInner {
   margin: 0 auto;
-  max-width: 42rem;
+  max-width: 58rem;
   padding: 1.25rem 1rem 1.5rem;
 }
 
 @media (min-width: 640px) {
-  .psHeaderInner {
-    padding-left: 1.25rem;
-    padding-right: 1.25rem;
+  .igHeaderInner {
+    padding: 1.75rem 1.5rem 2rem;
   }
 }
 
-.psRow {
+.igHero {
   display: flex;
   align-items: flex-start;
-  gap: 1rem;
+  gap: 1.75rem;
   width: 100%;
   min-width: 0;
 }
 
-/* Колонка с именем: длинный текст не сжимает аватар и не ломает flex-ряд. */
-.psTextCol {
-  flex: 1;
-  min-width: 0;
-  align-self: flex-start;
-}
-
-.psAvatar {
-  flex-shrink: 0;
-  width: 5.5rem;
-  height: 5.5rem;
-  border-radius: 9999px;
-  overflow: hidden;
-  border: 3px solid #fff;
-  box-shadow: 0 8px 24px rgba(125, 54, 64, 0.15);
-  background: rgba(255, 255, 255, 0.9);
-}
-
 @media (min-width: 640px) {
-  .psAvatar {
-    width: 6.25rem;
-    height: 6.25rem;
+  .igHero {
+    gap: 2.5rem;
   }
 }
 
-.psAvatar img {
+.igAvatarBlock {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.igAvatar {
+  width: 5.75rem;
+  height: 5.75rem;
+  border-radius: 9999px;
+  overflow: hidden;
+  background: linear-gradient(
+    145deg,
+    color-mix(in srgb, var(--profile-primary) 12%, var(--profile-surface)),
+    var(--profile-surface-elevated)
+  );
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--profile-border) 80%, transparent),
+    0 12px 32px rgba(28, 25, 23, 0.08);
+}
+
+@media (min-width: 640px) {
+  .igAvatar {
+    width: 9.25rem;
+    height: 9.25rem;
+  }
+}
+
+.igAvatar img {
   width: 100%;
   height: 100%;
   object-fit: cover;
 }
 
-.psAvatarPlaceholder {
+.igAvatarPh {
+  width: 100%;
   height: 100%;
   display: grid;
   place-items: center;
-  color: color-mix(in srgb, var(--profile-primary) 35%, transparent);
 }
 
-.psTitle {
-  margin: 0;
-  font-size: 1.35rem;
-  font-weight: 800;
-  letter-spacing: -0.02em;
-  color: var(--profile-text-heading);
-  overflow-wrap: anywhere;
-  word-break: break-word;
+.igAvatarPhIcon {
+  width: 2.75rem;
+  height: 2.75rem;
+  color: color-mix(in srgb, var(--profile-primary) 45%, transparent);
 }
 
 @media (min-width: 640px) {
-  .psTitle {
-    font-size: 1.5rem;
+  .igAvatarPhIcon {
+    width: 3.5rem;
+    height: 3.5rem;
   }
 }
 
-.psUsername {
-  margin: 0.25rem 0 0;
+.igHiddenFile {
+  position: absolute;
+  width: 0;
+  height: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.igAvatarCam {
+  position: absolute;
+  right: -0.125rem;
+  bottom: -0.125rem;
+  display: grid;
+  place-items: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 9999px;
+  border: 2px solid var(--profile-surface-elevated);
+  background: var(--profile-text-heading);
+  color: #fff;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
+}
+
+.igAvatarCam:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.igHeroMain {
+  flex: 1;
+  min-width: 0;
+}
+
+.igNameRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.igHandle {
+  margin: 0;
+  font-size: 1.125rem;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  color: var(--profile-text-heading);
+}
+
+@media (min-width: 640px) {
+  .igHandle {
+    font-size: 1.35rem;
+  }
+}
+
+.igActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.igBtnSecondary {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.4rem 0.85rem;
+  border-radius: 0.5rem;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  text-decoration: none;
+  color: var(--profile-text-heading);
+  background: color-mix(in srgb, var(--profile-text-heading) 5%, var(--profile-surface));
+  border: 1px solid var(--profile-border);
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    transform 0.12s ease;
+}
+
+.igBtnSecondary:hover {
+  background: color-mix(in srgb, var(--profile-text-heading) 8%, var(--profile-surface));
+}
+
+.igBtnSecondary:active {
+  transform: scale(0.98);
+}
+
+.igStats {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1rem 1.5rem;
+  margin-bottom: 1rem;
+}
+
+.igStat {
+  display: flex;
+  align-items: baseline;
+  gap: 0.35rem;
+}
+
+.igStatNum {
+  font-size: 1rem;
+  font-weight: 800;
+  color: var(--profile-text-heading);
+}
+
+.igStatLabel {
   font-size: 0.875rem;
   font-weight: 600;
   color: var(--profile-text-muted);
 }
 
-.psBio {
-  margin: 0.75rem 0 0;
-  font-size: 0.875rem;
-  font-weight: 600;
-  line-height: 1.45;
-  color: var(--profile-text-body);
-  white-space: pre-wrap;
-  word-break: break-word;
+.igLock {
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--profile-text-muted);
 }
 
-.psMeta {
-  margin-top: 0.75rem;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
+.igDisplayBlock {
+  padding-top: 0.25rem;
 }
 
-.psBadge {
-  display: inline-flex;
-  align-items: center;
-  border-radius: 9999px;
-  padding: 0.25rem 0.65rem;
+.igDisplayName {
+  margin: 0 0 0.5rem;
+  font-size: 0.9375rem;
+  font-weight: 700;
+  color: var(--profile-text-heading);
+}
+
+.igBioBlock {
+  max-width: 32rem;
+}
+
+.igBioLabel {
+  display: block;
   font-size: 0.6875rem;
   font-weight: 800;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
-  background: color-mix(in srgb, var(--profile-text-heading) 6%, var(--profile-surface));
-  color: var(--profile-text-soft);
+  letter-spacing: 0.1em;
+  color: var(--profile-text-muted);
+  margin-bottom: 0.35rem;
 }
 
-.psGridWrap {
+.igBioText {
+  margin: 0;
+  font-size: 0.9375rem;
+  line-height: 1.5;
+  font-weight: 500;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--profile-text-body);
+}
+
+.igBioEmpty {
+  margin: 0;
+  font-size: 0.9375rem;
+  line-height: 1.5;
+  color: var(--profile-text-muted);
+}
+
+.igInlineLink {
+  font-weight: 700;
+  color: var(--profile-primary);
+  text-decoration: none;
+}
+
+.igInlineLink:hover {
+  text-decoration: underline;
+}
+
+.igTabs {
+  display: flex;
+  justify-content: center;
+  max-width: 58rem;
   margin: 0 auto;
-  max-width: 42rem;
-  padding: 1rem 1rem 0;
+  padding: 0 1rem;
+  border-bottom: 1px solid var(--profile-border);
+  background: var(--profile-surface-elevated);
+}
+
+.igTabActive {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.75rem 0.25rem;
+  margin-bottom: -1px;
+  border-bottom: 2px solid var(--profile-text-heading);
+  font-size: 0.75rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--profile-text-heading);
+}
+
+.igGridWrap {
+  margin: 0 auto;
+  max-width: 58rem;
+  padding: 2px 2px 3rem;
 }
 
 @media (min-width: 640px) {
-  .psGridWrap {
-    padding-left: 1.25rem;
-    padding-right: 1.25rem;
+  .igGridWrap {
+    padding-left: 1rem;
+    padding-right: 1rem;
   }
 }
 
-.psGrid {
+.igGrid {
   display: grid;
   width: 100%;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.25rem;
+  gap: 2px;
 }
 
-.psCell {
+.igCell {
   position: relative;
   aspect-ratio: 1 / 1;
   overflow: hidden;
-  border-radius: 0.25rem;
-  background: var(--profile-media-placeholder);
+  background: #e5e5e5;
 }
 
-.psCell img,
-.psCell video {
+.igCell img,
+.igCell video {
   width: 100%;
   height: 100%;
   object-fit: cover;
 }
 
-.psCellOverlay {
+.igCellFallback {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  padding: 0.5rem;
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-align: center;
+  color: var(--profile-text-muted);
+}
+
+.igCellOverlay {
   position: absolute;
   inset: 0;
   display: flex;
@@ -174,49 +346,107 @@
   background: rgba(0, 0, 0, 0.35);
   opacity: 0;
   transition: opacity 0.15s ease;
+  pointer-events: none;
 }
 
-.psCell:hover .psCellOverlay {
-  opacity: 1;
+@media (hover: hover) {
+  .igCell:hover .igCellOverlay {
+    opacity: 1;
+  }
 }
 
-.psCellStats {
+.igCellStats {
   display: flex;
-  gap: 0.75rem;
-  font-size: 0.75rem;
+  gap: 1.25rem;
+  font-size: 0.875rem;
   font-weight: 800;
   color: #fff;
+  align-items: center;
 }
 
-.psEmpty {
+.igCellStats span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.igEmpty {
   grid-column: 1 / -1;
   text-align: center;
-  padding: 2rem 1rem;
-  font-size: 0.875rem;
+  padding: 3rem 1.5rem 2rem;
+  font-size: 0.9375rem;
   font-weight: 600;
   color: var(--profile-text-muted);
 }
 
-.psError {
+.igEmptyCta {
+  margin-top: 1rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.65rem 1.25rem;
+  border: none;
+  border-radius: 0.75rem;
+  font-size: 0.875rem;
+  font-weight: 800;
+  cursor: pointer;
+  color: #fff;
+  background: linear-gradient(135deg, var(--profile-gradient-from), var(--profile-primary));
+  box-shadow: 0 8px 24px color-mix(in srgb, var(--profile-primary) 30%, transparent);
+}
+
+.igFab {
+  position: fixed;
+  right: max(1rem, env(safe-area-inset-right, 0px));
+  bottom: calc(5.5rem + env(safe-area-inset-bottom, 0px));
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  width: 3.5rem;
+  height: 3.5rem;
+  border: none;
+  border-radius: 9999px;
+  cursor: pointer;
+  color: #fff;
+  background: linear-gradient(145deg, var(--profile-primary), var(--profile-gradient-to));
+  box-shadow:
+    0 4px 18px color-mix(in srgb, var(--profile-primary) 45%, transparent),
+    0 0 0 1px rgba(255, 255, 255, 0.2) inset;
+}
+
+@media (min-width: 768px) {
+  .igFab {
+    bottom: calc(1.5rem + env(safe-area-inset-bottom, 0px));
+  }
+}
+
+.igError {
   margin: 2rem auto;
   max-width: 24rem;
   padding: 1.5rem;
   text-align: center;
-  border-radius: 1.5rem;
+  border-radius: 1.25rem;
   background: var(--profile-card-bg);
-  box-shadow: 0 8px 24px rgba(28, 25, 23, 0.08);
   border: 1px solid var(--profile-border);
 }
 
-.psError p {
+.igError p {
   margin: 0;
   font-size: 0.875rem;
   font-weight: 700;
   color: var(--profile-danger);
 }
 
-/* Skeleton: keyframes локальны для модуля (Vite добавляет уникальный префикс). */
-@keyframes psShimmer {
+.igErrorLink {
+  display: inline-block;
+  margin-top: 1rem;
+  font-size: 0.875rem;
+  font-weight: 800;
+  color: var(--profile-primary);
+}
+
+/* Skeleton */
+@keyframes igShimmer {
   0% {
     background-position: -200% 0;
   }
@@ -225,28 +455,15 @@
   }
 }
 
-.psSkelCell {
-  aspect-ratio: 1 / 1;
-  border-radius: 0.25rem;
-  background: linear-gradient(
-    90deg,
-    var(--profile-media-placeholder) 0%,
-    var(--profile-media-placeholder-mid) 45%,
-    var(--profile-media-placeholder) 90%
-  );
-  background-size: 200% 100%;
-  animation: psShimmer 1.2s ease-in-out infinite;
-}
-
-.psSkelHeader {
+.igSkelRow {
   display: flex;
-  gap: 1rem;
+  gap: 1.5rem;
   align-items: flex-start;
 }
 
-.psSkelAvatar {
-  width: 5.5rem;
-  height: 5.5rem;
+.igSkelAvatar {
+  width: 5.75rem;
+  height: 5.75rem;
   border-radius: 9999px;
   flex-shrink: 0;
   background: linear-gradient(
@@ -256,19 +473,19 @@
     var(--profile-media-placeholder) 90%
   );
   background-size: 200% 100%;
-  animation: psShimmer 1.2s ease-in-out infinite;
+  animation: igShimmer 1.2s ease-in-out infinite;
 }
 
-.psSkelLines {
+.igSkelMeta {
   flex: 1;
   min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
-  padding-top: 0.5rem;
+  padding-top: 0.75rem;
 }
 
-.psSkelLine {
+.igSkelLine {
   height: 0.875rem;
   border-radius: 0.25rem;
   background: linear-gradient(
@@ -278,13 +495,25 @@
     var(--profile-media-placeholder) 90%
   );
   background-size: 200% 100%;
-  animation: psShimmer 1.2s ease-in-out infinite;
+  animation: igShimmer 1.2s ease-in-out infinite;
 }
 
-.psSkelLineShort {
-  width: 55%;
+.igSkelLineLg {
+  width: 70%;
 }
 
-.psSkelLineLong {
-  width: 85%;
+.igSkelLineSm {
+  width: 40%;
+}
+
+.igSkelCell {
+  aspect-ratio: 1 / 1;
+  background: linear-gradient(
+    90deg,
+    var(--profile-media-placeholder) 0%,
+    var(--profile-media-placeholder-mid) 45%,
+    var(--profile-media-placeholder) 90%
+  );
+  background-size: 200% 100%;
+  animation: igShimmer 1.2s ease-in-out infinite;
 }

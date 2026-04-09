@@ -574,7 +574,7 @@ export function Layout() {
       </aside>
 
       {/* Main: отступ слева от сайдбара — на родителе (padding); снизу под нижний бар на мобильных */}
-      <main className="app-main-content flex min-h-0 min-w-0 w-full max-w-full flex-1 flex-col overflow-x-clip pb-[max(9.25rem,calc(6.75rem+env(safe-area-inset-bottom,16px)))] md:pb-0 2xl:px-8 min-[1920px]:px-12">
+      <main className="app-main-content flex min-h-0 min-w-0 w-full max-w-full flex-1 flex-col overflow-x-clip pb-[max(7.5rem,calc(5.25rem+env(safe-area-inset-bottom,16px)))] md:pb-0 2xl:px-8 min-[1920px]:px-12">
         <Outlet />
       </main>
 
@@ -583,83 +583,38 @@ export function Layout() {
         className="app-bottom-nav fixed bottom-0 left-0 right-0 z-50 border-t border-gray-100 bg-white/95 pb-[env(safe-area-inset-bottom,16px)] shadow-sm backdrop-blur-xl supports-[backdrop-filter]:bg-white/90 md:hidden"
         aria-label="Основная навигация"
       >
-        <div className="mx-auto max-w-md px-2 pb-1 pt-1">
-          <div className="flex items-center justify-around">
-            {mobileItems.map((item) => {
-              const Icon = item.Icon;
-              return (
-                <NavLink
-                  key={item.to}
-                  to={item.to}
-                  className={({ isActive }) => navClassName(isActive, true)}
-                  aria-label={
-                    item.to === '/messenger' && unreadMessages > 0
-                      ? `Чаты, непрочитанных сообщений: ${unreadMessages > 99 ? 'более 99' : unreadMessages}`
-                      : undefined
-                  }
-                >
-                  {({ isActive }) => (
-                    <>
-                      <span className="relative z-10 inline-flex overflow-visible">
-                        <Icon className={navIconClass(isActive, true)} strokeWidth={2} aria-hidden />
-                        {item.to === '/messenger' && unreadMessages > 0 ? (
-                          <span className="absolute -right-2.5 top-0 z-[5] inline-flex min-h-[18px] min-w-[18px] items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-extrabold leading-none text-white shadow-sm ring-2 ring-white">
-                            {unreadMessages > 99 ? '99+' : unreadMessages}
-                          </span>
-                        ) : null}
-                      </span>
-                      <span className="mt-1 truncate px-0.5 text-center text-[11px] font-medium tracking-tight">
-                        {item.label}
-                      </span>
-                    </>
-                  )}
-                </NavLink>
-              );
-            })}
-          </div>
-          {registrationStatus === 'active' ? (
-            <div className="mt-1 flex items-center justify-center gap-5 border-t border-gray-100/90 pt-1.5">
+        <div className="mx-auto flex max-w-md items-center justify-around px-2 pb-1 pt-1">
+          {mobileItems.map((item) => {
+            const Icon = item.Icon;
+            return (
               <NavLink
-                to={publicProfileTo}
-                className={({ isActive }) =>
-                  [
-                    'relative inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-[11px] font-semibold transition-colors',
-                    isActive ? 'text-primary' : 'text-stone-500 hover:text-stone-800',
-                  ].join(' ')
-                }
+                key={item.to}
+                to={item.to}
+                className={({ isActive }) => navClassName(isActive, true)}
                 aria-label={
-                  hasProfilePostDraft ? 'Моя страница, есть черновик поста' : 'Моя страница'
+                  item.to === '/messenger' && unreadMessages > 0
+                    ? `Чаты, непрочитанных сообщений: ${unreadMessages > 99 ? 'более 99' : unreadMessages}`
+                    : undefined
                 }
               >
                 {({ isActive }) => (
                   <>
-                    <LuUser className={`h-4 w-4 shrink-0 ${isActive ? 'text-primary' : ''}`} strokeWidth={2} aria-hidden />
-                    {hasProfilePostDraft ? (
-                      <span className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-amber-500 ring-2 ring-white" aria-hidden />
-                    ) : null}
-                    <span>Моя страница</span>
+                    <span className="relative z-10 inline-flex overflow-visible">
+                      <Icon className={navIconClass(isActive, true)} strokeWidth={2} aria-hidden />
+                      {item.to === '/messenger' && unreadMessages > 0 ? (
+                        <span className="absolute -right-2.5 top-0 z-[5] inline-flex min-h-[18px] min-w-[18px] items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-extrabold leading-none text-white shadow-sm ring-2 ring-white">
+                          {unreadMessages > 99 ? '99+' : unreadMessages}
+                        </span>
+                      ) : null}
+                    </span>
+                    <span className="mt-1 truncate px-0.5 text-center text-[11px] font-medium tracking-tight">
+                      {item.label}
+                    </span>
                   </>
                 )}
               </NavLink>
-              <NavLink
-                to="/profile"
-                end
-                className={({ isActive }) =>
-                  [
-                    'flex items-center gap-1.5 rounded-lg px-2 py-1 text-[11px] font-semibold transition-colors',
-                    isActive ? 'text-primary' : 'text-stone-500 hover:text-stone-800',
-                  ].join(' ')
-                }
-              >
-                {({ isActive }) => (
-                  <>
-                    <LuSettings className={`h-4 w-4 shrink-0 ${isActive ? 'text-primary' : ''}`} strokeWidth={2} aria-hidden />
-                    <span>Настройки</span>
-                  </>
-                )}
-              </NavLink>
-            </div>
-          ) : null}
+            );
+          })}
         </div>
       </nav>
       </div>

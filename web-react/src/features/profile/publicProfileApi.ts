@@ -39,3 +39,25 @@ export async function fetchProfileByUsername(username: string): Promise<ProfileF
   const { data } = await apiClient.get<ProfileFeedResponse>(`/api/profile/by-username/${enc}`);
   return data;
 }
+
+/** GET `/api/profile/:memberId` — те же данные, что у ленты по username. */
+export async function fetchProfileByMemberId(memberId: number): Promise<ProfileFeedResponse> {
+  const { data } = await apiClient.get<ProfileFeedResponse>(`/api/profile/${memberId}`);
+  return data;
+}
+
+export async function patchPublicProfileSettings(body: {
+  display_name?: string | null;
+  bio?: string | null;
+}): Promise<void> {
+  await apiClient.patch('/api/profile/settings', body);
+}
+
+export async function createProfilePost(params: { files: File[]; caption: string }): Promise<void> {
+  const form = new FormData();
+  if (params.caption.trim()) form.append('caption', params.caption.trim());
+  for (const f of params.files) form.append('media', f);
+  await apiClient.post('/api/posts', form, {
+    timeout: 120_000,
+  });
+}

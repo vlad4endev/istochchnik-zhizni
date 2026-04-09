@@ -44,20 +44,21 @@ export async function getProfileWithFeed(memberId: number): Promise<ProfileView 
   await ensureProfileRow(memberId);
   const prof = await query(
     `SELECT
-      member_id,
-      username,
-      display_name,
-      bio,
-      avatar_url,
-      is_private,
-      allow_comments,
-      show_activity_status,
-      theme_mode,
-      theme_accent_color,
-      created_at::text AS created_at,
-      updated_at::text AS updated_at
-     FROM user_profiles
-     WHERE member_id = $1`,
+      up.member_id,
+      up.username,
+      COALESCE(NULLIF(TRIM(up.display_name), ''), NULLIF(TRIM(m.name), '')) AS display_name,
+      up.bio,
+      COALESCE(up.avatar_url, m.avatar_url) AS avatar_url,
+      up.is_private,
+      up.allow_comments,
+      up.show_activity_status,
+      up.theme_mode,
+      up.theme_accent_color,
+      up.created_at::text AS created_at,
+      up.updated_at::text AS updated_at
+     FROM user_profiles up
+     INNER JOIN members m ON m.id = up.member_id
+     WHERE up.member_id = $1`,
     [memberId],
   );
   const profile = prof.rows[0] as ProfileView['profile'] | undefined;

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
 import { ru } from 'date-fns/locale';
 import {
@@ -10,6 +10,7 @@ import {
   LuHeart,
   LuPlay,
   LuTv,
+  LuSettings,
   LuUser,
 } from 'react-icons/lu';
 
@@ -31,6 +32,7 @@ import {
   isBroadcastLiveNow,
 } from '../../broadcast/liveAccess';
 import { useAuthStore } from '../../auth/authStore';
+import { useProfileDraftStore } from '../../profile/profileDraftStore';
 import { LimitedRegistrationDashboard } from '../components/LimitedRegistrationDashboard';
 
 type DashboardEvent = {
@@ -239,6 +241,15 @@ function DashboardMain() {
   const fullName = `${me?.first_name ?? ''} ${me?.last_name ?? ''}`.trim() || me?.name || 'Профиль';
   const avatarUrl = resolvePublicUrl(me?.avatar_url ?? null);
 
+  const profileUsername = useAuthStore((s) => s.username ?? '');
+  const profileMemberId = useAuthStore((s) => s.memberId);
+  const hasProfilePostDraft = useProfileDraftStore((s) => s.hasActivePostDraft);
+  const publicProfileSlug =
+    profileUsername.trim() || (profileMemberId != null ? `member-${profileMemberId}` : '');
+  const publicProfileTo = publicProfileSlug
+    ? `/profile/${encodeURIComponent(publicProfileSlug)}`
+    : '/dashboard';
+
   const memberToday = prayerQ.data?.members?.[0] ?? null;
   const todayLabel = formatTodayLabel(now);
 
@@ -308,14 +319,10 @@ function DashboardMain() {
             </section>
           ) : null}
 
-          <button
-            type="button"
-            onClick={() => navigate('/profile')}
-            className="tap-highlight-transparent touch-manipulation group min-h-[146px] overflow-hidden rounded-3xl border border-stone-200/70 bg-white/85 p-4 text-left shadow-[var(--shadow-card)] transition hover:-translate-y-0.5 hover:shadow-[var(--shadow)] sm:min-h-[152px] sm:p-5 xl:col-span-4"
-          >
+          <section className="overflow-hidden rounded-3xl border border-stone-200/70 bg-white/85 p-4 shadow-[var(--shadow-card)] sm:min-h-[152px] sm:p-5 xl:col-span-4">
             <p className="text-[11px] font-extrabold uppercase tracking-[0.14em] text-stone-500">Мой профиль</p>
             <div className="mt-4 flex items-center gap-3">
-              <div className="h-14 w-14 overflow-hidden rounded-2xl bg-stone-100 ring-1 ring-stone-200/70">
+              <div className="h-14 w-14 shrink-0 overflow-hidden rounded-2xl bg-stone-100 ring-1 ring-stone-200/70">
                 {avatarUrl ? (
                   <img src={avatarUrl} alt="" className="h-full w-full object-cover" />
                 ) : (
@@ -326,10 +333,30 @@ function DashboardMain() {
               </div>
               <div className="min-w-0">
                 <p className="truncate text-base font-extrabold text-stone-900">{fullName}</p>
-                <p className="text-sm font-semibold text-stone-500">Открыть профиль</p>
+                <p className="text-sm font-semibold text-stone-500">Публичная лента и настройки</p>
               </div>
             </div>
-          </button>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <Link
+                to={publicProfileTo}
+                className="tap-highlight-transparent inline-flex min-h-[44px] flex-1 items-center justify-center gap-2 rounded-2xl border border-stone-200 bg-white px-4 text-sm font-extrabold text-stone-800 shadow-sm transition hover:bg-stone-50 sm:flex-none"
+                aria-label={hasProfilePostDraft ? 'Моя страница, есть черновик поста' : 'Моя страница'}
+              >
+                <LuUser className="h-4 w-4 shrink-0 text-primary" strokeWidth={2} aria-hidden />
+                Моя страница
+                {hasProfilePostDraft ? (
+                  <span className="h-2 w-2 shrink-0 rounded-full bg-amber-500" title="Черновик поста" aria-hidden />
+                ) : null}
+              </Link>
+              <Link
+                to="/profile"
+                className="tap-highlight-transparent inline-flex min-h-[44px] flex-1 items-center justify-center gap-2 rounded-2xl border border-stone-200 bg-white px-4 text-sm font-extrabold text-stone-800 shadow-sm transition hover:bg-stone-50 sm:flex-none"
+              >
+                <LuSettings className="h-4 w-4 shrink-0 text-primary" strokeWidth={2} aria-hidden />
+                Настройки
+              </Link>
+            </div>
+          </section>
 
           <button
             type="button"

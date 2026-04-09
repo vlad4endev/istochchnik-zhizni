@@ -29,6 +29,7 @@ import {
   type PrayerHistoryItem,
 } from '../api';
 import { fetchDirectionTemplates, type MinistryDirectionTemplate } from '../../admin/api';
+import { fetchProfileByMemberId, patchPublicProfileSettings } from '../publicProfileApi';
 
 import profileShell from '../profileShell.module.css';
 import pfStyles from './ProfilePage.module.css';
@@ -100,6 +101,11 @@ export function ProfilePage() {
 
   const [ministryTemplates, setMinistryTemplates] = useState<MinistryDirectionTemplate[]>([]);
 
+  /* ── Публичная лента (имя и «О себе» на странице /profile/:username) ── */
+  const [publicDraft, setPublicDraft] = useState({ display_name: '', bio: '' });
+  const [publicLoading, setPublicLoading] = useState(false);
+  const [savingPublic, setSavingPublic] = useState(false);
+
   /* ── Password ── */
   const [pwdCurrent, setPwdCurrent] = useState('');
   const [pwdNew, setPwdNew] = useState('');
@@ -170,6 +176,29 @@ export function ProfilePage() {
       });
     return () => { cancelled = true; };
   }, []);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    let cancelled = false;
+    setPublicLoading(true);
+    void fetchProfileByMemberId(user.id)
+      .then((feed) => {
+        if (cancelled) return;
+        setPublicDraft({
+          display_name: feed.profile.display_name?.trim() ?? '',
+          bio: feed.profile.bio?.trim() ?? '',
+        });
+      })
+      .catch(() => {
+        if (!cancelled) setPublicDraft({ display_name: '', bio: '' });
+      })
+      .finally(() => {
+        if (!cancelled) setPublicLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id]);
 
   useEffect(() => {
     if (!user?.id) return;
@@ -253,6 +282,22 @@ export function ProfilePage() {
       setPhoneMsg({ kind: 'err', text: e instanceof Error ? e.message : axiosMessage(e) });
     } finally {
       setPhoneSaving(false);
+    }
+  };
+
+  const savePublicProfile = async () => {
+    setSavingPublic(true);
+    setMsg(null);
+    try {
+      await patchPublicProfileSettings({
+        display_name: publicDraft.display_name.trim() || null,
+        bio: publicDraft.bio.trim() || null,
+      });
+      setMsg({ kind: 'ok', text: 'Публичный профиль сохранён' });
+    } catch (e) {
+      setMsg({ kind: 'err', text: axiosMessage(e) });
+    } finally {
+      setSavingPublic(false);
     }
   };
 
@@ -459,6 +504,60 @@ export function ProfilePage() {
             </div>
           </section>
         )}
+
+        {/* Публичная страница (как в Instagram) */}
+        <section className={CARD}>
+          <p className={LABEL}>Публичная страница</p>
+          <p className="mt-2 text-sm font-medium leading-snug text-[color:var(--profile-text-muted)]">
+            Имя и блок «О себе» видят все на вашей ленте{' '}
+            <Link
+              to={user?.username ? `/profile/${encodeURIComponent(user.username)}` : `/profile/member-${user?.id ?? ''}`}
+              className="font-bold text-[color:var(--profile-primary)] underline-offset-2 hover:underline"
+            >
+              в профиле
+            </Link>
+            . Фото меняется кнопкой на аватаре выше.
+          </p>
+          {publicLoading ? (
+            <p className="mt-4 text-sm text-[color:var(--profile-text-muted)]">Загрузка…</p>
+          ) : (
+            <div className="mt-4 grid gap-4">
+              <div>
+                <label className={LABEL} htmlFor="pub-display">
+                  Имя в ленте
+                </label>
+                <input
+                  id="pub-display"
+                  className={INPUT}
+                  placeholder="Как к вам обращаться"
+                  value={publicDraft.display_name}
+                  onChange={(e) => setPublicDraft((d) => ({ ...d, display_name: e.target.value }))}
+                />
+              </div>
+              <div>
+                <label className={LABEL} htmlFor="pub-bio">
+                  О себе
+                </label>
+                <textarea
+                  id="pub-bio"
+                  className={`${INPUT} min-h-[120px] resize-y`}
+                  placeholder="Коротко о себе для церкви…"
+                  rows={4}
+                  value={publicDraft.bio}
+                  onChange={(e) => setPublicDraft((d) => ({ ...d, bio: e.target.value }))}
+                />
+              </div>
+              <button
+                type="button"
+                disabled={savingPublic}
+                onClick={() => void savePublicProfile()}
+                className="inline-flex min-h-[48px] items-center justify-center rounded-2xl bg-[color:var(--profile-primary)] px-5 text-sm font-extrabold text-white shadow-[0_8px_24px_color-mix(in_srgb,var(--profile-primary)_22%,transparent)] disabled:opacity-50"
+              >
+                {savingPublic ? 'Сохраняем…' : 'Сохранить ленту'}
+              </button>
+            </div>
+          )}
+        </section>
 
         {/* ═══════════════════════════════════════════════════
             3. ПРОФИЛЬ — данные / редактирование
