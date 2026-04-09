@@ -110,6 +110,16 @@ export default defineConfig(({ mode }) => {
         },
         workbox: {
           globPatterns: ['**/*.{js,css,html,ico,png,svg,webp,woff2,woff,ttf}'],
+          /**
+           * Иконки из `manifest.icons` плагин уже кладёт в precache с `__WB_REVISION__`.
+           * globPatterns дублирует те же `assets/*.png` без revision → Workbox: add-to-cache-list-conflicting-entries.
+           */
+          globIgnores: [
+            '**/pwa-64x64.png',
+            '**/pwa-192x192.png',
+            '**/pwa-512x512.png',
+            '**/maskable-icon-512x512.png',
+          ],
           // Активирует новый SW сразу без ожидания закрытия старых вкладок
           skipWaiting: true,
           clientsClaim: true,

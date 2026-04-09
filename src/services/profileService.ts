@@ -142,11 +142,27 @@ const USERNAME_MAX_LEN = 64;
 export async function getProfileWithFeedByUsername(username: string): Promise<ProfileView | null> {
   const u = username.trim();
   if (!u || u.length > USERNAME_MAX_LEN) return null;
+
   const found = await query(
     `SELECT member_id FROM user_profiles WHERE LOWER(username) = LOWER($1) LIMIT 1`,
     [u],
   );
-  const mid = (found.rows[0] as { member_id?: unknown } | undefined)?.member_id;
+  let mid = (found.rows[0] as { member_id?: unknown } | undefined)?.member_id;
+
+  // Слаг `member-<id>` используется до первого визита в настройки — строки в `user_profiles` могло ещё не быть.
+  if (mid === undefined || mid === null) {
+    const m = /^member-(\d+)$/i.exec(u);
+    if (m) {
+      const parsedId = Number(m[1]);
+      if (Number.isInteger(parsedId) && parsedId > 0) {
+        const mem = await query(`SELECT id FROM members WHERE id = $1 LIMIT 1`, [parsedId]);
+        if (mem.rows.length === 0) return null;
+        await ensureProfileRow(parsedId);
+        mid = parsedId;
+      }
+    }
+  }
+
   const memberId = typeof mid === 'number' ? mid : typeof mid === 'string' ? Number(mid) : NaN;
   if (!Number.isInteger(memberId) || memberId <= 0) return null;
   return getProfileWithFeed(memberId);
