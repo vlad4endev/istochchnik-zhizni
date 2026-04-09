@@ -25,6 +25,8 @@ export type RegistrationStatus = 'active' | 'pending_review' | 'rejected';
 
 export interface AuthUser {
   id: number;
+  /** Слаг публичной страницы (`/profile/:username`), совпадает с `user_profiles.username` или `member-{id}`. */
+  username: string;
   /** Публичный UUID (не числовой id). */
   user_id: string;
   first_name: string | null;
@@ -122,6 +124,7 @@ type MemberRow = {
   created_at: string;
   updated_at: string;
   password_hash?: string | null;
+  profile_username?: string | null;
 };
 
 function normalizeRegistrationStatus(raw: unknown): RegistrationStatus {
@@ -250,8 +253,13 @@ function getMaxActiveSessionsPerUser(): number {
 }
 
 function mapAuthUser(row: MemberRow): AuthUser {
+  const slug =
+    typeof row.profile_username === 'string' && row.profile_username.trim() !== ''
+      ? row.profile_username.trim()
+      : `member-${row.id}`;
   return {
     id: row.id,
+    username: slug,
     user_id: row.user_id != null && String(row.user_id).trim() !== '' ? String(row.user_id) : '',
     first_name: row.first_name,
     last_name: row.last_name,
@@ -925,8 +933,10 @@ export async function getAuthUserById(userId: number): Promise<AuthUser | null> 
       m.is_collection_coordinator,
       m.in_prayer_cycle,
       m.created_at,
-      m.updated_at
+      m.updated_at,
+      COALESCE(NULLIF(TRIM(up.username), ''), 'member-' || m.id::text) AS profile_username
     FROM members m
+    LEFT JOIN user_profiles up ON up.member_id = m.id
     LEFT JOIN member_prayer_by_cycle mpc ON mpc.member_id = m.id AND mpc.cycle_index = $2
     WHERE m.id = $1
       AND (

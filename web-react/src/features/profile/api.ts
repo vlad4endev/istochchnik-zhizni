@@ -13,6 +13,8 @@ export interface MePrayerCycle {
 /** Ответ GET/PATCH `/api/auth/me`. */
 export interface MeResponse {
   id: number;
+  /** Слаг публичной страницы (`/profile/:username`); с бэкенда после миграции профиля. */
+  username?: string;
   user_id: string;
   first_name: string | null;
   last_name: string | null;

@@ -1,0 +1,42 @@
+/**
+ * Локальный корень модуля профиля: все темы только через --profile-*.
+ * Значения по умолчанию читают глобальные токены приложения (--surface, --text, --primary),
+ * не наоборот — глобальные стили не зависят от профиля.
+ */
+.profileRoot {
+  /* Привязка к теме приложения (через локальные алиасы) */
+  --profile-surface: var(--surface, #f4f1ed);
+  --profile-surface-elevated: var(--surface-elevated, #fafaf9);
+  --profile-text: var(--text, #1c1917);
+  --profile-text-heading: #1c1917;
+  --profile-text-body: #292524;
+  --profile-text-muted: #78716c;
+  --profile-text-soft: #57534e;
+  --profile-text-faint: #a8a29e;
+
+  --profile-primary: var(--primary, #7d3640);
+  --profile-primary-mid: #a25260;
+  --profile-primary-dark: var(--primary-dark, #5c2830);
+
+  --profile-card-bg: rgba(255, 255, 255, 0.8);
+  --profile-card-bg-soft: rgba(255, 255, 255, 0.55);
+  --profile-card-ring: rgba(231, 229, 228, 0.7);
+  --profile-border: rgba(120, 113, 108, 0.18);
+  --profile-border-light: rgba(245, 245, 244, 0.9);
+
+  --profile-gradient-from: #4a1e26;
+  --profile-gradient-to: #a25260;
+
+  --profile-danger: #b91c1c;
+  --profile-success: #047857;
+
+  --profile-media-placeholder: #e7e5e4;
+  --profile-media-placeholder-mid: #f5f5f4;
+
+  /* Хештеги / ссылки внутри модуля профиля (не тянем глобальный palette-slate) */
+  --profile-accent-blue: #2563eb;
+
+  background-color: var(--profile-surface);
+  color: var(--profile-text);
+  isolation: isolate;
+}

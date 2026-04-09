@@ -64,6 +64,8 @@ export function LimitedRegistrationDashboard({ registrationStatus, firstName }: 
         lastName: me.last_name ?? '',
         role: me.app_role ?? 'member',
         registrationStatus: normalizeRegistrationStatus(me.registration_status),
+        username: (me.username ?? '').trim(),
+        memberId: typeof me.id === 'number' ? me.id : null,
       });
       return me;
     },

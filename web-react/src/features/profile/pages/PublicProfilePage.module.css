@@ -1,0 +1,290 @@
+/*
+ * CSS Modules: только локальные классы (ps*).
+ * Цвета фона/текста — через унаследованные --profile-* с родителя .profileRoot (profileShell.module.css).
+ */
+
+.psPage {
+  min-height: 100%;
+  padding-bottom: 5rem;
+}
+
+.psHeader {
+  position: relative;
+  border-bottom: 1px solid var(--profile-border);
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--profile-gradient-from) 10%, var(--profile-surface)) 0%,
+    color-mix(in srgb, var(--profile-primary) 12%, var(--profile-surface)) 100%
+  );
+}
+
+.psHeaderInner {
+  margin: 0 auto;
+  max-width: 42rem;
+  padding: 1.25rem 1rem 1.5rem;
+}
+
+@media (min-width: 640px) {
+  .psHeaderInner {
+    padding-left: 1.25rem;
+    padding-right: 1.25rem;
+  }
+}
+
+.psRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+  width: 100%;
+  min-width: 0;
+}
+
+/* Колонка с именем: длинный текст не сжимает аватар и не ломает flex-ряд. */
+.psTextCol {
+  flex: 1;
+  min-width: 0;
+  align-self: flex-start;
+}
+
+.psAvatar {
+  flex-shrink: 0;
+  width: 5.5rem;
+  height: 5.5rem;
+  border-radius: 9999px;
+  overflow: hidden;
+  border: 3px solid #fff;
+  box-shadow: 0 8px 24px rgba(125, 54, 64, 0.15);
+  background: rgba(255, 255, 255, 0.9);
+}
+
+@media (min-width: 640px) {
+  .psAvatar {
+    width: 6.25rem;
+    height: 6.25rem;
+  }
+}
+
+.psAvatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.psAvatarPlaceholder {
+  height: 100%;
+  display: grid;
+  place-items: center;
+  color: color-mix(in srgb, var(--profile-primary) 35%, transparent);
+}
+
+.psTitle {
+  margin: 0;
+  font-size: 1.35rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--profile-text-heading);
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+@media (min-width: 640px) {
+  .psTitle {
+    font-size: 1.5rem;
+  }
+}
+
+.psUsername {
+  margin: 0.25rem 0 0;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--profile-text-muted);
+}
+
+.psBio {
+  margin: 0.75rem 0 0;
+  font-size: 0.875rem;
+  font-weight: 600;
+  line-height: 1.45;
+  color: var(--profile-text-body);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.psMeta {
+  margin-top: 0.75rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.psBadge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 9999px;
+  padding: 0.25rem 0.65rem;
+  font-size: 0.6875rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  background: color-mix(in srgb, var(--profile-text-heading) 6%, var(--profile-surface));
+  color: var(--profile-text-soft);
+}
+
+.psGridWrap {
+  margin: 0 auto;
+  max-width: 42rem;
+  padding: 1rem 1rem 0;
+}
+
+@media (min-width: 640px) {
+  .psGridWrap {
+    padding-left: 1.25rem;
+    padding-right: 1.25rem;
+  }
+}
+
+.psGrid {
+  display: grid;
+  width: 100%;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.25rem;
+}
+
+.psCell {
+  position: relative;
+  aspect-ratio: 1 / 1;
+  overflow: hidden;
+  border-radius: 0.25rem;
+  background: var(--profile-media-placeholder);
+}
+
+.psCell img,
+.psCell video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.psCellOverlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.35);
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.psCell:hover .psCellOverlay {
+  opacity: 1;
+}
+
+.psCellStats {
+  display: flex;
+  gap: 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 800;
+  color: #fff;
+}
+
+.psEmpty {
+  grid-column: 1 / -1;
+  text-align: center;
+  padding: 2rem 1rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--profile-text-muted);
+}
+
+.psError {
+  margin: 2rem auto;
+  max-width: 24rem;
+  padding: 1.5rem;
+  text-align: center;
+  border-radius: 1.5rem;
+  background: var(--profile-card-bg);
+  box-shadow: 0 8px 24px rgba(28, 25, 23, 0.08);
+  border: 1px solid var(--profile-border);
+}
+
+.psError p {
+  margin: 0;
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: var(--profile-danger);
+}
+
+/* Skeleton: keyframes локальны для модуля (Vite добавляет уникальный префикс). */
+@keyframes psShimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.psSkelCell {
+  aspect-ratio: 1 / 1;
+  border-radius: 0.25rem;
+  background: linear-gradient(
+    90deg,
+    var(--profile-media-placeholder) 0%,
+    var(--profile-media-placeholder-mid) 45%,
+    var(--profile-media-placeholder) 90%
+  );
+  background-size: 200% 100%;
+  animation: psShimmer 1.2s ease-in-out infinite;
+}
+
+.psSkelHeader {
+  display: flex;
+  gap: 1rem;
+  align-items: flex-start;
+}
+
+.psSkelAvatar {
+  width: 5.5rem;
+  height: 5.5rem;
+  border-radius: 9999px;
+  flex-shrink: 0;
+  background: linear-gradient(
+    90deg,
+    var(--profile-media-placeholder) 0%,
+    var(--profile-media-placeholder-mid) 45%,
+    var(--profile-media-placeholder) 90%
+  );
+  background-size: 200% 100%;
+  animation: psShimmer 1.2s ease-in-out infinite;
+}
+
+.psSkelLines {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding-top: 0.5rem;
+}
+
+.psSkelLine {
+  height: 0.875rem;
+  border-radius: 0.25rem;
+  background: linear-gradient(
+    90deg,
+    var(--profile-media-placeholder) 0%,
+    var(--profile-media-placeholder-mid) 45%,
+    var(--profile-media-placeholder) 90%
+  );
+  background-size: 200% 100%;
+  animation: psShimmer 1.2s ease-in-out infinite;
+}
+
+.psSkelLineShort {
+  width: 55%;
+}
+
+.psSkelLineLong {
+  width: 85%;
+}

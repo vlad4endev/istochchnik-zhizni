@@ -152,6 +152,8 @@ export function LoginPage() {
         lastName: (user.last_name ?? '').trim(),
         role: (user.app_role ?? 'member').trim() || 'member',
         registrationStatus: normalizeRegistrationStatus(user.registration_status),
+        username: ((user as { username?: string }).username ?? '').trim(),
+        memberId: typeof (user as { id?: number }).id === 'number' ? (user as { id: number }).id : null,
       });
       navigate('/', { replace: true });
     } catch (e) {
@@ -241,6 +243,8 @@ export function LoginPage() {
           lastName: (user.last_name ?? '').trim(),
           role: (user.app_role ?? 'member').trim() || 'member',
           registrationStatus: normalizeRegistrationStatus(user.registration_status),
+          username: ((user as { username?: string }).username ?? '').trim(),
+          memberId: typeof (user as { id?: number }).id === 'number' ? (user as { id: number }).id : null,
         });
         navigate('/', { replace: true });
         return;
@@ -258,6 +262,8 @@ export function LoginPage() {
             registrationStatus: normalizeRegistrationStatus(
               user.registration_status ?? 'pending_review',
             ),
+            username: ((user as { username?: string }).username ?? '').trim(),
+            memberId: typeof (user as { id?: number }).id === 'number' ? (user as { id: number }).id : null,
           });
           navigate('/dashboard', { replace: true });
           return;

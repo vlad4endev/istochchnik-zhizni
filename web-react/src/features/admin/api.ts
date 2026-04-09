@@ -18,6 +18,7 @@ export interface ChurchEventItem {
   weekly_day: number | null;
   is_active: boolean;
   category?: string | null;
+  poster_url?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -298,6 +299,13 @@ export async function fetchChurchEventCategoryOptions(): Promise<{ id: string; l
   return Array.isArray(data?.options) ? data.options : [];
 }
 
+export async function uploadChurchEventPoster(file: File): Promise<{ poster_url: string }> {
+  const form = new FormData();
+  form.append('file', file);
+  const { data } = await apiClient.post<{ poster_url: string }>(`${CAL}/events/poster`, form);
+  return data;
+}
+
 export async function createAdminEvent(body: {
   title: string;
   description?: string;
@@ -307,6 +315,7 @@ export async function createAdminEvent(body: {
   weekly_day?: number | null;
   is_active?: boolean;
   category?: string;
+  poster_url?: string | null;
 }): Promise<ChurchEventItem> {
   const { data } = await apiClient.post<ChurchEventItem>(`${CAL}/events`, body);
   return data;
@@ -323,6 +332,7 @@ export async function updateAdminEvent(
     weekly_day: number | null;
     is_active: boolean;
     category: string | null;
+    poster_url: string | null;
   }>,
 ): Promise<ChurchEventItem> {
   const { data } = await apiClient.patch<ChurchEventItem>(`${CAL}/events/${id}`, body);

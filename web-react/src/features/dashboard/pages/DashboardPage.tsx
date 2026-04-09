@@ -38,6 +38,7 @@ type DashboardEvent = {
   title: string;
   description: string;
   whenLabel: string;
+  posterUrl: string | null;
 };
 
 function formatTodayLabel(now: Date): string {
@@ -101,6 +102,7 @@ function toDashboardEvent(now: Date, item: ChurchEventItem, date: Date): Dashboa
     title: item.title.trim() || 'Событие',
     description: (item.description ?? '').trim() || 'Подробное описание скоро появится.',
     whenLabel,
+    posterUrl: resolvePublicUrl(item.poster_url ?? null),
   };
 }
 
@@ -119,6 +121,7 @@ function pickUpcomingEvent(now: Date, items: ChurchEventItem[]): DashboardEvent 
       title: 'Событий пока нет',
       description: 'Администратор скоро добавит новые события.',
       whenLabel: 'Следите за обновлениями',
+      posterUrl: null,
     };
   }
 
@@ -457,24 +460,24 @@ function DashboardMain() {
             <p className="text-[11px] font-extrabold uppercase tracking-[0.14em] text-stone-500">Описание события</p>
             <h2 className="mt-2 text-xl font-extrabold tracking-tight text-stone-900">{event.title}</h2>
             <p className="mt-1 text-sm font-semibold text-primary">{event.whenLabel}</p>
+            {event.posterUrl ? (
+              <div className="mt-4 overflow-hidden rounded-3xl border border-stone-200/70 bg-stone-50">
+                <img
+                  src={event.posterUrl}
+                  alt=""
+                  className="h-[200px] w-full object-cover sm:h-[260px]"
+                  loading="lazy"
+                />
+              </div>
+            ) : null}
             <p className="mt-3 text-sm font-medium leading-relaxed text-stone-700">{event.description}</p>
-            <div className="mt-5 flex flex-col-reverse items-stretch gap-2 sm:flex-row sm:items-center sm:justify-end">
+            <div className="mt-5 flex items-center justify-end">
               <button
                 type="button"
                 onClick={() => setEventOpen(false)}
                 className="tap-highlight-transparent touch-manipulation inline-flex min-h-[44px] items-center justify-center rounded-xl border border-stone-200 bg-white px-4 text-sm font-extrabold text-stone-700 hover:bg-stone-50"
               >
                 Закрыть
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setEventOpen(false);
-                  navigate('/service-flow');
-                }}
-                className="tap-highlight-transparent touch-manipulation inline-flex min-h-[44px] items-center justify-center rounded-xl bg-primary px-4 text-sm font-extrabold text-white hover:bg-primary-dark"
-              >
-                Открыть план служения
               </button>
             </div>
           </div>

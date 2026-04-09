@@ -47,6 +47,7 @@ import {
   fetchDirectionTemplates,
   fetchAdminEvents,
   fetchChurchEventCategoryOptions,
+  uploadChurchEventPoster,
   fetchGlobalBacksliders,
   fetchGlobalMinistries,
   fetchGlobalThemes,
@@ -1894,10 +1895,28 @@ function EventsSection() {
     weekly_day: 0,
     is_active: true,
     category: 'service',
+    poster_url: null as string | null,
   });
+  const [posterFile, setPosterFile] = useState<File | null>(null);
+  const posterPreviewUrl = useMemo(
+    () => (posterFile ? URL.createObjectURL(posterFile) : null),
+    [posterFile],
+  );
+  useEffect(() => {
+    return () => {
+      if (posterPreviewUrl) URL.revokeObjectURL(posterPreviewUrl);
+    };
+  }, [posterPreviewUrl]);
   const [editing, setEditing] = useState<ChurchEventItem | null>(null);
+  const [openId, setOpenId] = useState<number | null>(null);
 
   const invalidate = () => void qc.invalidateQueries({ queryKey: Q_EVENTS });
+
+  const categoryLabelById = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const o of categoryOptions) m.set(o.id, o.label);
+    return m;
+  }, [categoryOptions]);
 
   useEffect(() => {
     if (form.recurrence_type !== 'weekly') return;
@@ -1912,6 +1931,11 @@ function EventsSection() {
     setForm((s) => (ids.has(s.category) ? s : { ...s, category: opts[0].id }));
   }, [categoryOptions]);
 
+  useEffect(() => {
+    if (!editing) return;
+    setOpenId(editing.id);
+  }, [editing]);
+
   const createMut = useMutation({
     mutationFn: () =>
       createAdminEvent({
@@ -1923,13 +1947,27 @@ function EventsSection() {
         weekly_day: form.recurrence_type === 'weekly' ? form.weekly_day : null,
         is_active: form.is_active,
         category: form.category.trim() || undefined,
+        poster_url: form.poster_url,
       }),
     onSuccess: () => {
-      setForm((s) => ({ ...s, title: '', description: '' }));
+      setPosterFile(null);
+      setForm((s) => ({ ...s, title: '', description: '', poster_url: null }));
       setNote({ type: 'ok', text: 'Событие добавлено.' });
       invalidate();
     },
     onError: (e) => setNote({ type: 'err', text: apiErrorMessage(e, 'Не удалось добавить событие.') }),
+  });
+
+  const uploadPosterMut = useMutation({
+    mutationFn: async () => {
+      if (!posterFile) throw new Error('no_file');
+      return await uploadChurchEventPoster(posterFile);
+    },
+    onSuccess: (r) => {
+      setForm((s) => ({ ...s, poster_url: r.poster_url }));
+      setNote({ type: 'ok', text: 'Постер загружен.' });
+    },
+    onError: (e) => setNote({ type: 'err', text: apiErrorMessage(e, 'Не удалось загрузить постер.') }),
   });
 
   const updateMut = useMutation({
@@ -2082,6 +2120,46 @@ function EventsSection() {
               placeholder="Краткое описание события"
             />
           </div>
+          <div className="sm:col-span-2">
+            <label className="mb-1 block text-xs font-semibold text-stone-600">Постер (картинка)</label>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+              <input
+                type="file"
+                accept="image/*"
+                className={fieldClass()}
+                onChange={(e) => {
+                  const f = e.target.files?.[0] ?? null;
+                  setPosterFile(f);
+                  setForm((s) => ({ ...s, poster_url: null }));
+                }}
+              />
+              <button
+                type="button"
+                className={btnSecondary()}
+                disabled={!posterFile || uploadPosterMut.isPending}
+                onClick={() => {
+                  setNote(null);
+                  uploadPosterMut.mutate();
+                }}
+              >
+                {uploadPosterMut.isPending ? 'Загрузка…' : form.poster_url ? 'Перезагрузить' : 'Загрузить'}
+              </button>
+              {form.poster_url ? (
+                <span className="text-xs font-semibold text-emerald-700">Готово</span>
+              ) : null}
+            </div>
+            {posterPreviewUrl ? (
+              <div className="mt-3 overflow-hidden rounded-2xl border border-stone-200/70 bg-stone-50">
+                <img
+                  src={posterPreviewUrl}
+                  alt=""
+                  className="h-[140px] w-full object-cover sm:h-[180px]"
+                  loading="lazy"
+                />
+              </div>
+            ) : null}
+            <p className="mt-1 text-xs text-stone-500">Покажется на дашборде при открытии события.</p>
+          </div>
           <label className="sm:col-span-2 flex items-center gap-2 text-sm font-semibold text-stone-700">
             <input
               type="checkbox"
@@ -2142,201 +2220,261 @@ function EventsSection() {
             {(eventsQ.data ?? []).map((ev) => {
               const isEdit = editing?.id === ev.id;
               const row = isEdit ? editing : ev;
+              const isOpen = isEdit || openId === ev.id;
+              const catId = typeof row.category === 'string' ? row.category : '';
+              const catLabel = catId ? categoryLabelById.get(catId) ?? catId : '';
               return (
-                <article key={ev.id} className="rounded-2xl border border-stone-200/80 bg-white p-4">
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <div className="sm:col-span-2">
-                      <label className="mb-1 block text-xs font-semibold text-stone-600">Название</label>
-                      <input
-                        className={fieldClass()}
-                        value={row.title}
-                        disabled={!isEdit}
-                        onChange={(e) =>
-                          setEditing((s) => (s ? { ...s, title: e.target.value } : s))
-                        }
-                      />
+                <article key={ev.id} className="overflow-hidden rounded-2xl border border-stone-200/80 bg-white">
+                  <button
+                    type="button"
+                    className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-stone-50"
+                    onClick={() => {
+                      if (isEdit) return;
+                      setOpenId((cur) => (cur === ev.id ? null : ev.id));
+                    }}
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                        <span className="truncate text-[13px] font-extrabold text-stone-900">
+                          {row.title || '—'}
+                        </span>
+                        <span className="text-[11px] font-semibold text-stone-500">
+                          {row.event_date} · {row.event_time}
+                        </span>
+                        {row.recurrence_type === 'weekly' ? (
+                          <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wide text-indigo-700">
+                            weekly
+                          </span>
+                        ) : (
+                          <span className="rounded-full bg-stone-100 px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wide text-stone-600">
+                            once
+                          </span>
+                        )}
+                        {catLabel ? (
+                          <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-extrabold text-primary">
+                            {catLabel}
+                          </span>
+                        ) : null}
+                        {!row.is_active ? (
+                          <span className="rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-extrabold text-red-700">
+                            off
+                          </span>
+                        ) : null}
+                      </div>
+                      {row.description ? (
+                        <p className="mt-1 line-clamp-1 text-[12px] text-stone-500">{row.description}</p>
+                      ) : null}
                     </div>
-                    <div>
-                      <label className="mb-1 block text-xs font-semibold text-stone-600">Повтор</label>
-                      <select
-                        className={fieldClass()}
-                        value={row.recurrence_type}
-                        disabled={!isEdit}
-                        onChange={(e) =>
-                          setEditing((s) => {
-                            if (!s) return s;
-                            const rt = e.target.value as 'once' | 'weekly';
-                            if (rt === 'weekly') {
-                              const wd = s.weekly_day ?? 0;
-                              return {
-                                ...s,
-                                recurrence_type: rt,
-                                weekly_day: wd,
-                                event_date: nextOccurrenceLocalYmd(wd),
-                              };
-                            }
-                            return { ...s, recurrence_type: rt, weekly_day: null };
-                          })
-                        }
-                      >
-                        <option value="once">Один раз</option>
-                        <option value="weekly">Каждую неделю</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className="mb-1 block text-xs font-semibold text-stone-600">
-                        {row.recurrence_type === 'weekly' ? 'Дата-ориентир' : 'Дата'}
-                      </label>
-                      <input
-                        type="date"
-                        className={fieldClass()}
-                        value={row.event_date}
-                        disabled={!isEdit}
-                        onChange={(e) =>
-                          setEditing((s) => (s ? { ...s, event_date: e.target.value } : s))
-                        }
-                      />
-                    </div>
-                    <div>
-                      <label className="mb-1 block text-xs font-semibold text-stone-600">День недели</label>
-                      <select
-                        className={fieldClass()}
-                        value={String(row.weekly_day ?? 0)}
-                        disabled={!isEdit || row.recurrence_type !== 'weekly'}
-                        onChange={(e) =>
-                          setEditing((s) => {
-                            if (!s) return s;
-                            const wd = Number(e.target.value);
-                            return {
-                              ...s,
-                              weekly_day: wd,
-                              event_date:
-                                s.recurrence_type === 'weekly'
-                                  ? nextOccurrenceLocalYmd(wd)
-                                  : s.event_date,
-                            };
-                          })
-                        }
-                      >
-                        {weekDays.map((d) => (
-                          <option key={d.value} value={d.value}>
-                            {d.label}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="mb-1 block text-xs font-semibold text-stone-600">Время</label>
-                      <input
-                        type="time"
-                        className={fieldClass()}
-                        value={row.event_time}
-                        disabled={!isEdit}
-                        onChange={(e) =>
-                          setEditing((s) => (s ? { ...s, event_time: e.target.value } : s))
-                        }
-                      />
-                    </div>
-                    <div>
-                      <label className="mb-1 block text-xs font-semibold text-stone-600">Категория</label>
-                      <select
-                        className={fieldClass()}
-                        disabled={!isEdit}
-                        value={
-                          categoryOptions.some((o) => o.id === (row.category ?? ''))
-                            ? (row.category ?? categoryOptions[0].id)
-                            : categoryOptions[0].id
-                        }
-                        onChange={(e) =>
-                          setEditing((s) => (s ? { ...s, category: e.target.value } : s))
-                        }
-                      >
-                        {categoryOptions.map((o) => (
-                          <option key={o.id} value={o.id}>
-                            {o.label}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="sm:col-span-2">
-                      <label className="mb-1 block text-xs font-semibold text-stone-600">Описание</label>
-                      <textarea
-                        className={`${fieldClass()} min-h-[84px] resize-y`}
-                        value={row.description ?? ''}
-                        disabled={!isEdit}
-                        onChange={(e) =>
-                          setEditing((s) => (s ? { ...s, description: e.target.value } : s))
-                        }
-                      />
-                    </div>
-                    <label className="sm:col-span-2 flex items-center gap-2 text-sm font-semibold text-stone-700">
-                      <input
-                        type="checkbox"
-                        className="h-4 w-4 rounded border-stone-300 text-primary"
-                        checked={row.is_active}
-                        disabled={!isEdit}
-                        onChange={(e) =>
-                          setEditing((s) => (s ? { ...s, is_active: e.target.checked } : s))
-                        }
-                      />
-                      Активно
-                    </label>
-                  </div>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {!isEdit ? (
-                      <button
-                        type="button"
-                        className={btnSecondary()}
-                        onClick={() => {
-                          const raw = ev.category ?? '';
-                          const category = categoryOptions.some((o) => o.id === raw)
-                            ? raw
-                            : categoryOptions[0].id;
-                          setEditing({
-                            ...ev,
-                            event_date: dateInputValueFromApi(ev.event_date),
-                            category,
-                          });
-                        }}
-                      >
-                        Изменить
-                      </button>
-                    ) : (
-                      <>
-                        <button
-                          type="button"
-                          className={btnPrimary()}
-                          disabled={updateMut.isPending || !row.title.trim()}
-                          onClick={() => {
-                            setNote(null);
-                            updateMut.mutate(row);
-                          }}
-                        >
-                          {updateMut.isPending ? 'Сохранение…' : 'Сохранить'}
-                        </button>
-                        <button
-                          type="button"
-                          className={btnSecondary()}
-                          disabled={updateMut.isPending}
-                          onClick={() => setEditing(null)}
-                        >
-                          Отмена
-                        </button>
-                      </>
-                    )}
-                    <button
-                      type="button"
-                      className={btnDangerOutline()}
-                      disabled={deleteMut.isPending}
-                      onClick={() => {
-                        if (!window.confirm(`Удалить событие «${ev.title}»?`)) return;
-                        setNote(null);
-                        if (isEdit) setEditing(null);
-                        deleteMut.mutate(ev.id);
-                      }}
+                    <span
+                      className={`shrink-0 text-stone-400 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}
+                      aria-hidden
                     >
-                      Удалить
-                    </button>
+                      ▾
+                    </span>
+                  </button>
+
+                  <div
+                    className={`grid transition-[grid-template-rows] duration-300 ease-in-out motion-reduce:transition-none ${isOpen ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}
+                  >
+                    <div className="overflow-hidden">
+                      <div className="border-t border-stone-100 px-4 py-4">
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          <div className="sm:col-span-2">
+                            <label className="mb-1 block text-xs font-semibold text-stone-600">Название</label>
+                            <input
+                              className={fieldClass()}
+                              value={row.title}
+                              disabled={!isEdit}
+                              onChange={(e) =>
+                                setEditing((s) => (s ? { ...s, title: e.target.value } : s))
+                              }
+                            />
+                          </div>
+                          <div>
+                            <label className="mb-1 block text-xs font-semibold text-stone-600">Повтор</label>
+                            <select
+                              className={fieldClass()}
+                              value={row.recurrence_type}
+                              disabled={!isEdit}
+                              onChange={(e) =>
+                                setEditing((s) => {
+                                  if (!s) return s;
+                                  const rt = e.target.value as 'once' | 'weekly';
+                                  if (rt === 'weekly') {
+                                    const wd = s.weekly_day ?? 0;
+                                    return {
+                                      ...s,
+                                      recurrence_type: rt,
+                                      weekly_day: wd,
+                                      event_date: nextOccurrenceLocalYmd(wd),
+                                    };
+                                  }
+                                  return { ...s, recurrence_type: rt, weekly_day: null };
+                                })
+                              }
+                            >
+                              <option value="once">Один раз</option>
+                              <option value="weekly">Каждую неделю</option>
+                            </select>
+                          </div>
+                          <div>
+                            <label className="mb-1 block text-xs font-semibold text-stone-600">
+                              {row.recurrence_type === 'weekly' ? 'Дата-ориентир' : 'Дата'}
+                            </label>
+                            <input
+                              type="date"
+                              className={fieldClass()}
+                              value={row.event_date}
+                              disabled={!isEdit}
+                              onChange={(e) =>
+                                setEditing((s) => (s ? { ...s, event_date: e.target.value } : s))
+                              }
+                            />
+                          </div>
+                          <div>
+                            <label className="mb-1 block text-xs font-semibold text-stone-600">День недели</label>
+                            <select
+                              className={fieldClass()}
+                              value={String(row.weekly_day ?? 0)}
+                              disabled={!isEdit || row.recurrence_type !== 'weekly'}
+                              onChange={(e) =>
+                                setEditing((s) => {
+                                  if (!s) return s;
+                                  const wd = Number(e.target.value);
+                                  return {
+                                    ...s,
+                                    weekly_day: wd,
+                                    event_date:
+                                      s.recurrence_type === 'weekly'
+                                        ? nextOccurrenceLocalYmd(wd)
+                                        : s.event_date,
+                                  };
+                                })
+                              }
+                            >
+                              {weekDays.map((d) => (
+                                <option key={d.value} value={d.value}>
+                                  {d.label}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                          <div>
+                            <label className="mb-1 block text-xs font-semibold text-stone-600">Время</label>
+                            <input
+                              type="time"
+                              className={fieldClass()}
+                              value={row.event_time}
+                              disabled={!isEdit}
+                              onChange={(e) =>
+                                setEditing((s) => (s ? { ...s, event_time: e.target.value } : s))
+                              }
+                            />
+                          </div>
+                          <div>
+                            <label className="mb-1 block text-xs font-semibold text-stone-600">Категория</label>
+                            <select
+                              className={fieldClass()}
+                              disabled={!isEdit}
+                              value={
+                                categoryOptions.some((o) => o.id === (row.category ?? ''))
+                                  ? (row.category ?? categoryOptions[0].id)
+                                  : categoryOptions[0].id
+                              }
+                              onChange={(e) =>
+                                setEditing((s) => (s ? { ...s, category: e.target.value } : s))
+                              }
+                            >
+                              {categoryOptions.map((o) => (
+                                <option key={o.id} value={o.id}>
+                                  {o.label}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                          <div className="sm:col-span-2">
+                            <label className="mb-1 block text-xs font-semibold text-stone-600">Описание</label>
+                            <textarea
+                              className={`${fieldClass()} min-h-[84px] resize-y`}
+                              value={row.description ?? ''}
+                              disabled={!isEdit}
+                              onChange={(e) =>
+                                setEditing((s) => (s ? { ...s, description: e.target.value } : s))
+                              }
+                            />
+                          </div>
+                          <label className="sm:col-span-2 flex items-center gap-2 text-sm font-semibold text-stone-700">
+                            <input
+                              type="checkbox"
+                              className="h-4 w-4 rounded border-stone-300 text-primary"
+                              checked={row.is_active}
+                              disabled={!isEdit}
+                              onChange={(e) =>
+                                setEditing((s) => (s ? { ...s, is_active: e.target.checked } : s))
+                              }
+                            />
+                            Активно
+                          </label>
+                        </div>
+
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          {!isEdit ? (
+                            <button
+                              type="button"
+                              className={btnSecondary()}
+                              onClick={() => {
+                                const raw = ev.category ?? '';
+                                const category = categoryOptions.some((o) => o.id === raw)
+                                  ? raw
+                                  : categoryOptions[0].id;
+                                setEditing({
+                                  ...ev,
+                                  event_date: dateInputValueFromApi(ev.event_date),
+                                  category,
+                                });
+                              }}
+                            >
+                              Изменить
+                            </button>
+                          ) : (
+                            <>
+                              <button
+                                type="button"
+                                className={btnPrimary()}
+                                disabled={updateMut.isPending || !row.title.trim()}
+                                onClick={() => {
+                                  setNote(null);
+                                  updateMut.mutate(row);
+                                }}
+                              >
+                                {updateMut.isPending ? 'Сохранение…' : 'Сохранить'}
+                              </button>
+                              <button
+                                type="button"
+                                className={btnSecondary()}
+                                disabled={updateMut.isPending}
+                                onClick={() => setEditing(null)}
+                              >
+                                Отмена
+                              </button>
+                            </>
+                          )}
+                          <button
+                            type="button"
+                            className={btnDangerOutline()}
+                            disabled={deleteMut.isPending}
+                            onClick={() => {
+                              if (!window.confirm(`Удалить событие «${ev.title}»?`)) return;
+                              setNote(null);
+                              if (isEdit) setEditing(null);
+                              deleteMut.mutate(ev.id);
+                            }}
+                          >
+                            Удалить
+                          </button>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </article>
               );

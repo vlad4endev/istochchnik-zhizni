@@ -15,7 +15,8 @@
     "noFallthroughCasesInSwitch": true,
     "baseUrl": ".",
     "paths": {
-      "@/*": ["src/*"]
+      "@/*": ["src/*"],
+      "@features/*": ["src/features/*"]
     }
   },
   "include": ["src/**/*.ts", "src/**/*.tsx"]

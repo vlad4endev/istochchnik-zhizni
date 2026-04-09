@@ -2,7 +2,16 @@ import { Router, type Request, type Response } from 'express';
 import { getBroadcastEmbed, updateBroadcastEmbed } from '../controllers/broadcastController';
 import { getPodcastEpisodes, getPodcastSettings, patchPodcastSettings } from '../controllers/resourcesController';
 import { requireAuthSession } from '../middleware/authSession';
+import {
+  getProfile,
+  getProfileByUsername,
+  patchProfileSettings,
+  postComment,
+  postCreatePost,
+  postLike,
+} from '../controllers/profileController';
 import * as messenger from '../services/messengerService';
+import { profileMediaUploadMiddleware } from '../middleware/profileMediaUpload';
 
 const router = Router();
 
@@ -16,6 +25,19 @@ router.get('/resources/podcasts', getPodcastEpisodes);
 router.get('/resources/podcasts/settings', requireAuthSession, getPodcastSettings);
 /** PATCH /api/resources/podcasts/settings { rss_url } (admin) */
 router.patch('/resources/podcasts/settings', requireAuthSession, patchPodcastSettings);
+
+/**
+ * Profile System (Instagram-style)
+ * Note: actual URLs are under `/api/*` because this router is mounted at `/api`.
+ */
+router.get('/profile/by-username/:username', getProfileByUsername);
+router.get('/profile/:id', getProfile);
+router.patch('/profile/settings', requireAuthSession, patchProfileSettings);
+
+// Create post supports JSON or multipart uploads (field: media)
+router.post('/posts', requireAuthSession, profileMediaUploadMiddleware, postCreatePost);
+router.post('/posts/:id/like', requireAuthSession, postLike);
+router.post('/posts/:id/comment', requireAuthSession, postComment);
 
 type AuthReq = Request & { authUserId?: number };
 

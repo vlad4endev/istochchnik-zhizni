@@ -4,6 +4,7 @@ import {
   LuBookOpen,
   LuHeart,
   LuImagePlus,
+  LuLayoutGrid,
   LuLogOut,
   LuPencil,
   LuSave,
@@ -28,6 +29,9 @@ import {
   type PrayerHistoryItem,
 } from '../api';
 import { fetchDirectionTemplates, type MinistryDirectionTemplate } from '../../admin/api';
+
+import profileShell from '../profileShell.module.css';
+import pfStyles from './ProfilePage.module.css';
 
 /* ── Helpers ─────────────────────────────────────────────── */
 
@@ -55,11 +59,15 @@ function axiosMessage(err: unknown): string {
 
 /* ── Shared class names ──────────────────────────────────── */
 
-const SECTION_TITLE = 'text-[11px] font-bold uppercase tracking-[0.18em] text-stone-400';
-const CARD = 'rounded-3xl bg-white/80 p-5 shadow-[0_10px_30px_rgba(28,25,23,0.08)] ring-1 ring-stone-200/70 backdrop-blur';
-const LABEL = 'text-[11px] font-extrabold uppercase tracking-[0.14em] text-stone-500';
+const SECTION_TITLE =
+  'text-[11px] font-bold uppercase tracking-[0.18em] text-[color:var(--profile-text-faint)]';
+const CARD =
+  'rounded-3xl bg-[color:var(--profile-card-bg)] p-5 shadow-[0_10px_30px_rgba(28,25,23,0.08)] ring-1 ring-[color:var(--profile-card-ring)] backdrop-blur';
+const LABEL = 'text-[11px] font-extrabold uppercase tracking-[0.14em] text-[color:var(--profile-text-soft)]';
 const INPUT =
-  'mt-1.5 min-h-[48px] w-full rounded-2xl border border-stone-200 bg-white px-4 py-3 text-[15px] font-semibold text-stone-900 outline-none ring-primary/20 transition placeholder:text-stone-400 focus:border-primary focus:ring-2';
+  'mt-1.5 min-h-[48px] w-full rounded-2xl border border-[color:var(--profile-card-ring)] bg-white px-4 py-3 text-[15px] font-semibold text-[color:var(--profile-text-heading)] outline-none transition placeholder:text-[color:var(--profile-text-faint)] focus:border-[color:var(--profile-primary)] focus:ring-2 focus:ring-[color:color-mix(in_srgb,var(--profile-primary)_20%,transparent)]';
+
+const profilePageRoot = `${profileShell.profileRoot} min-h-full pb-24`;
 
 /* ═══════════════════════════════════════════════════════════
    ProfilePage
@@ -124,6 +132,8 @@ export function ProfilePage() {
         lastName: me.last_name ?? '',
         role: me.app_role ?? 'member',
         registrationStatus: normalizeRegistrationStatus(me.registration_status),
+        username: (me.username ?? '').trim(),
+        memberId: typeof me.id === 'number' ? me.id : null,
       });
       const nextDraft = {
         first_name: me.first_name ?? '',
@@ -280,12 +290,12 @@ export function ProfilePage() {
 
   if (loading) {
     return (
-      <div className="min-h-full bg-[var(--surface)] pb-24">
-        <div className="h-44 animate-pulse bg-stone-200 sm:h-52" />
+      <div className={profilePageRoot} data-profile-root>
+        <div className={`${pfStyles.pfSkelBanner} animate-pulse`} />
         <div className="mx-auto -mt-16 flex max-w-xl flex-col items-center gap-4 px-4">
-          <div className="h-[7.5rem] w-[7.5rem] animate-pulse rounded-full bg-stone-100 ring-4 ring-white" />
-          <div className="h-6 w-40 animate-pulse rounded-xl bg-stone-100" />
-          <div className="h-4 w-28 animate-pulse rounded-lg bg-stone-100" />
+          <div className={`${pfStyles.pfSkelAvatar} animate-pulse`} />
+          <div className={`${pfStyles.pfSkelLine} ${pfStyles.pfSkelLineMd} mx-auto animate-pulse`} />
+          <div className={`${pfStyles.pfSkelLine} ${pfStyles.pfSkelLineSm} animate-pulse`} />
         </div>
       </div>
     );
@@ -293,13 +303,13 @@ export function ProfilePage() {
 
   if (error) {
     return (
-      <div className="min-h-full bg-[var(--surface)] px-4 pb-24 pt-20">
-        <div className="mx-auto max-w-md rounded-3xl bg-white/80 p-8 text-center ring-1 ring-stone-200/70">
+      <div className={`${profilePageRoot} px-4 pt-20`} data-profile-root>
+        <div className="mx-auto max-w-md rounded-3xl bg-[color:var(--profile-card-bg)] p-8 text-center ring-1 ring-[color:var(--profile-card-ring)]">
           <p className="text-sm font-semibold text-red-600">{error}</p>
           <button
             type="button"
             onClick={() => void loadProfile()}
-            className="mt-5 min-h-[44px] rounded-2xl bg-primary px-6 py-2.5 text-sm font-extrabold text-white shadow-lg shadow-primary/25"
+            className="mt-5 min-h-[44px] rounded-2xl bg-[color:var(--profile-primary)] px-6 py-2.5 text-sm font-extrabold text-white shadow-[0_10px_30px_color-mix(in_srgb,var(--profile-primary)_25%,transparent)]"
           >
             Повторить
           </button>
@@ -313,14 +323,14 @@ export function ProfilePage() {
      ═══════════════════════════════════════════════════════════ */
 
   return (
-    <div className="min-h-full bg-[var(--surface)] pb-24">
+    <div className={profilePageRoot} data-profile-root>
 
       {/* ═══════════════════════════════════════════════════════
           1. HEADER — gradient banner + avatar + name
          ═══════════════════════════════════════════════════════ */}
       <div className="relative">
         {/* Gradient banner */}
-        <div className="relative h-44 overflow-hidden bg-gradient-to-br from-[#4a1e26] via-primary to-[#a25260] sm:h-52 md:h-56">
+        <div className="relative h-44 overflow-hidden bg-gradient-to-br from-[var(--profile-gradient-from)] via-[color:var(--profile-primary)] to-[var(--profile-gradient-to)] sm:h-52 md:h-56">
           <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_50%_at_20%_-20%,rgba(255,255,255,0.13),transparent)]" />
           <div className="absolute inset-0 bg-[radial-gradient(ellipse_60%_60%_at_90%_120%,rgba(255,255,255,0.08),transparent)]" />
           <div className="absolute -right-10 -top-10 h-40 w-40 rounded-full bg-white/[0.04]" />
@@ -331,14 +341,18 @@ export function ProfilePage() {
         <div className="relative mx-auto -mt-16 flex max-w-xl flex-col items-center px-4 text-center sm:-mt-[4.5rem]">
           {/* Avatar with upload */}
           <div className="relative">
-            <div className="flex h-[7.5rem] w-[7.5rem] items-center justify-center overflow-hidden rounded-full border-4 border-white bg-[var(--surface)] shadow-[0_8px_30px_rgba(125,54,64,0.18)] sm:h-[8.5rem] sm:w-[8.5rem]">
+            <div className="flex h-[7.5rem] w-[7.5rem] items-center justify-center overflow-hidden rounded-full border-4 border-white bg-[color:var(--profile-surface)] shadow-[0_8px_30px_rgba(125,54,64,0.18)] sm:h-[8.5rem] sm:w-[8.5rem]">
               {avatarUrl ? (
                 <img src={avatarUrl} alt="Аватар" className="h-full w-full object-cover" />
               ) : (
-                <LuUser className="h-14 w-14 text-primary/40 sm:h-16 sm:w-16" strokeWidth={1.4} aria-hidden />
+                <LuUser
+                  className="h-14 w-14 text-[color:color-mix(in_srgb,var(--profile-primary)_40%,transparent)] sm:h-16 sm:w-16"
+                  strokeWidth={1.4}
+                  aria-hidden
+                />
               )}
             </div>
-            <label className="absolute -bottom-1 -right-1 grid h-10 w-10 cursor-pointer place-items-center rounded-full bg-white text-primary shadow-lg ring-1 ring-stone-200/80 transition hover:bg-stone-50">
+            <label className="absolute -bottom-1 -right-1 grid h-10 w-10 cursor-pointer place-items-center rounded-full bg-white text-[color:var(--profile-primary)] shadow-lg ring-1 ring-[color:var(--profile-card-ring)] transition hover:bg-[color:color-mix(in_srgb,var(--profile-surface-elevated)_85%,var(--profile-surface))]">
               <LuImagePlus className="h-[18px] w-[18px]" aria-hidden />
               <span className="sr-only">Загрузить аватар</span>
               <input
@@ -352,20 +366,20 @@ export function ProfilePage() {
           </div>
 
           {avatarUploading && (
-            <p className="mt-2 text-xs font-semibold text-stone-500 animate-pulse">Загружаем фото…</p>
+            <p className="mt-2 text-xs font-semibold text-[color:var(--profile-text-muted)] animate-pulse">Загружаем фото…</p>
           )}
 
           {/* Name + Role */}
-          <h1 className="mt-3.5 text-[1.6rem] font-extrabold leading-tight tracking-tight text-stone-900 sm:text-[1.85rem]">
+          <h1 className="mt-3.5 text-[1.6rem] font-extrabold leading-tight tracking-tight text-[color:var(--profile-text-heading)] sm:text-[1.85rem]">
             {name}
           </h1>
 
           <div className="mt-2 flex flex-wrap items-center justify-center gap-2">
-            <span className="inline-flex items-center rounded-full bg-stone-900/5 px-3 py-1 text-xs font-semibold text-stone-600">
+            <span className="inline-flex items-center rounded-full bg-[color:color-mix(in_srgb,var(--profile-text-heading)_5%,transparent)] px-3 py-1 text-xs font-semibold text-[color:var(--profile-text-soft)]">
               {roleLabel(user?.app_role ?? 'member')}
             </span>
             {joinedLabel && (
-              <span className="inline-flex items-center rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
+              <span className="inline-flex items-center rounded-full bg-[color:color-mix(in_srgb,var(--profile-primary)_10%,transparent)] px-3 py-1 text-xs font-semibold text-[color:var(--profile-primary)]">
                 с {joinedLabel}
               </span>
             )}
@@ -374,8 +388,15 @@ export function ProfilePage() {
           {/* Action buttons */}
           <div className="mt-4 flex flex-wrap items-center justify-center gap-3">
             <Link
+              to={user?.id != null ? `/profile/member-${user.id}` : '/profile'}
+              className="inline-flex items-center gap-2.5 rounded-full bg-white px-6 py-2.5 text-sm font-bold text-[color:var(--profile-text-body)] shadow-md ring-1 ring-[color:var(--profile-card-ring)] transition-all hover:bg-[color:color-mix(in_srgb,var(--profile-surface-elevated)_90%,var(--profile-surface))] active:scale-[0.97]"
+            >
+              <LuLayoutGrid className="h-4 w-4" aria-hidden />
+              Лента профиля
+            </Link>
+            <Link
               to="/messenger"
-              className="inline-flex items-center gap-2.5 rounded-full bg-primary px-7 py-2.5 text-sm font-bold text-white shadow-lg shadow-primary/20 transition-all hover:bg-primary-dark active:scale-[0.97]"
+              className="inline-flex items-center gap-2.5 rounded-full bg-[color:var(--profile-primary)] px-7 py-2.5 text-sm font-bold text-white shadow-[0_8px_24px_color-mix(in_srgb,var(--profile-primary)_20%,transparent)] transition-all hover:bg-[color:var(--profile-primary-dark)] active:scale-[0.97]"
             >
               <LuSend className="h-4 w-4 -rotate-12" aria-hidden />
               Написать сообщение
@@ -383,7 +404,7 @@ export function ProfilePage() {
             <button
               type="button"
               onClick={() => void logout()}
-              className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-white/80 text-stone-600 ring-1 ring-stone-200/70 transition hover:bg-stone-100"
+              className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-[color:color-mix(in_srgb,var(--profile-card-bg)_90%,transparent)] text-[color:var(--profile-text-soft)] ring-1 ring-[color:var(--profile-card-ring)] transition hover:bg-[color:var(--profile-border-light)]"
               aria-label="Выйти"
               title="Выйти из аккаунта"
             >
@@ -406,7 +427,7 @@ export function ProfilePage() {
             2. СЕЙЧАС В ФОКУСЕ — glassmorphism card
            ═══════════════════════════════════════════════════ */}
         {(user?.prayer_request?.trim()) && (
-          <section className="rounded-2xl border border-white/50 bg-white/55 p-5 shadow-[0_8px_32px_rgba(125,54,64,0.07)] backdrop-blur-xl sm:rounded-3xl sm:p-6">
+          <section className="rounded-2xl border border-[color:color-mix(in_srgb,var(--profile-card-bg)_50%,transparent)] bg-[color:color-mix(in_srgb,var(--profile-card-bg-soft)_82%,var(--profile-surface))] p-5 shadow-[0_8px_32px_color-mix(in_srgb,var(--profile-primary)_7%,transparent)] backdrop-blur-xl sm:rounded-3xl sm:p-6">
             <h2 className={SECTION_TITLE}>Сейчас в фокусе</h2>
 
             <div className="mt-4 space-y-3.5">
@@ -415,8 +436,8 @@ export function ProfilePage() {
                   <LuBookOpen className="h-[1.2rem] w-[1.2rem]" aria-hidden />
                 </div>
                 <div className="min-w-0">
-                  <p className="text-[10.5px] font-bold uppercase tracking-wider text-stone-400">Молитвенный цикл</p>
-                  <p className="text-[15px] font-semibold leading-snug text-stone-800">
+                  <p className="text-[10.5px] font-bold uppercase tracking-wider text-[color:var(--profile-text-faint)]">Молитвенный цикл</p>
+                  <p className="text-[15px] font-semibold leading-snug text-[color:var(--profile-text-body)]">
                     {user.prayer_cycle
                       ? `Цикл ${user.prayer_cycle.number}, день ${user.prayer_cycle.day_index + 1}`
                       : 'Не в текущем цикле'}
@@ -429,8 +450,8 @@ export function ProfilePage() {
                   <LuHeart className="h-[1.2rem] w-[1.2rem]" aria-hidden />
                 </div>
                 <div className="min-w-0">
-                  <p className="text-[10.5px] font-bold uppercase tracking-wider text-stone-400">Молюсь за</p>
-                  <p className="whitespace-pre-wrap text-[15px] font-semibold leading-snug text-stone-800">
+                  <p className="text-[10.5px] font-bold uppercase tracking-wider text-[color:var(--profile-text-faint)]">Молюсь за</p>
+                  <p className="whitespace-pre-wrap text-[15px] font-semibold leading-snug text-[color:var(--profile-text-body)]">
                     {user.prayer_request}
                   </p>
                 </div>
@@ -449,7 +470,7 @@ export function ProfilePage() {
               <button
                 type="button"
                 onClick={() => setEditing(true)}
-                className="inline-flex items-center gap-1.5 rounded-full bg-stone-900 px-3.5 py-1.5 text-[11px] font-extrabold uppercase tracking-wide text-white transition hover:bg-stone-800"
+                className="inline-flex items-center gap-1.5 rounded-full bg-[color:var(--profile-text-heading)] px-3.5 py-1.5 text-[11px] font-extrabold uppercase tracking-wide text-white transition hover:bg-[color:color-mix(in_srgb,var(--profile-text-heading)_88%,black)]"
               >
                 <LuPencil className="h-3.5 w-3.5" aria-hidden />
                 Редактировать
@@ -460,7 +481,7 @@ export function ProfilePage() {
                   type="button"
                   disabled={savingProfile}
                   onClick={() => void saveProfile()}
-                  className="inline-flex items-center gap-1.5 rounded-full bg-primary px-3.5 py-1.5 text-[11px] font-extrabold uppercase tracking-wide text-white shadow-md shadow-primary/25 transition disabled:opacity-60"
+                  className="inline-flex items-center gap-1.5 rounded-full bg-[color:var(--profile-primary)] px-3.5 py-1.5 text-[11px] font-extrabold uppercase tracking-wide text-white shadow-[0_6px_20px_color-mix(in_srgb,var(--profile-primary)_22%,transparent)] transition disabled:opacity-60"
                 >
                   <LuSave className="h-3.5 w-3.5" aria-hidden />
                   {savingProfile ? 'Сохраняем…' : 'Сохранить'}
@@ -482,7 +503,7 @@ export function ProfilePage() {
                     });
                     setMsg(null);
                   }}
-                  className="inline-flex items-center gap-1 rounded-full bg-white/80 px-3 py-1.5 text-[11px] font-extrabold uppercase tracking-wide text-stone-600 ring-1 ring-stone-200/70"
+                  className="inline-flex items-center gap-1 rounded-full bg-[color:var(--profile-card-bg)] px-3 py-1.5 text-[11px] font-extrabold uppercase tracking-wide text-[color:var(--profile-text-soft)] ring-1 ring-[color:var(--profile-card-ring)]"
                 >
                   <LuX className="h-3.5 w-3.5" aria-hidden />
                   Отмена
@@ -592,7 +613,7 @@ export function ProfilePage() {
         <section className={CARD}>
           <div className="flex items-center justify-between gap-3">
             <p className={LABEL}>Безопасность</p>
-            <div className="inline-flex items-center gap-2 rounded-2xl bg-stone-900 px-3 py-1.5 text-[11px] font-extrabold uppercase tracking-[0.12em] text-white">
+            <div className="inline-flex items-center gap-2 rounded-2xl bg-[color:var(--profile-text-heading)] px-3 py-1.5 text-[11px] font-extrabold uppercase tracking-[0.12em] text-white">
               <LuShield className="h-3.5 w-3.5" aria-hidden />
               Аккаунт
             </div>
@@ -600,9 +621,9 @@ export function ProfilePage() {
 
           <div className="mt-4 grid gap-6">
             {/* Phone change */}
-            <div className="rounded-3xl bg-white/70 p-4 ring-1 ring-stone-200/60">
-              <p className="text-sm font-extrabold text-stone-900">Смена номера</p>
-              <p className="mt-1 text-sm font-semibold text-stone-500">
+            <div className="rounded-3xl bg-[color:color-mix(in_srgb,var(--profile-card-bg)_72%,var(--profile-surface))] p-4 ring-1 ring-[color:var(--profile-card-ring)]">
+              <p className="text-sm font-extrabold text-[color:var(--profile-text-heading)]">Смена номера</p>
+              <p className="mt-1 text-sm font-semibold text-[color:var(--profile-text-muted)]">
                 Текущий: {user?.phone_number || 'не указан'}
               </p>
               <div className="mt-4 grid gap-3">
@@ -628,7 +649,7 @@ export function ProfilePage() {
                   type="button"
                   disabled={phoneSaving}
                   onClick={() => void savePhone()}
-                  className="min-h-[48px] rounded-2xl bg-primary px-5 py-3 text-sm font-extrabold text-white shadow-lg shadow-primary/25 transition disabled:opacity-60"
+                  className="min-h-[48px] rounded-2xl bg-[color:var(--profile-primary)] px-5 py-3 text-sm font-extrabold text-white shadow-[0_10px_30px_color-mix(in_srgb,var(--profile-primary)_25%,transparent)] transition disabled:opacity-60"
                 >
                   {phoneSaving ? 'Обновляем…' : 'Обновить номер'}
                 </button>
@@ -636,8 +657,8 @@ export function ProfilePage() {
             </div>
 
             {/* Password change */}
-            <div className="rounded-3xl bg-white/70 p-4 ring-1 ring-stone-200/60">
-              <p className="text-sm font-extrabold text-stone-900">Смена пароля</p>
+            <div className="rounded-3xl bg-[color:color-mix(in_srgb,var(--profile-card-bg)_72%,var(--profile-surface))] p-4 ring-1 ring-[color:var(--profile-card-ring)]">
+              <p className="text-sm font-extrabold text-[color:var(--profile-text-heading)]">Смена пароля</p>
               <div className="mt-4 grid gap-3">
                 <input className={INPUT} type="password" placeholder="Текущий пароль" value={pwdCurrent} onChange={(e) => setPwdCurrent(e.target.value)} />
                 <input className={INPUT} type="password" placeholder="Новый пароль (мин. 8)" value={pwdNew} onChange={(e) => setPwdNew(e.target.value)} />
@@ -649,7 +670,7 @@ export function ProfilePage() {
                   type="button"
                   disabled={pwdSaving}
                   onClick={() => void savePassword()}
-                  className="min-h-[48px] rounded-2xl bg-stone-900 px-5 py-3 text-sm font-extrabold text-white shadow-lg transition disabled:opacity-60"
+                  className="min-h-[48px] rounded-2xl bg-[color:var(--profile-text-heading)] px-5 py-3 text-sm font-extrabold text-white shadow-lg transition disabled:opacity-60"
                 >
                   {pwdSaving ? 'Обновляем…' : 'Обновить пароль'}
                 </button>
@@ -666,19 +687,19 @@ export function ProfilePage() {
           <div className="mt-4">
             {historyLoading ? (
               <div className="space-y-3">
-                <div className="h-14 animate-pulse rounded-2xl bg-stone-100" />
-                <div className="h-14 animate-pulse rounded-2xl bg-stone-100" />
+                <div className="h-14 animate-pulse rounded-2xl bg-[color:var(--profile-media-placeholder-mid)]" />
+                <div className="h-14 animate-pulse rounded-2xl bg-[color:var(--profile-media-placeholder-mid)]" />
               </div>
             ) : historyError ? (
               <p className="text-sm font-semibold text-red-600">{historyError}</p>
             ) : history.length === 0 ? (
-              <p className="text-sm font-semibold text-stone-500">Пока пусто.</p>
+              <p className="text-sm font-semibold text-[color:var(--profile-text-muted)]">Пока пусто.</p>
             ) : (
               <div className="space-y-2">
                 {history.map((h) => (
-                  <div key={h.id} className="rounded-2xl bg-white/70 p-4 ring-1 ring-stone-200/60">
-                    <p className="whitespace-pre-wrap text-sm font-semibold text-stone-900">{h.prayer_request}</p>
-                    <p className="mt-1 text-[12px] font-semibold text-stone-500">
+                  <div key={h.id} className="rounded-2xl bg-[color:color-mix(in_srgb,var(--profile-card-bg)_72%,var(--profile-surface))] p-4 ring-1 ring-[color:var(--profile-card-ring)]">
+                    <p className="whitespace-pre-wrap text-sm font-semibold text-[color:var(--profile-text-heading)]">{h.prayer_request}</p>
+                    <p className="mt-1 text-[12px] font-semibold text-[color:var(--profile-text-muted)]">
                       {new Date(h.created_at).toLocaleString('ru-RU')}
                     </p>
                   </div>
@@ -689,7 +710,7 @@ export function ProfilePage() {
         </section>
 
         {/* Version stamp */}
-        <p className="text-center text-[11px] font-semibold text-stone-400">
+        <p className="text-center text-[11px] font-semibold text-[color:var(--profile-text-faint)]">
           Версия: {__WEB_REACT_BUILD_STAMP__}
         </p>
       </div>
@@ -701,9 +722,9 @@ export function ProfilePage() {
 
 function InfoRow({ label, value, pre }: { label: string; value: string; pre?: boolean }) {
   return (
-    <div className="rounded-2xl bg-white/70 p-4 ring-1 ring-stone-200/60">
-      <p className="text-xs font-extrabold uppercase tracking-[0.12em] text-stone-500">{label}</p>
-      <p className={`mt-1 text-sm font-extrabold text-stone-900 ${pre ? 'whitespace-pre-wrap' : ''}`}>
+    <div className="rounded-2xl bg-[color:color-mix(in_srgb,var(--profile-card-bg)_72%,var(--profile-surface))] p-4 ring-1 ring-[color:var(--profile-card-ring)]">
+      <p className="text-xs font-extrabold uppercase tracking-[0.12em] text-[color:var(--profile-text-soft)]">{label}</p>
+      <p className={`mt-1 text-sm font-extrabold text-[color:var(--profile-text-heading)] ${pre ? 'whitespace-pre-wrap' : ''}`}>
         {value}
       </p>
     </div>

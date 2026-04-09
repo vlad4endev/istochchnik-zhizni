@@ -1,6 +1,11 @@
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
 import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 /**
  * Локальный бэкенд: `PORT` в корневом `.env` (в `src/main.ts` дефолт 40978).
@@ -47,6 +52,12 @@ export default defineConfig(({ mode }) => {
   const pwaScope = pwaOrigin ? `${pwaOrigin}/` : base;
 
   return {
+    resolve: {
+      alias: {
+        '@': path.resolve(__dirname, 'src'),
+        '@features': path.resolve(__dirname, 'src/features'),
+      },
+    },
     define: {
       __WEB_REACT_BUILD_STAMP__: JSON.stringify(buildStamp),
     },

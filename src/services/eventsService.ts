@@ -12,6 +12,7 @@ export interface ChurchEvent {
   weekly_day: number | null;
   is_active: boolean;
   category?: string | null;
+  poster_url?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -28,6 +29,8 @@ export interface CreateChurchEventInput {
   is_active?: boolean;
   /** Если в БД есть колонка `category`. Иначе игнорируется. */
   category?: string | null;
+  /** URL постера, если в БД есть колонка `poster_url`. Иначе игнорируется. */
+  poster_url?: string | null;
 }
 
 type EventsSchemaState = {
@@ -64,6 +67,7 @@ const LEGACY_GAP_SKIP = new Set([
   'weekly_day',
   'is_active',
   'category',
+  'poster_url',
   'starts_at',
   'ends_at',
 ]);
@@ -207,6 +211,7 @@ function selectEventProjection(
 ): string {
   const descExpr = `NULLIF(BTRIM(description), '') AS description`;
   const catSql = schema.columnNames.has('category') ? ', category' : '';
+  const posterSql = schema.columnNames.has('poster_url') ? ', poster_url' : '';
   if (schema.hasFullRecurrenceShape) {
     return `
       id,
@@ -216,7 +221,7 @@ function selectEventProjection(
       to_char(event_time, 'HH24:MI') AS event_time,
       recurrence_type,
       weekly_day,
-      is_active${catSql},
+      is_active${catSql}${posterSql},
       created_at::text AS created_at,
       updated_at::text AS updated_at
     `;
@@ -230,7 +235,7 @@ function selectEventProjection(
       to_char(event_time, 'HH24:MI') AS event_time,
       recurrence_type,
       NULL::smallint AS weekly_day,
-      is_active${catSql},
+      is_active${catSql}${posterSql},
       created_at::text AS created_at,
       updated_at::text AS updated_at
     `;
@@ -243,7 +248,7 @@ function selectEventProjection(
       to_char(event_time, 'HH24:MI') AS event_time,
       'once'::text AS recurrence_type,
       NULL::smallint AS weekly_day,
-      is_active${catSql},
+      is_active${catSql}${posterSql},
       created_at::text AS created_at,
       updated_at::text AS updated_at
     `;
@@ -392,6 +397,15 @@ async function runChurchEventsDdlOnce(): Promise<void> {
         try {
           await query(`
             ALTER TABLE ${targetTableRef}
+              ADD COLUMN IF NOT EXISTS poster_url TEXT
+          `);
+        } catch (posterErr) {
+          console.warn('[events] church_events poster_url column skipped:', posterErr);
+        }
+
+        try {
+          await query(`
+            ALTER TABLE ${targetTableRef}
               ADD COLUMN IF NOT EXISTS description TEXT
           `);
           await query(`
@@ -534,6 +548,10 @@ function assembleCreateInsert(
     const c = raw || defaultChurchEventCategory();
     pushParam('category', c);
   }
+  if (names.has('poster_url')) {
+    const raw = input.poster_url != null ? String(input.poster_url).trim() : '';
+    pushParam('poster_url', raw || null);
+  }
 
   const startAt = '($3::date + $4::time)';
   if (names.has('starts_at')) {
@@ -581,6 +599,7 @@ function rowToChurchEvent(row: unknown): ChurchEvent {
   const ca = r.created_at;
   const ua = r.updated_at;
   const cat = r.category;
+  const poster = r.poster_url;
   const out: ChurchEvent = {
     id,
     title: String(r.title ?? ''),
@@ -595,6 +614,9 @@ function rowToChurchEvent(row: unknown): ChurchEvent {
   };
   if (cat !== undefined) {
     out.category = cat === null ? null : String(cat);
+  }
+  if (poster !== undefined) {
+    out.poster_url = poster === null ? null : String(poster);
   }
   return out;
 }
@@ -661,6 +683,7 @@ export async function updateChurchEvent(
     weekly_day: number | null;
     is_active: boolean;
     category: string | null;
+    poster_url: string | null;
   }>,
 ): Promise<ChurchEvent | null> {
   const schema = await ensureChurchEventsSchema();
@@ -714,6 +737,12 @@ export async function updateChurchEvent(
       updates.push(`category = $${i++}`);
       values.push(String(raw).trim());
     }
+  }
+  if (schema.columnNames.has('poster_url') && input.poster_url !== undefined) {
+    const raw = input.poster_url;
+    const wantsClear = raw === null || String(raw).trim() === '';
+    updates.push(`poster_url = $${i++}`);
+    values.push(wantsClear ? null : String(raw).trim());
   }
 
   if (

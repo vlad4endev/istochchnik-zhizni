@@ -60,6 +60,7 @@ export interface ChurchEventItem {
   weekly_day: number | null;
   is_active: boolean;
   category?: string | null;
+  poster_url?: string | null;
   created_at: string;
   updated_at: string;
 }

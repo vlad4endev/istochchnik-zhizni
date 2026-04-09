@@ -1,7 +1,19 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import type { IconType } from 'react-icons';
-import { LuChevronLeft, LuChevronRight, LuChurch, LuLayoutDashboard, LuMessageCircle, LuMic, LuShield, LuUser, LuWifiOff, LuX } from 'react-icons/lu';
+import {
+  LuChevronLeft,
+  LuChevronRight,
+  LuChurch,
+  LuLayoutDashboard,
+  LuMessageCircle,
+  LuMic,
+  LuSettings,
+  LuShield,
+  LuUser,
+  LuWifiOff,
+  LuX,
+} from 'react-icons/lu';
 
 import { useAuthStore } from '../features/auth/authStore';
 import { useBrandingStore } from '../features/branding/brandingStore';
@@ -16,6 +28,7 @@ import type { AppToastAction, AppToastKind } from '../lib/uiFeedback';
 import { useChatStore } from '../features/messenger/chatStore';
 import { MessengerWsProvider } from '../features/messenger/MessengerWsContext';
 import { useBrowserNotificationScheduler } from '../features/notifications/useBrowserNotificationScheduler';
+import { useProfileDraftStore } from '../features/profile/profileDraftStore';
 
 type NavItem = {
   to: string;
@@ -253,6 +266,15 @@ export function Layout() {
 
   const isAdmin = (role ?? 'member').toLowerCase() === 'admin';
   const registrationStatus = useAuthStore((s) => s.registrationStatus ?? 'active');
+  const profileUsername = useAuthStore((s) => s.username ?? '');
+  const profileMemberId = useAuthStore((s) => s.memberId);
+  const hasProfilePostDraft = useProfileDraftStore((s) => s.hasActivePostDraft);
+  const publicProfileSlug =
+    profileUsername.trim() || (profileMemberId != null ? `member-${profileMemberId}` : '');
+  const publicProfileTo = publicProfileSlug
+    ? `/profile/${encodeURIComponent(publicProfileSlug)}`
+    : '/dashboard';
+
   const navBase =
     registrationStatus === 'pending_review'
       ? NAV_ITEMS.filter((item) => item.to === '/dashboard')
@@ -471,25 +493,72 @@ export function Layout() {
 
         <div className="mt-auto border-t border-stone-200/80 p-4">
           {registrationStatus === 'active' ? (
-            <NavLink
-              to="/profile"
-              className={({ isActive }) =>
-                [
-                  'mb-2 flex min-h-[44px] w-full items-center rounded-xl py-3 text-left text-sm font-semibold transition-colors',
-                  navCollapsed ? 'justify-center px-0' : 'px-4',
-                  isActive ? 'bg-primary text-white shadow-md shadow-primary/25' : 'text-stone-600 hover:bg-stone-100',
-                ].join(' ')
-              }
-              title={navCollapsed ? 'Профиль' : undefined}
-              aria-label={navCollapsed ? 'Профиль' : undefined}
-            >
-              {({ isActive }) => (
-                <>
-                  <LuUser className={navIconClass(isActive, navCollapsed)} strokeWidth={2} aria-hidden />
-                  {!navCollapsed ? 'Профиль' : null}
-                </>
-              )}
-            </NavLink>
+            <>
+              <NavLink
+                to={publicProfileTo}
+                className={({ isActive }) =>
+                  [
+                    'mb-2 flex min-h-[44px] w-full items-center rounded-xl py-3 text-left text-sm font-semibold transition-colors',
+                    navCollapsed ? 'justify-center px-0' : 'px-4',
+                    isActive ? 'bg-primary text-white shadow-md shadow-primary/25' : 'text-stone-600 hover:bg-stone-100',
+                  ].join(' ')
+                }
+                title={navCollapsed ? 'Моя страница' : undefined}
+                aria-label={
+                  navCollapsed
+                    ? hasProfilePostDraft
+                      ? 'Моя страница, есть несохранённый черновик поста'
+                      : 'Моя страница'
+                    : undefined
+                }
+              >
+                {({ isActive }) => (
+                  <>
+                    <div className="relative">
+                      <LuUser className={navIconClass(isActive, navCollapsed)} strokeWidth={2} aria-hidden />
+                      {hasProfilePostDraft && navCollapsed ? (
+                        <span
+                          className="absolute -right-0.5 -top-0.5 z-[5] h-2.5 w-2.5 rounded-full bg-amber-500 ring-2 ring-white"
+                          aria-hidden
+                        />
+                      ) : null}
+                    </div>
+                    {!navCollapsed ? (
+                      <span className="flex min-w-0 flex-1 items-center justify-between gap-2">
+                        <span className="truncate">Моя страница</span>
+                        {hasProfilePostDraft ? (
+                          <span
+                            className="inline-flex h-2 w-2 shrink-0 rounded-full bg-amber-500"
+                            title="Черновик поста"
+                            aria-hidden
+                          />
+                        ) : null}
+                      </span>
+                    ) : null}
+                  </>
+                )}
+              </NavLink>
+              <NavLink
+                to="/profile"
+                end
+                className={({ isActive }) =>
+                  [
+                    'mb-2 flex min-h-[44px] w-full items-center rounded-xl py-3 text-left text-sm font-semibold transition-colors',
+                    navCollapsed ? 'justify-center px-0' : 'px-4',
+                    isActive ? 'bg-primary text-white shadow-md shadow-primary/25' : 'text-stone-600 hover:bg-stone-100',
+                  ].join(' ')
+                }
+                title={navCollapsed ? 'Настройки профиля' : undefined}
+                aria-label={navCollapsed ? 'Настройки профиля' : undefined}
+              >
+                {({ isActive }) => (
+                  <>
+                    <LuSettings className={navIconClass(isActive, navCollapsed)} strokeWidth={2} aria-hidden />
+                    {!navCollapsed ? 'Настройки' : null}
+                  </>
+                )}
+              </NavLink>
+            </>
           ) : null}
           <button
             type="button"
@@ -505,7 +574,7 @@ export function Layout() {
       </aside>
 
       {/* Main: отступ слева от сайдбара — на родителе (padding); снизу под нижний бар на мобильных */}
-      <main className="app-main-content flex min-h-0 min-w-0 w-full max-w-full flex-1 flex-col overflow-x-clip pb-[max(7.5rem,calc(5.25rem+env(safe-area-inset-bottom,16px)))] md:pb-0 2xl:px-8 min-[1920px]:px-12">
+      <main className="app-main-content flex min-h-0 min-w-0 w-full max-w-full flex-1 flex-col overflow-x-clip pb-[max(9.25rem,calc(6.75rem+env(safe-area-inset-bottom,16px)))] md:pb-0 2xl:px-8 min-[1920px]:px-12">
         <Outlet />
       </main>
 
@@ -514,38 +583,83 @@ export function Layout() {
         className="app-bottom-nav fixed bottom-0 left-0 right-0 z-50 border-t border-gray-100 bg-white/95 pb-[env(safe-area-inset-bottom,16px)] shadow-sm backdrop-blur-xl supports-[backdrop-filter]:bg-white/90 md:hidden"
         aria-label="Основная навигация"
       >
-        <div className="mx-auto flex max-w-md items-center justify-around px-2 pb-1 pt-1">
-          {mobileItems.map((item) => {
-            const Icon = item.Icon;
-            return (
+        <div className="mx-auto max-w-md px-2 pb-1 pt-1">
+          <div className="flex items-center justify-around">
+            {mobileItems.map((item) => {
+              const Icon = item.Icon;
+              return (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  className={({ isActive }) => navClassName(isActive, true)}
+                  aria-label={
+                    item.to === '/messenger' && unreadMessages > 0
+                      ? `Чаты, непрочитанных сообщений: ${unreadMessages > 99 ? 'более 99' : unreadMessages}`
+                      : undefined
+                  }
+                >
+                  {({ isActive }) => (
+                    <>
+                      <span className="relative z-10 inline-flex overflow-visible">
+                        <Icon className={navIconClass(isActive, true)} strokeWidth={2} aria-hidden />
+                        {item.to === '/messenger' && unreadMessages > 0 ? (
+                          <span className="absolute -right-2.5 top-0 z-[5] inline-flex min-h-[18px] min-w-[18px] items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-extrabold leading-none text-white shadow-sm ring-2 ring-white">
+                            {unreadMessages > 99 ? '99+' : unreadMessages}
+                          </span>
+                        ) : null}
+                      </span>
+                      <span className="mt-1 truncate px-0.5 text-center text-[11px] font-medium tracking-tight">
+                        {item.label}
+                      </span>
+                    </>
+                  )}
+                </NavLink>
+              );
+            })}
+          </div>
+          {registrationStatus === 'active' ? (
+            <div className="mt-1 flex items-center justify-center gap-5 border-t border-gray-100/90 pt-1.5">
               <NavLink
-                key={item.to}
-                to={item.to}
-                className={({ isActive }) => navClassName(isActive, true)}
+                to={publicProfileTo}
+                className={({ isActive }) =>
+                  [
+                    'relative inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-[11px] font-semibold transition-colors',
+                    isActive ? 'text-primary' : 'text-stone-500 hover:text-stone-800',
+                  ].join(' ')
+                }
                 aria-label={
-                  item.to === '/messenger' && unreadMessages > 0
-                    ? `Чаты, непрочитанных сообщений: ${unreadMessages > 99 ? 'более 99' : unreadMessages}`
-                    : undefined
+                  hasProfilePostDraft ? 'Моя страница, есть черновик поста' : 'Моя страница'
                 }
               >
                 {({ isActive }) => (
                   <>
-                    <span className="relative z-10 inline-flex overflow-visible">
-                      <Icon className={navIconClass(isActive, true)} strokeWidth={2} aria-hidden />
-                      {item.to === '/messenger' && unreadMessages > 0 ? (
-                        <span className="absolute -right-2.5 top-0 z-[5] inline-flex min-h-[18px] min-w-[18px] items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-extrabold leading-none text-white shadow-sm ring-2 ring-white">
-                          {unreadMessages > 99 ? '99+' : unreadMessages}
-                        </span>
-                      ) : null}
-                    </span>
-                    <span className="mt-1 truncate px-0.5 text-center text-[11px] font-medium tracking-tight">
-                      {item.label}
-                    </span>
+                    <LuUser className={`h-4 w-4 shrink-0 ${isActive ? 'text-primary' : ''}`} strokeWidth={2} aria-hidden />
+                    {hasProfilePostDraft ? (
+                      <span className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-amber-500 ring-2 ring-white" aria-hidden />
+                    ) : null}
+                    <span>Моя страница</span>
                   </>
                 )}
               </NavLink>
-            );
-          })}
+              <NavLink
+                to="/profile"
+                end
+                className={({ isActive }) =>
+                  [
+                    'flex items-center gap-1.5 rounded-lg px-2 py-1 text-[11px] font-semibold transition-colors',
+                    isActive ? 'text-primary' : 'text-stone-500 hover:text-stone-800',
+                  ].join(' ')
+                }
+              >
+                {({ isActive }) => (
+                  <>
+                    <LuSettings className={`h-4 w-4 shrink-0 ${isActive ? 'text-primary' : ''}`} strokeWidth={2} aria-hidden />
+                    <span>Настройки</span>
+                  </>
+                )}
+              </NavLink>
+            </div>
+          ) : null}
         </div>
       </nav>
       </div>

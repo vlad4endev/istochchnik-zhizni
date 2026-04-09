@@ -32,7 +32,9 @@ import {
   getEventCategoryOptions,
   patchEvent,
   postEvent,
+  uploadEventPoster,
 } from '../controllers/eventsController';
+import { eventPosterUploadMiddleware } from '../middleware/eventPosterUpload';
 
 const router = Router();
 
@@ -48,6 +50,7 @@ router.get('/birthdays/week', getWeekBirthdays);
 router.get('/events', getActiveEvents);
 router.get('/events/category-options', getEventCategoryOptions);
 router.get('/events/admin', getAdminEvents);
+router.post('/events/poster', eventPosterUploadMiddleware, uploadEventPoster);
 router.post('/events', postEvent);
 router.delete('/events', deleteAllEvents);
 router.patch('/events/:id', patchEvent);

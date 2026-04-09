@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { FiBell, FiBellOff } from 'react-icons/fi';
 import { unsubscribeFromPushApi } from '../api';
 import { useNotificationManager } from '../../pwa';
+import profileShell from '../profileShell.module.css';
 
 export function PushSettings() {
   const { isSubscribed, status, subscribe, loading: managerLoading, error: managerError, checkStatus } = useNotificationManager();
@@ -42,27 +43,29 @@ export function PushSettings() {
 
   if (status === 'unsupported') {
     return (
-      <div className="mt-4 p-4 border border-stone-200 rounded-xl bg-stone-50">
-        <p className="text-sm text-stone-500">
-          Ваш браузер или устройство не поддерживает Push-уведомления (или приложение не добавлено на главный экран).
-        </p>
+      <div className={profileShell.profileRoot} data-profile-root>
+        <div className="mt-4 rounded-xl border border-[color:var(--profile-card-ring)] bg-[color:color-mix(in_srgb,var(--profile-surface-elevated)_70%,var(--profile-surface))] p-4">
+          <p className="text-sm text-[color:var(--profile-text-muted)]">
+            Ваш браузер или устройство не поддерживает Push-уведомления (или приложение не добавлено на главный экран).
+          </p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="mt-6 border-t border-stone-100 pt-6">
+    <div className={`${profileShell.profileRoot} mt-6 border-t border-[color:var(--profile-border-light)] pt-6`} data-profile-root>
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-sm font-bold text-stone-900 flex items-center gap-2">
+          <h3 className="flex items-center gap-2 text-sm font-bold text-[color:var(--profile-text-heading)]">
             {isSubscribed ? (
-              <FiBell className="w-4 h-4 text-teal-600" />
+              <FiBell className="h-4 w-4 text-teal-600" />
             ) : (
-              <FiBellOff className="w-4 h-4 text-stone-400" />
+              <FiBellOff className="h-4 w-4 text-[color:var(--profile-text-faint)]" />
             )}
             Push-уведомления
           </h3>
-          <p className="text-sm text-stone-500 mt-1">
+          <p className="mt-1 text-sm text-[color:var(--profile-text-muted)]">
             Напоминания о ежедневной молитве и рассылка списков координаторам.
           </p>
         </div>
@@ -71,9 +74,9 @@ export function PushSettings() {
           type="button"
           onClick={() => void handleToggleSubscription()}
           disabled={loading}
-          className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 ${
-            isSubscribed ? 'bg-primary' : 'bg-stone-200'
-          } ${loading ? 'opacity-50 cursor-not-allowed' : ''}`}
+          className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-[color:var(--profile-primary)] focus:ring-offset-2 ${
+            isSubscribed ? 'bg-[color:var(--profile-primary)]' : 'bg-[color:var(--profile-media-placeholder)]'
+          } ${loading ? 'cursor-not-allowed opacity-50' : ''}`}
           role="switch"
           aria-checked={isSubscribed}
         >
@@ -104,3 +107,4 @@ export function PushSettings() {
     </div>
   );
 }
+

@@ -38,6 +38,16 @@ const MEMBER_ALLOWED_PATCH =
 const MEMBER_NOTIFICATIONS_POST =
   /^\/api\/notifications\/(?:subscribe|unsubscribe|save-token)\/?$/;
 
+/** Профиль / лента: мутации только своего контента (проверка в контроллере по сессии). */
+function isMemberProfileMutation(method: string, path: string): boolean {
+  if (method === 'PATCH' && /^\/api\/profile\/settings\/?$/.test(path)) return true;
+  if (method === 'POST') {
+    if (path === '/api/posts' || path === '/api/posts/') return true;
+    if (/^\/api\/posts\/\d+\/(like|comment)\/?$/.test(path)) return true;
+  }
+  return false;
+}
+
 function fullUrlPath(req: Request): string {
   // IMPORTANT: app.use('/api/messenger', ...) меняет req.path (без префикса),
   // поэтому используем originalUrl для RBAC-исключений.
@@ -72,6 +82,10 @@ export function enforceRoleAccess(req: Request, res: Response, next: NextFunctio
     }
     // Уведомления (PWA / натив): подписка и FCM-токен — только для текущего пользователя.
     if (req.method === 'POST' && MEMBER_NOTIFICATIONS_POST.test(fullPath)) {
+      next();
+      return;
+    }
+    if (isMemberProfileMutation(req.method, fullPath)) {
       next();
       return;
     }

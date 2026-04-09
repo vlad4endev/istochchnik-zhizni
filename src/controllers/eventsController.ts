@@ -134,6 +134,17 @@ export async function getEventCategoryOptions(req: Request, res: Response): Prom
   res.json({ options: getChurchEventCategoryOptionsForApi() });
 }
 
+export async function uploadEventPoster(req: Request, res: Response): Promise<void> {
+  if (!ensureAdmin(req, res)) return;
+  const file = (req as Request & { file?: Express.Multer.File }).file;
+  if (!file) {
+    res.status(400).json({ error: 'File is required' });
+    return;
+  }
+  // Express serves static files from /uploads -> path is relative public URL.
+  res.json({ poster_url: `/uploads/event-posters/${file.filename}` });
+}
+
 export async function getActiveEvents(_req: Request, res: Response): Promise<void> {
   try {
     const items = await listActiveEvents();
@@ -159,6 +170,7 @@ export async function postEvent(req: Request, res: Response): Promise<void> {
   if (!ensureAdmin(req, res)) return;
   const title = typeof req.body?.title === 'string' ? req.body.title.trim() : '';
   const description = typeof req.body?.description === 'string' ? req.body.description : null;
+  const posterUrl = typeof req.body?.poster_url === 'string' ? req.body.poster_url.trim() : '';
   const eventDate = req.body?.event_date;
   const eventTime =
     typeof req.body?.event_time === 'string' ? normalizeEventTimeString(req.body.event_time) : '';
@@ -207,6 +219,7 @@ export async function postEvent(req: Request, res: Response): Promise<void> {
       weekly_day: recurrenceType === 'weekly' ? parseWeeklyDay(weeklyDay) : null,
       is_active: typeof isActive === 'boolean' ? isActive : true,
       category: catParsed.value,
+      poster_url: posterUrl || null,
     });
     notifyRealtime(['calendar']);
     res.status(201).json(created);
@@ -259,6 +272,18 @@ export async function patchEvent(req: Request, res: Response): Promise<void> {
     res.status(400).json({ error: 'Field "is_active" must be boolean' });
     return;
   }
+  let patchPosterUrl: string | null | undefined;
+  if (body.poster_url !== undefined) {
+    if (body.poster_url === null) {
+      patchPosterUrl = null;
+    } else if (typeof body.poster_url === 'string') {
+      const t = body.poster_url.trim();
+      patchPosterUrl = t ? t : null;
+    } else {
+      res.status(400).json({ error: 'Field "poster_url" must be string or null' });
+      return;
+    }
+  }
   /** null / пустая строка после parse → «сброс»; при NOT NULL в БД сервис подставит DEFAULT или defaultChurchEventCategory(). */
   let patchCategory: string | null | undefined;
   if (body.category !== undefined) {
@@ -290,6 +315,7 @@ export async function patchEvent(req: Request, res: Response): Promise<void> {
       weekly_day: body.weekly_day !== undefined ? parseWeeklyDay(body.weekly_day) : undefined,
       is_active: typeof body.is_active === 'boolean' ? body.is_active : undefined,
       category: patchCategory,
+      poster_url: patchPosterUrl,
     });
     if (!updated) {
       res.status(404).json({ error: 'Event not found' });

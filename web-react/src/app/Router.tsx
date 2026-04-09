@@ -12,7 +12,6 @@ import { useAuthStore } from '../features/auth/authStore';
 import { useAuthHydrated } from '../hooks/useAuthHydrated';
 
 import { DailyPrayerPage } from '../features/calendar/pages/DailyPrayerPage';
-import { ProfilePage } from '../features/profile/pages/ProfilePage';
 import { BroadcastPage } from '../features/broadcast/pages/BroadcastPage';
 import { ResourcesRoutes } from '../features/resources/routes/ResourcesRoutes';
 import { PodcastsPage } from '../features/resources/pages/PodcastsPage';
@@ -20,6 +19,18 @@ import { ServiceFlowPage } from '../features/serviceFlow/pages/ServiceFlowPage';
 import { DashboardPage } from '../features/dashboard/pages/DashboardPage';
 
 import { Layout } from './Layout';
+import { ProfileRouteBoundary } from './ProfileRouteBoundary';
+
+/** Отдельные чанки: настройки (`/profile`) и публичная лента (`/profile/:username`) не тянут друг друга. */
+const LazyProfilePage = lazy(async () => {
+  const m = await import('@features/profile/pages/ProfilePage');
+  return { default: m.ProfilePage };
+});
+
+const LazyPublicProfilePage = lazy(async () => {
+  const m = await import('@features/profile/pages/PublicProfilePage');
+  return { default: m.PublicProfilePage };
+});
 
 const MessengerRoutes = lazy(async () => {
   const m = await import('../features/messenger/routes/MessengerRoutes');
@@ -161,7 +172,19 @@ export function AppRouter() {
           path="profile"
           element={
             <RequireFullMember>
-              <ProfilePage />
+              <ProfileRouteBoundary moduleName="настройки профиля" fallback={<RouteFallback />}>
+                <LazyProfilePage />
+              </ProfileRouteBoundary>
+            </RequireFullMember>
+          }
+        />
+        <Route
+          path="profile/:username"
+          element={
+            <RequireFullMember>
+              <ProfileRouteBoundary moduleName="профиль" fallback={<RouteFallback />}>
+                <LazyPublicProfilePage />
+              </ProfileRouteBoundary>
             </RequireFullMember>
           }
         />

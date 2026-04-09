@@ -20,10 +20,20 @@ export function getAvatarsDir(): string {
   return path.join(getUploadsRoot(), 'avatars');
 }
 
+export function getEventPostersDir(): string {
+  return path.join(getUploadsRoot(), 'event-posters');
+}
+
+export function getProfileMediaDir(): string {
+  return path.join(getUploadsRoot(), 'profile-media');
+}
+
 export function ensureUploadsDirs(): void {
   const root = getUploadsRoot();
   try {
     fs.mkdirSync(path.join(root, 'avatars'), { recursive: true });
+    fs.mkdirSync(path.join(root, 'event-posters'), { recursive: true });
+    fs.mkdirSync(path.join(root, 'profile-media'), { recursive: true });
   } catch (e) {
     console.warn('[uploads] cannot create uploads directories:', root, e);
   }

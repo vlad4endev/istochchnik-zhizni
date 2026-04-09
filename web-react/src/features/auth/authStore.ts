@@ -20,6 +20,10 @@ export interface AuthProfile {
   lastName: string;
   role: AuthRole;
   registrationStatus: RegistrationStatus;
+  /** Публичный слаг профиля; заполняется из `/api/auth/me` или ответа login. */
+  username: string;
+  /** Числовой id участника — запасной слаг `member-{id}` до первого `/me`. */
+  memberId: number | null;
 }
 
 interface AuthState extends AuthProfile {
@@ -54,7 +58,10 @@ export function normalizeRegistrationStatus(raw: string | undefined | null): Reg
 }
 
 function readLegacyFlutterKeys(): Partial<
-  Pick<AuthState, 'token' | 'firstName' | 'lastName' | 'role' | 'registrationStatus'>
+  Pick<
+    AuthState,
+    'token' | 'firstName' | 'lastName' | 'role' | 'registrationStatus' | 'username' | 'memberId'
+  >
 > | null {
   if (typeof localStorage === 'undefined') return null;
   const token = localStorage.getItem(LS_TOKEN);
@@ -86,6 +93,8 @@ const flutterCompatibleStorage: StateStorage = {
         registrationStatus: normalizeRegistrationStatus(
           legacy?.registrationStatus ?? localStorage.getItem(LS_REG),
         ),
+        username: legacy?.username ?? '',
+        memberId: legacy?.memberId ?? null,
       },
       version: 0,
     });
@@ -136,24 +145,37 @@ export const useAuthStore = create<AuthState>()(
       lastName: '',
       role: 'member',
       registrationStatus: 'active',
+      username: '',
+      memberId: null,
 
-      setSession: ({ token, firstName, lastName, role, registrationStatus }) => {
+      setSession: ({ token, firstName, lastName, role, registrationStatus, username, memberId }) => {
         set({
           token,
           firstName: firstName.trim(),
           lastName: lastName.trim(),
           role: normalizeRole(role),
           registrationStatus: normalizeRegistrationStatus(registrationStatus),
+          username: (username ?? '').trim(),
+          memberId: memberId ?? null,
         });
       },
 
-      applyServerProfile: ({ firstName, lastName, role, registrationStatus }) => {
+      applyServerProfile: ({
+        firstName,
+        lastName,
+        role,
+        registrationStatus,
+        username,
+        memberId,
+      }) => {
         if (!get().token) return;
         set({
           firstName: firstName.trim(),
           lastName: lastName.trim(),
           role: normalizeRole(role),
           registrationStatus: normalizeRegistrationStatus(registrationStatus),
+          username: (username ?? '').trim(),
+          memberId: memberId ?? null,
         });
       },
 
@@ -164,6 +186,8 @@ export const useAuthStore = create<AuthState>()(
           lastName: '',
           role: 'member',
           registrationStatus: 'active',
+          username: '',
+          memberId: null,
         });
       },
 
@@ -173,10 +197,12 @@ export const useAuthStore = create<AuthState>()(
           const response = await authAxios.post<{
             token?: string;
             user?: {
+              id?: number;
               first_name?: string;
               last_name?: string;
               app_role?: string;
               registration_status?: string;
+              username?: string;
             };
             error?: string;
           }>(
@@ -208,6 +234,8 @@ export const useAuthStore = create<AuthState>()(
             lastName: (user.last_name ?? '').trim(),
             role: (user.app_role ?? 'member').trim() || 'member',
             registrationStatus: normalizeRegistrationStatus(user.registration_status),
+            username: (user.username ?? '').trim(),
+            memberId: typeof user.id === 'number' ? user.id : null,
           });
 
           return { ok: true };
@@ -253,6 +281,8 @@ export const useAuthStore = create<AuthState>()(
         lastName: s.lastName,
         role: s.role,
         registrationStatus: s.registrationStatus,
+        username: s.username,
+        memberId: s.memberId,
       }),
     },
   ),
