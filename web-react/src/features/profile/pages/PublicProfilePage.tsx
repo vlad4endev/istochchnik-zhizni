@@ -33,7 +33,7 @@ import { EditPostModal } from '../components/EditPostModal';
 import profileShell from '../profileShell.module.css';
 import styles from './PublicProfilePage.module.css';
 
-const profileRootCn = `${profileShell.profileRoot} ${styles.igPage} ${styles.igPageThemeIg}`;
+const profileRootCn = `${profileShell.profileRoot} ${styles.igPage}`;
 
 function axiosMessage(err: unknown): string {
   if (err && typeof err === 'object' && 'response' in err) {
