@@ -307,6 +307,7 @@ export function AdminPage() {
       {tab === 'members' && <MembersSection />}
       {tab === 'requests' && <AccessRequestsSection />}
       {tab === 'calendar' && <CalendarSection />}
+      {tab === 'cycle_participants' && <PrayerCycleParticipantsSection />}
       {tab === 'events' && <EventsSection />}
       {tab === 'templates' && <TemplatesSection />}
       {tab === 'project' && <ProjectSection />}
@@ -1783,6 +1784,227 @@ function formatAdminDate(dateStr: string): string {
   } catch {
     return dateStr;
   }
+}
+
+/** Кто в молитвенном цикле: тот же флаг `in_prayer_cycle`, что и в карточке участника. */
+function PrayerCycleParticipantsSection() {
+  const qc = useQueryClient();
+  const { data, isLoading, error, isFetching } = useQuery({
+    queryKey: Q_MEMBERS,
+    queryFn: fetchAdminMembers,
+  });
+  const [listSearch, setListSearch] = useState('');
+  const [addSearch, setAddSearch] = useState('');
+  const [banner, setBanner] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
+
+  const patchMut = useMutation({
+    mutationFn: (p: { id: number; in_prayer_cycle: boolean }) =>
+      updateAdminMember(p.id, { in_prayer_cycle: p.in_prayer_cycle }),
+    onSuccess: async (_, vars) => {
+      setBanner({
+        type: 'ok',
+        text: vars.in_prayer_cycle
+          ? 'Участник добавлен в молитвенный цикл.'
+          : 'Участник убран из молитвенного цикла.',
+      });
+      await qc.invalidateQueries({ queryKey: Q_MEMBERS });
+      await qc.invalidateQueries({ queryKey: ['calendar'] });
+    },
+    onError: (e) =>
+      setBanner({ type: 'err', text: apiErrorMessage(e, 'Не удалось сохранить изменение.') }),
+  });
+
+  const activeInQueue = useMemo(() => {
+    const list = data ?? [];
+    return list.filter((u) => u.is_active && u.in_prayer_cycle).length;
+  }, [data]);
+
+  const flaggedInCycle = useMemo(() => {
+    const list = data ?? [];
+    return list.filter((u) => u.in_prayer_cycle).length;
+  }, [data]);
+
+  const inCycleRows = useMemo(() => {
+    const list = data ?? [];
+    const q = listSearch.trim().toLowerCase();
+    let rows = list.filter((u) => u.in_prayer_cycle);
+    if (q) {
+      rows = rows.filter((u) => {
+        const blob =
+          `${memberRosterName(u)} ${displayName(u)} ${u.phone_number ?? ''} ${u.email ?? ''}`.toLowerCase();
+        return blob.includes(q);
+      });
+    }
+    return [...rows].sort(compareMembersByFirstName);
+  }, [data, listSearch]);
+
+  const candidates = useMemo(() => {
+    const list = data ?? [];
+    const q = addSearch.trim().toLowerCase();
+    let rows = list.filter((u) => u.is_active && !u.in_prayer_cycle);
+    if (q) {
+      rows = rows.filter((u) => {
+        const blob =
+          `${memberRosterName(u)} ${displayName(u)} ${u.phone_number ?? ''} ${u.email ?? ''}`.toLowerCase();
+        return blob.includes(q);
+      });
+    }
+    return [...rows].sort(compareMembersByFirstName);
+  }, [data, addSearch]);
+
+  if (isLoading && !data) {
+    return <p className="text-sm text-stone-600">Загрузка списка…</p>;
+  }
+  if (error) {
+    return (
+      <p className="text-sm text-red-600">
+        Не удалось загрузить участников: {error instanceof Error ? error.message : 'ошибка'}
+      </p>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <section className="rounded-2xl border border-sky-200/80 bg-gradient-to-br from-sky-50/90 to-[var(--surface-elevated)] p-4 shadow-[var(--shadow)] sm:p-5">
+        <p className="text-sm leading-relaxed text-stone-700">
+          В ежедневную ротацию в разделе «Молитва» попадают только{' '}
+          <strong>активные</strong> участники с включённым участием в цикле. Здесь вы вручную задаёте,
+          кто в этом списке: он совпадает с полем «В молитвенном цикле» в карточке участника.
+        </p>
+        <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-sm">
+          <span className="font-semibold text-stone-900">
+            В очереди календаря:{' '}
+            <span className="text-primary tabular-nums">{activeInQueue}</span>
+          </span>
+          <span className="text-stone-500">
+            С флагом «в цикле» (все статусы):{' '}
+            <span className="font-semibold text-stone-700 tabular-nums">{flaggedInCycle}</span>
+          </span>
+          {isFetching ? <span className="text-xs text-stone-400">Обновление…</span> : null}
+        </div>
+      </section>
+
+      {banner ? (
+        <p
+          className={
+            banner.type === 'ok' ? 'text-sm font-medium text-emerald-700' : 'text-sm text-red-600'
+          }
+        >
+          {banner.text}
+        </p>
+      ) : null}
+
+      <section className="rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] p-4 shadow-[var(--shadow)] sm:p-5">
+        <h3 className="font-extrabold text-stone-900">Участники молитвенного цикла</h3>
+        <p className="mt-1 text-sm text-stone-600">
+          Поиск по имени или телефону. Неактивные с флагом «в цикле» показаны отдельно — в календарь они не входят,
+          пока карточка не активна.
+        </p>
+        <label className="mt-4 block text-xs font-semibold text-stone-600">Поиск в списке</label>
+        <input
+          type="search"
+          className={`${fieldClass()} mt-1 max-w-md`}
+          value={listSearch}
+          onChange={(e) => setListSearch(e.target.value)}
+          placeholder="Имя, фамилия, телефон…"
+          autoComplete="off"
+        />
+
+        <div className="mt-4 space-y-2">
+          {inCycleRows.length === 0 ? (
+            <p className="rounded-xl border border-dashed border-stone-200 py-8 text-center text-sm text-stone-500">
+              {listSearch.trim()
+                ? 'Никого не найдено.'
+                : 'Пока никто не отмечен как участник цикла — добавьте людей из списка ниже.'}
+            </p>
+          ) : (
+            inCycleRows.map((u) => (
+              <div
+                key={u.id}
+                className="flex flex-col gap-2 rounded-xl border border-stone-200/90 bg-white/80 px-3 py-3 sm:flex-row sm:items-center sm:justify-between"
+              >
+                <div className="min-w-0">
+                  <p className="font-bold text-stone-900">{memberRosterName(u)}</p>
+                  <p className="mt-0.5 text-sm text-stone-600">{u.phone_number ?? '—'}</p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {u.is_active ? (
+                      <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-semibold text-emerald-800">
+                        Активен — в очереди
+                      </span>
+                    ) : (
+                      <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-900">
+                        Неактивен — в календаре не учитывается
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className={btnDangerOutline('shrink-0 self-start sm:self-center')}
+                  disabled={patchMut.isPending}
+                  onClick={() => {
+                    setBanner(null);
+                    patchMut.mutate({ id: u.id, in_prayer_cycle: false });
+                  }}
+                >
+                  Убрать из цикла
+                </button>
+              </div>
+            ))
+          )}
+        </div>
+      </section>
+
+      <section className="rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] p-4 shadow-[var(--shadow)] sm:p-5">
+        <h3 className="font-extrabold text-stone-900">Добавить из списка участников</h3>
+        <p className="mt-1 text-sm text-stone-600">
+          Показаны только активные, ещё не включённые в молитвенный цикл. Нажмите «Включить в цикл».
+        </p>
+        <label className="mt-4 block text-xs font-semibold text-stone-600">Поиск кандидата</label>
+        <input
+          type="search"
+          className={`${fieldClass()} mt-1 max-w-md`}
+          value={addSearch}
+          onChange={(e) => setAddSearch(e.target.value)}
+          placeholder="Имя или телефон…"
+          autoComplete="off"
+        />
+
+        <div className="mt-4 max-h-[min(24rem,50vh)] space-y-2 overflow-y-auto pr-1">
+          {candidates.length === 0 ? (
+            <p className="rounded-xl border border-dashed border-stone-200 py-8 text-center text-sm text-stone-500">
+              {addSearch.trim()
+                ? 'Никого не найдено.'
+                : 'Нет активных участников вне цикла — все уже включены или нет карточек.'}
+            </p>
+          ) : (
+            candidates.map((u) => (
+              <div
+                key={u.id}
+                className="flex flex-col gap-2 rounded-xl border border-stone-200/90 bg-white/80 px-3 py-3 sm:flex-row sm:items-center sm:justify-between"
+              >
+                <div className="min-w-0">
+                  <p className="font-bold text-stone-900">{memberRosterName(u)}</p>
+                  <p className="mt-0.5 text-sm text-stone-600">{u.phone_number ?? '—'}</p>
+                </div>
+                <button
+                  type="button"
+                  className={btnPrimary('shrink-0 self-start sm:self-center')}
+                  disabled={patchMut.isPending}
+                  onClick={() => {
+                    setBanner(null);
+                    patchMut.mutate({ id: u.id, in_prayer_cycle: true });
+                  }}
+                >
+                  Включить в цикл
+                </button>
+              </div>
+            ))
+          )}
+        </div>
+      </section>
+    </div>
+  );
 }
 
 function CalendarSection() {
