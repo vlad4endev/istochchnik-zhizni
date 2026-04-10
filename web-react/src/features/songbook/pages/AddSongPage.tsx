@@ -3,20 +3,20 @@ import { useCallback, useRef, useState } from 'react';
 import {
   LuArrowLeft,
   LuArrowRight,
-  LuLoader2,
+  LuLoader,
   LuMusic,
   LuSparkles,
   LuUpload,
-  LuWand2,
   LuYoutube,
 } from 'react-icons/lu';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 
 import { useAuthStore } from '../../auth/authStore';
 import { canModerateSongCatalog } from '../../auth/studioAccess';
 import { createSong, fetchYoutubeOembed } from '../api';
 import { LyricsWithChords } from '../components/LyricsWithChords';
-import { convertStackedChordsToChordPro } from '../addSong/chordProConversion';
+import { convertToChordPro } from '../addSong/chordProConversion';
+import { SmartImportModal } from '../addSong/SmartImportModal';
 import { extractChordsFromText, guessKeyFromChords } from '../addSong/keyDetection';
 import { quickChordsForKey } from '../addSong/quickChords';
 
@@ -31,11 +31,14 @@ function parseKeyForApi(guessLabel: string): string {
 
 export function AddSongPage() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const isStudio = location.pathname.startsWith('/studio/');
   const role = useAuthStore((s) => s.role);
   const editorRef = useRef<HTMLTextAreaElement>(null);
   const selRef = useRef({ start: 0, end: 0 });
 
   const [step, setStep] = useState(1);
+  const [importOpen, setImportOpen] = useState(false);
   const [rawPaste, setRawPaste] = useState('');
   const [content, setContent] = useState('');
   const [title, setTitle] = useState('');
@@ -47,9 +50,44 @@ export function AddSongPage() {
   const [timeSig, setTimeSig] = useState('');
   const [tags, setTags] = useState('');
   const [keyHint, setKeyHint] = useState<string | null>(null);
-  const [dropActive, setDropActive] = useState(false);
 
-  const applyConvert = useCallback((src: string) => convertStackedChordsToChordPro(src), []);
+  const applyConvert = useCallback((src: string) => convertToChordPro(src), []);
+
+  const theme = isStudio
+    ? {
+        page: 'text-zinc-100',
+        link: 'text-zinc-400 hover:text-white',
+        title: 'text-white',
+        muted: 'text-zinc-400',
+        stepActive: 'bg-zinc-700 text-white',
+        stepDone: 'bg-zinc-800 text-zinc-200 hover:bg-zinc-700',
+        stepTodo: 'bg-zinc-900/80 text-zinc-500',
+        border: 'border-zinc-700',
+        input: 'border-zinc-600 bg-zinc-950 text-zinc-100 placeholder:text-zinc-500',
+        card: 'border-zinc-700 bg-zinc-900/60',
+        preview: 'border-zinc-700 bg-zinc-900/40',
+        amber: 'border-amber-900/50 bg-amber-950/40 text-amber-100',
+        btnOutline: 'border-zinc-600 text-zinc-200 hover:bg-zinc-800',
+        primaryBtn: 'bg-sky-600 text-white hover:bg-sky-500',
+        saveBtn: 'bg-sky-600 text-white hover:bg-sky-500',
+      }
+    : {
+        page: '',
+        link: 'text-stone-500 hover:text-stone-800',
+        title: 'text-stone-900',
+        muted: 'text-stone-600',
+        stepActive: 'bg-stone-900 text-white',
+        stepDone: 'bg-stone-200 text-stone-800 hover:bg-stone-300',
+        stepTodo: 'bg-stone-100 text-stone-400',
+        border: 'border-stone-200',
+        input: 'border-stone-200 bg-white text-stone-900 placeholder:text-stone-400',
+        card: 'border-stone-200 bg-white',
+        preview: 'border-stone-200 bg-stone-50',
+        amber: 'border-amber-100 bg-amber-50/80 text-amber-900',
+        btnOutline: 'border-stone-200 text-stone-800 hover:bg-stone-50',
+        primaryBtn: 'bg-primary text-white',
+        saveBtn: 'bg-stone-900 text-white hover:bg-stone-800',
+      };
 
   const syncEditorSelection = () => {
     const el = editorRef.current;
@@ -133,10 +171,13 @@ export function AddSongPage() {
 
   if (!canModerateSongCatalog(role)) {
     return (
-      <div className="mx-auto max-w-lg p-6">
-        <p className="text-stone-600">Добавление песен доступно редакторам каталога.</p>
-        <Link to="/songbook" className="mt-4 inline-block text-sky-600">
-          ← В песенник
+      <div className={`mx-auto max-w-lg p-6 ${isStudio ? 'text-zinc-300' : 'text-stone-600'}`}>
+        <p>Добавление песен доступно редакторам каталога.</p>
+        <Link
+          to={isStudio ? '/studio/my-songs' : '/songbook'}
+          className={`mt-4 inline-block ${isStudio ? 'text-sky-400' : 'text-sky-600'}`}
+        >
+          ← Назад
         </Link>
       </div>
     );
@@ -146,49 +187,50 @@ export function AddSongPage() {
 
   const goNext = () => {
     if (step === 1) {
-      setContent(applyConvert(rawPaste));
+      const next = content.trim() ? content : applyConvert(rawPaste);
+      setContent(next);
       setStep(2);
     } else if (step === 2) {
       setStep(3);
     }
   };
 
+  const handleSmartImport = ({ raw, chordPro }: { raw: string; chordPro: string }) => {
+    setRawPaste(raw);
+    setContent(chordPro);
+  };
+
   const goPrev = () => {
     if (step > 1) setStep((s) => s - 1);
   };
 
-  const onDropFile = (e: React.DragEvent) => {
-    e.preventDefault();
-    setDropActive(false);
-    const f = e.dataTransfer.files[0];
-    if (!f) return;
-    const ok = /\.(txt|chordpro|chopro|cho)$/i.test(f.name);
-    if (!ok) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      const text = typeof reader.result === 'string' ? reader.result : '';
-      setRawPaste(text);
-      setContent(applyConvert(text));
-    };
-    reader.readAsText(f);
-  };
-
   return (
-    <div className="mx-auto max-w-6xl space-y-6 pb-24">
+    <div className={`mx-auto max-w-6xl space-y-6 pb-24 ${theme.page}`}>
+      <SmartImportModal
+        open={importOpen}
+        onClose={() => setImportOpen(false)}
+        onApply={handleSmartImport}
+        initialRaw={rawPaste}
+        variant={isStudio ? 'studio' : 'default'}
+      />
+
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <Link to="/songbook" className="inline-flex items-center gap-2 text-sm text-stone-500 hover:text-stone-800">
+        <Link
+          to={isStudio ? '/studio/my-songs' : '/songbook'}
+          className={`inline-flex items-center gap-2 text-sm ${theme.link}`}
+        >
           <LuArrowLeft className="h-4 w-4" />
-          Песенник
+          {isStudio ? 'Студия' : 'Песенник'}
         </Link>
-        <h1 className="flex items-center gap-2 text-xl font-bold text-stone-900">
-          <LuMusic className="h-6 w-6 text-primary" />
+        <h1 className={`flex items-center gap-2 text-xl font-bold ${theme.title}`}>
+          <LuMusic className={`h-6 w-6 ${isStudio ? 'text-sky-400' : 'text-primary'}`} />
           Новая песня
         </h1>
       </div>
 
       {/* Stepper */}
       <ol className="flex flex-wrap gap-2">
-        {(['Вставка текста', 'Редактор и превью', 'Метаданные'] as const).map((label, i) => {
+        {(['Умный импорт', 'Редактор и превью', 'Метаданные'] as const).map((label, i) => {
           const n = i + 1;
           const active = step === n;
           return (
@@ -198,11 +240,7 @@ export function AddSongPage() {
                 onClick={() => n < step && setStep(n)}
                 disabled={n > step}
                 className={`rounded-full px-4 py-2 text-sm font-medium transition-colors ${
-                  active
-                    ? 'bg-stone-900 text-white'
-                    : n < step
-                      ? 'bg-stone-200 text-stone-800 hover:bg-stone-300'
-                      : 'bg-stone-100 text-stone-400'
+                  active ? theme.stepActive : n < step ? theme.stepDone : theme.stepTodo
                 }`}
               >
                 {n}. {label}
@@ -214,54 +252,34 @@ export function AddSongPage() {
 
       {step === 1 && (
         <section className="space-y-4">
-          <p className="text-sm text-stone-600">
-            Вставьте текст с сайта: аккорды строкой выше текста. Мы переведём его в ChordPro{' '}
-            <code className="rounded bg-stone-100 px-1">[Am]Слово</code>.
+          <p className={`text-sm ${theme.muted}`}>
+            Откройте окно импорта: вставьте текст с аккордами над строками или перетащите файл. Используется{' '}
+            <code className={isStudio ? 'text-sky-300' : 'rounded bg-stone-100 px-1 text-stone-800'}>
+              convertToChordPro
+            </code>{' '}
+            → ChordPro <code className={isStudio ? 'text-sky-300' : ''}>[Am]</code>.
           </p>
-          <div
-            onDragEnter={(e) => {
-              e.preventDefault();
-              setDropActive(true);
-            }}
-            onDragLeave={() => setDropActive(false)}
-            onDragOver={(e) => e.preventDefault()}
-            onDrop={onDropFile}
-            className={`rounded-2xl border-2 border-dashed p-4 transition-colors ${
-              dropActive ? 'border-sky-500 bg-sky-50' : 'border-stone-200 bg-white'
-            }`}
-          >
-            <textarea
-              value={rawPaste}
-              onChange={(e) => setRawPaste(e.target.value)}
-              onBlur={() => setContent(applyConvert(rawPaste))}
-              rows={14}
-              placeholder={
-                '   Am         C\n' +
-                'Первая строка текста здесь\n\n' +
-                'Или уже ChordPro: [Am]Первая строка'
-              }
-              className="w-full resize-y rounded-xl border border-stone-200 bg-white p-4 font-mono text-sm leading-relaxed text-stone-900 placeholder:text-stone-400"
-            />
-            <div className="mt-3 flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setContent(applyConvert(rawPaste))}
-                className="inline-flex items-center gap-2 rounded-xl bg-stone-900 px-4 py-2 text-sm font-semibold text-white hover:bg-stone-800"
-              >
-                <LuWand2 className="h-4 w-4" />
-                Конвертировать в ChordPro
-              </button>
-              <span className="inline-flex items-center gap-1 text-xs text-stone-500">
-                <LuUpload className="h-4 w-4" />
-                Перетащите .txt или .chordpro
-              </span>
-            </div>
+          <div className={`rounded-2xl border p-6 ${theme.card}`}>
+            <button
+              type="button"
+              onClick={() => setImportOpen(true)}
+              className={`inline-flex w-full items-center justify-center gap-2 rounded-xl px-5 py-4 text-sm font-semibold sm:w-auto ${theme.primaryBtn}`}
+            >
+              <LuUpload className="h-5 w-5" />
+              Импорт из текста
+            </button>
+            <p className={`mt-4 text-sm ${theme.muted}`}>
+              {(content.trim() || rawPaste.trim()) && (
+                <span className="text-emerald-500">Текст загружен — можно переходить к правке.</span>
+              )}
+              {!content.trim() && !rawPaste.trim() && 'Сначала импортируйте текст или откройте окно позже на шаге 2.'}
+            </p>
           </div>
           <div className="flex justify-end">
             <button
               type="button"
               onClick={goNext}
-              className="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-white"
+              className={`inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-semibold ${theme.primaryBtn}`}
             >
               Далее
               <LuArrowRight className="h-4 w-4" />
@@ -275,18 +293,26 @@ export function AddSongPage() {
           <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
+              onClick={() => setImportOpen(true)}
+              className={`inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-medium ${theme.btnOutline}`}
+            >
+              <LuUpload className="h-4 w-4" />
+              Импорт из текста
+            </button>
+            <button
+              type="button"
               onClick={onDetectKey}
-              className="inline-flex items-center gap-2 rounded-xl border border-stone-200 bg-white px-3 py-2 text-sm font-medium text-stone-800 hover:bg-stone-50"
+              className={`inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-medium ${theme.btnOutline}`}
             >
               <LuSparkles className="h-4 w-4 text-amber-500" />
               Определить тональность
             </button>
-            {keyHint && <span className="text-xs text-stone-600">{keyHint}</span>}
+            {keyHint && <span className={`text-xs ${theme.muted}`}>{keyHint}</span>}
           </div>
 
           <div className="grid gap-4 lg:grid-cols-2">
             <div>
-              <p className="mb-2 text-xs font-bold uppercase text-stone-500">Редактор</p>
+              <p className={`mb-2 text-xs font-bold uppercase ${theme.muted}`}>Редактор</p>
               <textarea
                 ref={editorRef}
                 value={content}
@@ -295,26 +321,32 @@ export function AddSongPage() {
                 onKeyUp={syncEditorSelection}
                 onMouseUp={syncEditorSelection}
                 rows={18}
-                className="w-full resize-y rounded-xl border border-stone-200 bg-white p-4 font-mono text-sm text-stone-900"
+                className={`w-full resize-y rounded-xl border p-4 font-mono text-sm ${theme.input}`}
               />
             </div>
             <div>
-              <p className="mb-2 text-xs font-bold uppercase text-stone-500">Превью</p>
-              <div className="min-h-[12rem] rounded-xl border border-stone-200 bg-stone-50 p-4">
-                <LyricsWithChords text={content} transposeSemitones={0} className="text-sm leading-relaxed text-stone-900" />
+              <p className={`mb-2 text-xs font-bold uppercase ${theme.muted}`}>Превью</p>
+              <div className={`min-h-[12rem] rounded-xl border p-4 ${theme.preview}`}>
+                <LyricsWithChords
+                  text={content}
+                  transposeSemitones={0}
+                  className={`text-sm leading-relaxed ${isStudio ? 'text-zinc-100' : 'text-stone-900'}`}
+                />
               </div>
             </div>
           </div>
 
-          <div className="rounded-xl border border-amber-100 bg-amber-50/80 p-4">
-            <p className="mb-2 text-xs font-bold uppercase text-amber-900">Быстрые аккорды</p>
+          <div className={`rounded-xl border p-4 ${theme.amber}`}>
+            <p className={`mb-2 text-xs font-bold uppercase ${isStudio ? 'text-amber-200' : 'text-amber-900'}`}>
+              Быстрые аккорды
+            </p>
             <div className="mb-3 flex flex-wrap items-center gap-2">
-              <label className="text-xs text-stone-600">
+              <label className={`text-xs ${theme.muted}`}>
                 Тоника
                 <select
                   value={quickRoot}
                   onChange={(e) => setQuickRoot(e.target.value)}
-                  className="ml-2 rounded-lg border border-stone-200 bg-white px-2 py-1 text-sm"
+                  className={`ml-2 rounded-lg border px-2 py-1 text-sm ${theme.input}`}
                 >
                   {KEY_ROOTS.map((k) => (
                     <option key={k} value={k}>
@@ -326,7 +358,7 @@ export function AddSongPage() {
               <select
                 value={quickMode}
                 onChange={(e) => setQuickMode(e.target.value as 'major' | 'minor')}
-                className="rounded-lg border border-stone-200 bg-white px-2 py-1 text-sm"
+                className={`rounded-lg border px-2 py-1 text-sm ${theme.input}`}
               >
                 <option value="major">мажор</option>
                 <option value="minor">минор</option>
@@ -338,7 +370,11 @@ export function AddSongPage() {
                   key={ch}
                   type="button"
                   onClick={() => insertChord(ch)}
-                  className="rounded-lg bg-white px-3 py-1.5 text-sm font-semibold text-amber-950 shadow-sm ring-1 ring-amber-200 hover:bg-amber-100"
+                  className={
+                    isStudio
+                      ? 'rounded-lg bg-zinc-800 px-3 py-1.5 text-sm font-semibold text-amber-100 ring-1 ring-amber-800/80 hover:bg-zinc-700'
+                      : 'rounded-lg bg-white px-3 py-1.5 text-sm font-semibold text-amber-950 shadow-sm ring-1 ring-amber-200 hover:bg-amber-100'
+                  }
                 >
                   {ch}
                 </button>
@@ -350,7 +386,7 @@ export function AddSongPage() {
             <button
               type="button"
               onClick={goPrev}
-              className="inline-flex items-center gap-2 rounded-xl border border-stone-200 px-4 py-2 text-sm"
+              className={`inline-flex items-center gap-2 rounded-xl border px-4 py-2 text-sm ${theme.btnOutline}`}
             >
               <LuArrowLeft className="h-4 w-4" />
               Назад
@@ -358,7 +394,7 @@ export function AddSongPage() {
             <button
               type="button"
               onClick={goNext}
-              className="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-white"
+              className={`inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-semibold ${theme.primaryBtn}`}
             >
               Далее
               <LuArrowRight className="h-4 w-4" />
@@ -371,46 +407,46 @@ export function AddSongPage() {
         <section className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
             <label className="block">
-              <span className="text-xs font-bold uppercase text-stone-500">Название *</span>
+              <span className={`text-xs font-bold uppercase ${theme.muted}`}>Название *</span>
               <input
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
-                className="mt-1 w-full rounded-xl border border-stone-200 px-3 py-2 text-sm"
+                className={`mt-1 w-full rounded-xl border px-3 py-2 text-sm ${theme.input}`}
                 placeholder="Название песни"
               />
             </label>
             <label className="block">
-              <span className="text-xs font-bold uppercase text-stone-500">Тональность</span>
+              <span className={`text-xs font-bold uppercase ${theme.muted}`}>Тональность</span>
               <input
                 value={defaultKey}
                 onChange={(e) => setDefaultKey(e.target.value)}
-                className="mt-1 w-full rounded-xl border border-stone-200 px-3 py-2 text-sm"
+                className={`mt-1 w-full rounded-xl border px-3 py-2 text-sm ${theme.input}`}
                 placeholder="G, Am, …"
               />
             </label>
             <label className="block">
-              <span className="text-xs font-bold uppercase text-stone-500">BPM</span>
+              <span className={`text-xs font-bold uppercase ${theme.muted}`}>BPM</span>
               <input
                 type="number"
                 value={tempo}
                 onChange={(e) => setTempo(e.target.value)}
-                className="mt-1 w-full rounded-xl border border-stone-200 px-3 py-2 text-sm"
+                className={`mt-1 w-full rounded-xl border px-3 py-2 text-sm ${theme.input}`}
                 placeholder="120"
               />
             </label>
             <label className="block">
-              <span className="text-xs font-bold uppercase text-stone-500">Размер</span>
+              <span className={`text-xs font-bold uppercase ${theme.muted}`}>Размер</span>
               <input
                 value={timeSig}
                 onChange={(e) => setTimeSig(e.target.value)}
-                className="mt-1 w-full rounded-xl border border-stone-200 px-3 py-2 text-sm"
+                className={`mt-1 w-full rounded-xl border px-3 py-2 text-sm ${theme.input}`}
                 placeholder="4/4"
               />
             </label>
           </div>
 
-          <div className="rounded-xl border border-stone-200 bg-white p-4">
-            <p className="mb-2 flex items-center gap-2 text-xs font-bold uppercase text-stone-500">
+          <div className={`rounded-xl border p-4 ${theme.card}`}>
+            <p className={`mb-2 flex items-center gap-2 text-xs font-bold uppercase ${theme.muted}`}>
               <LuYoutube className="h-4 w-4 text-red-600" />
               YouTube (опционально)
             </p>
@@ -418,38 +454,44 @@ export function AddSongPage() {
               <input
                 value={youtubeUrl}
                 onChange={(e) => setYoutubeUrl(e.target.value)}
-                className="min-w-[200px] flex-1 rounded-xl border border-stone-200 px-3 py-2 text-sm"
+                className={`min-w-[200px] flex-1 rounded-xl border px-3 py-2 text-sm ${theme.input}`}
                 placeholder="https://www.youtube.com/watch?v=…"
               />
               <button
                 type="button"
                 onClick={() => void onFetchYoutube()}
-                className="rounded-xl border border-stone-200 px-4 py-2 text-sm hover:bg-stone-50"
+                className={`rounded-xl border px-4 py-2 text-sm ${theme.btnOutline}`}
               >
                 Подставить название
               </button>
             </div>
-            <p className="mt-2 text-xs text-stone-500">
+            <p className={`mt-2 text-xs ${theme.muted}`}>
               Заголовок подтягивается через oEmbed (без API-ключа). При необходимости отредактируйте вручную.
             </p>
           </div>
 
           <label className="block">
-            <span className="text-xs font-bold uppercase text-stone-500">Теги (через запятую)</span>
+            <span className={`text-xs font-bold uppercase ${theme.muted}`}>Теги (через запятую)</span>
             <input
               value={tags}
               onChange={(e) => setTags(e.target.value)}
-              className="mt-1 w-full rounded-xl border border-stone-200 px-3 py-2 text-sm"
+              className={`mt-1 w-full rounded-xl border px-3 py-2 text-sm ${theme.input}`}
               placeholder="worship, fast"
             />
           </label>
 
           {createMut.isError && (
-            <p className="text-sm text-red-600">Не удалось сохранить. Проверьте поля и права.</p>
+            <p className={`text-sm ${isStudio ? 'text-red-400' : 'text-red-600'}`}>
+              Не удалось сохранить. Проверьте поля и права.
+            </p>
           )}
 
           <div className="flex flex-wrap justify-between gap-2">
-            <button type="button" onClick={goPrev} className="inline-flex items-center gap-2 rounded-xl border border-stone-200 px-4 py-2 text-sm">
+            <button
+              type="button"
+              onClick={goPrev}
+              className={`inline-flex items-center gap-2 rounded-xl border px-4 py-2 text-sm ${theme.btnOutline}`}
+            >
               <LuArrowLeft className="h-4 w-4" />
               Назад
             </button>
@@ -457,9 +499,9 @@ export function AddSongPage() {
               type="button"
               disabled={!title.trim() || createMut.isPending}
               onClick={() => createMut.mutate()}
-              className="inline-flex items-center gap-2 rounded-xl bg-stone-900 px-6 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
+              className={`inline-flex items-center gap-2 rounded-xl px-6 py-2.5 text-sm font-semibold disabled:opacity-50 ${theme.saveBtn}`}
             >
-              {createMut.isPending ? <LuLoader2 className="h-4 w-4 animate-spin" /> : null}
+              {createMut.isPending ? <LuLoader className="h-4 w-4 animate-spin" /> : null}
               Сохранить в каталог
             </button>
           </div>

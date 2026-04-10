@@ -4,13 +4,14 @@ import { Link } from 'react-router-dom';
 import { LuHeart, LuSparkles } from 'react-icons/lu';
 
 import { useAuthStore } from '../../auth/authStore';
-import { canAccessStudioRole } from '../../auth/studioAccess';
+import { canAccessStudioRole, canModerateSongCatalog } from '../../auth/studioAccess';
 import { deleteFavorite, fetchSongs, forkInStudio, postFavorite, type SongListQuery } from '../api';
 
 export function SongbookPage() {
   const qc = useQueryClient();
   const role = useAuthStore((s) => s.role);
   const studioOk = canAccessStudioRole(role);
+  const catalogOk = canModerateSongCatalog(role);
 
   const [q, setQ] = useState('');
   const [key, setKey] = useState('');
@@ -66,9 +67,19 @@ export function SongbookPage() {
 
   return (
     <div className="mx-auto max-w-3xl space-y-4 pb-24">
-      <div>
-        <h1 className="text-2xl font-bold text-stone-900">Песенник</h1>
-        <p className="text-sm text-stone-500">Общий каталог. Личные правки — в «Моей студии».</p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold text-stone-900">Песенник</h1>
+          <p className="text-sm text-stone-500">Общий каталог. Личные правки — в «Моей студии».</p>
+        </div>
+        {catalogOk && (
+          <Link
+            to="/songbook/add"
+            className="rounded-xl bg-stone-900 px-4 py-2 text-sm font-semibold text-white hover:bg-stone-800"
+          >
+            Добавить песню
+          </Link>
+        )}
       </div>
 
       <div className="space-y-3 rounded-2xl border border-stone-200 bg-white p-4">

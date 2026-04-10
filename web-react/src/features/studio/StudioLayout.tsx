@@ -1,5 +1,8 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
-import { LuArrowLeft, LuFileText, LuGuitar, LuListMusic, LuMusic2 } from 'react-icons/lu';
+import { LuArrowLeft, LuCirclePlus, LuFileText, LuGuitar, LuListMusic, LuMusic2 } from 'react-icons/lu';
+
+import { useAuthStore } from '../auth/authStore';
+import { canModerateSongCatalog } from '../auth/studioAccess';
 
 const links = [
   { to: '/studio/my-songs', label: 'Мои песни', Icon: LuMusic2 },
@@ -10,6 +13,8 @@ const links = [
 
 export function StudioLayout() {
   const navigate = useNavigate();
+  const role = useAuthStore((s) => s.role);
+  const showAddSong = canModerateSongCatalog(role);
 
   return (
     <div className="flex min-h-[100dvh] flex-col bg-zinc-950 text-zinc-100 md:flex-row">
@@ -29,6 +34,22 @@ export function StudioLayout() {
           </div>
         </div>
         <nav className="flex flex-row gap-1 overflow-x-auto px-2 py-2 md:flex-col md:overflow-visible md:px-3 md:py-4">
+          {showAddSong && (
+            <NavLink
+              to="/studio/add-song"
+              className={({ isActive }) =>
+                [
+                  'flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium whitespace-nowrap transition-colors',
+                  isActive
+                    ? 'bg-sky-900/50 text-sky-100 ring-1 ring-sky-700/60'
+                    : 'text-sky-300/90 hover:bg-zinc-900 hover:text-sky-200',
+                ].join(' ')
+              }
+            >
+              <LuCirclePlus className="h-4 w-4 shrink-0" />
+              Добавить в каталог
+            </NavLink>
+          )}
           {links.map(({ to, label, Icon }) => (
             <NavLink
               key={to}

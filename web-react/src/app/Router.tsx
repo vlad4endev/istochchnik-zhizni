@@ -19,7 +19,7 @@ import { PodcastsPage } from '../features/resources/pages/PodcastsPage';
 import { ServiceFlowPage } from '../features/serviceFlow/pages/ServiceFlowPage';
 import { DashboardPage } from '../features/dashboard/pages/DashboardPage';
 
-import { canAccessStudioRole } from '../features/auth/studioAccess';
+import { canAccessStudioRole, canModerateSongCatalog } from '../features/auth/studioAccess';
 
 import { Layout } from './Layout';
 import { ProfileRouteBoundary } from './ProfileRouteBoundary';
@@ -95,6 +95,11 @@ const SongDetailPage = lazy(async () => {
   return { default: m.SongDetailPage };
 });
 
+const AddSongPage = lazy(async () => {
+  const m = await import('../features/songbook/pages/AddSongPage');
+  return { default: m.AddSongPage };
+});
+
 const PublicSetlistPage = lazy(async () => {
   const m = await import('../features/studio/pages/PublicSetlistPage');
   return { default: m.PublicSetlistPage };
@@ -165,6 +170,16 @@ function RequireStudioAccess({ children }: { children: ReactNode }) {
   const role = useAuthStore((s) => s.role);
   if (!canAccessStudioRole(role)) {
     return <Navigate to="/dashboard" replace />;
+  }
+  return <>{children}</>;
+}
+
+function RequireCatalogModerator({ children }: { children: ReactNode }) {
+  const role = useAuthStore((s) => s.role);
+  const location = useLocation();
+  if (!canModerateSongCatalog(role)) {
+    const fallback = location.pathname.startsWith('/studio/') ? '/studio/my-songs' : '/songbook';
+    return <Navigate to={fallback} replace />;
   }
   return <>{children}</>;
 }
@@ -254,6 +269,16 @@ export function AppRouter() {
               </Suspense>
             }
           />
+          <Route
+            path="add-song"
+            element={
+              <RequireCatalogModerator>
+                <Suspense fallback={<RouteFallback />}>
+                  <AddSongPage />
+                </Suspense>
+              </RequireCatalogModerator>
+            }
+          />
         </Route>
 
         <Route element={<Layout />}>
@@ -316,6 +341,18 @@ export function AppRouter() {
               <Suspense fallback={<RouteFallback />}>
                 <SongbookPage />
               </Suspense>
+            </RequireFullMember>
+          }
+        />
+        <Route
+          path="songbook/add"
+          element={
+            <RequireFullMember>
+              <RequireCatalogModerator>
+                <Suspense fallback={<RouteFallback />}>
+                  <AddSongPage />
+                </Suspense>
+              </RequireCatalogModerator>
             </RequireFullMember>
           }
         />

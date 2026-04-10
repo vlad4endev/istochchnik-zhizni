@@ -35,6 +35,36 @@ export function looksLikeChordPro(line: string): boolean {
 }
 
 /**
+ * Слияние по позициям символов: аккорды «над» буквами в моноширинной вёрстке.
+ * Идея как в convertToChordPro: индекс начала токена аккорда = индекс в строке текста.
+ */
+function mergeByColumnPositions(chordLine: string, lyricLine: string): string | null {
+  const chords: { chord: string; pos: number }[] = [];
+  for (const match of chordLine.matchAll(/\S+/g)) {
+    const tok = match[0];
+    if (!isChordToken(tok)) return null;
+    chords.push({ chord: tok, pos: match.index ?? 0 });
+  }
+  if (chords.length === 0) return null;
+
+  const lyrics = lyricLine;
+  const maxPos = Math.max(...chords.map((c) => c.pos));
+  /** Если аккорды «уехали» правее текста — колонки не совпали, лучше другая эвристика. */
+  if (maxPos > lyrics.length) return null;
+
+  let merged = '';
+  let lastPos = 0;
+  const L = lyrics.length;
+  for (const { chord, pos } of chords) {
+    const p = Math.min(Math.max(pos, lastPos), L);
+    merged += lyrics.slice(lastPos, p) + `[${chord}]`;
+    lastPos = p;
+  }
+  merged += lyrics.slice(lastPos);
+  return merged;
+}
+
+/**
  * Склеить пару «строка аккордов» + «строка текста» в ChordPro.
  */
 export function mergeChordLineWithLyrics(chordLine: string, lyricLine: string): string {
@@ -47,6 +77,9 @@ export function mergeChordLineWithLyrics(chordLine: string, lyricLine: string): 
   if (words.length === chords.length) {
     return chords.map((c, i) => `[${c}]${words[i]}`).join(' ');
   }
+
+  const column = mergeByColumnPositions(chordLine, lyricLine);
+  if (column != null) return column;
 
   if (chords.length === 1) {
     return `[${chords[0]}]${trimmedLyric}`;
@@ -97,6 +130,9 @@ export function convertStackedChordsToChordPro(raw: string): string {
 
   return out.join('\n');
 }
+
+/** Алиас: полная конвертация вставленного текста в ChordPro. */
+export const convertToChordPro = convertStackedChordsToChordPro;
 
 /**
  * Добавляет директивы ChordPro в начало (опционально).
