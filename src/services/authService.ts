@@ -3,6 +3,8 @@ import { promisify } from 'util';
 import { query } from '../config/db';
 import type { PrayerCyclePublic } from './prayerCycleService';
 import { getPrayerCycleSnapshotForDate, toPublicCycleInfo } from './prayerCycleService';
+import type { AppRole } from '../types/appRole';
+import { normalizeAppRole } from '../types/appRole';
 import { findMemberIdConflictingName, updateUser } from './userService';
 import { postRegistrationAccessRequestMessengerNotification } from './messengerService';
 
@@ -17,7 +19,7 @@ const MAX_ACTIVE_SESSIONS_PER_USER = 20;
 const PHONE_DIGITS_MIN = 7;
 const PHONE_DIGITS_MAX = 20;
 
-export type AuthRole = 'member' | 'admin';
+export type AuthRole = AppRole;
 export type AccessRequestStatus = 'pending' | 'approved' | 'rejected';
 export type AccessRequestType = 'registration' | 'password_reset';
 
@@ -136,12 +138,7 @@ function normalizeRegistrationStatus(raw: unknown): RegistrationStatus {
 }
 
 function normalizeRole(rawRole: unknown): AuthRole {
-  if (typeof rawRole !== 'string') {
-    return 'member';
-  }
-
-  const normalized = rawRole.trim().toLowerCase();
-  return normalized === 'admin' ? 'admin' : 'member';
+  return normalizeAppRole(rawRole);
 }
 
 function normalizePhoneDigits(phone: string): string {

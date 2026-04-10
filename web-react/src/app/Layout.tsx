@@ -5,9 +5,11 @@ import {
   LuChevronLeft,
   LuChevronRight,
   LuChurch,
+  LuDisc3,
   LuLayoutDashboard,
   LuMessageCircle,
   LuMic,
+  LuMusic2,
   LuSettings,
   LuShield,
   LuUser,
@@ -29,18 +31,22 @@ import { useChatStore } from '../features/messenger/chatStore';
 import { MessengerWsProvider } from '../features/messenger/MessengerWsContext';
 import { useBrowserNotificationScheduler } from '../features/notifications/useBrowserNotificationScheduler';
 import { useProfileDraftStore } from '../features/profile/profileDraftStore';
+import { canAccessStudioRole } from '../features/auth/studioAccess';
 
 type NavItem = {
   to: string;
   label: string;
   Icon: IconType;
   adminOnly?: boolean;
+  studioOnly?: boolean;
 };
 
 const NAV_ITEMS: NavItem[] = [
   /** Контурные Lucide — не путать с цветными эмодзи / Font Awesome «картинками». */
   { to: '/dashboard', label: 'Главная', Icon: LuLayoutDashboard },
   { to: '/prayer', label: 'Молитва', Icon: LuChurch },
+  { to: '/songbook', label: 'Песенник', Icon: LuMusic2 },
+  { to: '/studio', label: 'Студия', Icon: LuDisc3, studioOnly: true },
   { to: '/sermons', label: 'Проповеди', Icon: LuMic },
   { to: '/messenger', label: 'Чаты', Icon: LuMessageCircle },
   // { to: '/broadcast', label: 'Трансляции', Icon: LuTv },
@@ -281,7 +287,10 @@ export function Layout() {
       : registrationStatus === 'rejected'
         ? NAV_ITEMS.filter((item) => item.to === '/dashboard' || item.to === '/messenger')
         : NAV_ITEMS;
-  const items = navBase.filter((item) => !item.adminOnly || isAdmin);
+  const items = navBase.filter(
+    (item) =>
+      (!item.adminOnly || isAdmin) && (!item.studioOnly || canAccessStudioRole(role)),
+  );
   const sidebarItems = items;
   const mobileItems = items;
 

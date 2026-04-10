@@ -12,3 +12,25 @@ interface ImportMetaEnv {
 interface ImportMeta {
   readonly env: ImportMetaEnv;
 }
+
+declare module '@tombatossals/react-chords/lib/Chord' {
+  import type { FC } from 'react';
+
+  const ChordDiagram: FC<{
+    chord: {
+      frets: number[];
+      fingers: number[];
+      baseFret: number;
+      barres: number[];
+      capo?: boolean;
+    };
+    instrument: {
+      strings: number;
+      fretsOnChord: number;
+      name: string;
+      tunings: { standard: string[] };
+    };
+    lite?: boolean;
+  }>;
+  export default ChordDiagram;
+}

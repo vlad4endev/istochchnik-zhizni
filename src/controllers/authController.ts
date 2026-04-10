@@ -21,7 +21,7 @@ import { MemberNameDuplicateError } from '../services/userService';
 
 type AuthRequest = Request & {
   authUserId?: number;
-  authUserRole?: 'member' | 'admin';
+  authUserRole?: import('../types/appRole').AppRole;
   authToken?: string;
 };
 

@@ -1,32 +1,24 @@
 import { NextFunction, Request, Response } from 'express';
 
+import type { AppRole } from '../types/appRole';
+import { canAccessStudio, canModerateCatalog, normalizeAppRole } from '../types/appRole';
+
 /**
- * Роли доступа (для coarse-grained middleware):
- * - admin — может менять данные через маршруты под enforceRoleAccess
- * - member — только безопасные чтения и явно разрешённые PATCH (см. MEMBER_ALLOWED_PATCH)
- *
- * Роль берётся только из сессии (Bearer), установленной в resolveAuthSession.
- * Заголовки x-role / x-user-id не используются — иначе любой клиент мог бы выдать себе права админа.
+ * Грубая фильтрация по роли из сессии (Bearer).
+ * Детальные проверки — в контроллерах (особенно /api/studio и модерация каталога).
  */
-export type UserRole = 'member' | 'admin';
+export type UserRole = AppRole;
 type RoleRequest = Request & {
   userRole?: UserRole;
   authUserId?: number;
-  authUserRole?: UserRole;
+  authUserRole?: AppRole;
 };
 
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 
 export function resolveUserRole(req: Request, _res: Response, next: NextFunction): void {
   const roleReq = req as RoleRequest;
-  const sessionRole = roleReq.authUserRole;
-
-  if (sessionRole === 'admin' || sessionRole === 'member') {
-    roleReq.userRole = sessionRole;
-  } else {
-    roleReq.userRole = 'member';
-  }
-
+  roleReq.userRole = normalizeAppRole(roleReq.authUserRole);
   next();
 }
 
@@ -51,16 +43,74 @@ function isMemberProfileMutation(method: string, path: string): boolean {
   return false;
 }
 
+function isSongFavoriteMutation(method: string, path: string): boolean {
+  return (
+    (method === 'POST' || method === 'DELETE') && /^\/api\/songs\/\d+\/favorite\/?$/.test(path)
+  );
+}
+
+/** Запись «песня открыта» для недавних в студии — любой авторизованный участник. */
+function isSongOpenPost(method: string, path: string): boolean {
+  return method === 'POST' && /^\/api\/songs\/\d+\/open\/?$/.test(path);
+}
+
+/** POST/PATCH/DELETE каталога (не избранное). */
+function isSongCatalogMutation(method: string, path: string): boolean {
+  if (SAFE_METHODS.has(method)) return false;
+  const p = path.split('?')[0];
+  if (!p.startsWith('/api/songs')) return false;
+  if (/^\/api\/songs\/\d+\/favorite\/?$/.test(p)) return false;
+  if (p === '/api/songs' || p === '/api/songs/') return method === 'POST';
+  return /^\/api\/songs\/\d+\/?$/.test(p) && (method === 'PATCH' || method === 'DELETE');
+}
+
+function isStudioApiPath(path: string): boolean {
+  return path.startsWith('/api/studio/');
+}
+
 function fullUrlPath(req: Request): string {
-  // IMPORTANT: app.use('/api/messenger', ...) меняет req.path (без префикса),
-  // поэтому используем originalUrl для RBAC-исключений.
   return (req.originalUrl || req.url || req.path || '').split('?')[0] || '';
+}
+
+/** Обычные пользовательские мутации (мессенджер, профиль и т.д.) — не только member. */
+function isStandardParticipantMutation(
+  role: AppRole,
+  method: string,
+  path: string,
+  authUserId: number | undefined
+): boolean {
+  if (role !== 'member' && role !== 'musician' && role !== 'editor') {
+    return false;
+  }
+  if (path.startsWith('/api/messenger/')) {
+    return true;
+  }
+  if (
+    (method === 'PATCH' || method === 'POST') &&
+    (path === '/api/auth/me' || path === '/api/auth/me/')
+  ) {
+    return true;
+  }
+  if (method === 'POST' && path === '/api/auth/me/avatar') {
+    return true;
+  }
+  if (method === 'POST' && MEMBER_NOTIFICATIONS_POST.test(path)) {
+    return true;
+  }
+  if (isMemberProfileMutation(method, path)) {
+    return true;
+  }
+  if (isSongFavoriteMutation(method, path) && authUserId) {
+    return true;
+  }
+  return false;
 }
 
 export function enforceRoleAccess(req: Request, res: Response, next: NextFunction): void {
   const roleReq = req as RoleRequest;
   const role = roleReq.userRole ?? 'member';
   const fullPath = fullUrlPath(req);
+  const authId = roleReq.authUserId;
 
   if (SAFE_METHODS.has(req.method)) {
     next();
@@ -72,26 +122,29 @@ export function enforceRoleAccess(req: Request, res: Response, next: NextFunctio
     return;
   }
 
-  if (role === 'member') {
-    // Messenger: отдельные права на уровне чата (checkChatPermission), поэтому разрешаем мутации.
-    if (fullPath.startsWith('/api/messenger/')) {
-      next();
-      return;
-    }
-    // Profile: разрешаем PATCH/POST только для /auth/me (и /avatar).
-    if ((req.method === 'PATCH' || req.method === 'POST') && (fullPath === '/api/auth/me' || fullPath === '/api/auth/me/avatar')) {
-      next();
-      return;
-    }
-    // Уведомления (PWA / натив): подписка и FCM-токен — только для текущего пользователя.
-    if (req.method === 'POST' && MEMBER_NOTIFICATIONS_POST.test(fullPath)) {
-      next();
-      return;
-    }
-    if (isMemberProfileMutation(req.method, fullPath)) {
-      next();
-      return;
-    }
+  if (isSongFavoriteMutation(req.method, fullPath) && authId) {
+    next();
+    return;
+  }
+
+  if (isSongOpenPost(req.method, fullPath) && authId) {
+    next();
+    return;
+  }
+
+  if (isStudioApiPath(fullPath) && authId && canAccessStudio(role)) {
+    next();
+    return;
+  }
+
+  if (isSongCatalogMutation(req.method, fullPath) && authId && canModerateCatalog(role)) {
+    next();
+    return;
+  }
+
+  if (isStandardParticipantMutation(role, req.method, fullPath, authId)) {
+    next();
+    return;
   }
 
   if (role !== 'admin') {

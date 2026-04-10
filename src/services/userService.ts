@@ -1,4 +1,6 @@
 import { query } from '../config/db';
+import type { AppRole } from '../types/appRole';
+import { mergeAppRoles, normalizeAppRole } from '../types/appRole';
 import { getPrayerDataByDate } from './calendarService';
 import { getCurrentCycleIndexForUpsert, upsertMemberPrayerForCycle } from './prayerCycleService';
 
@@ -18,7 +20,7 @@ export interface AppUser {
   account_provider: string | null;
   account_id: string | null;
   is_active: boolean;
-  app_role: 'member' | 'admin';
+  app_role: AppRole;
   /** Ответственный за сбор — может назначать участников на дни следующей недели. */
   is_collection_coordinator: boolean;
   /** Участвует в общем молитвенном цикле (очередь по дням). */
@@ -41,7 +43,7 @@ export interface CreateUserInput {
   account_provider?: string;
   account_id?: string;
   is_active?: boolean;
-  app_role?: 'member' | 'admin';
+  app_role?: AppRole;
   is_collection_coordinator?: boolean;
   merge_if_duplicate?: boolean;
 }
@@ -58,7 +60,7 @@ export interface UpdateUserInput {
   account_provider?: string;
   account_id?: string;
   is_active?: boolean;
-  app_role?: 'member' | 'admin';
+  app_role?: AppRole;
   is_collection_coordinator?: boolean;
   in_prayer_cycle?: boolean;
 }
@@ -68,7 +70,7 @@ export interface LinkAccountInput {
   account_id: string;
 }
 
-export type AppRole = 'member' | 'admin';
+export type { AppRole } from '../types/appRole';
 
 export class MemberNameDuplicateError extends Error {
   constructor(
@@ -168,11 +170,12 @@ function normalizeOptionalString(value: unknown): string | null {
   return trimmed.length > 0 ? trimmed : null;
 }
 
-function mapUser(row: AppUser & { user_id?: unknown }): AppUser {
+function mapUser(row: AppUser & { user_id?: unknown; app_role?: unknown }): AppUser {
   const uid = row.user_id;
   return {
     ...row,
     user_id: uid != null && String(uid).trim() !== '' ? String(uid) : '',
+    app_role: normalizeAppRole(row.app_role),
   };
 }
 
@@ -402,7 +405,7 @@ export async function createUser(input: CreateUserInput): Promise<AppUser> {
         ...(mergedAccountProvider ? { account_provider: mergedAccountProvider } : {}),
         ...(mergedAccountId ? { account_id: mergedAccountId } : {}),
         is_active: existing.is_active || (input.is_active ?? true),
-        app_role: existing.app_role === 'admin' || input.app_role === 'admin' ? 'admin' : 'member',
+        app_role: mergeAppRoles(existing.app_role, input.app_role ?? 'member'),
         is_collection_coordinator:
           existing.is_collection_coordinator || (input.is_collection_coordinator ?? false),
       });
@@ -723,7 +726,7 @@ export async function setUserAppRole(id: number, appRole: AppRole): Promise<AppU
     return null;
   }
 
-  if (currentUser.app_role === 'admin' && appRole === 'member') {
+  if (currentUser.app_role === 'admin' && appRole !== 'admin') {
     const adminsCount = await query(
       `SELECT COUNT(*)::int AS count
        FROM members

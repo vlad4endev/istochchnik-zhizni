@@ -138,7 +138,10 @@ export async function swapAllMembersFirstLastNames(): Promise<{
   return data;
 }
 
-export async function setMemberAppRole(id: number, app_role: 'member' | 'admin'): Promise<AppUser> {
+export async function setMemberAppRole(
+  id: number,
+  app_role: 'member' | 'musician' | 'editor' | 'admin',
+): Promise<AppUser> {
   const { data } = await apiClient.patch<AppUser>(`${USERS}/${id}/app-role`, { app_role });
   return data;
 }

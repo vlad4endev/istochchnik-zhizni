@@ -2,9 +2,9 @@ import 'express-serve-static-core';
 
 declare module 'express-serve-static-core' {
   interface Request {
-    userRole?: 'member' | 'admin';
+    userRole?: 'member' | 'musician' | 'editor' | 'admin';
     authUserId?: number;
-    authUserRole?: 'member' | 'admin';
+    authUserRole?: 'member' | 'musician' | 'editor' | 'admin';
     authToken?: string;
   }
 }

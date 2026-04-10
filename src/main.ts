@@ -22,6 +22,9 @@ import pushRoutes from './routes/pushRoutes';
 import messengerRoutes from './routes/messengerRoutes';
 import notificationsRoutes from './routes/notificationsRoutes';
 import telegramRoutes from './routes/telegramRoutes';
+import publicRoutes from './routes/publicRoutes';
+import songRoutes from './routes/songRoutes';
+import studioRoutes from './routes/studioRoutes';
 import settingsRoutes from './routes/settingsRoutes';
 import { attachRealtimeWebSocket, initRealtimeRedis } from './realtime/wsHub';
 import { initPushCronJobs } from './cron/pushJobs';
@@ -97,7 +100,12 @@ app.use(resolveAuthSession);
 ensureUploadsDirs();
 const uploadsAbs = getUploadsRoot();
 console.log(`[uploads] serving static files from: ${uploadsAbs}`);
-app.use('/uploads', express.static(uploadsAbs, { fallthrough: false }));
+// fallthrough: иначе при отсутствии файла send может отдать ENOENT в error handler → шум в логах.
+// Явный 404 после static: не отдаём SPA index.html на несуществующие /uploads/*.
+app.use('/uploads', express.static(uploadsAbs, { fallthrough: true }));
+app.use('/uploads', (_req, res) => {
+  res.status(404).type('text/plain').send('Not found');
+});
 
 app.use('/api/auth', authRoutes);
 
@@ -124,6 +132,9 @@ app.get('/health', async (_req, res) => {
 
 // /api/users — раньше общего /api, чтобы спец-маршруты (merge-duplicates, swap-all-…) не пересекались с будущими catch-all.
 app.use('/api/users', userRoutes);
+app.use('/api/public', publicRoutes);
+app.use('/api/songs', songRoutes);
+app.use('/api/studio', studioRoutes);
 app.use('/api/calendar', calendarRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api', routes);

@@ -90,6 +90,8 @@ export async function mergeMemberInto(keepId: number, dropId: number): Promise<v
          END,
          app_role = CASE
            WHEN k.app_role = 'admin' OR d.app_role = 'admin' THEN 'admin'
+           WHEN k.app_role = 'editor' OR d.app_role = 'editor' THEN 'editor'
+           WHEN k.app_role = 'musician' OR d.app_role = 'musician' THEN 'musician'
            ELSE 'member'
          END,
          is_collection_coordinator = k.is_collection_coordinator OR d.is_collection_coordinator,

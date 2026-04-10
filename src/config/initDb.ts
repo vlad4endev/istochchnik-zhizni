@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS members (
   account_provider VARCHAR(100),
   account_id VARCHAR(255),
   is_active BOOLEAN NOT NULL DEFAULT TRUE,
-  app_role VARCHAR(16) NOT NULL DEFAULT 'member' CHECK (app_role IN ('member', 'admin')),
+  app_role VARCHAR(16) NOT NULL DEFAULT 'member' CHECK (app_role IN ('member', 'musician', 'editor', 'admin')),
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -215,11 +215,11 @@ ALTER TABLE members ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEF
 ALTER TABLE members ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
 UPDATE members
 SET app_role = 'member'
-WHERE app_role IS NULL OR app_role NOT IN ('member', 'admin');
+WHERE app_role IS NULL OR app_role NOT IN ('member', 'musician', 'editor', 'admin');
 ALTER TABLE members ALTER COLUMN app_role SET DEFAULT 'member';
 ALTER TABLE members ALTER COLUMN app_role SET NOT NULL;
 ALTER TABLE members DROP CONSTRAINT IF EXISTS members_app_role_check;
-ALTER TABLE members ADD CONSTRAINT members_app_role_check CHECK (app_role IN ('member', 'admin'));
+ALTER TABLE members ADD CONSTRAINT members_app_role_check CHECK (app_role IN ('member', 'musician', 'editor', 'admin'));
 
 ALTER TABLE members ADD COLUMN IF NOT EXISTS is_collection_coordinator BOOLEAN NOT NULL DEFAULT FALSE;
 
@@ -973,6 +973,103 @@ CREATE TABLE IF NOT EXISTS profile_post_likes (
 
 CREATE INDEX IF NOT EXISTS idx_profile_post_likes_post
   ON profile_post_likes (post_id);
+
+-- Песенник и «Моя студия»
+CREATE TABLE IF NOT EXISTS songs (
+  id BIGSERIAL PRIMARY KEY,
+  title VARCHAR(500) NOT NULL,
+  slug VARCHAR(500) NOT NULL,
+  content TEXT NOT NULL DEFAULT '',
+  default_key VARCHAR(32),
+  tempo SMALLINT,
+  time_signature VARCHAR(32),
+  tags TEXT[] NOT NULL DEFAULT '{}',
+  is_published BOOLEAN NOT NULL DEFAULT TRUE,
+  created_by_member_id INTEGER REFERENCES members(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS songs_slug_uidx ON songs (LOWER(slug));
+ALTER TABLE songs ADD COLUMN IF NOT EXISTS tags TEXT[] NOT NULL DEFAULT '{}';
+CREATE INDEX IF NOT EXISTS songs_tags_gin ON songs USING GIN (tags);
+CREATE INDEX IF NOT EXISTS songs_fts_idx ON songs USING GIN (
+  to_tsvector('simple', coalesce(title, '') || ' ' || coalesce(content, ''))
+);
+
+CREATE TABLE IF NOT EXISTS studio_versions (
+  id BIGSERIAL PRIMARY KEY,
+  member_id INTEGER NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+  song_id BIGINT NOT NULL REFERENCES songs(id) ON DELETE CASCADE,
+  custom_content TEXT,
+  custom_key VARCHAR(32),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (member_id, song_id)
+);
+CREATE INDEX IF NOT EXISTS idx_studio_versions_member ON studio_versions (member_id);
+CREATE INDEX IF NOT EXISTS idx_studio_versions_song ON studio_versions (song_id);
+
+CREATE TABLE IF NOT EXISTS studio_drafts (
+  id BIGSERIAL PRIMARY KEY,
+  member_id INTEGER NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+  title VARCHAR(500) NOT NULL DEFAULT '',
+  content TEXT NOT NULL DEFAULT '',
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_studio_drafts_member ON studio_drafts (member_id);
+
+CREATE TABLE IF NOT EXISTS studio_instrument_settings (
+  member_id INTEGER PRIMARY KEY REFERENCES members(id) ON DELETE CASCADE,
+  settings JSONB NOT NULL DEFAULT '{}'::jsonb,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS song_favorites (
+  member_id INTEGER NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+  song_id BIGINT NOT NULL REFERENCES songs(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (member_id, song_id)
+);
+CREATE INDEX IF NOT EXISTS idx_song_favorites_song ON song_favorites (song_id);
+
+CREATE TABLE IF NOT EXISTS setlists (
+  id BIGSERIAL PRIMARY KEY,
+  member_id INTEGER NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+  title VARCHAR(500) NOT NULL,
+  event_date DATE,
+  is_public BOOLEAN NOT NULL DEFAULT FALSE,
+  share_token UUID UNIQUE DEFAULT gen_random_uuid(),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+ALTER TABLE setlists ADD COLUMN IF NOT EXISTS is_public BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE setlists ADD COLUMN IF NOT EXISTS share_token UUID UNIQUE DEFAULT gen_random_uuid();
+UPDATE setlists SET share_token = gen_random_uuid() WHERE share_token IS NULL;
+CREATE INDEX IF NOT EXISTS idx_setlists_member ON setlists (member_id);
+
+CREATE TABLE IF NOT EXISTS setlist_items (
+  id BIGSERIAL PRIMARY KEY,
+  setlist_id BIGINT NOT NULL REFERENCES setlists(id) ON DELETE CASCADE,
+  position INTEGER NOT NULL CHECK ("position" >= 0),
+  song_id BIGINT NOT NULL REFERENCES songs(id) ON DELETE CASCADE,
+  studio_version_id BIGINT REFERENCES studio_versions(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (setlist_id, "position")
+);
+CREATE INDEX IF NOT EXISTS idx_setlist_items_setlist ON setlist_items (setlist_id, "position");
+
+CREATE TABLE IF NOT EXISTS studio_song_recents (
+  member_id INTEGER NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+  song_id BIGINT NOT NULL REFERENCES songs(id) ON DELETE CASCADE,
+  last_opened_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (member_id, song_id)
+);
+CREATE INDEX IF NOT EXISTS idx_studio_song_recents_member ON studio_song_recents (member_id, last_opened_at DESC);
+
+INSERT INTO songs (title, slug, content, default_key, tempo, time_signature, is_published)
+SELECT 'Демо: пример песни', 'demo-primer-pesni',
+       '{title: Пример}' || chr(10) || '[C]Строка с аккордами' || chr(10) || 'Текст куплета',
+       'C', 72, '4/4', TRUE
+WHERE NOT EXISTS (SELECT 1 FROM songs WHERE LOWER(slug) = LOWER('demo-primer-pesni'));
 
 INSERT INTO ministry_role_templates (title)
 VALUES

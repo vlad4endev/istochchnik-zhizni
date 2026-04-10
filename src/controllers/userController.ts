@@ -23,6 +23,7 @@ import {
   swapMemberFirstLastName,
   updateUser,
 } from '../services/userService';
+import { isValidAppRoleString } from '../types/appRole';
 import { notifyRealtime, type RealtimeScope } from '../realtime/notify';
 import { mergeAllDuplicateMembers } from '../services/memberMergeService';
 
@@ -114,7 +115,7 @@ function isValidOptionalShortString(value: unknown, maxLength = 120): boolean {
 }
 
 function isValidAppRole(value: unknown): value is AppRole {
-  return value === 'member' || value === 'admin';
+  return isValidAppRoleString(value);
 }
 
 export async function getUsers(req: Request, res: Response): Promise<void> {
@@ -270,7 +271,9 @@ export async function createUserHandler(req: Request, res: Response): Promise<vo
   }
 
   if (req.body.app_role !== undefined && !isValidAppRole(req.body.app_role)) {
-    res.status(400).json({ error: 'Field "app_role" must be "member" or "admin"' });
+    res.status(400).json({
+      error: 'Field "app_role" must be "member", "musician", "editor", or "admin"',
+    });
     return;
   }
   if (req.body.merge_if_duplicate !== undefined && typeof req.body.merge_if_duplicate !== 'boolean') {
@@ -525,7 +528,9 @@ export async function updateUserHandler(req: Request, res: Response): Promise<vo
   }
 
   if (req.body.app_role !== undefined && !isValidAppRole(req.body.app_role)) {
-    res.status(400).json({ error: 'Field "app_role" must be "member" or "admin"' });
+    res.status(400).json({
+      error: 'Field "app_role" must be "member", "musician", "editor", or "admin"',
+    });
     return;
   }
 
@@ -636,7 +641,9 @@ export async function setUserAppRoleHandler(req: Request, res: Response): Promis
 
   const appRole = req.body.app_role;
   if (!isValidAppRole(appRole)) {
-    res.status(400).json({ error: 'Field "app_role" must be "member" or "admin"' });
+    res.status(400).json({
+      error: 'Field "app_role" must be "member", "musician", "editor", or "admin"',
+    });
     return;
   }
 

@@ -39,7 +39,7 @@ import {
 } from '../services/eventsService';
 import { notifyRealtime } from '../realtime/notify';
 
-type AuthReq = Request & { authUserRole?: 'member' | 'admin' };
+type AuthReq = Request & { authUserRole?: import('../types/appRole').AppRole };
 
 function ensureAdmin(req: Request, res: Response): AuthReq | null {
   const authReq = req as AuthReq;

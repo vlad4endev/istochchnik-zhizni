@@ -82,6 +82,32 @@ import {
 import type { AppUser } from '../types';
 import { fetchPrayerRequestHistory, type PrayerHistoryItem } from '../../profile/api';
 
+function appRoleLabel(role: string): string {
+  switch (role) {
+    case 'admin':
+      return 'Администратор';
+    case 'editor':
+      return 'Редактор каталога';
+    case 'musician':
+      return 'Музыкант';
+    default:
+      return 'Участник';
+  }
+}
+
+function appRoleBadgeClass(role: string): string {
+  if (role === 'admin') {
+    return 'rounded-full bg-primary/12 px-2.5 py-0.5 text-xs font-bold text-primary';
+  }
+  if (role === 'editor') {
+    return 'rounded-full bg-violet-100 px-2.5 py-0.5 text-xs font-semibold text-violet-800';
+  }
+  if (role === 'musician') {
+    return 'rounded-full bg-sky-100 px-2.5 py-0.5 text-xs font-semibold text-sky-900';
+  }
+  return 'rounded-full bg-stone-100 px-2.5 py-0.5 text-xs font-semibold text-stone-600';
+}
+
 const Q_MEMBERS = ['admin', 'members'] as const;
 const Q_ROLES = ['admin', 'templates', 'roles'] as const;
 const Q_DIRS = ['admin', 'templates', 'directions'] as const;
@@ -581,7 +607,13 @@ function MembersSection() {
   });
 
   const roleMut = useMutation({
-    mutationFn: ({ id, role }: { id: number; role: 'member' | 'admin' }) => setMemberAppRole(id, role),
+    mutationFn: ({
+      id,
+      role,
+    }: {
+      id: number;
+      role: 'member' | 'musician' | 'editor' | 'admin';
+    }) => setMemberAppRole(id, role),
     onSuccess: (updated) => {
       setEditing((prev) => (prev && prev.id === updated.id ? updated : prev));
       setBanner({ type: 'ok', text: 'Роль обновлена.' });
@@ -1173,15 +1205,7 @@ function MembersSection() {
               </div>
               <div className="mt-3 flex flex-wrap items-center gap-2">
                 <MemberRegistrationBadge u={u} />
-                <span
-                  className={
-                    u.app_role === 'admin'
-                      ? 'rounded-full bg-primary/12 px-2.5 py-0.5 text-xs font-bold text-primary'
-                      : 'rounded-full bg-stone-100 px-2.5 py-0.5 text-xs font-semibold text-stone-600'
-                  }
-                >
-                  {u.app_role === 'admin' ? 'Админ' : 'Участник'}
-                </span>
+                <span className={appRoleBadgeClass(u.app_role)}>{appRoleLabel(u.app_role)}</span>
                 <span
                   className={
                     u.is_active
@@ -1252,15 +1276,7 @@ function MembersSection() {
                     </td>
                     <td className="px-4 py-3 text-stone-600">{u.phone_number ?? '—'}</td>
                     <td className="px-4 py-3">
-                      <span
-                        className={
-                          u.app_role === 'admin'
-                            ? 'rounded-full bg-primary/10 px-2 py-0.5 text-xs font-bold text-primary'
-                            : 'text-stone-600'
-                        }
-                      >
-                        {u.app_role === 'admin' ? 'Администратор' : 'Участник'}
-                      </span>
+                      <span className={appRoleBadgeClass(u.app_role)}>{appRoleLabel(u.app_role)}</span>
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex flex-col gap-1">
@@ -1357,13 +1373,9 @@ function MembersSection() {
                   <div className="mt-1 flex flex-wrap items-center gap-2">
                     <MemberRegistrationBadge u={editing} />
                     <span
-                      className={
-                        editing.app_role === 'admin'
-                          ? 'rounded-full bg-primary/12 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-primary'
-                          : 'rounded-full bg-stone-100 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-stone-600'
-                      }
+                      className={`${appRoleBadgeClass(editing.app_role)} text-[10px] font-bold uppercase tracking-wide`}
                     >
-                      {editing.app_role === 'admin' ? 'Админ' : 'Участник'}
+                      {appRoleLabel(editing.app_role)}
                     </span>
                     <span
                       className={
@@ -1534,22 +1546,26 @@ function MembersSection() {
                   Действия администратора
                 </p>
                 <div className="flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    className={btnSecondary()}
-                    disabled={roleMut.isPending}
-                    onClick={() => {
-                      setBanner(null);
-                      roleMut.mutate({
-                        id: editing.id,
-                        role: editing.app_role === 'admin' ? 'member' : 'admin',
-                      });
-                    }}
-                  >
-                    {editing.app_role === 'admin'
-                      ? 'Снять права администратора'
-                      : 'Назначить администратором'}
-                  </button>
+                  <label className="flex flex-col gap-1 text-sm text-stone-700">
+                    <span className="text-[10px] font-extrabold uppercase tracking-wider text-stone-400">
+                      Роль приложения
+                    </span>
+                    <select
+                      className="max-w-xs rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm"
+                      value={editing.app_role}
+                      disabled={roleMut.isPending}
+                      onChange={(e) => {
+                        setBanner(null);
+                        const role = e.target.value as AppUser['app_role'];
+                        roleMut.mutate({ id: editing.id, role });
+                      }}
+                    >
+                      <option value="member">Участник</option>
+                      <option value="musician">Музыкант (студия)</option>
+                      <option value="editor">Редактор каталога</option>
+                      <option value="admin">Администратор</option>
+                    </select>
+                  </label>
                   <button
                     type="button"
                     className={btnSecondary()}

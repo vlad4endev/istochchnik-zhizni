@@ -46,9 +46,12 @@ interface AuthState extends AuthProfile {
 }
 
 function normalizeRole(raw: string | undefined): AuthRole {
-  const r = (raw ?? 'member').trim();
+  const r = (raw ?? 'member').trim().toLowerCase();
   if (!r) return 'member';
-  return r.toLowerCase() === 'admin' ? 'admin' : r;
+  if (r === 'admin') return 'admin';
+  if (r === 'editor') return 'editor';
+  if (r === 'musician') return 'musician';
+  return 'member';
 }
 
 export function normalizeRegistrationStatus(raw: string | undefined | null): RegistrationStatus {

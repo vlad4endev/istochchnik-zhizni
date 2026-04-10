@@ -1,6 +1,7 @@
 import { lazy, Suspense, type ReactNode } from 'react';
 import {
   Navigate,
+  Outlet,
   Route,
   Routes,
   useLocation,
@@ -17,6 +18,8 @@ import { ResourcesRoutes } from '../features/resources/routes/ResourcesRoutes';
 import { PodcastsPage } from '../features/resources/pages/PodcastsPage';
 import { ServiceFlowPage } from '../features/serviceFlow/pages/ServiceFlowPage';
 import { DashboardPage } from '../features/dashboard/pages/DashboardPage';
+
+import { canAccessStudioRole } from '../features/auth/studioAccess';
 
 import { Layout } from './Layout';
 import { ProfileRouteBoundary } from './ProfileRouteBoundary';
@@ -42,6 +45,61 @@ const AdminPage = lazy(async () => {
   return { default: m.AdminPage };
 });
 
+const StudioLayout = lazy(async () => {
+  const m = await import('../features/studio/StudioLayout');
+  return { default: m.StudioLayout };
+});
+
+const StudioMySongsPage = lazy(async () => {
+  const m = await import('../features/studio/pages/MySongsPage');
+  return { default: m.MySongsPage };
+});
+
+const StudioDraftsPage = lazy(async () => {
+  const m = await import('../features/studio/pages/DraftsPage');
+  return { default: m.DraftsPage };
+});
+
+const StudioSetlistsPage = lazy(async () => {
+  const m = await import('../features/studio/pages/SetlistsPage');
+  return { default: m.SetlistsPage };
+});
+
+const StudioSetlistDetailPage = lazy(async () => {
+  const m = await import('../features/studio/pages/SetlistDetailPage');
+  return { default: m.SetlistDetailPage };
+});
+
+const StudioPerformPage = lazy(async () => {
+  const m = await import('../features/studio/pages/PerformPage');
+  return { default: m.PerformPage };
+});
+
+const StudioInstrumentsPage = lazy(async () => {
+  const m = await import('../features/studio/pages/InstrumentsPage');
+  return { default: m.InstrumentsPage };
+});
+
+const StudioEditPage = lazy(async () => {
+  const m = await import('../features/studio/pages/StudioEditPage');
+  return { default: m.StudioEditPage };
+});
+
+const SongbookPage = lazy(async () => {
+  const m = await import('../features/songbook/pages/SongbookPage');
+  return { default: m.SongbookPage };
+});
+
+const SongDetailPage = lazy(async () => {
+  const m = await import('../features/songbook/pages/SongDetailPage');
+  return { default: m.SongDetailPage };
+});
+
+const PublicSetlistPage = lazy(async () => {
+  const m = await import('../features/studio/pages/PublicSetlistPage');
+  return { default: m.PublicSetlistPage };
+});
+
 const LOGIN_PATH = '/login';
 
 function RouteFallback(): ReactNode {
@@ -60,7 +118,7 @@ function HydrateSplash(): ReactNode {
   );
 }
 
-function RequireAuth({ children }: { children: ReactNode }) {
+function RequireAuth() {
   const hydrated = useAuthHydrated();
   const token = useAuthStore((s) => s.token);
   const location = useLocation();
@@ -73,7 +131,7 @@ function RequireAuth({ children }: { children: ReactNode }) {
     return <Navigate to={LOGIN_PATH} replace state={{ from: location.pathname }} />;
   }
 
-  return <>{children}</>;
+  return <Outlet />;
 }
 
 function RequireAdmin({ children }: { children: ReactNode }) {
@@ -103,6 +161,14 @@ function RequireMessengerAccess({ children }: { children: ReactNode }) {
   return <>{children}</>;
 }
 
+function RequireStudioAccess({ children }: { children: ReactNode }) {
+  const role = useAuthStore((s) => s.role);
+  if (!canAccessStudioRole(role)) {
+    return <Navigate to="/dashboard" replace />;
+  }
+  return <>{children}</>;
+}
+
 export function AppRouter() {
   return (
     <Routes>
@@ -110,16 +176,91 @@ export function AppRouter() {
       <Route path={`${LOGIN_PATH}/form`} element={<LoginPage />} />
 
       <Route
+        path="/setlist-share/:token"
         element={
-          <RequireAuth>
-            <Layout />
-          </RequireAuth>
+          <Suspense fallback={<RouteFallback />}>
+            <PublicSetlistPage />
+          </Suspense>
         }
-      >
-        <Route index element={<Navigate to="/dashboard" replace />} />
-        <Route path="dashboard" element={<DashboardPage />} />
+      />
+
+      <Route element={<RequireAuth />}>
         <Route
-          path="prayer"
+          path="studio"
+          element={
+            <RequireFullMember>
+              <RequireStudioAccess>
+                <Suspense fallback={<RouteFallback />}>
+                  <StudioLayout />
+                </Suspense>
+              </RequireStudioAccess>
+            </RequireFullMember>
+          }
+        >
+          <Route index element={<Navigate to="my-songs" replace />} />
+          <Route
+            path="my-songs"
+            element={
+              <Suspense fallback={<RouteFallback />}>
+                <StudioMySongsPage />
+              </Suspense>
+            }
+          />
+          <Route
+            path="drafts"
+            element={
+              <Suspense fallback={<RouteFallback />}>
+                <StudioDraftsPage />
+              </Suspense>
+            }
+          />
+          <Route
+            path="setlists"
+            element={
+              <Suspense fallback={<RouteFallback />}>
+                <StudioSetlistsPage />
+              </Suspense>
+            }
+          />
+          <Route
+            path="setlists/:id/perform"
+            element={
+              <Suspense fallback={<RouteFallback />}>
+                <StudioPerformPage />
+              </Suspense>
+            }
+          />
+          <Route
+            path="setlists/:id"
+            element={
+              <Suspense fallback={<RouteFallback />}>
+                <StudioSetlistDetailPage />
+              </Suspense>
+            }
+          />
+          <Route
+            path="instruments"
+            element={
+              <Suspense fallback={<RouteFallback />}>
+                <StudioInstrumentsPage />
+              </Suspense>
+            }
+          />
+          <Route
+            path="edit/:songId"
+            element={
+              <Suspense fallback={<RouteFallback />}>
+                <StudioEditPage />
+              </Suspense>
+            }
+          />
+        </Route>
+
+        <Route element={<Layout />}>
+          <Route index element={<Navigate to="/dashboard" replace />} />
+          <Route path="dashboard" element={<DashboardPage />} />
+          <Route
+            path="prayer"
           element={
             <RequireFullMember>
               <DailyPrayerPage />
@@ -169,6 +310,26 @@ export function AppRouter() {
           }
         />
         <Route
+          path="songbook"
+          element={
+            <RequireFullMember>
+              <Suspense fallback={<RouteFallback />}>
+                <SongbookPage />
+              </Suspense>
+            </RequireFullMember>
+          }
+        />
+        <Route
+          path="songbook/:id"
+          element={
+            <RequireFullMember>
+              <Suspense fallback={<RouteFallback />}>
+                <SongDetailPage />
+              </Suspense>
+            </RequireFullMember>
+          }
+        />
+        <Route
           path="profile"
           element={
             <RequireFullMember>
@@ -198,7 +359,8 @@ export function AppRouter() {
             </RequireAdmin>
           }
         />
-        <Route path="*" element={<Navigate to="/dashboard" replace />} />
+          <Route path="*" element={<Navigate to="/dashboard" replace />} />
+        </Route>
       </Route>
     </Routes>
   );

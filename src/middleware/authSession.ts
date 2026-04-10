@@ -1,9 +1,10 @@
 import { NextFunction, Request, Response } from 'express';
 import { resolveSessionByToken } from '../services/authService';
+import type { AppRole } from '../types/appRole';
 
 type AuthRequest = Request & {
   authUserId?: number;
-  authUserRole?: 'member' | 'admin';
+  authUserRole?: AppRole;
   authToken?: string;
 };
 

@@ -238,7 +238,7 @@ export async function getWeekBirthdays(_req: Request, res: Response): Promise<vo
   }
 }
 
-type AuthReq = Request & { authUserId?: number; authUserRole?: 'member' | 'admin' };
+type AuthReq = Request & { authUserId?: number; authUserRole?: import('../types/appRole').AppRole };
 
 /** План на след. неделю и назначения сбора — только администраторы и ответственные за сбор. */
 async function assertAdminOrCollectionCoordinator(req: Request, res: Response): Promise<boolean> {
