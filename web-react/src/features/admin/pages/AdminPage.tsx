@@ -72,6 +72,7 @@ import {
 } from '../api';
 import { CHURCH_EVENT_CATEGORY_OPTIONS_FALLBACK } from '../churchEventCategoryOptions';
 import { dateInputValueFromApi } from '../../../lib/dateInputValueFromApi';
+import { resolvePublicUrl } from '../../../lib/resolvePublicUrl';
 import { nextOccurrenceLocalYmd } from '../../../lib/weekdayAnchor';
 import {
   compareMembersByFirstName,
@@ -2163,8 +2164,13 @@ function EventsSection() {
   }, [posterPreviewUrl]);
   const [editing, setEditing] = useState<ChurchEventItem | null>(null);
   const [openId, setOpenId] = useState<number | null>(null);
+  const [addPanelOpen, setAddPanelOpen] = useState(false);
+  const [listPanelOpen, setListPanelOpen] = useState(false);
+  const [createExtrasOpen, setCreateExtrasOpen] = useState(false);
 
   const invalidate = () => void qc.invalidateQueries({ queryKey: Q_EVENTS });
+  const eventCount = (eventsQ.data ?? []).length;
+  const uploadedPosterSrc = resolvePublicUrl(form.poster_url);
 
   const categoryLabelById = useMemo(() => {
     const m = new Map<string, string>();
@@ -2205,6 +2211,9 @@ function EventsSection() {
       }),
     onSuccess: () => {
       setPosterFile(null);
+      setCreateExtrasOpen(false);
+      setAddPanelOpen(false);
+      setListPanelOpen(true);
       setForm((s) => ({ ...s, title: '', description: '', poster_url: null }));
       setNote({ type: 'ok', text: 'Событие добавлено.' });
       invalidate();
@@ -2265,7 +2274,7 @@ function EventsSection() {
   });
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       {note ? (
         <div
           className={
@@ -2281,196 +2290,288 @@ function EventsSection() {
         </div>
       ) : null}
 
-      <section className="rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] p-5 shadow-[var(--shadow)]">
-        <h3 className="text-base font-extrabold text-stone-900">Новое событие</h3>
-        <p className="mt-1 text-sm text-stone-600">
-          События показываются на дашборде. Время и повтор задаются здесь; при еженедельном режиме дата —
-          ближайший такой день недели (можно сменить вручную).
-        </p>
-        <div className="mt-4 grid gap-3 sm:grid-cols-2">
-          <div className="sm:col-span-2">
-            <label className="mb-1 block text-xs font-semibold text-stone-600">Название</label>
-            <input
-              className={fieldClass()}
-              value={form.title}
-              onChange={(e) => setForm((s) => ({ ...s, title: e.target.value }))}
-              placeholder="Воскресное служение"
-            />
+      <section
+        className="rounded-2xl border border-stone-200/80 bg-gradient-to-br from-amber-50/40 via-[var(--surface-elevated)] to-stone-50/60 p-4 shadow-[var(--shadow)] sm:p-5"
+        aria-labelledby="admin-events-heading"
+      >
+        <div className="flex items-start gap-3">
+          <div
+            className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-amber-100/90 text-amber-800"
+            aria-hidden
+          >
+            <LuCalendarDays className="h-5 w-5" strokeWidth={2} />
           </div>
-          <div>
-            <label className="mb-1 block text-xs font-semibold text-stone-600">Повтор</label>
-            <select
-              className={fieldClass()}
-              value={form.recurrence_type}
-              onChange={(e) =>
-                setForm((s) => ({ ...s, recurrence_type: e.target.value as 'once' | 'weekly' }))
-              }
-            >
-              <option value="once">Один раз (конкретная дата)</option>
-              <option value="weekly">Каждую неделю</option>
-            </select>
-          </div>
-          <div>
-            <label className="mb-1 block text-xs font-semibold text-stone-600">
-              {form.recurrence_type === 'weekly' ? 'Дата-ориентир' : 'Дата'}
-            </label>
-            <input
-              className={fieldClass()}
-              type="date"
-              value={form.event_date}
-              onChange={(e) => setForm((s) => ({ ...s, event_date: e.target.value }))}
-            />
-            {form.recurrence_type === 'weekly' ? (
-              <p className="mt-1 text-xs text-stone-500">Обновляется при смене дня недели.</p>
-            ) : null}
-          </div>
-          <div>
-            <label className="mb-1 block text-xs font-semibold text-stone-600">День недели</label>
-            <select
-              className={fieldClass()}
-              value={String(form.weekly_day)}
-              disabled={form.recurrence_type !== 'weekly'}
-              onChange={(e) => setForm((s) => ({ ...s, weekly_day: Number(e.target.value) }))}
-            >
-              {weekDays.map((d) => (
-                <option key={d.value} value={d.value}>
-                  {d.label}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="mb-1 block text-xs font-semibold text-stone-600">Время</label>
-            <input
-              className={fieldClass()}
-              type="time"
-              value={form.event_time}
-              onChange={(e) => setForm((s) => ({ ...s, event_time: e.target.value }))}
-            />
-          </div>
-          <div>
-            <label className="mb-1 block text-xs font-semibold text-stone-600">Категория</label>
-            <select
-              className={fieldClass()}
-              value={categoryOptions.some((o) => o.id === form.category) ? form.category : categoryOptions[0].id}
-              onChange={(e) => setForm((s) => ({ ...s, category: e.target.value }))}
-            >
-              {categoryOptions.map((o) => (
-                <option key={o.id} value={o.id}>
-                  {o.label}
-                </option>
-              ))}
-            </select>
-            <p className="mt-1 text-xs text-stone-500">
-              Список задаётся на сервере. Колонка в БД может отсутствовать — тогда значение не сохраняется.
+          <div className="min-w-0 flex-1">
+            <h3 id="admin-events-heading" className="text-base font-extrabold text-stone-900">
+              События
+            </h3>
+            <p className="mt-1 text-sm leading-relaxed text-stone-600">
+              Расписание для дашборда: дата и время, повтор, категория. Описание и постер — по желанию.
             </p>
           </div>
-          <div className="sm:col-span-2">
-            <label className="mb-1 block text-xs font-semibold text-stone-600">Описание</label>
-            <textarea
-              className={`${fieldClass()} min-h-[96px] resize-y`}
-              value={form.description}
-              onChange={(e) => setForm((s) => ({ ...s, description: e.target.value }))}
-              placeholder="Краткое описание события"
-            />
+          <div className="shrink-0 text-right">
+            <p className="text-[10px] font-extrabold uppercase tracking-wider text-stone-400">В базе</p>
+            <p className="text-xl font-extrabold tabular-nums text-stone-900">{eventCount}</p>
           </div>
-          <div className="sm:col-span-2">
-            <label className="mb-1 block text-xs font-semibold text-stone-600">Постер (картинка)</label>
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-              <input
-                type="file"
-                accept="image/*"
-                className={fieldClass()}
-                onChange={(e) => {
-                  const f = e.target.files?.[0] ?? null;
-                  setPosterFile(f);
-                  setForm((s) => ({ ...s, poster_url: null }));
-                }}
-              />
-              <button
-                type="button"
-                className={btnSecondary()}
-                disabled={!posterFile || uploadPosterMut.isPending}
-                onClick={() => {
-                  setNote(null);
-                  uploadPosterMut.mutate();
-                }}
-              >
-                {uploadPosterMut.isPending ? 'Загрузка…' : form.poster_url ? 'Перезагрузить' : 'Загрузить'}
-              </button>
-              {form.poster_url ? (
-                <span className="text-xs font-semibold text-emerald-700">Готово</span>
-              ) : null}
-            </div>
-            {posterPreviewUrl ? (
-              <div className="mt-3 overflow-hidden rounded-2xl border border-stone-200/70 bg-stone-50">
-                <img
-                  src={posterPreviewUrl}
-                  alt=""
-                  className="h-[140px] w-full object-cover sm:h-[180px]"
-                  loading="lazy"
-                />
-              </div>
-            ) : null}
-            <p className="mt-1 text-xs text-stone-500">Покажется на дашборде при открытии события.</p>
-          </div>
-          <label className="sm:col-span-2 flex items-center gap-2 text-sm font-semibold text-stone-700">
-            <input
-              type="checkbox"
-              className="h-4 w-4 rounded border-stone-300 text-primary"
-              checked={form.is_active}
-              onChange={(e) => setForm((s) => ({ ...s, is_active: e.target.checked }))}
-            />
-            Активное событие (видно в дашборде)
-          </label>
         </div>
-        <button
-          type="button"
-          className={`${btnPrimary('mt-4')}`}
-          disabled={
-            !form.title.trim() ||
-            !form.event_time ||
-            (form.recurrence_type === 'once' && !form.event_date) ||
-            createMut.isPending
-          }
-          onClick={() => {
-            setNote(null);
-            createMut.mutate();
-          }}
-        >
-          {createMut.isPending ? 'Сохранение…' : 'Добавить событие'}
-        </button>
       </section>
 
-      <section className="rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] p-5 shadow-[var(--shadow)]">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <h3 className="text-base font-extrabold text-stone-900">Список событий</h3>
-          <button
-            type="button"
-            className={btnDangerOutline()}
-            disabled={deleteAllMut.isPending || deleteMut.isPending || updateMut.isPending}
-            onClick={() => {
-              const total = (eventsQ.data ?? []).length;
-              if (total === 0) {
-                setNote({ type: 'err', text: 'Список уже пуст.' });
-                return;
-              }
-              if (!window.confirm(`Удалить все события (${total})? Действие нельзя отменить.`)) return;
-              setNote(null);
-              deleteAllMut.mutate();
-            }}
-          >
-            {deleteAllMut.isPending ? 'Удаление всех…' : 'Удалить все события'}
-          </button>
+      <section className="overflow-hidden rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] shadow-[var(--shadow)]">
+        <button
+          type="button"
+          className="flex w-full items-center gap-3 px-4 py-3.5 text-left transition-colors hover:bg-stone-50/80 sm:px-5"
+          onClick={() => setAddPanelOpen((v) => !v)}
+          aria-expanded={addPanelOpen}
+        >
+          <span className="text-sm font-extrabold text-stone-900">Добавить событие</span>
+          <span className="hidden text-xs text-stone-500 sm:inline">Название, расписание, категория</span>
+          <LuChevronDown
+            className={`ml-auto h-4 w-4 shrink-0 text-stone-400 transition-transform duration-200 ${addPanelOpen ? 'rotate-180' : ''}`}
+            strokeWidth={2}
+            aria-hidden
+          />
+        </button>
+        <div
+          className={`grid transition-[grid-template-rows] duration-300 ease-in-out motion-reduce:transition-none ${addPanelOpen ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}
+        >
+          <div className="overflow-hidden">
+            <div className="border-t border-stone-100 px-4 pb-4 pt-1 sm:px-5">
+              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                <div className="sm:col-span-2">
+                  <label className="mb-1 block text-xs font-semibold text-stone-600">Название</label>
+                  <input
+                    className={fieldClass()}
+                    value={form.title}
+                    onChange={(e) => setForm((s) => ({ ...s, title: e.target.value }))}
+                    placeholder="Например: Воскресное служение"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-semibold text-stone-600">Повтор</label>
+                  <select
+                    className={fieldClass()}
+                    value={form.recurrence_type}
+                    onChange={(e) =>
+                      setForm((s) => ({ ...s, recurrence_type: e.target.value as 'once' | 'weekly' }))
+                    }
+                  >
+                    <option value="once">Один раз</option>
+                    <option value="weekly">Каждую неделю</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-semibold text-stone-600">Время</label>
+                  <input
+                    className={fieldClass()}
+                    type="time"
+                    value={form.event_time}
+                    onChange={(e) => setForm((s) => ({ ...s, event_time: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-semibold text-stone-600">
+                    {form.recurrence_type === 'weekly' ? 'Дата (ориентир)' : 'Дата'}
+                  </label>
+                  <input
+                    className={fieldClass()}
+                    type="date"
+                    value={form.event_date}
+                    onChange={(e) => setForm((s) => ({ ...s, event_date: e.target.value }))}
+                  />
+                  {form.recurrence_type === 'weekly' ? (
+                    <p className="mt-1 text-xs text-stone-500">Подстраивается под выбранный день недели.</p>
+                  ) : null}
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-semibold text-stone-600">День недели</label>
+                  <select
+                    className={fieldClass()}
+                    value={String(form.weekly_day)}
+                    disabled={form.recurrence_type !== 'weekly'}
+                    onChange={(e) => setForm((s) => ({ ...s, weekly_day: Number(e.target.value) }))}
+                  >
+                    {weekDays.map((d) => (
+                      <option key={d.value} value={d.value}>
+                        {d.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-semibold text-stone-600">Категория</label>
+                  <select
+                    className={fieldClass()}
+                    value={
+                      categoryOptions.some((o) => o.id === form.category) ? form.category : categoryOptions[0].id
+                    }
+                    onChange={(e) => setForm((s) => ({ ...s, category: e.target.value }))}
+                  >
+                    {categoryOptions.map((o) => (
+                      <option key={o.id} value={o.id}>
+                        {o.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex flex-col justify-end pb-0.5">
+                  <label className="flex cursor-pointer items-center gap-2 text-sm font-semibold text-stone-700">
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 rounded border-stone-300 text-primary"
+                      checked={form.is_active}
+                      onChange={(e) => setForm((s) => ({ ...s, is_active: e.target.checked }))}
+                    />
+                    Показывать в дашборде
+                  </label>
+                </div>
+              </div>
+
+              <div className="mt-4 overflow-hidden rounded-xl border border-stone-200/80 bg-stone-50/60">
+                <button
+                  type="button"
+                  className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm font-bold text-stone-700 transition-colors hover:bg-stone-100/60"
+                  onClick={() => setCreateExtrasOpen((v) => !v)}
+                  aria-expanded={createExtrasOpen}
+                >
+                  <LuImage className="h-4 w-4 shrink-0 text-primary/80" strokeWidth={2} aria-hidden />
+                  <span className="flex-1">Описание и постер</span>
+                  <span className="text-xs font-normal text-stone-500">необязательно</span>
+                  <LuChevronDown
+                    className={`h-4 w-4 shrink-0 text-stone-400 transition-transform duration-200 ${createExtrasOpen ? 'rotate-180' : ''}`}
+                    strokeWidth={2}
+                    aria-hidden
+                  />
+                </button>
+                <div
+                  className={`grid transition-[grid-template-rows] duration-300 ease-in-out motion-reduce:transition-none ${createExtrasOpen ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}
+                >
+                  <div className="overflow-hidden">
+                    <div className="space-y-3 border-t border-stone-200/60 px-3 pb-3 pt-3">
+                      <div>
+                        <label className="mb-1 block text-xs font-semibold text-stone-600">Описание</label>
+                        <textarea
+                          className={`${fieldClass()} min-h-[88px] resize-y`}
+                          value={form.description}
+                          onChange={(e) => setForm((s) => ({ ...s, description: e.target.value }))}
+                          placeholder="Текст в карточке и в окне на дашборде"
+                        />
+                      </div>
+                      <div>
+                        <label className="mb-1 block text-xs font-semibold text-stone-600">Постер</label>
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                          <input
+                            type="file"
+                            accept="image/*"
+                            className={fieldClass()}
+                            onChange={(e) => {
+                              const f = e.target.files?.[0] ?? null;
+                              setPosterFile(f);
+                              setForm((s) => ({ ...s, poster_url: null }));
+                            }}
+                          />
+                          <button
+                            type="button"
+                            className={btnSecondary()}
+                            disabled={!posterFile || uploadPosterMut.isPending}
+                            onClick={() => {
+                              setNote(null);
+                              uploadPosterMut.mutate();
+                            }}
+                          >
+                            {uploadPosterMut.isPending ? 'Загрузка…' : form.poster_url ? 'Перезагрузить' : 'Загрузить'}
+                          </button>
+                          {form.poster_url ? (
+                            <span className="text-xs font-semibold text-emerald-700">Загружено</span>
+                          ) : null}
+                        </div>
+                        {posterPreviewUrl || uploadedPosterSrc ? (
+                          <div className="mt-3 overflow-hidden rounded-2xl border border-stone-200/70 bg-white">
+                            <img
+                              src={posterPreviewUrl ?? uploadedPosterSrc ?? ''}
+                              alt=""
+                              className="h-[120px] w-full object-cover sm:h-[160px]"
+                              loading="lazy"
+                            />
+                          </div>
+                        ) : null}
+                        <p className="mt-1 text-xs text-stone-500">Картинка в модалке события на дашборде.</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                className={`${btnPrimary('mt-4 w-full sm:w-auto')}`}
+                disabled={
+                  !form.title.trim() ||
+                  !form.event_time ||
+                  (form.recurrence_type === 'once' && !form.event_date) ||
+                  createMut.isPending
+                }
+                onClick={() => {
+                  setNote(null);
+                  createMut.mutate();
+                }}
+              >
+                {createMut.isPending ? 'Сохранение…' : 'Сохранить событие'}
+              </button>
+            </div>
+          </div>
         </div>
-        {eventsQ.isLoading ? (
-          <div className="mt-3 h-40 animate-pulse rounded-2xl bg-stone-100" />
-        ) : eventsQ.isError ? (
-          <p className="mt-3 text-sm text-red-600">{apiErrorMessage(eventsQ.error, 'Не удалось загрузить список событий.')}</p>
-        ) : (eventsQ.data ?? []).length === 0 ? (
-          <p className="mt-3 text-sm text-stone-500">Событий пока нет.</p>
-        ) : (
-          <div className="mt-3 space-y-3">
+      </section>
+
+      <section className="overflow-hidden rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] shadow-[var(--shadow)]">
+        <button
+          type="button"
+          className="flex w-full items-center gap-3 px-4 py-3.5 text-left transition-colors hover:bg-stone-50/80 sm:px-5"
+          onClick={() => setListPanelOpen((v) => !v)}
+          aria-expanded={listPanelOpen}
+        >
+          <span className="text-sm font-extrabold text-stone-900">Все события</span>
+          <span className="text-xs tabular-nums text-stone-500">
+            {eventsQ.isLoading ? '…' : `${eventCount} шт.`}
+          </span>
+          <LuChevronDown
+            className={`ml-auto h-4 w-4 shrink-0 text-stone-400 transition-transform duration-200 ${listPanelOpen ? 'rotate-180' : ''}`}
+            strokeWidth={2}
+            aria-hidden
+          />
+        </button>
+        <div
+          className={`grid transition-[grid-template-rows] duration-300 ease-in-out motion-reduce:transition-none ${listPanelOpen ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}
+        >
+          <div className="overflow-hidden">
+            <div className="border-t border-stone-100 px-4 pb-4 pt-3 sm:px-5">
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                <button
+                  type="button"
+                  className={btnDangerOutline()}
+                  disabled={deleteAllMut.isPending || deleteMut.isPending || updateMut.isPending}
+                  onClick={() => {
+                    if (eventCount === 0) {
+                      setNote({ type: 'err', text: 'Список уже пуст.' });
+                      return;
+                    }
+                    if (!window.confirm(`Удалить все события (${eventCount})? Действие нельзя отменить.`)) return;
+                    setNote(null);
+                    deleteAllMut.mutate();
+                  }}
+                >
+                  {deleteAllMut.isPending ? 'Удаление…' : 'Удалить все'}
+                </button>
+              </div>
+              {eventsQ.isLoading ? (
+                <div className="mt-3 h-40 animate-pulse rounded-2xl bg-stone-100" />
+              ) : eventsQ.isError ? (
+                <p className="mt-3 text-sm text-red-600">
+                  {apiErrorMessage(eventsQ.error, 'Не удалось загрузить список событий.')}
+                </p>
+              ) : (eventsQ.data ?? []).length === 0 ? (
+                <p className="mt-3 text-sm text-stone-500">Событий пока нет.</p>
+              ) : (
+                <div className="mt-3 space-y-3">
             {(eventsQ.data ?? []).map((ev) => {
               const isEdit = editing?.id === ev.id;
               const row = isEdit ? editing : ev;
@@ -2732,9 +2833,12 @@ function EventsSection() {
                   </div>
                 </article>
               );
-            })}
+                })}
+                </div>
+              )}
+            </div>
           </div>
-        )}
+        </div>
       </section>
     </div>
   );
