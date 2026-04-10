@@ -34,6 +34,7 @@
     "browser-image-compression": "^2.0.2",
     "date-fns": "^4.1.0",
     "framer-motion": "^12.38.0",
+    "fuse.js": "^7.3.0",
     "jspdf": "^4.2.1",
     "react": "^18.3.1",
     "react-day-picker": "^9.14.0",

@@ -32,6 +32,7 @@ import { MessengerWsProvider } from '../features/messenger/MessengerWsContext';
 import { useBrowserNotificationScheduler } from '../features/notifications/useBrowserNotificationScheduler';
 import { useProfileDraftStore } from '../features/profile/profileDraftStore';
 import { canAccessStudioRole } from '../features/auth/studioAccess';
+import { LAYOUT_MAIN_CHROME_EVENT } from './layoutChrome';
 
 type NavItem = {
   to: string;
@@ -264,6 +265,8 @@ export function Layout() {
   const logout = useAuthStore((s) => s.logout);
   const updatePrompt = useServiceWorkerUpdate({ showPrompt: true });
   const [navCollapsed, setNavCollapsed] = useState(false);
+  /** Скрытие сайдбара и нижнего таббара (режим чтения песен и т.п.). */
+  const [mainChromeVisible, setMainChromeVisible] = useState(true);
 
   const appName = useBrandingStore((s) => s.appName);
   const description = useBrandingStore((s) => s.description);
@@ -308,6 +311,17 @@ export function Layout() {
     } catch {
       /* ignore */
     }
+  }, []);
+
+  useEffect(() => {
+    const onChrome = (e: Event) => {
+      const ce = e as CustomEvent<{ visible?: boolean }>;
+      setMainChromeVisible(ce.detail?.visible !== false);
+    };
+    window.addEventListener(LAYOUT_MAIN_CHROME_EVENT, onChrome);
+    return () => {
+      window.removeEventListener(LAYOUT_MAIN_CHROME_EVENT, onChrome);
+    };
   }, []);
 
   function toggleNavCollapsed() {
@@ -396,7 +410,11 @@ export function Layout() {
       <div
         className={[
           'flex min-h-0 min-w-0 w-full max-w-full flex-1 flex-col box-border',
-          navCollapsed ? 'md:pl-[88px]' : 'md:pl-[260px] lg:pl-[272px]',
+          mainChromeVisible
+            ? navCollapsed
+              ? 'md:pl-[88px]'
+              : 'md:pl-[260px] lg:pl-[272px]'
+            : 'md:pl-0',
         ].join(' ')}
       >
       <div className="shrink-0">
@@ -408,9 +426,11 @@ export function Layout() {
       {/* Планшет/десктоп: фиксированный сайдбар (не в потоке, не растягивается по ширине main). На узких — нижняя навигация. */}
       <aside
         className={[
-          'hidden shrink-0 flex-col overflow-y-auto overflow-x-hidden border-r border-stone-200/80 bg-[var(--surface-elevated)] shadow-[4px_0_16px_rgba(0,0,0,0.06)] md:fixed md:bottom-0 md:left-0 md:top-0 md:z-30 md:flex [padding-bottom:env(safe-area-inset-bottom,0px)] [padding-top:env(safe-area-inset-top,0px)]',
+          'hidden shrink-0 flex-col overflow-y-auto overflow-x-hidden border-r border-stone-200/80 bg-[var(--surface-elevated)] shadow-[4px_0_16px_rgba(0,0,0,0.06)] md:fixed md:bottom-0 md:left-0 md:top-0 md:z-30 md:flex [padding-bottom:env(safe-area-inset-bottom,0px)] [padding-top:env(safe-area-inset-top,0px)] md:transition-transform md:duration-200',
           navCollapsed ? 'w-[88px] max-w-[88px]' : 'w-[260px] max-w-[260px] lg:w-[272px] lg:max-w-[272px]',
+          mainChromeVisible ? 'md:translate-x-0' : 'md:pointer-events-none md:-translate-x-full md:opacity-0',
         ].join(' ')}
+        aria-hidden={!mainChromeVisible}
       >
         <div className={navCollapsed ? 'flex min-h-0 flex-1 flex-col gap-1 p-4' : 'flex min-h-0 flex-1 flex-col gap-1 p-6'}>
           <div className={navCollapsed ? 'mb-4 flex items-center justify-center' : 'mb-6 flex items-start gap-3'}>
@@ -583,14 +603,25 @@ export function Layout() {
       </aside>
 
       {/* Main: отступ слева от сайдбара — на родителе (padding); снизу под нижний бар на мобильных */}
-      <main className="app-main-content flex min-h-0 min-w-0 w-full max-w-full flex-1 flex-col overflow-x-clip pb-[max(7.5rem,calc(5.25rem+env(safe-area-inset-bottom,16px)))] md:pb-0 2xl:px-8 min-[1920px]:px-12">
+      <main
+        className={[
+          'app-main-content flex min-h-0 min-w-0 w-full max-w-full flex-1 flex-col overflow-x-clip md:pb-0 2xl:px-8 min-[1920px]:px-12',
+          mainChromeVisible
+            ? 'pb-[max(7.5rem,calc(5.25rem+env(safe-area-inset-bottom,16px)))]'
+            : 'pb-[max(1rem,env(safe-area-inset-bottom,16px))]',
+        ].join(' ')}
+      >
         <Outlet />
       </main>
 
       {/* Телефон: нижняя навигация (иконка + подпись, как в нативных приложениях) */}
       <nav
-        className="app-bottom-nav fixed bottom-0 left-0 right-0 z-50 border-t border-gray-100 bg-white/95 pb-[env(safe-area-inset-bottom,16px)] shadow-sm backdrop-blur-xl supports-[backdrop-filter]:bg-white/90 md:hidden"
+        className={[
+          'app-bottom-nav fixed bottom-0 left-0 right-0 z-50 border-t border-gray-100 bg-white/95 pb-[env(safe-area-inset-bottom,16px)] shadow-sm backdrop-blur-xl supports-[backdrop-filter]:bg-white/90 md:hidden transition-transform duration-200',
+          mainChromeVisible ? 'translate-y-0' : 'pointer-events-none translate-y-full opacity-0',
+        ].join(' ')}
         aria-label="Основная навигация"
+        aria-hidden={!mainChromeVisible}
       >
         <div className="mx-auto flex max-w-md items-center justify-around px-2 pb-1 pt-1">
           {mobileItems.map((item) => {

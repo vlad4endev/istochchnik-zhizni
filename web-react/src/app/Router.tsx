@@ -23,6 +23,7 @@ import { canAccessStudioRole, canModerateSongCatalog } from '../features/auth/st
 
 import { Layout } from './Layout';
 import { ProfileRouteBoundary } from './ProfileRouteBoundary';
+import { SongbookLayout } from '../features/songbook/SongbookLayout';
 
 /** Отдельные чанки: настройки (`/profile`) и публичная лента (`/profile/:username`) не тянут друг друга. */
 const LazyProfilePage = lazy(async () => {
@@ -53,11 +54,6 @@ const StudioLayout = lazy(async () => {
 const StudioMySongsPage = lazy(async () => {
   const m = await import('../features/studio/pages/MySongsPage');
   return { default: m.MySongsPage };
-});
-
-const StudioDraftsPage = lazy(async () => {
-  const m = await import('../features/studio/pages/DraftsPage');
-  return { default: m.DraftsPage };
 });
 
 const StudioSetlistsPage = lazy(async () => {
@@ -98,6 +94,11 @@ const SongDetailPage = lazy(async () => {
 const AddSongPage = lazy(async () => {
   const m = await import('../features/songbook/pages/AddSongPage');
   return { default: m.AddSongPage };
+});
+
+const StudioEditor = lazy(async () => {
+  const m = await import('../features/songbook/studio/StudioEditor');
+  return { default: m.StudioEditor };
 });
 
 const PublicSetlistPage = lazy(async () => {
@@ -221,14 +222,7 @@ export function AppRouter() {
               </Suspense>
             }
           />
-          <Route
-            path="drafts"
-            element={
-              <Suspense fallback={<RouteFallback />}>
-                <StudioDraftsPage />
-              </Suspense>
-            }
-          />
+          <Route path="drafts" element={<Navigate to="/studio/my-songs" replace />} />
           <Route
             path="setlists"
             element={
@@ -338,34 +332,87 @@ export function AppRouter() {
           path="songbook"
           element={
             <RequireFullMember>
+              <SongbookLayout />
+            </RequireFullMember>
+          }
+        >
+          <Route
+            index
+            element={
               <Suspense fallback={<RouteFallback />}>
                 <SongbookPage />
               </Suspense>
-            </RequireFullMember>
-          }
-        />
-        <Route
-          path="songbook/add"
-          element={
-            <RequireFullMember>
+            }
+          />
+          <Route
+            path="add"
+            element={
               <RequireCatalogModerator>
                 <Suspense fallback={<RouteFallback />}>
                   <AddSongPage />
                 </Suspense>
               </RequireCatalogModerator>
-            </RequireFullMember>
-          }
-        />
-        <Route
-          path="songbook/:id"
-          element={
-            <RequireFullMember>
+            }
+          />
+          <Route
+            path="studio/edit/:songId"
+            element={
+              <RequireStudioAccess>
+                <Suspense fallback={<RouteFallback />}>
+                  <StudioEditor />
+                </Suspense>
+              </RequireStudioAccess>
+            }
+          />
+          <Route
+            path="studio"
+            element={
+              <RequireStudioAccess>
+                <Suspense fallback={<RouteFallback />}>
+                  <StudioMySongsPage />
+                </Suspense>
+              </RequireStudioAccess>
+            }
+          />
+          <Route
+            path="setlists/:id/perform"
+            element={
+              <RequireStudioAccess>
+                <Suspense fallback={<RouteFallback />}>
+                  <StudioPerformPage />
+                </Suspense>
+              </RequireStudioAccess>
+            }
+          />
+          <Route
+            path="setlists/:id"
+            element={
+              <RequireStudioAccess>
+                <Suspense fallback={<RouteFallback />}>
+                  <StudioSetlistDetailPage />
+                </Suspense>
+              </RequireStudioAccess>
+            }
+          />
+          <Route
+            path="setlists"
+            element={
+              <RequireStudioAccess>
+                <Suspense fallback={<RouteFallback />}>
+                  <StudioSetlistsPage />
+                </Suspense>
+              </RequireStudioAccess>
+            }
+          />
+          <Route
+            path=":id"
+            element={
               <Suspense fallback={<RouteFallback />}>
                 <SongDetailPage />
               </Suspense>
-            </RequireFullMember>
-          }
-        />
+            }
+          />
+        </Route>
         <Route
           path="profile"
           element={

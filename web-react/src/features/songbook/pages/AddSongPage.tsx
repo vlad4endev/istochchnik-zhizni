@@ -32,7 +32,8 @@ function parseKeyForApi(guessLabel: string): string {
 export function AddSongPage() {
   const navigate = useNavigate();
   const location = useLocation();
-  const isStudio = location.pathname.startsWith('/studio/');
+  const isStudio =
+    location.pathname.startsWith('/studio/') || location.pathname.startsWith('/songbook/studio');
   const role = useAuthStore((s) => s.role);
   const editorRef = useRef<HTMLTextAreaElement>(null);
   const selRef = useRef({ start: 0, end: 0 });
@@ -174,7 +175,7 @@ export function AddSongPage() {
       <div className={`mx-auto max-w-lg p-6 ${isStudio ? 'text-zinc-300' : 'text-stone-600'}`}>
         <p>Добавление песен доступно редакторам каталога.</p>
         <Link
-          to={isStudio ? '/studio/my-songs' : '/songbook'}
+          to={isStudio ? (location.pathname.startsWith('/songbook') ? '/songbook/studio' : '/studio/my-songs') : '/songbook'}
           className={`mt-4 inline-block ${isStudio ? 'text-sky-400' : 'text-sky-600'}`}
         >
           ← Назад
@@ -216,7 +217,7 @@ export function AddSongPage() {
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <Link
-          to={isStudio ? '/studio/my-songs' : '/songbook'}
+          to={isStudio ? (location.pathname.startsWith('/songbook') ? '/songbook/studio' : '/studio/my-songs') : '/songbook'}
           className={`inline-flex items-center gap-2 text-sm ${theme.link}`}
         >
           <LuArrowLeft className="h-4 w-4" />

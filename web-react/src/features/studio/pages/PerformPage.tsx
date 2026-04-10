@@ -15,11 +15,13 @@ import { useWakeLock } from '../../../hooks/useWakeLock';
 import { LyricsWithChords } from '../../songbook/components/LyricsWithChords';
 
 import { fetchPerformance } from '../api';
+import { studioSetlistDetailPath, useStudioModuleSurface } from '../studioPaths';
 
 export function PerformPage() {
   const { id } = useParams<{ id: string }>();
   const setlistId = Number(id);
   const navigate = useNavigate();
+  const surface = useStudioModuleSurface();
   const q = useQuery({
     queryKey: ['studio', 'perform', setlistId],
     queryFn: () => fetchPerformance(setlistId),
@@ -63,11 +65,11 @@ export function PerformPage() {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'ArrowRight') go(1);
       if (e.key === 'ArrowLeft') go(-1);
-      if (e.key === 'Escape') navigate(`/studio/setlists/${setlistId}`);
+      if (e.key === 'Escape') navigate(studioSetlistDetailPath(surface, setlistId));
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [go, navigate, setlistId]);
+  }, [go, navigate, setlistId, surface]);
 
   const pxPerSec = useBpmSpeed && bpm ? Math.max(12, Math.min(80, (bpm / 60) * 14)) : speedPxPerSec;
 
@@ -108,7 +110,7 @@ export function PerformPage() {
         <p>В сетлисте нет песен.</p>
         <button
           type="button"
-          onClick={() => navigate(`/studio/setlists/${setlistId}`)}
+          onClick={() => navigate(studioSetlistDetailPath(surface, setlistId))}
           className="text-sky-400"
         >
           Назад
@@ -138,7 +140,7 @@ export function PerformPage() {
       <header className="flex shrink-0 items-center justify-between border-b border-zinc-800 px-2 py-2">
         <button
           type="button"
-          onClick={() => navigate(`/studio/setlists/${setlistId}`)}
+          onClick={() => navigate(studioSetlistDetailPath(surface, setlistId))}
           className="flex h-10 w-10 shrink-0 items-center justify-center text-zinc-400"
           aria-label="Закрыть"
         >
@@ -217,7 +219,8 @@ export function PerformPage() {
         <LyricsWithChords
           text={body}
           transposeSemitones={transpose}
-          className="whitespace-pre-wrap font-sans text-lg leading-relaxed text-zinc-100 md:text-xl"
+          chordTone="dark"
+          className="font-sans text-lg text-zinc-100 md:text-xl"
         />
       </div>
 

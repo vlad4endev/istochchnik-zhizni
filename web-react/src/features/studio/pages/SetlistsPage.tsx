@@ -3,8 +3,10 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 
 import { createSetlist, deleteSetlist, fetchSetlists } from '../api';
+import { studioSetlistDetailPath, studioSetlistPerformPath, useStudioModuleSurface } from '../studioPaths';
 
 export function SetlistsPage() {
+  const surface = useStudioModuleSurface();
   const qc = useQueryClient();
   const q = useQuery({ queryKey: ['studio', 'setlists'], queryFn: fetchSetlists });
   const [title, setTitle] = useState('');
@@ -28,7 +30,14 @@ export function SetlistsPage() {
   if (q.isLoading) return <p className="text-sm text-zinc-500">Загрузка…</p>;
 
   return (
-    <div className="mx-auto max-w-2xl space-y-6">
+    <div
+      className={[
+        'mx-auto max-w-2xl space-y-6',
+        surface === 'songbook' ? 'rounded-2xl border border-zinc-800 bg-[#0a0a0a] p-4 shadow-inner md:p-6' : '',
+      ]
+        .filter(Boolean)
+        .join(' ')}
+    >
       <h1 className="text-lg font-semibold text-white">Сетлисты (программы)</h1>
       <div className="rounded-lg border border-zinc-800 bg-zinc-900/40 p-4">
         <p className="mb-2 text-xs font-bold uppercase text-zinc-500">Новый сетлист</p>
@@ -63,7 +72,7 @@ export function SetlistsPage() {
           >
             <div>
               <Link
-                to={`/studio/setlists/${s.id}`}
+                to={studioSetlistDetailPath(surface, Number(s.id))}
                 className="font-medium text-white hover:text-sky-400"
               >
                 {s.title}
@@ -74,7 +83,7 @@ export function SetlistsPage() {
             </div>
             <div className="flex items-center gap-3">
               <Link
-                to={`/studio/setlists/${s.id}/perform`}
+                to={studioSetlistPerformPath(surface, Number(s.id))}
                 className="text-sm text-emerald-400 hover:text-emerald-300"
               >
                 Выступление

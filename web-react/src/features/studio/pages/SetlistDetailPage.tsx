@@ -1,6 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useParams } from 'react-router-dom';
 import { useMemo, useState } from 'react';
+
+import { useStudioModuleSurface } from '../studioPaths';
 import { LuCopy, LuFileDown } from 'react-icons/lu';
 
 import { exportSetlistPdf } from '../../songbook/pdfExport';
@@ -18,6 +20,7 @@ export function SetlistDetailPage() {
   const { id } = useParams<{ id: string }>();
   const setlistId = Number(id);
   const qc = useQueryClient();
+  const surface = useStudioModuleSurface();
 
   const itemsQ = useQuery({
     queryKey: ['studio', 'setlist', setlistId, 'items'],
@@ -80,7 +83,14 @@ export function SetlistDetailPage() {
       : '';
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6">
+    <div
+      className={[
+        'mx-auto max-w-3xl space-y-6',
+        surface === 'songbook' ? 'rounded-2xl border border-zinc-800 bg-[#0a0a0a] p-4 shadow-inner md:p-6' : '',
+      ]
+        .filter(Boolean)
+        .join(' ')}
+    >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <h1 className="text-lg font-semibold text-white">Позиции сетлиста</h1>
         <div className="flex flex-wrap gap-2">
