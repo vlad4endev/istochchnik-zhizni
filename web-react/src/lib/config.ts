@@ -57,6 +57,15 @@ export function getCalendarApiBaseUrl(): string {
 /**
  * WebSocket для realtime (`/api/realtime`): тот же хост, что и REST (Vite proxy или nginx /api).
  */
+/**
+ * Origin веб-приложения чатов (отдельный поддомен). Пусто — чаты встроены в основной SPA (legacy).
+ * Пример: https://chat.church-tambov.ru
+ */
+export function resolveMessengerWebOrigin(): string {
+  const raw = import.meta.env.VITE_MESSENGER_ORIGIN ?? '';
+  return trimTrailingSlash(String(raw).trim());
+}
+
 export function resolveRealtimeWebSocketUrl(): string {
   const httpBase = resolveAxiosBaseURL().trim();
   if (!httpBase) {

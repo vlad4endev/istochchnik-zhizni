@@ -6,10 +6,20 @@ import { registerSW } from 'virtual:pwa-register';
 
 import { applyNativeShellViewportLock } from './lib/nativeShellViewport';
 import { AppRouter } from './app/Router';
+import { AppRouterMain } from './app/RouterMain';
+import { AppRouterStudio } from './app/RouterStudio';
+import { getAppVariant } from './lib/appVariant';
 import './index.css';
 
 applyNativeShellViewportLock();
 window.addEventListener('load', () => applyNativeShellViewportLock());
+
+function RootRouter() {
+  const v = getAppVariant();
+  if (v === 'main') return <AppRouterMain />;
+  if (v === 'studio') return <AppRouterStudio />;
+  return <AppRouter />;
+}
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -59,7 +69,7 @@ createRoot(document.getElementById('root')!).render(
     <div className="flex min-h-0 w-full max-w-full flex-1 flex-col overflow-x-clip">
       <QueryClientProvider client={queryClient}>
         <BrowserRouter>
-          <AppRouter />
+          <RootRouter />
         </BrowserRouter>
       </QueryClientProvider>
     </div>

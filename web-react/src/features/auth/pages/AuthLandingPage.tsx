@@ -1,7 +1,8 @@
 import { useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 
-import { useAuthHydrated } from '../../../hooks/useAuthHydrated';
+import { useAuthSessionReady } from '../../../hooks/useAuthSessionReady';
+import { defaultPostLoginPath } from '../../../lib/appVariant';
 import { useAuthStore } from '../authStore';
 
 const DEFAULT_APP_NAME = 'МОЯ ЦЕРКОВЬ';
@@ -9,17 +10,17 @@ const DEFAULT_DESCRIPTION = 'Цифровая платформа';
 
 export function AuthLandingPage() {
   const navigate = useNavigate();
-  const hydrated = useAuthHydrated();
+  const sessionReady = useAuthSessionReady();
   const token = useAuthStore((s) => s.token);
 
   useEffect(() => {
-    if (!hydrated) return;
+    if (!sessionReady) return;
     if (token) {
-      navigate('/', { replace: true });
+      navigate(defaultPostLoginPath(), { replace: true });
     }
-  }, [hydrated, token, navigate]);
+  }, [sessionReady, token, navigate]);
 
-  if (!hydrated) {
+  if (!sessionReady) {
     return (
       <div className="flex min-h-[100dvh] min-h-screen w-full max-w-[100vw] items-center justify-center bg-primary text-white">
         <p className="text-sm font-medium opacity-90">Загрузка…</p>

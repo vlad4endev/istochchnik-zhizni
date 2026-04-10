@@ -1,4 +1,5 @@
 import { Router, type Request, type Response } from 'express';
+import { resolveMessengerConversationDeepLink } from '../config/messengerPublic';
 import { requireAuthSession } from '../middleware/authSession';
 import { checkChatPermission } from '../middleware/chatPermission';
 import { ensureValidRequest, validateSendMessage } from '../middleware/messengerValidation';
@@ -27,6 +28,27 @@ async function getConversationListItemForMember(memberId: number, convId: string
 
 // All messenger routes require authentication
 router.use(requireAuthSession);
+
+/** POST /api/messenger/studio/song-chat { songId } — чат обсуждения песни (студия). */
+router.post('/studio/song-chat', async (req: Request, res: Response) => {
+  const userId = (req as AuthReq).authUserId!;
+  const songId = Number((req.body as { songId?: unknown })?.songId);
+  if (!Number.isFinite(songId) || songId <= 0) {
+    res.status(400).json({ error: 'songId is required' });
+    return;
+  }
+  try {
+    const { conversationId } = await svc.findOrCreateStudioSongConversation(songId, userId);
+    ensureMemberInRoom(userId, conversationId);
+    res.json({
+      conversationId,
+      openUrl: resolveMessengerConversationDeepLink(conversationId),
+    });
+  } catch (e) {
+    console.error('[messenger] studio song-chat error:', e);
+    res.status(500).json({ error: 'Failed to open song chat' });
+  }
+});
 
 /** POST /api/messenger/upload (form-data: file) -> { url, name, size } */
 router.post('/upload', upload.single('file'), async (req: Request, res: Response) => {
@@ -538,7 +560,7 @@ router.post(
             body: mentioned ? `${senderName}: ${previewShort || 'Сообщение'}` : bodyText,
             conversationId: convKey,
             messageId: String((message as any)?.id ?? ''),
-            url: `/messenger?conversationId=${encodeURIComponent(convKey)}`,
+            url: resolveMessengerConversationDeepLink(convKey),
           };
           // best-effort per recipient
           // eslint-disable-next-line no-await-in-loop

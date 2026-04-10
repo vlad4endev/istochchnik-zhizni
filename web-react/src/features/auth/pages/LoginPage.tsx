@@ -3,9 +3,10 @@ import { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { LuArrowRight, LuEye, LuEyeOff, LuPenLine, LuTriangleAlert } from 'react-icons/lu';
 
-import { useAuthHydrated } from '../../../hooks/useAuthHydrated';
+import { useAuthSessionReady } from '../../../hooks/useAuthSessionReady';
 import { apiClient } from '../../../lib/apiClient';
 import { isApiUrlProbablyWrongForWeb } from '../../../lib/config';
+import { defaultPostLoginPath, pendingRegistrationLandingPath } from '../../../lib/appVariant';
 import { humanizeServerError, mapAxiosAuthError } from '../authErrors';
 import { normalizeRegistrationStatus, useAuthStore } from '../authStore';
 import { formatRuPhoneInput, phoneInputAllowedKeys } from '../utils/formatRuPhone';
@@ -48,7 +49,7 @@ export function LoginPage() {
   const location = useLocation();
   const state = (location.state ?? {}) as LocationState;
 
-  const hydrated = useAuthHydrated();
+  const sessionReady = useAuthSessionReady();
   const token = useAuthStore((s) => s.token);
   const setSession = useAuthStore((s) => s.setSession);
 
@@ -75,13 +76,13 @@ export function LoginPage() {
   const apiMismatch = isApiUrlProbablyWrongForWeb();
 
   useEffect(() => {
-    if (!hydrated) return;
+    if (!sessionReady) return;
     if (token) {
-      navigate('/', { replace: true });
+      navigate(defaultPostLoginPath(), { replace: true });
     }
-  }, [hydrated, token, navigate]);
+  }, [sessionReady, token, navigate]);
 
-  if (!hydrated) {
+  if (!sessionReady) {
     return (
       <div className="flex min-h-[100dvh] min-h-screen items-center justify-center bg-[var(--surface)] text-stone-500">
         <p className="text-sm font-medium">Загрузка…</p>
@@ -155,7 +156,7 @@ export function LoginPage() {
         username: ((user as { username?: string }).username ?? '').trim(),
         memberId: typeof (user as { id?: number }).id === 'number' ? (user as { id: number }).id : null,
       });
-      navigate('/', { replace: true });
+      navigate(defaultPostLoginPath(), { replace: true });
     } catch (e) {
       if (axios.isAxiosError(e) && (e.response?.status === 401 || e.response?.status === 403)) {
         setStatusText('Неверный телефон или пароль.');
@@ -246,7 +247,7 @@ export function LoginPage() {
           username: ((user as { username?: string }).username ?? '').trim(),
           memberId: typeof (user as { id?: number }).id === 'number' ? (user as { id: number }).id : null,
         });
-        navigate('/', { replace: true });
+        navigate(defaultPostLoginPath(), { replace: true });
         return;
       }
 
@@ -265,7 +266,7 @@ export function LoginPage() {
             username: ((user as { username?: string }).username ?? '').trim(),
             memberId: typeof (user as { id?: number }).id === 'number' ? (user as { id: number }).id : null,
           });
-          navigate('/dashboard', { replace: true });
+          navigate(pendingRegistrationLandingPath(), { replace: true });
           return;
         }
         setIsRegisterMode(false);

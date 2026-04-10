@@ -1,4 +1,4 @@
-import { broadcastRealtime } from './wsHub';
+import { broadcastRealtime } from './wsNotifyHub';
 
 export type RealtimeScope =
   | 'calendar'

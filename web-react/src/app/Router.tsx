@@ -1,16 +1,8 @@
-import { lazy, Suspense, type ReactNode } from 'react';
-import {
-  Navigate,
-  Outlet,
-  Route,
-  Routes,
-  useLocation,
-} from 'react-router-dom';
+import { lazy, Suspense, useEffect } from 'react';
+import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 
 import { AuthLandingPage } from '../features/auth/pages/AuthLandingPage';
 import { LoginPage } from '../features/auth/pages/LoginPage';
-import { useAuthStore } from '../features/auth/authStore';
-import { useAuthHydrated } from '../hooks/useAuthHydrated';
 
 import { DailyPrayerPage } from '../features/calendar/pages/DailyPrayerPage';
 import { BroadcastPage } from '../features/broadcast/pages/BroadcastPage';
@@ -19,11 +11,19 @@ import { PodcastsPage } from '../features/resources/pages/PodcastsPage';
 import { ServiceFlowPage } from '../features/serviceFlow/pages/ServiceFlowPage';
 import { DashboardPage } from '../features/dashboard/pages/DashboardPage';
 
-import { canAccessStudioRole, canModerateSongCatalog } from '../features/auth/studioAccess';
-
 import { Layout } from './Layout';
 import { ProfileRouteBoundary } from './ProfileRouteBoundary';
 import { SongbookLayout } from '../features/songbook/SongbookLayout';
+import {
+  LOGIN_PATH,
+  RequireAdmin,
+  RequireAuth,
+  RequireCatalogModerator,
+  RequireFullMember,
+  RequireStudioAccess,
+  RouteFallback,
+} from './routeGuards';
+import { resolveMessengerWebOrigin } from '../lib/config';
 
 /** Отдельные чанки: настройки (`/profile`) и публичная лента (`/profile/:username`) не тянут друг друга. */
 const LazyProfilePage = lazy(async () => {
@@ -34,11 +34,6 @@ const LazyProfilePage = lazy(async () => {
 const LazyPublicProfilePage = lazy(async () => {
   const m = await import('@features/profile/pages/PublicProfilePage');
   return { default: m.PublicProfilePage };
-});
-
-const MessengerRoutes = lazy(async () => {
-  const m = await import('../features/messenger/routes/MessengerRoutes');
-  return { default: m.MessengerRoutes };
 });
 
 const AdminPage = lazy(async () => {
@@ -106,83 +101,19 @@ const PublicSetlistPage = lazy(async () => {
   return { default: m.PublicSetlistPage };
 });
 
-const LOGIN_PATH = '/login';
-
-function RouteFallback(): ReactNode {
-  return (
-    <div className="flex min-h-[50dvh] w-full flex-1 items-center justify-center bg-[var(--surface)] text-stone-500">
-      <p className="text-sm font-medium">Загрузка…</p>
-    </div>
-  );
-}
-
-function HydrateSplash(): ReactNode {
-  return (
-    <div className="flex min-h-screen items-center justify-center bg-[var(--surface)] text-stone-500">
-      <p className="text-sm font-medium">Загрузка…</p>
-    </div>
-  );
-}
-
-function RequireAuth() {
-  const hydrated = useAuthHydrated();
-  const token = useAuthStore((s) => s.token);
+/** Старые ссылки /messenger → редирект на поддомен чатов (или на главную, если origin не задан). */
+function MessengerMigrateRedirect() {
   const location = useLocation();
-
-  if (!hydrated) {
-    return <HydrateSplash />;
-  }
-
-  if (!token) {
-    return <Navigate to={LOGIN_PATH} replace state={{ from: location.pathname }} />;
-  }
-
-  return <Outlet />;
-}
-
-function RequireAdmin({ children }: { children: ReactNode }) {
-  const role = useAuthStore((s) => s.role);
-  const isAdmin = (role ?? 'member').toLowerCase() === 'admin';
-  if (!isAdmin) {
-    return <Navigate to="/prayer" replace />;
-  }
-  return <>{children}</>;
-}
-
-/** Полный доступ к разделам приложения только после одобрения заявки (active). */
-function RequireFullMember({ children }: { children: ReactNode }) {
-  const registrationStatus = useAuthStore((s) => s.registrationStatus ?? 'active');
-  if (registrationStatus !== 'active') {
-    return <Navigate to="/dashboard" replace />;
-  }
-  return <>{children}</>;
-}
-
-/** Чаты недоступны, пока заявка на регистрацию не одобрена (отклонённым — для поддержки). */
-function RequireMessengerAccess({ children }: { children: ReactNode }) {
-  const registrationStatus = useAuthStore((s) => s.registrationStatus ?? 'active');
-  if (registrationStatus === 'pending_review') {
-    return <Navigate to="/dashboard" replace />;
-  }
-  return <>{children}</>;
-}
-
-function RequireStudioAccess({ children }: { children: ReactNode }) {
-  const role = useAuthStore((s) => s.role);
-  if (!canAccessStudioRole(role)) {
-    return <Navigate to="/dashboard" replace />;
-  }
-  return <>{children}</>;
-}
-
-function RequireCatalogModerator({ children }: { children: ReactNode }) {
-  const role = useAuthStore((s) => s.role);
-  const location = useLocation();
-  if (!canModerateSongCatalog(role)) {
-    const fallback = location.pathname.startsWith('/studio/') ? '/studio/my-songs' : '/songbook';
-    return <Navigate to={fallback} replace />;
-  }
-  return <>{children}</>;
+  const navigate = useNavigate();
+  useEffect(() => {
+    const o = resolveMessengerWebOrigin();
+    if (o) {
+      window.location.replace(`${o}/messenger${location.search}${location.hash}`);
+      return;
+    }
+    navigate('/dashboard', { replace: true });
+  }, [location.search, location.hash, navigate]);
+  return <RouteFallback />;
 }
 
 export function AppRouter() {
@@ -286,16 +217,7 @@ export function AppRouter() {
             </RequireFullMember>
           }
         />
-        <Route
-          path="messenger/*"
-          element={
-            <RequireMessengerAccess>
-              <Suspense fallback={<RouteFallback />}>
-                <MessengerRoutes />
-              </Suspense>
-            </RequireMessengerAccess>
-          }
-        />
+        <Route path="messenger/*" element={<MessengerMigrateRedirect />} />
         <Route
           path="broadcast"
           element={

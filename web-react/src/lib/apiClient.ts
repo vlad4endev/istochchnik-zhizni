@@ -2,6 +2,7 @@ import axios, { type AxiosError, type InternalAxiosRequestConfig, isCancel } fro
 
 import { useAuthStore } from '../features/auth/authStore';
 
+import { isCookieOnlySessionToken } from './authSessionConstants';
 import { resolveAxiosBaseURL } from './config';
 
 const AUTH_PATHS_SKIP_401_HANDLING = ['/api/auth/login', '/api/auth/register'];
@@ -48,6 +49,7 @@ function getTokenForRequest(): string | null {
 export const apiClient = axios.create({
   timeout: 25_000,
   headers: { Accept: 'application/json' },
+  withCredentials: true,
 });
 
 function applyBaseURL(config: InternalAxiosRequestConfig): InternalAxiosRequestConfig {
@@ -57,8 +59,9 @@ function applyBaseURL(config: InternalAxiosRequestConfig): InternalAxiosRequestC
 
 apiClient.interceptors.request.use((config) => {
   const next = applyBaseURL(config);
+  next.withCredentials = true;
   const token = getTokenForRequest();
-  if (token) {
+  if (token && !isCookieOnlySessionToken(token)) {
     next.headers.Authorization = `Bearer ${token}`;
   } else if (next.headers && 'Authorization' in next.headers) {
     // Prevent stale bearer token after logout/session clear.

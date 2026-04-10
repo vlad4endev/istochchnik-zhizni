@@ -13,6 +13,11 @@ import type { WsMessengerEvent } from '../types/messenger';
 const FANOUT_CHANNEL = 'realtime:fanout';
 const INSTANCE_ID = randomUUID();
 
+/** Один origin для всех publishFanout в процессе (подписчики игнорируют свои же сообщения). */
+export function getRealtimeInstanceId(): string {
+  return INSTANCE_ID;
+}
+
 /** Fan-out через Redis только если явно включили (иначе каждый старт бил бы 127.0.0.1:6379 и забивал лог). */
 function shouldConnectRedisFanout(): boolean {
   if (process.env.REDIS_REALTIME_ENABLED === 'false') return false;
@@ -451,6 +456,57 @@ function handleRemoteFanout(raw: string): void {
   }
 }
 
+function buildRedisSocketOpts(): { reconnectStrategy(retries: number): false | number } {
+  return {
+    reconnectStrategy(retries: number): false | number {
+      if (retries > 6) return false;
+      return Math.min(retries * 400, 2500);
+    },
+  };
+}
+
+/**
+ * Только Redis publisher: для процесса основного API, чтобы sendToRoom* доходили до сервиса мессенджера
+ * через fan-out (локальных WS-клиентов чата в этом процессе нет).
+ */
+export async function initMessengerFanoutPublisherOnly(): Promise<void> {
+  if (process.env.REDIS_REALTIME_ENABLED === 'false') {
+    console.log('[realtime] Redis publisher skipped (REDIS_REALTIME_ENABLED=false)');
+    return;
+  }
+  if (!shouldConnectRedisFanout()) {
+    console.log(
+      '[realtime] Redis publisher skipped (нет REDIS_URL / fan-out выключен) — push в чат из этого процесса без Redis не синхронизируется с messenger.',
+    );
+    return;
+  }
+
+  let redisUrl = rewriteLocalRedisUrlIfInsideDocker(resolveRedisUrl());
+  if (process.env.REDIS_REALTIME_ENABLED === 'true' && !(process.env.REDIS_URL?.trim())) {
+    console.warn(
+      '[realtime] REDIS_REALTIME_ENABLED=true, но REDIS_URL пуст — подключаемся к redis://127.0.0.1:6379.',
+    );
+  }
+
+  const pub = createClient({ url: redisUrl, socket: buildRedisSocketOpts() });
+  pub.on('error', makeThrottledRedisErrorLog('pub'));
+
+  try {
+    await pub.connect();
+    pubClient = pub as RedisClientType;
+    redisFanoutEnabled = true;
+    console.log(
+      `[realtime] Redis publisher OK (fan-out → messenger) → ${FANOUT_CHANNEL} (${redisUrl}) instance=${INSTANCE_ID.slice(0, 8)}…`,
+    );
+  } catch (e) {
+    console.error('[realtime] Redis publisher connect failed:', e);
+    redisFanoutEnabled = false;
+    pub.removeAllListeners('error');
+    await pub.disconnect().catch(() => {});
+    pubClient = null;
+  }
+}
+
 /**
  * Подключение Redis pub/sub до приёма WebSocket upgrade.
  * При сбое — только лог; realtime остаётся в рамках одного процесса.
@@ -476,12 +532,7 @@ export async function initRealtimeRedis(): Promise<void> {
     );
   }
 
-  const socketOpts = {
-    reconnectStrategy(retries: number): false | number {
-      if (retries > 6) return false;
-      return Math.min(retries * 400, 2500);
-    },
-  };
+  const socketOpts = buildRedisSocketOpts();
 
   const pub = createClient({ url: redisUrl, socket: socketOpts });
   const sub = createClient({ url: redisUrl, socket: socketOpts });
@@ -566,10 +617,9 @@ export function getOnlineMemberIds(): number[] {
 }
 
 /**
- * Broadcast any generic invalidation payload (legacy API — used by other parts of the app).
+ * Только fan-out «broadcast» (инвалидация React Query — см. `wsNotifyHub.broadcastRealtime`).
  */
-export function broadcastRealtime(payload: unknown): void {
-  deliverLocalBroadcast(payload);
+export function publishFanoutBroadcastPayload(payload: unknown): void {
   publishFanout({ kind: 'broadcast', payload });
 }
 

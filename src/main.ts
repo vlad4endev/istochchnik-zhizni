@@ -19,14 +19,14 @@ import authRoutes from './routes/authRoutes';
 import calendarRoutes from './routes/calendarRoutes';
 import userRoutes from './routes/userRoutes';
 import pushRoutes from './routes/pushRoutes';
-import messengerRoutes from './routes/messengerRoutes';
 import notificationsRoutes from './routes/notificationsRoutes';
 import telegramRoutes from './routes/telegramRoutes';
 import publicRoutes from './routes/publicRoutes';
 import songRoutes from './routes/songRoutes';
 import studioRoutes from './routes/studioRoutes';
 import settingsRoutes from './routes/settingsRoutes';
-import { attachRealtimeWebSocket, initRealtimeRedis } from './realtime/wsHub';
+import { initMessengerFanoutPublisherOnly } from './realtime/wsHub';
+import { attachNotifyWebSocket, initNotifyRealtimeRedis } from './realtime/wsNotifyHub';
 import { initPushCronJobs } from './cron/pushJobs';
 import { ensureUploadsDirs, getUploadsRoot } from './config/uploadsRoot';
 import { ensureAccessRequestsMessengerChannel } from './services/messengerService';
@@ -140,7 +140,6 @@ app.use('/api/settings', settingsRoutes);
 app.use('/api', routes);
 app.use('/api/push', pushRoutes);
 app.use('/api/notifications', notificationsRoutes);
-app.use('/api/messenger', messengerRoutes);
 app.use('/api/telegram', telegramRoutes);
 
 // Debug/version endpoint (helps verify that deploy updated)
@@ -196,14 +195,15 @@ async function start(): Promise<void> {
     }
   }
   const server = http.createServer(app);
-  await initRealtimeRedis();
-  attachRealtimeWebSocket(server);
+  await initMessengerFanoutPublisherOnly();
+  await initNotifyRealtimeRedis();
+  attachNotifyWebSocket(server);
   
   initPushCronJobs();
   
   server.listen(Number(PORT), () => {
     console.log(`Server is running on http://localhost:${PORT}`);
-    console.log('[realtime] WebSocket: /api/realtime');
+    console.log('[realtime] Notify WebSocket: /api/realtime (мессенджер — отдельный сервис)');
   });
 }
 

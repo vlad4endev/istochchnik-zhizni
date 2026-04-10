@@ -69,6 +69,50 @@ services:
       retries: 8
       start_period: 180s
 
+  messenger:
+    build:
+      context: .
+      dockerfile: Dockerfile.messenger
+      args:
+        VITE_CHAT_APP: "true"
+        VITE_MAIN_APP_ORIGIN: ${VITE_MAIN_APP_ORIGIN:-}
+        VITE_MESSENGER_ORIGIN: ${VITE_MESSENGER_ORIGIN:-}
+    container_name: istochnik-messenger
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - app_uploads:/app/uploads
+    environment:
+      PORT: "3002"
+      MESSENGER_PORT: "3002"
+      UPLOADS_DIR: ${UPLOADS_DIR:-}
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL must be set}
+      DB_SSL: ${DB_SSL:-false}
+      DB_SSL_REJECT_UNAUTHORIZED: ${DB_SSL_REJECT_UNAUTHORIZED:-false}
+      SKIP_DB_INIT_ON_START: ${SKIP_DB_INIT_ON_START:-false}
+      AUTH_SESSION_TTL_DAYS: ${AUTH_SESSION_TTL_DAYS:-30}
+      AUTH_MAX_ACTIVE_SESSIONS_PER_USER: ${AUTH_MAX_ACTIVE_SESSIONS_PER_USER:-5}
+      TRUST_PROXY: ${TRUST_PROXY:-true}
+      REDIS_REALTIME_ENABLED: ${REDIS_REALTIME_ENABLED:-false}
+      REDIS_URL: ${REDIS_URL:-}
+      MESSENGER_PUBLIC_ORIGIN: ${MESSENGER_PUBLIC_ORIGIN:-}
+      MESSENGER_CORS_ORIGINS: ${MESSENGER_CORS_ORIGINS:-}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-}
+      CORS_ORIGIN: ${CORS_ORIGIN:-}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "${MESSENGER_PUBLISH:-0.0.0.0}:3002:3002"
+    healthcheck:
+      test:
+        ["CMD-SHELL", "curl -fsS http://127.0.0.1:3002/health >/dev/null || exit 1"]
+      interval: 20s
+      timeout: 5s
+      retries: 6
+      start_period: 120s
+
   web:
     build:
       context: .
@@ -77,6 +121,7 @@ services:
         VITE_PWA_ORIGIN: ${VITE_PWA_ORIGIN:-}
         VITE_API_URL: ${VITE_API_URL:-}
         VITE_API_BASE_URL: ${VITE_API_BASE_URL:-}
+        VITE_MESSENGER_ORIGIN: ${VITE_MESSENGER_ORIGIN:-}
     container_name: istochnik-web
     restart: unless-stopped
     depends_on:

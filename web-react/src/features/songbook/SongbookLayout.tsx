@@ -1,8 +1,9 @@
-import { NavLink, Outlet } from 'react-router-dom';
-import { LuDisc3, LuListMusic, LuMusic2 } from 'react-icons/lu';
+import { NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { LuDisc3, LuListMusic, LuLogOut, LuMusic2 } from 'react-icons/lu';
 
 import { useAuthStore } from '../auth/authStore';
 import { canAccessStudioRole } from '../auth/studioAccess';
+import { isMainSongbookDeploy } from '../../lib/appVariant';
 
 import { SongbookChromeProvider, useSongbookChrome } from './SongbookChromeContext';
 
@@ -13,11 +14,15 @@ const tabs = [
 ] as const;
 
 function SongbookShell() {
+  const navigate = useNavigate();
   const role = useAuthStore((s) => s.role);
+  const logout = useAuthStore((s) => s.logout);
   const studioOk = canAccessStudioRole(role);
   const { stageMode, toggleStageMode } = useSongbookChrome();
+  const mainOnly = isMainSongbookDeploy();
 
   const visibleTabs = tabs.filter((t) => {
+    if (mainOnly && 'studioOnly' in t && t.studioOnly) return false;
     if ('studioOnly' in t && t.studioOnly) return studioOk;
     return true;
   });
@@ -128,6 +133,22 @@ function SongbookShell() {
           >
             Режим сцены
           </button>
+
+          {mainOnly ? (
+            <button
+              type="button"
+              onClick={() => void logout().then(() => navigate('/login', { replace: true }))}
+              className={[
+                'inline-flex min-h-[44px] items-center gap-1.5 rounded-xl border px-3 text-xs font-semibold',
+                stageMode
+                  ? 'border-zinc-600 text-zinc-200 hover:bg-zinc-900'
+                  : 'border-stone-200 text-stone-700 hover:bg-stone-50',
+              ].join(' ')}
+            >
+              <LuLogOut className="h-4 w-4" aria-hidden />
+              Выйти
+            </button>
+          ) : null}
         </div>
       </div>
 

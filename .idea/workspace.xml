@@ -3,6 +3,161 @@
   <component name="AutoImportSettings">
     <option name="autoReloadType" value="NONE" />
   </component>
+  <component name="ChangeListManager">
+    <list default="true" id="b930d79f-12a6-4278-b2e4-43573b832812" name="Changes" comment="">
+      <change afterPath="$PROJECT_DIR$/.idea/caches/deviceStreaming.xml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.idea/markdown.xml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.idea/modules.xml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.idea/studiobot.xml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.idea/vcs.xml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.idea/истчоник жизни.iml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/new.sh" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/misc.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/misc.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/istochchnik-zhizni/web-react/android/.gitignore" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/istochchnik-zhizni/web-react/android/app/.gitignore" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/istochchnik-zhizni/web-react/android/app/build.gradle" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/istochchnik-zhizni/web-react/android/app/capacitor.build.gradle" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/istochchnik-zhizni/web-react/android/app/proguard-rules.pro" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/istochchnik-zhizni/web-react/android/app/src/androidTest/java/com/getcapacitor/myapp/ExampleInstrumentedTest.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/istochchnik-zhizni/web-react/android/app/src/main/AndroidManifest.xml" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/istochchnik-zhizni/web-react/android/app/src/main/java/com/istochnikzhizni/molitva/MainActivity.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/istochchnik-zhizni/web-react/android/app/src/main/res/drawable-land-hdpi/splash.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/istochchnik-zhizni/web-react/android/app/src/main/res/drawable-land-mdpi/splash.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/istochchnik-zhizni/web-react/android/app/src/main/res/drawable-land-xhdpi/splash.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/istochchnik-zhizni/web-react/android/app/src/main/res/drawable-land-xxhdpi/splash.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/istochchnik-zhizni/web-react/android/app/src/main/res/drawable-land-xxxhdpi/splash.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/istochchnik-zhizni/web-react/android/app/src/main/res/drawable-port-hdpi/splash.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/istochchnik-zhizni/web-react/android/app/src/main/res/drawable-port-mdpi/splash.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/istochchnik-zhizni/web-react/android/app/src/main/res/drawable-port-xhdpi/splash.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/istochchnik-zhizni/web-react/android/app/src/main/res/drawable-port-xxhdpi/splash.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/istochchnik-zhizni/web-react/android/app/src/main/res/drawable-port-xxxhdpi/splash.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/istochchnik-zhizni/web-react/android/app/src/main/res/drawable-v24/ic_launcher_foreground.xml" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/istochchnik-zhizni/web-react/android/app/src/main/res/drawable/ic_launcher_background.xml" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/istochchnik-zhizni/web-react/android/app/src/main/res/drawable/splash.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/istochchnik-zhizni/web-react/android/app/src/main/res/layout/activity_main.xml" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/istochchnik-zhizni/web-react/android/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/istochchnik-zhizni/web-react/android/app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/istochchnik-zhizni/web-react/android/app/src/main/res/mipmap-hdpi/ic_launcher.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/istochchnik-zhizni/web-react/android/app/src/main/res/mipmap-hdpi/ic_launcher_foreground.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/istochchnik-zhizni/web-react/android/app/src/main/res/mipmap-hdpi/ic_launcher_round.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/istochchnik-zhizni/web-react/android/app/src/main/res/mipmap-mdpi/ic_launcher.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/istochchnik-zhizni/web-react/android/app/src/main/res/mipmap-mdpi/ic_launcher_foreground.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/istochchnik-zhizni/web-react/android/app/src/main/res/mipmap-mdpi/ic_launcher_round.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/istochchnik-zhizni/web-react/android/app/src/main/res/mipmap-xhdpi/ic_launcher.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/istochchnik-zhizni/web-react/android/app/src/main/res/mipmap-xhdpi/ic_launcher_foreground.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/istochchnik-zhizni/web-react/android/app/src/main/res/mipmap-xhdpi/ic_launcher_round.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/istochchnik-zhizni/web-react/android/app/src/main/res/mipmap-xxhdpi/ic_launcher.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/istochchnik-zhizni/web-react/android/app/src/main/res/mipmap-xxhdpi/ic_launcher_foreground.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/istochchnik-zhizni/web-react/android/app/src/main/res/mipmap-xxhdpi/ic_launcher_round.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/istochchnik-zhizni/web-react/android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/istochchnik-zhizni/web-react/android/app/src/main/res/mipmap-xxxhdpi/ic_launcher_foreground.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/istochchnik-zhizni/web-react/android/app/src/main/res/mipmap-xxxhdpi/ic_launcher_round.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/istochchnik-zhizni/web-react/android/app/src/main/res/values/ic_launcher_background.xml" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/istochchnik-zhizni/web-react/android/app/src/main/res/values/strings.xml" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/istochchnik-zhizni/web-react/android/app/src/main/res/values/styles.xml" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/istochchnik-zhizni/web-react/android/app/src/main/res/xml/file_paths.xml" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/istochchnik-zhizni/web-react/android/app/src/test/java/com/getcapacitor/myapp/ExampleUnitTest.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/istochchnik-zhizni/web-react/android/build.gradle" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/istochchnik-zhizni/web-react/android/capacitor.settings.gradle" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/istochchnik-zhizni/web-react/android/gradle.properties" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/istochchnik-zhizni/web-react/android/gradle/wrapper/gradle-wrapper.jar" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/istochchnik-zhizni/web-react/android/gradle/wrapper/gradle-wrapper.properties" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/istochchnik-zhizni/web-react/android/gradlew" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/istochchnik-zhizni/web-react/android/gradlew.bat" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/istochchnik-zhizni/web-react/android/settings.gradle" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/istochchnik-zhizni/web-react/android/variables.gradle" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/istochchnik-zhizni/web-react/public/_redirects" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/istochchnik-zhizni/web-react/public/admin-panel.txt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/istochchnik-zhizni/web-react/public/assets/apple-touch-icon-180x180.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/istochchnik-zhizni/web-react/public/assets/favicon.ico" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/istochchnik-zhizni/web-react/public/assets/logo.svg" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/istochchnik-zhizni/web-react/public/assets/logo_gold.svg" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/istochchnik-zhizni/web-react/public/assets/logo_minimal.svg" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/istochchnik-zhizni/web-react/public/assets/maskable-icon-512x512.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/istochchnik-zhizni/web-react/public/assets/pwa-192x192.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/istochchnik-zhizni/web-react/public/assets/pwa-512x512.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/istochchnik-zhizni/web-react/public/assets/pwa-64x64.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/istochchnik-zhizni/web-react/public/custom-sw.js" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/istochchnik-zhizni/web-react/public/pwa/.gitkeep" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/istochchnik-zhizni/web-react/public/pwa/apple-splash-1125-2436.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/istochchnik-zhizni/web-react/public/pwa/apple-splash-1170-2532.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/istochchnik-zhizni/web-react/public/pwa/apple-splash-1179-2556.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/istochchnik-zhizni/web-react/public/pwa/apple-splash-1206-2622.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/istochchnik-zhizni/web-react/public/pwa/apple-splash-1242-2208.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/istochchnik-zhizni/web-react/public/pwa/apple-splash-1242-2688.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/istochchnik-zhizni/web-react/public/pwa/apple-splash-1260-2736.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/istochchnik-zhizni/web-react/public/pwa/apple-splash-1284-2778.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/istochchnik-zhizni/web-react/public/pwa/apple-splash-1290-2796.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/istochchnik-zhizni/web-react/public/pwa/apple-splash-1320-2868.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/istochchnik-zhizni/web-react/public/pwa/apple-splash-1488-2266.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/istochchnik-zhizni/web-react/public/pwa/apple-splash-1536-2048.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/istochchnik-zhizni/web-react/public/pwa/apple-splash-1620-2160.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/istochchnik-zhizni/web-react/public/pwa/apple-splash-1640-2360.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/istochchnik-zhizni/web-react/public/pwa/apple-splash-1668-2224.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/istochchnik-zhizni/web-react/public/pwa/apple-splash-1668-2388.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/istochchnik-zhizni/web-react/public/pwa/apple-splash-2048-2732.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/istochchnik-zhizni/web-react/public/pwa/apple-splash-640-1136.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/istochchnik-zhizni/web-react/public/pwa/apple-splash-750-1334.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/istochchnik-zhizni/web-react/public/pwa/apple-splash-828-1792.png" beforeDir="false" />
+    </list>
+    <option name="SHOW_DIALOG" value="false" />
+    <option name="HIGHLIGHT_CONFLICTS" value="true" />
+    <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
+    <option name="LAST_RESOLUTION" value="IGNORE" />
+  </component>
+  <component name="ClangdSettings">
+    <option name="formatViaClangd" value="false" />
+  </component>
+  <component name="Git.Settings">
+    <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
+    <option name="ROOT_SYNC" value="SYNC" />
+  </component>
+  <component name="GitHubPullRequestSearchHistory"><![CDATA[{
+  "lastFilter": {
+    "state": "OPEN",
+    "assignee": "vlad4endev"
+  }
+}]]></component>
+  <component name="GithubPullRequestsUISettings"><![CDATA[{
+  "selectedUrlAndAccountId": {
+    "url": "https://github.com/vlad4endev/istochchnik-zhizni.git",
+    "accountId": "7fe474d2-c74b-488d-8213-728f157de65a"
+  }
+}]]></component>
+  <component name="ProjectColorInfo"><![CDATA[{
+  "associatedIndex": 6
+}]]></component>
   <component name="ProjectId" id="3BdoWcjimD7ZodKbca5Lyw8IHkl" />
-  <component name="PropertiesComponent">{}</component>
+  <component name="ProjectViewState">
+    <option name="hideEmptyMiddlePackages" value="true" />
+    <option name="showLibraryContents" value="true" />
+  </component>
+  <component name="PropertiesComponent"><![CDATA[{
+  "keyToString": {
+    "AnalyzeApkAction.lastApkPath": "/Users/vl4endev/Desktop/истчоник жизни",
+    "ModuleVcsDetector.initialDetectionPerformed": "true",
+    "RunOnceActivity.ShowReadmeOnStart": "true",
+    "RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager.252": "true",
+    "RunOnceActivity.cidr.known.project.marker": "true",
+    "RunOnceActivity.git.unshallow": "true",
+    "RunOnceActivity.readMode.enableVisualFormatting": "true",
+    "SHARE_PROJECT_CONFIGURATION_FILES": "true",
+    "cf.first.check.clang-format": "false",
+    "cidr.known.project.marker": "true",
+    "git-widget-placeholder": "main",
+    "kotlin-language-version-configured": "true",
+    "last_opened_file_path": "/Users/vl4endev/Desktop/истчоник жизни"
+  }
+}]]></component>
+  <component name="TaskManager">
+    <task active="true" id="Default" summary="Default task">
+      <changelist id="b930d79f-12a6-4278-b2e4-43573b832812" name="Changes" comment="" />
+      <created>1775474003113</created>
+      <option name="number" value="Default" />
+      <option name="presentableId" value="Default" />
+      <updated>1775474003113</updated>
+    </task>
+    <servers />
+  </component>
 </project>

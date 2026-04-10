@@ -8,6 +8,7 @@ import { LuCalendarDays, LuHeart, LuLogOut, LuMessageCircle, LuSparkles } from '
 import { getActiveEvents, type ChurchEventItem } from '../../calendar/api';
 import { normalizeRegistrationStatus, useAuthStore, type RegistrationStatus } from '../../auth/authStore';
 import { fetchMe } from '../../profile/api';
+import { resolveMessengerWebOrigin } from '../../../lib/config';
 
 function parseOnceEventDateTime(item: ChurchEventItem): Date | null {
   const ts = `${item.event_date}T${item.event_time}:00`;
@@ -41,6 +42,7 @@ type Props = {
 };
 
 export function LimitedRegistrationDashboard({ registrationStatus, firstName }: Props) {
+  const messengerWebOrigin = resolveMessengerWebOrigin();
   const [now] = useState(() => new Date());
   const greeting = firstName.trim() || 'друг';
   const navigate = useNavigate();
@@ -213,12 +215,21 @@ export function LimitedRegistrationDashboard({ registrationStatus, firstName }: 
             <p className="mt-2 text-sm font-medium text-stone-600">
               Напишите в общий чат или администратору — мы ответим и поможем с вопросами.
             </p>
-            <Link
-              to="/messenger"
-              className="mt-4 inline-flex min-h-[48px] items-center justify-center rounded-2xl bg-primary px-5 text-sm font-extrabold text-white shadow-md shadow-primary/25 transition hover:opacity-95 active:scale-[0.99]"
-            >
-              Открыть чаты
-            </Link>
+            {messengerWebOrigin ? (
+              <a
+                href={`${messengerWebOrigin}/messenger`}
+                className="mt-4 inline-flex min-h-[48px] items-center justify-center rounded-2xl bg-primary px-5 text-sm font-extrabold text-white shadow-md shadow-primary/25 transition hover:opacity-95 active:scale-[0.99]"
+              >
+                Открыть чаты
+              </a>
+            ) : (
+              <Link
+                to="/messenger"
+                className="mt-4 inline-flex min-h-[48px] items-center justify-center rounded-2xl bg-primary px-5 text-sm font-extrabold text-white shadow-md shadow-primary/25 transition hover:opacity-95 active:scale-[0.99]"
+              >
+                Открыть чаты
+              </Link>
+            )}
           </section>
         ) : null}
 

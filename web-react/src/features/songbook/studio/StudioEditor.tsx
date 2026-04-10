@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router-dom';
 import {
   LuArrowLeft,
+  LuMessageCircle,
   LuSlidersHorizontal,
   LuUpload,
   LuWand,
@@ -16,6 +17,7 @@ import { quickChordsForKey } from '../addSong/quickChords';
 import { fetchVersionForSong, saveVersion } from '../../studio/api';
 import { studioMySongsPath, getStudioModuleSurface } from '../../studio/studioPaths';
 import { useSongbookChrome } from '../SongbookChromeContext';
+import { resolveMessengerWebOrigin } from '../../../lib/config';
 
 const KEY_ROOTS = ['C', 'D', 'E', 'F', 'G', 'A', 'B'] as const;
 const CHORD_STRIP = ['C', 'D', 'E', 'F', 'G', 'A', 'B', 'Am', 'Dm', 'Em', 'G', 'C7'];
@@ -37,6 +39,7 @@ export function StudioEditor() {
   const [importOpen, setImportOpen] = useState(false);
   const [toolsOpen, setToolsOpen] = useState(false);
   const [rawPaste, setRawPaste] = useState('');
+  const [songChatLoading, setSongChatLoading] = useState(false);
 
   const songQ = useQuery({
     queryKey: ['song', id],
@@ -113,6 +116,53 @@ export function StudioEditor() {
 
   const quick = quickChordsForKey(quickRoot, quickMode);
   const backTo = studioMySongsPath(surface);
+
+  const openSongDiscussionChat = () => {
+    void (async () => {
+      const origin = resolveMessengerWebOrigin().trim();
+      if (!origin) {
+        window.dispatchEvent(
+          new CustomEvent('app:toast', {
+            detail: {
+              message: 'Адрес чатов не настроен (VITE_MESSENGER_ORIGIN).',
+              kind: 'error',
+            },
+          }),
+        );
+        return;
+      }
+      setSongChatLoading(true);
+      try {
+        const res = await fetch(`${origin}/api/messenger/studio/song-chat`, {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ songId: id }),
+        });
+        const data = (await res.json()) as { conversationId?: string; openUrl?: string; error?: string };
+        if (!res.ok) {
+          throw new Error(data?.error || 'Не удалось открыть чат');
+        }
+        const conv = String(data.conversationId ?? '').trim();
+        const openUrl =
+          typeof data.openUrl === 'string' && data.openUrl.trim()
+            ? data.openUrl.trim()
+            : `${origin}/messenger?conversationId=${encodeURIComponent(conv)}`;
+        window.open(openUrl, '_blank', 'noopener,noreferrer');
+      } catch (e) {
+        window.dispatchEvent(
+          new CustomEvent('app:toast', {
+            detail: {
+              message: e instanceof Error ? e.message : 'Не удалось открыть чат',
+              kind: 'error',
+            },
+          }),
+        );
+      } finally {
+        setSongChatLoading(false);
+      }
+    })();
+  };
 
   const darkUi = surface !== 'songbook' || stageMode;
 
@@ -284,6 +334,16 @@ export function StudioEditor() {
         <h1 className={`min-w-0 flex-1 text-lg font-semibold leading-tight sm:text-xl ${shell.title}`}>
           {s.title}
         </h1>
+        <button
+          type="button"
+          onClick={openSongDiscussionChat}
+          disabled={songChatLoading}
+          className={`inline-flex min-h-[44px] shrink-0 items-center gap-2 rounded-xl px-3 text-sm font-semibold ${darkUi ? 'bg-emerald-800/80 text-emerald-50 hover:bg-emerald-700/90' : 'bg-emerald-600 text-white hover:bg-emerald-500'} disabled:opacity-50`}
+          title="Открыть групповой чат этой песни"
+        >
+          <LuMessageCircle className="h-5 w-5 shrink-0" aria-hidden />
+          <span className="hidden min-[380px]:inline">Обсудить в чате</span>
+        </button>
         <button
           type="button"
           onClick={() => setImportOpen(true)}

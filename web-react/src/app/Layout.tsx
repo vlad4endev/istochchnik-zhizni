@@ -28,7 +28,8 @@ import { AndroidInstallBanner } from '../components/AndroidInstallBanner';
 import { UpdateNotification, useServiceWorkerUpdate, NotificationPrompt } from '../features/pwa';
 import type { AppToastAction, AppToastKind } from '../lib/uiFeedback';
 import { useChatStore } from '../features/messenger/chatStore';
-import { MessengerWsProvider } from '../features/messenger/MessengerWsContext';
+import { useMessengerUnreadHint } from '../hooks/useMessengerUnreadHint';
+import { resolveMessengerWebOrigin } from '../lib/config';
 import { useBrowserNotificationScheduler } from '../features/notifications/useBrowserNotificationScheduler';
 import { useProfileDraftStore } from '../features/profile/profileDraftStore';
 import { canAccessStudioRole } from '../features/auth/studioAccess';
@@ -260,8 +261,12 @@ export function Layout() {
   const setActiveConversation = useChatStore((s) => s.setActiveConversation);
   const loadConversations = useChatStore((s) => s.loadConversations);
   const refreshUnread = useChatStore((s) => s.refreshUnread);
-  const unreadMessages = useChatStore((s) => s.totalUnread);
+  const legacyUnread = useChatStore((s) => s.totalUnread);
+  const messengerOrigin = typeof window !== 'undefined' ? resolveMessengerWebOrigin() : '';
+  const externalUnread = useMessengerUnreadHint();
+  const unreadMessages = messengerOrigin ? externalUnread : legacyUnread;
   const role = useAuthStore((s) => s.role);
+  const direction = useAuthStore((s) => s.ministryDirection);
   const logout = useAuthStore((s) => s.logout);
   const updatePrompt = useServiceWorkerUpdate({ showPrompt: true });
   const [navCollapsed, setNavCollapsed] = useState(false);
@@ -292,7 +297,7 @@ export function Layout() {
         : NAV_ITEMS;
   const items = navBase.filter(
     (item) =>
-      (!item.adminOnly || isAdmin) && (!item.studioOnly || canAccessStudioRole(role)),
+      (!item.adminOnly || isAdmin) && (!item.studioOnly || canAccessStudioRole(role, direction)),
   );
   const sidebarItems = items;
   const mobileItems = items;
@@ -342,21 +347,27 @@ export function Layout() {
       const conversationId = String(ce.detail?.conversationId ?? '').trim();
       if (!conversationId) return;
       setActiveConversation(conversationId);
-      navigate('/messenger');
+      if (messengerOrigin) {
+        window.location.href = `${messengerOrigin}/messenger?conversationId=${encodeURIComponent(conversationId)}`;
+      } else {
+        navigate('/messenger');
+      }
     };
     window.addEventListener('app:open-conversation', onOpenConversation);
     return () => {
       window.removeEventListener('app:open-conversation', onOpenConversation);
     };
-  }, [navigate, setActiveConversation]);
+  }, [navigate, setActiveConversation, messengerOrigin]);
 
-  /** Список чатов и totalUnread для бейджа в таббаре — не только после захода в «Чаты». */
+  /** Встроенный мессенджер (legacy): подгружаем список для бейджа. На отдельном поддомене — polling в useMessengerUnreadHint. */
   useEffect(() => {
+    if (messengerOrigin) return;
     if (!token) return;
     void loadConversations();
-  }, [token, loadConversations]);
+  }, [token, loadConversations, messengerOrigin]);
 
   useEffect(() => {
+    if (messengerOrigin) return;
     if (!token) return;
     const onVis = () => {
       if (document.visibilityState !== 'visible') return;
@@ -364,7 +375,7 @@ export function Layout() {
     };
     document.addEventListener('visibilitychange', onVis);
     return () => document.removeEventListener('visibilitychange', onVis);
-  }, [token, refreshUnread]);
+  }, [token, refreshUnread, messengerOrigin]);
 
   useEffect(() => {
     if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) {
@@ -382,7 +393,11 @@ export function Layout() {
       const conversationId = String(payload.conversationId ?? '').trim();
       if (conversationId) {
         setActiveConversation(conversationId);
-        navigate(`/messenger?conversationId=${encodeURIComponent(conversationId)}`);
+        if (messengerOrigin) {
+          window.location.href = `${messengerOrigin}/messenger?conversationId=${encodeURIComponent(conversationId)}`;
+        } else {
+          navigate(`/messenger?conversationId=${encodeURIComponent(conversationId)}`);
+        }
         return;
       }
 
@@ -402,10 +417,9 @@ export function Layout() {
     return () => {
       navigator.serviceWorker.removeEventListener('message', onServiceWorkerMessage);
     };
-  }, [navigate, setActiveConversation]);
+  }, [navigate, setActiveConversation, messengerOrigin]);
 
   return (
-    <MessengerWsProvider>
     <div className="flex min-h-0 w-full max-w-[100vw] flex-1 flex-col overflow-x-clip bg-[var(--surface)] text-[var(--text)] [padding-left:env(safe-area-inset-left,0px)] [padding-right:env(safe-area-inset-right,0px)]">
       <div
         className={[
@@ -477,6 +491,40 @@ export function Layout() {
           <nav className={navCollapsed ? 'flex flex-col gap-2' : 'flex flex-col gap-1'} data-web-nav="react-icons">
             {sidebarItems.map((item) => {
               const Icon = item.Icon;
+              if (item.to === '/messenger' && messengerOrigin) {
+                return (
+                  <a
+                    key={item.to}
+                    href={`${messengerOrigin}/messenger`}
+                    className={
+                      navCollapsed
+                        ? 'group flex min-h-[52px] w-full items-center justify-center rounded-2xl text-stone-600 transition-colors hover:bg-stone-100'
+                        : navClassName(false)
+                    }
+                    title={navCollapsed ? item.label : undefined}
+                    aria-label={navCollapsed ? item.label : undefined}
+                  >
+                    <div className="relative">
+                      <Icon className={navIconClass(false, navCollapsed)} strokeWidth={2} aria-hidden />
+                      {unreadMessages > 0 && navCollapsed ? (
+                        <span className="absolute -right-1 -top-1 z-[5] inline-flex min-h-[17px] min-w-[17px] items-center justify-center rounded-full bg-rose-500 px-0.5 text-[9px] font-extrabold leading-none text-white shadow-sm ring-2 ring-white">
+                          {unreadMessages > 99 ? '99+' : unreadMessages}
+                        </span>
+                      ) : null}
+                    </div>
+                    {!navCollapsed ? (
+                      <span className="flex min-w-0 flex-1 items-center justify-between gap-2">
+                        <span className="truncate">{item.label}</span>
+                        {unreadMessages > 0 ? (
+                          <span className="inline-flex min-w-[20px] items-center justify-center rounded-full bg-primary px-1.5 py-0.5 text-[11px] font-extrabold text-white">
+                            {unreadMessages > 99 ? '99+' : unreadMessages}
+                          </span>
+                        ) : null}
+                      </span>
+                    ) : null}
+                  </a>
+                );
+              }
               return (
                 <NavLink
                   key={item.to}
@@ -626,6 +674,32 @@ export function Layout() {
         <div className="mx-auto flex max-w-md items-center justify-around px-2 pb-1 pt-1">
           {mobileItems.map((item) => {
             const Icon = item.Icon;
+            if (item.to === '/messenger' && messengerOrigin) {
+              return (
+                <a
+                  key={item.to}
+                  href={`${messengerOrigin}/messenger`}
+                  className={navClassName(false, true)}
+                  aria-label={
+                    unreadMessages > 0
+                      ? `Чаты, непрочитанных сообщений: ${unreadMessages > 99 ? 'более 99' : unreadMessages}`
+                      : undefined
+                  }
+                >
+                  <span className="relative z-10 inline-flex overflow-visible">
+                    <Icon className={navIconClass(false, true)} strokeWidth={2} aria-hidden />
+                    {unreadMessages > 0 ? (
+                      <span className="absolute -right-2.5 top-0 z-[5] inline-flex min-h-[18px] min-w-[18px] items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-extrabold leading-none text-white shadow-sm ring-2 ring-white">
+                        {unreadMessages > 99 ? '99+' : unreadMessages}
+                      </span>
+                    ) : null}
+                  </span>
+                  <span className="mt-1 truncate px-0.5 text-center text-[11px] font-medium tracking-tight">
+                    {item.label}
+                  </span>
+                </a>
+              );
+            }
             return (
               <NavLink
                 key={item.to}
@@ -667,6 +741,5 @@ export function Layout() {
       ) : null}
       <NotificationPrompt />
     </div>
-    </MessengerWsProvider>
   );
 }

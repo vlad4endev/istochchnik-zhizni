@@ -6,6 +6,7 @@ import { LuHeart, LuPenLine, LuSearch, LuSparkles } from 'react-icons/lu';
 
 import { useAuthStore } from '../../auth/authStore';
 import { canAccessStudioRole, canModerateSongCatalog } from '../../auth/studioAccess';
+import { isMainSongbookDeploy } from '../../../lib/appVariant';
 import { studioEditSongPath } from '../../studio/studioPaths';
 import { deleteFavorite, fetchSongs, forkInStudio, postFavorite, type SongListItem } from '../api';
 
@@ -20,12 +21,6 @@ function toSearchDocs(items: SongListItem[]): SongSearchDoc[] {
   }));
 }
 
-function formatMetaLine(s: SongListItem): string {
-  const key = s.default_key?.trim() || '—';
-  const bpm = s.tempo != null ? `${s.tempo} BPM` : '—';
-  const sig = s.time_signature?.trim() || '—';
-  return `${key} • ${bpm} • ${sig}`;
-}
 
 const FUSE_OPTIONS: IFuseOptions<SongSearchDoc> = {
   keys: [
@@ -48,6 +43,7 @@ export function SongbookPage() {
   const role = useAuthStore((s) => s.role);
   const studioOk = canAccessStudioRole(role);
   const catalogOk = canModerateSongCatalog(role);
+  const mainOnly = isMainSongbookDeploy();
 
   const [search, setSearch] = useState('');
 
@@ -96,7 +92,7 @@ export function SongbookPage() {
             <h1 className="text-3xl font-bold tracking-tight text-slate-900">Песенник</h1>
             <p className="text-sm text-slate-500">Поиск по каталогу в реальном времени</p>
           </div>
-          {catalogOk ? (
+          {!mainOnly && catalogOk ? (
             <Link
               to="/songbook/add"
               className="inline-flex min-h-[44px] shrink-0 items-center justify-center rounded-2xl bg-slate-900 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800"
@@ -126,28 +122,27 @@ export function SongbookPage() {
         </label>
       </header>
 
-      <ul className="flex flex-col gap-2">
+      <ul className="flex flex-col gap-2.5">
         {rows.map((s) => (
           <li
             key={s.id}
-            className="relative rounded-2xl bg-slate-50/80 p-4 pr-24 shadow-[0_1px_3px_rgba(15,23,42,0.04)] transition hover:bg-slate-50"
+            className="group relative flex items-center justify-between rounded-2xl bg-white px-5 py-4 shadow-[0_2px_8px_rgba(15,23,42,0.04)] ring-1 ring-slate-100 transition-all hover:-translate-y-0.5 hover:shadow-[0_8px_16px_rgba(15,23,42,0.06)] hover:ring-slate-200"
           >
             <Link
               to={`/songbook/${s.id}`}
-              className="block min-w-0 rounded-xl outline-none ring-offset-2 focus-visible:ring-2 focus-visible:ring-slate-300"
+              className="flex-1 min-w-0 outline-none pr-4"
             >
-              <div className="flex items-start gap-2 pr-2">
-                <h2 className="text-lg font-semibold leading-snug text-slate-900">{s.title}</h2>
+              <div className="flex items-center gap-2">
+                <h2 className="truncate text-[16px] font-medium tracking-tight text-slate-900">{s.title}</h2>
                 {s.has_studio_version ? (
-                  <span className="mt-0.5 shrink-0" title="Есть версия в студии">
-                    <LuSparkles className="h-4 w-4 text-amber-500/90" aria-hidden />
+                  <span className="shrink-0" title="Есть версия в студии">
+                    <LuSparkles className="h-4 w-4 text-amber-500/80" aria-hidden />
                   </span>
                 ) : null}
               </div>
-              <p className="mt-1.5 text-xs text-slate-500">{formatMetaLine(s)}</p>
             </Link>
 
-            <div className="absolute right-2 top-2 flex items-center gap-0.5 sm:right-3 sm:top-3">
+            <div className="flex shrink-0 items-center gap-1.5 opacity-80 transition-opacity group-hover:opacity-100">
               <button
                 type="button"
                 onClick={(e) => {
@@ -155,12 +150,16 @@ export function SongbookPage() {
                   e.stopPropagation();
                   favMut.mutate({ id: Number(s.id), next: !s.is_favorite });
                 }}
-                className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-xl text-slate-400 transition hover:bg-white/80 hover:text-rose-500"
+                className={`inline-flex h-9 w-9 items-center justify-center rounded-full transition-colors ${
+                  s.is_favorite 
+                    ? 'bg-rose-50 text-rose-500 hover:bg-rose-100' 
+                    : 'bg-slate-50 text-slate-400 hover:bg-slate-100 hover:text-slate-600'
+                }`}
                 aria-label={s.is_favorite ? 'Убрать из избранного' : 'В избранное'}
               >
-                <LuHeart className={`h-5 w-5 ${s.is_favorite ? 'fill-rose-500 text-rose-500' : ''}`} />
+                <LuHeart className={`h-[18px] w-[18px] ${s.is_favorite ? 'fill-current' : ''}`} />
               </button>
-              {studioOk ? (
+              {!mainOnly && studioOk ? (
                 <button
                   type="button"
                   onClick={(e) => {
@@ -169,11 +168,11 @@ export function SongbookPage() {
                     forkMut.mutate(Number(s.id));
                   }}
                   disabled={forkMut.isPending}
-                  className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-xl text-slate-500 transition hover:bg-white/90 hover:text-slate-900 disabled:opacity-50"
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-slate-50 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 disabled:opacity-50"
                   aria-label="Редактировать в студии"
                   title="В студию"
                 >
-                  <LuPenLine className="h-5 w-5" strokeWidth={2} />
+                  <LuPenLine className="h-[18px] w-[18px]" strokeWidth={2.5} />
                 </button>
               ) : null}
             </div>

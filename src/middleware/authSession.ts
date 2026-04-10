@@ -1,4 +1,5 @@
 import { NextFunction, Request, Response } from 'express';
+import { readAuthTokenFromCookies } from '../config/authCookie';
 import { resolveSessionByToken } from '../services/authService';
 import type { AppRole } from '../types/appRole';
 
@@ -22,13 +23,21 @@ function readBearerToken(req: Request): string | null {
   return value.trim() || null;
 }
 
+function readSessionToken(req: Request): string | null {
+  const bearer = readBearerToken(req);
+  if (bearer) {
+    return bearer;
+  }
+  return readAuthTokenFromCookies(req);
+}
+
 export async function resolveAuthSession(
   req: Request,
   res: Response,
   next: NextFunction
 ): Promise<void> {
   const authReq = req as AuthRequest;
-  const token = readBearerToken(req);
+  const token = readSessionToken(req);
   if (!token || !process.env.DATABASE_URL) {
     next();
     return;

@@ -11,6 +11,7 @@ import type {
   ParticipantRole,
   PermissionsJson,
 } from '../types/messenger';
+import { resolveMessengerConversationDeepLink } from '../config/messengerPublic';
 import { sendPushNotification } from './pushService';
 
 // ─── Helpers ──────────────────────────────────────────────────
@@ -758,6 +759,56 @@ export async function createGroupConversation(
   }
 
   return convId;
+}
+
+/**
+ * Групповой чат для обсуждения песни (студия): один чат на `metadata.studio_song_id`.
+ */
+export async function findOrCreateStudioSongConversation(
+  songId: number,
+  memberId: number,
+): Promise<{ conversationId: string }> {
+  const existing = await dbQuery(
+    `SELECT id FROM conversations
+     WHERE type = 'group'
+       AND (metadata->>'studio_song_id') = $1
+     LIMIT 1`,
+    [String(songId)],
+  );
+  if (existing.rows[0]?.id != null) {
+    const cid = bigint(existing.rows[0].id);
+    const ok = await isMemberInConversation(cid, memberId);
+    if (!ok) {
+      await dbQuery(
+        `INSERT INTO conversation_participants (conversation_id, member_id, role)
+         VALUES ($1::bigint, $2, 'member')`,
+        [cid, memberId],
+      );
+    }
+    return { conversationId: cid };
+  }
+
+  const songRes = await dbQuery(`SELECT title FROM songs WHERE id = $1 LIMIT 1`, [songId]);
+  const rawTitle = songRes.rows[0]?.title;
+  const title =
+    typeof rawTitle === 'string' && rawTitle.trim() ? rawTitle.trim() : `Песня ${songId}`;
+  const chatTitle = `Обсуждение: ${title}`.slice(0, 500);
+
+  const ins = await dbQuery(
+    `INSERT INTO conversations (type, title, metadata)
+     VALUES ('group', $1, $2::jsonb)
+     RETURNING id`,
+    [chatTitle, JSON.stringify({ studio_song_id: String(songId) })],
+  );
+  const convId = bigint(ins.rows[0].id);
+
+  await dbQuery(
+    `INSERT INTO conversation_participants (conversation_id, member_id, role)
+     VALUES ($1::bigint, $2, 'owner')`,
+    [convId, memberId],
+  );
+
+  return { conversationId: convId };
 }
 
 /**
@@ -2070,7 +2121,7 @@ export async function postRegistrationAccessRequestMessengerNotification(input: 
         body: previewShort,
         conversationId: convId,
         messageId,
-        url: `/messenger?conversationId=${encodeURIComponent(convId)}`,
+        url: resolveMessengerConversationDeepLink(convId),
       });
     }
   } catch (e) {

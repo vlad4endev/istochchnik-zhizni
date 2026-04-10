@@ -1,0 +1,129 @@
+import { type ReactNode } from 'react';
+import { Navigate, Outlet, useLocation } from 'react-router-dom';
+
+import { useAuthStore } from '../features/auth/authStore';
+import { canAccessStudioRole, canModerateSongCatalog } from '../features/auth/studioAccess';
+import { getAppVariant } from '../lib/appVariant';
+import { useAuthSessionReady } from '../hooks/useAuthSessionReady';
+
+export const LOGIN_PATH = '/login';
+
+/** Основной сайт (главный домен), если чаты на отдельном origin — задаётся при сборке только messenger-web. */
+export function resolveMainAppOrigin(): string {
+  const raw =
+    typeof import.meta !== 'undefined'
+      ? (import.meta.env?.VITE_MAIN_APP_ORIGIN as string | undefined)
+      : undefined;
+  return (raw ?? '').trim().replace(/\/+$/, '');
+}
+
+function isChatStandaloneApp(): boolean {
+  return String(import.meta.env?.VITE_CHAT_APP ?? '').trim() === 'true';
+}
+
+export function getPendingRegistrationFallbackPath(): string {
+  return getAppVariant() === 'full' ? '/dashboard' : '/pending-review';
+}
+
+function getMessengerPendingFallbackPath(): string {
+  const ext = isChatStandaloneApp() ? resolveMainAppOrigin() : '';
+  const suffix = getAppVariant() === 'full' ? '/dashboard' : '/pending-review';
+  if (ext) {
+    return `${ext}${suffix}`;
+  }
+  return getAppVariant() === 'full' ? '/dashboard' : '/pending-review';
+}
+
+export function getStudioRoleDeniedPath(): string {
+  return getAppVariant() === 'studio' ? '/login' : '/dashboard';
+}
+
+export function RouteFallback(): ReactNode {
+  return (
+    <div className="flex min-h-[50dvh] w-full flex-1 items-center justify-center bg-[var(--surface)] text-stone-500">
+      <p className="text-sm font-medium">Загрузка…</p>
+    </div>
+  );
+}
+
+export function HydrateSplash(): ReactNode {
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-[var(--surface)] text-stone-500">
+      <p className="text-sm font-medium">Загрузка…</p>
+    </div>
+  );
+}
+
+export function RequireAuth() {
+  const ready = useAuthSessionReady();
+  const token = useAuthStore((s) => s.token);
+  const location = useLocation();
+
+  if (!ready) {
+    return <HydrateSplash />;
+  }
+
+  if (!token) {
+    const ext = isChatStandaloneApp() ? resolveMainAppOrigin() : '';
+    if (ext) {
+      const next = `${ext}/login`;
+      window.location.replace(
+        `${next}${location.pathname && location.pathname !== '/' ? `?from=${encodeURIComponent(location.pathname)}` : ''}`,
+      );
+      return null;
+    }
+    return <Navigate to={LOGIN_PATH} replace state={{ from: location.pathname }} />;
+  }
+
+  return <Outlet />;
+}
+
+export function RequireAdmin({ children }: { children: ReactNode }) {
+  const role = useAuthStore((s) => s.role);
+  const isAdmin = (role ?? 'member').toLowerCase() === 'admin';
+  if (!isAdmin) {
+    return <Navigate to="/prayer" replace />;
+  }
+  return <>{children}</>;
+}
+
+/** Полный доступ к разделам приложения только после одобрения заявки (active). */
+export function RequireFullMember({ children }: { children: ReactNode }) {
+  const registrationStatus = useAuthStore((s) => s.registrationStatus ?? 'active');
+  if (registrationStatus !== 'active') {
+    return <Navigate to={getPendingRegistrationFallbackPath()} replace />;
+  }
+  return <>{children}</>;
+}
+
+/** Чаты недоступны, пока заявка на регистрацию не одобрена (отклонённым — для поддержки). */
+export function RequireMessengerAccess({ children }: { children: ReactNode }) {
+  const registrationStatus = useAuthStore((s) => s.registrationStatus ?? 'active');
+  if (registrationStatus === 'pending_review') {
+    const path = getMessengerPendingFallbackPath();
+    if (path.startsWith('http://') || path.startsWith('https://')) {
+      window.location.replace(path);
+      return null;
+    }
+    return <Navigate to={path} replace />;
+  }
+  return <>{children}</>;
+}
+
+export function RequireStudioAccess({ children }: { children: ReactNode }) {
+  const role = useAuthStore((s) => s.role);
+  if (!canAccessStudioRole(role)) {
+    return <Navigate to={getStudioRoleDeniedPath()} replace />;
+  }
+  return <>{children}</>;
+}
+
+export function RequireCatalogModerator({ children }: { children: ReactNode }) {
+  const role = useAuthStore((s) => s.role);
+  const location = useLocation();
+  if (!canModerateSongCatalog(role)) {
+    const fallback = location.pathname.startsWith('/studio/') ? '/studio/my-songs' : '/songbook';
+    return <Navigate to={fallback} replace />;
+  }
+  return <>{children}</>;
+}

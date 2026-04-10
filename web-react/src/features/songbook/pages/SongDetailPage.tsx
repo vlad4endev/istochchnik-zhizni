@@ -6,6 +6,7 @@ import { LuFileDown, LuHeart, LuSettings2, LuSparkles } from 'react-icons/lu';
 import { dispatchLayoutMainChrome } from '../../../app/layoutChrome';
 import { useAuthStore } from '../../auth/authStore';
 import { canAccessStudioRole } from '../../auth/studioAccess';
+import { isMainSongbookDeploy } from '../../../lib/appVariant';
 import { studioEditSongPath, useStudioModuleSurface } from '../../studio/studioPaths';
 import { useWakeLock } from '../../../hooks/useWakeLock';
 import { deleteFavorite, fetchSong, forkInStudio, postFavorite, recordSongOpened } from '../api';
@@ -23,6 +24,7 @@ export function SongDetailPage() {
   const role = useAuthStore((s) => s.role);
   const token = useAuthStore((s) => s.token);
   const studioOk = canAccessStudioRole(role);
+  const mainOnly = isMainSongbookDeploy();
   const { stageMode } = useSongbookChrome();
 
   const [transpose, setTranspose] = useState(0);
@@ -188,7 +190,7 @@ export function SongDetailPage() {
               <LuHeart className={`h-4 w-4 ${s.is_favorite ? 'fill-red-500 text-red-500' : ''}`} />
               {s.is_favorite ? 'В избранном' : 'Избранное'}
             </button>
-            {studioOk && (
+            {!mainOnly && studioOk && (
               <button
                 type="button"
                 onClick={() => forkMut.mutate()}

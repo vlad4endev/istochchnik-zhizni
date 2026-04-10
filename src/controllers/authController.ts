@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import { appendClearAuthCookie, appendSetAuthCookie } from '../config/authCookie';
 import {
   approveAccessRequest,
   changeMemberPhone,
@@ -24,6 +25,13 @@ type AuthRequest = Request & {
   authUserRole?: import('../types/appRole').AppRole;
   authToken?: string;
 };
+
+function attachSessionCookieIfPresent(res: Response, body: { token?: unknown }): void {
+  const t = body.token;
+  if (typeof t === 'string' && t.length > 0) {
+    appendSetAuthCookie(res, t);
+  }
+}
 
 const MIN_PASSWORD_LENGTH = 8;
 const PHONE_DIGITS_MIN = 7;
@@ -145,11 +153,13 @@ export async function registerHandler(req: Request, res: Response): Promise<void
     });
 
     if (registration.status === 'pending') {
+      attachSessionCookieIfPresent(res, registration);
       res.status(202).json(registration);
       return;
     }
 
     notifyRealtime(['members', 'calendar']);
+    attachSessionCookieIfPresent(res, registration);
     res.status(201).json(registration);
   } catch (error) {
     if (error instanceof MemberNameDuplicateError) {
@@ -200,6 +210,9 @@ export async function loginHandler(req: Request, res: Response): Promise<void> {
     if (!result) {
       res.status(401).json({ error: 'Неверный телефон или пароль' });
       return;
+    }
+    if (typeof result.token === 'string' && result.token.length > 0) {
+      appendSetAuthCookie(res, result.token);
     }
     res.json(result);
   } catch (error) {
@@ -556,6 +569,7 @@ export async function logoutHandler(req: Request, res: Response): Promise<void> 
 
   try {
     await logoutByToken(token);
+    appendClearAuthCookie(res);
     res.status(204).send();
   } catch (error) {
     console.error('Failed to logout user', error);

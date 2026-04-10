@@ -3,6 +3,7 @@ import { create } from 'zustand';
 import { createJSONStorage, persist, type StateStorage } from 'zustand/middleware';
 
 import { AUTH_API_PREFIX, resolveAxiosBaseURL } from '../../lib/config';
+import { COOKIE_ONLY_SESSION_TOKEN, isCookieOnlySessionToken } from '../../lib/authSessionConstants';
 
 /** Те же ключи, что в Flutter AuthTokenStore — можно читать сессию с того же origin. */
 const LS_TOKEN = 'auth_access_token';
@@ -24,6 +25,7 @@ export interface AuthProfile {
   username: string;
   /** Числовой id участника — запасной слаг `member-{id}` до первого `/me`. */
   memberId: number | null;
+  ministryDirection?: string | null;
 }
 
 interface AuthState extends AuthProfile {
@@ -43,6 +45,8 @@ interface AuthState extends AuthProfile {
    * POST /api/auth/logout с Bearer, затем очистка локальной сессии.
    */
   logout: () => Promise<void>;
+  /** Если в localStorage нет токена, пробуем GET /api/auth/me с HttpOnly cookie (поддомены). */
+  bootstrapSessionFromHttpCookie: () => Promise<void>;
 }
 
 function normalizeRole(raw: string | undefined): AuthRole {
@@ -98,6 +102,7 @@ const flutterCompatibleStorage: StateStorage = {
         ),
         username: legacy?.username ?? '',
         memberId: legacy?.memberId ?? null,
+        ministryDirection: null,
       },
       version: 0,
     });
@@ -134,6 +139,7 @@ const flutterCompatibleStorage: StateStorage = {
 const authAxios = axios.create({
   timeout: 25_000,
   headers: { Accept: 'application/json' },
+  withCredentials: true,
 });
 
 function syncAuthAxiosBaseUrl(): void {
@@ -150,8 +156,9 @@ export const useAuthStore = create<AuthState>()(
       registrationStatus: 'active',
       username: '',
       memberId: null,
+      ministryDirection: null,
 
-      setSession: ({ token, firstName, lastName, role, registrationStatus, username, memberId }) => {
+      setSession: ({ token, firstName, lastName, role, registrationStatus, username, memberId, ministryDirection }) => {
         set({
           token,
           firstName: firstName.trim(),
@@ -160,6 +167,7 @@ export const useAuthStore = create<AuthState>()(
           registrationStatus: normalizeRegistrationStatus(registrationStatus),
           username: (username ?? '').trim(),
           memberId: memberId ?? null,
+          ministryDirection: ministryDirection ?? null,
         });
       },
 
@@ -170,6 +178,7 @@ export const useAuthStore = create<AuthState>()(
         registrationStatus,
         username,
         memberId,
+        ministryDirection,
       }) => {
         if (!get().token) return;
         set({
@@ -179,6 +188,7 @@ export const useAuthStore = create<AuthState>()(
           registrationStatus: normalizeRegistrationStatus(registrationStatus),
           username: (username ?? '').trim(),
           memberId: memberId ?? null,
+          ministryDirection: ministryDirection ?? null,
         });
       },
 
@@ -191,6 +201,7 @@ export const useAuthStore = create<AuthState>()(
           registrationStatus: 'active',
           username: '',
           memberId: null,
+          ministryDirection: null,
         });
       },
 
@@ -206,6 +217,7 @@ export const useAuthStore = create<AuthState>()(
               app_role?: string;
               registration_status?: string;
               username?: string;
+              ministry_direction?: string;
             };
             error?: string;
           }>(
@@ -239,6 +251,7 @@ export const useAuthStore = create<AuthState>()(
             registrationStatus: normalizeRegistrationStatus(user.registration_status),
             username: (user.username ?? '').trim(),
             memberId: typeof user.id === 'number' ? user.id : null,
+            ministryDirection: user.ministry_direction ?? null,
           });
 
           return { ok: true };
@@ -259,19 +272,57 @@ export const useAuthStore = create<AuthState>()(
         syncAuthAxiosBaseUrl();
         try {
           if (token) {
-            await authAxios.post(
-              `${AUTH_API_PREFIX}/logout`,
-              null,
-              {
-                validateStatus: (s) => s !== undefined && s < 500,
-                headers: { Authorization: `Bearer ${token}` },
-              },
-            );
+            const cfg: {
+              validateStatus: (s: number) => boolean;
+              headers?: Record<string, string>;
+            } = {
+              validateStatus: (s) => s !== undefined && s < 500,
+            };
+            if (!isCookieOnlySessionToken(token)) {
+              cfg.headers = { Authorization: `Bearer ${token}` };
+            }
+            await authAxios.post(`${AUTH_API_PREFIX}/logout`, null, cfg);
           }
         } catch {
           /* как во Flutter — всё равно чистим локально */
         } finally {
           get().clearSession();
+        }
+      },
+
+      bootstrapSessionFromHttpCookie: async () => {
+        if (get().token) return;
+        const base = resolveAxiosBaseURL();
+        const origin =
+          base ||
+          (typeof window !== 'undefined' && window.location?.origin ? window.location.origin : '');
+        if (!origin) return;
+        try {
+          const r = await fetch(`${origin}${AUTH_API_PREFIX}/me`, {
+            credentials: 'include',
+          });
+          if (r.status !== 200) return;
+          const user = (await r.json()) as {
+            id?: number;
+            first_name?: string | null;
+            last_name?: string | null;
+            app_role?: string;
+            registration_status?: string;
+            username?: string;
+            ministry_direction?: string;
+          };
+          get().setSession({
+            token: COOKIE_ONLY_SESSION_TOKEN,
+            firstName: (user.first_name ?? '').trim(),
+            lastName: (user.last_name ?? '').trim(),
+            role: (user.app_role ?? 'member').trim() || 'member',
+            registrationStatus: normalizeRegistrationStatus(user.registration_status),
+            username: (user.username ?? '').trim(),
+            memberId: typeof user.id === 'number' ? user.id : null,
+            ministryDirection: user.ministry_direction ?? null,
+          });
+        } catch {
+          /* сеть / CORS */
         }
       },
     }),
@@ -286,7 +337,20 @@ export const useAuthStore = create<AuthState>()(
         registrationStatus: s.registrationStatus,
         username: s.username,
         memberId: s.memberId,
+        ministryDirection: s.ministryDirection,
       }),
     },
   ),
 );
+
+authAxios.interceptors.request.use((config) => {
+  config.baseURL = resolveAxiosBaseURL();
+  config.withCredentials = true;
+  const token = useAuthStore.getState().token;
+  if (token && !isCookieOnlySessionToken(token)) {
+    config.headers.Authorization = `Bearer ${token}`;
+  } else if (config.headers && 'Authorization' in config.headers) {
+    delete (config.headers as Record<string, unknown>).Authorization;
+  }
+  return config;
+});

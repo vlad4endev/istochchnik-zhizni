@@ -17,6 +17,7 @@ import {
 import { normalizeRegistrationStatus, useAuthStore } from '../../auth/authStore';
 import { formatRuPhoneInput } from '../../auth/utils/formatRuPhone';
 import { dateInputValueFromApi } from '../../../lib/dateInputValueFromApi';
+import { resolveMessengerWebOrigin } from '../../../lib/config';
 import { resolvePublicUrl } from '../../../lib/resolvePublicUrl';
 import {
   changePassword,
@@ -75,6 +76,7 @@ const profilePageRoot = `${profileShell.profileRoot} min-h-full pb-24`;
    ═══════════════════════════════════════════════════════════ */
 
 export function ProfilePage() {
+  const messengerWebOrigin = resolveMessengerWebOrigin();
   const logout = useAuthStore((s) => s.logout);
   const applyServerProfile = useAuthStore((s) => s.applyServerProfile);
 
@@ -439,13 +441,23 @@ export function ProfilePage() {
               <LuLayoutGrid className="h-4 w-4" aria-hidden />
               Лента профиля
             </Link>
-            <Link
-              to="/messenger"
-              className="inline-flex items-center gap-2.5 rounded-full bg-[color:var(--profile-primary)] px-7 py-2.5 text-sm font-bold text-white shadow-[0_8px_24px_color-mix(in_srgb,var(--profile-primary)_20%,transparent)] transition-all hover:bg-[color:var(--profile-primary-dark)] active:scale-[0.97]"
-            >
-              <LuSend className="h-4 w-4 -rotate-12" aria-hidden />
-              Написать сообщение
-            </Link>
+            {messengerWebOrigin ? (
+              <a
+                href={`${messengerWebOrigin}/messenger`}
+                className="inline-flex items-center gap-2.5 rounded-full bg-[color:var(--profile-primary)] px-7 py-2.5 text-sm font-bold text-white shadow-[0_8px_24px_color-mix(in_srgb,var(--profile-primary)_20%,transparent)] transition-all hover:bg-[color:var(--profile-primary-dark)] active:scale-[0.97]"
+              >
+                <LuSend className="h-4 w-4 -rotate-12" aria-hidden />
+                Написать сообщение
+              </a>
+            ) : (
+              <Link
+                to="/messenger"
+                className="inline-flex items-center gap-2.5 rounded-full bg-[color:var(--profile-primary)] px-7 py-2.5 text-sm font-bold text-white shadow-[0_8px_24px_color-mix(in_srgb,var(--profile-primary)_20%,transparent)] transition-all hover:bg-[color:var(--profile-primary-dark)] active:scale-[0.97]"
+              >
+                <LuSend className="h-4 w-4 -rotate-12" aria-hidden />
+                Написать сообщение
+              </Link>
+            )}
             <button
               type="button"
               onClick={() => void logout()}

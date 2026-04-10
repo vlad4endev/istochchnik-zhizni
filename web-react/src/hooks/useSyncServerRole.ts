@@ -38,6 +38,7 @@ export function useSyncServerRole(): void {
           registrationStatus: normalizeRegistrationStatus(me.registration_status),
           username: (me.username ?? '').trim(),
           memberId: typeof me.id === 'number' ? me.id : null,
+          ministryDirection: me.ministry_direction ?? null,
         });
         doneForToken.current = token;
       } catch (e: unknown) {

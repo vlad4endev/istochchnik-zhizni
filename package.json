@@ -5,6 +5,7 @@
   "main": "dist/main.js",
   "scripts": {
     "dev": "ts-node-dev --respawn src/main.ts",
+    "dev:messenger": "MESSENGER_PORT=3002 PORT=3002 ts-node-dev --respawn src/messengerMain.ts",
     "dev:all": "concurrently -k -n api,web -c blue,magenta \"npm run dev\" \"npm run web:dev\"",
     "db:up": "docker compose -f docker-compose.yml -f docker-compose.local.yml up -d db",
     "web:dev": "npm --prefix web-react run dev",
