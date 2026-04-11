@@ -46,6 +46,10 @@ export async function fetchSong(id: number): Promise<SongListItem> {
   return data;
 }
 
+export async function deleteSong(id: number): Promise<void> {
+  await apiClient.delete(`${SONGS}/${id}`);
+}
+
 export async function postFavorite(songId: number): Promise<void> {
   await apiClient.post(`${SONGS}/${songId}/favorite`);
 }

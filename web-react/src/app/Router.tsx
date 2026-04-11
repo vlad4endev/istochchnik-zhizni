@@ -20,10 +20,12 @@ import {
   RequireAuth,
   RequireCatalogModerator,
   RequireFullMember,
+  RequireMessengerAccess,
   RequireStudioAccess,
   RouteFallback,
 } from './routeGuards';
 import { resolveMessengerWebOrigin } from '../lib/config';
+import { MessengerWsProvider } from '../features/messenger/MessengerWsContext';
 
 /** Отдельные чанки: настройки (`/profile`) и публичная лента (`/profile/:username`) не тянут друг друга. */
 const LazyProfilePage = lazy(async () => {
@@ -101,19 +103,35 @@ const PublicSetlistPage = lazy(async () => {
   return { default: m.PublicSetlistPage };
 });
 
-/** Старые ссылки /messenger → редирект на поддомен чатов (или на главную, если origin не задан). */
+const MessengerRoutes = lazy(async () => {
+  const m = await import('../features/messenger/routes/MessengerRoutes');
+  return { default: m.MessengerRoutes };
+});
+
+/** Старые ссылки /messenger → редирект на поддомен чатов (или показ встроенного мессенджера, если origin не задан). */
 function MessengerMigrateRedirect() {
   const location = useLocation();
-  const navigate = useNavigate();
+  const o = resolveMessengerWebOrigin();
+  
   useEffect(() => {
-    const o = resolveMessengerWebOrigin();
     if (o) {
       window.location.replace(`${o}/messenger${location.search}${location.hash}`);
-      return;
     }
-    navigate('/dashboard', { replace: true });
-  }, [location.search, location.hash, navigate]);
-  return <RouteFallback />;
+  }, [o, location.search, location.hash]);
+
+  if (o) {
+    return <RouteFallback />;
+  }
+
+  return (
+    <Suspense fallback={<RouteFallback />}>
+      <RequireMessengerAccess>
+        <MessengerWsProvider>
+          <MessengerRoutes />
+        </MessengerWsProvider>
+      </RequireMessengerAccess>
+    </Suspense>
+  );
 }
 
 export function AppRouter() {

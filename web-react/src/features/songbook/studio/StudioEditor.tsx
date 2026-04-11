@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Link, useLocation, useParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import {
   LuArrowLeft,
   LuMessageCircle,
@@ -10,7 +10,7 @@ import {
   LuX,
 } from 'react-icons/lu';
 
-import { fetchSong } from '../api';
+import { deleteSong, fetchSong } from '../api';
 import { convertToChordPro } from '../addSong/chordProConversion';
 import { SmartImportModal } from '../addSong/SmartImportModal';
 import { quickChordsForKey } from '../addSong/quickChords';
@@ -32,6 +32,7 @@ export function StudioEditor() {
   const location = useLocation();
   const surface = getStudioModuleSurface(location.pathname);
   const { stageMode } = useSongbookChrome();
+  const navigate = useNavigate();
 
   const editorRef = useRef<HTMLTextAreaElement>(null);
   const selRef = useRef({ start: 0, end: 0 });
@@ -81,6 +82,30 @@ export function StudioEditor() {
     },
   });
 
+  const backTo = studioMySongsPath(surface);
+
+  const deleteMut = useMutation({
+    mutationFn: () => deleteSong(id),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['songs'] });
+      void qc.invalidateQueries({ queryKey: ['studio', 'versions'] });
+      navigate(backTo, { replace: true });
+    },
+    onError: () => {
+      window.dispatchEvent(
+        new CustomEvent('app:toast', {
+          detail: { message: 'Не удалось удалить песню', kind: 'error' },
+        }),
+      );
+    },
+  });
+
+  const handleDelete = () => {
+    if (window.confirm('Вы уверены, что хотите навсегда удалить эту песню из каталога для всех пользователей?')) {
+      deleteMut.mutate();
+    }
+  };
+
   const applyConvert = useCallback((src: string) => convertToChordPro(src), []);
 
   const syncEditorSelection = () => {
@@ -115,7 +140,6 @@ export function StudioEditor() {
   };
 
   const quick = quickChordsForKey(quickRoot, quickMode);
-  const backTo = studioMySongsPath(surface);
 
   const openSongDiscussionChat = () => {
     void (async () => {
@@ -318,6 +342,17 @@ export function StudioEditor() {
                 <LuWand className="h-4 w-4" />
                 Конвертировать в ChordPro
               </button>
+
+              <div className="pt-6 border-t border-slate-200/20">
+                <button
+                  type="button"
+                  onClick={handleDelete}
+                  disabled={deleteMut.isPending}
+                  className="w-full rounded-xl bg-rose-500/10 px-4 py-3 text-sm font-semibold text-rose-500 transition-colors hover:bg-rose-500/20 disabled:opacity-50"
+                >
+                  Удалить песню для всех
+                </button>
+              </div>
             </div>
           </div>
         </>
