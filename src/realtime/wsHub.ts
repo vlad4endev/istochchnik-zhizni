@@ -623,6 +623,15 @@ export function publishFanoutBroadcastPayload(payload: unknown): void {
   publishFanout({ kind: 'broadcast', payload });
 }
 
+/**
+ * Инвалидация React Query + fan-out на другие инстансы основного API.
+ * Аналог функции из старого wsNotifyHub.ts.
+ */
+export function broadcastRealtime(payload: unknown): void {
+  deliverLocalBroadcast(payload);
+  publishFanoutBroadcastPayload(payload);
+}
+
 // ─── Internal helpers ─────────────────────────────────────────
 
 function broadcastPresence(event: WsMessengerEvent): void {

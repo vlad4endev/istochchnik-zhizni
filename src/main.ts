@@ -27,7 +27,6 @@ import studioRoutes from './routes/studioRoutes';
 import settingsRoutes from './routes/settingsRoutes';
 import messengerRoutes from './routes/messengerRoutes';
 import { attachRealtimeWebSocket, initRealtimeRedis } from './realtime/wsHub';
-import { attachNotifyWebSocket, initNotifyRealtimeRedis } from './realtime/wsNotifyHub';
 import { initPushCronJobs } from './cron/pushJobs';
 import { ensureUploadsDirs, getUploadsRoot } from './config/uploadsRoot';
 import { ensureAccessRequestsMessengerChannel } from './services/messengerService';
@@ -198,9 +197,7 @@ async function start(): Promise<void> {
   }
   const server = http.createServer(app);
   await initRealtimeRedis();
-  await initNotifyRealtimeRedis();
   attachRealtimeWebSocket(server);
-  attachNotifyWebSocket(server);
   
   initPushCronJobs();
   
