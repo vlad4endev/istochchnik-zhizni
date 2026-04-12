@@ -10,10 +10,10 @@ services:
     environment:
       PORT: "40978"
       DATABASE_URL: ${DATABASE_URL:?DATABASE_URL must be set}
-      DB_SSL: ${DB_SSL:-true}
+      DB_SSL: ${DB_SSL:-false}
       DB_SSL_REJECT_UNAUTHORIZED: ${DB_SSL_REJECT_UNAUTHORIZED:-false}
       DB_DEBUG_LOG: ${DB_DEBUG_LOG:-false}
-      SKIP_DB_INIT_ON_START: ${SKIP_DB_INIT_ON_START:-true}
+      SKIP_DB_INIT_ON_START: ${SKIP_DB_INIT_ON_START:-false}
       AUTH_SESSION_TTL_DAYS: ${AUTH_SESSION_TTL_DAYS:-30}
       AUTH_MAX_ACTIVE_SESSIONS_PER_USER: ${AUTH_MAX_ACTIVE_SESSIONS_PER_USER:-5}
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-*}
@@ -24,8 +24,9 @@ services:
       VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
       VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
       VAPID_SUBJECT: ${VAPID_SUBJECT:-}
-    extra_hosts:
-      - "supabase-db:host-gateway"
+    networks:
+      - default
+      - supabase_network
     expose:
       - "40978"
     ports:
@@ -63,3 +64,8 @@ services:
 
 volumes:
   istochnik-web-data:
+
+networks:
+  supabase_network:
+    external: true
+    name: supabase_default
