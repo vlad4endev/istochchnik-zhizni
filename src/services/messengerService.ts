@@ -2303,3 +2303,67 @@ export async function searchMessages(
 
   return result.rows.map((r: any) => mapMessageWithSender(r, memberId));
 }
+
+/**
+ * Global search across ALL conversations the user is a member of.
+ * Returns messages with a `conversationTitle` field.
+ */
+export async function searchAllMessages(
+  searchQuery: string,
+  memberId: number,
+  limit: number = 30,
+): Promise<Array<ReturnType<typeof mapMessageWithSender> & { conversationTitle: string }>> {
+  const searchTerm = `%${searchQuery.trim()}%`;
+
+  const result = await dbQuery(
+    `
+    SELECT
+      msg.*,
+      m.name        AS sender_name,
+      m.first_name  AS sender_first_name,
+      m.last_name   AS sender_last_name,
+      -- conversation title
+      COALESCE(c.title, 'Чат') AS conv_title,
+      -- reply preview
+      rm.id         AS rp_id,
+      rm.content    AS rp_content,
+      rm.is_deleted AS rp_is_deleted,
+      COALESCE(rm_s.first_name, '') || ' ' || COALESCE(rm_s.last_name, '') AS rp_sender_name,
+      -- reactions aggregated
+      (
+        SELECT COALESCE(json_agg(json_build_object(
+          'emoji', r.emoji,
+          'count', r.cnt,
+          'reacted_by_me', r.my_react
+        )), '[]'::json)
+        FROM (
+          SELECT
+            mr.emoji,
+            COUNT(*)::int AS cnt,
+            BOOL_OR(mr.member_id = $2) AS my_react
+          FROM message_reactions mr
+          WHERE mr.message_id = msg.id
+          GROUP BY mr.emoji
+        ) r
+      ) AS reactions_json,
+      '[]'::json AS poll_tallies_json,
+      '[]'::json AS poll_my_options_json
+    FROM messages msg
+    JOIN conversation_members cm ON cm.conversation_id = msg.conversation_id AND cm.member_id = $2
+    JOIN conversations c ON c.id = msg.conversation_id
+    LEFT JOIN members m ON m.id = msg.sender_id
+    LEFT JOIN messages rm ON rm.id = msg.reply_to_message_id
+    LEFT JOIN members rm_s ON rm_s.id = rm.sender_id
+    WHERE msg.is_deleted = FALSE
+      AND msg.content ILIKE $1
+    ORDER BY msg.created_at DESC
+    LIMIT $3
+    `,
+    [searchTerm, memberId, limit],
+  );
+
+  return result.rows.map((r: any) => ({
+    ...mapMessageWithSender(r, memberId),
+    conversationTitle: r.conv_title || 'Чат',
+  }));
+}

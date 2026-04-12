@@ -9,6 +9,7 @@ import { SearchChat } from './SearchChat';
 import { LuArrowLeft, LuSearch } from 'react-icons/lu';
 import { resolvePublicUrl } from '../../../lib/resolvePublicUrl';
 import { formatMessengerLastSeen } from '../lastSeenUtils';
+import { groupMessages } from '../groupMessages';
 import './messenger.css';
 
 interface ChatWindowProps {
@@ -171,29 +172,7 @@ export function ChatWindow({
     }, 120);
   }, [conversationId, markReadUpTo]);
 
-  const groupedMessages = useMemo(() => {
-    return messages.map((msg, idx) => {
-      const prev = messages[idx - 1];
-      const next = messages[idx + 1];
-      const isGroupedPrev =
-        !!prev &&
-        prev.sender_id === msg.sender_id &&
-        new Date(msg.created_at).getTime() - new Date(prev.created_at).getTime() < 300000;
-      const isGroupedNext =
-        !!next &&
-        next.sender_id === msg.sender_id &&
-        new Date(next.created_at).getTime() - new Date(msg.created_at).getTime() < 300000;
-      const msgDate = new Date(msg.created_at).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' });
-      const prevDate = prev ? new Date(prev.created_at).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' }) : null;
-      return {
-        ...msg,
-        isGroupedPrev,
-        isGroupedNext,
-        showDate: msgDate !== prevDate,
-        dateLabel: msgDate,
-      };
-    });
-  }, [messages]);
+  const groupedMessages = useMemo(() => groupMessages(messages), [messages]);
 
   const listCount = groupedMessages.length;
   const rowVirtualizer = useVirtualizer({

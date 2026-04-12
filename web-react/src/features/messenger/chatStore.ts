@@ -55,6 +55,8 @@ interface ChatState {
   // --- Read cursors (read receipts) ---
   /** conversationId -> memberId -> lastReadMessageId */
   readCursorsByConv: Record<string, Record<number, string>>;
+  /** convId → my own read cursor (separate from readCursorsByConv for other people) */
+  myReadCursorByConv: Record<string, string>;
 
   // --- Typing indicator: convId → memberId[] ---
   typingByConv: Record<string, TypingUser[]>;
@@ -89,6 +91,8 @@ interface ChatState {
   searchResults: MessageWithSender[];
   searchQuery: string;
   searchLoading: boolean;
+  globalSearchResults: Array<MessageWithSender & { conversationTitle: string }>;
+  globalSearchLoading: boolean;
 
   // --- Drafts ---
   drafts: Record<string, string>;
@@ -137,6 +141,8 @@ interface ChatState {
   // --- Search ---
   searchMessages: (query: string, conversationId: string) => Promise<void>;
   clearSearch: () => void;
+  searchAllConversations: (query: string) => Promise<void>;
+  clearGlobalSearch: () => void;
 
   // --- WS event handlers (called by messengerWs hook) ---
   handleNewMessage: (convId: string, msg: MessageWithSender) => void;
@@ -156,6 +162,7 @@ interface ChatState {
   handleTypingStart: (convId: string, memberId: number, memberName: string) => void;
   handleTypingStop: (convId: string, memberId: number) => void;
   handleConvCreated: (conv: ConversationListItem) => void;
+  handleConvUpdated: (convId: string, patch: Partial<ConversationListItem>) => void;
   handleReadUpdated: (convId: string, memberId: number, lastReadMsgId: string) => void;
   handlePresenceOnline: (memberId: number) => void;
   handlePresenceOffline: (memberId: number, lastSeenAt?: string) => void;
@@ -222,9 +229,21 @@ function getSnapshotKey(userId: number | null): string {
 function saveSnapshot(state: ChatState): void {
   try {
     if (typeof localStorage === 'undefined') return;
+
+    // Filter out temporary/pending messages from snapshot
+    const cleanMessagesByConv: Record<string, MessageWithSender[]> = {};
+    for (const [convId, msgs] of Object.entries(state.messagesByConv || {})) {
+      cleanMessagesByConv[convId] = msgs.filter(
+        (m) =>
+          !String(m.id).startsWith('temp-') &&
+          !String(m.id).startsWith('pending-') &&
+          m.status !== 'sending',
+      );
+    }
+
     const snap: MessengerSnapshot = {
       conversations: state.conversations || [],
-      messagesByConv: state.messagesByConv || {},
+      messagesByConv: cleanMessagesByConv,
       hasMore: state.hasMore || {},
       totalUnread: Number(state.totalUnread || 0),
       outbox: [],
@@ -511,6 +530,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   messagesLastLoadedAt: {},
   hasMore: {},
   readCursorsByConv: {},
+  myReadCursorByConv: {},
   typingByConv: {},
   pinnedBumpByConv: {},
   onlineMembers: new Set(),
@@ -537,6 +557,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
   searchResults: [],
   searchQuery: '',
   searchLoading: false,
+  globalSearchResults: [],
+  globalSearchLoading: false,
   drafts: {},
 
   hydrateFromCache: () => {
@@ -571,8 +593,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
       saveSnapshot(get());
     } catch (e) {
       console.error('[chatStore] loadConversations error:', e);
+      const wasLoaded = get().conversationsLoaded;
       // Offline/backend down: use cached snapshot.
       hydrateFromCacheIntoStore(set, get);
+      if (!wasLoaded) {
+        emitAppToast('Нет соединения. Показываем кэшированные данные.', 'info');
+      }
     } finally {
       set({ conversationsLoading: false });
     }
@@ -936,6 +962,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
       findConversationIdContainingMessage(state.messagesByConv, mid) ?? state.activeConversationId;
     if (!convId) return;
 
+    // Save original for rollback before any mutations
+    const originalMsg = (state.messagesByConv[convId] || [])
+      .find((m) => String(m.id) === mid) ?? null;
+
     const canonical = normalizeMentionsToCanonical(String(content ?? '').trim());
 
     // Optimistic edit
@@ -954,8 +984,21 @@ export const useChatStore = create<ChatState>((set, get) => ({
       await api.editMessage(messageId, canonical);
     } catch (e) {
       console.error('[chatStore] editMessage error:', e);
-      // Rollback by reloading
-      void get().loadMessages(convId);
+      // Granular rollback — restore only the affected message, no full reload
+      if (originalMsg) {
+        set((s) => ({
+          messagesByConv: {
+            ...s.messagesByConv,
+            [convId]: (s.messagesByConv[convId] || []).map((m) =>
+              String(m.id) === mid ? originalMsg : m,
+            ),
+          },
+          conversations: syncConversationLastMessageOnEdit(
+            s.conversations, convId, mid, originalMsg.content ?? '',
+          ),
+        }));
+      }
+      emitAppToast('Не удалось отредактировать сообщение', 'error');
     }
   },
 
@@ -968,7 +1011,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
       findConversationIdContainingMessage(state.messagesByConv, mid) ?? state.activeConversationId;
     if (!convId) return;
 
-    // Optimistic delete
+    // Save original for rollback
+    const originalMsg = (state.messagesByConv[convId] || [])
+      .find((m) => String(m.id) === mid) ?? null;
+
+    // Optimistic soft delete
     set((s) => {
       const nextMsgs = (s.messagesByConv[convId] || []).map((m) =>
         String(m.id) === mid ? { ...m, is_deleted: true, content: '' } : m,
@@ -988,7 +1035,21 @@ export const useChatStore = create<ChatState>((set, get) => ({
       await api.deleteMessage(messageId);
     } catch (e) {
       console.error('[chatStore] deleteMessage error:', e);
-      void get().loadMessages(convId);
+      // Granular rollback — restore only the affected message
+      if (originalMsg) {
+        set((s) => {
+          const restoredMsgs = (s.messagesByConv[convId] || []).map((m) =>
+            String(m.id) === mid ? originalMsg : m,
+          );
+          return {
+            messagesByConv: { ...s.messagesByConv, [convId]: restoredMsgs },
+            conversations: syncConversationLastMessageAfterMutation(
+              s.conversations, convId, restoredMsgs, mid,
+            ),
+          };
+        });
+      }
+      emitAppToast('Не удалось удалить сообщение', 'error');
     }
   },
 
@@ -1045,18 +1106,40 @@ export const useChatStore = create<ChatState>((set, get) => ({
   // ─── Reactions ────────────────────────────────────────────
 
   addReaction: async (messageId, emoji) => {
+    const state = get();
+    const me = state.currentMemberId;
+    const convId = findConversationIdContainingMessage(state.messagesByConv, String(messageId));
+    if (!convId || me == null) return;
+
+    // Optimistic: add reaction immediately
+    get().handleReaction(convId, String(messageId), emoji, me, 'add');
+
     try {
       await api.addReaction(messageId, emoji);
     } catch (e) {
       console.error('[chatStore] addReaction error:', e);
+      // Rollback
+      get().handleReaction(convId, String(messageId), emoji, me, 'remove');
+      emitAppToast('Не удалось добавить реакцию', 'error');
     }
   },
 
   removeReaction: async (messageId, emoji) => {
+    const state = get();
+    const me = state.currentMemberId;
+    const convId = findConversationIdContainingMessage(state.messagesByConv, String(messageId));
+    if (!convId || me == null) return;
+
+    // Optimistic: remove reaction immediately
+    get().handleReaction(convId, String(messageId), emoji, me, 'remove');
+
     try {
       await api.removeReaction(messageId, emoji);
     } catch (e) {
       console.error('[chatStore] removeReaction error:', e);
+      // Rollback
+      get().handleReaction(convId, String(messageId), emoji, me, 'add');
+      emitAppToast('Не удалось убрать реакцию', 'error');
     }
   },
 
@@ -1250,21 +1333,44 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   votePoll: async (messageId, optionIndexes) => {
+    const state = get();
+    const mid = String(messageId);
+
+    // Find message for optimistic update
+    let convId: string | null = null;
+    let originalTallies: number[] | undefined;
+    let originalMyOptions: number[] | undefined;
+
+    for (const [cid, msgs] of Object.entries(state.messagesByConv)) {
+      const found = msgs.find((m) => String(m.id) === mid);
+      if (found) {
+        convId = cid;
+        originalTallies = found.poll_tallies ? [...found.poll_tallies] : undefined;
+        originalMyOptions = found.poll_my_options ? [...found.poll_my_options] : undefined;
+        break;
+      }
+    }
+
+    // Optimistic: increment counters immediately
+    if (convId && originalTallies) {
+      const optimisticTallies = [...originalTallies];
+      for (const idx of optionIndexes) {
+        if (optimisticTallies[idx] !== undefined) optimisticTallies[idx] += 1;
+      }
+      get().handlePollTallies(convId, messageId, optimisticTallies, optionIndexes);
+    }
+
     try {
       const { tallies, my_options } = await api.votePoll(messageId, optionIndexes);
-      const mid = String(messageId);
-      set((s) => {
-        const next = { ...s.messagesByConv };
-        for (const cid of Object.keys(next)) {
-          const list = next[cid];
-          if (!list.some((m) => String(m.id) === mid)) continue;
-          next[cid] = list.map((m) =>
-            String(m.id) === mid ? { ...m, poll_tallies: tallies, poll_my_options: my_options } : m,
-          );
-        }
-        return { messagesByConv: next };
-      });
+      // Replace optimistic with real data
+      if (convId) {
+        get().handlePollTallies(convId, messageId, tallies, my_options);
+      }
     } catch (e) {
+      // Rollback
+      if (convId && originalTallies !== undefined) {
+        get().handlePollTallies(convId, messageId, originalTallies, originalMyOptions);
+      }
       if (axios.isAxiosError(e)) {
         const err = e.response?.data as { error?: string } | undefined;
         emitAppToast(err?.error ?? 'Не удалось сохранить голос', 'error');
@@ -1359,13 +1465,28 @@ export const useChatStore = create<ChatState>((set, get) => ({
   handleConvCreated: (conv) => {
     const normalized = { ...conv, id: String(conv.id) };
     set((s) => {
-      if (s.conversations.some((c) => c.id === normalized.id)) return s;
-      const updated = [normalized, ...s.conversations];
+      // Upsert: update if exists, add to front if new
+      const exists = s.conversations.some((c) => c.id === normalized.id);
+      const conversations = exists
+        ? s.conversations.map((c) => c.id === normalized.id ? { ...c, ...normalized } : c)
+        : [normalized, ...s.conversations];
+
       const om = normalized.other_member;
       const ls = om?.last_seen_at;
       const memberLastSeenAt =
         om && ls ? { ...s.memberLastSeenAt, [om.id]: ls } : s.memberLastSeenAt;
-      return { conversations: updated, memberLastSeenAt };
+      return { conversations, memberLastSeenAt };
+    });
+  },
+
+  handleConvUpdated: (convId, patch) => {
+    set((s) => {
+      const exists = s.conversations.some((c) => c.id === convId);
+      if (!exists) return s;
+      const conversations = s.conversations.map((c) =>
+        c.id === convId ? { ...c, ...patch } : c,
+      );
+      return { conversations };
     });
   },
 
@@ -1376,10 +1497,22 @@ export const useChatStore = create<ChatState>((set, get) => ({
     if (!convKey || !Number.isFinite(mid) || mid <= 0 || !/^\d+$/.test(msgId)) {
       return;
     }
-    // Ignore my own cursor in receipts UI.
-    const me = get().currentMemberId;
-    if (me != null && Number(me) === mid) return;
 
+    const me = get().currentMemberId;
+
+    if (me != null && Number(me) === mid) {
+      // Own cursor — store separately, not in readCursorsByConv
+      set((s) => {
+        const prev = s.myReadCursorByConv[convKey];
+        if (prev && /^\d+$/.test(prev) && BigInt(prev) >= BigInt(msgId)) return s;
+        return {
+          myReadCursorByConv: { ...s.myReadCursorByConv, [convKey]: msgId },
+        };
+      });
+      return;
+    }
+
+    // Other people's cursors — for "read receipts" UI
     set((s) => {
       const existing = s.readCursorsByConv[convKey] || {};
       const prev = existing[mid];
@@ -1525,6 +1658,24 @@ export const useChatStore = create<ChatState>((set, get) => ({
     set({ searchResults: [], searchQuery: '' });
   },
 
+  searchAllConversations: async (query) => {
+    if (!query.trim()) return;
+    set({ globalSearchLoading: true });
+    try {
+      const results = await api.searchAllMessages(query, 30);
+      set({ globalSearchResults: results });
+    } catch (e) {
+      console.error('[chatStore] searchAllConversations error:', e);
+      set({ globalSearchResults: [] });
+    } finally {
+      set({ globalSearchLoading: false });
+    }
+  },
+
+  clearGlobalSearch: () => {
+    set({ globalSearchResults: [], searchQuery: '' });
+  },
+
   // ─── Drafts ───────────────────────────────────────────────
 
   saveDraft: (conversationId, content) => {
@@ -1549,12 +1700,18 @@ export const useChatStore = create<ChatState>((set, get) => ({
   loadDrafts: () => {
     try {
       const userId = get().currentMemberId;
-      if (userId) {
-        const stored = localStorage.getItem(`messenger_drafts_${userId}`);
-        if (stored) {
-          const drafts = JSON.parse(stored);
-          set({ drafts });
-        }
+      if (!userId) return;
+      const stored = localStorage.getItem(`messenger_drafts_${userId}`);
+      if (!stored) return;
+      const parsed = JSON.parse(stored);
+      // Validate: must be a flat object of strings
+      if (
+        parsed &&
+        typeof parsed === 'object' &&
+        !Array.isArray(parsed) &&
+        Object.values(parsed).every((v) => typeof v === 'string')
+      ) {
+        set({ drafts: parsed as Record<string, string> });
       }
     } catch {
       /* ignore localStorage errors */

@@ -878,4 +878,24 @@ router.get('/conversations/:id/search', async (req: Request, res: Response) => {
   }
 });
 
+/** GET /api/messenger/search?q=...&limit=30 — global search across all user's conversations */
+router.get('/search', async (req: Request, res: Response) => {
+  const userId = (req as AuthReq).authUserId!;
+  const searchQuery = (req.query.q as string || '').trim();
+  const limit = Math.min(50, Math.max(1, Number(req.query.limit) || 30));
+
+  if (!searchQuery) {
+    res.status(400).json({ error: 'Search query is required' });
+    return;
+  }
+
+  try {
+    const results = await svc.searchAllMessages(searchQuery, userId, limit);
+    res.json(results);
+  } catch (e) {
+    console.error('[messenger] searchAllMessages error:', e);
+    res.status(500).json({ error: 'Failed to search messages' });
+  }
+});
+
 export default router;

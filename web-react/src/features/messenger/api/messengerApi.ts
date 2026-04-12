@@ -358,6 +358,17 @@ export async function patchMyConversationUi(conversationId: string, body: PatchM
   await apiClient.patch(`${BASE}/conversations/${encodeURIComponent(conversationId)}/my-ui`, body);
 }
 
+export async function searchAllMessages(
+  query: string,
+  limit = 30,
+): Promise<Array<MessageWithSender & { conversationTitle: string }>> {
+  const { data } = await apiClient.get<Array<MessageWithSender & { conversationTitle: string }>>(
+    `${BASE}/search`,
+    { params: { q: query, limit } },
+  );
+  return data;
+}
+
 export async function clearConversationHistory(conversationId: string) {
   await apiClient.post(`${BASE}/conversations/${encodeURIComponent(conversationId)}/clear-history`);
 }

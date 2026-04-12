@@ -17,19 +17,29 @@ export function useMessengerWs(): {
 
   // Typing debounce
   const typingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastTypingSentRef = useRef<Record<string, number>>({});
 
   const sendTypingStart = useCallback((conversationId: string) => {
-    const ws = wsRef.current;
-    if (ws?.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({ type: 'typing:start', conversationId }));
+    const now = Date.now();
+    const last = lastTypingSentRef.current[conversationId] ?? 0;
+
+    // Throttle: send WS event at most once every 1500ms per conversation
+    if (now - last > 1500) {
+      const ws = wsRef.current;
+      if (ws?.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: 'typing:start', conversationId }));
+      }
+      lastTypingSentRef.current[conversationId] = now;
     }
-    // Auto-stop after 3s
+
+    // Reset auto-stop timer
     if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
     typingTimerRef.current = setTimeout(() => {
       const ws2 = wsRef.current;
       if (ws2?.readyState === WebSocket.OPEN) {
         ws2.send(JSON.stringify({ type: 'typing:stop', conversationId }));
       }
+      delete lastTypingSentRef.current[conversationId];
     }, 3000);
   }, []);
 
@@ -338,13 +348,27 @@ function handleWsMessage(msg: any): void {
       store.handleConvCreated(msg.conversation);
       break;
 
-    case 'conv:updated':
-      // Reload conversation list to get updated info
-      void store.loadConversations();
-      if (typeof msg.conversationId === 'string' && msg.conversationId) {
-        store.bumpPinnedRevision(msg.conversationId);
+    case 'conv:updated': {
+      const cid =
+        typeof msg.conversationId === 'string' && msg.conversationId
+          ? msg.conversationId
+          : null;
+
+      if (cid) {
+        store.bumpPinnedRevision(cid);
+
+        // If server sent full conversation object — patch inline without HTTP request
+        if (msg.conversation && typeof msg.conversation === 'object') {
+          store.handleConvUpdated(cid, msg.conversation);
+        } else {
+          // Fallback: reload (throttled by cooldown in loadConversations)
+          void store.loadConversations();
+        }
+      } else {
+        void store.loadConversations();
       }
       break;
+    }
 
     case 'conv:history_cleared':
       if (typeof msg.conversationId === 'string' && msg.conversationId) {

@@ -1,5 +1,6 @@
 import { createContext, useContext, type ReactNode } from 'react';
 import { useMessengerWs } from './useMessengerWs';
+import { useDocumentTitle } from './hooks/useDocumentTitle';
 
 type MessengerWsApi = ReturnType<typeof useMessengerWs>;
 
@@ -11,6 +12,7 @@ const MessengerWsContext = createContext<MessengerWsApi | null>(null);
  */
 export function MessengerWsProvider({ children }: { children: ReactNode }) {
   const api = useMessengerWs();
+  useDocumentTitle();
   return <MessengerWsContext.Provider value={api}>{children}</MessengerWsContext.Provider>;
 }
 
