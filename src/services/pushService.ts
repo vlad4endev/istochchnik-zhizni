@@ -65,15 +65,16 @@ interface PushSubWithMemberRow extends PushSubRow {
   member_id: number;
 }
 
-export async function saveSubscription(memberId: number, sub: PushSubscriptionData): Promise<void> {
+export async function saveSubscription(memberId: number, sub: PushSubscriptionData, userAgent?: string): Promise<void> {
   await query(
-    `INSERT INTO push_subscriptions (member_id, endpoint, keys_p256dh, keys_auth)
-     VALUES ($1, $2, $3, $4)
+    `INSERT INTO push_subscriptions (member_id, endpoint, keys_p256dh, keys_auth, user_agent, last_used_at)
+     VALUES ($1, $2, $3, $4, $5, NOW())
      ON CONFLICT (endpoint) DO UPDATE 
      SET member_id = EXCLUDED.member_id, 
          keys_p256dh = EXCLUDED.keys_p256dh, 
-         keys_auth = EXCLUDED.keys_auth`,
-    [memberId, sub.endpoint, sub.keys.p256dh, sub.keys.auth]
+         keys_auth = EXCLUDED.keys_auth,
+         user_agent = COALESCE(EXCLUDED.user_agent, push_subscriptions.user_agent)`,
+    [memberId, sub.endpoint, sub.keys.p256dh, sub.keys.auth, userAgent || null]
   );
 }
 
@@ -147,8 +148,12 @@ export async function sendNotificationToSubscription(
         keys: sub.keys,
       },
       JSON.stringify(payload),
-      { timeout: WEB_PUSH_HTTP_TIMEOUT_MS },
+      { TTL: 86400, timeout: WEB_PUSH_HTTP_TIMEOUT_MS },
     );
+    // Mark as used
+    query(`UPDATE push_subscriptions SET last_used_at = NOW() WHERE endpoint = $1`, [sub.endpoint]).catch(e => {
+        console.warn('Failed to update last_used_at on push success', e);
+    });
   } catch (err: unknown) {
     const statusCode =
       err && typeof err === 'object' && 'statusCode' in err ? (err as { statusCode?: number }).statusCode : undefined;
@@ -179,9 +184,7 @@ export async function sendNotificationToMember(memberId: number, payload: unknow
   if (subs.length === 0) {
     return;
   }
-  for (const sub of subs) {
-    await sendNotificationToSubscription(sub, payload);
-  }
+  await Promise.allSettled(subs.map((sub) => sendNotificationToSubscription(sub, payload)));
 }
 
 const FCM_MULTICAST_CHUNK = 500;

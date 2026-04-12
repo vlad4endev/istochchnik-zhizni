@@ -61,7 +61,8 @@ router.post('/subscribe', requireAuthSession, async (req: Request, res: Response
         auth: String(subscription.keys.auth),
       },
     };
-    await saveSubscription(memberId, normalized);
+    const userAgent = req.headers['user-agent'] || req.body?.userAgent;
+    await saveSubscription(memberId, normalized, userAgent);
     try {
       const host = new URL(normalized.endpoint).host;
       console.log('[notifications] web push subscribe ok', { memberId, pushHost: host });

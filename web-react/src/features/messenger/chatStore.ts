@@ -1798,3 +1798,16 @@ function getAvatarFallback(title: string): string {
   const text = String(title || '').trim();
   return (text.charAt(0) || '?').toUpperCase();
 }
+
+// Sync totalUnread to App Badge in compatible browsers
+useChatStore.subscribe((state, prevState) => {
+  if (state.totalUnread !== prevState.totalUnread) {
+    if ('setAppBadge' in navigator && typeof navigator.setAppBadge === 'function') {
+      if (state.totalUnread > 0) {
+        navigator.setAppBadge(state.totalUnread).catch(() => { /* ignore */ });
+      } else if (typeof navigator.clearAppBadge === 'function') {
+        navigator.clearAppBadge().catch(() => { /* ignore */ });
+      }
+    }
+  }
+});

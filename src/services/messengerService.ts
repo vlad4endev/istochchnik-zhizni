@@ -2122,6 +2122,14 @@ export async function postRegistrationAccessRequestMessengerNotification(input: 
         conversationId: convId,
         messageId,
         url: resolveMessengerConversationDeepLink(convId),
+        tag: `chat-${convId}`,
+        renotify: true,
+        badge: '/assets/pwa-64x64.png',
+        icon: '/assets/pwa-192x192.png',
+        actions: [
+          { action: 'reply', title: 'Ответить' },
+          { action: 'dismiss', title: 'Закрыть' },
+        ],
       });
     }
   } catch (e) {

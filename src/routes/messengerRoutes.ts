@@ -561,6 +561,14 @@ router.post(
             conversationId: convKey,
             messageId: String((message as any)?.id ?? ''),
             url: resolveMessengerConversationDeepLink(convKey),
+            tag: `chat-${convKey}`,
+            renotify: true,
+            badge: '/assets/pwa-64x64.png',
+            icon: '/assets/pwa-192x192.png',
+            actions: [
+              { action: 'reply', title: 'Ответить' },
+              { action: 'dismiss', title: 'Закрыть' },
+            ],
           };
           // best-effort per recipient
           // eslint-disable-next-line no-await-in-loop

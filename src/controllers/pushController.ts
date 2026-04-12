@@ -47,7 +47,8 @@ export const subscribeToPush = async (req: Request, res: Response) => {
         auth: String(subscription.keys.auth),
       },
     };
-    await saveSubscription(memberId, normalized);
+    const userAgent = req.headers['user-agent'] || req.body?.userAgent;
+    await saveSubscription(memberId, normalized, userAgent);
     res.status(201).json({ message: 'Subscribed successfully.' });
   } catch (error) {
     console.error('Failed to subscribe:', error);

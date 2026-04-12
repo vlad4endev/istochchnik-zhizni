@@ -6,17 +6,24 @@ import { fetchVapidPublicKey } from '../../profile/api';
 const LS_VAPID_PUBLIC_KEY = 'web_push_vapid_public_key';
 
 function subscriptionToJsonBody(sub: PushSubscription): Record<string, unknown> {
+  let body: Record<string, unknown>;
   if (typeof sub.toJSON === 'function') {
-    return sub.toJSON() as Record<string, unknown>;
+    body = sub.toJSON() as Record<string, unknown>;
+  } else {
+    body = {
+      endpoint: sub.endpoint,
+      expirationTime: sub.expirationTime,
+      keys: {
+        p256dh: bufferToUrlBase64(sub.getKey('p256dh')),
+        auth: bufferToUrlBase64(sub.getKey('auth')),
+      },
+    };
   }
-  return {
-    endpoint: sub.endpoint,
-    expirationTime: sub.expirationTime,
-    keys: {
-      p256dh: bufferToUrlBase64(sub.getKey('p256dh')),
-      auth: bufferToUrlBase64(sub.getKey('auth')),
-    },
-  };
+  
+  if (typeof navigator !== 'undefined') {
+    body.userAgent = navigator.userAgent;
+  }
+  return body;
 }
 
 function bufferToUrlBase64(buf: ArrayBuffer | null): string {

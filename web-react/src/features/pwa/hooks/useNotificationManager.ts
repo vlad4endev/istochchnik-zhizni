@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { fetchVapidPublicKey, subscribeToPushApi } from '../../profile/api';
+import { fetchVapidPublicKey, subscribeToPushApi, unsubscribeFromPushApi } from '../../profile/api';
 
 function urlBase64ToUint8Array(base64String: string) {
   const padding = '='.repeat((4 - base64String.length % 4) % 4);
@@ -87,12 +87,51 @@ export function useNotificationManager() {
     }
   }, []);
 
+  const unsubscribe = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const registration = await navigator.serviceWorker.ready;
+      const subscription = await registration.pushManager.getSubscription();
+      if (subscription) {
+        // Send request to backend to delete from DB
+        try {
+          await unsubscribeFromPushApi(subscription.endpoint);
+        } catch (e) {
+          console.error('Failed to report unsubscribe to backend', e);
+        }
+        await subscription.unsubscribe();
+      }
+      setIsSubscribed(false);
+      
+      // Clear app badge when unsubscribing
+      if (typeof navigator !== 'undefined' && 'clearAppBadge' in navigator) {
+         try {
+           // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+           // @ts-ignore
+           await navigator.clearAppBadge();
+         } catch {
+           /* ignore */
+         }
+      }
+      
+      return true;
+    } catch (err: any) {
+      console.error('Push Unsubscription Error:', err);
+      setError(err.message || 'Ошибка при отписке от уведомлений');
+      return false;
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
   return {
     status,
     isSubscribed,
     loading,
     error,
     subscribe,
+    unsubscribe,
     checkStatus
   };
 }

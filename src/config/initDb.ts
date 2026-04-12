@@ -361,9 +361,14 @@ CREATE TABLE IF NOT EXISTS push_subscriptions (
   endpoint TEXT NOT NULL,
   keys_p256dh TEXT NOT NULL,
   keys_auth TEXT NOT NULL,
+  user_agent TEXT,
+  last_used_at TIMESTAMPTZ DEFAULT NOW(),
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   UNIQUE(endpoint)
 );
+
+ALTER TABLE push_subscriptions ADD COLUMN IF NOT EXISTS user_agent TEXT;
+ALTER TABLE push_subscriptions ADD COLUMN IF NOT EXISTS last_used_at TIMESTAMPTZ DEFAULT NOW();
 
 CREATE INDEX IF NOT EXISTS idx_push_subs_member_id
   ON push_subscriptions (member_id);

@@ -13,6 +13,13 @@ export function NotificationPrompt() {
   const showIosSafariNote = isAppleMobileWeb() && !isInstalledPwa();
 
   useEffect(() => {
+    const isDismissed = localStorage.getItem('push_banner_dismissed') === 'true';
+    if (isDismissed) {
+      setDismissed(true);
+    }
+  }, []);
+
+  useEffect(() => {
     if (!token?.trim()) {
       setVisible(false);
       return;
@@ -32,6 +39,7 @@ export function NotificationPrompt() {
   };
 
   const handleDismiss = () => {
+    localStorage.setItem('push_banner_dismissed', 'true');
     setDismissed(true);
     setVisible(false);
   };
