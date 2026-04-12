@@ -32,7 +32,7 @@ import { useMessengerUnreadHint } from '../hooks/useMessengerUnreadHint';
 import { resolveMessengerWebOrigin } from '../lib/config';
 import { useBrowserNotificationScheduler } from '../features/notifications/useBrowserNotificationScheduler';
 import { useProfileDraftStore } from '../features/profile/profileDraftStore';
-import { canAccessStudioRole } from '../features/auth/studioAccess';
+import { canAccessMusicMenu } from '../features/auth/studioAccess';
 import { LAYOUT_MAIN_CHROME_EVENT } from './layoutChrome';
 
 type NavItem = {
@@ -40,15 +40,16 @@ type NavItem = {
   label: string;
   Icon: IconType;
   adminOnly?: boolean;
-  studioOnly?: boolean;
+  /** Видно только участникам с направлением «Музыкальное служение» или admin */
+  musicOnly?: boolean;
 };
 
 const NAV_ITEMS: NavItem[] = [
   /** Контурные Lucide — не путать с цветными эмодзи / Font Awesome «картинками». */
   { to: '/dashboard', label: 'Главная', Icon: LuLayoutDashboard },
   { to: '/prayer', label: 'Молитва', Icon: LuChurch },
-  { to: '/songbook', label: 'Песенник', Icon: LuMusic2 },
-  { to: '/studio', label: 'Студия', Icon: LuDisc3, studioOnly: true },
+  { to: '/songbook', label: 'Песенник', Icon: LuMusic2, musicOnly: true },
+  { to: '/studio', label: 'Студия', Icon: LuDisc3, musicOnly: true },
   { to: '/sermons', label: 'Проповеди', Icon: LuMic },
   { to: '/messenger', label: 'Чаты', Icon: LuMessageCircle },
   // { to: '/broadcast', label: 'Трансляции', Icon: LuTv },
@@ -295,9 +296,10 @@ export function Layout() {
       : registrationStatus === 'rejected'
         ? NAV_ITEMS.filter((item) => item.to === '/dashboard' || item.to === '/messenger')
         : NAV_ITEMS;
+  const hasMusicalAccess = canAccessMusicMenu(role, direction);
   const items = navBase.filter(
     (item) =>
-      (!item.adminOnly || isAdmin) && (!item.studioOnly || canAccessStudioRole(role, direction)),
+      (!item.adminOnly || isAdmin) && (!item.musicOnly || hasMusicalAccess),
   );
   const sidebarItems = items;
   const mobileItems = items;
