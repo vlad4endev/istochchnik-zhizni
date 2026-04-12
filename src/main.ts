@@ -25,7 +25,8 @@ import publicRoutes from './routes/publicRoutes';
 import songRoutes from './routes/songRoutes';
 import studioRoutes from './routes/studioRoutes';
 import settingsRoutes from './routes/settingsRoutes';
-import { initMessengerFanoutPublisherOnly } from './realtime/wsHub';
+import messengerRoutes from './routes/messengerRoutes';
+import { attachRealtimeWebSocket, initRealtimeRedis } from './realtime/wsHub';
 import { attachNotifyWebSocket, initNotifyRealtimeRedis } from './realtime/wsNotifyHub';
 import { initPushCronJobs } from './cron/pushJobs';
 import { ensureUploadsDirs, getUploadsRoot } from './config/uploadsRoot';
@@ -141,6 +142,7 @@ app.use('/api', routes);
 app.use('/api/push', pushRoutes);
 app.use('/api/notifications', notificationsRoutes);
 app.use('/api/telegram', telegramRoutes);
+app.use('/api/messenger', messengerRoutes);
 
 // Debug/version endpoint (helps verify that deploy updated)
 app.get('/api/version', (_req, res) => {
@@ -195,15 +197,16 @@ async function start(): Promise<void> {
     }
   }
   const server = http.createServer(app);
-  await initMessengerFanoutPublisherOnly();
+  await initRealtimeRedis();
   await initNotifyRealtimeRedis();
+  attachRealtimeWebSocket(server);
   attachNotifyWebSocket(server);
   
   initPushCronJobs();
   
   server.listen(Number(PORT), () => {
     console.log(`Server is running on http://localhost:${PORT}`);
-    console.log('[realtime] Notify WebSocket: /api/realtime (мессенджер — отдельный сервис)');
+    console.log('[realtime] Monolith WebSocket: /api/realtime');
   });
 }
 

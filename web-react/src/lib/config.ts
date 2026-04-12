@@ -62,8 +62,8 @@ export function getCalendarApiBaseUrl(): string {
  * Пример: https://chat.church-tambov.ru
  */
 export function resolveMessengerWebOrigin(): string {
-  const raw = import.meta.env.VITE_MESSENGER_ORIGIN ?? '';
-  return trimTrailingSlash(String(raw).trim());
+  // В режиме монолита всегда возвращаем пустую строку, игнорируя VITE_MESSENGER_ORIGIN
+  return '';
 }
 
 export function resolveRealtimeWebSocketUrl(): string {

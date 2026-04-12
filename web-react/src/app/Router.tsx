@@ -1,5 +1,5 @@
-import { lazy, Suspense, useEffect } from 'react';
-import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
+import { lazy, Suspense } from 'react';
+import { Navigate, Route, Routes } from 'react-router-dom';
 
 import { AuthLandingPage } from '../features/auth/pages/AuthLandingPage';
 import { LoginPage } from '../features/auth/pages/LoginPage';
@@ -24,7 +24,6 @@ import {
   RequireStudioAccess,
   RouteFallback,
 } from './routeGuards';
-import { resolveMessengerWebOrigin } from '../lib/config';
 import { MessengerWsProvider } from '../features/messenger/MessengerWsContext';
 
 /** Отдельные чанки: настройки (`/profile`) и публичная лента (`/profile/:username`) не тянут друг друга. */
@@ -108,31 +107,6 @@ const MessengerRoutes = lazy(async () => {
   return { default: m.MessengerRoutes };
 });
 
-/** Старые ссылки /messenger → редирект на поддомен чатов (или показ встроенного мессенджера, если origin не задан). */
-function MessengerMigrateRedirect() {
-  const location = useLocation();
-  const o = resolveMessengerWebOrigin();
-  
-  useEffect(() => {
-    if (o) {
-      window.location.replace(`${o}/messenger${location.search}${location.hash}`);
-    }
-  }, [o, location.search, location.hash]);
-
-  if (o) {
-    return <RouteFallback />;
-  }
-
-  return (
-    <Suspense fallback={<RouteFallback />}>
-      <RequireMessengerAccess>
-        <MessengerWsProvider>
-          <MessengerRoutes />
-        </MessengerWsProvider>
-      </RequireMessengerAccess>
-    </Suspense>
-  );
-}
 
 export function AppRouter() {
   return (
@@ -235,7 +209,18 @@ export function AppRouter() {
             </RequireFullMember>
           }
         />
-        <Route path="messenger/*" element={<MessengerMigrateRedirect />} />
+        <Route
+          path="messenger/*"
+          element={
+            <Suspense fallback={<RouteFallback />}>
+              <RequireMessengerAccess>
+                <MessengerWsProvider>
+                  <MessengerRoutes />
+                </MessengerWsProvider>
+              </RequireMessengerAccess>
+            </Suspense>
+          }
+        />
         <Route
           path="broadcast"
           element={
