@@ -12,14 +12,22 @@ self.addEventListener('push', function (event) {
 
   const title = data.title || 'Уведомление';
 
+  // Helper to parse potential stringified JSON from FCM backend
+  const parseJsonStr = (val, fallback) => {
+    if (typeof val === 'string') {
+      try { return JSON.parse(val); } catch (e) { return fallback; }
+    }
+    return val !== undefined ? val : fallback;
+  };
+
   // Extract new properties or fallback to defaults
   const options = {
     body: data.body || '',
     icon: data.icon || '/assets/logo_minimal.svg',
     badge: data.badge || '/assets/logo_minimal.svg',
     tag: data.tag || undefined,
-    renotify: data.renotify ?? false,
-    actions: data.actions || [],
+    renotify: parseJsonStr(data.renotify, false),
+    actions: parseJsonStr(data.actions, []),
     data: {
       url: data.url || '/',
       conversationId: data.conversationId || null,
