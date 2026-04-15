@@ -1,4 +1,5 @@
-import { Router, type Request, type Response } from 'express';
+import { Router, type Request, type Response, type NextFunction } from 'express';
+import multer from 'multer';
 import fs from 'node:fs/promises';
 import { constants as fsConstants } from 'node:fs';
 import path from 'node:path';
@@ -31,6 +32,72 @@ function normalizeOptionalBigintId(raw: unknown): string | null {
 }
 
 const router = Router();
+
+/** Имена файлов с multer: UUID + необязательное расширение (без path traversal). */
+const MESSENGER_PUBLIC_UPLOAD_NAME =
+  /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}(\.[a-z0-9]+)?$/i;
+
+/**
+ * Публичная раздача локального вложения по пути под `/api/messenger/...`, чтобы хватало одного прокси
+ * на `/api` в nginx без отдельного `location /uploads/` (см. resolvePublicUrl).
+ * Размещено ДО requireAuthSession.
+ */
+router.get('/public-uploads/:filename', async (req: Request, res: Response) => {
+  const filename = String(req.params.filename ?? '').trim();
+  if (!filename || !MESSENGER_PUBLIC_UPLOAD_NAME.test(filename)) {
+    res.status(400).type('text/plain').send('Bad request');
+    return;
+  }
+  const absPath = path.join(getUploadsRoot(), filename);
+  const root = path.resolve(getUploadsRoot());
+  if (!absPath.startsWith(`${root}${path.sep}`) && absPath !== root) {
+    res.status(404).type('text/plain').send('Not found');
+    return;
+  }
+  try {
+    const st = await fs.stat(absPath);
+    if (!st.isFile()) {
+      res.status(404).type('text/plain').send('Not found');
+      return;
+    }
+  } catch {
+    res.status(404).type('text/plain').send('Not found');
+    return;
+  }
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Cache-Control', 'public, max-age=86400, immutable');
+  res.sendFile(absPath, (err) => {
+    if (err && !res.headersSent) res.status(404).end();
+  });
+});
+
+function localMessengerPublicUploadUrl(filename: string): string {
+  return `/api/messenger/public-uploads/${filename}`;
+}
+
+/** Multer без обёртки отдаёт 500 при LIMIT_* / fileFilter — отвечаем JSON 400 как в authRoutes. */
+function messengerUploadMiddleware(req: Request, res: Response, next: NextFunction): void {
+  upload.single('file')(req, res, (err: unknown) => {
+    if (!err) {
+      next();
+      return;
+    }
+    if (err instanceof multer.MulterError) {
+      if (err.code === 'LIMIT_FILE_SIZE') {
+        res.status(400).json({ error: 'File too large', maxBytes: 20 * 1024 * 1024 });
+        return;
+      }
+      if (err.code === 'LIMIT_UNEXPECTED_FILE') {
+        res.status(400).json({ error: 'File type not allowed' });
+        return;
+      }
+      res.status(400).json({ error: err.message });
+      return;
+    }
+    const message = err instanceof Error ? err.message : 'Upload failed';
+    res.status(400).json({ error: message });
+  });
+}
 
 async function getConversationListItemForMember(memberId: number, convId: string) {
   const list = await svc.listConversations(memberId);
@@ -83,52 +150,76 @@ router.post('/studio/song-chat', async (req: Request, res: Response) => {
   }
 });
 
+/** При ошибке Supabase оставляем файл на диске и отдаём через /api/messenger/public-uploads/… . Отключить строгий режим 500: MESSENGER_UPLOAD_FALLBACK_LOCAL=false */
+function messengerUploadFallbackLocalEnabled(): boolean {
+  const v = String(process.env.MESSENGER_UPLOAD_FALLBACK_LOCAL ?? '').trim().toLowerCase();
+  if (v === 'false' || v === '0' || v === 'no') return false;
+  return true;
+}
+
 /** POST /api/messenger/upload (form-data: file) -> { url, name, size } */
-router.post('/upload', upload.single('file'), async (req: Request, res: Response) => {
+router.post('/upload', messengerUploadMiddleware, async (req: Request, res: Response) => {
   const startedAt = Date.now();
-  const file = (req as Request & { file?: Express.Multer.File }).file;
-  if (!file) {
-    res.status(400).json({ error: 'File is required' });
-    return;
-  }
-  const memberId = (req as AuthReq).authUserId!;
-  let url: string;
-
-  if (isSupabaseStorageConfigured()) {
-    const bucket = messengerBucket();
-    const objectPath = buildMessengerObjectPath(memberId, file.originalname || path.basename(file.path));
-    const localPath = file.path;
-    try {
-      const { publicUrl } = await uploadLocalFileToPublicBucket({
-        bucket,
-        objectPath,
-        localPath,
-        contentType: file.mimetype || undefined,
-      });
-      url = publicUrl;
-    } catch (e) {
-      console.error('[messenger] Supabase upload failed:', e);
-      res.status(500).json({ error: 'Storage upload failed' });
+  try {
+    const file = (req as Request & { file?: Express.Multer.File }).file;
+    if (!file) {
+      res.status(400).json({ error: 'File is required' });
       return;
-    } finally {
-      try {
-        await fs.unlink(localPath);
-      } catch {
-        /* ignore */
-      }
     }
-  } else {
-    url = `/uploads/${file.filename}`;
-  }
+    const memberId = (req as AuthReq).authUserId!;
+    let url: string;
 
-  res.json({
-    url,
-    name: file.originalname,
-    originalName: file.originalname,
-    mimeType: file.mimetype || '',
-    size: file.size,
-    upload_ms: Date.now() - startedAt,
-  });
+    if (isSupabaseStorageConfigured()) {
+      const bucket = messengerBucket();
+      const objectPath = buildMessengerObjectPath(memberId, file.originalname || path.basename(file.path));
+      const localPath = file.path;
+      try {
+        const { publicUrl } = await uploadLocalFileToPublicBucket({
+          bucket,
+          objectPath,
+          localPath,
+          contentType: file.mimetype || undefined,
+        });
+        url = publicUrl;
+        try {
+          await fs.unlink(localPath);
+        } catch {
+          /* ignore */
+        }
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        console.error('[messenger] Supabase upload failed:', msg);
+        if (messengerUploadFallbackLocalEnabled()) {
+          console.warn('[messenger] MESSENGER_UPLOAD_FALLBACK_LOCAL: serving file from disk', localPath);
+          url = localMessengerPublicUploadUrl(file.filename);
+        } else {
+          try {
+            await fs.unlink(localPath);
+          } catch {
+            /* ignore */
+          }
+          res.status(500).json({ error: 'Storage upload failed', code: 'supabase_upload' });
+          return;
+        }
+      }
+    } else {
+      url = localMessengerPublicUploadUrl(file.filename);
+    }
+
+    res.json({
+      url,
+      name: file.originalname,
+      originalName: file.originalname,
+      mimeType: file.mimetype || '',
+      size: file.size,
+      upload_ms: Date.now() - startedAt,
+    });
+  } catch (e) {
+    console.error('[messenger] upload handler error:', e);
+    if (!res.headersSent) {
+      res.status(500).json({ error: 'Upload failed', code: 'upload_handler' });
+    }
+  }
 });
 
 // ─── Conversations ────────────────────────────────────────────

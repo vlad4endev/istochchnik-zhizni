@@ -1184,13 +1184,15 @@ function normalizeAttachmentUrl(raw: unknown): string {
   if (/^https?:\/\//i.test(input)) return input;
 
   let normalized = input;
-  if (normalized.startsWith('/api/uploads/')) {
+  if (normalized.startsWith('/api/messenger/public-uploads/')) {
+    normalized = normalized.replace(/^\/api\/messenger\/public-uploads\//, '/uploads/');
+  } else if (normalized.startsWith('/api/uploads/')) {
     normalized = normalized.replace(/^\/api\/uploads\//, '/uploads/');
   } else if (normalized.startsWith('api/uploads/')) {
     normalized = normalized.replace(/^api\/uploads\//, '/uploads/');
   }
   if (!normalized.startsWith('/uploads/')) {
-    throw new Error('Attachment URL must start with /uploads/');
+    throw new Error('Attachment URL must start with /uploads/ or /api/messenger/public-uploads/');
   }
   return normalized;
 }
