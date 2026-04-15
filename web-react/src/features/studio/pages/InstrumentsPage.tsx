@@ -22,18 +22,22 @@ export function InstrumentsPage() {
     onSuccess: () => void qc.invalidateQueries({ queryKey: ['studio', 'instruments'] }),
   });
 
-  if (q.isLoading) return <p className="text-zinc-500">Загрузка…</p>;
+  if (q.isLoading) return <p className="text-sm text-stone-500">Загрузка…</p>;
 
   return (
-    <div className="mx-auto max-w-xl space-y-4">
-      <h1 className="text-lg font-semibold text-white">Настройки инструментов</h1>
-      <p className="text-sm text-zinc-400">
-        Произвольный JSON (транспонирование по умолчанию, MIDI и т.д.) — для расширения.
-      </p>
+    <div className="mx-auto max-w-xl space-y-5">
+      <header className="space-y-2 border-b border-stone-200 pb-5">
+        <h1 className="text-xl font-bold text-stone-900">Инструменты</h1>
+        <p className="text-sm leading-relaxed text-stone-600">
+          Расширенные настройки в формате JSON (транспонирование по умолчанию, MIDI и т.д.). Обычно этот раздел
+          не нужен — меняйте только если знаете, зачем.
+        </p>
+      </header>
       <textarea
-        className="min-h-[200px] w-full rounded border border-zinc-700 bg-zinc-950 px-3 py-2 font-mono text-xs text-zinc-200"
+        className="min-h-[220px] w-full rounded-xl border border-stone-200 bg-stone-50 px-3 py-3 font-mono text-xs text-stone-900 outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
         value={jsonText}
         onChange={(e) => setJsonText(e.target.value)}
+        spellCheck={false}
       />
       <button
         type="button"
@@ -47,7 +51,7 @@ export function InstrumentsPage() {
           save.mutate();
         }}
         disabled={save.isPending}
-        className="rounded-lg bg-sky-600 px-4 py-2 text-sm font-medium text-white hover:bg-sky-500"
+        className="rounded-lg bg-stone-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-stone-800 disabled:opacity-50"
       >
         Сохранить
       </button>

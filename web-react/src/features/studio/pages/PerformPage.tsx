@@ -99,21 +99,21 @@ export function PerformPage() {
 
   if (q.isLoading) {
     return (
-      <div className="flex min-h-[100dvh] items-center justify-center bg-black text-zinc-500">
+      <div className="flex min-h-[100dvh] items-center justify-center bg-stone-100 text-stone-500">
         Загрузка…
       </div>
     );
   }
   if (!q.data || items.length === 0) {
     return (
-      <div className="flex min-h-[100dvh] flex-col items-center justify-center gap-4 bg-black text-zinc-400">
-        <p>В сетлисте нет песен.</p>
+      <div className="flex min-h-[100dvh] flex-col items-center justify-center gap-4 bg-stone-100 px-4 text-center text-stone-600">
+        <p>В сетлисте нет песен. Добавьте их в редакторе сетлиста.</p>
         <button
           type="button"
           onClick={() => navigate(studioSetlistDetailPath(surface, setlistId))}
-          className="text-sky-400"
+          className="rounded-lg bg-stone-900 px-4 py-2 text-sm font-semibold text-white hover:bg-stone-800"
         >
-          Назад
+          К сетлисту
         </button>
       </div>
     );
@@ -123,7 +123,7 @@ export function PerformPage() {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex flex-col bg-black text-zinc-100"
+      className="fixed inset-0 z-50 flex flex-col bg-stone-100 text-stone-900"
       onTouchStart={(e) => {
         touchStartX.current = e.touches[0]?.clientX ?? null;
       }}
@@ -137,22 +137,22 @@ export function PerformPage() {
         if (dx < -60) go(1);
       }}
     >
-      <header className="flex shrink-0 items-center justify-between border-b border-zinc-800 px-2 py-2">
+      <header className="flex shrink-0 items-center justify-between border-b border-stone-200 bg-white/90 px-2 py-2 backdrop-blur-sm">
         <button
           type="button"
           onClick={() => navigate(studioSetlistDetailPath(surface, setlistId))}
-          className="flex h-10 w-10 shrink-0 items-center justify-center text-zinc-400"
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-stone-500 hover:bg-stone-100 hover:text-stone-800"
           aria-label="Закрыть"
         >
           <LuX className="h-6 w-6" />
         </button>
         <div className="min-w-0 flex-1 px-2 text-center">
-          <p className="truncate text-xs text-zinc-500">{title}</p>
+          <p className="truncate text-xs text-stone-500">{title}</p>
           <div className="flex items-center justify-center gap-2">
-            <p className="truncate text-sm font-semibold text-white">{current?.song.title}</p>
+            <p className="truncate text-sm font-semibold text-stone-900">{current?.song.title}</p>
             {bpm ? (
               <span
-                className="inline-block h-2 w-2 shrink-0 rounded-full bg-emerald-400"
+                className="inline-block h-2 w-2 shrink-0 rounded-full bg-emerald-500"
                 style={{
                   animation: `perform-bpm-pulse ${60 / bpm}s ease-in-out infinite`,
                 }}
@@ -161,41 +161,41 @@ export function PerformPage() {
             ) : null}
           </div>
         </div>
-        <span className="w-10 shrink-0 text-right text-xs text-zinc-500">
+        <span className="w-10 shrink-0 text-right text-xs font-medium text-stone-500">
           {index + 1}/{items.length}
         </span>
       </header>
 
-      <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-zinc-800 px-3 py-2 text-xs">
-        <span className="text-zinc-500">Трансп.</span>
+      <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-stone-200 bg-white/80 px-3 py-2 text-xs backdrop-blur-sm">
+        <span className="text-stone-500">Трансп.</span>
         <button
           type="button"
-          className="rounded-lg bg-zinc-900 px-2 py-1"
+          className="rounded-lg border border-stone-200 bg-stone-50 px-2 py-1 text-stone-800 hover:bg-stone-100"
           onClick={() => setTranspose((t) => Math.max(t - 1, -11))}
         >
           <LuMinus className="h-4 w-4" />
         </button>
-        <span className="w-8 text-center font-mono">{transpose}</span>
+        <span className="w-8 text-center font-mono font-semibold text-stone-900">{transpose}</span>
         <button
           type="button"
-          className="rounded-lg bg-zinc-900 px-2 py-1"
+          className="rounded-lg border border-stone-200 bg-stone-50 px-2 py-1 text-stone-800 hover:bg-stone-100"
           onClick={() => setTranspose((t) => Math.min(t + 1, 11))}
           aria-label="Выше"
         >
           <LuPlus className="h-4 w-4" />
         </button>
-        <div className="mx-1 h-4 w-px bg-zinc-700" />
+        <div className="mx-1 h-4 w-px bg-stone-200" />
         <button
           type="button"
           onClick={() => setAutoScroll((a) => !a)}
-          className={`inline-flex items-center gap-1 rounded-lg px-3 py-1.5 font-medium ${
-            autoScroll ? 'bg-emerald-700 text-white' : 'bg-zinc-900 text-zinc-300'
+          className={`inline-flex items-center gap-1 rounded-lg px-3 py-1.5 font-semibold ${
+            autoScroll ? 'bg-emerald-600 text-white shadow-sm' : 'border border-stone-200 bg-white text-stone-700'
           }`}
         >
           {autoScroll ? <LuPause className="h-4 w-4" /> : <LuPlay className="h-4 w-4" />}
           Автоскролл
         </button>
-        <label className="flex cursor-pointer items-center gap-1 text-zinc-400">
+        <label className="flex cursor-pointer items-center gap-1 text-stone-600">
           <input
             type="checkbox"
             checked={useBpmSpeed}
@@ -211,25 +211,25 @@ export function PerformPage() {
           value={speedPxPerSec}
           onChange={(e) => setSpeedPxPerSec(Number(e.target.value))}
           disabled={useBpmSpeed && Boolean(bpm)}
-          className="h-1 w-24 accent-emerald-500"
+          className="h-1 w-24 accent-emerald-600"
         />
       </div>
 
-      <div ref={scrollRef} className="min-h-0 flex-1 overflow-auto px-4 py-4">
+      <div ref={scrollRef} className="min-h-0 flex-1 overflow-auto bg-stone-50 px-4 py-5">
         <LyricsWithChords
           text={body}
           transposeSemitones={transpose}
-          chordTone="dark"
-          className="font-sans text-lg text-zinc-100 md:text-xl"
+          chordTone="light"
+          className="font-sans text-lg leading-relaxed text-stone-900 md:text-xl"
         />
       </div>
 
-      <footer className="flex shrink-0 items-center justify-between gap-4 border-t border-zinc-800 p-4">
+      <footer className="flex shrink-0 items-center justify-between gap-4 border-t border-stone-200 bg-white/95 p-4 backdrop-blur-sm">
         <button
           type="button"
           onClick={() => go(-1)}
           disabled={index <= 0}
-          className="flex h-14 flex-1 items-center justify-center rounded-xl bg-zinc-900 text-white disabled:opacity-30"
+          className="flex h-14 flex-1 items-center justify-center rounded-xl border border-stone-200 bg-white text-stone-900 shadow-sm hover:bg-stone-50 disabled:opacity-30"
         >
           <LuChevronLeft className="h-8 w-8" />
         </button>
@@ -237,7 +237,7 @@ export function PerformPage() {
           type="button"
           onClick={() => go(1)}
           disabled={index >= items.length - 1}
-          className="flex h-14 flex-1 items-center justify-center rounded-xl bg-zinc-900 text-white disabled:opacity-30"
+          className="flex h-14 flex-1 items-center justify-center rounded-xl border border-stone-200 bg-white text-stone-900 shadow-sm hover:bg-stone-50 disabled:opacity-30"
         >
           <LuChevronRight className="h-8 w-8" />
         </button>

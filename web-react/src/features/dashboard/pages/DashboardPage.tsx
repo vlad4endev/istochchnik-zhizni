@@ -31,6 +31,7 @@ import {
 import { NextWeekPrayerPlanSection, userCanViewNextWeekPrayerPlan } from '../../calendar/components/NextWeekPrayerPlanSection';
 import { fetchMe } from '../../profile/api';
 import { fetchProfileByUsername } from '../../profile/publicProfileApi';
+import { apiBoolean } from '../../../lib/apiBoolean';
 import { resolvePublicUrl } from '../../../lib/resolvePublicUrl';
 import { memberRosterName, splitMemberNameParts } from '../../../lib/memberRosterName';
 import type { Member } from '../../../types';
@@ -275,13 +276,13 @@ function DashboardMain() {
   const collectionClaimsQ = useQuery({
     queryKey: ['calendar', 'cycle', 'collection-claims', 'current'],
     queryFn: () => getCycleCollectionClaims('current'),
-    enabled: Boolean(meQ.data?.is_collection_coordinator || isAdmin),
+    enabled: apiBoolean(meQ.data?.is_collection_coordinator) || isAdmin,
     staleTime: 30_000,
   });
   const weekMembersQ = useQuery({
     queryKey: ['calendar', 'week-members', 'current', 'dashboard'],
     queryFn: () => getWeekPlanMembers('current'),
-    enabled: Boolean(meQ.data?.is_collection_coordinator || isAdmin),
+    enabled: apiBoolean(meQ.data?.is_collection_coordinator) || isAdmin,
     staleTime: 30_000,
   });
 
@@ -370,8 +371,9 @@ function DashboardMain() {
     return unfilledWeekRowsAdmin.filter((r) => claimedMemberIds.has(r.member.id));
   }, [unfilledWeekRowsAdmin, collectionClaimsQ.data?.members, me?.id]);
 
-  const isCollectionCoordinator = Boolean(me?.is_collection_coordinator);
-  const canManageCoordinatorNotes = isAdmin || isCollectionCoordinator;
+  const isCollectionCoordinator = apiBoolean(me?.is_collection_coordinator);
+  const canManageCoordinatorNotes =
+    meQ.isSuccess && (isAdmin || isCollectionCoordinator);
 
   async function onDeleteAnnouncement() {
     if (!window.confirm('Удалить объявление?')) return;

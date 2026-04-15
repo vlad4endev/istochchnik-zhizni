@@ -41,7 +41,11 @@ import { memberRosterName } from '../../../lib/memberRosterName';
 import type { Backslider, DayPrayerData, GlobalTheme, Member, Ministry } from '../../../types';
 import { fetchMe, patchProfile } from '../../profile/api';
 import { useCoordinatorNoteEditorRequestStore } from '../../dashboard/coordinatorNoteEditorRequestStore';
-import { NextWeekPrayerPlanSection, userCanViewNextWeekPrayerPlan } from '../components/NextWeekPrayerPlanSection';
+import {
+  NextWeekPrayerPlanSection,
+  userCanManageCoordinatorDashboardNotes,
+  userCanViewNextWeekPrayerPlan,
+} from '../components/NextWeekPrayerPlanSection';
 import {
   deleteDashboardCoordinatorNote,
   fetchDashboardCoordinatorNotes,
@@ -460,7 +464,7 @@ export function DailyPrayerPage() {
   const [calendarExpanded, setCalendarExpanded] = useState(false);
   const [calendarView, setCalendarView] = useState<'week' | 'month'>('week');
 
-  const { data: me } = useQuery({
+  const { data: me, isSuccess: meQuerySuccess } = useQuery({
     queryKey: ['auth', 'me'],
     queryFn: fetchMe,
     staleTime: 60_000,
@@ -522,7 +526,8 @@ export function DailyPrayerPage() {
       </section>
     ) : null;
 
-  const canManageCoordinatorNotes = userCanViewNextWeekPrayerPlan(me);
+  const canManageCoordinatorNotes =
+    meQuerySuccess && userCanManageCoordinatorDashboardNotes(me);
 
   async function onDeleteUrgentPrayer() {
     if (!window.confirm('Удалить срочную молитвенную нужду?')) return;

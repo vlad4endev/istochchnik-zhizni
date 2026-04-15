@@ -4,8 +4,8 @@ import { Link, useParams } from 'react-router-dom';
 import { useMemo, useState } from 'react';
 
 import { emitAppToast } from '../../../lib/uiFeedback';
-import { useStudioModuleSurface } from '../studioPaths';
-import { LuCopy, LuFileDown } from 'react-icons/lu';
+import { studioSetlistsIndexPath, useStudioModuleSurface } from '../studioPaths';
+import { LuCopy, LuFileDown, LuChevronLeft } from 'react-icons/lu';
 
 import { exportSetlistPdf } from '../../songbook/pdfExport';
 import { fetchSongs } from '../../songbook/api';
@@ -87,7 +87,7 @@ export function SetlistDetailPage() {
   });
 
   if (!Number.isInteger(setlistId) || setlistId <= 0) {
-    return <p className="text-red-400">Некорректный id</p>;
+    return <p className="text-red-600">Некорректный id</p>;
   }
 
   const songs = songsQ.data ?? [];
@@ -100,20 +100,27 @@ export function SetlistDetailPage() {
       ? `${window.location.origin}/setlist-share/${meta.share_token}`
       : '';
 
+  const pageCard =
+    surface === 'songbook'
+      ? 'rounded-2xl border border-stone-200 bg-white p-4 shadow-sm md:p-6'
+      : '';
+
   return (
-    <div
-      className={[
-        'mx-auto max-w-3xl space-y-6',
-        surface === 'songbook' ? 'rounded-2xl border border-zinc-800 bg-[#0a0a0a] p-4 shadow-inner md:p-6' : '',
-      ]
-        .filter(Boolean)
-        .join(' ')}
-    >
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="text-lg font-semibold text-white">Позиции сетлиста</h1>
-          <p className="mt-1 text-sm text-zinc-400">
-            Выберите песню в списке ниже и нажмите «Добавить». Порядок — как в списке (сверху вниз).
+    <div className={['mx-auto max-w-3xl space-y-6', pageCard].filter(Boolean).join(' ')}>
+      <Link
+        to={studioSetlistsIndexPath(surface)}
+        className="inline-flex items-center gap-1 text-sm font-medium text-stone-600 hover:text-sky-700"
+      >
+        <LuChevronLeft className="h-4 w-4" aria-hidden />
+        Все сетлисты
+      </Link>
+
+      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-stone-200 pb-5">
+        <div className="min-w-0">
+          <h1 className="text-xl font-bold text-stone-900">{meta?.title ?? 'Сетлист'}</h1>
+          <p className="mt-1 text-sm text-stone-600">
+            Добавьте песни из каталога и при необходимости включите «Моя версия». Порядок в списке ниже —
+            порядок на выступлении.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -133,7 +140,7 @@ export function SetlistDetailPage() {
               });
             }}
             disabled={!itemsQ.data?.length}
-            className="inline-flex items-center gap-1 rounded-lg border border-zinc-600 px-3 py-1.5 text-sm text-zinc-200 hover:bg-zinc-800 disabled:opacity-40"
+            className="inline-flex items-center gap-1 rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm font-medium text-stone-800 shadow-sm hover:bg-stone-50 disabled:opacity-40"
           >
             <LuFileDown className="h-4 w-4" />
             PDF
@@ -141,11 +148,12 @@ export function SetlistDetailPage() {
         </div>
       </div>
 
-      <div className="rounded-lg border border-zinc-800 bg-zinc-900/40 p-4">
-        <p className="mb-2 text-xs font-bold uppercase text-zinc-500">Публичная ссылка</p>
-        <label className="flex cursor-pointer items-center gap-2 text-sm text-zinc-300">
+      <div className="rounded-xl border border-stone-200 bg-stone-50/80 p-4">
+        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-stone-500">Публичная ссылка</p>
+        <label className="flex cursor-pointer items-center gap-2 text-sm text-stone-700">
           <input
             type="checkbox"
+            className="rounded border-stone-300 text-sky-600 focus:ring-sky-500"
             checked={Boolean(meta?.is_public)}
             onChange={(e) => publicMut.mutate(e.target.checked)}
             disabled={publicMut.isPending || !meta}
@@ -153,13 +161,13 @@ export function SetlistDetailPage() {
           Открыть просмотр по ссылке (без входа в приложение)
         </label>
         {meta?.is_public && shareUrl && (
-          <div className="mt-2 flex flex-wrap items-center gap-2">
-            <code className="max-w-full truncate rounded bg-zinc-950 px-2 py-1 text-xs text-sky-300">
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <code className="max-w-full truncate rounded-lg border border-stone-200 bg-white px-2 py-1.5 text-xs text-sky-800">
               {shareUrl}
             </code>
             <button
               type="button"
-              className="inline-flex items-center gap-1 rounded-lg bg-zinc-800 px-2 py-1 text-xs text-white hover:bg-zinc-700"
+              className="inline-flex items-center gap-1 rounded-lg border border-stone-300 bg-white px-2 py-1.5 text-xs font-medium text-stone-800 hover:bg-stone-50"
               onClick={() => void navigator.clipboard.writeText(shareUrl)}
             >
               <LuCopy className="h-3 w-3" />
@@ -169,28 +177,26 @@ export function SetlistDetailPage() {
         )}
       </div>
 
-      <div className="rounded-lg border border-zinc-800 bg-zinc-900/40 p-4">
-        <p className="mb-2 text-xs font-bold uppercase text-zinc-500">Добавить песню</p>
-        {songsQ.isLoading && (
-          <p className="text-sm text-zinc-500">Загрузка каталога песен…</p>
-        )}
+      <div className="rounded-xl border border-stone-200 bg-stone-50/80 p-4">
+        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-stone-500">Добавить песню</p>
+        {songsQ.isLoading && <p className="text-sm text-stone-500">Загрузка каталога песен…</p>}
         {songsQ.isError && (
-          <p className="text-sm text-amber-400">
+          <p className="text-sm text-amber-700">
             Не удалось загрузить песни. Обновите страницу или проверьте подключение.
           </p>
         )}
         {!songsQ.isLoading && !songsQ.isError && songs.length === 0 && (
-          <p className="text-sm text-zinc-400">
+          <p className="text-sm text-stone-600">
             В песеннике пока нет песен — сначала добавьте их в разделе{' '}
-            <Link to={songbookHome} className="text-sky-400 hover:text-sky-300">
+            <Link to={songbookHome} className="font-semibold text-sky-700 hover:text-sky-800">
               Песенник
             </Link>
             .
           </p>
         )}
-        <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center">
+        <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
           <select
-            className="flex-1 rounded border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-white disabled:opacity-50"
+            className="min-h-[44px] flex-1 rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm text-stone-900 outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100 disabled:opacity-50"
             value={pickSong}
             onChange={(e) => setPickSong(e.target.value)}
             disabled={songsQ.isLoading || songsQ.isError || songs.length === 0}
@@ -202,9 +208,10 @@ export function SetlistDetailPage() {
               </option>
             ))}
           </select>
-          <label className="flex items-center gap-2 text-sm text-zinc-400">
+          <label className="flex min-h-[44px] cursor-pointer items-center gap-2 text-sm text-stone-600">
             <input
               type="checkbox"
+              className="rounded border-stone-300 text-sky-600 focus:ring-sky-500"
               checked={useMyVersion}
               onChange={(e) => setUseMyVersion(e.target.checked)}
               disabled={!pickSong || !hasVersionFor(pickSong)}
@@ -215,32 +222,33 @@ export function SetlistDetailPage() {
             type="button"
             onClick={() => addMut.mutate()}
             disabled={!pickSong || addMut.isPending || songsQ.isLoading || songs.length === 0}
-            className="rounded-lg bg-sky-600 px-4 py-2 text-sm text-white hover:bg-sky-500 disabled:opacity-50"
+            className="min-h-[44px] rounded-lg bg-sky-600 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-500 disabled:opacity-50"
           >
             Добавить
           </button>
         </div>
       </div>
 
-      <ol className="list-decimal space-y-2 pl-5 text-zinc-200">
-        {itemsQ.isLoading && (
-          <li className="text-sm text-zinc-500">Загрузка позиций…</li>
-        )}
+      <ol className="list-decimal space-y-2 pl-5 text-stone-800">
+        {itemsQ.isLoading && <li className="text-sm text-stone-500">Загрузка позиций…</li>}
         {!itemsQ.isLoading && (itemsQ.data ?? []).length === 0 && (
-          <li className="rounded border border-dashed border-zinc-700 py-6 pl-0 text-sm text-zinc-500 list-none -ml-1">
-            Пока пусто — добавьте песни блоком выше.
+          <li className="-ml-1 list-none rounded-xl border border-dashed border-stone-300 py-8 pl-4 text-sm text-stone-600">
+            Пока пусто — выберите песню выше и нажмите «Добавить».
           </li>
         )}
         {(itemsQ.data ?? []).map((it, idx) => (
-          <li key={it.id} className="rounded border border-zinc-800 bg-zinc-900/60 py-2 pr-3 pl-2">
+          <li
+            key={it.id}
+            className="rounded-xl border border-stone-200 bg-white py-3 pr-3 pl-3 shadow-sm"
+          >
             <div className="flex items-start justify-between gap-2">
-              <div>
-                <span className="text-xs text-zinc-500">{idx + 1}. </span>
-                <span className="font-medium">{it.song.title}</span>
-                {it.studio_version_id && (
-                  <span className="ml-2 text-xs text-amber-400">моя версия</span>
-                )}
-                <p className="mt-1 font-mono text-xs text-zinc-500 line-clamp-2">
+              <div className="min-w-0">
+                <span className="text-xs font-medium text-stone-500">{idx + 1}. </span>
+                <span className="font-semibold text-stone-900">{it.song.title}</span>
+                {it.studio_version_id ? (
+                  <span className="ml-2 text-xs font-medium text-amber-700">моя версия</span>
+                ) : null}
+                <p className="mt-1 font-mono text-xs text-stone-500 line-clamp-2">
                   {it.effective_content_preview}
                 </p>
               </div>
@@ -249,7 +257,7 @@ export function SetlistDetailPage() {
                 onClick={() => {
                   if (window.confirm('Убрать из сетлиста?')) removeMut.mutate(Number(it.id));
                 }}
-                className="shrink-0 text-xs text-red-400"
+                className="shrink-0 text-xs font-medium text-red-600 hover:text-red-700"
               >
                 Удалить
               </button>

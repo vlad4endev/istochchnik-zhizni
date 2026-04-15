@@ -114,7 +114,8 @@ export function StudioEditor() {
   const quick = quickChordsForKey(quickRoot, quickMode);
   const backTo = studioMySongsPath(surface);
 
-  const darkUi = surface !== 'songbook' || stageMode;
+  /** Тёмный интерфейс только в режиме сцены внутри песенника; отдельная /studio — светлая тема. */
+  const darkUi = surface === 'songbook' && stageMode;
 
   const shell = darkUi
     ? {
@@ -175,7 +176,10 @@ export function StudioEditor() {
         <>
           <button
             type="button"
-            className="fixed inset-0 z-[100] bg-slate-950/40 backdrop-blur-[2px]"
+            className={[
+              'fixed inset-0 z-[100] backdrop-blur-[2px]',
+              darkUi ? 'bg-slate-950/40' : 'bg-stone-900/25',
+            ].join(' ')}
             aria-label="Закрыть панель"
             onClick={() => setToolsOpen(false)}
           />
@@ -210,7 +214,11 @@ export function StudioEditor() {
                   placeholder="напр. Am"
                 />
               </div>
-              <p className={`rounded-xl bg-slate-950/30 px-3 py-2 text-xs leading-relaxed ${shell.muted}`}>
+              <p
+                className={`rounded-xl px-3 py-2 text-xs leading-relaxed ${shell.muted} ${
+                  darkUi ? 'bg-slate-950/30' : 'bg-stone-100'
+                }`}
+              >
                 В каталоге: темп {s.tempo ?? '—'} BPM · размер {s.time_signature ?? '—'} (справочно)
               </p>
 

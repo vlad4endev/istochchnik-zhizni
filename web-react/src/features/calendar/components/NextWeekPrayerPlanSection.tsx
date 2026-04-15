@@ -16,6 +16,7 @@ import {
 } from 'react-icons/lu';
 import { SiOpenai } from 'react-icons/si';
 
+import { apiBoolean } from '../../../lib/apiBoolean';
 import { memberRosterName } from '../../../lib/memberRosterName';
 import type { MeResponse } from '../../profile/api';
 import type { NextWeekMemberDay } from '../../../types';
@@ -34,7 +35,12 @@ import { loadErrorDescription } from '../prayerPageUtils';
 export function userCanViewNextWeekPrayerPlan(me: MeResponse | undefined): boolean {
   if (!me) return false;
   if (me.app_role?.trim().toLowerCase() === 'admin') return true;
-  return Boolean(me.is_collection_coordinator);
+  return apiBoolean(me.is_collection_coordinator);
+}
+
+/** Редактирование / удаление срочных нужд и объявлений (только админ или координатор сбора). */
+export function userCanManageCoordinatorDashboardNotes(me: MeResponse | undefined): boolean {
+  return userCanViewNextWeekPrayerPlan(me);
 }
 
 function useClaimByMemberId(snapshot: CycleCollectionClaimsSnapshot | undefined) {

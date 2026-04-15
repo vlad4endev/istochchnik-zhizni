@@ -3,6 +3,7 @@ import axios from 'axios';
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { LuCross, LuHandshake, LuMegaphone, LuPlus } from 'react-icons/lu';
 
+import { apiBoolean } from '../../../lib/apiBoolean';
 import {
   deleteDashboardCoordinatorNote,
   fetchDashboardCoordinatorNotesForManage,
@@ -32,7 +33,7 @@ export function CoordinatorDashboardNoteFab() {
   const meQ = useQuery({ queryKey: ['auth', 'me'], queryFn: fetchMe, staleTime: 60_000 });
   const me = meQ.data ?? null;
   const isAdmin = me?.app_role?.trim().toLowerCase() === 'admin';
-  const can = isAdmin || Boolean(me?.is_collection_coordinator);
+  const can = meQ.isSuccess && (isAdmin || apiBoolean(me?.is_collection_coordinator));
 
   const pendingOpenKind = useCoordinatorNoteEditorRequestStore((s) => s.pendingOpenKind);
   const clearPendingOpen = useCoordinatorNoteEditorRequestStore((s) => s.clearPendingOpen);
