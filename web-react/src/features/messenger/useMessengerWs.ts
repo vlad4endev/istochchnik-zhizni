@@ -3,6 +3,15 @@ import { useAuthStore } from '../auth/authStore';
 import { resolveRealtimeWebSocketUrl } from '../../lib/config';
 import { useChatStore, isDraftPrivateConversationId } from './chatStore';
 
+function emitMessengerMetric(name: string, value: number, context?: Record<string, unknown>): void {
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent(
+    new CustomEvent('messenger:metric', {
+      detail: { name, value, context: context ?? {} },
+    }),
+  );
+}
+
 /**
  * Hook that connects to the WS server and routes messenger events
  * into the Zustand chatStore. Also handles reconnection.
@@ -111,6 +120,7 @@ export function useMessengerWs(): {
       wsRef.current = ws;
 
       ws.onopen = () => {
+        const openedAt = performance.now();
         const wasReconnected = attempt > 0;
         attempt = 0;
         ws.send(JSON.stringify({ type: 'auth', token }));
@@ -137,6 +147,16 @@ export function useMessengerWs(): {
             void store.loadMessages(actId);
           }
         }
+        if (wasReconnected) {
+          const prioritized = (store.conversations || [])
+            .filter((c) => !isDraftPrivateConversationId(c.id))
+            .filter((c) => c.unread_count > 0 || c.id === actId)
+            .slice(0, 8);
+          for (const c of prioritized) {
+            void store.catchUpMessagesAfter(c.id);
+          }
+        }
+        emitMessengerMetric('ws_connect_open', 1, { reconnected: wasReconnected, openedAt });
 
         // Heartbeat: ping every 15s; if no pong within 10s, close to force reconnect.
         pingInterval = setInterval(() => {
@@ -170,6 +190,7 @@ export function useMessengerWs(): {
       };
 
       ws.onclose = () => {
+        emitMessengerMetric('ws_close', 1, { attempt });
         wsRef.current = null;
         clearTimers();
         if (!stoppedRef.current) scheduleReconnect();

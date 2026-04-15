@@ -1,4 +1,4 @@
-import { useState, useRef, useMemo, useEffect } from 'react';
+import { memo, useState, useRef, useMemo, useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useChatStore } from '../chatStore';
 import type { MessageWithSender } from '../api/messengerApi';
@@ -394,7 +394,7 @@ interface MessageBubbleProps {
   onPinToggle?: (messageId: string, nextPinned: boolean) => void | Promise<void>;
 }
 
-export function MessageBubble({
+function MessageBubbleInner({
   message,
   isGroupedPrev,
   isGroupedNext,
@@ -920,3 +920,5 @@ export function MessageBubble({
     </>
   );
 }
+
+export const MessageBubble = memo(MessageBubbleInner);

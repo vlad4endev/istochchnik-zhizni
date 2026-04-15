@@ -9,6 +9,7 @@ type AppAvatarProps = {
   imgClassName?: string;
   style?: CSSProperties;
   loading?: 'eager' | 'lazy';
+  fetchPriority?: 'high' | 'low' | 'auto';
 };
 
 export function AppAvatar({
@@ -19,6 +20,7 @@ export function AppAvatar({
   imgClassName = 'h-full w-full object-cover',
   style,
   loading = 'lazy',
+  fetchPriority = 'auto',
 }: AppAvatarProps) {
   const resolvedSrc = useMemo(() => resolvePublicUrl(src ?? null), [src]);
   const [loadFailed, setLoadFailed] = useState(false);
@@ -37,6 +39,8 @@ export function AppAvatar({
           alt={alt}
           className={imgClassName}
           loading={loading}
+          decoding="async"
+          fetchPriority={fetchPriority}
           onError={() => setLoadFailed(true)}
         />
       ) : (

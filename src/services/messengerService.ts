@@ -1950,6 +1950,14 @@ export async function addReaction(
   memberId: number,
   emoji: string,
 ): Promise<boolean> {
+  const cId = await getMessageConversationId(messageId);
+  if (!cId) {
+    throw new Error('Message not found');
+  }
+  const allowed = await isMemberInConversation(cId, memberId);
+  if (!allowed) {
+    throw new Error('Forbidden');
+  }
   const result = await dbQuery(
     `INSERT INTO message_reactions (message_id, member_id, emoji)
      VALUES ($1, $2, $3)
@@ -1965,6 +1973,14 @@ export async function removeReaction(
   memberId: number,
   emoji: string,
 ): Promise<boolean> {
+  const cId = await getMessageConversationId(messageId);
+  if (!cId) {
+    throw new Error('Message not found');
+  }
+  const allowed = await isMemberInConversation(cId, memberId);
+  if (!allowed) {
+    throw new Error('Forbidden');
+  }
   const result = await dbQuery(
     `DELETE FROM message_reactions
      WHERE message_id = $1 AND member_id = $2 AND emoji = $3

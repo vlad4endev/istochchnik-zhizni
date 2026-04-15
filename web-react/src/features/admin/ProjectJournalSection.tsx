@@ -6,6 +6,7 @@ import { ru } from 'date-fns/locale';
 import { fetchAppLogsAdmin, type AppLogItem } from './api';
 
 const Q_JOURNAL = ['admin', 'journal', 'logs'] as const;
+const SLOW_MS = 1200;
 
 function badgeClass(level: AppLogItem['level']): string {
   if (level === 'error') return 'bg-red-100 text-red-700 border-red-200';
@@ -62,6 +63,115 @@ function actionHint(it: AppLogItem): string | null {
   return null;
 }
 
+function pct(value: number): string {
+  return `${value.toFixed(1)}%`;
+}
+
+type JournalAnalysis = {
+  total: number;
+  totalHttp: number;
+  errorCount: number;
+  warnCount: number;
+  errorRate: number;
+  avgDuration: number | null;
+  slowCount: number;
+  healthScore: number;
+  healthText: string;
+  topErrorPath: { path: string; count: number } | null;
+  topSlowPath: { path: string; avgMs: number } | null;
+  insights: string[];
+};
+
+function analyzeLogs(items: AppLogItem[]): JournalAnalysis {
+  const http = items.filter((it) => it.scope === 'http');
+  const errorCount = items.filter((it) => it.level === 'error').length;
+  const warnCount = items.filter((it) => it.level === 'warn').length;
+  const totalHttp = http.length;
+  const errorRate = totalHttp > 0 ? (http.filter((it) => (it.status_code ?? 0) >= 500).length / totalHttp) * 100 : 0;
+
+  const durations = http
+    .map((it) => (typeof it.duration_ms === 'number' ? it.duration_ms : null))
+    .filter((v): v is number => v != null && Number.isFinite(v));
+  const avgDuration = durations.length ? durations.reduce((s, d) => s + d, 0) / durations.length : null;
+  const slowCount = durations.filter((d) => d >= SLOW_MS).length;
+
+  const errorPathMap = new Map<string, number>();
+  for (const it of http) {
+    if ((it.status_code ?? 0) >= 500 && it.request_path) {
+      errorPathMap.set(it.request_path, (errorPathMap.get(it.request_path) ?? 0) + 1);
+    }
+  }
+  let topErrorPath: { path: string; count: number } | null = null;
+  for (const [path, count] of errorPathMap) {
+    if (!topErrorPath || count > topErrorPath.count) topErrorPath = { path, count };
+  }
+
+  const slowPathMap = new Map<string, { total: number; count: number }>();
+  for (const it of http) {
+    if (typeof it.duration_ms === 'number' && it.request_path) {
+      const prev = slowPathMap.get(it.request_path) ?? { total: 0, count: 0 };
+      prev.total += it.duration_ms;
+      prev.count += 1;
+      slowPathMap.set(it.request_path, prev);
+    }
+  }
+  let topSlowPath: { path: string; avgMs: number } | null = null;
+  for (const [path, v] of slowPathMap) {
+    const avg = v.total / v.count;
+    if (!topSlowPath || avg > topSlowPath.avgMs) topSlowPath = { path, avgMs: avg };
+  }
+
+  let healthScore = 100;
+  healthScore -= Math.min(40, errorRate * 6);
+  if (avgDuration != null) healthScore -= Math.min(25, avgDuration / 120);
+  if (slowCount > 0) healthScore -= Math.min(20, slowCount * 2);
+  if (items.some((it) => it.scope === 'runtime' && it.level === 'error')) healthScore -= 15;
+  if (items.some((it) => it.scope === 'boot' && it.level === 'error')) healthScore -= 10;
+  healthScore = Math.max(0, Math.round(healthScore));
+
+  let healthText = 'Стабильно';
+  if (healthScore < 40) healthText = 'Критично';
+  else if (healthScore < 65) healthText = 'Нестабильно';
+  else if (healthScore < 85) healthText = 'Есть риски';
+
+  const insights: string[] = [];
+  if (totalHttp === 0) {
+    insights.push('Пока мало данных по запросам API. Оценка появится после работы пользователей.');
+  } else {
+    insights.push(`Сервер обработал ${totalHttp} API-запросов в текущей выборке.`);
+    if (errorRate >= 5) {
+      insights.push(`Высокая доля ошибок 5xx: ${pct(errorRate)}. Это признак серверного сбоя.`);
+    } else if (errorRate > 0) {
+      insights.push(`Ошибки 5xx есть, но пока в умеренном объеме: ${pct(errorRate)}.`);
+    } else {
+      insights.push('Ошибок 5xx не обнаружено: сервер отвечает стабильно.');
+    }
+    if (avgDuration != null) {
+      if (avgDuration >= SLOW_MS) insights.push('Средний ответ API медленный — стоит проверить БД и тяжелые запросы.');
+      else insights.push(`Среднее время ответа API: ${Math.round(avgDuration)} мс.`);
+    }
+    if (topErrorPath) insights.push(`Чаще всего падает endpoint ${topErrorPath.path} (${topErrorPath.count} раз).`);
+    if (topSlowPath && topSlowPath.avgMs >= SLOW_MS) {
+      insights.push(`Самый тяжелый endpoint: ${topSlowPath.path} (в среднем ${Math.round(topSlowPath.avgMs)} мс).`);
+    }
+  }
+
+  return {
+    total: items.length,
+    totalHttp,
+    errorCount,
+    warnCount,
+    errorRate,
+    avgDuration,
+    slowCount,
+    healthScore,
+    healthText,
+    topErrorPath,
+    topSlowPath,
+    insights,
+  };
+}
+
 export function ProjectJournalSection() {
   const [level, setLevel] = useState<'all' | 'info' | 'warn' | 'error'>('all');
   const [searchInput, setSearchInput] = useState('');
@@ -84,6 +194,7 @@ export function ProjectJournalSection() {
     for (const it of items) s[it.level] += 1;
     return s;
   }, [items]);
+  const analysis = useMemo(() => analyzeLogs(items), [items]);
 
   return (
     <section className="space-y-4">
@@ -141,6 +252,47 @@ export function ProjectJournalSection() {
           </button>
         </div>
       </div>
+
+      {items.length > 0 && (
+        <div className="rounded-2xl border border-stone-200 bg-white p-4 shadow-sm">
+          <h4 className="text-sm font-bold text-stone-900">Умный анализ сервиса</h4>
+          <p className="mt-1 text-sm text-stone-600">
+            Автоматическая оценка показывает, как сейчас работает система и где есть риски.
+          </p>
+          <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="rounded-xl border border-stone-200 bg-stone-50 p-3">
+              <p className="text-xs font-semibold text-stone-500">Здоровье сервиса</p>
+              <p className="mt-1 text-lg font-extrabold text-stone-900">{analysis.healthScore}/100</p>
+              <p className="text-xs text-stone-600">{analysis.healthText}</p>
+            </div>
+            <div className="rounded-xl border border-stone-200 bg-stone-50 p-3">
+              <p className="text-xs font-semibold text-stone-500">Ошибки 5xx</p>
+              <p className="mt-1 text-lg font-extrabold text-stone-900">{pct(analysis.errorRate)}</p>
+              <p className="text-xs text-stone-600">от API-запросов</p>
+            </div>
+            <div className="rounded-xl border border-stone-200 bg-stone-50 p-3">
+              <p className="text-xs font-semibold text-stone-500">Средний ответ API</p>
+              <p className="mt-1 text-lg font-extrabold text-stone-900">
+                {analysis.avgDuration == null ? '—' : `${Math.round(analysis.avgDuration)} мс`}
+              </p>
+              <p className="text-xs text-stone-600">медленные: {analysis.slowCount}</p>
+            </div>
+            <div className="rounded-xl border border-stone-200 bg-stone-50 p-3">
+              <p className="text-xs font-semibold text-stone-500">Записей в анализе</p>
+              <p className="mt-1 text-lg font-extrabold text-stone-900">{analysis.total}</p>
+              <p className="text-xs text-stone-600">API-запросов: {analysis.totalHttp}</p>
+            </div>
+          </div>
+
+          <div className="mt-3 space-y-2">
+            {analysis.insights.map((line) => (
+              <p key={line} className="rounded-xl border border-stone-200 bg-stone-50 px-3 py-2 text-sm text-stone-700">
+                {line}
+              </p>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-sm">
         {q.isLoading ? (

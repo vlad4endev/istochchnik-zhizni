@@ -6,6 +6,7 @@ import { AppAvatar } from '../../../components/AppAvatar';
 import { getAvatarColor, getAvatarInitial } from '../avatarUtils';
 import { LuPin, LuVolume2, LuVolumeX, LuFolderOpen, LuEraser, LuTrash2 } from 'react-icons/lu';
 import { IoCheckmarkDone } from 'react-icons/io5';
+import { shallow } from 'zustand/shallow';
 
 interface ChatListProps {
   onSelect: (id: string) => void;
@@ -16,8 +17,6 @@ export function ChatList({ onSelect, activeId }: ChatListProps) {
   const conversations = useChatStore((s) => s.conversations || EMPTY_ARRAY);
   const conversationsLoading = useChatStore((s) => s.conversationsLoading);
   const conversationsLoaded = useChatStore((s) => s.conversationsLoaded);
-  const onlineMembers = useChatStore((s) => s.onlineMembers);
-  const typingByConv = useChatStore((s) => s.typingByConv);
   const activeTab = useChatStore((s) => s.activeTab);
   const setActiveTab = useChatStore((s) => s.setActiveTab);
   const getUnreadForTab = useChatStore((s) => s.getUnreadForTab);
@@ -62,8 +61,6 @@ export function ChatList({ onSelect, activeId }: ChatListProps) {
                 conv={conv}
                 isActive={conv.id === activeId}
                 isLast={index === filtered.length - 1}
-                isOnline={conv.type === 'private' && conv.other_member ? onlineMembers.has(conv.other_member.id) : false}
-                typingUsers={typingByConv[conv.id] || EMPTY_ARRAY}
                 onClick={() => onSelect(conv.id)}
               />
             </li>
@@ -142,22 +139,28 @@ function ChatListItem({
   conv,
   isActive,
   isLast,
-  isOnline,
-  typingUsers,
   onClick,
 }: {
   conv: ConversationListItem;
   isActive: boolean;
   /** Последняя строка — без нижнего разделителя у текстовой колонки. */
   isLast: boolean;
-  isOnline: boolean;
-  typingUsers: { memberId: number; memberName: string }[];
   onClick: () => void;
 }) {
+  const typingUsers = useChatStore((s) => s.typingByConv[conv.id] || EMPTY_ARRAY);
+  const isOnline = useChatStore((s) => {
+    if (conv.type !== 'private' || !conv.other_member) return false;
+    return s.onlineMembers.has(conv.other_member.id);
+  });
   const currentMemberId = useChatStore((s) => s.currentMemberId);
-  const patchChatMyUi = useChatStore((s) => s.patchChatMyUi);
-  const clearChatHistory = useChatStore((s) => s.clearChatHistory);
-  const leaveChat = useChatStore((s) => s.leaveChat);
+  const { patchChatMyUi, clearChatHistory, leaveChat } = useChatStore(
+    (s) => ({
+      patchChatMyUi: s.patchChatMyUi,
+      clearChatHistory: s.clearChatHistory,
+      leaveChat: s.leaveChat,
+    }),
+    shallow,
+  );
 
   const [menuPos, setMenuPos] = useState<{ x: number; y: number } | null>(null);
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -392,6 +395,7 @@ function ChatListItem({
     </>
   );
 }
+
 
 function ChatRowContextMenu({
   x,

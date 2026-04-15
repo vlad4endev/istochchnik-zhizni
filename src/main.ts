@@ -145,7 +145,13 @@ const uploadsAbs = getUploadsRoot();
 console.log(`[uploads] serving static files from: ${uploadsAbs}`);
 // fallthrough: иначе при отсутствии файла send может отдать ENOENT в error handler → шум в логах.
 // Явный 404 после static: не отдаём SPA index.html на несуществующие /uploads/*.
-app.use('/uploads', express.static(uploadsAbs, { fallthrough: true }));
+app.use('/uploads', express.static(uploadsAbs, {
+  fallthrough: true,
+  setHeaders: (res) => {
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Cache-Control', 'public, max-age=86400, immutable');
+  },
+}));
 app.use('/uploads', (_req, res) => {
   res.status(404).type('text/plain').send('Not found');
 });

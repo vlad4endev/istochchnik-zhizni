@@ -1,6 +1,7 @@
 import { Router, type Request, type Response } from 'express';
 import fs from 'node:fs/promises';
 import { constants as fsConstants } from 'node:fs';
+import { randomUUID } from 'node:crypto';
 import { resolveMessengerConversationDeepLink } from '../config/messengerPublic';
 import { requireAuthSession } from '../middleware/authSession';
 import { checkChatPermission } from '../middleware/chatPermission';
@@ -73,6 +74,7 @@ router.post('/studio/song-chat', async (req: Request, res: Response) => {
 
 /** POST /api/messenger/upload (form-data: file) -> { url, name, size } */
 router.post('/upload', upload.single('file'), async (req: Request, res: Response) => {
+  const startedAt = Date.now();
   const file = (req as Request & { file?: Express.Multer.File }).file;
   if (!file) {
     res.status(400).json({ error: 'File is required' });
@@ -84,6 +86,7 @@ router.post('/upload', upload.single('file'), async (req: Request, res: Response
     originalName: file.originalname,
     mimeType: file.mimetype || '',
     size: file.size,
+    upload_ms: Date.now() - startedAt,
   });
 });
 
@@ -92,8 +95,10 @@ router.post('/upload', upload.single('file'), async (req: Request, res: Response
 /** GET /api/messenger/conversations */
 router.get('/conversations', async (req: Request, res: Response) => {
   const userId = (req as AuthReq).authUserId!;
+  const startedAt = Date.now();
   try {
     const list = await svc.listConversations(userId);
+    res.setHeader('Server-Timing', `listConversations;dur=${Date.now() - startedAt}`);
     res.json(list);
   } catch (e) {
     console.error('[messenger] listConversations error:', e);
@@ -463,6 +468,7 @@ router.delete(
 /** GET /api/messenger/conversations/:id/messages?before=<id>|after=<id>&limit=50 */
 router.get('/conversations/:id/messages', async (req: Request, res: Response) => {
   const userId = (req as AuthReq).authUserId!;
+  const startedAt = Date.now();
   const convId = req.params.id;
   const before = (req.query.before as string) || undefined;
   const after = (req.query.after as string) || undefined;
@@ -480,6 +486,7 @@ router.get('/conversations/:id/messages', async (req: Request, res: Response) =>
     const messages = after
       ? await svc.loadMessagesAfter(convId, userId, after, limit)
       : await svc.loadMessages(convId, userId, limit, before);
+    res.setHeader('Server-Timing', `loadMessages;dur=${Date.now() - startedAt}`);
     res.json(messages);
   } catch (e) {
     console.error('[messenger] loadMessages error:', e);
@@ -497,6 +504,7 @@ router.post(
     const userId = (req as AuthReq).authUserId!;
     const convId = req.params.id;
     const { content, replyToMessageId, clientMsgId, payloadType, payload } = req.body;
+    const requestStartedAt = Date.now();
     const pt =
       payloadType === 'prayer_request' ||
       payloadType === 'text' ||
@@ -512,8 +520,12 @@ router.post(
         : {};
     const replyId = normalizeOptionalBigintId(replyToMessageId);
     try {
+      const safeClientMsgId =
+        typeof clientMsgId === 'string' && clientMsgId.trim()
+          ? clientMsgId.trim().slice(0, 160)
+          : `srv-${randomUUID()}`;
       const convKey = String(convId);
-      const prepared = await svc.prepareMessageForSend(convId, userId, content, replyId, clientMsgId, pt, pl);
+      const prepared = await svc.prepareMessageForSend(convId, userId, content, replyId, safeClientMsgId, pt, pl);
       const pendingRealtime = { ...prepared.pendingMessage, is_read: false as const };
       // Low-latency: fan-out до INSERT; клиенты сливают pending → финальный id по client_msg_id.
       sendToRoomAll(convKey, { type: 'msg:new', conversationId: convKey, message: pendingRealtime });
@@ -539,10 +551,15 @@ router.post(
       // Явный флаг для клиентского счётчика: только is_read === false считается непрочитанным.
       const messageForRealtime = { ...message, is_read: false as const };
       sendToRoomAll(convKey, { type: 'msg:new', conversationId: convKey, message: messageForRealtime });
+      res.json({
+        ...messageForRealtime,
+        send_api_ms: Date.now() - requestStartedAt,
+      });
 
       // Push-уведомления: всем участникам, кроме отправителя.
       // Пуши приходят даже при закрытом приложении (если подписка активна и браузер разрешил).
-      try {
+      void (async () => {
+        try {
         const memberIds = await svc.getConversationMemberIds(convKey);
         const recipients = memberIds.filter((id) => Number(id) !== Number(userId));
         const senderName = (message as any)?.sender_name ?? 'Новое сообщение';
@@ -573,10 +590,12 @@ router.post(
         const previewShort =
           bodyText.length > 160 ? `${bodyText.slice(0, 157).trim()}…` : bodyText;
 
-        for (const rid of recipients) {
+        const batchSize = 8;
+        for (let i = 0; i < recipients.length; i += batchSize) {
+          const batch = recipients.slice(i, i + batchSize);
+          await Promise.allSettled(batch.map(async (rid) => {
           const r = Number(rid);
-          // eslint-disable-next-line no-await-in-loop
-          if (await svc.isConversationMutedForMember(convKey, r)) continue;
+          if (await svc.isConversationMutedForMember(convKey, r)) return;
           const mentioned = mentionSet.has(r);
           const payload = {
             title: mentioned ? `Вас упомянули в «${chatLabel}»` : senderName,
@@ -593,15 +612,13 @@ router.post(
               { action: 'dismiss', title: 'Закрыть' },
             ],
           };
-          // best-effort per recipient
-          // eslint-disable-next-line no-await-in-loop
           await sendPushNotification(r, payload);
+          }));
         }
-      } catch (e) {
-        console.warn('[messenger] push notify failed (best-effort):', e);
-      }
-
-      res.json(messageForRealtime);
+        } catch (e) {
+          console.warn('[messenger] push notify failed (best-effort):', e);
+        }
+      })();
     } catch (e) {
       const obj: Record<string, unknown> | null = e && typeof e === 'object' ? (e as Record<string, unknown>) : null;
       const message =
@@ -827,6 +844,15 @@ router.post('/messages/:id/reactions', async (req: Request, res: Response) => {
     }
     res.json({ ok: true });
   } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+    if (message === 'Forbidden') {
+      res.status(403).json({ error: 'Forbidden' });
+      return;
+    }
+    if (message === 'Message not found') {
+      res.status(404).json({ error: 'Message not found' });
+      return;
+    }
     console.error('[messenger] addReaction error:', e);
     res.status(500).json({ error: 'Failed to add reaction' });
   }
@@ -855,6 +881,15 @@ router.delete('/messages/:id/reactions/:emoji', async (req: Request, res: Respon
     }
     res.json({ ok: true });
   } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+    if (message === 'Forbidden') {
+      res.status(403).json({ error: 'Forbidden' });
+      return;
+    }
+    if (message === 'Message not found') {
+      res.status(404).json({ error: 'Message not found' });
+      return;
+    }
     console.error('[messenger] removeReaction error:', e);
     res.status(500).json({ error: 'Failed to remove reaction' });
   }

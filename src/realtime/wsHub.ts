@@ -5,6 +5,7 @@ import { createClient, type RedisClientType } from 'redis';
 import { WebSocketServer, WebSocket } from 'ws';
 
 import { resolveSessionByToken } from '../services/authService';
+import { isMemberInConversation } from '../services/messengerService';
 import type { WsMessengerEvent } from '../types/messenger';
 
 // ─── Redis pub/sub (горизонтальное масштабирование, без Socket.io) ──
@@ -103,6 +104,7 @@ interface AuthenticatedClient {
   memberName: string;
   /** Conversation IDs this client has joined */
   rooms: Set<string>;
+  isAlive: boolean;
 }
 
 /** All authenticated clients indexed by WebSocket instance */
@@ -113,11 +115,33 @@ const clientsByMember = new Map<number, Set<AuthenticatedClient>>();
 const rooms = new Map<string, Set<AuthenticatedClient>>();
 /** Online member IDs (at least one connected client) */
 const onlineMembers = new Set<number>();
+const HEARTBEAT_INTERVAL_MS = 15_000;
+const MAX_WS_MESSAGE_BYTES = 64 * 1024;
 
 // ─── Attach ───────────────────────────────────────────────────
 
 export function attachRealtimeWebSocket(server: Server): void {
   const wss = new WebSocketServer({ noServer: true });
+  const heartbeatTimer = setInterval(() => {
+    for (const [, client] of clientsByWs) {
+      if (!client.isAlive) {
+        removeClient(client.ws);
+        try {
+          client.ws.terminate();
+        } catch {
+          /* ignore */
+        }
+        continue;
+      }
+      client.isAlive = false;
+      try {
+        client.ws.ping();
+      } catch {
+        removeClient(client.ws);
+      }
+    }
+  }, HEARTBEAT_INTERVAL_MS);
+  heartbeatTimer.unref?.();
 
   server.on('upgrade', (request, socket, head) => {
     let pathname = '/';
@@ -182,6 +206,7 @@ async function handleNewSocket(ws: WebSocket): Promise<void> {
         memberId: sessionOk.userId,
         memberName: '',
         rooms: new Set(),
+        isAlive: true,
       };
 
       // Try to fetch member name
@@ -242,12 +267,23 @@ async function handleNewSocket(ws: WebSocket): Promise<void> {
       // Handle subsequent messages (messenger events)
       ws.on('message', (data) => {
         try {
+          if (Buffer.isBuffer(data) && data.byteLength > MAX_WS_MESSAGE_BYTES) {
+            fail(1009, 'message too large');
+            return;
+          }
           const text = Buffer.isBuffer(data) ? data.toString('utf8') : String(data);
+          if (text.length > MAX_WS_MESSAGE_BYTES) {
+            fail(1009, 'message too large');
+            return;
+          }
           const msg = JSON.parse(text);
-          handleClientMessage(client, msg);
+          void handleClientMessage(client, msg);
         } catch {
           /* malformed message — ignore */
         }
+      });
+      ws.on('pong', () => {
+        client.isAlive = true;
       });
 
       ws.on('close', () => removeClient(ws));
@@ -261,12 +297,28 @@ async function handleNewSocket(ws: WebSocket): Promise<void> {
 
 // ─── Client message handling ──────────────────────────────────
 
-function handleClientMessage(client: AuthenticatedClient, msg: any): void {
+async function handleClientMessage(client: AuthenticatedClient, msg: any): Promise<void> {
   switch (msg.type) {
     case 'join': {
       // Join a conversation room: { type: 'join', conversationId }
       if (typeof msg.conversationId === 'string') {
-        joinRoom(client, msg.conversationId);
+        const convId = String(msg.conversationId).trim();
+        if (!convId) break;
+        try {
+          const allowed = await isMemberInConversation(convId, client.memberId);
+          if (!allowed) {
+            try {
+              client.ws.close(1008, 'forbidden conversation');
+            } catch {
+              /* ignore */
+            }
+            removeClient(client.ws);
+            break;
+          }
+          joinRoom(client, convId);
+        } catch {
+          /* ignore membership check errors */
+        }
       }
       break;
     }
@@ -280,6 +332,7 @@ function handleClientMessage(client: AuthenticatedClient, msg: any): void {
     case 'typing:start': {
       // { type: 'typing:start', conversationId }
       if (typeof msg.conversationId === 'string') {
+        if (!client.rooms.has(msg.conversationId)) break;
         sendToRoom(msg.conversationId, {
           type: 'typing:start',
           conversationId: msg.conversationId,
@@ -292,6 +345,7 @@ function handleClientMessage(client: AuthenticatedClient, msg: any): void {
     case 'typing:stop': {
       // { type: 'typing:stop', conversationId }
       if (typeof msg.conversationId === 'string') {
+        if (!client.rooms.has(msg.conversationId)) break;
         sendToRoom(msg.conversationId, {
           type: 'typing:stop',
           conversationId: msg.conversationId,

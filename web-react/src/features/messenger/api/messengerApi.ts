@@ -1,6 +1,28 @@
 import { apiClient } from '../../../lib/apiClient';
 
 const BASE = '/api/messenger';
+const META_CACHE_TTL_MS = 45_000;
+const PINS_CACHE_TTL_MS = 25_000;
+const PARTICIPANTS_CACHE_TTL_MS = 45_000;
+
+type CacheEntry<T> = { value: T; expiresAt: number };
+const conversationMetaCache = new Map<string, CacheEntry<ConversationMeta>>();
+const pinnedCache = new Map<string, CacheEntry<MessageWithSender[]>>();
+const participantsCache = new Map<string, CacheEntry<Participant[]>>();
+
+function readCache<T>(map: Map<string, CacheEntry<T>>, key: string): T | null {
+  const item = map.get(key);
+  if (!item) return null;
+  if (item.expiresAt < Date.now()) {
+    map.delete(key);
+    return null;
+  }
+  return item.value;
+}
+
+function writeCache<T>(map: Map<string, CacheEntry<T>>, key: string, value: T, ttlMs: number): void {
+  map.set(key, { value, expiresAt: Date.now() + ttlMs });
+}
 
 // ─── Types (mirroring backend) ────────────────────────────────
 
@@ -174,17 +196,29 @@ export async function uploadFile(
 ): Promise<UploadedFile> {
   const form = new FormData();
   form.append('file', file);
-  const { data } = await apiClient.post<UploadedFile>(`/api/messenger/upload`, form, {
-    signal: opts?.signal,
-    onUploadProgress: (e) => {
-      const total = e.total ?? 0;
-      const loaded = e.loaded ?? 0;
-      if (!total) return;
-      const pct = Math.max(0, Math.min(100, Math.round((loaded / total) * 100)));
-      opts?.onProgress?.(pct);
-    },
-  });
-  return data;
+  const maxAttempts = 3;
+  let lastError: unknown = null;
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      const { data } = await apiClient.post<UploadedFile>(`/api/messenger/upload`, form, {
+        signal: opts?.signal,
+        onUploadProgress: (e) => {
+          const total = e.total ?? 0;
+          const loaded = e.loaded ?? 0;
+          if (!total) return;
+          const pct = Math.max(0, Math.min(100, Math.round((loaded / total) * 100)));
+          opts?.onProgress?.(pct);
+        },
+      });
+      return data;
+    } catch (error) {
+      lastError = error;
+      if (attempt >= maxAttempts) break;
+      if (opts?.signal?.aborted) break;
+      await new Promise((resolve) => setTimeout(resolve, 300 * attempt));
+    }
+  }
+  throw lastError;
 }
 
 export async function fetchUploadsHealth(): Promise<{ ok: boolean; storage: 'healthy' | 'unavailable'; reason?: string }> {
@@ -212,26 +246,40 @@ export type ConversationMeta = {
 };
 
 export async function fetchConversationMeta(conversationId: string): Promise<ConversationMeta> {
+  const cacheKey = String(conversationId);
+  const cached = readCache(conversationMetaCache, cacheKey);
+  if (cached) return cached;
   const { data } = await apiClient.get<ConversationMeta>(`${BASE}/conversations/${conversationId}/meta`);
+  writeCache(conversationMetaCache, cacheKey, data, META_CACHE_TTL_MS);
   return data;
 }
 
 export async function fetchPinnedMessages(conversationId: string, limit = 15): Promise<MessageWithSender[]> {
+  const cacheKey = `${conversationId}:${limit}`;
+  const cached = readCache(pinnedCache, cacheKey);
+  if (cached) return cached;
   const { data } = await apiClient.get<MessageWithSender[]>(
     `${BASE}/conversations/${encodeURIComponent(conversationId)}/pinned-messages`,
     { params: { limit } },
   );
+  writeCache(pinnedCache, cacheKey, data, PINS_CACHE_TTL_MS);
   return data;
 }
 
 export async function pinChatMessage(conversationId: string, messageId: string): Promise<void> {
   await apiClient.post(`${BASE}/conversations/${encodeURIComponent(conversationId)}/pins`, { messageId });
+  for (const key of pinnedCache.keys()) {
+    if (key.startsWith(`${conversationId}:`)) pinnedCache.delete(key);
+  }
 }
 
 export async function unpinChatMessage(conversationId: string, messageId: string): Promise<void> {
   await apiClient.delete(
     `${BASE}/conversations/${encodeURIComponent(conversationId)}/pins/${encodeURIComponent(messageId)}`,
   );
+  for (const key of pinnedCache.keys()) {
+    if (key.startsWith(`${conversationId}:`)) pinnedCache.delete(key);
+  }
 }
 
 export type ConversationMember = {
@@ -280,6 +328,7 @@ export async function patchConversationPermissions(
   patch: { default_permissions?: Record<string, boolean>; settings?: Record<string, unknown> },
 ) {
   await apiClient.patch(`${BASE}/conversations/${conversationId}/permissions`, patch);
+  conversationMetaCache.delete(String(conversationId));
 }
 
 export async function patchConversationMember(
@@ -288,6 +337,8 @@ export async function patchConversationMember(
   patch: { role?: ParticipantRole; permissions?: Record<string, boolean>; muted_until?: string | null },
 ) {
   await apiClient.patch(`${BASE}/conversations/${conversationId}/members/${memberId}`, patch);
+  participantsCache.delete(String(conversationId));
+  conversationMetaCache.delete(String(conversationId));
 }
 
 export async function editMessage(messageId: string, content: string) {
@@ -344,20 +395,27 @@ export async function searchMessages(conversationId: string, q: string, limit = 
 }
 
 export async function fetchParticipants(conversationId: string): Promise<Participant[]> {
+  const cacheKey = String(conversationId);
+  const cached = readCache(participantsCache, cacheKey);
+  if (cached) return cached;
   const { data } = await apiClient.get<Participant[]>(`${BASE}/conversations/${conversationId}/participants`);
+  writeCache(participantsCache, cacheKey, data, PARTICIPANTS_CACHE_TTL_MS);
   return data;
 }
 
 export async function updateConversation(conversationId: string, updates: { title?: string; avatar_url?: string }) {
   await apiClient.patch(`${BASE}/conversations/${conversationId}`, updates);
+  conversationMetaCache.delete(String(conversationId));
 }
 
 export async function addParticipant(conversationId: string, memberId: number) {
   await apiClient.post(`${BASE}/conversations/${conversationId}/participants`, { memberId });
+  participantsCache.delete(String(conversationId));
 }
 
 export async function removeParticipant(conversationId: string, memberId: number) {
   await apiClient.delete(`${BASE}/conversations/${conversationId}/participants/${memberId}`);
+  participantsCache.delete(String(conversationId));
 }
 
 export type PatchMyConversationUiBody = {
@@ -368,6 +426,7 @@ export type PatchMyConversationUiBody = {
 
 export async function patchMyConversationUi(conversationId: string, body: PatchMyConversationUiBody) {
   await apiClient.patch(`${BASE}/conversations/${encodeURIComponent(conversationId)}/my-ui`, body);
+  conversationMetaCache.delete(String(conversationId));
 }
 
 export async function searchAllMessages(
@@ -383,4 +442,7 @@ export async function searchAllMessages(
 
 export async function clearConversationHistory(conversationId: string) {
   await apiClient.post(`${BASE}/conversations/${encodeURIComponent(conversationId)}/clear-history`);
+  for (const key of pinnedCache.keys()) {
+    if (key.startsWith(`${conversationId}:`)) pinnedCache.delete(key);
+  }
 }

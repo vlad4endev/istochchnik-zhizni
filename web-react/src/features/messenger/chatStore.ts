@@ -482,6 +482,24 @@ function listPreviewFromMessage(tail: MessageWithSender): NonNullable<Conversati
   };
 }
 
+function moveConversationToTop(
+  conversations: ConversationListItem[],
+  conversationId: string,
+  updater: (conv: ConversationListItem) => ConversationListItem,
+): ConversationListItem[] {
+  const idx = conversations.findIndex((c) => c.id === conversationId);
+  if (idx < 0) return conversations;
+  const updated = updater(conversations[idx]);
+  if (idx === 0) {
+    if (updated === conversations[0]) return conversations;
+    const next = [...conversations];
+    next[0] = updated;
+    return next;
+  }
+  const next = [updated, ...conversations.slice(0, idx), ...conversations.slice(idx + 1)];
+  return next;
+}
+
 /** Если правили/удалили текущее превью в списке чатов — обновить с учётом нового хвоста треда. */
 function syncConversationLastMessageAfterMutation(
   conversations: ConversationListItem[],
@@ -1205,28 +1223,23 @@ export const useChatStore = create<ChatState>((set, get) => ({
         : [...existing, msg];
       const newMsgs = dedupeMessages(merged);
 
-      // Update conversation list
-      const updatedConvs = s.conversations.map((c) => {
-        if (c.id !== idKey) return c;
-        return {
-          ...c,
-          last_message: {
-            id: serverMsgId,
-            content: msg.content,
-            sender_id: msg.sender_id,
-            sender_name: msg.sender_name,
-            created_at: msg.created_at,
-            is_deleted: msg.is_deleted,
-          },
-          updated_at: msg.created_at,
-          unread_count: shouldCountUnread ? c.unread_count + 1 : c.unread_count,
-        };
-      });
+      const prevUnreadForConv = s.conversations.find((c) => c.id === idKey)?.unread_count ?? 0;
+      const nextUnreadForConv = shouldCountUnread ? prevUnreadForConv + 1 : prevUnreadForConv;
+      const updatedConvs = moveConversationToTop(s.conversations, idKey, (c) => ({
+        ...c,
+        last_message: {
+          id: serverMsgId,
+          content: msg.content,
+          sender_id: msg.sender_id,
+          sender_name: msg.sender_name,
+          created_at: msg.created_at,
+          is_deleted: msg.is_deleted,
+        },
+        updated_at: msg.created_at,
+        unread_count: nextUnreadForConv,
+      }));
 
-      // Sort by updated_at desc
-      updatedConvs.sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime());
-
-      const totalUnread = updatedConvs.reduce((sum, c) => sum + c.unread_count, 0);
+      const totalUnread = s.totalUnread + (nextUnreadForConv - prevUnreadForConv);
 
       if (!isActiveConversation && !isOwnMessage) {
         const toastMeta = getConversationToastMeta(targetConversation, msg);

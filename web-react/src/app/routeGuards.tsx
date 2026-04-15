@@ -112,8 +112,7 @@ export function RequireMessengerAccess({ children }: { children: ReactNode }) {
 
 export function RequireStudioAccess({ children }: { children: ReactNode }) {
   const role = useAuthStore((s) => s.role);
-  const direction = useAuthStore((s) => s.ministryDirection);
-  if (!canAccessStudioRole(role, direction)) {
+  if (!canAccessStudioRole(role)) {
     return <Navigate to={getStudioRoleDeniedPath()} replace />;
   }
   return <>{children}</>;

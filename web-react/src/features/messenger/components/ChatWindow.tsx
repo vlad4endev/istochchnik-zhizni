@@ -54,6 +54,8 @@ export function ChatWindow({
   const lastSentReadIdRef = useRef<bigint>(0n);
   const visibleForeignIdsRef = useRef<Set<string>>(new Set());
   const flushTimerRef = useRef<number | null>(null);
+  const markReadInFlightRef = useRef<bigint>(0n);
+  const markReadCommittedRef = useRef<bigint>(0n);
   const scrollMeasureRafRef = useRef<number | null>(null);
   const readObserverRef = useRef<IntersectionObserver | null>(null);
 
@@ -166,11 +168,22 @@ export function ChatWindow({
         const b = BigInt(id);
         if (b > max) max = b;
       }
-      if (max > lastSentReadIdRef.current) {
+      if (max > lastSentReadIdRef.current && max > markReadInFlightRef.current && max > markReadCommittedRef.current) {
         lastSentReadIdRef.current = max;
-        void markReadUpTo(conversationId, String(max));
+        markReadInFlightRef.current = max;
+        void markReadUpTo(conversationId, String(max))
+          .then(() => {
+            if (markReadCommittedRef.current < max) {
+              markReadCommittedRef.current = max;
+            }
+          })
+          .finally(() => {
+            if (markReadInFlightRef.current === max) {
+              markReadInFlightRef.current = 0n;
+            }
+          });
       }
-    }, 120);
+    }, 350);
   }, [conversationId, markReadUpTo]);
 
   const groupedMessages = useMemo(() => groupMessages(messages), [messages]);
@@ -228,6 +241,8 @@ export function ChatWindow({
 
     visibleForeignIdsRef.current.clear();
     lastSentReadIdRef.current = 0n;
+    markReadInFlightRef.current = 0n;
+    markReadCommittedRef.current = 0n;
 
     const observer = new IntersectionObserver(
       (entries) => {
