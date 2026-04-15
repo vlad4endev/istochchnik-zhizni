@@ -9,6 +9,8 @@ const ALLOWED_MIME_TYPES = new Set([
   'image/png',
   'image/webp',
   'image/gif',
+  'image/heic',
+  'image/heif',
   'application/pdf',
   'text/plain',
   'application/msword',
@@ -25,6 +27,8 @@ const ALLOWED_EXTENSIONS = new Set([
   '.png',
   '.webp',
   '.gif',
+  '.heic',
+  '.heif',
   '.pdf',
   '.txt',
   '.doc',
@@ -35,10 +39,33 @@ const ALLOWED_EXTENSIONS = new Set([
   '.pptx',
 ]);
 
+const IMAGE_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.webp', '.gif', '.heic', '.heif']);
+
 function isAllowedUpload(file: Express.Multer.File): boolean {
   const ext = path.extname(file.originalname || '').toLowerCase();
   const mime = String(file.mimetype || '').toLowerCase();
-  return ALLOWED_EXTENSIONS.has(ext) && ALLOWED_MIME_TYPES.has(mime);
+
+  if (ALLOWED_EXTENSIONS.has(ext) && ALLOWED_MIME_TYPES.has(mime)) {
+    return true;
+  }
+
+  // Android/WebView часто шлют image/* как application/octet-stream; сжатие в браузере может обнулить MIME.
+  if (IMAGE_EXTENSIONS.has(ext)) {
+    if (!mime || mime === 'application/octet-stream' || mime.startsWith('image/')) {
+      return true;
+    }
+  }
+
+  if (ALLOWED_EXTENSIONS.has(ext) && (!mime || mime === 'application/octet-stream')) {
+    return true;
+  }
+
+  // После client-side compression имя иногда `blob` или пустое — остаётся только MIME.
+  if (!ext && mime.startsWith('image/')) {
+    return true;
+  }
+
+  return false;
 }
 
 const storage = multer.diskStorage({
@@ -52,7 +79,12 @@ const storage = multer.diskStorage({
     cb(null, dir);
   },
   filename: (_req, file, cb) => {
-    const ext = path.extname(file.originalname || '') || '';
+    let ext = path.extname(file.originalname || '').toLowerCase() || '';
+    const mime = String(file.mimetype || '').toLowerCase();
+    if (!ext && mime === 'image/jpeg') ext = '.jpg';
+    else if (!ext && mime === 'image/png') ext = '.png';
+    else if (!ext && mime === 'image/webp') ext = '.webp';
+    else if (!ext && mime === 'image/gif') ext = '.gif';
     const safeExt = ext && ext.length <= 12 ? ext : '';
     cb(null, `${uuidv4()}${safeExt}`);
   },

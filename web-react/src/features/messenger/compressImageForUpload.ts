@@ -22,14 +22,22 @@ export async function compressImageForMessengerUpload(
     useWebWorker: typeof Worker !== 'undefined',
   };
 
+  let out: File;
   try {
-    return await imageCompression(file, opts);
+    out = await imageCompression(file, opts);
   } catch (e) {
     if (signal?.aborted) throw e;
     try {
-      return await imageCompression(file, { ...opts, useWebWorker: false });
+      out = await imageCompression(file, { ...opts, useWebWorker: false });
     } catch {
       return file;
     }
   }
+  // Иначе Multer на сервере отклоняет «blob» без расширения при строгой проверке fileFilter.
+  const t = out.type || file.type;
+  if (t === 'image/jpeg' && !/\.(jpe?g)$/i.test(out.name)) {
+    const base = file.name.replace(/\.[^.]+$/, '') || 'image';
+    return new File([out], `${base}-chat.jpg`, { type: 'image/jpeg', lastModified: Date.now() });
+  }
+  return out;
 }
