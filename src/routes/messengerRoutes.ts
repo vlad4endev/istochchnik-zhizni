@@ -41,9 +41,13 @@ const MESSENGER_PUBLIC_UPLOAD_NAME =
  * Публичная раздача локального вложения по пути под `/api/messenger/...`, чтобы хватало одного прокси
  * на `/api` в nginx без отдельного `location /uploads/` (см. resolvePublicUrl).
  * Размещено ДО requireAuthSession.
+ *
+ * Важно: не использовать `:filename` — path-to-regexp отделяет расширение (`uuid.jpg` → потеря `.jpg` → 404).
  */
-router.get('/public-uploads/:filename', async (req: Request, res: Response) => {
-  const filename = String(req.params.filename ?? '').trim();
+router.get(/^\/public-uploads\/(.+)$/, async (req: Request, res: Response) => {
+  const pathOnly = String(req.path || '').split('?')[0] || '';
+  const seg = /^\/public-uploads\/(.+)$/.exec(pathOnly);
+  const filename = (seg?.[1] ?? '').trim();
   if (!filename || !MESSENGER_PUBLIC_UPLOAD_NAME.test(filename)) {
     res.status(400).type('text/plain').send('Bad request');
     return;
@@ -327,10 +331,17 @@ router.get('/conversations/:id/meta', checkChatPermission('view'), async (req: R
       return;
     }
     const auth = req.chatAuth!;
+    let myLastRead: string | null = null;
+    try {
+      myLastRead = await svc.getParticipantLastReadMessageId(convId, auth.memberId);
+    } catch (e) {
+      console.warn('[messenger] getParticipantLastReadMessageId:', e);
+    }
     res.json({
       ...meta,
       my_role: auth.role,
       my_effective_permissions: auth.effective,
+      my_last_read_message_id: myLastRead,
     });
   } catch (e) {
     console.error('[messenger] getConversationMeta error:', e);
@@ -411,7 +422,21 @@ router.patch('/conversations/:id', checkChatPermission('manage_chat'), async (re
   const convId = req.params.id;
   try {
     await svc.updateConversation(convId, req.body);
-    sendToRoomAll(String(convId), { type: 'conv:updated', conversationId: String(convId) });
+    const meta = await svc.getConversationMeta(String(convId));
+    const convKey = String(convId);
+    if (meta) {
+      sendToRoomAll(convKey, {
+        type: 'conv:updated',
+        conversationId: convKey,
+        conversation: {
+          avatar_url: meta.avatar_url,
+          title: meta.title,
+          updated_at: meta.updated_at,
+        },
+      });
+    } else {
+      sendToRoomAll(convKey, { type: 'conv:updated', conversationId: convKey });
+    }
     res.json({ ok: true });
   } catch (e) {
     console.error('[messenger] updateConversation error:', e);

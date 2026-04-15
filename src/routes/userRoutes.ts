@@ -10,6 +10,7 @@ import {
   getUser,
   getMinistryRoleTemplatesHandler,
   getPrayerRequestHistoryHandler,
+  addPrayerRequestHistoryHandler,
   getUsers,
   linkUserAccountHandler,
   setMinistryDirectionTemplateRolesHandler,
@@ -38,6 +39,7 @@ router.post('/merge-duplicates', mergeDuplicateMembersHandler);
 router.post('/swap-all-first-last-names', swapAllMembersFirstLastNamesHandler);
 router.get('/:id', getUser);
 router.get('/:id/prayer-requests/history', getPrayerRequestHistoryHandler);
+router.post('/:id/prayer-requests/history', addPrayerRequestHistoryHandler);
 router.post('/', createUserHandler);
 router.patch('/:id', updateUserHandler);
 router.patch('/:id/app-role', setUserAppRoleHandler);

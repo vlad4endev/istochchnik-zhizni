@@ -116,6 +116,68 @@ const MEMBER_ORDER_SQL = `LOWER(COALESCE(NULLIF(trim(m.first_name), ''), split_p
     LOWER(COALESCE(NULLIF(trim(m.last_name), ''), NULLIF(trim(split_part(trim(m.name), ' ', 2)), ''), trim(m.name))) ASC,
     m.id ASC`;
 
+function isPgMissingTableOrColumn(e: unknown): boolean {
+  const code =
+    e && typeof e === 'object' && 'code' in e ? String((e as { code?: unknown }).code ?? '') : '';
+  return code === '42P01' || code === '42703';
+}
+
+/** Ручные «предыдущие нужды» координаторов (таблица может отсутствовать на старых БД). */
+async function attachManualPreviousPrayerNeedsToMembers(members: Member[]): Promise<void> {
+  const ids = members.map((m) => m.id).filter((id) => Number.isFinite(id));
+  if (ids.length === 0) return;
+  try {
+    const prevNeeds = await query(
+      `SELECT
+         ranked.member_id,
+         ranked.id,
+         ranked.note,
+         ranked.created_at
+       FROM (
+         SELECT
+           p.member_id,
+           p.id,
+           p.note,
+           p.created_at::text AS created_at,
+           ROW_NUMBER() OVER (
+             PARTITION BY p.member_id
+             ORDER BY p.created_at DESC, p.id DESC
+           ) AS rn
+         FROM member_previous_prayer_needs_manual p
+         WHERE p.member_id = ANY($1::int[])
+           AND NULLIF(TRIM(COALESCE(p.note, '')), '') IS NOT NULL
+       ) AS ranked
+       WHERE ranked.rn <= 5
+       ORDER BY ranked.member_id ASC, ranked.created_at DESC`,
+      [ids],
+    );
+
+    const byMember = new Map<number, Array<{ id: number; note: string; created_at: string }>>();
+    for (const row of prevNeeds.rows as any[]) {
+      const id = Number(row.member_id);
+      const arr = byMember.get(id) ?? [];
+      arr.push({
+        id: Number(row.id),
+        note: String(row.note),
+        created_at: String(row.created_at),
+      });
+      byMember.set(id, arr);
+    }
+
+    for (const m of members) {
+      m.previous_manual_prayer_needs = byMember.get(m.id) ?? [];
+    }
+  } catch (e) {
+    if (isPgMissingTableOrColumn(e)) {
+      for (const m of members) {
+        m.previous_manual_prayer_needs = [];
+      }
+      return;
+    }
+    throw e;
+  }
+}
+
 export async function getPrayerDataByDate(targetDate: string): Promise<PrayerDataByDate> {
   const cycleStartDate = await getCycleStartDate();
   const diffDays = getDiffDays(targetDate, cycleStartDate);
@@ -320,52 +382,8 @@ async function getMemberAssignmentsForDates(dates: string[]): Promise<NextWeekMe
     });
   }
 
-  const memberIds = Array.from(
-    new Set(out.map((row) => row.member?.id).filter((id): id is number => Number.isFinite(id)))
-  );
-  if (memberIds.length > 0) {
-    const prevNeeds = await query(
-      `SELECT
-         ranked.member_id,
-         ranked.id,
-         ranked.note,
-         ranked.created_at
-       FROM (
-         SELECT
-           p.member_id,
-           p.id,
-           p.note,
-           p.created_at::text AS created_at,
-           ROW_NUMBER() OVER (
-             PARTITION BY p.member_id
-             ORDER BY p.created_at DESC, p.id DESC
-           ) AS rn
-         FROM member_previous_prayer_needs_manual p
-         WHERE p.member_id = ANY($1::int[])
-           AND NULLIF(TRIM(COALESCE(p.note, '')), '') IS NOT NULL
-       ) AS ranked
-       WHERE ranked.rn <= 5
-       ORDER BY ranked.member_id ASC, ranked.created_at DESC`,
-      [memberIds]
-    );
-
-    const byMember = new Map<number, Array<{ id: number; note: string; created_at: string }>>();
-    for (const row of prevNeeds.rows as any[]) {
-      const id = Number(row.member_id);
-      const arr = byMember.get(id) ?? [];
-      arr.push({
-        id: Number(row.id),
-        note: String(row.note),
-        created_at: String(row.created_at),
-      });
-      byMember.set(id, arr);
-    }
-
-    for (const row of out) {
-      if (!row.member) continue;
-      row.member.previous_manual_prayer_needs = byMember.get(row.member.id) ?? [];
-    }
-  }
+  const membersOnly = out.map((r) => r.member).filter((m): m is Member => m != null);
+  await attachManualPreviousPrayerNeedsToMembers(membersOnly);
 
   return out;
 }

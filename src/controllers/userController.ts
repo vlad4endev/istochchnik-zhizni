@@ -12,6 +12,7 @@ import {
   linkUserAccount,
   listMinistryDirectionTemplates,
   listPrayerRequestHistory,
+  addPrayerRequestHistoryManual,
   listMinistryRoleTemplates,
   listUsers,
   MemberNameDuplicateError,
@@ -221,6 +222,49 @@ export async function getPrayerRequestHistoryHandler(req: Request, res: Response
     res.json(history);
   } catch (error) {
     console.error('Failed to fetch prayer request history', error);
+    res.status(500).json({ error: 'Database error' });
+  }
+}
+
+/** POST тело: { prayer_request: string, cycle_number?: number | null } — cycle_number как «Цикл N» в интерфейсе (1 = первый цикл). */
+export async function addPrayerRequestHistoryHandler(req: Request, res: Response): Promise<void> {
+  const authReq = ensureAdmin(req, res);
+  if (!authReq) {
+    return;
+  }
+  const userId = parseUserId(req.params.id);
+  if (!userId) {
+    res.status(400).json({ error: 'Invalid user id' });
+    return;
+  }
+
+  const body = req.body as Record<string, unknown>;
+  if (typeof body.prayer_request !== 'string') {
+    res.status(400).json({ error: 'Ожидается prayer_request (строка)' });
+    return;
+  }
+
+  let cycleIndex: number | null = null;
+  if (body.cycle_number !== undefined && body.cycle_number !== null && body.cycle_number !== '') {
+    const n = Number(body.cycle_number);
+    if (!Number.isFinite(n) || n < 1 || !Number.isInteger(n)) {
+      res.status(400).json({ error: 'cycle_number должен быть целым числом ≥ 1' });
+      return;
+    }
+    cycleIndex = n - 1;
+  }
+
+  try {
+    const row = await addPrayerRequestHistoryManual(userId, body.prayer_request, cycleIndex);
+    notifyRealtime(['members']);
+    res.status(201).json(row);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg === 'empty_prayer_request') {
+      res.status(400).json({ error: 'Текст нужды не может быть пустым' });
+      return;
+    }
+    console.error('Failed to add prayer request history', err);
     res.status(500).json({ error: 'Database error' });
   }
 }

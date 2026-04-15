@@ -1,4 +1,4 @@
-import { memo, useState, useRef, useMemo, useEffect } from 'react';
+import { memo, useState, useRef, useMemo, useEffect, useCallback } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useChatStore } from '../chatStore';
 import type { MessageWithSender } from '../api/messengerApi';
@@ -6,6 +6,7 @@ import { apiErrorMessage, approveAccessRequest, rejectAccessRequest } from '../.
 import { IoCheckmark, IoCheckmarkDone } from 'react-icons/io5';
 import { LuDownload, LuFileText, LuLoader, LuX } from 'react-icons/lu';
 import { resolvePublicUrl } from '../../../lib/resolvePublicUrl';
+import { emitAppToast } from '../../../lib/uiFeedback';
 import { motion, useMotionValue, useTransform, animate } from 'framer-motion';
 import type { PanInfo } from 'framer-motion';
 import { LuReply } from 'react-icons/lu';
@@ -383,6 +384,24 @@ function AccessRequestMessengerCard({
   );
 }
 
+/** Первый ряд — как в Telegram: быстрый выбор при long-press. */
+const QUICK_REACTION_STRIP = ['❤️', '👍', '😂', '😮', '😢', '🙏', '🔥'];
+
+const QUICK_REACTIONS = [
+  '❤️',
+  '👍',
+  '😂',
+  '😮',
+  '😢',
+  '🙏',
+  '😡',
+  '😍',
+  '🔥',
+  '💯',
+  '✨',
+  '👏',
+];
+
 interface MessageBubbleProps {
   message: MessageWithSender;
   isGroupedPrev: boolean;
@@ -413,8 +432,12 @@ function MessageBubbleInner({
   const deleteMessage = useChatStore((s) => s.deleteMessage);
   const [showActions, setShowActions] = useState(false);
   const [showReactions, setShowReactions] = useState(false);
+  /** Плашка реакций над пузырьком (long-press), как в Telegram */
+  const [showReactionBar, setShowReactionBar] = useState(false);
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
-  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const longPressTimer = useRef<number | null>(null);
+  const longPressOrigin = useRef<{ x: number; y: number } | null>(null);
+  const lastTapUpRef = useRef<{ t: number; x: number; y: number } | null>(null);
 
   useEffect(() => {
     if (!lightboxSrc) return;
@@ -425,12 +448,20 @@ function MessageBubbleInner({
     return () => window.removeEventListener('keydown', onKey);
   }, [lightboxSrc]);
 
-  const x = useMotionValue(0);
-  const replyOpacity = useTransform(x, [-90, -50, 0], [1, 0.9, 0]);
-  const replyScale = useTransform(x, [-90, -50, 0], [1, 0.98, 0.9]);
-
   const isOptimistic = message.id.startsWith('temp-');
   const isMine = isOptimistic || (currentMemberId != null && message.sender_id === currentMemberId);
+
+  const x = useMotionValue(0);
+  const replyOpacity = useTransform(x, (v: number) => {
+    const t = isMine ? Math.max(0, -v) : Math.max(0, v);
+    if (t < 8) return 0;
+    return Math.min(1, 0.12 + ((t - 8) / 82) * 0.88);
+  });
+  const replyScale = useTransform(x, (v: number) => {
+    const t = isMine ? Math.max(0, -v) : Math.max(0, v);
+    if (t < 8) return 0.92;
+    return Math.min(1, 0.92 + ((t - 8) / 82) * 0.08);
+  });
   const isDeleted = message.is_deleted;
   const status = message.status ?? (isOptimistic ? 'sending' : 'sent');
   const convReadCursors = readCursorsByConv[String(message.conversation_id)] || {};
@@ -626,34 +657,50 @@ function MessageBubbleInner({
     }
   };
 
-  const handleTouchStart = () => {
-    longPressTimer.current = setTimeout(() => {
-      if (!isDeleted && !isOptimistic) {
-        setShowActions(true);
-      }
-    }, 500);
-  };
-
-  const handleTouchEnd = () => {
+  const clearLongPressTimer = () => {
     if (longPressTimer.current) {
       clearTimeout(longPressTimer.current);
       longPressTimer.current = null;
     }
+    longPressOrigin.current = null;
+  };
+
+  const handlePointerDownCapture = (e: React.PointerEvent) => {
+    if (e.button !== 0 || isDeleted || isOptimistic) return;
+    longPressOrigin.current = { x: e.clientX, y: e.clientY };
+    longPressTimer.current = window.setTimeout(() => {
+      longPressTimer.current = null;
+      longPressOrigin.current = null;
+      setShowReactionBar(true);
+      if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
+        navigator.vibrate(12);
+      }
+      try {
+        (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+      } catch {
+        /* ignore */
+      }
+    }, 420);
+  };
+
+  const handlePointerMoveCapture = (e: React.PointerEvent) => {
+    if (longPressOrigin.current == null || longPressTimer.current == null) return;
+    const o = longPressOrigin.current;
+    if (Math.hypot(e.clientX - o.x, e.clientY - o.y) > 14) clearLongPressTimer();
   };
 
   useEffect(() => {
-    if (!showActions) return;
+    if (!showActions && !showReactionBar) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         setShowActions(false);
         setShowReactions(false);
+        setShowReactionBar(false);
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [showActions]);
-
-  const QUICK_REACTIONS = ['❤️', '👍', '😂', '😮', '😢', '🙏', '😡', '😍', '🔥', '💯', '✨', '👏'];
+  }, [showActions, showReactionBar]);
 
   const toggleReaction = (emoji: string, reactedByMe: boolean) => {
     if (reactedByMe) {
@@ -661,6 +708,40 @@ function MessageBubbleInner({
     } else {
       void addReaction(message.id, emoji);
     }
+  };
+
+  const applyQuickReaction = useCallback(
+    (emoji: string) => {
+      const row = message.reactions.find((x) => x.emoji === emoji);
+      if (row?.reacted_by_me) void removeReaction(message.id, emoji);
+      else void addReaction(message.id, emoji);
+      setShowReactionBar(false);
+    },
+    [message.reactions, message.id, addReaction, removeReaction],
+  );
+
+  const handleBubblePointerUp = (e: React.PointerEvent) => {
+    if (e.button !== 0 || isOptimistic) return;
+    if (showReactionBar || showActions) return;
+    const target = e.target as HTMLElement;
+    if (target.closest('button, a, [role="button"]')) return;
+    if (target.closest('.msg-reaction-chip')) return;
+    const now = Date.now();
+    const prev = lastTapUpRef.current;
+    if (
+      prev &&
+      now - prev.t <= 450 &&
+      Math.hypot(e.clientX - prev.x, e.clientY - prev.y) <= 32
+    ) {
+      lastTapUpRef.current = null;
+      const heart = '❤️';
+      const row = message.reactions.find((x) => x.emoji === heart);
+      if (row?.reacted_by_me) void removeReaction(message.id, heart);
+      else void addReaction(message.id, heart);
+      e.preventDefault();
+      return;
+    }
+    lastTapUpRef.current = { t: now, x: e.clientX, y: e.clientY };
   };
 
   if (isDeleted) {
@@ -721,21 +802,63 @@ function MessageBubbleInner({
     <>
     <div
       className={[
-        'flex w-fit max-w-[min(88%,20.5rem)] flex-col sm:max-w-[min(84%,24rem)]',
+        'relative flex w-fit max-w-[min(88%,20.5rem)] flex-col sm:max-w-[min(84%,24rem)]',
         isMine ? 'ml-auto items-end' : 'mr-auto items-start',
       ].join(' ')}
       onContextMenu={handleContextMenu}
-      onTouchStart={handleTouchStart}
-      onTouchEnd={handleTouchEnd}
-      onTouchCancel={handleTouchEnd}
+      onPointerDownCapture={handlePointerDownCapture}
+      onPointerMoveCapture={handlePointerMoveCapture}
+      onPointerUpCapture={() => clearLongPressTimer()}
+      onPointerCancelCapture={() => clearLongPressTimer()}
       style={{ 
         marginTop: isGroupedPrev ? '2px' : '8px',
         marginBottom: isGroupedNext ? '0' : '4px'
       }}
     >
       <div className="relative">
+        {showReactionBar ? (
+          <>
+            <button
+              type="button"
+              tabIndex={-1}
+              aria-hidden
+              className="msg-reaction-bar-overlay"
+              onClick={() => setShowReactionBar(false)}
+            />
+            <div
+              role="toolbar"
+              aria-label="Быстрые реакции"
+              className={['msg-reaction-floating', isMine ? 'msg-reaction-floating--mine' : ''].join(' ')}
+              onClick={(ev) => ev.stopPropagation()}
+            >
+              {QUICK_REACTION_STRIP.map((emoji) => (
+                <button
+                  key={emoji}
+                  type="button"
+                  className="msg-reaction-floating__emoji"
+                  title={emoji}
+                  onClick={() => applyQuickReaction(emoji)}
+                >
+                  {emoji}
+                </button>
+              ))}
+              <button
+                type="button"
+                className="msg-reaction-floating__more"
+                title="Ещё действия"
+                aria-label="Ещё действия"
+                onClick={() => {
+                  setShowReactionBar(false);
+                  setShowActions(true);
+                }}
+              >
+                ⋯
+              </button>
+            </div>
+          </>
+        ) : null}
         <motion.div
-          className="absolute right-2 top-1/2 -translate-y-1/2"
+          className={['absolute top-1/2 z-0 -translate-y-1/2', isMine ? 'right-2' : 'left-2'].join(' ')}
           style={{ opacity: replyOpacity, scale: replyScale }}
           aria-hidden
         >
@@ -750,14 +873,18 @@ function MessageBubbleInner({
           dragConstraints={{ left: 0, right: 0 }}
           dragElastic={0.2}
           style={{ x }}
+          onPointerUp={handleBubblePointerUp}
+          onDragStart={() => clearLongPressTimer()}
           onDragEnd={(_e: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
             const dx = info.offset.x;
-            if (dx < -50) {
+            const towardCenter = isMine ? dx < -52 : dx > 52;
+            if (towardCenter) {
               setReplyingTo(message);
               if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
-                navigator.vibrate(50);
+                navigator.vibrate(45);
               }
             }
+            clearLongPressTimer();
             animate(x, 0, { type: 'spring', stiffness: 420, damping: 32 });
           }}
         >
@@ -831,11 +958,31 @@ function MessageBubbleInner({
       {/* Actions Popup (Context Menu) */}
       {showActions && (
         <>
-          <div className="msg-actions-overlay" onClick={() => setShowActions(false)} />
+          <div
+            className="msg-actions-overlay"
+            onClick={() => {
+              setShowActions(false);
+              setShowReactionBar(false);
+            }}
+          />
           <div className={`msg-actions ${isMine ? 'msg-actions--mine' : ''}`}>
             <button type="button" onClick={() => { setReplyTo(message); setShowActions(false); }}>
               <span>↩️</span> Ответить
             </button>
+            {payloadType === 'text' && String(message.content ?? '').trim() ? (
+              <button
+                type="button"
+                onClick={() => {
+                  void navigator.clipboard
+                    .writeText(String(message.content ?? ''))
+                    .then(() => emitAppToast('Текст скопирован', 'success'))
+                    .catch(() => emitAppToast('Не удалось скопировать', 'error'));
+                  setShowActions(false);
+                }}
+              >
+                <span>📋</span> Копировать
+              </button>
+            ) : null}
             {canPinMessages && !isOptimistic && /^\d+$/.test(String(message.id)) ? (
               <button
                 type="button"

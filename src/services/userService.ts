@@ -179,6 +179,12 @@ function mapUser(row: AppUser & { user_id?: unknown; app_role?: unknown }): AppU
   };
 }
 
+/**
+ * Журнал `member_prayer_request_history`: строки при явном сохранении с изменённым текстом, ручные записи
+ * админа и **ежедневный автоснимок** завершённых циклов (`snapshotPastCyclePrayersToHistory`).
+ * Цикл `cycleIndex` — 0-based, как в `member_prayer_by_cycle`. До автоснимка «сироты» из mpc
+ * подтягиваются в `listPrayerRequestHistory` через UNION.
+ */
 async function appendPrayerRequestHistory(
   memberId: number,
   prayerRequest: string,
@@ -667,12 +673,14 @@ export async function updateUser(id: number, input: UpdateUserInput): Promise<Ap
   }
 
   if (hasPrayerRequestUpdate) {
-    const nextPrayerRequest = (updated.prayer_request ?? '').trim();
+    const normalizedStored = normalizeOptionalString(input.prayer_request);
+    const nextForHistory = (normalizedStored ?? '').trim();
     const prevPrayerRequest = previousPrayerRequest ?? '';
     const ci = await getCurrentCycleIndexForUpsert();
-    await upsertMemberPrayerForCycle(id, ci, normalizeOptionalString(input.prayer_request));
-    if (nextPrayerRequest.length > 0 && nextPrayerRequest !== prevPrayerRequest) {
-      await appendPrayerRequestHistory(id, nextPrayerRequest, ci);
+    await upsertMemberPrayerForCycle(id, ci, normalizedStored);
+    // «Предыдущее» — как в UI: COALESCE(mpc, members); «следующее» — то же, что пишем в mpc.
+    if (nextForHistory.length > 0 && nextForHistory !== prevPrayerRequest) {
+      await appendPrayerRequestHistory(id, nextForHistory, ci);
     }
   }
 
@@ -1053,15 +1061,92 @@ export async function deleteManualPreviousPrayerNeed(id: number): Promise<boolea
   return (result.rowCount ?? 0) > 0;
 }
 
+/**
+ * Ежедневный снимок: для циклов строго раньше текущего календарного (`cycle_index < ci_сегодня`)
+ * переносим финальный текст из `member_prayer_by_cycle` в журнал, если для пары (участник, цикл)
+ * ещё нет ни одной строки в `member_prayer_request_history`. Дата записи — `updated_at` строки цикла.
+ */
+export async function snapshotPastCyclePrayersToHistory(): Promise<number> {
+  const ciNow = await getCurrentCycleIndexForUpsert();
+  const result = await query(
+    `INSERT INTO member_prayer_request_history (member_id, prayer_request, cycle_index, created_at)
+     SELECT mpc.member_id,
+            trim(mpc.prayer_request),
+            mpc.cycle_index,
+            mpc.updated_at
+       FROM member_prayer_by_cycle mpc
+       INNER JOIN members m ON m.id = mpc.member_id AND m.is_active = TRUE
+      WHERE mpc.cycle_index < $1
+        AND NULLIF(trim(mpc.prayer_request), '') IS NOT NULL
+        AND NOT EXISTS (
+          SELECT 1
+            FROM member_prayer_request_history h
+           WHERE h.member_id = mpc.member_id
+             AND h.cycle_index IS NOT DISTINCT FROM mpc.cycle_index
+        )`,
+    [ciNow],
+  );
+  return result.rowCount ?? 0;
+}
+
+/** Ручная запись в журнал истории (админ). */
+export async function addPrayerRequestHistoryManual(
+  memberId: number,
+  prayerRequest: string,
+  cycleIndex: number | null
+): Promise<PrayerRequestHistoryItem> {
+  const normalized = prayerRequest.trim();
+  if (!normalized) {
+    throw new Error('empty_prayer_request');
+  }
+  const result = await query(
+    `INSERT INTO member_prayer_request_history (member_id, prayer_request, cycle_index)
+     VALUES ($1, $2, $3)
+     RETURNING id, member_id, prayer_request, cycle_index, created_at::text AS created_at`,
+    [memberId, normalized, cycleIndex]
+  );
+  const row = result.rows[0] as PrayerRequestHistoryItem;
+  row.prayed_on_date = row.created_at.slice(0, 10);
+  return row;
+}
+
 export async function listPrayerRequestHistory(
   memberId: number,
   limit = 20
 ): Promise<PrayerRequestHistoryItem[]> {
   const safeLimit = Number.isInteger(limit) ? Math.min(Math.max(limit, 1), 100) : 20;
+  /**
+   * История из журнала сохранений плюс «сироты» из member_prayer_by_cycle: для цикла могла быть
+   * заполнена нужда в таблице цикла, но запись в member_prayer_request_history не создалась
+   * (например, нужда только отображалась из профиля без отдельного сохранения в журнал).
+   * Тогда строки цикла всё равно показываем в админке как прошлые нужды.
+   */
   const result = await query(
     `SELECT id, member_id, prayer_request, cycle_index, created_at
-     FROM member_prayer_request_history
-     WHERE member_id = $1
+     FROM (
+       SELECT h.id::bigint AS id,
+              h.member_id,
+              h.prayer_request,
+              h.cycle_index,
+              h.created_at::text AS created_at
+         FROM member_prayer_request_history h
+        WHERE h.member_id = $1
+       UNION ALL
+       SELECT (-(mpc.cycle_index + 1))::bigint AS id,
+              mpc.member_id,
+              trim(mpc.prayer_request) AS prayer_request,
+              mpc.cycle_index,
+              mpc.updated_at::text AS created_at
+         FROM member_prayer_by_cycle mpc
+        WHERE mpc.member_id = $1
+          AND NULLIF(trim(mpc.prayer_request), '') IS NOT NULL
+          AND NOT EXISTS (
+            SELECT 1
+              FROM member_prayer_request_history h2
+             WHERE h2.member_id = mpc.member_id
+               AND h2.cycle_index IS NOT DISTINCT FROM mpc.cycle_index
+          )
+     ) combined
      ORDER BY created_at DESC
      LIMIT $2`,
     [memberId, safeLimit]
@@ -1069,11 +1154,6 @@ export async function listPrayerRequestHistory(
 
   const rows = result.rows as PrayerRequestHistoryItem[];
 
-  // prayed_on_date = the date the record was created.
-  // This is reliable because the history entry is written on the same day
-  // the coordinator/user saves/edits the prayer request — i.e. the prayer day itself.
-  // (Using cycle_index * memberCount would be wrong because start_date shifts
-  //  via the reset_cycle_on_member_change trigger whenever the member list changes.)
   for (const item of rows) {
     item.prayed_on_date = item.created_at.slice(0, 10);
   }

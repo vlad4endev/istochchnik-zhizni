@@ -378,11 +378,28 @@ function handleWsMessage(msg: any): void {
       if (cid) {
         store.bumpPinnedRevision(cid);
 
-        // If server sent full conversation object — patch inline without HTTP request
+        // Server may send a partial row (title/avatar) so we don't rely on loadConversations (1.5s throttle).
         if (msg.conversation && typeof msg.conversation === 'object') {
           store.handleConvUpdated(cid, msg.conversation);
+        } else if (
+          typeof (msg as { title?: unknown }).title !== 'undefined' ||
+          typeof (msg as { avatarUrl?: unknown }).avatarUrl !== 'undefined' ||
+          typeof (msg as { avatar_url?: unknown }).avatar_url !== 'undefined'
+        ) {
+          const m = msg as {
+            title?: string | null;
+            avatarUrl?: string | null;
+            avatar_url?: string | null;
+            updated_at?: string;
+          };
+          const patch: Record<string, unknown> = {};
+          if (typeof m.title !== 'undefined') patch.title = m.title;
+          if (typeof m.avatarUrl !== 'undefined' || typeof m.avatar_url !== 'undefined') {
+            patch.avatar_url = m.avatar_url !== undefined ? m.avatar_url : m.avatarUrl;
+          }
+          if (typeof m.updated_at === 'string') patch.updated_at = m.updated_at;
+          store.handleConvUpdated(cid, patch);
         } else {
-          // Fallback: reload (throttled by cooldown in loadConversations)
           void store.loadConversations();
         }
       } else {

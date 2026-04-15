@@ -243,6 +243,8 @@ export type ConversationMeta = {
   my_role?: ParticipantRole;
   /** Эффективные права (учёт роли, настроек чата и персональных ограничений). */
   my_effective_permissions?: EffectivePermissions;
+  /** id последнего прочитанного сообщения (участник), для перехода к непрочитанным. */
+  my_last_read_message_id?: string | null;
 };
 
 export async function fetchConversationMeta(conversationId: string): Promise<ConversationMeta> {

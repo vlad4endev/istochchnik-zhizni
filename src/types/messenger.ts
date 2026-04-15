@@ -176,7 +176,15 @@ export type WsMessengerEvent =
   | { type: 'typing:start'; conversationId: string; memberId: number; memberName: string }
   | { type: 'typing:stop'; conversationId: string; memberId: number }
   | { type: 'conv:created'; conversation: ConversationListItem }
-  | { type: 'conv:updated'; conversationId: string; title?: string; avatarUrl?: string }
+  | {
+      type: 'conv:updated';
+      conversationId: string;
+      /** @deprecated — предпочтительно `conversation` */
+      title?: string;
+      avatarUrl?: string;
+      /** Глобальные поля (аватар, название) для merge в списке без перетирания unread/last_message. */
+      conversation?: Partial<Pick<ConversationListItem, 'avatar_url' | 'title' | 'updated_at'>>;
+    }
   | { type: 'conv:history_cleared'; conversationId: string }
   | { type: 'messages_read'; chatId: string; userId: number; lastReadMessageId: string }
   | { type: 'read:updated'; conversationId: string; memberId: number; lastReadMessageId: string }

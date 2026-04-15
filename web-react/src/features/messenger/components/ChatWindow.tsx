@@ -6,12 +6,24 @@ import * as api from '../api/messengerApi';
 import { MessageBubble } from './MessageBubble';
 import { ChatInput } from './ChatInput';
 import { SearchChat } from './SearchChat';
-import { LuArrowLeft, LuSearch } from 'react-icons/lu';
+import { LuArrowLeft, LuLayers, LuSearch } from 'react-icons/lu';
 import { AppAvatar } from '../../../components/AppAvatar';
+import { resolvePublicUrl } from '../../../lib/resolvePublicUrl';
+import { ChatMediaGallery } from './ChatMediaGallery';
 import { formatMessengerLastSeen } from '../lastSeenUtils';
 import { groupMessages } from '../groupMessages';
 import { getAvatarColor, getAvatarInitial } from '../avatarUtils';
 import './messenger.css';
+
+/** Склонение «N участников» по-русски (как в интерфейсах мессенджеров). */
+function formatParticipantCountRU(n: number): string {
+  const mod10 = n % 10;
+  const mod100 = n % 100;
+  if (mod100 >= 11 && mod100 <= 14) return `${n} участников`;
+  if (mod10 === 1) return `${n} участник`;
+  if (mod10 >= 2 && mod10 <= 4) return `${n} участника`;
+  return `${n} участников`;
+}
 
 interface ChatWindowProps {
   conversationId: string;
@@ -45,12 +57,16 @@ export function ChatWindow({
   const [chatMeta, setChatMeta] = useState<api.ConversationMeta | null>(null);
   const [pinnedMessages, setPinnedMessages] = useState<api.MessageWithSender[]>([]);
   const [mentionList, setMentionList] = useState<{ id: number; label: string }[]>([]);
+  /** Все member_id в группе/канале — для подзаголовка «N в сети» (как в Telegram). */
+  const [groupParticipantIds, setGroupParticipantIds] = useState<number[]>([]);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const nearBottomRef = useRef(true);
   const restoreScrollRef = useRef<{ scrollHeight: number; scrollTop: number } | null>(null);
   const [showSearch, setShowSearch] = useState(false);
+  const [showMediaGallery, setShowMediaGallery] = useState(false);
   const nodeByMsgIdRef = useRef<Map<string, HTMLElement>>(new Map());
+  const autoJumpUnreadKeyRef = useRef<string | null>(null);
   const lastSentReadIdRef = useRef<bigint>(0n);
   const visibleForeignIdsRef = useRef<Set<string>>(new Set());
   const flushTimerRef = useRef<number | null>(null);
@@ -66,6 +82,7 @@ export function ChatWindow({
       setChatMeta(null);
       setPinnedMessages([]);
       setMentionList([]);
+      setGroupParticipantIds([]);
       return;
     }
     let alive = true;
@@ -83,6 +100,7 @@ export function ChatWindow({
       void api.fetchParticipants(conversationId).then((parts) => {
         if (!alive) return;
         const me = useChatStore.getState().currentMemberId;
+        setGroupParticipantIds(parts.map((p) => p.member_id));
         setMentionList(
           parts
             .filter((p) => me == null || p.member_id !== me)
@@ -94,11 +112,15 @@ export function ChatWindow({
             })),
         );
       }).catch(() => {
-        if (alive) setMentionList([]);
+        if (alive) {
+          setMentionList([]);
+          setGroupParticipantIds([]);
+        }
       });
     } else {
       setPinnedMessages([]);
       setMentionList([]);
+      setGroupParticipantIds([]);
     }
     return () => {
       alive = false;
@@ -149,12 +171,16 @@ export function ChatWindow({
     }
   }, [conversationId, loadMessages]);
 
-  // On open: mark chat as read (server cursor + local unread reset)
+  // On open: mark read; если есть непрочитанное — чуть откладываем, чтобы успел сработать автоскролл к первому непрочитанному.
   useEffect(() => {
-    if (!isDraft) {
+    if (isDraft) return;
+    const unread = conversations.find((c) => c.id === conversationId)?.unread_count ?? 0;
+    const delay = unread > 0 ? 700 : 0;
+    const t = window.setTimeout(() => {
       void markAsRead(conversationId);
-    }
-  }, [conversationId, markAsRead]);
+    }, delay);
+    return () => window.clearTimeout(t);
+  }, [conversationId, markAsRead, isDraft, conversations]);
 
   const flushVisibleReads = useCallback(() => {
     if (flushTimerRef.current != null) {
@@ -232,6 +258,56 @@ export function ChatWindow({
     },
     [groupedMessages, rowVirtualizer],
   );
+
+  useEffect(() => {
+    autoJumpUnreadKeyRef.current = null;
+  }, [conversationId]);
+
+  const firstUnreadMessageId = useMemo(() => {
+    if (isDraft || currentMemberId == null || chatMeta == null) return null;
+    const lr = chatMeta.my_last_read_message_id;
+    let base = 0n;
+    if (lr && /^\d+$/.test(lr)) {
+      try {
+        base = BigInt(lr);
+      } catch {
+        base = 0n;
+      }
+    }
+    for (const m of messages) {
+      const id = String(m.id);
+      if (!/^\d+$/.test(id)) continue;
+      if (m.sender_id != null && Number(m.sender_id) === Number(currentMemberId)) continue;
+      try {
+        if (BigInt(id) > base) return id;
+      } catch {
+        continue;
+      }
+    }
+    return null;
+  }, [messages, chatMeta, currentMemberId, isDraft]);
+
+  const mediaItems = useMemo(() => {
+    const out: { messageId: string; src: string }[] = [];
+    for (const m of messages) {
+      if (m.is_deleted || m.payload_type !== 'image') continue;
+      const raw = String((m.payload as { url?: string }).url ?? '').trim();
+      const src = resolvePublicUrl(raw) ?? raw;
+      if (src) out.push({ messageId: String(m.id), src });
+    }
+    return out;
+  }, [messages]);
+
+  useLayoutEffect(() => {
+    if (isDraft || chatMeta == null) return;
+    const unread = conv?.unread_count ?? 0;
+    if (unread <= 0 || !firstUnreadMessageId) return;
+    if (messages.length === 0) return;
+    const key = `${conversationId}:${firstUnreadMessageId}`;
+    if (autoJumpUnreadKeyRef.current === key) return;
+    autoJumpUnreadKeyRef.current = key;
+    jumpToMessage(firstUnreadMessageId);
+  }, [isDraft, chatMeta, conversationId, conv?.unread_count, firstUnreadMessageId, messages.length, jumpToMessage]);
 
   useEffect(() => {
     const root = scrollRef.current;
@@ -364,6 +440,11 @@ export function ChatWindow({
 
   const isOnline = conv?.type === 'private' && conv.other_member && onlineMembers.has(conv.other_member.id);
 
+  const onlineInGroupCount = useMemo(() => {
+    if (groupParticipantIds.length === 0) return 0;
+    return groupParticipantIds.filter((id) => onlineMembers.has(id)).length;
+  }, [groupParticipantIds, onlineMembers]);
+
   const headerSubtitle = useMemo(() => {
     if (typingUsers.length > 0) {
       return `${typingUsers.map((u: { memberName: string }) => u.memberName.split(' ')[0]).join(', ')} печатает…`;
@@ -376,8 +457,27 @@ export function ChatWindow({
       const iso = memberLastSeenAt[pid] ?? conv.other_member.last_seen_at ?? null;
       return formatMessengerLastSeen(iso);
     }
-    return conv.type === 'channel' ? 'канал' : 'группа';
-  }, [conv, typingUsers, isOnline, isDraft, memberLastSeenAt]);
+    if (conv.type === 'group' || conv.type === 'channel') {
+      const n = groupParticipantIds.length;
+      if (n > 0 && onlineInGroupCount > 0) {
+        const onWord = `${onlineInGroupCount} в сети`;
+        return `${onWord} · ${formatParticipantCountRU(n)}`;
+      }
+      if (n > 0) {
+        return formatParticipantCountRU(n);
+      }
+      return conv.type === 'channel' ? 'канал' : 'группа';
+    }
+    return 'чат';
+  }, [
+    conv,
+    typingUsers,
+    isOnline,
+    isDraft,
+    memberLastSeenAt,
+    groupParticipantIds.length,
+    onlineInGroupCount,
+  ]);
 
   const headerStatusClass =
     typingUsers.length > 0
@@ -464,6 +564,28 @@ export function ChatWindow({
 
           {/* Справа: действия */}
           <div className="flex shrink-0 items-center justify-end gap-0.5 sm:gap-1">
+            {!isDraft && firstUnreadMessageId && (conv?.unread_count ?? 0) > 0 ? (
+              <button
+                type="button"
+                onClick={() => firstUnreadMessageId && jumpToMessage(firstUnreadMessageId)}
+                aria-label="К первому непрочитанному"
+                title="К непрочитанным"
+                className="inline-flex h-10 min-w-[2rem] items-center justify-center rounded-full px-1.5 text-[13px] font-extrabold text-primary transition-colors hover:bg-primary/10 active:bg-primary/15"
+              >
+                ↓
+              </button>
+            ) : null}
+            {!isDraft && mediaItems.length > 0 ? (
+              <button
+                type="button"
+                onClick={() => setShowMediaGallery(true)}
+                aria-label="Медиа в этом чате"
+                title="Медиа"
+                className="inline-flex h-10 w-10 items-center justify-center rounded-full text-gray-600 transition-colors active:bg-gray-100"
+              >
+                <LuLayers size={20} strokeWidth={2.25} />
+              </button>
+            ) : null}
             <button
               type="button"
               onClick={() => navigate(`/messenger/chat/${conversationId}/manage`)}
@@ -525,7 +647,9 @@ export function ChatWindow({
           <div className="flex flex-1 flex-col items-center justify-center py-12 text-center">
             <p className="text-base font-semibold text-stone-900">Пока тихо</p>
             <p className="mt-1 max-w-xs text-sm text-stone-500">
-              Напишите первое сообщение — оно появится здесь.
+              {conv && conv.type !== 'private'
+                ? 'Напишите первое сообщение в этой беседе — его увидят все участники.'
+                : 'Напишите первое сообщение — оно появится здесь.'}
             </p>
           </div>
         ) : (
@@ -610,6 +734,15 @@ export function ChatWindow({
 
       {showSearch ? (
         <SearchChat conversationId={conversationId} onClose={() => setShowSearch(false)} />
+      ) : null}
+
+      {!isDraft ? (
+        <ChatMediaGallery
+          open={showMediaGallery}
+          onClose={() => setShowMediaGallery(false)}
+          items={mediaItems}
+          onOpenMessage={(id) => jumpToMessage(id)}
+        />
       ) : null}
     </div>
   );

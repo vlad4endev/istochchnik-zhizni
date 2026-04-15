@@ -39,11 +39,7 @@ import {
 import { memberRosterName } from '../../../lib/memberRosterName';
 import type { Backslider, DayPrayerData, GlobalTheme, Member, Ministry } from '../../../types';
 import { fetchMe, patchProfile } from '../../profile/api';
-import {
-  NextWeekPrayerPlanSection,
-  userCanEditNextWeekPrayerNeeds,
-  userCanViewNextWeekPrayerPlan,
-} from '../components/NextWeekPrayerPlanSection';
+import { NextWeekPrayerPlanSection, userCanViewNextWeekPrayerPlan } from '../components/NextWeekPrayerPlanSection';
 import { formatCalendarDayKey, getCalendarDay } from '../api';
 import { loadErrorDescription } from '../prayerPageUtils';
 
@@ -613,10 +609,7 @@ export function DailyPrayerPage() {
 
       <div className="px-4 pt-4 shell:px-6">
         {userCanViewNextWeekPrayerPlan(me) ? (
-          <NextWeekPrayerPlanSection canView currentUserId={me?.id ?? null} mode="collection" />
-        ) : null}
-        {userCanEditNextWeekPrayerNeeds(me) ? (
-          <NextWeekPrayerPlanSection canView currentUserId={me?.id ?? null} mode="fill" />
+          <NextWeekPrayerPlanSection canView currentUserId={me?.id ?? null} />
         ) : null}
         {isPending ? (
           <CalendarPrayerSkeleton />

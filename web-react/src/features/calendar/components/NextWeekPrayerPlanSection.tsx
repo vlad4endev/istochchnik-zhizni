@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { format, parse, parseISO } from 'date-fns';
+import { format, parse } from 'date-fns';
 import { ru } from 'date-fns/locale';
 import { useId, useMemo, useState, type ReactNode, useEffect } from 'react';
 import { createPortal } from 'react-dom';
@@ -7,12 +7,8 @@ import {
   LuCalendarClock,
   LuCheck,
   LuClipboardList,
-  LuHistory,
   LuLoader,
-  LuPencil,
-  LuTrash2,
   LuSearch,
-  LuUsers,
   LuX,
 } from 'react-icons/lu';
 
@@ -22,36 +18,17 @@ import type { NextWeekMemberDay } from '../../../types';
 import type { CycleCollectionClaimRow, CycleCollectionClaimsSnapshot } from '../collectionTypes';
 import {
   getCycleCollectionClaims,
-  deleteMemberPreviousPrayerNeed,
   getWeekPlanMembers,
   patchCycleCollectionClaim,
-  patchMemberCyclePrayer,
-  patchMemberPreviousPrayerNeed,
-  putMemberPreviousPrayerNeed,
   type WeekPlanKind,
 } from '../api';
+import { CoordinatorPreviousNeedsPanel } from './CoordinatorPreviousNeedsPanel';
 import { loadErrorDescription } from '../prayerPageUtils';
 
 export function userCanViewNextWeekPrayerPlan(me: MeResponse | undefined): boolean {
   if (!me) return false;
   if (me.app_role?.trim().toLowerCase() === 'admin') return true;
   return Boolean(me.is_collection_coordinator);
-}
-
-export function userCanEditNextWeekPrayerNeeds(me: MeResponse | undefined): boolean {
-  if (!me) return false;
-  if (me.app_role?.trim().toLowerCase() === 'admin') return true;
-  return Boolean(me.is_collection_coordinator);
-}
-
-function formatWeekRangeLabel(days: NextWeekMemberDay[]): string {
-  if (days.length < 2) return '';
-  const a = parse(days[0].date, 'yyyy-MM-dd', new Date());
-  const b = parse(days[days.length - 1].date, 'yyyy-MM-dd', new Date());
-  if (a.getMonth() === b.getMonth() && a.getFullYear() === b.getFullYear()) {
-    return `${format(a, 'd', { locale: ru })}–${format(b, 'd MMMM yyyy', { locale: ru })}`;
-  }
-  return `${format(a, 'd MMMM yyyy', { locale: ru })} — ${format(b, 'd MMMM yyyy', { locale: ru })}`;
 }
 
 function useClaimByMemberId(snapshot: CycleCollectionClaimsSnapshot | undefined) {
@@ -65,296 +42,7 @@ function useClaimByMemberId(snapshot: CycleCollectionClaimsSnapshot | undefined)
   }, [snapshot]);
 }
 
-function formatUpdatedAt(iso: string | null | undefined): string | null {
-  if (iso == null || typeof iso !== 'string' || !iso.trim()) return null;
-  try {
-    const d = parseISO(iso.replace(' ', 'T'));
-    if (Number.isNaN(d.getTime())) return null;
-    return format(d, 'd MMM yyyy, HH:mm', { locale: ru });
-  } catch {
-    return null;
-  }
-}
-
-function DayPrayerNeedRow(props: {
-  row: NextWeekMemberDay;
-  onSaved: () => void;
-}) {
-  const { row, onSaved } = props;
-  const mid = row.member?.id;
-  const initial = row.member?.prayer_request ?? '';
-  const [text, setText] = useState(initial);
-  const [previousNeedText, setPreviousNeedText] = useState('');
-  const [editingNeedId, setEditingNeedId] = useState<number | null>(null);
-  const [editingNeedText, setEditingNeedText] = useState('');
-  const [savedFlash, setSavedFlash] = useState(false);
-
-  useEffect(() => {
-    setText(row.member?.prayer_request ?? '');
-  }, [row.date, row.member?.id, row.member?.prayer_request]);
-
-  const saveMut = useMutation({
-    mutationFn: async () => {
-      if (mid == null) throw new Error('no_member');
-      await patchMemberCyclePrayer(mid, row.date, text);
-    },
-    onSuccess: () => {
-      onSaved();
-      setSavedFlash(true);
-      window.setTimeout(() => setSavedFlash(false), 2000);
-    },
-  });
-
-  const d = parse(row.date, 'yyyy-MM-dd', new Date());
-  const weekday = format(d, 'EEEE', { locale: ru });
-  const dayShort = format(d, 'd MMM', { locale: ru });
-  const name = row.member ? memberRosterName(row.member) : null;
-  const updatedLabel = formatUpdatedAt(row.member?.prayer_need_updated_at);
-  const previousNeeds = row.member?.previous_manual_prayer_needs ?? [];
-
-  const savePreviousNeedMut = useMutation({
-    mutationFn: async () => {
-      if (mid == null) throw new Error('no_member');
-      await patchMemberPreviousPrayerNeed(mid, previousNeedText);
-    },
-    onSuccess: () => {
-      setPreviousNeedText('');
-      onSaved();
-      setSavedFlash(true);
-      window.setTimeout(() => setSavedFlash(false), 2000);
-    },
-  });
-
-  const updatePreviousNeedMut = useMutation({
-    mutationFn: async () => {
-      if (editingNeedId == null) throw new Error('no_need_id');
-      await putMemberPreviousPrayerNeed(editingNeedId, editingNeedText);
-    },
-    onSuccess: () => {
-      setEditingNeedId(null);
-      setEditingNeedText('');
-      onSaved();
-      setSavedFlash(true);
-      window.setTimeout(() => setSavedFlash(false), 2000);
-    },
-  });
-
-  const deletePreviousNeedMut = useMutation({
-    mutationFn: async (id: number) => {
-      await deleteMemberPreviousPrayerNeed(id);
-    },
-    onSuccess: () => {
-      if (editingNeedId != null) {
-        setEditingNeedId(null);
-        setEditingNeedText('');
-      }
-      onSaved();
-      setSavedFlash(true);
-      window.setTimeout(() => setSavedFlash(false), 2000);
-    },
-  });
-
-  if (mid == null) {
-    return (
-      <li className="rounded-xl border border-stone-100 bg-stone-50/80 px-3 py-3 sm:px-4">
-        <p className="text-[13px] font-medium text-stone-500">
-          {weekday}, {dayShort}
-        </p>
-        <p className="mt-1 text-[14px] text-stone-400">
-          В очереди молитвенного цикла на этот день никого не назначено
-        </p>
-      </li>
-    );
-  }
-
-  const dirty = text !== (row.member?.prayer_request ?? '');
-
-  return (
-    <li className="rounded-xl border border-stone-200/80 bg-[var(--surface-elevated)] px-3 py-3 shadow-sm sm:px-4">
-      <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
-        <div>
-          <p className="text-[12px] font-semibold uppercase tracking-wide text-stone-500">
-            {weekday} · {dayShort}
-          </p>
-          <p className="text-[16px] font-bold text-stone-900">{name}</p>
-        </div>
-        {savedFlash ? (
-          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-emerald-900">
-            <LuCheck className="h-3.5 w-3.5" aria-hidden />
-            Сохранено
-          </span>
-        ) : null}
-      </div>
-      <label className="block">
-        <span className="sr-only">Молитвенная нужда для {name}</span>
-        <textarea
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
-              e.preventDefault();
-              if (saveMut.isPending || !dirty) return;
-              void saveMut.mutateAsync();
-            }
-          }}
-          rows={3}
-          maxLength={8000}
-          placeholder="Введите нужду…"
-          className="w-full rounded-xl border border-stone-200 bg-white px-3 py-2.5 text-[15px] text-stone-800 outline-none ring-primary/15 focus:border-primary focus:ring-2"
-        />
-      </label>
-      <div className="mt-3 rounded-xl border border-stone-200 bg-white/70 px-3 py-2.5">
-        <p className="flex items-center gap-1.5 text-[12px] font-bold uppercase tracking-wide text-stone-600">
-          <LuHistory className="h-3.5 w-3.5" aria-hidden />
-          Предыдущие нужды (только для координаторов)
-        </p>
-        {previousNeeds.length > 0 ? (
-          <div className="mt-2 space-y-1.5">
-            {previousNeeds.map((item) => (
-              <div key={item.id} className="rounded-lg bg-stone-50 px-2.5 py-2 ring-1 ring-stone-200/70">
-                <p className="text-[11px] font-semibold text-stone-500">
-                  {formatUpdatedAt(item.created_at) ?? 'Без даты'}
-                </p>
-                {editingNeedId === item.id ? (
-                  <div className="mt-1.5">
-                    <textarea
-                      value={editingNeedText}
-                      onChange={(e) => setEditingNeedText(e.target.value)}
-                      rows={2}
-                      maxLength={8000}
-                      className="w-full rounded-lg border border-stone-300 bg-white px-2.5 py-2 text-[13px] text-stone-800 outline-none ring-primary/15 focus:border-primary focus:ring-2"
-                    />
-                    <div className="mt-1.5 flex flex-wrap items-center justify-end gap-1.5">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setEditingNeedId(null);
-                          setEditingNeedText('');
-                        }}
-                        className="min-h-[32px] rounded-md border border-stone-300 bg-white px-2 py-1 text-[11px] font-bold text-stone-700"
-                      >
-                        Отмена
-                      </button>
-                      <button
-                        type="button"
-                        disabled={updatePreviousNeedMut.isPending || !editingNeedText.trim()}
-                        onClick={() => void updatePreviousNeedMut.mutateAsync()}
-                        className="min-h-[32px] rounded-md border border-primary/25 bg-primary/10 px-2 py-1 text-[11px] font-bold text-primary disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-                        {updatePreviousNeedMut.isPending ? 'Сохр…' : 'Сохранить'}
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <>
-                    <p className="mt-0.5 whitespace-pre-wrap break-words text-[13px] text-stone-700">
-                      {item.note}
-                    </p>
-                    <div className="mt-1.5 flex flex-wrap items-center justify-end gap-1.5">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setEditingNeedId(item.id);
-                          setEditingNeedText(item.note);
-                        }}
-                        className="inline-flex min-h-[30px] items-center gap-1 rounded-md border border-stone-300 bg-white px-2 py-1 text-[11px] font-bold text-stone-700"
-                      >
-                        <LuPencil className="h-3.5 w-3.5" aria-hidden />
-                        Изменить
-                      </button>
-                      <button
-                        type="button"
-                        disabled={deletePreviousNeedMut.isPending}
-                        onClick={() => {
-                          const ok = window.confirm('Удалить эту предыдущую молитвенную нужду?');
-                          if (!ok) return;
-                          void deletePreviousNeedMut.mutateAsync(item.id);
-                        }}
-                        className="inline-flex min-h-[30px] items-center gap-1 rounded-md border border-red-200 bg-red-50 px-2 py-1 text-[11px] font-bold text-red-700 disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-                        <LuTrash2 className="h-3.5 w-3.5" aria-hidden />
-                        Удалить
-                      </button>
-                    </div>
-                  </>
-                )}
-              </div>
-            ))}
-          </div>
-        ) : (
-          <p className="mt-2 text-[12px] text-stone-400">Пока нет сохраненных предыдущих нужд.</p>
-        )}
-        <label className="mt-2 block">
-          <span className="sr-only">Новая предыдущая нужда для {name}</span>
-          <textarea
-            value={previousNeedText}
-            onChange={(e) => setPreviousNeedText(e.target.value)}
-            rows={2}
-            maxLength={8000}
-            placeholder="Добавить предыдущую нужду вручную…"
-            className="w-full rounded-xl border border-stone-200 bg-white px-3 py-2 text-[14px] text-stone-800 outline-none ring-primary/15 focus:border-primary focus:ring-2"
-          />
-        </label>
-        <div className="mt-2 flex justify-end">
-          <button
-            type="button"
-            disabled={savePreviousNeedMut.isPending || !previousNeedText.trim()}
-            onClick={() => void savePreviousNeedMut.mutateAsync()}
-            className="min-h-[38px] rounded-lg border border-stone-300 bg-white px-3 py-1.5 text-[12px] font-bold text-stone-700 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {savePreviousNeedMut.isPending ? 'Сохранение…' : 'Сохранить как предыдущую'}
-          </button>
-        </div>
-        {savePreviousNeedMut.isError ? (
-          <p className="mt-2 text-[12px] text-red-600">
-            {loadErrorDescription(savePreviousNeedMut.error) ?? 'Ошибка сохранения предыдущей нужды'}
-          </p>
-        ) : null}
-        {updatePreviousNeedMut.isError ? (
-          <p className="mt-2 text-[12px] text-red-600">
-            {loadErrorDescription(updatePreviousNeedMut.error) ?? 'Ошибка изменения предыдущей нужды'}
-          </p>
-        ) : null}
-        {deletePreviousNeedMut.isError ? (
-          <p className="mt-2 text-[12px] text-red-600">
-            {loadErrorDescription(deletePreviousNeedMut.error) ?? 'Ошибка удаления предыдущей нужды'}
-          </p>
-        ) : null}
-      </div>
-      <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
-        <p className="text-[11px] text-stone-400">
-          {updatedLabel ? <>Последнее сохранение: {updatedLabel}</> : <>Ещё не сохраняли для этого цикла</>}
-          <span className="hidden sm:inline"> · </span>
-          <span className="sm:hidden">
-            <br />
-          </span>
-          <span className="text-stone-400">Ctrl+Enter — сохранить</span>
-        </p>
-        <button
-          type="button"
-          disabled={saveMut.isPending || !dirty}
-          onClick={() => void saveMut.mutateAsync()}
-          className="min-h-[40px] shrink-0 rounded-xl bg-primary px-4 py-2 text-[13px] font-bold text-white shadow-sm shadow-primary/20 disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          {saveMut.isPending ? (
-            <span className="inline-flex items-center gap-2">
-              <LuLoader className="h-4 w-4 animate-spin" aria-hidden />
-              Сохранение…
-            </span>
-          ) : (
-            'Сохранить'
-          )}
-        </button>
-      </div>
-      {saveMut.isError ? (
-        <p className="mt-2 text-[13px] text-red-600">{loadErrorDescription(saveMut.error) ?? 'Ошибка'}</p>
-      ) : null}
-    </li>
-  );
-}
-
 function NextWeekMembersPanel(props: {
-  mode: 'collection' | 'fill';
   weekKind: WeekPlanKind;
   days: NextWeekMemberDay[] | undefined;
   isPending: boolean;
@@ -371,7 +59,6 @@ function NextWeekMembersPanel(props: {
 }) {
   const sectionId = useId();
   const {
-    mode,
     weekKind,
     days,
     isPending,
@@ -390,28 +77,15 @@ function NextWeekMembersPanel(props: {
   const claimByMemberId = useClaimByMemberId(claimsSnapshot);
   const [filterMode, setFilterMode] = useState<'all' | 'mine' | 'free' | 'busy'>('all');
   const [searchQuery, setSearchQuery] = useState('');
-  const isCollectionMode = mode === 'collection';
-
-  const heading =
-    weekKind === 'current'
-      ? 'Текущая неделя — очередь молитвенного цикла'
-      : 'Следующая неделя — очередь молитвенного цикла';
 
   if (isPending || claimsPending) {
     return (
-      <div aria-busy="true" aria-label="Загрузка плана на неделю">
-        <div className="mb-3 flex items-center gap-3">
-          <div className="h-10 w-10 animate-pulse rounded-[10px] bg-stone-200/90" />
-          <div className="h-4 w-48 animate-pulse rounded bg-stone-200/90" />
-        </div>
-        <div className="space-y-2 rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] p-4 shadow-[var(--shadow)]">
+      <div aria-busy="true" aria-label="Загрузка очереди">
+        <div className="space-y-1.5 rounded-xl border border-stone-200/80 bg-[var(--surface-elevated)] p-2.5 shadow-sm">
           {[0, 1, 2, 3, 4, 5, 6].map((i) => (
-            <div
-              key={i}
-              className="flex justify-between gap-3 border-b border-stone-100 pb-2 last:border-0 last:pb-0"
-            >
-              <div className="h-4 w-28 animate-pulse rounded bg-stone-100" />
-              <div className="h-4 w-32 max-w-[50%] animate-pulse rounded bg-stone-100" />
+            <div key={i} className="flex justify-between gap-2 border-b border-stone-100 py-2 last:border-0 last:pb-0">
+              <div className="h-3.5 w-24 animate-pulse rounded bg-stone-100" />
+              <div className="h-3.5 w-16 animate-pulse rounded bg-stone-100" />
             </div>
           ))}
         </div>
@@ -436,12 +110,8 @@ function NextWeekMembersPanel(props: {
   }
 
   if (!days || days.length === 0) {
-    return <p className="text-center text-[14px] text-stone-500">Нет данных на выбранную неделю.</p>;
+    return <p className="text-center text-[13px] text-stone-500">Нет данных.</p>;
   }
-
-  const range = formatWeekRangeLabel(days);
-  const cycleLabel =
-    claimsSnapshot != null ? `Молитвенный цикл №${claimsSnapshot.cycle_number}` : null;
 
   const normalizedSearch = searchQuery.trim().toLowerCase();
   const listRows = days.filter((row) => {
@@ -481,70 +151,40 @@ function NextWeekMembersPanel(props: {
 
   return (
     <div aria-labelledby={sectionId}>
-      <div className="mb-3 flex items-center gap-3 pl-0.5">
-        <div
-          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] bg-primary/10 text-primary"
-          aria-hidden
-        >
-          <LuUsers className="h-5 w-5" />
-        </div>
-        <div className="min-w-0">
-          <h2 id={sectionId} className="text-xs font-extrabold uppercase tracking-[0.12em] text-stone-900">
-            {heading}
-          </h2>
-          <p className="mt-0.5 text-[13px] text-stone-500">{range}</p>
-          {claimsError ? (
-            <p className="mt-1 text-[12px] leading-snug text-amber-800">
-              Отметки сбора нужд сейчас недоступны (ошибка загрузки).
-            </p>
-          ) : cycleLabel ? (
-            <p className="mt-1 text-[12px] leading-snug text-stone-500">
-              {cycleLabel}. Отметьте, за кого из очереди цикла вы собираете нужды: один человек — только у одного ответственного.
-            </p>
-          ) : null}
-        </div>
-      </div>
+      <h2 id={sectionId} className="sr-only">
+        Очередь молитвенного цикла и отметки сбора нужд{weekKind === 'next' ? ', следующая неделя' : ', текущая неделя'}
+      </h2>
+      {claimsError ? (
+        <p className="mb-2 text-[12px] leading-snug text-amber-800">Отметки сбора недоступны.</p>
+      ) : null}
 
-      <p className="mb-3 text-[13px] leading-snug text-stone-600">
-        {isCollectionMode
-          ? 'Список той же очереди, что на экране «Молитва»: поиск, фильтры и закрепление ответственного за сбор.'
-          : 'Заполняйте нужды по дням для людей из очереди молитвенного цикла — текст хранится по циклу и в истории при изменении.'}
-      </p>
-
-      {!isCollectionMode ? (
-        <ul className="mb-6 space-y-3">
-          {days.map((row) => (
-            <DayPrayerNeedRow key={row.date} row={row} onSaved={onPrayerSaved} />
-          ))}
-        </ul>
-      ) : (
-        <div>
-          <div className="mb-3 space-y-2">
+      <div>
+          <div className="mb-2 space-y-1.5">
             <label className="relative block">
-              <span className="sr-only">Поиск по очереди молитвенного цикла</span>
-              <LuSearch className="pointer-events-none absolute left-3 top-1/2 h-4.5 w-4.5 -translate-y-1/2 text-stone-400" />
+              <span className="sr-only">Поиск по имени</span>
+              <LuSearch className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-stone-400" />
               <input
                 type="search"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Поиск по имени (очередь цикла)"
-                className="min-h-[44px] w-full rounded-xl border border-stone-200 bg-white pl-10 pr-3 text-[14px] text-stone-800 outline-none ring-primary/15 focus:border-primary focus:ring-2"
+                placeholder="Поиск"
+                className="min-h-[40px] w-full rounded-lg border border-stone-200 bg-white pl-9 pr-2.5 text-[13px] text-stone-800 outline-none ring-primary/15 focus:border-primary focus:ring-1"
               />
             </label>
 
-            <div className="flex items-center gap-2 overflow-x-auto pb-0.5 [-webkit-overflow-scrolling:touch]">
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 [-webkit-overflow-scrolling:touch]">
               {([
-                ['all', `Все · ${days.length}`],
-                ['mine', `Мои · ${myClaimsCount}`],
-                ['free', `Свободные · ${freeCount}`],
-                ['busy', `Занятые · ${busyCount}`],
+                ['all', `Все ${days.length}`],
+                ['mine', `Мои ${myClaimsCount}`],
+                ['free', `Своб. ${freeCount}`],
+                ['busy', `Занят. ${busyCount}`],
               ] as const).map(([mode, label]) => (
                 <button
                   key={mode}
                   type="button"
                   onClick={() => setFilterMode(mode)}
                   className={[
-                    'shrink-0 rounded-full border px-3 py-2 text-[12px] font-extrabold uppercase tracking-[0.08em] transition',
+                    'shrink-0 rounded-full border px-2.5 py-1 text-[11px] font-bold tracking-wide transition',
                     filterMode === mode
                       ? 'border-primary/60 bg-primary/10 text-primary'
                       : 'border-stone-200 bg-white text-stone-600 hover:text-stone-900',
@@ -557,16 +197,16 @@ function NextWeekMembersPanel(props: {
           </div>
 
           {listRows.length === 0 ? (
-            <p className="mb-3 rounded-xl border border-stone-200 bg-stone-50 px-3 py-3 text-[13px] text-stone-500">
-              Ничего не найдено по текущему фильтру.
+            <p className="mb-2 rounded-lg border border-stone-200 bg-stone-50 px-2.5 py-2 text-[12px] text-stone-500">
+              Ничего не найдено.
             </p>
           ) : null}
 
-          <div className="overflow-hidden rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] shadow-[var(--shadow)]">
+          <div className="overflow-hidden rounded-xl border border-stone-200/80 bg-[var(--surface-elevated)] shadow-sm">
             <ul className="divide-y divide-stone-100">
               {listRows.map((row) => {
                 const d = parse(row.date, 'yyyy-MM-dd', new Date());
-                const label = format(d, 'EEEE, d MMMM', { locale: ru });
+                const label = format(d, 'EEE d.MM', { locale: ru });
                 const mem = row.member;
                 const name = mem ? memberRosterName(mem) : null;
                 const mid = row.member?.id;
@@ -588,13 +228,14 @@ function NextWeekMembersPanel(props: {
                 return (
                   <li
                     key={`claim-${row.date}`}
-                    className="group flex flex-col gap-2 px-4 py-3 transition-colors hover:bg-stone-50/70 sm:flex-row sm:items-center sm:justify-between sm:gap-3 shell:px-5"
+                    className="group flex flex-col transition-colors hover:bg-stone-50/70"
                   >
-                    <div className="flex min-w-0 flex-1 flex-col gap-0.5 sm:flex-row sm:items-baseline sm:gap-3">
-                      <span className="shrink-0 text-[12px] font-semibold uppercase tracking-wide text-stone-500">
+                    <div className="flex flex-col gap-1.5 px-3 py-2 sm:flex-row sm:items-center sm:justify-between sm:gap-2 sm:py-2.5">
+                    <div className="flex min-w-0 flex-1 flex-col gap-0.5 sm:flex-row sm:items-center sm:gap-2">
+                      <span className="w-[4.5rem] shrink-0 text-[11px] font-semibold tabular-nums text-stone-500">
                         {label}
                       </span>
-                      <span className="min-w-0 text-[15px] font-extrabold tracking-tight text-stone-900">
+                      <span className="min-w-0 text-[14px] font-bold leading-tight tracking-tight text-stone-900">
                         {name ?? '—'}
                       </span>
                     </div>
@@ -604,7 +245,7 @@ function NextWeekMembersPanel(props: {
                         {claimRow.claimed_by ? (
                           <span
                             className={[
-                              'inline-flex max-w-full items-center rounded-full px-2.5 py-1 text-[11px] font-extrabold uppercase tracking-wide',
+                              'inline-flex max-w-[7rem] truncate rounded-full px-2 py-0.5 text-[10px] font-bold',
                               mine
                                 ? 'bg-primary/10 text-primary'
                                 : 'bg-amber-500/12 text-amber-950',
@@ -613,8 +254,8 @@ function NextWeekMembersPanel(props: {
                             {claimedByLabel}
                           </span>
                         ) : (
-                          <span className="inline-flex max-w-full items-center rounded-full bg-emerald-500/10 px-2.5 py-1 text-[11px] font-extrabold uppercase tracking-wide text-emerald-900">
-                            Свободно
+                          <span className="inline-flex items-center rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-bold text-emerald-900">
+                            Своб.
                           </span>
                         )}
 
@@ -635,8 +276,8 @@ function NextWeekMembersPanel(props: {
                             onToggle(mid, !mine);
                           }}
                           className={[
-                            'relative inline-flex h-10 w-[72px] items-center rounded-full border transition',
-                            'focus:outline-none focus:ring-2 focus:ring-primary/25 focus:ring-offset-2 focus:ring-offset-[var(--surface)]',
+                            'relative inline-flex h-9 w-[60px] items-center rounded-full border transition',
+                            'focus:outline-none focus:ring-2 focus:ring-primary/25 focus:ring-offset-1 focus:ring-offset-[var(--surface)]',
                             disabled
                               ? 'cursor-not-allowed border-stone-200 bg-stone-100 opacity-60'
                               : mine
@@ -655,9 +296,9 @@ function NextWeekMembersPanel(props: {
                         >
                           <span
                             className={[
-                              'absolute left-1 flex h-8 w-8 items-center justify-center rounded-full shadow-sm transition-transform',
+                              'absolute left-0.5 flex h-7 w-7 items-center justify-center rounded-full shadow-sm transition-transform',
                               mine
-                                ? 'translate-x-[30px] bg-primary text-white'
+                                ? 'translate-x-[26px] bg-primary text-white'
                                 : 'translate-x-0 bg-stone-200 text-stone-600',
                             ].join(' ')}
                           >
@@ -667,13 +308,23 @@ function NextWeekMembersPanel(props: {
                         </button>
                       </div>
                     ) : null}
+                    </div>
+                    {mine && mid != null && mem && !claimsError ? (
+                      <div className="border-t border-stone-100 bg-stone-50/80 px-3 py-2">
+                        <CoordinatorPreviousNeedsPanel
+                          memberId={mid}
+                          memberLabel={name ?? ''}
+                          items={mem.previous_manual_prayer_needs ?? []}
+                          onChanged={onPrayerSaved}
+                        />
+                      </div>
+                    ) : null}
                   </li>
                 );
               })}
             </ul>
           </div>
         </div>
-      )}
     </div>
   );
 }
@@ -714,27 +365,27 @@ function ModalFrame(props: {
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className="flex max-h-[min(92dvh,920px)] w-full max-w-lg flex-col rounded-t-3xl border border-stone-200/90 bg-[var(--surface)] shadow-2xl sm:max-h-[88vh] sm:rounded-3xl"
+        className="flex max-h-[min(88dvh,720px)] w-full max-w-md flex-col rounded-t-2xl border border-stone-200/90 bg-[var(--surface)] shadow-2xl sm:max-h-[85vh] sm:rounded-2xl"
       >
-        <div className="flex shrink-0 items-center justify-between gap-3 border-b border-stone-200/80 px-4 py-3 sm:px-5">
-          <div className="flex min-w-0 items-center gap-2.5">
-            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
-              <LuCalendarClock className="h-5 w-5" aria-hidden />
+        <div className="flex shrink-0 items-center justify-between gap-2 border-b border-stone-200/80 px-3 py-2 sm:px-4">
+          <div className="flex min-w-0 items-center gap-2">
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+              <LuCalendarClock className="h-4 w-4" aria-hidden />
             </span>
-            <h2 id={titleId} className="truncate text-[15px] font-extrabold text-stone-900 sm:text-base">
+            <h2 id={titleId} className="truncate text-[14px] font-extrabold text-stone-900">
               {title}
             </h2>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-stone-500 hover:bg-stone-100"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-stone-500 hover:bg-stone-100"
             aria-label="Закрыть"
           >
-            <LuX className="h-6 w-6" strokeWidth={2} />
+            <LuX className="h-5 w-5" strokeWidth={2} />
           </button>
         </div>
-        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-5 sm:py-5">{children}</div>
+        <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3 sm:px-4">{children}</div>
       </div>
     </div>
   );
@@ -742,18 +393,13 @@ function ModalFrame(props: {
 
 type Props = { canView: boolean; currentUserId: number | null };
 
-/** Кнопка и модалка: 7 дней недели по циклу в одном из режимов (сбор или заполнение). */
-export function NextWeekPrayerPlanSection({
-  canView,
-  currentUserId,
-  mode = 'collection',
-}: Props & { mode?: 'collection' | 'fill' }) {
+/** Кнопка и модалка: очередь цикла и отметки сбора нужд; под «своими» участниками — предыдущие нужды. */
+export function NextWeekPrayerPlanSection({ canView, currentUserId }: Props) {
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const titleId = useId();
   const [mutErr, setMutErr] = useState<string | null>(null);
   const [weekKind, setWeekKind] = useState<WeekPlanKind>('current');
-  const isCollectionMode = mode === 'collection';
 
   const enabled = canView && open;
 
@@ -811,24 +457,17 @@ export function NextWeekPrayerPlanSection({
   if (!canView) return null;
 
   return (
-    <div className="mb-6">
+    <div className="mb-4">
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="touch-manipulation flex w-full min-h-[56px] items-center gap-3 rounded-2xl border-2 border-primary/25 bg-gradient-to-br from-[var(--surface-elevated)] to-primary/[0.06] px-4 py-3.5 text-left shadow-[var(--shadow)] transition hover:border-primary/40 hover:shadow-md"
+        className="touch-manipulation flex w-full min-h-[48px] items-center gap-2.5 rounded-xl border border-primary/30 bg-[var(--surface-elevated)] px-3 py-2.5 text-left shadow-sm transition hover:border-primary/45 hover:shadow-md"
       >
-        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[12px] bg-primary text-white shadow-md shadow-primary/25">
-          <LuClipboardList className="h-5 w-5" strokeWidth={2} aria-hidden />
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary text-white">
+          <LuClipboardList className="h-4 w-4" strokeWidth={2} aria-hidden />
         </span>
-        <span className="min-w-0 flex-1">
-          <span className="block text-[16px] font-extrabold text-stone-900">
-            {isCollectionMode ? 'Список сбора нужд недели' : 'Заполнение нужд недели'}
-          </span>
-          <span className="mt-0.5 block text-[12px] leading-snug text-stone-600">
-            {isCollectionMode
-              ? '7 дней · очередь молитвенного цикла · поиск и отбор'
-              : '7 дней · текущая или следующая неделя · ввод нужд'}
-          </span>
+        <span className="min-w-0 flex-1 text-[15px] font-extrabold leading-tight text-stone-900">
+          Сбор нужд · очередь недели
         </span>
       </button>
 
@@ -836,25 +475,25 @@ export function NextWeekPrayerPlanSection({
         ? createPortal(
             <ModalFrame
               titleId={titleId}
-              title={isCollectionMode ? 'Список сбора нужд' : 'Заполнение нужд на неделю'}
+              title="Очередь недели"
               onClose={() => setOpen(false)}
             >
-              <div className="mb-4 flex rounded-2xl border border-stone-200/90 bg-stone-100/80 p-1">
+              <div className="mb-2 flex rounded-lg border border-stone-200/90 bg-stone-100/90 p-0.5">
                 <button
                   type="button"
                   onClick={() => setWeekKind('current')}
-                  className={`min-h-[44px] flex-1 rounded-[10px] px-3 text-[13px] font-bold transition ${
+                  className={`min-h-[36px] flex-1 rounded-md px-2 text-[12px] font-bold transition ${
                     weekKind === 'current'
                       ? 'bg-[var(--surface-elevated)] text-stone-900 shadow-sm'
                       : 'text-stone-600 hover:text-stone-900'
                   }`}
                 >
-                  Текущая неделя
+                  Эта неделя
                 </button>
                 <button
                   type="button"
                   onClick={() => setWeekKind('next')}
-                  className={`min-h-[44px] flex-1 rounded-[10px] px-3 text-[13px] font-bold transition ${
+                  className={`min-h-[36px] flex-1 rounded-md px-2 text-[12px] font-bold transition ${
                     weekKind === 'next'
                       ? 'bg-[var(--surface-elevated)] text-stone-900 shadow-sm'
                       : 'text-stone-600 hover:text-stone-900'
@@ -864,18 +503,18 @@ export function NextWeekPrayerPlanSection({
                 </button>
               </div>
 
-              {mutErr ? <p className="mb-3 text-[13px] text-red-600">{mutErr}</p> : null}
+              {mutErr ? <p className="mb-2 text-[12px] text-red-600">{mutErr}</p> : null}
               {!weekPending &&
               !claimsPending &&
               enabled &&
               (weekFetching || claimsFetching) ? (
-                <p className="mb-3 flex items-center gap-2 text-[13px] font-semibold text-primary">
-                  <LuLoader className="h-4 w-4 shrink-0 animate-spin" aria-hidden />
-                  Обновляем план и отметки…
+                <p className="mb-2 flex items-center gap-1.5 text-[12px] font-semibold text-primary">
+                  <LuLoader className="h-3.5 w-3.5 shrink-0 animate-spin" aria-hidden />
+                  Обновление…
                 </p>
               ) : null}
               {claimsError && !weekError ? (
-                <div className="mb-3 flex flex-wrap items-center gap-2 rounded-xl border border-amber-200/90 bg-amber-50/90 px-3 py-2 text-[13px] text-amber-950">
+                <div className="mb-2 flex flex-wrap items-center gap-2 rounded-lg border border-amber-200/90 bg-amber-50/90 px-2.5 py-1.5 text-[12px] text-amber-950">
                   <span>{loadErrorDescription(claimsErr) ?? 'Ошибка загрузки отметок'}</span>
                   <button
                     type="button"
@@ -887,13 +526,12 @@ export function NextWeekPrayerPlanSection({
                 </div>
               ) : null}
               {mut.isPending ? (
-                <p className="mb-3 flex items-center gap-2 text-[13px] text-stone-500">
-                  <LuLoader className="h-4 w-4 animate-spin" aria-hidden />
-                  Сохранение отметки…
+                <p className="mb-2 flex items-center gap-1.5 text-[12px] text-stone-500">
+                  <LuLoader className="h-3.5 w-3.5 animate-spin" aria-hidden />
+                  Сохранение…
                 </p>
               ) : null}
               <NextWeekMembersPanel
-                mode={mode}
                 weekKind={weekKind}
                 days={weekDays}
                 isPending={weekPending}

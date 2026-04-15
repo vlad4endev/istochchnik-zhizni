@@ -2,6 +2,7 @@ import axios from 'axios';
 
 import { apiClient } from '../../lib/apiClient';
 import type { Backslider, GlobalTheme, Ministry } from '../../types';
+import type { PrayerHistoryItem } from '../profile/api';
 
 import type { AppUser } from './types';
 
@@ -113,6 +114,18 @@ export async function updateAdminMember(
 
 export async function deleteAdminMember(id: number): Promise<void> {
   await apiClient.delete(`${USERS}/${id}`);
+}
+
+/** Ручная запись в историю молитвенных нужд (только админ). */
+export async function addAdminPrayerRequestHistory(
+  memberId: number,
+  body: { prayer_request: string; cycle_number?: number },
+): Promise<PrayerHistoryItem> {
+  const { data } = await apiClient.post<PrayerHistoryItem>(
+    `${USERS}/${memberId}/prayer-requests/history`,
+    body,
+  );
+  return data;
 }
 
 /** Объединяет дубликаты участников (одинаковое ФИО), оставляя карточку с меньшим id. */

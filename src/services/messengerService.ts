@@ -316,6 +316,23 @@ export async function getConversationMeta(
   throw lastErr instanceof Error ? lastErr : new Error(String(lastErr));
 }
 
+/** Курсор прочитанного текущего участника (для «перейти к непрочитанным» на клиенте). */
+export async function getParticipantLastReadMessageId(
+  conversationId: string,
+  memberId: number,
+): Promise<string | null> {
+  const result = await dbQuery(
+    `SELECT last_read_message_id::text AS lid
+     FROM conversation_participants
+     WHERE conversation_id = $1::bigint AND member_id = $2 AND left_at IS NULL
+     LIMIT 1`,
+    [conversationId, memberId],
+  );
+  const raw = result.rows[0]?.lid as string | undefined | null;
+  if (raw == null || String(raw).trim() === '') return null;
+  return String(raw).trim();
+}
+
 export async function updateConversationPermissionsAndSettings(
   conversationId: string,
   patch: {

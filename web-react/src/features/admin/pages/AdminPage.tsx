@@ -27,6 +27,7 @@ import { NotificationsSettingsSection } from '../NotificationsSettingsSection';
 import { ProjectJournalSection } from '../ProjectJournalSection';
 import { useBrandingStore } from '../../branding/brandingStore';
 import {
+  addAdminPrayerRequestHistory,
   apiErrorMessage,
   bulkCreateAdminMembers,
   createAdminMember,
@@ -1695,12 +1696,39 @@ function MembersSection() {
 /** Сворачиваемый/разворачиваемый блок с историей молитвенных нужд участника. */
 function AdminPrayerHistory({ memberId }: { memberId: number }) {
   const [open, setOpen] = useState(false);
+  const [manualText, setManualText] = useState('');
+  const [cycleInput, setCycleInput] = useState('');
+  const qc = useQueryClient();
 
   const { data, isPending } = useQuery({
     queryKey: ['admin', 'prayer-history', memberId],
     queryFn: () => fetchPrayerRequestHistory(memberId, 30),
     enabled: open,
     staleTime: 30_000,
+  });
+
+  const addHistoryMut = useMutation({
+    mutationFn: () => {
+      const trimmed = manualText.trim();
+      if (!trimmed) {
+        return Promise.reject(new Error('Укажите текст нужды'));
+      }
+      const cycleTrim = cycleInput.trim();
+      let cycle_number: number | undefined;
+      if (cycleTrim !== '') {
+        const n = Number.parseInt(cycleTrim, 10);
+        if (!Number.isFinite(n) || n < 1) {
+          return Promise.reject(new Error('Номер цикла — целое число от 1'));
+        }
+        cycle_number = n;
+      }
+      return addAdminPrayerRequestHistory(memberId, { prayer_request: trimmed, cycle_number });
+    },
+    onSuccess: async () => {
+      setManualText('');
+      setCycleInput('');
+      await qc.invalidateQueries({ queryKey: ['admin', 'prayer-history', memberId] });
+    },
   });
 
   return (
@@ -1724,6 +1752,54 @@ function AdminPrayerHistory({ memberId }: { memberId: number }) {
       >
         <div className="overflow-hidden">
           <div className="pt-3 pb-1">
+            <div className="mb-4 rounded-xl border border-dashed border-primary/30 bg-primary/[0.04] p-3">
+              <p className="mb-2 text-[11px] font-extrabold uppercase tracking-wide text-stone-500">
+                Добавить запись вручную
+              </p>
+              <label className="block">
+                <span className="sr-only">Текст молитвенной нужды</span>
+                <textarea
+                  value={manualText}
+                  onChange={(e) => setManualText(e.target.value)}
+                  rows={3}
+                  maxLength={8000}
+                  placeholder="Текст нужды…"
+                  className="w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-[13px] text-stone-800 outline-none ring-primary/15 focus:border-primary focus:ring-1"
+                />
+              </label>
+              <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-end">
+                <label className="block min-w-0 sm:max-w-[11rem]">
+                  <span className="mb-0.5 block text-[11px] font-semibold text-stone-500">
+                    № цикла (необязательно)
+                  </span>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={cycleInput}
+                    onChange={(e) => setCycleInput(e.target.value.replace(/\D/g, ''))}
+                    placeholder="Как в списке: 5"
+                    className="w-full rounded-lg border border-stone-200 bg-white px-2.5 py-1.5 text-[13px] text-stone-800 outline-none focus:border-primary focus:ring-1"
+                  />
+                </label>
+                <button
+                  type="button"
+                  disabled={addHistoryMut.isPending || !manualText.trim()}
+                  onClick={() => void addHistoryMut.mutateAsync()}
+                  className="min-h-[40px] shrink-0 rounded-lg bg-primary px-4 text-[13px] font-bold text-white shadow-sm transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {addHistoryMut.isPending ? 'Сохранение…' : 'Добавить в историю'}
+                </button>
+              </div>
+              {addHistoryMut.isError ? (
+                <p className="mt-2 text-[12px] text-red-600">
+                  {apiErrorMessage(
+                    addHistoryMut.error,
+                    addHistoryMut.error instanceof Error ? addHistoryMut.error.message : 'Ошибка',
+                  )}
+                </p>
+              ) : null}
+            </div>
+
             {isPending ? (
               <div className="space-y-3 py-2">
                 {[0, 1, 2].map((i) => (

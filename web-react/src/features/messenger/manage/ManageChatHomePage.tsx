@@ -51,6 +51,7 @@ function GroupManageControls({
       const toSend = await compressImageForMessengerUpload(file);
       const up = await api.uploadFile(toSend);
       await api.updateConversation(chatId, { avatar_url: up.url });
+      useChatStore.getState().handleConvUpdated(chatId, { avatar_url: up.url });
       await onSaved();
       emitAppToast('Фото чата обновлено', 'success');
     } catch {
