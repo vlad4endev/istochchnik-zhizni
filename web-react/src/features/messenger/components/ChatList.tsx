@@ -6,7 +6,6 @@ import { AppAvatar } from '../../../components/AppAvatar';
 import { getAvatarColor, getAvatarInitial } from '../avatarUtils';
 import { LuPin, LuVolume2, LuVolumeX, LuFolderOpen, LuEraser, LuTrash2 } from 'react-icons/lu';
 import { IoCheckmarkDone } from 'react-icons/io5';
-import { shallow } from 'zustand/shallow';
 
 interface ChatListProps {
   onSelect: (id: string) => void;
@@ -153,14 +152,9 @@ function ChatListItem({
     return s.onlineMembers.has(conv.other_member.id);
   });
   const currentMemberId = useChatStore((s) => s.currentMemberId);
-  const { patchChatMyUi, clearChatHistory, leaveChat } = useChatStore(
-    (s) => ({
-      patchChatMyUi: s.patchChatMyUi,
-      clearChatHistory: s.clearChatHistory,
-      leaveChat: s.leaveChat,
-    }),
-    shallow,
-  );
+  const patchChatMyUi = useChatStore((s) => s.patchChatMyUi);
+  const clearChatHistory = useChatStore((s) => s.clearChatHistory);
+  const leaveChat = useChatStore((s) => s.leaveChat);
 
   const [menuPos, setMenuPos] = useState<{ x: number; y: number } | null>(null);
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
