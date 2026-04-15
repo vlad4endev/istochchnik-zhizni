@@ -33,6 +33,9 @@ const MEMBER_ALLOWED_CALENDAR_POST =
 /** Срочная нужда / объявление на дашборде — только координаторы и админ (проверка в контроллере). */
 const COORDINATOR_DASHBOARD_NOTES_POST = /^\/api\/calendar\/dashboard-coordinator-notes\/?$/;
 
+const COORDINATOR_DASHBOARD_NOTES_DELETE =
+  /^\/api\/calendar\/dashboard-coordinator-notes\/(urgent_prayer|announcement)\/?$/;
+
 /** Web Push / FCM: мутации привязаны к member_id из сессии (requireAuthSession в роутере). */
 const MEMBER_NOTIFICATIONS_POST =
   /^\/api\/notifications\/(?:subscribe|unsubscribe|save-token)\/?$/;
@@ -135,6 +138,11 @@ export function enforceRoleAccess(req: Request, res: Response, next: NextFunctio
   }
 
   if (req.method === 'POST' && COORDINATOR_DASHBOARD_NOTES_POST.test(fullPath) && authId) {
+    next();
+    return;
+  }
+
+  if (req.method === 'DELETE' && COORDINATOR_DASHBOARD_NOTES_DELETE.test(fullPath) && authId) {
     next();
     return;
   }

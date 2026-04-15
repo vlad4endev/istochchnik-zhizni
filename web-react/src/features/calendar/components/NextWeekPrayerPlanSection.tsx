@@ -598,10 +598,21 @@ function ModalFrame(props: {
   );
 }
 
-type Props = { canView: boolean; currentUserId: number | null; isAdmin?: boolean };
+type Props = {
+  canView: boolean;
+  currentUserId: number | null;
+  isAdmin?: boolean;
+  /** Контент сразу под кнопкой «Сбор нужд · очередь недели» (например, срочная молитвенная нужда). */
+  afterWeekQueueButton?: ReactNode;
+};
 
 /** Кнопка и модалка: очередь цикла и отметки сбора нужд; под «своими» участниками — предыдущие нужды. */
-export function NextWeekPrayerPlanSection({ canView, currentUserId, isAdmin = false }: Props) {
+export function NextWeekPrayerPlanSection({
+  canView,
+  currentUserId,
+  isAdmin = false,
+  afterWeekQueueButton,
+}: Props) {
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const titleId = useId();
@@ -664,7 +675,7 @@ export function NextWeekPrayerPlanSection({ canView, currentUserId, isAdmin = fa
   if (!canView) return null;
 
   return (
-    <div className="mb-4">
+    <div className="mb-4 flex flex-col gap-3">
       <button
         type="button"
         onClick={() => setOpen(true)}
@@ -677,6 +688,8 @@ export function NextWeekPrayerPlanSection({ canView, currentUserId, isAdmin = fa
           Сбор нужд · очередь недели
         </span>
       </button>
+
+      {afterWeekQueueButton}
 
       {open && typeof document !== 'undefined'
         ? createPortal(

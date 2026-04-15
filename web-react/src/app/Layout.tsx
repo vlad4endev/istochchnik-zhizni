@@ -34,6 +34,7 @@ import { useProfileDraftStore } from '../features/profile/profileDraftStore';
 import { canAccessStudioRole } from '../features/auth/studioAccess';
 import { LAYOUT_MAIN_CHROME_EVENT } from './layoutChrome';
 import { AppAvatar } from '../components/AppAvatar';
+import { CoordinatorDashboardNoteFab } from '../features/dashboard/components/CoordinatorDashboardNoteFab';
 
 type NavItem = {
   to: string;
@@ -619,6 +620,8 @@ export function Layout() {
       >
         <Outlet />
       </main>
+
+      <CoordinatorDashboardNoteFab />
 
       {/* Телефон: нижняя навигация (иконка + подпись, как в нативных приложениях) */}
       <nav

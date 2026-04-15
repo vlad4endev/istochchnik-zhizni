@@ -402,3 +402,22 @@ export async function saveDashboardCoordinatorNote(input: {
   const { data } = await apiClient.post<unknown>('/api/calendar/dashboard-coordinator-notes', input);
   return normalizeDashboardCoordinatorResponse(data);
 }
+
+/** Текущие записи в БД (в т.ч. с истёкшим сроком) — только для координаторов/админа. */
+export async function fetchDashboardCoordinatorNotesForManage(): Promise<DashboardCoordinatorNotesResponse> {
+  const { data } = await apiClient.get<unknown>('/api/calendar/dashboard-coordinator-notes', {
+    params: { scope: 'manage' },
+  });
+  return normalizeDashboardCoordinatorResponse(data);
+}
+
+export async function deleteDashboardCoordinatorNote(
+  kind: DashboardCoordinatorNoteKind,
+  forDate?: string,
+): Promise<DashboardCoordinatorNotesResponse> {
+  const path = `/api/calendar/dashboard-coordinator-notes/${encodeURIComponent(kind)}`;
+  const { data } = await apiClient.delete<unknown>(path, {
+    params: forDate ? { for_date: forDate } : {},
+  });
+  return normalizeDashboardCoordinatorResponse(data);
+}

@@ -40,8 +40,14 @@ import {
 import { memberRosterName } from '../../../lib/memberRosterName';
 import type { Backslider, DayPrayerData, GlobalTheme, Member, Ministry } from '../../../types';
 import { fetchMe, patchProfile } from '../../profile/api';
+import { useCoordinatorNoteEditorRequestStore } from '../../dashboard/coordinatorNoteEditorRequestStore';
 import { NextWeekPrayerPlanSection, userCanViewNextWeekPrayerPlan } from '../components/NextWeekPrayerPlanSection';
-import { fetchDashboardCoordinatorNotes, formatCalendarDayKey, getCalendarDay } from '../api';
+import {
+  deleteDashboardCoordinatorNote,
+  fetchDashboardCoordinatorNotes,
+  formatCalendarDayKey,
+  getCalendarDay,
+} from '../api';
 import { loadErrorDescription } from '../prayerPageUtils';
 
 import 'react-day-picker/style.css';
@@ -449,6 +455,7 @@ function WeekStripPicker(props: {
 
 export function DailyPrayerPage() {
   const qc = useQueryClient();
+  const requestOpenCoordinatorNoteEditor = useCoordinatorNoteEditorRequestStore((s) => s.requestOpenEditor);
   const [selected, setSelected] = useState<Date>(() => new Date());
   const [calendarExpanded, setCalendarExpanded] = useState(false);
   const [calendarView, setCalendarView] = useState<'week' | 'month'>('week');
@@ -488,6 +495,69 @@ export function DailyPrayerPage() {
   const isToday = isSameDay(selected, today);
   const hasThemesOrMinistries =
     data != null && (data.global_themes.length > 0 || data.ministries.length > 0);
+
+  const urgentPrayerText = coordinatorNotesQ.data?.urgent_prayer?.text?.trim() ?? '';
+  const urgentPrayerBlock: ReactNode =
+    urgentPrayerText.length > 0 ? (
+      <section
+        aria-label="Срочная молитвенная нужда"
+        className="overflow-hidden rounded-2xl border-2 border-rose-300/90 bg-gradient-to-br from-rose-50 via-white to-amber-50/90 p-4 shadow-[0_10px_32px_rgba(190,24,93,0.14)]"
+      >
+        <div className="flex items-start gap-3">
+          <span
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-rose-500/15 text-rose-700"
+            aria-hidden
+          >
+            <LuFlame className="h-5 w-5" strokeWidth={2} />
+          </span>
+          <div className="min-w-0 flex-1">
+            <h2 className="text-[11px] font-extrabold uppercase tracking-[0.14em] text-rose-800">
+              Срочная молитвенная нужда
+            </h2>
+            <p className="mt-2 whitespace-pre-wrap text-[15px] font-semibold leading-relaxed text-stone-800">
+              {urgentPrayerText}
+            </p>
+          </div>
+        </div>
+      </section>
+    ) : null;
+
+  const canManageCoordinatorNotes = userCanViewNextWeekPrayerPlan(me);
+
+  async function onDeleteUrgentPrayer() {
+    if (!window.confirm('Удалить срочную молитвенную нужду?')) return;
+    try {
+      await deleteDashboardCoordinatorNote('urgent_prayer', dateKey);
+      void qc.invalidateQueries({ queryKey: ['calendar', 'dashboard-coordinator-notes'] });
+    } catch {
+      /* ignore */
+    }
+  }
+
+  const urgentPrayerStack: ReactNode =
+    urgentPrayerBlock == null ? null : (
+      <div className="flex flex-col gap-2">
+        {canManageCoordinatorNotes ? (
+          <div className="flex flex-wrap justify-end gap-2">
+            <button
+              type="button"
+              className="tap-highlight-transparent inline-flex min-h-[36px] items-center justify-center rounded-xl border border-rose-300/80 bg-white/90 px-3 text-xs font-extrabold text-rose-950 hover:bg-rose-50"
+              onClick={() => requestOpenCoordinatorNoteEditor('urgent_prayer')}
+            >
+              Изменить
+            </button>
+            <button
+              type="button"
+              className="tap-highlight-transparent inline-flex min-h-[36px] items-center justify-center rounded-xl border border-red-200 bg-red-50/90 px-3 text-xs font-extrabold text-red-800 hover:bg-red-100"
+              onClick={() => void onDeleteUrgentPrayer()}
+            >
+              Удалить
+            </button>
+          </div>
+        ) : null}
+        {urgentPrayerBlock}
+      </div>
+    );
 
   return (
     <div className="prayer-page-bg min-h-full pb-6 shell:pb-8">
@@ -615,35 +685,15 @@ export function DailyPrayerPage() {
       </div>
 
       <div className="px-4 pt-4 shell:px-6">
-        {coordinatorNotesQ.data?.urgent_prayer ? (
-          <section
-            aria-label="Срочная молитвенная нужда"
-            className="mb-4 overflow-hidden rounded-2xl border-2 border-rose-300/90 bg-gradient-to-br from-rose-50 via-white to-amber-50/90 p-4 shadow-[0_10px_32px_rgba(190,24,93,0.14)]"
-          >
-            <div className="flex items-start gap-3">
-              <span
-                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-rose-500/15 text-rose-700"
-                aria-hidden
-              >
-                <LuFlame className="h-5 w-5" strokeWidth={2} />
-              </span>
-              <div className="min-w-0 flex-1">
-                <h2 className="text-[11px] font-extrabold uppercase tracking-[0.14em] text-rose-800">
-                  Срочная молитвенная нужда
-                </h2>
-                <p className="mt-2 whitespace-pre-wrap text-[15px] font-semibold leading-relaxed text-stone-800">
-                  {coordinatorNotesQ.data.urgent_prayer.text}
-                </p>
-              </div>
-            </div>
-          </section>
-        ) : null}
         {userCanViewNextWeekPrayerPlan(me) ? (
           <NextWeekPrayerPlanSection
             canView
             currentUserId={me?.id ?? null}
             isAdmin={me?.app_role?.trim().toLowerCase() === 'admin'}
+            afterWeekQueueButton={urgentPrayerStack}
           />
+        ) : urgentPrayerStack ? (
+          <div className="mb-4">{urgentPrayerStack}</div>
         ) : null}
         {isPending ? (
           <CalendarPrayerSkeleton />

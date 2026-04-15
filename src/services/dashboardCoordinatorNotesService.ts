@@ -76,6 +76,40 @@ export async function getCoordinatorNotesVisibleOnDate(viewDateYmd: string): Pro
   return { urgent_prayer, announcement };
 }
 
+/** Все непустые записи (без фильтра по дате) — для редактирования координатором. */
+export async function getCoordinatorNotesManageSnapshot(): Promise<{
+  urgent_prayer: CoordinatorNotePublic | null;
+  announcement: CoordinatorNotePublic | null;
+}> {
+  const result = await query(
+    `SELECT kind, body, start_date, end_date
+     FROM dashboard_coordinator_notes
+     WHERE length(trim(body)) > 0`
+  );
+
+  let urgent_prayer: CoordinatorNotePublic | null = null;
+  let announcement: CoordinatorNotePublic | null = null;
+  for (const row of result.rows as Array<{
+    kind: string;
+    body: string;
+    start_date: string;
+    end_date: string;
+  }>) {
+    const item: CoordinatorNotePublic = {
+      text: String(row.body ?? '').trim(),
+      start_date: String(row.start_date),
+      end_date: String(row.end_date),
+    };
+    if (row.kind === 'urgent_prayer') urgent_prayer = item;
+    if (row.kind === 'announcement') announcement = item;
+  }
+  return { urgent_prayer, announcement };
+}
+
+export async function deleteCoordinatorNote(kind: NoteKind): Promise<void> {
+  await query(`DELETE FROM dashboard_coordinator_notes WHERE kind = $1`, [kind]);
+}
+
 export async function upsertCoordinatorNote(
   memberId: number,
   kind: NoteKind,

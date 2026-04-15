@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import {
+  deleteDashboardCoordinatorNote,
   getDashboardCoordinatorNotes,
   postDashboardCoordinatorNote,
 } from '../controllers/dashboardCoordinatorNotesController';
@@ -49,6 +50,11 @@ const router = Router();
 
 router.get('/dashboard-coordinator-notes', requireAuthSession, getDashboardCoordinatorNotes);
 router.post('/dashboard-coordinator-notes', requireAuthSession, postDashboardCoordinatorNote);
+router.delete(
+  '/dashboard-coordinator-notes/:kind',
+  requireAuthSession,
+  deleteDashboardCoordinatorNote,
+);
 
 router.get('/next-week/members', getNextWeekMembers);
 router.post('/prayer-need/improve-text', postPrayerNeedImproveText);

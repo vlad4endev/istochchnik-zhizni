@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from 'react-router-dom';
 import { format, parse } from 'date-fns';
 import { ru } from 'date-fns/locale';
@@ -17,6 +17,7 @@ import {
 import { fetchBroadcastEmbed } from '../../../api/broadcast';
 import { fetchPodcastFeed, type PodcastEpisode } from '../../../api/resources';
 import {
+  deleteDashboardCoordinatorNote,
   fetchDashboardCoordinatorNotes,
   getCycleCollectionClaims,
   getWeekBirthdays,
@@ -40,7 +41,7 @@ import {
 } from '../../broadcast/liveAccess';
 import { useAuthStore } from '../../auth/authStore';
 import { useProfileDraftStore } from '../../profile/profileDraftStore';
-import { CoordinatorDashboardNoteFab } from '../components/CoordinatorDashboardNoteFab';
+import { useCoordinatorNoteEditorRequestStore } from '../coordinatorNoteEditorRequestStore';
 import { LimitedRegistrationDashboard } from '../components/LimitedRegistrationDashboard';
 
 type DashboardEvent = {
@@ -173,6 +174,8 @@ function memberFirstLastLine(m: Member): string {
 }
 
 function DashboardMain() {
+  const qc = useQueryClient();
+  const requestOpenCoordinatorNoteEditor = useCoordinatorNoteEditorRequestStore((s) => s.requestOpenEditor);
   const [now, setNow] = useState(() => new Date());
   const navigate = useNavigate();
   const role = useAuthStore((s) => s.role);
@@ -367,6 +370,18 @@ function DashboardMain() {
   }, [unfilledWeekRowsAdmin, collectionClaimsQ.data?.members, me?.id]);
 
   const isCollectionCoordinator = Boolean(me?.is_collection_coordinator);
+  const canManageCoordinatorNotes = isAdmin || isCollectionCoordinator;
+
+  async function onDeleteAnnouncement() {
+    if (!window.confirm('Удалить объявление?')) return;
+    try {
+      await deleteDashboardCoordinatorNote('announcement', todayDateKey);
+      void qc.invalidateQueries({ queryKey: ['calendar', 'dashboard-coordinator-notes'] });
+    } catch {
+      /* toast optional */
+    }
+  }
+
   const showPrayerPlanOnDashboard =
     userCanViewNextWeekPrayerPlan(meQ.data) &&
     (isAdmin || (isCollectionCoordinator && coordinatorUnfilledRows.length > 0));
@@ -450,64 +465,85 @@ function DashboardMain() {
             </section>
           ) : null}
 
-          <button
-            type="button"
-            onClick={() =>
-              navigate(
-                publicProfileSlug
-                  ? `/profile/${encodeURIComponent(publicProfileSlug)}`
-                  : '/profile',
-              )
-            }
-            className="tap-highlight-transparent touch-manipulation relative overflow-hidden rounded-3xl border border-stone-200/70 bg-white/90 p-4 text-left shadow-[var(--shadow-card)] transition hover:-translate-y-0.5 hover:shadow-[var(--shadow)] sm:min-h-[132px] sm:p-4 xl:col-span-4"
-          >
-            <div className="pointer-events-none absolute right-0 top-0 h-20 w-20 rounded-full bg-primary/[0.06] blur-2xl" />
-            <div className="relative flex items-start justify-between gap-2">
-              <p className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-stone-500">Мой профиль</p>
-              {hasProfilePostDraft ? (
-                <span
-                  className="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wide text-amber-900"
-                  title="Есть черновик поста на странице"
-                >
-                  Черновик
-                </span>
-              ) : null}
-            </div>
-            <div className="relative mt-3 flex items-start gap-3">
-              <div className="h-14 w-14 shrink-0 overflow-hidden rounded-2xl bg-stone-100 ring-1 ring-stone-200/70">
-                {avatarUrl ? (
-                  <img src={avatarUrl} alt="" className="h-full w-full object-cover" />
-                ) : (
-                  <div className="grid h-full w-full place-items-center text-stone-500">
-                    <LuUser className="h-6 w-6" strokeWidth={2} aria-hidden />
-                  </div>
-                )}
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-base font-extrabold leading-tight text-stone-900">{profileDisplayTitle}</p>
-                {profileHandleLine ? (
-                  <p className="mt-0.5 truncate text-xs font-semibold text-stone-500">{profileHandleLine}</p>
+          <div className="flex flex-col gap-3 xl:col-span-4">
+            <button
+              type="button"
+              onClick={() =>
+                navigate(
+                  publicProfileSlug
+                    ? `/profile/${encodeURIComponent(publicProfileSlug)}`
+                    : '/profile',
+                )
+              }
+              className="tap-highlight-transparent touch-manipulation relative w-full overflow-hidden rounded-3xl border border-stone-200/70 bg-white/90 p-4 text-left shadow-[var(--shadow-card)] transition hover:-translate-y-0.5 hover:shadow-[var(--shadow)] sm:min-h-[132px] sm:p-4"
+            >
+              <div className="pointer-events-none absolute right-0 top-0 h-20 w-20 rounded-full bg-primary/[0.06] blur-2xl" />
+              <div className="relative flex items-start justify-between gap-2">
+                <p className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-stone-500">Мой профиль</p>
+                {hasProfilePostDraft ? (
+                  <span
+                    className="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wide text-amber-900"
+                    title="Есть черновик поста на странице"
+                  >
+                    Черновик
+                  </span>
                 ) : null}
-                <div className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-stone-100/90 px-2.5 py-1 text-xs font-bold text-stone-700">
-                  <span className="tabular-nums text-stone-900">{publicationsCount}</span>
-                  <span>публикаций</span>
+              </div>
+              <div className="relative mt-3 flex items-start gap-3">
+                <div className="h-14 w-14 shrink-0 overflow-hidden rounded-2xl bg-stone-100 ring-1 ring-stone-200/70">
+                  {avatarUrl ? (
+                    <img src={avatarUrl} alt="" className="h-full w-full object-cover" />
+                  ) : (
+                    <div className="grid h-full w-full place-items-center text-stone-500">
+                      <LuUser className="h-6 w-6" strokeWidth={2} aria-hidden />
+                    </div>
+                  )}
                 </div>
-                <p className="mt-2 line-clamp-2 text-sm font-medium leading-snug text-stone-600">
-                  {bioText || 'Откройте страницу, чтобы заполнить описание.'}
-                </p>
-                {dashboardNotesQ.data?.announcement ? (
-                  <div className="mt-3 rounded-2xl border border-amber-200/90 bg-gradient-to-br from-amber-50/95 to-orange-50/80 px-3 py-2.5 shadow-sm">
-                    <p className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-amber-900/90">
-                      Объявление
-                    </p>
-                    <p className="mt-1 whitespace-pre-wrap text-sm font-semibold leading-snug text-stone-900">
-                      {dashboardNotesQ.data.announcement.text}
-                    </p>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-base font-extrabold leading-tight text-stone-900">{profileDisplayTitle}</p>
+                  {profileHandleLine ? (
+                    <p className="mt-0.5 truncate text-xs font-semibold text-stone-500">{profileHandleLine}</p>
+                  ) : null}
+                  <div className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-stone-100/90 px-2.5 py-1 text-xs font-bold text-stone-700">
+                    <span className="tabular-nums text-stone-900">{publicationsCount}</span>
+                    <span>публикаций</span>
+                  </div>
+                  <p className="mt-2 line-clamp-2 text-sm font-medium leading-snug text-stone-600">
+                    {bioText || 'Откройте страницу, чтобы заполнить описание.'}
+                  </p>
+                </div>
+              </div>
+            </button>
+            {dashboardNotesQ.data?.announcement ? (
+              <section
+                aria-label="Объявление"
+                className="overflow-hidden rounded-3xl border border-amber-200/90 bg-gradient-to-br from-amber-50/95 to-orange-50/80 p-4 shadow-[var(--shadow-card)]"
+              >
+                {canManageCoordinatorNotes ? (
+                  <div className="mb-3 flex flex-wrap justify-end gap-2">
+                    <button
+                      type="button"
+                      className="tap-highlight-transparent inline-flex min-h-[36px] items-center justify-center rounded-xl border border-amber-300/80 bg-white/90 px-3 text-xs font-extrabold text-amber-950 hover:bg-amber-50"
+                      onClick={() => requestOpenCoordinatorNoteEditor('announcement')}
+                    >
+                      Изменить
+                    </button>
+                    <button
+                      type="button"
+                      className="tap-highlight-transparent inline-flex min-h-[36px] items-center justify-center rounded-xl border border-red-200 bg-red-50/90 px-3 text-xs font-extrabold text-red-800 hover:bg-red-100"
+                      onClick={() => void onDeleteAnnouncement()}
+                    >
+                      Удалить
+                    </button>
                   </div>
                 ) : null}
-              </div>
-            </div>
-          </button>
+                <p className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-amber-900/90">Объявление</p>
+                <p className="mt-2 whitespace-pre-wrap text-sm font-semibold leading-snug text-stone-900">
+                  {dashboardNotesQ.data.announcement.text}
+                </p>
+              </section>
+            ) : null}
+          </div>
 
           {showPrayerPlanOnDashboard ? (
             <section className="rounded-3xl border border-primary/20 bg-gradient-to-br from-primary/[0.06] to-[var(--surface-elevated)] p-4 shadow-[var(--shadow-card)] sm:col-span-2 xl:col-span-12">
@@ -726,8 +762,6 @@ function DashboardMain() {
           </div>
         </div>
       ) : null}
-
-      <CoordinatorDashboardNoteFab />
     </div>
   );
 }

@@ -1,6 +1,8 @@
 import { Request, Response } from 'express';
 
 import {
+  deleteCoordinatorNote,
+  getCoordinatorNotesManageSnapshot,
   getCoordinatorNotesVisibleOnDate,
   memberIsAdminOrCollectionCoordinator,
   upsertCoordinatorNote,
@@ -30,12 +32,62 @@ export async function getDashboardCoordinatorNotes(req: Request, res: Response):
       return;
     }
 
+    const scope = typeof req.query.scope === 'string' ? req.query.scope.trim() : '';
+    if (scope === 'manage') {
+      const ok = await memberIsAdminOrCollectionCoordinator(authReq.authUserId);
+      if (!ok) {
+        res.status(403).json({ error: 'Доступно администратору и координаторам сбора нужд.' });
+        return;
+      }
+      const data = await getCoordinatorNotesManageSnapshot();
+      res.json(data);
+      return;
+    }
+
     const raw = req.query.for_date ?? req.query.date;
     const forDate = isValidYmd(raw) ? raw : new Date().toISOString().slice(0, 10);
     const data = await getCoordinatorNotesVisibleOnDate(forDate);
     res.json(data);
   } catch (err) {
     console.error('[dashboardCoordinatorNotes] get', err);
+    res.status(500).json({ error: 'Database error' });
+  }
+}
+
+function noteKindFromParam(param: string | undefined): NoteKind | null {
+  if (param === 'urgent_prayer' || param === 'announcement') return param;
+  return null;
+}
+
+export async function deleteDashboardCoordinatorNote(req: Request, res: Response): Promise<void> {
+  try {
+    const authReq = req as AuthReq;
+    const memberId = authReq.authUserId;
+    if (!memberId) {
+      res.status(401).json({ error: 'Authentication required' });
+      return;
+    }
+
+    const ok = await memberIsAdminOrCollectionCoordinator(memberId);
+    if (!ok) {
+      res.status(403).json({ error: 'Доступно администратору и координаторам сбора нужд.' });
+      return;
+    }
+
+    const kind = noteKindFromParam(req.params.kind);
+    if (!kind) {
+      res.status(400).json({ error: 'Invalid kind' });
+      return;
+    }
+
+    await deleteCoordinatorNote(kind);
+
+    const raw = req.query.for_date ?? req.query.date;
+    const forDate = isValidYmd(raw) ? raw : new Date().toISOString().slice(0, 10);
+    const data = await getCoordinatorNotesVisibleOnDate(forDate);
+    res.json(data);
+  } catch (err) {
+    console.error('[dashboardCoordinatorNotes] delete', err);
     res.status(500).json({ error: 'Database error' });
   }
 }
