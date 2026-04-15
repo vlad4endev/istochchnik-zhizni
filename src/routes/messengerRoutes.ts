@@ -1,6 +1,7 @@
 import { Router, type Request, type Response } from 'express';
 import fs from 'node:fs/promises';
 import { constants as fsConstants } from 'node:fs';
+import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { resolveMessengerConversationDeepLink } from '../config/messengerPublic';
 import { requireAuthSession } from '../middleware/authSession';
@@ -11,6 +12,12 @@ import * as svc from '../services/messengerService';
 import { sendToRoomAll, sendToRoom, sendToMember, ensureMemberInRoom } from '../realtime/wsHub';
 import { sendPushNotification } from '../services/pushService';
 import { getUploadsRoot } from '../config/uploadsRoot';
+import {
+  buildMessengerObjectPath,
+  isSupabaseStorageConfigured,
+  messengerBucket,
+  uploadLocalFileToPublicBucket,
+} from '../lib/supabaseStorage';
 
 type AuthReq = Request & { authUserId?: number };
 
@@ -44,7 +51,11 @@ router.get('/uploads/health', async (_req: Request, res: Response) => {
       res.status(503).json({ ok: false, storage: 'unavailable', reason: 'uploads_path_not_directory' });
       return;
     }
-    res.json({ ok: true, storage: 'healthy' });
+    if (isSupabaseStorageConfigured()) {
+      res.json({ ok: true, storage: 'supabase', bucket: messengerBucket(), temp_uploads: 'local_writable' });
+      return;
+    }
+    res.json({ ok: true, storage: 'local' });
   } catch (e) {
     console.error('[messenger] uploads health check failed:', e);
     res.status(503).json({ ok: false, storage: 'unavailable', reason: 'uploads_not_writable' });
@@ -80,8 +91,38 @@ router.post('/upload', upload.single('file'), async (req: Request, res: Response
     res.status(400).json({ error: 'File is required' });
     return;
   }
+  const memberId = (req as AuthReq).authUserId!;
+  let url: string;
+
+  if (isSupabaseStorageConfigured()) {
+    const bucket = messengerBucket();
+    const objectPath = buildMessengerObjectPath(memberId, file.originalname || path.basename(file.path));
+    const localPath = file.path;
+    try {
+      const { publicUrl } = await uploadLocalFileToPublicBucket({
+        bucket,
+        objectPath,
+        localPath,
+        contentType: file.mimetype || undefined,
+      });
+      url = publicUrl;
+    } catch (e) {
+      console.error('[messenger] Supabase upload failed:', e);
+      res.status(500).json({ error: 'Storage upload failed' });
+      return;
+    } finally {
+      try {
+        await fs.unlink(localPath);
+      } catch {
+        /* ignore */
+      }
+    }
+  } else {
+    url = `/uploads/${file.filename}`;
+  }
+
   res.json({
-    url: `/uploads/${file.filename}`,
+    url,
     name: file.originalname,
     originalName: file.originalname,
     mimeType: file.mimetype || '',
