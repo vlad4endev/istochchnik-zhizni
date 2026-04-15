@@ -27,6 +27,7 @@ import {
   type BirthdayWeekItem,
   type ChurchEventItem,
 } from '../../calendar/api';
+import { NextWeekPrayerPlanSection, userCanViewNextWeekPrayerPlan } from '../../calendar/components/NextWeekPrayerPlanSection';
 import { fetchMe } from '../../profile/api';
 import { fetchProfileByUsername } from '../../profile/publicProfileApi';
 import { resolvePublicUrl } from '../../../lib/resolvePublicUrl';
@@ -443,6 +444,15 @@ function DashboardMain() {
                   </span>
                 ))}
               </div>
+            </section>
+          ) : null}
+
+          {userCanViewNextWeekPrayerPlan(meQ.data) ? (
+            <section className="rounded-3xl border border-primary/20 bg-gradient-to-br from-primary/[0.06] to-[var(--surface-elevated)] p-4 shadow-[var(--shadow-card)] sm:col-span-2 xl:col-span-12">
+              <p className="text-[11px] font-extrabold uppercase tracking-[0.14em] text-primary/90">
+                Координаторам сбора
+              </p>
+              <NextWeekPrayerPlanSection canView currentUserId={me?.id ?? null} isAdmin={isAdmin} />
             </section>
           ) : null}
 

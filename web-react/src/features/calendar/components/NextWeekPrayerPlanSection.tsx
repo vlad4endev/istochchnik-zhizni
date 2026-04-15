@@ -10,6 +10,9 @@ import {
   LuLoader,
   LuSearch,
   LuX,
+  LuCircleAlert,
+  LuCircleCheck,
+  LuPencilLine,
 } from 'react-icons/lu';
 
 import { memberRosterName } from '../../../lib/memberRosterName';
@@ -20,6 +23,7 @@ import {
   getCycleCollectionClaims,
   getWeekPlanMembers,
   patchCycleCollectionClaim,
+  patchMemberCyclePrayer,
   type WeekPlanKind,
 } from '../api';
 import { CoordinatorPreviousNeedsPanel } from './CoordinatorPreviousNeedsPanel';
@@ -56,6 +60,8 @@ function NextWeekMembersPanel(props: {
   onToggle: (memberId: number, claim: boolean) => void;
   mutPending: boolean;
   onPrayerSaved: () => void;
+  /** Админ: панель «предыдущие нужды» у всех строк; удобнее массовая работа. */
+  isAdmin?: boolean;
 }) {
   const sectionId = useId();
   const {
@@ -72,11 +78,29 @@ function NextWeekMembersPanel(props: {
     onToggle,
     mutPending,
     onPrayerSaved,
+    isAdmin = false,
   } = props;
 
   const claimByMemberId = useClaimByMemberId(claimsSnapshot);
   const [filterMode, setFilterMode] = useState<'all' | 'mine' | 'free' | 'busy'>('all');
+  const [needFilter, setNeedFilter] = useState<'all' | 'empty' | 'filled'>('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [expandedDate, setExpandedDate] = useState<string | null>(null);
+  const [prayerDraft, setPrayerDraft] = useState('');
+
+  const savePrayerMut = useMutation({
+    mutationFn: async (input: { memberId: number; date: string; text: string }) => {
+      await patchMemberCyclePrayer(input.memberId, input.date, input.text);
+    },
+    onSuccess: () => {
+      onPrayerSaved();
+      setExpandedDate(null);
+    },
+  });
+
+  function needText(m: NextWeekMemberDay['member']): string {
+    return (m?.prayer_request ?? '').trim();
+  }
 
   if (isPending || claimsPending) {
     return (
@@ -113,6 +137,9 @@ function NextWeekMembersPanel(props: {
     return <p className="text-center text-[13px] text-stone-500">Нет данных.</p>;
   }
 
+  const filledNeedCount = days.filter((r) => r.member && needText(r.member).length > 0).length;
+  const emptyNeedCount = days.filter((r) => r.member && needText(r.member).length === 0).length;
+
   const normalizedSearch = searchQuery.trim().toLowerCase();
   const listRows = days.filter((row) => {
     const m = row.member;
@@ -120,6 +147,13 @@ function NextWeekMembersPanel(props: {
       ? `${memberRosterName(m)} ${m.name} ${m.first_name ?? ''} ${m.last_name ?? ''}`.toLowerCase()
       : '';
     if (normalizedSearch && !searchBlob.includes(normalizedSearch)) return false;
+
+    if (needFilter === 'empty') {
+      if (!m || needText(m).length > 0) return false;
+    }
+    if (needFilter === 'filled') {
+      if (!m || needText(m).length === 0) return false;
+    }
 
     if (claimsError) return filterMode === 'all';
     const mid = row.member?.id;
@@ -172,27 +206,72 @@ function NextWeekMembersPanel(props: {
               />
             </label>
 
-            <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 [-webkit-overflow-scrolling:touch]">
-              {([
-                ['all', `Все ${days.length}`],
-                ['mine', `Мои ${myClaimsCount}`],
-                ['free', `Своб. ${freeCount}`],
-                ['busy', `Занят. ${busyCount}`],
-              ] as const).map(([mode, label]) => (
-                <button
-                  key={mode}
-                  type="button"
-                  onClick={() => setFilterMode(mode)}
-                  className={[
-                    'shrink-0 rounded-full border px-2.5 py-1 text-[11px] font-bold tracking-wide transition',
-                    filterMode === mode
-                      ? 'border-primary/60 bg-primary/10 text-primary'
-                      : 'border-stone-200 bg-white text-stone-600 hover:text-stone-900',
-                  ].join(' ')}
-                >
-                  {label}
-                </button>
-              ))}
+            <p className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border border-stone-200/90 bg-white px-2.5 py-2 text-[11px] leading-snug text-stone-700">
+              <span className="font-extrabold text-stone-900">Нужды недели:</span>
+              <span className="inline-flex items-center gap-0.5 font-bold text-emerald-800">
+                <LuCircleCheck className="h-3.5 w-3.5 shrink-0" strokeWidth={2.2} aria-hidden />
+                заполнено {filledNeedCount}
+              </span>
+              <span className="text-stone-300">·</span>
+              <span className="inline-flex items-center gap-0.5 font-bold text-amber-900">
+                <LuCircleAlert className="h-3.5 w-3.5 shrink-0" strokeWidth={2.2} aria-hidden />
+                пусто {emptyNeedCount}
+              </span>
+            </p>
+
+            <div>
+              <p className="mb-1 text-[10px] font-extrabold uppercase tracking-wide text-stone-400">Нужда</p>
+              <div className="flex flex-wrap gap-1.5">
+                {(
+                  [
+                    ['all', `Весь список (${days.length})`],
+                    ['empty', `Без нужды (${emptyNeedCount})`],
+                    ['filled', `С нуждой (${filledNeedCount})`],
+                  ] as const
+                ).map(([mode, label]) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    onClick={() => setNeedFilter(mode)}
+                    className={[
+                      'rounded-full border px-2.5 py-1 text-[11px] font-bold tracking-wide transition',
+                      needFilter === mode
+                        ? 'border-amber-500/50 bg-amber-50 text-amber-950'
+                        : 'border-stone-200 bg-white text-stone-600 hover:text-stone-900',
+                    ].join(' ')}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <p className="mb-1 text-[10px] font-extrabold uppercase tracking-wide text-stone-400">
+                Ответственный (куратор)
+              </p>
+              <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 [-webkit-overflow-scrolling:touch]">
+                {([
+                  ['all', `Все ${days.length}`],
+                  ['mine', `Мои ${myClaimsCount}`],
+                  ['free', `Своб. ${freeCount}`],
+                  ['busy', `Занят. ${busyCount}`],
+                ] as const).map(([mode, label]) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    onClick={() => setFilterMode(mode)}
+                    className={[
+                      'shrink-0 rounded-full border px-2.5 py-1 text-[11px] font-bold tracking-wide transition',
+                      filterMode === mode
+                        ? 'border-primary/60 bg-primary/10 text-primary'
+                        : 'border-stone-200 bg-white text-stone-600 hover:text-stone-900',
+                    ].join(' ')}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
 
@@ -224,92 +303,179 @@ function NextWeekMembersPanel(props: {
                         last_name: claimRow.claimed_by.last_name,
                       })
                   : null;
+                const hasNeed = Boolean(mem && needText(mem).length > 0);
+                const showPrevPanel = (mine || isAdmin) && mid != null && mem && !claimsError;
 
                 return (
                   <li
                     key={`claim-${row.date}`}
                     className="group flex flex-col transition-colors hover:bg-stone-50/70"
                   >
-                    <div className="flex flex-col gap-1.5 px-3 py-2 sm:flex-row sm:items-center sm:justify-between sm:gap-2 sm:py-2.5">
-                    <div className="flex min-w-0 flex-1 flex-col gap-0.5 sm:flex-row sm:items-center sm:gap-2">
-                      <span className="w-[4.5rem] shrink-0 text-[11px] font-semibold tabular-nums text-stone-500">
-                        {label}
-                      </span>
-                      <span className="min-w-0 text-[14px] font-bold leading-tight tracking-tight text-stone-900">
-                        {name ?? '—'}
-                      </span>
-                    </div>
-                    {mid != null && claimRow && !claimsError ? (
-                      <div className="flex flex-wrap items-center justify-end gap-2 sm:shrink-0">
-                        {/* Статус */}
-                        {claimRow.claimed_by ? (
-                          <span
-                            className={[
-                              'inline-flex max-w-[7rem] truncate rounded-full px-2 py-0.5 text-[10px] font-bold',
-                              mine
-                                ? 'bg-primary/10 text-primary'
-                                : 'bg-amber-500/12 text-amber-950',
-                            ].join(' ')}
-                          >
-                            {claimedByLabel}
+                    <div className="flex flex-col gap-2 px-3 py-2.5 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
+                      <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="w-[4.5rem] shrink-0 text-[11px] font-semibold tabular-nums text-stone-500">
+                            {label}
                           </span>
-                        ) : (
-                          <span className="inline-flex items-center rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-bold text-emerald-900">
-                            Своб.
+                          <span className="min-w-0 text-[14px] font-bold leading-tight tracking-tight text-stone-900">
+                            {name ?? '—'}
                           </span>
-                        )}
+                          {mem && mid != null ? (
+                            <span
+                              className={[
+                                'inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wide',
+                                hasNeed ? 'bg-emerald-500/15 text-emerald-900' : 'bg-amber-500/15 text-amber-950',
+                              ].join(' ')}
+                            >
+                              {hasNeed ? (
+                                <>
+                                  <LuCircleCheck className="h-3 w-3" strokeWidth={2.5} aria-hidden />
+                                  Нужда
+                                </>
+                              ) : (
+                                <>
+                                  <LuCircleAlert className="h-3 w-3" strokeWidth={2.5} aria-hidden />
+                                  Пусто
+                                </>
+                              )}
+                            </span>
+                          ) : null}
+                        </div>
+                        {mem && mid != null && hasNeed ? (
+                          <p className="line-clamp-2 text-[12px] leading-snug text-stone-600 sm:max-w-xl">
+                            {needText(mem)}
+                          </p>
+                        ) : null}
+                      </div>
 
-                        {/* Современный выбор: toggle-кнопка */}
-                        <button
-                          type="button"
-                          disabled={disabled}
-                          aria-pressed={mine}
-                          aria-label={
-                            mine
-                              ? 'Снять отметку сбора нужд'
-                              : claimRow.claimed_by
-                                ? 'Недоступно: уже занято'
-                                : 'Взять сбор нужд на себя'
-                          }
-                          onClick={() => {
-                            if (disabled) return;
-                            onToggle(mid, !mine);
-                          }}
-                          className={[
-                            'relative inline-flex h-9 w-[60px] items-center rounded-full border transition',
-                            'focus:outline-none focus:ring-2 focus:ring-primary/25 focus:ring-offset-1 focus:ring-offset-[var(--surface)]',
-                            disabled
-                              ? 'cursor-not-allowed border-stone-200 bg-stone-100 opacity-60'
-                              : mine
-                                ? 'border-primary/40 bg-primary/10 hover:bg-primary/15'
-                                : 'border-stone-200 bg-white hover:border-stone-300 hover:bg-stone-50',
-                          ].join(' ')}
-                          title={
-                            disabled
-                              ? claimRow.claimed_by && !mine
-                                ? 'Уже занято другим ответственным'
-                                : 'Недоступно'
-                              : mine
-                                ? 'Снять отметку'
-                                : 'Взять на себя'
-                          }
-                        >
-                          <span
-                            className={[
-                              'absolute left-0.5 flex h-7 w-7 items-center justify-center rounded-full shadow-sm transition-transform',
-                              mine
-                                ? 'translate-x-[26px] bg-primary text-white'
-                                : 'translate-x-0 bg-stone-200 text-stone-600',
-                            ].join(' ')}
+                      <div className="flex flex-wrap items-center justify-end gap-2 sm:max-w-[200px] sm:flex-col sm:items-end">
+                        {mid != null && claimRow && !claimsError ? (
+                          <>
+                            {claimRow.claimed_by ? (
+                              <span
+                                className={[
+                                  'inline-flex max-w-[10rem] truncate rounded-full px-2 py-0.5 text-[10px] font-bold',
+                                  mine ? 'bg-primary/10 text-primary' : 'bg-amber-500/12 text-amber-950',
+                                ].join(' ')}
+                                title={claimedByLabel ?? ''}
+                              >
+                                Куратор: {claimedByLabel}
+                              </span>
+                            ) : (
+                              <span className="inline-flex rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-bold text-emerald-900">
+                                Куратор не назначен
+                              </span>
+                            )}
+                            <button
+                              type="button"
+                              disabled={disabled}
+                              aria-pressed={mine}
+                              aria-label={
+                                mine
+                                  ? 'Снять отметку сбора нужд'
+                                  : claimRow.claimed_by
+                                    ? 'Недоступно: уже занято'
+                                    : 'Взять сбор нужд на себя'
+                              }
+                              onClick={() => {
+                                if (disabled) return;
+                                onToggle(mid, !mine);
+                              }}
+                              className={[
+                                'relative inline-flex h-9 w-[60px] items-center rounded-full border transition',
+                                'focus:outline-none focus:ring-2 focus:ring-primary/25 focus:ring-offset-1 focus:ring-offset-[var(--surface)]',
+                                disabled
+                                  ? 'cursor-not-allowed border-stone-200 bg-stone-100 opacity-60'
+                                  : mine
+                                    ? 'border-primary/40 bg-primary/10 hover:bg-primary/15'
+                                    : 'border-stone-200 bg-white hover:border-stone-300 hover:bg-stone-50',
+                              ].join(' ')}
+                              title={
+                                disabled
+                                  ? claimRow.claimed_by && !mine
+                                    ? 'Уже занято другим'
+                                    : 'Недоступно'
+                                  : mine
+                                    ? 'Снять отметку'
+                                    : 'Взять на себя'
+                              }
+                            >
+                              <span
+                                className={[
+                                  'absolute left-0.5 flex h-7 w-7 items-center justify-center rounded-full shadow-sm transition-transform',
+                                  mine
+                                    ? 'translate-x-[26px] bg-primary text-white'
+                                    : 'translate-x-0 bg-stone-200 text-stone-600',
+                                ].join(' ')}
+                              >
+                                <LuCheck className={mine ? 'h-4 w-4' : 'h-4 w-4 opacity-0'} aria-hidden />
+                              </span>
+                              <span className="sr-only">{mine ? 'Выбрано' : 'Не выбрано'}</span>
+                            </button>
+                          </>
+                        ) : claimsError && mid != null ? (
+                          <span className="text-[10px] font-medium text-amber-800">Отметки кураторов недоступны</span>
+                        ) : null}
+                      </div>
+                    </div>
+
+                    {mem && mid != null ? (
+                      <div className="border-t border-stone-100 bg-white/70 px-3 py-2">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <span className="text-[11px] font-bold text-stone-600">Молитвенная нужда на этот день</span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (expandedDate === row.date) {
+                                setExpandedDate(null);
+                              } else {
+                                setExpandedDate(row.date);
+                                setPrayerDraft(mem.prayer_request ?? '');
+                              }
+                            }}
+                            className="inline-flex items-center gap-1 rounded-lg border border-stone-200 bg-white px-2.5 py-1 text-[11px] font-bold text-primary hover:bg-stone-50"
                           >
-                            <LuCheck className={mine ? 'h-4 w-4' : 'h-4 w-4 opacity-0'} aria-hidden />
-                          </span>
-                          <span className="sr-only">{mine ? 'Выбрано' : 'Не выбрано'}</span>
-                        </button>
+                            <LuPencilLine className="h-3.5 w-3.5" aria-hidden />
+                            {expandedDate === row.date ? 'Свернуть' : hasNeed ? 'Изменить' : 'Заполнить'}
+                          </button>
+                        </div>
+                        {expandedDate === row.date ? (
+                          <div className="mt-2 space-y-2">
+                            <textarea
+                              value={prayerDraft}
+                              onChange={(e) => setPrayerDraft(e.target.value)}
+                              rows={4}
+                              maxLength={8000}
+                              placeholder="О чём просим молиться в этот день цикла…"
+                              className="w-full rounded-lg border border-stone-200 bg-white px-2.5 py-2 text-[13px] text-stone-800 outline-none ring-primary/15 focus:border-primary focus:ring-1"
+                            />
+                            <div className="flex flex-wrap items-center gap-2">
+                              <button
+                                type="button"
+                                disabled={savePrayerMut.isPending}
+                                onClick={() =>
+                                  void savePrayerMut.mutateAsync({
+                                    memberId: mid,
+                                    date: row.date,
+                                    text: prayerDraft,
+                                  })
+                                }
+                                className="min-h-[40px] rounded-lg bg-primary px-4 text-[13px] font-bold text-white shadow-sm hover:bg-primary/90 disabled:opacity-50"
+                              >
+                                {savePrayerMut.isPending ? 'Сохранение…' : 'Сохранить нужду'}
+                              </button>
+                              {savePrayerMut.isError ? (
+                                <span className="text-[12px] text-red-600">
+                                  {loadErrorDescription(savePrayerMut.error) ?? 'Ошибка'}
+                                </span>
+                              ) : null}
+                            </div>
+                          </div>
+                        ) : null}
                       </div>
                     ) : null}
-                    </div>
-                    {mine && mid != null && mem && !claimsError ? (
+
+                    {showPrevPanel ? (
                       <div className="border-t border-stone-100 bg-stone-50/80 px-3 py-2">
                         <CoordinatorPreviousNeedsPanel
                           memberId={mid}
@@ -334,8 +500,13 @@ function ModalFrame(props: {
   title: string;
   onClose: () => void;
   children: ReactNode;
+  /** Шире окно — удобнее список с полем нужды. */
+  size?: 'default' | 'wide';
 }) {
-  const { titleId, title, onClose, children } = props;
+  const { titleId, title, onClose, children, size = 'default' } = props;
+  const widthClass = size === 'wide' ? 'max-w-2xl' : 'max-w-md';
+  const maxHClass =
+    size === 'wide' ? 'max-h-[min(92dvh,820px)] sm:max-h-[88vh]' : 'max-h-[min(88dvh,720px)] sm:max-h-[85vh]';
 
   useEffect(() => {
     const prev = document.body.style.overflow;
@@ -365,7 +536,7 @@ function ModalFrame(props: {
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className="flex max-h-[min(88dvh,720px)] w-full max-w-md flex-col rounded-t-2xl border border-stone-200/90 bg-[var(--surface)] shadow-2xl sm:max-h-[85vh] sm:rounded-2xl"
+        className={`flex w-full flex-col rounded-t-2xl border border-stone-200/90 bg-[var(--surface)] shadow-2xl sm:rounded-2xl ${maxHClass} ${widthClass}`}
       >
         <div className="flex shrink-0 items-center justify-between gap-2 border-b border-stone-200/80 px-3 py-2 sm:px-4">
           <div className="flex min-w-0 items-center gap-2">
@@ -391,10 +562,10 @@ function ModalFrame(props: {
   );
 }
 
-type Props = { canView: boolean; currentUserId: number | null };
+type Props = { canView: boolean; currentUserId: number | null; isAdmin?: boolean };
 
 /** Кнопка и модалка: очередь цикла и отметки сбора нужд; под «своими» участниками — предыдущие нужды. */
-export function NextWeekPrayerPlanSection({ canView, currentUserId }: Props) {
+export function NextWeekPrayerPlanSection({ canView, currentUserId, isAdmin = false }: Props) {
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const titleId = useId();
@@ -477,6 +648,7 @@ export function NextWeekPrayerPlanSection({ canView, currentUserId }: Props) {
               titleId={titleId}
               title="Очередь недели"
               onClose={() => setOpen(false)}
+              size="wide"
             >
               <div className="mb-2 flex rounded-lg border border-stone-200/90 bg-stone-100/90 p-0.5">
                 <button
@@ -545,6 +717,7 @@ export function NextWeekPrayerPlanSection({ canView, currentUserId }: Props) {
                 onToggle={(memberId, claim) => mut.mutate({ memberId, claim })}
                 mutPending={mut.isPending}
                 onPrayerSaved={invalidateAfterPrayerSave}
+                isAdmin={isAdmin}
               />
             </ModalFrame>,
             document.body,

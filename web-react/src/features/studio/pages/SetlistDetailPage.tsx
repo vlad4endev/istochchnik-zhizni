@@ -1,7 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useParams } from 'react-router-dom';
+import axios from 'axios';
+import { Link, useParams } from 'react-router-dom';
 import { useMemo, useState } from 'react';
 
+import { emitAppToast } from '../../../lib/uiFeedback';
 import { useStudioModuleSurface } from '../studioPaths';
 import { LuCopy, LuFileDown } from 'react-icons/lu';
 
@@ -51,15 +53,32 @@ export function SetlistDetailPage() {
   const addMut = useMutation({
     mutationFn: async () => {
       const songId = Number(pickSong);
-      if (!Number.isInteger(songId) || songId <= 0) return;
+      if (!Number.isInteger(songId) || songId <= 0) {
+        throw new Error('Выберите песню из списка');
+      }
       let studioVersionId: number | null = null;
       if (useMyVersion) {
-        const v = (versionsQ.data ?? []).find((x) => x.song_id === String(songId));
+        const v = (versionsQ.data ?? []).find((x) => x.song_id === pickSong);
         if (v) studioVersionId = Number(v.id);
       }
       await addSetlistItem(setlistId, songId, studioVersionId);
     },
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ['studio', 'setlist', setlistId, 'items'] }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['studio', 'setlist', setlistId, 'items'] });
+      emitAppToast({ kind: 'success', message: 'Песня добавлена в сетлист' });
+      setPickSong('');
+      setUseMyVersion(false);
+    },
+    onError: (err: unknown) => {
+      let msg = 'Не удалось добавить песню';
+      if (axios.isAxiosError(err)) {
+        const d = err.response?.data as { error?: string } | undefined;
+        if (d?.error && typeof d.error === 'string') msg = d.error;
+      } else if (err instanceof Error && err.message) {
+        msg = err.message;
+      }
+      emitAppToast(msg);
+    },
   });
 
   const removeMut = useMutation({
@@ -71,9 +90,8 @@ export function SetlistDetailPage() {
     return <p className="text-red-400">Некорректный id</p>;
   }
 
-  if (itemsQ.isLoading) return <p className="text-zinc-500">Загрузка…</p>;
-
   const songs = songsQ.data ?? [];
+  const songbookHome = '/songbook';
   const hasVersionFor = (songId: string) =>
     (versionsQ.data ?? []).some((v) => v.song_id === songId);
 
@@ -92,7 +110,12 @@ export function SetlistDetailPage() {
         .join(' ')}
     >
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <h1 className="text-lg font-semibold text-white">Позиции сетлиста</h1>
+        <div>
+          <h1 className="text-lg font-semibold text-white">Позиции сетлиста</h1>
+          <p className="mt-1 text-sm text-zinc-400">
+            Выберите песню в списке ниже и нажмите «Добавить». Порядок — как в списке (сверху вниз).
+          </p>
+        </div>
         <div className="flex flex-wrap gap-2">
           <button
             type="button"
@@ -148,13 +171,31 @@ export function SetlistDetailPage() {
 
       <div className="rounded-lg border border-zinc-800 bg-zinc-900/40 p-4">
         <p className="mb-2 text-xs font-bold uppercase text-zinc-500">Добавить песню</p>
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+        {songsQ.isLoading && (
+          <p className="text-sm text-zinc-500">Загрузка каталога песен…</p>
+        )}
+        {songsQ.isError && (
+          <p className="text-sm text-amber-400">
+            Не удалось загрузить песни. Обновите страницу или проверьте подключение.
+          </p>
+        )}
+        {!songsQ.isLoading && !songsQ.isError && songs.length === 0 && (
+          <p className="text-sm text-zinc-400">
+            В песеннике пока нет песен — сначала добавьте их в разделе{' '}
+            <Link to={songbookHome} className="text-sky-400 hover:text-sky-300">
+              Песенник
+            </Link>
+            .
+          </p>
+        )}
+        <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center">
           <select
-            className="flex-1 rounded border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-white"
+            className="flex-1 rounded border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-white disabled:opacity-50"
             value={pickSong}
             onChange={(e) => setPickSong(e.target.value)}
+            disabled={songsQ.isLoading || songsQ.isError || songs.length === 0}
           >
-            <option value="">Выберите песню</option>
+            <option value="">{songsQ.isLoading ? 'Загрузка…' : 'Выберите песню'}</option>
             {songs.map((s) => (
               <option key={s.id} value={s.id}>
                 {s.title}
@@ -173,7 +214,7 @@ export function SetlistDetailPage() {
           <button
             type="button"
             onClick={() => addMut.mutate()}
-            disabled={!pickSong || addMut.isPending}
+            disabled={!pickSong || addMut.isPending || songsQ.isLoading || songs.length === 0}
             className="rounded-lg bg-sky-600 px-4 py-2 text-sm text-white hover:bg-sky-500 disabled:opacity-50"
           >
             Добавить
@@ -182,6 +223,14 @@ export function SetlistDetailPage() {
       </div>
 
       <ol className="list-decimal space-y-2 pl-5 text-zinc-200">
+        {itemsQ.isLoading && (
+          <li className="text-sm text-zinc-500">Загрузка позиций…</li>
+        )}
+        {!itemsQ.isLoading && (itemsQ.data ?? []).length === 0 && (
+          <li className="rounded border border-dashed border-zinc-700 py-6 pl-0 text-sm text-zinc-500 list-none -ml-1">
+            Пока пусто — добавьте песни блоком выше.
+          </li>
+        )}
         {(itemsQ.data ?? []).map((it, idx) => (
           <li key={it.id} className="rounded border border-zinc-800 bg-zinc-900/60 py-2 pr-3 pl-2">
             <div className="flex items-start justify-between gap-2">

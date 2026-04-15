@@ -1,12 +1,14 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 
+import { emitAppToast } from '../../../lib/uiFeedback';
 import { createSetlist, deleteSetlist, fetchSetlists } from '../api';
 import { studioSetlistDetailPath, studioSetlistPerformPath, useStudioModuleSurface } from '../studioPaths';
 
 export function SetlistsPage() {
   const surface = useStudioModuleSurface();
+  const navigate = useNavigate();
   const qc = useQueryClient();
   const q = useQuery({ queryKey: ['studio', 'setlists'], queryFn: fetchSetlists });
   const [title, setTitle] = useState('');
@@ -15,11 +17,13 @@ export function SetlistsPage() {
   const createMut = useMutation({
     mutationFn: () =>
       createSetlist(title.trim() || 'Сетлист', eventDate.trim() ? eventDate.trim() : null),
-    onSuccess: () => {
+    onSuccess: (created) => {
       setTitle('');
       setEventDate('');
       void qc.invalidateQueries({ queryKey: ['studio', 'setlists'] });
+      navigate(studioSetlistDetailPath(surface, Number(created.id)));
     },
+    onError: () => emitAppToast('Не удалось создать сетлист'),
   });
 
   const delMut = useMutation({
@@ -39,6 +43,10 @@ export function SetlistsPage() {
         .join(' ')}
     >
       <h1 className="text-lg font-semibold text-white">Сетлисты (программы)</h1>
+      <p className="text-sm text-zinc-400">
+        Укажите название (и при желании дату события), нажмите «Создать» — откроется страница сетлиста,
+        где можно добавить песни из песенника по одной.
+      </p>
       <div className="rounded-lg border border-zinc-800 bg-zinc-900/40 p-4">
         <p className="mb-2 text-xs font-bold uppercase text-zinc-500">Новый сетлист</p>
         <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
@@ -65,6 +73,11 @@ export function SetlistsPage() {
         </div>
       </div>
       <ul className="space-y-2">
+        {(q.data ?? []).length === 0 && (
+          <li className="rounded-lg border border-dashed border-zinc-700 px-4 py-6 text-center text-sm text-zinc-500">
+            Пока нет сетлистов. Создайте первый формой выше — затем добавьте в него песни.
+          </li>
+        )}
         {(q.data ?? []).map((s) => (
           <li
             key={s.id}

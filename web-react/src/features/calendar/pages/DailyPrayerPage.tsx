@@ -609,7 +609,11 @@ export function DailyPrayerPage() {
 
       <div className="px-4 pt-4 shell:px-6">
         {userCanViewNextWeekPrayerPlan(me) ? (
-          <NextWeekPrayerPlanSection canView currentUserId={me?.id ?? null} />
+          <NextWeekPrayerPlanSection
+            canView
+            currentUserId={me?.id ?? null}
+            isAdmin={me?.app_role?.trim().toLowerCase() === 'admin'}
+          />
         ) : null}
         {isPending ? (
           <CalendarPrayerSkeleton />

@@ -11,6 +11,7 @@ import {
 import {
   LuCalendarDays,
   LuChevronDown,
+  LuClipboardList,
   LuHistory,
   LuImage,
   LuPenLine,
@@ -72,6 +73,7 @@ import {
   type ChurchEventItem,
   type TelegramSettingsResponse,
 } from '../api';
+import { NextWeekPrayerPlanSection } from '../../calendar/components/NextWeekPrayerPlanSection';
 import { CHURCH_EVENT_CATEGORY_OPTIONS_FALLBACK } from '../churchEventCategoryOptions';
 import { dateInputValueFromApi } from '../../../lib/dateInputValueFromApi';
 import { resolvePublicUrl } from '../../../lib/resolvePublicUrl';
@@ -82,7 +84,7 @@ import {
   splitMemberNameParts,
 } from '../../../lib/memberRosterName';
 import type { AppUser } from '../types';
-import { fetchPrayerRequestHistory, type PrayerHistoryItem } from '../../profile/api';
+import { fetchMe, fetchPrayerRequestHistory, type PrayerHistoryItem } from '../../profile/api';
 
 function appRoleLabel(role: string): string {
   switch (role) {
@@ -2101,6 +2103,11 @@ function CalendarPrayerCycleRoster() {
 }
 
 function CalendarSection() {
+  const meQ = useQuery({
+    queryKey: ['auth', 'me'],
+    queryFn: fetchMe,
+    staleTime: 60_000,
+  });
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [msg, setMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
   const mut = useMutation({
@@ -2189,6 +2196,31 @@ function CalendarSection() {
         </div>
         <div className="mt-5">
           <CalendarPrayerCycleRoster />
+        </div>
+      </section>
+
+      <section className="rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] p-5 shadow-[var(--shadow)]">
+        <div className="flex items-start gap-3">
+          <span
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary"
+            aria-hidden
+          >
+            <LuClipboardList className="h-5 w-5" strokeWidth={2} />
+          </span>
+          <div className="min-w-0">
+            <h3 className="font-extrabold text-stone-900">Сбор нужд: эта и следующая неделя</h3>
+            <p className="mt-1 text-sm text-stone-600">
+              Очередь молитвенного цикла по дням, ответственные за сбор и предыдущие нужды — то же, что на экране
+              «Молитва» (для администратора и координаторов сбора).
+            </p>
+          </div>
+        </div>
+        <div className="mt-4 max-w-2xl">
+          <NextWeekPrayerPlanSection
+            canView
+            currentUserId={meQ.data?.id ?? null}
+            isAdmin={meQ.data?.app_role?.trim().toLowerCase() === 'admin'}
+          />
         </div>
       </section>
 
