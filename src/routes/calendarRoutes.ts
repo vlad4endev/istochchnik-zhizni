@@ -1,5 +1,10 @@
 import { Router } from 'express';
 import {
+  getDashboardCoordinatorNotes,
+  postDashboardCoordinatorNote,
+} from '../controllers/dashboardCoordinatorNotesController';
+import { requireAuthSession } from '../middleware/authSession';
+import {
   getCycleCollectionClaims,
   deleteMemberPreviousPrayerNeed,
   getWeekBirthdays,
@@ -41,6 +46,9 @@ import {
 import { eventPosterUploadMiddleware } from '../middleware/eventPosterUpload';
 
 const router = Router();
+
+router.get('/dashboard-coordinator-notes', requireAuthSession, getDashboardCoordinatorNotes);
+router.post('/dashboard-coordinator-notes', requireAuthSession, postDashboardCoordinatorNote);
 
 router.get('/next-week/members', getNextWeekMembers);
 router.post('/prayer-need/improve-text', postPrayerNeedImproveText);

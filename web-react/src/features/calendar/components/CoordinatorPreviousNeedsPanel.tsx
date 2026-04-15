@@ -30,7 +30,7 @@ export function CoordinatorPreviousNeedsPanel(props: {
   memberId: number;
   /** Подпись для screen reader. */
   memberLabel: string;
-  items: Array<{ id: number; note: string; created_at: string }>;
+  items: Array<{ id: number; note: string; created_at: string; source?: 'manual' | 'journal' }>;
   onChanged: () => void;
 }) {
   const { memberId, memberLabel, items, onChanged } = props;
@@ -100,12 +100,28 @@ export function CoordinatorPreviousNeedsPanel(props: {
         <div className="border-t border-stone-200/80 px-2 pb-2.5 pt-1">
           {items.length > 0 ? (
             <div className="space-y-1.5">
-              {items.map((item) => (
-                <div key={item.id} className="rounded-lg bg-stone-50 px-2.5 py-2 ring-1 ring-stone-200/70">
-                  <p className="text-[11px] font-semibold text-stone-500">
-                    {formatUpdatedAt(item.created_at) ?? 'Без даты'}
-                  </p>
-                  {editingNeedId === item.id ? (
+              {items.map((item) => {
+                const isJournal = item.source === 'journal';
+                return (
+                <div
+                  key={`${item.source ?? 'm'}-${item.id}`}
+                  className="rounded-lg bg-stone-50 px-2.5 py-2 ring-1 ring-stone-200/70"
+                >
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="text-[11px] font-semibold text-stone-500">
+                      {formatUpdatedAt(item.created_at) ?? 'Без даты'}
+                    </p>
+                    {isJournal ? (
+                      <span className="rounded-full bg-sky-100 px-2 py-0.5 text-[9px] font-extrabold uppercase tracking-wide text-sky-900">
+                        Из истории цикла
+                      </span>
+                    ) : null}
+                  </div>
+                  {isJournal ? (
+                    <p className="mt-0.5 whitespace-pre-wrap break-words text-[13px] text-stone-700">
+                      {item.note}
+                    </p>
+                  ) : editingNeedId === item.id ? (
                     <div className="mt-1.5">
                       <textarea
                         value={editingNeedText}
@@ -169,7 +185,8 @@ export function CoordinatorPreviousNeedsPanel(props: {
                     </>
                   )}
                 </div>
-              ))}
+                );
+              })}
             </div>
           ) : (
             <p className="py-1 text-[12px] text-stone-400">Пока нет сохранённых предыдущих нужд.</p>

@@ -1,4 +1,10 @@
 import { query } from '../config/db';
+import {
+  AI_PRESET_CATALOG,
+  getPresetDefaults,
+  isConnectionPresetId,
+  type AiConnectionPresetId,
+} from '../types/aiConnectionPresets';
 import { AI_PROMPT_SCOPE_LIST, isAiPromptScopeId, type AiPromptScopeId } from '../types/aiPromptScopes';
 import {
   type AiSectionPrompts,
@@ -68,6 +74,8 @@ export async function getAiSettingsAdmin(): Promise<AiSettingsAdminView> {
   return {
     enabled: doc.enabled,
     provider: doc.provider,
+    connection_preset: doc.connection_preset,
+    preset_catalog: [...AI_PRESET_CATALOG],
     base_url: doc.base_url,
     api_key_masked: maskApiKey(key),
     has_api_key: Boolean(key),
@@ -82,6 +90,7 @@ export async function getAiSettingsAdmin(): Promise<AiSettingsAdminView> {
 
 export interface AiSettingsPatch {
   enabled?: boolean;
+  connection_preset?: AiConnectionPresetId | null;
   base_url?: string | null;
   /** undefined — не менять; null — сбросить ключ в БД (останется env); непустая строка — записать */
   api_key?: string | null;
@@ -99,6 +108,18 @@ export async function updateAiSettings(patch: AiSettingsPatch): Promise<AiSettin
 
   if (typeof patch.enabled === 'boolean') {
     next.enabled = patch.enabled;
+  }
+  if (
+    patch.connection_preset !== undefined &&
+    patch.connection_preset !== null &&
+    isConnectionPresetId(patch.connection_preset)
+  ) {
+    next.connection_preset = patch.connection_preset;
+    if (patch.connection_preset !== 'custom') {
+      const d = getPresetDefaults(patch.connection_preset);
+      next.base_url = d.base_url;
+      next.default_model = d.default_model;
+    }
   }
   if (patch.base_url !== undefined) {
     if (patch.base_url === null || (typeof patch.base_url === 'string' && !patch.base_url.trim())) {

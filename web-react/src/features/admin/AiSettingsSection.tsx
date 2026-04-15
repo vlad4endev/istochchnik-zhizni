@@ -1,16 +1,20 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useState } from 'react';
-import { LuBot } from 'react-icons/lu';
+import { useEffect, useMemo, useState } from 'react';
+import { LuBot, LuCheck, LuKeyRound, LuServer } from 'react-icons/lu';
 
 import {
   apiErrorMessage,
   fetchAiSettingsAdmin,
   patchAiSettings,
   postAiTest,
+  type AiConnectionPresetId,
+  type AiPresetCatalogEntry,
   type AiSettingsAdminResponse,
 } from './api';
 
 const Q_AI = ['admin', 'ai', 'settings'] as const;
+
+const MANUAL_MODEL = '__manual__';
 
 function fieldClass() {
   return (
@@ -27,10 +31,20 @@ function btnSecondary(c = '') {
   return `rounded-xl border border-stone-200 bg-white px-3 py-2 text-sm font-semibold text-stone-700 transition hover:bg-stone-50 ${c}`;
 }
 
-/** Пустое поле ключа — не менять сохранённое значение; непустое — записать. */
 function optionalApiKeyFromUi(value: string): string | undefined {
   const t = value.trim();
   return t.length > 0 ? t : undefined;
+}
+
+function applyCatalogPreset(
+  preset: Exclude<AiConnectionPresetId, 'custom'>,
+  catalog: AiPresetCatalogEntry[],
+): { base_url: string; default_model: string } {
+  const e = catalog.find((c) => c.id === preset);
+  if (e) {
+    return { base_url: e.base_url, default_model: e.default_model };
+  }
+  return { base_url: 'https://api.openai.com/v1', default_model: 'gpt-4o-mini' };
 }
 
 export function AiSettingsSection() {
@@ -42,6 +56,7 @@ export function AiSettingsSection() {
 
   const [form, setForm] = useState({
     enabled: false,
+    connection_preset: 'openai' as AiConnectionPresetId,
     base_url: '',
     api_key: '',
     default_model: '',
@@ -52,12 +67,15 @@ export function AiSettingsSection() {
   const [sectionPrompts, setSectionPrompts] = useState<Record<string, string>>({});
   const [testPrompt, setTestPrompt] = useState('');
   const [testSection, setTestSection] = useState('');
+  /** Пользователь явно выбрал «Другая модель…» в списке (иначе селект «откатывается»). */
+  const [forceManualModel, setForceManualModel] = useState(false);
   const [note, setNote] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
 
   useEffect(() => {
     if (!data) return;
     setForm({
       enabled: data.enabled,
+      connection_preset: data.connection_preset,
       base_url: data.base_url ?? '',
       api_key: '',
       default_model: data.default_model ?? '',
@@ -70,7 +88,22 @@ export function AiSettingsSection() {
       sp[s.id] = data.section_prompts[s.id] ?? '';
     }
     setSectionPrompts(sp);
+    setForceManualModel(false);
   }, [data]);
+
+  const catalog = data?.preset_catalog ?? [];
+
+  const activeCatalogEntry = useMemo(() => {
+    if (form.connection_preset === 'custom') return undefined;
+    return catalog.find((c) => c.id === form.connection_preset);
+  }, [catalog, form.connection_preset]);
+
+  const modelSelectValue = useMemo(() => {
+    if (form.connection_preset === 'custom') return MANUAL_MODEL;
+    if (forceManualModel) return MANUAL_MODEL;
+    const opts = activeCatalogEntry?.model_options ?? [];
+    return opts.some((o) => o.id === form.default_model) ? form.default_model : MANUAL_MODEL;
+  }, [activeCatalogEntry, forceManualModel, form.connection_preset, form.default_model]);
 
   const saveMut = useMutation({
     mutationFn: () => {
@@ -81,6 +114,7 @@ export function AiSettingsSection() {
       }
       return patchAiSettings({
         enabled: form.enabled,
+        connection_preset: form.connection_preset,
         base_url: form.base_url.trim(),
         api_key: optionalApiKeyFromUi(form.api_key),
         default_model: form.default_model.trim(),
@@ -91,7 +125,10 @@ export function AiSettingsSection() {
       });
     },
     onSuccess: (next) => {
-      setNote({ type: 'ok', text: 'Настройки ИИ сохранены. Они используются сервером при вызовах агента.' });
+      setNote({
+        type: 'ok',
+        text: 'Настройки сохранены. Можно отправить тестовый запрос ниже.',
+      });
       qc.setQueryData(Q_AI, next);
       setForm((prev) => ({ ...prev, api_key: '' }));
     },
@@ -101,7 +138,10 @@ export function AiSettingsSection() {
   const clearKeyMut = useMutation({
     mutationFn: () => patchAiSettings({ api_key: null }),
     onSuccess: (next) => {
-      setNote({ type: 'ok', text: 'Ключ в базе сброшен. Если задан AI_API_KEY в окружении, он по-прежнему будет использоваться.' });
+      setNote({
+        type: 'ok',
+        text: 'Ключ в базе сброшен. Если задан AI_API_KEY в окружении, он по-прежнему используется.',
+      });
       qc.setQueryData(Q_AI, next);
       setForm((prev) => ({ ...prev, api_key: '' }));
     },
@@ -120,6 +160,22 @@ export function AiSettingsSection() {
     onError: (e) => setNote({ type: 'err', text: apiErrorMessage(e, 'Тестовый запрос не выполнен.') }),
   });
 
+  function selectPreset(preset: AiConnectionPresetId) {
+    if (!data) return;
+    setForceManualModel(false);
+    if (preset === 'custom') {
+      setForm((f) => ({ ...f, connection_preset: 'custom' }));
+      return;
+    }
+    const { base_url, default_model } = applyCatalogPreset(preset, data.preset_catalog);
+    setForm((f) => ({
+      ...f,
+      connection_preset: preset,
+      base_url,
+      default_model,
+    }));
+  }
+
   if (isLoading) {
     return <div className="h-44 animate-pulse rounded-2xl bg-stone-200/50" />;
   }
@@ -136,22 +192,14 @@ export function AiSettingsSection() {
     );
   }
 
-  const settings = (data ?? {
-    enabled: false,
-    provider: 'openai_compatible',
-    base_url: '',
-    api_key_masked: null,
-    has_api_key: false,
-    default_model: '',
-    system_prompt: null,
-    prompt_scopes: [],
-    section_prompts: {},
-    temperature: 0.7,
-    max_tokens: 2048,
-  }) satisfies AiSettingsAdminResponse;
+  if (!data) {
+    return null;
+  }
+
+  const settings: AiSettingsAdminResponse = data;
 
   return (
-    <div className="max-w-3xl space-y-5">
+    <div className="max-w-4xl space-y-5">
       {note ? (
         <div
           className={
@@ -164,59 +212,100 @@ export function AiSettingsSection() {
         </div>
       ) : null}
 
-      <section className="rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] p-5 shadow-[var(--shadow)]">
+      <section className="rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] p-5 shadow-[var(--shadow)] sm:p-6">
         <h3 className="flex items-center gap-2 text-base font-extrabold text-stone-900">
           <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary">
             <LuBot className="h-5 w-5" />
           </span>
-          Языковые модели (серверный агент)
+          Подключение к модели
         </h3>
-        <p className="mt-2 text-sm text-stone-600">
-          Подключение по протоколу OpenAI Chat Completions (<span className="font-mono text-xs">/v1/chat/completions</span>
-          ). Подходит для OpenAI, OpenRouter, Azure OpenAI (с корректным base URL) и совместимых прокси.
+        <p className="mt-2 text-sm leading-relaxed text-stone-600">
+          Выберите сервис — подставятся адрес API и модель по умолчанию. Дальше вставьте ключ и сохраните.
         </p>
 
-        <label className="mt-4 flex items-center gap-2 text-sm font-semibold text-stone-700">
-          <input
-            type="checkbox"
-            className="h-4 w-4 rounded border-stone-300 text-primary"
-            checked={form.enabled}
-            onChange={(e) => setForm((s) => ({ ...s, enabled: e.target.checked }))}
-          />
-          Включить использование ИИ на сервере
-        </label>
+        <ol className="mt-4 flex flex-wrap gap-3 text-xs font-semibold text-stone-600">
+          <li className="rounded-full bg-stone-100 px-3 py-1.5">1. Сервис</li>
+          <li className="rounded-full bg-stone-100 px-3 py-1.5">2. Ключ API</li>
+          <li className="rounded-full bg-stone-100 px-3 py-1.5">3. Сохранить</li>
+        </ol>
 
-        <div className="mt-4 grid gap-3 sm:grid-cols-2">
-          <div className="sm:col-span-2">
-            <label className="mb-1 block text-xs font-semibold text-stone-600">Base URL API</label>
-            <input
-              className={fieldClass()}
-              value={form.base_url}
-              onChange={(e) => setForm((s) => ({ ...s, base_url: e.target.value }))}
-              placeholder="https://api.openai.com/v1"
-              autoComplete="off"
-            />
-            <p className="mt-1 text-xs text-stone-500">
-              Можно переопределить через переменную окружения <code className="rounded bg-stone-100 px-1">AI_BASE_URL</code>.
-            </p>
+        <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          {settings.preset_catalog.map((entry) => {
+            const active = form.connection_preset === entry.id;
+            return (
+              <button
+                key={entry.id}
+                type="button"
+                onClick={() => selectPreset(entry.id)}
+                className={
+                  active
+                    ? 'relative flex min-h-[120px] flex-col rounded-2xl border-2 border-primary bg-primary/[0.06] p-4 text-left shadow-md shadow-primary/10 transition hover:bg-primary/10'
+                    : 'flex min-h-[120px] flex-col rounded-2xl border border-stone-200/90 bg-white p-4 text-left shadow-sm transition hover:border-stone-300 hover:bg-stone-50/90'
+                }
+              >
+                {active ? (
+                  <span className="absolute right-3 top-3 flex h-7 w-7 items-center justify-center rounded-full bg-primary text-white">
+                    <LuCheck className="h-4 w-4" strokeWidth={2.5} />
+                  </span>
+                ) : null}
+                <span className="pr-8 text-sm font-extrabold text-stone-900">{entry.label}</span>
+                <span className="mt-1 text-[11px] leading-snug text-stone-500">{entry.description}</span>
+              </button>
+            );
+          })}
+          <button
+            type="button"
+            onClick={() => selectPreset('custom')}
+            className={
+              form.connection_preset === 'custom'
+                ? 'relative flex min-h-[120px] flex-col rounded-2xl border-2 border-primary bg-primary/[0.06] p-4 text-left shadow-md shadow-primary/10 transition hover:bg-primary/10'
+                : 'flex min-h-[120px] flex-col rounded-2xl border border-dashed border-stone-300 bg-stone-50/80 p-4 text-left shadow-sm transition hover:border-stone-400 hover:bg-stone-100/80'
+            }
+          >
+            {form.connection_preset === 'custom' ? (
+              <span className="absolute right-3 top-3 flex h-7 w-7 items-center justify-center rounded-full bg-primary text-white">
+                <LuCheck className="h-4 w-4" strokeWidth={2.5} />
+              </span>
+            ) : null}
+            <span className="flex items-center gap-2 pr-8 text-sm font-extrabold text-stone-900">
+              <LuServer className="h-4 w-4 text-stone-500" />
+              Свой URL
+            </span>
+            <span className="mt-1 text-[11px] leading-snug text-stone-500">
+              Любой OpenAI-совместимый endpoint (локально, Azure, прокси).
+            </span>
+          </button>
+        </div>
+
+        {form.connection_preset !== 'custom' && activeCatalogEntry ? (
+          <div className="mt-5 rounded-xl border border-stone-200/90 bg-stone-50/70 px-4 py-3 text-xs text-stone-600">
+            <span className="font-semibold text-stone-700">Ключ: </span>
+            {activeCatalogEntry.key_hint}
           </div>
+        ) : null}
 
-          <div className="sm:col-span-2">
-            <label className="mb-1 block text-xs font-semibold text-stone-600">API Key</label>
+        <div className="mt-5 space-y-4">
+          <div>
+            <label className="mb-1 flex items-center gap-2 text-xs font-semibold text-stone-600">
+              <LuKeyRound className="h-3.5 w-3.5" />
+              API Key
+            </label>
             <input
-              className={fieldClass()}
+              className={`${fieldClass()} text-base sm:text-sm`}
               type="password"
               value={form.api_key}
               onChange={(e) => setForm((s) => ({ ...s, api_key: e.target.value }))}
               placeholder={
-                settings.api_key_masked ? `Текущий ключ: ${settings.api_key_masked}` : 'sk-...'
+                settings.api_key_masked
+                  ? `Сохранён: ${settings.api_key_masked} — вставьте новый, чтобы заменить`
+                  : 'Вставьте секретный ключ'
               }
               autoComplete="new-password"
             />
-            <p className="mt-1 text-xs text-stone-500">
-              Оставьте пустым, чтобы не менять ключ. Альтернатива:{' '}
+            <p className="mt-1 text-[11px] text-stone-500">
+              Оставьте пустым при сохранении, если ключ не меняется. Для сервера можно задать{' '}
               <code className="rounded bg-stone-100 px-1">AI_API_KEY</code> или{' '}
-              <code className="rounded bg-stone-100 px-1">OPENAI_API_KEY</code> на сервере.
+              <code className="rounded bg-stone-100 px-1">OPENAI_API_KEY</code>.
             </p>
             {settings.has_api_key ? (
               <button
@@ -233,87 +322,87 @@ export function AiSettingsSection() {
             ) : null}
           </div>
 
-          <div className="sm:col-span-2">
-            <label className="mb-1 block text-xs font-semibold text-stone-600">Модель по умолчанию</label>
-            <input
-              className={fieldClass()}
-              value={form.default_model}
-              onChange={(e) => setForm((s) => ({ ...s, default_model: e.target.value }))}
-              placeholder="gpt-4o-mini"
-              autoComplete="off"
-            />
-            <p className="mt-1 text-xs text-stone-500">
-              Переопределение через <code className="rounded bg-stone-100 px-1">AI_MODEL</code> — имеет приоритет над полем.
-            </p>
-          </div>
-
-          <div>
-            <label className="mb-1 block text-xs font-semibold text-stone-600">Temperature</label>
-            <input
-              className={fieldClass()}
-              type="number"
-              min={0}
-              max={2}
-              step={0.1}
-              value={form.temperature}
-              onChange={(e) => setForm((s) => ({ ...s, temperature: Number(e.target.value) }))}
-            />
-          </div>
-          <div>
-            <label className="mb-1 block text-xs font-semibold text-stone-600">Max tokens</label>
-            <input
-              className={fieldClass()}
-              type="number"
-              min={64}
-              max={128000}
-              step={64}
-              value={form.max_tokens}
-              onChange={(e) => setForm((s) => ({ ...s, max_tokens: Number(e.target.value) }))}
-            />
-          </div>
-
-          <div className="sm:col-span-2">
-            <label className="mb-1 block text-xs font-semibold text-stone-600">Системный промпт по умолчанию</label>
-            <textarea
-              className={`${fieldClass()} min-h-[120px]`}
-              value={form.system_prompt}
-              onChange={(e) => setForm((s) => ({ ...s, system_prompt: e.target.value }))}
-              placeholder="Роль ассистента, если для раздела ниже не задан отдельный промпт."
-            />
-          </div>
-
-          <div className="sm:col-span-2 rounded-xl border border-stone-200/90 bg-stone-50/80 p-4">
-            <p className="text-sm font-extrabold text-stone-900">Промпты по разделам</p>
-            <p className="mt-1 text-xs text-stone-600">
-              Задайте текст и выберите раздел через подпись поля. В коде сервиса передайте{' '}
-              <code className="rounded bg-white px-1 font-mono text-[11px]">chatCompletion(..., &#123; section: &apos;messenger&apos; &#125;)</code>
-              — подставится промпт этого раздела, иначе используется общий промпт выше.
-            </p>
-            <div className="mt-4 space-y-4">
-              {(settings.prompt_scopes ?? []).map((scope) => (
-                <div key={scope.id}>
-                  <label className="mb-1 block text-xs font-semibold text-stone-700">
-                    {scope.label}
-                    <span className="ml-2 font-mono font-normal text-stone-400">({scope.id})</span>
-                  </label>
-                  <textarea
-                    className={`${fieldClass()} min-h-[88px]`}
-                    value={sectionPrompts[scope.id] ?? ''}
-                    onChange={(e) =>
-                      setSectionPrompts((prev) => ({
-                        ...prev,
-                        [scope.id]: e.target.value,
-                      }))
-                    }
-                    placeholder={`Промпт только для раздела «${scope.label}»…`}
-                  />
-                </div>
-              ))}
+          {form.connection_preset === 'custom' ? (
+            <div className="grid gap-3 sm:grid-cols-1">
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-stone-600">Base URL</label>
+                <input
+                  className={fieldClass()}
+                  value={form.base_url}
+                  onChange={(e) => setForm((s) => ({ ...s, base_url: e.target.value }))}
+                  placeholder="https://…/v1"
+                  autoComplete="off"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-stone-600">ID модели</label>
+                <input
+                  className={fieldClass()}
+                  value={form.default_model}
+                  onChange={(e) => setForm((s) => ({ ...s, default_model: e.target.value }))}
+                  placeholder="например gpt-4o-mini"
+                  autoComplete="off"
+                />
+              </div>
             </div>
-          </div>
+          ) : (
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="sm:col-span-2">
+                <label className="mb-1 block text-xs font-semibold text-stone-600">Модель</label>
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                  <select
+                    className={`${fieldClass()} sm:max-w-md`}
+                    value={modelSelectValue}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      if (v === MANUAL_MODEL) {
+                        setForceManualModel(true);
+                        return;
+                      }
+                      setForceManualModel(false);
+                      setForm((s) => ({ ...s, default_model: v }));
+                    }}
+                  >
+                    {(activeCatalogEntry?.model_options ?? []).map((o) => (
+                      <option key={o.id} value={o.id}>
+                        {o.label}
+                      </option>
+                    ))}
+                    <option value={MANUAL_MODEL}>Другая модель…</option>
+                  </select>
+                  {modelSelectValue === MANUAL_MODEL ? (
+                    <input
+                      className={fieldClass()}
+                      value={form.default_model}
+                      onChange={(e) => {
+                        setForceManualModel(true);
+                        setForm((s) => ({ ...s, default_model: e.target.value }));
+                      }}
+                      placeholder="точное имя модели у провайдера"
+                      autoComplete="off"
+                    />
+                  ) : null}
+                </div>
+              </div>
+              <div className="sm:col-span-2 rounded-lg border border-stone-100 bg-stone-50/90 px-3 py-2 font-mono text-[11px] text-stone-600">
+                <span className="font-sans font-semibold text-stone-500">Endpoint: </span>
+                {form.base_url}
+              </div>
+            </div>
+          )}
+
+          <label className="flex cursor-pointer items-center gap-2 text-sm font-semibold text-stone-800">
+            <input
+              type="checkbox"
+              className="h-4 w-4 rounded border-stone-300 text-primary"
+              checked={form.enabled}
+              onChange={(e) => setForm((s) => ({ ...s, enabled: e.target.checked }))}
+            />
+            Включить ИИ на сервере
+          </label>
         </div>
 
-        <div className="mt-5 flex flex-wrap gap-2">
+        <div className="mt-6 flex flex-wrap gap-2">
           <button
             type="button"
             className={btnPrimary()}
@@ -328,19 +417,98 @@ export function AiSettingsSection() {
         </div>
       </section>
 
+      <details className="group rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] shadow-[var(--shadow)]">
+        <summary className="cursor-pointer list-none px-5 py-4 font-extrabold text-stone-900 marker:content-none [&::-webkit-details-marker]:hidden">
+          <span className="underline decoration-stone-300 decoration-2 underline-offset-2 group-open:no-underline">
+            Дополнительно: температура, промпты
+          </span>
+          <span className="ml-2 text-xs font-semibold text-stone-500">(необязательно)</span>
+        </summary>
+        <div className="space-y-5 border-t border-stone-200/80 px-5 pb-5 pt-2">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-stone-600">Temperature</label>
+              <input
+                className={fieldClass()}
+                type="number"
+                min={0}
+                max={2}
+                step={0.1}
+                value={form.temperature}
+                onChange={(e) => setForm((s) => ({ ...s, temperature: Number(e.target.value) }))}
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-stone-600">Max tokens</label>
+              <input
+                className={fieldClass()}
+                type="number"
+                min={64}
+                max={128000}
+                step={64}
+                value={form.max_tokens}
+                onChange={(e) => setForm((s) => ({ ...s, max_tokens: Number(e.target.value) }))}
+              />
+            </div>
+            <div className="sm:col-span-2">
+              <label className="mb-1 block text-xs font-semibold text-stone-600">Системный промпт по умолчанию</label>
+              <textarea
+                className={`${fieldClass()} min-h-[100px]`}
+                value={form.system_prompt}
+                onChange={(e) => setForm((s) => ({ ...s, system_prompt: e.target.value }))}
+                placeholder="Если для раздела не задан свой промпт — используется этот."
+              />
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-stone-200/90 bg-stone-50/80 p-4">
+            <p className="text-sm font-extrabold text-stone-900">Промпты по разделам приложения</p>
+            <p className="mt-1 text-xs text-stone-600">
+              Опционально: отдельный текст для{' '}
+              <code className="rounded bg-white px-1 font-mono text-[11px]">chatCompletion(..., &#123; section: &apos;…&apos; &#125;)</code>
+              .
+            </p>
+            <div className="mt-4 space-y-4">
+              {(settings.prompt_scopes ?? []).map((scope) => (
+                <div key={scope.id}>
+                  <label className="mb-1 block text-xs font-semibold text-stone-700">
+                    {scope.label}
+                    <span className="ml-2 font-mono font-normal text-stone-400">({scope.id})</span>
+                  </label>
+                  <textarea
+                    className={`${fieldClass()} min-h-[72px]`}
+                    value={sectionPrompts[scope.id] ?? ''}
+                    onChange={(e) =>
+                      setSectionPrompts((prev) => ({
+                        ...prev,
+                        [scope.id]: e.target.value,
+                      }))
+                    }
+                    placeholder={`Только для «${scope.label}»…`}
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <p className="text-[11px] text-stone-500">
+            Переопределение через ENV: <code className="rounded bg-stone-100 px-1">AI_BASE_URL</code>,{' '}
+            <code className="rounded bg-stone-100 px-1">AI_MODEL</code> — имеет приоритет над полями формы.
+          </p>
+        </div>
+      </details>
+
       <section className="rounded-2xl border border-dashed border-stone-300 bg-stone-50/80 p-5">
         <h4 className="text-sm font-extrabold text-stone-900">Проверка связи</h4>
-        <p className="mt-1 text-xs text-stone-600">
-          Отправляет короткий тестовый запрос к выбранной модели (учитываются включение модуля и ключ).
-        </p>
+        <p className="mt-1 text-xs text-stone-600">Запрос выполняется с уже сохранёнными настройками.</p>
         <div className="mt-3">
-          <label className="block text-xs font-semibold text-stone-600">Раздел для теста (опционально)</label>
+          <label className="block text-xs font-semibold text-stone-600">Раздел промпта (опционально)</label>
           <select
             className={`${fieldClass()} mt-1 max-w-md`}
             value={testSection}
             onChange={(e) => setTestSection(e.target.value)}
           >
-            <option value="">Общий системный промпт (без раздела)</option>
+            <option value="">Общий системный промпт</option>
             {(settings.prompt_scopes ?? []).map((s) => (
               <option key={s.id} value={s.id}>
                 {s.label}
@@ -348,18 +516,18 @@ export function AiSettingsSection() {
             ))}
           </select>
         </div>
-        <label className="mt-3 block text-xs font-semibold text-stone-600">Текст (необязательно)</label>
+        <label className="mt-3 block text-xs font-semibold text-stone-600">Сообщение пользователя (опционально)</label>
         <textarea
           className={`${fieldClass()} mt-1 min-h-[72px]`}
           value={testPrompt}
           onChange={(e) => setTestPrompt(e.target.value)}
-          placeholder="Если пусто — используется стандартная короткая проверка."
+          placeholder="Если пусто — короткая встроенная проверка."
         />
         <button
           type="button"
           className={btnSecondary('mt-3')}
           disabled={testMut.isPending || !settings.enabled}
-          title={!settings.enabled ? 'Сохраните включение модуля — тест идёт по данным на сервере' : undefined}
+          title={!settings.enabled ? 'Сначала включите ИИ и сохраните настройки' : undefined}
           onClick={() => {
             setNote(null);
             testMut.mutate();
@@ -369,7 +537,7 @@ export function AiSettingsSection() {
         </button>
         {!settings.enabled ? (
           <p className="mt-2 text-xs text-amber-800">
-            Тест обращается к уже сохранённым настройкам: включите модуль и нажмите «Сохранить», затем проверьте связь.
+            Сохраните настройки с включённым «Включить ИИ на сервере», затем проверьте связь.
           </p>
         ) : null}
       </section>

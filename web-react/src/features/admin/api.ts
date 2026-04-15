@@ -479,9 +479,23 @@ export interface AiPromptScopeOption {
   label: string;
 }
 
+export type AiConnectionPresetId = 'openai' | 'deepseek' | 'openrouter' | 'custom';
+
+export interface AiPresetCatalogEntry {
+  id: 'openai' | 'deepseek' | 'openrouter';
+  label: string;
+  description: string;
+  base_url: string;
+  default_model: string;
+  key_hint: string;
+  model_options: { id: string; label: string }[];
+}
+
 export interface AiSettingsAdminResponse {
   enabled: boolean;
   provider: 'openai_compatible';
+  connection_preset: AiConnectionPresetId;
+  preset_catalog: AiPresetCatalogEntry[];
   base_url: string;
   api_key_masked: string | null;
   has_api_key: boolean;
@@ -501,6 +515,7 @@ export async function fetchAiSettingsAdmin(): Promise<AiSettingsAdminResponse> {
 
 export async function patchAiSettings(body: {
   enabled?: boolean;
+  connection_preset?: AiConnectionPresetId | null;
   base_url?: string | null;
   api_key?: string | null;
   default_model?: string | null;

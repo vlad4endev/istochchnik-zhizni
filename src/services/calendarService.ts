@@ -22,6 +22,8 @@ interface Member {
     id: number;
     note: string;
     created_at: string;
+    /** Ручные заметки координатора; journal — та же выборка, что в «Истории молитвенных записок» у участника. */
+    source?: 'manual' | 'journal';
   }>;
 }
 
@@ -122,10 +124,25 @@ function isPgMissingTableOrColumn(e: unknown): boolean {
   return code === '42P01' || code === '42703';
 }
 
-/** Ручные «предыдущие нужды» координаторов (таблица может отсутствовать на старых БД). */
+type PreviousNeedItem = {
+  id: number;
+  note: string;
+  created_at: string;
+  source: 'manual' | 'journal';
+};
+
+function parsePreviousNeedId(raw: unknown): number {
+  if (typeof raw === 'number' && Number.isFinite(raw)) return raw;
+  if (typeof raw === 'string' && /^-?\d+$/.test(raw.trim())) return Number(raw.trim());
+  return NaN;
+}
+
+/** Ручные заметки координаторов + записи из журнала истории (как в профиле участника). */
 async function attachManualPreviousPrayerNeedsToMembers(members: Member[]): Promise<void> {
   const ids = members.map((m) => m.id).filter((id) => Number.isFinite(id));
   if (ids.length === 0) return;
+
+  const byManual = new Map<number, PreviousNeedItem[]>();
   try {
     const prevNeeds = await query(
       `SELECT
@@ -147,34 +164,115 @@ async function attachManualPreviousPrayerNeedsToMembers(members: Member[]): Prom
          WHERE p.member_id = ANY($1::int[])
            AND NULLIF(TRIM(COALESCE(p.note, '')), '') IS NOT NULL
        ) AS ranked
-       WHERE ranked.rn <= 5
+       WHERE ranked.rn <= 8
        ORDER BY ranked.member_id ASC, ranked.created_at DESC`,
       [ids],
     );
 
-    const byMember = new Map<number, Array<{ id: number; note: string; created_at: string }>>();
-    for (const row of prevNeeds.rows as any[]) {
-      const id = Number(row.member_id);
-      const arr = byMember.get(id) ?? [];
+    for (const row of prevNeeds.rows as Array<{
+      member_id: unknown;
+      id: unknown;
+      note: unknown;
+      created_at: unknown;
+    }>) {
+      const mid = Number(row.member_id);
+      const nid = parsePreviousNeedId(row.id);
+      if (!Number.isFinite(mid) || !Number.isFinite(nid)) continue;
+      const note = String(row.note ?? '').trim();
+      if (!note) continue;
+      const arr = byManual.get(mid) ?? [];
       arr.push({
-        id: Number(row.id),
-        note: String(row.note),
+        id: nid,
+        note,
         created_at: String(row.created_at),
+        source: 'manual',
       });
-      byMember.set(id, arr);
-    }
-
-    for (const m of members) {
-      m.previous_manual_prayer_needs = byMember.get(m.id) ?? [];
+      byManual.set(mid, arr);
     }
   } catch (e) {
-    if (isPgMissingTableOrColumn(e)) {
-      for (const m of members) {
-        m.previous_manual_prayer_needs = [];
-      }
-      return;
+    if (!isPgMissingTableOrColumn(e)) {
+      throw e;
     }
-    throw e;
+  }
+
+  const byJournal = new Map<number, PreviousNeedItem[]>();
+  try {
+    const hist = await query(
+      `SELECT member_id, id, note, created_at FROM (
+         SELECT h.member_id,
+                h.id::bigint AS id,
+                trim(h.prayer_request) AS note,
+                h.created_at::text AS created_at
+           FROM member_prayer_request_history h
+          WHERE h.member_id = ANY($1::int[])
+            AND NULLIF(trim(h.prayer_request), '') IS NOT NULL
+         UNION ALL
+         SELECT mpc.member_id,
+                (-(mpc.cycle_index + 1))::bigint AS id,
+                trim(mpc.prayer_request) AS note,
+                mpc.updated_at::text AS created_at
+           FROM member_prayer_by_cycle mpc
+          WHERE mpc.member_id = ANY($1::int[])
+            AND NULLIF(trim(mpc.prayer_request), '') IS NOT NULL
+            AND NOT EXISTS (
+              SELECT 1
+                FROM member_prayer_request_history h2
+               WHERE h2.member_id = mpc.member_id
+                 AND h2.cycle_index IS NOT DISTINCT FROM mpc.cycle_index
+            )
+       ) sub
+       ORDER BY member_id ASC, created_at DESC`,
+      [ids],
+    );
+
+    const rankByMember = new Map<number, number>();
+    for (const row of hist.rows as Array<{
+      member_id: unknown;
+      id: unknown;
+      note: unknown;
+      created_at: unknown;
+    }>) {
+      const mid = Number(row.member_id);
+      const nid = parsePreviousNeedId(row.id);
+      if (!Number.isFinite(mid) || !Number.isFinite(nid)) continue;
+      const note = String(row.note ?? '').trim();
+      if (!note) continue;
+      const r = (rankByMember.get(mid) ?? 0) + 1;
+      rankByMember.set(mid, r);
+      if (r > 15) continue;
+      const arr = byJournal.get(mid) ?? [];
+      arr.push({
+        id: nid,
+        note,
+        created_at: String(row.created_at),
+        source: 'journal',
+      });
+      byJournal.set(mid, arr);
+    }
+  } catch (e) {
+    if (!isPgMissingTableOrColumn(e)) {
+      throw e;
+    }
+  }
+
+  for (const m of members) {
+    const manual = byManual.get(m.id) ?? [];
+    const journal = byJournal.get(m.id) ?? [];
+    const combined: PreviousNeedItem[] = [...manual, ...journal];
+    combined.sort((a, b) => {
+      const t = b.created_at.localeCompare(a.created_at);
+      return t !== 0 ? t : b.id - a.id;
+    });
+    const seen = new Set<string>();
+    const deduped: PreviousNeedItem[] = [];
+    for (const row of combined) {
+      const key = `${row.source}|${row.note}|${row.created_at.slice(0, 19)}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      deduped.push(row);
+      if (deduped.length >= 12) break;
+    }
+    m.previous_manual_prayer_needs = deduped;
   }
 }
 

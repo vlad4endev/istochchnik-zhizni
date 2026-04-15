@@ -1114,6 +1114,15 @@ CREATE TABLE IF NOT EXISTS studio_song_recents (
 );
 CREATE INDEX IF NOT EXISTS idx_studio_song_recents_member ON studio_song_recents (member_id, last_opened_at DESC);
 
+CREATE TABLE IF NOT EXISTS dashboard_coordinator_notes (
+  kind VARCHAR(32) PRIMARY KEY CHECK (kind IN ('urgent_prayer', 'announcement')),
+  body TEXT NOT NULL DEFAULT '',
+  start_date DATE NOT NULL,
+  end_date DATE NOT NULL,
+  updated_by_member_id INTEGER REFERENCES members(id) ON DELETE SET NULL,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 INSERT INTO songs (title, slug, content, default_key, tempo, time_signature, is_published)
 SELECT 'Демо: пример песни', 'demo-primer-pesni',
        '{title: Пример}' || chr(10) || '[C]Строка с аккордами' || chr(10) || 'Текст куплета',

@@ -22,6 +22,7 @@ import {
   LuChevronUp,
   LuChurch,
   LuCloudOff,
+  LuFlame,
   LuHammer,
   LuHandHeart,
   LuHeartHandshake,
@@ -40,7 +41,7 @@ import { memberRosterName } from '../../../lib/memberRosterName';
 import type { Backslider, DayPrayerData, GlobalTheme, Member, Ministry } from '../../../types';
 import { fetchMe, patchProfile } from '../../profile/api';
 import { NextWeekPrayerPlanSection, userCanViewNextWeekPrayerPlan } from '../components/NextWeekPrayerPlanSection';
-import { formatCalendarDayKey, getCalendarDay } from '../api';
+import { fetchDashboardCoordinatorNotes, formatCalendarDayKey, getCalendarDay } from '../api';
 import { loadErrorDescription } from '../prayerPageUtils';
 
 import 'react-day-picker/style.css';
@@ -476,6 +477,12 @@ export function DailyPrayerPage() {
     queryFn: () => getCalendarDay(dateKey),
   });
 
+  const coordinatorNotesQ = useQuery({
+    queryKey: ['calendar', 'dashboard-coordinator-notes', dateKey],
+    queryFn: () => fetchDashboardCoordinatorNotes(dateKey),
+    staleTime: 60_000,
+  });
+
   const today = new Date();
   const chipLabel = format(selected, 'd MMMM yyyy', { locale: ru });
   const isToday = isSameDay(selected, today);
@@ -608,6 +615,29 @@ export function DailyPrayerPage() {
       </div>
 
       <div className="px-4 pt-4 shell:px-6">
+        {coordinatorNotesQ.data?.urgent_prayer ? (
+          <section
+            aria-label="Срочная молитвенная нужда"
+            className="mb-4 overflow-hidden rounded-2xl border-2 border-rose-300/90 bg-gradient-to-br from-rose-50 via-white to-amber-50/90 p-4 shadow-[0_10px_32px_rgba(190,24,93,0.14)]"
+          >
+            <div className="flex items-start gap-3">
+              <span
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-rose-500/15 text-rose-700"
+                aria-hidden
+              >
+                <LuFlame className="h-5 w-5" strokeWidth={2} />
+              </span>
+              <div className="min-w-0 flex-1">
+                <h2 className="text-[11px] font-extrabold uppercase tracking-[0.14em] text-rose-800">
+                  Срочная молитвенная нужда
+                </h2>
+                <p className="mt-2 whitespace-pre-wrap text-[15px] font-semibold leading-relaxed text-stone-800">
+                  {coordinatorNotesQ.data.urgent_prayer.text}
+                </p>
+              </div>
+            </div>
+          </section>
+        ) : null}
         {userCanViewNextWeekPrayerPlan(me) ? (
           <NextWeekPrayerPlanSection
             canView

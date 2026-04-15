@@ -2,6 +2,7 @@ import type { Request, Response } from 'express';
 import { AiAgentError, chatCompletion } from '../ai';
 import { notifyRealtime } from '../realtime/notify';
 import { getAiSettingsAdmin, updateAiSettings } from '../services/aiSettingsService';
+import { isConnectionPresetId, type AiConnectionPresetId } from '../types/aiConnectionPresets';
 import { isAiPromptScopeId, type AiPromptScopeId } from '../types/aiPromptScopes';
 
 type AuthRequest = Request & { authUserId?: number; authUserRole?: string };
@@ -40,6 +41,7 @@ export async function patchAiSettingsHandler(req: Request, res: Response): Promi
 
   const patch: {
     enabled?: boolean;
+    connection_preset?: AiConnectionPresetId | null;
     base_url?: string | null;
     api_key?: string | null;
     default_model?: string | null;
@@ -55,6 +57,17 @@ export async function patchAiSettingsHandler(req: Request, res: Response): Promi
       return;
     }
     patch.enabled = body.enabled;
+  }
+  if (body.connection_preset !== undefined) {
+    if (body.connection_preset !== null && typeof body.connection_preset !== 'string') {
+      res.status(400).json({ error: 'Поле connection_preset: строка (openai|deepseek|openrouter|custom) или null' });
+      return;
+    }
+    if (body.connection_preset !== null && !isConnectionPresetId(body.connection_preset)) {
+      res.status(400).json({ error: 'Неизвестный connection_preset' });
+      return;
+    }
+    patch.connection_preset = body.connection_preset as AiConnectionPresetId | null;
   }
   if (body.base_url !== undefined) {
     if (body.base_url !== null && typeof body.base_url !== 'string') {

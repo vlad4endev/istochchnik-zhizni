@@ -1,3 +1,5 @@
+import type { AiConnectionPresetId, AiPresetCatalogEntry } from './aiConnectionPresets';
+import { inferConnectionPresetFromBaseUrl, isConnectionPresetId } from './aiConnectionPresets';
 import {
   AI_PROMPT_SCOPE_LIST,
   type AiPromptScopeId,
@@ -6,12 +8,16 @@ import {
 
 export type AiProviderId = 'openai_compatible';
 
+export type { AiConnectionPresetId };
+
 /** Промпты по разделам: если для раздела не задано, используется общий `system_prompt`. */
 export type AiSectionPrompts = Partial<Record<AiPromptScopeId, string>>;
 
 export interface AiSettingsDocument {
   enabled: boolean;
   provider: AiProviderId;
+  /** Мастер выбора: готовые OpenAI / DeepSeek / OpenRouter или свой URL */
+  connection_preset: AiConnectionPresetId;
   /** База API без завершающего слэша, например https://api.openai.com/v1 */
   base_url: string;
   /** Ключ в JSON; может быть null если задан только через переменные окружения */
@@ -40,6 +46,9 @@ export interface AiSettingsAdminView {
   prompt_scopes: AiPromptScopeOption[];
   /** Значения по каждому разделу (null — не задано, возьмётся общий промпт) */
   section_prompts: Record<AiPromptScopeId, string | null>;
+  connection_preset: AiConnectionPresetId;
+  /** Каталог пресетов для админки (одинаковый при каждом ответе) */
+  preset_catalog: AiPresetCatalogEntry[];
   temperature: number;
   max_tokens: number;
 }
@@ -101,9 +110,15 @@ export function normalizeAiSettingsDocument(raw: unknown): AiSettingsDocument {
 
   const section_prompts = normalizeSectionPrompts(o.section_prompts);
 
+  const connection_preset: AiConnectionPresetId =
+    typeof o.connection_preset === 'string' && isConnectionPresetId(o.connection_preset)
+      ? o.connection_preset
+      : inferConnectionPresetFromBaseUrl(base_url);
+
   return {
     enabled,
     provider,
+    connection_preset,
     base_url,
     api_key,
     default_model,

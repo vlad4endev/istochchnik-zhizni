@@ -35,14 +35,20 @@ function normalizeMemberRow(raw: unknown): Member | null {
           const itemId = item.id;
           const note = item.note;
           const createdAt = item.created_at;
+          const srcRaw = item.source;
           const parsedId = typeof itemId === 'number' ? itemId : Number(itemId);
           if (!Number.isFinite(parsedId) || typeof note !== 'string' || typeof createdAt !== 'string') {
             return null;
           }
           if (!note.trim()) return null;
-          return { id: parsedId, note, created_at: createdAt };
+          const source =
+            srcRaw === 'journal' || srcRaw === 'manual' ? srcRaw : undefined;
+          return source ? { id: parsedId, note, created_at: createdAt, source } : { id: parsedId, note, created_at: createdAt };
         })
-        .filter((x): x is { id: number; note: string; created_at: string } => x != null)
+        .filter(
+          (x): x is { id: number; note: string; created_at: string; source?: 'manual' | 'journal' } =>
+            x != null,
+        )
     : [];
   return {
     id: idNum,
@@ -341,4 +347,58 @@ export async function getCalendarDay(dateKey: string): Promise<DayPrayerData | n
     }
     throw e;
   }
+}
+
+export type DashboardCoordinatorNoteKind = 'urgent_prayer' | 'announcement';
+export type DashboardCoordinatorDuration = 'day' | 'week' | 'month';
+
+export interface DashboardCoordinatorNotePayload {
+  text: string;
+  start_date: string;
+  end_date: string;
+}
+
+export interface DashboardCoordinatorNotesResponse {
+  urgent_prayer: DashboardCoordinatorNotePayload | null;
+  announcement: DashboardCoordinatorNotePayload | null;
+}
+
+function normalizeDashboardNote(raw: unknown): DashboardCoordinatorNotePayload | null {
+  if (raw == null || typeof raw !== 'object') return null;
+  const o = raw as Record<string, unknown>;
+  const text = typeof o.text === 'string' ? o.text : '';
+  const start_date = typeof o.start_date === 'string' ? o.start_date : '';
+  const end_date = typeof o.end_date === 'string' ? o.end_date : '';
+  if (!start_date || !end_date) return null;
+  if (!text.trim()) return null;
+  return { text: text.trim(), start_date, end_date };
+}
+
+function normalizeDashboardCoordinatorResponse(raw: unknown): DashboardCoordinatorNotesResponse {
+  if (raw == null || typeof raw !== 'object') {
+    return { urgent_prayer: null, announcement: null };
+  }
+  const o = raw as Record<string, unknown>;
+  return {
+    urgent_prayer: normalizeDashboardNote(o.urgent_prayer),
+    announcement: normalizeDashboardNote(o.announcement),
+  };
+}
+
+/** Срочная нужда и объявление координаторов: видимость на календарную дату `forDate`. */
+export async function fetchDashboardCoordinatorNotes(forDate: string): Promise<DashboardCoordinatorNotesResponse> {
+  const { data } = await apiClient.get<unknown>('/api/calendar/dashboard-coordinator-notes', {
+    params: { for_date: forDate },
+  });
+  return normalizeDashboardCoordinatorResponse(data);
+}
+
+export async function saveDashboardCoordinatorNote(input: {
+  kind: DashboardCoordinatorNoteKind;
+  text: string;
+  duration: DashboardCoordinatorDuration;
+  today_key: string;
+}): Promise<DashboardCoordinatorNotesResponse> {
+  const { data } = await apiClient.post<unknown>('/api/calendar/dashboard-coordinator-notes', input);
+  return normalizeDashboardCoordinatorResponse(data);
 }

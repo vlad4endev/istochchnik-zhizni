@@ -10,6 +10,8 @@ export interface Member {
     id: number;
     note: string;
     created_at: string;
+    /** Запись из журнала («История молитвенных записок»), не редактируется как ручная заметка. */
+    source?: 'manual' | 'journal';
   }>;
 }
 
