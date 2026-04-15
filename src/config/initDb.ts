@@ -106,6 +106,7 @@ CREATE TABLE IF NOT EXISTS global_settings (
   telegram_prayer_chat_id TEXT,
   telegram_coordinator_chat_id TEXT,
   telegram_default_chat_id TEXT,
+  telegram_prayer_template TEXT,
   telegram_enabled BOOLEAN NOT NULL DEFAULT FALSE
 );
 
@@ -124,6 +125,14 @@ CREATE TABLE IF NOT EXISTS member_prayer_request_history (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+CREATE TABLE IF NOT EXISTS member_previous_prayer_needs_manual (
+  id BIGSERIAL PRIMARY KEY,
+  member_id INTEGER NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+  note TEXT NOT NULL,
+  created_by_member_id INTEGER REFERENCES members(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 CREATE TABLE IF NOT EXISTS member_prayer_by_cycle (
   member_id INTEGER NOT NULL REFERENCES members(id) ON DELETE CASCADE,
   cycle_index BIGINT NOT NULL,
@@ -135,6 +144,9 @@ CREATE TABLE IF NOT EXISTS member_prayer_by_cycle (
 
 CREATE INDEX IF NOT EXISTS idx_member_prayer_by_cycle_cycle
   ON member_prayer_by_cycle (cycle_index);
+
+CREATE INDEX IF NOT EXISTS idx_member_previous_prayer_needs_manual_member_created
+  ON member_previous_prayer_needs_manual (member_id, created_at DESC);
 
 ALTER TABLE member_prayer_request_history ADD COLUMN IF NOT EXISTS cycle_index BIGINT;
 
@@ -278,6 +290,7 @@ ALTER TABLE global_settings ADD COLUMN IF NOT EXISTS telegram_bot_token TEXT;
 ALTER TABLE global_settings ADD COLUMN IF NOT EXISTS telegram_prayer_chat_id TEXT;
 ALTER TABLE global_settings ADD COLUMN IF NOT EXISTS telegram_coordinator_chat_id TEXT;
 ALTER TABLE global_settings ADD COLUMN IF NOT EXISTS telegram_default_chat_id TEXT;
+ALTER TABLE global_settings ADD COLUMN IF NOT EXISTS telegram_prayer_template TEXT;
 ALTER TABLE global_settings ADD COLUMN IF NOT EXISTS telegram_enabled BOOLEAN NOT NULL DEFAULT FALSE;
 ALTER TABLE global_settings ADD COLUMN IF NOT EXISTS notification_settings_json TEXT;
 
@@ -361,14 +374,9 @@ CREATE TABLE IF NOT EXISTS push_subscriptions (
   endpoint TEXT NOT NULL,
   keys_p256dh TEXT NOT NULL,
   keys_auth TEXT NOT NULL,
-  user_agent TEXT,
-  last_used_at TIMESTAMPTZ DEFAULT NOW(),
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   UNIQUE(endpoint)
 );
-
-ALTER TABLE push_subscriptions ADD COLUMN IF NOT EXISTS user_agent TEXT;
-ALTER TABLE push_subscriptions ADD COLUMN IF NOT EXISTS last_used_at TIMESTAMPTZ DEFAULT NOW();
 
 CREATE INDEX IF NOT EXISTS idx_push_subs_member_id
   ON push_subscriptions (member_id);
@@ -384,6 +392,31 @@ CREATE TABLE IF NOT EXISTS user_subscriptions (
 
 CREATE INDEX IF NOT EXISTS idx_user_subscriptions_member_id
   ON user_subscriptions (member_id);
+
+-- Централизованный журнал приложения (админка -> раздел "Журнал")
+CREATE TABLE IF NOT EXISTS app_logs (
+  id BIGSERIAL PRIMARY KEY,
+  level VARCHAR(16) NOT NULL CHECK (level IN ('info', 'warn', 'error')),
+  scope VARCHAR(64) NOT NULL,
+  event VARCHAR(128) NOT NULL,
+  message TEXT NOT NULL,
+  context JSONB NOT NULL DEFAULT '{}'::jsonb,
+  request_method VARCHAR(12),
+  request_path TEXT,
+  status_code INTEGER,
+  duration_ms INTEGER,
+  user_id INTEGER REFERENCES members(id) ON DELETE SET NULL,
+  ip TEXT,
+  user_agent TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_app_logs_created_desc
+  ON app_logs (created_at DESC, id DESC);
+CREATE INDEX IF NOT EXISTS idx_app_logs_level_created
+  ON app_logs (level, created_at DESC, id DESC);
+CREATE INDEX IF NOT EXISTS idx_app_logs_scope_created
+  ON app_logs (scope, created_at DESC, id DESC);
 
 
 -- RPC aligned with src/services/calendarService.ts (overrides + is_active + per-cycle prayer_request).
@@ -982,6 +1015,7 @@ CREATE INDEX IF NOT EXISTS idx_profile_post_likes_post
 -- Песенник и «Моя студия»
 CREATE TABLE IF NOT EXISTS songs (
   id BIGSERIAL PRIMARY KEY,
+  song_number INTEGER,
   title VARCHAR(500) NOT NULL,
   slug VARCHAR(500) NOT NULL,
   content TEXT NOT NULL DEFAULT '',
@@ -995,6 +1029,16 @@ CREATE TABLE IF NOT EXISTS songs (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE UNIQUE INDEX IF NOT EXISTS songs_slug_uidx ON songs (LOWER(slug));
+ALTER TABLE songs ADD COLUMN IF NOT EXISTS song_number INTEGER;
+UPDATE songs
+SET song_number = ranked.rn
+FROM (
+  SELECT id, ROW_NUMBER() OVER (ORDER BY created_at ASC, id ASC) AS rn
+  FROM songs
+) AS ranked
+WHERE songs.id = ranked.id
+  AND songs.song_number IS NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS songs_song_number_uidx ON songs (song_number) WHERE song_number IS NOT NULL;
 ALTER TABLE songs ADD COLUMN IF NOT EXISTS tags TEXT[] NOT NULL DEFAULT '{}';
 CREATE INDEX IF NOT EXISTS songs_tags_gin ON songs USING GIN (tags);
 CREATE INDEX IF NOT EXISTS songs_fts_idx ON songs USING GIN (

@@ -534,15 +534,31 @@ export function MessageBubble({
     if (payloadType === 'image') {
       const rawUrl = String(payload.url ?? '').trim();
       const src = resolvePublicUrl(rawUrl) ?? rawUrl;
+      const caption = String(message.content ?? '').trim();
       return src ? (
-        <button
-          type="button"
-          onClick={() => setLightboxSrc(src)}
-          className="block w-full max-w-[250px] overflow-hidden rounded-lg bg-black/5"
-          aria-label="Открыть изображение"
-        >
-          <img src={src} alt="" className="h-48 w-full object-cover" loading="lazy" />
-        </button>
+        <div className="w-full max-w-[min(78vw,22rem)] overflow-hidden rounded-2xl">
+          <button
+            type="button"
+            onClick={() => setLightboxSrc(src)}
+            className={[
+              'block w-full overflow-hidden',
+              isMine ? 'bg-white/10' : 'bg-black/[0.04]',
+            ].join(' ')}
+            aria-label="Открыть изображение"
+          >
+            <img
+              src={src}
+              alt=""
+              className="max-h-[420px] w-full object-cover"
+              loading="lazy"
+            />
+          </button>
+          {caption ? (
+            <div className={['px-3 py-2 text-[14px] leading-relaxed', isMine ? 'text-white/95' : 'text-gray-900'].join(' ')}>
+              <MentionRichText text={caption} namesById={participantLabelById} isMine={isMine} />
+            </div>
+          ) : null}
+        </div>
       ) : (
         <span>Изображение недоступно</span>
       );

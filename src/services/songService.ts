@@ -2,6 +2,7 @@ import { query } from '../config/db';
 
 export interface SongRow {
   id: string;
+  song_number: number | null;
   title: string;
   slug: string;
   content: string;
@@ -28,6 +29,7 @@ function mapSong(r: Record<string, unknown>): SongRow {
   }
   return {
     id: String(r.id),
+    song_number: r.song_number != null ? Number(r.song_number) : null,
     title: String(r.title),
     slug: String(r.slug),
     content: String(r.content ?? ''),
@@ -102,7 +104,10 @@ export async function listPublishedSongs(
   const whereSql = conditions.join(' AND ');
 
   if (memberId == null) {
-    const result = await query(`SELECT * FROM songs s WHERE ${whereSql} ORDER BY s.title ASC`, params);
+    const result = await query(
+      `SELECT * FROM songs s WHERE ${whereSql} ORDER BY COALESCE(s.song_number, 2147483647) ASC, s.title ASC`,
+      params
+    );
     return result.rows.map((row) => ({ ...mapSong(row as Record<string, unknown>) }));
   }
 
@@ -116,7 +121,7 @@ export async function listPublishedSongs(
      LEFT JOIN studio_versions sv ON sv.song_id = s.id AND sv.member_id = $${mid1}
      LEFT JOIN song_favorites f ON f.song_id = s.id AND f.member_id = $${mid2}
      WHERE ${whereSql}
-     ORDER BY s.title ASC`,
+     ORDER BY COALESCE(s.song_number, 2147483647) ASC, s.title ASC`,
     [...params, memberId, memberId]
   );
 
@@ -164,6 +169,7 @@ export async function getSongById(
 }
 
 export interface CreateSongInput {
+  song_number?: number | null;
   title: string;
   content?: string;
   default_key?: string | null;
@@ -183,10 +189,25 @@ export async function createSong(input: CreateSongInput): Promise<SongRow> {
   const tags = input.tags?.length ? input.tags : [];
 
   const result = await query(
-    `INSERT INTO songs (title, slug, content, default_key, tempo, time_signature, tags, is_published, created_by_member_id)
-     VALUES ($1, gen_random_uuid()::text, $2, $3, $4, $5, $6::text[], COALESCE($7, TRUE), $8)
+    `INSERT INTO songs (song_number, title, slug, content, default_key, tempo, time_signature, tags, is_published, created_by_member_id)
+     VALUES (
+       COALESCE(
+         $1,
+         (SELECT COALESCE(MAX(s2.song_number), 0) + 1 FROM songs s2)
+       ),
+       $2,
+       gen_random_uuid()::text,
+       $3,
+       $4,
+       $5,
+       $6,
+       $7::text[],
+       COALESCE($8, TRUE),
+       $9
+     )
      RETURNING *`,
     [
+      input.song_number ?? null,
       title,
       input.content ?? '',
       input.default_key ?? null,

@@ -1,4 +1,6 @@
 import { randomUUID } from 'node:crypto';
+import fs from 'node:fs';
+import path from 'node:path';
 
 import { query as dbQuery } from '../config/db';
 import type {
@@ -12,6 +14,8 @@ import type {
   PermissionsJson,
 } from '../types/messenger';
 import { resolveMessengerConversationDeepLink } from '../config/messengerPublic';
+import { getUploadsRoot } from '../config/uploadsRoot';
+import { getPrayerCycleSnapshotForDate } from './prayerCycleService';
 import { sendPushNotification } from './pushService';
 
 // ─── Helpers ──────────────────────────────────────────────────
@@ -438,7 +442,7 @@ export async function listConversationMembers(conversationId: string): Promise<C
   for (const sql of attempts) {
     try {
       const result = await dbQuery(sql, [conversationId]);
-      return result.rows.map((r: any) => ({
+      const baseMembers = result.rows.map((r: any) => ({
         member_id: Number(r.member_id),
         role: r.role as ParticipantRole,
         joined_at: r.joined_at ?? new Date().toISOString(),
@@ -449,6 +453,67 @@ export async function listConversationMembers(conversationId: string): Promise<C
         last_name: r.last_name ?? null,
         avatar_url: r.avatar_url ?? null,
       }));
+      if (baseMembers.length === 0) return baseMembers;
+
+      const today = new Date().toISOString().slice(0, 10);
+      const snap = await getPrayerCycleSnapshotForDate(today);
+      const currentCycleIndex = snap?.cycle_index ?? 0;
+      if (currentCycleIndex <= 0) return baseMembers;
+
+      try {
+        const memberIds = baseMembers.map((m) => m.member_id);
+        const historyResult = await dbQuery(
+          `SELECT
+             ranked.member_id,
+             ranked.cycle_index,
+             ranked.prayer_request,
+             ranked.updated_at
+           FROM (
+             SELECT
+               mpc.member_id,
+               mpc.cycle_index,
+               mpc.prayer_request,
+               mpc.updated_at,
+               ROW_NUMBER() OVER (
+                 PARTITION BY mpc.member_id
+                 ORDER BY mpc.cycle_index DESC, mpc.updated_at DESC
+               ) AS rn
+             FROM member_prayer_by_cycle mpc
+             WHERE mpc.member_id = ANY($1::int[])
+               AND mpc.cycle_index < $2
+               AND NULLIF(TRIM(COALESCE(mpc.prayer_request, '')), '') IS NOT NULL
+           ) AS ranked
+           WHERE ranked.rn <= 3
+           ORDER BY ranked.member_id ASC, ranked.cycle_index DESC, ranked.updated_at DESC`,
+          [memberIds, currentCycleIndex],
+        );
+
+        const historyByMember = new Map<
+          number,
+          Array<{ cycle_index: number; prayer_request: string; updated_at: string | null }>
+        >();
+        for (const row of historyResult.rows as any[]) {
+          const memberId = Number(row.member_id);
+          const current = historyByMember.get(memberId) ?? [];
+          current.push({
+            cycle_index: Number(row.cycle_index),
+            prayer_request: String(row.prayer_request),
+            updated_at: row.updated_at ? String(row.updated_at) : null,
+          });
+          historyByMember.set(memberId, current);
+        }
+
+        return baseMembers.map((member) => ({
+          ...member,
+          previous_prayer_requests: historyByMember.get(member.member_id) ?? [],
+        }));
+      } catch (e) {
+        // Backward compatibility for environments without prayer-cycle tables/columns.
+        if (pgErrorCode(e) === '42P01' || pgErrorCode(e) === '42703') {
+          return baseMembers;
+        }
+        throw e;
+      }
     } catch (e) {
       lastErr = e;
       if (!isPgUndefinedColumnError(e)) {
@@ -1113,6 +1178,55 @@ function normalizePayload(raw: unknown): MessagePayload {
   return {};
 }
 
+function normalizeAttachmentUrl(raw: unknown): string {
+  const input = String(raw ?? '').trim();
+  if (!input) throw new Error('Attachment URL is required');
+  if (/^https?:\/\//i.test(input)) return input;
+
+  let normalized = input;
+  if (normalized.startsWith('/api/uploads/')) {
+    normalized = normalized.replace(/^\/api\/uploads\//, '/uploads/');
+  } else if (normalized.startsWith('api/uploads/')) {
+    normalized = normalized.replace(/^api\/uploads\//, '/uploads/');
+  }
+  if (!normalized.startsWith('/uploads/')) {
+    throw new Error('Attachment URL must start with /uploads/');
+  }
+  return normalized;
+}
+
+function resolveLocalUploadAbsolutePath(urlPath: string): string | null {
+  if (!urlPath.startsWith('/uploads/')) return null;
+  let rel = urlPath.slice('/uploads/'.length);
+  try {
+    rel = decodeURIComponent(rel);
+  } catch {
+    return null;
+  }
+  const posixRel = path.posix.normalize(rel).replace(/^\/+/, '');
+  if (!posixRel || posixRel.startsWith('..') || posixRel.includes('\0')) return null;
+  const abs = path.resolve(getUploadsRoot(), posixRel);
+  const root = path.resolve(getUploadsRoot());
+  if (!abs.startsWith(`${root}${path.sep}`) && abs !== root) return null;
+  return abs;
+}
+
+function normalizeAttachmentPayloadForSend(plRaw: MessagePayload): MessagePayload {
+  const url = normalizeAttachmentUrl(plRaw.url);
+  const localPath = resolveLocalUploadAbsolutePath(url);
+  if (localPath && !fs.existsSync(localPath)) {
+    throw new Error('Attachment file is missing on server');
+  }
+  const sizeNum = Number(plRaw.size ?? 0);
+  return {
+    ...plRaw,
+    url,
+    name: String(plRaw.name ?? plRaw.filename ?? '').trim() || undefined,
+    mimeType: String(plRaw.mimeType ?? '').trim() || undefined,
+    size: Number.isFinite(sizeNum) && sizeNum > 0 ? sizeNum : undefined,
+  };
+}
+
 async function fetchMemberDisplayRow(memberId: number): Promise<{
   sender_name: string | null;
   sender_first_name: string | null;
@@ -1186,6 +1300,8 @@ export async function prepareMessageForSend(
   let pl: MessagePayload;
   if (pt === 'poll') {
     pl = normalizePollPayloadForSend(contentStored, plRaw);
+  } else if (pt === 'image' || pt === 'file') {
+    pl = normalizeAttachmentPayloadForSend(plRaw);
   } else if (pt === 'text' && Object.keys(plRaw).length === 0) {
     pl = { text: contentStored };
   } else {

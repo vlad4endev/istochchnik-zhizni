@@ -24,6 +24,7 @@ import { ru } from 'date-fns/locale';
 import { ADMIN_TABS, type AdminTabId } from '../adminTabs';
 import { AccessRequestsSection } from '../AccessRequestsSection';
 import { NotificationsSettingsSection } from '../NotificationsSettingsSection';
+import { ProjectJournalSection } from '../ProjectJournalSection';
 import { useBrandingStore } from '../../branding/brandingStore';
 import {
   apiErrorMessage,
@@ -337,6 +338,7 @@ export function AdminPage() {
       {tab === 'events' && <EventsSection />}
       {tab === 'templates' && <TemplatesSection />}
       {tab === 'project' && <ProjectSection />}
+      {tab === 'journal' && <ProjectJournalSection />}
       {tab === 'notifications' && <NotificationsSettingsSection />}
       {tab === 'telegram' && <TelegramSection />}
     </div>
@@ -3656,6 +3658,7 @@ function TelegramSection() {
     prayer_chat_id: '',
     coordinator_chat_id: '',
     default_chat_id: '',
+    prayer_template: '',
   });
   const [customText, setCustomText] = useState('');
   const [customChatId, setCustomChatId] = useState('');
@@ -3669,6 +3672,7 @@ function TelegramSection() {
       prayer_chat_id: data.prayer_chat_id ?? '',
       coordinator_chat_id: data.coordinator_chat_id ?? '',
       default_chat_id: data.default_chat_id ?? '',
+      prayer_template: data.prayer_template ?? '',
     });
   }, [data]);
 
@@ -3676,10 +3680,11 @@ function TelegramSection() {
     mutationFn: () =>
       patchTelegramSettings({
         enabled: form.enabled,
-        bot_token: normalizeUiString(form.bot_token),
+        bot_token: normalizeUiOptionalUpdateString(form.bot_token),
         prayer_chat_id: normalizeUiString(form.prayer_chat_id),
         coordinator_chat_id: normalizeUiString(form.coordinator_chat_id),
         default_chat_id: normalizeUiString(form.default_chat_id),
+        prayer_template: normalizeUiString(form.prayer_template),
       }),
     onSuccess: (next) => {
       setNote({ type: 'ok', text: 'Telegram настройки сохранены.' });
@@ -3724,6 +3729,7 @@ function TelegramSection() {
     prayer_chat_id: null,
     coordinator_chat_id: null,
     default_chat_id: null,
+    prayer_template: null,
     has_bot_token: false,
   }) satisfies TelegramSettingsResponse;
 
@@ -3802,6 +3808,22 @@ function TelegramSection() {
               onChange={(e) => setForm((s) => ({ ...s, default_chat_id: e.target.value }))}
               placeholder="-1001234567890"
             />
+          </div>
+          <div className="sm:col-span-2">
+            <label className="mb-1 block text-xs font-semibold text-stone-600">
+              Шаблон «Молитва на сегодня»
+            </label>
+            <textarea
+              className={`${fieldClass()} min-h-[170px]`}
+              value={form.prayer_template}
+              onChange={(e) => setForm((s) => ({ ...s, prayer_template: e.target.value }))}
+              placeholder={'Молитва на {{date}}\n\nУчастник: {{member_name}}\nНужда: {{member_prayer_request}}'}
+            />
+            <p className="mt-1 text-xs text-stone-500">
+              Переменные: {'{{date}}'}, {'{{member_name}}'}, {'{{member_prayer_request}}'}, {'{{theme_title}}'},{' '}
+              {'{{theme_bible_verse}}'}, {'{{theme_prayer_points}}'}, {'{{ministry_title}}'}, {'{{ministry_prayer_points}}'},
+              {' {{backslider_name}}'}.
+            </p>
           </div>
         </div>
 
@@ -3886,6 +3908,11 @@ function TelegramSection() {
 function normalizeUiString(value: string): string | null {
   const t = value.trim();
   return t.length > 0 ? t : null;
+}
+
+function normalizeUiOptionalUpdateString(value: string): string | undefined {
+  const t = value.trim();
+  return t.length > 0 ? t : undefined;
 }
 
 function ProjectSection() {

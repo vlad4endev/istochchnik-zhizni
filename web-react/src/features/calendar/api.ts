@@ -25,8 +25,25 @@ function normalizeMemberRow(raw: unknown): Member | null {
   if (!Number.isFinite(idNum)) return null;
   const pr = raw.prayer_request;
   const pu = raw.prayer_need_updated_at;
+  const prevManualNeedsRaw = raw.previous_manual_prayer_needs;
   const fn = raw.first_name;
   const ln = raw.last_name;
+  const previous_manual_prayer_needs = Array.isArray(prevManualNeedsRaw)
+    ? prevManualNeedsRaw
+        .map((item) => {
+          if (!isRecord(item)) return null;
+          const itemId = item.id;
+          const note = item.note;
+          const createdAt = item.created_at;
+          const parsedId = typeof itemId === 'number' ? itemId : Number(itemId);
+          if (!Number.isFinite(parsedId) || typeof note !== 'string' || typeof createdAt !== 'string') {
+            return null;
+          }
+          if (!note.trim()) return null;
+          return { id: parsedId, note, created_at: createdAt };
+        })
+        .filter((x): x is { id: number; note: string; created_at: string } => x != null)
+    : [];
   return {
     id: idNum,
     name: String(name),
@@ -35,6 +52,7 @@ function normalizeMemberRow(raw: unknown): Member | null {
     prayer_request: typeof pr === 'string' ? pr : pr == null ? null : String(pr),
     prayer_need_updated_at:
       typeof pu === 'string' ? pu : pu == null || pu === undefined ? null : String(pu),
+    previous_manual_prayer_needs,
   };
 }
 
@@ -115,6 +133,27 @@ export async function patchMemberCyclePrayer(
     target_date: targetDate,
     prayer_request: prayerRequest,
   });
+}
+
+export async function patchMemberPreviousPrayerNeed(
+  memberId: number,
+  note: string
+): Promise<void> {
+  await apiClient.patch('/api/calendar/member-previous-prayer-need', {
+    member_id: memberId,
+    note,
+  });
+}
+
+export async function putMemberPreviousPrayerNeed(
+  id: number,
+  note: string
+): Promise<void> {
+  await apiClient.put(`/api/calendar/member-previous-prayer-need/${id}`, { note });
+}
+
+export async function deleteMemberPreviousPrayerNeed(id: number): Promise<void> {
+  await apiClient.delete(`/api/calendar/member-previous-prayer-need/${id}`);
 }
 
 export async function getActiveEvents(): Promise<ChurchEventItem[]> {

@@ -394,7 +394,25 @@ export interface TelegramSettingsResponse {
   prayer_chat_id: string | null;
   coordinator_chat_id: string | null;
   default_chat_id: string | null;
+  prayer_template: string | null;
   has_bot_token: boolean;
+}
+
+export interface AppLogItem {
+  id: number;
+  level: 'info' | 'warn' | 'error';
+  scope: string;
+  event: string;
+  message: string;
+  context: Record<string, unknown>;
+  request_method: string | null;
+  request_path: string | null;
+  status_code: number | null;
+  duration_ms: number | null;
+  user_id: number | null;
+  ip: string | null;
+  user_agent: string | null;
+  created_at: string;
 }
 
 export async function fetchTelegramSettings(): Promise<TelegramSettingsResponse> {
@@ -408,6 +426,7 @@ export async function patchTelegramSettings(body: {
   prayer_chat_id?: string | null;
   coordinator_chat_id?: string | null;
   default_chat_id?: string | null;
+  prayer_template?: string | null;
 }): Promise<TelegramSettingsResponse> {
   const { data } = await apiClient.patch<TelegramSettingsResponse>('/api/telegram/settings', body);
   return data;
@@ -423,4 +442,21 @@ export async function sendTelegramMessage(body: {
     body,
   );
   return data;
+}
+
+export async function fetchAppLogsAdmin(params?: {
+  level?: 'info' | 'warn' | 'error';
+  search?: string;
+  limit?: number;
+  offset?: number;
+}): Promise<AppLogItem[]> {
+  const { data } = await apiClient.get<{ items?: AppLogItem[] }>('/api/settings/logs/admin', {
+    params: {
+      level: params?.level || undefined,
+      search: params?.search?.trim() || undefined,
+      limit: params?.limit ?? 100,
+      offset: params?.offset ?? 0,
+    },
+  });
+  return Array.isArray(data?.items) ? data.items : [];
 }

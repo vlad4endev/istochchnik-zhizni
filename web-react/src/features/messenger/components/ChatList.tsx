@@ -2,7 +2,8 @@ import { useMemo, useRef, useState, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { useChatStore, EMPTY_ARRAY, type ChatTab } from '../chatStore';
 import type { ConversationListItem, PatchMyConversationUiBody } from '../api/messengerApi';
-import { resolvePublicUrl } from '../../../lib/resolvePublicUrl';
+import { AppAvatar } from '../../../components/AppAvatar';
+import { getAvatarColor, getAvatarInitial } from '../avatarUtils';
 import { LuPin, LuVolume2, LuVolumeX, LuFolderOpen, LuEraser, LuTrash2 } from 'react-icons/lu';
 import { IoCheckmarkDone } from 'react-icons/io5';
 
@@ -253,13 +254,12 @@ function ChatListItem({
   };
 
   const displayName = getConversationName(conv);
-  const avatarLetter = displayName.charAt(0).toUpperCase();
+  const avatarLetter = getAvatarInitial(displayName);
   const avatarColor = getAvatarColor(conv.id);
   const avatarUrl =
     conv.type === 'private'
       ? (conv.other_member?.avatar_url ?? null)
       : (conv.avatar_url ?? null);
-  const avatarSrc = resolvePublicUrl(avatarUrl);
   const lastMsg = conv.last_message;
   const isTyping = typingUsers.length > 0;
   const isPinned = conv.my_ui_pinned === true;
@@ -318,11 +318,12 @@ function ChatListItem({
               className="grid h-12 w-12 place-items-center overflow-hidden rounded-full text-[15px] font-bold text-white"
               style={{ background: avatarColor }}
             >
-              {avatarSrc ? (
-                <img src={avatarSrc} alt="" className="h-full w-full object-cover" loading="lazy" />
-              ) : (
-                <span>{avatarLetter}</span>
-              )}
+              <AppAvatar
+                src={avatarUrl}
+                fallback={<span>{avatarLetter}</span>}
+                className="grid h-full w-full place-items-center"
+                imgClassName="h-full w-full object-cover"
+              />
             </div>
             {conv.type === 'private' ? (
               <span
@@ -539,20 +540,6 @@ function getConversationName(conv: ConversationListItem): string {
     return `${fn} ${ln}`.trim() || conv.other_member.name;
   }
   return conv.title || 'Без названия';
-}
-
-const AVATAR_COLORS = [
-  '#C0392B', '#E67E22', '#D35400', '#F1C40F',
-  '#27AE60', '#16A085', '#2980B9', '#8E44AD',
-  '#2C3E50', '#7F8C8D', '#7d3640', '#5c2830'
-];
-
-function getAvatarColor(id: string): string {
-  let hash = 0;
-  for (let i = 0; i < id.length; i++) {
-    hash = id.charCodeAt(i) + ((hash << 5) - hash);
-  }
-  return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
 }
 
 function formatTime(iso: string): string {

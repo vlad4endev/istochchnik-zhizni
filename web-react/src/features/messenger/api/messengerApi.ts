@@ -187,6 +187,13 @@ export async function uploadFile(
   return data;
 }
 
+export async function fetchUploadsHealth(): Promise<{ ok: boolean; storage: 'healthy' | 'unavailable'; reason?: string }> {
+  const { data } = await apiClient.get<{ ok: boolean; storage: 'healthy' | 'unavailable'; reason?: string }>(
+    `${BASE}/uploads/health`,
+  );
+  return data;
+}
+
 export type EffectivePermissions = Record<string, boolean>;
 
 export type ConversationMeta = {
@@ -237,6 +244,11 @@ export type ConversationMember = {
   first_name: string | null;
   last_name: string | null;
   avatar_url?: string | null;
+  previous_prayer_requests?: Array<{
+    cycle_index: number;
+    prayer_request: string;
+    updated_at: string | null;
+  }>;
 };
 
 export type PrivateChatProfile = {

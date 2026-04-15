@@ -5,7 +5,12 @@ import {
   type WeekPlanKind,
   getPrayerDataByDate,
 } from '../services/calendarService';
-import { setCoordinatorPrayerNeedForDate } from '../services/userService';
+import {
+  addManualPreviousPrayerNeed,
+  deleteManualPreviousPrayerNeed,
+  setCoordinatorPrayerNeedForDate,
+  updateManualPreviousPrayerNeed,
+} from '../services/userService';
 import {
   getCycleCollectionClaimsSnapshot,
   setCycleCollectionClaim,
@@ -338,6 +343,84 @@ export async function patchMemberCyclePrayer(req: Request, res: Response): Promi
       return;
     }
     console.error('Calendar member-cycle-prayer PATCH error:', err);
+    res.status(500).json({ error: 'Database error' });
+  }
+}
+
+export async function patchMemberPreviousPrayerNeed(req: Request, res: Response): Promise<void> {
+  if (!(await assertAdminOrCollectionCoordinator(req, res))) {
+    return;
+  }
+  const authReq = req as AuthReq;
+  const memberId = parsePositiveInt(req.body?.member_id);
+  const noteRaw = req.body?.note;
+  if (memberId == null || typeof noteRaw !== 'string') {
+    res.status(400).json({ error: 'Ожидается { member_id: number, note: string }' });
+    return;
+  }
+  try {
+    await addManualPreviousPrayerNeed(memberId, noteRaw, authReq.authUserId ?? null);
+    notifyRealtime(['calendar']);
+    res.json({ ok: true });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg === 'empty_note') {
+      res.status(400).json({ error: 'Текст предыдущей нужды не может быть пустым' });
+      return;
+    }
+    console.error('Calendar member-previous-prayer-need PATCH error:', err);
+    res.status(500).json({ error: 'Database error' });
+  }
+}
+
+export async function putMemberPreviousPrayerNeed(req: Request, res: Response): Promise<void> {
+  if (!(await assertAdminOrCollectionCoordinator(req, res))) {
+    return;
+  }
+  const id = parsePositiveInt(req.params?.id);
+  const noteRaw = req.body?.note;
+  if (id == null || typeof noteRaw !== 'string') {
+    res.status(400).json({ error: 'Ожидается { note: string } и валидный id' });
+    return;
+  }
+  try {
+    const updated = await updateManualPreviousPrayerNeed(id, noteRaw);
+    if (!updated) {
+      res.status(404).json({ error: 'Запись не найдена' });
+      return;
+    }
+    notifyRealtime(['calendar']);
+    res.json({ ok: true });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg === 'empty_note') {
+      res.status(400).json({ error: 'Текст предыдущей нужды не может быть пустым' });
+      return;
+    }
+    console.error('Calendar member-previous-prayer-need PUT error:', err);
+    res.status(500).json({ error: 'Database error' });
+  }
+}
+
+export async function deleteMemberPreviousPrayerNeed(req: Request, res: Response): Promise<void> {
+  if (!(await assertAdminOrCollectionCoordinator(req, res))) {
+    return;
+  }
+  const id = parsePositiveInt(req.params?.id);
+  if (id == null) {
+    res.status(400).json({ error: 'Ожидается валидный id' });
+    return;
+  }
+  try {
+    const deleted = await deleteManualPreviousPrayerNeed(id);
+    if (!deleted) {
+      res.status(404).json({ error: 'Запись не найдена' });
+      return;
+    }
+    notifyRealtime(['calendar']);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('Calendar member-previous-prayer-need DELETE error:', err);
     res.status(500).json({ error: 'Database error' });
   }
 }

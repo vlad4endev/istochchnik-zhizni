@@ -43,6 +43,8 @@ export function AddSongPage() {
   const [rawPaste, setRawPaste] = useState('');
   const [content, setContent] = useState('');
   const [title, setTitle] = useState('');
+  const [autoSongNumber, setAutoSongNumber] = useState(true);
+  const [songNumber, setSongNumber] = useState('');
   const [youtubeUrl, setYoutubeUrl] = useState('');
   const [defaultKey, setDefaultKey] = useState('');
   const [quickRoot, setQuickRoot] = useState('G');
@@ -154,6 +156,7 @@ export function AddSongPage() {
   const createMut = useMutation({
     mutationFn: () =>
       createSong({
+        song_number: autoSongNumber ? null : songNumber.trim() ? Number(songNumber) : null,
         title: title.trim(),
         content,
         default_key: defaultKey.trim() || null,
@@ -204,6 +207,10 @@ export function AddSongPage() {
   const goPrev = () => {
     if (step > 1) setStep((s) => s - 1);
   };
+
+  const manualSongNumberInvalid =
+    !autoSongNumber &&
+    (!!songNumber.trim() ? !Number.isInteger(Number(songNumber)) || Number(songNumber) <= 0 : true);
 
   return (
     <div className={`mx-auto max-w-6xl space-y-6 pb-24 ${theme.page}`}>
@@ -426,6 +433,36 @@ export function AddSongPage() {
               />
             </label>
             <label className="block">
+              <span className={`text-xs font-bold uppercase ${theme.muted}`}>Номер песни</span>
+              <div className="mt-1 flex items-center gap-2">
+                <label className={`inline-flex items-center gap-2 text-xs ${theme.muted}`}>
+                  <input
+                    type="checkbox"
+                    checked={autoSongNumber}
+                    onChange={(e) => setAutoSongNumber(e.target.checked)}
+                  />
+                  Авто по порядку
+                </label>
+                {!autoSongNumber ? (
+                  <div className="space-y-1">
+                    <input
+                      type="number"
+                      min={1}
+                      value={songNumber}
+                      onChange={(e) => setSongNumber(e.target.value)}
+                      className={`w-28 rounded-xl border px-3 py-2 text-sm ${theme.input}`}
+                      placeholder="№"
+                    />
+                    {manualSongNumberInvalid ? (
+                      <p className={`text-[11px] ${isStudio ? 'text-red-400' : 'text-red-600'}`}>
+                        Укажите целый номер больше 0.
+                      </p>
+                    ) : null}
+                  </div>
+                ) : null}
+              </div>
+            </label>
+            <label className="block">
               <span className={`text-xs font-bold uppercase ${theme.muted}`}>BPM</span>
               <input
                 type="number"
@@ -498,7 +535,7 @@ export function AddSongPage() {
             </button>
             <button
               type="button"
-              disabled={!title.trim() || createMut.isPending}
+              disabled={!title.trim() || createMut.isPending || manualSongNumberInvalid}
               onClick={() => createMut.mutate()}
               className={`inline-flex items-center gap-2 rounded-xl px-6 py-2.5 text-sm font-semibold disabled:opacity-50 ${theme.saveBtn}`}
             >

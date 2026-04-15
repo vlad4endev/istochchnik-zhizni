@@ -18,6 +18,11 @@ interface Member {
   prayer_request: string | null;
   /** Когда последний раз меняли молитвенную нужду для этого цикла (member_prayer_by_cycle). */
   prayer_need_updated_at: string | null;
+  previous_manual_prayer_needs?: Array<{
+    id: number;
+    note: string;
+    created_at: string;
+  }>;
 }
 
 interface MemberOverrideRow {
@@ -313,6 +318,53 @@ async function getMemberAssignmentsForDates(dates: string[]): Promise<NextWeekMe
         prayer_need_updated_at: updatedAt,
       },
     });
+  }
+
+  const memberIds = Array.from(
+    new Set(out.map((row) => row.member?.id).filter((id): id is number => Number.isFinite(id)))
+  );
+  if (memberIds.length > 0) {
+    const prevNeeds = await query(
+      `SELECT
+         ranked.member_id,
+         ranked.id,
+         ranked.note,
+         ranked.created_at
+       FROM (
+         SELECT
+           p.member_id,
+           p.id,
+           p.note,
+           p.created_at::text AS created_at,
+           ROW_NUMBER() OVER (
+             PARTITION BY p.member_id
+             ORDER BY p.created_at DESC, p.id DESC
+           ) AS rn
+         FROM member_previous_prayer_needs_manual p
+         WHERE p.member_id = ANY($1::int[])
+           AND NULLIF(TRIM(COALESCE(p.note, '')), '') IS NOT NULL
+       ) AS ranked
+       WHERE ranked.rn <= 5
+       ORDER BY ranked.member_id ASC, ranked.created_at DESC`,
+      [memberIds]
+    );
+
+    const byMember = new Map<number, Array<{ id: number; note: string; created_at: string }>>();
+    for (const row of prevNeeds.rows as any[]) {
+      const id = Number(row.member_id);
+      const arr = byMember.get(id) ?? [];
+      arr.push({
+        id: Number(row.id),
+        note: String(row.note),
+        created_at: String(row.created_at),
+      });
+      byMember.set(id, arr);
+    }
+
+    for (const row of out) {
+      if (!row.member) continue;
+      row.member.previous_manual_prayer_needs = byMember.get(row.member.id) ?? [];
+    }
   }
 
   return out;

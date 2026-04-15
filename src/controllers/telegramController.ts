@@ -55,6 +55,7 @@ export async function patchTelegramSettingsHandler(req: Request, res: Response):
         prayer_chat_id?: unknown;
         coordinator_chat_id?: unknown;
         default_chat_id?: unknown;
+        prayer_template?: unknown;
       }
     | undefined;
 
@@ -90,6 +91,14 @@ export async function patchTelegramSettingsHandler(req: Request, res: Response):
     res.status(400).json({ error: 'Поле "default_chat_id" должно быть строкой или null' });
     return;
   }
+  if (
+    body?.prayer_template !== undefined &&
+    body.prayer_template !== null &&
+    typeof body.prayer_template !== 'string'
+  ) {
+    res.status(400).json({ error: 'Поле "prayer_template" должно быть строкой или null' });
+    return;
+  }
 
   try {
     const settings = await updateTelegramSettings({
@@ -98,6 +107,7 @@ export async function patchTelegramSettingsHandler(req: Request, res: Response):
       prayer_chat_id: body?.prayer_chat_id as string | null | undefined,
       coordinator_chat_id: body?.coordinator_chat_id as string | null | undefined,
       default_chat_id: body?.default_chat_id as string | null | undefined,
+      prayer_template: body?.prayer_template as string | null | undefined,
     });
     notifyRealtime(['admin']);
     res.json(settings);

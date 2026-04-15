@@ -10,7 +10,9 @@ export type NotificationRuleId =
   | 'system_update'
   | 'new_sermon'
   | 'new_event'
-  | 'coordinator_week_digest';
+  | 'coordinator_week_digest'
+  | 'coordinator_missing_need_tomorrow'
+  | 'coordinator_missing_need_today_escalation';
 
 export interface NotificationRule {
   id: NotificationRuleId;
@@ -139,6 +141,30 @@ export const DEFAULT_NOTIFICATION_RULES: readonly NotificationRule[] = [
     enabled: true,
     time: '09:00',
     importance: 'normal',
+    repeat: 'week',
+    weekDay: 1,
+    monthDay: 1,
+    yearMonth: 1,
+    yearDay: 1,
+  },
+  {
+    id: 'coordinator_missing_need_tomorrow',
+    title: 'Контроль: на завтра нет молитвенной нужды',
+    enabled: true,
+    time: '18:00',
+    importance: 'high',
+    repeat: 'week',
+    weekDay: 0,
+    monthDay: 1,
+    yearMonth: 1,
+    yearDay: 1,
+  },
+  {
+    id: 'coordinator_missing_need_today_escalation',
+    title: 'Эскалация: сегодня всё ещё нет молитвенной нужды',
+    enabled: true,
+    time: '08:00',
+    importance: 'high',
     repeat: 'week',
     weekDay: 1,
     monthDay: 1,

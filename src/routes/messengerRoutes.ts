@@ -1,4 +1,6 @@
 import { Router, type Request, type Response } from 'express';
+import fs from 'node:fs/promises';
+import { constants as fsConstants } from 'node:fs';
 import { resolveMessengerConversationDeepLink } from '../config/messengerPublic';
 import { requireAuthSession } from '../middleware/authSession';
 import { checkChatPermission } from '../middleware/chatPermission';
@@ -7,6 +9,7 @@ import { upload } from '../middleware/upload';
 import * as svc from '../services/messengerService';
 import { sendToRoomAll, sendToRoom, sendToMember, ensureMemberInRoom } from '../realtime/wsHub';
 import { sendPushNotification } from '../services/pushService';
+import { getUploadsRoot } from '../config/uploadsRoot';
 
 type AuthReq = Request & { authUserId?: number };
 
@@ -28,6 +31,24 @@ async function getConversationListItemForMember(memberId: number, convId: string
 
 // All messenger routes require authentication
 router.use(requireAuthSession);
+
+/** GET /api/messenger/uploads/health */
+router.get('/uploads/health', async (_req: Request, res: Response) => {
+  const root = getUploadsRoot();
+  try {
+    await fs.mkdir(root, { recursive: true });
+    await fs.access(root, fsConstants.R_OK | fsConstants.W_OK);
+    const st = await fs.stat(root);
+    if (!st.isDirectory()) {
+      res.status(503).json({ ok: false, storage: 'unavailable', reason: 'uploads_path_not_directory' });
+      return;
+    }
+    res.json({ ok: true, storage: 'healthy' });
+  } catch (e) {
+    console.error('[messenger] uploads health check failed:', e);
+    res.status(503).json({ ok: false, storage: 'unavailable', reason: 'uploads_not_writable' });
+  }
+});
 
 /** POST /api/messenger/studio/song-chat { songId } — чат обсуждения песни (студия). */
 router.post('/studio/song-chat', async (req: Request, res: Response) => {
@@ -60,6 +81,8 @@ router.post('/upload', upload.single('file'), async (req: Request, res: Response
   res.json({
     url: `/uploads/${file.filename}`,
     name: file.originalname,
+    originalName: file.originalname,
+    mimeType: file.mimetype || '',
     size: file.size,
   });
 });

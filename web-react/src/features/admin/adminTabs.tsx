@@ -3,6 +3,7 @@ import {
   LuBell,
   LuCalendarDays,
   LuCalendarRange,
+  LuHistory,
   LuInbox,
   LuPalette,
   LuSend,
@@ -11,7 +12,16 @@ import {
 } from 'react-icons/lu';
 
 export interface AdminTabConfig {
-  id: 'members' | 'requests' | 'calendar' | 'events' | 'templates' | 'project' | 'notifications' | 'telegram';
+  id:
+    | 'members'
+    | 'requests'
+    | 'calendar'
+    | 'events'
+    | 'templates'
+    | 'project'
+    | 'journal'
+    | 'notifications'
+    | 'telegram';
   label: string;
   Icon: IconType;
   short: string;
@@ -63,6 +73,13 @@ export const ADMIN_TABS: readonly AdminTabConfig[] = [
     short: 'Вид',
     description:
       'Название и логотип в меню хранятся только в этом браузере — тот же формат, что в мобильном приложении.',
+  },
+  {
+    id: 'journal',
+    label: 'Журнал',
+    Icon: LuHistory,
+    short: 'Логи',
+    description: 'Логи процессов, HTTP-запросов и ошибок сервера для быстрой диагностики проблем.',
   },
   {
     id: 'notifications',

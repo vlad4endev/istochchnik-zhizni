@@ -6,6 +6,11 @@ export interface Member {
   prayer_request: string | null;
   /** Когда сохраняли нужду для текущего цикла (member_prayer_by_cycle.updated_at). */
   prayer_need_updated_at?: string | null;
+  previous_manual_prayer_needs?: Array<{
+    id: number;
+    note: string;
+    created_at: string;
+  }>;
 }
 
 export interface GlobalTheme {

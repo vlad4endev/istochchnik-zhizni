@@ -5,6 +5,7 @@ import { format } from 'date-fns';
 import { ru } from 'date-fns/locale';
 import {
   LuArrowRight,
+  LuBellRing,
   LuCalendarDays,
   LuChurch,
   LuHeart,
@@ -17,10 +18,12 @@ import {
 import { fetchBroadcastEmbed } from '../../../api/broadcast';
 import { fetchPodcastFeed, type PodcastEpisode } from '../../../api/resources';
 import {
+  getCycleCollectionClaims,
   getWeekBirthdays,
   formatCalendarDayKey,
   getActiveEvents,
   getCalendarDay,
+  getWeekPlanMembers,
   type BirthdayWeekItem,
   type ChurchEventItem,
 } from '../../calendar/api';
@@ -152,6 +155,12 @@ function formatBirthdayChipDate(ymd: string): string {
   return format(d, 'EEE, d MMM', { locale: ru });
 }
 
+function formatReminderDateLabel(ymd: string): string {
+  const d = new Date(`${ymd}T00:00:00`);
+  if (Number.isNaN(d.getTime())) return ymd;
+  return format(d, 'EEEE, d MMMM', { locale: ru });
+}
+
 function DashboardMain() {
   const [now, setNow] = useState(() => new Date());
   const navigate = useNavigate();
@@ -249,6 +258,18 @@ function DashboardMain() {
     queryFn: getWeekBirthdays,
     staleTime: 300_000,
   });
+  const collectionClaimsQ = useQuery({
+    queryKey: ['calendar', 'cycle', 'collection-claims', 'current'],
+    queryFn: () => getCycleCollectionClaims('current'),
+    enabled: Boolean(meQ.data?.is_collection_coordinator || isAdmin),
+    staleTime: 30_000,
+  });
+  const weekMembersQ = useQuery({
+    queryKey: ['calendar', 'week-members', 'current', 'dashboard'],
+    queryFn: () => getWeekPlanMembers('current'),
+    enabled: Boolean(meQ.data?.is_collection_coordinator || isAdmin),
+    staleTime: 30_000,
+  });
 
   const me = meQ.data ?? null;
   const fullName = `${me?.first_name ?? ''} ${me?.last_name ?? ''}`.trim() || me?.name || 'Профиль';
@@ -290,6 +311,29 @@ function DashboardMain() {
   const latestEpisode = pickLatestEpisode(sermonsQ.data?.episodes ?? []);
   const event = pickUpcomingEvent(now, eventsQ.data ?? []);
   const birthdaysThisWeek: BirthdayWeekItem[] = birthdaysQ.data?.items ?? [];
+  const myMissingNeedRow = useMemo(() => {
+    const meId = me?.id ?? null;
+    const claims = collectionClaimsQ.data?.members ?? [];
+    const weekDays = weekMembersQ.data ?? [];
+    if (meId == null || claims.length === 0 || weekDays.length === 0) return null;
+    const myClaimedIds = new Set(
+      claims
+        .filter((row) => row.claimed_by?.id === meId)
+        .map((row) => row.id),
+    );
+    if (myClaimedIds.size === 0) return null;
+    const today = todayDateKey;
+    return (
+      weekDays
+        .filter((row) => row.date >= today)
+        .find((row) => {
+          const memberId = row.member?.id;
+          if (memberId == null || !myClaimedIds.has(memberId)) return false;
+          const need = (row.member?.prayer_request ?? '').trim();
+          return need.length === 0;
+        }) ?? null
+    );
+  }, [collectionClaimsQ.data?.members, me?.id, todayDateKey, weekMembersQ.data]);
 
   function onToggleFavorite(id: string) {
     setFavorites((prev) => {
@@ -350,6 +394,38 @@ function DashboardMain() {
         </div>
 
         <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 sm:gap-4 xl:grid-cols-12">
+          {myMissingNeedRow?.member ? (
+            <section className="overflow-hidden rounded-3xl border border-rose-200/80 bg-gradient-to-br from-rose-50/90 via-white to-orange-50/80 p-4 shadow-[var(--shadow-card)] sm:col-span-2 sm:p-5 xl:col-span-12">
+              <div className="flex items-start gap-3">
+                <div className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-rose-100 text-rose-700">
+                  <LuBellRing className="h-5 w-5" strokeWidth={2.2} aria-hidden />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-[11px] font-extrabold uppercase tracking-[0.14em] text-rose-700">
+                    Важно для ответственного
+                  </p>
+                  <p className="mt-1 text-base font-extrabold leading-tight text-stone-900">
+                    У участника, которого вы выбрали, нет заполненной молитвенной нужды.
+                  </p>
+                  <p className="mt-1.5 text-sm font-semibold text-stone-700">
+                    {myMissingNeedRow.member.name} · {formatReminderDateLabel(myMissingNeedRow.date)}
+                  </p>
+                  <p className="mt-1 text-sm text-stone-600">
+                    Заполните поле нужды, чтобы не пропустить молитвенный день.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => navigate('/prayer')}
+                  className="tap-highlight-transparent touch-manipulation inline-flex min-h-[44px] shrink-0 items-center gap-2 rounded-2xl bg-rose-600 px-4 text-sm font-extrabold text-white shadow-sm hover:bg-rose-700"
+                >
+                  Заполнить
+                  <LuArrowRight className="h-4 w-4" strokeWidth={2} aria-hidden />
+                </button>
+              </div>
+            </section>
+          ) : null}
+
           {birthdaysThisWeek.length > 0 ? (
             <section className="overflow-hidden rounded-3xl border border-violet-200/70 bg-gradient-to-br from-violet-50/80 via-white to-fuchsia-50/70 p-4 shadow-[var(--shadow-card)] sm:col-span-2 sm:p-5 xl:col-span-12">
               <p className="text-[11px] font-extrabold uppercase tracking-[0.14em] text-violet-700">

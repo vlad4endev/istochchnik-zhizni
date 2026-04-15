@@ -8,6 +8,8 @@ import { formatMessengerLastSeen } from '../lastSeenUtils';
 import { resolvePublicUrl } from '../../../lib/resolvePublicUrl';
 import { emitAppToast } from '../../../lib/uiFeedback';
 import { ManageScreenShell, ManageSettingsGroup } from './ManageScreenShell';
+import { AppAvatar } from '../../../components/AppAvatar';
+import { getAvatarInitial } from '../avatarUtils';
 
 function GroupManageControls({
   chatId,
@@ -199,7 +201,7 @@ export function ManageChatHomePage() {
   const privateAvatarUrl =
     resolvePublicUrl(privateProfile?.avatar_url ?? null) ??
     resolvePublicUrl(conv?.other_member?.avatar_url ?? null);
-  const privateInitial = (fullName ?? title).trim().charAt(0).toUpperCase() || 'U';
+  const privateInitial = getAvatarInitial(fullName ?? title, 'U');
 
   return (
     <ManageScreenShell>
@@ -207,13 +209,16 @@ export function ManageChatHomePage() {
         <ManageSettingsGroup className="mt-4">
           <div className="flex items-start gap-4 p-4">
             <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-full bg-primary/10 ring-1 ring-gray-200/80">
-              {groupAvatarSrc ? (
-                <img src={groupAvatarSrc} alt="" className="h-full w-full object-cover" loading="lazy" />
-              ) : (
-                <div className="grid h-full w-full place-items-center text-primary">
-                  <LuUsers size={26} />
-                </div>
-              )}
+              <AppAvatar
+                src={groupAvatarSrc}
+                className="h-full w-full"
+                imgClassName="h-full w-full object-cover"
+                fallback={
+                  <div className="grid h-full w-full place-items-center text-primary">
+                    <LuUsers size={26} />
+                  </div>
+                }
+              />
             </div>
             <div className="min-w-0 flex-1">
               <p className="truncate text-[17px] font-semibold text-gray-900">{title}</p>
@@ -255,20 +260,16 @@ export function ManageChatHomePage() {
           <ManageSettingsGroup>
             <div className="flex flex-col items-center px-5 pb-4 pt-6">
               <div className="relative h-[72px] w-[72px] shrink-0 overflow-hidden rounded-full bg-primary/10 ring-2 ring-white shadow-sm">
-                {privateAvatarUrl ? (
-                  <img
-                    src={privateAvatarUrl}
-                    alt=""
-                    className="h-full w-full object-cover"
-                    loading="lazy"
-                    onError={(e) => {
-                      (e.currentTarget as HTMLImageElement).style.display = 'none';
-                    }}
-                  />
-                ) : null}
-                {!privateAvatarUrl ? (
-                  <div className="grid h-full w-full place-items-center text-2xl font-semibold text-primary">{privateInitial}</div>
-                ) : null}
+                <AppAvatar
+                  src={privateAvatarUrl}
+                  className="h-full w-full"
+                  imgClassName="h-full w-full object-cover"
+                  fallback={
+                    <div className="grid h-full w-full place-items-center text-2xl font-semibold text-primary">
+                      {privateInitial}
+                    </div>
+                  }
+                />
                 <span
                   className={[
                     'absolute bottom-0.5 right-0.5 h-3.5 w-3.5 rounded-full border-2 border-white',

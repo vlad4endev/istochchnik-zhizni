@@ -3,7 +3,8 @@ import type { SearchMember } from '../api/messengerApi';
 import { useEffect, useRef, useCallback, useMemo, useState } from 'react';
 import { LuSearch, LuX, LuUsers, LuMegaphone } from 'react-icons/lu';
 import { useChatStore, DRAFT_PRIVATE_PREFIX } from '../chatStore';
-import { resolvePublicUrl } from '../../../lib/resolvePublicUrl';
+import { AppAvatar } from '../../../components/AppAvatar';
+import { getAvatarColor } from '../avatarUtils';
 
 interface NewChatDialogProps {
   onClose: () => void;
@@ -182,7 +183,6 @@ export function NewChatDialog({ onClose, onCreated }: NewChatDialogProps) {
               {searching ? (
                 <div className="tg-empty-state">Поиск...</div>
               ) : sortedContacts.map((u) => {
-                const avatarSrc = resolvePublicUrl(u.avatar_url);
                 return (
                 <button 
                   key={u.id} 
@@ -190,16 +190,12 @@ export function NewChatDialog({ onClose, onCreated }: NewChatDialogProps) {
                   onClick={() => handleOpenChat(u)}
                 >
                   <div className="tg-member-avatar" style={{ background: getAvatarColor(String(u.id)) }}>
-                    {avatarSrc ? (
-                      <img
-                        src={avatarSrc}
-                        alt=""
-                        className="h-full w-full rounded-full object-cover"
-                        loading="lazy"
-                      />
-                    ) : (
-                      (u.first_name?.[0] || u.name[0])
-                    )}
+                    <AppAvatar
+                      src={u.avatar_url ?? null}
+                      fallback={u.first_name?.[0] || u.name[0]}
+                      className="grid h-full w-full place-items-center"
+                      imgClassName="h-full w-full rounded-full object-cover"
+                    />
                   </div>
                   <div className="tg-member-info">
                     <div className="tg-member-name">{u.first_name ? `${u.first_name} ${u.last_name || ''}` : u.name}</div>
@@ -238,7 +234,6 @@ export function NewChatDialog({ onClose, onCreated }: NewChatDialogProps) {
                 sortedContacts.map((u) => {
                   const isSelf = currentMemberId != null && u.id === currentMemberId;
                   const picked = Boolean(groupPick[u.id]);
-                  const avatarSrc = resolvePublicUrl(u.avatar_url);
                   return (
                     <button
                       key={u.id}
@@ -258,16 +253,12 @@ export function NewChatDialog({ onClose, onCreated }: NewChatDialogProps) {
                         {picked ? '✓' : ''}
                       </div>
                       <div className="tg-member-avatar" style={{ background: getAvatarColor(String(u.id)) }}>
-                        {avatarSrc ? (
-                          <img
-                            src={avatarSrc}
-                            alt=""
-                            className="h-full w-full rounded-full object-cover"
-                            loading="lazy"
-                          />
-                        ) : (
-                          u.first_name?.[0] || u.name[0]
-                        )}
+                        <AppAvatar
+                          src={u.avatar_url ?? null}
+                          fallback={u.first_name?.[0] || u.name[0]}
+                          className="grid h-full w-full place-items-center"
+                          imgClassName="h-full w-full rounded-full object-cover"
+                        />
                       </div>
                       <div className="tg-member-info">
                         <div className="tg-member-name">
@@ -315,9 +306,3 @@ export function NewChatDialog({ onClose, onCreated }: NewChatDialogProps) {
   );
 }
 
-function getAvatarColor(id: string): string {
-  const AVATAR_COLORS = ['#C0392B', '#E67E22', '#D35400', '#F1C40F', '#27AE60', '#16A085', '#2980B9', '#8E44AD'];
-  let hash = 0;
-  for (let i = 0; i < id.length; i++) { hash = id.charCodeAt(i) + ((hash << 5) - hash); }
-  return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
-}

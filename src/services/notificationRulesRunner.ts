@@ -3,10 +3,15 @@ import { pool } from '../config/db';
 import type { NotificationRule, NotificationSettingsDocument } from '../types/notificationSettings';
 import { getZonedNow, isoWeekKeyFromYmd, parseHm, type ZonedNow } from '../utils/zonedTime';
 import { readPodcastSettings } from '../controllers/resourcesController';
+import { getPrayerDataByDate } from './calendarService';
 import { getNextWeekMemberAssignments } from './calendarService';
 import { getBirthdayNamesForCalendarDay, getBirthdayNamesForWeekAroundDate } from './notificationBirthdayQueries';
 import { loadNotificationSettings, patchNotificationRuntimeState } from './notificationSettingsService';
-import { getCoordinatorMemberIdsWithPush, getMemberIdsWithAnyPushSubscription } from './fcmSubscriptionService';
+import {
+  getAdminMemberIdsWithPush,
+  getCoordinatorMemberIdsWithPush,
+  getMemberIdsWithAnyPushSubscription,
+} from './fcmSubscriptionService';
 import { sendPush } from './pushService';
 
 const parser = new Parser();
@@ -62,6 +67,68 @@ async function pushToCoordinators(title: string, body: string, url: string): Pro
   const ids = await getCoordinatorMemberIdsWithPush();
   for (const id of ids) {
     await sendPush(id, title, body, { url });
+  }
+}
+
+function ymdFromZoned(z: ZonedNow): string {
+  return `${z.year}-${String(z.month).padStart(2, '0')}-${String(z.day).padStart(2, '0')}`;
+}
+
+function addDaysYmd(ymd: string, days: number): string {
+  const d = new Date(`${ymd}T00:00:00.000Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+async function getCollectionClaimOwnerForMemberInCycle(
+  cycleIndex: number,
+  memberId: number,
+): Promise<number | null> {
+  if (!pool) return null;
+  const result = await pool.query(
+    `SELECT claimed_by_member_id
+     FROM cycle_collection_claims
+     WHERE cycle_index = $1 AND member_id = $2
+     LIMIT 1`,
+    [cycleIndex, memberId],
+  );
+  const raw = result.rows[0]?.claimed_by_member_id;
+  if (raw == null) return null;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : null;
+}
+
+async function notifyMissingPrayerNeedForDate(
+  dateYmd: string,
+  title: string,
+  bodyType: 'tomorrow' | 'today',
+): Promise<void> {
+  const dayData = await getPrayerDataByDate(dateYmd);
+  const assigned = dayData.members[0];
+  const need = (assigned?.prayer_request ?? '').trim();
+  if (!assigned || need.length > 0) return;
+
+  const memberName = assigned.name?.trim() || `Участник ${assigned.id}`;
+  const recipients = new Set<number>();
+
+  const admins = await getAdminMemberIdsWithPush();
+  for (const id of admins) recipients.add(id);
+
+  const cycleIndex = dayData.prayer_cycle?.index;
+  if (typeof cycleIndex === 'number') {
+    const ownerId = await getCollectionClaimOwnerForMemberInCycle(cycleIndex, assigned.id);
+    if (ownerId != null) recipients.add(ownerId);
+  }
+
+  const body =
+    bodyType === 'tomorrow'
+      ? `${memberName}: поле нужды на ${dateYmd} не заполнено.`
+      : `${memberName}: поле нужды на сегодня (${dateYmd}) всё ещё пустое.`;
+  const pushType =
+    bodyType === 'tomorrow' ? 'missing_prayer_need_tomorrow' : 'missing_prayer_need_today_escalation';
+
+  for (const id of recipients) {
+    await sendPush(id, title, body, { url: '/calendar', type: pushType });
   }
 }
 
@@ -225,6 +292,25 @@ async function handleRule(rule: NotificationRule, doc: NotificationSettingsDocum
         ? `Участники: ${participantsList}`
         : 'На следующую неделю нет распределённых участников.';
       await pushToCoordinators('Сбор нужд на следующую неделю', body, '/calendar');
+      return;
+    }
+    case 'coordinator_missing_need_tomorrow': {
+      const todayYmd = ymdFromZoned(z);
+      const tomorrowYmd = addDaysYmd(todayYmd, 1);
+      await notifyMissingPrayerNeedForDate(
+        tomorrowYmd,
+        'Нет молитвенной нужды на завтра',
+        'tomorrow',
+      );
+      return;
+    }
+    case 'coordinator_missing_need_today_escalation': {
+      const todayYmd = ymdFromZoned(z);
+      await notifyMissingPrayerNeedForDate(
+        todayYmd,
+        'Эскалация: нет молитвенной нужды на сегодня',
+        'today',
+      );
       return;
     }
     default:

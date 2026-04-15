@@ -24,7 +24,6 @@ import {
   RequireStudioAccess,
   RouteFallback,
 } from './routeGuards';
-import { MessengerWsProvider } from '../features/messenger/MessengerWsContext';
 
 /** Отдельные чанки: настройки (`/profile`) и публичная лента (`/profile/:username`) не тянут друг друга. */
 const LazyProfilePage = lazy(async () => {
@@ -35,6 +34,11 @@ const LazyProfilePage = lazy(async () => {
 const LazyPublicProfilePage = lazy(async () => {
   const m = await import('@features/profile/pages/PublicProfilePage');
   return { default: m.PublicProfilePage };
+});
+
+const MessengerRoutes = lazy(async () => {
+  const m = await import('../features/messenger/routes/MessengerRoutes');
+  return { default: m.MessengerRoutes };
 });
 
 const AdminPage = lazy(async () => {
@@ -101,12 +105,6 @@ const PublicSetlistPage = lazy(async () => {
   const m = await import('../features/studio/pages/PublicSetlistPage');
   return { default: m.PublicSetlistPage };
 });
-
-const MessengerRoutes = lazy(async () => {
-  const m = await import('../features/messenger/routes/MessengerRoutes');
-  return { default: m.MessengerRoutes };
-});
-
 
 export function AppRouter() {
   return (
@@ -212,13 +210,11 @@ export function AppRouter() {
         <Route
           path="messenger/*"
           element={
-            <Suspense fallback={<RouteFallback />}>
-              <RequireMessengerAccess>
-                <MessengerWsProvider>
-                  <MessengerRoutes />
-                </MessengerWsProvider>
-              </RequireMessengerAccess>
-            </Suspense>
+            <RequireMessengerAccess>
+              <Suspense fallback={<RouteFallback />}>
+                <MessengerRoutes />
+              </Suspense>
+            </RequireMessengerAccess>
           }
         />
         <Route

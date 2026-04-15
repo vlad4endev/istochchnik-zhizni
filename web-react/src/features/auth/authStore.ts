@@ -25,7 +25,6 @@ export interface AuthProfile {
   username: string;
   /** Числовой id участника — запасной слаг `member-{id}` до первого `/me`. */
   memberId: number | null;
-  ministryDirection?: string | null;
 }
 
 interface AuthState extends AuthProfile {
@@ -102,7 +101,6 @@ const flutterCompatibleStorage: StateStorage = {
         ),
         username: legacy?.username ?? '',
         memberId: legacy?.memberId ?? null,
-        ministryDirection: null,
       },
       version: 0,
     });
@@ -156,9 +154,8 @@ export const useAuthStore = create<AuthState>()(
       registrationStatus: 'active',
       username: '',
       memberId: null,
-      ministryDirection: null,
 
-      setSession: ({ token, firstName, lastName, role, registrationStatus, username, memberId, ministryDirection }) => {
+      setSession: ({ token, firstName, lastName, role, registrationStatus, username, memberId }) => {
         set({
           token,
           firstName: firstName.trim(),
@@ -167,7 +164,6 @@ export const useAuthStore = create<AuthState>()(
           registrationStatus: normalizeRegistrationStatus(registrationStatus),
           username: (username ?? '').trim(),
           memberId: memberId ?? null,
-          ministryDirection: ministryDirection ?? null,
         });
       },
 
@@ -178,7 +174,6 @@ export const useAuthStore = create<AuthState>()(
         registrationStatus,
         username,
         memberId,
-        ministryDirection,
       }) => {
         if (!get().token) return;
         set({
@@ -188,7 +183,6 @@ export const useAuthStore = create<AuthState>()(
           registrationStatus: normalizeRegistrationStatus(registrationStatus),
           username: (username ?? '').trim(),
           memberId: memberId ?? null,
-          ministryDirection: ministryDirection ?? null,
         });
       },
 
@@ -201,7 +195,6 @@ export const useAuthStore = create<AuthState>()(
           registrationStatus: 'active',
           username: '',
           memberId: null,
-          ministryDirection: null,
         });
       },
 
@@ -217,7 +210,6 @@ export const useAuthStore = create<AuthState>()(
               app_role?: string;
               registration_status?: string;
               username?: string;
-              ministry_direction?: string;
             };
             error?: string;
           }>(
@@ -251,7 +243,6 @@ export const useAuthStore = create<AuthState>()(
             registrationStatus: normalizeRegistrationStatus(user.registration_status),
             username: (user.username ?? '').trim(),
             memberId: typeof user.id === 'number' ? user.id : null,
-            ministryDirection: user.ministry_direction ?? null,
           });
 
           return { ok: true };
@@ -309,7 +300,6 @@ export const useAuthStore = create<AuthState>()(
             app_role?: string;
             registration_status?: string;
             username?: string;
-            ministry_direction?: string;
           };
           get().setSession({
             token: COOKIE_ONLY_SESSION_TOKEN,
@@ -319,7 +309,6 @@ export const useAuthStore = create<AuthState>()(
             registrationStatus: normalizeRegistrationStatus(user.registration_status),
             username: (user.username ?? '').trim(),
             memberId: typeof user.id === 'number' ? user.id : null,
-            ministryDirection: user.ministry_direction ?? null,
           });
         } catch {
           /* сеть / CORS */
@@ -337,7 +326,6 @@ export const useAuthStore = create<AuthState>()(
         registrationStatus: s.registrationStatus,
         username: s.username,
         memberId: s.memberId,
-        ministryDirection: s.ministryDirection,
       }),
     },
   ),

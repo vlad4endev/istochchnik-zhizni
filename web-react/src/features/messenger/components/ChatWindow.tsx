@@ -7,9 +7,10 @@ import { MessageBubble } from './MessageBubble';
 import { ChatInput } from './ChatInput';
 import { SearchChat } from './SearchChat';
 import { LuArrowLeft, LuSearch } from 'react-icons/lu';
-import { resolvePublicUrl } from '../../../lib/resolvePublicUrl';
+import { AppAvatar } from '../../../components/AppAvatar';
 import { formatMessengerLastSeen } from '../lastSeenUtils';
 import { groupMessages } from '../groupMessages';
+import { getAvatarColor, getAvatarInitial } from '../avatarUtils';
 import './messenger.css';
 
 interface ChatWindowProps {
@@ -334,22 +335,16 @@ export function ChatWindow({
     return conv.title || 'Чат';
   }, [conv, draftPeer, isDraft]);
 
-  const headerInitial = displayName.trim().charAt(0).toUpperCase() || '?';
+  const headerInitial = getAvatarInitial(displayName);
   const headerAvatarUrl = isDraft
     ? (draftPeer?.avatar_url ?? null)
     : conv?.type === 'private'
       ? (conv.other_member?.avatar_url ?? null)
       : (conv?.avatar_url ?? null);
-  const headerAvatarSrc = useMemo(() => resolvePublicUrl(headerAvatarUrl), [headerAvatarUrl]);
   const headerAvatarColor = useMemo(() => {
     if (isDraft && draftPeer) return 'var(--tg-primary)';
     if (!conv?.id) return 'var(--tg-primary)';
-    let hash = 0;
-    for (let i = 0; i < conv.id.length; i++) {
-      hash = conv.id.charCodeAt(i) + ((hash << 5) - hash);
-    }
-    const palette = ['#7d3640', '#0d9488', '#6366f1', '#c2410c', '#4f46e5', '#0e7490'];
-    return palette[Math.abs(hash) % palette.length];
+    return getAvatarColor(conv.id);
   }, [conv?.id, draftPeer, isDraft]);
 
   const isOnline = conv?.type === 'private' && conv.other_member && onlineMembers.has(conv.other_member.id);
@@ -435,11 +430,12 @@ export function ChatWindow({
               className="grid h-9 w-9 shrink-0 place-items-center overflow-hidden rounded-full text-[13px] font-semibold text-white sm:h-10 sm:w-10"
               style={{ backgroundColor: headerAvatarColor }}
             >
-              {headerAvatarSrc ? (
-                <img src={headerAvatarSrc} alt="" className="h-full w-full object-cover" />
-              ) : (
-                <span>{headerInitial}</span>
-              )}
+              <AppAvatar
+                src={headerAvatarUrl}
+                fallback={<span>{headerInitial}</span>}
+                className="grid h-full w-full place-items-center"
+                imgClassName="h-full w-full object-cover"
+              />
             </div>
             <div className="min-w-0 flex-1 overflow-hidden">
               <div className="truncate text-[16px] font-semibold leading-[1.2] text-gray-900 sm:text-[17px]">{displayName}</div>

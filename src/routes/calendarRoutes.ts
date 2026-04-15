@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import {
   getCycleCollectionClaims,
+  deleteMemberPreviousPrayerNeed,
   getWeekBirthdays,
   getNextWeekMembers,
   getPrayerBotMessage,
@@ -8,6 +9,8 @@ import {
   getTodayPrayerBotMessage,
   patchCycleCollectionClaims,
   patchMemberCyclePrayer,
+  patchMemberPreviousPrayerNeed,
+  putMemberPreviousPrayerNeed,
 } from '../controllers/calendarController';
 import {
   getThemes,
@@ -40,6 +43,9 @@ const router = Router();
 
 router.get('/next-week/members', getNextWeekMembers);
 router.patch('/member-cycle-prayer', patchMemberCyclePrayer);
+router.patch('/member-previous-prayer-need', patchMemberPreviousPrayerNeed);
+router.put('/member-previous-prayer-need/:id', putMemberPreviousPrayerNeed);
+router.delete('/member-previous-prayer-need/:id', deleteMemberPreviousPrayerNeed);
 router.get('/cycle/collection-claims', getCycleCollectionClaims);
 router.patch('/cycle/collection-claims', patchCycleCollectionClaims);
 /** Совместимость: старые клиенты / кэш PWA ходили на next-week/collection. */

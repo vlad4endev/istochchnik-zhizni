@@ -184,6 +184,7 @@ export async function createSongHandler(req: Request, res: Response): Promise<vo
       return;
     }
     const body = req.body as {
+      song_number?: number | string | null;
       title?: string;
       content?: string;
       default_key?: string | null;
@@ -197,8 +198,20 @@ export async function createSongHandler(req: Request, res: Response): Promise<vo
       res.status(400).json({ error: 'title required' });
       return;
     }
+    const songNumber =
+      body.song_number == null || body.song_number === ''
+        ? null
+        : Number.isInteger(Number(body.song_number)) && Number(body.song_number) > 0
+          ? Number(body.song_number)
+          : NaN;
+    if (Number.isNaN(songNumber)) {
+      res.status(400).json({ error: 'song_number должен быть целым положительным числом' });
+      return;
+    }
+
     const tags = parseTagsField(body);
     const song = await createSong({
+      song_number: songNumber,
       title,
       content: typeof body.content === 'string' ? body.content : '',
       default_key: body.default_key,

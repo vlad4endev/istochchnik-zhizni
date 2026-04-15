@@ -25,11 +25,15 @@ import publicRoutes from './routes/publicRoutes';
 import songRoutes from './routes/songRoutes';
 import studioRoutes from './routes/studioRoutes';
 import settingsRoutes from './routes/settingsRoutes';
-import messengerRoutes from './routes/messengerRoutes';
-import { attachRealtimeWebSocket, initRealtimeRedis } from './realtime/wsHub';
+import {
+  attachRealtimeWebSocket,
+  initMessengerFanoutPublisherOnly,
+  initRealtimeRedis,
+} from './realtime/wsHub';
 import { initPushCronJobs } from './cron/pushJobs';
 import { ensureUploadsDirs, getUploadsRoot } from './config/uploadsRoot';
 import { ensureAccessRequestsMessengerChannel } from './services/messengerService';
+import { writeAppLog } from './services/appLogService';
 
 dotenv.config();
 
@@ -44,6 +48,13 @@ if (process.env.TRUST_PROXY !== 'false') {
 
 function normalizeOrigin(url: string): string {
   return url.trim().replace(/\/+$/, '');
+}
+
+function httpStatusText(status: number): string {
+  if (status >= 500) return 'Ошибка сервера';
+  if (status >= 400) return 'Проблема в запросе';
+  if (status >= 300) return 'Перенаправление';
+  return 'Запрос выполнен';
 }
 
 /**
@@ -96,6 +107,38 @@ app.use(cors(corsOptions()));
 app.use(express.json());
 app.use(resolveAuthSession);
 
+// Журналируем API-запросы (длительность, статус, пользователь) для админки "Журнал".
+app.use((req, res, next) => {
+  const startedAt = Date.now();
+  const targetPath = (req.originalUrl || req.url || req.path || '').split('?')[0] || '';
+  const shouldLog = targetPath.startsWith('/api/') || targetPath === '/health';
+  if (!shouldLog) {
+    next();
+    return;
+  }
+  res.on('finish', () => {
+    const status = res.statusCode;
+    const level = status >= 500 ? 'error' : status >= 400 ? 'warn' : 'info';
+    void writeAppLog({
+      level,
+      scope: 'http',
+      event: 'http.request',
+      message: `${httpStatusText(status)}: ${req.method} ${targetPath} (статус ${status})`,
+      context: {
+        query: req.query,
+      },
+      request_method: req.method,
+      request_path: targetPath,
+      status_code: status,
+      duration_ms: Date.now() - startedAt,
+      user_id: req.authUserId,
+      ip: req.ip,
+      user_agent: req.get('user-agent') ?? '',
+    });
+  });
+  next();
+});
+
 // User-uploaded files (мессенджер, аватары). Путь: UPLOADS_DIR или ./uploads — том Docker обязателен в проде.
 ensureUploadsDirs();
 const uploadsAbs = getUploadsRoot();
@@ -141,7 +184,6 @@ app.use('/api', routes);
 app.use('/api/push', pushRoutes);
 app.use('/api/notifications', notificationsRoutes);
 app.use('/api/telegram', telegramRoutes);
-app.use('/api/messenger', messengerRoutes);
 
 // Debug/version endpoint (helps verify that deploy updated)
 app.get('/api/version', (_req, res) => {
@@ -196,6 +238,7 @@ async function start(): Promise<void> {
     }
   }
   const server = http.createServer(app);
+  await initMessengerFanoutPublisherOnly();
   await initRealtimeRedis();
   attachRealtimeWebSocket(server);
   
@@ -203,11 +246,48 @@ async function start(): Promise<void> {
   
   server.listen(Number(PORT), () => {
     console.log(`Server is running on http://localhost:${PORT}`);
-    console.log('[realtime] Monolith WebSocket: /api/realtime');
+    console.log('[realtime] Notify WebSocket: /api/realtime (мессенджер — отдельный сервис)');
+    void writeAppLog({
+      level: 'info',
+      scope: 'boot',
+      event: 'boot.ready',
+      message: `Сервер запущен на порту ${PORT}`,
+      context: { port: Number(PORT) },
+    });
   });
 }
 
 start().catch((err) => {
   console.error('Failed to start server:', err);
+  void writeAppLog({
+    level: 'error',
+    scope: 'boot',
+    event: 'boot.failed',
+    message: 'Не удалось запустить сервер',
+    context: { error: err instanceof Error ? err.message : String(err) },
+  });
   process.exit(1);
+});
+
+process.on('unhandledRejection', (reason) => {
+  const msg = reason instanceof Error ? reason.message : String(reason);
+  console.error('[runtime] Unhandled rejection:', reason);
+  void writeAppLog({
+    level: 'error',
+    scope: 'runtime',
+    event: 'runtime.unhandled_rejection',
+    message: 'Необработанная ошибка в фоновом процессе',
+    context: { reason: msg },
+  });
+});
+
+process.on('uncaughtException', (error) => {
+  console.error('[runtime] Uncaught exception:', error);
+  void writeAppLog({
+    level: 'error',
+    scope: 'runtime',
+    event: 'runtime.uncaught_exception',
+    message: 'Критическая ошибка процесса',
+    context: { stack: error.stack ?? null },
+  });
 });

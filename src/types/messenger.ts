@@ -148,6 +148,11 @@ export interface ConversationMember {
   first_name: string | null;
   last_name: string | null;
   avatar_url?: string | null;
+  previous_prayer_requests?: Array<{
+    cycle_index: number;
+    prayer_request: string;
+    updated_at: string | null;
+  }>;
 }
 
 // ─── WebSocket event types ────────────────────────────────────

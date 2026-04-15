@@ -48,6 +48,14 @@ export function SongDetailPage() {
 
   /** Режим «чистого чтения»: при прокрутке вниз скрываем основной хром приложения. */
   useEffect(() => {
+    const isMobileViewport = () =>
+      typeof window !== 'undefined' && window.matchMedia('(max-width: 767px)').matches;
+
+    if (!isMobileViewport()) {
+      dispatchLayoutMainChrome(true);
+      return;
+    }
+
     const onScroll = () => {
       const y = window.scrollY || document.documentElement.scrollTop;
       const visible = y < 56;

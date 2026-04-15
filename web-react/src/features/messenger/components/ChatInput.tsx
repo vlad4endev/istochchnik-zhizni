@@ -13,6 +13,7 @@ type PendingAttachment = {
   file: File;
   isImage: boolean;
   previewUrl: string | null;
+  uploaded?: api.UploadedFile | null;
 };
 
 type PopoverPos =
@@ -93,6 +94,8 @@ export function ChatInput({
   const [uploading, setUploading] = useState<{ name: string; size: number } | null>(null);
   const [uploadPct, setUploadPct] = useState<number>(0);
   const [uploadErr, setUploadErr] = useState<string | null>(null);
+  const [uploadsHealthy, setUploadsHealthy] = useState(true);
+  const [uploadsHealthChecking, setUploadsHealthChecking] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
   const [attachMenuOpen, setAttachMenuOpen] = useState(false);
   const [emojiOpen, setEmojiOpen] = useState(false);
@@ -120,6 +123,7 @@ export function ChatInput({
   const [mentionFiltered, setMentionFiltered] = useState<{ id: number; label: string }[]>([]);
   const [mentionHighlight, setMentionHighlight] = useState(0);
   const lastOpenedEditIdRef = useRef<string | null>(null);
+  const uploadsHealthTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Load draft on conversation change
   useEffect(() => {
@@ -142,6 +146,41 @@ export function ChatInput({
       }
     };
   }, [conversationId, sendTypingStop]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const checkUploadsHealth = async () => {
+      setUploadsHealthChecking(true);
+      try {
+        const status = await api.fetchUploadsHealth();
+        if (!cancelled) setUploadsHealthy(status.ok === true);
+      } catch {
+        if (!cancelled) setUploadsHealthy(false);
+      } finally {
+        if (!cancelled) setUploadsHealthChecking(false);
+      }
+    };
+
+    void checkUploadsHealth();
+    if (uploadsHealthTimerRef.current) clearInterval(uploadsHealthTimerRef.current);
+    uploadsHealthTimerRef.current = setInterval(() => {
+      void checkUploadsHealth();
+    }, 30000);
+
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') void checkUploadsHealth();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+
+    return () => {
+      cancelled = true;
+      document.removeEventListener('visibilitychange', onVisible);
+      if (uploadsHealthTimerRef.current) {
+        clearInterval(uploadsHealthTimerRef.current);
+        uploadsHealthTimerRef.current = null;
+      }
+    };
+  }, []);
 
   // Sync content with editing state (читаемые @Имя вместо @[id])
   useEffect(() => {
@@ -324,19 +363,27 @@ export function ChatInput({
     haptic(10);
     const text = content.trim();
     if (pending) {
+      if (!uploadsHealthy) {
+        setUploadErr('Хранилище файлов сейчас недоступно. Повторите отправку позже.');
+        return;
+      }
       setUploadErr(null);
       setUploadPct(0);
-      setUploading({ name: pending.file.name, size: pending.file.size });
       try {
-        const ctrl = new AbortController();
-        uploadAbortRef.current = ctrl;
-        const fileToUpload = pending.isImage
-          ? await compressImageForMessengerUpload(pending.file, ctrl.signal)
-          : pending.file;
-        const uploaded = await api.uploadFile(fileToUpload, {
-          onProgress: (pct) => setUploadPct(pct),
-          signal: ctrl.signal,
-        });
+        let uploaded = pending.uploaded ?? null;
+        if (!uploaded) {
+          setUploading({ name: pending.file.name, size: pending.file.size });
+          const ctrl = new AbortController();
+          uploadAbortRef.current = ctrl;
+          const fileToUpload = pending.isImage
+            ? await compressImageForMessengerUpload(pending.file, ctrl.signal)
+            : pending.file;
+          uploaded = await api.uploadFile(fileToUpload, {
+            onProgress: (pct) => setUploadPct(pct),
+            signal: ctrl.signal,
+          });
+          setPending((prev) => (prev ? { ...prev, uploaded } : prev));
+        }
         const payloadType: api.MessagePayloadType = pending.isImage ? 'image' : 'file';
         const payload = {
           url: uploaded.url,
@@ -355,8 +402,10 @@ export function ChatInput({
         const msg = e instanceof Error ? e.message : String(e);
         if (msg.toLowerCase().includes('canceled') || msg.toLowerCase().includes('abort')) {
           setUploadErr('Загрузка отменена');
+        } else if (pending.uploaded) {
+          setUploadErr('Файл загружен, но сообщение не отправилось. Нажмите отправить снова.');
         } else {
-          setUploadErr('Не удалось загрузить файл');
+          setUploadErr('Не удалось загрузить или отправить файл');
         }
       } finally {
         setUploading(null);
@@ -389,6 +438,10 @@ export function ChatInput({
   };
 
   const pickFile = (kind: 'image' | 'file') => {
+    if (!uploadsHealthy) {
+      setUploadErr('Хранилище файлов недоступно. Вложения временно отключены.');
+      return;
+    }
     setUploadErr(null);
     setAttachMenuOpen(false);
     haptic(12);
@@ -431,7 +484,7 @@ export function ChatInput({
     if (pending?.previewUrl) URL.revokeObjectURL(pending.previewUrl);
     const isImage = (file.type || '').startsWith('image/');
     const previewUrl = isImage ? URL.createObjectURL(file) : null;
-    setPending({ file, isImage, previewUrl });
+    setPending({ file, isImage, previewUrl, uploaded: null });
     textareaRef.current?.focus();
   };
 
@@ -756,6 +809,12 @@ export function ChatInput({
       {uploadErr ? (
         <p className="mb-2 text-sm font-semibold text-red-600">{uploadErr}</p>
       ) : null}
+      {!uploadsHealthy ? (
+        <p className="mb-2 text-sm font-semibold text-amber-700">
+          Хранилище вложений недоступно. Отправка фото и файлов временно отключена.
+          {uploadsHealthChecking ? ' Проверяем восстановление…' : ''}
+        </p>
+      ) : null}
 
       <div className="tg-input-area min-w-0 items-center gap-2 sm:gap-2.5">
         {mentionOpen && mentionFiltered.length > 0 ? (
@@ -795,6 +854,7 @@ export function ChatInput({
               ref={attachBtnRef}
               type="button"
               className="tg-input-icon-btn transition-colors duration-200"
+              disabled={!uploadsHealthy}
               onClick={() => {
                 haptic(8);
                 setAttachMenuOpen((v) => !v);

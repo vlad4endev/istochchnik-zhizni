@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { LuCrown, LuPlus, LuSearch, LuSettings2, LuShield, LuUser, LuX } from 'react-icons/lu';
-import { resolvePublicUrl } from '../../../lib/resolvePublicUrl';
 import * as api from '../api/messengerApi';
 import { ManageScreenShell, ManageSettingsGroup } from './ManageScreenShell';
+import { AppAvatar } from '../../../components/AppAvatar';
 
 export function ChatMembersPage() {
   const { chatId } = useParams<{ chatId: string }>();
@@ -163,7 +163,7 @@ function MemberRow({
   onEditPermissions: () => void;
 }) {
   const displayName = (m.first_name ? `${m.first_name} ${m.last_name ?? ''}`.trim() : m.name) || `Участник ${m.member_id}`;
-  const avatarSrc = resolvePublicUrl(m.avatar_url ?? null);
+  const previousNeeds = (m.previous_prayer_requests ?? []).filter((item) => item?.prayer_request?.trim());
   const badge =
     m.role === 'owner' ? { text: 'Владелец', Icon: LuCrown, cls: 'bg-amber-50 text-amber-700 ring-amber-200/70' } :
     m.role === 'admin' ? { text: 'Админ', Icon: LuShield, cls: 'bg-indigo-50 text-indigo-700 ring-indigo-200/70' } :
@@ -172,24 +172,38 @@ function MemberRow({
   return (
     <div
       className={[
-        'flex items-center gap-3 px-4 py-3 sm:gap-4',
+        'flex items-start gap-3 px-4 py-3 sm:gap-4',
         !isLast ? 'border-b border-gray-200/70' : '',
       ]
         .filter(Boolean)
         .join(' ')}
     >
       <div className="grid h-11 w-11 shrink-0 place-items-center overflow-hidden rounded-full bg-primary/10 text-sm font-semibold text-primary">
-        {avatarSrc ? (
-          <img src={avatarSrc} alt="" className="h-full w-full object-cover" loading="lazy" />
-        ) : (
-          displayName[0]?.toUpperCase() ?? 'U'
-        )}
+        <AppAvatar
+          src={m.avatar_url ?? null}
+          fallback={displayName[0]?.toUpperCase() ?? 'U'}
+          className="grid h-full w-full place-items-center"
+          imgClassName="h-full w-full object-cover"
+        />
       </div>
       <div className="min-w-0 flex-1">
         <p className="truncate text-[15px] font-medium text-gray-900">{displayName}</p>
         <p className="mt-0.5 text-xs text-gray-500">ID: {m.member_id}</p>
+        {previousNeeds.length > 0 ? (
+          <div className="mt-2 rounded-xl bg-amber-50/70 p-2.5 ring-1 ring-amber-200/60">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-800">Нужды из прошлых циклов</p>
+            <div className="mt-1.5 space-y-1.5">
+              {previousNeeds.map((item) => (
+                <div key={`${m.member_id}-${item.cycle_index}`} className="rounded-lg bg-white/80 px-2 py-1.5 ring-1 ring-amber-100">
+                  <p className="text-[11px] font-semibold text-amber-700">Цикл {item.cycle_index + 1}</p>
+                  <p className="mt-0.5 whitespace-pre-wrap break-words text-xs leading-5 text-stone-700">{item.prayer_request.trim()}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
       </div>
-      <div className="flex shrink-0 flex-col items-end gap-2 sm:flex-row sm:items-center">
+      <div className="flex shrink-0 flex-col items-end gap-2">
         {canEditPermissions ? (
           <button
             type="button"

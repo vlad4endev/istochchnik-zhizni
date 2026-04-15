@@ -57,3 +57,20 @@ export async function getCoordinatorMemberIdsWithPush(): Promise<number[]> {
   );
   return (result.rows as { id: number }[]).map((r) => Number(r.id)).filter((n) => Number.isFinite(n));
 }
+
+/**
+ * Администраторы с активной подпиской на пуш (Web или FCM).
+ */
+export async function getAdminMemberIdsWithPush(): Promise<number[]> {
+  const result = await query(
+    `SELECT m.id
+     FROM members m
+     WHERE m.is_active = TRUE
+       AND LOWER(COALESCE(m.app_role, '')) = 'admin'
+       AND (
+         EXISTS (SELECT 1 FROM push_subscriptions ps WHERE ps.member_id = m.id)
+         OR EXISTS (SELECT 1 FROM user_subscriptions us WHERE us.member_id = m.id)
+       )`,
+  );
+  return (result.rows as { id: number }[]).map((r) => Number(r.id)).filter((n) => Number.isFinite(n));
+}

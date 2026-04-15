@@ -5,6 +5,7 @@ import * as api from './api/messengerApi';
 import { emitAppToast } from '../../lib/uiFeedback';
 import { playAudio } from '../../utils/audio';
 import { extractMentionMemberIdsFromText, normalizeMentionsToCanonical } from './mentionUtils';
+import { getAvatarInitial } from './avatarUtils';
 
 /** Личный чат до первого сообщения: нет строки в БД, пока пользователь не отправит сообщение. */
 export const DRAFT_PRIVATE_PREFIX = 'draft:';
@@ -1483,8 +1484,15 @@ export const useChatStore = create<ChatState>((set, get) => ({
     set((s) => {
       const exists = s.conversations.some((c) => c.id === convId);
       if (!exists) return s;
+      const normalizedPatch: Partial<ConversationListItem> & { avatarUrl?: string | null } = {
+        ...(patch as Partial<ConversationListItem>),
+      };
+      if (Object.prototype.hasOwnProperty.call(normalizedPatch, 'avatarUrl')) {
+        normalizedPatch.avatar_url = normalizedPatch.avatarUrl ?? null;
+        delete normalizedPatch.avatarUrl;
+      }
       const conversations = s.conversations.map((c) =>
-        c.id === convId ? { ...c, ...patch } : c,
+        c.id === convId ? { ...c, ...normalizedPatch } : c,
       );
       return { conversations };
     });
@@ -1795,8 +1803,7 @@ function getConversationTitle(conversation: ConversationListItem): string {
 }
 
 function getAvatarFallback(title: string): string {
-  const text = String(title || '').trim();
-  return (text.charAt(0) || '?').toUpperCase();
+  return getAvatarInitial(title);
 }
 
 // Sync totalUnread to App Badge in compatible browsers

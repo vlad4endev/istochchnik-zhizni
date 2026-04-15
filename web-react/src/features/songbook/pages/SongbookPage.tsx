@@ -1,14 +1,13 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import Fuse, { type IFuseOptions } from 'fuse.js';
-import { useMemo, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { LuHeart, LuPenLine, LuSearch, LuSparkles } from 'react-icons/lu';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { LuSearch, LuX } from 'react-icons/lu';
 
 import { useAuthStore } from '../../auth/authStore';
-import { canAccessStudioRole, canModerateSongCatalog } from '../../auth/studioAccess';
+import { canModerateSongCatalog } from '../../auth/studioAccess';
 import { isMainSongbookDeploy } from '../../../lib/appVariant';
-import { studioEditSongPath } from '../../studio/studioPaths';
-import { deleteFavorite, fetchSongs, forkInStudio, postFavorite, type SongListItem } from '../api';
+import { fetchSongs, type SongListItem } from '../api';
 
 type SongSearchDoc = SongListItem & {
   _tempoSearch: string;
@@ -20,7 +19,6 @@ function toSearchDocs(items: SongListItem[]): SongSearchDoc[] {
     _tempoSearch: s.tempo != null ? `${s.tempo} bpm ${String(s.tempo)}` : '',
   }));
 }
-
 
 const FUSE_OPTIONS: IFuseOptions<SongSearchDoc> = {
   keys: [
@@ -38,12 +36,10 @@ const FUSE_OPTIONS: IFuseOptions<SongSearchDoc> = {
 };
 
 export function SongbookPage() {
-  const navigate = useNavigate();
-  const qc = useQueryClient();
   const role = useAuthStore((s) => s.role);
-  const studioOk = canAccessStudioRole(role);
   const catalogOk = canModerateSongCatalog(role);
   const mainOnly = isMainSongbookDeploy();
+  const searchRef = useRef<HTMLInputElement | null>(null);
 
   const [search, setSearch] = useState('');
 
@@ -61,21 +57,25 @@ export function SongbookPage() {
     return fuse.search(term).map((r) => r.item);
   }, [docs, fuse, search]);
 
-  const favMut = useMutation({
-    mutationFn: async ({ id, next }: { id: number; next: boolean }) => {
-      if (next) await postFavorite(id);
-      else await deleteFavorite(id);
-    },
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ['songs'] }),
-  });
-
-  const forkMut = useMutation({
-    mutationFn: (songId: number) => forkInStudio(songId),
-    onSuccess: (_, songId) => {
-      void qc.invalidateQueries({ queryKey: ['songs'] });
-      navigate(studioEditSongPath('songbook', songId));
-    },
-  });
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      const inEditable =
+        target?.tagName === 'INPUT' ||
+        target?.tagName === 'TEXTAREA' ||
+        target?.isContentEditable;
+      if (inEditable) return;
+      if (e.key === '/') {
+        e.preventDefault();
+        searchRef.current?.focus();
+      }
+      if (e.key === 'Escape' && document.activeElement === searchRef.current) {
+        searchRef.current?.blur();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
 
   if (query.isLoading) {
     return <p className="text-sm text-slate-500">Загрузка песенника…</p>;
@@ -111,71 +111,52 @@ export function SongbookPage() {
               aria-hidden
             />
             <input
+              ref={searchRef}
               type="search"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Найти по названию, тексту, тональности, BPM…"
               autoComplete="off"
-              className="w-full min-h-[52px] rounded-2xl border-0 bg-slate-50 py-3.5 pl-12 pr-4 text-base text-slate-900 shadow-[0_2px_12px_rgba(15,23,42,0.06)] outline-none ring-1 ring-slate-900/[0.06] transition placeholder:text-slate-400 focus:bg-white focus:shadow-[0_4px_20px_rgba(15,23,42,0.08)] focus:ring-slate-900/10 sm:text-[15px]"
+              className="w-full min-h-[52px] rounded-2xl border-0 bg-slate-50 py-3.5 pl-12 pr-11 text-base text-slate-900 shadow-[0_2px_12px_rgba(15,23,42,0.06)] outline-none ring-1 ring-slate-900/[0.06] transition placeholder:text-slate-400 focus:bg-white focus:shadow-[0_4px_20px_rgba(15,23,42,0.08)] focus:ring-slate-900/10 sm:text-[15px]"
             />
+            {search.trim() ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setSearch('');
+                  searchRef.current?.focus();
+                }}
+                className="absolute right-2 top-1/2 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+                aria-label="Очистить поиск"
+              >
+                <LuX className="h-4 w-4" />
+              </button>
+            ) : null}
           </div>
         </label>
+        <div className="flex items-center justify-between text-xs text-slate-500">
+          <span>
+            Найдено: <span className="font-semibold text-slate-700">{rows.length}</span>
+          </span>
+          <span className="hidden sm:inline">Нажмите `/`, чтобы быстро перейти к поиску</span>
+        </div>
       </header>
 
-      <ul className="flex flex-col gap-2.5">
+      <ul className="flex flex-col gap-2">
         {rows.map((s) => (
           <li
             key={s.id}
-            className="group relative flex items-center justify-between rounded-2xl bg-white px-5 py-4 shadow-[0_2px_8px_rgba(15,23,42,0.04)] ring-1 ring-slate-100 transition-all hover:-translate-y-0.5 hover:shadow-[0_8px_16px_rgba(15,23,42,0.06)] hover:ring-slate-200"
+            className="rounded-2xl bg-slate-50/80 shadow-[0_1px_3px_rgba(15,23,42,0.04)] transition hover:bg-slate-50"
           >
             <Link
               to={`/songbook/${s.id}`}
-              className="flex-1 min-w-0 outline-none pr-4"
+              className="block min-h-[52px] min-w-0 rounded-2xl px-4 py-3 outline-none ring-offset-2 transition active:scale-[0.99] focus-visible:ring-2 focus-visible:ring-slate-300"
             >
-              <div className="flex items-center gap-2">
-                <h2 className="truncate text-[16px] font-medium tracking-tight text-slate-900">{s.title}</h2>
-                {s.has_studio_version ? (
-                  <span className="shrink-0" title="Есть версия в студии">
-                    <LuSparkles className="h-4 w-4 text-amber-500/80" aria-hidden />
-                  </span>
-                ) : null}
-              </div>
+              <h2 className="text-lg font-semibold leading-snug text-slate-900">
+                {s.song_number != null ? `${s.song_number}. ` : ''}
+                {s.title}
+              </h2>
             </Link>
-
-            <div className="flex shrink-0 items-center gap-1.5 opacity-80 transition-opacity group-hover:opacity-100">
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  favMut.mutate({ id: Number(s.id), next: !s.is_favorite });
-                }}
-                className={`inline-flex h-9 w-9 items-center justify-center rounded-full transition-colors ${
-                  s.is_favorite 
-                    ? 'bg-rose-50 text-rose-500 hover:bg-rose-100' 
-                    : 'bg-slate-50 text-slate-400 hover:bg-slate-100 hover:text-slate-600'
-                }`}
-                aria-label={s.is_favorite ? 'Убрать из избранного' : 'В избранное'}
-              >
-                <LuHeart className={`h-[18px] w-[18px] ${s.is_favorite ? 'fill-current' : ''}`} />
-              </button>
-              {!mainOnly && studioOk ? (
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    forkMut.mutate(Number(s.id));
-                  }}
-                  disabled={forkMut.isPending}
-                  className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-slate-50 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 disabled:opacity-50"
-                  aria-label="Редактировать в студии"
-                  title="В студию"
-                >
-                  <LuPenLine className="h-[18px] w-[18px]" strokeWidth={2.5} />
-                </button>
-              ) : null}
-            </div>
           </li>
         ))}
       </ul>

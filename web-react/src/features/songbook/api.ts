@@ -2,6 +2,7 @@ import { apiClient } from '../../lib/apiClient';
 
 export interface SongListItem {
   id: string;
+  song_number: number | null;
   title: string;
   slug: string;
   content: string;
@@ -46,10 +47,6 @@ export async function fetchSong(id: number): Promise<SongListItem> {
   return data;
 }
 
-export async function deleteSong(id: number): Promise<void> {
-  await apiClient.delete(`${SONGS}/${id}`);
-}
-
 export async function postFavorite(songId: number): Promise<void> {
   await apiClient.post(`${SONGS}/${songId}/favorite`);
 }
@@ -79,6 +76,7 @@ export async function recordSongOpened(songId: number): Promise<void> {
 }
 
 export async function createSong(body: {
+  song_number?: number | null;
   title: string;
   content?: string;
   default_key?: string | null;

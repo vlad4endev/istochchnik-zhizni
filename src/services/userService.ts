@@ -1011,6 +1011,48 @@ export async function setCoordinatorPrayerNeedForDate(
   }
 }
 
+export async function addManualPreviousPrayerNeed(
+  memberId: number,
+  note: string | null,
+  createdByMemberId: number | null
+): Promise<void> {
+  const normalized = normalizeOptionalString(note);
+  if (!normalized) {
+    throw new Error('empty_note');
+  }
+  await query(
+    `INSERT INTO member_previous_prayer_needs_manual (member_id, note, created_by_member_id)
+     VALUES ($1, $2, $3)`,
+    [memberId, normalized, createdByMemberId]
+  );
+}
+
+export async function updateManualPreviousPrayerNeed(
+  id: number,
+  note: string | null
+): Promise<boolean> {
+  const normalized = normalizeOptionalString(note);
+  if (!normalized) {
+    throw new Error('empty_note');
+  }
+  const result = await query(
+    `UPDATE member_previous_prayer_needs_manual
+     SET note = $2
+     WHERE id = $1`,
+    [id, normalized]
+  );
+  return (result.rowCount ?? 0) > 0;
+}
+
+export async function deleteManualPreviousPrayerNeed(id: number): Promise<boolean> {
+  const result = await query(
+    `DELETE FROM member_previous_prayer_needs_manual
+     WHERE id = $1`,
+    [id]
+  );
+  return (result.rowCount ?? 0) > 0;
+}
+
 export async function listPrayerRequestHistory(
   memberId: number,
   limit = 20

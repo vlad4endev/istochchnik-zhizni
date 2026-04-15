@@ -7,6 +7,7 @@ function mapSong(row: Record<string, unknown>): SongRow {
   const tags = Array.isArray(rawTags) ? rawTags.map((t) => String(t)) : [];
   return {
     id: String(row.id),
+    song_number: row.song_number != null ? Number(row.song_number) : null,
     title: String(row.title),
     slug: String(row.slug),
     content: String(row.content ?? ''),
@@ -407,6 +408,7 @@ async function fetchSetlistItemRows(setlistId: number): Promise<SetlistItemRow[]
     const r = row as Record<string, unknown>;
     const song = mapSong({
       id: r.s_id,
+      song_number: r.song_number,
       title: r.title,
       slug: r.slug,
       content: r.content,

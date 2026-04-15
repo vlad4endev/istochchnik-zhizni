@@ -28,28 +28,27 @@ import { AndroidInstallBanner } from '../components/AndroidInstallBanner';
 import { UpdateNotification, useServiceWorkerUpdate, NotificationPrompt } from '../features/pwa';
 import type { AppToastAction, AppToastKind } from '../lib/uiFeedback';
 import { useChatStore } from '../features/messenger/chatStore';
-import { useMessengerUnreadHint } from '../hooks/useMessengerUnreadHint';
-import { resolveMessengerWebOrigin } from '../lib/config';
+import { MessengerWsProvider } from '../features/messenger/MessengerWsContext';
 import { useBrowserNotificationScheduler } from '../features/notifications/useBrowserNotificationScheduler';
 import { useProfileDraftStore } from '../features/profile/profileDraftStore';
-import { canAccessMusicMenu } from '../features/auth/studioAccess';
+import { canAccessStudioRole } from '../features/auth/studioAccess';
 import { LAYOUT_MAIN_CHROME_EVENT } from './layoutChrome';
+import { AppAvatar } from '../components/AppAvatar';
 
 type NavItem = {
   to: string;
   label: string;
   Icon: IconType;
   adminOnly?: boolean;
-  /** Видно только участникам с направлением «Музыкальное служение» или admin */
-  musicOnly?: boolean;
+  studioOnly?: boolean;
 };
 
 const NAV_ITEMS: NavItem[] = [
   /** Контурные Lucide — не путать с цветными эмодзи / Font Awesome «картинками». */
   { to: '/dashboard', label: 'Главная', Icon: LuLayoutDashboard },
   { to: '/prayer', label: 'Молитва', Icon: LuChurch },
-  { to: '/songbook', label: 'Песенник', Icon: LuMusic2, musicOnly: true },
-  { to: '/studio', label: 'Студия', Icon: LuDisc3, musicOnly: true },
+  { to: '/songbook', label: 'Песенник', Icon: LuMusic2 },
+  { to: '/studio', label: 'Студия', Icon: LuDisc3, studioOnly: true },
   { to: '/sermons', label: 'Проповеди', Icon: LuMic },
   { to: '/messenger', label: 'Чаты', Icon: LuMessageCircle },
   // { to: '/broadcast', label: 'Трансляции', Icon: LuTv },
@@ -214,13 +213,7 @@ function AppToastHost() {
           ].join(' ')}
         >
           <div className="flex items-start gap-3">
-            <div className="grid h-9 w-9 shrink-0 place-items-center overflow-hidden rounded-full bg-white/60 text-xs font-extrabold text-stone-900">
-              {toast.avatarUrl ? (
-                <img src={toast.avatarUrl} alt="" className="h-full w-full object-cover" />
-              ) : (
-                <span>{(toast.avatarText || '?').slice(0, 1).toUpperCase()}</span>
-              )}
-            </div>
+            <ToastAvatar avatarUrl={toast.avatarUrl} avatarText={toast.avatarText} />
             <div className="min-w-0 flex-1">
               {toast.title ? (
                 <p className="truncate text-[13px] font-extrabold leading-tight">{toast.title}</p>
@@ -231,6 +224,23 @@ function AppToastHost() {
         </button>
       ))}
     </div>
+  );
+}
+
+function ToastAvatar({
+  avatarUrl,
+  avatarText,
+}: {
+  avatarUrl?: string | null;
+  avatarText?: string;
+}) {
+  return (
+    <AppAvatar
+      src={avatarUrl ?? null}
+      fallback={<span>{(avatarText || '?').slice(0, 1).toUpperCase()}</span>}
+      className="grid h-9 w-9 shrink-0 place-items-center overflow-hidden rounded-full bg-white/60 text-xs font-extrabold text-stone-900"
+      imgClassName="h-full w-full object-cover"
+    />
   );
 }
 
@@ -262,12 +272,8 @@ export function Layout() {
   const setActiveConversation = useChatStore((s) => s.setActiveConversation);
   const loadConversations = useChatStore((s) => s.loadConversations);
   const refreshUnread = useChatStore((s) => s.refreshUnread);
-  const legacyUnread = useChatStore((s) => s.totalUnread);
-  const messengerOrigin = typeof window !== 'undefined' ? resolveMessengerWebOrigin() : '';
-  const externalUnread = useMessengerUnreadHint();
-  const unreadMessages = messengerOrigin ? externalUnread : legacyUnread;
+  const unreadMessages = useChatStore((s) => s.totalUnread);
   const role = useAuthStore((s) => s.role);
-  const direction = useAuthStore((s) => s.ministryDirection);
   const logout = useAuthStore((s) => s.logout);
   const updatePrompt = useServiceWorkerUpdate({ showPrompt: true });
   const [navCollapsed, setNavCollapsed] = useState(false);
@@ -296,10 +302,9 @@ export function Layout() {
       : registrationStatus === 'rejected'
         ? NAV_ITEMS.filter((item) => item.to === '/dashboard' || item.to === '/messenger')
         : NAV_ITEMS;
-  const hasMusicalAccess = canAccessMusicMenu(role, direction);
   const items = navBase.filter(
     (item) =>
-      (!item.adminOnly || isAdmin) && (!item.musicOnly || hasMusicalAccess),
+      (!item.adminOnly || isAdmin) && (!item.studioOnly || canAccessStudioRole(role)),
   );
   const sidebarItems = items;
   const mobileItems = items;
@@ -349,27 +354,21 @@ export function Layout() {
       const conversationId = String(ce.detail?.conversationId ?? '').trim();
       if (!conversationId) return;
       setActiveConversation(conversationId);
-      if (messengerOrigin) {
-        window.location.href = `${messengerOrigin}/messenger?conversationId=${encodeURIComponent(conversationId)}`;
-      } else {
-        navigate('/messenger');
-      }
+      navigate('/messenger');
     };
     window.addEventListener('app:open-conversation', onOpenConversation);
     return () => {
       window.removeEventListener('app:open-conversation', onOpenConversation);
     };
-  }, [navigate, setActiveConversation, messengerOrigin]);
+  }, [navigate, setActiveConversation]);
 
-  /** Встроенный мессенджер (legacy): подгружаем список для бейджа. На отдельном поддомене — polling в useMessengerUnreadHint. */
+  /** Список чатов и totalUnread для бейджа в таббаре — не только после захода в «Чаты». */
   useEffect(() => {
-    if (messengerOrigin) return;
     if (!token) return;
     void loadConversations();
-  }, [token, loadConversations, messengerOrigin]);
+  }, [token, loadConversations]);
 
   useEffect(() => {
-    if (messengerOrigin) return;
     if (!token) return;
     const onVis = () => {
       if (document.visibilityState !== 'visible') return;
@@ -377,7 +376,7 @@ export function Layout() {
     };
     document.addEventListener('visibilitychange', onVis);
     return () => document.removeEventListener('visibilitychange', onVis);
-  }, [token, refreshUnread, messengerOrigin]);
+  }, [token, refreshUnread]);
 
   useEffect(() => {
     if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) {
@@ -395,11 +394,7 @@ export function Layout() {
       const conversationId = String(payload.conversationId ?? '').trim();
       if (conversationId) {
         setActiveConversation(conversationId);
-        if (messengerOrigin) {
-          window.location.href = `${messengerOrigin}/messenger?conversationId=${encodeURIComponent(conversationId)}`;
-        } else {
-          navigate(`/messenger?conversationId=${encodeURIComponent(conversationId)}`);
-        }
+        navigate(`/messenger?conversationId=${encodeURIComponent(conversationId)}`);
         return;
       }
 
@@ -419,18 +414,15 @@ export function Layout() {
     return () => {
       navigator.serviceWorker.removeEventListener('message', onServiceWorkerMessage);
     };
-  }, [navigate, setActiveConversation, messengerOrigin]);
+  }, [navigate, setActiveConversation]);
 
   return (
+    <MessengerWsProvider>
     <div className="flex min-h-0 w-full max-w-[100vw] flex-1 flex-col overflow-x-clip bg-[var(--surface)] text-[var(--text)] [padding-left:env(safe-area-inset-left,0px)] [padding-right:env(safe-area-inset-right,0px)]">
       <div
         className={[
           'flex min-h-0 min-w-0 w-full max-w-full flex-1 flex-col box-border',
-          mainChromeVisible
-            ? navCollapsed
-              ? 'md:pl-[88px]'
-              : 'md:pl-[260px] lg:pl-[272px]'
-            : 'md:pl-0',
+          navCollapsed ? 'md:pl-[88px]' : 'md:pl-[260px] lg:pl-[272px]',
         ].join(' ')}
       >
       <div className="shrink-0">
@@ -442,11 +434,9 @@ export function Layout() {
       {/* Планшет/десктоп: фиксированный сайдбар (не в потоке, не растягивается по ширине main). На узких — нижняя навигация. */}
       <aside
         className={[
-          'hidden shrink-0 flex-col overflow-y-auto overflow-x-hidden border-r border-stone-200/80 bg-[var(--surface-elevated)] shadow-[4px_0_16px_rgba(0,0,0,0.06)] md:fixed md:bottom-0 md:left-0 md:top-0 md:z-30 md:flex [padding-bottom:env(safe-area-inset-bottom,0px)] [padding-top:env(safe-area-inset-top,0px)] md:transition-transform md:duration-200',
+          'hidden shrink-0 flex-col overflow-y-auto overflow-x-hidden border-r border-stone-200/80 bg-[var(--surface-elevated)] shadow-[4px_0_16px_rgba(0,0,0,0.06)] md:fixed md:bottom-0 md:left-0 md:top-0 md:z-30 md:flex [padding-bottom:env(safe-area-inset-bottom,0px)] [padding-top:env(safe-area-inset-top,0px)]',
           navCollapsed ? 'w-[88px] max-w-[88px]' : 'w-[260px] max-w-[260px] lg:w-[272px] lg:max-w-[272px]',
-          mainChromeVisible ? 'md:translate-x-0' : 'md:pointer-events-none md:-translate-x-full md:opacity-0',
         ].join(' ')}
-        aria-hidden={!mainChromeVisible}
       >
         <div className={navCollapsed ? 'flex min-h-0 flex-1 flex-col gap-1 p-4' : 'flex min-h-0 flex-1 flex-col gap-1 p-6'}>
           <div className={navCollapsed ? 'mb-4 flex items-center justify-center' : 'mb-6 flex items-start gap-3'}>
@@ -493,40 +483,6 @@ export function Layout() {
           <nav className={navCollapsed ? 'flex flex-col gap-2' : 'flex flex-col gap-1'} data-web-nav="react-icons">
             {sidebarItems.map((item) => {
               const Icon = item.Icon;
-              if (item.to === '/messenger' && messengerOrigin) {
-                return (
-                  <a
-                    key={item.to}
-                    href={`${messengerOrigin}/messenger`}
-                    className={
-                      navCollapsed
-                        ? 'group flex min-h-[52px] w-full items-center justify-center rounded-2xl text-stone-600 transition-colors hover:bg-stone-100'
-                        : navClassName(false)
-                    }
-                    title={navCollapsed ? item.label : undefined}
-                    aria-label={navCollapsed ? item.label : undefined}
-                  >
-                    <div className="relative">
-                      <Icon className={navIconClass(false, navCollapsed)} strokeWidth={2} aria-hidden />
-                      {unreadMessages > 0 && navCollapsed ? (
-                        <span className="absolute -right-1 -top-1 z-[5] inline-flex min-h-[17px] min-w-[17px] items-center justify-center rounded-full bg-rose-500 px-0.5 text-[9px] font-extrabold leading-none text-white shadow-sm ring-2 ring-white">
-                          {unreadMessages > 99 ? '99+' : unreadMessages}
-                        </span>
-                      ) : null}
-                    </div>
-                    {!navCollapsed ? (
-                      <span className="flex min-w-0 flex-1 items-center justify-between gap-2">
-                        <span className="truncate">{item.label}</span>
-                        {unreadMessages > 0 ? (
-                          <span className="inline-flex min-w-[20px] items-center justify-center rounded-full bg-primary px-1.5 py-0.5 text-[11px] font-extrabold text-white">
-                            {unreadMessages > 99 ? '99+' : unreadMessages}
-                          </span>
-                        ) : null}
-                      </span>
-                    ) : null}
-                  </a>
-                );
-              }
               return (
                 <NavLink
                   key={item.to}
@@ -676,32 +632,6 @@ export function Layout() {
         <div className="mx-auto flex max-w-md items-center justify-around px-2 pb-1 pt-1">
           {mobileItems.map((item) => {
             const Icon = item.Icon;
-            if (item.to === '/messenger' && messengerOrigin) {
-              return (
-                <a
-                  key={item.to}
-                  href={`${messengerOrigin}/messenger`}
-                  className={navClassName(false, true)}
-                  aria-label={
-                    unreadMessages > 0
-                      ? `Чаты, непрочитанных сообщений: ${unreadMessages > 99 ? 'более 99' : unreadMessages}`
-                      : undefined
-                  }
-                >
-                  <span className="relative z-10 inline-flex overflow-visible">
-                    <Icon className={navIconClass(false, true)} strokeWidth={2} aria-hidden />
-                    {unreadMessages > 0 ? (
-                      <span className="absolute -right-2.5 top-0 z-[5] inline-flex min-h-[18px] min-w-[18px] items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-extrabold leading-none text-white shadow-sm ring-2 ring-white">
-                        {unreadMessages > 99 ? '99+' : unreadMessages}
-                      </span>
-                    ) : null}
-                  </span>
-                  <span className="mt-1 truncate px-0.5 text-center text-[11px] font-medium tracking-tight">
-                    {item.label}
-                  </span>
-                </a>
-              );
-            }
             return (
               <NavLink
                 key={item.to}
@@ -743,5 +673,6 @@ export function Layout() {
       ) : null}
       <NotificationPrompt />
     </div>
+    </MessengerWsProvider>
   );
 }
