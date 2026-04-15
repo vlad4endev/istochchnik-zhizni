@@ -288,7 +288,8 @@ function DashboardMain() {
   const dashboardNotesQ = useQuery({
     queryKey: ['calendar', 'dashboard-coordinator-notes', todayDateKey],
     queryFn: () => fetchDashboardCoordinatorNotes(todayDateKey),
-    staleTime: 60_000,
+    /** Срочные нужды и объявления: сразу подтягивать после WS `coordinator-notes` и при заходе на главную. */
+    staleTime: 0,
   });
 
   const me = meQ.data ?? null;

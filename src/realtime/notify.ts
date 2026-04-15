@@ -2,6 +2,7 @@ import { broadcastRealtime } from './wsHub';
 
 export type RealtimeScope =
   | 'calendar'
+  | 'coordinator-notes'
   | 'members'
   | 'global'
   | 'templates'

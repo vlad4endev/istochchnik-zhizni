@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 
+import { notifyRealtime } from '../realtime/notify';
 import {
   deleteCoordinatorNote,
   getCoordinatorNotesManageSnapshot,
@@ -81,6 +82,7 @@ export async function deleteDashboardCoordinatorNote(req: Request, res: Response
     }
 
     await deleteCoordinatorNote(kind);
+    notifyRealtime(['coordinator-notes']);
 
     const raw = req.query.for_date ?? req.query.date;
     const forDate = isValidYmd(raw) ? raw : new Date().toISOString().slice(0, 10);
@@ -129,6 +131,7 @@ export async function postDashboardCoordinatorNote(req: Request, res: Response):
     }
 
     await upsertCoordinatorNote(memberId, kind, text, duration, todayYmd);
+    notifyRealtime(['coordinator-notes']);
     const data = await getCoordinatorNotesVisibleOnDate(todayYmd);
     res.json(data);
   } catch (err) {

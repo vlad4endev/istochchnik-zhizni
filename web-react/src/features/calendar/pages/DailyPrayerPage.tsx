@@ -487,7 +487,7 @@ export function DailyPrayerPage() {
   const coordinatorNotesQ = useQuery({
     queryKey: ['calendar', 'dashboard-coordinator-notes', dateKey],
     queryFn: () => fetchDashboardCoordinatorNotes(dateKey),
-    staleTime: 60_000,
+    staleTime: 0,
   });
 
   const today = new Date();

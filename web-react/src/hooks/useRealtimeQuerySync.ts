@@ -15,6 +15,8 @@ function applyScopes(scopes: string[], invalidate: QueryClient['invalidateQuerie
     if (s === 'calendar') {
       void invalidate({ queryKey: ['calendar'] });
       void invalidate({ queryKey: ['admin', 'events'] });
+    } else if (s === 'coordinator-notes') {
+      void invalidate({ queryKey: ['calendar', 'dashboard-coordinator-notes'] });
     } else if (s === 'members') {
       void invalidate({ queryKey: ['admin', 'members'] });
       void invalidate({ queryKey: ['admin', 'access-requests'] });
