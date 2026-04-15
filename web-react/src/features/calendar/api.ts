@@ -135,6 +135,18 @@ export async function patchMemberCyclePrayer(
   });
 }
 
+/** Улучшить черновик нужды через ИИ (сервер: раздел промпта «Молитвенный календарь»). */
+export async function improvePrayerNeedTextWithAi(text: string, memberName?: string): Promise<string> {
+  const { data } = await apiClient.post<{ text: string }>('/api/calendar/prayer-need/improve-text', {
+    text,
+    member_name: memberName?.trim() ?? '',
+  });
+  if (typeof data?.text !== 'string') {
+    throw new Error('Некорректный ответ: нет текста');
+  }
+  return data.text;
+}
+
 export async function patchMemberPreviousPrayerNeed(
   memberId: number,
   note: string

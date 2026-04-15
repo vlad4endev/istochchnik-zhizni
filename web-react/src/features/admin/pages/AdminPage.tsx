@@ -24,6 +24,7 @@ import { ru } from 'date-fns/locale';
 
 import { ADMIN_TABS, type AdminTabId } from '../adminTabs';
 import { AccessRequestsSection } from '../AccessRequestsSection';
+import { AiSettingsSection } from '../AiSettingsSection';
 import { NotificationsSettingsSection } from '../NotificationsSettingsSection';
 import { ProjectJournalSection } from '../ProjectJournalSection';
 import { useBrandingStore } from '../../branding/brandingStore';
@@ -344,6 +345,7 @@ export function AdminPage() {
       {tab === 'journal' && <ProjectJournalSection />}
       {tab === 'notifications' && <NotificationsSettingsSection />}
       {tab === 'telegram' && <TelegramSection />}
+      {tab === 'ai' && <AiSettingsSection />}
     </div>
   );
 }

@@ -14,6 +14,7 @@ import {
   LuCircleCheck,
   LuPencilLine,
 } from 'react-icons/lu';
+import { SiOpenai } from 'react-icons/si';
 
 import { memberRosterName } from '../../../lib/memberRosterName';
 import type { MeResponse } from '../../profile/api';
@@ -22,6 +23,7 @@ import type { CycleCollectionClaimRow, CycleCollectionClaimsSnapshot } from '../
 import {
   getCycleCollectionClaims,
   getWeekPlanMembers,
+  improvePrayerNeedTextWithAi,
   patchCycleCollectionClaim,
   patchMemberCyclePrayer,
   type WeekPlanKind,
@@ -95,6 +97,14 @@ function NextWeekMembersPanel(props: {
     onSuccess: () => {
       onPrayerSaved();
       setExpandedDate(null);
+    },
+  });
+
+  const improvePrayerMut = useMutation({
+    mutationFn: async (input: { text: string; memberLabel: string }) =>
+      improvePrayerNeedTextWithAi(input.text, input.memberLabel),
+    onSuccess: (text) => {
+      setPrayerDraft(text);
     },
   });
 
@@ -449,21 +459,47 @@ function NextWeekMembersPanel(props: {
                               placeholder="О чём просим молиться в этот день цикла…"
                               className="w-full rounded-lg border border-stone-200 bg-white px-2.5 py-2 text-[13px] text-stone-800 outline-none ring-primary/15 focus:border-primary focus:ring-1"
                             />
-                            <div className="flex flex-wrap items-center gap-2">
-                              <button
-                                type="button"
-                                disabled={savePrayerMut.isPending}
-                                onClick={() =>
-                                  void savePrayerMut.mutateAsync({
-                                    memberId: mid,
-                                    date: row.date,
-                                    text: prayerDraft,
-                                  })
-                                }
-                                className="min-h-[40px] rounded-lg bg-primary px-4 text-[13px] font-bold text-white shadow-sm hover:bg-primary/90 disabled:opacity-50"
-                              >
-                                {savePrayerMut.isPending ? 'Сохранение…' : 'Сохранить нужду'}
-                              </button>
+                            <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <button
+                                  type="button"
+                                  disabled={
+                                    improvePrayerMut.isPending ||
+                                    savePrayerMut.isPending ||
+                                    !prayerDraft.trim()
+                                  }
+                                  onClick={() =>
+                                    void improvePrayerMut.mutateAsync({
+                                      text: prayerDraft,
+                                      memberLabel: name ?? '',
+                                    })
+                                  }
+                                  className="inline-flex min-h-[40px] items-center gap-1.5 rounded-lg border border-violet-300/80 bg-violet-50 px-3 text-[13px] font-bold text-violet-900 shadow-sm hover:bg-violet-100/90 disabled:cursor-not-allowed disabled:opacity-50"
+                                  title="Улучшить формулировку по системному промпту раздела «Молитвенный календарь» (настройки ИИ в админке). Текст в поле заменится на вариант от модели."
+                                >
+                                  <SiOpenai className="h-4 w-4 shrink-0" aria-hidden />
+                                  {improvePrayerMut.isPending ? 'ИИ…' : 'Улучшить с ИИ'}
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={savePrayerMut.isPending || improvePrayerMut.isPending}
+                                  onClick={() =>
+                                    void savePrayerMut.mutateAsync({
+                                      memberId: mid,
+                                      date: row.date,
+                                      text: prayerDraft,
+                                    })
+                                  }
+                                  className="min-h-[40px] rounded-lg bg-primary px-4 text-[13px] font-bold text-white shadow-sm hover:bg-primary/90 disabled:opacity-50"
+                                >
+                                  {savePrayerMut.isPending ? 'Сохранение…' : 'Сохранить нужду'}
+                                </button>
+                              </div>
+                              {improvePrayerMut.isError ? (
+                                <span className="text-[12px] text-red-600">
+                                  {loadErrorDescription(improvePrayerMut.error) ?? 'Ошибка ИИ'}
+                                </span>
+                              ) : null}
                               {savePrayerMut.isError ? (
                                 <span className="text-[12px] text-red-600">
                                   {loadErrorDescription(savePrayerMut.error) ?? 'Ошибка'}

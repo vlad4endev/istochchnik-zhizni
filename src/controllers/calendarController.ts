@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import { AiAgentError, chatCompletion } from '../ai';
 import { query } from '../config/db';
 import {
   getMemberAssignmentsForWeek,
@@ -297,6 +298,87 @@ export async function getNextWeekMembers(req: Request, res: Response): Promise<v
   } catch (err) {
     console.error('Calendar next-week error:', err);
     res.status(500).json({ error: 'Database error' });
+  }
+}
+
+function stripCommonAssistantWrappers(raw: string): string {
+  let s = raw.trim();
+  const fence = /^```(?:[a-zA-Z]+)?\s*\n?([\s\S]*?)\n?```\s*$/m.exec(s);
+  if (fence && typeof fence[1] === 'string') {
+    s = fence[1].trim();
+  }
+  if ((s.startsWith('"') && s.endsWith('"')) || (s.startsWith('«') && s.endsWith('»'))) {
+    s = s.slice(1, -1).trim();
+  }
+  return s;
+}
+
+/**
+ * Улучшение черновика молитвенной нужды через ИИ (промпт раздела «Молитвенный календарь» в админке).
+ */
+export async function postPrayerNeedImproveText(req: Request, res: Response): Promise<void> {
+  if (!(await assertAdminOrCollectionCoordinator(req, res))) {
+    return;
+  }
+
+  const rawText = req.body?.text;
+  if (typeof rawText !== 'string') {
+    res.status(400).json({ error: 'Ожидается text (строка)' });
+    return;
+  }
+  const trimmed = rawText.trim();
+  if (!trimmed) {
+    res.status(400).json({ error: 'Введите текст нужды, чтобы улучшить его' });
+    return;
+  }
+
+  const memberNameRaw = req.body?.member_name;
+  const memberName =
+    typeof memberNameRaw === 'string' && memberNameRaw.trim().length > 0 ? memberNameRaw.trim() : '';
+
+  const userBlock = memberName
+    ? `Участник цикла: ${memberName}.\n\nТекст молитвенной нужды:\n${trimmed}`
+    : `Текст молитвенной нужды:\n${trimmed}`;
+
+  try {
+    const improved = await chatCompletion(
+      [
+        {
+          role: 'user',
+          content: `${userBlock}
+
+Отредактируй текст: сделай его ясным, бережным, без лишних слов. Сохрани смысл и личные детали. Верни только готовый текст одной нужды, без заголовков и без кавычек вокруг всего ответа.`,
+        },
+      ],
+      { section: 'calendar', temperature: 0.35, max_tokens: 2500 },
+    );
+    const out = stripCommonAssistantWrappers(improved);
+    if (!out) {
+      res.status(502).json({ error: 'Модель вернула пустой ответ' });
+      return;
+    }
+    res.json({ text: out });
+  } catch (e) {
+    if (e instanceof AiAgentError) {
+      const status =
+        e.code === 'ai_disabled'
+          ? 409
+          : e.code === 'ai_not_configured'
+            ? 400
+            : e.code === 'ai_http_error'
+              ? e.status && e.status >= 400 && e.status < 600
+                ? e.status
+                : 502
+              : 502;
+      res.status(status).json({
+        error: e.message,
+        code: e.code,
+        details: e.bodySnippet ? { bodySnippet: e.bodySnippet } : undefined,
+      });
+      return;
+    }
+    console.error('[calendar] prayer-need improve-text error:', e);
+    res.status(500).json({ error: 'Не удалось улучшить текст' });
   }
 }
 

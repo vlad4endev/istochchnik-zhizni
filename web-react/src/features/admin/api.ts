@@ -473,3 +473,54 @@ export async function fetchAppLogsAdmin(params?: {
   });
   return Array.isArray(data?.items) ? data.items : [];
 }
+
+export interface AiPromptScopeOption {
+  id: string;
+  label: string;
+}
+
+export interface AiSettingsAdminResponse {
+  enabled: boolean;
+  provider: 'openai_compatible';
+  base_url: string;
+  api_key_masked: string | null;
+  has_api_key: boolean;
+  default_model: string;
+  system_prompt: string | null;
+  prompt_scopes: AiPromptScopeOption[];
+  /** Промпт по разделу; null — использовать общий системный промпт */
+  section_prompts: Record<string, string | null>;
+  temperature: number;
+  max_tokens: number;
+}
+
+export async function fetchAiSettingsAdmin(): Promise<AiSettingsAdminResponse> {
+  const { data } = await apiClient.get<AiSettingsAdminResponse>('/api/settings/ai/admin');
+  return data;
+}
+
+export async function patchAiSettings(body: {
+  enabled?: boolean;
+  base_url?: string | null;
+  api_key?: string | null;
+  default_model?: string | null;
+  system_prompt?: string | null;
+  section_prompts?: Partial<Record<string, string | null>>;
+  temperature?: number | null;
+  max_tokens?: number | null;
+}): Promise<AiSettingsAdminResponse> {
+  const { data } = await apiClient.patch<AiSettingsAdminResponse>('/api/settings/ai', body);
+  return data;
+}
+
+export async function postAiTest(options?: {
+  message?: string;
+  /** Учесть промпт выбранного раздела (как в chatCompletion) */
+  section?: string;
+}): Promise<{ ok: boolean; reply: string }> {
+  const { data } = await apiClient.post<{ ok: boolean; reply: string }>('/api/settings/ai/test', {
+    message: options?.message?.trim() || undefined,
+    section: options?.section?.trim() || undefined,
+  });
+  return data;
+}

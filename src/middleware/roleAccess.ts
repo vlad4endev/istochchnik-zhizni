@@ -26,6 +26,10 @@ export function resolveUserRole(req: Request, _res: Response, next: NextFunction
 const MEMBER_ALLOWED_PATCH =
   /^\/api\/calendar\/(?:cycle\/collection-claims|next-week\/collection|member-cycle-prayer)\/?$/;
 
+/** То же для координаторов: POST улучшения текста нужды — проверка роли в контроллере. */
+const MEMBER_ALLOWED_CALENDAR_POST =
+  /^\/api\/calendar\/prayer-need\/improve-text\/?$/;
+
 /** Web Push / FCM: мутации привязаны к member_id из сессии (requireAuthSession в роутере). */
 const MEMBER_NOTIFICATIONS_POST =
   /^\/api\/notifications\/(?:subscribe|unsubscribe|save-token)\/?$/;
@@ -118,6 +122,11 @@ export function enforceRoleAccess(req: Request, res: Response, next: NextFunctio
   }
 
   if (req.method === 'PATCH' && MEMBER_ALLOWED_PATCH.test(fullPath)) {
+    next();
+    return;
+  }
+
+  if (req.method === 'POST' && MEMBER_ALLOWED_CALENDAR_POST.test(fullPath)) {
     next();
     return;
   }

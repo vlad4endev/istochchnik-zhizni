@@ -9,6 +9,7 @@ import {
   getTodayPrayerBotMessage,
   patchCycleCollectionClaims,
   patchMemberCyclePrayer,
+  postPrayerNeedImproveText,
   patchMemberPreviousPrayerNeed,
   putMemberPreviousPrayerNeed,
 } from '../controllers/calendarController';
@@ -42,6 +43,7 @@ import { eventPosterUploadMiddleware } from '../middleware/eventPosterUpload';
 const router = Router();
 
 router.get('/next-week/members', getNextWeekMembers);
+router.post('/prayer-need/improve-text', postPrayerNeedImproveText);
 router.patch('/member-cycle-prayer', patchMemberCyclePrayer);
 router.patch('/member-previous-prayer-need', patchMemberPreviousPrayerNeed);
 router.put('/member-previous-prayer-need/:id', putMemberPreviousPrayerNeed);

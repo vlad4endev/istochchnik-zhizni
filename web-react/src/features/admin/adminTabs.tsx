@@ -1,6 +1,7 @@
 import type { IconType } from 'react-icons';
 import {
   LuBell,
+  LuBot,
   LuCalendarDays,
   LuCalendarRange,
   LuHistory,
@@ -21,7 +22,8 @@ export interface AdminTabConfig {
     | 'project'
     | 'journal'
     | 'notifications'
-    | 'telegram';
+    | 'telegram'
+    | 'ai';
   label: string;
   Icon: IconType;
   short: string;
@@ -95,6 +97,14 @@ export const ADMIN_TABS: readonly AdminTabConfig[] = [
     Icon: LuSend,
     short: 'Бот',
     description: 'Скрытый админ-модуль для отправки молитв и недельных списков в Telegram.',
+  },
+  {
+    id: 'ai',
+    label: 'ИИ и модели',
+    Icon: LuBot,
+    short: 'ИИ',
+    description:
+      'Интеграция с OpenAI-совместимым API (включая OpenRouter и локальные эндпоинты): ключ, модель, системный промпт для серверного агента.',
   },
 ];
 
