@@ -97,6 +97,13 @@ function getSupabaseClient(): SupabaseClient {
   return cachedSupabaseClient;
 }
 
+function hasSupabaseWriteConfig(): boolean {
+  return Boolean(
+    String(process.env.SUPABASE_URL ?? '').trim() &&
+      String(process.env.SUPABASE_SERVICE_ROLE_KEY ?? '').trim(),
+  );
+}
+
 function toIsoWeekKey(year: number, weekNumber: number): number {
   return year * 100 + weekNumber;
 }
@@ -422,7 +429,6 @@ export class DistributionService {
     }
 
     const tableName = resolveAssignmentsTable();
-    const supabase = getSupabaseClient();
     const payload = assignments.map((item) => ({
       participant_id: item.participantId,
       curator_id: item.curatorId,
@@ -430,12 +436,33 @@ export class DistributionService {
       year: item.year,
     }));
 
-    // Multi-row insert is executed as a single SQL statement by PostgREST, which is atomic.
-    const { error } = await supabase
-      .from(tableName)
-      .upsert(payload, { onConflict: 'participant_id,week_number,year' });
-    if (error) {
-      throw new Error(`Failed to save assignments to Supabase: ${error.message}`);
+    if (hasSupabaseWriteConfig()) {
+      const supabase = getSupabaseClient();
+      // Multi-row insert is executed as a single SQL statement by PostgREST, which is atomic.
+      const { error } = await supabase
+        .from(tableName)
+        .upsert(payload, { onConflict: 'participant_id,week_number,year' });
+      if (error) {
+        throw new Error(`Failed to save assignments to Supabase: ${error.message}`);
+      }
+      return;
+    }
+
+    await query('BEGIN');
+    try {
+      for (const item of payload) {
+        await query(
+          `INSERT INTO ${tableName} (participant_id, curator_id, week_number, year)
+           VALUES ($1, $2, $3, $4)
+           ON CONFLICT (participant_id, week_number, year)
+           DO UPDATE SET curator_id = EXCLUDED.curator_id`,
+          [item.participant_id, item.curator_id, item.week_number, item.year],
+        );
+      }
+      await query('COMMIT');
+    } catch (err) {
+      await query('ROLLBACK');
+      throw err;
     }
   }
 

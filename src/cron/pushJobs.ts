@@ -97,6 +97,6 @@ export function initPushCronJobs() {
         console.error('[CRON] curator distribution', e);
       }
     },
-    { timezone: 'UTC' },
+    { timezone: process.env.CURATOR_DISTRIBUTION_TZ?.trim() || 'Europe/Moscow' },
   );
 }
