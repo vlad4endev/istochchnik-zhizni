@@ -6,13 +6,13 @@ import { createPortal } from 'react-dom';
 import {
   LuCalendarClock,
   LuCheck,
+  LuChevronDown,
   LuClipboardList,
   LuLoader,
   LuSearch,
   LuX,
   LuCircleAlert,
   LuCircleCheck,
-  LuPencilLine,
 } from 'react-icons/lu';
 import { SiOpenai } from 'react-icons/si';
 
@@ -43,6 +43,14 @@ export function userCanViewNextWeekPrayerPlan(me: MeResponse | undefined): boole
 export function userCanManageCoordinatorDashboardNotes(me: MeResponse | undefined): boolean {
   return userCanViewNextWeekPrayerPlan(me);
 }
+
+type QuickListFilter =
+  | 'all'
+  | 'need_empty'
+  | 'need_filled'
+  | 'curator_free'
+  | 'curator_mine'
+  | 'curator_busy';
 
 function useClaimByMemberId(snapshot: CycleCollectionClaimsSnapshot | undefined) {
   return useMemo(() => {
@@ -91,11 +99,25 @@ function NextWeekMembersPanel(props: {
   } = props;
 
   const claimByMemberId = useClaimByMemberId(claimsSnapshot);
-  const [filterMode, setFilterMode] = useState<'all' | 'mine' | 'free' | 'busy'>('all');
-  const [needFilter, setNeedFilter] = useState<'all' | 'empty' | 'filled'>('all');
+  const [quickFilter, setQuickFilter] = useState<QuickListFilter>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedDate, setExpandedDate] = useState<string | null>(null);
   const [prayerDraft, setPrayerDraft] = useState('');
+
+  useEffect(() => {
+    setQuickFilter('all');
+    setSearchQuery('');
+    setExpandedDate(null);
+  }, [weekKind]);
+
+  useEffect(() => {
+    if (
+      claimsError &&
+      (quickFilter === 'curator_free' || quickFilter === 'curator_mine' || quickFilter === 'curator_busy')
+    ) {
+      setQuickFilter('all');
+    }
+  }, [claimsError, quickFilter]);
 
   const savePrayerMut = useMutation({
     mutationFn: async (input: { memberId: number; date: string; text: string }) => {
@@ -165,21 +187,23 @@ function NextWeekMembersPanel(props: {
       : '';
     if (normalizedSearch && !searchBlob.includes(normalizedSearch)) return false;
 
-    if (needFilter === 'empty') {
+    if (quickFilter === 'need_empty') {
       if (!m || needText(m).length > 0) return false;
     }
-    if (needFilter === 'filled') {
+    if (quickFilter === 'need_filled') {
       if (!m || needText(m).length === 0) return false;
     }
 
-    if (claimsError) return filterMode === 'all';
+    if (claimsError) {
+      return quickFilter === 'all' || quickFilter === 'need_empty' || quickFilter === 'need_filled';
+    }
     const mid = row.member?.id;
     const claimRow = mid != null ? claimByMemberId.get(mid) : undefined;
     const mine = currentUserId != null && claimRow?.claimed_by?.id === currentUserId;
 
-    if (filterMode === 'mine') return mine;
-    if (filterMode === 'free') return Boolean(claimRow && !claimRow.claimed_by);
-    if (filterMode === 'busy') return Boolean(claimRow?.claimed_by && !mine);
+    if (quickFilter === 'curator_mine') return mine;
+    if (quickFilter === 'curator_free') return Boolean(claimRow && !claimRow.claimed_by);
+    if (quickFilter === 'curator_busy') return Boolean(claimRow?.claimed_by && !mine);
     return true;
   });
 
@@ -210,91 +234,56 @@ function NextWeekMembersPanel(props: {
       ) : null}
 
       <div>
-          <div className="mb-2 space-y-1.5">
-            <label className="relative block">
+          <div className="mb-3 rounded-xl border border-stone-200/80 bg-stone-50/80 px-3 py-2.5">
+            <p className="text-[12px] font-semibold text-stone-700">
+              <span className="tabular-nums text-stone-900">{days.length}</span> дней · с нуждой{' '}
+              <span className="tabular-nums font-bold text-emerald-800">{filledNeedCount}</span> · без текста{' '}
+              <span className="tabular-nums font-bold text-amber-900">{emptyNeedCount}</span>
+              {!claimsError ? (
+                <>
+                  {' '}
+                  · без куратора <span className="tabular-nums font-bold text-stone-800">{freeCount}</span>
+                </>
+              ) : null}
+            </p>
+            <label className="relative mt-2 block">
               <span className="sr-only">Поиск по имени</span>
               <LuSearch className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-stone-400" />
               <input
                 type="search"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Поиск"
-                className="min-h-[40px] w-full rounded-lg border border-stone-200 bg-white pl-9 pr-2.5 text-[13px] text-stone-800 outline-none ring-primary/15 focus:border-primary focus:ring-1"
+                placeholder="Имя участника…"
+                className="min-h-[42px] w-full rounded-lg border border-stone-200 bg-white pl-9 pr-2.5 text-[14px] text-stone-800 outline-none ring-primary/15 focus:border-primary focus:ring-1"
               />
             </label>
-
-            <p className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border border-stone-200/90 bg-white px-2.5 py-2 text-[11px] leading-snug text-stone-700">
-              <span className="font-extrabold text-stone-900">Нужды недели:</span>
-              <span className="inline-flex items-center gap-0.5 font-bold text-emerald-800">
-                <LuCircleCheck className="h-3.5 w-3.5 shrink-0" strokeWidth={2.2} aria-hidden />
-                заполнено {filledNeedCount}
-              </span>
-              <span className="text-stone-300">·</span>
-              <span className="inline-flex items-center gap-0.5 font-bold text-amber-900">
-                <LuCircleAlert className="h-3.5 w-3.5 shrink-0" strokeWidth={2.2} aria-hidden />
-                пусто {emptyNeedCount}
-              </span>
-            </p>
-
-            <div>
-              <p className="mb-1 text-[10px] font-extrabold uppercase tracking-wide text-stone-400">Нужда</p>
-              <div className="flex flex-wrap gap-1.5">
-                {(
-                  [
-                    ['all', `Весь список (${days.length})`],
-                    ['empty', `Без нужды (${emptyNeedCount})`],
-                    ['filled', `С нуждой (${filledNeedCount})`],
-                  ] as const
-                ).map(([mode, label]) => (
-                  <button
-                    key={mode}
-                    type="button"
-                    onClick={() => setNeedFilter(mode)}
-                    className={[
-                      'rounded-full border px-2.5 py-1 text-[11px] font-bold tracking-wide transition',
-                      needFilter === mode
-                        ? 'border-amber-500/50 bg-amber-50 text-amber-950'
-                        : 'border-stone-200 bg-white text-stone-600 hover:text-stone-900',
-                    ].join(' ')}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div>
-              <p className="mb-1 text-[10px] font-extrabold uppercase tracking-wide text-stone-400">
-                Ответственный (куратор)
-              </p>
-              <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 [-webkit-overflow-scrolling:touch]">
-                {([
-                  ['all', `Все ${days.length}`],
-                  ['mine', `Мои ${myClaimsCount}`],
-                  ['free', `Своб. ${freeCount}`],
-                  ['busy', `Занят. ${busyCount}`],
-                ] as const).map(([mode, label]) => (
-                  <button
-                    key={mode}
-                    type="button"
-                    onClick={() => setFilterMode(mode)}
-                    className={[
-                      'shrink-0 rounded-full border px-2.5 py-1 text-[11px] font-bold tracking-wide transition',
-                      filterMode === mode
-                        ? 'border-primary/60 bg-primary/10 text-primary'
-                        : 'border-stone-200 bg-white text-stone-600 hover:text-stone-900',
-                    ].join(' ')}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
+            <div className="mt-2">
+              <label htmlFor={`${sectionId}-quick-filter`} className="sr-only">
+                Быстрый фильтр списка
+              </label>
+              <select
+                id={`${sectionId}-quick-filter`}
+                value={quickFilter}
+                onChange={(e) => setQuickFilter(e.target.value as QuickListFilter)}
+                className="min-h-[42px] w-full rounded-lg border border-stone-200 bg-white px-2.5 py-2 text-[13px] font-semibold text-stone-800 outline-none ring-primary/15 focus:border-primary focus:ring-1"
+              >
+                <option value="all">Все дни ({days.length})</option>
+                <option value="need_empty">Только без текста нужды ({emptyNeedCount})</option>
+                <option value="need_filled">Только с текстом нужды ({filledNeedCount})</option>
+                {!claimsError ? (
+                  <>
+                    <option value="curator_free">Без ответственного куратора ({freeCount})</option>
+                    <option value="curator_mine">Мои дни ({myClaimsCount})</option>
+                    <option value="curator_busy">Заняты другими кураторами ({busyCount})</option>
+                  </>
+                ) : null}
+              </select>
             </div>
           </div>
 
           {listRows.length === 0 ? (
             <p className="mb-2 rounded-lg border border-stone-200 bg-stone-50 px-2.5 py-2 text-[12px] text-stone-500">
-              Ничего не найдено.
+              Ничего не найдено — смените фильтр или поиск.
             </p>
           ) : null}
 
@@ -326,22 +315,20 @@ function NextWeekMembersPanel(props: {
                 return (
                   <li
                     key={`claim-${row.date}`}
-                    className="group flex flex-col transition-colors hover:bg-stone-50/70"
+                    className="flex flex-col transition-colors hover:bg-stone-50/70"
                   >
-                    <div className="flex flex-col gap-2 px-3 py-2.5 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
-                      <div className="flex min-w-0 flex-1 flex-col gap-1.5">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="w-[4.5rem] shrink-0 text-[11px] font-semibold tabular-nums text-stone-500">
-                            {label}
-                          </span>
-                          <span className="min-w-0 text-[14px] font-bold leading-tight tracking-tight text-stone-900">
+                    <div className="grid grid-cols-1 gap-2 px-3 py-2.5 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:gap-3">
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                          <span className="shrink-0 text-[11px] font-bold tabular-nums text-stone-500">{label}</span>
+                          <span className="min-w-0 text-[15px] font-extrabold leading-tight text-stone-900">
                             {name ?? '—'}
                           </span>
                           {mem && mid != null ? (
                             <span
                               className={[
-                                'inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wide',
-                                hasNeed ? 'bg-emerald-500/15 text-emerald-900' : 'bg-amber-500/15 text-amber-950',
+                                'inline-flex shrink-0 items-center gap-0.5 rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide',
+                                hasNeed ? 'bg-emerald-500/12 text-emerald-900' : 'bg-amber-500/12 text-amber-950',
                               ].join(' ')}
                             >
                               {hasNeed ? (
@@ -359,28 +346,26 @@ function NextWeekMembersPanel(props: {
                           ) : null}
                         </div>
                         {mem && mid != null && hasNeed ? (
-                          <p className="line-clamp-2 text-[12px] leading-snug text-stone-600 sm:max-w-xl">
-                            {needText(mem)}
-                          </p>
+                          <p className="mt-0.5 line-clamp-1 text-[12px] leading-snug text-stone-500">{needText(mem)}</p>
                         ) : null}
                       </div>
 
-                      <div className="flex flex-wrap items-center justify-end gap-2 sm:max-w-[200px] sm:flex-col sm:items-end">
+                      <div className="flex flex-wrap items-center gap-2 sm:justify-end">
                         {mid != null && claimRow && !claimsError ? (
                           <>
                             {claimRow.claimed_by ? (
                               <span
                                 className={[
-                                  'inline-flex max-w-[10rem] truncate rounded-full px-2 py-0.5 text-[10px] font-bold',
-                                  mine ? 'bg-primary/10 text-primary' : 'bg-amber-500/12 text-amber-950',
+                                  'inline-flex max-w-[11rem] truncate rounded-md px-2 py-1 text-[11px] font-semibold',
+                                  mine ? 'bg-primary/10 text-primary' : 'bg-stone-100 text-stone-800',
                                 ].join(' ')}
                                 title={claimedByLabel ?? ''}
                               >
-                                Куратор: {claimedByLabel}
+                                {claimedByLabel}
                               </span>
                             ) : (
-                              <span className="inline-flex rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-bold text-emerald-900">
-                                Куратор не назначен
+                              <span className="inline-flex rounded-md bg-emerald-500/10 px-2 py-1 text-[11px] font-semibold text-emerald-900">
+                                Свободно
                               </span>
                             )}
                             <button
@@ -399,7 +384,7 @@ function NextWeekMembersPanel(props: {
                                 onToggle(mid, !mine);
                               }}
                               className={[
-                                'relative inline-flex h-9 w-[60px] items-center rounded-full border transition',
+                                'relative inline-flex h-9 w-[52px] shrink-0 items-center rounded-full border transition',
                                 'focus:outline-none focus:ring-2 focus:ring-primary/25 focus:ring-offset-1 focus:ring-offset-[var(--surface)]',
                                 disabled
                                   ? 'cursor-not-allowed border-stone-200 bg-stone-100 opacity-60'
@@ -413,15 +398,15 @@ function NextWeekMembersPanel(props: {
                                     ? 'Уже занято другим'
                                     : 'Недоступно'
                                   : mine
-                                    ? 'Снять отметку'
-                                    : 'Взять на себя'
+                                    ? 'Снять: я не отвечаю'
+                                    : 'Я отвечаю за сбор'
                               }
                             >
                               <span
                                 className={[
                                   'absolute left-0.5 flex h-7 w-7 items-center justify-center rounded-full shadow-sm transition-transform',
                                   mine
-                                    ? 'translate-x-[26px] bg-primary text-white'
+                                    ? 'translate-x-[22px] bg-primary text-white'
                                     : 'translate-x-0 bg-stone-200 text-stone-600',
                                 ].join(' ')}
                               >
@@ -431,31 +416,36 @@ function NextWeekMembersPanel(props: {
                             </button>
                           </>
                         ) : claimsError && mid != null ? (
-                          <span className="text-[10px] font-medium text-amber-800">Отметки кураторов недоступны</span>
+                          <span className="text-[10px] font-medium text-amber-800">Отметки недоступны</span>
                         ) : null}
                       </div>
                     </div>
 
                     {mem && mid != null ? (
                       <div className="border-t border-stone-100 bg-white/70 px-3 py-2">
-                        <div className="flex flex-wrap items-center justify-between gap-2">
-                          <span className="text-[11px] font-bold text-stone-600">Молитвенная нужда на этот день</span>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if (expandedDate === row.date) {
-                                setExpandedDate(null);
-                              } else {
-                                setExpandedDate(row.date);
-                                setPrayerDraft(mem.prayer_request ?? '');
-                              }
-                            }}
-                            className="inline-flex items-center gap-1 rounded-lg border border-stone-200 bg-white px-2.5 py-1 text-[11px] font-bold text-primary hover:bg-stone-50"
-                          >
-                            <LuPencilLine className="h-3.5 w-3.5" aria-hidden />
-                            {expandedDate === row.date ? 'Свернуть' : hasNeed ? 'Изменить' : 'Заполнить'}
-                          </button>
-                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (expandedDate === row.date) {
+                              setExpandedDate(null);
+                            } else {
+                              setExpandedDate(row.date);
+                              setPrayerDraft(mem.prayer_request ?? '');
+                            }
+                          }}
+                          className="flex w-full items-center justify-between gap-2 rounded-lg py-1 text-left text-[13px] font-bold text-stone-800 hover:bg-stone-50/80"
+                        >
+                          <span className="text-stone-600">
+                            {expandedDate === row.date ? 'Скрыть редактор' : hasNeed ? 'Текст нужды' : 'Добавить нужду'}
+                          </span>
+                          <LuChevronDown
+                            className={[
+                              'h-4 w-4 shrink-0 text-stone-400 transition-transform',
+                              expandedDate === row.date ? 'rotate-180' : '',
+                            ].join(' ')}
+                            aria-hidden
+                          />
+                        </button>
                         {expandedDate === row.date ? (
                           <div className="mt-2 space-y-2">
                             <textarea
@@ -519,14 +509,25 @@ function NextWeekMembersPanel(props: {
                     ) : null}
 
                     {showPrevPanel ? (
-                      <div className="border-t border-stone-100 bg-stone-50/80 px-3 py-2">
-                        <CoordinatorPreviousNeedsPanel
-                          memberId={mid}
-                          memberLabel={name ?? ''}
-                          items={mem.previous_manual_prayer_needs ?? []}
-                          onChanged={onPrayerSaved}
-                        />
-                      </div>
+                      <details className="group border-t border-stone-100 bg-stone-50/60">
+                        <summary className="cursor-pointer list-none px-3 py-2 text-[12px] font-bold text-stone-600 marker:content-none [&::-webkit-details-marker]:hidden">
+                          <span className="inline-flex w-full items-center justify-between gap-2">
+                            Предыдущие нужды (справка)
+                            <LuChevronDown
+                              className="h-3.5 w-3.5 shrink-0 text-stone-400 transition-transform group-open:rotate-180"
+                              aria-hidden
+                            />
+                          </span>
+                        </summary>
+                        <div className="border-t border-stone-100/80 px-3 pb-2 pt-1">
+                          <CoordinatorPreviousNeedsPanel
+                            memberId={mid}
+                            memberLabel={name ?? ''}
+                            items={mem.previous_manual_prayer_needs ?? []}
+                            onChanged={onPrayerSaved}
+                          />
+                        </div>
+                      </details>
                     ) : null}
                   </li>
                 );
@@ -541,12 +542,13 @@ function NextWeekMembersPanel(props: {
 function ModalFrame(props: {
   titleId: string;
   title: string;
+  subtitle?: string;
   onClose: () => void;
   children: ReactNode;
   /** Шире окно — удобнее список с полем нужды. */
   size?: 'default' | 'wide';
 }) {
-  const { titleId, title, onClose, children, size = 'default' } = props;
+  const { titleId, title, subtitle, onClose, children, size = 'default' } = props;
   const widthClass = size === 'wide' ? 'max-w-2xl' : 'max-w-md';
   const maxHClass =
     size === 'wide' ? 'max-h-[min(92dvh,820px)] sm:max-h-[88vh]' : 'max-h-[min(88dvh,720px)] sm:max-h-[85vh]';
@@ -581,14 +583,19 @@ function ModalFrame(props: {
         aria-labelledby={titleId}
         className={`flex w-full flex-col rounded-t-2xl border border-stone-200/90 bg-[var(--surface)] shadow-2xl sm:rounded-2xl ${maxHClass} ${widthClass}`}
       >
-        <div className="flex shrink-0 items-center justify-between gap-2 border-b border-stone-200/80 px-3 py-2 sm:px-4">
+        <div className="flex shrink-0 items-center justify-between gap-2 border-b border-stone-200/80 px-3 py-2.5 sm:px-4">
           <div className="flex min-w-0 items-center gap-2">
             <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
               <LuCalendarClock className="h-4 w-4" aria-hidden />
             </span>
-            <h2 id={titleId} className="truncate text-[14px] font-extrabold text-stone-900">
-              {title}
-            </h2>
+            <div className="min-w-0">
+              <h2 id={titleId} className="truncate text-[15px] font-extrabold text-stone-900">
+                {title}
+              </h2>
+              {subtitle ? (
+                <p className="mt-0.5 line-clamp-2 text-[12px] font-medium leading-snug text-stone-500">{subtitle}</p>
+              ) : null}
+            </div>
           </div>
           <button
             type="button"
@@ -626,6 +633,10 @@ export function NextWeekPrayerPlanSection({
   const [mutErr, setMutErr] = useState<string | null>(null);
   const [weekKind, setWeekKind] = useState<WeekPlanKind>('current');
   const [distributionInfo, setDistributionInfo] = useState<string | null>(null);
+
+  useEffect(() => {
+    setDistributionInfo(null);
+  }, [weekKind]);
 
   const enabled = canView && open;
 
@@ -721,15 +732,16 @@ export function NextWeekPrayerPlanSection({
         ? createPortal(
             <ModalFrame
               titleId={titleId}
-              title="Очередь недели"
+              title="Сбор нужд"
+              subtitle="По дням недели: кто в очереди и кто отвечает за сбор. Ниже — поиск, фильтр и список."
               onClose={() => setOpen(false)}
               size="wide"
             >
-              <div className="mb-2 flex rounded-lg border border-stone-200/90 bg-stone-100/90 p-0.5">
+              <div className="mb-3 flex rounded-xl border border-stone-200/90 bg-stone-100/90 p-1">
                 <button
                   type="button"
                   onClick={() => setWeekKind('current')}
-                  className={`min-h-[36px] flex-1 rounded-md px-2 text-[12px] font-bold transition ${
+                  className={`min-h-[44px] flex-1 rounded-lg px-2 text-[13px] font-extrabold transition ${
                     weekKind === 'current'
                       ? 'bg-[var(--surface-elevated)] text-stone-900 shadow-sm'
                       : 'text-stone-600 hover:text-stone-900'
@@ -740,7 +752,7 @@ export function NextWeekPrayerPlanSection({
                 <button
                   type="button"
                   onClick={() => setWeekKind('next')}
-                  className={`min-h-[36px] flex-1 rounded-md px-2 text-[12px] font-bold transition ${
+                  className={`min-h-[44px] flex-1 rounded-lg px-2 text-[13px] font-extrabold transition ${
                     weekKind === 'next'
                       ? 'bg-[var(--surface-elevated)] text-stone-900 shadow-sm'
                       : 'text-stone-600 hover:text-stone-900'
@@ -749,19 +761,22 @@ export function NextWeekPrayerPlanSection({
                   Следующая
                 </button>
               </div>
-              <div className="mb-2 flex flex-wrap items-center gap-2">
+              <div className="mb-3 rounded-xl border border-stone-200/80 bg-stone-50/70 px-3 py-2.5">
+                <p className="text-[12px] leading-snug text-stone-600">
+                  Назначить кураторов по правилам нагрузки и отправить им уведомление.
+                </p>
                 <button
                   type="button"
                   onClick={() => autoDistributionMut.mutate(weekKind)}
                   disabled={autoDistributionMut.isPending}
-                  className="min-h-[38px] rounded-lg bg-primary px-3 text-[12px] font-extrabold text-white shadow-sm hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="mt-2 min-h-[44px] w-full rounded-lg bg-primary px-3 text-[13px] font-extrabold text-white shadow-sm hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
                 >
                   {autoDistributionMut.isPending
-                    ? 'Распределение...'
-                    : `Автораспределить на ${weekKind === 'current' ? 'эту' : 'следующую'} неделю`}
+                    ? 'Выполняется…'
+                    : `Автораспределить (${weekKind === 'current' ? 'эта' : 'следующая'} неделя)`}
                 </button>
                 {distributionInfo ? (
-                  <span className="text-[12px] font-semibold text-emerald-700">{distributionInfo}</span>
+                  <p className="mt-2 text-[12px] font-semibold leading-snug text-emerald-800">{distributionInfo}</p>
                 ) : null}
               </div>
 

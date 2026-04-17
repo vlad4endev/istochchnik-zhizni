@@ -319,6 +319,7 @@ CREATE TABLE IF NOT EXISTS cycle_collection_claims (
   cycle_index INTEGER NOT NULL,
   member_id INTEGER NOT NULL REFERENCES members(id) ON DELETE CASCADE,
   claimed_by_member_id INTEGER NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+  week_start_date DATE,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   PRIMARY KEY (cycle_index, member_id)
 );
@@ -334,6 +335,12 @@ CREATE INDEX IF NOT EXISTS cycle_collection_claims_cycle_idx
 
 CREATE INDEX IF NOT EXISTS cycle_collection_claims_claimer_idx
   ON cycle_collection_claims (claimed_by_member_id);
+
+CREATE UNIQUE INDEX IF NOT EXISTS cycle_collection_claims_week_member_uidx
+  ON cycle_collection_claims (week_start_date, member_id);
+
+CREATE INDEX IF NOT EXISTS cycle_collection_claims_week_start_idx
+  ON cycle_collection_claims (week_start_date);
 
 CREATE UNIQUE INDEX IF NOT EXISTS members_email_unique_idx
   ON members (LOWER(email))

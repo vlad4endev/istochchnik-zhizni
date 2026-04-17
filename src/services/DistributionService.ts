@@ -2,6 +2,7 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
 import { query } from '../config/db';
 import { getCalendarWeekStartDate, getMemberAssignmentsForWeek, type WeekPlanKind } from './calendarService';
+import { ensureCycleCollectionClaimsWeekScopeSchema } from './cycleCollectionClaimsService';
 import { getPrayerCycleSnapshotForDate } from './prayerCycleService';
 
 export type DistributionParticipant = {
@@ -277,6 +278,7 @@ export class DistributionService {
     const participants = await this.getQueueParticipantsForWeek(kind);
     const assignments = await this.distributeForWeek({ week, participants });
     await this.saveAssignmentsViaSupabase(assignments);
+    await ensureCycleCollectionClaimsWeekScopeSchema();
     const cycleIndex = await this.syncAssignmentsToCycleCollectionClaims(assignments, kind);
     return { week, assignments, cycleIndex };
   }
@@ -380,11 +382,13 @@ export class DistributionService {
     try {
       for (const item of assignments) {
         await query(
-          `INSERT INTO cycle_collection_claims (cycle_index, member_id, claimed_by_member_id)
-           VALUES ($1, $2, $3)
-           ON CONFLICT (cycle_index, member_id)
-           DO UPDATE SET claimed_by_member_id = EXCLUDED.claimed_by_member_id`,
-          [cycleIndex, item.participantId, item.curatorId],
+          `INSERT INTO cycle_collection_claims (cycle_index, member_id, claimed_by_member_id, week_start_date)
+           VALUES ($1, $2, $3, $4::date)
+           ON CONFLICT (week_start_date, member_id)
+           DO UPDATE SET
+             claimed_by_member_id = EXCLUDED.claimed_by_member_id,
+             cycle_index = EXCLUDED.cycle_index`,
+          [cycleIndex, item.participantId, item.curatorId, weekStartDate],
         );
       }
       await query('COMMIT');
@@ -397,6 +401,7 @@ export class DistributionService {
   }
 
   async getCoordinatorAssignmentsForQueueWeek(kind: WeekPlanKind): Promise<CuratorWeekAssignment[]> {
+    await ensureCycleCollectionClaimsWeekScopeSchema();
     const weekStartDate = getCalendarWeekStartDate(kind);
     const cycle = await getPrayerCycleSnapshotForDate(weekStartDate);
     if (!cycle) {
@@ -420,9 +425,9 @@ export class DistributionService {
        FROM cycle_collection_claims c
        JOIN members cm ON cm.id = c.claimed_by_member_id
        JOIN members m ON m.id = c.member_id
-       WHERE c.cycle_index = $1
+       WHERE c.week_start_date = $1::date
        ORDER BY coordinator_name ASC, member_name ASC`,
-      [cycle.cycle_index],
+      [weekStartDate],
     );
 
     const byCoordinator = new Map<number, CuratorWeekAssignment>();

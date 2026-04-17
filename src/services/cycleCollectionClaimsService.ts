@@ -6,6 +6,22 @@ const MEMBER_ORDER_SQL = `LOWER(COALESCE(NULLIF(trim(m.first_name), ''), split_p
   LOWER(COALESCE(NULLIF(trim(m.last_name), ''), NULLIF(trim(split_part(trim(m.name), ' ', 2)), ''), trim(m.name))) ASC,
   m.id ASC`;
 
+let weekScopeReady = false;
+
+export async function ensureCycleCollectionClaimsWeekScopeSchema(): Promise<void> {
+  if (weekScopeReady) return;
+  await query(`ALTER TABLE cycle_collection_claims ADD COLUMN IF NOT EXISTS week_start_date DATE`);
+  await query(
+    `CREATE UNIQUE INDEX IF NOT EXISTS cycle_collection_claims_week_member_uidx
+     ON cycle_collection_claims (week_start_date, member_id)`,
+  );
+  await query(
+    `CREATE INDEX IF NOT EXISTS cycle_collection_claims_week_start_idx
+     ON cycle_collection_claims (week_start_date)`,
+  );
+  weekScopeReady = true;
+}
+
 export interface CycleCollectionClaimRow {
   id: number;
   name: string;
@@ -33,6 +49,7 @@ export async function getCycleCollectionClaimsSnapshot(
   /** Какую неделю смотрим: цикл и отметки сбора считаются от понедельника этой недели (как план недели). Без параметра — по-прежнему от сегодняшней даты. */
   weekKind?: WeekPlanKind
 ): Promise<CycleCollectionClaimsSnapshot> {
+  await ensureCycleCollectionClaimsWeekScopeSchema();
   const refDate =
     weekKind === undefined ? new Date().toISOString().slice(0, 10) : getCalendarWeekStartDate(weekKind);
   const snap = await getPrayerCycleSnapshotForDate(refDate);
@@ -49,14 +66,25 @@ export async function getCycleCollectionClaimsSnapshot(
     []
   );
 
-  const claimsResult = await query(
-    `SELECT c.member_id, c.claimed_by_member_id,
-            cb.name AS claimer_name, cb.first_name AS claimer_first_name, cb.last_name AS claimer_last_name
-     FROM cycle_collection_claims c
-     JOIN members cb ON cb.id = c.claimed_by_member_id
-     WHERE c.cycle_index = $1`,
-    [cycleIndex]
-  );
+  const claimsResult =
+    weekKind === undefined
+      ? await query(
+          `SELECT c.member_id, c.claimed_by_member_id,
+                  cb.name AS claimer_name, cb.first_name AS claimer_first_name, cb.last_name AS claimer_last_name
+           FROM cycle_collection_claims c
+           JOIN members cb ON cb.id = c.claimed_by_member_id
+           WHERE c.cycle_index = $1
+             AND c.week_start_date IS NULL`,
+          [cycleIndex],
+        )
+      : await query(
+          `SELECT c.member_id, c.claimed_by_member_id,
+                  cb.name AS claimer_name, cb.first_name AS claimer_first_name, cb.last_name AS claimer_last_name
+           FROM cycle_collection_claims c
+           JOIN members cb ON cb.id = c.claimed_by_member_id
+           WHERE c.week_start_date = $1::date`,
+          [refDate],
+        );
 
   const claimByMember = new Map<
     number,
@@ -129,6 +157,7 @@ export async function setCycleCollectionClaim(params: {
   /** Тот же week, что при GET snapshot — иначе отметка попадёт в цикл «сегодня». */
   weekKind?: WeekPlanKind;
 }): Promise<void> {
+  await ensureCycleCollectionClaimsWeekScopeSchema();
   const { authUserId, authIsAdmin, memberId, claim, weekKind } = params;
 
   let canManage = false;
@@ -152,6 +181,7 @@ export async function setCycleCollectionClaim(params: {
     throw new Error('invalid_member');
   }
   const cycleIndex = snap.cycle_index;
+  const weekStartDate = weekKind ? getCalendarWeekStartDate(weekKind) : null;
 
   const memCheck = await query(
     `SELECT 1 FROM members m WHERE m.id = $1 AND ${PRAYER_CYCLE_MEMBERS_WHERE_M} LIMIT 1`,
@@ -162,10 +192,20 @@ export async function setCycleCollectionClaim(params: {
   }
 
   if (claim) {
-    const existing = await query(
-      `SELECT claimed_by_member_id FROM cycle_collection_claims WHERE cycle_index = $1 AND member_id = $2`,
-      [cycleIndex, memberId]
-    );
+    const existing =
+      weekStartDate == null
+        ? await query(
+            `SELECT claimed_by_member_id
+             FROM cycle_collection_claims
+             WHERE cycle_index = $1 AND member_id = $2 AND week_start_date IS NULL`,
+            [cycleIndex, memberId],
+          )
+        : await query(
+            `SELECT claimed_by_member_id
+             FROM cycle_collection_claims
+             WHERE week_start_date = $1::date AND member_id = $2`,
+            [weekStartDate, memberId],
+          );
     const row = existing.rows[0] as { claimed_by_member_id?: number } | undefined;
     if (row) {
       if (row.claimed_by_member_id === authUserId) {
@@ -175,18 +215,36 @@ export async function setCycleCollectionClaim(params: {
     }
 
     try {
-      await query(
-        `INSERT INTO cycle_collection_claims (cycle_index, member_id, claimed_by_member_id)
-         VALUES ($1, $2, $3)`,
-        [cycleIndex, memberId, authUserId]
-      );
+      if (weekStartDate == null) {
+        await query(
+          `INSERT INTO cycle_collection_claims (cycle_index, member_id, claimed_by_member_id, week_start_date)
+           VALUES ($1, $2, $3, NULL)`,
+          [cycleIndex, memberId, authUserId],
+        );
+      } else {
+        await query(
+          `INSERT INTO cycle_collection_claims (cycle_index, member_id, claimed_by_member_id, week_start_date)
+           VALUES ($1, $2, $3, $4::date)`,
+          [cycleIndex, memberId, authUserId, weekStartDate],
+        );
+      }
     } catch (err: unknown) {
       const e = err as { code?: string };
       if (e.code === '23505') {
-        const again = await query(
-          `SELECT claimed_by_member_id FROM cycle_collection_claims WHERE cycle_index = $1 AND member_id = $2`,
-          [cycleIndex, memberId]
-        );
+        const again =
+          weekStartDate == null
+            ? await query(
+                `SELECT claimed_by_member_id
+                 FROM cycle_collection_claims
+                 WHERE cycle_index = $1 AND member_id = $2 AND week_start_date IS NULL`,
+                [cycleIndex, memberId],
+              )
+            : await query(
+                `SELECT claimed_by_member_id
+                 FROM cycle_collection_claims
+                 WHERE week_start_date = $1::date AND member_id = $2`,
+                [weekStartDate, memberId],
+              );
         const owner = again.rows[0] as { claimed_by_member_id?: number } | undefined;
         if (owner?.claimed_by_member_id === authUserId) return;
         throw new Error('already_claimed');
@@ -194,11 +252,19 @@ export async function setCycleCollectionClaim(params: {
       throw err;
     }
   } else {
-    const del = await query(
-      `DELETE FROM cycle_collection_claims
-       WHERE cycle_index = $1 AND member_id = $2 AND claimed_by_member_id = $3`,
-      [cycleIndex, memberId, authUserId]
-    );
+    const del =
+      weekStartDate == null
+        ? await query(
+            `DELETE FROM cycle_collection_claims
+             WHERE cycle_index = $1 AND member_id = $2 AND claimed_by_member_id = $3
+               AND week_start_date IS NULL`,
+            [cycleIndex, memberId, authUserId],
+          )
+        : await query(
+            `DELETE FROM cycle_collection_claims
+             WHERE week_start_date = $1::date AND member_id = $2 AND claimed_by_member_id = $3`,
+            [weekStartDate, memberId, authUserId],
+          );
     if ((del.rowCount ?? 0) === 0) {
       throw new Error('not_owner');
     }
