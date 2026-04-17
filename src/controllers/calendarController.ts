@@ -596,11 +596,36 @@ export async function postCuratorDistribution(req: Request, res: Response): Prom
   try {
     const weekKindRaw = req.body?.week_kind;
     const weekKind: WeekPlanKind = weekKindRaw === 'current' ? 'current' : 'next';
+    const notifyCurators = req.body?.notify_curators !== false;
     const service = new DistributionService();
     const result = await service.executeAndSaveForCollectionQueueWeek(weekKind);
 
     const assignmentsView = await service.getAssignmentsForWeek(result.week);
     const groupedByCurator = service.groupAssignmentsByCurator(assignmentsView);
+    let pushedCoordinators = 0;
+    if (notifyCurators) {
+      const coordinatorAssignments = await service.getCoordinatorAssignmentsForQueueWeek(weekKind);
+      for (const row of coordinatorAssignments) {
+        if (row.members.length <= 0) {
+          continue;
+        }
+        const namesPreview = row.members.slice(0, 5).map((m) => m.memberName).join(', ');
+        const suffix = row.members.length > 5 ? ` и еще ${row.members.length - 5}` : '';
+        const body = `На ${weekKind === 'current' ? 'эту' : 'следующую'} неделю вам назначено ${row.members.length} участник(ов): ${namesPreview}${suffix}.`;
+        try {
+          await sendPush(row.coordinatorId, 'Сбор молитвенных нужд: новые назначения', body, {
+            url: '/dashboard',
+            type: 'curator_week_assignments_manual',
+            week_kind: weekKind,
+            week_start: row.weekStartDate,
+            cycle_index: String(row.cycleIndex),
+          });
+          pushedCoordinators += 1;
+        } catch (pushErr) {
+          console.warn('[calendar] curator distribution push failed:', pushErr);
+        }
+      }
+    }
     notifyRealtime(['calendar']);
     res.json({
       ok: true,
@@ -610,6 +635,8 @@ export async function postCuratorDistribution(req: Request, res: Response): Prom
       total: result.assignments.length,
       assignments: result.assignments,
       grouped_by_curator: groupedByCurator,
+      notify_curators: notifyCurators,
+      pushed_coordinators: pushedCoordinators,
     });
   } catch (err) {
     console.error('Calendar curator distribution POST error:', err);

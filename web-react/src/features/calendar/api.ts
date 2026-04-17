@@ -74,6 +74,16 @@ function normalizeNextWeekDay(raw: unknown): NextWeekMemberDay | null {
 
 export type WeekPlanKind = 'current' | 'next';
 
+export interface CuratorDistributionRunResponse {
+  ok: boolean;
+  week_kind: WeekPlanKind;
+  week: { weekNumber: number; year: number };
+  cycle_index: number;
+  total: number;
+  notify_curators: boolean;
+  pushed_coordinators: number;
+}
+
 export interface ChurchEventItem {
   id: number;
   title: string;
@@ -330,6 +340,19 @@ export async function patchCycleCollectionClaim(
     ...(week ? { week } : {}),
   });
   return normalizeCycleCollectionSnapshot(data);
+}
+
+export async function runCuratorAutoDistribution(
+  weekKind: WeekPlanKind,
+): Promise<CuratorDistributionRunResponse> {
+  const { data } = await apiClient.post<CuratorDistributionRunResponse>(
+    '/api/calendar/next-week/curator-distribution',
+    {
+      week_kind: weekKind,
+      notify_curators: true,
+    },
+  );
+  return data;
 }
 
 /**

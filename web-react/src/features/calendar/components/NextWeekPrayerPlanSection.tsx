@@ -27,6 +27,7 @@ import {
   improvePrayerNeedTextWithAi,
   patchCycleCollectionClaim,
   patchMemberCyclePrayer,
+  runCuratorAutoDistribution,
   type WeekPlanKind,
 } from '../api';
 import { CoordinatorPreviousNeedsPanel } from './CoordinatorPreviousNeedsPanel';
@@ -624,6 +625,7 @@ export function NextWeekPrayerPlanSection({
   const titleId = useId();
   const [mutErr, setMutErr] = useState<string | null>(null);
   const [weekKind, setWeekKind] = useState<WeekPlanKind>('current');
+  const [distributionInfo, setDistributionInfo] = useState<string | null>(null);
 
   const enabled = canView && open;
 
@@ -665,6 +667,24 @@ export function NextWeekPrayerPlanSection({
     },
     onError: (e: unknown) => {
       setMutErr(loadErrorDescription(e) ?? 'Не удалось сохранить');
+    },
+  });
+
+  const autoDistributionMut = useMutation({
+    mutationFn: async (kind: WeekPlanKind) => runCuratorAutoDistribution(kind),
+    onSuccess: (data) => {
+      setMutErr(null);
+      const label = data.week_kind === 'current' ? 'текущую' : 'следующую';
+      setDistributionInfo(
+        `Автораспределение на ${label} неделю завершено: ${data.total} назначений, уведомлены ${data.pushed_coordinators} куратор(ов).`,
+      );
+      void qc.invalidateQueries({ queryKey: ['calendar', 'cycle', 'collection-claims'] });
+      void qc.invalidateQueries({ queryKey: ['calendar', 'week-members'] });
+      void qc.invalidateQueries({ queryKey: ['calendar', 'curator-distribution'] });
+    },
+    onError: (e: unknown) => {
+      setDistributionInfo(null);
+      setMutErr(loadErrorDescription(e) ?? 'Не удалось выполнить автораспределение');
     },
   });
 
@@ -728,6 +748,21 @@ export function NextWeekPrayerPlanSection({
                 >
                   Следующая
                 </button>
+              </div>
+              <div className="mb-2 flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => autoDistributionMut.mutate(weekKind)}
+                  disabled={autoDistributionMut.isPending}
+                  className="min-h-[38px] rounded-lg bg-primary px-3 text-[12px] font-extrabold text-white shadow-sm hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {autoDistributionMut.isPending
+                    ? 'Распределение...'
+                    : `Автораспределить на ${weekKind === 'current' ? 'эту' : 'следующую'} неделю`}
+                </button>
+                {distributionInfo ? (
+                  <span className="text-[12px] font-semibold text-emerald-700">{distributionInfo}</span>
+                ) : null}
               </div>
 
               {mutErr ? <p className="mb-2 text-[12px] text-red-600">{mutErr}</p> : null}
