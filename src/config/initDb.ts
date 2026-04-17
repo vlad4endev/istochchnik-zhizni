@@ -330,6 +330,9 @@ ALTER TABLE cycle_collection_claims ADD CONSTRAINT cycle_collection_claims_membe
 ALTER TABLE cycle_collection_claims DROP CONSTRAINT IF EXISTS cycle_collection_claims_claimed_by_member_id_fkey;
 ALTER TABLE cycle_collection_claims ADD CONSTRAINT cycle_collection_claims_claimed_by_member_id_fkey FOREIGN KEY (claimed_by_member_id) REFERENCES members(id) ON DELETE CASCADE;
 
+-- Таблица могла быть создана раньше без week_start_date; IF NOT EXISTS в CREATE TABLE её не добавит.
+ALTER TABLE cycle_collection_claims ADD COLUMN IF NOT EXISTS week_start_date DATE;
+
 CREATE INDEX IF NOT EXISTS cycle_collection_claims_cycle_idx
   ON cycle_collection_claims (cycle_index);
 
