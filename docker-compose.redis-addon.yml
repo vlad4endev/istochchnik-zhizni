@@ -1,0 +1,34 @@
+# Опционально: Redis для realtime мессенджера между несколькими инстансами API.
+# Запуск вместе с прод-стеком:
+#   docker compose -f docker-compose.prod.yml -f docker-compose.redis-addon.yml up -d
+#
+# В .env задайте (или положитесь на значения ниже для сервиса api):
+#   REDIS_REALTIME_ENABLED=true
+#   REDIS_URL=redis://redis:6379
+
+services:
+  redis:
+    image: redis:7-alpine
+    restart: always
+    command: redis-server --appendonly yes
+    volumes:
+      - istochnik_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # Явно указываем и db, и redis: при merge compose не всегда объединяет depends_on из разных файлов.
+  api:
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      REDIS_REALTIME_ENABLED: "true"
+      REDIS_URL: redis://redis:6379
+
+volumes:
+  istochnik_redis_data:

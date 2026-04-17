@@ -60,6 +60,7 @@ export function ChatList({ onSelect, activeId }: ChatListProps) {
                 conv={conv}
                 isActive={conv.id === activeId}
                 isLast={index === filtered.length - 1}
+                avatarPriority={index < 16 || conv.id === activeId}
                 onClick={() => onSelect(conv.id)}
               />
             </li>
@@ -138,12 +139,15 @@ function ChatListItem({
   conv,
   isActive,
   isLast,
+  avatarPriority,
   onClick,
 }: {
   conv: ConversationListItem;
   isActive: boolean;
   /** Последняя строка — без нижнего разделителя у текстовой колонки. */
   isLast: boolean;
+  /** Первые строки списка + активный чат — eager-загрузка фото. */
+  avatarPriority: boolean;
   onClick: () => void;
 }) {
   const typingUsers = useChatStore((s) => s.typingByConv[conv.id] || EMPTY_ARRAY);
@@ -318,6 +322,7 @@ function ChatListItem({
               <AppAvatar
                 src={avatarUrl}
                 fallback={<span>{avatarLetter}</span>}
+                priority={avatarPriority}
                 className="grid h-full w-full place-items-center"
                 imgClassName="h-full w-full object-cover"
               />

@@ -18,6 +18,7 @@ import {
 } from '../services/cycleCollectionClaimsService';
 import { notifyRealtime } from '../realtime/notify';
 import { sendPush } from '../services/pushService';
+import { DistributionService, getNextIsoWeekRef } from '../services/DistributionService';
 
 function isValidDateInput(value: unknown): value is string {
   if (typeof value !== 'string') {
@@ -584,5 +585,70 @@ export async function patchCycleCollectionClaims(req: Request, res: Response): P
     }
     console.error('Calendar cycle collection-claims PATCH error:', err);
     res.status(500).json({ error: 'Database error' });
+  }
+}
+
+export async function postCuratorDistribution(req: Request, res: Response): Promise<void> {
+  if (!(await assertAdminOrCollectionCoordinator(req, res))) {
+    return;
+  }
+
+  try {
+    const weekKindRaw = req.body?.week_kind;
+    const weekKind: WeekPlanKind = weekKindRaw === 'current' ? 'current' : 'next';
+    const service = new DistributionService();
+    const result = await service.executeAndSaveForCollectionQueueWeek(weekKind);
+
+    const assignmentsView = await service.getAssignmentsForWeek(result.week);
+    const groupedByCurator = service.groupAssignmentsByCurator(assignmentsView);
+    notifyRealtime(['calendar']);
+    res.json({
+      ok: true,
+      week_kind: weekKind,
+      week: result.week,
+      cycle_index: result.cycleIndex,
+      total: result.assignments.length,
+      assignments: result.assignments,
+      grouped_by_curator: groupedByCurator,
+    });
+  } catch (err) {
+    console.error('Calendar curator distribution POST error:', err);
+    res.status(500).json({ error: 'Не удалось выполнить распределение кураторов' });
+  }
+}
+
+export async function getCuratorDistributionTargetWeek(_req: Request, res: Response): Promise<void> {
+  const week = getNextIsoWeekRef();
+  res.json({ week });
+}
+
+export async function getCuratorDistribution(req: Request, res: Response): Promise<void> {
+  if (!(await assertAdminOrCollectionCoordinator(req, res))) {
+    return;
+  }
+
+  try {
+    const queryWeek = req.query?.week;
+    const queryYear = req.query?.year;
+    const week =
+      typeof queryWeek === 'string' &&
+      typeof queryYear === 'string' &&
+      /^\d+$/.test(queryWeek) &&
+      /^\d+$/.test(queryYear)
+        ? { weekNumber: Number(queryWeek), year: Number(queryYear) }
+        : getNextIsoWeekRef();
+
+    const service = new DistributionService();
+    const assignments = await service.getAssignmentsForWeek(week);
+    const groupedByCurator = service.groupAssignmentsByCurator(assignments);
+    res.json({
+      week,
+      total: assignments.length,
+      assignments,
+      grouped_by_curator: groupedByCurator,
+    });
+  } catch (err) {
+    console.error('Calendar curator distribution GET error:', err);
+    res.status(500).json({ error: 'Не удалось получить распределение кураторов' });
   }
 }

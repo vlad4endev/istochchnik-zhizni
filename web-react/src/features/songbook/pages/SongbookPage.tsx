@@ -1,13 +1,14 @@
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Fuse, { type IFuseOptions } from 'fuse.js';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { LuSearch, LuX } from 'react-icons/lu';
+import { LuSearch, LuTrash2, LuX } from 'react-icons/lu';
 
 import { useAuthStore } from '../../auth/authStore';
-import { canModerateSongCatalog } from '../../auth/studioAccess';
+import { canDeleteSongFromCatalog, canModerateSongCatalog } from '../../auth/studioAccess';
+import { emitAppToast } from '../../../lib/uiFeedback';
 import { isMainSongbookDeploy } from '../../../lib/appVariant';
-import { fetchSongs, type SongListItem } from '../api';
+import { deleteSong, fetchSongs, type SongListItem } from '../api';
 
 type SongSearchDoc = SongListItem & {
   _tempoSearch: string;
@@ -37,7 +38,9 @@ const FUSE_OPTIONS: IFuseOptions<SongSearchDoc> = {
 
 export function SongbookPage() {
   const role = useAuthStore((s) => s.role);
+  const qc = useQueryClient();
   const catalogOk = canModerateSongCatalog(role);
+  const deleteOk = canDeleteSongFromCatalog(role);
   const mainOnly = isMainSongbookDeploy();
   const searchRef = useRef<HTMLInputElement | null>(null);
 
@@ -46,6 +49,16 @@ export function SongbookPage() {
   const query = useQuery({
     queryKey: ['songs', 'catalog'],
     queryFn: () => fetchSongs(),
+  });
+
+  const deleteMut = useMutation({
+    mutationFn: (id: number) => deleteSong(id),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['songs', 'catalog'] });
+      void qc.invalidateQueries({ queryKey: ['songs', 'catalog-all'] });
+      emitAppToast({ kind: 'success', message: 'Песня удалена из каталога' });
+    },
+    onError: () => emitAppToast('Не удалось удалить песню'),
   });
 
   const docs = useMemo(() => toSearchDocs(query.data ?? []), [query.data]);
@@ -146,17 +159,38 @@ export function SongbookPage() {
         {rows.map((s) => (
           <li
             key={s.id}
-            className="rounded-2xl bg-slate-50/80 shadow-[0_1px_3px_rgba(15,23,42,0.04)] transition hover:bg-slate-50"
+            className="flex min-h-[52px] items-stretch gap-1 rounded-2xl bg-slate-50/80 shadow-[0_1px_3px_rgba(15,23,42,0.04)] transition hover:bg-slate-50"
           >
             <Link
               to={`/songbook/${s.id}`}
-              className="block min-h-[52px] min-w-0 rounded-2xl px-4 py-3 outline-none ring-offset-2 transition active:scale-[0.99] focus-visible:ring-2 focus-visible:ring-slate-300"
+              className="flex min-w-0 flex-1 flex-col justify-center rounded-2xl px-4 py-3 outline-none ring-offset-2 transition active:scale-[0.99] focus-visible:ring-2 focus-visible:ring-slate-300"
             >
               <h2 className="text-lg font-semibold leading-snug text-slate-900">
                 {s.song_number != null ? `${s.song_number}. ` : ''}
                 {s.title}
               </h2>
             </Link>
+            {deleteOk ? (
+              <button
+                type="button"
+                title="Удалить из каталога"
+                onClick={(e) => {
+                  e.preventDefault();
+                  if (
+                    window.confirm(
+                      `Удалить «${s.title}» из каталога? Это необратимо, в том числе для сетлистов и студийных версий.`,
+                    )
+                  ) {
+                    deleteMut.mutate(Number(s.id));
+                  }
+                }}
+                disabled={deleteMut.isPending}
+                className="inline-flex shrink-0 items-center justify-center self-stretch rounded-r-2xl px-3 text-slate-400 transition hover:bg-red-50 hover:text-red-600 disabled:opacity-40"
+                aria-label={`Удалить «${s.title}»`}
+              >
+                <LuTrash2 className="h-5 w-5" />
+              </button>
+            ) : null}
           </li>
         ))}
       </ul>

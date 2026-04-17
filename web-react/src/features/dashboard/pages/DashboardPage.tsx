@@ -371,6 +371,21 @@ function DashboardMain() {
     return unfilledWeekRowsAdmin.filter((r) => claimedMemberIds.has(r.member.id));
   }, [unfilledWeekRowsAdmin, collectionClaimsQ.data?.members, me?.id]);
 
+  /** Все участники, закреплённые за текущим куратором на эту неделю (не только с пустой нуждой). */
+  const coordinatorAssignedRows = useMemo(() => {
+    const meId = me?.id ?? null;
+    if (meId == null) return [];
+    const claims = collectionClaimsQ.data?.members ?? [];
+    const claimedMemberIds = new Set(
+      claims.filter((c) => c.claimed_by?.id === meId).map((c) => c.id),
+    );
+    const rows = (weekMembersQ.data ?? [])
+      .filter((r) => r.member && claimedMemberIds.has(r.member.id))
+      .map((r) => ({ date: r.date, member: r.member as Member }));
+    rows.sort((a, b) => a.date.localeCompare(b.date));
+    return rows;
+  }, [collectionClaimsQ.data?.members, weekMembersQ.data, me?.id]);
+
   const isCollectionCoordinator = apiBoolean(me?.is_collection_coordinator);
   const canManageCoordinatorNotes =
     meQ.isSuccess && (isAdmin || isCollectionCoordinator);
@@ -583,20 +598,49 @@ function DashboardMain() {
                 </>
               ) : (
                 <div className="mt-3">
+                  {coordinatorAssignedRows.length > 0 ? (
+                    <>
+                      <p className="text-sm font-semibold text-stone-800">
+                        Вам назначены участники на текущую неделю:
+                      </p>
+                      <ul className="mt-2 space-y-1.5">
+                        {coordinatorAssignedRows.map((row) => (
+                          <li
+                            key={`assigned-${row.date}-${row.member.id}`}
+                            className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-primary/20 bg-white/80 px-3 py-2 text-sm"
+                          >
+                            <span className="font-bold text-stone-900">{memberFirstLastLine(row.member)}</span>
+                            <span className="text-xs font-semibold text-stone-600">{formatWeekDayChip(row.date)}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </>
+                  ) : (
+                    <p className="text-sm text-stone-600">
+                      На текущую неделю за вами пока нет закреплённых участников.
+                    </p>
+                  )}
+
                   <p className="text-sm font-semibold text-stone-800">
                     У выбранных вами участников пока нет текста нужды:
                   </p>
-                  <ul className="mt-2 space-y-1.5">
-                    {coordinatorUnfilledRows.map((row) => (
-                      <li
-                        key={`${row.date}-${row.member.id}`}
-                        className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-200/70 bg-amber-50/60 px-3 py-2 text-sm"
-                      >
-                        <span className="font-bold text-stone-900">{memberFirstLastLine(row.member)}</span>
-                        <span className="text-xs font-semibold text-stone-600">{formatWeekDayChip(row.date)}</span>
-                      </li>
-                    ))}
-                  </ul>
+                  {coordinatorUnfilledRows.length > 0 ? (
+                    <ul className="mt-2 space-y-1.5">
+                      {coordinatorUnfilledRows.map((row) => (
+                        <li
+                          key={`${row.date}-${row.member.id}`}
+                          className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-200/70 bg-amber-50/60 px-3 py-2 text-sm"
+                        >
+                          <span className="font-bold text-stone-900">{memberFirstLastLine(row.member)}</span>
+                          <span className="text-xs font-semibold text-stone-600">{formatWeekDayChip(row.date)}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="mt-2 text-sm text-stone-600">
+                      У всех ваших участников нужды уже заполнены.
+                    </p>
+                  )}
                   <button
                     type="button"
                     onClick={() => navigate('/prayer')}

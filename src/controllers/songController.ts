@@ -1,6 +1,11 @@
 import type { Request, Response } from 'express';
 
-import { canModerateCatalog, normalizeAppRole, type AppRole } from '../types/appRole';
+import {
+  canDeleteCatalogSong,
+  canModerateCatalog,
+  normalizeAppRole,
+  type AppRole,
+} from '../types/appRole';
 import type { SongListFilters } from '../services/songService';
 import {
   addFavorite,
@@ -281,7 +286,7 @@ export async function deleteSongHandler(req: Request, res: Response): Promise<vo
       res.status(401).json({ error: 'Требуется вход' });
       return;
     }
-    if (!canModerateCatalog(roleOf(r))) {
+    if (!canDeleteCatalogSong(roleOf(r))) {
       res.status(403).json({ error: 'Недостаточно прав' });
       return;
     }

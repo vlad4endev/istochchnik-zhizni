@@ -75,6 +75,10 @@ export async function recordSongOpened(songId: number): Promise<void> {
   await apiClient.post(`${SONGS}/${songId}/open`);
 }
 
+export async function deleteSong(id: number): Promise<void> {
+  await apiClient.delete(`${SONGS}/${id}`);
+}
+
 export async function createSong(body: {
   song_number?: number | null;
   title: string;

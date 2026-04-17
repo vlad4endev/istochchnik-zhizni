@@ -582,6 +582,7 @@ function MessageBubbleInner({
               alt=""
               className="max-h-[420px] w-full object-cover"
               loading="lazy"
+              decoding="async"
             />
           </button>
           {caption ? (

@@ -1,0 +1,592 @@
+import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+
+import { query } from '../config/db';
+import { getCalendarWeekStartDate, getMemberAssignmentsForWeek, type WeekPlanKind } from './calendarService';
+import { getPrayerCycleSnapshotForDate } from './prayerCycleService';
+
+export type DistributionParticipant = {
+  id: number;
+};
+
+export type DistributionCurator = {
+  id: number;
+};
+
+export type WeekRef = {
+  weekNumber: number;
+  year: number;
+};
+
+export type ParticipantAssignment = {
+  participantId: number;
+  curatorId: number;
+  weekNumber: number;
+  year: number;
+};
+
+export type ParticipantAssignmentView = ParticipantAssignment & {
+  participantName: string;
+  curatorName: string;
+};
+
+export type CuratorAssignmentsGroup = {
+  curatorId: number;
+  curatorName: string;
+  total: number;
+  participants: Array<{
+    participantId: number;
+    participantName: string;
+  }>;
+};
+
+export type CuratorWeekAssignment = {
+  coordinatorId: number;
+  coordinatorName: string;
+  weekKind: WeekPlanKind;
+  weekStartDate: string;
+  cycleIndex: number;
+  members: Array<{
+    memberId: number;
+    memberName: string;
+  }>;
+};
+
+type ParticipantHistoryStats = {
+  blockedCuratorIds: Set<number>;
+  totalByCurator: Map<number, number>;
+};
+
+const DEFAULT_ASSIGNMENTS_TABLE = 'mentor_assignments';
+const MAX_CONSECUTIVE_WITH_SAME_CURATOR = 3;
+let cachedSupabaseClient: SupabaseClient | null | undefined;
+
+function shuffledCopy<T>(source: readonly T[]): T[] {
+  const arr = [...source];
+  for (let i = arr.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
+function resolveAssignmentsTable(): string {
+  const raw = process.env.MENTOR_ASSIGNMENTS_TABLE?.trim() || DEFAULT_ASSIGNMENTS_TABLE;
+  if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(raw)) {
+    throw new Error('Invalid MENTOR_ASSIGNMENTS_TABLE name');
+  }
+  return raw;
+}
+
+function getSupabaseClient(): SupabaseClient {
+  if (cachedSupabaseClient !== undefined) {
+    return cachedSupabaseClient as SupabaseClient;
+  }
+
+  const url = String(process.env.SUPABASE_URL ?? '').trim();
+  const serviceRoleKey = String(process.env.SUPABASE_SERVICE_ROLE_KEY ?? '').trim();
+  if (!url || !serviceRoleKey) {
+    throw new Error('Supabase is not configured (SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY)');
+  }
+
+  cachedSupabaseClient = createClient(url, serviceRoleKey, {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+    },
+  });
+  return cachedSupabaseClient;
+}
+
+function toIsoWeekKey(year: number, weekNumber: number): number {
+  return year * 100 + weekNumber;
+}
+
+function assertWeekRef(ref: WeekRef): void {
+  if (!Number.isInteger(ref.weekNumber) || ref.weekNumber < 1 || ref.weekNumber > 53) {
+    throw new Error('weekNumber must be an integer in range 1..53');
+  }
+  if (!Number.isInteger(ref.year) || ref.year < 2000 || ref.year > 3000) {
+    throw new Error('year must be a valid integer');
+  }
+}
+
+export class DistributionService {
+  async getActiveParticipantsForNextWeek(): Promise<DistributionParticipant[]> {
+    const result = await query(
+      `SELECT id
+       FROM members
+       WHERE is_active = TRUE
+         AND in_prayer_cycle = TRUE
+       ORDER BY id ASC`,
+    );
+    return result.rows.map((row) => ({ id: Number(row.id) }));
+  }
+
+  async getAvailableCurators(): Promise<DistributionCurator[]> {
+    const result = await query(
+      `SELECT id
+       FROM members
+       WHERE is_active = TRUE
+         AND is_collection_coordinator = TRUE
+       ORDER BY id ASC`,
+    );
+    return result.rows.map((row) => ({ id: Number(row.id) }));
+  }
+
+  async distributeForWeek(input: {
+    week: WeekRef;
+    participants?: DistributionParticipant[];
+    curators?: DistributionCurator[];
+  }): Promise<ParticipantAssignment[]> {
+    assertWeekRef(input.week);
+    const participants = input.participants ?? (await this.getActiveParticipantsForNextWeek());
+    const curators = input.curators ?? (await this.getAvailableCurators());
+
+    if (participants.length === 0) {
+      return [];
+    }
+    if (curators.length === 0) {
+      throw new Error('No available curators for distribution');
+    }
+
+    const participantIds = participants.map((p) => p.id);
+    const curatorIds = curators.map((c) => c.id);
+    const statsByParticipant = await this.getParticipantHistoryStats(participantIds, curatorIds);
+
+    const perCuratorBase = Math.floor(participants.length / curators.length);
+    const extraSlots = participants.length % curators.length;
+    const curatorOrder = shuffledCopy(curatorIds);
+    const remainingSlots = new Map<number, number>();
+    for (let i = 0; i < curatorOrder.length; i += 1) {
+      const curatorId = curatorOrder[i];
+      const limit = perCuratorBase + (i < extraSlots ? 1 : 0);
+      remainingSlots.set(curatorId, limit);
+    }
+
+    const currentLoad = new Map<number, number>();
+    for (const curatorId of curatorIds) {
+      currentLoad.set(curatorId, 0);
+    }
+
+    const assignments: ParticipantAssignment[] = [];
+    const randomizedParticipants = shuffledCopy(participants);
+
+    for (const participant of randomizedParticipants) {
+      const participantStats =
+        statsByParticipant.get(participant.id) ??
+        ({ blockedCuratorIds: new Set<number>(), totalByCurator: new Map<number, number>() } satisfies ParticipantHistoryStats);
+
+      const curatorsWithSlots = curatorIds.filter((curatorId) => (remainingSlots.get(curatorId) ?? 0) > 0);
+      if (curatorsWithSlots.length === 0) {
+        throw new Error('Distribution failed: no curator slots left');
+      }
+
+      const allowedByConsecutiveRule = curatorsWithSlots.filter(
+        (curatorId) => !participantStats.blockedCuratorIds.has(curatorId),
+      );
+
+      let selectedCuratorId: number;
+      if (allowedByConsecutiveRule.length > 0) {
+        selectedCuratorId = this.selectBestCurator(allowedByConsecutiveRule, currentLoad);
+      } else {
+        const allCuratorsBlocked = curatorIds.every((curatorId) =>
+          participantStats.blockedCuratorIds.has(curatorId),
+        );
+        if (allCuratorsBlocked) {
+          selectedCuratorId = this.selectCuratorByLeastHistory(
+            curatorsWithSlots,
+            participantStats.totalByCurator,
+            currentLoad,
+          );
+        } else {
+          selectedCuratorId = this.selectBestCurator(curatorsWithSlots, currentLoad);
+        }
+      }
+
+      assignments.push({
+        participantId: participant.id,
+        curatorId: selectedCuratorId,
+        weekNumber: input.week.weekNumber,
+        year: input.week.year,
+      });
+
+      remainingSlots.set(selectedCuratorId, (remainingSlots.get(selectedCuratorId) ?? 0) - 1);
+      currentLoad.set(selectedCuratorId, (currentLoad.get(selectedCuratorId) ?? 0) + 1);
+    }
+
+    return assignments;
+  }
+
+  async executeAndSaveForWeek(week: WeekRef): Promise<ParticipantAssignment[]> {
+    const assignments = await this.distributeForWeek({ week });
+    await this.saveAssignmentsViaSupabase(assignments);
+    return assignments;
+  }
+
+  async executeAndSaveForNextWeek(fromDate: Date = new Date()): Promise<{
+    week: WeekRef;
+    assignments: ParticipantAssignment[];
+  }> {
+    const week = getNextIsoWeekRef(fromDate);
+    const assignments = await this.executeAndSaveForWeek(week);
+    return { week, assignments };
+  }
+
+  async executeAndSaveForCollectionQueueWeek(kind: WeekPlanKind): Promise<{
+    week: WeekRef;
+    assignments: ParticipantAssignment[];
+    cycleIndex: number;
+  }> {
+    const weekStartDate = getCalendarWeekStartDate(kind);
+    const week = getIsoWeekRefByDateString(weekStartDate);
+    const participants = await this.getQueueParticipantsForWeek(kind);
+    const assignments = await this.distributeForWeek({ week, participants });
+    await this.saveAssignmentsViaSupabase(assignments);
+    const cycleIndex = await this.syncAssignmentsToCycleCollectionClaims(assignments, kind);
+    return { week, assignments, cycleIndex };
+  }
+
+  async getAssignmentsForWeek(week: WeekRef): Promise<ParticipantAssignmentView[]> {
+    assertWeekRef(week);
+    const tableName = resolveAssignmentsTable();
+    const result = await query(
+      `SELECT
+         ma.participant_id,
+         ma.curator_id,
+         ma.week_number,
+         ma.year,
+         COALESCE(
+           NULLIF(TRIM(COALESCE(p.first_name, '') || ' ' || COALESCE(p.last_name, '')), ''),
+           p.name,
+           'Участник'
+         ) AS participant_name,
+         COALESCE(
+           NULLIF(TRIM(COALESCE(c.first_name, '') || ' ' || COALESCE(c.last_name, '')), ''),
+           c.name,
+           'Куратор'
+         ) AS curator_name
+       FROM ${tableName} ma
+       JOIN members p ON p.id = ma.participant_id
+       JOIN members c ON c.id = ma.curator_id
+       WHERE ma.week_number = $1
+         AND ma.year = $2
+       ORDER BY curator_name ASC, participant_name ASC`,
+      [week.weekNumber, week.year],
+    );
+
+    return result.rows.map((row) => ({
+      participantId: Number(row.participant_id),
+      curatorId: Number(row.curator_id),
+      weekNumber: Number(row.week_number),
+      year: Number(row.year),
+      participantName: String(row.participant_name ?? 'Участник'),
+      curatorName: String(row.curator_name ?? 'Куратор'),
+    }));
+  }
+
+  groupAssignmentsByCurator(assignments: ParticipantAssignmentView[]): CuratorAssignmentsGroup[] {
+    const groups = new Map<number, CuratorAssignmentsGroup>();
+    for (const item of assignments) {
+      const existing = groups.get(item.curatorId);
+      if (existing) {
+        existing.participants.push({
+          participantId: item.participantId,
+          participantName: item.participantName,
+        });
+        existing.total += 1;
+        continue;
+      }
+
+      groups.set(item.curatorId, {
+        curatorId: item.curatorId,
+        curatorName: item.curatorName,
+        total: 1,
+        participants: [
+          {
+            participantId: item.participantId,
+            participantName: item.participantName,
+          },
+        ],
+      });
+    }
+
+    return [...groups.values()].sort((a, b) => a.curatorName.localeCompare(b.curatorName, 'ru'));
+  }
+
+  async getQueueParticipantsForWeek(kind: WeekPlanKind): Promise<DistributionParticipant[]> {
+    const days = await getMemberAssignmentsForWeek(kind);
+    const unique = new Set<number>();
+    for (const row of days) {
+      const id = row.member?.id;
+      if (typeof id === 'number' && Number.isFinite(id)) {
+        unique.add(id);
+      }
+    }
+    return [...unique].map((id) => ({ id }));
+  }
+
+  async syncAssignmentsToCycleCollectionClaims(
+    assignments: ParticipantAssignment[],
+    weekKind: WeekPlanKind,
+  ): Promise<number> {
+    if (assignments.length === 0) {
+      return 0;
+    }
+
+    const weekStartDate = getCalendarWeekStartDate(weekKind);
+    const cycle = await getPrayerCycleSnapshotForDate(weekStartDate);
+    if (!cycle) {
+      throw new Error('No active prayer cycle for selected queue week');
+    }
+    const cycleIndex = cycle.cycle_index;
+
+    await query('BEGIN');
+    try {
+      for (const item of assignments) {
+        await query(
+          `INSERT INTO cycle_collection_claims (cycle_index, member_id, claimed_by_member_id)
+           VALUES ($1, $2, $3)
+           ON CONFLICT (cycle_index, member_id)
+           DO UPDATE SET claimed_by_member_id = EXCLUDED.claimed_by_member_id`,
+          [cycleIndex, item.participantId, item.curatorId],
+        );
+      }
+      await query('COMMIT');
+    } catch (err) {
+      await query('ROLLBACK');
+      throw err;
+    }
+
+    return cycleIndex;
+  }
+
+  async getCoordinatorAssignmentsForQueueWeek(kind: WeekPlanKind): Promise<CuratorWeekAssignment[]> {
+    const weekStartDate = getCalendarWeekStartDate(kind);
+    const cycle = await getPrayerCycleSnapshotForDate(weekStartDate);
+    if (!cycle) {
+      return [];
+    }
+
+    const result = await query(
+      `SELECT
+         c.claimed_by_member_id AS coordinator_id,
+         COALESCE(
+           NULLIF(TRIM(COALESCE(cm.first_name, '') || ' ' || COALESCE(cm.last_name, '')), ''),
+           cm.name,
+           'Куратор'
+         ) AS coordinator_name,
+         c.member_id,
+         COALESCE(
+           NULLIF(TRIM(COALESCE(m.first_name, '') || ' ' || COALESCE(m.last_name, '')), ''),
+           m.name,
+           'Участник'
+         ) AS member_name
+       FROM cycle_collection_claims c
+       JOIN members cm ON cm.id = c.claimed_by_member_id
+       JOIN members m ON m.id = c.member_id
+       WHERE c.cycle_index = $1
+       ORDER BY coordinator_name ASC, member_name ASC`,
+      [cycle.cycle_index],
+    );
+
+    const byCoordinator = new Map<number, CuratorWeekAssignment>();
+    for (const row of result.rows) {
+      const coordinatorId = Number(row.coordinator_id);
+      const memberId = Number(row.member_id);
+      if (!Number.isFinite(coordinatorId) || !Number.isFinite(memberId)) {
+        continue;
+      }
+      const coordinatorName = String(row.coordinator_name ?? 'Куратор');
+      const memberName = String(row.member_name ?? 'Участник');
+      const existing = byCoordinator.get(coordinatorId);
+      if (existing) {
+        existing.members.push({ memberId, memberName });
+        continue;
+      }
+      byCoordinator.set(coordinatorId, {
+        coordinatorId,
+        coordinatorName,
+        weekKind: kind,
+        weekStartDate,
+        cycleIndex: cycle.cycle_index,
+        members: [{ memberId, memberName }],
+      });
+    }
+
+    return [...byCoordinator.values()];
+  }
+
+  async saveAssignmentsViaSupabase(assignments: ParticipantAssignment[]): Promise<void> {
+    if (assignments.length === 0) {
+      return;
+    }
+
+    const tableName = resolveAssignmentsTable();
+    const supabase = getSupabaseClient();
+    const payload = assignments.map((item) => ({
+      participant_id: item.participantId,
+      curator_id: item.curatorId,
+      week_number: item.weekNumber,
+      year: item.year,
+    }));
+
+    // Multi-row insert is executed as a single SQL statement by PostgREST, which is atomic.
+    const { error } = await supabase
+      .from(tableName)
+      .upsert(payload, { onConflict: 'participant_id,week_number,year' });
+    if (error) {
+      throw new Error(`Failed to save assignments to Supabase: ${error.message}`);
+    }
+  }
+
+  private selectBestCurator(
+    curatorIds: number[],
+    currentLoad: Map<number, number>,
+  ): number {
+    const shuffled = shuffledCopy(curatorIds);
+    return shuffled.sort((a, b) => (currentLoad.get(a) ?? 0) - (currentLoad.get(b) ?? 0))[0];
+  }
+
+  private selectCuratorByLeastHistory(
+    curatorIds: number[],
+    totalByCurator: Map<number, number>,
+    currentLoad: Map<number, number>,
+  ): number {
+    const shuffled = shuffledCopy(curatorIds);
+    return shuffled
+      .sort((a, b) => {
+        const byHistory = (totalByCurator.get(a) ?? 0) - (totalByCurator.get(b) ?? 0);
+        if (byHistory !== 0) {
+          return byHistory;
+        }
+        return (currentLoad.get(a) ?? 0) - (currentLoad.get(b) ?? 0);
+      })[0];
+  }
+
+  private async getParticipantHistoryStats(
+    participantIds: number[],
+    curatorIds: number[],
+  ): Promise<Map<number, ParticipantHistoryStats>> {
+    const stats = new Map<number, ParticipantHistoryStats>();
+
+    for (const participantId of participantIds) {
+      stats.set(participantId, {
+        blockedCuratorIds: new Set<number>(),
+        totalByCurator: new Map<number, number>(),
+      });
+    }
+
+    if (participantIds.length === 0 || curatorIds.length === 0) {
+      return stats;
+    }
+
+    const tableName = resolveAssignmentsTable();
+    const totals = await query(
+      `SELECT participant_id, curator_id, COUNT(*)::int AS total
+       FROM ${tableName}
+       WHERE participant_id = ANY($1::int[])
+         AND curator_id = ANY($2::int[])
+       GROUP BY participant_id, curator_id`,
+      [participantIds, curatorIds],
+    );
+
+    for (const row of totals.rows) {
+      const participantId = Number(row.participant_id);
+      const curatorId = Number(row.curator_id);
+      const total = Number(row.total);
+      const entry = stats.get(participantId);
+      if (!entry) {
+        continue;
+      }
+      entry.totalByCurator.set(curatorId, total);
+    }
+
+    const recent = await query(
+      `SELECT participant_id, curator_id, week_number, year
+       FROM (
+         SELECT
+           participant_id,
+           curator_id,
+           week_number,
+           year,
+           ROW_NUMBER() OVER (
+             PARTITION BY participant_id
+             ORDER BY year DESC, week_number DESC
+           ) AS rn
+         FROM ${tableName}
+         WHERE participant_id = ANY($1::int[])
+       ) ranked
+       WHERE rn <= $2
+       ORDER BY participant_id ASC, year DESC, week_number DESC`,
+      [participantIds, MAX_CONSECUTIVE_WITH_SAME_CURATOR],
+    );
+
+    const recentByParticipant = new Map<number, Array<{ curatorId: number }>>();
+    for (const row of recent.rows) {
+      const participantId = Number(row.participant_id);
+      const list = recentByParticipant.get(participantId) ?? [];
+      list.push({ curatorId: Number(row.curator_id) });
+      recentByParticipant.set(participantId, list);
+    }
+
+    for (const participantId of participantIds) {
+      const entry = stats.get(participantId);
+      if (!entry) {
+        continue;
+      }
+      const recentList = recentByParticipant.get(participantId) ?? [];
+      if (recentList.length < MAX_CONSECUTIVE_WITH_SAME_CURATOR) {
+        continue;
+      }
+
+      const firstCuratorId = recentList[0]?.curatorId;
+      const allSame = recentList.every((item) => item.curatorId === firstCuratorId);
+      if (allSame && typeof firstCuratorId === 'number') {
+        entry.blockedCuratorIds.add(firstCuratorId);
+      }
+    }
+
+    return stats;
+  }
+}
+
+export function getNextIsoWeekRef(fromDate: Date = new Date()): WeekRef {
+  const date = new Date(Date.UTC(fromDate.getUTCFullYear(), fromDate.getUTCMonth(), fromDate.getUTCDate()));
+  const day = date.getUTCDay() || 7;
+  date.setUTCDate(date.getUTCDate() + (8 - day));
+
+  const yearStart = new Date(Date.UTC(date.getUTCFullYear(), 0, 1));
+  const yearStartDay = yearStart.getUTCDay() || 7;
+  const firstThursday = new Date(yearStart);
+  firstThursday.setUTCDate(yearStart.getUTCDate() + (4 - yearStartDay));
+
+  const currentThursday = new Date(date);
+  const currentDay = currentThursday.getUTCDay() || 7;
+  currentThursday.setUTCDate(currentThursday.getUTCDate() + (4 - currentDay));
+
+  const week = Math.floor((currentThursday.getTime() - firstThursday.getTime()) / 604800000) + 1;
+  return { weekNumber: week, year: currentThursday.getUTCFullYear() };
+}
+
+export function getIsoWeekRefByDateString(dateIso: string): WeekRef {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateIso)) {
+    throw new Error('Invalid ISO date');
+  }
+  const d = new Date(`${dateIso}T00:00:00.000Z`);
+  const thursday = new Date(d);
+  const day = thursday.getUTCDay() || 7;
+  thursday.setUTCDate(thursday.getUTCDate() + (4 - day));
+
+  const yearStart = new Date(Date.UTC(thursday.getUTCFullYear(), 0, 1));
+  const yearStartDay = yearStart.getUTCDay() || 7;
+  const firstThursday = new Date(yearStart);
+  firstThursday.setUTCDate(yearStart.getUTCDate() + (4 - yearStartDay));
+  const week =
+    Math.floor((thursday.getTime() - firstThursday.getTime()) / 604800000) + 1;
+
+  return { year: thursday.getUTCFullYear(), weekNumber: week };
+}
+
+export function canAssignForWeek(existing: WeekRef, target: WeekRef): boolean {
+  return toIsoWeekKey(target.year, target.weekNumber) >= toIsoWeekKey(existing.year, existing.weekNumber);
+}

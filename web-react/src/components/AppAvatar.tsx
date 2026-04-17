@@ -8,6 +8,8 @@ type AppAvatarProps = {
   className?: string;
   imgClassName?: string;
   style?: CSSProperties;
+  /** Видимые аватары в списке/шапке — без lazy, чтобы не «подтягивались» секундами. */
+  priority?: boolean;
   loading?: 'eager' | 'lazy';
   fetchPriority?: 'high' | 'low' | 'auto';
 };
@@ -19,11 +21,15 @@ export function AppAvatar({
   className = '',
   imgClassName = 'h-full w-full object-cover',
   style,
-  loading = 'lazy',
-  fetchPriority = 'auto',
+  priority = false,
+  loading,
+  fetchPriority,
 }: AppAvatarProps) {
   const resolvedSrc = useMemo(() => resolvePublicUrl(src ?? null), [src]);
   const [loadFailed, setLoadFailed] = useState(false);
+
+  const effectiveLoading = loading ?? (priority ? 'eager' : 'lazy');
+  const effectiveFetchPriority = fetchPriority ?? (priority ? 'high' : 'auto');
 
   useEffect(() => {
     setLoadFailed(false);
@@ -38,9 +44,9 @@ export function AppAvatar({
           src={resolvedSrc ?? undefined}
           alt={alt}
           className={imgClassName}
-          loading={loading}
+          loading={effectiveLoading}
           decoding="async"
-          fetchPriority={fetchPriority}
+          fetchPriority={effectiveFetchPriority}
           onError={() => setLoadFailed(true)}
         />
       ) : (

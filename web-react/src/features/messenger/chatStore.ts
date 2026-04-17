@@ -102,12 +102,12 @@ interface ChatState {
   clearDraft: (conversationId: string) => void;
 
   // --- Actions ---
-  loadConversations: () => Promise<void>;
+  loadConversations: (opts?: { force?: boolean }) => Promise<void>;
   setActiveConversation: (id: string | null) => void;
   openPrivateDraft: (peer: SearchMember) => void;
-  loadMessages: (conversationId: string, older?: boolean) => Promise<void>;
+  loadMessages: (conversationId: string, older?: boolean, opts?: { force?: boolean }) => Promise<void>;
   /** После reconnect: догрузить сообщения новее max(реальный id) без сброса истории. */
-  catchUpMessagesAfter: (conversationId: string) => Promise<void>;
+  catchUpMessagesAfter: (conversationId: string, retryCount?: number) => Promise<void>;
   hydrateFromCache: () => void;
 
   /**
@@ -586,11 +586,17 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   // ─── Load conversations ───────────────────────────────────
 
-  loadConversations: async () => {
+  loadConversations: async (opts) => {
+    const force = opts?.force === true;
     if (get().conversationsLoading) return;
     // Guard against rapid refetch loops (WS flaps / repeated events).
-    // 1.5s cooldown is enough to prevent UI flicker while staying responsive.
-    if (Date.now() - (get().conversationsLastLoadedAt || 0) < 1500) return;
+    // Skip cooldown after reconnect (`force`) so список чатов не «залипает» после восстановления WS.
+    if (
+      !force &&
+      Date.now() - (get().conversationsLastLoadedAt || 0) < 1500
+    ) {
+      return;
+    }
     set({ conversationsLoading: true });
     try {
       const conversations = await api.fetchConversations();
@@ -654,11 +660,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   // ─── Load messages ────────────────────────────────────────
 
-  loadMessages: async (conversationId, older = false) => {
+  loadMessages: async (conversationId, older = false, opts) => {
+    const force = opts?.force === true;
     if (isDraftPrivateConversationId(conversationId)) return;
     const state = get();
     if (state.messagesLoading[conversationId]) return;
-    if (!older) {
+    if (!older && !force) {
       const last = state.messagesLastLoadedAt[conversationId] || 0;
       if (Date.now() - last < 1500) return;
     }
@@ -697,10 +704,17 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
   },
 
-  catchUpMessagesAfter: async (conversationId) => {
+  catchUpMessagesAfter: async (conversationId, retryCount = 0) => {
     if (isDraftPrivateConversationId(conversationId)) return;
     const state = get();
-    if (state.messagesLoading[conversationId]) return;
+    if (state.messagesLoading[conversationId]) {
+      // Не терять догрузку после reconnect, если параллельно идёт loadMessages из ChatWindow.
+      if (retryCount < 12) {
+        await new Promise((r) => setTimeout(r, 100));
+        return get().catchUpMessagesAfter(conversationId, retryCount + 1);
+      }
+      return;
+    }
 
     const existing = state.messagesByConv[conversationId] || [];
     const afterSeed = maxRealServerMessageId(existing);
@@ -708,7 +722,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       set((s) => ({
         messagesLastLoadedAt: { ...s.messagesLastLoadedAt, [conversationId]: 0 },
       }));
-      await get().loadMessages(conversationId);
+      await get().loadMessages(conversationId, false, { force: true });
       return;
     }
 

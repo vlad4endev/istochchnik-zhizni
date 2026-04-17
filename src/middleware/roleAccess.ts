@@ -1,7 +1,12 @@
 import { NextFunction, Request, Response } from 'express';
 
 import type { AppRole } from '../types/appRole';
-import { canAccessStudio, canModerateCatalog, normalizeAppRole } from '../types/appRole';
+import {
+  canAccessStudio,
+  canDeleteCatalogSong,
+  canModerateCatalog,
+  normalizeAppRole,
+} from '../types/appRole';
 
 /**
  * Грубая фильтрация по роли из сессии (Bearer).
@@ -64,14 +69,23 @@ function isSongOpenPost(method: string, path: string): boolean {
   return method === 'POST' && /^\/api\/songs\/\d+\/open\/?$/.test(path);
 }
 
-/** POST/PATCH/DELETE каталога (не избранное). */
-function isSongCatalogMutation(method: string, path: string): boolean {
+/** POST/PATCH каталога (создание и правка — редакторы и админ). */
+function isSongCatalogModerateMutation(method: string, path: string): boolean {
   if (SAFE_METHODS.has(method)) return false;
   const p = path.split('?')[0];
   if (!p.startsWith('/api/songs')) return false;
   if (/^\/api\/songs\/\d+\/favorite\/?$/.test(p)) return false;
   if (p === '/api/songs' || p === '/api/songs/') return method === 'POST';
-  return /^\/api\/songs\/\d+\/?$/.test(p) && (method === 'PATCH' || method === 'DELETE');
+  return /^\/api\/songs\/\d+\/?$/.test(p) && method === 'PATCH';
+}
+
+/** DELETE песни из каталога (музыкант / редактор / админ — проверка роли ниже). */
+function isSongCatalogDeleteMutation(method: string, path: string): boolean {
+  if (method !== 'DELETE') return false;
+  const p = path.split('?')[0];
+  if (!p.startsWith('/api/songs')) return false;
+  if (/^\/api\/songs\/\d+\/favorite\/?$/.test(p)) return false;
+  return /^\/api\/songs\/\d+\/?$/.test(p);
 }
 
 function isStudioApiPath(path: string): boolean {
@@ -162,7 +176,12 @@ export function enforceRoleAccess(req: Request, res: Response, next: NextFunctio
     return;
   }
 
-  if (isSongCatalogMutation(req.method, fullPath) && authId && canModerateCatalog(role)) {
+  if (isSongCatalogModerateMutation(req.method, fullPath) && authId && canModerateCatalog(role)) {
+    next();
+    return;
+  }
+
+  if (isSongCatalogDeleteMutation(req.method, fullPath) && authId && canDeleteCatalogSong(role)) {
     next();
     return;
   }

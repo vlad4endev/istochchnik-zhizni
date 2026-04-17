@@ -9,6 +9,7 @@
 #    Альтернатива: bind-mount хоста + UPLOADS_DIR (см. .env.example).
 # 4. Запуск: docker compose -f docker-compose.prod.yml up -d --build
 # 5. Остановка: docker compose -f docker-compose.prod.yml down
+# 6. Стабильный мессенджер при нескольких инстансах API: Redis — docker-compose.redis-addon.yml (см. .env.example).
 #
 # Полный стек с веб в контейнере: docker-compose.yml + docker-compose.prod.overlay.yml (React в Dockerfile.web)
 # =============================================================================

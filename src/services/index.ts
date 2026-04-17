@@ -1,1 +1,1 @@
-// Services will be placed here
+export * from './DistributionService';

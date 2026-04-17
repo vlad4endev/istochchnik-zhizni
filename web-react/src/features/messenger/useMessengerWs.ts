@@ -135,7 +135,7 @@ export function useMessengerWs(): {
         const shouldResyncConversations = wasReconnected || !store.conversationsLoaded;
 
         if (shouldResyncConversations) {
-          void store.loadConversations();
+          void store.loadConversations({ force: wasReconnected });
         }
 
         const actId = activeConversationId;
@@ -144,7 +144,7 @@ export function useMessengerWs(): {
           if (wasReconnected && activeMessages.length > 0) {
             void store.catchUpMessagesAfter(actId);
           } else if (wasReconnected || activeMessages.length === 0) {
-            void store.loadMessages(actId);
+            void store.loadMessages(actId, false, { force: wasReconnected });
           }
         }
         if (wasReconnected) {
@@ -158,7 +158,8 @@ export function useMessengerWs(): {
         }
         emitMessengerMetric('ws_connect_open', 1, { reconnected: wasReconnected, openedAt });
 
-        // Heartbeat: ping every 15s; if no pong within 10s, close to force reconnect.
+        // Heartbeat: ping every 20s; if no pong within 35s, close to force reconnect.
+        // Меньше ложных обрывов на медленных сетях/прокси, чем 15s/10s.
         pingInterval = setInterval(() => {
           if (ws.readyState !== WebSocket.OPEN) return;
           clearPongDeadline();
@@ -172,8 +173,8 @@ export function useMessengerWs(): {
                 /* ignore */
               }
             }
-          }, 10_000);
-        }, 15_000);
+          }, 35_000);
+        }, 20_000);
       };
 
       ws.onmessage = (ev) => {
@@ -274,8 +275,8 @@ function handleWsMessage(msg: any): void {
       if (convId && payload && typeof payload === 'object' && payload.id != null) {
         store.handleNewMessage(convId, payload);
       } else if (convId) {
-        void store.loadMessages(convId);
-        void store.loadConversations();
+        void store.loadMessages(convId, false, { force: true });
+        void store.loadConversations({ force: true });
       }
       break;
     }

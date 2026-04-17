@@ -1,15 +1,16 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { LuFileDown, LuHeart, LuSettings2, LuSparkles } from 'react-icons/lu';
+import { LuFileDown, LuHeart, LuSettings2, LuSparkles, LuTrash2 } from 'react-icons/lu';
 
 import { dispatchLayoutMainChrome } from '../../../app/layoutChrome';
 import { useAuthStore } from '../../auth/authStore';
-import { canAccessStudioRole } from '../../auth/studioAccess';
+import { canAccessStudioRole, canDeleteSongFromCatalog } from '../../auth/studioAccess';
+import { emitAppToast } from '../../../lib/uiFeedback';
 import { isMainSongbookDeploy } from '../../../lib/appVariant';
 import { studioEditSongPath, useStudioModuleSurface } from '../../studio/studioPaths';
 import { useWakeLock } from '../../../hooks/useWakeLock';
-import { deleteFavorite, fetchSong, forkInStudio, postFavorite, recordSongOpened } from '../api';
+import { deleteFavorite, deleteSong, fetchSong, forkInStudio, postFavorite, recordSongOpened } from '../api';
 import { LyricsWithChords } from '../components/LyricsWithChords';
 import { SongReaderSettings } from '../components/SongReaderSettings';
 import { exportSongPdf } from '../pdfExport';
@@ -24,6 +25,7 @@ export function SongDetailPage() {
   const role = useAuthStore((s) => s.role);
   const token = useAuthStore((s) => s.token);
   const studioOk = canAccessStudioRole(role);
+  const canDeleteCatalog = canDeleteSongFromCatalog(role);
   const mainOnly = isMainSongbookDeploy();
   const { stageMode } = useSongbookChrome();
 
@@ -97,6 +99,18 @@ export function SongDetailPage() {
       void qc.invalidateQueries({ queryKey: ['songs'] });
       navigate(studioEditSongPath(surface, songId));
     },
+  });
+
+  const deleteMut = useMutation({
+    mutationFn: () => deleteSong(songId),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['songs'] });
+      void qc.invalidateQueries({ queryKey: ['songs', 'catalog'] });
+      void qc.invalidateQueries({ queryKey: ['songs', 'catalog-all'] });
+      emitAppToast({ kind: 'success', message: 'Песня удалена из каталога' });
+      navigate('/songbook', { replace: true });
+    },
+    onError: () => emitAppToast('Не удалось удалить песню'),
   });
 
   const metaLine = useMemo(() => {
@@ -206,6 +220,29 @@ export function SongDetailPage() {
                 className={`min-h-[44px] rounded-xl px-4 text-sm font-semibold ${shell.primary}`}
               >
                 В студии
+              </button>
+            )}
+            {canDeleteCatalog && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (
+                    window.confirm(
+                      `Удалить «${s.title}» из каталога? Связанные версии в студии и позиции в сетлистах будут удалены. Действие необратимо.`,
+                    )
+                  ) {
+                    deleteMut.mutate();
+                  }
+                }}
+                disabled={deleteMut.isPending}
+                className={`inline-flex min-h-[44px] items-center gap-1.5 rounded-xl border px-3 text-sm font-medium ${
+                  stageMode
+                    ? 'border-red-900/60 bg-red-950/40 text-red-300 hover:bg-red-950/70'
+                    : 'border-red-200 bg-red-50 text-red-800 hover:bg-red-100'
+                } disabled:opacity-50`}
+              >
+                <LuTrash2 className="h-4 w-4" aria-hidden />
+                Удалить
               </button>
             )}
           </div>

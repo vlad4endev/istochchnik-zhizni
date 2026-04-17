@@ -7,15 +7,18 @@ import {
 import { requireAuthSession } from '../middleware/authSession';
 import {
   getCycleCollectionClaims,
+  getCuratorDistribution,
   deleteMemberPreviousPrayerNeed,
   getWeekBirthdays,
   getNextWeekMembers,
   getPrayerBotMessage,
   getPrayerData,
+  getCuratorDistributionTargetWeek,
   getTodayPrayerBotMessage,
   patchCycleCollectionClaims,
   patchMemberCyclePrayer,
   postPrayerNeedImproveText,
+  postCuratorDistribution,
   patchMemberPreviousPrayerNeed,
   putMemberPreviousPrayerNeed,
 } from '../controllers/calendarController';
@@ -57,6 +60,9 @@ router.delete(
 );
 
 router.get('/next-week/members', getNextWeekMembers);
+router.get('/next-week/curator-distribution/week', getCuratorDistributionTargetWeek);
+router.get('/next-week/curator-distribution', getCuratorDistribution);
+router.post('/next-week/curator-distribution', postCuratorDistribution);
 router.post('/prayer-need/improve-text', postPrayerNeedImproveText);
 router.patch('/member-cycle-prayer', patchMemberCyclePrayer);
 router.patch('/member-previous-prayer-need', patchMemberPreviousPrayerNeed);

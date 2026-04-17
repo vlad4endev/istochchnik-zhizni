@@ -32,6 +32,11 @@ export function canModerateCatalog(role: AppRole): boolean {
   return role === 'editor' || role === 'admin';
 }
 
+/** Удаление песни из общего каталога — музыканты студии, редакторы и админ. */
+export function canDeleteCatalogSong(role: AppRole): boolean {
+  return role === 'musician' || role === 'editor' || role === 'admin';
+}
+
 export function isValidAppRoleString(value: unknown): value is AppRole {
   return (
     value === 'member' ||

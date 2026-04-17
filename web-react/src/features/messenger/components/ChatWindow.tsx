@@ -167,7 +167,8 @@ export function ChatWindow({
     nearBottomRef.current = true;
     restoreScrollRef.current = null;
     if (!isDraft) {
-      void loadMessages(conversationId);
+      // При открытии чата всегда подтягиваем первую страницу (как в Telegram), без антидребезга 1.5s.
+      void loadMessages(conversationId, false, { force: true });
     }
   }, [conversationId, loadMessages]);
 
@@ -548,6 +549,7 @@ export function ChatWindow({
               <AppAvatar
                 src={headerAvatarUrl}
                 fallback={<span>{headerInitial}</span>}
+                priority
                 className="grid h-full w-full place-items-center"
                 imgClassName="h-full w-full object-cover"
               />

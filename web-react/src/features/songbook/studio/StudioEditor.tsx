@@ -1,15 +1,19 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Link, useLocation, useParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import {
   LuArrowLeft,
   LuSlidersHorizontal,
+  LuTrash2,
   LuUpload,
   LuWand,
   LuX,
 } from 'react-icons/lu';
 
-import { fetchSong } from '../api';
+import { useAuthStore } from '../../auth/authStore';
+import { canDeleteSongFromCatalog } from '../../auth/studioAccess';
+import { emitAppToast } from '../../../lib/uiFeedback';
+import { deleteSong, fetchSong } from '../api';
 import { convertToChordPro } from '../addSong/chordProConversion';
 import { SmartImportModal } from '../addSong/SmartImportModal';
 import { quickChordsForKey } from '../addSong/quickChords';
@@ -27,8 +31,11 @@ export function StudioEditor() {
   const { songId } = useParams<{ songId: string }>();
   const id = Number(songId);
   const qc = useQueryClient();
+  const navigate = useNavigate();
   const location = useLocation();
   const surface = getStudioModuleSurface(location.pathname);
+  const role = useAuthStore((s) => s.role);
+  const canDeleteCatalog = canDeleteSongFromCatalog(role);
   const { stageMode } = useSongbookChrome();
 
   const editorRef = useRef<HTMLTextAreaElement>(null);
@@ -76,6 +83,20 @@ export function StudioEditor() {
       void qc.invalidateQueries({ queryKey: ['songs'] });
       void qc.invalidateQueries({ queryKey: ['song', id] });
     },
+  });
+
+  const deleteCatalogMut = useMutation({
+    mutationFn: () => deleteSong(id),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['songs'] });
+      void qc.invalidateQueries({ queryKey: ['songs', 'catalog'] });
+      void qc.invalidateQueries({ queryKey: ['songs', 'catalog-all'] });
+      void qc.invalidateQueries({ queryKey: ['studio', 'versions'] });
+      void qc.invalidateQueries({ queryKey: ['studio', 'setlists'] });
+      emitAppToast({ kind: 'success', message: 'Песня удалена из каталога' });
+      navigate(studioMySongsPath(surface));
+    },
+    onError: () => emitAppToast('Не удалось удалить песню'),
   });
 
   const applyConvert = useCallback((src: string) => convertToChordPro(src), []);
@@ -308,6 +329,30 @@ export function StudioEditor() {
         >
           <LuSlidersHorizontal className="h-5 w-5" />
         </button>
+        {canDeleteCatalog ? (
+          <button
+            type="button"
+            onClick={() => {
+              if (
+                window.confirm(
+                  `Удалить «${s.title}» из каталога целиком? Студийные версии и позиции в сетлистах будут удалены. Действие необратимо.`,
+                )
+              ) {
+                deleteCatalogMut.mutate();
+              }
+            }}
+            disabled={deleteCatalogMut.isPending}
+            className={`inline-flex min-h-[44px] items-center gap-1.5 rounded-xl border px-3 text-sm font-semibold disabled:opacity-50 ${
+              darkUi
+                ? 'border-red-900/50 bg-red-950/30 text-red-300 hover:bg-red-950/50'
+                : 'border-red-200 bg-red-50 text-red-800 hover:bg-red-100'
+            }`}
+          >
+            <LuTrash2 className="h-4 w-4 shrink-0" aria-hidden />
+            <span className="hidden sm:inline">Удалить из каталога</span>
+            <span className="sm:hidden">Удалить</span>
+          </button>
+        ) : null}
         <button
           type="button"
           onClick={() => saveMut.mutate()}
@@ -318,7 +363,9 @@ export function StudioEditor() {
         </button>
       </div>
 
-      <p className={`text-xs ${shell.muted}`}>Ваш текст ниже — оригинал в каталоге не меняется.</p>
+      <p className={`text-xs ${shell.muted}`}>
+        Ваш текст ниже — оригинал в каталоге не меняется, пока вы не сохраните и не удалите песню целиком.
+      </p>
 
       <textarea
         ref={editorRef}
