@@ -23,6 +23,7 @@
   --nav-pill-shadow: 0 -8px 32px rgba(28, 25, 23, 0.09), 0 4px 16px rgba(28, 25, 23, 0.04);
 
   /* Доступность: масштаб базового rem и межстрочный интервал (задаются из JS) */
+  --system-font-scale: 1;
   --a11y-font-scale: 1;
   --a11y-line-height: 1.55;
   --a11y-focus-ring: var(--primary);
@@ -93,12 +94,30 @@ html[data-color-theme='blue'] {
 html {
   width: 100%;
   min-height: 100%;
-  -webkit-text-size-adjust: 100%;
-  text-size-adjust: 100%;
+  /* Разрешаем подстройку под настройки чтения браузера; единый масштаб — через zoom ниже */
+  -webkit-text-size-adjust: auto;
+  text-size-adjust: auto;
   -webkit-tap-highlight-color: transparent;
   /* На полноэкранных экранах входа без полос по краям */
   background-color: var(--surface);
-  font-size: calc(16px * var(--a11y-font-scale, 1));
+  /*
+   * База 16px (дизайн), визуальный масштаб = системный × панель доступности.
+   * zoom масштабирует и rem (Tailwind), и фиксированные px — интерфейс остаётся согласованным.
+   */
+  font-size: 16px;
+}
+
+@supports (zoom: 1) {
+  html {
+    zoom: calc(var(--system-font-scale, 1) * var(--a11y-font-scale, 1));
+  }
+}
+
+/* Firefox и пр.: без свойства zoom — только через корневой font-size (px в дочерних узлах не тянутся за rem) */
+@supports not (zoom: 1) {
+  html {
+    font-size: calc(16px * var(--system-font-scale, 1) * var(--a11y-font-scale, 1));
+  }
 }
 
 /* Монохром только для приложения (#root); панель доступности рендерится вне #root */

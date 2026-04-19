@@ -1,5 +1,6 @@
-import { NavLink, Outlet, useNavigate } from 'react-router-dom';
-import { useEffect, useState } from 'react';
+import { NavLink, Outlet, useNavigate, Link } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
+import { useEffect, useMemo, useState } from 'react';
 import type { IconType } from 'react-icons';
 import {
   LuChevronLeft,
@@ -35,6 +36,8 @@ import { canAccessStudioRole } from '../features/auth/studioAccess';
 import { LAYOUT_MAIN_CHROME_EVENT } from './layoutChrome';
 import { AppAvatar } from '../components/AppAvatar';
 import { CoordinatorDashboardNoteFab } from '../features/dashboard/components/CoordinatorDashboardNoteFab';
+import { getActiveEvents } from '../features/calendar/api';
+import { countUpcomingEventsInWindow } from '../features/calendar/eventSchedule';
 
 type NavItem = {
   to: string;
@@ -245,6 +248,10 @@ function ToastAvatar({
   );
 }
 
+function formatNavBadgeCount(n: number): string {
+  return n > 99 ? '99+' : String(n);
+}
+
 function navClassName(isActive: boolean, compact = false): string {
   const base = compact
     ? 'group relative flex min-w-0 flex-1 flex-col items-center justify-center overflow-visible rounded-2xl px-1.5 py-1.5 transition-colors duration-200 tap-highlight-transparent touch-manipulation active:scale-[0.96]'
@@ -274,6 +281,7 @@ export function Layout() {
   const loadConversations = useChatStore((s) => s.loadConversations);
   const refreshUnread = useChatStore((s) => s.refreshUnread);
   const unreadMessages = useChatStore((s) => s.totalUnread);
+  const [layoutNow, setLayoutNow] = useState(() => new Date());
   const role = useAuthStore((s) => s.role);
   const logout = useAuthStore((s) => s.logout);
   const updatePrompt = useServiceWorkerUpdate({ showPrompt: true });
@@ -370,6 +378,22 @@ export function Layout() {
   }, [token, loadConversations]);
 
   useEffect(() => {
+    const id = window.setInterval(() => setLayoutNow(new Date()), 60_000);
+    return () => window.clearInterval(id);
+  }, []);
+
+  const eventsForBadgesQ = useQuery({
+    queryKey: ['calendar', 'events', 'dashboard'],
+    queryFn: getActiveEvents,
+    staleTime: 60_000,
+  });
+
+  const upcomingEventsCount = useMemo(
+    () => countUpcomingEventsInWindow(layoutNow, eventsForBadgesQ.data ?? [], 7),
+    [layoutNow, eventsForBadgesQ.data],
+  );
+
+  useEffect(() => {
     if (!token) return;
     const onVis = () => {
       if (document.visibilityState !== 'visible') return;
@@ -446,7 +470,67 @@ export function Layout() {
         <ConnectivityBanner />
       </div>
       <div className="relative flex min-h-0 w-full min-w-0 flex-1 flex-col">
-      {/* Мобильная шапка: кнопка профиля справа сверху убрана — мешала контенту (особенно iOS PWA). */}
+      {/* Мобильная шапка: логотип и бейджи (реальные счётчики чатов и ближайших событий). */}
+      <header
+        className={[
+          'md:hidden sticky top-0 z-40 flex items-center gap-3 border-b border-stone-200/80 bg-[var(--surface)]/95 px-3 shadow-[0_1px_0_rgba(0,0,0,0.04)] backdrop-blur-xl [padding-bottom:0.625rem] [padding-top:max(0.625rem,env(safe-area-inset-top,0px))]',
+          mainChromeVisible ? '' : 'hidden',
+        ].join(' ')}
+        aria-hidden={!mainChromeVisible}
+      >
+        <Link
+          to="/dashboard"
+          className="tap-highlight-transparent flex min-w-0 flex-1 items-center gap-3 active:opacity-90"
+          aria-label={[
+            'Главная',
+            unreadMessages > 0
+              ? `непрочитанных сообщений: ${unreadMessages > 99 ? 'более 99' : unreadMessages}`
+              : '',
+            upcomingEventsCount > 0
+              ? `событий на 7 дней: ${upcomingEventsCount > 99 ? 'более 99' : upcomingEventsCount}`
+              : '',
+          ]
+            .filter(Boolean)
+            .join('. ')}
+        >
+          <div className="relative flex h-11 w-11 shrink-0 items-center justify-center overflow-visible rounded-2xl bg-primary/10 p-1 text-primary">
+            {customLogoDataUrl ? (
+              <img
+                src={customLogoDataUrl}
+                alt=""
+                className="max-h-full max-w-full object-contain"
+                style={{ transform: `scale(${logoScalePercent / 100})` }}
+              />
+            ) : (
+              <img src="/assets/logo.svg" alt="" className="h-full w-full object-contain drop-shadow-sm" />
+            )}
+            {unreadMessages > 0 || upcomingEventsCount > 0 ? (
+              <div className="pointer-events-none absolute -right-2 -top-1 z-[5] flex max-w-[200px] flex-row flex-nowrap items-center justify-end gap-0.5">
+                {unreadMessages > 0 ? (
+                  <span
+                    className="inline-flex min-h-[17px] min-w-[17px] shrink-0 items-center justify-center rounded-full bg-rose-500 px-0.5 text-[9px] font-extrabold leading-none text-white shadow-sm ring-2 ring-[var(--surface)]"
+                    title={`Непрочитанные сообщения: ${formatNavBadgeCount(unreadMessages)}`}
+                  >
+                    {formatNavBadgeCount(unreadMessages)}
+                  </span>
+                ) : null}
+                {upcomingEventsCount > 0 ? (
+                  <span
+                    className="inline-flex min-h-[17px] min-w-[17px] shrink-0 items-center justify-center rounded-full bg-primary px-0.5 text-[9px] font-extrabold leading-none text-white shadow-sm ring-2 ring-[var(--surface)]"
+                    title={`События на 7 дней: ${formatNavBadgeCount(upcomingEventsCount)}`}
+                  >
+                    {formatNavBadgeCount(upcomingEventsCount)}
+                  </span>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-[15px] font-extrabold leading-tight text-stone-900">{appName}</p>
+            <p className="mt-0.5 truncate text-xs text-stone-500">{description}</p>
+          </div>
+        </Link>
+      </header>
 
       {/* Планшет/десктоп: фиксированный сайдбар (не в потоке, не растягивается по ширине main). На узких — нижняя навигация. */}
       <aside
@@ -521,7 +605,7 @@ export function Layout() {
                         <Icon className={navIconClass(isActive, navCollapsed)} strokeWidth={2} aria-hidden />
                         {item.to === '/messenger' && unreadMessages > 0 && navCollapsed ? (
                           <span className="absolute -right-1 -top-1 z-[5] inline-flex min-h-[17px] min-w-[17px] items-center justify-center rounded-full bg-rose-500 px-0.5 text-[9px] font-extrabold leading-none text-white shadow-sm ring-2 ring-white">
-                            {unreadMessages > 99 ? '99+' : unreadMessages}
+                            {formatNavBadgeCount(unreadMessages)}
                           </span>
                         ) : null}
                       </div>
@@ -530,7 +614,7 @@ export function Layout() {
                           <span className="truncate">{item.label}</span>
                           {item.to === '/messenger' && unreadMessages > 0 ? (
                             <span className={['inline-flex min-w-[20px] items-center justify-center rounded-full px-1.5 py-0.5 text-[11px] font-extrabold', isActive ? 'bg-white/90 text-primary' : 'bg-primary text-white'].join(' ')}>
-                              {unreadMessages > 99 ? '99+' : unreadMessages}
+                              {formatNavBadgeCount(unreadMessages)}
                             </span>
                           ) : null}
                         </span>
@@ -661,16 +745,23 @@ export function Layout() {
                 aria-label={
                   item.to === '/messenger' && unreadMessages > 0
                     ? `Чаты, непрочитанных сообщений: ${unreadMessages > 99 ? 'более 99' : unreadMessages}`
-                    : undefined
+                    : item.to === '/dashboard' && upcomingEventsCount > 0
+                      ? `Главная, событий на 7 дней: ${upcomingEventsCount > 99 ? 'более 99' : upcomingEventsCount}`
+                      : undefined
                 }
               >
                 {({ isActive }) => (
                   <>
                     <span className="relative z-10 inline-flex overflow-visible">
                       <Icon className={navIconClass(isActive, true)} strokeWidth={2} aria-hidden />
+                      {item.to === '/dashboard' && upcomingEventsCount > 0 ? (
+                        <span className="absolute -right-2.5 top-0 z-[5] inline-flex min-h-[18px] min-w-[18px] items-center justify-center rounded-full bg-primary px-1 text-[10px] font-extrabold leading-none text-white shadow-sm ring-2 ring-white">
+                          {formatNavBadgeCount(upcomingEventsCount)}
+                        </span>
+                      ) : null}
                       {item.to === '/messenger' && unreadMessages > 0 ? (
                         <span className="absolute -right-2.5 top-0 z-[5] inline-flex min-h-[18px] min-w-[18px] items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-extrabold leading-none text-white shadow-sm ring-2 ring-white">
-                          {unreadMessages > 99 ? '99+' : unreadMessages}
+                          {formatNavBadgeCount(unreadMessages)}
                         </span>
                       ) : null}
                     </span>

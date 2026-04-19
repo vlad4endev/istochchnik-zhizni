@@ -1,6 +1,9 @@
 import type { AccessibilityState } from './types';
+import { applySystemFontScaleToDocument } from './syncSystemFontScale';
 
 export function applyAccessibilityToDocument(state: AccessibilityState): void {
+  applySystemFontScaleToDocument();
+
   const root = document.documentElement;
 
   if (state.colorTheme === 'standard') {

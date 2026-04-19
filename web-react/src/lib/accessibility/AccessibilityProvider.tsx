@@ -12,6 +12,7 @@ import {
 } from 'react';
 
 import { applyAccessibilityToDocument } from './applyDocumentAccessibility';
+import { applySystemFontScaleToDocument } from './syncSystemFontScale';
 import { A11Y_DEFAULTS } from './constants';
 import { syncHideImages } from './hideImagesSync';
 import { loadAccessibilityState, saveAccessibilityState } from './storage';
@@ -64,6 +65,19 @@ export function AccessibilityProvider({ children }: { children: ReactNode }) {
   useLayoutEffect(() => {
     applyAccessibilityToDocument(state);
   }, [state]);
+
+  useEffect(() => {
+    const onLayout = () => applySystemFontScaleToDocument();
+    window.addEventListener('orientationchange', onLayout);
+    window.addEventListener('resize', onLayout);
+    const vv = window.visualViewport;
+    vv?.addEventListener?.('resize', onLayout);
+    return () => {
+      window.removeEventListener('orientationchange', onLayout);
+      window.removeEventListener('resize', onLayout);
+      vv?.removeEventListener?.('resize', onLayout);
+    };
+  }, []);
 
   useEffect(() => {
     saveAccessibilityState(state);
