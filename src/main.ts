@@ -156,6 +156,17 @@ app.use('/uploads', express.static(uploadsAbs, {
 app.use('/uploads', (_req, res) => {
   res.status(404).type('text/plain').send('Not found');
 });
+// Alias for reverse proxies that only route `/api/*`.
+app.use('/api/uploads', express.static(uploadsAbs, {
+  fallthrough: true,
+  setHeaders: (res) => {
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Cache-Control', 'public, max-age=86400, immutable');
+  },
+}));
+app.use('/api/uploads', (_req, res) => {
+  res.status(404).type('text/plain').send('Not found');
+});
 
 app.use('/api/auth', authRoutes);
 

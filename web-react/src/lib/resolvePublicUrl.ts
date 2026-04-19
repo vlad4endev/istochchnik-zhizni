@@ -15,10 +15,11 @@ export function resolvePublicUrl(raw: string | null | undefined): string | null 
   }
   // Backward/legacy: some places stored uploads as `/api/uploads/...` while the server serves them on `/uploads/...`.
   if (v.startsWith('/api/messenger/public-uploads/')) {
-    v = v.replace(/^\/api\/messenger\/public-uploads\//, '/uploads/');
+    v = v.replace(/^\/api\/messenger\/public-uploads\//, '/api/uploads/');
   }
-  if (v.startsWith('/api/uploads/')) v = v.replace(/^\/api\/uploads\//, '/uploads/');
-  if (v.startsWith('api/uploads/')) v = v.replace(/^api\/uploads\//, '/uploads/');
+  if (v.startsWith('api/uploads/')) v = `/${v}`;
+  // Prefer /api/uploads because some edge proxies route only /api/* to backend.
+  if (v.startsWith('/uploads/')) v = v.replace(/^\/uploads\//, '/api/uploads/');
   if (/^https?:\/\//i.test(v)) {
     // Смешанный контент: страница по https, а в БД остался http (часто редиректы Supabase).
     if (
