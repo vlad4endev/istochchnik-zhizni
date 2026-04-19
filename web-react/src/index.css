@@ -21,6 +21,67 @@
   /* Легче на маленьких экранах — меньше «грязи» при скролле */
   --shadow-card: 0 2px 12px rgba(28, 25, 23, 0.05);
   --nav-pill-shadow: 0 -8px 32px rgba(28, 25, 23, 0.09), 0 4px 16px rgba(28, 25, 23, 0.04);
+
+  /* Доступность: масштаб базового rem и межстрочный интервал (задаются из JS) */
+  --a11y-font-scale: 1;
+  --a11y-line-height: 1.55;
+  --a11y-focus-ring: var(--primary);
+}
+
+/* ── Темы оформления (глобально на <html data-color-theme>) ── */
+html[data-color-theme='dark'] {
+  color-scheme: dark;
+  --primary: #d97787;
+  --primary-dark: #b85c6c;
+  --accent: #f87171;
+  --surface: #1c1917;
+  --surface-elevated: #292524;
+  --text: #fafaf9;
+  --text-secondary: #d6d3d1;
+  --text-muted: #a8a29e;
+  --text-on-primary: #1c1917;
+  --shadow: 0 8px 28px rgba(0, 0, 0, 0.35);
+  --shadow-card: 0 2px 14px rgba(0, 0, 0, 0.28);
+  --nav-pill-shadow: 0 -8px 32px rgba(0, 0, 0, 0.4), 0 4px 16px rgba(0, 0, 0, 0.25);
+  --a11y-focus-ring: #fbbf24;
+}
+
+html[data-color-theme='high-contrast'] {
+  color-scheme: dark;
+  --primary: #ffff00;
+  --primary-dark: #e6e600;
+  --accent: #ffff00;
+  --surface: #000000;
+  --surface-elevated: #0a0a0a;
+  --text: #ffff00;
+  --text-secondary: #ffff00;
+  --text-muted: #f5e000;
+  --text-on-primary: #000000;
+  --member: #00ffff;
+  --theme: #00ffff;
+  --ministry: #ffff00;
+  --backslider: #ff00ff;
+  --shadow: none;
+  --shadow-card: none;
+  --nav-pill-shadow: none;
+  --a11y-focus-ring: #ffffff;
+}
+
+html[data-color-theme='blue'] {
+  color-scheme: dark;
+  --primary: #93c5fd;
+  --primary-dark: #60a5fa;
+  --accent: #38bdf8;
+  --surface: #0b1628;
+  --surface-elevated: #0f2137;
+  --text: #f8fafc;
+  --text-secondary: #e2e8f0;
+  --text-muted: #94a3b8;
+  --text-on-primary: #0b1628;
+  --shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+  --shadow-card: 0 2px 14px rgba(0, 0, 0, 0.35);
+  --nav-pill-shadow: 0 -8px 32px rgba(0, 0, 0, 0.45), 0 4px 16px rgba(0, 0, 0, 0.3);
+  --a11y-focus-ring: #fde047;
 }
 
 *,
@@ -37,6 +98,27 @@ html {
   -webkit-tap-highlight-color: transparent;
   /* На полноэкранных экранах входа без полос по краям */
   background-color: var(--surface);
+  font-size: calc(16px * var(--a11y-font-scale, 1));
+}
+
+/* Монохром только для приложения (#root); панель доступности рендерится вне #root */
+html[data-a11y-monochrome='true'] #root {
+  filter: grayscale(1) contrast(1.04);
+}
+
+html[data-a11y-large-cursor='true'] body,
+html[data-a11y-large-cursor='true'] body button,
+html[data-a11y-large-cursor='true'] body a,
+html[data-a11y-large-cursor='true'] body [role='button'],
+html[data-a11y-large-cursor='true'] body input,
+html[data-a11y-large-cursor='true'] body select,
+html[data-a11y-large-cursor='true'] body textarea,
+html[data-a11y-large-cursor='true'] body label,
+html[data-a11y-large-cursor='true'] body summary {
+  cursor:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Cpath fill='%23000' stroke='%23fff' stroke-width='1.5' d='M4 4l10 22 4-9 9-4z'/%3E%3C/svg%3E")
+      4 4,
+    auto;
 }
 
 /* PWA standalone / Capacitor: без pinch-zoom и без «вебового» double-tap zoom */
@@ -68,7 +150,7 @@ body {
     sans-serif;
   background: var(--surface);
   color: var(--text);
-  line-height: 1.55;
+  line-height: var(--a11y-line-height, 1.55);
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
   overscroll-behavior-y: contain;
@@ -172,4 +254,71 @@ nav[aria-label='Основная навигация'] svg {
 button {
   font: inherit;
   cursor: pointer;
+}
+
+/* Skip link + чёткий фокус (WCAG 2.4.1, 2.4.7) */
+.skip-link {
+  position: absolute;
+  left: 0.75rem;
+  top: 0;
+  z-index: 9999;
+  padding: 0.65rem 1rem;
+  border-radius: 0.65rem;
+  font-size: 0.875rem;
+  font-weight: 700;
+  text-decoration: none;
+  background: var(--surface-elevated);
+  color: var(--text);
+  border: 2px solid var(--a11y-focus-ring, var(--primary));
+  box-shadow: var(--shadow-card);
+  transform: translateY(-120%);
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+}
+
+.skip-link:focus {
+  outline: none;
+}
+
+.skip-link:focus-visible {
+  transform: translateY(0.75rem);
+  box-shadow: var(--shadow);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skip-link {
+    transition: none;
+  }
+}
+
+:where(a, button, input:not([type='hidden']), select, textarea, summary, [tabindex]:not([tabindex='-1'])):focus-visible {
+  outline: 3px solid var(--a11y-focus-ring, var(--primary));
+  outline-offset: 3px;
+}
+
+/* Замещающий блок для режима «только описание изображения» */
+.a11y-img-alt-block {
+  display: block;
+  box-sizing: border-box;
+  margin: 0.35rem 0;
+  padding: 0.65rem 0.85rem;
+  max-width: 100%;
+  border-radius: 0.5rem;
+  border: 1px dashed color-mix(in srgb, var(--text) 45%, var(--surface-elevated));
+  background: color-mix(in srgb, var(--surface-elevated) 88%, var(--text) 12%);
+  color: var(--text);
+  font-size: 0.9rem;
+  font-weight: 600;
+  line-height: var(--a11y-line-height, 1.55);
+}
+
+.a11y-img-hidden-visual {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
 }

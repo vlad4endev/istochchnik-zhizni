@@ -31,6 +31,7 @@ import {
 } from '../api';
 import { fetchDirectionTemplates, type MinistryDirectionTemplate } from '../../admin/api';
 import { fetchProfileByMemberId, patchPublicProfileSettings } from '../publicProfileApi';
+import { ProfileAccessibilitySection } from '../components/ProfileAccessibilitySection';
 
 import profileShell from '../profileShell.module.css';
 import pfStyles from './ProfilePage.module.css';
@@ -570,6 +571,8 @@ export function ProfilePage() {
             </div>
           )}
         </section>
+
+        <ProfileAccessibilitySection />
 
         {/* ═══════════════════════════════════════════════════
             3. ПРОФИЛЬ — данные / редактирование

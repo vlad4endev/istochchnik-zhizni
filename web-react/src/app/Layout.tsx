@@ -420,6 +420,22 @@ export function Layout() {
   return (
     <MessengerWsProvider>
     <div className="flex min-h-0 w-full max-w-[100vw] flex-1 flex-col overflow-x-clip bg-[var(--surface)] text-[var(--text)] [padding-left:env(safe-area-inset-left,0px)] [padding-right:env(safe-area-inset-right,0px)]">
+      <a
+        href="#main-content"
+        className="skip-link"
+        onClick={(e) => {
+          const mainEl = document.getElementById('main-content');
+          if (!mainEl) return;
+          e.preventDefault();
+          mainEl.focus();
+          const reduceMotion =
+            typeof window !== 'undefined' &&
+            window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches;
+          mainEl.scrollIntoView({ block: 'start', behavior: reduceMotion ? 'auto' : 'smooth' });
+        }}
+      >
+        Перейти к содержимому
+      </a>
       <div
         className={[
           'flex min-h-0 min-w-0 w-full max-w-full flex-1 flex-col box-border',
@@ -611,8 +627,10 @@ export function Layout() {
 
       {/* Main: отступ слева от сайдбара — на родителе (padding); снизу под нижний бар на мобильных */}
       <main
+        id="main-content"
+        tabIndex={-1}
         className={[
-          'app-main-content flex min-h-0 min-w-0 w-full max-w-full flex-1 flex-col overflow-x-clip md:pb-0 2xl:px-8 min-[1920px]:px-12',
+          'app-main-content flex min-h-0 min-w-0 w-full max-w-full flex-1 flex-col overflow-x-clip md:pb-0 2xl:px-8 min-[1920px]:px-12 outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--a11y-focus-ring,var(--primary))] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)]',
           mainChromeVisible
             ? 'pb-[max(7.5rem,calc(5.25rem+env(safe-area-inset-bottom,16px)))]'
             : 'pb-[max(1rem,env(safe-area-inset-bottom,16px))]',

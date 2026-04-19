@@ -8,6 +8,8 @@ import { applyNativeShellViewportLock } from './lib/nativeShellViewport';
 import { AppRouter } from './app/Router';
 import { AppRouterMain } from './app/RouterMain';
 import { AppRouterStudio } from './app/RouterStudio';
+import { AccessibilityToolbar } from './components/accessibility/AccessibilityToolbar';
+import { AccessibilityProvider } from './lib/accessibility/AccessibilityProvider';
 import { getAppVariant } from './lib/appVariant';
 import './index.css';
 
@@ -69,7 +71,10 @@ createRoot(document.getElementById('root')!).render(
     <div className="flex min-h-0 w-full max-w-full flex-1 flex-col overflow-x-clip">
       <QueryClientProvider client={queryClient}>
         <BrowserRouter>
-          <RootRouter />
+          <AccessibilityProvider>
+            <RootRouter />
+            <AccessibilityToolbar />
+          </AccessibilityProvider>
         </BrowserRouter>
       </QueryClientProvider>
     </div>
