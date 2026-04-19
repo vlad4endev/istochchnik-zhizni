@@ -83,7 +83,7 @@ import { resolvePublicUrl } from '../../../lib/resolvePublicUrl';
 import { nextOccurrenceLocalYmd } from '../../../lib/weekdayAnchor';
 import {
   compareMembersByFirstName,
-  compareMembersByPrayerCycleOrder,
+  compareMembersByDisplayNameRu,
   memberRosterName,
   splitMemberNameParts,
 } from '../../../lib/memberRosterName';
@@ -1893,8 +1893,7 @@ function formatAdminDate(dateStr: string): string {
  */
 function CalendarPrayerCycleRoster() {
   const qc = useQueryClient();
-  const anchorQueueDateId = useId();
-  const anchorMemberRadioName = useId();
+  const rosterAnchorYmd = format(new Date(), 'yyyy-MM-dd');
   const { data, isLoading, error, isFetching } = useQuery({
     queryKey: Q_MEMBERS,
     queryFn: fetchAdminMembers,
@@ -1902,33 +1901,22 @@ function CalendarPrayerCycleRoster() {
   const [listSearch, setListSearch] = useState('');
   const [addSearch, setAddSearch] = useState('');
   const [banner, setBanner] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
-  const [anchorQueueDate, setAnchorQueueDate] = useState(() => format(new Date(), 'yyyy-MM-dd'));
-  const [pickedAnchorMemberId, setPickedAnchorMemberId] = useState<number | null>(null);
 
   const rosterSnapQ = useQuery({
-    queryKey: ['admin', 'prayer-cycle-roster', anchorQueueDate] as const,
-    queryFn: () => fetchPrayerCycleRoster(anchorQueueDate),
-    enabled: /^\d{4}-\d{2}-\d{2}$/.test(anchorQueueDate),
+    queryKey: ['admin', 'prayer-cycle-roster', rosterAnchorYmd] as const,
+    queryFn: () => fetchPrayerCycleRoster(rosterAnchorYmd),
   });
 
-  useEffect(() => {
-    if (!rosterSnapQ.data) return;
-    setPickedAnchorMemberId(rosterSnapQ.data.today_member_id);
-  }, [rosterSnapQ.data]);
-
   const anchorQueueMut = useMutation({
-    mutationFn: (memberId?: number) =>
+    mutationFn: (memberId: number) =>
       anchorPrayerCycleMember({
-        member_id: memberId ?? pickedAnchorMemberId!,
-        anchor_date: anchorQueueDate,
+        member_id: memberId,
+        anchor_date: format(new Date(), 'yyyy-MM-dd'),
       }),
-    onSuccess: async (_data, memberId) => {
-      if (typeof memberId === 'number') {
-        setPickedAnchorMemberId(memberId);
-      }
+    onSuccess: async () => {
       setBanner({
         type: 'ok',
-        text: 'Дата старта цикла обновлена: в выбранный день первым в очереди идёт указанный участник; следующие дни — по списку по кругу.',
+        text: 'Дата старта цикла обновлена: с сегодняшнего дня первым в очереди идёт выбранный участник; дальше — по списку по кругу.',
       });
       await qc.invalidateQueries({ queryKey: Q_MEMBERS });
       await qc.invalidateQueries({ queryKey: ['calendar'] });
@@ -1976,22 +1964,15 @@ function CalendarPrayerCycleRoster() {
         return blob.includes(q);
       });
     }
-    const active = rows.filter((u) => u.is_active);
-    const inactive = rows.filter((u) => !u.is_active);
-    return [
-      ...active.sort(compareMembersByPrayerCycleOrder),
-      ...inactive.sort(compareMembersByPrayerCycleOrder),
-    ];
+    return [...rows].sort(compareMembersByDisplayNameRu);
   }, [data, listSearch]);
 
-  const rosterOrderIndexByMemberId = useMemo(() => {
-    const m = new Map<number, number>();
-    const roster = rosterSnapQ.data?.roster;
-    if (!roster) return m;
-    for (const r of roster) {
-      m.set(r.id, r.roster_index);
+  const activeCycleMemberIds = useMemo(() => {
+    const ids = new Set<number>();
+    for (const r of rosterSnapQ.data?.roster ?? []) {
+      ids.add(r.id);
     }
-    return m;
+    return ids;
   }, [rosterSnapQ.data?.roster]);
 
   const candidates = useMemo(() => {
@@ -2039,116 +2020,11 @@ function CalendarPrayerCycleRoster() {
         что переключатель в карточке в разделе «Участники»).
       </p>
 
-      <section className="rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] p-4 shadow-[var(--shadow)] sm:p-5">
-        <h4 className="font-extrabold text-stone-900">Переключить очередь на дату</h4>
-        <p className="mt-1 text-sm text-stone-600">
-          Выберите день, отметьте <strong>радиокнопкой</strong> участника, который в этот день должен быть в очереди
-          первым (как в календаре молитвы), и нажмите «Применить очередь». Обновится только дата старта цикла в
-          настройках: дальше каждый следующий день — следующий в списке (А–Я по фамилии, имя, id). Через полный круг
-          (число дней = числу активных с флагом «в цикле») порядок снова повторяется по кругу — без отдельного сброса
-          на «первого в алфавите», пока снова не перенастроите очередь здесь.
+      {rosterSnapQ.isError ? (
+        <p className="text-sm text-red-600">
+          {apiErrorMessage(rosterSnapQ.error, 'Не удалось загрузить порядок цикла.')}
         </p>
-        <label className="mt-4 block text-xs font-semibold text-stone-600" htmlFor={anchorQueueDateId}>
-          День
-        </label>
-        <input
-          id={anchorQueueDateId}
-          type="date"
-          className={`${fieldClass()} mt-1 max-w-xs`}
-          value={anchorQueueDate}
-          onChange={(e) => setAnchorQueueDate(e.target.value)}
-        />
-        {rosterSnapQ.data ? (
-          <p className="mt-2 text-xs text-stone-500">
-            Сейчас в настройках дата старта цикла:{' '}
-            <span className="font-mono font-semibold text-stone-700">{rosterSnapQ.data.start_date}</span>
-            {rosterSnapQ.data.total > 0 ? (
-              <>
-                {' '}
-                · по формуле на выбранный день первым идёт{' '}
-                <span className="font-semibold text-stone-700">
-                  {rosterSnapQ.data.today_member_id != null
-                    ? memberRosterName(
-                        rosterSnapQ.data.roster.find((r) => r.id === rosterSnapQ.data!.today_member_id) ?? {
-                          id: rosterSnapQ.data.today_member_id,
-                          name: '',
-                        },
-                      )
-                    : '—'}
-                </span>
-              </>
-            ) : null}
-          </p>
-        ) : null}
-        {rosterSnapQ.isError ? (
-          <p className="mt-3 text-sm text-red-600">
-            {apiErrorMessage(rosterSnapQ.error, 'Не удалось загрузить порядок цикла.')}
-          </p>
-        ) : null}
-        {rosterSnapQ.isFetching && !rosterSnapQ.data ? (
-          <p className="mt-3 text-sm text-stone-500">Загрузка порядка…</p>
-        ) : null}
-        {rosterSnapQ.data && rosterSnapQ.data.total === 0 ? (
-          <p className="mt-3 text-sm text-stone-600">
-            В цикле пока никого нет — сначала добавьте участников списком ниже.
-          </p>
-        ) : null}
-        {rosterSnapQ.data && rosterSnapQ.data.total > 0 ? (
-          <>
-            <p className="mt-3 text-xs font-semibold text-stone-600">Кто первым в очереди в этот день</p>
-            <div className="mt-2 max-h-[min(16rem,40vh)] space-y-1.5 overflow-y-auto rounded-xl border border-stone-200/80 bg-white/80 p-2">
-              {rosterSnapQ.data.roster.map((r) => {
-                const isFormulaToday = r.id === rosterSnapQ.data!.today_member_id;
-                return (
-                  <label
-                    key={r.id}
-                    className={`flex cursor-pointer items-start gap-2 rounded-lg px-2 py-2 text-sm ${
-                      isFormulaToday ? 'bg-primary/[0.06] ring-1 ring-primary/15' : 'hover:bg-stone-50'
-                    }`}
-                  >
-                    <input
-                      type="radio"
-                      className="mt-1"
-                      name={anchorMemberRadioName}
-                      checked={pickedAnchorMemberId === r.id}
-                      onChange={() => setPickedAnchorMemberId(r.id)}
-                    />
-                    <span className="min-w-0 flex-1">
-                      <span className="font-semibold text-stone-900">{memberRosterName(r)}</span>
-                      <span className="ml-2 tabular-nums text-xs text-stone-400">#{r.roster_index + 1}</span>
-                      {isFormulaToday ? (
-                        <span className="ml-2 rounded-full bg-primary/12 px-2 py-0.5 text-[10px] font-bold text-primary">
-                          сейчас по расчёту
-                        </span>
-                      ) : null}
-                      {!r.is_active ? (
-                        <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-900">
-                          неактивен
-                        </span>
-                      ) : null}
-                    </span>
-                  </label>
-                );
-              })}
-            </div>
-            <button
-              type="button"
-              className={btnPrimary('mt-4')}
-              disabled={
-                anchorQueueMut.isPending ||
-                pickedAnchorMemberId == null ||
-                rosterSnapQ.data.total === 0
-              }
-              onClick={() => {
-                setBanner(null);
-                anchorQueueMut.mutate(undefined);
-              }}
-            >
-              {anchorQueueMut.isPending ? 'Применение…' : 'Применить очередь'}
-            </button>
-          </>
-        ) : null}
-      </section>
+      ) : null}
 
       {banner ? (
         <p
@@ -2164,9 +2040,16 @@ function CalendarPrayerCycleRoster() {
         <div className="rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] p-4 shadow-[var(--shadow)] sm:p-5">
           <h4 className="font-extrabold text-stone-900">Сейчас в молитвенном цикле</h4>
           <p className="mt-1 text-xs text-stone-500">
-            Порядок колонки «№» — как в календаре молитвы (фамилия, имя). Неактивная карточка с флагом не попадает в
-            календарь, пока её не активируют. «Первым на дату» использует день из блока «Переключить очередь на дату»
-            выше.
+            Список отсортирован по алфавиту А–Я по отображаемому имени. Колонка «№» — порядок в этом списке (не номер
+            дня в календарном цикле). Неактивная карточка с флагом не попадает в календарь, пока её не активируют.
+            «Первым сегодня» задаёт очередь от сегодняшнего дня (дата старта цикла в настройках).
+            {rosterSnapQ.data ? (
+              <>
+                {' '}
+                Сейчас в настройках:{' '}
+                <span className="font-mono font-semibold text-stone-700">{rosterSnapQ.data.start_date}</span>.
+              </>
+            ) : null}
           </p>
           <label className="mt-3 block text-xs font-semibold text-stone-600">Поиск</label>
           <input
@@ -2196,20 +2079,19 @@ function CalendarPrayerCycleRoster() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-stone-100 bg-white/90">
-                  {inCycleRows.map((u) => {
-                    const queueNo = rosterOrderIndexByMemberId.get(u.id);
+                  {inCycleRows.map((u, alphaIdx) => {
                     const isFormulaToday = rosterSnapQ.data?.today_member_id === u.id;
-                    const canAnchor = u.is_active && queueNo != null;
+                    const canAnchor = u.is_active && activeCycleMemberIds.has(u.id);
                     return (
                       <tr key={u.id} className={isFormulaToday ? 'bg-primary/[0.04]' : undefined}>
                         <td className="whitespace-nowrap px-3 py-2.5 tabular-nums text-stone-600">
-                          {queueNo != null ? queueNo + 1 : '—'}
+                          {alphaIdx + 1}
                         </td>
                         <td className="px-3 py-2.5">
                           <span className="font-semibold text-stone-900">{memberRosterName(u)}</span>
                           {isFormulaToday ? (
                             <span className="ml-2 inline-block rounded-full bg-primary/12 px-2 py-0.5 text-[10px] font-bold text-primary">
-                              на дату
+                              сегодня
                             </span>
                           ) : null}
                           <p className="mt-0.5 text-xs text-stone-500 sm:hidden">{u.phone_number ?? '—'}</p>
@@ -2231,26 +2113,20 @@ function CalendarPrayerCycleRoster() {
                             <button
                               type="button"
                               className={btnPrimary('text-xs whitespace-nowrap')}
-                              disabled={
-                                anchorQueueMut.isPending ||
-                                patchMut.isPending ||
-                                !canAnchor ||
-                                !/^\d{4}-\d{2}-\d{2}$/.test(anchorQueueDate)
-                              }
+                              disabled={anchorQueueMut.isPending || patchMut.isPending || !canAnchor}
                               title={
                                 !u.is_active
                                   ? 'Сначала активируйте карточку'
-                                  : queueNo == null
+                                  : !activeCycleMemberIds.has(u.id)
                                     ? 'Нет в расчёте очереди'
                                     : undefined
                               }
                               onClick={() => {
                                 setBanner(null);
-                                setPickedAnchorMemberId(u.id);
                                 anchorQueueMut.mutate(u.id);
                               }}
                             >
-                              Первым на дату
+                              Первым сегодня
                             </button>
                             <button
                               type="button"

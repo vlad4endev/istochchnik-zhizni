@@ -55,6 +55,18 @@ export function compareMembersByFirstName(
   return a.id - b.id;
 }
 
+/** А–Я по строке как в списках («Имя Фамилия»), при равенстве — по id. */
+export function compareMembersByDisplayNameRu(
+  a: { id: number; name: string; first_name?: string | null; last_name?: string | null },
+  b: typeof a,
+): number {
+  const na = memberRosterName(a).trim();
+  const nb = memberRosterName(b).trim();
+  const c = na.localeCompare(nb, 'ru', { sensitivity: 'base' });
+  if (c !== 0) return c;
+  return a.id - b.id;
+}
+
 /** Как в молитвенном цикле в БД: фамилия, имя, id. */
 export function compareMembersByPrayerCycleOrder(
   a: { id: number; name: string; first_name?: string | null; last_name?: string | null },
