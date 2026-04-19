@@ -14,6 +14,7 @@ import type {
 import { resolveMessengerConversationDeepLink } from '../config/messengerPublic';
 import { getPrayerCycleSnapshotForDate } from './prayerCycleService';
 import { sendPushNotification } from './pushService';
+import { rewriteStorageUrlsInRecord, rewriteSupabaseStorageUrlForClient } from '../lib/supabaseStorage';
 
 // ─── Helpers ──────────────────────────────────────────────────
 
@@ -1335,6 +1336,8 @@ export async function prepareMessageForSend(
     }
   }
 
+  pl = rewriteStorageUrlsInRecord(pl as Record<string, unknown>) as MessagePayload;
+
   const payloadJson = JSON.stringify(pl);
   const replyNorm = replyToMessageId || null;
   const clientNorm = clientMsgId || null;
@@ -2045,7 +2048,9 @@ export async function getMessageAttachmentForMember(
   if (payloadType !== 'image' && payloadType !== 'file') return null;
   const payload = normalizePayload(row.payload);
   const urlRaw = String(payload.url ?? '').trim();
-  const url = urlRaw ? normalizeAttachmentUrl(urlRaw) : null;
+  const url = urlRaw
+    ? rewriteSupabaseStorageUrlForClient(normalizeAttachmentUrl(urlRaw))
+    : null;
   const objectPath = normalizeStorageObjectPath(payload.objectPath ?? payload.object_path);
   if (!url && !objectPath) return null;
   return { conversationId, url, objectPath };
@@ -2375,7 +2380,9 @@ function mapMessageWithSender(r: any, currentMemberId: number): MessageWithSende
     } catch { /* ignore */ }
   }
 
-  const payloadNorm = normalizePayload(r.payload);
+  const payloadNorm = rewriteStorageUrlsInRecord(
+    normalizePayload(r.payload) as Record<string, unknown>,
+  ) as MessagePayload;
   const pt = normalizePayloadType(r.payload_type);
 
   const base: MessageWithSender = {

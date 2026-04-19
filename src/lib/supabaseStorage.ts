@@ -11,6 +11,83 @@ function getServiceRoleKey(): string {
   return String(process.env.SUPABASE_SERVICE_ROLE_KEY ?? '').trim();
 }
 
+function trimTrailingSlashes(s: string): string {
+  return s.replace(/\/+$/, '');
+}
+
+/**
+ * Публичный HTTPS-ориджин Storage для браузера (обычно `https://<ref>.supabase.co`).
+ * Задайте, если `SUPABASE_URL` у API — внутренний (Docker/LAN), иначе в ответах попадут http://IP:port
+ * и HTTPS-сайт заблокирует картинки (mixed content).
+ */
+export function getSupabaseStoragePublicOrigin(): string | null {
+  const raw = process.env.SUPABASE_STORAGE_PUBLIC_URL?.trim();
+  if (!raw) return null;
+  try {
+    return trimTrailingSlashes(new URL(raw).origin);
+  } catch {
+    return null;
+  }
+}
+
+/** Префиксы URL, которые нужно заменить на публичный ориджин: SUPABASE_URL + опционально LAN/stage. */
+function internalStorageUrlPrefixes(): string[] {
+  const set = new Set<string>();
+  const u = getUrl();
+  if (u) {
+    try {
+      set.add(trimTrailingSlashes(new URL(u).origin));
+    } catch {
+      /* ignore */
+    }
+  }
+  const legacy = process.env.SUPABASE_STORAGE_LEGACY_ORIGINS?.trim();
+  if (legacy) {
+    for (const part of legacy.split(',')) {
+      const t = part.trim();
+      if (!t) continue;
+      try {
+        const origin = new URL(t.includes('://') ? t : `http://${t}`).origin;
+        set.add(trimTrailingSlashes(origin));
+      } catch {
+        set.add(trimTrailingSlashes(t));
+      }
+    }
+  }
+  return [...set];
+}
+
+/**
+ * Подмена ориджина в URL Storage API (`/storage/v1/...`) для клиентов за HTTPS.
+ * Без `SUPABASE_STORAGE_PUBLIC_URL` возвращает строку как есть.
+ */
+export function rewriteSupabaseStorageUrlForClient(url: string): string {
+  if (!url || typeof url !== 'string') return url;
+  const publicOrigin = getSupabaseStoragePublicOrigin();
+  if (!publicOrigin) return url;
+  const trimmed = url.trim();
+  for (const prefix of internalStorageUrlPrefixes()) {
+    if (!prefix || prefix === publicOrigin) continue;
+    if (trimmed === prefix || trimmed.startsWith(`${prefix}/`) || trimmed.startsWith(`${prefix}?`)) {
+      return publicOrigin + trimmed.slice(prefix.length);
+    }
+  }
+  return url;
+}
+
+/** Поля вложений мессенджера / медиа, где может лежать абсолютный URL Storage. */
+export function rewriteStorageUrlsInRecord(pl: Record<string, unknown>): Record<string, unknown> {
+  if (!pl || typeof pl !== 'object' || Array.isArray(pl)) return pl;
+  const out: Record<string, unknown> = { ...pl };
+  for (const key of ['url', 'signedUrl', 'signed_url', 'thumbnail_url', 'preview_url'] as const) {
+    const v = out[key];
+    if (typeof v === 'string' && v.length > 0) {
+      out[key] = rewriteSupabaseStorageUrlForClient(v);
+    }
+  }
+  return out;
+}
+
 export function getSupabaseStorageMissingEnv(): string[] {
   const missing: string[] = [];
   if (!getUrl()) missing.push('SUPABASE_URL');
@@ -74,7 +151,7 @@ export async function uploadBufferToPublicBucket(opts: {
   if (!data?.publicUrl) {
     throw new Error('Storage getPublicUrl returned empty URL');
   }
-  return { publicUrl: data.publicUrl };
+  return { publicUrl: rewriteSupabaseStorageUrlForClient(data.publicUrl) };
 }
 
 export async function createSignedUrlForBucketObject(opts: {
@@ -95,7 +172,7 @@ export async function createSignedUrlForBucketObject(opts: {
   if (!data?.signedUrl) {
     throw new Error('Storage createSignedUrl returned empty URL');
   }
-  return { signedUrl: data.signedUrl };
+  return { signedUrl: rewriteSupabaseStorageUrlForClient(data.signedUrl) };
 }
 
 export function buildMessengerObjectPath(memberId: number, extension: string): string {

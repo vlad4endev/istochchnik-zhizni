@@ -20,6 +20,26 @@ export function parseDraftPrivateMemberId(id: string): number | null {
   return Number.isFinite(n) && n > 0 ? n : null;
 }
 
+/** Дебаунс markReadUpTo при потоке входящих WS-сообщений — иначе сотни параллельных POST → ERR_INSUFFICIENT_RESOURCES. */
+const markReadDebounceByConv = new Map<string, ReturnType<typeof setTimeout>>();
+
+function debouncedMarkReadUpTo(
+  convId: string,
+  msgId: string,
+  fn: (c: string, m: string) => void,
+  delayMs = 1000,
+): void {
+  const existing = markReadDebounceByConv.get(convId);
+  if (existing) clearTimeout(existing);
+  markReadDebounceByConv.set(
+    convId,
+    setTimeout(() => {
+      markReadDebounceByConv.delete(convId);
+      fn(convId, msgId);
+    }, delayMs),
+  );
+}
+
 // ─── Types ────────────────────────────────────────────────────
 
 interface TypingUser {
@@ -1277,10 +1297,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
       };
     });
 
-    // If user is currently inside this chat, sync read cursor immediately
-    // so server-side unread_count does not drift.
+    // Если чат открыт — синхронизируем read cursor с сервером (с дебаунсом: см. поток msg:new).
     if (shouldAutoReadNow) {
-      void get().markReadUpTo(idKey, serverMsgId);
+      debouncedMarkReadUpTo(idKey, serverMsgId, (c, m) => {
+        void get().markReadUpTo(c, m);
+      });
     }
   },
 
