@@ -12,13 +12,19 @@ import { resolveAxiosBaseURL } from './config';
 export function resolvePublicUrl(raw: string | null | undefined): string | null {
   let v = typeof raw === 'string' ? raw.trim() : '';
   if (!v) return null;
+  if (/^\/\//.test(v)) {
+    if (typeof window !== 'undefined' && window.location?.protocol) {
+      return `${window.location.protocol}${v}`;
+    }
+    return `https:${v}`;
+  }
   // Backward/legacy: some places stored uploads as `/api/uploads/...` while the server serves them on `/uploads/...`.
   if (v.startsWith('/api/uploads/')) v = v.replace(/^\/api\/uploads\//, '/uploads/');
   if (v.startsWith('api/uploads/')) v = v.replace(/^api\/uploads\//, '/uploads/');
   // Локальные вложения чата: в БД может быть `/uploads/<uuid>.<ext>` или вложенный путь.
   // Если nginx отдаёт только `/api`, грузим через `/api/messenger/public-uploads/...`.
   if (v.startsWith('/uploads/') && !v.startsWith('/uploads/avatars/')) {
-    const rest = v.slice('/uploads/'.length);
+    const rest = v.slice('/uploads/'.length).replace(/^\/+/, '');
     if (rest.trim()) {
       v = `/api/messenger/public-uploads/${rest}`;
     }

@@ -105,6 +105,8 @@ export async function findMemberIdConflictingName(
   const fullDirect = `${fn} ${ln}`.trim();
   const fullReverse = `${ln} ${fn}`.trim();
 
+  // Сравнение с колонкой `name` только для «старых» строк без first/last: иначе «Фамилия Имя»
+  // в $5 совпадало бы с чужим каноническим name = «Имя Фамилия» и ломало PATCH без смены ФИО.
   const result = await query(
     `SELECT id FROM members
      WHERE ($3::INTEGER IS NULL OR id <> $3)
@@ -116,11 +118,15 @@ export async function findMemberIdConflictingName(
            AND LOWER(TRIM(last_name)) = LOWER($2)
          )
          OR (
-           LOWER(regexp_replace(TRIM(COALESCE(name, '')), '\\s+', ' ', 'g'))
+           NULLIF(TRIM(COALESCE(first_name, '')), '') IS NULL
+           AND NULLIF(TRIM(COALESCE(last_name, '')), '') IS NULL
+           AND LOWER(regexp_replace(TRIM(COALESCE(name, '')), '\\s+', ' ', 'g'))
              = LOWER(regexp_replace(TRIM($4), '\\s+', ' ', 'g'))
          )
          OR (
-           LOWER(regexp_replace(TRIM(COALESCE(name, '')), '\\s+', ' ', 'g'))
+           NULLIF(TRIM(COALESCE(first_name, '')), '') IS NULL
+           AND NULLIF(TRIM(COALESCE(last_name, '')), '') IS NULL
+           AND LOWER(regexp_replace(TRIM(COALESCE(name, '')), '\\s+', ' ', 'g'))
              = LOWER(regexp_replace(TRIM($5), '\\s+', ' ', 'g'))
          )
        )
@@ -553,9 +559,16 @@ export async function updateUser(id: number, input: UpdateUserInput): Promise<Ap
         ? input.last_name.trim()
         : (existing.last_name ?? '').trim();
     if (effFirst && effLast) {
-      const dupId = await findMemberIdConflictingName(effFirst, effLast, id);
-      if (dupId !== null) {
-        throw new MemberNameDuplicateError();
+      const prevFirst = (existing.first_name ?? '').trim();
+      const prevLast = (existing.last_name ?? '').trim();
+      const namesUnchanged =
+        effFirst.toLowerCase() === prevFirst.toLowerCase() &&
+        effLast.toLowerCase() === prevLast.toLowerCase();
+      if (!namesUnchanged) {
+        const dupId = await findMemberIdConflictingName(effFirst, effLast, id);
+        if (dupId !== null) {
+          throw new MemberNameDuplicateError();
+        }
       }
     }
   }

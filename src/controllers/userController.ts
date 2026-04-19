@@ -508,7 +508,7 @@ export async function updateUserHandler(req: Request, res: Response): Promise<vo
         res.json(updated);
       } catch (error) {
         if (error instanceof MemberNameDuplicateError) {
-          res.status(409).json({ error: error.message });
+          res.status(409).json({ error: error.message, code: 'member_name_duplicate' });
           return;
         }
         console.error('Failed to swap member name fields', error);
@@ -607,7 +607,7 @@ export async function updateUserHandler(req: Request, res: Response): Promise<vo
     res.json(updated);
   } catch (error) {
     if (error instanceof MemberNameDuplicateError) {
-      res.status(409).json({ error: error.message });
+      res.status(409).json({ error: error.message, code: 'member_name_duplicate' });
       return;
     }
     console.error('Failed to update user', error);

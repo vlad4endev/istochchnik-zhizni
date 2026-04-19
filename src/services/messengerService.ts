@@ -1233,9 +1233,16 @@ function resolveLocalUploadAbsolutePath(urlPath: string): string | null {
   }
   const posixRel = path.posix.normalize(rel).replace(/^\/+/, '');
   if (!posixRel || posixRel.startsWith('..') || posixRel.includes('\0')) return null;
-  const abs = path.resolve(getUploadsRoot(), posixRel);
   const root = path.resolve(getUploadsRoot());
-  if (!abs.startsWith(`${root}${path.sep}`) && abs !== root) return null;
+  const abs = path.resolve(root, posixRel);
+  const relToRoot = path.relative(root, abs);
+  if (
+    relToRoot.startsWith('..') ||
+    path.isAbsolute(relToRoot) ||
+    relToRoot.includes('\0')
+  ) {
+    return null;
+  }
   return abs;
 }
 

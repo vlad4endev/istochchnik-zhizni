@@ -16,6 +16,8 @@ type PendingAttachment = {
   uploaded?: api.UploadedFile | null;
 };
 
+const IMAGE_NAME_EXT_RE = /\.(jpe?g|png|webp|gif|heic|heif)$/i;
+
 type PopoverPos =
   | { bottomPx: number; leftPx?: number; rightPx?: number }
   | null;
@@ -482,7 +484,9 @@ export function ChatInput({
       return;
     }
     if (pending?.previewUrl) URL.revokeObjectURL(pending.previewUrl);
-    const isImage = (file.type || '').startsWith('image/');
+    const isImage =
+      (file.type || '').startsWith('image/') ||
+      IMAGE_NAME_EXT_RE.test(String(file.name || '').trim());
     const previewUrl = isImage ? URL.createObjectURL(file) : null;
     setPending({ file, isImage, previewUrl, uploaded: null });
     textareaRef.current?.focus();

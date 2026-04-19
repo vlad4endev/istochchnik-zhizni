@@ -22,6 +22,103 @@ import {
 
 type AuthReq = Request & { authUserId?: number };
 
+const EXT_TO_MIME: Record<string, string> = {
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.png': 'image/png',
+  '.gif': 'image/gif',
+  '.webp': 'image/webp',
+  '.heic': 'image/heic',
+  '.heif': 'image/heif',
+  '.pdf': 'application/pdf',
+  '.txt': 'text/plain; charset=utf-8',
+  '.doc': 'application/msword',
+  '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  '.xls': 'application/vnd.ms-excel',
+  '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  '.ppt': 'application/vnd.ms-powerpoint',
+  '.pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+};
+
+function inferMimeFromHeader(buf: Buffer): string | null {
+  if (buf.length >= 3 && buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) return 'image/jpeg';
+  if (
+    buf.length >= 8 &&
+    buf[0] === 0x89 &&
+    buf[1] === 0x50 &&
+    buf[2] === 0x4e &&
+    buf[3] === 0x47 &&
+    buf[4] === 0x0d &&
+    buf[5] === 0x0a &&
+    buf[6] === 0x1a &&
+    buf[7] === 0x0a
+  ) {
+    return 'image/png';
+  }
+  if (buf.length >= 6) {
+    const sig6 = buf.subarray(0, 6).toString('ascii');
+    if (sig6 === 'GIF87a' || sig6 === 'GIF89a') return 'image/gif';
+  }
+  if (
+    buf.length >= 12 &&
+    buf.subarray(0, 4).toString('ascii') === 'RIFF' &&
+    buf.subarray(8, 12).toString('ascii') === 'WEBP'
+  ) {
+    return 'image/webp';
+  }
+  if (buf.length >= 12 && buf.subarray(4, 8).toString('ascii') === 'ftyp') {
+    const brand = buf.subarray(8, 12).toString('ascii').toLowerCase();
+    if (brand.startsWith('heic')) return 'image/heic';
+    if (brand.startsWith('heif')) return 'image/heif';
+    if (brand === 'mif1' || brand === 'msf1') return 'image/heif';
+  }
+  if (
+    buf.length >= 5 &&
+    buf[0] === 0x25 &&
+    buf[1] === 0x50 &&
+    buf[2] === 0x44 &&
+    buf[3] === 0x46 &&
+    buf[4] === 0x2d
+  ) {
+    return 'application/pdf';
+  }
+  return null;
+}
+
+type ResolvedMimeType = {
+  mimeType: string;
+  isPdfConfirmedByHeader: boolean;
+};
+
+async function resolveFileMimeType(absPath: string): Promise<ResolvedMimeType> {
+  const ext = path.extname(absPath).toLowerCase();
+  const extMime = ext ? EXT_TO_MIME[ext] : undefined;
+  let sniffed: string | null = null;
+  try {
+    const fh = await fs.open(absPath, 'r');
+    try {
+      const buf = Buffer.alloc(512);
+      const { bytesRead } = await fh.read(buf, 0, buf.length, 0);
+      sniffed = inferMimeFromHeader(buf.subarray(0, bytesRead));
+    } finally {
+      await fh.close();
+    }
+  } catch {
+    // ignore; fallback below
+  }
+  const isPdfConfirmedByHeader = sniffed === 'application/pdf';
+  if (isPdfConfirmedByHeader) {
+    return { mimeType: 'application/pdf', isPdfConfirmedByHeader: true };
+  }
+  // If extension says PDF but signature doesn't, do not force browser inline-open on spoofed payload.
+  if (extMime === 'application/pdf') {
+    return { mimeType: 'application/octet-stream', isPdfConfirmedByHeader: false };
+  }
+  if (sniffed) return { mimeType: sniffed, isPdfConfirmedByHeader: false };
+  if (extMime) return { mimeType: extMime, isPdfConfirmedByHeader: false };
+  return { mimeType: 'application/octet-stream', isPdfConfirmedByHeader: false };
+}
+
 /** DB `messages.id` / FK columns are bigint; drop temp-ids and other junk so Postgres never 500s on cast. */
 function normalizeOptionalBigintId(raw: unknown): string | null {
   if (raw == null) return null;
@@ -43,9 +140,16 @@ function resolvePublicUploadAbsolutePath(rawPath: string): string | null {
   }
   const normalized = path.posix.normalize(rel).replace(/^\/+/, '');
   if (!normalized || normalized.startsWith('..') || normalized.includes('\0')) return null;
-  const absPath = path.resolve(getUploadsRoot(), normalized);
   const root = path.resolve(getUploadsRoot());
-  if (!absPath.startsWith(`${root}${path.sep}`) && absPath !== root) return null;
+  const absPath = path.resolve(root, normalized);
+  const relToRoot = path.relative(root, absPath);
+  if (
+    relToRoot.startsWith('..') ||
+    path.isAbsolute(relToRoot) ||
+    relToRoot.includes('\0')
+  ) {
+    return null;
+  }
   return absPath;
 }
 
@@ -66,8 +170,13 @@ async function serveMessengerPublicUpload(req: Request, res: Response): Promise<
     res.status(404).type('text/plain').send('Not found');
     return;
   }
+  const { mimeType, isPdfConfirmedByHeader } = await resolveFileMimeType(absPath);
+  res.setHeader('Content-Type', mimeType);
+  if (mimeType.startsWith('image/') || isPdfConfirmedByHeader) {
+    res.setHeader('Content-Disposition', 'inline');
+  }
   res.setHeader('X-Content-Type-Options', 'nosniff');
-  res.setHeader('Cache-Control', 'public, max-age=86400, immutable');
+  res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
   res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
   res.sendFile(absPath, (err) => {
     if (err && !res.headersSent) res.status(404).end();

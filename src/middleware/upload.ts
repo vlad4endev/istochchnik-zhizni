@@ -40,6 +40,22 @@ const ALLOWED_EXTENSIONS = new Set([
 ]);
 
 const IMAGE_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.webp', '.gif', '.heic', '.heif']);
+const MIME_TO_EXTENSION: Record<string, string> = {
+  'image/jpeg': '.jpg',
+  'image/png': '.png',
+  'image/webp': '.webp',
+  'image/gif': '.gif',
+  'image/heic': '.heic',
+  'image/heif': '.heif',
+  'application/pdf': '.pdf',
+  'text/plain': '.txt',
+  'application/msword': '.doc',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': '.docx',
+  'application/vnd.ms-excel': '.xls',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': '.xlsx',
+  'application/vnd.ms-powerpoint': '.ppt',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation': '.pptx',
+};
 
 function isAllowedUpload(file: Express.Multer.File): boolean {
   const ext = path.extname(file.originalname || '').toLowerCase();
@@ -81,10 +97,9 @@ const storage = multer.diskStorage({
   filename: (_req, file, cb) => {
     let ext = path.extname(file.originalname || '').toLowerCase() || '';
     const mime = String(file.mimetype || '').toLowerCase();
-    if (!ext && mime === 'image/jpeg') ext = '.jpg';
-    else if (!ext && mime === 'image/png') ext = '.png';
-    else if (!ext && mime === 'image/webp') ext = '.webp';
-    else if (!ext && mime === 'image/gif') ext = '.gif';
+    if (!ext && mime) {
+      ext = MIME_TO_EXTENSION[mime] || '';
+    }
     const safeExt = ext && ext.length <= 12 ? ext : '';
     cb(null, `${uuidv4()}${safeExt}`);
   },

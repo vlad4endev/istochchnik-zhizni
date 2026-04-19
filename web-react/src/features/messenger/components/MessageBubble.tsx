@@ -566,6 +566,44 @@ function MessageBubbleInner({
       const rawUrl = String(payload.url ?? '').trim();
       const src = resolvePublicUrl(rawUrl) ?? rawUrl;
       const caption = String(message.content ?? '').trim();
+      const attachmentMime = String(payload.mimeType ?? payload.mimetype ?? '').trim().toLowerCase();
+      const attachmentName = String(payload.name ?? payload.filename ?? '').trim().toLowerCase();
+      const urlPath = rawUrl.split('?')[0].toLowerCase();
+      const isHeicLike =
+        attachmentMime === 'image/heic' ||
+        attachmentMime === 'image/heif' ||
+        urlPath.endsWith('.heic') ||
+        urlPath.endsWith('.heif') ||
+        attachmentName.endsWith('.heic') ||
+        attachmentName.endsWith('.heif');
+      if (isHeicLike) {
+        return (
+          <a
+            href={src || undefined}
+            target="_blank"
+            rel="noreferrer"
+            className={[
+              'flex max-w-[20rem] items-center justify-between gap-3 rounded-2xl px-3 py-2 ring-1 transition-colors duration-200',
+              isMine
+                ? 'bg-white/10 ring-white/10 hover:bg-white/15'
+                : 'bg-gray-50 ring-gray-100 hover:bg-gray-100',
+            ].join(' ')}
+          >
+            <span className="min-w-0">
+              <span className={['block truncate text-[14px] font-semibold', isMine ? 'text-white/95' : 'text-gray-900'].join(' ')}>
+                HEIC/HEIF изображение
+              </span>
+              <span className={['mt-0.5 block text-[11px] font-semibold', isMine ? 'text-white/70' : 'text-gray-500'].join(' ')}>
+                Просмотр в браузере ограничен, откройте или скачайте файл
+              </span>
+            </span>
+            <span className={['inline-flex shrink-0 items-center gap-1 rounded-full px-3 py-1 text-[11px] font-extrabold', isMine ? 'bg-white/12 text-white/90' : 'bg-primary/10 text-primary'].join(' ')}>
+              <LuDownload size={14} />
+              Открыть
+            </span>
+          </a>
+        );
+      }
       return src ? (
         <div className="w-full max-w-[min(78vw,22rem)] overflow-hidden rounded-2xl">
           <button
@@ -583,6 +621,7 @@ function MessageBubbleInner({
               className="max-h-[420px] w-full object-cover"
               loading="lazy"
               decoding="async"
+              referrerPolicy="no-referrer"
             />
           </button>
           {caption ? (
@@ -1060,6 +1099,7 @@ function MessageBubbleInner({
             src={lightboxSrc}
             alt=""
             className="max-h-full max-w-full rounded-2xl object-contain shadow-2xl"
+            referrerPolicy="no-referrer"
             onClick={(e) => e.stopPropagation()}
           />
         </div>
