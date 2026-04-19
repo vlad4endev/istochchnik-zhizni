@@ -20,6 +20,60 @@ export type ZonedNow = {
 /**
  * Календарные часы в указанной IANA-таймзоне (для сопоставления с расписанием уведомлений).
  */
+/**
+ * Календарная дата `YYYY-MM-DD` в указанной таймзоне для момента `date` (как на стенных часах церкви).
+ */
+export function formatYmdInTimeZone(timeZone: string, date: Date): string {
+  return new Intl.DateTimeFormat('sv-SE', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(date);
+}
+
+/**
+ * UTC-момент внутри заданного календарного дня в `timeZone` (якорь для арифметики дней с учётом DST).
+ */
+export function zonedCalendarNoonUtc(timeZone: string, ymd: string): Date {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(ymd.trim());
+  if (!m) {
+    throw new Error(`Invalid YMD: ${ymd}`);
+  }
+  const y = Number(m[1]);
+  const mo = Number(m[2]);
+  const d = Number(m[3]);
+  let t = Date.UTC(y, mo - 1, d, 12, 0, 0);
+  for (let i = 0; i < 48; i += 1) {
+    if (formatYmdInTimeZone(timeZone, new Date(t)) === ymd) {
+      return new Date(t);
+    }
+    const got = formatYmdInTimeZone(timeZone, new Date(t));
+    t += (got < ymd ? 1 : -1) * 3600 * 1000;
+  }
+  throw new Error(`Could not resolve calendar day ${ymd} in ${timeZone}`);
+}
+
+/** Сдвиг на N календарных дней в таймзоне (N может быть отрицательным). */
+export function addCalendarDaysYmd(timeZone: string, ymd: string, delta: number): string {
+  if (delta === 0) {
+    return ymd;
+  }
+  const dir = delta > 0 ? 1 : -1;
+  let cur = zonedCalendarNoonUtc(timeZone, ymd);
+  let last = formatYmdInTimeZone(timeZone, cur);
+  let remaining = Math.abs(delta);
+  while (remaining > 0) {
+    cur = new Date(cur.getTime() + dir * 3600 * 1000);
+    const g = formatYmdInTimeZone(timeZone, cur);
+    if (g !== last) {
+      remaining -= 1;
+      last = g;
+    }
+  }
+  return formatYmdInTimeZone(timeZone, cur);
+}
+
 export function getZonedNow(timeZone: string, date: Date = new Date()): ZonedNow {
   const dtf = new Intl.DateTimeFormat('en-US', {
     timeZone,

@@ -99,6 +99,24 @@ export function useMessengerWs(): {
 function handleWsMessage(msg: any): void {
   const store = useChatStore.getState();
 
+  // TEMP DIAGNOSTIC: presence/typing issue. Remove after root-causing.
+  if (
+    msg &&
+    (msg.type === 'ready' ||
+      msg.type === 'presence:online' ||
+      msg.type === 'presence:offline' ||
+      msg.type === 'typing:start' ||
+      msg.type === 'typing:stop')
+  ) {
+    // eslint-disable-next-line no-console
+    console.info('[messenger:ws:diag]', msg.type, {
+      memberId: msg.memberId,
+      conversationId: msg.conversationId,
+      onlineMembers: msg.onlineMembers,
+      memberName: msg.memberName,
+    });
+  }
+
   switch (msg.type) {
     case 'ready':
       if (typeof msg.memberId === 'number') {

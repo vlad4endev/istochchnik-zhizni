@@ -848,19 +848,38 @@ function MessageBubbleInner({
     isMine ? 'text-white/70' : 'text-gray-400',
   ].join(' ');
 
-  const statusAnnouncerId = `msg-delivery-status-${message.id}`;
-  const liveStatusLabel =
-    !isMine || isDeleted
-      ? null
-      : status === 'sending'
-        ? 'Сообщение отправляется'
-        : status === 'error'
-          ? 'Не удалось отправить сообщение. Нажмите, чтобы повторить.'
-          : isReadByOther
-            ? 'Сообщение прочитано'
-            : status === 'delivered'
-              ? 'Сообщение доставлено'
-              : 'Сообщение отправлено';
+  /*
+   * A11y статуса доставки (WCAG 2.1, SC 1.1.1 «Non-text Content» + SC 4.1.2 «Name, Role, Value»).
+   *
+   * Раньше статус дублировался двумя способами:
+   *   1) сама иконка (`LuLoader` / `IoCheckmark` / `IoCheckmarkDone`) была `aria-hidden`;
+   *   2) рядом с ней рендерился скрытый `aria-live="polite"` span с полным текстом.
+   *
+   * Проблема: на ленте из N своих сообщений это N живых регионов.
+   * Некоторые screen-reader'ы (Orca, TalkBack) озвучивают все aria-live узлы при
+   * первичном монтировании — пользователь получал «сообщение доставлено × 50» при
+   * открытии чата. Это противоречит WCAG 2.1 Technique G192 (не злоупотреблять live).
+   *
+   * Решение:
+   *   - Иконка получает `role="img" aria-label="..."` с текущим состоянием.
+   *     SR читает её при фокусной навигации к метаданным сообщения, без спама.
+   *   - Глобальные объявления «новое сообщение / typing / presence» делаются
+   *     отдельными live-регионами уровня `ChatWindow` (см. `ChatWindow.tsx`),
+   *     не per-message.
+   *   - Retry-кнопка сама по себе интерактивна и имеет расширенный `aria-label`
+   *     с полной фразой ошибки + действием.
+   */
+  const statusIconLabel = !isMine || isDeleted
+    ? null
+    : status === 'sending'
+      ? 'Отправляется'
+      : status === 'error'
+        ? null // у «error» интерактивный элемент — label живёт на <button>
+        : isReadByOther
+          ? 'Прочитано'
+          : status === 'delivered'
+            ? 'Доставлено'
+            : 'Отправлено';
 
   const bubbleMeta = (
     <div className={metaRowClass}>
@@ -868,50 +887,44 @@ function MessageBubbleInner({
       <span className="tabular-nums">{formattedTime}</span>
       {isMine ? (
         <>
-          {liveStatusLabel ? (
-            <span id={statusAnnouncerId} className="sr-only" aria-live="polite" aria-atomic="true">
-              {liveStatusLabel}
-            </span>
-          ) : null}
           {status === 'sending' ? (
             <LuLoader
               className="h-3.5 w-3.5 shrink-0 animate-spin text-white/85"
-              aria-hidden
+              role="img"
+              aria-label={statusIconLabel ?? undefined}
               focusable={false}
-              aria-describedby={statusAnnouncerId}
             />
           ) : status === 'error' ? (
             <button
               type="button"
               className="inline-flex shrink-0 rounded p-0.5 text-white/90 hover:bg-white/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
-              aria-label="Повторить отправку сообщения"
-              aria-describedby={statusAnnouncerId}
+              aria-label="Сообщение не доставлено. Нажмите, чтобы повторить отправку."
               onClick={() => {
                 void retrySendMessage(String(message.conversation_id), String(message.id));
               }}
             >
-              <LuRefreshCw className="h-3.5 w-3.5" aria-hidden />
+              <LuRefreshCw className="h-3.5 w-3.5" aria-hidden focusable={false} />
             </button>
           ) : isReadByOther ? (
             <IoCheckmarkDone
               className="h-3.5 w-3.5 shrink-0 text-sky-200"
-              aria-hidden
+              role="img"
+              aria-label={statusIconLabel ?? undefined}
               focusable={false}
-              aria-describedby={statusAnnouncerId}
             />
           ) : status === 'delivered' ? (
             <IoCheckmarkDone
               className="h-3.5 w-3.5 shrink-0 text-white/70"
-              aria-hidden
+              role="img"
+              aria-label={statusIconLabel ?? undefined}
               focusable={false}
-              aria-describedby={statusAnnouncerId}
             />
           ) : (
             <IoCheckmark
               className="h-3.5 w-3.5 shrink-0 text-white/70"
-              aria-hidden
+              role="img"
+              aria-label={statusIconLabel ?? undefined}
               focusable={false}
-              aria-describedby={statusAnnouncerId}
             />
           )}
         </>

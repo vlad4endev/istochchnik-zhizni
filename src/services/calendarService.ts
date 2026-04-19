@@ -1,5 +1,6 @@
 import { query } from '../config/db';
 import { getDiffDays } from '../utils/isoDates';
+import { addCalendarDaysYmd, getZonedNow } from '../utils/zonedTime';
 import {
   computeCycleIndex,
   getCycleStartDate,
@@ -71,35 +72,42 @@ export interface NextWeekMemberAssignment {
   member: Member | null;
 }
 
-function formatUtcDate(date: Date): string {
-  return date.toISOString().slice(0, 10);
+/**
+ * Таймзона для понедельник–воскресенье «эта / следующая неделя» (сбор нужд, план).
+ * Совпадает с cron автораспределения; не UTC — иначе в понедельник 00:00 по Москве ещё «воскресенье» в UTC и недели съезжают.
+ */
+function resolvePrayerPlanWeekTimeZone(): string {
+  const candidates = [process.env.PRAYER_PLAN_WEEK_TZ, process.env.CURATOR_DISTRIBUTION_TZ];
+  for (const raw of candidates) {
+    const tz = raw?.trim();
+    if (!tz) continue;
+    try {
+      Intl.DateTimeFormat(undefined, { timeZone: tz });
+      return tz;
+    } catch {
+      // ignore invalid TZ
+    }
+  }
+  return 'Europe/Moscow';
 }
 
-function addUtcDays(date: Date, days: number): Date {
-  const result = new Date(date);
-  result.setUTCDate(result.getUTCDate() + days);
-  return result;
-}
-
-/** Семь дат пн–вс следующей календарной недели (от следующего понедельника). */
+/** Семь дат пн–вс следующей календарной недели (пн следующей недели после «этой» в таймзоне церкви). */
 export function getNextWeekDates(): string[] {
-  const now = new Date();
-  const todayUtc = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
-  const day = todayUtc.getUTCDay(); // 0=Sun ... 6=Sat
-  const daysUntilNextMonday = day === 1 ? 7 : ((8 - day) % 7);
-  const nextMonday = addUtcDays(todayUtc, daysUntilNextMonday);
-
-  return Array.from({ length: 7 }, (_, index) => formatUtcDate(addUtcDays(nextMonday, index)));
+  const tz = resolvePrayerPlanWeekTimeZone();
+  const current = getCurrentWeekDates();
+  const nextMonday = addCalendarDaysYmd(tz, current[0], 7);
+  return Array.from({ length: 7 }, (_, index) => addCalendarDaysYmd(tz, nextMonday, index));
 }
 
-/** Семь дат пн–вс текущей календарной недели (включая сегодня). */
+/** Семь дат пн–вс текущей календарной недели (пн–вс, в которую попадает «сегодня» в таймзоне церкви). */
 export function getCurrentWeekDates(): string[] {
-  const now = new Date();
-  const todayUtc = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
-  const day = todayUtc.getUTCDay(); // 0=Sun ... 6=Sat
+  const tz = resolvePrayerPlanWeekTimeZone();
+  const z = getZonedNow(tz, new Date());
+  const todayYmd = `${z.year}-${String(z.month).padStart(2, '0')}-${String(z.day).padStart(2, '0')}`;
+  const day = z.weekDay; // 0=Sun ... 6=Sat (как getUTCDay)
   const daysFromMonday = day === 0 ? 6 : day - 1;
-  const monday = addUtcDays(todayUtc, -daysFromMonday);
-  return Array.from({ length: 7 }, (_, index) => formatUtcDate(addUtcDays(monday, index)));
+  const mondayYmd = addCalendarDaysYmd(tz, todayYmd, -daysFromMonday);
+  return Array.from({ length: 7 }, (_, index) => addCalendarDaysYmd(tz, mondayYmd, index));
 }
 
 async function getByIndex<T>(

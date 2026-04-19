@@ -873,16 +873,30 @@ export function ChatInput({
             </button>
           </div>
           {/*
-           * A11y: VoiceOver/NVDA озвучивают `placeholder` только у пустого поля и не во всех
-           * браузерах. Явный `aria-label` гарантирует, что при любом состоянии (пусто / черновик /
-           * режим редактирования через `editingMessageId`) фокус на textarea читается как
-           * «Сообщение, текстовое поле». Подсказка про @-упоминания вынесена в sr-only узел
-           * и привязана через `aria-describedby` — только когда участников для упоминания >1,
-           * иначе SR не зачитывает бессмысленное описание в личном чате.
+           * A11y (WCAG 2.1, SC 1.3.1 / 4.1.2): у textarea несколько состояний, которые
+           * SR по умолчанию не озвучивает:
+           *   - `placeholder` читается только при пустом значении и не во всех браузерах;
+           *   - наличие активного вложения в составе сообщения (pending attachment) для SR
+           *     невидимо — визуальный preview живёт отдельным блоком выше;
+           *   - подсказка про @-упоминания доступна только зрячему (через serif-меню).
+           *
+           * Решение: явный `aria-label="Текст сообщения"` + динамический `aria-describedby`,
+           * который собирает все активные описания в одну строку ("mention и attachment"),
+           * и подключается только тогда, когда соответствующая подсказка действительно актуальна.
            */}
           {mentionParticipants.length > 0 ? (
             <span id="chat-input-mention-hint" className="sr-only">
               Наберите символ собака, чтобы упомянуть участника
+            </span>
+          ) : null}
+          {pending ? (
+            <span id="chat-input-attachment-hint" className="sr-only">
+              К сообщению прикреплено вложение: {pending.file.name}. Будет отправлено вместе с текстом.
+            </span>
+          ) : null}
+          {uploading ? (
+            <span id="chat-input-uploading-hint" className="sr-only" aria-live="polite">
+              Загружается файл {uploading.name}. Подождите завершения загрузки.
             </span>
           ) : null}
           <textarea
@@ -891,8 +905,16 @@ export function ChatInput({
             placeholder={
               mentionParticipants.length > 0 ? 'Сообщение… (наберите @ — позвать человека)' : 'Сообщение…'
             }
-            aria-label="Сообщение"
-            aria-describedby={mentionParticipants.length > 0 ? 'chat-input-mention-hint' : undefined}
+            aria-label="Текст сообщения"
+            aria-describedby={
+              [
+                mentionParticipants.length > 0 ? 'chat-input-mention-hint' : null,
+                pending ? 'chat-input-attachment-hint' : null,
+                uploading ? 'chat-input-uploading-hint' : null,
+              ]
+                .filter((id): id is string => Boolean(id))
+                .join(' ') || undefined
+            }
             aria-multiline="true"
             rows={1}
             value={content}

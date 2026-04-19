@@ -1,4 +1,5 @@
 import { query } from '../config/db';
+import { getNextWeekDates } from './calendarService';
 
 export interface GlobalTheme {
   id: number;
@@ -23,21 +24,6 @@ export interface NextWeekGlobalAssignment {
   themes: GlobalTheme[];
   ministries: Ministry[];
   backslider: Backslider | null;
-}
-
-function getNextWeekDates(): string[] {
-  const now = new Date();
-  const todayUtc = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
-  const day = todayUtc.getUTCDay();
-  const daysUntilNextMonday = day === 1 ? 7 : ((8 - day) % 7);
-  const nextMonday = new Date(todayUtc);
-  nextMonday.setUTCDate(todayUtc.getUTCDate() + daysUntilNextMonday);
-
-  return Array.from({ length: 7 }, (_, i) => {
-    const d = new Date(nextMonday);
-    d.setUTCDate(nextMonday.getUTCDate() + i);
-    return d.toISOString().slice(0, 10);
-  });
 }
 
 async function getCycleStartDate(): Promise<string> {
