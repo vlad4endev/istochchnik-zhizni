@@ -27,6 +27,7 @@ import {
   unlikeProfilePost,
 } from '../publicProfileApi';
 import { resolvePublicUrl } from '../../../lib/resolvePublicUrl';
+import { AccessibilityHeaderMenu } from '../../../components/accessibility/AccessibilityHeaderMenu';
 import { ProfileComposeModal } from '../components/ProfileComposeModal';
 import { EditPostModal } from '../components/EditPostModal';
 
@@ -360,9 +361,12 @@ export function PublicProfilePage() {
         <span className={styles.igTopBarTitle}>{topBarHandle}</span>
         <div className={styles.igTopBarRight}>
           {isOwner ? (
-            <Link to="/profile" className={styles.igTopBarIconBtn} aria-label="Настройки профиля" title="Настройки">
-              <LuSettings className="h-5 w-5" strokeWidth={2} aria-hidden />
-            </Link>
+            <>
+              <AccessibilityHeaderMenu triggerClassName={styles.igTopBarA11yBtn} />
+              <Link to="/profile" className={styles.igTopBarIconBtn} aria-label="Настройки профиля" title="Настройки">
+                <LuSettings className="h-5 w-5" strokeWidth={2} aria-hidden />
+              </Link>
+            </>
           ) : (
             <span className={styles.igTopBarRightPad} aria-hidden />
           )}
