@@ -1,7 +1,5 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { randomUUID } from 'node:crypto';
-import fs from 'node:fs/promises';
-import path from 'node:path';
 
 let cached: SupabaseClient | null | undefined;
 
@@ -33,33 +31,33 @@ function getClient(): SupabaseClient {
 }
 
 export function messengerBucket(): string {
-  return process.env.SUPABASE_STORAGE_BUCKET_MESSENGER?.trim() || 'chat';
+  return process.env.SUPABASE_STORAGE_BUCKET_MESSENGER?.trim() || 'messenger';
 }
 
 export function userMediaBucket(): string {
   return process.env.SUPABASE_STORAGE_BUCKET_USER_MEDIA?.trim() || 'user-media';
 }
 
-/**
- * Загружает файл с диска в Storage, возвращает публичный URL (бакет должен быть public).
- * Локальный файл после успешной загрузки можно удалить вызывающим кодом.
- */
-export async function uploadLocalFileToPublicBucket(opts: {
+/** Загружает буфер в Storage, возвращает публичный URL (бакет должен быть public). */
+export async function uploadBufferToPublicBucket(opts: {
   bucket: string;
   /** Ключ внутри бакета, без ведущего slash */
   objectPath: string;
-  localPath: string;
+  file: Buffer;
   contentType?: string;
+  cacheControl?: string;
+  metadata?: Record<string, string>;
 }): Promise<{ publicUrl: string }> {
   const client = getClient();
   if (!client) {
     throw new Error('Supabase Storage is not configured (SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY)');
   }
-  const buf = await fs.readFile(opts.localPath);
   const { error } = await client.storage
     .from(opts.bucket)
-    .upload(opts.objectPath, buf, {
+    .upload(opts.objectPath, opts.file, {
       contentType: opts.contentType,
+      cacheControl: opts.cacheControl,
+      metadata: opts.metadata,
       upsert: false,
     });
   if (error) {
@@ -72,8 +70,29 @@ export async function uploadLocalFileToPublicBucket(opts: {
   return { publicUrl: data.publicUrl };
 }
 
-export function buildMessengerObjectPath(memberId: number, originalName: string): string {
-  const ext = path.extname(originalName || '') || '';
+export async function createSignedUrlForBucketObject(opts: {
+  bucket: string;
+  objectPath: string;
+  expiresInSec: number;
+}): Promise<{ signedUrl: string }> {
+  const client = getClient();
+  if (!client) {
+    throw new Error('Supabase Storage is not configured (SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY)');
+  }
+  const { data, error } = await client.storage
+    .from(opts.bucket)
+    .createSignedUrl(opts.objectPath, opts.expiresInSec);
+  if (error) {
+    throw new Error(`Storage createSignedUrl failed: ${error.message}`);
+  }
+  if (!data?.signedUrl) {
+    throw new Error('Storage createSignedUrl returned empty URL');
+  }
+  return { signedUrl: data.signedUrl };
+}
+
+export function buildMessengerObjectPath(memberId: number, extension: string): string {
+  const ext = String(extension || '').trim();
   const safeExt = ext && ext.length <= 12 ? ext.toLowerCase() : '';
   const id = randomUUID();
   return `${memberId}/${id}${safeExt}`;

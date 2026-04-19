@@ -389,7 +389,8 @@ export function ChatInput({
         const payloadType: api.MessagePayloadType = pending.isImage ? 'image' : 'file';
         const payload = {
           url: uploaded.url,
-          name: uploaded.originalName || pending.file.name,
+          name: uploaded.name || pending.file.name,
+          objectPath: uploaded.objectPath,
           mimeType: uploaded.mimeType || pending.file.type || '',
           size: uploaded.size || pending.file.size || 0,
         };

@@ -43,7 +43,8 @@ export type MessagePayload = Record<string, unknown>;
 
 export type UploadedFile = {
   url: string;
-  originalName: string;
+  name: string;
+  objectPath?: string;
   mimeType: string;
   size: number;
 };
@@ -245,6 +246,28 @@ export async function uploadFile(
     }
   }
   throw lastError;
+}
+
+const attachmentUrlCache = new Map<string, { url: string; expiresAtMs: number }>();
+
+export async function fetchMessageAttachmentUrl(messageId: string): Promise<{ url: string }> {
+  const key = String(messageId);
+  const now = Date.now();
+  const cached = attachmentUrlCache.get(key);
+  if (cached && cached.expiresAtMs > now + 5000) {
+    return { url: cached.url };
+  }
+  const { data } = await apiClient.get<{ url: string; source: 'signed' | 'stored'; expiresAt?: string }>(
+    `${BASE}/messages/${encodeURIComponent(messageId)}/attachment-url`,
+  );
+  const expiresAtMs = data.expiresAt ? Date.parse(data.expiresAt) : now + 5 * 60 * 1000;
+  if (data.url) {
+    attachmentUrlCache.set(key, {
+      url: data.url,
+      expiresAtMs: Number.isFinite(expiresAtMs) ? expiresAtMs : now + 5 * 60 * 1000,
+    });
+  }
+  return { url: data.url };
 }
 
 export async function fetchUploadsHealth(): Promise<{ ok: boolean; storage: 'healthy' | 'unavailable'; reason?: string }> {

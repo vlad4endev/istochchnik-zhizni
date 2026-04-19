@@ -1,6 +1,4 @@
 import { randomUUID } from 'node:crypto';
-import fs from 'node:fs';
-import path from 'node:path';
 
 import { query as dbQuery } from '../config/db';
 import type {
@@ -14,7 +12,6 @@ import type {
   PermissionsJson,
 } from '../types/messenger';
 import { resolveMessengerConversationDeepLink } from '../config/messengerPublic';
-import { getUploadsRoot } from '../config/uploadsRoot';
 import { getPrayerCycleSnapshotForDate } from './prayerCycleService';
 import { sendPushNotification } from './pushService';
 
@@ -1208,6 +1205,7 @@ function normalizeAttachmentUrl(raw: unknown): string {
   const input = String(raw ?? '').trim();
   if (!input) throw new Error('Attachment URL is required');
   if (/^https?:\/\//i.test(input)) return input;
+  if (/^\/\//.test(input)) return `https:${input}`;
 
   let normalized = input;
   if (normalized.startsWith('/api/messenger/public-uploads/')) {
@@ -1218,44 +1216,29 @@ function normalizeAttachmentUrl(raw: unknown): string {
     normalized = normalized.replace(/^api\/uploads\//, '/uploads/');
   }
   if (!normalized.startsWith('/uploads/')) {
-    throw new Error('Attachment URL must start with /uploads/ or /api/messenger/public-uploads/');
+    throw new Error(
+      'Attachment URL must be absolute (https://...) or legacy /uploads/... path',
+    );
   }
   return normalized;
 }
 
-function resolveLocalUploadAbsolutePath(urlPath: string): string | null {
-  if (!urlPath.startsWith('/uploads/')) return null;
-  let rel = urlPath.slice('/uploads/'.length);
-  try {
-    rel = decodeURIComponent(rel);
-  } catch {
-    return null;
-  }
-  const posixRel = path.posix.normalize(rel).replace(/^\/+/, '');
-  if (!posixRel || posixRel.startsWith('..') || posixRel.includes('\0')) return null;
-  const root = path.resolve(getUploadsRoot());
-  const abs = path.resolve(root, posixRel);
-  const relToRoot = path.relative(root, abs);
-  if (
-    relToRoot.startsWith('..') ||
-    path.isAbsolute(relToRoot) ||
-    relToRoot.includes('\0')
-  ) {
-    return null;
-  }
-  return abs;
+function normalizeStorageObjectPath(raw: unknown): string | undefined {
+  const input = String(raw ?? '').trim();
+  if (!input) return undefined;
+  const safe = input.replace(/^\/+/, '').replace(/\0/g, '');
+  if (!safe || safe.includes('..') || safe.length > 512) return undefined;
+  return safe;
 }
 
 function normalizeAttachmentPayloadForSend(plRaw: MessagePayload): MessagePayload {
   const url = normalizeAttachmentUrl(plRaw.url);
-  const localPath = resolveLocalUploadAbsolutePath(url);
-  if (localPath && !fs.existsSync(localPath)) {
-    throw new Error('Attachment file is missing on server');
-  }
   const sizeNum = Number(plRaw.size ?? 0);
+  const objectPath = normalizeStorageObjectPath(plRaw.objectPath ?? plRaw.object_path);
   return {
     ...plRaw,
     url,
+    objectPath,
     name: String(plRaw.name ?? plRaw.filename ?? '').trim() || undefined,
     mimeType: String(plRaw.mimeType ?? '').trim() || undefined,
     size: Number.isFinite(sizeNum) && sizeNum > 0 ? sizeNum : undefined,
@@ -2032,6 +2015,40 @@ export async function getMessageConversationId(messageId: string): Promise<strin
   );
   const raw = result.rows[0]?.conversation_id;
   return raw != null ? bigint(raw) : null;
+}
+
+export async function getMessageAttachmentForMember(
+  messageId: string,
+  memberId: number,
+): Promise<{
+  conversationId: string;
+  url: string | null;
+  objectPath?: string;
+} | null> {
+  const result = await dbQuery(
+    `SELECT conversation_id, payload_type::text AS payload_type, payload
+     FROM messages
+     WHERE id = $1
+     LIMIT 1`,
+    [messageId],
+  );
+  const row = result.rows[0] as
+    | { conversation_id: string; payload_type: string; payload: unknown }
+    | undefined;
+  if (!row) return null;
+  const conversationId = bigint(row.conversation_id);
+  const allowed = await isMemberInConversation(conversationId, memberId);
+  if (!allowed) {
+    throw new Error('Forbidden');
+  }
+  const payloadType = String(row.payload_type);
+  if (payloadType !== 'image' && payloadType !== 'file') return null;
+  const payload = normalizePayload(row.payload);
+  const urlRaw = String(payload.url ?? '').trim();
+  const url = urlRaw ? normalizeAttachmentUrl(urlRaw) : null;
+  const objectPath = normalizeStorageObjectPath(payload.objectPath ?? payload.object_path);
+  if (!url && !objectPath) return null;
+  return { conversationId, url, objectPath };
 }
 
 export async function interactWithMessage(

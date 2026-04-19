@@ -1,8 +1,5 @@
 import { Router, type Request, type Response, type NextFunction } from 'express';
 import multer from 'multer';
-import fs from 'node:fs/promises';
-import { constants as fsConstants } from 'node:fs';
-import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { resolveMessengerConversationDeepLink } from '../config/messengerPublic';
 import { requireAuthSession } from '../middleware/authSession';
@@ -12,12 +9,12 @@ import { upload } from '../middleware/upload';
 import * as svc from '../services/messengerService';
 import { sendToRoomAll, sendToRoom, sendToMember, ensureMemberInRoom } from '../realtime/wsHub';
 import { sendPushNotification } from '../services/pushService';
-import { getUploadsRoot } from '../config/uploadsRoot';
 import {
   buildMessengerObjectPath,
+  createSignedUrlForBucketObject,
   isSupabaseStorageConfigured,
   messengerBucket,
-  uploadLocalFileToPublicBucket,
+  uploadBufferToPublicBucket,
 } from '../lib/supabaseStorage';
 
 type AuthReq = Request & { authUserId?: number };
@@ -31,7 +28,7 @@ const EXT_TO_MIME: Record<string, string> = {
   '.heic': 'image/heic',
   '.heif': 'image/heif',
   '.pdf': 'application/pdf',
-  '.txt': 'text/plain; charset=utf-8',
+  '.txt': 'text/plain',
   '.doc': 'application/msword',
   '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   '.xls': 'application/vnd.ms-excel',
@@ -39,6 +36,13 @@ const EXT_TO_MIME: Record<string, string> = {
   '.ppt': 'application/vnd.ms-powerpoint',
   '.pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
 };
+const MIME_TO_EXT: Record<string, string> = Object.entries(EXT_TO_MIME).reduce<Record<string, string>>(
+  (acc, [ext, mime]) => {
+    if (!acc[mime]) acc[mime] = ext;
+    return acc;
+  },
+  {},
+);
 
 function inferMimeFromHeader(buf: Buffer): string | null {
   if (buf.length >= 3 && buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) return 'image/jpeg';
@@ -85,38 +89,32 @@ function inferMimeFromHeader(buf: Buffer): string | null {
   return null;
 }
 
-type ResolvedMimeType = {
-  mimeType: string;
-  isPdfConfirmedByHeader: boolean;
-};
+function normalizeExtension(input: string): string {
+  const cleaned = String(input || '').trim().toLowerCase().replace(/[^a-z0-9.]/g, '');
+  if (!cleaned || cleaned === '.') return '';
+  return cleaned.startsWith('.') ? cleaned : `.${cleaned}`;
+}
 
-async function resolveFileMimeType(absPath: string): Promise<ResolvedMimeType> {
-  const ext = path.extname(absPath).toLowerCase();
-  const extMime = ext ? EXT_TO_MIME[ext] : undefined;
-  let sniffed: string | null = null;
-  try {
-    const fh = await fs.open(absPath, 'r');
-    try {
-      const buf = Buffer.alloc(512);
-      const { bytesRead } = await fh.read(buf, 0, buf.length, 0);
-      sniffed = inferMimeFromHeader(buf.subarray(0, bytesRead));
-    } finally {
-      await fh.close();
-    }
-  } catch {
-    // ignore; fallback below
-  }
-  const isPdfConfirmedByHeader = sniffed === 'application/pdf';
-  if (isPdfConfirmedByHeader) {
-    return { mimeType: 'application/pdf', isPdfConfirmedByHeader: true };
-  }
-  // If extension says PDF but signature doesn't, do not force browser inline-open on spoofed payload.
-  if (extMime === 'application/pdf') {
-    return { mimeType: 'application/octet-stream', isPdfConfirmedByHeader: false };
-  }
-  if (sniffed) return { mimeType: sniffed, isPdfConfirmedByHeader: false };
-  if (extMime) return { mimeType: extMime, isPdfConfirmedByHeader: false };
-  return { mimeType: 'application/octet-stream', isPdfConfirmedByHeader: false };
+function resolveUploadMetadata(file: Express.Multer.File): { mimeType: string; extension: string } {
+  const filename = String(file.originalname || '').trim();
+  const extMatch = filename.match(/(\.[a-z0-9]{1,12})$/i);
+  const byName = normalizeExtension(extMatch?.[1] || '');
+  const byMime = String(file.mimetype || '').trim().toLowerCase();
+  const sniffed = inferMimeFromHeader(file.buffer ?? Buffer.alloc(0)) ?? '';
+  const mimeType = sniffed || byMime || EXT_TO_MIME[byName] || 'application/octet-stream';
+  const extension = normalizeExtension(byName || MIME_TO_EXT[mimeType] || MIME_TO_EXT[sniffed] || '');
+  return { mimeType, extension };
+}
+
+function isStorageAlreadyExistsError(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err ?? '');
+  return /already exists|resource already exists|duplicate/i.test(msg);
+}
+
+function attachmentSignedUrlTtlSec(): number {
+  const n = Number(process.env.MESSENGER_ATTACHMENT_SIGNED_URL_TTL_SEC ?? 3600);
+  if (!Number.isFinite(n)) return 3600;
+  return Math.min(7 * 24 * 3600, Math.max(60, Math.floor(n)));
 }
 
 /** DB `messages.id` / FK columns are bigint; drop temp-ids and other junk so Postgres never 500s on cast. */
@@ -129,75 +127,6 @@ function normalizeOptionalBigintId(raw: unknown): string | null {
 }
 
 const router = Router();
-
-function resolvePublicUploadAbsolutePath(rawPath: string): string | null {
-  let rel = String(rawPath || '').trim();
-  if (!rel) return null;
-  try {
-    rel = decodeURIComponent(rel);
-  } catch {
-    return null;
-  }
-  const normalized = path.posix.normalize(rel).replace(/^\/+/, '');
-  if (!normalized || normalized.startsWith('..') || normalized.includes('\0')) return null;
-  const root = path.resolve(getUploadsRoot());
-  const absPath = path.resolve(root, normalized);
-  const relToRoot = path.relative(root, absPath);
-  if (
-    relToRoot.startsWith('..') ||
-    path.isAbsolute(relToRoot) ||
-    relToRoot.includes('\0')
-  ) {
-    return null;
-  }
-  return absPath;
-}
-
-async function serveMessengerPublicUpload(req: Request, res: Response): Promise<void> {
-  const rel = String(req.params[0] ?? '').trim();
-  const absPath = resolvePublicUploadAbsolutePath(rel);
-  if (!absPath) {
-    res.status(400).type('text/plain').send('Bad request');
-    return;
-  }
-  try {
-    const st = await fs.stat(absPath);
-    if (!st.isFile()) {
-      res.status(404).type('text/plain').send('Not found');
-      return;
-    }
-  } catch {
-    res.status(404).type('text/plain').send('Not found');
-    return;
-  }
-  const { mimeType, isPdfConfirmedByHeader } = await resolveFileMimeType(absPath);
-  res.setHeader('Content-Type', mimeType);
-  if (mimeType.startsWith('image/') || isPdfConfirmedByHeader) {
-    res.setHeader('Content-Disposition', 'inline');
-  }
-  res.setHeader('X-Content-Type-Options', 'nosniff');
-  res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
-  res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
-  res.sendFile(absPath, (err) => {
-    if (err && !res.headersSent) res.status(404).end();
-  });
-}
-
-/**
- * Публичная раздача локального вложения по пути под `/api/messenger/...`, чтобы хватало одного прокси
- * на `/api` в nginx без отдельного `location /uploads/` (см. resolvePublicUrl).
- * Размещено ДО requireAuthSession.
- */
-router.get(/^\/public-uploads\/(.+)$/, (req: Request, res: Response) => {
-  void serveMessengerPublicUpload(req, res);
-});
-router.head(/^\/public-uploads\/(.+)$/, (req: Request, res: Response) => {
-  void serveMessengerPublicUpload(req, res);
-});
-
-function localMessengerPublicUploadUrl(filename: string): string {
-  return `/api/messenger/public-uploads/${filename}`;
-}
 
 /** Multer без обёртки отдаёт 500 при LIMIT_* / fileFilter — отвечаем JSON 400 как в authRoutes. */
 function messengerUploadMiddleware(req: Request, res: Response, next: NextFunction): void {
@@ -233,24 +162,11 @@ router.use(requireAuthSession);
 
 /** GET /api/messenger/uploads/health */
 router.get('/uploads/health', async (_req: Request, res: Response) => {
-  const root = getUploadsRoot();
-  try {
-    await fs.mkdir(root, { recursive: true });
-    await fs.access(root, fsConstants.R_OK | fsConstants.W_OK);
-    const st = await fs.stat(root);
-    if (!st.isDirectory()) {
-      res.status(503).json({ ok: false, storage: 'unavailable', reason: 'uploads_path_not_directory' });
-      return;
-    }
-    if (isSupabaseStorageConfigured()) {
-      res.json({ ok: true, storage: 'supabase', bucket: messengerBucket(), temp_uploads: 'local_writable' });
-      return;
-    }
-    res.json({ ok: true, storage: 'local' });
-  } catch (e) {
-    console.error('[messenger] uploads health check failed:', e);
-    res.status(503).json({ ok: false, storage: 'unavailable', reason: 'uploads_not_writable' });
+  if (!isSupabaseStorageConfigured()) {
+    res.status(503).json({ ok: false, storage: 'unavailable', reason: 'supabase_not_configured' });
+    return;
   }
+  res.json({ ok: true, storage: 'supabase', bucket: messengerBucket() });
 });
 
 /** POST /api/messenger/studio/song-chat { songId } — чат обсуждения песни (студия). */
@@ -274,69 +190,76 @@ router.post('/studio/song-chat', async (req: Request, res: Response) => {
   }
 });
 
-/** При ошибке Supabase оставляем файл на диске и отдаём через /api/messenger/public-uploads/… . Отключить строгий режим 500: MESSENGER_UPLOAD_FALLBACK_LOCAL=false */
-function messengerUploadFallbackLocalEnabled(): boolean {
-  const v = String(process.env.MESSENGER_UPLOAD_FALLBACK_LOCAL ?? '').trim().toLowerCase();
-  if (v === 'false' || v === '0' || v === 'no') return false;
-  return true;
-}
-
 /** POST /api/messenger/upload (form-data: file) -> { url, name, size } */
 router.post('/upload', messengerUploadMiddleware, async (req: Request, res: Response) => {
-  const startedAt = Date.now();
   try {
     const file = (req as Request & { file?: Express.Multer.File }).file;
     if (!file) {
       res.status(400).json({ error: 'File is required' });
       return;
     }
+    if (!file.buffer || !file.buffer.length) {
+      res.status(400).json({ error: 'File is empty' });
+      return;
+    }
+    if (file.size > 20 * 1024 * 1024) {
+      res.status(413).json({ error: 'File too large', maxBytes: 20 * 1024 * 1024 });
+      return;
+    }
+    if (!isSupabaseStorageConfigured()) {
+      res.status(503).json({ error: 'Storage is not configured', code: 'supabase_not_configured' });
+      return;
+    }
     const memberId = (req as AuthReq).authUserId!;
-    let url: string;
-
-    if (isSupabaseStorageConfigured()) {
-      const bucket = messengerBucket();
-      const objectPath = buildMessengerObjectPath(memberId, file.originalname || path.basename(file.path));
-      const localPath = file.path;
+    const { mimeType, extension } = resolveUploadMetadata(file);
+    const bucket = messengerBucket();
+    let objectPath = '';
+    let url: string | null = null;
+    const maxAttempts = 3;
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      objectPath = buildMessengerObjectPath(memberId, extension);
       try {
-        const { publicUrl } = await uploadLocalFileToPublicBucket({
+        const { publicUrl } = await uploadBufferToPublicBucket({
           bucket,
           objectPath,
-          localPath,
-          contentType: file.mimetype || undefined,
+          file: file.buffer,
+          contentType: mimeType,
+          cacheControl: 'public, max-age=31536000, immutable',
+          metadata: {
+            originalName: String(file.originalname || '').slice(0, 255),
+            uploadedBy: String(memberId),
+          },
         });
         url = publicUrl;
-        try {
-          await fs.unlink(localPath);
-        } catch {
-          /* ignore */
-        }
+        break;
       } catch (e) {
+        if (attempt < maxAttempts && isStorageAlreadyExistsError(e)) {
+          continue;
+        }
         const msg = e instanceof Error ? e.message : String(e);
         console.error('[messenger] Supabase upload failed:', msg);
-        if (messengerUploadFallbackLocalEnabled()) {
-          console.warn('[messenger] MESSENGER_UPLOAD_FALLBACK_LOCAL: serving file from disk', localPath);
-          url = localMessengerPublicUploadUrl(file.filename);
-        } else {
-          try {
-            await fs.unlink(localPath);
-          } catch {
-            /* ignore */
-          }
-          res.status(500).json({ error: 'Storage upload failed', code: 'supabase_upload' });
-          return;
-        }
+        res.status(502).json({ error: 'Storage upload failed', code: 'supabase_upload' });
+        return;
       }
-    } else {
-      url = localMessengerPublicUploadUrl(file.filename);
     }
+    if (!url) {
+      res.status(502).json({ error: 'Storage upload failed', code: 'supabase_upload' });
+      return;
+    }
+
+    console.log('[messenger] upload:', {
+      user: memberId,
+      path: objectPath,
+      mimeType,
+      size: file.size,
+    });
 
     res.json({
       url,
-      name: file.originalname,
-      originalName: file.originalname,
-      mimeType: file.mimetype || '',
+      name: file.originalname || (objectPath.split('/').pop() ?? 'file'),
+      objectPath,
+      mimeType,
       size: file.size,
-      upload_ms: Date.now() - startedAt,
     });
   } catch (e) {
     console.error('[messenger] upload handler error:', e);
@@ -989,6 +912,54 @@ router.post(
     }
   },
 );
+
+/** PATCH /api/messenger/messages/:id { content } */
+router.get('/messages/:id/attachment-url', async (req: Request, res: Response) => {
+  const userId = (req as AuthReq).authUserId!;
+  const msgId = String(req.params.id || '').trim();
+  if (!/^\d+$/.test(msgId)) {
+    res.status(400).json({ error: 'Invalid message id' });
+    return;
+  }
+  try {
+    const item = await svc.getMessageAttachmentForMember(msgId, userId);
+    if (!item) {
+      res.status(404).json({ error: 'Attachment not found' });
+      return;
+    }
+    if (item.objectPath && isSupabaseStorageConfigured()) {
+      try {
+        const ttl = attachmentSignedUrlTtlSec();
+        const { signedUrl } = await createSignedUrlForBucketObject({
+          bucket: messengerBucket(),
+          objectPath: item.objectPath,
+          expiresInSec: ttl,
+        });
+        res.json({
+          url: signedUrl,
+          source: 'signed',
+          expiresAt: new Date(Date.now() + ttl * 1000).toISOString(),
+        });
+        return;
+      } catch (e) {
+        console.warn('[messenger] attachment signed URL failed, fallback to stored url:', e);
+      }
+    }
+    if (!item.url) {
+      res.status(404).json({ error: 'Attachment URL not found' });
+      return;
+    }
+    res.json({ url: item.url, source: 'stored' });
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+    if (message === 'Forbidden') {
+      res.status(403).json({ error: 'Forbidden' });
+      return;
+    }
+    console.error('[messenger] get attachment URL error:', e);
+    res.status(500).json({ error: 'Failed to load attachment URL' });
+  }
+});
 
 /** PATCH /api/messenger/messages/:id { content } */
 router.patch('/messages/:id', async (req: Request, res: Response) => {

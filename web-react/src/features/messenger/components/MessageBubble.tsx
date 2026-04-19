@@ -1,7 +1,7 @@
 import { memo, useState, useRef, useMemo, useEffect, useCallback } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useChatStore } from '../chatStore';
-import type { MessageWithSender } from '../api/messengerApi';
+import { fetchMessageAttachmentUrl, type MessageWithSender } from '../api/messengerApi';
 import { apiErrorMessage, approveAccessRequest, rejectAccessRequest } from '../../admin/api';
 import { IoCheckmark, IoCheckmarkDone } from 'react-icons/io5';
 import { LuDownload, LuFileText, LuLoader, LuX } from 'react-icons/lu';
@@ -490,6 +490,34 @@ function MessageBubbleInner({
 
   const payloadType = message.payload_type ?? 'text';
   const payload = (message.payload ?? {}) as Record<string, unknown>;
+  const attachmentRawUrl = String(payload.url ?? '').trim();
+  const attachmentObjectPath = String(payload.objectPath ?? payload.object_path ?? '').trim();
+  const [resolvedAttachmentUrl, setResolvedAttachmentUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fallback = attachmentRawUrl ? (resolvePublicUrl(attachmentRawUrl) ?? attachmentRawUrl) : null;
+    setResolvedAttachmentUrl(fallback);
+    if (
+      (payloadType !== 'image' && payloadType !== 'file') ||
+      !attachmentObjectPath ||
+      !/^\d+$/.test(String(message.id))
+    ) {
+      return;
+    }
+    let cancelled = false;
+    void fetchMessageAttachmentUrl(String(message.id))
+      .then(({ url }) => {
+        if (cancelled || !url) return;
+        const resolved = resolvePublicUrl(url) ?? url;
+        if (resolved) setResolvedAttachmentUrl(resolved);
+      })
+      .catch(() => {
+        // keep fallback URL to avoid breaking current rendering flow
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [attachmentRawUrl, attachmentObjectPath, message.id, payloadType]);
 
   /** Время и галочки в одной строке с текстом (как в Telegram), если нет цитаты и не «особый» контент. */
   const useInlineTextMeta =
@@ -563,8 +591,8 @@ function MessageBubbleInner({
     }
 
     if (payloadType === 'image') {
-      const rawUrl = String(payload.url ?? '').trim();
-      const src = resolvePublicUrl(rawUrl) ?? rawUrl;
+      const rawUrl = attachmentRawUrl;
+      const src = resolvedAttachmentUrl ?? (resolvePublicUrl(rawUrl) ?? rawUrl);
       const caption = String(message.content ?? '').trim();
       const attachmentMime = String(payload.mimeType ?? payload.mimetype ?? '').trim().toLowerCase();
       const attachmentName = String(payload.name ?? payload.filename ?? '').trim().toLowerCase();
@@ -636,8 +664,8 @@ function MessageBubbleInner({
     }
 
     if (payloadType === 'file') {
-      const rawUrl = String(payload.url ?? '').trim();
-      const href = resolvePublicUrl(rawUrl) ?? rawUrl;
+      const rawUrl = attachmentRawUrl;
+      const href = resolvedAttachmentUrl ?? (resolvePublicUrl(rawUrl) ?? rawUrl);
       const name = String(payload.name ?? payload.filename ?? message.content ?? 'Файл').trim() || 'Файл';
       const sizeRaw = Number(payload.size ?? 0);
       const sizeLabel = Number.isFinite(sizeRaw) && sizeRaw > 0 ? formatBytes(sizeRaw) : null;
