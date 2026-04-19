@@ -10,7 +10,6 @@ import path from 'node:path';
 
 import { pool } from './config/db';
 import { initDb } from './config/initDb';
-import { MEMBER_SEED_SQL } from './config/memberSeedSql';
 import { ensurePrayerCycleAnchor } from './config/prayerCycleAnchor';
 import { resolveAuthSession } from './middleware/authSession';
 import { enforceRoleAccess, resolveUserRole } from './middleware/roleAccess';
@@ -140,7 +139,7 @@ app.use((req, res, next) => {
   next();
 });
 
-// User-uploaded files (мессенджер, аватары). Путь: UPLOADS_DIR или ./uploads — том Docker обязателен в проде.
+// Устаревшие локальные файлы: только чтение, если каталог не пуст (новые загрузки — Supabase Storage).
 ensureUploadsDirs();
 const uploadsAbs = getUploadsRoot();
 console.log(`[uploads] serving static files from: ${uploadsAbs}`);
@@ -245,15 +244,6 @@ async function start(): Promise<void> {
       void ensureAccessRequestsMessengerChannel().catch((e) =>
         console.warn('[messenger] ensureAccessRequestsMessengerChannel on boot:', e),
       );
-      const cnt = await pool.query('SELECT COUNT(*)::int AS c FROM members');
-      const n = Number(cnt.rows[0]?.c ?? 0);
-      if (n === 0) {
-        await pool.query(MEMBER_SEED_SQL);
-        console.log(
-          '[db] Таблица members была пуста — применён базовый список участников (54 записи).',
-        );
-        await ensurePrayerCycleAnchor(pool);
-      }
     }
   }
   const server = http.createServer(app);

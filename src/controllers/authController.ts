@@ -1,3 +1,4 @@
+import path from 'node:path';
 import { Request, Response } from 'express';
 import { appendClearAuthCookie, appendSetAuthCookie } from '../config/authCookie';
 import {
@@ -19,6 +20,13 @@ import { markAccessRequestMessengerResolved } from '../services/messengerService
 import { getCoordinatorMemberIdsWithPush } from '../services/fcmSubscriptionService';
 import { sendPush } from '../services/pushService';
 import { MemberNameDuplicateError } from '../services/userService';
+import {
+  buildUserMediaAvatarPath,
+  getSupabaseStorageMissingEnv,
+  isSupabaseStorageConfigured,
+  uploadBufferToPublicBucket,
+  userMediaBucket,
+} from '../lib/supabaseStorage';
 
 type AuthRequest = Request & {
   authUserId?: number;
@@ -464,7 +472,46 @@ export async function uploadAvatarHandler(req: Request, res: Response): Promise<
     res.status(400).json({ error: 'File is required' });
     return;
   }
-  const avatarUrl = `/uploads/avatars/${file.filename}`;
+  const buf = file.buffer;
+  if (!buf || !buf.length) {
+    res.status(400).json({ error: 'File is empty' });
+    return;
+  }
+  const ext = path.extname(file.originalname || '') || '';
+  const safeExt = ext && ext.length <= 10 ? ext.toLowerCase() : '';
+  const mimeType = String(file.mimetype || 'image/jpeg').toLowerCase();
+
+  if (!isSupabaseStorageConfigured()) {
+    res.status(503).json({
+      error: 'Хранилище файлов не настроено (нужны SUPABASE_URL и SUPABASE_SERVICE_ROLE_KEY)',
+      code: 'supabase_not_configured',
+      missingEnv: getSupabaseStorageMissingEnv(),
+    });
+    return;
+  }
+
+  let avatarUrl: string;
+  try {
+    const objectPath = buildUserMediaAvatarPath(authReq.authUserId, safeExt);
+    const { publicUrl } = await uploadBufferToPublicBucket({
+      bucket: userMediaBucket(),
+      objectPath,
+      file: buf,
+      contentType: mimeType,
+      cacheControl: 'public, max-age=31536000, immutable',
+      metadata: {
+        kind: 'avatar',
+        uploadedBy: String(authReq.authUserId),
+      },
+    });
+    avatarUrl = publicUrl;
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error('[auth] avatar upload failed:', msg);
+    res.status(502).json({ error: 'Не удалось сохранить файл в хранилище', code: 'storage_upload' });
+    return;
+  }
+
   try {
     const user = await updateAuthUserAvatar(authReq.authUserId, avatarUrl);
     notifyRealtime(['me', 'members']);

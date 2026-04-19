@@ -1,3 +1,4 @@
+import path from 'node:path';
 import type { Request, Response } from 'express';
 import {
   addComment,
@@ -12,6 +13,13 @@ import {
   updatePostCaptionAsOwner,
   type MediaType,
 } from '../services/profileService';
+import {
+  buildUserMediaProfilePath,
+  getSupabaseStorageMissingEnv,
+  isSupabaseStorageConfigured,
+  uploadBufferToPublicBucket,
+  userMediaBucket,
+} from '../lib/supabaseStorage';
 
 type AuthReq = Request & { authUserId?: number };
 
@@ -96,11 +104,55 @@ export async function postCreatePost(req: Request, res: Response): Promise<void>
   const files = (req as Request & { files?: Express.Multer.File[] }).files;
   try {
     if (Array.isArray(files) && files.length > 0) {
-      const uploads = files.map((f, idx) => ({
-        url: `/uploads/profile-media/${f.filename}`,
-        type: inferMediaTypeFromMimetype(f.mimetype),
-        order: idx,
-      }));
+      if (!isSupabaseStorageConfigured()) {
+        res.status(503).json({
+          error: 'Хранилище файлов не настроено (нужны SUPABASE_URL и SUPABASE_SERVICE_ROLE_KEY)',
+          code: 'supabase_not_configured',
+          missingEnv: getSupabaseStorageMissingEnv(),
+        });
+        return;
+      }
+      const uploads: { url: string; type: MediaType; order: number }[] = [];
+      for (let idx = 0; idx < files.length; idx += 1) {
+        const f = files[idx];
+        const buf = f.buffer;
+        if (!buf || !buf.length) {
+          res.status(400).json({ error: 'Пустой файл в загрузке' });
+          return;
+        }
+        const ext = path.extname(f.originalname || '') || '';
+        const safeExt = ext && ext.length <= 12 ? ext.toLowerCase() : '';
+        const mime = String(f.mimetype || 'application/octet-stream').toLowerCase();
+        let url: string;
+        try {
+          const objectPath = buildUserMediaProfilePath(authUserId, safeExt);
+          const { publicUrl } = await uploadBufferToPublicBucket({
+            bucket: userMediaBucket(),
+            objectPath,
+            file: buf,
+            contentType: mime,
+            cacheControl: 'public, max-age=31536000, immutable',
+            metadata: {
+              kind: 'profile-media',
+              uploadedBy: String(authUserId),
+            },
+          });
+          url = publicUrl;
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e);
+          console.error('[profile] media upload failed:', msg);
+          res.status(502).json({
+            error: 'Не удалось сохранить файл в хранилище',
+            code: 'storage_upload',
+          });
+          return;
+        }
+        uploads.push({
+          url,
+          type: inferMediaTypeFromMimetype(f.mimetype),
+          order: idx,
+        });
+      }
       const created = await createPost({ kind: 'uploads', memberId: authUserId, caption, uploads });
       res.status(201).json({ id: created.id, media: uploads });
       return;

@@ -1,9 +1,6 @@
 import type { NextFunction, Request, Response } from 'express';
 import multer from 'multer';
 import path from 'node:path';
-import fs from 'node:fs';
-import { v4 as uuidv4 } from 'uuid';
-import { getEventPostersDir } from '../config/uploadsRoot';
 
 const IMAGE_EXTENSIONS = new Set([
   '.jpg',
@@ -35,25 +32,8 @@ function posterFileFilter(
   cb(new Error('Разрешены только изображения (JPEG, PNG, WebP и др.)'));
 }
 
-const storage = multer.diskStorage({
-  destination: (_req, _file, cb) => {
-    const dir = getEventPostersDir();
-    try {
-      fs.mkdirSync(dir, { recursive: true });
-    } catch (e) {
-      console.warn('[uploads] cannot create event-posters dir:', dir, e);
-    }
-    cb(null, dir);
-  },
-  filename: (_req, file, cb) => {
-    const ext = path.extname(file.originalname || '') || '';
-    const safeExt = ext && ext.length <= 12 ? ext : '';
-    cb(null, `${uuidv4()}${safeExt}`);
-  },
-});
-
 const upload = multer({
-  storage,
+  storage: multer.memoryStorage(),
   limits: { fileSize: 8 * 1024 * 1024 }, // 8MB
   fileFilter: posterFileFilter,
 });
@@ -77,4 +57,3 @@ export function eventPosterUploadMiddleware(req: Request, res: Response, next: N
     res.status(400).json({ error: message });
   });
 }
-

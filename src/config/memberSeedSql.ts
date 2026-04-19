@@ -1,5 +1,7 @@
 /**
- * Идемпотентная вставка базового списка участников (по lower(trim(name))).
+ * Идемпотентная вставка базового списка участников.
+ * Учитывает ту же семантику, что findMemberIdConflictingName: «Фамилия Имя» в сиде
+ * не дублирует карточку с first_name/last_name и name «Имя Фамилия».
  */
 export const MEMBER_SEED_SQL = `
 WITH source_members(full_name) AS (
@@ -58,13 +60,66 @@ WITH source_members(full_name) AS (
     ('Шкирская Надежда'),
     ('Шкирский Геннадий'),
     ('Юрьева Надежда')
+),
+src AS (
+  SELECT
+    full_name,
+    regexp_split_to_array(trim(full_name), '[[:space:]]+') AS words
+  FROM source_members
 )
 INSERT INTO members (name, prayer_request, in_prayer_cycle)
 SELECT s.full_name, NULL, TRUE
-FROM source_members s
+FROM src s
 WHERE NOT EXISTS (
   SELECT 1
   FROM members m
-  WHERE lower(trim(m.name)) = lower(trim(s.full_name))
+  WHERE
+    lower(regexp_replace(trim(coalesce(m.name, '')), '[[:space:]]+', ' ', 'g'))
+      = lower(regexp_replace(trim(s.full_name), '[[:space:]]+', ' ', 'g'))
+    OR (
+      cardinality(s.words) = 2
+      AND (
+        (
+          nullif(trim(coalesce(m.first_name, '')), '') IS NOT NULL
+          AND nullif(trim(coalesce(m.last_name, '')), '') IS NOT NULL
+          AND lower(trim(m.first_name)) = lower(s.words[2])
+          AND lower(trim(m.last_name)) = lower(s.words[1])
+        )
+        OR (
+          nullif(trim(coalesce(m.first_name, '')), '') IS NULL
+          AND nullif(trim(coalesce(m.last_name, '')), '') IS NULL
+          AND lower(regexp_replace(trim(coalesce(m.name, '')), '[[:space:]]+', ' ', 'g')) IN (
+            lower(regexp_replace(trim(s.full_name), '[[:space:]]+', ' ', 'g')),
+            lower(regexp_replace(trim(s.words[2] || ' ' || s.words[1]), '[[:space:]]+', ' ', 'g'))
+          )
+        )
+      )
+    )
+    OR (
+      cardinality(s.words) >= 3
+      AND (
+        (
+          nullif(trim(coalesce(m.first_name, '')), '') IS NOT NULL
+          AND nullif(trim(coalesce(m.last_name, '')), '') IS NOT NULL
+          AND lower(trim(m.first_name)) = lower(
+            array_to_string(s.words[2:array_length(s.words, 1)], ' ')
+          )
+          AND lower(trim(m.last_name)) = lower(s.words[1])
+        )
+        OR (
+          nullif(trim(coalesce(m.first_name, '')), '') IS NULL
+          AND nullif(trim(coalesce(m.last_name, '')), '') IS NULL
+          AND lower(regexp_replace(trim(coalesce(m.name, '')), '[[:space:]]+', ' ', 'g')) IN (
+            lower(regexp_replace(trim(s.full_name), '[[:space:]]+', ' ', 'g')),
+            lower(regexp_replace(trim(
+              array_to_string(s.words[2:array_length(s.words, 1)], ' ') || ' ' || s.words[1]
+            ), '[[:space:]]+', ' ', 'g')),
+            lower(regexp_replace(trim(
+              s.words[1] || ' ' || array_to_string(s.words[2:array_length(s.words, 1)], ' ')
+            ), '[[:space:]]+', ' ', 'g'))
+          )
+        )
+      )
+    )
 );
 `;

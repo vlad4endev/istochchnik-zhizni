@@ -16,8 +16,6 @@ import {
 import { requireAuthSession } from '../middleware/authSession';
 import multer from 'multer';
 import path from 'node:path';
-import fs from 'node:fs';
-import { getAvatarsDir } from '../config/uploadsRoot';
 
 const router = Router();
 
@@ -52,26 +50,8 @@ function avatarFileFilter(
   cb(new Error('Разрешены только изображения (JPEG, PNG, WebP и др.)'));
 }
 
-const storage = multer.diskStorage({
-  destination: (_req, _file, cb) => {
-    const dir = getAvatarsDir();
-    try {
-      fs.mkdirSync(dir, { recursive: true });
-    } catch (e) {
-      console.warn('[uploads] cannot create avatars dir:', dir, e);
-    }
-    cb(null, dir);
-  },
-  filename: (req, file, cb) => {
-    const userId = (req as unknown as { authUserId?: number }).authUserId ?? 'anon';
-    const ext = path.extname(file.originalname || '') || '';
-    const safeExt = ext && ext.length <= 10 ? ext : '';
-    cb(null, `u${userId}-${Date.now()}${safeExt}`);
-  },
-});
-
 const upload = multer({
-  storage,
+  storage: multer.memoryStorage(),
   limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
   fileFilter: avatarFileFilter,
 });

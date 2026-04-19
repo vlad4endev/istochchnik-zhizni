@@ -1,5 +1,6 @@
 import { pool } from './db';
 import { MEMBER_SEED_SQL } from './memberSeedSql';
+import { mergeDuplicateMembersBootPatchIfNeeded } from '../services/memberMergeService';
 
 const INIT_SQL = `
 CREATE TABLE IF NOT EXISTS members (
@@ -1608,4 +1609,5 @@ export async function initDb(): Promise<void> {
   }
   await pool.query(INIT_SQL);
   await pool.query(MEMBER_SEED_SQL);
+  await mergeDuplicateMembersBootPatchIfNeeded();
 }

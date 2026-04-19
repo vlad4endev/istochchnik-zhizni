@@ -1,29 +1,8 @@
 import type { NextFunction, Request, Response } from 'express';
 import multer from 'multer';
-import path from 'node:path';
-import fs from 'node:fs';
-import { v4 as uuidv4 } from 'uuid';
-import { getProfileMediaDir } from '../config/uploadsRoot';
-
-const storage = multer.diskStorage({
-  destination: (_req, _file, cb) => {
-    const dir = getProfileMediaDir();
-    try {
-      fs.mkdirSync(dir, { recursive: true });
-    } catch (e) {
-      console.warn('[uploads] cannot create profile-media dir:', dir, e);
-    }
-    cb(null, dir);
-  },
-  filename: (_req, file, cb) => {
-    const ext = path.extname(file.originalname || '') || '';
-    const safeExt = ext && ext.length <= 12 ? ext : '';
-    cb(null, `${uuidv4()}${safeExt}`);
-  },
-});
 
 const upload = multer({
-  storage,
+  storage: multer.memoryStorage(),
   limits: {
     fileSize: 25 * 1024 * 1024, // 25MB per file (images/videos)
     files: 10,

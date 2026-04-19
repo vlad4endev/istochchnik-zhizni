@@ -104,3 +104,27 @@ export function buildMessengerObjectPath(memberId: number, extension: string): s
   const id = randomUUID();
   return `${memberId}/${id}${safeExt}`;
 }
+
+/** Бакет `user-media`: аватары участников. */
+export function buildUserMediaAvatarPath(memberId: number, extension: string): string {
+  const ext = String(extension || '').trim();
+  const safeExt = ext && ext.length <= 12 ? ext.toLowerCase() : '';
+  const id = randomUUID();
+  return `avatars/${memberId}/${id}${safeExt}`;
+}
+
+/** Бакет `user-media`: изображения/видео постов профиля. */
+export function buildUserMediaProfilePath(memberId: number, extension: string): string {
+  const ext = String(extension || '').trim();
+  const safeExt = ext && ext.length <= 12 ? ext.toLowerCase() : '';
+  const id = randomUUID();
+  return `profile-media/${memberId}/${id}${safeExt}`;
+}
+
+/** Бакет `user-media`: афиши событий (админка). */
+export function buildUserMediaEventPosterPath(extension: string): string {
+  const ext = String(extension || '').trim();
+  const safeExt = ext && ext.length <= 12 ? ext.toLowerCase() : '';
+  const id = randomUUID();
+  return `event-posters/${id}${safeExt}`;
+}

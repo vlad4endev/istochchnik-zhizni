@@ -8,24 +8,29 @@ type MemberRow = {
   name: string;
 };
 
-function parseNameParts(row: MemberRow): { fn: string; ln: string } | null {
-  let f = (row.first_name ?? '').trim();
-  let l = (row.last_name ?? '').trim();
+/** Варианты (имя, фамилия) для поиска конфликта — как у findMemberIdConflictingName. */
+function mergeNameVariants(row: MemberRow): { fn: string; ln: string }[] {
+  const f = (row.first_name ?? '').trim();
+  const l = (row.last_name ?? '').trim();
   if (f && l) {
-    return { fn: f, ln: l };
+    return [{ fn: f, ln: l }];
   }
   const raw = (row.name ?? '').trim();
   if (!raw) {
-    return null;
+    return [];
   }
   const parts = raw.split(/\s+/).filter(Boolean);
   if (parts.length >= 3) {
-    return { fn: parts.slice(1).join(' '), ln: parts[0] };
+    return [{ fn: parts.slice(1).join(' '), ln: parts[0] }];
   }
   if (parts.length === 2) {
-    return { fn: parts[0], ln: parts[1] };
+    // «Имя Фамилия» и «Фамилия Имя» в одной строке — оба порядка
+    return [
+      { fn: parts[0], ln: parts[1] },
+      { fn: parts[1], ln: parts[0] },
+    ];
   }
-  return null;
+  return [];
 }
 
 /**
@@ -205,23 +210,45 @@ export async function mergeAllDuplicateMembers(): Promise<{ mergedPairs: number 
     );
     const list = result.rows as MemberRow[];
 
-    for (const m of list) {
-      const parsed = parseNameParts(m);
-      if (!parsed || !parsed.fn || !parsed.ln) {
-        continue;
+    outer: for (const m of list) {
+      const variants = mergeNameVariants(m);
+      for (const parsed of variants) {
+        if (!parsed.fn || !parsed.ln) {
+          continue;
+        }
+        const conflictId = await findMemberIdConflictingName(parsed.fn, parsed.ln, m.id);
+        if (conflictId == null) {
+          continue;
+        }
+        const keepId = Math.min(m.id, conflictId);
+        const dropId = Math.max(m.id, conflictId);
+        await mergeMemberInto(keepId, dropId);
+        mergedPairs += 1;
+        progress = true;
+        break outer;
       }
-      const conflictId = await findMemberIdConflictingName(parsed.fn, parsed.ln, m.id);
-      if (conflictId == null) {
-        continue;
-      }
-      const keepId = Math.min(m.id, conflictId);
-      const dropId = Math.max(m.id, conflictId);
-      await mergeMemberInto(keepId, dropId);
-      mergedPairs += 1;
-      progress = true;
-      break;
     }
   }
 
   return { mergedPairs };
+}
+
+const BOOT_MERGE_PATCH_ID = 'members_merge_seed_duplicates_2026_04_19';
+
+/** Один раз после обновления: сливает пары «сид + приложение» без повторного прохода на каждом старте. */
+export async function mergeDuplicateMembersBootPatchIfNeeded(): Promise<void> {
+  if (!pool) {
+    return;
+  }
+  const r = await pool.query(`SELECT 1 FROM app_data_patches WHERE patch_id = $1`, [
+    BOOT_MERGE_PATCH_ID,
+  ]);
+  if (r.rowCount) {
+    return;
+  }
+  const { mergedPairs } = await mergeAllDuplicateMembers();
+  await pool.query(`INSERT INTO app_data_patches (patch_id) VALUES ($1)`, [BOOT_MERGE_PATCH_ID]);
+  if (mergedPairs > 0) {
+    console.log(`[db] Объединено дубликатов участников (патч после сида): ${mergedPairs} пар.`);
+  }
 }

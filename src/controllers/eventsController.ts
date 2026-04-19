@@ -1,3 +1,4 @@
+import path from 'node:path';
 import type { Request, Response } from 'express';
 
 function pgErrorMeta(err: unknown): {
@@ -38,6 +39,13 @@ import {
   updateChurchEvent,
 } from '../services/eventsService';
 import { notifyRealtime } from '../realtime/notify';
+import {
+  buildUserMediaEventPosterPath,
+  getSupabaseStorageMissingEnv,
+  isSupabaseStorageConfigured,
+  uploadBufferToPublicBucket,
+  userMediaBucket,
+} from '../lib/supabaseStorage';
 
 type AuthReq = Request & { authUserRole?: import('../types/appRole').AppRole };
 
@@ -141,8 +149,38 @@ export async function uploadEventPoster(req: Request, res: Response): Promise<vo
     res.status(400).json({ error: 'File is required' });
     return;
   }
-  // Express serves static files from /uploads -> path is relative public URL.
-  res.json({ poster_url: `/uploads/event-posters/${file.filename}` });
+  const buf = file.buffer;
+  if (!buf || !buf.length) {
+    res.status(400).json({ error: 'File is empty' });
+    return;
+  }
+  if (!isSupabaseStorageConfigured()) {
+    res.status(503).json({
+      error: 'Хранилище файлов не настроено (нужны SUPABASE_URL и SUPABASE_SERVICE_ROLE_KEY)',
+      code: 'supabase_not_configured',
+      missingEnv: getSupabaseStorageMissingEnv(),
+    });
+    return;
+  }
+  const ext = path.extname(file.originalname || '') || '';
+  const safeExt = ext && ext.length <= 12 ? ext.toLowerCase() : '';
+  const mimeType = String(file.mimetype || 'image/jpeg').toLowerCase();
+  try {
+    const objectPath = buildUserMediaEventPosterPath(safeExt);
+    const { publicUrl } = await uploadBufferToPublicBucket({
+      bucket: userMediaBucket(),
+      objectPath,
+      file: buf,
+      contentType: mimeType,
+      cacheControl: 'public, max-age=31536000, immutable',
+      metadata: { kind: 'event-poster' },
+    });
+    res.json({ poster_url: publicUrl });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error('[events] poster upload failed:', msg);
+    res.status(502).json({ error: 'Не удалось сохранить файл в хранилище', code: 'storage_upload' });
+  }
 }
 
 export async function getActiveEvents(_req: Request, res: Response): Promise<void> {
