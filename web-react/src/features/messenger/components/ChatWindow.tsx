@@ -1,4 +1,5 @@
 import { useEffect, useRef, useMemo, useCallback, useState, useLayoutEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { useNavigate } from 'react-router-dom';
 import { useChatStore, EMPTY_ARRAY, isDraftPrivateConversationId } from '../chatStore';
@@ -611,32 +612,33 @@ export function ChatWindow({
         </div>
       </header>
 
-      {!isDraft && pinnedMessages.length > 0 ? (
-        <div className="shrink-0 border-b border-amber-200/80 bg-amber-50/90 px-3 py-2">
-          <p className="text-[10px] font-extrabold uppercase tracking-wider text-amber-900/80">Закреплено</p>
-          <div className="mt-1 space-y-1">
-            {pinnedMessages.map((pm) => (
-              <button
-                key={pm.id}
-                type="button"
-                onClick={() => jumpToMessage(String(pm.id))}
-                className="block w-full truncate rounded-lg px-2 py-1 text-left text-[13px] font-semibold text-stone-800 transition hover:bg-amber-100/80"
-              >
-                {String(pm.content || '').trim().slice(0, 100) || 'Сообщение'}
-              </button>
-            ))}
+      <div className="tg-chat-window__body flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+        {!isDraft && pinnedMessages.length > 0 ? (
+          <div className="shrink-0 border-b border-amber-200/80 bg-amber-50/90 px-3 py-2">
+            <p className="text-[10px] font-extrabold uppercase tracking-wider text-amber-900/80">Закреплено</p>
+            <div className="mt-1 space-y-1">
+              {pinnedMessages.map((pm) => (
+                <button
+                  key={pm.id}
+                  type="button"
+                  onClick={() => jumpToMessage(String(pm.id))}
+                  className="block w-full truncate rounded-lg px-2 py-1 text-left text-[13px] font-semibold text-stone-800 transition hover:bg-amber-100/80"
+                >
+                  {String(pm.content || '').trim().slice(0, 100) || 'Сообщение'}
+                </button>
+              ))}
+            </div>
           </div>
-        </div>
-      ) : null}
+        ) : null}
 
-      <div
-        className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto bg-transparent px-3 py-3 sm:gap-3 sm:p-4"
-        ref={scrollRef}
-        onScroll={handleScroll}
-        role="log"
-        aria-live="polite"
-        aria-relevant="additions"
-      >
+        <div
+          className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto bg-transparent px-3 py-3 sm:gap-3 sm:p-4"
+          ref={scrollRef}
+          onScroll={handleScroll}
+          role="log"
+          aria-live="polite"
+          aria-relevant="additions"
+        >
         {hasMore ? (
           <div className="flex justify-center">
             <div className="rounded-full bg-white/90 px-3 py-1 text-[11px] font-semibold text-stone-600 shadow-sm ring-1 ring-stone-200/50">
@@ -721,9 +723,10 @@ export function ChatWindow({
             })}
           </div>
         )}
+        </div>
       </div>
 
-      <div className="sticky bottom-0 z-20 w-full min-w-0 max-w-full shrink-0 border-t bg-white p-3">
+      <div className="tg-chat-window__composer sticky bottom-0 z-20 w-full min-w-0 max-w-full shrink-0 border-t bg-white p-3">
         <ChatInput
           conversationId={conversationId}
           sendTypingStart={sendTypingStart}
@@ -734,9 +737,12 @@ export function ChatWindow({
         />
       </div>
 
-      {showSearch ? (
-        <SearchChat conversationId={conversationId} onClose={() => setShowSearch(false)} />
-      ) : null}
+      {showSearch && typeof document !== 'undefined'
+        ? createPortal(
+            <SearchChat conversationId={conversationId} onClose={() => setShowSearch(false)} />,
+            document.body,
+          )
+        : null}
 
       {!isDraft ? (
         <ChatMediaGallery

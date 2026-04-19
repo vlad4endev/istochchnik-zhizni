@@ -446,6 +446,19 @@
 }
 
 /* Chat Window Layout */
+.tg-chat-window__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.tg-chat-window__composer {
+  flex-shrink: 0;
+}
+
 .tg-chat-window {
   flex: 1;
   display: flex;
@@ -1373,10 +1386,16 @@
 
 /* Mobile Adjustments */
 @media (max-width: 768px) {
+  /* Заполняем область main с учётом нижней навигации — без 100dvh, иначе слой «выше» контента и кажется оверлеем */
+  .tg-messenger-page {
+    overflow: hidden;
+  }
+
   .tg-messenger {
     position: relative;
-    height: 100svh;
-    height: 100dvh;
+    flex: 1 1 auto;
+    min-height: 0;
+    width: 100%;
     overflow: hidden;
   }
 
@@ -1485,7 +1504,7 @@
       padding-right: env(safe-area-inset-right, 0px);
     }
 
-    html[data-chat-open="1"] .tg-main--visible .tg-chat-window > .shrink-0:last-of-type {
+    html[data-chat-open="1"] .tg-main--visible .tg-chat-window > .tg-chat-window__composer {
       /* Safe-area слева/справа только на корне чата; здесь оставляем как у Tailwind `p-3` */
       padding-left: 0.75rem;
       padding-right: 0.75rem;
@@ -1575,8 +1594,8 @@
       z-index: 40;
     }
 
-    html[data-chat-open="1"] .tg-main--visible .tg-chat-window > .shrink-0:last-of-type,
-    html[data-chat-open="1"] .tg-chat-window > .shrink-0:last-of-type {
+    html[data-chat-open="1"] .tg-main--visible .tg-chat-window > .tg-chat-window__composer,
+    html[data-chat-open="1"] .tg-chat-window > .tg-chat-window__composer {
       position: sticky;
       bottom: 0;
       z-index: 40;

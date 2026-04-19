@@ -1,17 +1,19 @@
 import type { Server } from 'node:http';
 import { existsSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
-import { createClient, type RedisClientType } from 'redis';
+import Redis from 'ioredis';
 import { WebSocketServer, WebSocket } from 'ws';
 
 import { resolveSessionByToken } from '../services/authService';
 import { isMemberInConversation } from '../services/messengerService';
 import type { WsMessengerEvent } from '../types/messenger';
 
-// ─── Redis pub/sub (горизонтальное масштабирование, без Socket.io) ──
+// ─── Redis pub/sub (ioredis, горизонтальное масштабирование, без Socket.io) ──
 // Проект использует пакет `ws`, а не socket.io — @socket.io/redis-adapter сюда не подключается.
 
 const FANOUT_CHANNEL = 'realtime:fanout';
+/** Адресная доставка пользователю (все инстансы подписаны; origin отсекает эхо на том же процессе). */
+const CHAT_EVENTS_CHANNEL = 'chat:events';
 const INSTANCE_ID = randomUUID();
 
 /** Один origin для всех publishFanout в процессе (подписчики игнорируют свои же сообщения). */
@@ -59,8 +61,8 @@ function rewriteLocalRedisUrlIfInsideDocker(url: string): string {
   }
 }
 
-let pubClient: RedisClientType | null = null;
-let subClient: RedisClientType | null = null;
+let pubClient: Redis | null = null;
+let subClient: Redis | null = null;
 let redisFanoutEnabled = false;
 
 function makeThrottledRedisErrorLog(role: 'pub' | 'sub'): (err: unknown) => void {
@@ -81,19 +83,34 @@ function makeThrottledRedisErrorLog(role: 'pub' | 'sub'): (err: unknown) => void
 type FanoutPayload =
   | { kind: 'room'; conversationId: string; event: WsMessengerEvent; excludeMemberId?: number }
   | { kind: 'roomAll'; conversationId: string; event: WsMessengerEvent }
-  | { kind: 'member'; memberId: number; event: WsMessengerEvent }
   | { kind: 'presence'; event: WsMessengerEvent }
   | { kind: 'broadcast'; payload: unknown }
   | { kind: 'ensureRoom'; memberId: number; conversationId: string };
 
 type FanoutEnvelope = { origin: string; payload: FanoutPayload };
 
+function isRedisPubReady(): boolean {
+  return pubClient != null && pubClient.status === 'ready';
+}
+
 function publishFanout(payload: FanoutPayload): void {
-  if (!redisFanoutEnabled || !pubClient?.isOpen) return;
+  if (!redisFanoutEnabled || !isRedisPubReady() || !pubClient) return;
   const envelope: FanoutEnvelope = { origin: INSTANCE_ID, payload };
   void pubClient
     .publish(FANOUT_CHANNEL, JSON.stringify(envelope))
     .catch((err) => console.error('[realtime] Redis publish failed:', err));
+}
+
+/**
+ * Публикация события одному пользователю на все инстансы API.
+ * На удалённых процессах подписчик шлёт только локальным сокетам этого userId.
+ */
+export function publishChatUserEvent(userId: number, message: string): void {
+  if (!redisFanoutEnabled || !isRedisPubReady() || !pubClient) return;
+  const body = JSON.stringify({ userId, message, origin: INSTANCE_ID });
+  void pubClient
+    .publish(CHAT_EVENTS_CHANNEL, body)
+    .catch((err) => console.error('[realtime] Redis chat:events publish failed:', err));
 }
 
 // ─── Client tracking ─────────────────────────────────────────
@@ -531,9 +548,6 @@ function handleRemoteFanout(raw: string): void {
     case 'roomAll':
       deliverToLocalRoomAll(p.conversationId, p.event);
       break;
-    case 'member':
-      deliverToLocalMember(p.memberId, p.event);
-      break;
     case 'presence':
       deliverLocalPresence(p.event);
       break;
@@ -548,13 +562,36 @@ function handleRemoteFanout(raw: string): void {
   }
 }
 
-function buildRedisSocketOpts(): { reconnectStrategy(retries: number): false | number } {
-  return {
-    reconnectStrategy(retries: number): false | number {
-      if (retries > 6) return false;
+function createRedisClient(role: 'pub' | 'sub', redisUrl: string): Redis {
+  return new Redis(redisUrl, {
+    connectionName: `realtime-ws-${role}`,
+    maxRetriesPerRequest: null,
+    lazyConnect: true,
+    retryStrategy(retries: number): number | null {
+      if (retries > 6) return null;
       return Math.min(retries * 400, 2500);
     },
-  };
+  });
+}
+
+function handleChatEventsMessage(raw: string): void {
+  let parsed: { userId?: unknown; message?: unknown; origin?: unknown };
+  try {
+    parsed = JSON.parse(raw) as { userId?: unknown; message?: unknown; origin?: unknown };
+  } catch {
+    return;
+  }
+  if (typeof parsed.origin === 'string' && parsed.origin === INSTANCE_ID) {
+    return;
+  }
+  const userId = typeof parsed.userId === 'number' ? parsed.userId : Number(parsed.userId);
+  if (!Number.isFinite(userId)) return;
+  if (typeof parsed.message !== 'string') return;
+  const memberClients = clientsByMember.get(userId);
+  if (!memberClients) return;
+  for (const client of memberClients) {
+    safeSend(client.ws, parsed.message);
+  }
 }
 
 /**
@@ -573,28 +610,28 @@ export async function initMessengerFanoutPublisherOnly(): Promise<void> {
     return;
   }
 
-  let redisUrl = rewriteLocalRedisUrlIfInsideDocker(resolveRedisUrl());
+  const redisUrl = rewriteLocalRedisUrlIfInsideDocker(resolveRedisUrl());
   if (process.env.REDIS_REALTIME_ENABLED === 'true' && !(process.env.REDIS_URL?.trim())) {
     console.warn(
       '[realtime] REDIS_REALTIME_ENABLED=true, но REDIS_URL пуст — подключаемся к redis://127.0.0.1:6379.',
     );
   }
 
-  const pub = createClient({ url: redisUrl, socket: buildRedisSocketOpts() });
+  const pub = createRedisClient('pub', redisUrl);
   pub.on('error', makeThrottledRedisErrorLog('pub'));
 
   try {
     await pub.connect();
-    pubClient = pub as RedisClientType;
+    pubClient = pub;
     redisFanoutEnabled = true;
     console.log(
-      `[realtime] Redis publisher OK (fan-out → messenger) → ${FANOUT_CHANNEL} (${redisUrl}) instance=${INSTANCE_ID.slice(0, 8)}…`,
+      `[realtime] Redis publisher OK (ioredis) → ${FANOUT_CHANNEL}, ${CHAT_EVENTS_CHANNEL} (${redisUrl}) instance=${INSTANCE_ID.slice(0, 8)}…`,
     );
   } catch (e) {
     console.error('[realtime] Redis publisher connect failed:', e);
     redisFanoutEnabled = false;
     pub.removeAllListeners('error');
-    await pub.disconnect().catch(() => {});
+    pub.disconnect();
     pubClient = null;
   }
 }
@@ -616,7 +653,7 @@ export async function initRealtimeRedis(): Promise<void> {
     return;
   }
 
-  let redisUrl = rewriteLocalRedisUrlIfInsideDocker(resolveRedisUrl());
+  const redisUrl = rewriteLocalRedisUrlIfInsideDocker(resolveRedisUrl());
   if (process.env.REDIS_REALTIME_ENABLED === 'true' && !(process.env.REDIS_URL?.trim())) {
     console.warn(
       '[realtime] REDIS_REALTIME_ENABLED=true, но REDIS_URL пуст — подключаемся к redis://127.0.0.1:6379. ' +
@@ -624,32 +661,48 @@ export async function initRealtimeRedis(): Promise<void> {
     );
   }
 
-  const socketOpts = buildRedisSocketOpts();
+  if (pubClient) {
+    pubClient.removeAllListeners('error');
+    pubClient.disconnect();
+    pubClient = null;
+  }
+  if (subClient) {
+    subClient.removeAllListeners('error');
+    subClient.removeAllListeners('message');
+    subClient.disconnect();
+    subClient = null;
+  }
 
-  const pub = createClient({ url: redisUrl, socket: socketOpts });
-  const sub = createClient({ url: redisUrl, socket: socketOpts });
+  const pub = createRedisClient('pub', redisUrl);
+  const sub = createRedisClient('sub', redisUrl);
   pub.on('error', makeThrottledRedisErrorLog('pub'));
   sub.on('error', makeThrottledRedisErrorLog('sub'));
 
   try {
     await pub.connect();
     await sub.connect();
-    await sub.subscribe(FANOUT_CHANNEL, (message) => {
-      handleRemoteFanout(message);
+    await sub.subscribe(FANOUT_CHANNEL, CHAT_EVENTS_CHANNEL);
+    sub.on('message', (channel: string, message: string) => {
+      if (channel === FANOUT_CHANNEL) {
+        handleRemoteFanout(message);
+      } else if (channel === CHAT_EVENTS_CHANNEL) {
+        handleChatEventsMessage(message);
+      }
     });
-    pubClient = pub as RedisClientType;
-    subClient = sub as RedisClientType;
+    pubClient = pub;
+    subClient = sub;
     redisFanoutEnabled = true;
     console.log(
-      `[realtime] Redis pub/sub OK → ${FANOUT_CHANNEL} (${redisUrl}) instance=${INSTANCE_ID.slice(0, 8)}…`,
+      `[realtime] Redis pub/sub OK (ioredis) → ${FANOUT_CHANNEL}, ${CHAT_EVENTS_CHANNEL} (${redisUrl}) instance=${INSTANCE_ID.slice(0, 8)}…`,
     );
   } catch (e) {
     console.error('[realtime] Redis connect/subscribe failed — fan-out local-only:', e);
     redisFanoutEnabled = false;
     pub.removeAllListeners('error');
     sub.removeAllListeners('error');
-    await sub.disconnect().catch(() => {});
-    await pub.disconnect().catch(() => {});
+    sub.removeAllListeners('message');
+    sub.disconnect();
+    pub.disconnect();
     pubClient = null;
     subClient = null;
   }
@@ -683,7 +736,7 @@ export function sendToRoomAll(conversationId: string, event: WsMessengerEvent): 
  */
 export function sendToMember(memberId: number, event: WsMessengerEvent): void {
   deliverToLocalMember(memberId, event);
-  publishFanout({ kind: 'member', memberId, event });
+  publishChatUserEvent(memberId, JSON.stringify(event));
 }
 
 /**
