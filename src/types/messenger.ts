@@ -159,6 +159,16 @@ export interface ConversationMember {
 
 export type WsMessengerEvent =
   | { type: 'msg:new'; conversationId: string; message: MessageWithSender }
+  /** Сервер принял и провалидировал сообщение (до/параллельно INSERT); клиент ставит статус «отправлено». */
+  | { type: 'msg:server_ack'; conversationId: string; clientMsgId: string }
+  /** Получатель подтвердил доставку в свой клиент; ретрансляция отправителю через Redis. */
+  | {
+      type: 'msg:delivered';
+      conversationId: string;
+      messageId: string;
+      clientMsgId: string;
+      deliveredByMemberId?: number;
+    }
   /** Сохранение в БД не удалось после раннего fan-out; клиент снимает pending/temp по client_msg_id. */
   | { type: 'msg:send_failed'; conversationId: string; clientMsgId: string; reason?: string }
   | { type: 'msg:edited'; conversationId: string; messageId: string; content: string; updatedAt: string }

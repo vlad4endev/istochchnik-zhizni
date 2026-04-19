@@ -4,7 +4,7 @@ import { useChatStore } from '../chatStore';
 import { fetchMessageAttachmentUrl, type MessageWithSender } from '../api/messengerApi';
 import { apiErrorMessage, approveAccessRequest, rejectAccessRequest } from '../../admin/api';
 import { IoCheckmark, IoCheckmarkDone } from 'react-icons/io5';
-import { LuDownload, LuFileText, LuLoader, LuX } from 'react-icons/lu';
+import { LuDownload, LuFileText, LuLoader, LuRefreshCw, LuX } from 'react-icons/lu';
 import { resolvePublicUrl } from '../../../lib/resolvePublicUrl';
 import { emitAppToast } from '../../../lib/uiFeedback';
 import { motion, useMotionValue, useTransform, animate } from 'framer-motion';
@@ -430,6 +430,7 @@ function MessageBubbleInner({
   const setReplyingTo = useChatStore((s) => s.setReplyingTo);
   const setEditing = useChatStore((s) => s.setEditing);
   const deleteMessage = useChatStore((s) => s.deleteMessage);
+  const retrySendMessage = useChatStore((s) => s.retrySendMessage);
   const [showActions, setShowActions] = useState(false);
   const [showReactions, setShowReactions] = useState(false);
   /** Плашка реакций над пузырьком (long-press), как в Telegram */
@@ -847,21 +848,73 @@ function MessageBubbleInner({
     isMine ? 'text-white/70' : 'text-gray-400',
   ].join(' ');
 
+  const statusAnnouncerId = `msg-delivery-status-${message.id}`;
+  const liveStatusLabel =
+    !isMine || isDeleted
+      ? null
+      : status === 'sending'
+        ? 'Сообщение отправляется'
+        : status === 'error'
+          ? 'Не удалось отправить сообщение. Нажмите, чтобы повторить.'
+          : isReadByOther
+            ? 'Сообщение прочитано'
+            : status === 'delivered'
+              ? 'Сообщение доставлено'
+              : 'Сообщение отправлено';
+
   const bubbleMeta = (
     <div className={metaRowClass}>
       {message.is_edited ? <span className="msg-edited">ред.</span> : null}
       <span className="tabular-nums">{formattedTime}</span>
       {isMine ? (
-        status === 'sending' || status === 'error' ? (
-          <LuLoader
-            className="h-3.5 w-3.5 shrink-0 animate-spin text-white/85"
-            aria-label={status === 'error' ? 'Ожидание сети' : 'Отправляется'}
-          />
-        ) : isReadByOther ? (
-          <IoCheckmarkDone className="h-3.5 w-3.5 shrink-0 text-sky-200" aria-label="Прочитано" />
-        ) : (
-          <IoCheckmark className="h-3.5 w-3.5 shrink-0 text-white/70" aria-label="Отправлено" />
-        )
+        <>
+          {liveStatusLabel ? (
+            <span id={statusAnnouncerId} className="sr-only" aria-live="polite" aria-atomic="true">
+              {liveStatusLabel}
+            </span>
+          ) : null}
+          {status === 'sending' ? (
+            <LuLoader
+              className="h-3.5 w-3.5 shrink-0 animate-spin text-white/85"
+              aria-hidden
+              focusable={false}
+              aria-describedby={statusAnnouncerId}
+            />
+          ) : status === 'error' ? (
+            <button
+              type="button"
+              className="inline-flex shrink-0 rounded p-0.5 text-white/90 hover:bg-white/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
+              aria-label="Повторить отправку сообщения"
+              aria-describedby={statusAnnouncerId}
+              onClick={() => {
+                void retrySendMessage(String(message.conversation_id), String(message.id));
+              }}
+            >
+              <LuRefreshCw className="h-3.5 w-3.5" aria-hidden />
+            </button>
+          ) : isReadByOther ? (
+            <IoCheckmarkDone
+              className="h-3.5 w-3.5 shrink-0 text-sky-200"
+              aria-hidden
+              focusable={false}
+              aria-describedby={statusAnnouncerId}
+            />
+          ) : status === 'delivered' ? (
+            <IoCheckmarkDone
+              className="h-3.5 w-3.5 shrink-0 text-white/70"
+              aria-hidden
+              focusable={false}
+              aria-describedby={statusAnnouncerId}
+            />
+          ) : (
+            <IoCheckmark
+              className="h-3.5 w-3.5 shrink-0 text-white/70"
+              aria-hidden
+              focusable={false}
+              aria-describedby={statusAnnouncerId}
+            />
+          )}
+        </>
       ) : null}
     </div>
   );

@@ -139,6 +139,40 @@ function handleWsMessage(msg: any): void {
       break;
     }
 
+    case 'msg:server_ack': {
+      const convId =
+        msg.conversationId != null && String(msg.conversationId).trim() !== ''
+          ? String(msg.conversationId)
+          : null;
+      const clientMsgId =
+        msg.clientMsgId != null && String(msg.clientMsgId).trim() !== ''
+          ? String(msg.clientMsgId).trim()
+          : '';
+      if (convId && clientMsgId) {
+        store.handleMsgServerAck(convId, clientMsgId);
+      }
+      break;
+    }
+
+    case 'msg:delivered': {
+      const convId =
+        msg.conversationId != null && String(msg.conversationId).trim() !== ''
+          ? String(msg.conversationId)
+          : null;
+      const clientMsgId =
+        msg.clientMsgId != null && String(msg.clientMsgId).trim() !== ''
+          ? String(msg.clientMsgId).trim()
+          : '';
+      const messageId =
+        msg.messageId != null && String(msg.messageId).trim() !== ''
+          ? String(msg.messageId).trim()
+          : '';
+      if (convId && (clientMsgId || messageId)) {
+        store.handleMsgDelivered(convId, { clientMsgId, messageId });
+      }
+      break;
+    }
+
     case 'msg:edited': {
       const cid =
         msg.conversationId != null && String(msg.conversationId).trim() !== ''

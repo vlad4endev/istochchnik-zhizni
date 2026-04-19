@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from 'react-router-dom';
-import { format, parse } from 'date-fns';
+import { format, isBefore, parse, startOfDay, startOfWeek } from 'date-fns';
 import { ru } from 'date-fns/locale';
 import {
   LuArrowRight,
@@ -181,6 +181,11 @@ function DashboardMain() {
   const role = useAuthStore((s) => s.role);
   const isAdmin = role === 'admin';
   const todayDateKey = useMemo(() => formatCalendarDayKey(now), [now]);
+  /** Понедельник текущей недели (как на сервере) — чтобы кэш сбрасывался при смене недели. */
+  const weekStartKey = useMemo(
+    () => formatCalendarDayKey(startOfWeek(now, { weekStartsOn: 1 })),
+    [now],
+  );
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   const [activeAudioUrl, setActiveAudioUrl] = useState<string | null>(null);
@@ -191,6 +196,19 @@ function DashboardMain() {
     const timer = window.setInterval(() => setNow(new Date()), 30_000);
     return () => window.clearInterval(timer);
   }, []);
+
+  /** Сразу после полуночи обновляем «сегодня» (даты дней рождения и др. блоков). */
+  useEffect(() => {
+    const msUntilMidnight = () => {
+      const t = new Date();
+      const next = new Date(t);
+      next.setDate(next.getDate() + 1);
+      next.setHours(0, 0, 0, 0);
+      return Math.max(0, next.getTime() - t.getTime());
+    };
+    const id = window.setTimeout(() => setNow(new Date()), msUntilMidnight());
+    return () => window.clearTimeout(id);
+  }, [todayDateKey]);
 
   useEffect(() => {
     if (!eventOpen) return;
@@ -268,9 +286,11 @@ function DashboardMain() {
     staleTime: 60_000,
   });
   const birthdaysQ = useQuery({
-    queryKey: ['calendar', 'birthdays', 'week'],
+    queryKey: ['calendar', 'birthdays', 'week', weekStartKey, todayDateKey],
     queryFn: getWeekBirthdays,
-    staleTime: 300_000,
+    /** Дни рождения зависят от «сегодня» — не держим устаревший список в кэше. */
+    staleTime: 0,
+    refetchInterval: 60_000,
   });
   const collectionClaimsQ = useQuery({
     queryKey: ['calendar', 'cycle', 'collection-claims', 'current'],
@@ -331,7 +351,17 @@ function DashboardMain() {
 
   const latestEpisode = pickLatestEpisode(sermonsQ.data?.episodes ?? []);
   const event = pickUpcomingEvent(now, eventsQ.data ?? []);
-  const birthdaysThisWeek: BirthdayWeekItem[] = birthdaysQ.data?.items ?? [];
+  const birthdaysThisWeek: BirthdayWeekItem[] = useMemo(() => {
+    const items = birthdaysQ.data?.items ?? [];
+    const todayStart = startOfDay(now);
+    return items.filter((row) => {
+      const raw = row.week_date.trim();
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) return false;
+      const d = parse(raw, 'yyyy-MM-dd', new Date());
+      if (Number.isNaN(d.getTime())) return false;
+      return !isBefore(d, todayStart);
+    });
+  }, [birthdaysQ.data, now]);
 
   /** С сегодняшнего дня недели: участники без нужды + подпись координатора (для админа). */
   const unfilledWeekRowsAdmin = useMemo(() => {
@@ -465,7 +495,7 @@ function DashboardMain() {
           {birthdaysThisWeek.length > 0 ? (
             <section className="overflow-hidden rounded-3xl border border-violet-200/70 bg-gradient-to-br from-violet-50/80 via-white to-fuchsia-50/70 p-4 shadow-[var(--shadow-card)] sm:col-span-2 sm:p-5 xl:col-span-12">
               <p className="text-[11px] font-extrabold uppercase tracking-[0.14em] text-violet-700">
-                День рождения на этой неделе
+                Предстоящие дни рождения на этой неделе
               </p>
               <div className="mt-3 flex flex-wrap gap-2">
                 {birthdaysThisWeek.map((row) => (

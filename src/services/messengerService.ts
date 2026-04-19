@@ -1744,6 +1744,22 @@ export async function unpinMessageInConversation(conversationId: string, message
   await dbQuery(`UPDATE messages SET is_pinned = FALSE WHERE id = $1`, [mid]);
 }
 
+/** Для WS `msg:delivered_signal` с числовым `messageId`: сообщение в чате и от ожидаемого отправителя. */
+export async function verifyMessageSenderInConversation(
+  conversationId: string,
+  messageId: string,
+  expectedSenderId: number,
+): Promise<boolean> {
+  const mid = String(messageId || '').trim();
+  if (!/^\d+$/.test(mid)) return false;
+  const r = await dbQuery(
+    `SELECT sender_id FROM messages WHERE id = $1 AND conversation_id = $2 AND is_deleted = FALSE LIMIT 1`,
+    [mid, conversationId],
+  );
+  const sid = r.rows[0]?.sender_id;
+  return sid != null && Number(sid) === Number(expectedSenderId);
+}
+
 /**
  * Edit message content (only by sender).
  */

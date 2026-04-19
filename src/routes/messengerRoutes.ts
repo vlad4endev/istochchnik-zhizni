@@ -757,6 +757,11 @@ router.post(
           : `srv-${randomUUID()}`;
       const convKey = String(convId);
       const prepared = await svc.prepareMessageForSend(convId, userId, content, replyId, safeClientMsgId, pt, pl);
+      sendToMember(userId, {
+        type: 'msg:server_ack',
+        conversationId: convKey,
+        clientMsgId: safeClientMsgId,
+      });
       const pendingRealtime = { ...prepared.pendingMessage, is_read: false as const };
       // Low-latency: fan-out до INSERT; клиенты сливают pending → финальный id по client_msg_id.
       sendToRoomAll(convKey, { type: 'msg:new', conversationId: convKey, message: pendingRealtime });

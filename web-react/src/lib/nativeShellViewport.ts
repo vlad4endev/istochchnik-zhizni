@@ -3,7 +3,7 @@ const LOCKED_VIEWPORT =
 
 /**
  * Фиксирует viewport: без pinch / double-tap zoom в мобильном браузере и в PWA.
- * Масштаб интерфейса — через настройки системы и панель доступности (см. syncSystemFontScale, --a11y-font-scale).
+ * Масштаб текста в приложении — через панель доступности (--a11y-font-scale), без умножения на «системный» коэффициент.
  */
 export function applyNativeShellViewportLock(): boolean {
   if (typeof document === 'undefined') return false;

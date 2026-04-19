@@ -10,10 +10,8 @@ import { AppRouterMain } from './app/RouterMain';
 import { AppRouterStudio } from './app/RouterStudio';
 import { AccessibilityProvider } from './lib/accessibility/AccessibilityProvider';
 import { getAppVariant } from './lib/appVariant';
-import { applySystemFontScaleToDocument } from './lib/accessibility/syncSystemFontScale';
 import './index.css';
 
-applySystemFontScaleToDocument();
 applyNativeShellViewportLock();
 window.addEventListener('load', () => applyNativeShellViewportLock());
 

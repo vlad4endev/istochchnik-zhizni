@@ -5,7 +5,7 @@ import Redis from 'ioredis';
 import { WebSocketServer, WebSocket } from 'ws';
 
 import { resolveSessionByToken } from '../services/authService';
-import { isMemberInConversation } from '../services/messengerService';
+import { isMemberInConversation, verifyMessageSenderInConversation } from '../services/messengerService';
 import type { WsMessengerEvent } from '../types/messenger';
 
 // ─── Redis pub/sub (ioredis, горизонтальное масштабирование, без Socket.io) ──
@@ -405,6 +405,42 @@ async function handleClientMessage(client: AuthenticatedClient, msg: any): Promi
     }
     case 'ping': {
       safeSend(client.ws, JSON.stringify({ type: 'pong', t: Date.now() }));
+      break;
+    }
+    case 'msg:delivered_signal': {
+      const convId =
+        typeof msg.conversationId === 'string' && msg.conversationId.trim()
+          ? String(msg.conversationId).trim()
+          : '';
+      const messageId =
+        typeof msg.messageId === 'string' && msg.messageId.trim() ? String(msg.messageId).trim() : '';
+      const clientMsgId =
+        typeof msg.clientMsgId === 'string' && msg.clientMsgId.trim()
+          ? String(msg.clientMsgId).trim().slice(0, 160)
+          : '';
+      const senderRaw = msg.senderId;
+      const senderId = typeof senderRaw === 'number' ? senderRaw : Number(senderRaw);
+      if (!convId || !messageId || !clientMsgId || !Number.isFinite(senderId)) break;
+      if (senderId === client.memberId) break;
+      try {
+        const recipientOk = await isMemberInConversation(convId, client.memberId);
+        if (!recipientOk) break;
+        const senderOk = await isMemberInConversation(convId, senderId);
+        if (!senderOk) break;
+        if (/^\d+$/.test(messageId)) {
+          const verified = await verifyMessageSenderInConversation(convId, messageId, senderId);
+          if (!verified) break;
+        }
+        sendToMember(senderId, {
+          type: 'msg:delivered',
+          conversationId: convId,
+          messageId,
+          clientMsgId,
+          deliveredByMemberId: client.memberId,
+        });
+      } catch {
+        /* ignore */
+      }
       break;
     }
     default: {

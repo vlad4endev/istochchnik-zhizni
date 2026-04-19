@@ -1,6 +1,5 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { IconType } from 'react-icons';
 import {
   LuChevronLeft,
@@ -38,8 +37,6 @@ import { LAYOUT_MAIN_CHROME_EVENT } from './layoutChrome';
 import { AppAvatar } from '../components/AppAvatar';
 import { AccessibilityHeaderMenu } from '../components/accessibility/AccessibilityHeaderMenu';
 import { CoordinatorDashboardNoteFab } from '../features/dashboard/components/CoordinatorDashboardNoteFab';
-import { getActiveEvents } from '../features/calendar/api';
-import { countUpcomingEventsInWindow } from '../features/calendar/eventSchedule';
 
 type NavItem = {
   to: string;
@@ -284,7 +281,6 @@ export function Layout() {
   const loadConversations = useChatStore((s) => s.loadConversations);
   const refreshUnread = useChatStore((s) => s.refreshUnread);
   const unreadMessages = useChatStore((s) => s.totalUnread);
-  const [layoutNow, setLayoutNow] = useState(() => new Date());
   const role = useAuthStore((s) => s.role);
   const logout = useAuthStore((s) => s.logout);
   const updatePrompt = useServiceWorkerUpdate({ showPrompt: true });
@@ -381,22 +377,6 @@ export function Layout() {
   }, [token, loadConversations]);
 
   useEffect(() => {
-    const id = window.setInterval(() => setLayoutNow(new Date()), 60_000);
-    return () => window.clearInterval(id);
-  }, []);
-
-  const eventsForBadgesQ = useQuery({
-    queryKey: ['calendar', 'events', 'dashboard'],
-    queryFn: getActiveEvents,
-    staleTime: 60_000,
-  });
-
-  const upcomingEventsCount = useMemo(
-    () => countUpcomingEventsInWindow(layoutNow, eventsForBadgesQ.data ?? [], 7),
-    [layoutNow, eventsForBadgesQ.data],
-  );
-
-  useEffect(() => {
     if (!token) return;
     const onVis = () => {
       if (document.visibilityState !== 'visible') return;
@@ -444,7 +424,7 @@ export function Layout() {
     };
   }, [navigate, setActiveConversation]);
 
-  /** Бейдж на иконке установленного PWA (Badging API): непрочитанные + ближайшие события. iOS ограниченно поддерживает. */
+  /** Бейдж на иконке PWA: только непрочитанные сообщения в чатах (не календарные события). */
   useEffect(() => {
     if (typeof navigator === 'undefined') return;
     const nav = navigator as Navigator & {
@@ -457,7 +437,7 @@ export function Layout() {
       }
       return;
     }
-    const total = Math.min(99, unreadMessages + upcomingEventsCount);
+    const total = Math.min(99, unreadMessages);
     if (typeof nav.setAppBadge === 'function') {
       if (total > 0) {
         void nav.setAppBadge(total).catch(() => {});
@@ -465,7 +445,7 @@ export function Layout() {
         void nav.clearAppBadge().catch(() => {});
       }
     }
-  }, [token, unreadMessages, upcomingEventsCount]);
+  }, [token, unreadMessages]);
 
   return (
     <MessengerWsProvider>
@@ -718,20 +698,13 @@ export function Layout() {
                 aria-label={
                   item.to === '/messenger' && unreadMessages > 0
                     ? `Чаты, непрочитанных сообщений: ${unreadMessages > 99 ? 'более 99' : unreadMessages}`
-                    : item.to === '/dashboard' && upcomingEventsCount > 0
-                      ? `Главная, событий на 7 дней: ${upcomingEventsCount > 99 ? 'более 99' : upcomingEventsCount}`
-                      : undefined
+                    : undefined
                 }
               >
                 {({ isActive }) => (
                   <>
                     <span className="relative z-10 inline-flex overflow-visible">
                       <Icon className={navIconClass(isActive, true)} strokeWidth={2} aria-hidden />
-                      {item.to === '/dashboard' && upcomingEventsCount > 0 ? (
-                        <span className="absolute -right-2.5 top-0 z-[5] inline-flex min-h-[18px] min-w-[18px] items-center justify-center rounded-full bg-primary px-1 text-[10px] font-extrabold leading-none text-white shadow-sm ring-2 ring-white">
-                          {formatNavBadgeCount(upcomingEventsCount)}
-                        </span>
-                      ) : null}
                       {item.to === '/messenger' && unreadMessages > 0 ? (
                         <span className="absolute -right-2.5 top-0 z-[5] inline-flex min-h-[18px] min-w-[18px] items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-extrabold leading-none text-white shadow-sm ring-2 ring-white">
                           {formatNavBadgeCount(unreadMessages)}

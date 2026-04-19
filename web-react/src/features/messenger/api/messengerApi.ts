@@ -142,7 +142,7 @@ export interface MessageWithSender {
   /** Option indexes the current member voted for. */
   poll_my_options?: number[];
   /** Local-only optimistic status (not persisted in DB). */
-  status?: 'sending' | 'sent' | 'error';
+  status?: 'sending' | 'sent' | 'delivered' | 'error';
 }
 
 export interface Participant {

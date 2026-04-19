@@ -146,6 +146,20 @@ function formatYmdLocal(date: Date): string {
   return `${y}-${m}-${d}`;
 }
 
+/** Календарная дата в локальной TZ сервера (без сравнения через getTime — стабильнее для «сегодня»). */
+function calendarYmdLocal(d: Date): { y: number; m: number; day: number } {
+  return { y: d.getFullYear(), m: d.getMonth() + 1, day: d.getDate() };
+}
+
+function compareCalendarYmd(
+  a: { y: number; m: number; day: number },
+  b: { y: number; m: number; day: number },
+): number {
+  if (a.y !== b.y) return a.y - b.y;
+  if (a.m !== b.m) return a.m - b.m;
+  return a.day - b.day;
+}
+
 function fullNameOrFallback(row: {
   first_name?: string | null;
   last_name?: string | null;
@@ -156,6 +170,12 @@ function fullNameOrFallback(row: {
   const full = `${fn} ${ln}`.trim();
   if (full) return full;
   return (row.name ?? '').trim() || 'Участник';
+}
+
+/** DATE из Postgres может прийти как `YYYY-MM-DD` или с хвостом — берём первые 10 символов. */
+function normalizeBirthDateYmd(raw: string): string | null {
+  const s = raw.trim().slice(0, 10);
+  return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : null;
 }
 
 function birthdayForYear(birthDateYmd: string, year: number): Date | null {
@@ -188,6 +208,9 @@ export async function getWeekBirthdays(_req: Request, res: Response): Promise<vo
     weekEnd.setDate(weekStart.getDate() + 6);
     weekEnd.setHours(23, 59, 59, 999);
 
+    /** Не показывать дни рождения, которые уже прошли в текущей неделе (только с сегодня и до вс). */
+    const todayYmd = calendarYmdLocal(now);
+
     const years = Array.from(new Set([weekStart.getFullYear(), weekEnd.getFullYear()]));
     const result = await query(
       `SELECT id, first_name, last_name, name, birth_date::text AS birth_date
@@ -207,11 +230,13 @@ export async function getWeekBirthdays(_req: Request, res: Response): Promise<vo
       };
       if (typeof row.id !== 'number') continue;
       if (typeof row.birth_date !== 'string') continue;
+      const birthYmd = normalizeBirthDateYmd(row.birth_date);
+      if (!birthYmd) continue;
       const personName = fullNameOrFallback(row);
 
       let hit: Date | null = null;
       for (const y of years) {
-        const b = birthdayForYear(row.birth_date, y);
+        const b = birthdayForYear(birthYmd, y);
         if (!b) continue;
         if (b.getTime() >= weekStart.getTime() && b.getTime() <= weekEnd.getTime()) {
           hit = b;
@@ -219,11 +244,12 @@ export async function getWeekBirthdays(_req: Request, res: Response): Promise<vo
         }
       }
       if (!hit) continue;
+      if (compareCalendarYmd(calendarYmdLocal(hit), todayYmd) < 0) continue;
 
       out.push({
         id: row.id,
         name: personName,
-        birth_date: row.birth_date,
+        birth_date: birthYmd,
         week_date: formatYmdLocal(hit),
       });
     }
@@ -234,6 +260,7 @@ export async function getWeekBirthdays(_req: Request, res: Response): Promise<vo
       return a.name.localeCompare(b.name, 'ru');
     });
 
+    res.setHeader('Cache-Control', 'no-store');
     res.json({
       week_start: formatYmdLocal(weekStart),
       week_end: formatYmdLocal(weekEnd),

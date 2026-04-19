@@ -6,6 +6,7 @@ import { emitAppToast } from '../../lib/uiFeedback';
 import { playAudio } from '../../utils/audio';
 import { extractMentionMemberIdsFromText, normalizeMentionsToCanonical } from './mentionUtils';
 import { getAvatarInitial } from './avatarUtils';
+import { sendRealtimeJson } from '../../lib/realtimeWsClient';
 
 /** Личный чат до первого сообщения: нет строки в БД, пока пользователь не отправит сообщение. */
 export const DRAFT_PRIVATE_PREFIX = 'draft:';
@@ -189,6 +190,11 @@ interface ChatState {
   handlePresenceOffline: (memberId: number, lastSeenAt?: string) => void;
   setOnlineMembers: (ids: number[]) => void;
   setCurrentMemberId: (id: number) => void;
+
+  /** WS: сервер подтвердил приём сообщения (до завершения записи в БД). */
+  handleMsgServerAck: (convId: string, clientMsgId: string) => void;
+  /** WS: получатель подтвердил доставку в свой клиент. */
+  handleMsgDelivered: (convId: string, payload: { clientMsgId: string; messageId: string }) => void;
 
   /** WS: история чата очищена на сервере. */
   handleConvHistoryCleared: (conversationId: string) => void;
@@ -554,6 +560,65 @@ function syncConversationLastMessageOnEdit(
   });
 }
 
+const SERVER_ACK_TIMEOUT_MS = 10_000;
+const serverAckTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
+function serverAckKey(convId: string, clientMsgId: string): string {
+  return `${convId}:${clientMsgId}`;
+}
+
+function clearServerAckTimer(convId: string, clientMsgId: string): void {
+  const k = serverAckKey(convId, clientMsgId);
+  const t = serverAckTimers.get(k);
+  if (t != null) clearTimeout(t);
+  serverAckTimers.delete(k);
+}
+
+function scheduleServerAckTimer(
+  get: () => ChatState,
+  convId: string,
+  tempId: string,
+  clientMsgId: string,
+): void {
+  const k = serverAckKey(convId, clientMsgId);
+  const prev = serverAckTimers.get(k);
+  if (prev != null) clearTimeout(prev);
+  const t = setTimeout(() => {
+    serverAckTimers.delete(k);
+    const st = get();
+    const list = st.messagesByConv[convId] || [];
+    const hit = list.find(
+      (m) =>
+        String(m.client_msg_id || '') === clientMsgId &&
+        m.id === tempId &&
+        m.status === 'sending',
+    );
+    if (!hit) return;
+    useChatStore.setState((s) => ({
+      messagesByConv: {
+        ...s.messagesByConv,
+        [convId]: (s.messagesByConv[convId] || []).map((m) =>
+          m.id === tempId && String(m.client_msg_id || '') === clientMsgId && m.status === 'sending'
+            ? { ...m, status: 'error' as const }
+            : m,
+        ),
+      },
+    }));
+  }, SERVER_ACK_TIMEOUT_MS);
+  serverAckTimers.set(k, t);
+}
+
+function newClientMsgId(): string {
+  try {
+    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+      return crypto.randomUUID();
+    }
+  } catch {
+    /* ignore */
+  }
+  return `c-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
+}
+
 // ─── Store ────────────────────────────────────────────────────
 
 export const useChatStore = create<ChatState>((set, get) => ({
@@ -842,7 +907,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const textForSend = normalizeMentionsToCanonical(String(content ?? '').trim());
     playAudio('send');
     const tempId = `temp-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-    const clientMsgId = `c-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const clientMsgId = newClientMsgId();
     const serverReplyId =
       replyToId != null && /^\d+$/.test(String(replyToId)) ? replyToId : null;
 
@@ -906,14 +971,25 @@ export const useChatStore = create<ChatState>((set, get) => ({
       replyToMessage: null,
     }));
 
+    scheduleServerAckTimer(get, convId, tempId, clientMsgId);
+
     try {
       const real = await api.sendMessage(convId, textForSend, serverReplyId, clientMsgId, pt, payload);
+      clearServerAckTimer(convId, clientMsgId);
       // Replace temp with real and dedupe against WS echo by id/client_msg_id.
       set((s) => ({
         messagesByConv: {
           ...s.messagesByConv,
           [convId]: dedupeMessages(
-            (s.messagesByConv[convId] || []).map((m) => (m.id === tempId ? { ...real, status: 'sent' } : m)),
+            (s.messagesByConv[convId] || []).map((m) => {
+              const match =
+                m.id === tempId ||
+                (String(m.client_msg_id || '') === clientMsgId &&
+                  (String(m.id).startsWith('temp-') || m.status === 'error'));
+              if (!match) return m;
+              const keepStatus = m.status === 'delivered' ? 'delivered' : ('sent' as const);
+              return { ...real, status: keepStatus };
+            }),
           ),
         },
       }));
@@ -928,6 +1004,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       } else {
         console.error('[chatStore] sendMessage error:', e);
       }
+      clearServerAckTimer(convId, clientMsgId);
       // Mark failed optimistic message
       set((s) => ({
         messagesByConv: {
@@ -966,7 +1043,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       msg.reply_to_message_id != null && /^\d+$/.test(String(msg.reply_to_message_id))
         ? String(msg.reply_to_message_id)
         : null;
-    const clientMsgId = msg.client_msg_id ?? `c-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const clientMsgId = msg.client_msg_id?.trim() || newClientMsgId();
 
     set((s) => ({
       messagesByConv: {
@@ -977,13 +1054,20 @@ export const useChatStore = create<ChatState>((set, get) => ({
       },
     }));
 
+    scheduleServerAckTimer(get, conversationId, tempId, clientMsgId);
+
     try {
       const real = await api.sendMessage(conversationId, msg.content ?? '', replyId, clientMsgId, pt, payload);
+      clearServerAckTimer(conversationId, clientMsgId);
       set((s) => ({
         messagesByConv: {
           ...s.messagesByConv,
           [conversationId]: dedupeMessages(
-            (s.messagesByConv[conversationId] || []).map((m) => (m.id === tempId ? { ...real, status: 'sent' } : m)),
+            (s.messagesByConv[conversationId] || []).map((m) => {
+              if (m.id !== tempId) return m;
+              const keepStatus = m.status === 'delivered' ? 'delivered' : ('sent' as const);
+              return { ...real, status: keepStatus };
+            }),
           ),
         },
       }));
@@ -995,6 +1079,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       saveSnapshot(get());
     } catch (e) {
       console.error('[chatStore] retrySendMessage error:', e);
+      clearServerAckTimer(conversationId, clientMsgId);
       set((s) => ({
         messagesByConv: {
           ...s.messagesByConv,
@@ -1251,9 +1336,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
           (m) => isProvisionalLocalId(String(m.id)) && m.client_msg_id === msgClientId,
         );
       const merged = hasProvisionalTwin
-        ? existing.map((m) =>
-            isProvisionalLocalId(String(m.id)) && m.client_msg_id === msgClientId ? msg : m,
-          )
+        ? existing.map((m) => {
+            if (!isProvisionalLocalId(String(m.id)) || m.client_msg_id !== msgClientId) return m;
+            const prevSt = m.status;
+            const nextStatus =
+              prevSt === 'delivered' ? ('delivered' as const) : ('sent' as const);
+            return { ...msg, status: nextStatus };
+          })
         : [...existing, msg];
       const newMsgs = dedupeMessages(merged);
 
@@ -1308,12 +1397,31 @@ export const useChatStore = create<ChatState>((set, get) => ({
         void get().markReadUpTo(c, m);
       });
     }
+
+    if (
+      !alreadyPresent &&
+      !isOwnNow &&
+      msgClientId &&
+      msg.sender_id != null &&
+      (serverMsgId.startsWith('pending-') || /^\d+$/.test(serverMsgId))
+    ) {
+      queueMicrotask(() => {
+        sendRealtimeJson({
+          type: 'msg:delivered_signal',
+          conversationId: idKey,
+          messageId: serverMsgId,
+          clientMsgId: msgClientId,
+          senderId: Number(msg.sender_id),
+        });
+      });
+    }
   },
 
   handleMessageSendFailed: (convId, clientMsgId) => {
     const idKey = String(convId);
     const cid = String(clientMsgId || '').trim();
     if (!cid) return;
+    clearServerAckTimer(idKey, cid);
     set((s) => {
       const list = s.messagesByConv[idKey] || [];
       const next = list.map((m) =>
@@ -1322,6 +1430,47 @@ export const useChatStore = create<ChatState>((set, get) => ({
           ? { ...m, status: 'error' as const }
           : m,
       );
+      return { messagesByConv: { ...s.messagesByConv, [idKey]: next } };
+    });
+  },
+
+  handleMsgServerAck: (convId, clientMsgId) => {
+    const idKey = String(convId);
+    const c = String(clientMsgId || '').trim();
+    if (!c) return;
+    clearServerAckTimer(idKey, c);
+    set((s) => ({
+      messagesByConv: {
+        ...s.messagesByConv,
+        [idKey]: (s.messagesByConv[idKey] || []).map((m) => {
+          if (String(m.client_msg_id || '') !== c) return m;
+          const prov =
+            String(m.id).startsWith('temp-') ||
+            String(m.id).startsWith('pending-') ||
+            m.status === 'sending';
+          if (!prov) return m;
+          return { ...m, status: 'sent' as const };
+        }),
+      },
+    }));
+  },
+
+  handleMsgDelivered: (convId, payload) => {
+    const idKey = String(convId);
+    const c = String(payload.clientMsgId || '').trim();
+    const mid = String(payload.messageId || '').trim();
+    if (!c && !mid) return;
+    set((s) => {
+      const me = s.currentMemberId;
+      const list = s.messagesByConv[idKey] || [];
+      const next = list.map((m) => {
+        if (me == null || m.sender_id == null || Number(m.sender_id) !== Number(me)) return m;
+        const match =
+          (c && String(m.client_msg_id || '') === c) || (mid && String(m.id) === mid);
+        if (!match) return m;
+        if (m.status === 'error' || m.status === 'sending') return m;
+        return { ...m, status: 'delivered' as const };
+      });
       return { messagesByConv: { ...s.messagesByConv, [idKey]: next } };
     });
   },
