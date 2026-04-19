@@ -54,3 +54,17 @@ export function compareMembersByFirstName(
   if (lCmp !== 0) return lCmp;
   return a.id - b.id;
 }
+
+/** Как в молитвенном цикле в БД: фамилия, имя, id. */
+export function compareMembersByPrayerCycleOrder(
+  a: { id: number; name: string; first_name?: string | null; last_name?: string | null },
+  b: typeof a,
+): number {
+  const aa = splitMemberNameParts(a);
+  const bb = splitMemberNameParts(b);
+  const lCmp = aa.last.localeCompare(bb.last, 'ru', { sensitivity: 'base' });
+  if (lCmp !== 0) return lCmp;
+  const fCmp = aa.first.localeCompare(bb.first, 'ru', { sensitivity: 'base' });
+  if (fCmp !== 0) return fCmp;
+  return a.id - b.id;
+}

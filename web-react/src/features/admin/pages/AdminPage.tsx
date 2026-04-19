@@ -83,6 +83,7 @@ import { resolvePublicUrl } from '../../../lib/resolvePublicUrl';
 import { nextOccurrenceLocalYmd } from '../../../lib/weekdayAnchor';
 import {
   compareMembersByFirstName,
+  compareMembersByPrayerCycleOrder,
   memberRosterName,
   splitMemberNameParts,
 } from '../../../lib/memberRosterName';
@@ -1916,12 +1917,15 @@ function CalendarPrayerCycleRoster() {
   }, [rosterSnapQ.data]);
 
   const anchorQueueMut = useMutation({
-    mutationFn: () =>
+    mutationFn: (memberId?: number) =>
       anchorPrayerCycleMember({
-        member_id: pickedAnchorMemberId!,
+        member_id: memberId ?? pickedAnchorMemberId!,
         anchor_date: anchorQueueDate,
       }),
-    onSuccess: async () => {
+    onSuccess: async (_data, memberId) => {
+      if (typeof memberId === 'number') {
+        setPickedAnchorMemberId(memberId);
+      }
       setBanner({
         type: 'ok',
         text: 'Дата старта цикла обновлена: в выбранный день первым в очереди идёт указанный участник; следующие дни — по списку по кругу.',
@@ -1972,8 +1976,23 @@ function CalendarPrayerCycleRoster() {
         return blob.includes(q);
       });
     }
-    return [...rows].sort(compareMembersByFirstName);
+    const active = rows.filter((u) => u.is_active);
+    const inactive = rows.filter((u) => !u.is_active);
+    return [
+      ...active.sort(compareMembersByPrayerCycleOrder),
+      ...inactive.sort(compareMembersByPrayerCycleOrder),
+    ];
   }, [data, listSearch]);
+
+  const rosterOrderIndexByMemberId = useMemo(() => {
+    const m = new Map<number, number>();
+    const roster = rosterSnapQ.data?.roster;
+    if (!roster) return m;
+    for (const r of roster) {
+      m.set(r.id, r.roster_index);
+    }
+    return m;
+  }, [rosterSnapQ.data?.roster]);
 
   const candidates = useMemo(() => {
     const list = data ?? [];
@@ -2122,7 +2141,7 @@ function CalendarPrayerCycleRoster() {
               }
               onClick={() => {
                 setBanner(null);
-                anchorQueueMut.mutate();
+                anchorQueueMut.mutate(undefined);
               }}
             >
               {anchorQueueMut.isPending ? 'Применение…' : 'Применить очередь'}
@@ -2145,7 +2164,9 @@ function CalendarPrayerCycleRoster() {
         <div className="rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] p-4 shadow-[var(--shadow)] sm:p-5">
           <h4 className="font-extrabold text-stone-900">Сейчас в молитвенном цикле</h4>
           <p className="mt-1 text-xs text-stone-500">
-            Неактивная карточка с флагом не попадает в календарь, пока её не активируют.
+            Порядок колонки «№» — как в календаре молитвы (фамилия, имя). Неактивная карточка с флагом не попадает в
+            календарь, пока её не активируют. «Первым на дату» использует день из блока «Переключить очередь на дату»
+            выше.
           </p>
           <label className="mt-3 block text-xs font-semibold text-stone-600">Поиск</label>
           <input
@@ -2156,47 +2177,99 @@ function CalendarPrayerCycleRoster() {
             placeholder="Имя, телефон…"
             autoComplete="off"
           />
-          <div className="mt-3 max-h-[min(22rem,45vh)] space-y-2 overflow-y-auto pr-0.5">
+          <div className="mt-3 max-h-[min(28rem,55vh)] overflow-auto rounded-xl border border-stone-200/80">
             {inCycleRows.length === 0 ? (
-              <p className="rounded-xl border border-dashed border-stone-200 py-6 text-center text-sm text-stone-500">
+              <p className="py-8 text-center text-sm text-stone-500">
                 {listSearch.trim()
                   ? 'Никого не найдено.'
                   : 'Список пуст — добавьте людей справа.'}
               </p>
             ) : (
-              inCycleRows.map((u) => (
-                <div
-                  key={u.id}
-                  className="flex flex-col gap-2 rounded-xl border border-stone-200/90 bg-white/90 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between"
-                >
-                  <div className="min-w-0">
-                    <p className="font-bold text-stone-900">{memberRosterName(u)}</p>
-                    <p className="mt-0.5 text-xs text-stone-600">{u.phone_number ?? '—'}</p>
-                    <div className="mt-1.5">
-                      {u.is_active ? (
-                        <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-800">
-                          В очереди
-                        </span>
-                      ) : (
-                        <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-900">
-                          Неактивен
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    className={btnDangerOutline('shrink-0 self-start text-xs sm:self-center')}
-                    disabled={patchMut.isPending}
-                    onClick={() => {
-                      setBanner(null);
-                      patchMut.mutate({ id: u.id, in_prayer_cycle: false });
-                    }}
-                  >
-                    Убрать
-                  </button>
-                </div>
-              ))
+              <table className="min-w-full border-collapse text-left text-sm">
+                <thead>
+                  <tr className="sticky top-0 z-[1] border-b border-stone-200 bg-stone-50/95 text-xs font-semibold uppercase tracking-wide text-stone-600 backdrop-blur-sm">
+                    <th className="whitespace-nowrap px-3 py-2.5">№</th>
+                    <th className="min-w-[10rem] px-3 py-2.5">Участник</th>
+                    <th className="hidden px-3 py-2.5 sm:table-cell">Телефон</th>
+                    <th className="whitespace-nowrap px-3 py-2.5">Статус</th>
+                    <th className="min-w-[11rem] px-3 py-2.5 text-right">Действия</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-stone-100 bg-white/90">
+                  {inCycleRows.map((u) => {
+                    const queueNo = rosterOrderIndexByMemberId.get(u.id);
+                    const isFormulaToday = rosterSnapQ.data?.today_member_id === u.id;
+                    const canAnchor = u.is_active && queueNo != null;
+                    return (
+                      <tr key={u.id} className={isFormulaToday ? 'bg-primary/[0.04]' : undefined}>
+                        <td className="whitespace-nowrap px-3 py-2.5 tabular-nums text-stone-600">
+                          {queueNo != null ? queueNo + 1 : '—'}
+                        </td>
+                        <td className="px-3 py-2.5">
+                          <span className="font-semibold text-stone-900">{memberRosterName(u)}</span>
+                          {isFormulaToday ? (
+                            <span className="ml-2 inline-block rounded-full bg-primary/12 px-2 py-0.5 text-[10px] font-bold text-primary">
+                              на дату
+                            </span>
+                          ) : null}
+                          <p className="mt-0.5 text-xs text-stone-500 sm:hidden">{u.phone_number ?? '—'}</p>
+                        </td>
+                        <td className="hidden px-3 py-2.5 text-stone-600 sm:table-cell">{u.phone_number ?? '—'}</td>
+                        <td className="px-3 py-2.5">
+                          {u.is_active ? (
+                            <span className="inline-block rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-800">
+                              В очереди
+                            </span>
+                          ) : (
+                            <span className="inline-block rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-900">
+                              Неактивен
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-3 py-2.5">
+                          <div className="flex flex-col items-stretch gap-1.5 sm:flex-row sm:justify-end sm:gap-2">
+                            <button
+                              type="button"
+                              className={btnPrimary('text-xs whitespace-nowrap')}
+                              disabled={
+                                anchorQueueMut.isPending ||
+                                patchMut.isPending ||
+                                !canAnchor ||
+                                !/^\d{4}-\d{2}-\d{2}$/.test(anchorQueueDate)
+                              }
+                              title={
+                                !u.is_active
+                                  ? 'Сначала активируйте карточку'
+                                  : queueNo == null
+                                    ? 'Нет в расчёте очереди'
+                                    : undefined
+                              }
+                              onClick={() => {
+                                setBanner(null);
+                                setPickedAnchorMemberId(u.id);
+                                anchorQueueMut.mutate(u.id);
+                              }}
+                            >
+                              Первым на дату
+                            </button>
+                            <button
+                              type="button"
+                              className={btnDangerOutline('text-xs whitespace-nowrap')}
+                              disabled={patchMut.isPending || anchorQueueMut.isPending}
+                              onClick={() => {
+                                setBanner(null);
+                                patchMut.mutate({ id: u.id, in_prayer_cycle: false });
+                              }}
+                            >
+                              Убрать
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             )}
           </div>
         </div>
