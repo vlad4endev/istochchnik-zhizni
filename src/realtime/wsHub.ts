@@ -132,8 +132,17 @@ const clientsByMember = new Map<number, Set<AuthenticatedClient>>();
 const rooms = new Map<string, Set<AuthenticatedClient>>();
 /** Online member IDs (at least one connected client) */
 const onlineMembers = new Set<number>();
-/** Нативный WebSocket ping (ответ — pong от клиента). Держим ниже типичного proxy_read_timeout (60s). */
-const HEARTBEAT_INTERVAL_MS = 15_000;
+/**
+ * Нативный WebSocket ping (ответ — pong от клиента).
+ *
+ * 30 секунд — компромисс между:
+ *   - типичным nginx/Cloudflare `proxy_read_timeout` (60 с) — ниже него нужно успеть;
+ *   - клиентским pong-deadline 35 с (`realtimeWsClient.ts`) — сервер должен быть
+ *     не агрессивнее клиента, иначе на 2G/3G возникает «реконнект-шторм»:
+ *     RTT + потеря пакета легко превышает 15 с, и прежнее значение рвало
+ *     соединения, которые клиент всё ещё считал живыми.
+ */
+const HEARTBEAT_INTERVAL_MS = 30_000;
 const MAX_WS_MESSAGE_BYTES = 64 * 1024;
 
 let safeSendFailLogLastMs = 0;

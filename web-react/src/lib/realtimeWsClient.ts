@@ -20,9 +20,21 @@ let ws: WebSocket | null = null;
 let authToken: string | null = null;
 let stopped = false;
 let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
-let pingInterval: ReturnType<typeof setInterval> | undefined;
-let pongDeadlineTimer: ReturnType<typeof setTimeout> | undefined;
 let attempt = 0;
+
+/**
+ * Таймеры heartbeat привязаны к конкретному экземпляру `WebSocket`, а не к модулю:
+ * иначе при быстрых реконнектах (2G/visibilitychange + online) handle старого интервала
+ * теряется и навсегда остаётся активным — утечка памяти + CPU.
+ *
+ * `Map` (а не `WeakMap`), чтобы иметь возможность перебрать и погасить все сразу
+ * в `clearAllSocketTimers()` без ожидания GC.
+ */
+type SocketTimers = {
+  ping?: ReturnType<typeof setInterval>;
+  pongDeadline?: ReturnType<typeof setTimeout>;
+};
+const socketTimers = new Map<WebSocket, SocketTimers>();
 
 /** Последний `ready` для подписчиков, подключившихся после открытия сокета */
 let lastReadyPayload: { memberId: number; onlineMembers: number[]; v?: number } | null = null;
@@ -79,23 +91,52 @@ function logWarn(message: string, extra?: Record<string, unknown>): void {
   }
 }
 
-function clearPongDeadline(): void {
-  if (pongDeadlineTimer !== undefined) {
-    clearTimeout(pongDeadlineTimer);
-    pongDeadlineTimer = undefined;
+function clearPongDeadline(socket: WebSocket): void {
+  const t = socketTimers.get(socket);
+  if (!t) return;
+  if (t.pongDeadline !== undefined) {
+    clearTimeout(t.pongDeadline);
+    t.pongDeadline = undefined;
   }
 }
 
-function clearTimers(): void {
+/** Полная очистка таймеров одного сокета + удаление записи из Map. */
+function clearSocketTimers(socket: WebSocket | null | undefined): void {
+  if (!socket) return;
+  const t = socketTimers.get(socket);
+  if (!t) return;
+  if (t.ping !== undefined) {
+    clearInterval(t.ping);
+    t.ping = undefined;
+  }
+  if (t.pongDeadline !== undefined) {
+    clearTimeout(t.pongDeadline);
+    t.pongDeadline = undefined;
+  }
+  socketTimers.delete(socket);
+}
+
+/**
+ * Снимает heartbeat со ВСЕХ зарегистрированных сокетов.
+ * Вызывается в начале `openSocket()` и при разрыве, чтобы исключить утечки
+ * «зомби-таймеров», указывающих на закрытые/замещённые экземпляры `WebSocket`.
+ */
+function clearAllSocketTimers(): void {
+  for (const socket of Array.from(socketTimers.keys())) {
+    clearSocketTimers(socket);
+  }
+}
+
+function clearReconnectTimer(): void {
   if (reconnectTimer !== undefined) {
     clearTimeout(reconnectTimer);
     reconnectTimer = undefined;
   }
-  if (pingInterval !== undefined) {
-    clearInterval(pingInterval);
-    pingInterval = undefined;
-  }
-  clearPongDeadline();
+}
+
+function clearTimers(): void {
+  clearReconnectTimer();
+  clearAllSocketTimers();
 }
 
 function dispatchMessage(msg: unknown): void {
@@ -118,6 +159,18 @@ function dispatchOpen(detail: OpenDetail): void {
   }
 }
 
+/**
+ * Jitter ±20% (коэффициент 0.8–1.2) к экспоненциальному бэкаффу.
+ * Зачем: после падения ноды API все активные клиенты одновременно
+ * получают `close` и через фиксированный `attempt²`-тайминг вернутся
+ * строго синхронно → «thundering herd» по API + load balancer.
+ * Рандомизация размазывает возврат по окну и снимает пиковую нагрузку.
+ */
+function applyReconnectJitter(baseDelayMs: number): number {
+  const factor = 0.8 + Math.random() * 0.4;
+  return Math.round(baseDelayMs * factor);
+}
+
 function scheduleReconnect(): void {
   if (stopped || !authToken) return;
   clearTimers();
@@ -126,8 +179,9 @@ function scheduleReconnect(): void {
     return;
   }
   attempt += 1;
-  const delay = Math.min(30_000, 1000 * 2 ** Math.min(attempt, 5));
-  logInfo(`reconnect: попытка ${attempt} через ${delay}ms`);
+  const baseDelay = Math.min(30_000, 1000 * 2 ** Math.min(attempt, 5));
+  const delay = applyReconnectJitter(baseDelay);
+  logInfo(`reconnect: попытка ${attempt} через ${delay}ms (base ${baseDelay}ms ±20% jitter)`);
   reconnectTimer = setTimeout(() => {
     reconnectTimer = undefined;
     openSocket();
@@ -136,6 +190,8 @@ function scheduleReconnect(): void {
 
 function openSocket(): void {
   if (stopped || !authToken) return;
+  // Первая строка: снимаем ВСЕ heartbeat старых экземпляров (reconnect-шторм,
+  // online+visibilitychange подряд) и отменяем запланированный реконнект.
   clearTimers();
 
   const url = resolveRealtimeWebSocketUrl();
@@ -155,6 +211,8 @@ function openSocket(): void {
   }
 
   ws = socket;
+  const timers: SocketTimers = {};
+  socketTimers.set(socket, timers);
 
   socket.onopen = () => {
     const wasReconnected = attempt > 0;
@@ -166,17 +224,22 @@ function openSocket(): void {
       logWarn('auth send failed', { error: String(e) });
     }
 
-    // Heartbeat: JSON ping (сервер отвечает { type: 'pong' }) + нативный ping от сервера (ws)
-    pingInterval = setInterval(() => {
-      if (socket.readyState !== WebSocket.OPEN) return;
-      clearPongDeadline();
+    // Heartbeat: JSON ping (сервер отвечает { type: 'pong' }) + нативный ping от сервера (ws).
+    // Таймеры привязаны к `socket`; при его замене очищаются из socketTimers.
+    timers.ping = setInterval(() => {
+      // Если сокет закрыт или замещён — гасим свой же интервал, чтобы не держать ссылку.
+      if (socket.readyState !== WebSocket.OPEN || ws !== socket) {
+        clearSocketTimers(socket);
+        return;
+      }
+      clearPongDeadline(socket);
       try {
         socket.send(JSON.stringify({ type: 'ping' }));
       } catch (e) {
         logWarn('ping send failed', { error: String(e) });
       }
-      pongDeadlineTimer = setTimeout(() => {
-        pongDeadlineTimer = undefined;
+      timers.pongDeadline = setTimeout(() => {
+        timers.pongDeadline = undefined;
         if (socket.readyState === WebSocket.OPEN && ws === socket) {
           logWarn('нет pong за 35s — закрываю сокет для переподключения');
           try {
@@ -195,7 +258,7 @@ function openSocket(): void {
     try {
       const msg = JSON.parse(String(ev.data)) as { type?: string; memberId?: number; onlineMembers?: number[] };
       if (msg && msg.type === 'pong') {
-        clearPongDeadline();
+        clearPongDeadline(socket);
         return;
       }
       if (msg && msg.type === 'ready' && typeof msg.memberId === 'number') {
@@ -213,14 +276,17 @@ function openSocket(): void {
 
   socket.onerror = (ev) => {
     logWarn('socket error', { type: ev.type });
+    // Error часто предшествует close; перестрахуемся и сразу снимаем heartbeat
+    // этого экземпляра, чтобы он не пережил замену `ws`.
+    clearSocketTimers(socket);
   };
 
   socket.onclose = (ev) => {
     logInfo('close', { code: ev.code, reason: ev.reason || '', wasClean: ev.wasClean });
+    clearSocketTimers(socket);
     if (ws === socket) {
       ws = null;
     }
-    clearTimers();
     if (!stopped && authToken) {
       scheduleReconnect();
     }

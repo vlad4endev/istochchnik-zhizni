@@ -1391,8 +1391,24 @@ export async function prepareMessageForSend(
   };
 }
 
-/** INSERT + обновление списка чатов (после раннего WS fan-out). */
-export async function persistPreparedMessage(prep: PreparedMessageSend): Promise<MessageWithSender> {
+/**
+ * Результат записи сообщения в БД.
+ * `isNew === false` означает, что сработал `ON CONFLICT` по `client_msg_id`
+ * (клиент ретраил тот же запрос) — уведомления (WS / push) уже были отправлены
+ * при первой вставке, и повторно их слать нельзя.
+ */
+export type PersistMessageResult = {
+  message: MessageWithSender;
+  isNew: boolean;
+};
+
+/**
+ * INSERT с идемпотентностью по `client_msg_id` + флаг «это свежая строка, а не
+ * повторное UPDATE через ON CONFLICT». Флаг вычисляется через `xmax = 0`:
+ * у свежевставленного кортежа `xmax = 0`, у обновлённого через ON CONFLICT
+ * DO UPDATE — идентификатор текущей транзакции (ненулевой).
+ */
+export async function persistPreparedMessage(prep: PreparedMessageSend): Promise<PersistMessageResult> {
   const { conversationId, senderId, contentStored, replyToMessageId, clientMsgId, pt, payloadJson } = prep;
 
   await dbQuery(`UPDATE conversations SET updated_at = NOW() WHERE id = $1`, [conversationId]);
@@ -1407,7 +1423,7 @@ export async function persistPreparedMessage(prep: PreparedMessageSend): Promise
         content = EXCLUDED.content,
         payload_type = EXCLUDED.payload_type,
         payload = EXCLUDED.payload
-      RETURNING *
+      RETURNING *, (xmax = 0) AS is_new
     )
     SELECT
       ins.*,
@@ -1454,7 +1470,9 @@ export async function persistPreparedMessage(prep: PreparedMessageSend): Promise
     ],
   );
 
-  return mapMessageWithSender(result.rows[0], senderId);
+  const row = result.rows[0];
+  const isNew = row?.is_new === true;
+  return { message: mapMessageWithSender(row, senderId), isNew };
 }
 
 /** Send a message. Returns the full message with sender info. */
@@ -1476,7 +1494,8 @@ export async function sendMessage(
     payloadType,
     payload,
   );
-  return persistPreparedMessage(prep);
+  const { message } = await persistPreparedMessage(prep);
+  return message;
 }
 
 /**

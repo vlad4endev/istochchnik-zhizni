@@ -30,7 +30,8 @@ self.addEventListener('push', function (event) {
     actions: parseJsonStr(data.actions, []),
     data: {
       url: data.url || '/',
-      conversationId: data.conversationId || null,
+      conversationId: data.conversationId != null ? data.conversationId : null,
+      deliveryId: data.deliveryId != null && data.deliveryId !== '' ? String(data.deliveryId) : null,
     },
     vibrate: [200, 100, 200],
   };
@@ -49,12 +50,15 @@ self.addEventListener('push', function (event) {
       await self.registration.showNotification(title, options);
       try {
         if (
-          appBadge > 0 &&
           self.navigator &&
           'setAppBadge' in self.navigator &&
           typeof self.navigator.setAppBadge === 'function'
         ) {
-          await self.navigator.setAppBadge(appBadge);
+          if (appBadge > 0) {
+            await self.navigator.setAppBadge(appBadge);
+          } else if (typeof self.navigator.clearAppBadge === 'function') {
+            await self.navigator.clearAppBadge();
+          }
         }
       } catch {
         /* Badging API не везде доступен */
@@ -66,8 +70,26 @@ self.addEventListener('push', function (event) {
 self.addEventListener('notificationclick', function (event) {
   event.notification.close();
 
-  // Handle explicit 'dismiss' action
+  const rawDelivery = event.notification?.data?.deliveryId;
+  const deliveryId =
+    typeof rawDelivery === 'string'
+      ? rawDelivery.trim()
+      : rawDelivery != null
+        ? String(rawDelivery).trim()
+        : '';
+
+  const markDeliveryOpened =
+    deliveryId && /^\d+$/.test(deliveryId)
+      ? fetch(new URL('/api/notifications/deliveries/' + deliveryId + '/open', self.location.origin).href, {
+          method: 'POST',
+          credentials: 'include',
+          mode: 'same-origin',
+        }).catch(function () {})
+      : Promise.resolve();
+
+  // Handle explicit 'dismiss' action — всё равно снимаем запись с бейджа
   if (event.action === 'dismiss') {
+    event.waitUntil(markDeliveryOpened);
     return;
   }
 
@@ -75,28 +97,32 @@ self.addEventListener('notificationclick', function (event) {
   const urlToOpen = new URL(safeUrl, self.location.origin).href;
 
   event.waitUntil(
-    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
-      // Prefer focusing any existing app window/tab that matches origin
-      let clientToFocus = null;
-      for (const client of windowClients) {
-        if (client.url && new URL(client.url).origin === self.location.origin) {
-          clientToFocus = client;
-          break;
+    markDeliveryOpened.then(function () {
+      return clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
+        let clientToFocus = null;
+        for (const client of windowClients) {
+          if (client.url && new URL(client.url).origin === self.location.origin) {
+            clientToFocus = client;
+            break;
+          }
         }
-      }
 
-      if (clientToFocus) {
-        clientToFocus.focus();
-        // If app is already open, let it navigate to the chat (best-effort).
-        try {
-          clientToFocus.postMessage({ type: 'push:navigate', url: urlToOpen, conversationId: event.notification.data.conversationId || null });
-        } catch {
-          /* ignore */
+        if (clientToFocus) {
+          clientToFocus.focus();
+          try {
+            clientToFocus.postMessage({
+              type: 'push:navigate',
+              url: urlToOpen,
+              conversationId: event.notification.data.conversationId || null,
+            });
+          } catch {
+            /* ignore */
+          }
+          return;
         }
-        return;
-      }
-      return clients.openWindow(urlToOpen);
-    })
+        return clients.openWindow(urlToOpen);
+      });
+    }),
   );
 });
 

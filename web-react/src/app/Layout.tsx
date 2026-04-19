@@ -1,4 +1,5 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import type { IconType } from 'react-icons';
 import {
@@ -37,6 +38,7 @@ import { LAYOUT_MAIN_CHROME_EVENT } from './layoutChrome';
 import { AppAvatar } from '../components/AppAvatar';
 import { AccessibilityHeaderMenu } from '../components/accessibility/AccessibilityHeaderMenu';
 import { CoordinatorDashboardNoteFab } from '../features/dashboard/components/CoordinatorDashboardNoteFab';
+import { apiClient } from '../lib/apiClient';
 
 type NavItem = {
   to: string;
@@ -268,11 +270,14 @@ function navClassName(isActive: boolean, compact = false): string {
   return `${base} ${size} ${active}`.replace(/\s+/g, ' ').trim();
 }
 
+const UNREAD_DELIVERIES_QK = ['notifications', 'unread-deliveries-count'] as const;
+
 export function Layout() {
   useSyncServerRole();
   useFCM();
   useWebPushSync();
   const token = useAuthStore((s) => s.token);
+  const queryClient = useQueryClient();
   useRealtimeQuerySync();
   useRealtimeWsConnection();
   useBrowserNotificationScheduler();
@@ -281,6 +286,19 @@ export function Layout() {
   const loadConversations = useChatStore((s) => s.loadConversations);
   const refreshUnread = useChatStore((s) => s.refreshUnread);
   const unreadMessages = useChatStore((s) => s.totalUnread);
+  const pendingDeliveriesQ = useQuery({
+    queryKey: UNREAD_DELIVERIES_QK,
+    queryFn: async () => {
+      const { data } = await apiClient.get<{ count?: number }>('/api/notifications/unread-deliveries-count');
+      const n = Number(data?.count);
+      return Number.isFinite(n) && n > 0 ? n : 0;
+    },
+    enabled: Boolean(token),
+    staleTime: 12_000,
+    refetchOnWindowFocus: true,
+  });
+  const pendingDeliveries = pendingDeliveriesQ.data ?? 0;
+  const activityBadgeTotal = Math.min(99, unreadMessages + pendingDeliveries);
   const role = useAuthStore((s) => s.role);
   const logout = useAuthStore((s) => s.logout);
   const updatePrompt = useServiceWorkerUpdate({ showPrompt: true });
@@ -381,10 +399,19 @@ export function Layout() {
     const onVis = () => {
       if (document.visibilityState !== 'visible') return;
       void refreshUnread();
+      void queryClient.invalidateQueries({ queryKey: UNREAD_DELIVERIES_QK });
     };
     document.addEventListener('visibilitychange', onVis);
     return () => document.removeEventListener('visibilitychange', onVis);
-  }, [token, refreshUnread]);
+  }, [token, refreshUnread, queryClient]);
+
+  useEffect(() => {
+    const onDeliveries = () => {
+      void queryClient.invalidateQueries({ queryKey: UNREAD_DELIVERIES_QK });
+    };
+    window.addEventListener('app:notification-deliveries-changed', onDeliveries);
+    return () => window.removeEventListener('app:notification-deliveries-changed', onDeliveries);
+  }, [queryClient]);
 
   useEffect(() => {
     if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) {
@@ -424,7 +451,7 @@ export function Layout() {
     };
   }, [navigate, setActiveConversation]);
 
-  /** Бейдж на иконке PWA: только непрочитанные сообщения в чатах (не календарные события). */
+  /** Бейдж на иконке PWA: чаты + неоткрытые push/напоминания из журнала. */
   useEffect(() => {
     if (typeof navigator === 'undefined') return;
     const nav = navigator as Navigator & {
@@ -437,7 +464,7 @@ export function Layout() {
       }
       return;
     }
-    const total = Math.min(99, unreadMessages);
+    const total = activityBadgeTotal;
     if (typeof nav.setAppBadge === 'function') {
       if (total > 0) {
         void nav.setAppBadge(total).catch(() => {});
@@ -445,7 +472,7 @@ export function Layout() {
         void nav.clearAppBadge().catch(() => {});
       }
     }
-  }, [token, unreadMessages]);
+  }, [token, activityBadgeTotal]);
 
   return (
     <MessengerWsProvider>
@@ -556,18 +583,18 @@ export function Layout() {
                     <>
                       <div className="relative">
                         <Icon className={navIconClass(isActive, navCollapsed)} strokeWidth={2} aria-hidden />
-                        {item.to === '/messenger' && unreadMessages > 0 && navCollapsed ? (
+                        {item.to === '/messenger' && activityBadgeTotal > 0 && navCollapsed ? (
                           <span className="absolute -right-1 -top-1 z-[5] inline-flex min-h-[17px] min-w-[17px] items-center justify-center rounded-full bg-rose-500 px-0.5 text-[9px] font-extrabold leading-none text-white shadow-sm ring-2 ring-white">
-                            {formatNavBadgeCount(unreadMessages)}
+                            {formatNavBadgeCount(activityBadgeTotal)}
                           </span>
                         ) : null}
                       </div>
                       {!navCollapsed ? (
                         <span className="flex min-w-0 flex-1 items-center justify-between gap-2">
                           <span className="truncate">{item.label}</span>
-                          {item.to === '/messenger' && unreadMessages > 0 ? (
+                          {item.to === '/messenger' && activityBadgeTotal > 0 ? (
                             <span className={['inline-flex min-w-[20px] items-center justify-center rounded-full px-1.5 py-0.5 text-[11px] font-extrabold', isActive ? 'bg-white/90 text-primary' : 'bg-primary text-white'].join(' ')}>
-                              {formatNavBadgeCount(unreadMessages)}
+                              {formatNavBadgeCount(activityBadgeTotal)}
                             </span>
                           ) : null}
                         </span>
@@ -696,8 +723,8 @@ export function Layout() {
                 to={item.to}
                 className={({ isActive }) => navClassName(isActive, true)}
                 aria-label={
-                  item.to === '/messenger' && unreadMessages > 0
-                    ? `Чаты, непрочитанных сообщений: ${unreadMessages > 99 ? 'более 99' : unreadMessages}`
+                  item.to === '/messenger' && activityBadgeTotal > 0
+                    ? `Чаты: непрочитанные сообщения и неоткрытые уведомления, всего: ${activityBadgeTotal > 99 ? 'более 99' : activityBadgeTotal}`
                     : undefined
                 }
               >
@@ -705,9 +732,9 @@ export function Layout() {
                   <>
                     <span className="relative z-10 inline-flex overflow-visible">
                       <Icon className={navIconClass(isActive, true)} strokeWidth={2} aria-hidden />
-                      {item.to === '/messenger' && unreadMessages > 0 ? (
+                      {item.to === '/messenger' && activityBadgeTotal > 0 ? (
                         <span className="absolute -right-2.5 top-0 z-[5] inline-flex min-h-[18px] min-w-[18px] items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-extrabold leading-none text-white shadow-sm ring-2 ring-white">
-                          {formatNavBadgeCount(unreadMessages)}
+                          {formatNavBadgeCount(activityBadgeTotal)}
                         </span>
                       ) : null}
                     </span>

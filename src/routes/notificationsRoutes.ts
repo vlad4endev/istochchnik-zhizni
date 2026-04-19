@@ -1,6 +1,11 @@
 import { Router, type Request, type Response } from 'express';
 import { requireAuthSession } from '../middleware/authSession';
 import { saveFcmToken } from '../services/fcmSubscriptionService';
+import {
+  getUnreadNotificationDeliveryCount,
+  insertMemberNotificationDelivery,
+  markNotificationDeliveryOpened,
+} from '../services/notificationDeliveryService';
 import { removeSubscription, saveSubscription } from '../services/pushService';
 
 type AuthReq = Request & { authUserId?: number };
@@ -130,6 +135,83 @@ router.post('/save-token', requireAuthSession, async (req: Request, res: Respons
   } catch (e) {
     console.error('[notifications] save-token error:', e);
     res.status(500).json({ error: 'Failed to save token' });
+  }
+});
+
+/**
+ * GET /api/notifications/unread-deliveries-count
+ * Непрочитанные записи журнала push/напоминаний (ещё не открыты по тапу из трея).
+ */
+router.get('/unread-deliveries-count', requireAuthSession, async (req: Request, res: Response) => {
+  const memberId = (req as AuthReq).authUserId;
+  if (!memberId) {
+    res.status(401).json({ error: 'Unauthorized' });
+    return;
+  }
+  try {
+    const count = await getUnreadNotificationDeliveryCount(memberId);
+    res.json({ count });
+  } catch (e) {
+    console.error('[notifications] unread-deliveries-count error:', e);
+    res.status(500).json({ error: 'Failed to load count' });
+  }
+});
+
+/**
+ * POST /api/notifications/deliveries/:id/open
+ * Помечает доставку открытой (снимается с бейджа). Вызывается из SW при клике по уведомлению.
+ */
+router.post('/deliveries/:id/open', requireAuthSession, async (req: Request, res: Response) => {
+  const memberId = (req as AuthReq).authUserId;
+  if (!memberId) {
+    res.status(401).json({ error: 'Unauthorized' });
+    return;
+  }
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id) || id <= 0) {
+    res.status(400).json({ error: 'Invalid id' });
+    return;
+  }
+  try {
+    const ok = await markNotificationDeliveryOpened(id, memberId);
+    res.json({ ok });
+  } catch (e) {
+    console.error('[notifications] delivery open error:', e);
+    res.status(500).json({ error: 'Failed to update' });
+  }
+});
+
+/**
+ * POST /api/notifications/deliveries/local-reminder
+ * Локальное напоминание из вкладки (useBrowserNotificationScheduler) — попадает в тот же счётчик «не открыто».
+ */
+router.post('/deliveries/local-reminder', requireAuthSession, async (req: Request, res: Response) => {
+  const memberId = (req as AuthReq).authUserId;
+  if (!memberId) {
+    res.status(401).json({ error: 'Unauthorized' });
+    return;
+  }
+  const ruleId = typeof req.body?.ruleId === 'string' ? req.body.ruleId.trim().slice(0, 64) : '';
+  const title = typeof req.body?.title === 'string' ? req.body.title.trim().slice(0, 500) : '';
+  const body = typeof req.body?.body === 'string' ? req.body.body.trim().slice(0, 2000) : '';
+  const tag = typeof req.body?.tag === 'string' ? req.body.tag.trim().slice(0, 128) : ruleId;
+  if (!ruleId || !title) {
+    res.status(400).json({ error: 'ruleId and title are required' });
+    return;
+  }
+  try {
+    const id = await insertMemberNotificationDelivery({
+      memberId,
+      source: 'browser_scheduler',
+      tag: tag || ruleId,
+      title,
+      body,
+      payload: { ruleId },
+    });
+    res.status(201).json({ id });
+  } catch (e) {
+    console.error('[notifications] local-reminder error:', e);
+    res.status(500).json({ error: 'Failed to record reminder' });
   }
 });
 

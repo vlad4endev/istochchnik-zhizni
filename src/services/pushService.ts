@@ -6,6 +6,10 @@ import {
   getFcmTokensForMember,
   isUnrecoverableFcmErrorCode,
 } from './fcmSubscriptionService';
+import {
+  getCombinedAppBadgeCount,
+  insertMemberNotificationDelivery,
+} from './notificationDeliveryService';
 
 const { VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, VAPID_SUBJECT } = process.env;
 
@@ -189,6 +193,11 @@ export async function sendNotificationToMember(memberId: number, payload: unknow
 
 const FCM_MULTICAST_CHUNK = 500;
 
+export type SendPushOptions = {
+  /** false — только чаты (sendPushNotification), запись в журнал не создаём, чтобы не дублировать счётчик. */
+  recordDelivery?: boolean;
+};
+
 /**
  * Web Push + FCM: все подписки участника.
  */
@@ -197,8 +206,43 @@ export async function sendPush(
   title: string,
   body: string,
   data?: Record<string, string>,
+  opts?: SendPushOptions,
 ): Promise<void> {
+  const recordDelivery = opts?.recordDelivery !== false;
+  let deliveryId: number | undefined;
+  if (recordDelivery) {
+    try {
+      const payloadObj: Record<string, unknown> = {};
+      if (data) {
+        for (const [k, v] of Object.entries(data)) {
+          payloadObj[k] = v;
+        }
+      }
+      const id = await insertMemberNotificationDelivery({
+        memberId,
+        source: 'push',
+        tag: data?.tag ?? null,
+        title,
+        body,
+        payload: payloadObj,
+      });
+      if (id > 0) deliveryId = id;
+    } catch (e) {
+      console.warn('[push] notification delivery log failed', e);
+    }
+  }
+
   const webPayload: Record<string, unknown> = { title, body, ...(data ?? {}) };
+  if (deliveryId != null) {
+    webPayload.deliveryId = String(deliveryId);
+  }
+  try {
+    const badge = await getCombinedAppBadgeCount(memberId);
+    webPayload.badgeCount = String(badge);
+  } catch (e) {
+    console.warn('[push] badge count failed', e);
+  }
+
   await sendNotificationToMember(memberId, webPayload);
 
   const messaging = getFirebaseMessaging();
@@ -216,6 +260,12 @@ export async function sendPush(
     for (const [k, v] of Object.entries(data)) {
       dataStrings[k] = v;
     }
+  }
+  if (deliveryId != null) {
+    dataStrings.deliveryId = String(deliveryId);
+  }
+  if (typeof webPayload.badgeCount === 'string') {
+    dataStrings.badgeCount = webPayload.badgeCount;
   }
 
   for (let i = 0; i < tokens.length; i += FCM_MULTICAST_CHUNK) {
@@ -260,5 +310,5 @@ export async function sendPushNotification(memberId: number, payload: unknown): 
       data[k] = typeof v === 'string' ? v : JSON.stringify(v);
     }
   }
-  await sendPush(memberId, title, body, data);
+  await sendPush(memberId, title, body, data, { recordDelivery: false });
 }

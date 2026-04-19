@@ -422,6 +422,21 @@ function hydrateFromCacheIntoStore(set: (partial: Partial<ChatState>) => void, g
     totalUnread: Number(snap.totalUnread || 0),
   });
   ensureOutboxPump(get);
+
+  // Outbox recovery: если вкладка только что открылась с уже накопленной очередью
+  // (например, ОС выгрузила Safari PWA до того, как `window.online` успел выстрелить),
+  // не ждём следующий 7-сек тик `outboxRetryTimer` — пробуем отправить сразу.
+  // Гонка с логаутом исключена: `flushOutbox` идёт через microtask и проверяет
+  // `navigator.onLine` перед каждой итерацией.
+  if (
+    inMemoryOutbox.length > 0 &&
+    typeof navigator !== 'undefined' &&
+    navigator.onLine !== false
+  ) {
+    queueMicrotask(() => {
+      void flushOutbox(get);
+    });
+  }
 }
 
 function dedupeMessages(messages: MessageWithSender[]): MessageWithSender[] {
@@ -1322,8 +1337,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
         s.currentMemberId != null &&
         msg.sender_id != null &&
         Number(msg.sender_id) === Number(s.currentMemberId);
-      const shouldCountUnread =
-        messageCountsAsUnreadForCurrentUser(msg, s.currentMemberId) && !isActiveConversation;
       const targetConversation = s.conversations.find((c) => c.id === idKey) || null;
 
       // Already present by definitive server id.
@@ -1335,6 +1348,21 @@ export const useChatStore = create<ChatState>((set, get) => ({
         existing.some(
           (m) => isProvisionalLocalId(String(m.id)) && m.client_msg_id === msgClientId,
         );
+
+      // ⛔️ Защита от двойного инкремента `unread_count` / `totalUnread`:
+      // если сообщение уже присутствует в кэше — как финальная версия своего twin'а
+      // (provisional id) или как идентичная копия по `client_msg_id`, — значит
+      // счётчик непрочитанных был инкрементирован на предыдущем `msg:new`.
+      // Проверку делаем ДО вычисления `shouldCountUnread`.
+      const alreadyPresentByClientId =
+        msgClientId != null &&
+        existing.some((m) => m.client_msg_id === msgClientId);
+      const shouldCountUnread =
+        !hasProvisionalTwin &&
+        !alreadyPresentByClientId &&
+        messageCountsAsUnreadForCurrentUser(msg, s.currentMemberId) &&
+        !isActiveConversation;
+
       const merged = hasProvisionalTwin
         ? existing.map((m) => {
             if (!isProvisionalLocalId(String(m.id)) || m.client_msg_id !== msgClientId) return m;
@@ -1364,7 +1392,15 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
       const totalUnread = s.totalUnread + (nextUnreadForConv - prevUnreadForConv);
 
-      if (!isActiveConversation && !isOwnMessage) {
+      // Toast показываем только при реально «новом» сообщении — так же, как инкремент unread:
+      // если это финальная версия уже показанного provisional twin'а или повторная копия
+      // по `client_msg_id`, второй тост только спамит пользователя.
+      if (
+        !isActiveConversation &&
+        !isOwnMessage &&
+        !hasProvisionalTwin &&
+        !alreadyPresentByClientId
+      ) {
         const toastMeta = getConversationToastMeta(targetConversation, msg);
         emitAppToast({
           kind: 'info',

@@ -76,6 +76,23 @@ export function ChatWindow({
   const scrollMeasureRafRef = useRef<number | null>(null);
   const readObserverRef = useRef<IntersectionObserver | null>(null);
 
+  /**
+   * A11y-announcer'ы (sr-only live regions) — три независимых буфера.
+   *
+   * Почему отдельные, а НЕ `aria-live` на виртуализированном списке:
+   *   - `@tanstack/react-virtual` добавляет/удаляет DOM-узлы при прокрутке, и
+   *     `aria-live` на контейнере = SR зачитывает историю при каждом скролле;
+   *   - разведение по регионам даёт разный приоритет и предотвращает
+   *     «склеивание» (например, «печатает» + одновременно приходит сообщение
+   *     в одном буфере = SR режет речь).
+   */
+  const [newMessageAnnouncement, setNewMessageAnnouncement] = useState('');
+  const [presenceAnnouncement, setPresenceAnnouncement] = useState('');
+  /** id последнего уже озвученного «хвоста» (защита от повторов + игнор истории). */
+  const lastAnnouncedTailIdRef = useRef<string | null>(null);
+  /** предыдущее значение online для других-в-личке, чтобы озвучивать только переходы. */
+  const prevIsOnlineRef = useRef<boolean | null>(null);
+
   const conv = useMemo(() => conversations.find((c) => c.id === conversationId), [conversations, conversationId]);
 
   useEffect(() => {
@@ -135,6 +152,89 @@ export function ChatWindow({
     }
     return m;
   }, [mentionList]);
+
+  /** Сброс announcer-состояния при переключении чата. */
+  useEffect(() => {
+    lastAnnouncedTailIdRef.current = null;
+    prevIsOnlineRef.current = null;
+    setNewMessageAnnouncement('');
+    setPresenceAnnouncement('');
+  }, [conversationId]);
+
+  /**
+   * Announcer для входящих сообщений: срабатывает только на реально новое сообщение
+   * (сдвиг «хвоста»), игнорирует:
+   *   - подгрузку истории (prepend в начало — хвост не сдвигается);
+   *   - optimistic-echo собственного отправления (`temp-*` / `pending-*` id);
+   *   - собственное сообщение (его уже видно на экране);
+   *   - повторный эффект с тем же последним id.
+   */
+  useEffect(() => {
+    if (messages.length === 0) return;
+    const last = messages[messages.length - 1];
+    if (!last) return;
+    const idStr = String(last.id);
+    if (!/^\d+$/.test(idStr)) return;
+    if (last.sender_id != null && Number(last.sender_id) === Number(currentMemberId)) {
+      lastAnnouncedTailIdRef.current = idStr;
+      return;
+    }
+    if (lastAnnouncedTailIdRef.current == null) {
+      // Первый замер после открытия чата: фиксируем точку, чтобы не зачитывать всю историю.
+      lastAnnouncedTailIdRef.current = idStr;
+      return;
+    }
+    if (idStr === lastAnnouncedTailIdRef.current) return;
+    try {
+      if (BigInt(idStr) <= BigInt(lastAnnouncedTailIdRef.current)) return;
+    } catch {
+      /* несущественный id — пропускаем проверку монотонности */
+    }
+    lastAnnouncedTailIdRef.current = idStr;
+    const speaker =
+      last.sender_name ||
+      (last.sender_id != null ? participantLabelById[Number(last.sender_id)] : undefined) ||
+      'Новое сообщение';
+    const raw = String(last.content ?? '').replace(/\s+/g, ' ').trim();
+    const preview = raw.length > 140 ? `${raw.slice(0, 140)}…` : raw || 'вложение';
+    setNewMessageAnnouncement(`${speaker}: ${preview}`);
+  }, [messages, currentMemberId, participantLabelById]);
+
+  /**
+   * Typing-announcer: выводится в отдельный sr-only буфер.
+   * Отдаём только имя + «печатает», без «…», — многоточие SR зачитывает как паузу.
+   */
+  const typingAnnouncement = useMemo(() => {
+    if (typingUsers.length === 0) return '';
+    const names = typingUsers
+      .map((u: { memberName: string }) => u.memberName.split(' ')[0])
+      .filter(Boolean);
+    if (names.length === 0) return '';
+    return `${names.join(', ')} печатает`;
+  }, [typingUsers]);
+
+  /**
+   * Presence-announcer (только личный чат). Озвучиваем ТОЛЬКО переход online↔offline,
+   * не начальное состояние (иначе каждое открытие чата = «Иван в сети»).
+   */
+  useEffect(() => {
+    if (!conv || conv.type !== 'private' || !conv.other_member) {
+      prevIsOnlineRef.current = null;
+      return;
+    }
+    const next = onlineMembers.has(conv.other_member.id);
+    const prev = prevIsOnlineRef.current;
+    if (prev === null) {
+      prevIsOnlineRef.current = next;
+      return;
+    }
+    if (prev === next) return;
+    prevIsOnlineRef.current = next;
+    const fn = conv.other_member.first_name || '';
+    const ln = conv.other_member.last_name || '';
+    const name = `${fn} ${ln}`.trim() || conv.other_member.name || 'Собеседник';
+    setPresenceAnnouncement(next ? `${name} в сети` : `${name} оффлайн`);
+  }, [onlineMembers, conv]);
 
   const canPostMessages = isDraft || chatMeta?.my_effective_permissions?.can_send_messages !== false;
   const canPinMessages = chatMeta?.my_effective_permissions?.can_pin_messages === true;
@@ -229,7 +329,18 @@ export function ChatWindow({
     gap: 10,
     getItemKey: (index) => {
       const row = groupedMessages[index];
-      return row ? String(row.id) : index;
+      if (!row) return index;
+      // Стабильный ключ на всех стадиях жизни сообщения.
+      // id меняется дважды: `temp-<rand>` (optimistic) → `pending-<uuid>` (early WS,
+      // может ещё оставаться у старых клиентов) → `<bigint>` (после INSERT).
+      // Каждая смена id при старом getItemKey = размонтирование строки в
+      // `@tanstack/react-virtual`: пересчёт размера, перезапуск CSS-переходов,
+      // «прыжок» скролла. `client_msg_id` одинаков через все стадии — держим ключ
+      // на нём, а на `id` падаем только для старых сообщений из истории,
+      // у которых `client_msg_id` пустой (мигрированы на `NULL` в initDb.ts).
+      // Префиксы `c:` / `i:` исключают коллизию, если client_msg_id случайно
+      // выглядит как bigint.
+      return row.client_msg_id ? `c:${row.client_msg_id}` : `i:${row.id}`;
     },
   });
 
@@ -631,13 +742,29 @@ export function ChatWindow({
           </div>
         ) : null}
 
+        {/*
+         * Три независимых sr-only live-региона. `role="status"` + `aria-live="polite"`
+         * (неперебивающий приоритет), `aria-atomic="true"` — SR зачитывает весь
+         * обновлённый текст как единое объявление, а не diff по словам. Расположены
+         * ВНЕ виртуализированного контейнера: иначе Virtual-размонтирование обнуляло бы
+         * объявление до того, как VoiceOver успел его прочитать.
+         */}
+        <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">
+          {newMessageAnnouncement}
+        </div>
+        <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">
+          {typingAnnouncement}
+        </div>
+        <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">
+          {presenceAnnouncement}
+        </div>
+
         <div
           className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto bg-transparent px-3 py-3 sm:gap-3 sm:p-4"
           ref={scrollRef}
           onScroll={handleScroll}
           role="log"
-          aria-live="polite"
-          aria-relevant="additions"
+          aria-label="Сообщения в чате"
         >
         {hasMore ? (
           <div className="flex justify-center">
@@ -671,6 +798,10 @@ export function ChatWindow({
                   data-index={virtualRow.index}
                   ref={rowVirtualizer.measureElement}
                   className="left-0 top-0 w-full"
+                  role="group"
+                  aria-roledescription="Сообщение"
+                  aria-posinset={virtualRow.index + 1}
+                  aria-setsize={listCount}
                   style={{
                     position: 'absolute',
                     transform: `translateY(${virtualRow.start}px)`,

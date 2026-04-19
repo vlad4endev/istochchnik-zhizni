@@ -757,43 +757,60 @@ router.post(
           : `srv-${randomUUID()}`;
       const convKey = String(convId);
       const prepared = await svc.prepareMessageForSend(convId, userId, content, replyId, safeClientMsgId, pt, pl);
+      // Акк только отправителю — это не «сообщение в комнате», а подтверждение
+      // приёма запроса сервером; ни у кого в чате ещё нет этого сообщения.
       sendToMember(userId, {
         type: 'msg:server_ack',
         conversationId: convKey,
         clientMsgId: safeClientMsgId,
       });
-      const pendingRealtime = { ...prepared.pendingMessage, is_read: false as const };
-      // Low-latency: fan-out до INSERT; клиенты сливают pending → финальный id по client_msg_id.
-      sendToRoomAll(convKey, { type: 'msg:new', conversationId: convKey, message: pendingRealtime });
 
-      let message: Awaited<ReturnType<typeof svc.persistPreparedMessage>>;
+      // Сохраняем в БД СНАЧАЛА, и только после успешной записи рассылаем `msg:new`.
+      // Ранее использовался early-fanout «до INSERT», но он создавал две патологии:
+      //   1) получатели видели `pending-<uuid>`, которого нет в БД → 404 на reply/reactions;
+      //   2) при ошибке INSERT оставался «призрак», который `msg:send_failed` лишь помечал.
+      let persistResult: Awaited<ReturnType<typeof svc.persistPreparedMessage>>;
       try {
-        message = await svc.persistPreparedMessage(prepared);
+        persistResult = await svc.persistPreparedMessage(prepared);
       } catch (persistErr) {
         console.error('[messenger] persistPreparedMessage failed:', persistErr);
-        const cid = String(prepared.pendingMessage.client_msg_id ?? '').trim();
-        if (cid) {
-          sendToRoomAll(convKey, {
-            type: 'msg:send_failed',
-            conversationId: convKey,
-            clientMsgId: cid,
-            reason: 'db_error',
-          });
-        }
+        // Поскольку fan-out не было, говорить об ошибке нужно только отправителю
+        // (его другие вкладки могли получить `msg:server_ack`).
+        sendToMember(userId, {
+          type: 'msg:send_failed',
+          conversationId: convKey,
+          clientMsgId: safeClientMsgId,
+          reason: 'db_error',
+        });
         res.status(503).json({ error: 'Failed to save message' });
         return;
       }
 
+      const { message, isNew } = persistResult;
       // Явный флаг для клиентского счётчика: только is_read === false считается непрочитанным.
       const messageForRealtime = { ...message, is_read: false as const };
-      sendToRoomAll(convKey, { type: 'msg:new', conversationId: convKey, message: messageForRealtime });
+
+      if (isNew) {
+        // Свежая вставка — первый и единственный fan-out на комнату.
+        sendToRoomAll(convKey, { type: 'msg:new', conversationId: convKey, message: messageForRealtime });
+      } else {
+        // Идемпотентный повтор (клиент ретраил тот же `client_msg_id`).
+        // Остальные участники уже получили `msg:new` и push при первой вставке —
+        // повторно их тревожить нельзя. Отправляем только отправителю, чтобы его
+        // другие устройства могли заменить `temp-*`/`pending-*` на финальный id.
+        sendToMember(userId, { type: 'msg:new', conversationId: convKey, message: messageForRealtime });
+      }
+
       res.json({
         ...messageForRealtime,
         send_api_ms: Date.now() - requestStartedAt,
       });
 
-      // Push-уведомления: всем участникам, кроме отправителя.
-      // Пуши приходят даже при закрытом приложении (если подписка активна и браузер разрешил).
+      // Push-уведомления: ТОЛЬКО при первой вставке. Для ретраев тот же
+      // `client_msg_id` уже приводил к пушу ранее; второй push — дубль у получателя.
+      if (!isNew) {
+        return;
+      }
       void (async () => {
         try {
         const memberIds = await svc.getConversationMemberIds(convKey);
@@ -833,12 +850,6 @@ router.post(
           const r = Number(rid);
           if (await svc.isConversationMutedForMember(convKey, r)) return;
           const mentioned = mentionSet.has(r);
-          let badgeCount = 0;
-          try {
-            badgeCount = Math.min(99, await svc.getTotalUnreadCount(r));
-          } catch {
-            /* ignore — бейдж опционален */
-          }
           const payload = {
             title: mentioned ? `Вас упомянули в «${chatLabel}»` : senderName,
             body: mentioned ? `${senderName}: ${previewShort || 'Сообщение'}` : bodyText,
@@ -849,7 +860,6 @@ router.post(
             renotify: true,
             badge: '/assets/pwa-64x64.png',
             icon: '/assets/pwa-192x192.png',
-            ...(badgeCount > 0 ? { badgeCount: String(badgeCount) } : {}),
             actions: [
               { action: 'reply', title: 'Ответить' },
               { action: 'dismiss', title: 'Закрыть' },

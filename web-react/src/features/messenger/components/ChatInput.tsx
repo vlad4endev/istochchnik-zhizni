@@ -872,12 +872,28 @@ export function ChatInput({
               <LuPlus size={22} />
             </button>
           </div>
+          {/*
+           * A11y: VoiceOver/NVDA озвучивают `placeholder` только у пустого поля и не во всех
+           * браузерах. Явный `aria-label` гарантирует, что при любом состоянии (пусто / черновик /
+           * режим редактирования через `editingMessageId`) фокус на textarea читается как
+           * «Сообщение, текстовое поле». Подсказка про @-упоминания вынесена в sr-only узел
+           * и привязана через `aria-describedby` — только когда участников для упоминания >1,
+           * иначе SR не зачитывает бессмысленное описание в личном чате.
+           */}
+          {mentionParticipants.length > 0 ? (
+            <span id="chat-input-mention-hint" className="sr-only">
+              Наберите символ собака, чтобы упомянуть участника
+            </span>
+          ) : null}
           <textarea
             ref={textareaRef}
             className="tg-input-textarea text-gray-900 placeholder:text-gray-400"
             placeholder={
               mentionParticipants.length > 0 ? 'Сообщение… (наберите @ — позвать человека)' : 'Сообщение…'
             }
+            aria-label="Сообщение"
+            aria-describedby={mentionParticipants.length > 0 ? 'chat-input-mention-hint' : undefined}
+            aria-multiline="true"
             rows={1}
             value={content}
             onChange={handleChange}
