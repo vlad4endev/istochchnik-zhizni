@@ -54,30 +54,9 @@
 }
 
 .igTopBarRight {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 0.35rem;
-  flex-shrink: 0;
-}
-
-.igTopBarA11yBtn {
-  display: grid;
-  place-items: center;
   width: 2.75rem;
-  height: 2.75rem;
-  border-radius: 9999px;
-  border: none;
-  background: transparent;
-  color: var(--profile-text-heading);
-  cursor: pointer;
-  transition: background 0.15s ease;
-  padding: 0;
-  font: inherit;
-}
-
-.igTopBarA11yBtn:hover {
-  background: color-mix(in srgb, var(--profile-text-heading) 6%, transparent);
+  display: flex;
+  justify-content: flex-end;
 }
 
 .igTopBarRightPad {

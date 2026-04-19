@@ -8,7 +8,6 @@ import { applyNativeShellViewportLock } from './lib/nativeShellViewport';
 import { AppRouter } from './app/Router';
 import { AppRouterMain } from './app/RouterMain';
 import { AppRouterStudio } from './app/RouterStudio';
-import { AccessibilityToolbar } from './components/accessibility/AccessibilityToolbar';
 import { AccessibilityProvider } from './lib/accessibility/AccessibilityProvider';
 import { getAppVariant } from './lib/appVariant';
 import { applySystemFontScaleToDocument } from './lib/accessibility/syncSystemFontScale';
@@ -75,7 +74,6 @@ createRoot(document.getElementById('root')!).render(
         <BrowserRouter>
           <AccessibilityProvider>
             <RootRouter />
-            <AccessibilityToolbar />
           </AccessibilityProvider>
         </BrowserRouter>
       </QueryClientProvider>

@@ -115,8 +115,18 @@ const clientsByMember = new Map<number, Set<AuthenticatedClient>>();
 const rooms = new Map<string, Set<AuthenticatedClient>>();
 /** Online member IDs (at least one connected client) */
 const onlineMembers = new Set<number>();
+/** Нативный WebSocket ping (ответ — pong от клиента). Держим ниже типичного proxy_read_timeout (60s). */
 const HEARTBEAT_INTERVAL_MS = 15_000;
 const MAX_WS_MESSAGE_BYTES = 64 * 1024;
+
+let safeSendFailLogLastMs = 0;
+function logSafeSendFailureThrottled(err: unknown): void {
+  const now = Date.now();
+  if (now - safeSendFailLogLastMs < 5000) return;
+  safeSendFailLogLastMs = now;
+  const msg = err instanceof Error ? err.message : String(err);
+  console.warn('[realtime] ws.send failed (throttled):', msg);
+}
 
 // ─── Attach ───────────────────────────────────────────────────
 
@@ -125,6 +135,7 @@ export function attachRealtimeWebSocket(server: Server): void {
   const heartbeatTimer = setInterval(() => {
     for (const [, client] of clientsByWs) {
       if (!client.isAlive) {
+        console.warn('[realtime] heartbeat: нет pong, разрываю сокет', { memberId: client.memberId });
         removeClient(client.ws);
         try {
           client.ws.terminate();
@@ -136,7 +147,11 @@ export function attachRealtimeWebSocket(server: Server): void {
       client.isAlive = false;
       try {
         client.ws.ping();
-      } catch {
+      } catch (e) {
+        console.warn('[realtime] heartbeat: ping() failed', {
+          memberId: client.memberId,
+          err: e instanceof Error ? e.message : String(e),
+        });
         removeClient(client.ws);
       }
     }
@@ -194,6 +209,7 @@ async function handleNewSocket(ws: WebSocket): Promise<void> {
       const sessionOk = await resolveSessionByToken(msg.token.trim());
       if (!sessionOk) {
         clearTimeout(timer);
+        console.warn('[realtime] auth rejected (invalid or expired token)');
         fail(1008, 'unauthorized');
         return;
       }
@@ -286,8 +302,24 @@ async function handleNewSocket(ws: WebSocket): Promise<void> {
         client.isAlive = true;
       });
 
-      ws.on('close', () => removeClient(ws));
-      ws.on('error', () => removeClient(ws));
+      ws.on('close', (code, reason) => {
+        if (code !== 1000 && code !== 1001) {
+          const reasonStr = Buffer.isBuffer(reason) ? reason.toString('utf8') : String(reason);
+          console.info('[realtime] client close', {
+            memberId: client.memberId,
+            code,
+            reason: reasonStr.slice(0, 120),
+          });
+        }
+        removeClient(ws);
+      });
+      ws.on('error', (err) => {
+        console.warn('[realtime] client socket error', {
+          memberId: client.memberId,
+          message: err instanceof Error ? err.message : String(err),
+        });
+        removeClient(ws);
+      });
     } catch {
       clearTimeout(timer);
       fail(1011, 'server error');
@@ -355,7 +387,13 @@ async function handleClientMessage(client: AuthenticatedClient, msg: any): Promi
       break;
     }
     case 'ping': {
-      safeSend(client.ws, JSON.stringify({ type: 'pong' }));
+      safeSend(client.ws, JSON.stringify({ type: 'pong', t: Date.now() }));
+      break;
+    }
+    default: {
+      if (msg?.type != null && process.env.NODE_ENV !== 'production') {
+        console.info('[realtime] unknown client message type:', String(msg.type));
+      }
       break;
     }
   }
@@ -415,8 +453,8 @@ function safeSend(ws: WebSocket, data: string): void {
   if (ws.readyState === WebSocket.OPEN) {
     try {
       ws.send(data);
-    } catch {
-      /* ignore send failures */
+    } catch (e) {
+      logSafeSendFailureThrottled(e);
     }
   }
 }

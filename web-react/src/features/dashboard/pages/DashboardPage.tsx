@@ -14,7 +14,6 @@ import {
   LuUser,
 } from 'react-icons/lu';
 
-import { AccessibilityHeaderMenu } from '../../../components/accessibility/AccessibilityHeaderMenu';
 import { fetchBroadcastEmbed } from '../../../api/broadcast';
 import { fetchPodcastFeed, type PodcastEpisode } from '../../../api/resources';
 import {
@@ -450,17 +449,14 @@ function DashboardMain() {
               <h1 className="min-w-0 text-xl font-extrabold leading-tight tracking-tight sm:text-2xl md:text-3xl lg:text-[1.65rem] xl:text-[26px] animate-prayer-fade-up motion-reduce:animate-none">
                 Главная
               </h1>
-              <div className="flex shrink-0 items-center gap-2">
-                <AccessibilityHeaderMenu tone="on-gradient" />
-                <Link
-                  to="/profile"
-                  className="tap-highlight-transparent flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-white/25 bg-white/15 text-white shadow-sm transition hover:bg-white/25 active:scale-[0.98] md:hidden"
-                  aria-label="Настройки профиля"
-                  title="Настройки"
-                >
-                  <LuSettings className="h-5 w-5" strokeWidth={2} aria-hidden />
-                </Link>
-              </div>
+              <Link
+                to="/profile"
+                className="tap-highlight-transparent flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-white/25 bg-white/15 text-white shadow-sm transition hover:bg-white/25 active:scale-[0.98] md:hidden"
+                aria-label="Настройки профиля"
+                title="Настройки"
+              >
+                <LuSettings className="h-5 w-5" strokeWidth={2} aria-hidden />
+              </Link>
             </div>
           </header>
         </div>

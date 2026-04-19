@@ -35,7 +35,32 @@ self.addEventListener('push', function (event) {
     vibrate: [200, 100, 200],
   };
 
-  event.waitUntil(self.registration.showNotification(title, options));
+  const rawBadge = data.badgeCount;
+  const parsedBadge =
+    typeof rawBadge === 'number'
+      ? rawBadge
+      : typeof rawBadge === 'string'
+        ? parseInt(rawBadge, 10)
+        : NaN;
+  const appBadge = Number.isFinite(parsedBadge) ? Math.min(99, Math.max(0, parsedBadge)) : 0;
+
+  event.waitUntil(
+    (async () => {
+      await self.registration.showNotification(title, options);
+      try {
+        if (
+          appBadge > 0 &&
+          self.navigator &&
+          'setAppBadge' in self.navigator &&
+          typeof self.navigator.setAppBadge === 'function'
+        ) {
+          await self.navigator.setAppBadge(appBadge);
+        }
+      } catch {
+        /* Badging API не везде доступен */
+      }
+    })(),
+  );
 });
 
 self.addEventListener('notificationclick', function (event) {

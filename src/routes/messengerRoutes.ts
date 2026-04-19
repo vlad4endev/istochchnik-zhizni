@@ -828,6 +828,12 @@ router.post(
           const r = Number(rid);
           if (await svc.isConversationMutedForMember(convKey, r)) return;
           const mentioned = mentionSet.has(r);
+          let badgeCount = 0;
+          try {
+            badgeCount = Math.min(99, await svc.getTotalUnreadCount(r));
+          } catch {
+            /* ignore — бейдж опционален */
+          }
           const payload = {
             title: mentioned ? `Вас упомянули в «${chatLabel}»` : senderName,
             body: mentioned ? `${senderName}: ${previewShort || 'Сообщение'}` : bodyText,
@@ -838,6 +844,7 @@ router.post(
             renotify: true,
             badge: '/assets/pwa-64x64.png',
             icon: '/assets/pwa-192x192.png',
+            ...(badgeCount > 0 ? { badgeCount: String(badgeCount) } : {}),
             actions: [
               { action: 'reply', title: 'Ответить' },
               { action: 'dismiss', title: 'Закрыть' },

@@ -1297,6 +1297,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
       };
     });
 
+    // Сообщение пришло по WS, а строки чата ещё нет в списке (например, добавили в группу с другого устройства).
+    if (!get().conversations.some((c) => c.id === idKey)) {
+      void get().loadConversations({ force: true });
+    }
+
     // Если чат открыт — синхронизируем read cursor с сервером (с дебаунсом: см. поток msg:new).
     if (shouldAutoReadNow) {
       debouncedMarkReadUpTo(idKey, serverMsgId, (c, m) => {
@@ -1854,16 +1859,3 @@ function getConversationTitle(conversation: ConversationListItem): string {
 function getAvatarFallback(title: string): string {
   return getAvatarInitial(title);
 }
-
-// Sync totalUnread to App Badge in compatible browsers
-useChatStore.subscribe((state, prevState) => {
-  if (state.totalUnread !== prevState.totalUnread) {
-    if ('setAppBadge' in navigator && typeof navigator.setAppBadge === 'function') {
-      if (state.totalUnread > 0) {
-        navigator.setAppBadge(state.totalUnread).catch(() => { /* ignore */ });
-      } else if (typeof navigator.clearAppBadge === 'function') {
-        navigator.clearAppBadge().catch(() => { /* ignore */ });
-      }
-    }
-  }
-});

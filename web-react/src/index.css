@@ -275,12 +275,30 @@ button {
   cursor: pointer;
 }
 
-/* Skip link + чёткий фокус (WCAG 2.4.1, 2.4.7) */
-.skip-link {
+/* Skip link: только для клавиатуры — не занимает место и не виден на мобильных (WCAG 2.4.1) */
+.skip-link:not(:focus-visible) {
   position: absolute;
-  left: 0.75rem;
-  top: 0;
-  z-index: 9999;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
+
+.skip-link:focus-visible {
+  position: fixed;
+  left: max(0.75rem, env(safe-area-inset-left, 0px));
+  top: max(0.65rem, env(safe-area-inset-top, 0px));
+  z-index: 99999;
+  width: auto;
+  height: auto;
+  margin: 0;
+  clip: auto;
+  overflow: visible;
+  white-space: normal;
   padding: 0.65rem 1rem;
   border-radius: 0.65rem;
   font-size: 0.875rem;
@@ -289,24 +307,8 @@ button {
   background: var(--surface-elevated);
   color: var(--text);
   border: 2px solid var(--a11y-focus-ring, var(--primary));
-  box-shadow: var(--shadow-card);
-  transform: translateY(-120%);
-  transition: transform 0.18s ease, box-shadow 0.18s ease;
-}
-
-.skip-link:focus {
-  outline: none;
-}
-
-.skip-link:focus-visible {
-  transform: translateY(0.75rem);
   box-shadow: var(--shadow);
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .skip-link {
-    transition: none;
-  }
+  outline: none;
 }
 
 :where(a, button, input:not([type='hidden']), select, textarea, summary, [tabindex]:not([tabindex='-1'])):focus-visible {

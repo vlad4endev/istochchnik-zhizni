@@ -2,7 +2,7 @@ import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { useEffect, useRef } from 'react';
 
 import { useAuthStore } from '../features/auth/authStore';
-import { resolveRealtimeWebSocketUrl } from '../lib/config';
+import { subscribeRealtimeMessages } from '../lib/realtimeWsClient';
 
 type InvalidateMessage = {
   v?: number;
@@ -40,7 +40,7 @@ function applyScopes(scopes: string[], invalidate: QueryClient['invalidateQuerie
 }
 
 /**
- * WebSocket `/api/realtime`: после изменений на сервере инвалидирует React Query — данные подтягиваются без ручного обновления.
+ * Инвалидация React Query по общему WebSocket (`useRealtimeWsConnection` в Layout).
  */
 export function useRealtimeQuerySync(): void {
   const token = useAuthStore((s) => s.token);
@@ -53,114 +53,19 @@ export function useRealtimeQuerySync(): void {
       return;
     }
 
-    const url = resolveRealtimeWebSocketUrl();
-    if (!url) {
-      return;
-    }
-
-    let ws: WebSocket | null = null;
-    let stopped = false;
-    let reconnectTimer: number | undefined;
-    let attempt = 0;
-
-    const clearTimer = () => {
-      if (reconnectTimer !== undefined) {
-        window.clearTimeout(reconnectTimer);
-        reconnectTimer = undefined;
-      }
-    };
-
-    const scheduleReconnect = () => {
-      if (stopped) return;
-      clearTimer();
-      attempt += 1;
-      const delay = Math.min(30_000, 1000 * 2 ** Math.min(attempt, 5));
-      reconnectTimer = window.setTimeout(() => {
-        connect();
-      }, delay);
-    };
-
-    function connect() {
-      if (stopped) return;
-      clearTimer();
+    return subscribeRealtimeMessages((raw) => {
       try {
-        ws = new WebSocket(url);
+        const msg = raw as InvalidateMessage;
+        if (msg.type === 'ready' || msg.type === 'pong') {
+          return;
+        }
+        if (msg.v !== 1 || msg.type !== 'invalidate' || !Array.isArray(msg.scopes)) {
+          return;
+        }
+        applyScopes(msg.scopes, qcRef.current.invalidateQueries);
       } catch {
-        scheduleReconnect();
-        return;
+        /* некорректное сообщение */
       }
-
-      ws.onopen = () => {
-        attempt = 0;
-        ws?.send(JSON.stringify({ type: 'auth', token }));
-      };
-
-      ws.onmessage = (ev) => {
-        try {
-          const msg = JSON.parse(String(ev.data)) as InvalidateMessage;
-          if (msg.type === 'ready') {
-            return;
-          }
-          if (msg.v !== 1 || msg.type !== 'invalidate' || !Array.isArray(msg.scopes)) {
-            return;
-          }
-          applyScopes(msg.scopes, qcRef.current.invalidateQueries);
-        } catch {
-          /* некорректное сообщение */
-        }
-      };
-
-      ws.onclose = () => {
-        ws = null;
-        if (!stopped) {
-          scheduleReconnect();
-        }
-      };
-
-      ws.onerror = () => {
-        ws?.close();
-      };
-    }
-
-    const handleOnline = () => {
-      if (stopped) return;
-      if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
-        return;
-      }
-      clearTimer();
-      connect();
-    };
-
-    const handleOffline = () => {
-      if (!ws) return;
-      if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
-        ws.close();
-      }
-    };
-
-    const handleVisibilityChange = () => {
-      if (document.visibilityState !== 'visible') return;
-      if (stopped) return;
-      if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
-        return;
-      }
-      if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
-      clearTimer();
-      connect();
-    };
-
-    window.addEventListener('online', handleOnline);
-    window.addEventListener('offline', handleOffline);
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    connect();
-
-    return () => {
-      stopped = true;
-      clearTimer();
-      window.removeEventListener('online', handleOnline);
-      window.removeEventListener('offline', handleOffline);
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-      ws?.close();
-    };
+    });
   }, [token]);
 }

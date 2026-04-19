@@ -1,4 +1,4 @@
-import { NavLink, Outlet, useNavigate, Link } from 'react-router-dom';
+import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
 import type { IconType } from 'react-icons';
@@ -23,6 +23,7 @@ import { useBrandingStore } from '../features/branding/brandingStore';
 import { useFCM } from '../hooks/useFCM';
 import { useWebPushSync } from '../hooks/useWebPushSync';
 import { useRealtimeQuerySync } from '../hooks/useRealtimeQuerySync';
+import { useRealtimeWsConnection } from '../lib/realtimeWsClient';
 import { useSyncServerRole } from '../hooks/useSyncServerRole';
 import { IOSInstallBanner } from '../components/IOSInstallBanner';
 import { AndroidInstallBanner } from '../components/AndroidInstallBanner';
@@ -35,6 +36,7 @@ import { useProfileDraftStore } from '../features/profile/profileDraftStore';
 import { canAccessStudioRole } from '../features/auth/studioAccess';
 import { LAYOUT_MAIN_CHROME_EVENT } from './layoutChrome';
 import { AppAvatar } from '../components/AppAvatar';
+import { AccessibilityHeaderMenu } from '../components/accessibility/AccessibilityHeaderMenu';
 import { CoordinatorDashboardNoteFab } from '../features/dashboard/components/CoordinatorDashboardNoteFab';
 import { getActiveEvents } from '../features/calendar/api';
 import { countUpcomingEventsInWindow } from '../features/calendar/eventSchedule';
@@ -273,10 +275,11 @@ export function Layout() {
   useSyncServerRole();
   useFCM();
   useWebPushSync();
+  const token = useAuthStore((s) => s.token);
   useRealtimeQuerySync();
+  useRealtimeWsConnection();
   useBrowserNotificationScheduler();
   const navigate = useNavigate();
-  const token = useAuthStore((s) => s.token);
   const setActiveConversation = useChatStore((s) => s.setActiveConversation);
   const loadConversations = useChatStore((s) => s.loadConversations);
   const refreshUnread = useChatStore((s) => s.refreshUnread);
@@ -441,6 +444,29 @@ export function Layout() {
     };
   }, [navigate, setActiveConversation]);
 
+  /** Бейдж на иконке установленного PWA (Badging API): непрочитанные + ближайшие события. iOS ограниченно поддерживает. */
+  useEffect(() => {
+    if (typeof navigator === 'undefined') return;
+    const nav = navigator as Navigator & {
+      setAppBadge?: (n: number) => Promise<void>;
+      clearAppBadge?: () => Promise<void>;
+    };
+    if (!token) {
+      if (typeof nav.clearAppBadge === 'function') {
+        void nav.clearAppBadge().catch(() => {});
+      }
+      return;
+    }
+    const total = Math.min(99, unreadMessages + upcomingEventsCount);
+    if (typeof nav.setAppBadge === 'function') {
+      if (total > 0) {
+        void nav.setAppBadge(total).catch(() => {});
+      } else if (typeof nav.clearAppBadge === 'function') {
+        void nav.clearAppBadge().catch(() => {});
+      }
+    }
+  }, [token, unreadMessages, upcomingEventsCount]);
+
   return (
     <MessengerWsProvider>
     <div className="flex min-h-0 w-full max-w-[100vw] flex-1 flex-col overflow-x-clip bg-[var(--surface)] text-[var(--text)] [padding-left:env(safe-area-inset-left,0px)] [padding-right:env(safe-area-inset-right,0px)]">
@@ -460,6 +486,15 @@ export function Layout() {
       >
         Перейти к содержимому
       </a>
+      {mainChromeVisible ? (
+        <div
+          className="pointer-events-none fixed right-[max(0.65rem,env(safe-area-inset-right,0px))] top-[max(0.45rem,env(safe-area-inset-top,0px))] z-[55] md:right-5 md:top-[max(0.6rem,env(safe-area-inset-top,0px))]"
+        >
+          <div className="pointer-events-auto">
+            <AccessibilityHeaderMenu tone="on-surface" />
+          </div>
+        </div>
+      ) : null}
       <div
         className={[
           'flex min-h-0 min-w-0 w-full max-w-full flex-1 flex-col box-border',
@@ -470,68 +505,6 @@ export function Layout() {
         <ConnectivityBanner />
       </div>
       <div className="relative flex min-h-0 w-full min-w-0 flex-1 flex-col">
-      {/* Мобильная шапка: логотип и бейджи (реальные счётчики чатов и ближайших событий). */}
-      <header
-        className={[
-          'md:hidden sticky top-0 z-40 flex items-center gap-3 border-b border-stone-200/80 bg-[var(--surface)]/95 px-3 shadow-[0_1px_0_rgba(0,0,0,0.04)] backdrop-blur-xl [padding-bottom:0.625rem] [padding-top:max(0.625rem,env(safe-area-inset-top,0px))]',
-          mainChromeVisible ? '' : 'hidden',
-        ].join(' ')}
-        aria-hidden={!mainChromeVisible}
-      >
-        <Link
-          to="/dashboard"
-          className="tap-highlight-transparent flex min-w-0 flex-1 items-center gap-3 active:opacity-90"
-          aria-label={[
-            'Главная',
-            unreadMessages > 0
-              ? `непрочитанных сообщений: ${unreadMessages > 99 ? 'более 99' : unreadMessages}`
-              : '',
-            upcomingEventsCount > 0
-              ? `событий на 7 дней: ${upcomingEventsCount > 99 ? 'более 99' : upcomingEventsCount}`
-              : '',
-          ]
-            .filter(Boolean)
-            .join('. ')}
-        >
-          <div className="relative flex h-11 w-11 shrink-0 items-center justify-center overflow-visible rounded-2xl bg-primary/10 p-1 text-primary">
-            {customLogoDataUrl ? (
-              <img
-                src={customLogoDataUrl}
-                alt=""
-                className="max-h-full max-w-full object-contain"
-                style={{ transform: `scale(${logoScalePercent / 100})` }}
-              />
-            ) : (
-              <img src="/assets/logo.svg" alt="" className="h-full w-full object-contain drop-shadow-sm" />
-            )}
-            {unreadMessages > 0 || upcomingEventsCount > 0 ? (
-              <div className="pointer-events-none absolute -right-2 -top-1 z-[5] flex max-w-[200px] flex-row flex-nowrap items-center justify-end gap-0.5">
-                {unreadMessages > 0 ? (
-                  <span
-                    className="inline-flex min-h-[17px] min-w-[17px] shrink-0 items-center justify-center rounded-full bg-rose-500 px-0.5 text-[9px] font-extrabold leading-none text-white shadow-sm ring-2 ring-[var(--surface)]"
-                    title={`Непрочитанные сообщения: ${formatNavBadgeCount(unreadMessages)}`}
-                  >
-                    {formatNavBadgeCount(unreadMessages)}
-                  </span>
-                ) : null}
-                {upcomingEventsCount > 0 ? (
-                  <span
-                    className="inline-flex min-h-[17px] min-w-[17px] shrink-0 items-center justify-center rounded-full bg-primary px-0.5 text-[9px] font-extrabold leading-none text-white shadow-sm ring-2 ring-[var(--surface)]"
-                    title={`События на 7 дней: ${formatNavBadgeCount(upcomingEventsCount)}`}
-                  >
-                    {formatNavBadgeCount(upcomingEventsCount)}
-                  </span>
-                ) : null}
-              </div>
-            ) : null}
-          </div>
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-[15px] font-extrabold leading-tight text-stone-900">{appName}</p>
-            <p className="mt-0.5 truncate text-xs text-stone-500">{description}</p>
-          </div>
-        </Link>
-      </header>
-
       {/* Планшет/десктоп: фиксированный сайдбар (не в потоке, не растягивается по ширине main). На узких — нижняя навигация. */}
       <aside
         className={[

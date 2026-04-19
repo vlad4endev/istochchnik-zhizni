@@ -37,7 +37,6 @@ import {
   isApiUrlProbablyWrongForWeb,
   resolveAxiosBaseURL,
 } from '../../../lib/config';
-import { AccessibilityHeaderMenu } from '../../../components/accessibility/AccessibilityHeaderMenu';
 import { memberRosterName } from '../../../lib/memberRosterName';
 import type { Backslider, DayPrayerData, GlobalTheme, Member, Ministry } from '../../../types';
 import { fetchMe, patchProfile } from '../../profile/api';
@@ -577,12 +576,9 @@ export function DailyPrayerPage() {
           className="pointer-events-none absolute -bottom-12 -left-10 h-40 w-40 rounded-full bg-black/18 blur-2xl"
           aria-hidden
         />
-        <div className="relative flex items-center justify-between gap-3">
-          <h1 className="min-w-0 text-xl font-extrabold leading-tight tracking-tight sm:text-2xl md:text-3xl lg:text-[1.65rem] xl:text-[26px] animate-prayer-fade-up motion-reduce:animate-none">
-            Молитва
-          </h1>
-          <AccessibilityHeaderMenu tone="on-gradient" />
-        </div>
+        <h1 className="relative text-xl font-extrabold leading-tight tracking-tight sm:text-2xl md:text-3xl lg:text-[1.65rem] xl:text-[26px] animate-prayer-fade-up motion-reduce:animate-none">
+          Молитва
+        </h1>
       </header>
 
       {/* Чип даты */}
