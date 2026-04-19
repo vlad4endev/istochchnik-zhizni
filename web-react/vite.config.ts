@@ -125,7 +125,6 @@ export default defineConfig(({ mode }) => {
           clientsClaim: true,
           navigateFallback: 'index.html',
           navigateFallbackDenylist: [/^\/api\//, /^\/uploads\//],
-          importScripts: ['custom-sw.js'],
           // Версионирование для инвалидации кэша
           runtimeCaching: [
             {

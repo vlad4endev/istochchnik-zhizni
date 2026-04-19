@@ -12,6 +12,7 @@ import { sendPushNotification } from '../services/pushService';
 import {
   buildMessengerObjectPath,
   createSignedUrlForBucketObject,
+  getSupabaseStorageMissingEnv,
   isSupabaseStorageConfigured,
   messengerBucket,
   uploadBufferToPublicBucket,
@@ -157,17 +158,22 @@ async function getConversationListItemForMember(memberId: number, convId: string
   return list.find((c) => String(c.id) === String(convId)) ?? null;
 }
 
-// All messenger routes require authentication
-router.use(requireAuthSession);
-
 /** GET /api/messenger/uploads/health */
 router.get('/uploads/health', async (_req: Request, res: Response) => {
   if (!isSupabaseStorageConfigured()) {
-    res.status(503).json({ ok: false, storage: 'unavailable', reason: 'supabase_not_configured' });
+    res.status(503).json({
+      ok: false,
+      storage: 'unavailable',
+      reason: 'supabase_not_configured',
+      missingEnv: getSupabaseStorageMissingEnv(),
+    });
     return;
   }
   res.json({ ok: true, storage: 'supabase', bucket: messengerBucket() });
 });
+
+// All messenger routes require authentication
+router.use(requireAuthSession);
 
 /** POST /api/messenger/studio/song-chat { songId } — чат обсуждения песни (студия). */
 router.post('/studio/song-chat', async (req: Request, res: Response) => {
@@ -207,7 +213,13 @@ router.post('/upload', messengerUploadMiddleware, async (req: Request, res: Resp
       return;
     }
     if (!isSupabaseStorageConfigured()) {
-      res.status(503).json({ error: 'Storage is not configured', code: 'supabase_not_configured' });
+      const missingEnv = getSupabaseStorageMissingEnv();
+      console.error('[messenger] storage is not configured:', { missingEnv });
+      res.status(503).json({
+        error: 'Storage is not configured',
+        code: 'supabase_not_configured',
+        missingEnv,
+      });
       return;
     }
     const memberId = (req as AuthReq).authUserId!;

@@ -11,9 +11,16 @@ function getServiceRoleKey(): string {
   return String(process.env.SUPABASE_SERVICE_ROLE_KEY ?? '').trim();
 }
 
+export function getSupabaseStorageMissingEnv(): string[] {
+  const missing: string[] = [];
+  if (!getUrl()) missing.push('SUPABASE_URL');
+  if (!getServiceRoleKey()) missing.push('SUPABASE_SERVICE_ROLE_KEY');
+  return missing;
+}
+
 /** Storage включён для серверной загрузки (service role). */
 export function isSupabaseStorageConfigured(): boolean {
-  return Boolean(getUrl() && getServiceRoleKey());
+  return getSupabaseStorageMissingEnv().length === 0;
 }
 
 function getClient(): SupabaseClient {
