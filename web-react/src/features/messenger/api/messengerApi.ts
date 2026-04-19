@@ -247,10 +247,15 @@ export type ConversationMeta = {
   my_last_read_message_id?: string | null;
 };
 
-export async function fetchConversationMeta(conversationId: string): Promise<ConversationMeta> {
+export async function fetchConversationMeta(
+  conversationId: string,
+  opts?: { bypassCache?: boolean },
+): Promise<ConversationMeta> {
   const cacheKey = String(conversationId);
-  const cached = readCache(conversationMetaCache, cacheKey);
-  if (cached) return cached;
+  if (!opts?.bypassCache) {
+    const cached = readCache(conversationMetaCache, cacheKey);
+    if (cached) return cached;
+  }
   const { data } = await apiClient.get<ConversationMeta>(`${BASE}/conversations/${conversationId}/meta`);
   writeCache(conversationMetaCache, cacheKey, data, META_CACHE_TTL_MS);
   return data;

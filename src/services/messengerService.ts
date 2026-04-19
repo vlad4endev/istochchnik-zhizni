@@ -1024,7 +1024,7 @@ export async function removeParticipant(
  */
 export async function updateConversation(
   conversationId: string,
-  updates: { title?: string; avatar_url?: string },
+  updates: { title?: string; avatar_url?: string | null },
 ): Promise<void> {
   const sets: string[] = [];
   const params: unknown[] = [];
@@ -1036,7 +1036,8 @@ export async function updateConversation(
   }
   if (updates.avatar_url !== undefined) {
     sets.push(`avatar_url = $${i++}`);
-    params.push(updates.avatar_url);
+    const av = updates.avatar_url;
+    params.push(av === null || (typeof av === 'string' && av.trim() === '') ? null : av);
   }
   if (sets.length === 0) return;
 

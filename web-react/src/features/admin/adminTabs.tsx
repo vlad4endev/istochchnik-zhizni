@@ -34,10 +34,10 @@ export interface AdminTabConfig {
 export const ADMIN_TABS: readonly AdminTabConfig[] = [
   {
     id: 'members',
-    label: 'Участники',
+    label: 'Пользователи',
     Icon: LuUsersRound,
     short: 'Люди',
-    description: 'Карточки, роли, доступ и разовая дата в цикле молитв.',
+    description: 'Карточки пользователей, роли, доступ и разовая дата в цикле молитв.',
   },
   {
     id: 'requests',
@@ -52,7 +52,7 @@ export const ADMIN_TABS: readonly AdminTabConfig[] = [
     Icon: LuCalendarDays,
     short: 'Молитва',
     description:
-      'Дата старта цикла, кто в ежедневной очереди на молитву, глобальные темы, служения и отступники в приложении.',
+      'Дата старта цикла, члены церкви в ежедневной очереди на молитву, глобальные темы, служения и отступники в приложении.',
   },
   {
     id: 'events',
@@ -66,7 +66,7 @@ export const ADMIN_TABS: readonly AdminTabConfig[] = [
     label: 'Шаблоны',
     Icon: LuSparkles,
     short: 'Подсказки',
-    description: 'Готовые роли и направления при добавлении участника.',
+    description: 'Готовые роли и направления при добавлении пользователя.',
   },
   {
     id: 'project',

@@ -421,7 +421,20 @@ router.patch('/conversations/:id/members/:memberId', checkChatPermission('set_pe
 router.patch('/conversations/:id', checkChatPermission('manage_chat'), async (req: Request, res: Response) => {
   const convId = req.params.id;
   try {
-    await svc.updateConversation(convId, req.body);
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const updates: { title?: string; avatar_url?: string | null } = {};
+    if (typeof body.title === 'string') {
+      updates.title = body.title;
+    }
+    if (Object.prototype.hasOwnProperty.call(body, 'avatar_url') || Object.prototype.hasOwnProperty.call(body, 'avatarUrl')) {
+      const v = body.avatar_url !== undefined ? body.avatar_url : body.avatarUrl;
+      if (v === null) {
+        updates.avatar_url = null;
+      } else if (typeof v === 'string') {
+        updates.avatar_url = v.trim();
+      }
+    }
+    await svc.updateConversation(convId, updates);
     const meta = await svc.getConversationMeta(String(convId));
     const convKey = String(convId);
     if (meta) {

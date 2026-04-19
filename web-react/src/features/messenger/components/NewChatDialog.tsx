@@ -218,6 +218,9 @@ export function NewChatDialog({ onClose, onCreated }: NewChatDialogProps) {
             <p className="text-sm font-semibold text-stone-600" style={{ margin: 0 }}>
               Выберите участников и укажите название. Вы будете владельцем чата.
             </p>
+            <p className="text-xs font-semibold leading-snug text-stone-400" style={{ margin: 0 }}>
+              В списке только пользователи с одобренной регистрацией в приложении (без заявок на модерации).
+            </p>
             <div className="tg-dialog-search" style={{ border: '1px solid var(--tg-border)', borderRadius: '8px' }}>
               <LuSearch size={20} className="text-stone-400" />
               <input

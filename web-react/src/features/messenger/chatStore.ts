@@ -1494,9 +1494,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const normalized = { ...conv, id: String(conv.id) };
     set((s) => {
       // Upsert: update if exists, add to front if new
-      const exists = s.conversations.some((c) => c.id === normalized.id);
+      const exists = s.conversations.some((c) => String(c.id) === normalized.id);
       const conversations = exists
-        ? s.conversations.map((c) => c.id === normalized.id ? { ...c, ...normalized } : c)
+        ? s.conversations.map((c) => (String(c.id) === normalized.id ? { ...c, ...normalized } : c))
         : [normalized, ...s.conversations];
 
       const om = normalized.other_member;
@@ -1508,8 +1508,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   handleConvUpdated: (convId, patch) => {
+    const idKey = String(convId);
     set((s) => {
-      const exists = s.conversations.some((c) => c.id === convId);
+      const exists = s.conversations.some((c) => String(c.id) === idKey);
       if (!exists) return s;
       const normalizedPatch: Partial<ConversationListItem> & { avatarUrl?: string | null } = {
         ...(patch as Partial<ConversationListItem>),
@@ -1519,7 +1520,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         delete normalizedPatch.avatarUrl;
       }
       const conversations = s.conversations.map((c) =>
-        c.id === convId ? { ...c, ...normalizedPatch } : c,
+        String(c.id) === idKey ? { ...c, ...normalizedPatch } : c,
       );
       return { conversations };
     });

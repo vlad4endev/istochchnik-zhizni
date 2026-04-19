@@ -53,7 +53,7 @@ export function AccessRequestsSection() {
         <p className="font-semibold">Заявки на регистрацию и сброс пароля</p>
         <p className="mt-1 text-amber-900/90">
           Здесь появляются две категории заявок: новая регистрация и «Забыл пароль». После одобрения регистрации
-          участник получит доступ в приложение, а после одобрения сброса начнёт действовать новый пароль.
+          пользователь получит доступ в приложение, а после одобрения сброса начнёт действовать новый пароль.
         </p>
       </div>
 
@@ -125,7 +125,7 @@ function AccessRequestRow(props: {
         </span>
       </div>
       <label className="mt-4 block">
-        <span className="text-xs font-semibold text-stone-500">Комментарий для участника (необязательно)</span>
+        <span className="text-xs font-semibold text-stone-500">Комментарий для пользователя (необязательно)</span>
         <textarea
           value={note}
           onChange={(e) => onNoteChange(e.target.value)}

@@ -4,6 +4,7 @@ import { LuCrown, LuPlus, LuSearch, LuSettings2, LuShield, LuUser, LuX } from 'r
 import * as api from '../api/messengerApi';
 import { ManageScreenShell, ManageSettingsGroup } from './ManageScreenShell';
 import { AppAvatar } from '../../../components/AppAvatar';
+import { getAvatarColor } from '../avatarUtils';
 
 export function ChatMembersPage() {
   const { chatId } = useParams<{ chatId: string }>();
@@ -361,7 +362,16 @@ function AddMemberDialog({
   }, [q]);
 
   const existing = useMemo(() => new Set(existingMemberIds.map((x) => Number(x))), [existingMemberIds]);
-  const filtered = useMemo(() => results.filter((m) => !existing.has(Number(m.id))), [results, existing]);
+  /** Сначала тех, кого можно добавить, затем уже в чате (серые строки). */
+  const orderedResults = useMemo(() => {
+    const addable: api.SearchMember[] = [];
+    const inChat: api.SearchMember[] = [];
+    for (const m of results) {
+      if (existing.has(Number(m.id))) inChat.push(m);
+      else addable.push(m);
+    }
+    return [...addable, ...inChat];
+  }, [results, existing]);
 
   const title = 'Добавить участника';
 
@@ -391,6 +401,9 @@ function AddMemberDialog({
               autoFocus
             />
           </div>
+          <p className="mt-2 text-[11px] font-semibold leading-snug text-stone-400">
+            В списке только пользователи с одобренной регистрацией. Уже в этом чате отображаются серым и не добавляются повторно.
+          </p>
 
           {err ? <p className="mt-2 text-sm font-semibold text-red-600">{err}</p> : null}
 
@@ -401,17 +414,51 @@ function AddMemberDialog({
                 <div className="h-14 animate-pulse rounded-2xl bg-stone-100" />
                 <div className="h-14 animate-pulse rounded-2xl bg-stone-100" />
               </div>
-            ) : filtered.length === 0 ? (
+            ) : orderedResults.length === 0 ? (
               <p className="py-6 text-center text-sm font-semibold text-stone-500">
-                {q.trim() ? 'Никого не нашли' : 'Начните вводить имя для поиска'}
+                {q.trim() ? 'Никого не нашли' : 'Нет пользователей с активной регистрацией или начните вводить имя'}
               </p>
             ) : (
               <div className="space-y-2">
-                {filtered.map((m) => {
+                {orderedResults.map((m) => {
                   const displayName =
                     (m.first_name ? `${m.first_name} ${m.last_name ?? ''}`.trim() : m.name) ||
                     `Участник ${m.id}`;
                   const isBusy = busyId === m.id;
+                  const alreadyInChat = existing.has(Number(m.id));
+
+                  if (alreadyInChat) {
+                    return (
+                      <div
+                        key={m.id}
+                        role="listitem"
+                        aria-label={`${displayName}, уже в чате`}
+                        className="pointer-events-none flex w-full items-center justify-between gap-3 rounded-2xl bg-stone-100/90 px-4 py-3 text-left ring-1 ring-stone-200/60"
+                      >
+                        <div className="flex min-w-0 flex-1 items-center gap-3">
+                          <div
+                            className="relative h-10 w-10 shrink-0 overflow-hidden rounded-full ring-1 ring-stone-200/80"
+                            style={{ background: getAvatarColor(String(m.id)) }}
+                          >
+                            <AppAvatar
+                              src={m.avatar_url ?? null}
+                              fallback={displayName.trim().charAt(0) || '?'}
+                              className="h-full w-full opacity-70"
+                              imgClassName="h-full w-full object-cover"
+                            />
+                          </div>
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-semibold text-stone-400">{displayName}</p>
+                            <p className="mt-0.5 text-xs font-semibold text-stone-400">Уже в чате</p>
+                          </div>
+                        </div>
+                        <span className="inline-flex shrink-0 rounded-full bg-stone-200/90 px-3 py-1 text-xs font-extrabold text-stone-500">
+                          В чате
+                        </span>
+                      </div>
+                    );
+                  }
+
                   return (
                     <button
                       key={m.id}
@@ -432,9 +479,22 @@ function AddMemberDialog({
                       }}
                       className="flex w-full items-center justify-between gap-3 rounded-2xl bg-white px-4 py-3 text-left shadow-sm ring-1 ring-stone-200/70 hover:bg-stone-50 disabled:opacity-60"
                     >
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-extrabold text-stone-900">{displayName}</p>
-                        <p className="mt-0.5 text-xs font-semibold text-stone-500">ID: {m.id}</p>
+                      <div className="flex min-w-0 flex-1 items-center gap-3">
+                        <div
+                          className="relative h-10 w-10 shrink-0 overflow-hidden rounded-full ring-1 ring-stone-200/80"
+                          style={{ background: getAvatarColor(String(m.id)) }}
+                        >
+                          <AppAvatar
+                            src={m.avatar_url ?? null}
+                            fallback={displayName.trim().charAt(0) || '?'}
+                            className="h-full w-full"
+                            imgClassName="h-full w-full object-cover"
+                          />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-extrabold text-stone-900">{displayName}</p>
+                          <p className="mt-0.5 text-xs font-semibold text-stone-500">ID: {m.id}</p>
+                        </div>
                       </div>
                       <span className="inline-flex shrink-0 items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-xs font-extrabold text-primary">
                         <LuPlus size={14} />

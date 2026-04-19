@@ -1210,6 +1210,9 @@ ALTER TABLE conversations
 ALTER TABLE conversations ADD COLUMN IF NOT EXISTS settings JSONB NOT NULL DEFAULT '{}'::jsonb;
 ALTER TABLE conversations ADD COLUMN IF NOT EXISTS metadata JSONB NOT NULL DEFAULT '{}'::jsonb;
 
+-- Аватар группы/канала (старые БД без колонки в CREATE TABLE)
+ALTER TABLE conversations ADD COLUMN IF NOT EXISTS avatar_url TEXT;
+
 ALTER TABLE conversation_participants ADD COLUMN IF NOT EXISTS permissions JSONB NOT NULL DEFAULT '{}'::jsonb;
 ALTER TABLE conversation_participants ADD COLUMN IF NOT EXISTS joined_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
 ALTER TABLE conversation_participants ADD COLUMN IF NOT EXISTS muted_until TIMESTAMPTZ;

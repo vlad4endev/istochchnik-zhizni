@@ -82,8 +82,7 @@ import { dateInputValueFromApi } from '../../../lib/dateInputValueFromApi';
 import { resolvePublicUrl } from '../../../lib/resolvePublicUrl';
 import { nextOccurrenceLocalYmd } from '../../../lib/weekdayAnchor';
 import {
-  compareMembersByFirstName,
-  compareMembersByDisplayNameRu,
+  compareMembersByPrayerCycleOrder,
   memberRosterName,
   splitMemberNameParts,
 } from '../../../lib/memberRosterName';
@@ -99,7 +98,7 @@ function appRoleLabel(role: string): string {
     case 'musician':
       return 'Музыкант';
     default:
-      return 'Участник';
+      return 'Член церкви';
   }
 }
 
@@ -198,7 +197,7 @@ function displayName(u: AppUser): string {
  * — 3+ слова: «Фамилия Имя Отчество» (как в сиде).
  * — 2 слова: «Имя Фамилия» (как при создании в админке).
  */
-/** Плашка: есть ли у участника аккаунт в приложении (пароль в базе). */
+/** Плашка: есть ли у пользователя аккаунт в приложении (пароль в базе). */
 function MemberRegistrationBadge({ u }: { u: AppUser }) {
   const ok = Boolean(u.has_registered);
   return (
@@ -211,7 +210,7 @@ function MemberRegistrationBadge({ u }: { u: AppUser }) {
       title={
         ok
           ? 'Пароль задан — можно войти в приложение по телефону'
-          : 'В списке участников, но вход в приложение ещё не оформлен'
+          : 'В списке пользователей, но вход в приложение ещё не оформлен'
       }
     >
       {ok ? (
@@ -422,7 +421,7 @@ function MembersSection() {
             `${memberRosterName(u)} ${displayName(u)} ${u.phone_number ?? ''} ${u.email ?? ''}`.toLowerCase();
           return blob.includes(q);
         });
-    return [...matched].sort(compareMembersByFirstName);
+    return [...matched].sort(compareMembersByPrayerCycleOrder);
   }, [data, search]);
 
   const dirs = (dirsQ.data ?? []) as MinistryDirectionTemplate[];
@@ -453,7 +452,7 @@ function MembersSection() {
   const createMut = useMutation({
     mutationFn: () => createAdminMember(createPayload()),
     onSuccess: () => {
-      setBanner({ type: 'ok', text: 'Участник создан.' });
+      setBanner({ type: 'ok', text: 'Пользователь создан.' });
       setForm({
         first_name: '',
         last_name: '',
@@ -474,7 +473,7 @@ function MembersSection() {
       const duplicateByText = /Участник с таким именем и фамилией уже есть/i.test(msg);
       if (duplicateByCode || duplicateByText) {
         const agree = window.confirm(
-          'Участник с таким именем и фамилией уже есть. Объединить введённые данные с существующей карточкой?',
+          'Пользователь с таким именем и фамилией уже есть. Объединить введённые данные с существующей карточкой?',
         );
         if (agree) {
           mergeOnCreateMut.mutate();
@@ -488,7 +487,7 @@ function MembersSection() {
   const mergeOnCreateMut = useMutation({
     mutationFn: () => createAdminMember({ ...createPayload(), merge_if_duplicate: true }),
     onSuccess: () => {
-      setBanner({ type: 'ok', text: 'Данные объединены с существующей карточкой участника.' });
+      setBanner({ type: 'ok', text: 'Данные объединены с существующей карточкой пользователя.' });
       setForm({
         first_name: '',
         last_name: '',
@@ -545,7 +544,7 @@ function MembersSection() {
     onSuccess: ({ res, eligible }) => {
       invalidate();
       if (res.errors.length === 0) {
-        setBanner({ type: 'ok', text: `Создано участников: ${res.created}.` });
+        setBanner({ type: 'ok', text: `Создано пользователей: ${res.created}.` });
         setBulkRows([emptyBulkRow(), emptyBulkRow(), emptyBulkRow()]);
         setBulkPasteText('');
       } else {
@@ -655,7 +654,7 @@ function MembersSection() {
         setBanner({
           type: 'ok',
           text:
-            'Нечего обновить: нет участников с заполненными колонками имени/фамилии и нет карточек, где в name ровно два слова при пустых колонках.',
+            'Нечего обновить: нет пользователей с заполненными колонками имени/фамилии и нет карточек, где в name ровно два слова при пустых колонках.',
         });
       } else {
         const bits: string[] = [];
@@ -804,7 +803,7 @@ function MembersSection() {
           onClick={() => {
             if (
               !window.confirm(
-                'Объединить дубликаты участников? Останется одна карточка с меньшим номером (старая запись), пароль и данные перенесутся.',
+                'Объединить дубликаты пользователей? Останется одна карточка с меньшим номером (старая запись), пароль и данные перенесутся.',
               )
             ) {
               return;
@@ -823,7 +822,7 @@ function MembersSection() {
           onClick={() => {
             if (
               !window.confirm(
-                'Поменять местами поля «имя» и «фамилия» у ВСЕХ участников сразу? Используйте только если данные были занесены в перепутанные колонки. Повторный запуск снова меняет местами всё (откат).',
+                'Поменять местами поля «имя» и «фамилия» у ВСЕХ пользователей сразу? Используйте только если данные были занесены в перепутанные колонки. Повторный запуск снова меняет местами всё (откат).',
               )
             ) {
               return;
@@ -843,7 +842,7 @@ function MembersSection() {
           placeholder="Поиск по имени или телефону…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          aria-label="Поиск участников"
+          aria-label="Поиск пользователей"
         />
         <div className="flex flex-wrap gap-2 self-start sm:self-auto">
           <button
@@ -851,7 +850,7 @@ function MembersSection() {
             className={btnSecondary('')}
             onClick={() => setShowCreate((v) => !v)}
           >
-            {showCreate ? 'Скрыть форму добавления' : 'Добавить участника'}
+            {showCreate ? 'Скрыть форму добавления' : 'Добавить пользователя'}
           </button>
           <button
             type="button"
@@ -872,7 +871,7 @@ function MembersSection() {
         <section className="rounded-2xl border border-indigo-200/80 bg-gradient-to-br from-indigo-50/90 via-white to-violet-50/40 p-4 shadow-[var(--shadow)] shell:p-5">
           <h3 className="flex items-center gap-2 text-sm font-extrabold text-stone-900">
             <LuTable2 className="h-4 w-4 text-indigo-700" aria-hidden />
-            Массовое создание участников
+            Массовое создание пользователей
           </h3>
           <p className="mt-1 text-xs text-stone-600">
             Заполните строки в таблице. Обязательны фамилия, имя, телефон и дата рождения (ГГГГ-ММ-ДД).
@@ -1087,7 +1086,7 @@ function MembersSection() {
 
       {showCreate ? (
         <section className="rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] p-4 shadow-[var(--shadow)] shell:p-5">
-          <h3 className="text-sm font-extrabold text-stone-900">Новый участник</h3>
+          <h3 className="text-sm font-extrabold text-stone-900">Новый пользователь</h3>
           <p className="mt-1 text-xs text-stone-500">
             Обязательны имя, фамилия, телефон и дата рождения. Служение можно указать позже в карточке.
           </p>
@@ -1176,7 +1175,7 @@ function MembersSection() {
               >
                 {createMut.isPending || mergeOnCreateMut.isPending
                   ? 'Сохранение…'
-                  : 'Создать участника'}
+                  : 'Создать пользователя'}
               </button>
             </div>
           </form>
@@ -1251,7 +1250,7 @@ function MembersSection() {
           <table className="min-w-[720px] w-full border-collapse text-left text-sm">
             <thead>
               <tr className="border-b border-stone-200 bg-stone-50/90 text-xs font-extrabold uppercase tracking-wider text-stone-500">
-                <th className="px-4 py-3">Участник</th>
+                <th className="px-4 py-3">Пользователь</th>
                 <th className="px-4 py-3 whitespace-nowrap">Вход</th>
                 <th className="px-4 py-3">Телефон</th>
                 <th className="px-4 py-3">Роль в приложении</th>
@@ -1322,7 +1321,7 @@ function MembersSection() {
               Разовая дата в цикле
             </h3>
             <p className="mt-1 text-sm text-stone-600">
-              Участник:{' '}
+              Член церкви:{' '}
               <strong>{oneTimeSubject ? memberRosterName(oneTimeSubject) : `#${oneTimeId}`}</strong>
             </p>
             <p className="mt-2 text-xs text-stone-500">
@@ -1445,7 +1444,7 @@ function MembersSection() {
                       onClick={() => {
                         if (
                           !window.confirm(
-                            'Поменять в базе местами поля «имя» и «фамилия» у этого участника? Используйте, если данные оказались в неправильных колонках.',
+                            'Поменять в базе местами поля «имя» и «фамилия» у этого пользователя? Используйте, если данные оказались в неправильных колонках.',
                           )
                         ) {
                           return;
@@ -1544,7 +1543,7 @@ function MembersSection() {
                   <span>
                     <span className="font-semibold text-stone-900">В молитвенном цикле</span>
                     <span className="mt-0.5 block text-xs font-normal text-stone-500">
-                      Включите вручную: новый участник по умолчанию не попадает в очередь «день за днём».
+                      Включите вручную: новый пользователь по умолчанию не попадает в очередь «день за днём».
                     </span>
                   </span>
                 </label>
@@ -1570,7 +1569,7 @@ function MembersSection() {
                         roleMut.mutate({ id: editing.id, role });
                       }}
                     >
-                      <option value="member">Участник</option>
+                      <option value="member">Член церкви</option>
                       <option value="musician">Музыкант (студия)</option>
                       <option value="editor">Редактор каталога</option>
                       <option value="admin">Администратор</option>
@@ -1636,7 +1635,7 @@ function MembersSection() {
                       deleteMut.mutate(editing.id);
                     }}
                   >
-                    {deleteMut.isPending ? 'Удаление…' : 'Удалить участника'}
+                    {deleteMut.isPending ? 'Удаление…' : 'Удалить пользователя'}
                   </button>
                 </div>
               </section>
@@ -1700,7 +1699,7 @@ function MembersSection() {
   );
 }
 
-/** Сворачиваемый/разворачиваемый блок с историей молитвенных нужд участника. */
+/** Сворачиваемый/разворачиваемый блок с историей молитвенных нужд пользователя. */
 function AdminPrayerHistory({ memberId }: { memberId: number }) {
   const [open, setOpen] = useState(false);
   const [manualText, setManualText] = useState('');
@@ -1888,7 +1887,7 @@ function formatAdminDate(dateStr: string): string {
 }
 
 /**
- * Очередь молитвенного цикла: флаг `in_prayer_cycle` (как в карточке участника).
+ * Очередь молитвенного цикла: флаг `in_prayer_cycle` (как в карточке пользователя).
  * Две колонки: текущий состав и добавление из активных вне цикла.
  */
 function CalendarPrayerCycleRoster() {
@@ -1916,7 +1915,7 @@ function CalendarPrayerCycleRoster() {
     onSuccess: async () => {
       setBanner({
         type: 'ok',
-        text: 'Дата старта цикла обновлена: с сегодняшнего дня первым в очереди идёт выбранный участник; дальше — по списку по кругу.',
+        text: 'Дата старта цикла обновлена: с сегодняшнего дня первым в очереди идёт выбранный член церкви; дальше — по списку по кругу.',
       });
       await qc.invalidateQueries({ queryKey: Q_MEMBERS });
       await qc.invalidateQueries({ queryKey: ['calendar'] });
@@ -1933,8 +1932,8 @@ function CalendarPrayerCycleRoster() {
       setBanner({
         type: 'ok',
         text: vars.in_prayer_cycle
-          ? 'Участник добавлен в молитвенный цикл.'
-          : 'Участник убран из молитвенного цикла.',
+          ? 'Член церкви добавлен в молитвенный цикл.'
+          : 'Член церкви убран из молитвенного цикла.',
       });
       await qc.invalidateQueries({ queryKey: Q_MEMBERS });
       await qc.invalidateQueries({ queryKey: ['calendar'] });
@@ -1964,7 +1963,7 @@ function CalendarPrayerCycleRoster() {
         return blob.includes(q);
       });
     }
-    return [...rows].sort(compareMembersByDisplayNameRu);
+    return [...rows].sort(compareMembersByPrayerCycleOrder);
   }, [data, listSearch]);
 
   const activeCycleMemberIds = useMemo(() => {
@@ -1986,16 +1985,16 @@ function CalendarPrayerCycleRoster() {
         return blob.includes(q);
       });
     }
-    return [...rows].sort(compareMembersByDisplayNameRu);
+    return [...rows].sort(compareMembersByPrayerCycleOrder);
   }, [data, addSearch]);
 
   if (isLoading && !data) {
-    return <p className="text-sm text-stone-600">Загрузка участников…</p>;
+    return <p className="text-sm text-stone-600">Загрузка членов церкви…</p>;
   }
   if (error) {
     return (
       <p className="text-sm text-red-600">
-        Не удалось загрузить участников: {error instanceof Error ? error.message : 'ошибка'}
+        Не удалось загрузить членов церкви: {error instanceof Error ? error.message : 'ошибка'}
       </p>
     );
   }
@@ -2025,8 +2024,8 @@ function CalendarPrayerCycleRoster() {
       </div>
 
       <p className="border-b border-stone-100 px-4 py-3 text-sm leading-relaxed text-stone-600">
-        В приложении «Молитва» по дням показываются только <strong>активные</strong> участники с флагом «в цикле» (как
-        в карточке в разделе «Участники»). Таблица слева — алфавит А–Я; «№» — порядок в таблице, не день цикла.
+        В приложении «Молитва» по дням показываются только <strong>активные</strong> члены церкви с флагом «в цикле» (как
+        в карточке в разделе «Пользователи»). Таблица слева — по фамилии А–Я; «№» — порядок в таблице, не день цикла.
         «Первым сегодня» сдвигает очередь так, чтобы выбранный человек был первым именно сегодня.
       </p>
 
@@ -2075,7 +2074,7 @@ function CalendarPrayerCycleRoster() {
                 <thead>
                   <tr className="sticky top-0 z-[1] border-b border-stone-200 bg-stone-50/95 text-xs font-semibold uppercase tracking-wide text-stone-600 backdrop-blur-sm">
                     <th className="whitespace-nowrap px-3 py-2.5">№</th>
-                    <th className="min-w-[10rem] px-3 py-2.5">Участник</th>
+                    <th className="min-w-[10rem] px-3 py-2.5">Член церкви</th>
                     <th className="hidden px-3 py-2.5 sm:table-cell">Телефон</th>
                     <th className="whitespace-nowrap px-3 py-2.5">Статус</th>
                     <th className="min-w-[11rem] px-3 py-2.5 text-right">Действия</th>
@@ -2176,7 +2175,7 @@ function CalendarPrayerCycleRoster() {
               <table className="min-w-full border-collapse text-left text-sm">
                 <thead>
                   <tr className="sticky top-0 z-[1] border-b border-stone-200 bg-stone-50/95 text-xs font-semibold uppercase tracking-wide text-stone-600 backdrop-blur-sm">
-                    <th className="min-w-[10rem] px-3 py-2.5">Участник</th>
+                    <th className="min-w-[10rem] px-3 py-2.5">Член церкви</th>
                     <th className="hidden px-3 py-2.5 sm:table-cell">Телефон</th>
                     <th className="w-[1%] whitespace-nowrap px-3 py-2.5 text-right">Действие</th>
                   </tr>
@@ -2244,7 +2243,7 @@ function CalendarSection() {
           Молитвенный календарь
         </h2>
         <p className="mt-2 text-sm leading-relaxed text-stone-600">
-          Настройка экрана «Молитва»: с какой даты считать цикл, кто в ежедневной очереди, план сбора нужд и
+          Настройка экрана «Молитва»: с какой даты считать цикл, состав очереди членов церкви, план сбора нужд и
           дополнительные блоки (темы, служения, отступники).
         </p>
         <nav
@@ -2255,7 +2254,7 @@ function CalendarSection() {
             1. Дата старта
           </a>
           <a className={navClass} href="#cal-roster">
-            2. Очередь участников
+            2. Очередь членов церкви
           </a>
           <a className={navClass} href="#cal-collection">
             3. Сбор нужд
@@ -2285,7 +2284,7 @@ function CalendarSection() {
                 <strong>сегодня</strong> первым шёл конкретный человек без смены этой даты, нажмите «Первым сегодня» в
                 блоке{' '}
                 <a href="#cal-roster" className="font-semibold text-primary underline-offset-2 hover:underline">
-                  очереди участников
+                  очереди членов церкви
                 </a>
                 .
               </p>
@@ -2335,7 +2334,7 @@ function CalendarSection() {
             2
           </span>
           <div className="min-w-0 flex-1">
-            <h3 className="font-extrabold text-stone-900">Очередь участников</h3>
+            <h3 className="font-extrabold text-stone-900">Очередь членов церкви</h3>
             <p className="mt-1 text-sm text-stone-600">
               Состав цикла и добавление людей. Здесь же — сдвиг очереди на сегодня («Первым сегодня»).
             </p>
@@ -3689,7 +3688,7 @@ function TemplatesSection() {
     <div className="space-y-4">
       <p className="text-sm text-stone-600">
         Эти списки подставляются как подсказки при заполнении полей «роль служения» и «направление» у
-        участника — удобно держать единый словарь.
+        пользователя — удобно держать единый словарь.
       </p>
       {note && (
         <div
@@ -4078,7 +4077,7 @@ function TelegramSection() {
               className={`${fieldClass()} min-h-[170px]`}
               value={form.prayer_template}
               onChange={(e) => setForm((s) => ({ ...s, prayer_template: e.target.value }))}
-              placeholder={'Молитва на {{date}}\n\nУчастник: {{member_name}}\nНужда: {{member_prayer_request}}'}
+              placeholder={'Молитва на {{date}}\n\nЧлен церкви: {{member_name}}\nНужда: {{member_prayer_request}}'}
             />
             <p className="mt-1 text-xs text-stone-500">
               Переменные: {'{{date}}'}, {'{{member_name}}'}, {'{{member_prayer_request}}'}, {'{{theme_title}}'},{' '}

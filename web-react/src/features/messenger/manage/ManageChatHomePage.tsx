@@ -229,9 +229,9 @@ export function ManageChatHomePage() {
                   chatId={chatId}
                   initialTitle={meta?.title ?? conv?.title ?? ''}
                   onSaved={async () => {
-                    void useChatStore.getState().loadConversations();
+                    void useChatStore.getState().loadConversations({ force: true });
                     try {
-                      const m = await api.fetchConversationMeta(chatId);
+                      const m = await api.fetchConversationMeta(chatId, { bypassCache: true });
                       setMeta(m);
                     } catch {
                       /* ignore */
