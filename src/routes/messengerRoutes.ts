@@ -33,29 +33,27 @@ function normalizeOptionalBigintId(raw: unknown): string | null {
 
 const router = Router();
 
-/** Имена файлов с multer: UUID + необязательное расширение (без path traversal). */
-const MESSENGER_PUBLIC_UPLOAD_NAME =
-  /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}(\.[a-z0-9]+)?$/i;
-
-/**
- * Публичная раздача локального вложения по пути под `/api/messenger/...`, чтобы хватало одного прокси
- * на `/api` в nginx без отдельного `location /uploads/` (см. resolvePublicUrl).
- * Размещено ДО requireAuthSession.
- *
- * Важно: не использовать `:filename` — path-to-regexp отделяет расширение (`uuid.jpg` → потеря `.jpg` → 404).
- */
-router.get(/^\/public-uploads\/(.+)$/, async (req: Request, res: Response) => {
-  const pathOnly = String(req.path || '').split('?')[0] || '';
-  const seg = /^\/public-uploads\/(.+)$/.exec(pathOnly);
-  const filename = (seg?.[1] ?? '').trim();
-  if (!filename || !MESSENGER_PUBLIC_UPLOAD_NAME.test(filename)) {
-    res.status(400).type('text/plain').send('Bad request');
-    return;
+function resolvePublicUploadAbsolutePath(rawPath: string): string | null {
+  let rel = String(rawPath || '').trim();
+  if (!rel) return null;
+  try {
+    rel = decodeURIComponent(rel);
+  } catch {
+    return null;
   }
-  const absPath = path.join(getUploadsRoot(), filename);
+  const normalized = path.posix.normalize(rel).replace(/^\/+/, '');
+  if (!normalized || normalized.startsWith('..') || normalized.includes('\0')) return null;
+  const absPath = path.resolve(getUploadsRoot(), normalized);
   const root = path.resolve(getUploadsRoot());
-  if (!absPath.startsWith(`${root}${path.sep}`) && absPath !== root) {
-    res.status(404).type('text/plain').send('Not found');
+  if (!absPath.startsWith(`${root}${path.sep}`) && absPath !== root) return null;
+  return absPath;
+}
+
+async function serveMessengerPublicUpload(req: Request, res: Response): Promise<void> {
+  const rel = String(req.params[0] ?? '').trim();
+  const absPath = resolvePublicUploadAbsolutePath(rel);
+  if (!absPath) {
+    res.status(400).type('text/plain').send('Bad request');
     return;
   }
   try {
@@ -70,9 +68,22 @@ router.get(/^\/public-uploads\/(.+)$/, async (req: Request, res: Response) => {
   }
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('Cache-Control', 'public, max-age=86400, immutable');
+  res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
   res.sendFile(absPath, (err) => {
     if (err && !res.headersSent) res.status(404).end();
   });
+}
+
+/**
+ * Публичная раздача локального вложения по пути под `/api/messenger/...`, чтобы хватало одного прокси
+ * на `/api` в nginx без отдельного `location /uploads/` (см. resolvePublicUrl).
+ * Размещено ДО requireAuthSession.
+ */
+router.get(/^\/public-uploads\/(.+)$/, (req: Request, res: Response) => {
+  void serveMessengerPublicUpload(req, res);
+});
+router.head(/^\/public-uploads\/(.+)$/, (req: Request, res: Response) => {
+  void serveMessengerPublicUpload(req, res);
 });
 
 function localMessengerPublicUploadUrl(filename: string): string {
@@ -531,6 +542,12 @@ router.post(
       }
       if (type === 'private') {
         res.status(400).json({ error: 'Cannot add participants to a private chat' });
+        return;
+      }
+
+      const alreadyActive = await svc.isMemberInConversation(String(convId), parsed);
+      if (alreadyActive) {
+        res.json({ ok: true, alreadyMember: true });
         return;
       }
 

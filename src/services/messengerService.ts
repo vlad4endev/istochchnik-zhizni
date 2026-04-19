@@ -216,7 +216,8 @@ export async function listConversations(memberId: number): Promise<ConversationL
     id: bigint(r.id),
     type: r.type as ConversationType,
     title: r.title,
-    avatar_url: r.avatar_url,
+    avatar_url:
+      r.avatar_url != null && String(r.avatar_url).trim() !== '' ? String(r.avatar_url).trim() : null,
     updated_at: r.updated_at,
     last_message: r.lm_id
       ? {
@@ -459,7 +460,7 @@ export async function listConversationMembers(conversationId: string): Promise<C
   for (const sql of attempts) {
     try {
       const result = await dbQuery(sql, [conversationId]);
-      const baseMembers = result.rows.map((r: any) => ({
+      const baseMembersRaw = result.rows.map((r: any) => ({
         member_id: Number(r.member_id),
         role: r.role as ParticipantRole,
         joined_at: r.joined_at ?? new Date().toISOString(),
@@ -470,6 +471,13 @@ export async function listConversationMembers(conversationId: string): Promise<C
         last_name: r.last_name ?? null,
         avatar_url: r.avatar_url ?? null,
       }));
+      const seenIds = new Set<number>();
+      const baseMembers = baseMembersRaw.filter((row) => {
+        const id = Number(row.member_id);
+        if (!Number.isFinite(id) || id < 1 || seenIds.has(id)) return false;
+        seenIds.add(id);
+        return true;
+      });
       if (baseMembers.length === 0) return baseMembers;
 
       const today = new Date().toISOString().slice(0, 10);

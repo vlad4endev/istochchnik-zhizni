@@ -6,6 +6,24 @@ import { ManageScreenShell, ManageSettingsGroup } from './ManageScreenShell';
 import { AppAvatar } from '../../../components/AppAvatar';
 import { getAvatarColor } from '../avatarUtils';
 
+/** Единый ключ для сравнения id участника (API может отдать number | string). */
+function normalizeMemberId(raw: unknown): string | null {
+  if (raw === null || raw === undefined) return null;
+  if (typeof raw === 'bigint') return raw.toString();
+  if (typeof raw === 'number') {
+    if (!Number.isFinite(raw) || raw < 1) return null;
+    return String(Math.trunc(raw));
+  }
+  if (typeof raw === 'string') {
+    const t = raw.trim();
+    if (!t) return null;
+    const n = Number.parseInt(t, 10);
+    if (!Number.isFinite(n) || n < 1) return null;
+    return String(n);
+  }
+  return null;
+}
+
 export function ChatMembersPage() {
   const { chatId } = useParams<{ chatId: string }>();
   const [members, setMembers] = useState<api.ConversationMember[]>([]);
@@ -336,7 +354,31 @@ function AddMemberDialog({
   const [results, setResults] = useState<api.SearchMember[]>([]);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const [busyId, setBusyId] = useState<number | null>(null);
+  const [busyKey, setBusyKey] = useState<string | null>(null);
+  /** Актуальные id участников чата с сервера (источник истины при открытии диалога). */
+  const [fetchedMemberKeys, setFetchedMemberKeys] = useState<Set<string> | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    void api
+      .fetchConversationMembers(chatId)
+      .then((list) => {
+        if (!alive) return;
+        const next = new Set<string>();
+        for (const row of list) {
+          const k = normalizeMemberId(row.member_id);
+          if (k) next.add(k);
+        }
+        setFetchedMemberKeys(next);
+      })
+      .catch(() => {
+        if (!alive) return;
+        setFetchedMemberKeys(null);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [chatId]);
 
   useEffect(() => {
     let alive = true;
@@ -361,17 +403,46 @@ function AddMemberDialog({
     };
   }, [q]);
 
-  const existing = useMemo(() => new Set(existingMemberIds.map((x) => Number(x))), [existingMemberIds]);
+  const propMemberKeys = useMemo(() => {
+    const s = new Set<string>();
+    for (const x of existingMemberIds) {
+      const k = normalizeMemberId(x);
+      if (k) s.add(k);
+    }
+    return s;
+  }, [existingMemberIds]);
+
+  const existing = useMemo(() => {
+    const merged = new Set(propMemberKeys);
+    if (fetchedMemberKeys) {
+      for (const k of fetchedMemberKeys) merged.add(k);
+    }
+    return merged;
+  }, [propMemberKeys, fetchedMemberKeys]);
+
+  const dedupedResults = useMemo(() => {
+    const seen = new Set<string>();
+    const out: api.SearchMember[] = [];
+    for (const m of results) {
+      const k = normalizeMemberId(m.id);
+      if (!k || seen.has(k)) continue;
+      seen.add(k);
+      out.push(m);
+    }
+    return out;
+  }, [results]);
+
   /** Сначала тех, кого можно добавить, затем уже в чате (серые строки). */
   const orderedResults = useMemo(() => {
     const addable: api.SearchMember[] = [];
     const inChat: api.SearchMember[] = [];
-    for (const m of results) {
-      if (existing.has(Number(m.id))) inChat.push(m);
+    for (const m of dedupedResults) {
+      const k = normalizeMemberId(m.id);
+      if (k && existing.has(k)) inChat.push(m);
       else addable.push(m);
     }
     return [...addable, ...inChat];
-  }, [results, existing]);
+  }, [dedupedResults, existing]);
 
   const title = 'Добавить участника';
 
@@ -421,16 +492,17 @@ function AddMemberDialog({
             ) : (
               <div className="space-y-2">
                 {orderedResults.map((m) => {
+                  const idKey = normalizeMemberId(m.id);
                   const displayName =
                     (m.first_name ? `${m.first_name} ${m.last_name ?? ''}`.trim() : m.name) ||
                     `Участник ${m.id}`;
-                  const isBusy = busyId === m.id;
-                  const alreadyInChat = existing.has(Number(m.id));
+                  const isBusy = idKey != null && busyKey === idKey;
+                  const alreadyInChat = idKey != null && existing.has(idKey);
 
                   if (alreadyInChat) {
                     return (
                       <div
-                        key={m.id}
+                        key={idKey ?? m.id}
                         role="listitem"
                         aria-label={`${displayName}, уже в чате`}
                         className="pointer-events-none flex w-full items-center justify-between gap-3 rounded-2xl bg-stone-100/90 px-4 py-3 text-left ring-1 ring-stone-200/60"
@@ -461,20 +533,22 @@ function AddMemberDialog({
 
                   return (
                     <button
-                      key={m.id}
+                      key={idKey ?? m.id}
                       type="button"
-                      disabled={isBusy}
+                      disabled={isBusy || idKey == null}
                       onClick={async () => {
+                        if (idKey == null) return;
                         try {
-                          setBusyId(m.id);
+                          setBusyKey(idKey);
                           setErr(null);
-                          await api.addParticipant(chatId, m.id);
+                          const memberIdNum = Number(idKey);
+                          await api.addParticipant(chatId, memberIdNum);
                           await onAdded();
                           onClose();
                         } catch {
                           setErr('Не удалось добавить участника (нет прав или ошибка сервера)');
                         } finally {
-                          setBusyId(null);
+                          setBusyKey(null);
                         }
                       }}
                       className="flex w-full items-center justify-between gap-3 rounded-2xl bg-white px-4 py-3 text-left shadow-sm ring-1 ring-stone-200/70 hover:bg-stone-50 disabled:opacity-60"

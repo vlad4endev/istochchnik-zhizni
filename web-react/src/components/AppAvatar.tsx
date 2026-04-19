@@ -47,6 +47,7 @@ export function AppAvatar({
           loading={effectiveLoading}
           decoding="async"
           fetchPriority={effectiveFetchPriority}
+          referrerPolicy="no-referrer"
           onError={() => setLoadFailed(true)}
         />
       ) : (

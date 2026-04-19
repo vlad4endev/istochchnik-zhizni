@@ -33,7 +33,7 @@ import { fetchMe } from '../../profile/api';
 import { fetchProfileByUsername } from '../../profile/publicProfileApi';
 import { apiBoolean } from '../../../lib/apiBoolean';
 import { resolvePublicUrl } from '../../../lib/resolvePublicUrl';
-import { memberRosterName, splitMemberNameParts } from '../../../lib/memberRosterName';
+import { memberRosterName } from '../../../lib/memberRosterName';
 import type { Member } from '../../../types';
 import {
   extractBroadcastDateLabel,
@@ -167,10 +167,9 @@ function formatWeekDayChip(ymd: string): string {
   return format(d, 'EEE d.MM', { locale: ru });
 }
 
-/** Имя и фамилия для подписи в дашборде. */
+/** Фамилия и имя для подписи в дашборде (как в списках). */
 function memberFirstLastLine(m: Member): string {
-  const { first, last } = splitMemberNameParts(m);
-  const s = `${first} ${last}`.trim();
+  const s = memberRosterName(m).trim();
   return s || m.name.trim() || '—';
 }
 

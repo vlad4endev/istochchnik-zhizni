@@ -81,6 +81,32 @@ export interface ConversationListItem {
   my_ui_folder?: 'personal' | 'ministry' | null;
 }
 
+type ConversationListRow = ConversationListItem & { avatarUrl?: string | null };
+
+function normalizeConversationListItem(c: ConversationListRow): ConversationListItem {
+  const rawAvatar = c.avatar_url ?? c.avatarUrl ?? null;
+  const avatar_url =
+    typeof rawAvatar === 'string' && rawAvatar.trim().length > 0 ? rawAvatar.trim() : null;
+  const omIn = c.other_member as (NonNullable<ConversationListItem['other_member']> & {
+    avatarUrl?: string | null;
+  }) | null;
+  const om = omIn
+    ? {
+        ...omIn,
+        avatar_url: (() => {
+          const raw = omIn.avatar_url ?? omIn.avatarUrl ?? null;
+          return typeof raw === 'string' && raw.trim().length > 0 ? raw.trim() : null;
+        })(),
+      }
+    : null;
+  return {
+    ...c,
+    id: String(c.id),
+    avatar_url,
+    other_member: om,
+  };
+}
+
 export interface MessageWithSender {
   id: string;
   conversation_id: string;
@@ -138,8 +164,8 @@ export interface SearchMember {
 // ─── API calls ────────────────────────────────────────────────
 
 export async function fetchConversations(): Promise<ConversationListItem[]> {
-  const { data } = await apiClient.get<ConversationListItem[]>(`${BASE}/conversations`);
-  return data;
+  const { data } = await apiClient.get<ConversationListRow[]>(`${BASE}/conversations`);
+  return (data ?? []).map(normalizeConversationListItem);
 }
 
 export async function createPersonalChat(otherMemberId: number) {
