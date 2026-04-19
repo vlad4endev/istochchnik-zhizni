@@ -1986,7 +1986,7 @@ function CalendarPrayerCycleRoster() {
         return blob.includes(q);
       });
     }
-    return [...rows].sort(compareMembersByFirstName);
+    return [...rows].sort(compareMembersByDisplayNameRu);
   }, [data, addSearch]);
 
   if (isLoading && !data) {
@@ -2001,8 +2001,8 @@ function CalendarPrayerCycleRoster() {
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl border border-stone-200/80 bg-stone-50/80 px-3 py-2.5 text-sm">
+    <div className="overflow-hidden rounded-2xl border border-stone-200/90 bg-[var(--surface-elevated)] shadow-[var(--shadow)]">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-stone-200/80 bg-stone-50/95 px-4 py-3 text-sm">
         <span className="font-semibold text-stone-900">
           В ежедневной очереди:{' '}
           <span className="text-primary tabular-nums">{activeInQueue}</span>
@@ -2012,16 +2012,26 @@ function CalendarPrayerCycleRoster() {
         <span className="text-stone-600">
           С флагом «в цикле»: <span className="font-semibold tabular-nums text-stone-800">{flaggedInCycle}</span>
         </span>
+        {rosterSnapQ.data ? (
+          <>
+            <span className="hidden h-4 w-px bg-stone-200 sm:block" aria-hidden />
+            <span className="text-stone-600">
+              Якорь цикла:{' '}
+              <span className="font-mono font-semibold text-stone-800">{rosterSnapQ.data.start_date}</span>
+            </span>
+          </>
+        ) : null}
         {isFetching ? <span className="text-xs text-stone-400">Обновление…</span> : null}
       </div>
 
-      <p className="text-sm text-stone-600">
-        В разделе «Молитва» по очереди идут только <strong>активные</strong> участники с этим флагом (то же самое,
-        что переключатель в карточке в разделе «Участники»).
+      <p className="border-b border-stone-100 px-4 py-3 text-sm leading-relaxed text-stone-600">
+        В приложении «Молитва» по дням показываются только <strong>активные</strong> участники с флагом «в цикле» (как
+        в карточке в разделе «Участники»). Таблица слева — алфавит А–Я; «№» — порядок в таблице, не день цикла.
+        «Первым сегодня» сдвигает очередь так, чтобы выбранный человек был первым именно сегодня.
       </p>
 
       {rosterSnapQ.isError ? (
-        <p className="text-sm text-red-600">
+        <p className="border-b border-amber-100 bg-amber-50/80 px-4 py-2 text-sm text-red-700">
           {apiErrorMessage(rosterSnapQ.error, 'Не удалось загрузить порядок цикла.')}
         </p>
       ) : null}
@@ -2029,27 +2039,20 @@ function CalendarPrayerCycleRoster() {
       {banner ? (
         <p
           className={
-            banner.type === 'ok' ? 'text-sm font-medium text-emerald-700' : 'text-sm text-red-600'
+            banner.type === 'ok'
+              ? 'border-b border-emerald-100 bg-emerald-50/60 px-4 py-2.5 text-sm font-medium text-emerald-800'
+              : 'border-b border-red-100 bg-red-50/60 px-4 py-2.5 text-sm text-red-700'
           }
         >
           {banner.text}
         </p>
       ) : null}
 
-      <div className="grid gap-6 lg:grid-cols-2 lg:items-start">
-        <div className="rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] p-4 shadow-[var(--shadow)] sm:p-5">
-          <h4 className="font-extrabold text-stone-900">Сейчас в молитвенном цикле</h4>
+      <div className="grid lg:grid-cols-2 lg:divide-x lg:divide-stone-200">
+        <div className="p-4 sm:p-5">
+          <h4 className="text-xs font-extrabold uppercase tracking-wide text-stone-500">Сейчас в цикле</h4>
           <p className="mt-1 text-xs text-stone-500">
-            Список отсортирован по алфавиту А–Я по отображаемому имени. Колонка «№» — порядок в этом списке (не номер
-            дня в календарном цикле). Неактивная карточка с флагом не попадает в календарь, пока её не активируют.
-            «Первым сегодня» задаёт очередь от сегодняшнего дня (дата старта цикла в настройках).
-            {rosterSnapQ.data ? (
-              <>
-                {' '}
-                Сейчас в настройках:{' '}
-                <span className="font-mono font-semibold text-stone-700">{rosterSnapQ.data.start_date}</span>.
-              </>
-            ) : null}
+            Неактивные с флагом в календарь не попадают, пока карточку не активируют.
           </p>
           <label className="mt-3 block text-xs font-semibold text-stone-600">Поиск</label>
           <input
@@ -2150,9 +2153,9 @@ function CalendarPrayerCycleRoster() {
           </div>
         </div>
 
-        <div className="rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] p-4 shadow-[var(--shadow)] sm:p-5">
-          <h4 className="font-extrabold text-stone-900">Добавить в очередь</h4>
-          <p className="mt-1 text-xs text-stone-500">Активные участники, ещё не в цикле.</p>
+        <div className="bg-stone-50/50 p-4 sm:p-5 lg:min-h-[12rem]">
+          <h4 className="text-xs font-extrabold uppercase tracking-wide text-stone-500">Добавить в цикл</h4>
+          <p className="mt-1 text-xs text-stone-500">Активные без флага «в цикле», сортировка А–Я как слева.</p>
           <label className="mt-3 block text-xs font-semibold text-stone-600">Поиск</label>
           <input
             type="search"
@@ -2162,36 +2165,47 @@ function CalendarPrayerCycleRoster() {
             placeholder="Имя или телефон…"
             autoComplete="off"
           />
-          <div className="mt-3 max-h-[min(22rem,45vh)] space-y-2 overflow-y-auto pr-0.5">
+          <div className="mt-3 max-h-[min(28rem,55vh)] overflow-auto rounded-xl border border-stone-200/80 bg-white/90">
             {candidates.length === 0 ? (
-              <p className="rounded-xl border border-dashed border-stone-200 py-6 text-center text-sm text-stone-500">
+              <p className="py-8 text-center text-sm text-stone-500">
                 {addSearch.trim()
                   ? 'Никого не найдено.'
                   : 'Все активные уже в цикле или нет карточек.'}
               </p>
             ) : (
-              candidates.map((u) => (
-                <div
-                  key={u.id}
-                  className="flex flex-col gap-2 rounded-xl border border-stone-200/90 bg-white/90 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between"
-                >
-                  <div className="min-w-0">
-                    <p className="font-bold text-stone-900">{memberRosterName(u)}</p>
-                    <p className="mt-0.5 text-xs text-stone-600">{u.phone_number ?? '—'}</p>
-                  </div>
-                  <button
-                    type="button"
-                    className={btnPrimary('shrink-0 self-start text-xs sm:self-center')}
-                    disabled={patchMut.isPending}
-                    onClick={() => {
-                      setBanner(null);
-                      patchMut.mutate({ id: u.id, in_prayer_cycle: true });
-                    }}
-                  >
-                    В цикл
-                  </button>
-                </div>
-              ))
+              <table className="min-w-full border-collapse text-left text-sm">
+                <thead>
+                  <tr className="sticky top-0 z-[1] border-b border-stone-200 bg-stone-50/95 text-xs font-semibold uppercase tracking-wide text-stone-600 backdrop-blur-sm">
+                    <th className="min-w-[10rem] px-3 py-2.5">Участник</th>
+                    <th className="hidden px-3 py-2.5 sm:table-cell">Телефон</th>
+                    <th className="w-[1%] whitespace-nowrap px-3 py-2.5 text-right">Действие</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-stone-100">
+                  {candidates.map((u) => (
+                    <tr key={u.id}>
+                      <td className="px-3 py-2.5">
+                        <span className="font-semibold text-stone-900">{memberRosterName(u)}</span>
+                        <p className="mt-0.5 text-xs text-stone-500 sm:hidden">{u.phone_number ?? '—'}</p>
+                      </td>
+                      <td className="hidden px-3 py-2.5 text-stone-600 sm:table-cell">{u.phone_number ?? '—'}</td>
+                      <td className="px-3 py-2.5 text-right">
+                        <button
+                          type="button"
+                          className={btnPrimary('text-xs whitespace-nowrap')}
+                          disabled={patchMut.isPending}
+                          onClick={() => {
+                            setBanner(null);
+                            patchMut.mutate({ id: u.id, in_prayer_cycle: true });
+                          }}
+                        >
+                          В цикл
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             )}
           </div>
         </div>
@@ -2217,67 +2231,102 @@ function CalendarSection() {
     onError: (e) => setMsg({ type: 'err', text: apiErrorMessage(e, 'Не удалось запустить цикл.') }),
   });
 
+  const navClass =
+    'rounded-lg border border-stone-200/90 bg-white/80 px-2.5 py-1 text-stone-700 transition hover:border-primary/30 hover:bg-primary/[0.04] hover:text-stone-900';
+
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       <section
         className="rounded-2xl border border-primary/20 bg-gradient-to-br from-primary/[0.07] via-[var(--surface-elevated)] to-stone-50/90 p-5 shadow-[var(--shadow)]"
         aria-labelledby="calendar-intro-heading"
       >
-        <h3 id="calendar-intro-heading" className="text-base font-extrabold text-stone-900">
+        <h2 id="calendar-intro-heading" className="text-lg font-extrabold tracking-tight text-stone-900">
           Молитвенный календарь
-        </h3>
+        </h2>
         <p className="mt-2 text-sm leading-relaxed text-stone-600">
-          Три шага ниже — одна тема: <strong>от какой даты</strong> считается ротация,{' '}
-          <strong>кто входит в очередь</strong> на молитву по дням и <strong>что ещё показывать</strong> на экране
-          «Молитва» (темы, служения, отступники).
+          Настройка экрана «Молитва»: с какой даты считать цикл, кто в ежедневной очереди, план сбора нужд и
+          дополнительные блоки (темы, служения, отступники).
         </p>
+        <nav
+          className="mt-4 flex flex-wrap gap-2 border-t border-stone-200/60 pt-4 text-sm"
+          aria-label="Подразделы молитвенного календаря"
+        >
+          <a className={navClass} href="#cal-anchor">
+            1. Дата старта
+          </a>
+          <a className={navClass} href="#cal-roster">
+            2. Очередь участников
+          </a>
+          <a className={navClass} href="#cal-collection">
+            3. Сбор нужд
+          </a>
+          <a className={navClass} href="#cal-content">
+            4. Контент «Молитва»
+          </a>
+        </nav>
       </section>
 
-      <section className="rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] p-5 shadow-[var(--shadow)]">
-        <div className="flex items-start gap-3">
-          <span
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-sm font-extrabold text-primary"
-            aria-hidden
-          >
-            1
-          </span>
-          <div className="min-w-0">
-            <h3 className="font-extrabold text-stone-900">Дата старта цикла</h3>
-            <p className="mt-1 text-sm text-stone-600">
-              «День 1» для ротации участников и привязки глобальных блоков в приложении.
-            </p>
+      <section
+        id="cal-anchor"
+        className="scroll-mt-6 rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] p-5 shadow-[var(--shadow)]"
+      >
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="flex min-w-0 items-start gap-3">
+            <span
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-sm font-extrabold text-primary"
+              aria-hidden
+            >
+              1
+            </span>
+            <div className="min-w-0">
+              <h3 className="font-extrabold text-stone-900">Дата начала отсчёта цикла</h3>
+              <p className="mt-1 text-sm text-stone-600">
+                Глобальная «нулевая» дата: от неё считается, кто попадает на какой календарный день в ротации. Чтобы{' '}
+                <strong>сегодня</strong> первым шёл конкретный человек без смены этой даты, нажмите «Первым сегодня» в
+                блоке{' '}
+                <a href="#cal-roster" className="font-semibold text-primary underline-offset-2 hover:underline">
+                  очереди участников
+                </a>
+                .
+              </p>
+            </div>
           </div>
         </div>
-        <label className="mt-4 block text-xs font-semibold text-stone-600">Дата старта</label>
-        <input
-          type="date"
-          className={`${fieldClass()} mt-1 max-w-xs`}
-          value={date}
-          onChange={(e) => setDate(e.target.value)}
-        />
-        <button
-          type="button"
-          className={`${btnPrimary('mt-4')}`}
-          disabled={mut.isPending}
-          onClick={() => {
-            setMsg(null);
-            mut.mutate();
-          }}
-        >
-          {mut.isPending ? 'Сохранение…' : 'Применить дату старта'}
-        </button>
-        {msg ? (
-          <p
-            className={
-              msg.type === 'ok' ? 'mt-3 text-sm font-medium text-emerald-700' : 'mt-3 text-sm text-red-600'
-            }
+        <div className="mt-5 max-w-md rounded-xl border border-stone-200/80 bg-stone-50/60 p-4">
+          <label className="block text-xs font-semibold text-stone-600">Дата старта</label>
+          <input
+            type="date"
+            className={`${fieldClass()} mt-1 w-full max-w-xs`}
+            value={date}
+            onChange={(e) => setDate(e.target.value)}
+          />
+          <button
+            type="button"
+            className={`${btnPrimary('mt-4 w-full max-w-xs')}`}
+            disabled={mut.isPending}
+            onClick={() => {
+              setMsg(null);
+              mut.mutate();
+            }}
           >
-            {msg.text}
-          </p>
-        ) : null}
+            {mut.isPending ? 'Сохранение…' : 'Сохранить дату старта'}
+          </button>
+          {msg ? (
+            <p
+              className={
+                msg.type === 'ok' ? 'mt-3 text-sm font-medium text-emerald-700' : 'mt-3 text-sm text-red-600'
+              }
+            >
+              {msg.text}
+            </p>
+          ) : null}
+        </div>
       </section>
 
-      <section className="rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] p-5 shadow-[var(--shadow)]">
+      <section
+        id="cal-roster"
+        className="scroll-mt-6 rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] p-5 shadow-[var(--shadow)]"
+      >
         <div className="flex items-start gap-3">
           <span
             className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-sm font-extrabold text-primary"
@@ -2285,10 +2334,10 @@ function CalendarSection() {
           >
             2
           </span>
-          <div className="min-w-0">
-            <h3 className="font-extrabold text-stone-900">Очередь на молитву по дням</h3>
+          <div className="min-w-0 flex-1">
+            <h3 className="font-extrabold text-stone-900">Очередь участников</h3>
             <p className="mt-1 text-sm text-stone-600">
-              Кто участвует в ежедневной ротации имени для молитвы. Управление только вручную.
+              Состав цикла и добавление людей. Здесь же — сдвиг очереди на сегодня («Первым сегодня»).
             </p>
           </div>
         </div>
@@ -2297,7 +2346,10 @@ function CalendarSection() {
         </div>
       </section>
 
-      <section className="rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] p-5 shadow-[var(--shadow)]">
+      <section
+        id="cal-collection"
+        className="scroll-mt-6 rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] p-5 shadow-[var(--shadow)]"
+      >
         <div className="flex items-start gap-3">
           <span
             className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary"
@@ -2308,8 +2360,8 @@ function CalendarSection() {
           <div className="min-w-0">
             <h3 className="font-extrabold text-stone-900">Сбор нужд: эта и следующая неделя</h3>
             <p className="mt-1 text-sm text-stone-600">
-              Очередь молитвенного цикла по дням, ответственные за сбор и предыдущие нужды — то же, что на экране
-              «Молитва» (для администратора и координаторов сбора).
+              Как на экране «Молитва»: дни цикла, кто отвечает за сбор, прошлые нужды — для администратора и
+              координаторов.
             </p>
           </div>
         </div>
@@ -2322,18 +2374,21 @@ function CalendarSection() {
         </div>
       </section>
 
-      <section>
+      <section
+        id="cal-content"
+        className="scroll-mt-6 rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] p-5 shadow-[var(--shadow)]"
+      >
         <div className="mb-4 flex items-start gap-3">
           <span
             className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-sm font-extrabold text-primary"
             aria-hidden
           >
-            3
+            4
           </span>
           <div className="min-w-0">
             <h3 className="font-extrabold text-stone-900">Контент на экране «Молитва»</h3>
             <p className="mt-1 text-sm text-stone-600">
-              Глобальные темы, служения и отступники — три колонки в приложении.
+              Темы, служения и отступники — три колонки под календарём в приложении.
             </p>
           </div>
         </div>
