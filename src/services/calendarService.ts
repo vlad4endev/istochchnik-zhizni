@@ -113,9 +113,9 @@ async function getByIndex<T>(
   return result.rows as T[];
 }
 
-/** Порядок участников в цикле: А–Я по имени, затем по фамилии (как в админке). */
-const MEMBER_ORDER_SQL = `LOWER(COALESCE(NULLIF(trim(m.first_name), ''), split_part(trim(m.name), ' ', 1))) ASC,
-    LOWER(COALESCE(NULLIF(trim(m.last_name), ''), NULLIF(trim(split_part(trim(m.name), ' ', 2)), ''), trim(m.name))) ASC,
+/** Порядок участников в цикле: А–Я по фамилии, затем по имени (как в get_daily_prayer / триггере якоря). */
+const MEMBER_ORDER_SQL = `LOWER(COALESCE(NULLIF(trim(m.last_name), ''), split_part(trim(m.name), ' ', 1))) ASC,
+    LOWER(COALESCE(NULLIF(trim(m.first_name), ''), m.name)) ASC,
     m.id ASC`;
 
 function isPgMissingTableOrColumn(e: unknown): boolean {

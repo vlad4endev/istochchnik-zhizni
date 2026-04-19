@@ -202,15 +202,6 @@ async function appendPrayerRequestHistory(
   );
 }
 
-async function resetCycleStartToCurrentDate(): Promise<void> {
-  await query(
-    `INSERT INTO global_settings (id, start_date)
-     VALUES (1, current_date)
-     ON CONFLICT (id)
-     DO UPDATE SET start_date = EXCLUDED.start_date`
-  );
-}
-
 export async function listUsers(): Promise<AppUser[]> {
   const ci = await getCurrentCycleIndexForUpsert();
   const result = await query(
@@ -615,15 +606,6 @@ export async function updateUser(id: number, input: UpdateUserInput): Promise<Ap
     values.push(input.in_prayer_cycle);
   }
 
-  let previousInPrayerCycle: boolean | undefined;
-  if (typeof input.in_prayer_cycle === 'boolean') {
-    const cur = await getUserById(id);
-    if (!cur) {
-      return null;
-    }
-    previousInPrayerCycle = cur.in_prayer_cycle;
-  }
-
   if (updates.length === 0) {
     return getUserById(id);
   }
@@ -664,14 +646,6 @@ export async function updateUser(id: number, input: UpdateUserInput): Promise<Ap
     return null;
   }
 
-  if (
-    typeof input.in_prayer_cycle === 'boolean' &&
-    previousInPrayerCycle !== undefined &&
-    previousInPrayerCycle !== input.in_prayer_cycle
-  ) {
-    await resetCycleStartToCurrentDate();
-  }
-
   if (hasPrayerRequestUpdate) {
     const normalizedStored = normalizeOptionalString(input.prayer_request);
     const nextForHistory = (normalizedStored ?? '').trim();
@@ -689,11 +663,7 @@ export async function updateUser(id: number, input: UpdateUserInput): Promise<Ap
 
 export async function deleteUser(id: number): Promise<boolean> {
   const result = await query('DELETE FROM members WHERE id = $1', [id]);
-  const isDeleted = (result.rowCount ?? 0) > 0;
-  if (isDeleted) {
-    await resetCycleStartToCurrentDate();
-  }
-  return isDeleted;
+  return (result.rowCount ?? 0) > 0;
 }
 
 export async function linkUserAccount(id: number, input: LinkAccountInput): Promise<AppUser | null> {

@@ -563,100 +563,6 @@ function DashboardMain() {
             ) : null}
           </div>
 
-          {showPrayerPlanOnDashboard ? (
-            <section className="rounded-3xl border border-primary/20 bg-gradient-to-br from-primary/[0.06] to-[var(--surface-elevated)] p-4 shadow-[var(--shadow-card)] sm:col-span-2 xl:col-span-12">
-              <p className="text-[11px] font-extrabold uppercase tracking-[0.14em] text-primary/90">
-                Координаторам сбора
-              </p>
-              {isAdmin ? (
-                <>
-                  {unfilledWeekRowsAdmin.length > 0 ? (
-                    <div className="mt-3">
-                      <p className="text-sm font-semibold text-stone-800">
-                        На текущей неделе не заполнена молитвенная нужда (с сегодня и дальше по циклу):
-                      </p>
-                      <ul className="mt-2 max-h-[min(40vh,320px)] space-y-2 overflow-y-auto pr-0.5">
-                        {unfilledWeekRowsAdmin.map((row) => (
-                          <li
-                            key={`${row.date}-${row.member.id}`}
-                            className="flex flex-col gap-0.5 rounded-xl border border-stone-200/80 bg-white/80 px-3 py-2 text-sm sm:flex-row sm:flex-wrap sm:items-center sm:justify-between"
-                          >
-                            <span className="font-bold text-stone-900">{memberFirstLastLine(row.member)}</span>
-                            <span className="text-xs font-semibold text-stone-500">{formatWeekDayChip(row.date)}</span>
-                            <span className="text-xs text-stone-600 sm:text-right">
-                              Координатор: <span className="font-semibold text-stone-800">{row.coordinatorLabel}</span>
-                            </span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  ) : (
-                    <p className="mt-2 text-sm text-stone-600">
-                      На текущей неделе (с сегодня) у всех участников цикла нужды заполнены.
-                    </p>
-                  )}
-                </>
-              ) : (
-                <div className="mt-3">
-                  {coordinatorAssignedRows.length > 0 ? (
-                    <>
-                      <p className="text-sm font-semibold text-stone-800">
-                        Вам назначены участники на текущую неделю:
-                      </p>
-                      <ul className="mt-2 space-y-1.5">
-                        {coordinatorAssignedRows.map((row) => (
-                          <li
-                            key={`assigned-${row.date}-${row.member.id}`}
-                            className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-primary/20 bg-white/80 px-3 py-2 text-sm"
-                          >
-                            <span className="font-bold text-stone-900">{memberFirstLastLine(row.member)}</span>
-                            <span className="text-xs font-semibold text-stone-600">{formatWeekDayChip(row.date)}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </>
-                  ) : (
-                    <p className="text-sm text-stone-600">
-                      На текущую неделю за вами пока нет закреплённых участников.
-                    </p>
-                  )}
-
-                  <p className="text-sm font-semibold text-stone-800">
-                    У выбранных вами участников пока нет текста нужды:
-                  </p>
-                  {coordinatorUnfilledRows.length > 0 ? (
-                    <ul className="mt-2 space-y-1.5">
-                      {coordinatorUnfilledRows.map((row) => (
-                        <li
-                          key={`${row.date}-${row.member.id}`}
-                          className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-200/70 bg-amber-50/60 px-3 py-2 text-sm"
-                        >
-                          <span className="font-bold text-stone-900">{memberFirstLastLine(row.member)}</span>
-                          <span className="text-xs font-semibold text-stone-600">{formatWeekDayChip(row.date)}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  ) : (
-                    <p className="mt-2 text-sm text-stone-600">
-                      У всех ваших участников нужды уже заполнены.
-                    </p>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => navigate('/prayer')}
-                    className="tap-highlight-transparent mt-3 inline-flex min-h-[44px] items-center gap-2 rounded-2xl bg-primary px-4 text-sm font-extrabold text-white shadow-sm hover:bg-primary/90"
-                  >
-                    Заполнить в «Молитва»
-                    <LuArrowRight className="h-4 w-4" strokeWidth={2} aria-hidden />
-                  </button>
-                </div>
-              )}
-              <div className="mt-4">
-                <NextWeekPrayerPlanSection canView currentUserId={me?.id ?? null} isAdmin={isAdmin} />
-              </div>
-            </section>
-          ) : null}
-
           <button
             type="button"
             onClick={() => navigate('/prayer')}
@@ -769,6 +675,100 @@ function DashboardMain() {
               </div>
             </div>
           </button>
+
+          {showPrayerPlanOnDashboard ? (
+            <section className="rounded-3xl border border-primary/20 bg-gradient-to-br from-primary/[0.06] to-[var(--surface-elevated)] p-4 shadow-[var(--shadow-card)] sm:col-span-2 xl:col-span-12">
+              <p className="text-[11px] font-extrabold uppercase tracking-[0.14em] text-primary/90">
+                Координаторам сбора
+              </p>
+              {isAdmin ? (
+                <>
+                  {unfilledWeekRowsAdmin.length > 0 ? (
+                    <div className="mt-3">
+                      <p className="text-sm font-semibold text-stone-800">
+                        На текущей неделе не заполнена молитвенная нужда (с сегодня и дальше по циклу):
+                      </p>
+                      <ul className="mt-2 max-h-[min(40vh,320px)] space-y-2 overflow-y-auto pr-0.5">
+                        {unfilledWeekRowsAdmin.map((row) => (
+                          <li
+                            key={`${row.date}-${row.member.id}`}
+                            className="flex flex-col gap-0.5 rounded-xl border border-stone-200/80 bg-white/80 px-3 py-2 text-sm sm:flex-row sm:flex-wrap sm:items-center sm:justify-between"
+                          >
+                            <span className="font-bold text-stone-900">{memberFirstLastLine(row.member)}</span>
+                            <span className="text-xs font-semibold text-stone-500">{formatWeekDayChip(row.date)}</span>
+                            <span className="text-xs text-stone-600 sm:text-right">
+                              Координатор: <span className="font-semibold text-stone-800">{row.coordinatorLabel}</span>
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : (
+                    <p className="mt-2 text-sm text-stone-600">
+                      На текущей неделе (с сегодня) у всех участников цикла нужды заполнены.
+                    </p>
+                  )}
+                </>
+              ) : (
+                <div className="mt-3">
+                  {coordinatorAssignedRows.length > 0 ? (
+                    <>
+                      <p className="text-sm font-semibold text-stone-800">
+                        Вам назначены участники на текущую неделю:
+                      </p>
+                      <ul className="mt-2 space-y-1.5">
+                        {coordinatorAssignedRows.map((row) => (
+                          <li
+                            key={`assigned-${row.date}-${row.member.id}`}
+                            className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-primary/20 bg-white/80 px-3 py-2 text-sm"
+                          >
+                            <span className="font-bold text-stone-900">{memberFirstLastLine(row.member)}</span>
+                            <span className="text-xs font-semibold text-stone-600">{formatWeekDayChip(row.date)}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </>
+                  ) : (
+                    <p className="text-sm text-stone-600">
+                      На текущую неделю за вами пока нет закреплённых участников.
+                    </p>
+                  )}
+
+                  <p className="text-sm font-semibold text-stone-800">
+                    У выбранных вами участников пока нет текста нужды:
+                  </p>
+                  {coordinatorUnfilledRows.length > 0 ? (
+                    <ul className="mt-2 space-y-1.5">
+                      {coordinatorUnfilledRows.map((row) => (
+                        <li
+                          key={`${row.date}-${row.member.id}`}
+                          className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-200/70 bg-amber-50/60 px-3 py-2 text-sm"
+                        >
+                          <span className="font-bold text-stone-900">{memberFirstLastLine(row.member)}</span>
+                          <span className="text-xs font-semibold text-stone-600">{formatWeekDayChip(row.date)}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="mt-2 text-sm text-stone-600">
+                      У всех ваших участников нужды уже заполнены.
+                    </p>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => navigate('/prayer')}
+                    className="tap-highlight-transparent mt-3 inline-flex min-h-[44px] items-center gap-2 rounded-2xl bg-primary px-4 text-sm font-extrabold text-white shadow-sm hover:bg-primary/90"
+                  >
+                    Заполнить в «Молитва»
+                    <LuArrowRight className="h-4 w-4" strokeWidth={2} aria-hidden />
+                  </button>
+                </div>
+              )}
+              <div className="mt-4">
+                <NextWeekPrayerPlanSection canView currentUserId={me?.id ?? null} isAdmin={isAdmin} />
+              </div>
+            </section>
+          ) : null}
         </div>
       </div>
 

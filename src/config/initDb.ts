@@ -490,8 +490,8 @@ BEGIN
   LEFT JOIN member_prayer_by_cycle mpc ON mpc.member_id = m.id AND mpc.cycle_index = v_cycle_index
   WHERE m.is_active = TRUE AND m.in_prayer_cycle = TRUE
   ORDER BY
-    LOWER(COALESCE(NULLIF(trim(m.first_name), ''), split_part(trim(m.name), ' ', 1))) ASC,
-    LOWER(COALESCE(NULLIF(trim(m.last_name), ''), NULLIF(trim(split_part(trim(m.name), ' ', 2)), ''), trim(m.name))) ASC,
+    LOWER(COALESCE(NULLIF(trim(m.last_name), ''), split_part(trim(m.name), ' ', 1))) ASC,
+    LOWER(COALESCE(NULLIF(trim(m.first_name), ''), m.name)) ASC,
     m.id ASC
   LIMIT 1 OFFSET v_index;
 
@@ -520,107 +520,549 @@ EXECUTE PROCEDURE set_access_requests_updated_at();
 CREATE OR REPLACE FUNCTION reset_cycle_on_member_change()
 RETURNS TRIGGER
 LANGUAGE plpgsql
+SET search_path = public
 AS $$
-DECLARE
-  v_today DATE := CURRENT_DATE;
-  v_start_date DATE;
-  v_old_total INTEGER;
-  v_new_total INTEGER;
-  v_old_index INTEGER;
-  v_old_member_id INTEGER;
-  v_new_index INTEGER;
-BEGIN
-  INSERT INTO global_settings (id, start_date)
-  VALUES (1, current_date)
-  ON CONFLICT (id) DO NOTHING;
+declare
+  v_today date := current_date;
+  v_start_date date;
+  v_old_total integer;
+  v_new_total integer;
+  v_old_index integer;
+  v_old_member_id integer;
+  v_new_index integer;
+  v_pick_index integer;
+  v_target_member_id integer;
+begin
+  insert into global_settings (id, start_date)
+  values (1, current_date)
+  on conflict (id) do nothing;
 
-  SELECT start_date
-    INTO v_start_date
-  FROM global_settings
-  WHERE id = 1;
+  select start_date
+    into v_start_date
+  from global_settings
+  where id = 1;
 
-  IF TG_OP = 'INSERT' THEN
-    IF NEW.is_active IS DISTINCT FROM TRUE OR NEW.in_prayer_cycle IS DISTINCT FROM TRUE THEN
-      RETURN NULL;
-    END IF;
+  if TG_OP = 'INSERT' then
+    if NEW.is_active is distinct from true or NEW.in_prayer_cycle is distinct from true then
+      return null;
+    end if;
 
-    SELECT COUNT(*)::int
-      INTO v_new_total
-    FROM members
-    WHERE is_active = TRUE AND in_prayer_cycle = TRUE;
+    select count(*)::int
+      into v_new_total
+    from members
+    where is_active = true and in_prayer_cycle = true;
 
     v_old_total := v_new_total - 1;
-    IF v_old_total <= 0 THEN
-      UPDATE global_settings
-      SET start_date = v_today
-      WHERE id = 1;
-      RETURN NULL;
-    END IF;
+    if v_old_total <= 0 then
+      update global_settings
+      set start_date = v_today
+      where id = 1;
+      return null;
+    end if;
 
     v_old_index := ((v_today - v_start_date) % v_old_total + v_old_total) % v_old_total;
 
-    SELECT m.id
-      INTO v_old_member_id
-    FROM members m
-    WHERE m.id <> NEW.id
-      AND m.is_active = TRUE
-      AND m.in_prayer_cycle = TRUE
-    ORDER BY
-      LOWER(COALESCE(NULLIF(trim(m.first_name), ''), split_part(trim(m.name), ' ', 1))) ASC,
-      LOWER(COALESCE(NULLIF(trim(m.last_name), ''), NULLIF(trim(split_part(trim(m.name), ' ', 2)), ''), trim(m.name))) ASC,
-      m.id ASC
-    LIMIT 1
-    OFFSET v_old_index;
+    select m.id
+      into v_old_member_id
+    from members m
+    where m.id <> NEW.id
+      and m.is_active = true
+      and m.in_prayer_cycle = true
+    order by
+      lower(coalesce(nullif(trim(m.last_name), ''), split_part(trim(m.name), ' ', 1))) asc,
+      lower(coalesce(nullif(trim(m.first_name), ''), m.name)) asc,
+      m.id asc
+    limit 1 offset v_old_index;
 
-    IF v_old_member_id IS NULL THEN
-      RETURN NULL;
-    END IF;
+    if v_old_member_id is null then
+      return null;
+    end if;
 
-    SELECT ranked.idx
-      INTO v_new_index
-    FROM (
-      SELECT
+    select ranked.idx
+      into v_new_index
+    from (
+      select
         m.id,
-        ROW_NUMBER() OVER (
-          ORDER BY
-            LOWER(COALESCE(NULLIF(trim(m.first_name), ''), split_part(trim(m.name), ' ', 1))) ASC,
-            LOWER(COALESCE(NULLIF(trim(m.last_name), ''), NULLIF(trim(split_part(trim(m.name), ' ', 2)), ''), trim(m.name))) ASC,
-            m.id ASC
-        ) - 1 AS idx
-      FROM members m
-      WHERE m.is_active = TRUE AND m.in_prayer_cycle = TRUE
+        row_number() over (
+          order by
+            lower(coalesce(nullif(trim(m.last_name), ''), split_part(trim(m.name), ' ', 1))) asc,
+            lower(coalesce(nullif(trim(m.first_name), ''), m.name)) asc,
+            m.id asc
+        ) - 1 as idx
+      from members m
+      where m.is_active = true and m.in_prayer_cycle = true
     ) ranked
-    WHERE ranked.id = v_old_member_id;
+    where ranked.id = v_old_member_id;
 
-    IF v_new_index IS NULL THEN
-      RETURN NULL;
-    END IF;
+    if v_new_index is null then
+      return null;
+    end if;
 
-    UPDATE global_settings
-    SET start_date = v_today - v_new_index
-    WHERE id = 1;
-    RETURN NULL;
-  END IF;
+    update global_settings
+    set start_date = v_today - v_new_index
+    where id = 1;
+    return null;
+  end if;
 
-  IF OLD.is_active IS DISTINCT FROM TRUE OR OLD.in_prayer_cycle IS DISTINCT FROM TRUE THEN
-    RETURN NULL;
-  END IF;
+  if TG_OP = 'UPDATE' then
+    -- Входит в молитвенный цикл (в т.ч. после повторной активации).
+    if NEW.is_active is true
+       and NEW.in_prayer_cycle is true
+       and OLD.in_prayer_cycle is not true then
+      select count(*)::int
+        into v_new_total
+      from members
+      where is_active = true and in_prayer_cycle = true;
 
-  -- Deleting участника из молитвенного цикла: якорь на сегодня.
-  UPDATE global_settings
-  SET start_date = v_today
-  WHERE id = 1;
+      v_old_total := v_new_total - 1;
+      if v_old_total <= 0 then
+        update global_settings
+        set start_date = v_today
+        where id = 1;
+        return null;
+      end if;
 
-  RETURN NULL;
-END;
+      v_old_index := ((v_today - v_start_date) % v_old_total + v_old_total) % v_old_total;
+
+      select m.id
+        into v_old_member_id
+      from members m
+      where m.id <> NEW.id
+        and m.is_active = true
+        and m.in_prayer_cycle = true
+      order by
+        lower(coalesce(nullif(trim(m.last_name), ''), split_part(trim(m.name), ' ', 1))) asc,
+        lower(coalesce(nullif(trim(m.first_name), ''), m.name)) asc,
+        m.id asc
+      limit 1 offset v_old_index;
+
+      if v_old_member_id is null then
+        return null;
+      end if;
+
+      select ranked.idx
+        into v_new_index
+      from (
+        select
+          m.id,
+          row_number() over (
+            order by
+              lower(coalesce(nullif(trim(m.last_name), ''), split_part(trim(m.name), ' ', 1))) asc,
+              lower(coalesce(nullif(trim(m.first_name), ''), m.name)) asc,
+              m.id asc
+          ) - 1 as idx
+        from members m
+        where m.is_active = true and m.in_prayer_cycle = true
+      ) ranked
+      where ranked.id = v_old_member_id;
+
+      if v_new_index is null then
+        return null;
+      end if;
+
+      update global_settings
+      set start_date = v_today - v_new_index
+      where id = 1;
+      return null;
+    end if;
+
+    -- Выходит из цикла (флаг): старая очередь с учётом того, что у строки ещё был active + in_cycle.
+    if OLD.in_prayer_cycle is true and NEW.in_prayer_cycle is not true and OLD.is_active is true then
+      select count(*)::int
+        into v_new_total
+      from members
+      where is_active = true and in_prayer_cycle = true;
+
+      if v_new_total <= 0 then
+        update global_settings
+        set start_date = v_today
+        where id = 1;
+        return null;
+      end if;
+
+      v_old_total := v_new_total + 1;
+      v_old_index := ((v_today - v_start_date) % v_old_total + v_old_total) % v_old_total;
+
+      select m.id
+        into v_old_member_id
+      from members m
+      where (
+          (m.id = NEW.id and OLD.in_prayer_cycle is true and OLD.is_active is true)
+          or (m.id <> NEW.id and m.is_active is true and m.in_prayer_cycle is true)
+        )
+      order by
+        case when m.id = NEW.id then
+          lower(coalesce(nullif(trim(OLD.last_name), ''), split_part(trim(OLD.name), ' ', 1)))
+        else
+          lower(coalesce(nullif(trim(m.last_name), ''), split_part(trim(m.name), ' ', 1)))
+        end asc,
+        case when m.id = NEW.id then
+          lower(coalesce(nullif(trim(OLD.first_name), ''), OLD.name))
+        else
+          lower(coalesce(nullif(trim(m.first_name), ''), m.name))
+        end asc,
+        m.id asc
+      limit 1 offset v_old_index;
+
+      if v_old_member_id is null then
+        return null;
+      end if;
+
+      if v_old_member_id = NEW.id then
+        v_pick_index := (v_old_index + 1) % v_old_total;
+        select m.id
+          into v_target_member_id
+        from members m
+        where (
+            (m.id = NEW.id and OLD.in_prayer_cycle is true and OLD.is_active is true)
+            or (m.id <> NEW.id and m.is_active is true and m.in_prayer_cycle is true)
+          )
+        order by
+          case when m.id = NEW.id then
+            lower(coalesce(nullif(trim(OLD.last_name), ''), split_part(trim(OLD.name), ' ', 1)))
+          else
+            lower(coalesce(nullif(trim(m.last_name), ''), split_part(trim(m.name), ' ', 1)))
+          end asc,
+          case when m.id = NEW.id then
+            lower(coalesce(nullif(trim(OLD.first_name), ''), OLD.name))
+          else
+            lower(coalesce(nullif(trim(m.first_name), ''), m.name))
+          end asc,
+          m.id asc
+        limit 1 offset v_pick_index;
+      else
+        v_target_member_id := v_old_member_id;
+      end if;
+
+      if v_target_member_id is null then
+        update global_settings
+        set start_date = v_today
+        where id = 1;
+        return null;
+      end if;
+
+      select ranked.idx
+        into v_new_index
+      from (
+        select
+          m.id,
+          row_number() over (
+            order by
+              lower(coalesce(nullif(trim(m.last_name), ''), split_part(trim(m.name), ' ', 1))) asc,
+              lower(coalesce(nullif(trim(m.first_name), ''), m.name)) asc,
+              m.id asc
+          ) - 1 as idx
+        from members m
+        where m.is_active = true and m.in_prayer_cycle = true
+      ) ranked
+      where ranked.id = v_target_member_id;
+
+      if v_new_index is null then
+        update global_settings
+        set start_date = v_today
+        where id = 1;
+        return null;
+      end if;
+
+      update global_settings
+      set start_date = v_today - v_new_index
+      where id = 1;
+      return null;
+    end if;
+
+    -- Деактивация, но флаг «в цикле» остался true — убираем из пула по факту как выше.
+    if OLD.is_active is true
+       and NEW.is_active is not true
+       and OLD.in_prayer_cycle is true
+       and NEW.in_prayer_cycle is true then
+      select count(*)::int
+        into v_new_total
+      from members
+      where is_active = true and in_prayer_cycle = true;
+
+      if v_new_total <= 0 then
+        update global_settings
+        set start_date = v_today
+        where id = 1;
+        return null;
+      end if;
+
+      v_old_total := v_new_total + 1;
+      v_old_index := ((v_today - v_start_date) % v_old_total + v_old_total) % v_old_total;
+
+      select m.id
+        into v_old_member_id
+      from members m
+      where (
+          (m.id = NEW.id and OLD.in_prayer_cycle is true and OLD.is_active is true)
+          or (m.id <> NEW.id and m.is_active is true and m.in_prayer_cycle is true)
+        )
+      order by
+        case when m.id = NEW.id then
+          lower(coalesce(nullif(trim(OLD.last_name), ''), split_part(trim(OLD.name), ' ', 1)))
+        else
+          lower(coalesce(nullif(trim(m.last_name), ''), split_part(trim(m.name), ' ', 1)))
+        end asc,
+        case when m.id = NEW.id then
+          lower(coalesce(nullif(trim(OLD.first_name), ''), OLD.name))
+        else
+          lower(coalesce(nullif(trim(m.first_name), ''), m.name))
+        end asc,
+        m.id asc
+      limit 1 offset v_old_index;
+
+      if v_old_member_id is null then
+        return null;
+      end if;
+
+      if v_old_member_id = NEW.id then
+        v_pick_index := (v_old_index + 1) % v_old_total;
+        select m.id
+          into v_target_member_id
+        from members m
+        where (
+            (m.id = NEW.id and OLD.in_prayer_cycle is true and OLD.is_active is true)
+            or (m.id <> NEW.id and m.is_active is true and m.in_prayer_cycle is true)
+          )
+        order by
+          case when m.id = NEW.id then
+            lower(coalesce(nullif(trim(OLD.last_name), ''), split_part(trim(OLD.name), ' ', 1)))
+          else
+            lower(coalesce(nullif(trim(m.last_name), ''), split_part(trim(m.name), ' ', 1)))
+          end asc,
+          case when m.id = NEW.id then
+            lower(coalesce(nullif(trim(OLD.first_name), ''), OLD.name))
+          else
+            lower(coalesce(nullif(trim(m.first_name), ''), m.name))
+          end asc,
+          m.id asc
+        limit 1 offset v_pick_index;
+      else
+        v_target_member_id := v_old_member_id;
+      end if;
+
+      if v_target_member_id is null then
+        update global_settings
+        set start_date = v_today
+        where id = 1;
+        return null;
+      end if;
+
+      select ranked.idx
+        into v_new_index
+      from (
+        select
+          m.id,
+          row_number() over (
+            order by
+              lower(coalesce(nullif(trim(m.last_name), ''), split_part(trim(m.name), ' ', 1))) asc,
+              lower(coalesce(nullif(trim(m.first_name), ''), m.name)) asc,
+              m.id asc
+          ) - 1 as idx
+        from members m
+        where m.is_active = true and m.in_prayer_cycle = true
+      ) ranked
+      where ranked.id = v_target_member_id;
+
+      if v_new_index is null then
+        update global_settings
+        set start_date = v_today
+        where id = 1;
+        return null;
+      end if;
+
+      update global_settings
+      set start_date = v_today - v_new_index
+      where id = 1;
+      return null;
+    end if;
+
+    -- Смена ФИО у активного участника цикла: порядок в списке мог измениться, якорь подстраиваем.
+    if NEW.is_active is true
+       and OLD.is_active is true
+       and NEW.in_prayer_cycle is true
+       and OLD.in_prayer_cycle is true
+       and (
+         OLD.first_name is distinct from NEW.first_name
+         or OLD.last_name is distinct from NEW.last_name
+         or OLD.name is distinct from NEW.name
+       ) then
+      select count(*)::int
+        into v_new_total
+      from members
+      where is_active = true and in_prayer_cycle = true;
+
+      if v_new_total <= 0 then
+        return null;
+      end if;
+
+      v_old_index := ((v_today - v_start_date) % v_new_total + v_new_total) % v_new_total;
+
+      select m.id
+        into v_old_member_id
+      from members m
+      where m.is_active = true and m.in_prayer_cycle = true
+      order by
+        case when m.id = NEW.id then
+          lower(coalesce(nullif(trim(OLD.last_name), ''), split_part(trim(OLD.name), ' ', 1)))
+        else
+          lower(coalesce(nullif(trim(m.last_name), ''), split_part(trim(m.name), ' ', 1)))
+        end asc,
+        case when m.id = NEW.id then
+          lower(coalesce(nullif(trim(OLD.first_name), ''), OLD.name))
+        else
+          lower(coalesce(nullif(trim(m.first_name), ''), m.name))
+        end asc,
+        m.id asc
+      limit 1 offset v_old_index;
+
+      if v_old_member_id is null then
+        return null;
+      end if;
+
+      select ranked.idx
+        into v_new_index
+      from (
+        select
+          m.id,
+          row_number() over (
+            order by
+              lower(coalesce(nullif(trim(m.last_name), ''), split_part(trim(m.name), ' ', 1))) asc,
+              lower(coalesce(nullif(trim(m.first_name), ''), m.name)) asc,
+              m.id asc
+          ) - 1 as idx
+        from members m
+        where m.is_active = true and m.in_prayer_cycle = true
+      ) ranked
+      where ranked.id = v_old_member_id;
+
+      if v_new_index is null then
+        return null;
+      end if;
+
+      update global_settings
+      set start_date = v_today - v_new_index
+      where id = 1;
+      return null;
+    end if;
+
+    return null;
+  end if;
+
+  if TG_OP = 'DELETE' then
+    if OLD.is_active is distinct from true or OLD.in_prayer_cycle is distinct from true then
+      return null;
+    end if;
+
+    select count(*)::int
+      into v_new_total
+    from members
+    where is_active = true and in_prayer_cycle = true;
+
+    if v_new_total <= 0 then
+      update global_settings
+      set start_date = v_today
+      where id = 1;
+      return null;
+    end if;
+
+    v_old_total := v_new_total + 1;
+    v_old_index := ((v_today - v_start_date) % v_old_total + v_old_total) % v_old_total;
+
+    with roster as (
+      select
+        m.id,
+        lower(coalesce(nullif(trim(m.last_name), ''), split_part(trim(m.name), ' ', 1))) as sort_ln,
+        lower(coalesce(nullif(trim(m.first_name), ''), m.name)) as sort_fn
+      from members m
+      where m.is_active = true and m.in_prayer_cycle = true
+      union all
+      select
+        OLD.id,
+        lower(coalesce(nullif(trim(OLD.last_name), ''), split_part(trim(OLD.name), ' ', 1))),
+        lower(coalesce(nullif(trim(OLD.first_name), ''), OLD.name))
+    )
+    select r.id
+      into v_old_member_id
+    from roster r
+    order by r.sort_ln asc, r.sort_fn asc, r.id asc
+    limit 1 offset v_old_index;
+
+    if v_old_member_id is null then
+      return null;
+    end if;
+
+    if v_old_member_id = OLD.id then
+      v_pick_index := (v_old_index + 1) % v_old_total;
+      with roster as (
+        select
+          m.id,
+          lower(coalesce(nullif(trim(m.last_name), ''), split_part(trim(m.name), ' ', 1))) as sort_ln,
+          lower(coalesce(nullif(trim(m.first_name), ''), m.name)) as sort_fn
+        from members m
+        where m.is_active = true and m.in_prayer_cycle = true
+        union all
+        select
+          OLD.id,
+          lower(coalesce(nullif(trim(OLD.last_name), ''), split_part(trim(OLD.name), ' ', 1))),
+          lower(coalesce(nullif(trim(OLD.first_name), ''), OLD.name))
+      )
+      select r.id
+        into v_target_member_id
+      from roster r
+      order by r.sort_ln asc, r.sort_fn asc, r.id asc
+      limit 1 offset v_pick_index;
+    else
+      v_target_member_id := v_old_member_id;
+    end if;
+
+    if v_target_member_id is null then
+      update global_settings
+      set start_date = v_today
+      where id = 1;
+      return null;
+    end if;
+
+    select ranked.idx
+      into v_new_index
+    from (
+      select
+        m.id,
+        row_number() over (
+          order by
+            lower(coalesce(nullif(trim(m.last_name), ''), split_part(trim(m.name), ' ', 1))) asc,
+            lower(coalesce(nullif(trim(m.first_name), ''), m.name)) asc,
+            m.id asc
+        ) - 1 as idx
+      from members m
+      where m.is_active = true and m.in_prayer_cycle = true
+    ) ranked
+    where ranked.id = v_target_member_id;
+
+    if v_new_index is null then
+      update global_settings
+      set start_date = v_today
+      where id = 1;
+      return null;
+    end if;
+
+    update global_settings
+    set start_date = v_today - v_new_index
+    where id = 1;
+    return null;
+  end if;
+
+  return null;
+end;
 $$;
 
 DROP TRIGGER IF EXISTS trg_reset_cycle_on_member_change ON members;
 
 CREATE TRIGGER trg_reset_cycle_on_member_change
-AFTER INSERT OR DELETE ON members
+AFTER INSERT OR UPDATE OR DELETE ON members
 FOR EACH ROW
 EXECUTE PROCEDURE reset_cycle_on_member_change();
+
 
 -- ═══════════════════════════════════════════════════════════════════
 -- MESSENGER MODULE
