@@ -5,6 +5,11 @@ import { addUtcDaysToIsoDate, getDiffDays } from '../utils/isoDates';
 export const PRAYER_CYCLE_MEMBERS_WHERE = 'is_active = TRUE AND in_prayer_cycle = TRUE';
 export const PRAYER_CYCLE_MEMBERS_WHERE_M = 'm.is_active = TRUE AND m.in_prayer_cycle = TRUE';
 
+/** Совпадает с get_daily_prayer и триггером reset_cycle_on_member_change (ORDER BY members). */
+export const PRAYER_CYCLE_ROSTER_ORDER_SQL = `LOWER(COALESCE(NULLIF(trim(m.last_name), ''), split_part(trim(m.name), ' ', 1))) ASC,
+    LOWER(COALESCE(NULLIF(trim(m.first_name), ''), m.name)) ASC,
+    m.id ASC`;
+
 /** Метаданные молитвенного цикла: полный проход по активным участникам (M дней). */
 export interface PrayerCycleSnapshot {
   /** 0-based индекс цикла относительно start_date */

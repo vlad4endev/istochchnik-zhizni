@@ -16,6 +16,8 @@ import {
   setMinistryDirectionTemplateRolesHandler,
   setUserAppRoleHandler,
   setOneTimeMemberDateOverrideHandler,
+  anchorPrayerCycleMemberHandler,
+  getPrayerCycleRosterHandler,
   startPrayerCycleHandler,
   updateUserHandler,
   bulkCreateUsersHandler,
@@ -37,6 +39,9 @@ router.get('/', getUsers);
 router.post('/bulk', bulkCreateUsersHandler);
 router.post('/merge-duplicates', mergeDuplicateMembersHandler);
 router.post('/swap-all-first-last-names', swapAllMembersFirstLastNamesHandler);
+router.get('/prayer-cycle/roster', getPrayerCycleRosterHandler);
+router.post('/prayer-cycle/anchor-member', anchorPrayerCycleMemberHandler);
+router.post('/prayer-cycle/start', startPrayerCycleHandler);
 router.get('/:id', getUser);
 router.get('/:id/prayer-requests/history', getPrayerRequestHistoryHandler);
 router.post('/:id/prayer-requests/history', addPrayerRequestHistoryHandler);
@@ -45,7 +50,6 @@ router.patch('/:id', updateUserHandler);
 router.patch('/:id/app-role', setUserAppRoleHandler);
 router.delete('/:id', deleteUserHandler);
 router.post('/:id/link-account', linkUserAccountHandler);
-router.post('/prayer-cycle/start', startPrayerCycleHandler);
 router.post('/:id/prayer-cycle/one-time-date', setOneTimeMemberDateOverrideHandler);
 
 export default router;

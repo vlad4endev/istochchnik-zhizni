@@ -6,6 +6,7 @@ import {
   getPrayerCycleSnapshotForDate,
   PRAYER_CYCLE_MEMBERS_WHERE,
   PRAYER_CYCLE_MEMBERS_WHERE_M,
+  PRAYER_CYCLE_ROSTER_ORDER_SQL,
   toPublicCycleInfo,
   type PrayerCyclePublic,
 } from './prayerCycleService';
@@ -112,11 +113,6 @@ async function getByIndex<T>(
   );
   return result.rows as T[];
 }
-
-/** Порядок участников в цикле: А–Я по фамилии, затем по имени (как в get_daily_prayer / триггере якоря). */
-const MEMBER_ORDER_SQL = `LOWER(COALESCE(NULLIF(trim(m.last_name), ''), split_part(trim(m.name), ' ', 1))) ASC,
-    LOWER(COALESCE(NULLIF(trim(m.first_name), ''), m.name)) ASC,
-    m.id ASC`;
 
 function isPgMissingTableOrColumn(e: unknown): boolean {
   const code =
@@ -338,7 +334,7 @@ export async function getPrayerDataByDate(targetDate: string): Promise<PrayerDat
        LEFT JOIN member_prayer_by_cycle mpc
          ON mpc.member_id = m.id AND mpc.cycle_index = $2
        WHERE ${PRAYER_CYCLE_MEMBERS_WHERE_M}
-       ORDER BY ${MEMBER_ORDER_SQL}
+       ORDER BY ${PRAYER_CYCLE_ROSTER_ORDER_SQL}
        LIMIT 1 OFFSET $1`,
       [memberIndex, cycleIndexForDate]
     );
@@ -401,7 +397,7 @@ async function getMemberAssignmentsForDates(dates: string[]): Promise<NextWeekMe
     `SELECT m.id, m.name, m.first_name, m.last_name
      FROM members m
      WHERE ${PRAYER_CYCLE_MEMBERS_WHERE_M}
-     ORDER BY ${MEMBER_ORDER_SQL}`
+     ORDER BY ${PRAYER_CYCLE_ROSTER_ORDER_SQL}`
   ).then((result) => result.rows as { id: number; name: string; first_name: string | null; last_name: string | null }[]);
 
   const overrides = await query(

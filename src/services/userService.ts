@@ -1,8 +1,15 @@
 import { query } from '../config/db';
 import type { AppRole } from '../types/appRole';
 import { mergeAppRoles, normalizeAppRole } from '../types/appRole';
+import { addUtcDaysToIsoDate, getDiffDays } from '../utils/isoDates';
 import { getPrayerDataByDate } from './calendarService';
-import { getCurrentCycleIndexForUpsert, upsertMemberPrayerForCycle } from './prayerCycleService';
+import {
+  getCurrentCycleIndexForUpsert,
+  getCycleStartDate,
+  PRAYER_CYCLE_MEMBERS_WHERE_M,
+  PRAYER_CYCLE_ROSTER_ORDER_SQL,
+  upsertMemberPrayerForCycle,
+} from './prayerCycleService';
 
 export interface AppUser {
   id: number;
@@ -128,6 +135,31 @@ export async function findMemberIdConflictingName(
 export interface PrayerCycleStartResult {
   requested_date: string;
   start_date: string;
+}
+
+export interface PrayerCycleRosterEntry {
+  id: number;
+  roster_index: number;
+  first_name: string | null;
+  last_name: string | null;
+  name: string;
+  is_active: boolean;
+}
+
+export interface PrayerCycleRosterSnapshot {
+  anchor_date: string;
+  start_date: string;
+  total: number;
+  today_index: number;
+  today_member_id: number | null;
+  roster: PrayerCycleRosterEntry[];
+}
+
+export interface AnchorPrayerCycleMemberResult {
+  start_date: string;
+  anchor_date: string;
+  roster_index: number;
+  member_id: number;
 }
 
 export interface OneTimeMemberDateOverrideResult {
@@ -770,6 +802,82 @@ export async function startPrayerCycle(dateInput: string): Promise<PrayerCycleSt
   return {
     requested_date: normalizedRequestedDate,
     start_date: startDate,
+  };
+}
+
+export async function getPrayerCycleRosterSnapshot(anchorDateYmd: string): Promise<PrayerCycleRosterSnapshot> {
+  const anchorDate = normalizeIsoDate(anchorDateYmd.trim());
+  const startDate = await getCycleStartDate();
+  const diffDays = getDiffDays(anchorDate, startDate);
+  const rosterRes = await query(
+    `SELECT m.id, m.first_name, m.last_name, m.name, m.is_active
+     FROM members m
+     WHERE ${PRAYER_CYCLE_MEMBERS_WHERE_M}
+     ORDER BY ${PRAYER_CYCLE_ROSTER_ORDER_SQL}`,
+  );
+  const rows = rosterRes.rows as {
+    id: unknown;
+    first_name: unknown;
+    last_name: unknown;
+    name: unknown;
+    is_active: unknown;
+  }[];
+  const roster: PrayerCycleRosterEntry[] = rows.map((r, i) => ({
+    id: Number(r.id),
+    roster_index: i,
+    first_name: r.first_name != null ? String(r.first_name) : null,
+    last_name: r.last_name != null ? String(r.last_name) : null,
+    name: String(r.name ?? ''),
+    is_active: Boolean(r.is_active),
+  }));
+  const n = roster.length;
+  const todayIndex = n > 0 ? ((diffDays % n) + n) % n : 0;
+  const todayMemberId = n > 0 ? roster[todayIndex]?.id ?? null : null;
+  return {
+    anchor_date: anchorDate,
+    start_date: startDate,
+    total: n,
+    roster,
+    today_index: todayIndex,
+    today_member_id: todayMemberId,
+  };
+}
+
+export async function anchorPrayerCycleMemberOnDate(
+  memberId: number,
+  anchorDateYmd: string,
+): Promise<AnchorPrayerCycleMemberResult> {
+  const anchorDate = normalizeIsoDate(anchorDateYmd.trim());
+  const idxRes = await query(
+    `WITH ranked AS (
+       SELECT
+         m.id,
+         (ROW_NUMBER() OVER (ORDER BY ${PRAYER_CYCLE_ROSTER_ORDER_SQL}) - 1)::int AS idx
+       FROM members m
+       WHERE ${PRAYER_CYCLE_MEMBERS_WHERE_M}
+     )
+     SELECT idx FROM ranked WHERE id = $1`,
+    [memberId],
+  );
+  if (idxRes.rows.length === 0) {
+    throw new Error('Member not in active prayer cycle');
+  }
+  const rosterIndex = Number((idxRes.rows[0] as { idx: number }).idx);
+  if (!Number.isInteger(rosterIndex) || rosterIndex < 0) {
+    throw new Error('Invalid roster index');
+  }
+  const newStartDate = addUtcDaysToIsoDate(anchorDate, -rosterIndex);
+  await query(
+    `INSERT INTO global_settings (id, start_date)
+     VALUES (1, $1::date)
+     ON CONFLICT (id) DO UPDATE SET start_date = EXCLUDED.start_date`,
+    [newStartDate],
+  );
+  return {
+    start_date: newStartDate,
+    anchor_date: anchorDate,
+    roster_index: rosterIndex,
+    member_id: memberId,
   };
 }
 

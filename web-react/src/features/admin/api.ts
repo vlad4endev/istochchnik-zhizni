@@ -166,6 +166,44 @@ export async function startPrayerCycle(start_date: string): Promise<{ start_date
   return data;
 }
 
+export interface PrayerCycleRosterEntry {
+  id: number;
+  roster_index: number;
+  first_name: string | null;
+  last_name: string | null;
+  name: string;
+  is_active: boolean;
+}
+
+export interface PrayerCycleRosterSnapshot {
+  anchor_date: string;
+  start_date: string;
+  total: number;
+  today_index: number;
+  today_member_id: number | null;
+  roster: PrayerCycleRosterEntry[];
+}
+
+export async function fetchPrayerCycleRoster(date: string): Promise<PrayerCycleRosterSnapshot> {
+  const { data } = await apiClient.get<PrayerCycleRosterSnapshot>(`${USERS}/prayer-cycle/roster`, {
+    params: { date },
+  });
+  return data;
+}
+
+export async function anchorPrayerCycleMember(body: {
+  member_id: number;
+  anchor_date: string;
+}): Promise<{ start_date: string; anchor_date: string; roster_index: number; member_id: number }> {
+  const { data } = await apiClient.post<{
+    start_date: string;
+    anchor_date: string;
+    roster_index: number;
+    member_id: number;
+  }>(`${USERS}/prayer-cycle/anchor-member`, body);
+  return data;
+}
+
 export async function setOneTimeMemberDate(memberId: number, target_date: string): Promise<void> {
   await apiClient.post(`${USERS}/${memberId}/prayer-cycle/one-time-date`, { target_date });
 }

@@ -17,6 +17,8 @@ import {
   listUsers,
   MemberNameDuplicateError,
   setMinistryDirectionTemplateRoles,
+  anchorPrayerCycleMemberOnDate,
+  getPrayerCycleRosterSnapshot,
   setOneTimeMemberDateOverride,
   setUserAppRole,
   startPrayerCycle,
@@ -726,6 +728,61 @@ export async function startPrayerCycleHandler(req: Request, res: Response): Prom
     res.json(result);
   } catch (error) {
     console.error('Failed to start prayer cycle', error);
+    res.status(500).json({ error: 'Database error' });
+  }
+}
+
+export async function getPrayerCycleRosterHandler(req: Request, res: Response): Promise<void> {
+  if (!ensureAdmin(req, res)) {
+    return;
+  }
+  const dateRaw = typeof req.query.date === 'string' ? req.query.date.trim() : '';
+  const anchorYmd = dateRaw ? coerceToYmd(dateRaw) : new Date().toISOString().slice(0, 10);
+  if (dateRaw && !anchorYmd) {
+    res.status(400).json({ error: 'Query "date" must be YYYY-MM-DD' });
+    return;
+  }
+
+  try {
+    const snapshot = await getPrayerCycleRosterSnapshot(anchorYmd!);
+    res.json(snapshot);
+  } catch (error) {
+    console.error('Failed to load prayer cycle roster', error);
+    res.status(500).json({ error: 'Database error' });
+  }
+}
+
+export async function anchorPrayerCycleMemberHandler(req: Request, res: Response): Promise<void> {
+  if (!ensureAdmin(req, res)) {
+    return;
+  }
+  const rawId = (req.body as { member_id?: unknown }).member_id;
+  const memberId = typeof rawId === 'number' ? rawId : typeof rawId === 'string' ? Number(rawId) : NaN;
+  if (!Number.isInteger(memberId) || memberId <= 0) {
+    res.status(400).json({ error: 'Field "member_id" is required (positive integer)' });
+    return;
+  }
+  const dateRaw = typeof req.body.anchor_date === 'string' ? req.body.anchor_date.trim() : '';
+  const anchorYmd = coerceToYmd(dateRaw);
+  if (!anchorYmd) {
+    res.status(400).json({ error: 'Field "anchor_date" is required (YYYY-MM-DD)' });
+    return;
+  }
+
+  try {
+    const result = await anchorPrayerCycleMemberOnDate(memberId, anchorYmd);
+    notifyRealtime(['calendar', 'members', 'me', 'coordinator-notes']);
+    res.json(result);
+  } catch (error) {
+    if (error instanceof Error && error.message === 'Member not in active prayer cycle') {
+      res.status(400).json({ error: error.message });
+      return;
+    }
+    if (error instanceof Error && error.message === 'Invalid start date') {
+      res.status(400).json({ error: error.message });
+      return;
+    }
+    console.error('Failed to anchor prayer cycle member', error);
     res.status(500).json({ error: 'Database error' });
   }
 }
