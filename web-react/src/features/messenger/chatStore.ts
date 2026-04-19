@@ -7,6 +7,7 @@ import { playAudio } from '../../utils/audio';
 import { extractMentionMemberIdsFromText, normalizeMentionsToCanonical } from './mentionUtils';
 import { getAvatarInitial } from './avatarUtils';
 import { sendRealtimeJson } from '../../lib/realtimeWsClient';
+import { isMessengerChatReadSurfaceOpen } from './messengerReadSurface';
 
 /** Личный чат до первого сообщения: нет строки в БД, пока пользователь не отправит сообщение. */
 export const DRAFT_PRIVATE_PREFIX = 'draft:';
@@ -1323,6 +1324,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
           (m) => isProvisionalLocalId(String(m.id)) && m.client_msg_id === msgClientId,
         ));
     const shouldAutoReadNow =
+      isMessengerChatReadSurfaceOpen() &&
       state.activeConversationId === idKey &&
       !isOwnNow &&
       /^\d+$/.test(serverMsgId) &&

@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { useNavigate } from 'react-router-dom';
 import { useChatStore, EMPTY_ARRAY, isDraftPrivateConversationId } from '../chatStore';
+import { isMessengerChatReadSurfaceOpen } from '../messengerReadSurface';
 import * as api from '../api/messengerApi';
 import { MessageBubble } from './MessageBubble';
 import { ChatInput } from './ChatInput';
@@ -279,6 +280,7 @@ export function ChatWindow({
     const unread = conversations.find((c) => c.id === conversationId)?.unread_count ?? 0;
     const delay = unread > 0 ? 700 : 0;
     const t = window.setTimeout(() => {
+      if (!isMessengerChatReadSurfaceOpen()) return;
       void markAsRead(conversationId);
     }, delay);
     return () => window.clearTimeout(t);
@@ -289,6 +291,7 @@ export function ChatWindow({
       window.clearTimeout(flushTimerRef.current);
     }
     flushTimerRef.current = window.setTimeout(() => {
+      if (!isMessengerChatReadSurfaceOpen()) return;
       const ids = Array.from(visibleForeignIdsRef.current);
       let max: bigint = 0n;
       for (const id of ids) {

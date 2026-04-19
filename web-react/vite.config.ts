@@ -125,6 +125,11 @@ export default defineConfig(({ mode }) => {
           clientsClaim: true,
           navigateFallback: 'index.html',
           navigateFallbackDenylist: [/^\/api\//, /^\/uploads\//],
+          /**
+           * `public/custom-sw.js` — обработчики Web Push (`push`, `notificationclick`, бейдж).
+           * Без importScripts файл только прекэшируется и не выполняется в контексте SW.
+           */
+          importScripts: ['custom-sw.js'],
           // Версионирование для инвалидации кэша
           runtimeCaching: [
             {
