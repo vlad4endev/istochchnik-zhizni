@@ -5,6 +5,42 @@ import { runNotificationRulesTick } from '../services/notificationRulesRunner';
 import { DistributionService } from '../services/DistributionService';
 import { sendPush } from '../services/pushService';
 
+type CuratorWeekKind = 'current' | 'next';
+
+async function pushCuratorAssignmentsForWeek(
+  service: DistributionService,
+  weekKind: CuratorWeekKind,
+  pushType: 'curator_week_assignments' | 'curator_week_assignments_auto',
+): Promise<{ sent: number; total: number }> {
+  const assignments = await service.getCoordinatorAssignmentsForQueueWeek(weekKind);
+  let sent = 0;
+  for (const row of assignments) {
+    if (row.members.length === 0) {
+      continue;
+    }
+    const top = row.members.slice(0, 5).map((m) => m.memberName).join(', ');
+    const suffix = row.members.length > 5 ? ` и еще ${row.members.length - 5}` : '';
+    const weekLabel = weekKind === 'current' ? 'эту' : 'следующую';
+    const body = `На ${weekLabel} неделю вам назначено ${row.members.length} участник(ов): ${top}${suffix}.`;
+    try {
+      await sendPush(row.coordinatorId, 'Сбор молитвенных нужд: назначения на неделю', body, {
+        url: '/dashboard',
+        type: pushType,
+        week_kind: weekKind,
+        week_start: row.weekStartDate,
+        cycle_index: String(row.cycleIndex),
+      });
+      sent += 1;
+    } catch (pushErr) {
+      console.warn(
+        `[CRON] curator assignments push failed for coordinator ${row.coordinatorId}:`,
+        pushErr,
+      );
+    }
+  }
+  return { sent, total: assignments.length };
+}
+
 /**
  * Расписание push-уведомлений задаётся в админке (`/api/settings/notifications`).
  * Здесь минутный тик: при совпадении локального времени церкви с правилом срабатывает отправка.
@@ -51,25 +87,14 @@ export function initPushCronJobs() {
       }
       try {
         const service = new DistributionService();
-        const assignments = await service.getCoordinatorAssignmentsForQueueWeek('current');
-        for (const row of assignments) {
-          if (row.members.length === 0) {
-            continue;
-          }
-          const top = row.members.slice(0, 5).map((m) => m.memberName).join(', ');
-          const suffix =
-            row.members.length > 5 ? ` и еще ${row.members.length - 5}` : '';
-          const body = `На эту неделю вам назначено ${row.members.length} участник(ов): ${top}${suffix}.`;
-          await sendPush(row.coordinatorId, 'Сбор молитвенных нужд: назначения на неделю', body, {
-            url: '/dashboard',
-            type: 'curator_week_assignments',
-            week_start: row.weekStartDate,
-            cycle_index: String(row.cycleIndex),
-          });
-        }
-        if (assignments.length > 0) {
+        const result = await pushCuratorAssignmentsForWeek(
+          service,
+          'current',
+          'curator_week_assignments',
+        );
+        if (result.total > 0) {
           console.log(
-            `[CRON] curator assignments push sent for ${assignments.length} coordinator(s)`,
+            `[CRON] curator assignments push sent for ${result.sent}/${result.total} coordinator(s)`,
           );
         }
       } catch (e) {
@@ -89,8 +114,13 @@ export function initPushCronJobs() {
       try {
         const service = new DistributionService();
         const result = await service.executeAndSaveForCollectionQueueWeek('next');
+        const pushResult = await pushCuratorAssignmentsForWeek(
+          service,
+          'next',
+          'curator_week_assignments_auto',
+        );
         console.log(
-          `[CRON] curator distribution synced for queue week ${result.week.year}-W${String(result.week.weekNumber).padStart(2, '0')} (cycle ${result.cycleIndex}): ${result.assignments.length} assignments`,
+          `[CRON] curator distribution synced for queue week ${result.week.year}-W${String(result.week.weekNumber).padStart(2, '0')} (cycle ${result.cycleIndex}): ${result.assignments.length} assignments; push ${pushResult.sent}/${pushResult.total}`,
         );
         notifyRealtime(['calendar']);
       } catch (e) {

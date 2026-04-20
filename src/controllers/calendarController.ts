@@ -274,14 +274,14 @@ export async function getWeekBirthdays(_req: Request, res: Response): Promise<vo
 
 type AuthReq = Request & { authUserId?: number; authUserRole?: import('../types/appRole').AppRole };
 
-/** План на след. неделю и назначения сбора — только администраторы и ответственные за сбор. */
-async function assertAdminOrCollectionCoordinator(req: Request, res: Response): Promise<boolean> {
+/** План недели и назначения сбора — администратор, пастор или ответственный за сбор. */
+async function assertAdminPastorOrCollectionCoordinator(req: Request, res: Response): Promise<boolean> {
   const authReq = req as AuthReq;
   if (!authReq.authUserId) {
     res.status(401).json({ error: 'Требуется вход в аккаунт' });
     return false;
   }
-  if (authReq.authUserRole === 'admin') {
+  if (authReq.authUserRole === 'admin' || authReq.authUserRole === 'pastor') {
     return true;
   }
 
@@ -300,7 +300,7 @@ async function assertAdminOrCollectionCoordinator(req: Request, res: Response): 
     return false;
   }
 
-  res.status(403).json({ error: 'Нет доступа к разделу следующей недели' });
+  res.status(403).json({ error: 'Нет доступа к разделу плана недели' });
   return false;
 }
 
@@ -316,7 +316,7 @@ function parseOptionalWeekKind(value: unknown): WeekPlanKind | undefined {
 }
 
 export async function getNextWeekMembers(req: Request, res: Response): Promise<void> {
-  if (!(await assertAdminOrCollectionCoordinator(req, res))) {
+  if (!(await assertAdminPastorOrCollectionCoordinator(req, res))) {
     return;
   }
   try {
@@ -345,7 +345,7 @@ function stripCommonAssistantWrappers(raw: string): string {
  * Улучшение черновика молитвенной нужды через ИИ (промпт раздела «Молитвенный календарь» в админке).
  */
 export async function postPrayerNeedImproveText(req: Request, res: Response): Promise<void> {
-  if (!(await assertAdminOrCollectionCoordinator(req, res))) {
+  if (!(await assertAdminPastorOrCollectionCoordinator(req, res))) {
     return;
   }
 
@@ -411,7 +411,7 @@ export async function postPrayerNeedImproveText(req: Request, res: Response): Pr
 }
 
 export async function patchMemberCyclePrayer(req: Request, res: Response): Promise<void> {
-  if (!(await assertAdminOrCollectionCoordinator(req, res))) {
+  if (!(await assertAdminPastorOrCollectionCoordinator(req, res))) {
     return;
   }
 
@@ -458,7 +458,7 @@ export async function patchMemberCyclePrayer(req: Request, res: Response): Promi
 }
 
 export async function patchMemberPreviousPrayerNeed(req: Request, res: Response): Promise<void> {
-  if (!(await assertAdminOrCollectionCoordinator(req, res))) {
+  if (!(await assertAdminPastorOrCollectionCoordinator(req, res))) {
     return;
   }
   const authReq = req as AuthReq;
@@ -484,7 +484,7 @@ export async function patchMemberPreviousPrayerNeed(req: Request, res: Response)
 }
 
 export async function putMemberPreviousPrayerNeed(req: Request, res: Response): Promise<void> {
-  if (!(await assertAdminOrCollectionCoordinator(req, res))) {
+  if (!(await assertAdminPastorOrCollectionCoordinator(req, res))) {
     return;
   }
   const id = parsePositiveInt(req.params?.id);
@@ -513,7 +513,7 @@ export async function putMemberPreviousPrayerNeed(req: Request, res: Response): 
 }
 
 export async function deleteMemberPreviousPrayerNeed(req: Request, res: Response): Promise<void> {
-  if (!(await assertAdminOrCollectionCoordinator(req, res))) {
+  if (!(await assertAdminPastorOrCollectionCoordinator(req, res))) {
     return;
   }
   const id = parsePositiveInt(req.params?.id);
@@ -536,14 +536,20 @@ export async function deleteMemberPreviousPrayerNeed(req: Request, res: Response
 }
 
 export async function getCycleCollectionClaims(req: Request, res: Response): Promise<void> {
-  if (!(await assertAdminOrCollectionCoordinator(req, res))) {
+  if (!(await assertAdminPastorOrCollectionCoordinator(req, res))) {
     return;
   }
   try {
     const authReq = req as AuthReq;
     const isAdmin = authReq.authUserRole === 'admin';
+    const isPastor = authReq.authUserRole === 'pastor';
     const week = parseOptionalWeekKind(req.query?.week);
-    const snapshot = await getCycleCollectionClaimsSnapshot(authReq.authUserId ?? null, isAdmin, week);
+    const snapshot = await getCycleCollectionClaimsSnapshot(
+      authReq.authUserId ?? null,
+      isAdmin,
+      isPastor,
+      week,
+    );
     res.json(snapshot);
   } catch (err) {
     console.error('Calendar cycle collection-claims GET error:', err);
@@ -578,16 +584,56 @@ export async function patchCycleCollectionClaims(req: Request, res: Response): P
 
   try {
     const week = parseOptionalWeekKind(req.body?.week);
+    const assignedCoordinatorId = parsePositiveInt(req.body?.assigned_coordinator_id);
+    const assignMode = assignedCoordinatorId != null;
+    const authIsAdmin = authReq.authUserRole === 'admin';
+    const authIsPastor = authReq.authUserRole === 'pastor';
+    if (assignMode && !authIsAdmin && !authIsPastor) {
+      res.status(403).json({ error: 'Назначать кураторов может только администратор или пастор' });
+      return;
+    }
     await setCycleCollectionClaim({
       authUserId: authReq.authUserId,
-      authIsAdmin: authReq.authUserRole === 'admin',
+      authIsAdmin,
+      authIsPastor,
       memberId,
       claim,
+      assignedCoordinatorId: assignedCoordinatorId ?? undefined,
       weekKind: week,
     });
+    if (assignMode && claim && assignedCoordinatorId != null) {
+      const snapshotForPush = await getCycleCollectionClaimsSnapshot(
+        authReq.authUserId,
+        authIsAdmin,
+        authIsPastor,
+        week,
+      );
+      const row = snapshotForPush.members.find((m) => m.id === memberId);
+      const target = snapshotForPush.coordinators.find((c) => c.id === assignedCoordinatorId);
+      const memberName = row?.name?.trim() || `Участник #${memberId}`;
+      if (target) {
+        const actorLabel = authIsPastor ? 'Пастор' : 'Администратор';
+        const weekLabel = week === 'current' ? 'эту' : 'следующую';
+        try {
+          await sendPush(
+            assignedCoordinatorId,
+            'Сбор молитвенных нужд: новое назначение',
+            `${actorLabel} назначил(а) вам участника ${memberName} на ${weekLabel} неделю.`,
+            {
+              url: '/dashboard',
+              type: 'curator_assignment_by_pastor',
+              week_kind: week ?? 'next',
+            },
+          );
+        } catch (pushErr) {
+          console.warn('[calendar] curator assignment push failed:', pushErr);
+        }
+      }
+    }
     const snapshot = await getCycleCollectionClaimsSnapshot(
       authReq.authUserId,
-      authReq.authUserRole === 'admin',
+      authIsAdmin,
+      authIsPastor,
       week
     );
     notifyRealtime(['calendar']);
@@ -610,13 +656,17 @@ export async function patchCycleCollectionClaims(req: Request, res: Response): P
       res.status(400).json({ error: 'Некорректный участник' });
       return;
     }
+    if (msg === 'invalid_coordinator') {
+      res.status(400).json({ error: 'Некорректный куратор для назначения' });
+      return;
+    }
     console.error('Calendar cycle collection-claims PATCH error:', err);
     res.status(500).json({ error: 'Database error' });
   }
 }
 
 export async function postCuratorDistribution(req: Request, res: Response): Promise<void> {
-  if (!(await assertAdminOrCollectionCoordinator(req, res))) {
+  if (!(await assertAdminPastorOrCollectionCoordinator(req, res))) {
     return;
   }
 
@@ -677,7 +727,7 @@ export async function getCuratorDistributionTargetWeek(_req: Request, res: Respo
 }
 
 export async function getCuratorDistribution(req: Request, res: Response): Promise<void> {
-  if (!(await assertAdminOrCollectionCoordinator(req, res))) {
+  if (!(await assertAdminPastorOrCollectionCoordinator(req, res))) {
     return;
   }
 

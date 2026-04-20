@@ -180,6 +180,7 @@ function DashboardMain() {
   const navigate = useNavigate();
   const role = useAuthStore((s) => s.role);
   const isAdmin = role === 'admin';
+  const isPastor = role === 'pastor';
   const todayDateKey = useMemo(() => formatCalendarDayKey(now), [now]);
   /** Понедельник текущей недели (как на сервере) — чтобы кэш сбрасывался при смене недели. */
   const weekStartKey = useMemo(
@@ -293,14 +294,14 @@ function DashboardMain() {
     refetchInterval: 60_000,
   });
   const collectionClaimsQ = useQuery({
-    queryKey: ['calendar', 'cycle', 'collection-claims', 'current'],
-    queryFn: () => getCycleCollectionClaims('current'),
+    queryKey: ['calendar', 'cycle', 'collection-claims', 'next', 'dashboard'],
+    queryFn: () => getCycleCollectionClaims('next'),
     enabled: apiBoolean(meQ.data?.is_collection_coordinator) || isAdmin,
     staleTime: 30_000,
   });
   const weekMembersQ = useQuery({
-    queryKey: ['calendar', 'week-members', 'current', 'dashboard'],
-    queryFn: () => getWeekPlanMembers('current'),
+    queryKey: ['calendar', 'week-members', 'next', 'dashboard'],
+    queryFn: () => getWeekPlanMembers('next'),
     enabled: apiBoolean(meQ.data?.is_collection_coordinator) || isAdmin,
     staleTime: 30_000,
   });
@@ -431,7 +432,7 @@ function DashboardMain() {
 
   const showPrayerPlanOnDashboard =
     userCanViewNextWeekPrayerPlan(meQ.data) &&
-    (isAdmin || (isCollectionCoordinator && coordinatorUnfilledRows.length > 0));
+    (isAdmin || isPastor || isCollectionCoordinator);
 
   function onToggleFavorite(id: string) {
     setFavorites((prev) => {
@@ -710,12 +711,12 @@ function DashboardMain() {
               <p className="text-[11px] font-extrabold uppercase tracking-[0.14em] text-primary/90">
                 Координаторам сбора
               </p>
-              {isAdmin ? (
+              {isAdmin || isPastor ? (
                 <>
                   {unfilledWeekRowsAdmin.length > 0 ? (
                     <div className="mt-3">
                       <p className="text-sm font-semibold text-stone-800">
-                        На текущей неделе не заполнена молитвенная нужда (с сегодня и дальше по циклу):
+                        На следующей неделе не заполнена молитвенная нужда:
                       </p>
                       <ul className="mt-2 max-h-[min(40vh,320px)] space-y-2 overflow-y-auto pr-0.5">
                         {unfilledWeekRowsAdmin.map((row) => (
@@ -734,7 +735,7 @@ function DashboardMain() {
                     </div>
                   ) : (
                     <p className="mt-2 text-sm text-stone-600">
-                      На текущей неделе (с сегодня) у всех участников цикла нужды заполнены.
+                      На следующей неделе у всех участников цикла нужды заполнены.
                     </p>
                   )}
                 </>
@@ -743,7 +744,7 @@ function DashboardMain() {
                   {coordinatorAssignedRows.length > 0 ? (
                     <>
                       <p className="text-sm font-semibold text-stone-800">
-                        Вам назначены участники на текущую неделю:
+                        Вам назначены участники на следующую неделю:
                       </p>
                       <ul className="mt-2 space-y-1.5">
                         {coordinatorAssignedRows.map((row) => (
@@ -759,7 +760,7 @@ function DashboardMain() {
                     </>
                   ) : (
                     <p className="text-sm text-stone-600">
-                      На текущую неделю за вами пока нет закреплённых участников.
+                      На следующую неделю за вами пока нет закреплённых участников.
                     </p>
                   )}
 
@@ -794,7 +795,12 @@ function DashboardMain() {
                 </div>
               )}
               <div className="mt-4">
-                <NextWeekPrayerPlanSection canView currentUserId={me?.id ?? null} isAdmin={isAdmin} />
+                <NextWeekPrayerPlanSection
+                  canView
+                  currentUserId={me?.id ?? null}
+                  currentUserRole={me?.app_role ?? null}
+                  isAdmin={isAdmin}
+                />
               </div>
             </section>
           ) : null}

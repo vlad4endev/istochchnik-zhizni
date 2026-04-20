@@ -35,13 +35,16 @@ import { loadErrorDescription } from '../prayerPageUtils';
 
 export function userCanViewNextWeekPrayerPlan(me: MeResponse | undefined): boolean {
   if (!me) return false;
-  if (me.app_role?.trim().toLowerCase() === 'admin') return true;
+  const role = me.app_role?.trim().toLowerCase();
+  if (role === 'admin' || role === 'pastor') return true;
   return apiBoolean(me.is_collection_coordinator);
 }
 
 /** Редактирование / удаление срочных нужд и объявлений (только админ или координатор сбора). */
 export function userCanManageCoordinatorDashboardNotes(me: MeResponse | undefined): boolean {
-  return userCanViewNextWeekPrayerPlan(me);
+  if (!me) return false;
+  if (me.app_role?.trim().toLowerCase() === 'admin') return true;
+  return apiBoolean(me.is_collection_coordinator);
 }
 
 type QuickListFilter =
@@ -75,7 +78,10 @@ function NextWeekMembersPanel(props: {
   claimsError: boolean;
   currentUserId: number | null;
   onToggle: (memberId: number, claim: boolean) => void;
+  onAssignCurator: (memberId: number, coordinatorId: number | null) => void;
   mutPending: boolean;
+  assignCuratorPending: boolean;
+  canAssignCurators: boolean;
   onPrayerSaved: () => void;
   /** Админ: панель «предыдущие нужды» у всех строк; удобнее массовая работа. */
   isAdmin?: boolean;
@@ -93,7 +99,10 @@ function NextWeekMembersPanel(props: {
     claimsError,
     currentUserId,
     onToggle,
+    onAssignCurator,
     mutPending,
+    assignCuratorPending,
+    canAssignCurators,
     onPrayerSaved,
     isAdmin = false,
   } = props;
@@ -298,7 +307,7 @@ function NextWeekMembersPanel(props: {
                 const claimRow = claimsError ? undefined : mid != null ? claimByMemberId.get(mid) : undefined;
                 const mine = currentUserId != null && claimRow?.claimed_by?.id === currentUserId;
                 const canToggle = Boolean(claimRow && (claimRow.can_toggle || mine));
-                const disabled = mutPending || !canToggle;
+                const disabled = (mutPending || assignCuratorPending) || !canToggle;
                 const claimedByLabel = claimRow?.claimed_by
                   ? mine
                     ? 'Вы'
@@ -368,52 +377,87 @@ function NextWeekMembersPanel(props: {
                                 Свободно
                               </span>
                             )}
-                            <button
-                              type="button"
-                              disabled={disabled}
-                              aria-pressed={mine}
-                              aria-label={
-                                mine
-                                  ? 'Снять отметку сбора нужд'
-                                  : claimRow.claimed_by
-                                    ? 'Недоступно: уже занято'
-                                    : 'Взять сбор нужд на себя'
-                              }
-                              onClick={() => {
-                                if (disabled) return;
-                                onToggle(mid, !mine);
-                              }}
-                              className={[
-                                'relative inline-flex h-9 w-[52px] shrink-0 items-center rounded-full border transition',
-                                'focus:outline-none focus:ring-2 focus:ring-primary/25 focus:ring-offset-1 focus:ring-offset-[var(--surface)]',
-                                disabled
-                                  ? 'cursor-not-allowed border-stone-200 bg-stone-100 opacity-60'
-                                  : mine
-                                    ? 'border-primary/40 bg-primary/10 hover:bg-primary/15'
-                                    : 'border-stone-200 bg-white hover:border-stone-300 hover:bg-stone-50',
-                              ].join(' ')}
-                              title={
-                                disabled
-                                  ? claimRow.claimed_by && !mine
-                                    ? 'Уже занято другим'
-                                    : 'Недоступно'
-                                  : mine
-                                    ? 'Снять: я не отвечаю'
-                                    : 'Я отвечаю за сбор'
-                              }
-                            >
-                              <span
-                                className={[
-                                  'absolute left-0.5 flex h-7 w-7 items-center justify-center rounded-full shadow-sm transition-transform',
+                            {canAssignCurators ? (
+                              <label className="min-w-[10.5rem]">
+                                <span className="sr-only">Назначенный куратор</span>
+                                <select
+                                  value={claimRow.claimed_by?.id ?? ''}
+                                  disabled={assignCuratorPending}
+                                  onChange={(e) => {
+                                    const raw = e.target.value.trim();
+                                    if (!raw) {
+                                      onAssignCurator(mid, null);
+                                      return;
+                                    }
+                                    const selectedId = Number(raw);
+                                    if (Number.isInteger(selectedId) && selectedId > 0) {
+                                      onAssignCurator(mid, selectedId);
+                                    }
+                                  }}
+                                  className="min-h-[36px] w-full rounded-md border border-stone-200 bg-white px-2 py-1 text-[12px] font-semibold text-stone-800"
+                                  title="Назначить ответственного куратора"
+                                >
+                                  <option value="">Без куратора</option>
+                                  {(claimsSnapshot?.coordinators ?? []).map((c) => (
+                                    <option key={c.id} value={c.id}>
+                                      {memberRosterName({
+                                        id: c.id,
+                                        name: c.name,
+                                        first_name: c.first_name,
+                                        last_name: c.last_name,
+                                      })}
+                                    </option>
+                                  ))}
+                                </select>
+                              </label>
+                            ) : (
+                              <button
+                                type="button"
+                                disabled={disabled}
+                                aria-pressed={mine}
+                                aria-label={
                                   mine
-                                    ? 'translate-x-[22px] bg-primary text-white'
-                                    : 'translate-x-0 bg-stone-200 text-stone-600',
+                                    ? 'Снять отметку сбора нужд'
+                                    : claimRow.claimed_by
+                                      ? 'Недоступно: уже занято'
+                                      : 'Взять сбор нужд на себя'
+                                }
+                                onClick={() => {
+                                  if (disabled) return;
+                                  onToggle(mid, !mine);
+                                }}
+                                className={[
+                                  'relative inline-flex h-9 w-[52px] shrink-0 items-center rounded-full border transition',
+                                  'focus:outline-none focus:ring-2 focus:ring-primary/25 focus:ring-offset-1 focus:ring-offset-[var(--surface)]',
+                                  disabled
+                                    ? 'cursor-not-allowed border-stone-200 bg-stone-100 opacity-60'
+                                    : mine
+                                      ? 'border-primary/40 bg-primary/10 hover:bg-primary/15'
+                                      : 'border-stone-200 bg-white hover:border-stone-300 hover:bg-stone-50',
                                 ].join(' ')}
+                                title={
+                                  disabled
+                                    ? claimRow.claimed_by && !mine
+                                      ? 'Уже занято другим'
+                                      : 'Недоступно'
+                                    : mine
+                                      ? 'Снять: я не отвечаю'
+                                      : 'Я отвечаю за сбор'
+                                }
                               >
-                                <LuCheck className={mine ? 'h-4 w-4' : 'h-4 w-4 opacity-0'} aria-hidden />
-                              </span>
-                              <span className="sr-only">{mine ? 'Выбрано' : 'Не выбрано'}</span>
-                            </button>
+                                <span
+                                  className={[
+                                    'absolute left-0.5 flex h-7 w-7 items-center justify-center rounded-full shadow-sm transition-transform',
+                                    mine
+                                      ? 'translate-x-[22px] bg-primary text-white'
+                                      : 'translate-x-0 bg-stone-200 text-stone-600',
+                                  ].join(' ')}
+                                >
+                                  <LuCheck className={mine ? 'h-4 w-4' : 'h-4 w-4 opacity-0'} aria-hidden />
+                                </span>
+                                <span className="sr-only">{mine ? 'Выбрано' : 'Не выбрано'}</span>
+                              </button>
+                            )}
                           </>
                         ) : claimsError && mid != null ? (
                           <span className="text-[10px] font-medium text-amber-800">Отметки недоступны</span>
@@ -615,6 +659,7 @@ function ModalFrame(props: {
 type Props = {
   canView: boolean;
   currentUserId: number | null;
+  currentUserRole?: string | null;
   isAdmin?: boolean;
   /** Контент сразу под кнопкой «Сбор нужд · очередь недели» (например, срочная молитвенная нужда). */
   afterWeekQueueButton?: ReactNode;
@@ -624,9 +669,15 @@ type Props = {
 export function NextWeekPrayerPlanSection({
   canView,
   currentUserId,
+  currentUserRole = null,
   isAdmin = false,
   afterWeekQueueButton,
 }: Props) {
+  const canAssignCurators = useMemo(() => {
+    const role = (currentUserRole ?? '').trim().toLowerCase();
+    return role === 'pastor' || role === 'admin';
+  }, [currentUserRole]);
+
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const titleId = useId();
@@ -669,8 +720,15 @@ export function NextWeekPrayerPlanSection({
   });
 
   const mut = useMutation({
-    mutationFn: ({ memberId, claim }: { memberId: number; claim: boolean }) =>
-      patchCycleCollectionClaim(memberId, claim, weekKind),
+    mutationFn: ({
+      memberId,
+      claim,
+      assignedCoordinatorId,
+    }: {
+      memberId: number;
+      claim: boolean;
+      assignedCoordinatorId?: number;
+    }) => patchCycleCollectionClaim(memberId, claim, weekKind, assignedCoordinatorId),
     onSuccess: (data) => {
       setMutErr(null);
       qc.setQueryData(['calendar', 'cycle', 'collection-claims', weekKind], data);
@@ -820,7 +878,16 @@ export function NextWeekPrayerPlanSection({
                 claimsError={claimsError}
                 currentUserId={currentUserId}
                 onToggle={(memberId, claim) => mut.mutate({ memberId, claim })}
+                onAssignCurator={(memberId, coordinatorId) =>
+                  mut.mutate({
+                    memberId,
+                    claim: coordinatorId != null,
+                    assignedCoordinatorId: coordinatorId ?? undefined,
+                  })
+                }
                 mutPending={mut.isPending}
+                assignCuratorPending={mut.isPending}
+                canAssignCurators={canAssignCurators}
                 onPrayerSaved={invalidateAfterPrayerSave}
                 isAdmin={isAdmin}
               />

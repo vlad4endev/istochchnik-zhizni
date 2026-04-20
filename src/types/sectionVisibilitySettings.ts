@@ -8,9 +8,9 @@ export const APP_SECTION_IDS = [
 ] as const;
 
 export type AppSectionId = (typeof APP_SECTION_IDS)[number];
-export type AppRole = 'member' | 'musician' | 'editor' | 'admin';
+export type AppRole = 'member' | 'pastor' | 'musician' | 'editor' | 'admin';
 
-export const APP_ROLE_IDS: readonly AppRole[] = ['member', 'musician', 'editor', 'admin'] as const;
+export const APP_ROLE_IDS: readonly AppRole[] = ['member', 'pastor', 'musician', 'editor', 'admin'] as const;
 
 export interface SectionVisibilityRule {
   enabled: boolean;
@@ -45,7 +45,7 @@ export function defaultSectionVisibilitySettings(): SectionVisibilitySettingsDoc
 
 function normalizeRole(raw: unknown): AppRole | null {
   const v = typeof raw === 'string' ? raw.trim().toLowerCase() : '';
-  if (v === 'member' || v === 'musician' || v === 'editor' || v === 'admin') {
+  if (v === 'member' || v === 'pastor' || v === 'musician' || v === 'editor' || v === 'admin') {
     return v;
   }
   return null;

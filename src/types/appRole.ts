@@ -1,5 +1,5 @@
-/** Роли приложения: member — пользователь; musician — студия; editor — модерация каталога; admin — полный доступ. */
-export type AppRole = 'member' | 'musician' | 'editor' | 'admin';
+/** Роли приложения: member — пользователь; pastor — пастор; musician — студия; editor — модерация каталога; admin — полный доступ. */
+export type AppRole = 'member' | 'pastor' | 'musician' | 'editor' | 'admin';
 
 export function normalizeAppRole(raw: unknown): AppRole {
   if (typeof raw !== 'string') {
@@ -7,6 +7,7 @@ export function normalizeAppRole(raw: unknown): AppRole {
   }
   const n = raw.trim().toLowerCase();
   if (n === 'admin') return 'admin';
+  if (n === 'pastor') return 'pastor';
   if (n === 'editor') return 'editor';
   if (n === 'musician') return 'musician';
   return 'member';
@@ -15,8 +16,9 @@ export function normalizeAppRole(raw: unknown): AppRole {
 const ROLE_RANK: Record<AppRole, number> = {
   member: 0,
   musician: 1,
-  editor: 2,
-  admin: 3,
+  pastor: 2,
+  editor: 3,
+  admin: 4,
 };
 
 /** При слиянии дубликатов участников выбирается более «высокая» роль. */
@@ -40,6 +42,7 @@ export function canDeleteCatalogSong(role: AppRole): boolean {
 export function isValidAppRoleString(value: unknown): value is AppRole {
   return (
     value === 'member' ||
+    value === 'pastor' ||
     value === 'musician' ||
     value === 'editor' ||
     value === 'admin'

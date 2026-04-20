@@ -103,7 +103,7 @@ function isStandardParticipantMutation(
   path: string,
   authUserId: number | undefined
 ): boolean {
-  if (role !== 'member' && role !== 'musician' && role !== 'editor') {
+  if (role !== 'member' && role !== 'pastor' && role !== 'musician' && role !== 'editor') {
     return false;
   }
   if (path.startsWith('/api/messenger/')) {

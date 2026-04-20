@@ -40,12 +40,19 @@ export interface CycleCollectionClaimRow {
 export interface CycleCollectionClaimsSnapshot {
   cycle_index: number;
   cycle_number: number;
+  coordinators: Array<{
+    id: number;
+    name: string;
+    first_name: string | null;
+    last_name: string | null;
+  }>;
   members: CycleCollectionClaimRow[];
 }
 
 export async function getCycleCollectionClaimsSnapshot(
   authUserId: number | null,
   authIsAdmin: boolean,
+  authIsPastor: boolean,
   /** Какую неделю смотрим: цикл и отметки сбора считаются от понедельника этой недели (как план недели). Без параметра — по-прежнему от сегодняшней даты. */
   weekKind?: WeekPlanKind
 ): Promise<CycleCollectionClaimsSnapshot> {
@@ -54,8 +61,17 @@ export async function getCycleCollectionClaimsSnapshot(
     weekKind === undefined ? new Date().toISOString().slice(0, 10) : getCalendarWeekStartDate(weekKind);
   const snap = await getPrayerCycleSnapshotForDate(refDate);
   if (!snap) {
-    return { cycle_index: 0, cycle_number: 1, members: [] };
+    return { cycle_index: 0, cycle_number: 1, coordinators: [], members: [] };
   }
+  const coordinatorsResult = await query(
+    `SELECT m.id, m.name, m.first_name, m.last_name
+     FROM members m
+     WHERE m.is_active = TRUE
+       AND m.is_collection_coordinator = TRUE
+     ORDER BY ${MEMBER_ORDER_SQL}`,
+    [],
+  );
+
 
   const cycleIndex = snap.cycle_index;
 
@@ -109,6 +125,8 @@ export async function getCycleCollectionClaimsSnapshot(
   if (authUserId != null) {
     if (authIsAdmin) {
       canManage = true;
+    } else if (authIsPastor) {
+      canManage = true;
     } else {
       const coord = await query(
         `SELECT 1 FROM members WHERE id = $1 AND is_active = TRUE AND is_collection_coordinator = TRUE LIMIT 1`,
@@ -127,7 +145,8 @@ export async function getCycleCollectionClaimsSnapshot(
     }[]
   ).map((m) => {
     const claimed = claimByMember.get(m.id) ?? null;
-    const can_toggle = canManage && (claimed == null || claimed.id === authUserId);
+    const can_toggle =
+      canManage && (authIsAdmin || authIsPastor || claimed == null || claimed.id === authUserId);
     return {
       id: m.id,
       name: m.name,
@@ -141,6 +160,17 @@ export async function getCycleCollectionClaimsSnapshot(
   return {
     cycle_index: cycleIndex,
     cycle_number: snap.cycle_number,
+    coordinators: (coordinatorsResult.rows as {
+      id: number;
+      name: string;
+      first_name: string | null;
+      last_name: string | null;
+    }[]).map((c) => ({
+      id: c.id,
+      name: c.name,
+      first_name: c.first_name,
+      last_name: c.last_name,
+    })),
     members,
   };
 }
@@ -152,16 +182,21 @@ export async function getCycleCollectionClaimsSnapshot(
 export async function setCycleCollectionClaim(params: {
   authUserId: number;
   authIsAdmin: boolean;
+  authIsPastor: boolean;
   memberId: number;
   claim: boolean;
+  /** Для админа/пастора: назначить конкретного куратора. */
+  assignedCoordinatorId?: number;
   /** Тот же week, что при GET snapshot — иначе отметка попадёт в цикл «сегодня». */
   weekKind?: WeekPlanKind;
 }): Promise<void> {
   await ensureCycleCollectionClaimsWeekScopeSchema();
-  const { authUserId, authIsAdmin, memberId, claim, weekKind } = params;
+  const { authUserId, authIsAdmin, authIsPastor, memberId, claim, assignedCoordinatorId, weekKind } = params;
 
   let canManage = false;
   if (authIsAdmin) {
+    canManage = true;
+  } else if (authIsPastor) {
     canManage = true;
   } else {
     const coord = await query(
@@ -172,6 +207,28 @@ export async function setCycleCollectionClaim(params: {
   }
   if (!canManage) {
     throw new Error('not_allowed');
+  }
+  const targetCoordinatorId =
+    typeof assignedCoordinatorId === 'number' && Number.isInteger(assignedCoordinatorId) && assignedCoordinatorId > 0
+      ? assignedCoordinatorId
+      : null;
+  const canAssignArbitraryCoordinator = authIsAdmin || authIsPastor;
+  if (targetCoordinatorId != null && !canAssignArbitraryCoordinator && targetCoordinatorId !== authUserId) {
+    throw new Error('not_allowed');
+  }
+  if (targetCoordinatorId != null) {
+    const coordCheck = await query(
+      `SELECT 1
+       FROM members
+       WHERE id = $1
+         AND is_active = TRUE
+         AND is_collection_coordinator = TRUE
+       LIMIT 1`,
+      [targetCoordinatorId],
+    );
+    if ((coordCheck.rowCount ?? 0) === 0) {
+      throw new Error('invalid_coordinator');
+    }
   }
 
   const refDate =
@@ -192,6 +249,31 @@ export async function setCycleCollectionClaim(params: {
   }
 
   if (claim) {
+    const ownerId = targetCoordinatorId ?? authUserId;
+    if (canAssignArbitraryCoordinator && targetCoordinatorId != null) {
+      if (weekStartDate == null) {
+        await query(
+          `INSERT INTO cycle_collection_claims (cycle_index, member_id, claimed_by_member_id, week_start_date)
+           VALUES ($1, $2, $3, NULL)
+           ON CONFLICT (week_start_date, member_id)
+           DO UPDATE SET
+             claimed_by_member_id = EXCLUDED.claimed_by_member_id,
+             cycle_index = EXCLUDED.cycle_index`,
+          [cycleIndex, memberId, ownerId],
+        );
+      } else {
+        await query(
+          `INSERT INTO cycle_collection_claims (cycle_index, member_id, claimed_by_member_id, week_start_date)
+           VALUES ($1, $2, $3, $4::date)
+           ON CONFLICT (week_start_date, member_id)
+           DO UPDATE SET
+             claimed_by_member_id = EXCLUDED.claimed_by_member_id,
+             cycle_index = EXCLUDED.cycle_index`,
+          [cycleIndex, memberId, ownerId, weekStartDate],
+        );
+      }
+      return;
+    }
     const existing =
       weekStartDate == null
         ? await query(
@@ -219,13 +301,13 @@ export async function setCycleCollectionClaim(params: {
         await query(
           `INSERT INTO cycle_collection_claims (cycle_index, member_id, claimed_by_member_id, week_start_date)
            VALUES ($1, $2, $3, NULL)`,
-          [cycleIndex, memberId, authUserId],
+          [cycleIndex, memberId, ownerId],
         );
       } else {
         await query(
           `INSERT INTO cycle_collection_claims (cycle_index, member_id, claimed_by_member_id, week_start_date)
            VALUES ($1, $2, $3, $4::date)`,
-          [cycleIndex, memberId, authUserId, weekStartDate],
+          [cycleIndex, memberId, ownerId, weekStartDate],
         );
       }
     } catch (err: unknown) {
@@ -252,21 +334,39 @@ export async function setCycleCollectionClaim(params: {
       throw err;
     }
   } else {
-    const del =
-      weekStartDate == null
-        ? await query(
-            `DELETE FROM cycle_collection_claims
-             WHERE cycle_index = $1 AND member_id = $2 AND claimed_by_member_id = $3
-               AND week_start_date IS NULL`,
-            [cycleIndex, memberId, authUserId],
-          )
-        : await query(
-            `DELETE FROM cycle_collection_claims
-             WHERE week_start_date = $1::date AND member_id = $2 AND claimed_by_member_id = $3`,
-            [weekStartDate, memberId, authUserId],
-          );
-    if ((del.rowCount ?? 0) === 0) {
-      throw new Error('not_owner');
+    if (canAssignArbitraryCoordinator) {
+      const del =
+        weekStartDate == null
+          ? await query(
+              `DELETE FROM cycle_collection_claims
+               WHERE cycle_index = $1 AND member_id = $2 AND week_start_date IS NULL`,
+              [cycleIndex, memberId],
+            )
+          : await query(
+              `DELETE FROM cycle_collection_claims
+               WHERE week_start_date = $1::date AND member_id = $2`,
+              [weekStartDate, memberId],
+            );
+      if ((del.rowCount ?? 0) === 0) {
+        throw new Error('not_owner');
+      }
+    } else {
+      const del =
+        weekStartDate == null
+          ? await query(
+              `DELETE FROM cycle_collection_claims
+               WHERE cycle_index = $1 AND member_id = $2 AND claimed_by_member_id = $3
+                 AND week_start_date IS NULL`,
+              [cycleIndex, memberId, authUserId],
+            )
+          : await query(
+              `DELETE FROM cycle_collection_claims
+               WHERE week_start_date = $1::date AND member_id = $2 AND claimed_by_member_id = $3`,
+              [weekStartDate, memberId, authUserId],
+            );
+      if ((del.rowCount ?? 0) === 0) {
+        throw new Error('not_owner');
+      }
     }
   }
 }

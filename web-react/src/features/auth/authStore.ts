@@ -12,7 +12,7 @@ const LS_LAST = 'auth_last_name';
 const LS_ROLE = 'auth_role';
 const LS_REG = 'auth_registration_status';
 
-export type AuthRole = 'member' | 'admin' | (string & {});
+export type AuthRole = 'member' | 'pastor' | 'admin' | (string & {});
 
 export type RegistrationStatus = 'active' | 'pending_review' | 'rejected';
 
@@ -52,6 +52,7 @@ function normalizeRole(raw: string | undefined): AuthRole {
   const r = (raw ?? 'member').trim().toLowerCase();
   if (!r) return 'member';
   if (r === 'admin') return 'admin';
+  if (r === 'pastor') return 'pastor';
   if (r === 'editor') return 'editor';
   if (r === 'musician') return 'musician';
   return 'member';

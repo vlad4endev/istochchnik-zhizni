@@ -308,8 +308,29 @@ function normalizeCycleCollectionSnapshot(raw: unknown): CycleCollectionClaimsSn
   const cycle_index = raw.cycle_index;
   const cycle_number = raw.cycle_number;
   const members = raw.members;
-  if (typeof cycle_index !== 'number' || typeof cycle_number !== 'number' || !Array.isArray(members)) {
+  const coordinatorsRaw = raw.coordinators;
+  if (
+    typeof cycle_index !== 'number' ||
+    typeof cycle_number !== 'number' ||
+    !Array.isArray(members) ||
+    !Array.isArray(coordinatorsRaw)
+  ) {
     throw new Error('Некорректный ответ API: cycle/collection-claims');
+  }
+  const coordinators: import('./collectionTypes').CycleCollectionCoordinatorRow[] = [];
+  for (const row of coordinatorsRaw) {
+    if (!isRecord(row)) continue;
+    const id = row.id;
+    const name = row.name;
+    if (typeof id !== 'number' || typeof name !== 'string') continue;
+    const fn = row.first_name;
+    const ln = row.last_name;
+    coordinators.push({
+      id,
+      name,
+      first_name: typeof fn === 'string' || fn === null ? fn : undefined,
+      last_name: typeof ln === 'string' || ln === null ? ln : undefined,
+    });
   }
   const rows: import('./collectionTypes').CycleCollectionClaimRow[] = [];
   for (const m of members) {
@@ -319,7 +340,7 @@ function normalizeCycleCollectionSnapshot(raw: unknown): CycleCollectionClaimsSn
     }
     rows.push(r);
   }
-  return { cycle_index, cycle_number, members: rows };
+  return { cycle_index, cycle_number, coordinators, members: rows };
 }
 
 export async function getCycleCollectionClaims(week?: WeekPlanKind): Promise<CycleCollectionClaimsSnapshot> {
@@ -333,11 +354,13 @@ export async function patchCycleCollectionClaim(
   memberId: number,
   claim: boolean,
   week?: WeekPlanKind,
+  assignedCoordinatorId?: number,
 ): Promise<CycleCollectionClaimsSnapshot> {
   const { data } = await apiClient.patch<unknown>('/api/calendar/cycle/collection-claims', {
     member_id: memberId,
     claim,
     ...(week ? { week } : {}),
+    ...(typeof assignedCoordinatorId === 'number' ? { assigned_coordinator_id: assignedCoordinatorId } : {}),
   });
   return normalizeCycleCollectionSnapshot(data);
 }

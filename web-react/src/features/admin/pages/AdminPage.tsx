@@ -98,6 +98,8 @@ function appRoleLabel(role: string): string {
   switch (role) {
     case 'admin':
       return 'Администратор';
+    case 'pastor':
+      return 'Пастор';
     case 'editor':
       return 'Редактор каталога';
     case 'musician':
@@ -110,6 +112,9 @@ function appRoleLabel(role: string): string {
 function appRoleBadgeClass(role: string): string {
   if (role === 'admin') {
     return 'rounded-full bg-primary/12 px-2.5 py-0.5 text-xs font-bold text-primary';
+  }
+  if (role === 'pastor') {
+    return 'rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-semibold text-emerald-900';
   }
   if (role === 'editor') {
     return 'rounded-full bg-violet-100 px-2.5 py-0.5 text-xs font-semibold text-violet-800';
@@ -664,7 +669,7 @@ function MembersSection() {
       role,
     }: {
       id: number;
-      role: 'member' | 'musician' | 'editor' | 'admin';
+      role: 'member' | 'pastor' | 'musician' | 'editor' | 'admin';
     }) => setMemberAppRole(id, role),
     onSuccess: (updated) => {
       setEditing((prev) => (prev && prev.id === updated.id ? updated : prev));
@@ -1613,6 +1618,7 @@ function MembersSection() {
                       }}
                     >
                       <option value="member">Член церкви</option>
+                      <option value="pastor">Пастор</option>
                       <option value="musician">Музыкант (студия)</option>
                       <option value="editor">Редактор каталога</option>
                       <option value="admin">Администратор</option>
@@ -2414,6 +2420,7 @@ function CalendarSection() {
           <NextWeekPrayerPlanSection
             canView
             currentUserId={meQ.data?.id ?? null}
+            currentUserRole={meQ.data?.app_role ?? null}
             isAdmin={meQ.data?.app_role?.trim().toLowerCase() === 'admin'}
           />
         </div>

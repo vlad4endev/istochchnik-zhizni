@@ -694,6 +694,7 @@ export function DailyPrayerPage() {
           <NextWeekPrayerPlanSection
             canView
             currentUserId={me?.id ?? null}
+            currentUserRole={me?.app_role ?? null}
             isAdmin={me?.app_role?.trim().toLowerCase() === 'admin'}
             afterWeekQueueButton={urgentPrayerStack}
           />

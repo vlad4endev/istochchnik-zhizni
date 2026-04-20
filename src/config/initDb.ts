@@ -20,7 +20,7 @@ CREATE TABLE IF NOT EXISTS members (
   account_provider VARCHAR(100),
   account_id VARCHAR(255),
   is_active BOOLEAN NOT NULL DEFAULT TRUE,
-  app_role VARCHAR(16) NOT NULL DEFAULT 'member' CHECK (app_role IN ('member', 'musician', 'editor', 'admin')),
+  app_role VARCHAR(16) NOT NULL DEFAULT 'member' CHECK (app_role IN ('member', 'pastor', 'musician', 'editor', 'admin')),
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -228,11 +228,11 @@ ALTER TABLE members ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEF
 ALTER TABLE members ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
 UPDATE members
 SET app_role = 'member'
-WHERE app_role IS NULL OR app_role NOT IN ('member', 'musician', 'editor', 'admin');
+WHERE app_role IS NULL OR app_role NOT IN ('member', 'pastor', 'musician', 'editor', 'admin');
 ALTER TABLE members ALTER COLUMN app_role SET DEFAULT 'member';
 ALTER TABLE members ALTER COLUMN app_role SET NOT NULL;
 ALTER TABLE members DROP CONSTRAINT IF EXISTS members_app_role_check;
-ALTER TABLE members ADD CONSTRAINT members_app_role_check CHECK (app_role IN ('member', 'musician', 'editor', 'admin'));
+ALTER TABLE members ADD CONSTRAINT members_app_role_check CHECK (app_role IN ('member', 'pastor', 'musician', 'editor', 'admin'));
 
 ALTER TABLE members ADD COLUMN IF NOT EXISTS is_collection_coordinator BOOLEAN NOT NULL DEFAULT FALSE;
 
