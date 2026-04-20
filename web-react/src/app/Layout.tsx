@@ -1,4 +1,4 @@
-import { NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useState } from 'react';
 import type { IconType } from 'react-icons';
@@ -288,6 +288,7 @@ export function Layout() {
   useRealtimeWsConnection();
   useBrowserNotificationScheduler();
   const navigate = useNavigate();
+  const location = useLocation();
   const setActiveConversation = useChatStore((s) => s.setActiveConversation);
   const loadConversations = useChatStore((s) => s.loadConversations);
   const refreshUnread = useChatStore((s) => s.refreshUnread);
@@ -348,6 +349,8 @@ export function Layout() {
   );
   const sidebarItems = items;
   const mobileItems = items;
+  const isDashboardRoute =
+    location.pathname === '/dashboard' || location.pathname === '/dashboard/';
 
   const markAllDeliveriesOpened = useCallback(async () => {
     if (!token) return;
@@ -729,7 +732,7 @@ export function Layout() {
         <Outlet />
       </main>
 
-      <CoordinatorDashboardNoteFab />
+      {isDashboardRoute ? <CoordinatorDashboardNoteFab /> : null}
 
       {/* Телефон: нижняя навигация (иконка + подпись, как в нативных приложениях) */}
       <nav

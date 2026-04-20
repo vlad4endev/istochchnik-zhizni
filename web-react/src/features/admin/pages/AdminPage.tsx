@@ -2216,6 +2216,7 @@ function CalendarPrayerCycleRoster() {
 }
 
 function CalendarSection() {
+  const qc = useQueryClient();
   const meQ = useQuery({
     queryKey: ['auth', 'me'],
     queryFn: fetchMe,
@@ -2225,9 +2226,11 @@ function CalendarSection() {
   const [msg, setMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
   const mut = useMutation({
     mutationFn: () => startPrayerCycle(date.trim()),
-    onSuccess: (d) => {
+    onSuccess: async (d) => {
       const x = d.start_date ?? date;
       setMsg({ type: 'ok', text: `Цикл отсчитывается с ${x}.` });
+      await qc.invalidateQueries({ queryKey: ['admin', 'prayer-cycle-roster'] });
+      await qc.invalidateQueries({ queryKey: ['calendar'] });
     },
     onError: (e) => setMsg({ type: 'err', text: apiErrorMessage(e, 'Не удалось запустить цикл.') }),
   });
