@@ -1,6 +1,7 @@
 /** Загрузка текста по HTTP(S) с базовой защитой от SSRF (только публичные хосты, лимит размера). */
 
-const MAX_BYTES = 1_500_000;
+const MAX_TEXT_BYTES = 1_500_000;
+const MAX_PDF_BYTES = 6_000_000;
 const MAX_REDIRECTS = 6;
 const FETCH_TIMEOUT_MS = 18_000;
 
@@ -39,24 +40,36 @@ function isBlockedHostname(host: string): boolean {
   return false;
 }
 
-function allowedContentType(ct: string, pathname: string): boolean {
-  const lower = ct.toLowerCase().split(';')[0]?.trim() ?? '';
-  if (lower.startsWith('text/')) {
-    if (lower === 'text/html' || lower === 'text/xml') return false;
-    return true;
-  }
-  if (lower === 'application/json') return true;
+/** Распознавание ответа для импорта песни: текст (в т.ч. ChordPro) или PDF. */
+function songImportKind(contentType: string, pathname: string): 'text' | 'pdf' | null {
+  const lower = contentType.toLowerCase().split(';')[0]?.trim() ?? '';
+  if (lower === 'application/pdf') return 'pdf';
   if (lower === 'application/octet-stream' || lower === 'binary/octet-stream') {
-    return /\.(txt|cho|chopro|chordpro|cpm|pro)$/i.test(pathname);
+    if (/\.pdf($|\?)/i.test(pathname)) return 'pdf';
+    if (/\.(txt|cho|chopro|chordpro|cpm|pro)($|\?)/i.test(pathname)) return 'text';
+    return null;
   }
-  return false;
+  if (lower.startsWith('text/')) {
+    if (lower === 'text/html' || lower === 'text/xml') return null;
+    return 'text';
+  }
+  if (lower === 'application/json') return 'text';
+  return null;
 }
 
 function bufferToUtf8(buf: ArrayBuffer): string {
   return new TextDecoder('utf-8', { fatal: false }).decode(buf);
 }
 
-export async function safeFetchUrlAsText(urlString: string): Promise<{ text: string; contentType: string }> {
+export type SongUrlImportFetchResult =
+  | { kind: 'text'; text: string; contentType: string }
+  | { kind: 'pdf'; buffer: Buffer; contentType: string };
+
+/**
+ * Скачивает по ссылке текст (plain, ChordPro и т.д.) или PDF для последующего разбора.
+ * PDF — только при явном application/pdf или .pdf при octet-stream.
+ */
+export async function safeFetchUrlForSongImport(urlString: string): Promise<SongUrlImportFetchResult> {
   let current = urlString.trim();
   if (!current) {
     throw new Error('Пустая ссылка');
@@ -75,10 +88,6 @@ export async function safeFetchUrlAsText(urlString: string): Promise<{ text: str
 
   if (url.protocol !== 'http:' && url.protocol !== 'https:') {
     throw new Error('Разрешены только http и https');
-  }
-
-  if (url.username || url.password) {
-    throw new Error('Ссылки с логином и паролем не поддерживаются');
   }
 
   if (isBlockedHostname(url.hostname)) {
@@ -105,7 +114,7 @@ export async function safeFetchUrlAsText(urlString: string): Promise<{ text: str
         method: 'GET',
         redirect: 'manual',
         headers: {
-          Accept: 'text/plain,text/html;q=0.3,application/json;q=0.5,*/*;q=0.1',
+          Accept: 'text/plain,application/pdf;q=0.6,text/html;q=0.3,application/json;q=0.5,*/*;q=0.1',
           'User-Agent': 'IstochnikSongbookImport/1.0',
         },
         signal: controller.signal,
@@ -122,24 +131,42 @@ export async function safeFetchUrlAsText(urlString: string): Promise<{ text: str
         throw new Error(`Сервер ответил кодом ${res.status}`);
       }
 
-      const len = res.headers.get('content-length');
-      if (len && Number(len) > MAX_BYTES) {
-        throw new Error('Файл по ссылке слишком большой (лимит 1,5 МБ)');
+      const ct = res.headers.get('content-type') ?? '';
+      const pathname = u.pathname;
+      const kind = songImportKind(ct, pathname);
+      if (!kind) {
+        throw new Error(
+          'Поддерживаются текст (text/*, JSON, .txt/.cho/.chordpro по ссылке) или PDF (application/pdf / файл .pdf).',
+        );
       }
 
-      const ct = res.headers.get('content-type') ?? '';
-      if (!allowedContentType(ct, u.pathname)) {
+      const maxBytes = kind === 'pdf' ? MAX_PDF_BYTES : MAX_TEXT_BYTES;
+      const len = res.headers.get('content-length');
+      if (len && Number(len) > maxBytes) {
         throw new Error(
-          'Поддерживаются текстовые ответы (text/*, JSON) или .txt по ссылке. Для PDF используйте загрузку файла.',
+          kind === 'pdf'
+            ? 'PDF по ссылке слишком большой (лимит 6 МБ)'
+            : 'Файл по ссылке слишком большой (лимит 1,5 МБ)',
         );
       }
 
       const buf = await res.arrayBuffer();
-      if (buf.byteLength > MAX_BYTES) {
-        throw new Error('Ответ слишком большой (лимит 1,5 МБ)');
+      if (buf.byteLength > maxBytes) {
+        throw new Error(
+          kind === 'pdf' ? 'PDF слишком большой (лимит 6 МБ)' : 'Ответ слишком большой (лимит 1,5 МБ)',
+        );
       }
 
-      return { text: bufferToUtf8(buf), contentType: ct };
+      if (kind === 'text') {
+        return { kind: 'text', text: bufferToUtf8(buf), contentType: ct };
+      }
+
+      const b = Buffer.from(buf);
+      const head = b.subarray(0, Math.min(5, b.length)).toString('latin1');
+      if (!head.startsWith('%PDF')) {
+        throw new Error('Ответ объявлен как PDF, но данные не похожи на PDF');
+      }
+      return { kind: 'pdf', buffer: b, contentType: ct };
     }
     throw new Error('Слишком много редиректов');
   } catch (e) {

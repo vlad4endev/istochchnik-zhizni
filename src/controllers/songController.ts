@@ -18,7 +18,9 @@ import {
   removeFavorite,
   updateSong,
 } from '../services/songService';
-import { safeFetchUrlAsText } from '../utils/safeUrlTextFetch';
+import pdfParse from 'pdf-parse';
+
+import { safeFetchUrlForSongImport } from '../utils/safeUrlTextFetch';
 
 type AuthReq = Request & { authUserId?: number; authUserRole?: AppRole };
 
@@ -326,11 +328,34 @@ export async function importUrlText(req: Request, res: Response): Promise<void> 
       res.status(400).json({ error: 'url required' });
       return;
     }
-    const { text, contentType } = await safeFetchUrlAsText(url);
-    res.json({ text, contentType });
+    const fetched = await safeFetchUrlForSongImport(url);
+    if (fetched.kind === 'text') {
+      res.json({ text: fetched.text, contentType: fetched.contentType });
+      return;
+    }
+    let text: string;
+    try {
+      const parsed = await pdfParse(fetched.buffer);
+      text = (parsed.text ?? '').trim();
+    } catch {
+      res.status(502).json({ error: 'Не удалось разобрать PDF по ссылке.' });
+      return;
+    }
+    if (!text) {
+      res.status(422).json({
+        error: 'В PDF не найден текст (возможно, только изображения). Загрузите файл вручную или скопируйте текст.',
+      });
+      return;
+    }
+    res.json({ text, contentType: fetched.contentType });
   } catch (e) {
     const msg = e instanceof Error ? e.message : 'Ошибка';
-    if (msg.startsWith('Некоррект') || msg.includes('Разрешены') || msg.includes('недоступен')) {
+    if (
+      msg.startsWith('Некоррект') ||
+      msg.includes('Разрешены') ||
+      msg.includes('недоступен') ||
+      msg.startsWith('Поддерживаются')
+    ) {
       res.status(400).json({ error: msg });
       return;
     }
