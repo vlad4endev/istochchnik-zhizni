@@ -1,6 +1,12 @@
 import { Chord, Key } from '@tonaljs/tonal';
 
-import { hasLyricLetters, isChordOnlyLine, looksLikeChordPro } from './chordProConversion';
+import {
+  hasLyricLetters,
+  isChordOnlyLine,
+  looksLikeChordPro,
+  listChordSymbolsInChordLine,
+  normalizeChordSymbolForCatalog,
+} from './chordProConversion';
 
 const ROOTS = ['C', 'C#', 'D', 'Eb', 'E', 'F', 'F#', 'G', 'Ab', 'A', 'Bb', 'B'] as const;
 
@@ -11,7 +17,8 @@ export function extractChordsFromText(text: string): string[] {
   let m: RegExpExecArray | null;
   while ((m = re.exec(text)) !== null) {
     const inner = m[1].trim();
-    if (isChordToken(inner)) fromBrackets.push(normalizeChordSymbol(inner));
+    const norm = normalizeChordSymbolForCatalog(inner);
+    if (norm) fromBrackets.push(norm);
   }
   if (fromBrackets.length > 0) return fromBrackets;
 
@@ -27,25 +34,11 @@ export function extractChordsFromText(text: string): string[] {
       !isChordOnlyLine(next) &&
       hasLyricLetters(next)
     ) {
-      line
-        .trim()
-        .split(/\s+/)
-        .filter(Boolean)
-        .filter(isChordToken)
-        .forEach((c) => stacked.push(normalizeChordSymbol(c)));
+      listChordSymbolsInChordLine(line).forEach((c) => stacked.push(c));
       i += 1;
     }
   }
   return stacked;
-}
-
-function normalizeChordSymbol(s: string): string {
-  const c = Chord.get(s);
-  return c.empty ? s : c.symbol;
-}
-
-function isChordToken(s: string): boolean {
-  return !Chord.get(s.trim()).empty;
 }
 
 export type KeyGuess = {

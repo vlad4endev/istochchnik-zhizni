@@ -1561,6 +1561,7 @@ CREATE TABLE IF NOT EXISTS setlist_items (
   UNIQUE (setlist_id, "position")
 );
 CREATE INDEX IF NOT EXISTS idx_setlist_items_setlist ON setlist_items (setlist_id, "position");
+ALTER TABLE setlist_items ADD COLUMN IF NOT EXISTS musician_notes JSONB NOT NULL DEFAULT '{}'::jsonb;
 
 CREATE TABLE IF NOT EXISTS studio_song_recents (
   member_id INTEGER NOT NULL REFERENCES members(id) ON DELETE CASCADE,

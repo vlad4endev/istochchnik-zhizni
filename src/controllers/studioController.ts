@@ -20,6 +20,7 @@ import {
   reorderSetlistItems,
   updateDraft,
   updateSetlist,
+  updateSetlistItemMusicianNotes,
   upsertStudioVersion,
 } from '../services/studioService';
 
@@ -392,6 +393,33 @@ export async function setlistItemsReorder(req: Request, res: Response): Promise<
       return;
     }
     await reorderSetlistItems(r.authUserId!, setlistId, ids);
+    res.json({ ok: true });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Ошибка' });
+  }
+}
+
+export async function setlistItemPatch(req: Request, res: Response): Promise<void> {
+  try {
+    const r = req as AuthReq;
+    if (!ensureStudio(r, res)) return;
+    const setlistId = Number(req.params.id);
+    const itemId = Number(req.params.itemId);
+    if (!Number.isInteger(setlistId) || setlistId <= 0 || !Number.isInteger(itemId) || itemId <= 0) {
+      res.status(400).json({ error: 'Invalid id' });
+      return;
+    }
+    const body = req.body as { musician_notes?: unknown };
+    if (body.musician_notes === undefined) {
+      res.status(400).json({ error: 'musician_notes required' });
+      return;
+    }
+    const ok = await updateSetlistItemMusicianNotes(r.authUserId!, setlistId, itemId, body.musician_notes);
+    if (!ok) {
+      res.status(404).json({ error: 'Не найдено' });
+      return;
+    }
     res.json({ ok: true });
   } catch (e) {
     console.error(e);

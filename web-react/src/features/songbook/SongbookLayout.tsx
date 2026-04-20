@@ -1,4 +1,4 @@
-import { NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { LuDisc3, LuListMusic, LuLogOut, LuMusic2 } from 'react-icons/lu';
 
 import { useAuthStore } from '../auth/authStore';
@@ -15,6 +15,7 @@ const tabs = [
 
 function SongbookShell() {
   const navigate = useNavigate();
+  const { pathname } = useLocation();
   const role = useAuthStore((s) => s.role);
   const logout = useAuthStore((s) => s.logout);
   const studioOk = canAccessStudioRole(role);
@@ -26,6 +27,19 @@ function SongbookShell() {
     if ('studioOnly' in t && t.studioOnly) return studioOk;
     return true;
   });
+
+  const studioStrip = (() => {
+    if (pathname.startsWith('/songbook/studio/edit/')) {
+      return 'Редактор: ваша версия текста. Оригинал в каталоге не меняется без отдельных действий.';
+    }
+    if (pathname.startsWith('/songbook/studio')) {
+      return 'Студия: личные версии и черновики. Редактор — из этого списка или из карточки песни в каталоге.';
+    }
+    if (pathname.startsWith('/songbook/setlists')) {
+      return 'Сетлисты: программа служения. На странице сетлиста — песни, PDF и режим выступления.';
+    }
+    return null;
+  })();
 
   return (
     <div
@@ -121,6 +135,10 @@ function SongbookShell() {
             ))}
           </nav>
 
+          {studioStrip && !stageMode ? (
+            <p className="hidden max-w-xl text-[11px] leading-snug text-stone-500 md:block md:px-0">{studioStrip}</p>
+          ) : null}
+
           <button
             type="button"
             onClick={toggleStageMode}
@@ -151,6 +169,10 @@ function SongbookShell() {
           ) : null}
         </div>
       </div>
+
+      {studioStrip && !stageMode ? (
+        <p className="mx-auto max-w-6xl px-3 pb-1 text-[11px] leading-snug text-stone-500 md:hidden">{studioStrip}</p>
+      ) : null}
 
       <div className="min-h-0 flex-1 overflow-auto px-3 py-4 md:px-6">
         <Outlet />

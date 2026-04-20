@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { LuPenLine, LuTrash2 } from 'react-icons/lu';
 
@@ -13,6 +13,8 @@ import {
   type StudioDraft,
 } from '../api';
 import { studioEditSongPath, useStudioModuleSurface } from '../studioPaths';
+
+type MySongsTab = 'saved' | 'drafts' | 'recent';
 
 function DraftRow({
   draft,
@@ -92,6 +94,7 @@ export function MySongsPage() {
     queryFn: () => fetchRecentSongs(8),
   });
 
+  const [tab, setTab] = useState<MySongsTab>('saved');
   const [draftTitle, setDraftTitle] = useState('');
   const [draftContent, setDraftContent] = useState('');
 
@@ -119,123 +122,165 @@ export function MySongsPage() {
   const rows = q.data ?? [];
   const recent = recentQ.data ?? [];
   const drafts = draftsQ.data ?? [];
+  const showRecentTab = recent.length > 0;
+
+  useEffect(() => {
+    if (tab === 'recent' && !showRecentTab && !recentQ.isLoading) {
+      setTab('saved');
+    }
+  }, [tab, showRecentTab, recentQ.isLoading]);
 
   const pageCard =
     surface === 'songbook'
       ? 'rounded-2xl border border-stone-200 bg-white p-4 shadow-sm md:p-6'
       : '';
 
+  const tabBtn = (id: MySongsTab, label: string, hint: string) => (
+    <button
+      key={id}
+      type="button"
+      role="tab"
+      aria-selected={tab === id}
+      title={hint}
+      onClick={() => setTab(id)}
+      className={[
+        'min-h-[44px] flex-1 rounded-xl px-2 py-2 text-center text-xs font-semibold transition-colors sm:text-sm',
+        tab === id ? 'bg-stone-900 text-white shadow-sm' : 'text-stone-600 hover:bg-stone-100 hover:text-stone-900',
+      ].join(' ')}
+    >
+      {label}
+    </button>
+  );
+
   return (
-    <div className={['mx-auto max-w-3xl space-y-10', pageCard].filter(Boolean).join(' ')}>
-      <header className="space-y-2 border-b border-stone-200 pb-6">
-        <h1 className="text-2xl font-bold tracking-tight text-stone-900">Мои версии</h1>
-        <p className="max-w-xl text-sm leading-relaxed text-stone-600">
-          Здесь — черновики и сохранённые правки к песням из общего каталога. Откройте песню в песеннике и
-          нажмите «В студию», чтобы начать свою версию.
-        </p>
+    <div className={['mx-auto max-w-3xl space-y-6', pageCard].filter(Boolean).join(' ')}>
+      <header className="space-y-3 border-b border-stone-200 pb-5">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight text-stone-900">Мои версии</h1>
+          <p className="mt-1 max-w-xl text-sm leading-relaxed text-stone-600">
+            Три зоны: правки к песням каталога, свободные черновики и быстрый возврат к недавним песням.
+          </p>
+        </div>
+        <div
+          className="flex w-full gap-1 rounded-2xl bg-stone-100 p-1"
+          role="tablist"
+          aria-label="Разделы «Мои версии»"
+        >
+          {tabBtn('saved', 'Каталог', 'Сохранённые студийные версии песен из общего списка')}
+          {showRecentTab ? tabBtn('recent', 'Недавние', 'Песни, которые вы недавно открывали в песеннике') : null}
+          {tabBtn('drafts', 'Черновики', 'Тексты без привязки к песне из каталога')}
+        </div>
       </header>
 
-      <section className="space-y-4">
-        <div>
-          <h2 className="text-base font-semibold text-stone-900">Черновики</h2>
-          <p className="mt-0.5 text-sm text-stone-500">Без привязки к каталогу — удобно набросать текст.</p>
-        </div>
-        <div className="space-y-3 rounded-xl border border-stone-200 bg-stone-50/80 p-4">
-          <div className="space-y-2">
-            <input
-              className="w-full rounded-lg border border-stone-200 bg-white px-3 py-2.5 text-sm text-stone-900 outline-none placeholder:text-stone-400 focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
-              placeholder="Название нового черновика"
-              value={draftTitle}
-              onChange={(e) => setDraftTitle(e.target.value)}
-            />
-            <textarea
-              className="min-h-[88px] w-full resize-y rounded-lg border border-stone-200 bg-white px-3 py-2 font-mono text-sm text-stone-900 outline-none placeholder:text-stone-400 focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
-              placeholder="Текст, ChordPro…"
-              value={draftContent}
-              onChange={(e) => setDraftContent(e.target.value)}
-            />
-          </div>
-          <button
-            type="button"
-            onClick={() => createMut.mutate()}
-            disabled={createMut.isPending}
-            className="rounded-lg bg-stone-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-stone-800 disabled:opacity-50"
-          >
-            Сохранить черновик
-          </button>
-        </div>
-        {drafts.length > 0 ? (
-          <ul className="flex flex-col gap-2">
-            {drafts.map((d) => (
-              <DraftRow key={d.id} draft={d} onDeleted={() => delDraftMut.mutate(Number(d.id))} />
-            ))}
-          </ul>
-        ) : (
-          <p className="text-sm text-stone-500">Черновиков пока нет.</p>
-        )}
-      </section>
-
-      {!recentQ.isLoading && recent.length > 0 ? (
-        <section className="space-y-3">
-          <h2 className="text-base font-semibold text-stone-900">Недавно открытые</h2>
-          <ul className="flex flex-col gap-2">
-            {recent.map((s) => (
-              <li
-                key={s.id}
-                className="flex min-h-[48px] items-center gap-3 rounded-xl border border-stone-200 bg-white px-4 py-3 shadow-sm"
+      <div className="min-h-[12rem]" role="tabpanel" aria-label={tab === 'saved' ? 'Каталог' : tab === 'recent' ? 'Недавние' : 'Черновики'}>
+        {tab === 'drafts' ? (
+          <section className="space-y-4">
+            <div className="rounded-xl border border-stone-200 bg-stone-50/80 p-4">
+              <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-stone-500">Новый черновик</p>
+              <div className="space-y-2">
+                <input
+                  className="w-full rounded-lg border border-stone-200 bg-white px-3 py-2.5 text-sm text-stone-900 outline-none placeholder:text-stone-400 focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
+                  placeholder="Название"
+                  value={draftTitle}
+                  onChange={(e) => setDraftTitle(e.target.value)}
+                />
+                <textarea
+                  className="min-h-[88px] w-full resize-y rounded-lg border border-stone-200 bg-white px-3 py-2 font-mono text-sm text-stone-900 outline-none placeholder:text-stone-400 focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
+                  placeholder="Текст, ChordPro…"
+                  value={draftContent}
+                  onChange={(e) => setDraftContent(e.target.value)}
+                />
+              </div>
+              <button
+                type="button"
+                onClick={() => createMut.mutate()}
+                disabled={createMut.isPending}
+                className="mt-3 rounded-lg bg-stone-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-stone-800 disabled:opacity-50"
               >
-                <Link
-                  to={`/songbook/${s.id}`}
-                  className="min-w-0 flex-1 truncate font-medium text-stone-900 hover:text-sky-700"
-                >
-                  {s.title}
-                </Link>
-                <Link
-                  to={studioEditSongPath(surface, Number(s.id))}
-                  className="inline-flex shrink-0 items-center gap-1 text-sm font-semibold text-sky-700 hover:text-sky-800"
-                >
-                  <LuPenLine className="h-4 w-4" aria-hidden />
-                  Редактор
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </section>
-      ) : null}
+                Сохранить черновик
+              </button>
+            </div>
+            {drafts.length > 0 ? (
+              <ul className="flex flex-col gap-2">
+                {drafts.map((d) => (
+                  <DraftRow key={d.id} draft={d} onDeleted={() => delDraftMut.mutate(Number(d.id))} />
+                ))}
+              </ul>
+            ) : (
+              <p className="text-sm text-stone-500">Список черновиков пуст — создайте первый формой выше.</p>
+            )}
+          </section>
+        ) : null}
 
-      <section className="space-y-3">
-        <h2 className="text-base font-semibold text-stone-900">Сохранённые версии из каталога</h2>
-        {rows.length === 0 ? (
-          <div className="space-y-3 rounded-xl border border-dashed border-stone-300 bg-stone-50 px-4 py-6 text-sm text-stone-600">
-            <p>Пока нет сохранённых версий. Откройте любую песню в песеннике и выберите вход в студию.</p>
-            <Link
-              to="/songbook"
-              className="inline-flex font-semibold text-sky-700 hover:text-sky-800"
-            >
-              Перейти в песенник →
-            </Link>
-          </div>
-        ) : (
-          <ul className="flex flex-col gap-2">
-            {rows.map((v) => (
-              <li key={v.id}>
-                <Link
-                  to={studioEditSongPath(surface, Number(v.song_id))}
-                  className="flex min-h-[52px] items-center justify-between gap-3 rounded-xl border border-stone-200 bg-white px-4 py-3 shadow-sm transition hover:border-stone-300 hover:bg-stone-50"
-                >
-                  <div className="min-w-0">
-                    <p className="truncate font-medium text-stone-900">{v.song_title}</p>
-                    <p className="mt-0.5 text-xs text-stone-500">
-                      {v.custom_key ?? '—'} · {new Date(v.updated_at).toLocaleString()}
-                    </p>
-                  </div>
-                  <LuPenLine className="h-5 w-5 shrink-0 text-stone-400" aria-hidden />
+        {tab === 'recent' ? (
+          <section className="space-y-3">
+            <p className="text-sm text-stone-600">
+              Открывайте карточку в песеннике или сразу переходите в редактор своей версии.
+            </p>
+            {recentQ.isLoading ? (
+              <p className="text-sm text-stone-500">Загрузка…</p>
+            ) : (
+              <ul className="flex flex-col gap-2">
+                {recent.map((s) => (
+                  <li
+                    key={s.id}
+                    className="flex min-h-[48px] items-center gap-3 rounded-xl border border-stone-200 bg-white px-4 py-3 shadow-sm"
+                  >
+                    <Link
+                      to={`/songbook/${s.id}`}
+                      className="min-w-0 flex-1 truncate font-medium text-stone-900 hover:text-sky-700"
+                    >
+                      {s.title}
+                    </Link>
+                    <Link
+                      to={studioEditSongPath(surface, Number(s.id))}
+                      className="inline-flex shrink-0 items-center gap-1 text-sm font-semibold text-sky-700 hover:text-sky-800"
+                    >
+                      <LuPenLine className="h-4 w-4" aria-hidden />
+                      Редактор
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        ) : null}
+
+        {tab === 'saved' ? (
+          <section className="space-y-3">
+            <p className="text-sm text-stone-600">
+              Это ваши сохранённые правки к песням из общего каталога. Оригинал в песеннике не меняется.
+            </p>
+            {rows.length === 0 ? (
+              <div className="space-y-3 rounded-xl border border-dashed border-stone-300 bg-stone-50 px-4 py-6 text-sm text-stone-600">
+                <p>Пока нет сохранённых версий. Откройте песню в песеннике и выберите «В студию».</p>
+                <Link to="/songbook" className="inline-flex font-semibold text-sky-700 hover:text-sky-800">
+                  Перейти в песенник →
                 </Link>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+              </div>
+            ) : (
+              <ul className="flex flex-col gap-2">
+                {rows.map((v) => (
+                  <li key={v.id}>
+                    <Link
+                      to={studioEditSongPath(surface, Number(v.song_id))}
+                      className="flex min-h-[52px] items-center justify-between gap-3 rounded-xl border border-stone-200 bg-white px-4 py-3 shadow-sm transition hover:border-stone-300 hover:bg-stone-50"
+                    >
+                      <div className="min-w-0">
+                        <p className="truncate font-medium text-stone-900">{v.song_title}</p>
+                        <p className="mt-0.5 text-xs text-stone-500">
+                          {v.custom_key ?? '—'} · {new Date(v.updated_at).toLocaleString()}
+                        </p>
+                      </div>
+                      <LuPenLine className="h-5 w-5 shrink-0 text-stone-400" aria-hidden />
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        ) : null}
+      </div>
     </div>
   );
 }

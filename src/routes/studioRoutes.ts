@@ -17,6 +17,7 @@ import {
   setlistItemsList,
   setlistItemsRemove,
   setlistItemsReorder,
+  setlistItemPatch,
   setlistsCreate,
   setlistsDelete,
   setlistsList,
@@ -49,6 +50,7 @@ router.delete('/setlists/:id', setlistsDelete);
 router.get('/setlists/:id/items', setlistItemsList);
 router.post('/setlists/:id/items', setlistItemsAdd);
 router.delete('/setlists/:id/items/:itemId', setlistItemsRemove);
+router.patch('/setlists/:id/items/:itemId', setlistItemPatch);
 router.post('/setlists/:id/reorder', setlistItemsReorder);
 router.get('/setlists/:id/performance', performanceGet);
 

@@ -99,3 +99,11 @@ export async function fetchYoutubeOembed(url: string): Promise<{ title: string; 
   );
   return data;
 }
+
+/** Текст по публичной ссылке (прокси API, см. import-url на сервере). */
+export async function fetchImportUrlText(url: string): Promise<{ text: string; contentType?: string }> {
+  const { data } = await apiClient.get<{ text: string; contentType?: string }>(
+    `${SONGS}/import-url?url=${encodeURIComponent(url)}`,
+  );
+  return data;
+}

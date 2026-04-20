@@ -377,6 +377,13 @@ export async function deleteSetlist(memberId: number, setlistId: number): Promis
   return (result.rowCount ?? 0) > 0;
 }
 
+/** v1: lineComments — ключ «индекс строки текста» (0-based), blockComments — диапазон строк. */
+export type MusicianNotesV1 = {
+  v: 1;
+  lineComments?: Record<string, string>;
+  blockComments?: Array<{ from: number; to: number; text: string }>;
+};
+
 export interface SetlistItemRow {
   id: string;
   setlist_id: string;
@@ -388,12 +395,58 @@ export interface SetlistItemRow {
   /** Полный текст для режима выступления */
   effective_content: string;
   effective_content_preview: string;
+  /** Только для владельца / режима выступления (не отдаётся по публичной ссылке). */
+  musician_notes: MusicianNotesV1;
+}
+
+/** Публичный просмотр: те же поля позиции, но без заметок для музыкантов. */
+export type PublicSetlistItemRow = Omit<SetlistItemRow, 'musician_notes'>;
+
+const EMPTY_NOTES: MusicianNotesV1 = { v: 1 };
+
+function sanitizeMusicianNotes(raw: unknown): MusicianNotesV1 {
+  if (raw == null || typeof raw !== 'object') return { ...EMPTY_NOTES };
+  const o = raw as Record<string, unknown>;
+  if (Number(o.v) !== 1) return { ...EMPTY_NOTES };
+
+  let lineComments: Record<string, string> | undefined;
+  if (o.lineComments != null && typeof o.lineComments === 'object') {
+    lineComments = {};
+    for (const [k, v] of Object.entries(o.lineComments as Record<string, unknown>)) {
+      if (!/^\d+$/.test(k)) continue;
+      const line = Number(k);
+      if (!Number.isInteger(line) || line < 0 || line > 5000) continue;
+      const text = String(v ?? '').trim().slice(0, 600);
+      if (text) lineComments[String(line)] = text;
+    }
+    if (Object.keys(lineComments).length === 0) lineComments = undefined;
+  }
+
+  let blockComments: MusicianNotesV1['blockComments'];
+  if (Array.isArray(o.blockComments)) {
+    const blocks: NonNullable<MusicianNotesV1['blockComments']> = [];
+    for (const x of o.blockComments) {
+      if (x == null || typeof x !== 'object') continue;
+      const b = x as Record<string, unknown>;
+      const from = Number(b.from);
+      const toRaw = Number(b.to);
+      const text = String(b.text ?? '').trim().slice(0, 1200);
+      if (!Number.isInteger(from) || !Number.isInteger(toRaw) || from < 0 || toRaw < from || toRaw > 5000 || !text) {
+        continue;
+      }
+      const to = Math.min(toRaw, from + 400);
+      blocks.push({ from, to, text });
+    }
+    if (blocks.length > 0) blockComments = blocks;
+  }
+
+  return { v: 1, lineComments, blockComments };
 }
 
 async function fetchSetlistItemRows(setlistId: number): Promise<SetlistItemRow[]> {
   const result = await query(
-    `SELECT si.id, si.setlist_id, si.position, si.song_id, si.studio_version_id,
-            s.id AS s_id, s.title, s.slug, s.content, s.default_key, s.tempo, s.time_signature,
+    `SELECT si.id, si.setlist_id, si.position, si.song_id, si.studio_version_id, si.musician_notes,
+            s.id AS s_id, s.song_number, s.title, s.slug, s.content, s.default_key, s.tempo, s.time_signature,
             s.tags, s.is_published, s.created_by_member_id, s.created_at, s.updated_at,
             sv.custom_key, sv.custom_content
      FROM setlist_items si
@@ -426,6 +479,7 @@ async function fetchSetlistItemRows(setlistId: number): Promise<SetlistItemRow[]
     const effectiveKey = customKey ?? song.default_key;
     const effectiveContent = (customContent && customContent.trim() ? customContent : song.content) ?? '';
     const preview = effectiveContent.slice(0, 200);
+    const rawNotes = r.musician_notes;
     return {
       id: String(r.id),
       setlist_id: String(r.setlist_id),
@@ -436,6 +490,7 @@ async function fetchSetlistItemRows(setlistId: number): Promise<SetlistItemRow[]
       effective_key: effectiveKey,
       effective_content: effectiveContent,
       effective_content_preview: preview,
+      musician_notes: sanitizeMusicianNotes(rawNotes),
     };
   });
 }
@@ -514,6 +569,23 @@ async function renumberSetlistPositions(setlistId: number): Promise<void> {
   }
 }
 
+export async function updateSetlistItemMusicianNotes(
+  memberId: number,
+  setlistId: number,
+  itemId: number,
+  notes: unknown
+): Promise<boolean> {
+  const safe = sanitizeMusicianNotes(notes);
+  const result = await query(
+    `UPDATE setlist_items si
+     SET musician_notes = $1::jsonb
+     FROM setlists sl
+     WHERE si.id = $2 AND si.setlist_id = $3 AND sl.id = si.setlist_id AND sl.member_id = $4`,
+    [JSON.stringify(safe), itemId, setlistId, memberId]
+  );
+  return (result.rowCount ?? 0) > 0;
+}
+
 export async function reorderSetlistItems(
   memberId: number,
   setlistId: number,
@@ -562,7 +634,7 @@ export async function getPerformancePayload(
 
 export async function getPublicSetlistByToken(
   token: string
-): Promise<{ setlist: SetlistRow; items: SetlistItemRow[] } | null> {
+): Promise<{ setlist: SetlistRow; items: PublicSetlistItemRow[] } | null> {
   const t = token.trim();
   if (!/^[0-9a-fA-F-]{36}$/.test(t)) {
     return null;
@@ -584,6 +656,7 @@ export async function getPublicSetlistByToken(
     created_at: String(row.created_at),
     updated_at: String(row.updated_at),
   };
-  const items = await fetchSetlistItemRows(setlistId);
+  const itemsFull = await fetchSetlistItemRows(setlistId);
+  const items: PublicSetlistItemRow[] = itemsFull.map(({ musician_notes: _m, ...rest }) => rest);
   return { setlist, items };
 }

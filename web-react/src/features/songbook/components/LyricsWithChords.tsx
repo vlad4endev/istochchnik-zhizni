@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 
+import { normalizeSplitWordChordsInText } from '../addSong/chordProConversion';
 import { transposeBracketChords } from '../chordUtils';
 import { splitChordSegments } from '../utils/chordSegments';
 import { ChordLine } from './ChordLine';
@@ -24,10 +25,10 @@ export function LyricsWithChords({
 }: Props) {
   const [openSymbol, setOpenSymbol] = useState<string | null>(null);
 
-  const tText = useMemo(
-    () => transposeBracketChords(text, transposeSemitones),
-    [text, transposeSemitones],
-  );
+  const tText = useMemo(() => {
+    const fixed = normalizeSplitWordChordsInText(text);
+    return transposeBracketChords(fixed, transposeSemitones);
+  }, [text, transposeSemitones]);
 
   const lines = useMemo(() => tText.split('\n'), [tText]);
 

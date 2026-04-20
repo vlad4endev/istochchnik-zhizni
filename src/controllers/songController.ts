@@ -18,6 +18,7 @@ import {
   removeFavorite,
   updateSong,
 } from '../services/songService';
+import { safeFetchUrlAsText } from '../utils/safeUrlTextFetch';
 
 type AuthReq = Request & { authUserId?: number; authUserRole?: AppRole };
 
@@ -304,6 +305,37 @@ export async function deleteSongHandler(req: Request, res: Response): Promise<vo
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: 'Ошибка' });
+  }
+}
+
+/** Прокси: загрузка текста песни по публичной ссылке (обход CORS, базовая защита от SSRF). */
+export async function importUrlText(req: Request, res: Response): Promise<void> {
+  try {
+    const r = req as AuthReq;
+    if (!r.authUserId) {
+      res.status(401).json({ error: 'Требуется вход' });
+      return;
+    }
+    if (!canModerateCatalog(roleOf(r))) {
+      res.status(403).json({ error: 'Недостаточно прав' });
+      return;
+    }
+    const raw = req.query.url;
+    const url = typeof raw === 'string' ? raw.trim() : '';
+    if (!url) {
+      res.status(400).json({ error: 'url required' });
+      return;
+    }
+    const { text, contentType } = await safeFetchUrlAsText(url);
+    res.json({ text, contentType });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : 'Ошибка';
+    if (msg.startsWith('Некоррект') || msg.includes('Разрешены') || msg.includes('недоступен')) {
+      res.status(400).json({ error: msg });
+      return;
+    }
+    console.error('[songs] import-url:', e);
+    res.status(502).json({ error: msg || 'Не удалось загрузить по ссылке' });
   }
 }
 

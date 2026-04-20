@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link, useParams } from 'react-router-dom';
 
+import { LyricsWithChords } from '../../songbook/components/LyricsWithChords';
 import { fetchPublicSetlist } from '../api';
 
 export function PublicSetlistPage() {
@@ -59,9 +60,14 @@ export function PublicSetlistPage() {
               Тональность: {it.effective_key ?? it.song.default_key ?? '—'} · BPM:{' '}
               {it.song.tempo ?? '—'}
             </p>
-            <pre className="mt-3 whitespace-pre-wrap font-sans text-base leading-relaxed text-stone-800">
-              {it.effective_content || it.song.content}
-            </pre>
+            <div className="mt-3 font-sans text-base text-stone-800">
+              <LyricsWithChords
+                text={it.effective_content || it.song.content || ''}
+                transposeSemitones={0}
+                chordTone="light"
+                className="leading-relaxed"
+              />
+            </div>
           </li>
         ))}
       </ol>

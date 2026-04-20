@@ -11,6 +11,7 @@ import {
   updateSongHandler,
   versionFlags,
   youtubeOembed,
+  importUrlText,
 } from '../controllers/songController';
 import { requireAuthSession } from '../middleware/authSession';
 
@@ -18,6 +19,7 @@ const router = Router();
 
 router.get('/', listSongs);
 router.get('/youtube-oembed', requireAuthSession, youtubeOembed);
+router.get('/import-url', requireAuthSession, importUrlText);
 router.get('/version-flags', requireAuthSession, versionFlags);
 router.post('/', requireAuthSession, createSongHandler);
 router.post('/:id/open', requireAuthSession, recordSongOpenedHandler);

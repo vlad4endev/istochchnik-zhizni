@@ -3,6 +3,7 @@ import axios from 'axios';
 import { apiClient } from '../../lib/apiClient';
 
 import type { SongListItem } from '../songbook/api';
+import type { MusicianNotesV1 } from './performNotes';
 
 const STUDIO = '/api/studio';
 
@@ -46,6 +47,8 @@ export interface SetlistItemRow {
   effective_key: string | null;
   effective_content: string;
   effective_content_preview: string;
+  /** Есть только у авторизованных запросов; в публичном API поля нет. */
+  musician_notes?: MusicianNotesV1;
 }
 
 export async function fetchMyVersions(): Promise<StudioVersionListItem[]> {
@@ -127,6 +130,14 @@ export async function addSetlistItem(
 
 export async function removeSetlistItem(setlistId: number, itemId: number): Promise<void> {
   await apiClient.delete(`${STUDIO}/setlists/${setlistId}/items/${itemId}`);
+}
+
+export async function patchSetlistItemMusicianNotes(
+  setlistId: number,
+  itemId: number,
+  musician_notes: MusicianNotesV1,
+): Promise<void> {
+  await apiClient.patch(`${STUDIO}/setlists/${setlistId}/items/${itemId}`, { musician_notes });
 }
 
 export async function reorderSetlistItems(setlistId: number, ordered_item_ids: number[]): Promise<void> {

@@ -12,9 +12,9 @@ import {
 } from 'react-icons/lu';
 
 import { useWakeLock } from '../../../hooks/useWakeLock';
-import { LyricsWithChords } from '../../songbook/components/LyricsWithChords';
-
+import { LyricsWithMusicianNotes } from '../components/LyricsWithMusicianNotes';
 import { fetchPerformance } from '../api';
+import { notesFromItem } from '../performNotes';
 import { studioSetlistDetailPath, useStudioModuleSurface } from '../studioPaths';
 
 export function PerformPage() {
@@ -216,11 +216,12 @@ export function PerformPage() {
       </div>
 
       <div ref={scrollRef} className="min-h-0 flex-1 overflow-auto bg-stone-50 px-4 py-5">
-        <LyricsWithChords
-          text={body}
+        <LyricsWithMusicianNotes
+          content={body}
+          notes={notesFromItem(current?.musician_notes)}
           transposeSemitones={transpose}
           chordTone="light"
-          className="font-sans text-lg leading-relaxed text-stone-900 md:text-xl"
+          className="font-sans text-lg text-stone-900 md:text-xl"
         />
       </div>
 

@@ -39,17 +39,22 @@ export function SetlistsPage() {
       : '';
 
   return (
-    <div className={['mx-auto max-w-2xl space-y-6', pageCard].filter(Boolean).join(' ')}>
+    <div className={['mx-auto max-w-2xl space-y-8', pageCard].filter(Boolean).join(' ')}>
       <header className="space-y-2 border-b border-stone-200 pb-5">
         <h1 className="text-xl font-bold text-stone-900">Сетлисты</h1>
         <p className="text-sm leading-relaxed text-stone-600">
-          Программа служения или репетиции: укажите название и при желании дату, нажмите «Создать» — откроется
-          страница, где из песенника добавляются песни по одной. Оттуда же доступен режим выступления и PDF.
+          <span className="font-medium text-stone-800">Шаг 1.</span> создайте программу здесь.{' '}
+          <span className="font-medium text-stone-800">Шаг 2.</span> на следующей странице добавьте песни из
+          песенника, при необходимости включите «моя версия», затем откройте выступление или PDF.
         </p>
       </header>
 
+      <section className="space-y-3" aria-labelledby="setlists-new-heading">
+        <h2 id="setlists-new-heading" className="text-sm font-semibold text-stone-900">
+          Новая программа
+        </h2>
       <div className="rounded-xl border border-stone-200 bg-stone-50/80 p-4">
-        <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-stone-500">Новый сетлист</p>
+        <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-stone-500">Форма</p>
         <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
           <input
             className="flex-1 rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm text-stone-900 outline-none placeholder:text-stone-400 focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
@@ -73,7 +78,12 @@ export function SetlistsPage() {
           </button>
         </div>
       </div>
+      </section>
 
+      <section className="space-y-3" aria-labelledby="setlists-list-heading">
+        <h2 id="setlists-list-heading" className="text-sm font-semibold text-stone-900">
+          Ваши сетлисты
+        </h2>
       <ul className="space-y-2">
         {(q.data ?? []).length === 0 && (
           <li className="rounded-xl border border-dashed border-stone-300 bg-stone-50 px-4 py-8 text-center text-sm text-stone-600">
@@ -114,6 +124,7 @@ export function SetlistsPage() {
           </li>
         ))}
       </ul>
+      </section>
     </div>
   );
 }

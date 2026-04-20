@@ -1,5 +1,5 @@
 import { useMutation } from '@tanstack/react-query';
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   LuArrowLeft,
   LuArrowRight,
@@ -40,6 +40,7 @@ export function AddSongPage() {
 
   const [step, setStep] = useState(1);
   const [importOpen, setImportOpen] = useState(false);
+  const importAutoOpened = useRef(false);
   const [rawPaste, setRawPaste] = useState('');
   const [content, setContent] = useState('');
   const [title, setTitle] = useState('');
@@ -55,6 +56,12 @@ export function AddSongPage() {
   const [keyHint, setKeyHint] = useState<string | null>(null);
 
   const applyConvert = useCallback((src: string) => convertToChordPro(src), []);
+
+  useEffect(() => {
+    if (step !== 1 || importAutoOpened.current) return;
+    importAutoOpened.current = true;
+    setImportOpen(true);
+  }, [step]);
 
   const theme = isStudio
     ? {
@@ -238,7 +245,7 @@ export function AddSongPage() {
 
       {/* Stepper */}
       <ol className="flex flex-wrap gap-2">
-        {(['Умный импорт', 'Редактор и превью', 'Метаданные'] as const).map((label, i) => {
+        {(['Источник текста', 'Редактор и превью', 'Метаданные'] as const).map((label, i) => {
           const n = i + 1;
           const active = step === n;
           return (
@@ -260,12 +267,10 @@ export function AddSongPage() {
 
       {step === 1 && (
         <section className="space-y-4">
-          <p className={`text-sm ${theme.muted}`}>
-            Откройте окно импорта: вставьте текст с аккордами над строками или перетащите файл. Используется{' '}
-            <code className={isStudio ? 'text-sky-300' : 'rounded bg-stone-100 px-1 text-stone-800'}>
-              convertToChordPro
-            </code>{' '}
-            → ChordPro <code className={isStudio ? 'text-sky-300' : ''}>[Am]</code>.
+          <p className={`text-sm leading-relaxed ${theme.muted}`}>
+            Окно импорта открывается автоматически: можно вставить текст, выбрать <strong className="font-medium">PDF</strong> с
+            текстовым слоем или указать <strong className="font-medium">прямую ссылку</strong> на .txt / ChordPro в интернете.
+            После вставки нажмите «Далее» — откроется редактор и превью.
           </p>
           <div className={`rounded-2xl border p-6 ${theme.card}`}>
             <button
@@ -274,13 +279,13 @@ export function AddSongPage() {
               className={`inline-flex w-full items-center justify-center gap-2 rounded-xl px-5 py-4 text-sm font-semibold sm:w-auto ${theme.primaryBtn}`}
             >
               <LuUpload className="h-5 w-5" />
-              Импорт из текста
+              Открыть окно импорта снова
             </button>
             <p className={`mt-4 text-sm ${theme.muted}`}>
               {(content.trim() || rawPaste.trim()) && (
                 <span className="text-emerald-500">Текст загружен — можно переходить к правке.</span>
               )}
-              {!content.trim() && !rawPaste.trim() && 'Сначала импортируйте текст или откройте окно позже на шаге 2.'}
+              {!content.trim() && !rawPaste.trim() && 'Пока текста нет — завершите импорт в окне или откройте его кнопкой выше.'}
             </p>
           </div>
           <div className="flex justify-end">
@@ -305,7 +310,7 @@ export function AddSongPage() {
               className={`inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-medium ${theme.btnOutline}`}
             >
               <LuUpload className="h-4 w-4" />
-              Импорт из текста
+              Импорт (текст, PDF, ссылка)
             </button>
             <button
               type="button"
