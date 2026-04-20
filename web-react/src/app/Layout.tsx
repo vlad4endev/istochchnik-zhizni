@@ -39,6 +39,11 @@ import { AppAvatar } from '../components/AppAvatar';
 import { AccessibilityHeaderMenu } from '../components/accessibility/AccessibilityHeaderMenu';
 import { CoordinatorDashboardNoteFab } from '../features/dashboard/components/CoordinatorDashboardNoteFab';
 import { apiClient } from '../lib/apiClient';
+import {
+  canRoleAccessSection,
+  fetchSectionVisibilitySettingsPublic,
+  type AppSectionId,
+} from '../features/settings/sectionVisibilityApi';
 
 type NavItem = {
   to: string;
@@ -46,16 +51,17 @@ type NavItem = {
   Icon: IconType;
   adminOnly?: boolean;
   studioOnly?: boolean;
+  sectionId?: AppSectionId;
 };
 
 const NAV_ITEMS: NavItem[] = [
   /** Контурные Lucide — не путать с цветными эмодзи / Font Awesome «картинками». */
-  { to: '/dashboard', label: 'Главная', Icon: LuLayoutDashboard },
-  { to: '/prayer', label: 'Молитва', Icon: LuChurch },
-  { to: '/songbook', label: 'Песенник', Icon: LuMusic2 },
-  { to: '/studio', label: 'Студия', Icon: LuDisc3, studioOnly: true },
-  { to: '/sermons', label: 'Проповеди', Icon: LuMic },
-  { to: '/messenger', label: 'Чаты', Icon: LuMessageCircle },
+  { to: '/dashboard', label: 'Главная', Icon: LuLayoutDashboard, sectionId: 'dashboard' },
+  { to: '/prayer', label: 'Молитва', Icon: LuChurch, sectionId: 'prayer' },
+  { to: '/songbook', label: 'Песенник', Icon: LuMusic2, sectionId: 'songbook' },
+  { to: '/studio', label: 'Студия', Icon: LuDisc3, studioOnly: true, sectionId: 'studio' },
+  { to: '/sermons', label: 'Проповеди', Icon: LuMic, sectionId: 'sermons' },
+  { to: '/messenger', label: 'Чаты', Icon: LuMessageCircle, sectionId: 'messenger' },
   // { to: '/broadcast', label: 'Трансляции', Icon: LuTv },
   { to: '/admin', label: 'Админ', Icon: LuShield, adminOnly: true },
 ];
@@ -300,6 +306,12 @@ export function Layout() {
   const pendingDeliveries = pendingDeliveriesQ.data ?? 0;
   const activityBadgeTotal = Math.min(99, unreadMessages + pendingDeliveries);
   const role = useAuthStore((s) => s.role);
+  const sectionVisibilityQ = useQuery({
+    queryKey: ['settings', 'sections', 'visibility'],
+    queryFn: fetchSectionVisibilitySettingsPublic,
+    staleTime: 30_000,
+    enabled: Boolean(token),
+  });
   const logout = useAuthStore((s) => s.logout);
   const updatePrompt = useServiceWorkerUpdate({ showPrompt: true });
   const [navCollapsed, setNavCollapsed] = useState(false);
@@ -330,7 +342,9 @@ export function Layout() {
         : NAV_ITEMS;
   const items = navBase.filter(
     (item) =>
-      (!item.adminOnly || isAdmin) && (!item.studioOnly || canAccessStudioRole(role)),
+      (!item.adminOnly || isAdmin) &&
+      (!item.studioOnly || canAccessStudioRole(role)) &&
+      (!item.sectionId || isAdmin || canRoleAccessSection(sectionVisibilityQ.data, item.sectionId, role)),
   );
   const sidebarItems = items;
   const mobileItems = items;

@@ -1,0 +1,83 @@
+import { apiClient } from '../../lib/apiClient';
+
+export const APP_SECTION_IDS = [
+  'dashboard',
+  'prayer',
+  'songbook',
+  'studio',
+  'sermons',
+  'messenger',
+] as const;
+export type AppSectionId = (typeof APP_SECTION_IDS)[number];
+
+export const APP_ROLE_IDS = ['member', 'musician', 'editor', 'admin'] as const;
+export type AppRole = (typeof APP_ROLE_IDS)[number];
+
+export interface SectionVisibilityRule {
+  enabled: boolean;
+  roles: AppRole[];
+}
+
+export type SectionVisibilityMap = Record<AppSectionId, SectionVisibilityRule>;
+
+export interface SectionVisibilitySettingsPublic {
+  sections: SectionVisibilityMap;
+}
+
+export interface SectionVisibilitySettingsAdmin extends SectionVisibilitySettingsPublic {
+  role_options: { id: AppRole; label: string }[];
+  section_options: { id: AppSectionId; label: string }[];
+}
+
+export function appRoleLabel(role: AppRole): string {
+  if (role === 'admin') return 'Администратор';
+  if (role === 'editor') return 'Редактор';
+  if (role === 'musician') return 'Музыкант';
+  return 'Участник';
+}
+
+export function appSectionLabel(section: AppSectionId): string {
+  if (section === 'dashboard') return 'Главная';
+  if (section === 'prayer') return 'Молитва';
+  if (section === 'songbook') return 'Песенник';
+  if (section === 'studio') return 'Студия';
+  if (section === 'sermons') return 'Проповеди';
+  return 'Чаты';
+}
+
+export function normalizeAppRole(raw: string | null | undefined): AppRole {
+  const value = (raw ?? '').trim().toLowerCase();
+  if (value === 'admin' || value === 'editor' || value === 'musician') {
+    return value;
+  }
+  return 'member';
+}
+
+export async function fetchSectionVisibilitySettingsPublic(): Promise<SectionVisibilitySettingsPublic> {
+  const { data } = await apiClient.get<SectionVisibilitySettingsPublic>('/api/settings/sections');
+  return data;
+}
+
+export async function fetchSectionVisibilitySettingsAdmin(): Promise<SectionVisibilitySettingsAdmin> {
+  const { data } = await apiClient.get<SectionVisibilitySettingsAdmin>('/api/settings/sections/admin');
+  return data;
+}
+
+export async function patchSectionVisibilitySettings(body: {
+  sections: Partial<Record<AppSectionId, Partial<SectionVisibilityRule>>>;
+}): Promise<SectionVisibilitySettingsPublic> {
+  const { data } = await apiClient.patch<SectionVisibilitySettingsPublic>('/api/settings/sections', body);
+  return data;
+}
+
+export function canRoleAccessSection(
+  settings: SectionVisibilitySettingsPublic | undefined,
+  sectionId: AppSectionId,
+  roleRaw: string | null | undefined,
+): boolean {
+  if (!settings) return true;
+  const role = normalizeAppRole(roleRaw);
+  const rule = settings.sections[sectionId];
+  if (!rule || !rule.enabled) return false;
+  return rule.roles.includes(role);
+}

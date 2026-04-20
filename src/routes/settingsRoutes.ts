@@ -10,6 +10,11 @@ import {
   patchNotificationSettings,
 } from '../controllers/notificationSettingsController';
 import { getAppLogsAdmin } from '../controllers/appLogController';
+import {
+  getSectionVisibilitySettingsAdmin,
+  getSectionVisibilitySettingsPublic,
+  patchSectionVisibilitySettingsHandler,
+} from '../controllers/sectionVisibilitySettingsController';
 
 const router = Router();
 
@@ -22,5 +27,8 @@ router.get('/logs/admin', getAppLogsAdmin);
 router.get('/ai/admin', getAiSettingsAdminHandler);
 router.patch('/ai', patchAiSettingsHandler);
 router.post('/ai/test', postAiTestHandler);
+router.get('/sections', getSectionVisibilitySettingsPublic);
+router.get('/sections/admin', getSectionVisibilitySettingsAdmin);
+router.patch('/sections', patchSectionVisibilitySettingsHandler);
 
 export default router;

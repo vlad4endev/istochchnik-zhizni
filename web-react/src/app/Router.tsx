@@ -21,6 +21,7 @@ import {
   RequireCatalogModerator,
   RequireFullMember,
   RequireMessengerAccess,
+  RequireSectionAccess,
   RequireStudioAccess,
   RouteFallback,
 } from './routeGuards';
@@ -126,11 +127,13 @@ export function AppRouter() {
           path="studio"
           element={
             <RequireFullMember>
-              <RequireStudioAccess>
-                <Suspense fallback={<RouteFallback />}>
-                  <StudioLayout />
-                </Suspense>
-              </RequireStudioAccess>
+              <RequireSectionAccess sectionId="studio">
+                <RequireStudioAccess>
+                  <Suspense fallback={<RouteFallback />}>
+                    <StudioLayout />
+                  </Suspense>
+                </RequireStudioAccess>
+              </RequireSectionAccess>
             </RequireFullMember>
           }
         >
@@ -198,12 +201,21 @@ export function AppRouter() {
 
         <Route element={<Layout />}>
           <Route index element={<Navigate to="/dashboard" replace />} />
-          <Route path="dashboard" element={<DashboardPage />} />
+          <Route
+            path="dashboard"
+            element={
+              <RequireSectionAccess sectionId="dashboard">
+                <DashboardPage />
+              </RequireSectionAccess>
+            }
+          />
           <Route
             path="prayer"
           element={
             <RequireFullMember>
-              <DailyPrayerPage />
+              <RequireSectionAccess sectionId="prayer">
+                <DailyPrayerPage />
+              </RequireSectionAccess>
             </RequireFullMember>
           }
         />
@@ -211,9 +223,11 @@ export function AppRouter() {
           path="messenger/*"
           element={
             <RequireMessengerAccess>
-              <Suspense fallback={<RouteFallback />}>
-                <MessengerRoutes />
-              </Suspense>
+              <RequireSectionAccess sectionId="messenger">
+                <Suspense fallback={<RouteFallback />}>
+                  <MessengerRoutes />
+                </Suspense>
+              </RequireSectionAccess>
             </RequireMessengerAccess>
           }
         />
@@ -229,7 +243,9 @@ export function AppRouter() {
           path="sermons"
           element={
             <RequireFullMember>
-              <PodcastsPage />
+              <RequireSectionAccess sectionId="sermons">
+                <PodcastsPage />
+              </RequireSectionAccess>
             </RequireFullMember>
           }
         />
@@ -253,7 +269,9 @@ export function AppRouter() {
           path="songbook"
           element={
             <RequireFullMember>
-              <SongbookLayout />
+              <RequireSectionAccess sectionId="songbook">
+                <SongbookLayout />
+              </RequireSectionAccess>
             </RequireFullMember>
           }
         >

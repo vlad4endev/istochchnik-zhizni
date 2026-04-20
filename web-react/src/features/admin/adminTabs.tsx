@@ -7,6 +7,7 @@ import {
   LuHistory,
   LuInbox,
   LuPalette,
+  LuPanelsTopLeft,
   LuSend,
   LuSparkles,
   LuUsersRound,
@@ -20,6 +21,7 @@ export interface AdminTabConfig {
     | 'events'
     | 'templates'
     | 'project'
+    | 'sections'
     | 'journal'
     | 'notifications'
     | 'telegram'
@@ -75,6 +77,13 @@ export const ADMIN_TABS: readonly AdminTabConfig[] = [
     short: 'Вид',
     description:
       'Название и логотип в меню хранятся только в этом браузере — тот же формат, что в мобильном приложении.',
+  },
+  {
+    id: 'sections',
+    label: 'Разделы приложения',
+    Icon: LuPanelsTopLeft,
+    short: 'Доступ',
+    description: 'Управление видимостью разделов приложения для ролей пользователей.',
   },
   {
     id: 'journal',

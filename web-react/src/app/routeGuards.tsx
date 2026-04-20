@@ -1,8 +1,14 @@
 import { type ReactNode } from 'react';
 import { Navigate, Outlet, useLocation } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 
 import { useAuthStore } from '../features/auth/authStore';
 import { canAccessStudioRole, canModerateSongCatalog } from '../features/auth/studioAccess';
+import {
+  canRoleAccessSection,
+  fetchSectionVisibilitySettingsPublic,
+  type AppSectionId,
+} from '../features/settings/sectionVisibilityApi';
 import { getAppVariant } from '../lib/appVariant';
 import { useAuthSessionReady } from '../hooks/useAuthSessionReady';
 
@@ -124,6 +130,31 @@ export function RequireCatalogModerator({ children }: { children: ReactNode }) {
   if (!canModerateSongCatalog(role)) {
     const fallback = location.pathname.startsWith('/studio/') ? '/studio/my-songs' : '/songbook';
     return <Navigate to={fallback} replace />;
+  }
+  return <>{children}</>;
+}
+
+export function RequireSectionAccess({
+  sectionId,
+  children,
+  fallbackPath = '/dashboard',
+}: {
+  sectionId: AppSectionId;
+  children: ReactNode;
+  fallbackPath?: string;
+}) {
+  const role = useAuthStore((s) => s.role);
+  const isAdmin = (role ?? 'member').toLowerCase() === 'admin';
+  const settingsQ = useQuery({
+    queryKey: ['settings', 'sections', 'visibility'],
+    queryFn: fetchSectionVisibilitySettingsPublic,
+    staleTime: 30_000,
+  });
+  if (isAdmin) return <>{children}</>;
+  if (settingsQ.isLoading) return <RouteFallback />;
+  const canAccess = canRoleAccessSection(settingsQ.data, sectionId, role);
+  if (!canAccess) {
+    return <Navigate to={fallbackPath} replace />;
   }
   return <>{children}</>;
 }
