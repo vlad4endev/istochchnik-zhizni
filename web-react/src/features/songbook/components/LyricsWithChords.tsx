@@ -1,8 +1,12 @@
 import { useMemo, useState } from 'react';
 
-import { normalizeSplitWordChordsInText } from '../addSong/chordProConversion';
+import {
+  normalizeDetachedChordBeforeCyrillicInText,
+  normalizeSplitWordChordsInText,
+} from '../addSong/chordProConversion';
 import { transposeBracketChords } from '../chordUtils';
 import { splitChordSegments } from '../utils/chordSegments';
+import { parseSectionTitle } from '../utils/sectionMarkers';
 import { ChordLine } from './ChordLine';
 import { ChordPopover } from './ChordPopover';
 
@@ -26,7 +30,7 @@ export function LyricsWithChords({
   const [openSymbol, setOpenSymbol] = useState<string | null>(null);
 
   const tText = useMemo(() => {
-    const fixed = normalizeSplitWordChordsInText(text);
+    const fixed = normalizeDetachedChordBeforeCyrillicInText(normalizeSplitWordChordsInText(text));
     return transposeBracketChords(fixed, transposeSemitones);
   }, [text, transposeSemitones]);
 
@@ -34,7 +38,13 @@ export function LyricsWithChords({
 
   const lyricsOnlyBody = useMemo(() => {
     return lines
-      .map((line) => splitChordSegments(line).map((s) => s.text).join(''))
+      .map((line) => {
+        const sec = parseSectionTitle(line);
+        if (sec !== null) return sec;
+        return splitChordSegments(line)
+          .map((s) => s.text)
+          .join('');
+      })
       .join('\n');
   }, [lines]);
 
@@ -50,6 +60,26 @@ export function LyricsWithChords({
     <>
       <div className={['leading-[2.35rem]', className].filter(Boolean).join(' ')}>
         {lines.map((line, lineIdx) => {
+          const secTitle = parseSectionTitle(line);
+          if (secTitle !== null) {
+            const bar =
+              chordTone === 'dark'
+                ? 'border-amber-400/80 text-amber-200/95'
+                : 'border-sky-600/70 text-sky-900';
+            return (
+              <div
+                key={lineIdx}
+                className={[
+                  'my-3 border-l-[3px] pl-3 text-sm font-bold uppercase tracking-wide first:mt-0',
+                  bar,
+                ].join(' ')}
+                role="heading"
+                aria-level={3}
+              >
+                {secTitle}
+              </div>
+            );
+          }
           const segments = splitChordSegments(line);
           return (
             <div key={lineIdx} className="block w-full">

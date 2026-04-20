@@ -15,7 +15,8 @@ import { canDeleteSongFromCatalog } from '../../auth/studioAccess';
 import { emitAppToast } from '../../../lib/uiFeedback';
 import { deleteSong, fetchSong } from '../api';
 import { convertToChordPro } from '../addSong/chordProConversion';
-import { SmartImportModal } from '../addSong/SmartImportModal';
+import { SmartImportModal, type SmartImportSourceTab } from '../addSong/SmartImportModal';
+import { SectionInsertToolbar } from '../components/SectionInsertToolbar';
 import { quickChordsForKey } from '../addSong/quickChords';
 import { fetchVersionForSong, saveVersion } from '../../studio/api';
 import { studioMySongsPath, getStudioModuleSurface } from '../../studio/studioPaths';
@@ -42,6 +43,7 @@ export function StudioEditor() {
   const selRef = useRef({ start: 0, end: 0 });
 
   const [importOpen, setImportOpen] = useState(false);
+  const [importInitialTab, setImportInitialTab] = useState<SmartImportSourceTab>('text');
   const [toolsOpen, setToolsOpen] = useState(false);
   const [rawPaste, setRawPaste] = useState('');
 
@@ -127,6 +129,32 @@ export function StudioEditor() {
     });
   };
 
+  const insertSectionMarkerLine = (markerOneLine: string) => {
+    const line = markerOneLine.trim();
+    const el = editorRef.current;
+    if (!el) {
+      setContent((c) => {
+        const base = c.length === 0 || c.endsWith('\n') ? c : `${c}\n`;
+        return `${base}${line}\n`;
+      });
+      return;
+    }
+    const { start, end } = selRef.current;
+    const v = el.value;
+    const before = v.slice(0, start);
+    const needsNl = before.length > 0 && !before.endsWith('\n');
+    const piece = `${needsNl ? '\n' : ''}${line}\n`;
+    const next = before + piece + v.slice(end);
+    setContent(next);
+    const pos = (before + piece).length;
+    requestAnimationFrame(() => {
+      if (!editorRef.current) return;
+      editorRef.current.focus();
+      editorRef.current.setSelectionRange(pos, pos);
+      selRef.current = { start: pos, end: pos };
+    });
+  };
+
   const handleSmartImport = ({ raw, chordPro }: { raw: string; chordPro: string }) => {
     setRawPaste(raw);
     setContent(chordPro);
@@ -187,9 +215,13 @@ export function StudioEditor() {
     >
       <SmartImportModal
         open={importOpen}
-        onClose={() => setImportOpen(false)}
+        onClose={() => {
+          setImportOpen(false);
+          setImportInitialTab('text');
+        }}
         onApply={handleSmartImport}
         initialRaw={rawPaste}
+        initialTab={importInitialTab}
         variant={importVariant}
       />
 
@@ -297,6 +329,23 @@ export function StudioEditor() {
                 <LuWand className="h-4 w-4" />
                 Конвертировать в ChordPro
               </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setToolsOpen(false);
+                  setImportInitialTab('pdf');
+                  setImportOpen(true);
+                }}
+                className={
+                  darkUi
+                    ? 'inline-flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl border border-slate-600 px-4 text-sm font-semibold text-slate-100 hover:bg-slate-800/80'
+                    : 'inline-flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl border border-slate-200 px-4 text-sm font-semibold text-slate-800 hover:bg-slate-50'
+                }
+              >
+                <LuUpload className="h-4 w-4" />
+                Импорт из PDF…
+              </button>
             </div>
           </div>
         </>
@@ -315,7 +364,10 @@ export function StudioEditor() {
         </h1>
         <button
           type="button"
-          onClick={() => setImportOpen(true)}
+          onClick={() => {
+            setImportInitialTab('text');
+            setImportOpen(true);
+          }}
           className={`inline-flex min-h-[44px] min-w-[44px] items-center justify-center ${shell.iconBtn}`}
           aria-label="Умный импорт"
         >
@@ -367,6 +419,8 @@ export function StudioEditor() {
         Ваш текст ниже — оригинал в каталоге не меняется, пока вы не сохраните и не удалите песню целиком.
       </p>
 
+      <SectionInsertToolbar dark={darkUi} onInsert={insertSectionMarkerLine} className="mb-3" />
+
       <textarea
         ref={editorRef}
         value={content}
@@ -375,7 +429,7 @@ export function StudioEditor() {
         onKeyUp={syncEditorSelection}
         onMouseUp={syncEditorSelection}
         className={`min-h-[min(70vh,520px)] w-full flex-1 resize-y rounded-2xl px-4 py-4 font-mono text-[15px] leading-relaxed outline-none ${shell.editor}`}
-        placeholder="ChordPro…"
+        placeholder={'ChordPro. Блоки: отдельной строкой {sec:Куплет 1} или кнопки над полем.'}
         spellCheck={false}
       />
 

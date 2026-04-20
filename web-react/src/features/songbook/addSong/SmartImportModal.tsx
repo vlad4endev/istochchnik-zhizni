@@ -6,19 +6,28 @@ import { convertToChordPro } from './chordProConversion';
 import { extractTextFromPdfBuffer } from './extractTextFromPdf';
 import { fetchImportUrlText } from '../api';
 
-type TabId = 'text' | 'pdf' | 'url';
+export type SmartImportSourceTab = 'text' | 'pdf' | 'url';
 
 type Props = {
   open: boolean;
   onClose: () => void;
   onApply: (payload: { raw: string; chordPro: string }) => void;
   initialRaw?: string;
+  /** С какой вкладки открыть окно (после сброса при открытии). */
+  initialTab?: SmartImportSourceTab;
   variant?: 'default' | 'studio';
 };
 
-export function SmartImportModal({ open, onClose, onApply, initialRaw = '', variant = 'default' }: Props) {
+export function SmartImportModal({
+  open,
+  onClose,
+  onApply,
+  initialRaw = '',
+  initialTab = 'text',
+  variant = 'default',
+}: Props) {
   const baseId = useId();
-  const [tab, setTab] = useState<TabId>('text');
+  const [tab, setTab] = useState<SmartImportSourceTab>('text');
   const [raw, setRaw] = useState(initialRaw);
   const [dropActive, setDropActive] = useState(false);
   const [urlInput, setUrlInput] = useState('');
@@ -36,7 +45,7 @@ export function SmartImportModal({ open, onClose, onApply, initialRaw = '', vari
   useEffect(() => {
     if (!open) return;
     setRaw(initialRaw);
-    setTab('text');
+    setTab(initialTab);
     setUrlInput('');
     setUrlError(null);
     setUrlBusy(false);
@@ -44,7 +53,7 @@ export function SmartImportModal({ open, onClose, onApply, initialRaw = '', vari
     setPdfBusy(false);
     setPdfName(null);
     setPdfBuffer(null);
-  }, [open, initialRaw]);
+  }, [open, initialRaw, initialTab]);
 
   if (!open) return null;
 
@@ -170,7 +179,7 @@ export function SmartImportModal({ open, onClose, onApply, initialRaw = '', vari
     onClose();
   };
 
-  const tabBtn = (id: TabId, label: string, Icon: typeof LuFileText) => (
+  const tabBtn = (id: SmartImportSourceTab, label: string, Icon: typeof LuFileText) => (
     <button
       key={id}
       type="button"

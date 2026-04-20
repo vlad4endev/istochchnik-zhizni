@@ -184,6 +184,74 @@ export function normalizeSplitWordChordsInText(text: string): string {
 }
 
 /**
+ * Латинский аккорд слепился с кириллицей без скобок («AmТы», «Gко») — типичный сбой PDF/колонок.
+ * Обрабатываем только вне `[...]`; однобуквенный «C» не трогаем (конфликт со словами вроде «Составил»).
+ */
+export function normalizeDetachedChordBeforeCyrillicInLine(line: string): string {
+  const singleRootOk = (tok: string) => /^[ABDEFG]$/i.test(tok);
+
+  let out = '';
+  let i = 0;
+  while (i < line.length) {
+    const ch = line[i];
+    if (ch === '[') {
+      const close = line.indexOf(']', i + 1);
+      if (close === -1) {
+        out += line.slice(i);
+        break;
+      }
+      out += line.slice(i, close + 1);
+      i = close + 1;
+      continue;
+    }
+
+    const prev = i > 0 ? line[i - 1]! : '';
+    if (/[A-Za-z\u0400-\u04FF#b0-9.]/.test(prev)) {
+      out += ch;
+      i += 1;
+      continue;
+    }
+
+    if (!/[A-G]/i.test(ch)) {
+      out += ch;
+      i += 1;
+      continue;
+    }
+
+    let bestLen = 0;
+    const maxLen = Math.min(14, line.length - i);
+    for (let len = maxLen; len >= 1; len--) {
+      const tok = line.slice(i, i + len);
+      let j = i + len;
+      while (j < line.length && line[j] === ' ') j++;
+      const after = line[j] ?? '';
+      if (!/[А-Яа-яЁё]/.test(after)) continue;
+      if (len === 1 && /^C$/i.test(tok)) continue;
+      if (len === 1 && !singleRootOk(tok)) continue;
+      if (!isChordToken(tok)) continue;
+      bestLen = len;
+      break;
+    }
+
+    if (bestLen > 0) {
+      const tok = line.slice(i, i + bestLen);
+      const norm = normalizeChordSymbolForCatalog(tok);
+      out += `[${norm ?? tok}]`;
+      i += bestLen;
+      continue;
+    }
+
+    out += ch;
+    i += 1;
+  }
+  return out;
+}
+
+export function normalizeDetachedChordBeforeCyrillicInText(text: string): string {
+  return text.split('\n').map((ln) => normalizeDetachedChordBeforeCyrillicInLine(ln)).join('\n');
+}
+
+/**
  * Слияние по позициям символов: аккорды «над» буквами в моноширинной вёрстке.
  */
 function mergeByColumnPositions(chordLine: string, lyricLine: string): string | null {
@@ -303,7 +371,9 @@ export function normalizeChordProBracketsInText(text: string): string {
  */
 export function convertToChordPro(raw: string): string {
   const stacked = convertStackedChordsToChordPro(raw);
-  return normalizeChordProBracketsInText(stacked);
+  const splitFixed = normalizeSplitWordChordsInText(stacked);
+  const detached = normalizeDetachedChordBeforeCyrillicInText(splitFixed);
+  return normalizeChordProBracketsInText(detached);
 }
 
 /**

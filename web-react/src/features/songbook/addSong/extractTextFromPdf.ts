@@ -3,31 +3,118 @@ import pdfWorkerSrc from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 
 pdfjs.GlobalWorkerOptions.workerSrc = pdfWorkerSrc;
 
+type Piece = {
+  str: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  hasEOL: boolean;
+};
+
+function isRenderableTextItem(item: unknown): item is {
+  str: string;
+  transform: number[];
+  width: number;
+  height: number;
+  hasEOL: boolean;
+} {
+  if (!item || typeof item !== 'object') return false;
+  const o = item as Record<string, unknown>;
+  return typeof o.str === 'string' && Array.isArray(o.transform) && (o.transform as number[]).length >= 6;
+}
+
+function piecesFromPage(textContent: { items: unknown[] }): Piece[] {
+  const out: Piece[] = [];
+  for (const item of textContent.items) {
+    if (!isRenderableTextItem(item)) continue;
+    const s = item.str.replace(/\u00a0/g, ' ');
+    if (!s.trim()) continue;
+    const t = item.transform;
+    const x = t[4] as number;
+    const y = t[5] as number;
+    const h = Math.abs(item.height || (t[3] as number) || 10);
+    const w = Math.abs(item.width || 0);
+    out.push({
+      str: s,
+      x,
+      y,
+      w: w > 0 ? w : h * 0.5 * Math.max(1, [...s].length),
+      h,
+      hasEOL: Boolean(item.hasEOL),
+    });
+  }
+  return out;
+}
+
+function median(nums: number[]): number {
+  if (nums.length === 0) return 8;
+  const s = [...nums].sort((a, b) => a - b);
+  const m = Math.floor(s.length / 2);
+  return s.length % 2 ? s[m]! : (s[m - 1]! + s[m]!) / 2;
+}
+
+/** Одна визуальная строка: крупные зазоры → таб (аккорды над текстом в PDF). */
+function mergeLinePieces(row: Piece[], gapForTab: number): string {
+  row.sort((a, b) => a.x - b.x);
+  let s = '';
+  let lastEnd = -Infinity;
+  for (let i = 0; i < row.length; i++) {
+    const p = row[i]!;
+    if (i > 0 && lastEnd > -Infinity) {
+      const gap = p.x - lastEnd;
+      if (gap >= gapForTab) s += '\t';
+      else if (!s.endsWith('\n') && !s.endsWith('\t')) s += ' ';
+    }
+    s += p.str;
+    lastEnd = p.x + p.w;
+    if (p.hasEOL) s += '\n';
+  }
+  return s.replace(/[ \t]+\n/g, '\n').trimEnd();
+}
+
 /**
- * Извлекает сырой текст из PDF (как в «копировать текст» в просмотрщике).
- * Порядок строк может отличаться от оригинальной вёрстки — дальше помогает convertToChordPro.
+ * Восстанавливает строки по координатам (вместо склейки всех фрагментов в одну линию).
+ */
+function layoutPageLines(pieces: Piece[]): string {
+  if (pieces.length === 0) return '';
+  const heights = pieces.map((p) => p.h);
+  const lineTol = Math.min(12, Math.max(2.2, median(heights) * 0.5));
+  const gapForTab = Math.max(14, median(heights) * 3.8);
+
+  const byY = [...pieces].sort((a, b) => b.y - a.y);
+  const rows: Piece[][] = [];
+  for (const p of byY) {
+    const last = rows[rows.length - 1];
+    if (!last) {
+      rows.push([p]);
+      continue;
+    }
+    const refY = last.reduce((s, q) => s + q.y, 0) / last.length;
+    if (Math.abs(p.y - refY) <= lineTol) last.push(p);
+    else rows.push([p]);
+  }
+
+  return rows.map((r) => mergeLinePieces(r, gapForTab)).join('\n');
+}
+
+/**
+ * Извлекает текст из PDF с учётом положения фрагментов (строки и табы между колонками).
+ * Нужен текстовый слой в PDF (не чистый скан без OCR).
  */
 export async function extractTextFromPdfBuffer(buffer: ArrayBuffer): Promise<string> {
   const data = buffer.byteLength === 0 ? new Uint8Array() : new Uint8Array(buffer);
   const loadingTask = pdfjs.getDocument({ data, useSystemFonts: true });
   const pdf = await loadingTask.promise;
-  const chunks: string[] = [];
+  const pageTexts: string[] = [];
 
   for (let i = 1; i <= pdf.numPages; i++) {
     const page = await pdf.getPage(i);
     const textContent = await page.getTextContent();
-    const line = textContent.items
-      .map((item) => {
-        if (item && typeof item === 'object' && 'str' in item && typeof item.str === 'string') {
-          return item.str;
-        }
-        return '';
-      })
-      .join(' ')
-      .replace(/\s+/g, ' ')
-      .trim();
-    if (line) chunks.push(line);
+    const pieces = piecesFromPage(textContent);
+    const text = layoutPageLines(pieces);
+    if (text.trim()) pageTexts.push(text);
   }
 
-  return chunks.join('\n\n').trim();
+  return pageTexts.join('\n\n').trim();
 }

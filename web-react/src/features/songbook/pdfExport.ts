@@ -1,6 +1,7 @@
 import { jsPDF } from 'jspdf';
 
 import { transposeBracketChords } from './chordUtils';
+import { sectionLinesToPlainHeadings } from './utils/sectionMarkers';
 
 export function exportSongPdf(opts: {
   title: string;
@@ -9,7 +10,7 @@ export function exportSongPdf(opts: {
   transposeSemitones: number;
   fileName: string;
 }): void {
-  const body = transposeBracketChords(opts.body, opts.transposeSemitones);
+  const body = sectionLinesToPlainHeadings(transposeBracketChords(opts.body, opts.transposeSemitones));
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
   const margin = 18;
   const pageW = 210;
@@ -69,7 +70,7 @@ export function exportSetlistPdf(opts: {
   const lineH = 5.5;
 
   for (const song of opts.songs) {
-    const body = transposeBracketChords(song.body, song.transpose);
+    const body = sectionLinesToPlainHeadings(transposeBracketChords(song.body, song.transpose));
     doc.setFont('helvetica', 'bold');
     if (y > bottom - 20) {
       doc.addPage();

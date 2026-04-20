@@ -15,8 +15,9 @@ import { useAuthStore } from '../../auth/authStore';
 import { canModerateSongCatalog } from '../../auth/studioAccess';
 import { createSong, fetchYoutubeOembed } from '../api';
 import { LyricsWithChords } from '../components/LyricsWithChords';
+import { SectionInsertToolbar } from '../components/SectionInsertToolbar';
 import { convertToChordPro } from '../addSong/chordProConversion';
-import { SmartImportModal } from '../addSong/SmartImportModal';
+import { SmartImportModal, type SmartImportSourceTab } from '../addSong/SmartImportModal';
 import { extractChordsFromText, guessKeyFromChords } from '../addSong/keyDetection';
 import { quickChordsForKey } from '../addSong/quickChords';
 
@@ -40,6 +41,7 @@ export function AddSongPage() {
 
   const [step, setStep] = useState(1);
   const [importOpen, setImportOpen] = useState(false);
+  const [importInitialTab, setImportInitialTab] = useState<SmartImportSourceTab>('text');
   const importAutoOpened = useRef(false);
   const [rawPaste, setRawPaste] = useState('');
   const [content, setContent] = useState('');
@@ -120,6 +122,32 @@ export function AddSongPage() {
       if (!editorRef.current) return;
       editorRef.current.focus();
       const pos = start + chord.length;
+      editorRef.current.setSelectionRange(pos, pos);
+      selRef.current = { start: pos, end: pos };
+    });
+  };
+
+  const insertSectionMarkerLine = (markerOneLine: string) => {
+    const line = markerOneLine.trim();
+    const el = editorRef.current;
+    if (!el) {
+      setContent((c) => {
+        const base = c.length === 0 || c.endsWith('\n') ? c : `${c}\n`;
+        return `${base}${line}\n`;
+      });
+      return;
+    }
+    const { start, end } = selRef.current;
+    const v = el.value;
+    const before = v.slice(0, start);
+    const needsNl = before.length > 0 && !before.endsWith('\n');
+    const piece = `${needsNl ? '\n' : ''}${line}\n`;
+    const next = before + piece + v.slice(end);
+    setContent(next);
+    const pos = (before + piece).length;
+    requestAnimationFrame(() => {
+      if (!editorRef.current) return;
+      editorRef.current.focus();
       editorRef.current.setSelectionRange(pos, pos);
       selRef.current = { start: pos, end: pos };
     });
@@ -223,9 +251,13 @@ export function AddSongPage() {
     <div className={`mx-auto max-w-6xl space-y-6 pb-24 ${theme.page}`}>
       <SmartImportModal
         open={importOpen}
-        onClose={() => setImportOpen(false)}
+        onClose={() => {
+          setImportOpen(false);
+          setImportInitialTab('text');
+        }}
         onApply={handleSmartImport}
         initialRaw={rawPaste}
+        initialTab={importInitialTab}
         variant={isStudio ? 'studio' : 'default'}
       />
 
@@ -273,14 +305,30 @@ export function AddSongPage() {
             После вставки нажмите «Далее» — откроется редактор и превью.
           </p>
           <div className={`rounded-2xl border p-6 ${theme.card}`}>
-            <button
-              type="button"
-              onClick={() => setImportOpen(true)}
-              className={`inline-flex w-full items-center justify-center gap-2 rounded-xl px-5 py-4 text-sm font-semibold sm:w-auto ${theme.primaryBtn}`}
-            >
-              <LuUpload className="h-5 w-5" />
-              Открыть окно импорта снова
-            </button>
+            <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+              <button
+                type="button"
+                onClick={() => {
+                  setImportInitialTab('text');
+                  setImportOpen(true);
+                }}
+                className={`inline-flex w-full items-center justify-center gap-2 rounded-xl px-5 py-4 text-sm font-semibold sm:w-auto ${theme.primaryBtn}`}
+              >
+                <LuUpload className="h-5 w-5" />
+                Импорт: текст / ссылка
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setImportInitialTab('pdf');
+                  setImportOpen(true);
+                }}
+                className={`inline-flex w-full items-center justify-center gap-2 rounded-xl border px-5 py-4 text-sm font-semibold sm:w-auto ${theme.btnOutline}`}
+              >
+                <LuUpload className="h-5 w-5" />
+                Импорт из PDF
+              </button>
+            </div>
             <p className={`mt-4 text-sm ${theme.muted}`}>
               {(content.trim() || rawPaste.trim()) && (
                 <span className="text-emerald-500">Текст загружен — можно переходить к правке.</span>
@@ -306,11 +354,25 @@ export function AddSongPage() {
           <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
-              onClick={() => setImportOpen(true)}
+              onClick={() => {
+                setImportInitialTab('text');
+                setImportOpen(true);
+              }}
               className={`inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-medium ${theme.btnOutline}`}
             >
               <LuUpload className="h-4 w-4" />
-              Импорт (текст, PDF, ссылка)
+              Импорт (текст, ссылка)
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setImportInitialTab('pdf');
+                setImportOpen(true);
+              }}
+              className={`inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-medium ${theme.btnOutline}`}
+            >
+              <LuUpload className="h-4 w-4" />
+              PDF
             </button>
             <button
               type="button"
@@ -326,6 +388,7 @@ export function AddSongPage() {
           <div className="grid gap-4 lg:grid-cols-2">
             <div>
               <p className={`mb-2 text-xs font-bold uppercase ${theme.muted}`}>Редактор</p>
+              <SectionInsertToolbar dark={isStudio} onInsert={insertSectionMarkerLine} className="mb-3" />
               <textarea
                 ref={editorRef}
                 value={content}
