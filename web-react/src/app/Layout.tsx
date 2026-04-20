@@ -1,6 +1,6 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import type { IconType } from 'react-icons';
 import {
   LuChevronLeft,
@@ -335,6 +335,17 @@ export function Layout() {
   const sidebarItems = items;
   const mobileItems = items;
 
+  const markAllDeliveriesOpened = useCallback(async () => {
+    if (!token) return;
+    try {
+      await apiClient.post('/api/notifications/deliveries/open-all');
+      void queryClient.invalidateQueries({ queryKey: UNREAD_DELIVERIES_QK });
+      window.dispatchEvent(new CustomEvent('app:notification-deliveries-changed'));
+    } catch {
+      /* ignore */
+    }
+  }, [token, queryClient]);
+
   async function handleLogout() {
     if (!window.confirm('Завершить текущую сессию?')) {
       return;
@@ -396,14 +407,15 @@ export function Layout() {
 
   useEffect(() => {
     if (!token) return;
+    void markAllDeliveriesOpened();
     const onVis = () => {
       if (document.visibilityState !== 'visible') return;
       void refreshUnread();
-      void queryClient.invalidateQueries({ queryKey: UNREAD_DELIVERIES_QK });
+      void markAllDeliveriesOpened();
     };
     document.addEventListener('visibilitychange', onVis);
     return () => document.removeEventListener('visibilitychange', onVis);
-  }, [token, refreshUnread, queryClient]);
+  }, [token, refreshUnread, markAllDeliveriesOpened]);
 
   useEffect(() => {
     const onDeliveries = () => {

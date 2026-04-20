@@ -67,25 +67,26 @@ self.addEventListener('push', function (event) {
   );
 });
 
+function markDeliveryOpenedById(deliveryIdRaw) {
+  const deliveryId =
+    typeof deliveryIdRaw === 'string'
+      ? deliveryIdRaw.trim()
+      : deliveryIdRaw != null
+        ? String(deliveryIdRaw).trim()
+        : '';
+  if (!(deliveryId && /^\d+$/.test(deliveryId))) {
+    return Promise.resolve();
+  }
+  return fetch(new URL('/api/notifications/deliveries/' + deliveryId + '/open', self.location.origin).href, {
+    method: 'POST',
+    credentials: 'include',
+    mode: 'same-origin',
+  }).catch(function () {});
+}
+
 self.addEventListener('notificationclick', function (event) {
   event.notification.close();
-
-  const rawDelivery = event.notification?.data?.deliveryId;
-  const deliveryId =
-    typeof rawDelivery === 'string'
-      ? rawDelivery.trim()
-      : rawDelivery != null
-        ? String(rawDelivery).trim()
-        : '';
-
-  const markDeliveryOpened =
-    deliveryId && /^\d+$/.test(deliveryId)
-      ? fetch(new URL('/api/notifications/deliveries/' + deliveryId + '/open', self.location.origin).href, {
-          method: 'POST',
-          credentials: 'include',
-          mode: 'same-origin',
-        }).catch(function () {})
-      : Promise.resolve();
+  const markDeliveryOpened = markDeliveryOpenedById(event.notification?.data?.deliveryId);
 
   // Handle explicit 'dismiss' action — всё равно снимаем запись с бейджа
   if (event.action === 'dismiss') {
@@ -124,6 +125,10 @@ self.addEventListener('notificationclick', function (event) {
       });
     }),
   );
+});
+
+self.addEventListener('notificationclose', function (event) {
+  event.waitUntil(markDeliveryOpenedById(event.notification?.data?.deliveryId));
 });
 
 // Handle browser rotating VAPID/subscription keys silently

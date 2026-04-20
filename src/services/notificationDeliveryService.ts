@@ -84,3 +84,17 @@ export async function markNotificationDeliveryOpened(
   );
   return Number(result.rowCount ?? 0) > 0;
 }
+
+export async function markAllNotificationDeliveriesOpened(memberId: number): Promise<number> {
+  const result = await query(
+    `
+    UPDATE member_notification_deliveries
+    SET opened_at = NOW()
+    WHERE member_id = $1
+      AND opened_at IS NULL
+      AND created_at > NOW() - INTERVAL '90 days'
+    `,
+    [memberId],
+  );
+  return Number(result.rowCount ?? 0);
+}

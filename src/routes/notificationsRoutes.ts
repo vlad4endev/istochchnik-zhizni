@@ -4,6 +4,7 @@ import { saveFcmToken } from '../services/fcmSubscriptionService';
 import {
   getUnreadNotificationDeliveryCount,
   insertMemberNotificationDelivery,
+  markAllNotificationDeliveriesOpened,
   markNotificationDeliveryOpened,
 } from '../services/notificationDeliveryService';
 import { removeSubscription, saveSubscription } from '../services/pushService';
@@ -177,6 +178,25 @@ router.post('/deliveries/:id/open', requireAuthSession, async (req: Request, res
     res.json({ ok });
   } catch (e) {
     console.error('[notifications] delivery open error:', e);
+    res.status(500).json({ error: 'Failed to update' });
+  }
+});
+
+/**
+ * POST /api/notifications/deliveries/open-all
+ * Помечает все непрочитанные доставки «открытыми» (когда пользователь вернулся в приложение).
+ */
+router.post('/deliveries/open-all', requireAuthSession, async (req: Request, res: Response) => {
+  const memberId = (req as AuthReq).authUserId;
+  if (!memberId) {
+    res.status(401).json({ error: 'Unauthorized' });
+    return;
+  }
+  try {
+    const updated = await markAllNotificationDeliveriesOpened(memberId);
+    res.json({ ok: true, updated });
+  } catch (e) {
+    console.error('[notifications] deliveries open-all error:', e);
     res.status(500).json({ error: 'Failed to update' });
   }
 });

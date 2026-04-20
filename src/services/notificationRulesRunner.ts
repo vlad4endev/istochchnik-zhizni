@@ -26,6 +26,17 @@ function hashStr(s: string): string {
 
 const lastFiredPeriod = new Map<string, string>();
 
+function applyBodyTemplate(template: string, vars: Record<string, string>): string {
+  return template.replace(/\{([a-zA-Z0-9_]+)\}/g, (_all, key: string) => vars[key] ?? '');
+}
+
+function resolveBody(rule: NotificationRule, fallback: string, vars?: Record<string, string>): string {
+  const raw = (rule.customBody ?? '').trim();
+  if (!raw) return fallback;
+  const rendered = vars ? applyBodyTemplate(raw, vars).trim() : raw;
+  return rendered || fallback;
+}
+
 function repeatMatches(rule: NotificationRule, z: ZonedNow): boolean {
   switch (rule.repeat) {
     case 'day':
@@ -102,6 +113,7 @@ async function notifyMissingPrayerNeedForDate(
   dateYmd: string,
   title: string,
   bodyType: 'tomorrow' | 'today',
+  customBody?: string,
 ): Promise<void> {
   const dayData = await getPrayerDataByDate(dateYmd);
   const assigned = dayData.members[0];
@@ -120,10 +132,14 @@ async function notifyMissingPrayerNeedForDate(
     if (ownerId != null) recipients.add(ownerId);
   }
 
-  const body =
+  const fallbackBody =
     bodyType === 'tomorrow'
       ? `${memberName}: поле нужды на ${dateYmd} не заполнено.`
       : `${memberName}: поле нужды на сегодня (${dateYmd}) всё ещё пустое.`;
+  const custom = (customBody ?? '').trim();
+  const body = custom
+    ? applyBodyTemplate(custom, { memberName, date: dateYmd }).trim() || fallbackBody
+    : fallbackBody;
   const pushType =
     bodyType === 'tomorrow' ? 'missing_prayer_need_tomorrow' : 'missing_prayer_need_today_escalation';
 
@@ -171,9 +187,10 @@ async function handleRule(rule: NotificationRule, doc: NotificationSettingsDocum
 
   switch (rule.id) {
     case 'prayer_reminder': {
+      const todayYmd = ymdFromZoned(z);
       await pushToAllMembers(
         'Время молитвы',
-        'Напоминание: уделите время молитве за нужды церкви.',
+        resolveBody(rule, 'Напоминание: уделите время молитве за нужды церкви.', { date: todayYmd }),
         '/prayer',
       );
       return;
@@ -181,9 +198,13 @@ async function handleRule(rule: NotificationRule, doc: NotificationSettingsDocum
     case 'birthday_today': {
       const names = await getBirthdayNamesForCalendarDay(z.month, z.day);
       if (names.length === 0) return;
+      const namesJoined = names.join(', ');
       await pushToAllMembers(
         'Дни рождения сегодня',
-        names.join(', '),
+        resolveBody(rule, namesJoined, {
+          names: namesJoined,
+          date: ymdFromZoned(z),
+        }),
         '/dashboard',
       );
       return;
@@ -191,9 +212,10 @@ async function handleRule(rule: NotificationRule, doc: NotificationSettingsDocum
     case 'birthday_week': {
       const names = await getBirthdayNamesForWeekAroundDate(z.year, z.month, z.day);
       if (names.length === 0) return;
+      const namesJoined = names.join(', ');
       await pushToAllMembers(
         'Дни рождения на этой неделе',
-        names.join(', '),
+        resolveBody(rule, namesJoined, { names: namesJoined }),
         '/dashboard',
       );
       return;
@@ -215,7 +237,11 @@ async function handleRule(rule: NotificationRule, doc: NotificationSettingsDocum
       }
       if (!code) return;
       if (rs.lastBroadcastHash === h) return;
-      await pushToAllMembers('Трансляция', 'Обновлён код плеера — эфир доступен в приложении.', '/dashboard');
+      await pushToAllMembers(
+        'Трансляция',
+        resolveBody(rule, 'Обновлён код плеера — эфир доступен в приложении.'),
+        '/dashboard',
+      );
       await patchNotificationRuntimeState((d) => ({
         ...d,
         runtimeState: { ...d.runtimeState, lastBroadcastHash: h },
@@ -237,7 +263,7 @@ async function handleRule(rule: NotificationRule, doc: NotificationSettingsDocum
       if (rs.lastApiBuildStamp === stamp) return;
       await pushToAllMembers(
         'Обновление',
-        'Вышла новая версия приложения. Обновите страницу или установите свежую сборку.',
+        resolveBody(rule, 'Вышла новая версия приложения. Обновите страницу или установите свежую сборку.'),
         '/dashboard',
       );
       await patchNotificationRuntimeState((d) => ({
@@ -257,7 +283,7 @@ async function handleRule(rule: NotificationRule, doc: NotificationSettingsDocum
         return;
       }
       if (rs.lastSermonEpisodeId === epId) return;
-      await pushToAllMembers('Новая проповедь', 'В ленте появилась новая запись.', '/sermons');
+      await pushToAllMembers('Новая проповедь', resolveBody(rule, 'В ленте появилась новая запись.'), '/sermons');
       await patchNotificationRuntimeState((d) => ({
         ...d,
         runtimeState: { ...d.runtimeState, lastSermonEpisodeId: epId },
@@ -275,7 +301,11 @@ async function handleRule(rule: NotificationRule, doc: NotificationSettingsDocum
         return;
       }
       if (rs.lastEventCreatedAtIso === created) return;
-      await pushToAllMembers('Новое событие', 'В календаре церкви добавлено или обновлено событие.', '/dashboard');
+      await pushToAllMembers(
+        'Новое событие',
+        resolveBody(rule, 'В календаре церкви добавлено или обновлено событие.'),
+        '/dashboard',
+      );
       await patchNotificationRuntimeState((d) => ({
         ...d,
         runtimeState: { ...d.runtimeState, lastEventCreatedAtIso: created },
@@ -291,7 +321,11 @@ async function handleRule(rule: NotificationRule, doc: NotificationSettingsDocum
       const body = participantsList
         ? `Участники: ${participantsList}`
         : 'На следующую неделю нет распределённых участников.';
-      await pushToCoordinators('Сбор нужд на следующую неделю', body, '/calendar');
+      await pushToCoordinators(
+        'Сбор нужд на следующую неделю',
+        resolveBody(rule, body, { participants: participantsList }),
+        '/calendar',
+      );
       return;
     }
     case 'coordinator_missing_need_tomorrow': {
@@ -301,6 +335,7 @@ async function handleRule(rule: NotificationRule, doc: NotificationSettingsDocum
         tomorrowYmd,
         'Нет молитвенной нужды на завтра',
         'tomorrow',
+        rule.customBody,
       );
       return;
     }
@@ -310,6 +345,7 @@ async function handleRule(rule: NotificationRule, doc: NotificationSettingsDocum
         todayYmd,
         'Эскалация: нет молитвенной нужды на сегодня',
         'today',
+        rule.customBody,
       );
       return;
     }

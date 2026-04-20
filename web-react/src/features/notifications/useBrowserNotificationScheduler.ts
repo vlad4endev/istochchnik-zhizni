@@ -82,16 +82,41 @@ function periodKey(rule: NotificationRule, z: ZonedNow): string {
   }
 }
 
-function notify(title: string, body: string, tag: string, importance: NotificationRule['importance']): boolean {
+function notify(
+  title: string,
+  body: string,
+  tag: string,
+  importance: NotificationRule['importance'],
+  deliveryId?: number,
+): boolean {
   if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return false;
   try {
     const silent = importance === 'low';
     const requireInteraction = importance === 'high';
-    new Notification(title, { body, tag, silent, requireInteraction });
+    const notification = new Notification(title, { body, tag, silent, requireInteraction });
+    if (deliveryId != null && Number.isFinite(deliveryId) && deliveryId > 0) {
+      const markOpened = () => {
+        void apiClient.post(`/api/notifications/deliveries/${deliveryId}/open`).catch(() => {});
+        window.dispatchEvent(new CustomEvent('app:notification-deliveries-changed'));
+      };
+      notification.onclick = markOpened;
+      notification.onclose = markOpened;
+    }
     return true;
   } catch {
     return false;
   }
+}
+
+function applyBodyTemplate(template: string, vars: Record<string, string>): string {
+  return template.replace(/\{([a-zA-Z0-9_]+)\}/g, (_all, key: string) => vars[key] ?? '');
+}
+
+function resolveBody(rule: NotificationRule, fallback: string, vars?: Record<string, string>): string {
+  const raw = (rule.customBody ?? '').trim();
+  if (!raw) return fallback;
+  const rendered = vars ? applyBodyTemplate(raw, vars).trim() : raw;
+  return rendered || fallback;
 }
 
 async function hasWebPushSubscription(): Promise<boolean> {
@@ -105,20 +130,23 @@ async function hasWebPushSubscription(): Promise<boolean> {
   }
 }
 
-async function recordLocalSchedulerDelivery(ruleId: string, title: string, body: string): Promise<void> {
+async function recordLocalSchedulerDelivery(ruleId: string, title: string, body: string): Promise<number | null> {
   if (await hasWebPushSubscription()) {
-    return;
+    return null;
   }
   try {
-    await apiClient.post('/api/notifications/deliveries/local-reminder', {
+    const { data } = await apiClient.post<{ id?: number }>('/api/notifications/deliveries/local-reminder', {
       ruleId,
       tag: ruleId,
       title,
       body,
     });
     window.dispatchEvent(new CustomEvent('app:notification-deliveries-changed'));
+    const id = Number(data?.id);
+    return Number.isFinite(id) && id > 0 ? id : null;
   } catch {
     /* офлайн или нет сессии */
+    return null;
   }
 }
 
@@ -141,10 +169,9 @@ async function runRule(
       const data = await getCalendarDay(day);
       const name = data?.members?.[0]?.name?.trim() || 'участника церкви';
       const t = 'Время молитвы';
-      const b = `Сегодня молимся за ${name}.`;
-      if (notify(t, b, rule.id, rule.importance)) {
-        void recordLocalSchedulerDelivery(rule.id, t, b);
-      }
+      const b = resolveBody(rule, `Сегодня молимся за ${name}.`, { memberName: name, date: day });
+      const deliveryId = await recordLocalSchedulerDelivery(rule.id, t, b);
+      notify(t, b, rule.id, rule.importance, deliveryId ?? undefined);
       setFired(rule.id, pk);
       return;
     }
@@ -157,10 +184,10 @@ async function runRule(
         return;
       }
       const t = 'Дни рождения сегодня';
-      const b = names.join(', ');
-      if (notify(t, b, rule.id, rule.importance)) {
-        void recordLocalSchedulerDelivery(rule.id, t, b);
-      }
+      const namesJoined = names.join(', ');
+      const b = resolveBody(rule, namesJoined, { names: namesJoined, date: today });
+      const deliveryId = await recordLocalSchedulerDelivery(rule.id, t, b);
+      notify(t, b, rule.id, rule.importance, deliveryId ?? undefined);
       setFired(rule.id, pk);
       return;
     }
@@ -172,9 +199,9 @@ async function runRule(
       }
       const lines = week.items.map((i) => `${i.name} (${i.week_date})`).join(' · ');
       const t = 'Дни рождения на неделе';
-      if (notify(t, lines, rule.id, rule.importance)) {
-        void recordLocalSchedulerDelivery(rule.id, t, lines);
-      }
+      const b = resolveBody(rule, lines, { names: lines });
+      const deliveryId = await recordLocalSchedulerDelivery(rule.id, t, b);
+      notify(t, b, rule.id, rule.importance, deliveryId ?? undefined);
       setFired(rule.id, pk);
       return;
     }
@@ -198,10 +225,9 @@ async function runRule(
       }
       st.broadcastHash = h;
       const t = 'Трансляция';
-      const b = 'Обновлён код плеера — эфир доступен в приложении.';
-      if (notify(t, b, rule.id, rule.importance)) {
-        void recordLocalSchedulerDelivery(rule.id, t, b);
-      }
+      const b = resolveBody(rule, 'Обновлён код плеера — эфир доступен в приложении.');
+      const deliveryId = await recordLocalSchedulerDelivery(rule.id, t, b);
+      notify(t, b, rule.id, rule.importance, deliveryId ?? undefined);
       setFired(rule.id, pk);
       return;
     }
@@ -225,10 +251,9 @@ async function runRule(
       }
       st.apiStamp = stamp;
       const t = 'Обновление';
-      const b = 'Доступна новая версия сайта — обновите вкладку.';
-      if (notify(t, b, rule.id, rule.importance)) {
-        void recordLocalSchedulerDelivery(rule.id, t, b);
-      }
+      const b = resolveBody(rule, 'Доступна новая версия сайта — обновите вкладку.');
+      const deliveryId = await recordLocalSchedulerDelivery(rule.id, t, b);
+      notify(t, b, rule.id, rule.importance, deliveryId ?? undefined);
       setFired(rule.id, pk);
       return;
     }
@@ -250,10 +275,9 @@ async function runRule(
       }
       st.sermonId = epId;
       const t = 'Новая проповедь';
-      const b = 'В ленте появилась новая запись.';
-      if (notify(t, b, rule.id, rule.importance)) {
-        void recordLocalSchedulerDelivery(rule.id, t, b);
-      }
+      const b = resolveBody(rule, 'В ленте появилась новая запись.');
+      const deliveryId = await recordLocalSchedulerDelivery(rule.id, t, b);
+      notify(t, b, rule.id, rule.importance, deliveryId ?? undefined);
       setFired(rule.id, pk);
       return;
     }
@@ -276,10 +300,10 @@ async function runRule(
       }
       st.eventCreated = created;
       const t = 'Новое событие';
-      const b = latest?.title ? `«${latest.title}»` : 'Добавлено событие в календаре.';
-      if (notify(t, b, rule.id, rule.importance)) {
-        void recordLocalSchedulerDelivery(rule.id, t, b);
-      }
+      const fallback = latest?.title ? `«${latest.title}»` : 'Добавлено событие в календаре.';
+      const b = resolveBody(rule, fallback);
+      const deliveryId = await recordLocalSchedulerDelivery(rule.id, t, b);
+      notify(t, b, rule.id, rule.importance, deliveryId ?? undefined);
       setFired(rule.id, pk);
       return;
     }

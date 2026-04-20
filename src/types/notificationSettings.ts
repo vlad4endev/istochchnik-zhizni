@@ -18,6 +18,8 @@ export interface NotificationRule {
   id: NotificationRuleId;
   /** Показываемое название (можно править в админке). */
   title: string;
+  /** Кастомный текст push-уведомления (если пусто — стандартный текст правила). */
+  customBody?: string;
   enabled: boolean;
   /** Локальное время в `timezone` документа, формат HH:mm */
   time: string;
@@ -188,6 +190,10 @@ function normalizeRule(raw: unknown, fallback: NotificationRule): NotificationRu
   return {
     id,
     title: typeof o.title === 'string' && o.title.trim() ? o.title.trim() : base.title,
+    customBody:
+      typeof o.customBody === 'string' && o.customBody.trim().length > 0
+        ? o.customBody.trim().slice(0, 2000)
+        : '',
     enabled: typeof o.enabled === 'boolean' ? o.enabled : base.enabled,
     time: typeof o.time === 'string' && /^\d{1,2}:\d{2}$/.test(o.time.trim()) ? o.time.trim() : base.time,
     importance:

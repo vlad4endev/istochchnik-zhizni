@@ -14,6 +14,23 @@ const Q_NOTIF_PUBLIC = ['notification-settings', 'public'] as const;
 
 const WEEK_DAYS_RU = ['Воскресенье', 'Понедельник', 'Вторник', 'Среда', 'Четвер', 'Пятница', 'Суббота'];
 
+function customBodyHint(ruleId: NotificationRule['id']): string | null {
+  switch (ruleId) {
+    case 'birthday_today':
+    case 'birthday_week':
+      return 'Можно использовать {names} (имена именинников), для today также {date}.';
+    case 'prayer_reminder':
+      return 'Можно использовать {date}.';
+    case 'coordinator_week_digest':
+      return 'Можно использовать {participants}.';
+    case 'coordinator_missing_need_tomorrow':
+    case 'coordinator_missing_need_today_escalation':
+      return 'Можно использовать {memberName} и {date}.';
+    default:
+      return null;
+  }
+}
+
 function fieldClass() {
   return (
     'w-full rounded-xl border border-stone-200/90 bg-white px-3 py-2.5 text-sm text-stone-900 outline-none ' +
@@ -165,6 +182,19 @@ export function NotificationsSettingsSection() {
               value={rule.title}
               onChange={(e) => updateRule(rule.id, { title: e.target.value })}
             />
+
+            <label className="mt-3 block text-xs font-semibold text-stone-600">
+              Кастомный текст push (необязательно)
+            </label>
+            <textarea
+              className={`${fieldClass()} mt-1 min-h-[84px] resize-y`}
+              value={rule.customBody ?? ''}
+              onChange={(e) => updateRule(rule.id, { customBody: e.target.value })}
+              placeholder="Если оставить пустым — отправится стандартный текст правила."
+            />
+            {customBodyHint(rule.id) ? (
+              <p className="mt-1 text-[11px] text-stone-500">{customBodyHint(rule.id)}</p>
+            ) : null}
 
             <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <div>

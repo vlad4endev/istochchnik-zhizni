@@ -10,11 +10,14 @@ export type NotificationRuleId =
   | 'system_update'
   | 'new_sermon'
   | 'new_event'
-  | 'coordinator_week_digest';
+  | 'coordinator_week_digest'
+  | 'coordinator_missing_need_tomorrow'
+  | 'coordinator_missing_need_today_escalation';
 
 export interface NotificationRule {
   id: NotificationRuleId;
   title: string;
+  customBody?: string;
   enabled: boolean;
   time: string;
   importance: NotificationImportance;
