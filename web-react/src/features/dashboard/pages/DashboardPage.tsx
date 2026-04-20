@@ -299,16 +299,32 @@ function DashboardMain() {
     staleTime: 0,
     refetchInterval: 60_000,
   });
+  const needsNextWeekPlan =
+    apiBoolean(meQ.data?.is_collection_coordinator) || isAdmin || isPastor;
+  const needsCurrentWeekPlan = isAdmin || isPastor;
+
   const collectionClaimsQ = useQuery({
     queryKey: ['calendar', 'cycle', 'collection-claims', 'next', 'dashboard'],
     queryFn: () => getCycleCollectionClaims('next'),
-    enabled: apiBoolean(meQ.data?.is_collection_coordinator) || isAdmin || isPastor,
+    enabled: needsNextWeekPlan,
+    staleTime: 30_000,
+  });
+  const collectionClaimsCurrentQ = useQuery({
+    queryKey: ['calendar', 'cycle', 'collection-claims', 'current', 'dashboard'],
+    queryFn: () => getCycleCollectionClaims('current'),
+    enabled: needsCurrentWeekPlan,
     staleTime: 30_000,
   });
   const weekMembersQ = useQuery({
     queryKey: ['calendar', 'week-members', 'next', 'dashboard'],
     queryFn: () => getWeekPlanMembers('next'),
-    enabled: apiBoolean(meQ.data?.is_collection_coordinator) || isAdmin || isPastor,
+    enabled: needsNextWeekPlan,
+    staleTime: 30_000,
+  });
+  const weekMembersCurrentQ = useQuery({
+    queryKey: ['calendar', 'week-members', 'current', 'dashboard'],
+    queryFn: () => getWeekPlanMembers('current'),
+    enabled: needsCurrentWeekPlan,
     staleTime: 30_000,
   });
 
@@ -370,10 +386,13 @@ function DashboardMain() {
     });
   }, [birthdaysQ.data, now]);
 
-  /** С сегодняшнего дня недели: участники без нужды + подпись координатора (для админа). */
+  /**
+   * Текущая календарная неделя: с сегодняшнего дня — без текста нужды + координатор по закреплениям этой же недели.
+   * (Следующая неделя — отдельно: назначения и план в блоке ниже.)
+   */
   const unfilledWeekRowsAdmin = useMemo(() => {
-    const days = weekMembersQ.data ?? [];
-    const claims = collectionClaimsQ.data?.members ?? [];
+    const days = weekMembersCurrentQ.data ?? [];
+    const claims = collectionClaimsCurrentQ.data?.members ?? [];
     const claimById = new Map(claims.map((c) => [c.id, c]));
     const rows: Array<{ date: string; member: Member; coordinatorLabel: string }> = [];
     for (const row of days) {
@@ -394,7 +413,7 @@ function DashboardMain() {
     }
     rows.sort((a, b) => a.date.localeCompare(b.date));
     return rows;
-  }, [weekMembersQ.data, collectionClaimsQ.data?.members, todayDateKey]);
+  }, [weekMembersCurrentQ.data, collectionClaimsCurrentQ.data?.members, todayDateKey]);
 
   /** Для админа: только участники цикла (`in_prayer_cycle`), у кого пустая нужда. */
   const adminUnfilledCycleRows = useMemo(
@@ -422,7 +441,10 @@ function DashboardMain() {
     return { withMember, filled, inCycle };
   }, [adminNextWeekRosterRows]);
 
-  /** Те же строки, но только по дням, закреплённым за текущим координатором. */
+  /**
+   * Следующая неделя: среди участников, закреплённых за координатором, у кого ещё пустая нужда
+   * (по дням плана следующей недели — то же окно, что и «назначены»).
+   */
   const coordinatorUnfilledRows = useMemo(() => {
     const meId = me?.id ?? null;
     if (meId == null) return [];
@@ -430,8 +452,17 @@ function DashboardMain() {
     const claimedMemberIds = new Set(
       claims.filter((c) => c.claimed_by?.id === meId).map((c) => c.id),
     );
-    return unfilledWeekRowsAdmin.filter((r) => claimedMemberIds.has(r.member.id));
-  }, [unfilledWeekRowsAdmin, collectionClaimsQ.data?.members, me?.id]);
+    const rows: Array<{ date: string; member: Member }> = [];
+    for (const row of weekMembersQ.data ?? []) {
+      if (!row.member) continue;
+      if (row.date < todayDateKey) continue;
+      if (!claimedMemberIds.has(row.member.id)) continue;
+      if ((row.member.prayer_request ?? '').trim().length > 0) continue;
+      rows.push({ date: row.date, member: row.member });
+    }
+    rows.sort((a, b) => a.date.localeCompare(b.date));
+    return rows;
+  }, [weekMembersQ.data, collectionClaimsQ.data?.members, me?.id, todayDateKey]);
 
   /** Все участники, закреплённые за текущим куратором на эту неделю (не только с пустой нуждой). */
   const coordinatorAssignedRows = useMemo(() => {
@@ -751,8 +782,8 @@ function DashboardMain() {
                       <div className="mt-3">
                         <p className="text-sm font-semibold text-stone-800">
                           {isAdmin
-                            ? 'На следующей неделе не заполнена молитвенная нужда (только участники цикла):'
-                            : 'На следующей неделе не заполнена молитвенная нужда:'}
+                            ? 'На текущей неделе не заполнена молитвенная нужда (только участники цикла):'
+                            : 'На текущей неделе не заполнена молитвенная нужда:'}
                         </p>
                         <ul className="mt-2 max-h-[min(40vh,320px)] space-y-2 overflow-y-auto pr-0.5">
                           {leaderUnfilledRows.map((row) => (
@@ -772,8 +803,8 @@ function DashboardMain() {
                     ) : (
                       <p className="mt-2 text-sm text-stone-600">
                         {isAdmin
-                          ? 'На следующей неделе у всех участников цикла нужды заполнены.'
-                          : 'На следующей неделе пустых нужд в плане не осталось.'}
+                          ? 'На текущей неделе у всех участников цикла нужды заполнены.'
+                          : 'На текущей неделе пустых нужд в плане не осталось.'}
                       </p>
                     );
                   })()}
@@ -874,8 +905,8 @@ function DashboardMain() {
                     </p>
                   )}
 
-                  <p className="text-sm font-semibold text-stone-800">
-                    У выбранных вами участников пока нет текста нужды:
+                  <p className="mt-4 text-sm font-semibold text-stone-800">
+                    Среди назначенных вам на следующую неделю пока нет текста нужды:
                   </p>
                   {coordinatorUnfilledRows.length > 0 ? (
                     <ul className="mt-2 space-y-1.5">
@@ -891,7 +922,7 @@ function DashboardMain() {
                     </ul>
                   ) : (
                     <p className="mt-2 text-sm text-stone-600">
-                      У всех ваших участников нужды уже заполнены.
+                      У всех ваших участников на следующую неделю нужды уже заполнены.
                     </p>
                   )}
                   <button
