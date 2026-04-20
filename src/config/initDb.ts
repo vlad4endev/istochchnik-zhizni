@@ -1486,14 +1486,21 @@ CREATE TABLE IF NOT EXISTS songs (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS songs_slug_uidx ON songs (LOWER(slug));
 ALTER TABLE songs ADD COLUMN IF NOT EXISTS song_number INTEGER;
-UPDATE songs
-SET song_number = ranked.rn
+-- Нумерация только для NULL: номера max(existing)+1… без коллизий с уже занятыми song_number.
+UPDATE songs AS s
+SET song_number = base.mx + n.seq
 FROM (
-  SELECT id, ROW_NUMBER() OVER (ORDER BY created_at ASC, id ASC) AS rn
+  SELECT id, ROW_NUMBER() OVER (ORDER BY created_at ASC, id ASC) AS seq
   FROM songs
-) AS ranked
-WHERE songs.id = ranked.id
-  AND songs.song_number IS NULL;
+  WHERE song_number IS NULL
+) AS n
+CROSS JOIN (
+  SELECT COALESCE(
+    (SELECT MAX(s2.song_number)::bigint FROM songs s2 WHERE s2.song_number IS NOT NULL),
+    0::bigint
+  ) AS mx
+) AS base
+WHERE s.id = n.id;
 CREATE UNIQUE INDEX IF NOT EXISTS songs_song_number_uidx ON songs (song_number) WHERE song_number IS NOT NULL;
 ALTER TABLE songs ADD COLUMN IF NOT EXISTS tags TEXT[] NOT NULL DEFAULT '{}';
 CREATE INDEX IF NOT EXISTS songs_tags_gin ON songs USING GIN (tags);
