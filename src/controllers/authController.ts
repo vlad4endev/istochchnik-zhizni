@@ -5,6 +5,7 @@ import {
   approveAccessRequest,
   changeMemberPhone,
   changeMemberPassword,
+  confirmPasswordResetViaSms,
   getAuthUserById,
   listAccessRequests,
   loginUser,
@@ -12,8 +13,10 @@ import {
   rejectAccessRequest,
   registerUser,
   requestPasswordReset,
+  startPasswordResetViaSms,
   updateAuthUserAvatar,
   updateAuthUserProfile,
+  verifyPasswordResetSmsCode,
 } from '../services/authService';
 import { notifyRealtime } from '../realtime/notify';
 import { markAccessRequestMessengerResolved } from '../services/messengerService';
@@ -27,6 +30,7 @@ import {
   uploadBufferToPublicBucket,
   userMediaBucket,
 } from '../lib/supabaseStorage';
+import { sendPasswordResetCodeSms } from '../services/smsRuService';
 
 type AuthRequest = Request & {
   authUserId?: number;
@@ -275,6 +279,118 @@ export async function forgotPasswordRequestHandler(req: Request, res: Response):
     }
     console.error('Failed to create password reset request', error);
     res.status(500).json({ error: 'Database error' });
+  }
+}
+
+export async function startPasswordResetSmsHandler(req: Request, res: Response): Promise<void> {
+  const phoneNumber = readStringField(req.body.phone_number);
+  if (!phoneNumber) {
+    res.status(400).json({ error: 'Field "phone_number" is required' });
+    return;
+  }
+  try {
+    const result = await startPasswordResetViaSms(phoneNumber, sendPasswordResetCodeSms);
+    res.status(200).json(result);
+  } catch (error) {
+    if (error instanceof Error && error.message === 'Account not found') {
+      res.status(404).json({ error: 'Аккаунт с таким номером не найден' });
+      return;
+    }
+    if (error instanceof Error && error.message === 'Ambiguous phone number') {
+      res.status(409).json({
+        error: 'Найдено несколько аккаунтов с этим номером. Обратитесь к администратору.',
+      });
+      return;
+    }
+    if (error instanceof Error && error.message === 'Invalid phone number') {
+      res.status(400).json({ error: 'Неверный номер телефона' });
+      return;
+    }
+    if (error instanceof Error && error.message === 'SMS provider is not configured') {
+      res.status(503).json({ error: 'SMS-сервис не настроен на сервере' });
+      return;
+    }
+    if (error instanceof Error && error.message === 'SMS integration is disabled') {
+      res.status(409).json({ error: 'SMS-восстановление отключено администратором' });
+      return;
+    }
+    console.error('Failed to start password reset via SMS', error);
+    res.status(500).json({ error: 'Не удалось отправить код. Попробуйте позже.' });
+  }
+}
+
+export async function verifyPasswordResetSmsHandler(req: Request, res: Response): Promise<void> {
+  const phoneNumber = readStringField(req.body.phone_number);
+  const code = readStringField(req.body.code);
+  if (!phoneNumber || !code) {
+    res.status(400).json({ error: 'Fields "phone_number" and "code" are required' });
+    return;
+  }
+  try {
+    const result = await verifyPasswordResetSmsCode(phoneNumber, code);
+    res.status(200).json(result);
+  } catch (error) {
+    if (error instanceof Error && error.message === 'Invalid phone number') {
+      res.status(400).json({ error: 'Неверный номер телефона' });
+      return;
+    }
+    if (error instanceof Error && error.message === 'Invalid code') {
+      res.status(400).json({ error: 'Неверный код подтверждения' });
+      return;
+    }
+    if (error instanceof Error && error.message === 'Code expired') {
+      res.status(410).json({ error: 'Срок действия кода истек. Запросите новый.' });
+      return;
+    }
+    if (error instanceof Error && error.message === 'Too many attempts') {
+      res.status(429).json({ error: 'Слишком много попыток. Запросите новый код.' });
+      return;
+    }
+    if (error instanceof Error && error.message === 'Account not found') {
+      res.status(404).json({ error: 'Аккаунт с таким номером не найден' });
+      return;
+    }
+    console.error('Failed to verify password reset code', error);
+    res.status(500).json({ error: 'Не удалось проверить код. Попробуйте позже.' });
+  }
+}
+
+export async function completePasswordResetSmsHandler(req: Request, res: Response): Promise<void> {
+  const phoneNumber = readStringField(req.body.phone_number);
+  const resetToken = readStringField(req.body.reset_token);
+  const newPassword = readStringField(req.body.new_password);
+  if (!phoneNumber || !resetToken || !newPassword) {
+    res
+      .status(400)
+      .json({ error: 'Fields "phone_number", "reset_token" and "new_password" are required' });
+    return;
+  }
+  try {
+    await confirmPasswordResetViaSms(phoneNumber, resetToken, newPassword);
+    res.status(204).send();
+  } catch (error) {
+    if (error instanceof Error && error.message === 'Invalid phone number') {
+      res.status(400).json({ error: 'Неверный номер телефона' });
+      return;
+    }
+    if (error instanceof Error && error.message === 'Invalid password') {
+      res.status(400).json({ error: `Пароль должен быть не короче ${MIN_PASSWORD_LENGTH} символов` });
+      return;
+    }
+    if (error instanceof Error && error.message === 'Invalid reset token') {
+      res.status(400).json({ error: 'Некорректная сессия восстановления' });
+      return;
+    }
+    if (error instanceof Error && error.message === 'Reset session expired') {
+      res.status(410).json({ error: 'Сессия восстановления истекла. Пройдите подтверждение снова.' });
+      return;
+    }
+    if (error instanceof Error && error.message === 'Account not found') {
+      res.status(404).json({ error: 'Аккаунт с таким номером не найден' });
+      return;
+    }
+    console.error('Failed to complete password reset via SMS', error);
+    res.status(500).json({ error: 'Не удалось обновить пароль. Попробуйте позже.' });
   }
 }
 

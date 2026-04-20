@@ -14,6 +14,7 @@ import {
   LuClipboardList,
   LuHistory,
   LuImage,
+  LuMessageSquare,
   LuPenLine,
   LuSend,
   LuTable2,
@@ -60,9 +61,11 @@ import {
   fetchGlobalThemes,
   fetchRoleTemplates,
   fetchTelegramSettings,
+  fetchSmsSettings,
   mergeDuplicateMembers,
   swapAllMembersFirstLastNames,
   patchTelegramSettings,
+  patchSmsSettings,
   sendTelegramMessage,
   setDirectionTemplateRoles,
   setMemberAppRole,
@@ -76,6 +79,7 @@ import {
   type MinistryDirectionTemplate,
   type ChurchEventItem,
   type TelegramSettingsResponse,
+  type SmsSettingsResponse,
 } from '../api';
 import { NextWeekPrayerPlanSection } from '../../calendar/components/NextWeekPrayerPlanSection';
 import { CHURCH_EVENT_CATEGORY_OPTIONS_FALLBACK } from '../churchEventCategoryOptions';
@@ -125,6 +129,7 @@ const Q_GB = ['admin', 'global', 'backsliders'] as const;
 const Q_EVENTS = ['admin', 'events'] as const;
 const Q_EVENT_CATEGORY_OPTIONS = ['admin', 'church-event-category-options'] as const;
 const Q_TG = ['admin', 'telegram', 'settings'] as const;
+const Q_SMS = ['admin', 'sms', 'settings'] as const;
 
 type BulkMemberRow = {
   key: string;
@@ -349,7 +354,43 @@ export function AdminPage() {
       {tab === 'journal' && <ProjectJournalSection />}
       {tab === 'notifications' && <NotificationsSettingsSection />}
       {tab === 'telegram' && <TelegramSection />}
-      {tab === 'ai' && <AiSettingsSection />}
+      {tab === 'integrations' && <IntegrationsSection />}
+    </div>
+  );
+}
+
+function IntegrationsSection() {
+  const [subTab, setSubTab] = useState<'sms' | 'ai'>('sms');
+  return (
+    <div className="space-y-6">
+      <section className="rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] p-3 shadow-[var(--shadow)]">
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            className={
+              subTab === 'sms'
+                ? 'rounded-xl bg-primary px-3 py-2 text-sm font-bold text-white shadow-md shadow-primary/20'
+                : 'rounded-xl border border-stone-200 bg-white px-3 py-2 text-sm font-semibold text-stone-700 hover:bg-stone-50'
+            }
+            onClick={() => setSubTab('sms')}
+          >
+            SMS.ru
+          </button>
+          <button
+            type="button"
+            className={
+              subTab === 'ai'
+                ? 'rounded-xl bg-primary px-3 py-2 text-sm font-bold text-white shadow-md shadow-primary/20'
+                : 'rounded-xl border border-stone-200 bg-white px-3 py-2 text-sm font-semibold text-stone-700 hover:bg-stone-50'
+            }
+            onClick={() => setSubTab('ai')}
+          >
+            ИИ интеграции
+          </button>
+        </div>
+      </section>
+
+      {subTab === 'sms' ? <SmsSection /> : <AiSettingsSection />}
     </div>
   );
 }
@@ -4165,6 +4206,168 @@ function TelegramSection() {
             {sendMut.isPending ? 'Отправка…' : 'Отправить уведомление'}
           </button>
         </div>
+      </section>
+    </div>
+  );
+}
+
+function SmsSection() {
+  const qc = useQueryClient();
+  const { data, isLoading, error } = useQuery({
+    queryKey: Q_SMS,
+    queryFn: fetchSmsSettings,
+  });
+  const [form, setForm] = useState({
+    enabled: false,
+    api_id: '',
+    sender_name: '',
+    reset_secret: '',
+  });
+  const [note, setNote] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
+
+  useEffect(() => {
+    if (!data) return;
+    setForm({
+      enabled: data.enabled,
+      api_id: '',
+      sender_name: data.sender_name ?? '',
+      reset_secret: '',
+    });
+  }, [data]);
+
+  const saveMut = useMutation({
+    mutationFn: () =>
+      patchSmsSettings({
+        enabled: form.enabled,
+        api_id: normalizeUiOptionalUpdateString(form.api_id),
+        sender_name: normalizeUiString(form.sender_name),
+        reset_secret: normalizeUiOptionalUpdateString(form.reset_secret),
+      }),
+    onSuccess: (next) => {
+      setNote({ type: 'ok', text: 'SMS.ru настройки сохранены.' });
+      qc.setQueryData(Q_SMS, next);
+      setForm((prev) => ({ ...prev, api_id: '', reset_secret: '' }));
+    },
+    onError: (e) => setNote({ type: 'err', text: apiErrorMessage(e, 'Не удалось сохранить SMS.ru настройки.') }),
+  });
+
+  if (isLoading) {
+    return <div className="h-44 animate-pulse rounded-2xl bg-stone-200/50" />;
+  }
+
+  if (error) {
+    return (
+      <div className="rounded-2xl border border-red-200 bg-red-50/80 p-6 text-center">
+        <p className="font-semibold text-red-900">Не удалось загрузить SMS.ru настройки</p>
+        <p className="mt-2 text-sm text-red-800">{apiErrorMessage(error, 'Ошибка сети или сервера.')}</p>
+        <button
+          type="button"
+          className={`${btnPrimary('mt-4')}`}
+          onClick={() => void qc.invalidateQueries({ queryKey: Q_SMS })}
+        >
+          Обновить
+        </button>
+      </div>
+    );
+  }
+
+  const settings = (data ?? {
+    enabled: false,
+    api_id_masked: null,
+    sender_name: null,
+    has_api_id: false,
+    has_reset_secret: false,
+  }) satisfies SmsSettingsResponse;
+
+  return (
+    <div className="max-w-3xl space-y-5">
+      {note ? (
+        <div
+          className={
+            note.type === 'ok'
+              ? 'rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900'
+              : 'rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900'
+          }
+        >
+          {note.text}
+        </div>
+      ) : null}
+
+      <section className="rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] p-5 shadow-[var(--shadow)]">
+        <h3 className="flex items-center gap-2 text-base font-extrabold text-stone-900">
+          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary">
+            <LuMessageSquare className="h-5 w-5" />
+          </span>
+          SMS.ru интеграция
+        </h3>
+        <p className="mt-2 text-sm text-stone-600">
+          Используется для восстановления пароля по SMS-коду. Настройки доступны только администраторам.
+        </p>
+
+        <label className="mt-4 flex items-center gap-2 text-sm font-semibold text-stone-700">
+          <input
+            type="checkbox"
+            className="h-4 w-4 rounded border-stone-300 text-primary"
+            checked={form.enabled}
+            onChange={(e) => setForm((s) => ({ ...s, enabled: e.target.checked }))}
+          />
+          Включить восстановление пароля через SMS.ru
+        </label>
+
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          <div className="sm:col-span-2">
+            <label className="mb-1 block text-xs font-semibold text-stone-600">SMS.ru API ID</label>
+            <input
+              className={fieldClass()}
+              value={form.api_id}
+              onChange={(e) => setForm((s) => ({ ...s, api_id: e.target.value }))}
+              placeholder={settings.api_id_masked ? `Текущий: ${settings.api_id_masked}` : 'Введите API ID'}
+            />
+            <p className="mt-1 text-xs text-stone-500">
+              Оставьте пустым, чтобы не менять. Также можно задать через `SMS_RU_API_ID` в окружении.
+            </p>
+          </div>
+
+          <div>
+            <label className="mb-1 block text-xs font-semibold text-stone-600">Имя отправителя (опционально)</label>
+            <input
+              className={fieldClass()}
+              value={form.sender_name}
+              onChange={(e) => setForm((s) => ({ ...s, sender_name: e.target.value }))}
+              placeholder="ISTOCHNIK"
+            />
+          </div>
+
+          <div>
+            <label className="mb-1 block text-xs font-semibold text-stone-600">Секрет reset-кодов</label>
+            <input
+              className={fieldClass()}
+              value={form.reset_secret}
+              onChange={(e) => setForm((s) => ({ ...s, reset_secret: e.target.value }))}
+              placeholder={settings.has_reset_secret ? 'Текущий секрет скрыт' : 'Введите длинный секрет'}
+            />
+            <p className="mt-1 text-xs text-stone-500">
+              Используется для хеширования SMS-кодов и токенов восстановления.
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-4 rounded-xl border border-stone-200/80 bg-white p-3 text-xs text-stone-600">
+          <div>API ID: {settings.has_api_id ? 'задан' : 'не задан'}</div>
+          <div>Reset secret: {settings.has_reset_secret ? 'задан' : 'не задан'}</div>
+        </div>
+
+        <button
+          type="button"
+          className={`${btnPrimary('mt-4')}`}
+          disabled={saveMut.isPending}
+          onClick={() => {
+            setNote(null);
+            saveMut.mutate();
+          }}
+        >
+          {saveMut.isPending ? 'Сохранение…' : 'Сохранить настройки'}
+        </button>
       </section>
     </div>
   );

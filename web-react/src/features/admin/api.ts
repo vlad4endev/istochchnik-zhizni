@@ -449,6 +449,14 @@ export interface TelegramSettingsResponse {
   has_bot_token: boolean;
 }
 
+export interface SmsSettingsResponse {
+  enabled: boolean;
+  api_id_masked: string | null;
+  sender_name: string | null;
+  has_api_id: boolean;
+  has_reset_secret: boolean;
+}
+
 export interface AppLogItem {
   id: number;
   level: 'info' | 'warn' | 'error';
@@ -492,6 +500,21 @@ export async function sendTelegramMessage(body: {
     '/api/telegram/send',
     body,
   );
+  return data;
+}
+
+export async function fetchSmsSettings(): Promise<SmsSettingsResponse> {
+  const { data } = await apiClient.get<SmsSettingsResponse>('/api/sms/settings');
+  return data;
+}
+
+export async function patchSmsSettings(body: {
+  enabled?: boolean;
+  api_id?: string | null;
+  sender_name?: string | null;
+  reset_secret?: string | null;
+}): Promise<SmsSettingsResponse> {
+  const { data } = await apiClient.patch<SmsSettingsResponse>('/api/sms/settings', body);
   return data;
 }
 

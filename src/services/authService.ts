@@ -7,6 +7,7 @@ import type { AppRole } from '../types/appRole';
 import { normalizeAppRole } from '../types/appRole';
 import { findMemberIdConflictingName, updateUser } from './userService';
 import { postRegistrationAccessRequestMessengerNotification } from './messengerService';
+import { resolveSmsRuntimeConfig } from './smsSettingsService';
 
 const scrypt = promisify(scryptCallback);
 const MIN_PASSWORD_LENGTH = 8;
@@ -18,6 +19,10 @@ const MIN_ACTIVE_SESSIONS_PER_USER = 1;
 const MAX_ACTIVE_SESSIONS_PER_USER = 20;
 const PHONE_DIGITS_MIN = 7;
 const PHONE_DIGITS_MAX = 20;
+const PASSWORD_RESET_CODE_TTL_SEC = 10 * 60;
+const PASSWORD_RESET_VERIFY_TTL_SEC = 15 * 60;
+const PASSWORD_RESET_RESEND_INTERVAL_SEC = 60;
+const PASSWORD_RESET_MAX_ATTEMPTS = 5;
 
 export type AuthRole = AppRole;
 export type AccessRequestStatus = 'pending' | 'approved' | 'rejected';
@@ -66,6 +71,18 @@ export interface PasswordResetRequestInput {
   first_name: string;
   last_name: string;
   phone_number: string;
+}
+
+export interface PasswordResetSmsRequestResult {
+  status: 'code_sent';
+  expires_in_sec: number;
+  retry_after_sec: number;
+}
+
+export interface PasswordResetSmsVerifyResult {
+  status: 'verified';
+  reset_token: string;
+  expires_in_sec: number;
 }
 
 export interface LoginResult {
@@ -214,6 +231,16 @@ function createSessionToken(): { token: string; tokenHash: string } {
   const token = randomBytes(48).toString('hex');
   const tokenHash = createHash('sha256').update(token).digest('hex');
   return { token, tokenHash };
+}
+
+function createPasswordResetCode(): string {
+  return String(Math.floor(100000 + Math.random() * 900000));
+}
+
+async function hashResetValue(value: string): Promise<string> {
+  const cfg = await resolveSmsRuntimeConfig();
+  const secret = String(cfg.resetSecret || '').trim();
+  return createHash('sha256').update(`${secret}:${value}`).digest('hex');
 }
 
 function getSessionTtlDays(): number {
@@ -446,6 +473,41 @@ async function findMemberByPhoneDigits(phoneDigits: string): Promise<MemberRow |
       password_hash
     FROM members
     WHERE regexp_replace(COALESCE(phone_number, ''), '\\D', '', 'g') = ANY($1::text[])
+    ORDER BY id ASC
+    LIMIT 2`,
+    [phoneVariants]
+  );
+
+  if (result.rows.length > 1) {
+    throw new Error('Ambiguous phone number');
+  }
+
+  return (result.rows[0] as MemberRow | undefined) ?? null;
+}
+
+async function findMemberWithPasswordByPhone(phoneInput: string): Promise<MemberRow | null> {
+  const phoneDigits = normalizePhoneDigits(phoneInput);
+  const phoneVariants = getPhoneDigitsVariants(phoneDigits);
+  if (!phoneVariants.length) return null;
+
+  const result = await query(
+    `SELECT
+      id,
+      user_id,
+      first_name,
+      last_name,
+      name,
+      phone_number,
+      app_role,
+      is_active,
+      registration_status,
+      created_at,
+      updated_at,
+      password_hash
+    FROM members
+    WHERE regexp_replace(COALESCE(phone_number, ''), '\\D', '', 'g') = ANY($1::text[])
+      AND password_hash IS NOT NULL
+      AND is_active = TRUE
     ORDER BY id ASC
     LIMIT 2`,
     [phoneVariants]
@@ -792,6 +854,200 @@ export async function requestPasswordReset(input: PasswordResetRequestInput): Pr
     message:
       'Заявка на сброс пароля отправлена администратору. Новый пароль начнёт работать после подтверждения.',
   };
+}
+
+export async function startPasswordResetViaSms(
+  phoneInput: string,
+  sendSms: (phone: string, message: string) => Promise<void>
+): Promise<PasswordResetSmsRequestResult> {
+  ensureValidPhone(phoneInput);
+  const member = await findMemberWithPasswordByPhone(phoneInput);
+  if (!member?.phone_number) {
+    throw new Error('Account not found');
+  }
+
+  const memberPhoneDigits = normalizePhoneDigits(member.phone_number);
+  const now = Date.now();
+  const pending = await query(
+    `SELECT send_not_before
+     FROM password_reset_sms_codes
+     WHERE member_id = $1
+       AND consumed_at IS NULL
+       AND expires_at > NOW()
+     ORDER BY id DESC
+     LIMIT 1`,
+    [member.id]
+  );
+  const pendingRow = pending.rows[0] as { send_not_before: string | null } | undefined;
+  if (pendingRow?.send_not_before) {
+    const retryAt = new Date(pendingRow.send_not_before).getTime();
+    if (!Number.isNaN(retryAt) && retryAt > now) {
+      return {
+        status: 'code_sent',
+        expires_in_sec: PASSWORD_RESET_CODE_TTL_SEC,
+        retry_after_sec: Math.max(1, Math.ceil((retryAt - now) / 1000)),
+      };
+    }
+  }
+
+  const code = createPasswordResetCode();
+  const codeHash = await hashResetValue(`${member.id}:${memberPhoneDigits}:${code}`);
+  const expiresAt = new Date(now + PASSWORD_RESET_CODE_TTL_SEC * 1000).toISOString();
+  const sendNotBefore = new Date(now + PASSWORD_RESET_RESEND_INTERVAL_SEC * 1000).toISOString();
+
+  const inserted = await query(
+    `INSERT INTO password_reset_sms_codes (
+      member_id,
+      phone_digits,
+      code_hash,
+      expires_at,
+      send_not_before
+    )
+    VALUES ($1, $2, $3, $4, $5)
+    RETURNING id`,
+    [member.id, memberPhoneDigits, codeHash, expiresAt, sendNotBefore]
+  );
+
+  try {
+    await sendSms(member.phone_number, `Код восстановления пароля: ${code}. Никому его не сообщайте.`);
+  } catch (e) {
+    await query(`DELETE FROM password_reset_sms_codes WHERE id = $1`, [
+      (inserted.rows[0] as { id: number }).id,
+    ]);
+    throw e;
+  }
+
+  return {
+    status: 'code_sent',
+    expires_in_sec: PASSWORD_RESET_CODE_TTL_SEC,
+    retry_after_sec: PASSWORD_RESET_RESEND_INTERVAL_SEC,
+  };
+}
+
+export async function verifyPasswordResetSmsCode(
+  phoneInput: string,
+  codeInput: string
+): Promise<PasswordResetSmsVerifyResult> {
+  ensureValidPhone(phoneInput);
+  const code = String(codeInput || '').trim();
+  if (!/^\d{6}$/.test(code)) {
+    throw new Error('Invalid code');
+  }
+
+  const member = await findMemberWithPasswordByPhone(phoneInput);
+  if (!member?.phone_number) {
+    throw new Error('Account not found');
+  }
+  const memberPhoneDigits = normalizePhoneDigits(member.phone_number);
+
+  const rowResult = await query(
+    `SELECT id, code_hash, attempts_count
+     FROM password_reset_sms_codes
+     WHERE member_id = $1
+       AND consumed_at IS NULL
+       AND expires_at > NOW()
+     ORDER BY id DESC
+     LIMIT 1`,
+    [member.id]
+  );
+  const row = rowResult.rows[0] as
+    | {
+        id: number;
+        code_hash: string;
+        attempts_count: number;
+      }
+    | undefined;
+  if (!row) {
+    throw new Error('Code expired');
+  }
+  if ((row.attempts_count ?? 0) >= PASSWORD_RESET_MAX_ATTEMPTS) {
+    throw new Error('Too many attempts');
+  }
+
+  const expectedHash = await hashResetValue(`${member.id}:${memberPhoneDigits}:${code}`);
+  const expectedBuffer = Buffer.from(expectedHash, 'hex');
+  const actualBuffer = Buffer.from(String(row.code_hash), 'hex');
+  const codeOk =
+    expectedBuffer.length === actualBuffer.length && timingSafeEqual(expectedBuffer, actualBuffer);
+
+  if (!codeOk) {
+    await query(
+      `UPDATE password_reset_sms_codes
+       SET attempts_count = attempts_count + 1,
+           updated_at = NOW()
+       WHERE id = $1`,
+      [row.id]
+    );
+    throw new Error('Invalid code');
+  }
+
+  const resetToken = randomBytes(32).toString('hex');
+  const resetTokenHash = await hashResetValue(`token:${resetToken}`);
+  const verifyExpiresAt = new Date(Date.now() + PASSWORD_RESET_VERIFY_TTL_SEC * 1000).toISOString();
+  await query(
+    `UPDATE password_reset_sms_codes
+     SET verified_at = NOW(),
+         verified_token_hash = $2,
+         verified_expires_at = $3,
+         updated_at = NOW()
+     WHERE id = $1`,
+    [row.id, resetTokenHash, verifyExpiresAt]
+  );
+
+  return {
+    status: 'verified',
+    reset_token: resetToken,
+    expires_in_sec: PASSWORD_RESET_VERIFY_TTL_SEC,
+  };
+}
+
+export async function confirmPasswordResetViaSms(
+  phoneInput: string,
+  resetToken: string,
+  newPassword: string
+): Promise<void> {
+  ensureValidPhone(phoneInput);
+  ensureValidPassword(newPassword);
+  const token = String(resetToken || '').trim();
+  if (token.length < 32) {
+    throw new Error('Invalid reset token');
+  }
+
+  const member = await findMemberWithPasswordByPhone(phoneInput);
+  if (!member) {
+    throw new Error('Account not found');
+  }
+
+  const tokenHash = await hashResetValue(`token:${token}`);
+  const rowResult = await query(
+    `SELECT id
+     FROM password_reset_sms_codes
+     WHERE member_id = $1
+       AND verified_token_hash = $2
+       AND verified_expires_at > NOW()
+       AND consumed_at IS NULL
+     ORDER BY id DESC
+     LIMIT 1`,
+    [member.id, tokenHash]
+  );
+  const row = rowResult.rows[0] as { id: number } | undefined;
+  if (!row) {
+    throw new Error('Reset session expired');
+  }
+
+  const newHash = await hashPassword(newPassword);
+  await query(`UPDATE members SET password_hash = $1, updated_at = NOW() WHERE id = $2`, [
+    newHash,
+    member.id,
+  ]);
+  await query(`DELETE FROM auth_sessions WHERE member_id = $1`, [member.id]);
+  await query(
+    `UPDATE password_reset_sms_codes
+     SET consumed_at = NOW(),
+         updated_at = NOW()
+     WHERE id = $1`,
+    [row.id]
+  );
 }
 
 export async function loginUser(phoneInput: string, password: string): Promise<LoginResult | null> {

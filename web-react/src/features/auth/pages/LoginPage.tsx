@@ -37,10 +37,17 @@ type RegisterResponse = {
   error?: string;
 };
 
-type ForgotPasswordResponse = {
-  status?: string;
-  request_id?: number;
-  message?: string;
+type PasswordResetSmsRequestResponse = {
+  status?: 'code_sent';
+  expires_in_sec?: number;
+  retry_after_sec?: number;
+  error?: string;
+};
+
+type PasswordResetSmsVerifyResponse = {
+  status?: 'verified';
+  reset_token?: string;
+  expires_in_sec?: number;
   error?: string;
 };
 
@@ -65,9 +72,10 @@ export function LoginPage() {
   const [showPassword, setShowPassword] = useState(true);
   const [showConfirm, setShowConfirm] = useState(true);
   const [showResetForm, setShowResetForm] = useState(false);
-  const [resetFirstName, setResetFirstName] = useState('');
-  const [resetLastName, setResetLastName] = useState('');
   const [resetPhone, setResetPhone] = useState('');
+  const [resetCode, setResetCode] = useState('');
+  const [resetToken, setResetToken] = useState('');
+  const [resetCodeVerified, setResetCodeVerified] = useState(false);
   const [resetPassword, setResetPassword] = useState('');
   const [resetConfirmPassword, setResetConfirmPassword] = useState('');
   const [showResetPassword, setShowResetPassword] = useState(true);
@@ -290,15 +298,86 @@ export function LoginPage() {
     }
   }
 
+  async function requestResetCode() {
+    const p = resetPhone.trim();
+    if (!p) {
+      setStatusText('Введите номер телефона, привязанный к аккаунту.');
+      setStatusIsError(true);
+      return;
+    }
+    setSubmitting(true);
+    clearStatus();
+    try {
+      const response = await apiClient.post<PasswordResetSmsRequestResponse>(
+        '/api/auth/password-reset/sms/request',
+        { phone_number: p },
+        { validateStatus: (s) => s != null && s < 600 },
+      );
+      if (response.status === 200 && response.data?.status === 'code_sent') {
+        setStatusText('Код отправлен в SMS. Введите его для продолжения.');
+        setStatusIsError(false);
+        return;
+      }
+      const raw =
+        typeof response.data?.error === 'string'
+          ? response.data.error
+          : 'Не удалось отправить код подтверждения.';
+      setStatusText(humanizeServerError(raw));
+      setStatusIsError(true);
+    } catch (e) {
+      setStatusText(mapAxiosAuthError(e));
+      setStatusIsError(true);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function verifyResetCode() {
+    const p = resetPhone.trim();
+    const code = resetCode.trim();
+    if (!p || !code) {
+      setStatusText('Введите номер телефона и код из SMS.');
+      setStatusIsError(true);
+      return;
+    }
+    setSubmitting(true);
+    clearStatus();
+    try {
+      const response = await apiClient.post<PasswordResetSmsVerifyResponse>(
+        '/api/auth/password-reset/sms/verify',
+        { phone_number: p, code },
+        { validateStatus: (s) => s != null && s < 600 },
+      );
+      if (response.status === 200 && response.data?.status === 'verified' && response.data.reset_token) {
+        setResetToken(response.data.reset_token);
+        setResetCodeVerified(true);
+        setStatusText('Код подтверждён. Теперь задайте новый пароль.');
+        setStatusIsError(false);
+        return;
+      }
+      const raw =
+        typeof response.data?.error === 'string' ? response.data.error : 'Не удалось подтвердить код.';
+      setStatusText(humanizeServerError(raw));
+      setStatusIsError(true);
+    } catch (e) {
+      setStatusText(mapAxiosAuthError(e));
+      setStatusIsError(true);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   async function submitForgotPassword() {
-    const fn = resetFirstName.trim();
-    const ln = resetLastName.trim();
     const p = resetPhone.trim();
     const pw = resetPassword;
     const cpw = resetConfirmPassword;
-
-    if (!fn || !ln || !p || !pw) {
-      setStatusText('Для сброса пароля заполните ФИО, телефон и новый пароль.');
+    if (!resetCodeVerified || !resetToken) {
+      setStatusText('Сначала подтвердите код из SMS.');
+      setStatusIsError(true);
+      return;
+    }
+    if (!pw) {
+      setStatusText('Введите новый пароль.');
       setStatusIsError(true);
       return;
     }
@@ -312,49 +391,31 @@ export function LoginPage() {
       setStatusIsError(true);
       return;
     }
-
     setSubmitting(true);
     clearStatus();
     try {
-      const response = await apiClient.post<ForgotPasswordResponse>(
-        '/api/auth/forgot-password-request',
-        {
-          first_name: fn,
-          last_name: ln,
-          phone_number: p,
-          password: pw,
-        },
+      const response = await apiClient.post(
+        '/api/auth/password-reset/sms/complete',
+        { phone_number: p, reset_token: resetToken, new_password: pw },
         { validateStatus: (s) => s != null && s < 600 },
       );
-
-      const data = response.data ?? {};
-      if (response.status === 202 && data.status === 'pending') {
+      if (response.status === 204) {
         setShowResetForm(false);
-        setResetFirstName('');
-        setResetLastName('');
         setResetPhone('');
+        setResetCode('');
+        setResetToken('');
+        setResetCodeVerified(false);
         setResetPassword('');
         setResetConfirmPassword('');
-        setStatusText(
-          data.message ??
-            'Заявка на сброс отправлена. После подтверждения администратором войдите с новым паролем.',
-        );
+        setStatusText('Пароль успешно обновлён. Теперь войдите с новым паролем.');
         setStatusIsError(false);
         return;
       }
-
-      if (response.status === 400 || response.status === 409) {
-        const raw = typeof data.error === 'string' ? data.error : 'Не удалось отправить заявку.';
-        setStatusText(humanizeServerError(raw.trim()));
-        setStatusIsError(true);
-        return;
-      }
-
-      const fallback =
-        typeof data.error === 'string'
-          ? data.error
-          : 'Не удалось отправить заявку на сброс пароля. Попробуйте позже.';
-      setStatusText(humanizeServerError(fallback));
+      const raw =
+        typeof (response.data as { error?: string } | undefined)?.error === 'string'
+          ? (response.data as { error: string }).error
+          : 'Не удалось обновить пароль.';
+      setStatusText(humanizeServerError(raw));
       setStatusIsError(true);
     } catch (e) {
       setStatusText(mapAxiosAuthError(e));
@@ -426,6 +487,8 @@ export function LoginPage() {
                   onClick={() => {
                     setIsRegisterMode(false);
                     setShowResetForm(false);
+                    setResetCodeVerified(false);
+                    setResetToken('');
                     clearStatus();
                   }}
                 >
@@ -441,6 +504,8 @@ export function LoginPage() {
                   onClick={() => {
                     setIsRegisterMode(true);
                     setShowResetForm(false);
+                    setResetCodeVerified(false);
+                    setResetToken('');
                     clearStatus();
                   }}
                 >
@@ -522,10 +587,13 @@ export function LoginPage() {
                     className="text-xs font-semibold text-primary hover:underline"
                     onClick={() => {
                       setShowResetForm((v) => !v);
+                      setResetCodeVerified(false);
+                      setResetToken('');
+                      setResetCode('');
                       clearStatus();
                     }}
                   >
-                    {showResetForm ? 'Скрыть форму сброса' : 'Забыли пароль?'}
+                    {showResetForm ? 'Скрыть восстановление' : 'Забыли пароль?'}
                   </button>
                 </div>
               )}
@@ -562,30 +630,8 @@ export function LoginPage() {
               {!isRegisterMode && showResetForm && (
                 <div className="rounded-xl border border-primary/20 bg-primary/[0.04] p-3">
                   <p className="text-xs font-semibold text-stone-700">
-                    Сброс через администратора: заполните данные и задайте новый пароль.
+                    Восстановление по SMS: введите телефон, подтвердите код и установите новый пароль.
                   </p>
-                  <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                    <label className="block">
-                      <span className="mb-1 block text-xs font-semibold text-stone-600">Имя</span>
-                      <input
-                        className={inputClass}
-                        value={resetFirstName}
-                        onChange={(e) => setResetFirstName(e.target.value)}
-                        placeholder="Имя из карточки"
-                        autoComplete="given-name"
-                      />
-                    </label>
-                    <label className="block">
-                      <span className="mb-1 block text-xs font-semibold text-stone-600">Фамилия</span>
-                      <input
-                        className={inputClass}
-                        value={resetLastName}
-                        onChange={(e) => setResetLastName(e.target.value)}
-                        placeholder="Фамилия из карточки"
-                        autoComplete="family-name"
-                      />
-                    </label>
-                  </div>
                   <label className="mt-3 block">
                     <span className="mb-1 block text-xs font-semibold text-stone-600">Телефон</span>
                     <input
@@ -600,6 +646,39 @@ export function LoginPage() {
                       autoComplete="tel"
                     />
                   </label>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      disabled={submitting}
+                      onClick={() => void requestResetCode()}
+                      className="rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-white shadow-md shadow-primary/20 disabled:opacity-50"
+                    >
+                      Получить код
+                    </button>
+                  </div>
+                  <label className="mt-3 block">
+                    <span className="mb-1 block text-xs font-semibold text-stone-600">Код из SMS</span>
+                    <input
+                      className={inputClass}
+                      value={resetCode}
+                      onChange={(e) => setResetCode(e.target.value.replace(/\D+/g, '').slice(0, 6))}
+                      placeholder="6 цифр"
+                      inputMode="numeric"
+                      autoComplete="one-time-code"
+                    />
+                  </label>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      disabled={submitting}
+                      onClick={() => void verifyResetCode()}
+                      className="rounded-xl border border-primary/40 bg-white px-4 py-2.5 text-sm font-bold text-primary disabled:opacity-50"
+                    >
+                      Подтвердить код
+                    </button>
+                  </div>
+                  {resetCodeVerified && (
+                  <>
                   <div className="mt-3 grid gap-3 sm:grid-cols-2">
                     <label className="block">
                       <span className="mb-1 block text-xs font-semibold text-stone-600">Новый пароль</span>
@@ -659,9 +738,11 @@ export function LoginPage() {
                       onClick={() => void submitForgotPassword()}
                       className="rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-white shadow-md shadow-primary/20 disabled:opacity-50"
                     >
-                      Отправить заявку на сброс
+                      Сохранить новый пароль
                     </button>
                   </div>
+                  </>
+                  )}
                 </div>
               )}
             </div>

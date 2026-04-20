@@ -20,6 +20,7 @@ import userRoutes from './routes/userRoutes';
 import pushRoutes from './routes/pushRoutes';
 import notificationsRoutes from './routes/notificationsRoutes';
 import telegramRoutes from './routes/telegramRoutes';
+import smsRoutes from './routes/smsRoutes';
 import publicRoutes from './routes/publicRoutes';
 import songRoutes from './routes/songRoutes';
 import studioRoutes from './routes/studioRoutes';
@@ -202,6 +203,7 @@ app.use('/api', routes);
 app.use('/api/push', pushRoutes);
 app.use('/api/notifications', notificationsRoutes);
 app.use('/api/telegram', telegramRoutes);
+app.use('/api/sms', smsRoutes);
 
 // Debug/version endpoint (helps verify that deploy updated)
 app.get('/api/version', (_req, res) => {

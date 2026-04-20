@@ -3,6 +3,7 @@ import {
   approveAccessRequestHandler,
   changePhoneHandler,
   changePasswordHandler,
+  completePasswordResetSmsHandler,
   forgotPasswordRequestHandler,
   listAccessRequestsHandler,
   loginHandler,
@@ -12,6 +13,8 @@ import {
   uploadAvatarHandler,
   registerHandler,
   rejectAccessRequestHandler,
+  startPasswordResetSmsHandler,
+  verifyPasswordResetSmsHandler,
 } from '../controllers/authController';
 import { requireAuthSession } from '../middleware/authSession';
 import multer from 'multer';
@@ -79,6 +82,9 @@ function avatarUploadMiddleware(req: Request, res: Response, next: NextFunction)
 router.post('/register', registerHandler);
 router.post('/login', loginHandler);
 router.post('/forgot-password-request', forgotPasswordRequestHandler);
+router.post('/password-reset/sms/request', startPasswordResetSmsHandler);
+router.post('/password-reset/sms/verify', verifyPasswordResetSmsHandler);
+router.post('/password-reset/sms/complete', completePasswordResetSmsHandler);
 router.get('/me', requireAuthSession, meHandler);
 router.patch('/me', requireAuthSession, patchProfileHandler);
 router.post('/me/avatar', requireAuthSession, avatarUploadMiddleware, uploadAvatarHandler);

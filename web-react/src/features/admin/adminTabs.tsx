@@ -1,11 +1,11 @@
 import type { IconType } from 'react-icons';
 import {
   LuBell,
-  LuBot,
   LuCalendarDays,
   LuCalendarRange,
   LuHistory,
   LuInbox,
+  LuLink2,
   LuPalette,
   LuPanelsTopLeft,
   LuSend,
@@ -25,7 +25,7 @@ export interface AdminTabConfig {
     | 'journal'
     | 'notifications'
     | 'telegram'
-    | 'ai';
+    | 'integrations';
   label: string;
   Icon: IconType;
   short: string;
@@ -108,12 +108,12 @@ export const ADMIN_TABS: readonly AdminTabConfig[] = [
     description: 'Скрытый админ-модуль для отправки молитв и недельных списков в Telegram.',
   },
   {
-    id: 'ai',
-    label: 'ИИ и модели',
-    Icon: LuBot,
-    short: 'ИИ',
+    id: 'integrations',
+    label: 'Интеграции',
+    Icon: LuLink2,
+    short: 'SMS + ИИ',
     description:
-      'Интеграция с OpenAI-совместимым API (включая OpenRouter и локальные эндпоинты): ключ, модель, системный промпт для серверного агента.',
+      'Управление внешними интеграциями: SMS.ru для восстановления пароля и ИИ-модели для серверного агента.',
   },
 ];
 
