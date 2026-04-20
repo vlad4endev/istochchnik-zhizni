@@ -112,6 +112,14 @@ export function MySongsPage() {
     onSuccess: () => void qc.invalidateQueries({ queryKey: ['studio', 'drafts'] }),
   });
 
+  useEffect(() => {
+    const recent = recentQ.data ?? [];
+    const showRecentTab = recent.length > 0;
+    if (tab === 'recent' && !showRecentTab && !recentQ.isLoading) {
+      setTab('saved');
+    }
+  }, [tab, recentQ.data, recentQ.isLoading]);
+
   if (q.isLoading) {
     return <p className="text-sm text-stone-500">Загрузка…</p>;
   }
@@ -123,12 +131,6 @@ export function MySongsPage() {
   const recent = recentQ.data ?? [];
   const drafts = draftsQ.data ?? [];
   const showRecentTab = recent.length > 0;
-
-  useEffect(() => {
-    if (tab === 'recent' && !showRecentTab && !recentQ.isLoading) {
-      setTab('saved');
-    }
-  }, [tab, showRecentTab, recentQ.isLoading]);
 
   const pageCard =
     surface === 'songbook'
