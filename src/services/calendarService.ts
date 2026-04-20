@@ -17,6 +17,8 @@ interface Member {
   name: string;
   first_name: string | null;
   last_name: string | null;
+  /** Участвует в общем молитвенном цикле (для фильтров админки/дашборда). */
+  in_prayer_cycle: boolean;
   prayer_request: string | null;
   /** Когда последний раз меняли молитвенную нужду для этого цикла (member_prayer_by_cycle). */
   prayer_need_updated_at: string | null;
@@ -34,6 +36,7 @@ interface MemberOverrideRow {
   name: string;
   first_name: string | null;
   last_name: string | null;
+  in_prayer_cycle: boolean;
   prayer_request: string | null;
   prayer_need_updated_at: string | null;
 }
@@ -311,6 +314,7 @@ export async function getPrayerDataByDate(targetDate: string): Promise<PrayerDat
 
   const overridePromise = query(
     `SELECT m.id, m.name, m.first_name, m.last_name,
+            m.in_prayer_cycle AS in_prayer_cycle,
             COALESCE(mpc.prayer_request, m.prayer_request) AS prayer_request,
             mpc.updated_at::text AS prayer_need_updated_at
      FROM member_cycle_overrides o
@@ -336,6 +340,7 @@ export async function getPrayerDataByDate(targetDate: string): Promise<PrayerDat
 
     const result = await query(
       `SELECT m.id, m.name, m.first_name, m.last_name,
+              m.in_prayer_cycle AS in_prayer_cycle,
               COALESCE(mpc.prayer_request, m.prayer_request) AS prayer_request,
               mpc.updated_at::text AS prayer_need_updated_at
        FROM members m
@@ -402,11 +407,20 @@ async function getMemberAssignmentsForDates(dates: string[]): Promise<NextWeekMe
   }
 
   const sortedBase = await query(
-    `SELECT m.id, m.name, m.first_name, m.last_name
+    `SELECT m.id, m.name, m.first_name, m.last_name, m.in_prayer_cycle AS in_prayer_cycle
      FROM members m
      WHERE ${PRAYER_CYCLE_MEMBERS_WHERE_M}
      ORDER BY ${PRAYER_CYCLE_ROSTER_ORDER_SQL}`
-  ).then((result) => result.rows as { id: number; name: string; first_name: string | null; last_name: string | null }[]);
+  ).then(
+    (result) =>
+      result.rows as {
+        id: number;
+        name: string;
+        first_name: string | null;
+        last_name: string | null;
+        in_prayer_cycle: boolean;
+      }[],
+  );
 
   const overrides = await query(
     `SELECT o.target_date::text AS target_date, m.id
@@ -429,6 +443,7 @@ async function getMemberAssignmentsForDates(dates: string[]): Promise<NextWeekMe
     const cIdx = computeCycleIndex(diffD, totalMembers);
     const r = await query(
       `SELECT m.id, m.name, m.first_name, m.last_name,
+              m.in_prayer_cycle AS in_prayer_cycle,
               COALESCE(mpc.prayer_request, m.prayer_request) AS prayer_request,
               mpc.updated_at::text AS prayer_need_updated_at
        FROM members m
@@ -461,16 +476,24 @@ async function getMemberAssignmentsForDates(dates: string[]): Promise<NextWeekMe
     }
 
     const pr = await query(
-      `SELECT COALESCE(mpc.prayer_request, m.prayer_request) AS prayer_request,
+      `SELECT m.in_prayer_cycle AS in_prayer_cycle,
+              COALESCE(mpc.prayer_request, m.prayer_request) AS prayer_request,
               mpc.updated_at::text AS prayer_need_updated_at
        FROM members m
        LEFT JOIN member_prayer_by_cycle mpc ON mpc.member_id = m.id AND mpc.cycle_index = $2
        WHERE m.id = $1`,
       [base.id, cIdx]
     );
-    const row = pr.rows[0] as { prayer_request?: string | null; prayer_need_updated_at?: string | null } | undefined;
+    const row = pr.rows[0] as
+      | {
+          in_prayer_cycle?: boolean | null;
+          prayer_request?: string | null;
+          prayer_need_updated_at?: string | null;
+        }
+      | undefined;
     const prayerRequest = row?.prayer_request ?? null;
     const updatedAt = row?.prayer_need_updated_at ?? null;
+    const inCycle = row?.in_prayer_cycle ?? base.in_prayer_cycle;
     out.push({
       date,
       member: {
@@ -478,6 +501,7 @@ async function getMemberAssignmentsForDates(dates: string[]): Promise<NextWeekMe
         name: base.name,
         first_name: base.first_name,
         last_name: base.last_name,
+        in_prayer_cycle: Boolean(inCycle),
         prayer_request: prayerRequest,
         prayer_need_updated_at: updatedAt,
       },

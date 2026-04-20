@@ -25,6 +25,7 @@ function normalizeMemberRow(raw: unknown): Member | null {
   if (!Number.isFinite(idNum)) return null;
   const pr = raw.prayer_request;
   const pu = raw.prayer_need_updated_at;
+  const ipcRaw = raw.in_prayer_cycle;
   const prevManualNeedsRaw = raw.previous_manual_prayer_needs;
   const fn = raw.first_name;
   const ln = raw.last_name;
@@ -50,11 +51,20 @@ function normalizeMemberRow(raw: unknown): Member | null {
             x != null,
         )
     : [];
+  let in_prayer_cycle: boolean | undefined;
+  if (typeof ipcRaw === 'boolean') {
+    in_prayer_cycle = ipcRaw;
+  } else if (ipcRaw === 1 || ipcRaw === '1' || ipcRaw === 'true') {
+    in_prayer_cycle = true;
+  } else if (ipcRaw === 0 || ipcRaw === '0' || ipcRaw === 'false') {
+    in_prayer_cycle = false;
+  }
   return {
     id: idNum,
     name: String(name),
     first_name: typeof fn === 'string' || fn === null ? fn : undefined,
     last_name: typeof ln === 'string' || ln === null ? ln : undefined,
+    ...(in_prayer_cycle === undefined ? {} : { in_prayer_cycle }),
     prayer_request: typeof pr === 'string' ? pr : pr == null ? null : String(pr),
     prayer_need_updated_at:
       typeof pu === 'string' ? pu : pu == null || pu === undefined ? null : String(pu),

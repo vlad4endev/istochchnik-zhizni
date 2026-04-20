@@ -3,6 +3,8 @@ export interface Member {
   name: string;
   first_name?: string | null;
   last_name?: string | null;
+  /** Участвует в общем молитвенном цикле (приходит из API плана недели и др.). */
+  in_prayer_cycle?: boolean;
   prayer_request: string | null;
   /** Когда сохраняли нужду для текущего цикла (member_prayer_by_cycle.updated_at). */
   prayer_need_updated_at?: string | null;
