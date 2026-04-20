@@ -15,6 +15,8 @@ export function useServiceWorkerUpdate(options?: { showPrompt?: boolean }) {
   const [updatePrompt, setUpdatePrompt] = useState<UpdatePrompt>({ show: false, onUpdate: () => {} });
   const dismissedForThisSession = useRef(false);
   const reloadOnceRef = useRef(false);
+  const swFetchFailureCooldownUntilRef = useRef(0);
+  const swFetchFailureLoggedRef = useRef(false);
 
   useEffect(() => {
     if (!('serviceWorker' in navigator)) return;
@@ -23,12 +25,32 @@ export function useServiceWorkerUpdate(options?: { showPrompt?: boolean }) {
     let alive = true;
 
     const checkForUpdate = async () => {
+      if (Date.now() < swFetchFailureCooldownUntilRef.current) return;
+
       try {
         const registration = await navigator.serviceWorker.getRegistration();
         if (registration) {
           await registration.update();
         }
       } catch (error) {
+        const message = error instanceof Error ? error.message : String(error ?? '');
+        const isSwScriptFetchError =
+          message.includes('Failed to update a ServiceWorker') &&
+          message.includes('when fetching the script');
+
+        if (isSwScriptFetchError) {
+          // Avoid noisy logs every minute when sw.js is temporarily unavailable.
+          swFetchFailureCooldownUntilRef.current = Date.now() + 5 * 60 * 1000;
+          if (!swFetchFailureLoggedRef.current) {
+            swFetchFailureLoggedRef.current = true;
+            console.warn(
+              'Service Worker script is temporarily unreachable; retrying update checks later.',
+              error,
+            );
+          }
+          return;
+        }
+
         console.error('Failed to check for Service Worker updates:', error);
       }
     };

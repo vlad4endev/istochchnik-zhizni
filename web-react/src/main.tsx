@@ -39,6 +39,16 @@ const queryClient = new QueryClient({
 // iOS PWAs may keep serving stale cached assets unless we aggressively update + reload.
 if (import.meta.env.PROD) {
   try {
+    let swUpdateErrorLogged = false;
+    const safeUpdateRegistration = (reg: ServiceWorkerRegistration) => {
+      void reg.update().catch((error) => {
+        // Intermittent network/CDN hiccups should not create unhandled rejections.
+        if (swUpdateErrorLogged) return;
+        swUpdateErrorLogged = true;
+        console.warn('Service Worker update check failed (will retry later):', error);
+      });
+    };
+
     const updateSW = registerSW({
       immediate: true,
       onNeedRefresh: () => {
@@ -48,10 +58,10 @@ if (import.meta.env.PROD) {
       onRegisteredSW: (_swUrl, reg) => {
         if (!reg) return;
         // Periodically re-check updates (iOS sometimes delays update checks).
-        window.setInterval(() => void reg.update(), 60_000);
+        window.setInterval(() => safeUpdateRegistration(reg), 60_000);
         // Also re-check when returning to the app.
         document.addEventListener('visibilitychange', () => {
-          if (document.visibilityState === 'visible') void reg.update();
+          if (document.visibilityState === 'visible') safeUpdateRegistration(reg);
         });
       },
     });
