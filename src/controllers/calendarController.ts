@@ -614,20 +614,18 @@ export async function patchCycleCollectionClaims(req: Request, res: Response): P
       if (target) {
         const actorLabel = authIsPastor ? 'Пастор' : 'Администратор';
         const weekLabel = week === 'current' ? 'эту' : 'следующую';
-        try {
-          await sendPush(
-            assignedCoordinatorId,
-            'Сбор молитвенных нужд: новое назначение',
-            `${actorLabel} назначил(а) вам участника ${memberName} на ${weekLabel} неделю.`,
-            {
-              url: '/dashboard',
-              type: 'curator_assignment_by_pastor',
-              week_kind: week ?? 'next',
-            },
-          );
-        } catch (pushErr) {
+        void sendPush(
+          assignedCoordinatorId,
+          'Сбор молитвенных нужд: новое назначение',
+          `${actorLabel} назначил(а) вам участника ${memberName} на ${weekLabel} неделю.`,
+          {
+            url: '/dashboard',
+            type: 'curator_assignment_by_pastor',
+            week_kind: week ?? 'next',
+          },
+        ).catch((pushErr) => {
           console.warn('[calendar] curator assignment push failed:', pushErr);
-        }
+        });
       }
     }
     const snapshot = await getCycleCollectionClaimsSnapshot(
