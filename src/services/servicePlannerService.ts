@@ -374,13 +374,7 @@ function isWeeklyScheduleBlock(block: {
   content_json?: unknown;
   block_type_code?: unknown;
 }): boolean {
-  const typeCode = String(block.block_type_code ?? '').trim().toLowerCase();
-  if (typeCode === 'schedule') return true;
-  const content = asObject(block.content_json);
-  const markIcon = typeof content.block_mark_icon === 'string' ? content.block_mark_icon.trim().toLowerCase() : '';
-  if (markIcon === 'schedule') return true;
-  const title = String(block.title ?? '').trim().toLowerCase();
-  return title.includes('расписан');
+  return String(block.block_type_code ?? '').trim().toLowerCase() === 'schedule';
 }
 
 async function getNextWeekSchedule(serviceDate: string): Promise<NextWeekSchedulePayload> {

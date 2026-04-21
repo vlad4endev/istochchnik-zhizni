@@ -611,10 +611,7 @@ export function ServicePlannerPage() {
 
   function isScheduleBlock(block: ServicePlanBlock): boolean {
     const meta = getBlockTypeMeta(block);
-    if (meta?.code === 'schedule') return true;
-    const raw = block.content_json?.block_mark_icon;
-    if (typeof raw === 'string' && raw.trim().toLowerCase() === 'schedule') return true;
-    return block.title.trim().toLowerCase().includes('расписан');
+    return meta?.code === 'schedule';
   }
 
   function getBlockLogoUrl(block: ServicePlanBlock): string | null {
@@ -1937,9 +1934,14 @@ export function ServicePlannerPage() {
                             ) : null}
                             {!isSeparatorBlock(block) && isScheduleBlock(block) ? (
                               scheduleLines(block).length > 0 ? (
-                                <p className="text-xs leading-snug text-stone-600">
-                                  Расписание: {scheduleLines(block).join(' • ')}
-                                </p>
+                                <div className="text-xs leading-snug text-stone-600">
+                                  <p className="font-semibold">Расписание:</p>
+                                  <ul className="mt-0.5 space-y-0.5">
+                                    {scheduleLines(block).map((line) => (
+                                      <li key={line}>{line}</li>
+                                    ))}
+                                  </ul>
+                                </div>
                               ) : (
                                 <p className="text-xs leading-snug text-stone-500">
                                   На будущую неделю активных событий не найдено.

@@ -315,9 +315,14 @@ export function PublicServicePlanPage() {
                       )
                     ) : null}
                     {scheduleList.length > 0 ? (
-                      <p className="mt-0.5 text-xs leading-snug text-stone-600 sm:text-sm">
-                        Расписание: {scheduleList.join(' • ')}
-                      </p>
+                      <div className="mt-0.5 text-xs leading-snug text-stone-600 sm:text-sm">
+                        <p className="font-semibold">Расписание:</p>
+                        <ul className="mt-0.5 space-y-0.5">
+                          {scheduleList.map((line) => (
+                            <li key={line}>{line}</li>
+                          ))}
+                        </ul>
+                      </div>
                     ) : null}
                     {b.song_title ? (
                       <p className="mt-1 text-sm font-semibold leading-snug text-stone-700">
