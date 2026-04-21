@@ -143,6 +143,15 @@ function songBlockTitle(song: SongListItem): string {
   return key ? `${song.title} [${key}]` : song.title;
 }
 
+function splitHeadingAndKey(rawHeading: string): { title: string; key: string | null } {
+  const heading = rawHeading.trim();
+  const matched = heading.match(/^(.*)\s+\[([^\]]+)\]\s*$/);
+  if (!matched) return { title: heading, key: null };
+  const title = matched[1].trim();
+  const key = matched[2].trim();
+  return { title: title || heading, key: key || null };
+}
+
 function isSeparatorBlock(block: ServicePlanBlock): boolean {
   return block.content_json?.is_separator === true;
 }
@@ -1834,170 +1843,190 @@ export function ServicePlannerPage() {
           <Droppable droppableId="service-planner-blocks">
             {(provided) => (
               <div ref={provided.innerRef} {...provided.droppableProps} className="space-y-2">
-                {timedBlocks.map((block, index) => (
-                  <Draggable key={block.id} draggableId={String(block.id)} index={index}>
-                    {(dragProvided, dragSnapshot) => (
-                      <article
-                        ref={dragProvided.innerRef}
-                        {...dragProvided.draggableProps}
-                        className={[
-                          isSeparatorBlock(block)
-                            ? 'rounded-xl border border-dashed border-stone-300 bg-stone-50 p-2'
-                            : 'rounded-xl border border-stone-200 p-2',
-                          dragSnapshot.isDragging ? 'bg-stone-50 shadow' : 'bg-white',
-                          draft.current_block_id === block.id ? 'ring-2 ring-primary/30' : '',
-                        ].join(' ')}
-                      >
-                        <div className="flex items-start gap-2 sm:items-center">
-                          <button
-                            type="button"
-                            {...dragProvided.dragHandleProps}
-                            className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-stone-200 text-stone-500"
-                            aria-label="Перетащить блок"
-                          >
-                            <LuGripVertical className="h-4 w-4" />
-                          </button>
-                          <span className="w-11 shrink-0 rounded-md bg-stone-100 px-1.5 py-1 text-center text-[11px] font-bold text-stone-800">
-                            {isSeparatorBlock(block) ? '---' : block.startsAt}
-                          </span>
-                          {!isSeparatorBlock(block) ? (
-                            getBlockLogoUrl(block) ? (
-                              <img
-                                src={getBlockLogoUrl(block) ?? ''}
-                                alt="Лого блока"
-                                className="h-7 w-7 shrink-0 rounded-lg object-cover"
-                              />
-                            ) : (
-                              (() => {
-                                const customIcon = getBlockMarkIcon(block);
-                                const customMark = getBlockMark(block);
-                                const categoryIcon = getCategoryIcon(block);
-                                if (customIcon) {
-                                  const Icon = customIcon.Icon;
-                                  return (
-                                    <span className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${customIcon.wrapClass}`}>
-                                      <Icon className={`h-4 w-4 ${customIcon.iconClass}`} />
-                                    </span>
-                                  );
-                                }
-                                if (customMark) {
-                                  return (
-                                    <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-stone-100 text-base">
-                                      {customMark}
-                                    </span>
-                                  );
-                                }
-                                if (categoryIcon) {
-                                  const Icon = categoryIcon.Icon;
-                                  return (
-                                    <span className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${categoryIcon.wrapClass}`}>
-                                      <Icon className={`h-4 w-4 ${categoryIcon.iconClass}`} />
-                                    </span>
-                                  );
-                                }
-                                return (
-                                  <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-stone-100 text-xs">
-                                    •
-                                  </span>
-                                );
-                              })()
-                            )
-                          ) : null}
-                          <div className="min-w-0 flex-1">
-                            <p className="text-sm font-semibold leading-snug text-stone-900">
-                              {isSeparatorBlock(block)
-                                ? separatorLabel(block)
-                                : isPoemBlock(block)
-                                  ? poemHeading(block)
-                                  : isSermonBlock(block)
-                                    ? sermonHeading(block)
-                                  : isBirthdaysBlock(block)
-                                    ? 'Дни рождения недели'
-                                  : block.title}
-                            </p>
+                {timedBlocks.map((block, index) => {
+                  const heading = isSeparatorBlock(block)
+                    ? separatorLabel(block)
+                    : isPoemBlock(block)
+                      ? poemHeading(block)
+                      : isSermonBlock(block)
+                        ? sermonHeading(block)
+                        : isBirthdaysBlock(block)
+                          ? 'Дни рождения недели'
+                          : block.title;
+                  const { title: blockTitle, key: blockKey } = splitHeadingAndKey(heading);
+                  const blockTypeLabel = blockTypes.find((t) => t.id === block.block_type_id)?.name ?? 'Блок';
+
+                  return (
+                    <Draggable key={block.id} draggableId={String(block.id)} index={index}>
+                      {(dragProvided, dragSnapshot) => (
+                        <article
+                          ref={dragProvided.innerRef}
+                          {...dragProvided.draggableProps}
+                          className={[
+                            isSeparatorBlock(block)
+                              ? 'rounded-2xl border border-dashed border-stone-300 bg-stone-50 p-3 sm:p-4'
+                              : 'rounded-2xl border border-stone-200 p-3 sm:p-4',
+                            dragSnapshot.isDragging ? 'bg-stone-50 shadow' : 'bg-white',
+                            draft.current_block_id === block.id ? 'ring-2 ring-primary/30' : '',
+                          ].join(' ')}
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="inline-flex min-w-[3.25rem] shrink-0 items-center justify-center rounded-md bg-stone-100 px-2 py-1 text-center text-xs font-extrabold text-stone-900">
+                              {isSeparatorBlock(block) ? '---' : block.startsAt}
+                            </span>
+                            <div className="flex shrink-0 items-center gap-1">
+                              <button
+                                type="button"
+                                onClick={() => setEditingBlockId(block.id)}
+                                className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-stone-200 text-stone-600 hover:bg-stone-50"
+                                aria-label="Редактировать блок"
+                              >
+                                <LuPencil className="h-3.5 w-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setDraft({
+                                    ...draft,
+                                    blocks: draft.blocks.filter((b) => b.id !== block.id),
+                                  });
+                                  void deleteBlockMut.mutateAsync(block.id);
+                                }}
+                                className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-rose-200 text-rose-600 hover:bg-rose-50"
+                                aria-label="Удалить блок"
+                              >
+                                <LuTrash2 className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+                          </div>
+
+                          <div className="mt-3 flex flex-col gap-2 sm:gap-3 md:flex-row md:items-start">
                             {!isSeparatorBlock(block) ? (
-                              <p className="text-xs text-stone-500">
-                                {`${blockTypes.find((t) => t.id === block.block_type_id)?.name ?? 'Блок'} • ${block.duration_minutes} мин`}
-                              </p>
+                              getBlockLogoUrl(block) ? (
+                                <img
+                                  src={getBlockLogoUrl(block) ?? ''}
+                                  alt="Лого блока"
+                                  className="h-8 w-8 shrink-0 rounded-lg object-cover"
+                                />
+                              ) : (
+                                (() => {
+                                  const customIcon = getBlockMarkIcon(block);
+                                  const customMark = getBlockMark(block);
+                                  const categoryIcon = getCategoryIcon(block);
+                                  if (customIcon) {
+                                    const Icon = customIcon.Icon;
+                                    return (
+                                      <span className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${customIcon.wrapClass}`}>
+                                        <Icon className={`h-4 w-4 ${customIcon.iconClass}`} />
+                                      </span>
+                                    );
+                                  }
+                                  if (customMark) {
+                                    return (
+                                      <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-stone-100 text-base">
+                                        {customMark}
+                                      </span>
+                                    );
+                                  }
+                                  if (categoryIcon) {
+                                    const Icon = categoryIcon.Icon;
+                                    return (
+                                      <span className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${categoryIcon.wrapClass}`}>
+                                        <Icon className={`h-4 w-4 ${categoryIcon.iconClass}`} />
+                                      </span>
+                                    );
+                                  }
+                                  return (
+                                    <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-stone-100 text-xs">
+                                      •
+                                    </span>
+                                  );
+                                })()
+                              )
                             ) : null}
-                            {!isSeparatorBlock(block) && isPoemBlock(block) && poemSubline(block) ? (
-                              <p className="text-xs leading-snug text-stone-600">{poemSubline(block)}</p>
-                            ) : null}
-                            {!isSeparatorBlock(block) && isBirthdaysBlock(block) ? (
-                              birthdayLines(block).length > 0 ? (
+
+                            <div className="min-w-0 flex-1">
+                              <div className="flex flex-wrap items-center gap-1.5">
+                                <p className="text-sm font-semibold leading-snug normal-case text-stone-900">
+                                  {blockTitle}
+                                </p>
+                                {blockKey ? (
+                                  <span className="inline-flex items-center rounded-full bg-stone-100 px-2 py-0.5 text-[11px] font-semibold text-stone-700">
+                                    [{blockKey}]
+                                  </span>
+                                ) : null}
+                              </div>
+                              {!isSeparatorBlock(block) ? (
+                                <p className="text-xs text-stone-400">
+                                  {`${blockTypeLabel} • ${block.duration_minutes} мин`}
+                                </p>
+                              ) : null}
+                              {!isSeparatorBlock(block) && isPoemBlock(block) && poemSubline(block) ? (
+                                <p className="text-xs leading-snug text-stone-600">{poemSubline(block)}</p>
+                              ) : null}
+                              {!isSeparatorBlock(block) && isBirthdaysBlock(block) ? (
+                                birthdayLines(block).length > 0 ? (
+                                  <p className="text-xs leading-snug text-stone-600">
+                                    Именинники: {birthdayLines(block).join(' • ')}
+                                  </p>
+                                ) : (
+                                  <p className="text-xs leading-snug text-stone-500">На этой неделе именинников нет.</p>
+                                )
+                              ) : null}
+                              {!isSeparatorBlock(block) && isScheduleBlock(block) ? (
+                                scheduleLines(block).length > 0 ? (
+                                  <div className="text-xs leading-snug text-stone-600">
+                                    <p className="font-semibold">Расписание:</p>
+                                    <ul className="mt-0.5 space-y-0.5">
+                                      {scheduleLines(block).map((line) => (
+                                        <li key={line}>{line}</li>
+                                      ))}
+                                    </ul>
+                                  </div>
+                                ) : (
+                                  <p className="text-xs leading-snug text-stone-500">
+                                    На будущую неделю активных событий не найдено.
+                                  </p>
+                                )
+                              ) : null}
+                              {!isSeparatorBlock(block) && isSermonBlock(block) && sermonScripture(block) ? (
                                 <p className="text-xs leading-snug text-stone-600">
-                                  Именинники: {birthdayLines(block).join(' • ')}
+                                  Писание: {sermonScripture(block)}
                                 </p>
-                              ) : (
-                                <p className="text-xs leading-snug text-stone-500">На этой неделе именинников нет.</p>
-                              )
-                            ) : null}
-                            {!isSeparatorBlock(block) && isScheduleBlock(block) ? (
-                              scheduleLines(block).length > 0 ? (
-                                <div className="text-xs leading-snug text-stone-600">
-                                  <p className="font-semibold">Расписание:</p>
-                                  <ul className="mt-0.5 space-y-0.5">
-                                    {scheduleLines(block).map((line) => (
-                                      <li key={line}>{line}</li>
-                                    ))}
-                                  </ul>
-                                </div>
-                              ) : (
+                              ) : null}
+                              {!isSeparatorBlock(block) &&
+                              (getResponsibleLabel(block) || getDirectionLabel(block)) ? (
                                 <p className="text-xs leading-snug text-stone-500">
-                                  На будущую неделю активных событий не найдено.
+                                  {getResponsibleLabel(block)
+                                    ? `${isSermonBlock(block) ? 'Проповедник' : 'Ответственный'}: ${getResponsibleLabel(block)}`
+                                    : ''}
+                                  {getResponsibleLabel(block) && getDirectionLabel(block) ? ' • ' : ''}
+                                  {getDirectionLabel(block) ? `Направление: ${getDirectionLabel(block)}` : ''}
                                 </p>
-                              )
-                            ) : null}
-                            {!isSeparatorBlock(block) && isSermonBlock(block) && sermonScripture(block) ? (
-                              <p className="text-xs leading-snug text-stone-600">
-                                Писание: {sermonScripture(block)}
-                              </p>
-                            ) : null}
-                            {!isSeparatorBlock(block) &&
-                            (getResponsibleLabel(block) || getDirectionLabel(block)) ? (
-                              <p className="text-xs leading-snug text-stone-500">
-                                {getResponsibleLabel(block)
-                                  ? `${isSermonBlock(block) ? 'Проповедник' : 'Ответственный'}: ${getResponsibleLabel(block)}`
-                                  : ''}
-                                {getResponsibleLabel(block) && getDirectionLabel(block) ? ' • ' : ''}
-                                {getDirectionLabel(block) ? `Направление: ${getDirectionLabel(block)}` : ''}
-                              </p>
-                            ) : null}
-                            {!isSeparatorBlock(block) && getBlockNotePreview(block) ? (
-                              <p className="mt-0.5 text-xs leading-snug text-stone-600">
-                                Заметка: {getBlockNotePreview(block)}
-                              </p>
-                            ) : null}
+                              ) : null}
+                              {!isSeparatorBlock(block) && getBlockNotePreview(block) ? (
+                                <p className="mt-0.5 text-xs leading-snug text-stone-600">
+                                  Заметка: {getBlockNotePreview(block)}
+                                </p>
+                              ) : null}
+                            </div>
                           </div>
-                          <div className="flex shrink-0 items-center gap-1">
+
+                          <div className="mt-2 flex justify-end">
                             <button
                               type="button"
-                              onClick={() => setEditingBlockId(block.id)}
-                              className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-stone-200 text-stone-700 hover:bg-stone-50"
-                              aria-label="Редактировать блок"
+                              {...dragProvided.dragHandleProps}
+                              className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-stone-200 text-stone-400 hover:text-stone-600"
+                              aria-label="Перетащить блок"
                             >
-                              <LuPencil className="h-4 w-4" />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setDraft({
-                                  ...draft,
-                                  blocks: draft.blocks.filter((b) => b.id !== block.id),
-                                });
-                                void deleteBlockMut.mutateAsync(block.id);
-                              }}
-                              className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-rose-200 text-rose-700 hover:bg-rose-50"
-                              aria-label="Удалить блок"
-                            >
-                              <LuTrash2 className="h-4 w-4" />
+                              <LuGripVertical className="h-3.5 w-3.5" />
                             </button>
                           </div>
-                        </div>
-                      </article>
-                    )}
-                  </Draggable>
-                ))}
+                        </article>
+                      )}
+                    </Draggable>
+                  );
+                })}
                 {provided.placeholder}
               </div>
             )}
