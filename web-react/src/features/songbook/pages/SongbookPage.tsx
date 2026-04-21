@@ -1,16 +1,15 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { LuCheck } from 'react-icons/lu';
+import { LuCheck, LuSearch, LuX } from 'react-icons/lu';
 
-import { useAuthStore } from '../../auth/authStore';
 import { emitAppToast } from '../../../lib/uiFeedback';
 import { deleteFavorite, fetchSongs, postFavorite } from '../api';
 
 export function SongbookPage() {
   const qc = useQueryClient();
-  const role = useAuthStore((s) => s.role);
   const [tab, setTab] = useState<'catalog' | 'favorites'>('catalog');
+  const [search, setSearch] = useState('');
   const [compactList, setCompactList] = useState<boolean>(() => {
     if (typeof window === 'undefined') return true;
     const raw = window.localStorage.getItem('songbook.compactList');
@@ -42,9 +41,15 @@ export function SongbookPage() {
 
   const rows = useMemo(() => {
     const source = query.data ?? [];
-    if (tab === 'favorites') return source.filter((s) => s.is_favorite);
-    return source;
-  }, [query.data, tab]);
+    const tabRows = tab === 'favorites' ? source.filter((s) => s.is_favorite) : source;
+    const q = search.trim().toLowerCase();
+    if (!q) return tabRows;
+    return tabRows.filter((s) => {
+      const number = s.song_number == null ? '' : String(s.song_number);
+      const title = String(s.title ?? '').toLowerCase();
+      return number.includes(q) || title.includes(q);
+    });
+  }, [query.data, tab, search]);
 
   if (query.isLoading) {
     return <p className="text-sm text-stone-500">Загрузка песенника…</p>;
@@ -56,6 +61,33 @@ export function SongbookPage() {
   return (
     <div className="mx-auto max-w-3xl space-y-4 pb-24 text-stone-900">
       <header className="sticky top-0 z-20 -mx-3 border-b border-stone-200 bg-[var(--surface)]/95 px-3 py-2 backdrop-blur md:mx-0 md:px-0">
+        <label className="mb-2 block">
+          <span className="sr-only">Поиск по номеру или названию</span>
+          <div className="relative">
+            <LuSearch
+              className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-stone-400"
+              aria-hidden
+            />
+            <input
+              type="search"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Поиск: номер или название"
+              autoComplete="off"
+              className="w-full min-h-[42px] rounded-xl border border-stone-200 bg-white py-2 pl-9 pr-9 text-sm text-stone-900 outline-none placeholder:text-stone-400 focus:border-stone-300"
+            />
+            {search.trim() ? (
+              <button
+                type="button"
+                onClick={() => setSearch('')}
+                className="absolute right-1.5 top-1/2 inline-flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-md text-stone-400 hover:bg-stone-100 hover:text-stone-600"
+                aria-label="Очистить поиск"
+              >
+                <LuX className="h-4 w-4" />
+              </button>
+            ) : null}
+          </div>
+        </label>
         <div className="grid grid-cols-2 overflow-hidden rounded-xl bg-stone-100">
           <button
             type="button"
@@ -92,7 +124,7 @@ export function SongbookPage() {
       <ul className="space-y-1">
         {rows.map((s, idx) => (
           <li key={s.id} className="rounded-lg border border-stone-200 bg-white">
-            <div className={['flex items-center px-3', compactList ? 'gap-2 py-2' : 'gap-3 py-3'].join(' ')}>
+            <div className={['flex items-center px-3', compactList ? 'gap-2 py-1.5' : 'gap-2.5 py-2'].join(' ')}>
               <Link
                 to={`/songbook/${s.id}`}
                 className={['flex min-h-[44px] min-w-0 flex-1 items-center', compactList ? 'gap-2' : 'gap-3'].join(' ')}
@@ -100,7 +132,7 @@ export function SongbookPage() {
                 <span
                   className={[
                     'w-7 shrink-0 text-center text-stone-500',
-                    compactList ? 'text-xl font-semibold' : 'text-3xl font-light',
+                    compactList ? 'text-lg font-semibold' : 'text-2xl font-medium',
                   ].join(' ')}
                 >
                   {idx + 1}
@@ -108,7 +140,9 @@ export function SongbookPage() {
                 <h2
                   className={[
                     'truncate text-stone-900',
-                    compactList ? 'text-base font-bold tracking-normal sm:text-lg' : 'text-2xl font-extrabold uppercase tracking-wide',
+                    compactList
+                      ? 'text-sm font-semibold tracking-normal sm:text-base'
+                      : 'text-lg font-semibold tracking-normal sm:text-xl',
                   ].join(' ')}
                 >
                   {s.title}
@@ -137,17 +171,6 @@ export function SongbookPage() {
         <p className="rounded-xl border border-stone-200 bg-white py-10 text-center text-sm text-stone-500">
           {tab === 'favorites' ? 'В избранном пока нет песен.' : 'В каталоге пока нет песен.'}
         </p>
-      ) : null}
-
-      {role === 'admin' || role === 'editor' ? (
-        <div className="pt-1">
-          <Link
-            to="/songbook/add"
-            className="inline-flex min-h-[42px] items-center justify-center rounded-lg border border-stone-300 bg-white px-3 text-sm text-stone-700 hover:bg-stone-50"
-          >
-            Добавить песню
-          </Link>
-        </div>
       ) : null}
     </div>
   );

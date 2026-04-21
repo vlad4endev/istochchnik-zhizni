@@ -1,45 +1,9 @@
-import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { LuDisc3, LuListMusic, LuLogOut, LuMusic2 } from 'react-icons/lu';
-
-import { useAuthStore } from '../auth/authStore';
-import { canAccessStudioRole } from '../auth/studioAccess';
-import { isMainSongbookDeploy } from '../../lib/appVariant';
+import { Outlet } from 'react-router-dom';
 
 import { SongbookChromeProvider, useSongbookChrome } from './SongbookChromeContext';
 
-const tabs = [
-  { to: '/songbook', end: true, label: 'Общий каталог', Icon: LuMusic2 },
-  { to: '/songbook/studio', end: false, label: 'Мои версии', Icon: LuDisc3, studioOnly: true },
-  { to: '/songbook/setlists', end: false, label: 'Сетлисты', Icon: LuListMusic, studioOnly: true },
-] as const;
-
 function SongbookShell() {
-  const navigate = useNavigate();
-  const { pathname } = useLocation();
-  const role = useAuthStore((s) => s.role);
-  const logout = useAuthStore((s) => s.logout);
-  const studioOk = canAccessStudioRole(role);
   const { stageMode, toggleStageMode } = useSongbookChrome();
-  const mainOnly = isMainSongbookDeploy();
-
-  const visibleTabs = tabs.filter((t) => {
-    if (mainOnly && 'studioOnly' in t && t.studioOnly) return false;
-    if ('studioOnly' in t && t.studioOnly) return studioOk;
-    return true;
-  });
-
-  const studioStrip = (() => {
-    if (pathname.startsWith('/songbook/studio/edit/')) {
-      return 'Редактор: ваша версия текста. Оригинал в каталоге не меняется без отдельных действий.';
-    }
-    if (pathname.startsWith('/songbook/studio')) {
-      return 'Студия: личные версии и черновики. Редактор — из этого списка или из карточки песни в каталоге.';
-    }
-    if (pathname.startsWith('/songbook/setlists')) {
-      return 'Сетлисты: программа служения. На странице сетлиста — песни, PDF и режим выступления.';
-    }
-    return null;
-  })();
 
   return (
     <div
@@ -55,124 +19,24 @@ function SongbookShell() {
           stageMode ? 'border-zinc-800 bg-[#030303]/90' : 'border-stone-200/80 bg-[var(--surface)]/95',
         ].join(' ')}
       >
-        <div className="mx-auto flex max-w-6xl flex-col gap-2 px-3 py-2 md:flex-row md:items-center md:justify-between md:px-4">
-          <div className="flex items-center justify-between gap-2 md:justify-start">
-            <p className={`text-xs font-bold uppercase tracking-wide ${stageMode ? 'text-zinc-500' : 'text-stone-500'}`}>
-              Песни
-            </p>
-            <button
-              type="button"
-              onClick={toggleStageMode}
-              className={[
-                'min-h-[44px] rounded-full px-3 text-xs font-semibold transition-colors md:hidden',
-                stageMode ? 'bg-zinc-800 text-zinc-100' : 'bg-stone-200 text-stone-800',
-              ].join(' ')}
-            >
-              {stageMode ? 'Светлая' : 'Сцена'}
-            </button>
-          </div>
-
-          {/* Mobile: segmented */}
-          <div
-            className={[
-              'grid w-full gap-1 rounded-2xl p-1 md:hidden',
-              stageMode ? 'bg-zinc-900' : 'bg-stone-100',
-            ].join(' ')}
-            style={{ gridTemplateColumns: `repeat(${visibleTabs.length}, minmax(0, 1fr))` }}
-            role="tablist"
-            aria-label="Раздел песен"
-          >
-            {visibleTabs.map(({ to, end, label, Icon }) => (
-              <NavLink
-                key={to}
-                to={to}
-                end={end}
-                className={({ isActive }) =>
-                  [
-                    'flex min-h-[44px] items-center justify-center gap-1.5 rounded-xl px-2 py-2 text-center text-xs font-semibold transition-colors',
-                    isActive
-                      ? stageMode
-                        ? 'bg-zinc-800 text-white shadow-sm'
-                        : 'bg-white text-stone-900 shadow-sm'
-                      : stageMode
-                        ? 'text-zinc-400 hover:text-zinc-200'
-                        : 'text-stone-600 hover:text-stone-900',
-                  ].join(' ')
-                }
-              >
-                <Icon className="h-4 w-4 shrink-0" aria-hidden />
-                <span className="truncate">{label}</span>
-              </NavLink>
-            ))}
-          </div>
-
-          {/* Web: tabs row */}
-          <nav
-            className={['hidden gap-1 md:flex', stageMode ? 'text-zinc-300' : 'text-stone-600'].join(' ')}
-            aria-label="Подразделы песен"
-          >
-            {visibleTabs.map(({ to, end, label, Icon }) => (
-              <NavLink
-                key={to}
-                to={to}
-                end={end}
-                className={({ isActive }) =>
-                  [
-                    'inline-flex min-h-[44px] items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold transition-colors',
-                    isActive
-                      ? stageMode
-                        ? 'bg-zinc-800 text-white'
-                        : 'bg-stone-900 text-white'
-                      : stageMode
-                        ? 'hover:bg-zinc-900'
-                        : 'hover:bg-stone-100',
-                  ].join(' ')
-                }
-              >
-                <Icon className="h-4 w-4" aria-hidden />
-                {label}
-              </NavLink>
-            ))}
-          </nav>
-
-          {studioStrip && !stageMode ? (
-            <p className="hidden max-w-xl text-[11px] leading-snug text-stone-500 md:block md:px-0">{studioStrip}</p>
-          ) : null}
-
+        <div className="mx-auto flex max-w-6xl items-center justify-between px-3 py-2 md:px-4">
+          <p className={`text-xs font-semibold uppercase tracking-wide ${stageMode ? 'text-zinc-500' : 'text-stone-500'}`}>
+            Песенник
+          </p>
           <button
             type="button"
             onClick={toggleStageMode}
             className={[
-              'hidden min-h-[44px] rounded-xl border px-3 text-xs font-semibold md:inline-flex',
+              'inline-flex min-h-[36px] items-center rounded-full border px-3 text-xs font-semibold transition-colors',
               stageMode
                 ? 'border-zinc-600 text-zinc-200 hover:bg-zinc-900'
                 : 'border-stone-200 text-stone-700 hover:bg-stone-50',
             ].join(' ')}
           >
-            Режим сцены
+            {stageMode ? 'Светлая тема' : 'Режим сцены'}
           </button>
-
-          {mainOnly ? (
-            <button
-              type="button"
-              onClick={() => void logout().then(() => navigate('/login', { replace: true }))}
-              className={[
-                'inline-flex min-h-[44px] items-center gap-1.5 rounded-xl border px-3 text-xs font-semibold',
-                stageMode
-                  ? 'border-zinc-600 text-zinc-200 hover:bg-zinc-900'
-                  : 'border-stone-200 text-stone-700 hover:bg-stone-50',
-              ].join(' ')}
-            >
-              <LuLogOut className="h-4 w-4" aria-hidden />
-              Выйти
-            </button>
-          ) : null}
         </div>
       </div>
-
-      {studioStrip && !stageMode ? (
-        <p className="mx-auto max-w-6xl px-3 pb-1 text-[11px] leading-snug text-stone-500 md:hidden">{studioStrip}</p>
-      ) : null}
 
       <div className="min-h-0 flex-1 overflow-auto px-3 py-4 md:px-6">
         <Outlet />

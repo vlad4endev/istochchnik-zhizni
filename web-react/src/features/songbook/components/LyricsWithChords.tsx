@@ -50,11 +50,14 @@ export function LyricsWithChords({
       .join('\n');
   }, [lines]);
 
+  const normalizedFontSize = Math.max(12, Math.min(32, fontSizePx));
+  const lineHeight = Math.max(1.45, Math.min(1.75, 1.62 + (normalizedFontSize - 16) * 0.012));
+
   if (!chordsVisible) {
     return (
       <div
         className={['whitespace-pre-wrap leading-relaxed', className].filter(Boolean).join(' ')}
-        style={{ fontSize: `${Math.max(12, Math.min(36, fontSizePx))}px` }}
+        style={{ fontSize: `${normalizedFontSize}px`, lineHeight }}
       >
         {lyricsOnlyBody}
       </div>
@@ -64,8 +67,8 @@ export function LyricsWithChords({
   return (
     <>
       <div
-        className={['leading-[2.35rem]', className].filter(Boolean).join(' ')}
-        style={{ fontSize: `${Math.max(12, Math.min(36, fontSizePx))}px` }}
+        className={className}
+        style={{ fontSize: `${normalizedFontSize}px`, lineHeight }}
       >
         {lines.map((line, lineIdx) => {
           const secTitle = parseSectionTitle(line);
