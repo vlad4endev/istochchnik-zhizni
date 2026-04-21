@@ -1,25 +1,43 @@
 import { useQuery } from '@tanstack/react-query';
-import { useEffect, useMemo } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { LuArrowLeft } from 'react-icons/lu';
 
 import { dispatchLayoutMainChrome } from '../../../app/layoutChrome';
 import { useAuthStore } from '../../auth/authStore';
+import { canAccessStudioRole } from '../../auth/studioAccess';
 import { useWakeLock } from '../../../hooks/useWakeLock';
 import { fetchSong, recordSongOpened } from '../api';
+import { transposeChordSymbol } from '../chordUtils';
 import { LyricsWithChords } from '../components/LyricsWithChords';
+import { SongReaderSettings } from '../components/SongReaderSettings';
 import { useSongbookChrome } from '../SongbookChromeContext';
+import { fetchVersionForSong } from '../../studio/api';
 
 export function SongDetailPage() {
   const { id } = useParams<{ id: string }>();
   const songId = Number(id);
+  const role = useAuthStore((s) => s.role);
+  const studioOk = canAccessStudioRole(role);
   const token = useAuthStore((s) => s.token);
   const { stageMode } = useSongbookChrome();
+  const [transpose, setTranspose] = useState(0);
+  const [showChords, setShowChords] = useState(true);
+  const [autoScroll, setAutoScroll] = useState(false);
+  const [scrollSpeed, setScrollSpeed] = useState(40);
+  const [fontSize, setFontSize] = useState(15);
+  const [capo, setCapo] = useState(0);
+  const [showConcertChords, setShowConcertChords] = useState(false);
 
   const q = useQuery({
     queryKey: ['song', songId],
     queryFn: () => fetchSong(songId),
     enabled: Number.isInteger(songId) && songId > 0,
+  });
+  const versionQ = useQuery({
+    queryKey: ['studio', 'version', songId],
+    queryFn: () => fetchVersionForSong(songId),
+    enabled: studioOk && Number.isInteger(songId) && songId > 0,
   });
 
   useWakeLock(true);
@@ -52,11 +70,20 @@ export function SongDetailPage() {
     };
   }, []);
 
-  const metaLine = useMemo(() => {
-    if (!q.data) return '';
-    const s = q.data;
-    return `Тональность: ${s.default_key ?? '—'} · Темп: ${s.tempo ?? '—'} · Размер: ${s.time_signature ?? '—'}`;
-  }, [q.data]);
+  useEffect(() => {
+    if (!autoScroll) return;
+    let raf = 0;
+    let last = performance.now();
+    const tick = (now: number) => {
+      const dt = Math.min((now - last) / 1000, 0.05);
+      last = now;
+      const bpmFactor = q.data?.tempo ? Math.max(0.65, Math.min(2.4, Number(q.data.tempo) / 80)) : 1;
+      window.scrollBy(0, scrollSpeed * bpmFactor * dt);
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [autoScroll, scrollSpeed, q.data?.tempo]);
 
   if (!Number.isInteger(songId) || songId <= 0) {
     return <p className="text-red-600">Некорректная ссылка</p>;
@@ -65,6 +92,20 @@ export function SongDetailPage() {
   if (q.isError || !q.data) return <p className="text-red-600">Песня не найдена</p>;
 
   const s = q.data;
+  const version = (versionQ.data as { custom_content?: string | null; custom_key?: string | null } | null) ?? null;
+  const effectiveContent = version?.custom_content ?? s.content;
+  const effectiveKey = version?.custom_key ?? s.default_key;
+  const metaLine = `Тональность: ${effectiveKey ?? '—'} · Темп: ${s.tempo ?? '—'} · Размер: ${s.time_signature ?? '—'}`;
+  const currentShift = showChords
+    ? showConcertChords
+      ? transpose
+      : transpose - capo
+    : 0;
+  const keyLabel = effectiveKey
+    ? transposeChordSymbol(effectiveKey, currentShift)
+    : currentShift === 0
+      ? 'без сдвига'
+      : `сдвиг ${currentShift > 0 ? '+' : ''}${currentShift}`;
 
   const shell = stageMode
     ? {
@@ -106,16 +147,37 @@ export function SongDetailPage() {
               {s.title}
             </h1>
           </div>
+          <SongReaderSettings
+            currentKeyLabel={keyLabel}
+            fontSize={fontSize}
+            onFontSize={setFontSize}
+            transpose={transpose}
+            onTranspose={setTranspose}
+            showChords={showChords}
+            onShowChords={setShowChords}
+            autoScroll={autoScroll}
+            onAutoScroll={setAutoScroll}
+            scrollSpeed={scrollSpeed}
+            onScrollSpeed={setScrollSpeed}
+            capo={capo}
+            onCapo={setCapo}
+            showConcertChords={showConcertChords}
+            onShowConcertChords={setShowConcertChords}
+            stageMode={stageMode}
+          />
         </div>
       </div>
 
       <div className="mt-3 space-y-2">
-        <p className={`text-xs ${shell.meta}`}>{metaLine}</p>
+        <p className={`text-xs ${shell.meta}`}>
+          {metaLine}
+          {version ? ' · Моя версия' : ''}
+        </p>
         <LyricsWithChords
-          text={s.content}
-          transposeSemitones={0}
-          chordsVisible
-          fontSizePx={15}
+          text={effectiveContent}
+          transposeSemitones={currentShift}
+          chordsVisible={showChords}
+          fontSizePx={fontSize}
           chordTone="light"
           className={[
             'rounded-xl p-4 font-sans text-base',
