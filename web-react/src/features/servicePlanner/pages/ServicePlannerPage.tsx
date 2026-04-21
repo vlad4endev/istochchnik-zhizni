@@ -1403,13 +1403,13 @@ export function ServicePlannerPage() {
       <header className="rounded-2xl border border-stone-200 bg-white p-4 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h1 className="text-xl font-extrabold text-stone-900">План служения</h1>
-          <div className="flex items-center gap-2">
+          <div className="flex w-full items-center gap-1 overflow-x-auto pb-1 sm:w-auto sm:overflow-visible sm:pb-0">
             {isAdmin ? (
               <>
                 <button
                   type="button"
                   onClick={() => void createTemplateFromCurrentPlan()}
-                  className="rounded-lg border border-stone-300 px-3 py-1.5 text-xs font-semibold text-stone-700 hover:border-primary hover:text-primary"
+                  className="shrink-0 whitespace-nowrap rounded-lg border border-stone-300 px-2.5 py-1 text-[11px] font-semibold text-stone-700 hover:border-primary hover:text-primary sm:px-3 sm:py-1.5 sm:text-xs"
                 >
                   Сделать шаблон из программы
                 </button>
@@ -1419,7 +1419,7 @@ export function ServicePlannerPage() {
                     setIsTemplateDraftNew(false);
                     setScreen('template');
                   }}
-                  className="rounded-lg border border-stone-300 px-3 py-1.5 text-xs font-semibold text-stone-700 hover:border-primary hover:text-primary"
+                  className="shrink-0 whitespace-nowrap rounded-lg border border-stone-300 px-2.5 py-1 text-[11px] font-semibold text-stone-700 hover:border-primary hover:text-primary sm:px-3 sm:py-1.5 sm:text-xs"
                 >
                   Конструктор шаблона
                 </button>
@@ -1428,7 +1428,7 @@ export function ServicePlannerPage() {
             <button
               type="button"
               onClick={() => setScreen('home')}
-              className="rounded-lg border border-stone-300 px-3 py-1.5 text-xs font-semibold text-stone-700 hover:border-primary hover:text-primary"
+              className="shrink-0 whitespace-nowrap rounded-lg border border-stone-300 px-2.5 py-1 text-[11px] font-semibold text-stone-700 hover:border-primary hover:text-primary sm:px-3 sm:py-1.5 sm:text-xs"
             >
               Все программы
             </button>
@@ -1515,11 +1515,11 @@ export function ServicePlannerPage() {
 
       <section className="rounded-2xl border border-stone-200 bg-white p-3 shadow-sm">
         <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-stone-500">Составление программы</p>
-        <div className="grid gap-2 sm:grid-cols-2 md:grid-cols-4">
+        <div className="flex gap-2 overflow-x-auto pb-1 md:grid md:grid-cols-4 md:overflow-visible md:pb-0">
           <button
             type="button"
             onClick={addPlanBlock}
-            className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-xl border border-stone-300 px-3 py-2 text-sm font-semibold text-stone-700 hover:border-primary hover:text-primary"
+            className="inline-flex min-h-[40px] shrink-0 items-center justify-center gap-2 rounded-xl border border-stone-300 px-3 py-2 text-sm font-semibold text-stone-700 hover:border-primary hover:text-primary md:min-h-[44px] md:min-w-0"
           >
             <LuPlus className="h-4 w-4" />
             Добавить блок
@@ -1527,7 +1527,7 @@ export function ServicePlannerPage() {
           <button
             type="button"
             onClick={addSeparatorBlock}
-            className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-xl border border-stone-300 px-3 py-2 text-sm font-semibold text-stone-700 hover:border-primary hover:text-primary"
+            className="inline-flex min-h-[40px] shrink-0 items-center justify-center gap-2 rounded-xl border border-stone-300 px-3 py-2 text-sm font-semibold text-stone-700 hover:border-primary hover:text-primary md:min-h-[44px] md:min-w-0"
           >
             <LuPlus className="h-4 w-4" />
             Разделитель
@@ -1539,14 +1539,14 @@ export function ServicePlannerPage() {
               setDraft({ ...draft, status });
               void updatePlanMut.mutateAsync({ id: draft.id, body: { status } });
             }}
-            className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-xl border border-stone-300 px-3 py-2 text-sm font-semibold text-stone-700 hover:border-primary hover:text-primary sm:col-span-1"
+            className="inline-flex min-h-[40px] shrink-0 items-center justify-center gap-2 rounded-xl border border-stone-300 px-3 py-2 text-sm font-semibold text-stone-700 hover:border-primary hover:text-primary md:min-h-[44px] md:min-w-0"
           >
             {draft.status === 'draft' ? 'Черновик' : 'Опубликован'}
           </button>
           <button
             type="button"
             onClick={() => void saveProgramMut.mutateAsync()}
-            className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-xl bg-primary px-3 py-2 text-sm font-semibold text-white hover:bg-primary-dark sm:col-span-2 md:col-span-1"
+            className="inline-flex min-h-[40px] shrink-0 items-center justify-center gap-2 rounded-xl bg-primary px-3 py-2 text-sm font-semibold text-white hover:bg-primary-dark md:min-h-[44px] md:min-w-0"
           >
             <LuSave className="h-4 w-4" />
             Сохранить программу
@@ -1736,7 +1736,7 @@ export function ServicePlannerPage() {
         </div>
       )}
 
-      <div className="fixed inset-x-0 bottom-0 z-[60] border-t border-stone-200 bg-white/95 px-3 pb-[calc(8px+env(safe-area-inset-bottom))] pt-2 backdrop-blur md:hidden">
+      <div className="fixed inset-x-0 bottom-[calc(56px+env(safe-area-inset-bottom))] z-[60] border-t border-stone-200 bg-white/95 px-3 py-2 backdrop-blur md:hidden">
         <button
           type="button"
           onClick={() => void saveProgramMut.mutateAsync()}
