@@ -46,7 +46,7 @@ export function defaultSectionVisibilitySettings(): SectionVisibilitySettingsDoc
       songbook: defaultRule(),
       service_planner: {
         enabled: true,
-        roles: ['admin'],
+        roles: ['admin', 'minister'],
       },
       studio: defaultRule(),
       sermons: defaultRule(),

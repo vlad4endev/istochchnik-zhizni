@@ -189,7 +189,8 @@ export function ServicePlannerPage() {
   const qc = useQueryClient();
   const role = useAuthStore((s) => s.role);
   const authMemberId = useAuthStore((s) => s.memberId);
-  const isAdmin = (role ?? 'member').toLowerCase() === 'admin';
+  const normalizedRole = (role ?? 'member').toLowerCase();
+  const isPlannerManager = normalizedRole === 'admin' || normalizedRole === 'minister';
   const [screen, setScreen] = useState<'home' | 'plan' | 'template'>('home');
   const [createPlanDate, setCreatePlanDate] = useState(todayIso());
   const [isTemplateDraftNew, setIsTemplateDraftNew] = useState(false);
@@ -411,7 +412,7 @@ export function ServicePlannerPage() {
   const blockTypes = blockTypesQ.data ?? [];
   const usersById = useMemo(() => new Map(users.map((u) => [u.id, u] as const)), [users]);
   const authMember = authMemberId ? usersById.get(authMemberId) ?? null : null;
-  const canManageTemplates = isAdmin || (authMember ? hasMinistryRole(authMember, 'Ведущий') : false);
+  const canManageTemplates = isPlannerManager || (authMember ? hasMinistryRole(authMember, 'Ведущий') : false);
   const leaderCandidates = useMemo(() => users.filter((u) => hasMinistryRole(u, 'Ведущий')), [users]);
   const preacherCandidates = useMemo(() => users.filter((u) => isPreacherCandidate(u)), [users]);
 

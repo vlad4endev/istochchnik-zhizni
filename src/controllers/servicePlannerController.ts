@@ -36,13 +36,14 @@ function parseTimeHm(raw: unknown): string | null {
   return s;
 }
 
-function isAdmin(req: Request): boolean {
-  return (req.authUserRole ?? 'member') === 'admin';
+function isPlannerManager(req: Request): boolean {
+  const role = String(req.authUserRole ?? 'member').toLowerCase();
+  return role === 'admin' || role === 'minister';
 }
 
-function ensureAdmin(req: Request, res: Response): boolean {
-  if (!isAdmin(req)) {
-    res.status(403).json({ error: 'Недостаточно прав (только администратор)' });
+function ensurePlannerManager(req: Request, res: Response): boolean {
+  if (!isPlannerManager(req)) {
+    res.status(403).json({ error: 'Недостаточно прав (только администратор или служитель)' });
     return false;
   }
   return true;
@@ -58,7 +59,7 @@ function hasMinistryRole(raw: unknown, roleName: string): boolean {
 }
 
 async function ensureTemplateManager(req: Request, res: Response): Promise<boolean> {
-  if (isAdmin(req)) return true;
+  if (isPlannerManager(req)) return true;
   if (!req.authUserId) {
     res.status(401).json({ error: 'Требуется авторизация' });
     return false;
@@ -270,7 +271,7 @@ export async function getServicePlanById(req: Request, res: Response): Promise<v
 }
 
 export async function postServicePlan(req: Request, res: Response): Promise<void> {
-  if (!ensureAdmin(req, res)) return;
+  if (!ensurePlannerManager(req, res)) return;
   const body = parseJsonObject(req.body);
   const templateId = parseId(body.template_id);
   const date = parseDateYmd(body.service_date);
@@ -296,7 +297,7 @@ export async function postServicePlan(req: Request, res: Response): Promise<void
 }
 
 export async function patchServicePlanById(req: Request, res: Response): Promise<void> {
-  if (!ensureAdmin(req, res)) return;
+  if (!ensurePlannerManager(req, res)) return;
   const id = parseId(req.params.id);
   if (!id) {
     res.status(400).json({ error: 'Некорректный id плана' });
@@ -361,7 +362,7 @@ export async function patchServicePlanById(req: Request, res: Response): Promise
 }
 
 export async function patchServiceBlocksReorder(req: Request, res: Response): Promise<void> {
-  if (!ensureAdmin(req, res)) return;
+  if (!ensurePlannerManager(req, res)) return;
   const body = parseJsonObject(req.body);
   const servicePlanId = parseId(body.service_plan_id);
   const orderedBlockIdsRaw = Array.isArray(body.ordered_block_ids) ? body.ordered_block_ids : [];
@@ -381,7 +382,7 @@ export async function patchServiceBlocksReorder(req: Request, res: Response): Pr
 }
 
 export async function patchServiceBlockById(req: Request, res: Response): Promise<void> {
-  if (!ensureAdmin(req, res)) return;
+  if (!ensurePlannerManager(req, res)) return;
   const id = parseId(req.params.id);
   if (!id) {
     res.status(400).json({ error: 'Некорректный id блока' });
@@ -429,7 +430,7 @@ export async function patchServiceBlockById(req: Request, res: Response): Promis
 }
 
 export async function postServiceBlock(req: Request, res: Response): Promise<void> {
-  if (!ensureAdmin(req, res)) return;
+  if (!ensurePlannerManager(req, res)) return;
   const body = parseJsonObject(req.body);
   const servicePlanId = parseId(body.service_plan_id);
   const blockTypeId = parseId(body.block_type_id);
@@ -460,7 +461,7 @@ export async function postServiceBlock(req: Request, res: Response): Promise<voi
 }
 
 export async function deleteServiceBlockById(req: Request, res: Response): Promise<void> {
-  if (!ensureAdmin(req, res)) return;
+  if (!ensurePlannerManager(req, res)) return;
   const id = parseId(req.params.id);
   if (!id) {
     res.status(400).json({ error: 'Некорректный id блока' });
@@ -480,7 +481,7 @@ export async function deleteServiceBlockById(req: Request, res: Response): Promi
 }
 
 export async function deleteServicePlanById(req: Request, res: Response): Promise<void> {
-  if (!ensureAdmin(req, res)) return;
+  if (!ensurePlannerManager(req, res)) return;
   const id = parseId(req.params.id);
   if (!id) {
     res.status(400).json({ error: 'Некорректный id плана' });
