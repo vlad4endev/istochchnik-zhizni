@@ -8,8 +8,10 @@ import {
   LuChevronUp,
   LuClock3,
   LuCopy,
+  LuEllipsis,
   LuGripVertical,
   LuLink,
+  LuListOrdered,
   LuLoaderCircle,
   LuPencil,
   LuPlus,
@@ -223,6 +225,23 @@ export function ServicePlannerPage() {
   const [shareCopied, setShareCopied] = useState(false);
   const [showArchivedPlans, setShowArchivedPlans] = useState(false);
   const [isPlanSettingsOpenMobile, setIsPlanSettingsOpenMobile] = useState(false);
+  /** Мобильная панель: меню действий и показ времени блока */
+  const [mobilePlanBlockMenuId, setMobilePlanBlockMenuId] = useState<number | null>(null);
+  const [mobilePlanTimeOpenId, setMobilePlanTimeOpenId] = useState<number | null>(null);
+  const [mobileTemplateBlockMenuId, setMobileTemplateBlockMenuId] = useState<number | null>(null);
+  const [mobileTemplateOrderOpenId, setMobileTemplateOrderOpenId] = useState<number | null>(null);
+  /** Совпадает с Tailwind `md:` — на мобильной весь блок — ручка перетаскивания */
+  const [isNarrowViewport, setIsNarrowViewport] = useState(
+    () => typeof window !== 'undefined' && window.matchMedia('(max-width: 767px)').matches,
+  );
+
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 767px)');
+    const sync = () => setIsNarrowViewport(mq.matches);
+    sync();
+    mq.addEventListener('change', sync);
+    return () => mq.removeEventListener('change', sync);
+  }, []);
 
   const songsQ = useQuery<SongListItem[]>({
     queryKey: ['songs', 'service-planner'],
@@ -281,6 +300,35 @@ export function ServicePlannerPage() {
       }
     }
   }, [planQ.data]);
+
+  useEffect(() => {
+    if (
+      mobilePlanBlockMenuId == null &&
+      mobileTemplateBlockMenuId == null &&
+      mobilePlanTimeOpenId == null &&
+      mobileTemplateOrderOpenId == null
+    ) {
+      return undefined;
+    }
+    const onPointerDown = (e: PointerEvent) => {
+      const el = e.target;
+      if (!(el instanceof Element)) return;
+      if (el.closest('[data-planner-mobile-menu-root]')) return;
+      if (el.closest('[data-planner-mobile-time-root]')) return;
+      if (el.closest('[data-planner-mobile-template-order-root]')) return;
+      setMobilePlanBlockMenuId(null);
+      setMobileTemplateBlockMenuId(null);
+      setMobilePlanTimeOpenId(null);
+      setMobileTemplateOrderOpenId(null);
+    };
+    document.addEventListener('pointerdown', onPointerDown);
+    return () => document.removeEventListener('pointerdown', onPointerDown);
+  }, [
+    mobilePlanBlockMenuId,
+    mobileTemplateBlockMenuId,
+    mobilePlanTimeOpenId,
+    mobileTemplateOrderOpenId,
+  ]);
 
   useEffect(() => {
     if (!activeTemplateId && (templatesQ.data?.length ?? 0) > 0) {
@@ -1353,57 +1401,257 @@ export function ServicePlannerPage() {
                             <article
                               ref={dragProvided.innerRef}
                               {...dragProvided.draggableProps}
+                              {...(isNarrowViewport ? dragProvided.dragHandleProps : {})}
                               className={[
                                 isTemplateSeparatorBlock(b)
                                   ? 'rounded-xl border border-dashed border-stone-300 bg-stone-50 p-2'
                                   : 'rounded-xl border border-stone-200 bg-white p-2',
                                 dragSnapshot.isDragging ? 'shadow' : '',
+                                isNarrowViewport ? 'max-md:cursor-grab max-md:active:cursor-grabbing' : '',
                               ].join(' ')}
                             >
-                              <div className="flex items-center gap-2">
-                                <button
-                                  type="button"
-                                  {...dragProvided.dragHandleProps}
-                                  className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-stone-200 text-stone-500"
-                                  aria-label="Перетащить блок шаблона"
-                                >
-                                  <LuGripVertical className="h-4 w-4" />
-                                </button>
-                                <span className="w-8 text-xs font-bold text-stone-700">{idx + 1}</span>
-                                <div className="min-w-0 flex-1">
-                                  <p className="truncate text-xs font-semibold text-stone-900">
-                                    {isTemplateSeparatorBlock(b) ? templateSeparatorLabel(b) : b.title}
+                              {isTemplateSeparatorBlock(b) ? (
+                                <div className="relative flex min-h-[2rem] items-center justify-center py-0.5 pr-12 md:pr-28">
+                                  <p className="px-2 text-center text-xs font-bold leading-snug text-stone-800 sm:text-sm">
+                                    {templateSeparatorLabel(b)}
                                   </p>
-                                  {!isTemplateSeparatorBlock(b) ? (
-                                    <p className="text-xs text-stone-500">
-                                      {blockTypes.find((t) => t.id === b.block_type_id)?.name ?? 'Блок'} • {b.duration_minutes} мин
-                                    </p>
-                                  ) : null}
+                                  <div className="absolute right-0 top-1/2 hidden -translate-y-1/2 items-center gap-0.5 md:flex">
+                                    <button
+                                      type="button"
+                                      onClick={() => setEditingTemplateBlockId(b.id)}
+                                      className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-stone-200 text-stone-700 hover:bg-stone-50"
+                                      aria-label="Редактировать блок шаблона"
+                                    >
+                                      <LuPencil className="h-4 w-4" />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        setTemplateDraft({
+                                          ...templateDraft,
+                                          blocks: templateBlocksSorted
+                                            .filter((x) => x.id !== b.id)
+                                            .map((x, i) => ({ ...x, order_index: i })),
+                                        })
+                                      }
+                                      className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-rose-200 text-rose-700 hover:bg-rose-50"
+                                      aria-label="Удалить блок шаблона"
+                                    >
+                                      <LuTrash2 className="h-4 w-4" />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      {...(!isNarrowViewport ? dragProvided.dragHandleProps : {})}
+                                      className="inline-flex h-7 w-7 cursor-grab items-center justify-center rounded-lg border border-stone-200 text-stone-500 hover:bg-stone-50 active:cursor-grabbing"
+                                      aria-label="Перетащить блок шаблона"
+                                    >
+                                      <LuGripVertical className="h-4 w-4" />
+                                    </button>
+                                  </div>
+                                  <div
+                                    className="absolute right-0 top-1/2 flex -translate-y-1/2 md:hidden"
+                                    data-planner-mobile-menu-root
+                                    onPointerDown={(e) => isNarrowViewport && e.stopPropagation()}
+                                  >
+                                    <button
+                                      type="button"
+                                      className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-stone-200 text-stone-600 hover:bg-stone-50"
+                                      aria-label="Меню блока шаблона"
+                                      aria-expanded={mobileTemplateBlockMenuId === b.id}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setMobilePlanBlockMenuId(null);
+                                        setMobilePlanTimeOpenId(null);
+                                        setMobileTemplateOrderOpenId(null);
+                                        setMobileTemplateBlockMenuId((id) => (id === b.id ? null : b.id));
+                                      }}
+                                    >
+                                      <LuEllipsis className="h-5 w-5" strokeWidth={2.25} />
+                                    </button>
+                                    {mobileTemplateBlockMenuId === b.id ? (
+                                      <div
+                                        className="absolute right-0 top-full z-30 mt-1 w-44 overflow-hidden rounded-lg border border-stone-200 bg-white py-1 shadow-lg"
+                                        onPointerDown={(e) => e.stopPropagation()}
+                                      >
+                                        <button
+                                          type="button"
+                                          className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-stone-700 hover:bg-stone-50"
+                                          onClick={() => {
+                                            setMobileTemplateBlockMenuId(null);
+                                            setEditingTemplateBlockId(b.id);
+                                          }}
+                                        >
+                                          <LuPencil className="h-4 w-4 shrink-0" />
+                                          Редактировать
+                                        </button>
+                                        <button
+                                          type="button"
+                                          className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-rose-700 hover:bg-rose-50"
+                                          onClick={() => {
+                                            setMobileTemplateBlockMenuId(null);
+                                            setTemplateDraft({
+                                              ...templateDraft,
+                                              blocks: templateBlocksSorted
+                                                .filter((x) => x.id !== b.id)
+                                                .map((x, i) => ({ ...x, order_index: i })),
+                                            });
+                                          }}
+                                        >
+                                          <LuTrash2 className="h-4 w-4 shrink-0" />
+                                          Удалить
+                                        </button>
+                                        {!isNarrowViewport ? (
+                                          <button
+                                            type="button"
+                                            {...dragProvided.dragHandleProps}
+                                            className="flex w-full cursor-grab items-center gap-2 px-3 py-2 text-left text-sm text-stone-600 hover:bg-stone-50 active:cursor-grabbing"
+                                          >
+                                            <LuGripVertical className="h-4 w-4 shrink-0" />
+                                            Перетащить
+                                          </button>
+                                        ) : null}
+                                      </div>
+                                    ) : null}
+                                  </div>
                                 </div>
-                                <button
-                                  type="button"
-                                  onClick={() => setEditingTemplateBlockId(b.id)}
-                                  className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-stone-200 text-stone-700 hover:bg-stone-50"
-                                  aria-label="Редактировать блок шаблона"
-                                >
-                                  <LuPencil className="h-4 w-4" />
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    setTemplateDraft({
-                                      ...templateDraft,
-                                      blocks: templateBlocksSorted
-                                        .filter((x) => x.id !== b.id)
-                                        .map((x, i) => ({ ...x, order_index: i })),
-                                    })
-                                  }
-                                  className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-rose-200 text-rose-700 hover:bg-rose-50"
-                                  aria-label="Удалить блок шаблона"
-                                >
-                                  <LuTrash2 className="h-4 w-4" />
-                                </button>
-                              </div>
+                              ) : (
+                                <div className="flex items-center gap-2">
+                                  <button
+                                    type="button"
+                                    {...(!isNarrowViewport ? dragProvided.dragHandleProps : {})}
+                                    className="hidden h-7 w-7 items-center justify-center rounded-lg border border-stone-200 text-stone-500 md:inline-flex"
+                                    aria-label="Перетащить блок шаблона"
+                                  >
+                                    <LuGripVertical className="h-4 w-4" />
+                                  </button>
+                                  <div
+                                    className="relative shrink-0 md:hidden"
+                                    data-planner-mobile-template-order-root
+                                    onPointerDown={(e) => isNarrowViewport && e.stopPropagation()}
+                                  >
+                                    <button
+                                      type="button"
+                                      className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-stone-200 text-stone-600 hover:bg-stone-50"
+                                      aria-label="Номер блока в шаблоне"
+                                      aria-expanded={mobileTemplateOrderOpenId === b.id}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setMobilePlanBlockMenuId(null);
+                                        setMobilePlanTimeOpenId(null);
+                                        setMobileTemplateBlockMenuId(null);
+                                        setMobileTemplateOrderOpenId((id) => (id === b.id ? null : b.id));
+                                      }}
+                                    >
+                                      <LuListOrdered className="h-4 w-4" />
+                                    </button>
+                                    {mobileTemplateOrderOpenId === b.id ? (
+                                      <div className="absolute left-0 top-full z-30 mt-0.5 whitespace-nowrap rounded-md border border-stone-200 bg-white px-2 py-1 text-xs font-bold text-stone-900 shadow-md">
+                                        № {idx + 1}
+                                      </div>
+                                    ) : null}
+                                  </div>
+                                  <span className="hidden w-8 shrink-0 text-center text-xs font-bold text-stone-700 md:inline">
+                                    {idx + 1}
+                                  </span>
+                                  <div className="min-w-0 flex-1">
+                                    <p className="truncate text-xs font-semibold text-stone-900">{b.title}</p>
+                                    <p className="text-xs text-stone-500">
+                                      {blockTypes.find((t) => t.id === b.block_type_id)?.name ?? 'Блок'} •{' '}
+                                      {b.duration_minutes} мин
+                                    </p>
+                                  </div>
+                                  <div
+                                    className="relative shrink-0 md:hidden"
+                                    data-planner-mobile-menu-root
+                                    onPointerDown={(e) => isNarrowViewport && e.stopPropagation()}
+                                  >
+                                    <button
+                                      type="button"
+                                      className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-stone-200 text-stone-600 hover:bg-stone-50"
+                                      aria-label="Меню блока шаблона"
+                                      aria-expanded={mobileTemplateBlockMenuId === b.id}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setMobilePlanBlockMenuId(null);
+                                        setMobilePlanTimeOpenId(null);
+                                        setMobileTemplateOrderOpenId(null);
+                                        setMobileTemplateBlockMenuId((id) => (id === b.id ? null : b.id));
+                                      }}
+                                    >
+                                      <LuEllipsis className="h-5 w-5" strokeWidth={2.25} />
+                                    </button>
+                                    {mobileTemplateBlockMenuId === b.id ? (
+                                      <div
+                                        className="absolute right-0 top-full z-30 mt-1 w-44 overflow-hidden rounded-lg border border-stone-200 bg-white py-1 shadow-lg"
+                                        onPointerDown={(e) => e.stopPropagation()}
+                                      >
+                                        <button
+                                          type="button"
+                                          className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-stone-700 hover:bg-stone-50"
+                                          onClick={() => {
+                                            setMobileTemplateBlockMenuId(null);
+                                            setEditingTemplateBlockId(b.id);
+                                          }}
+                                        >
+                                          <LuPencil className="h-4 w-4 shrink-0" />
+                                          Редактировать
+                                        </button>
+                                        <button
+                                          type="button"
+                                          className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-rose-700 hover:bg-rose-50"
+                                          onClick={() => {
+                                            setMobileTemplateBlockMenuId(null);
+                                            setTemplateDraft({
+                                              ...templateDraft,
+                                              blocks: templateBlocksSorted
+                                                .filter((x) => x.id !== b.id)
+                                                .map((x, i) => ({ ...x, order_index: i })),
+                                            });
+                                          }}
+                                        >
+                                          <LuTrash2 className="h-4 w-4 shrink-0" />
+                                          Удалить
+                                        </button>
+                                        {!isNarrowViewport ? (
+                                          <button
+                                            type="button"
+                                            {...dragProvided.dragHandleProps}
+                                            className="flex w-full cursor-grab items-center gap-2 px-3 py-2 text-left text-sm text-stone-600 hover:bg-stone-50 active:cursor-grabbing"
+                                          >
+                                            <LuGripVertical className="h-4 w-4 shrink-0" />
+                                            Перетащить
+                                          </button>
+                                        ) : null}
+                                      </div>
+                                    ) : null}
+                                  </div>
+                                  <div className="ml-auto hidden shrink-0 items-center gap-0.5 md:flex">
+                                    <button
+                                      type="button"
+                                      onClick={() => setEditingTemplateBlockId(b.id)}
+                                      className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-stone-200 text-stone-700 hover:bg-stone-50"
+                                      aria-label="Редактировать блок шаблона"
+                                    >
+                                      <LuPencil className="h-4 w-4" />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        setTemplateDraft({
+                                          ...templateDraft,
+                                          blocks: templateBlocksSorted
+                                            .filter((x) => x.id !== b.id)
+                                            .map((x, i) => ({ ...x, order_index: i })),
+                                        })
+                                      }
+                                      className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-rose-200 text-rose-700 hover:bg-rose-50"
+                                      aria-label="Удалить блок шаблона"
+                                    >
+                                      <LuTrash2 className="h-4 w-4" />
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
                             </article>
                           )}
                         </Draggable>
@@ -1862,21 +2110,154 @@ export function ServicePlannerPage() {
                         <article
                           ref={dragProvided.innerRef}
                           {...dragProvided.draggableProps}
+                          {...(isNarrowViewport ? dragProvided.dragHandleProps : {})}
                           className={[
                             isSeparatorBlock(block)
                               ? 'rounded-xl border border-dashed border-stone-300 bg-stone-50 p-2 sm:p-2.5'
                               : 'rounded-xl border border-stone-200 p-2 sm:p-2.5',
                             dragSnapshot.isDragging ? 'bg-stone-50 shadow' : 'bg-white',
                             draft.current_block_id === block.id ? 'ring-2 ring-primary/30' : '',
+                            isNarrowViewport ? 'max-md:cursor-grab max-md:active:cursor-grabbing' : '',
                           ].join(' ')}
                         >
+                          {isSeparatorBlock(block) ? (
+                            <div className="relative flex min-h-[2.25rem] items-center justify-center py-0.5 pr-12 md:pr-28">
+                              <p className="px-2 text-center text-sm font-bold leading-snug text-stone-800">
+                                {blockTitle}
+                                {blockKey ? (
+                                  <span className="font-bold text-stone-700"> [{blockKey}]</span>
+                                ) : null}
+                              </p>
+                              <div className="absolute right-0 top-1/2 hidden -translate-y-1/2 items-center gap-0.5 sm:gap-1 md:flex">
+                                <button
+                                  type="button"
+                                  onClick={() => setEditingBlockId(block.id)}
+                                  className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-stone-200 text-stone-600 hover:bg-stone-50 sm:rounded-lg"
+                                  aria-label="Редактировать блок"
+                                >
+                                  <LuPencil className="h-3.5 w-3.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setDraft({
+                                      ...draft,
+                                      blocks: draft.blocks.filter((b) => b.id !== block.id),
+                                    });
+                                    void deleteBlockMut.mutateAsync(block.id);
+                                  }}
+                                  className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-rose-200 text-rose-600 hover:bg-rose-50 sm:rounded-lg"
+                                  aria-label="Удалить блок"
+                                >
+                                  <LuTrash2 className="h-3.5 w-3.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  {...(!isNarrowViewport ? dragProvided.dragHandleProps : {})}
+                                  className="inline-flex h-7 w-7 cursor-grab items-center justify-center rounded-md border border-stone-200 text-stone-400 hover:text-stone-600 active:cursor-grabbing sm:rounded-lg"
+                                  aria-label="Перетащить блок"
+                                >
+                                  <LuGripVertical className="h-3.5 w-3.5" />
+                                </button>
+                              </div>
+                              <div
+                                className="absolute right-0 top-1/2 flex -translate-y-1/2 md:hidden"
+                                data-planner-mobile-menu-root
+                                onPointerDown={(e) => isNarrowViewport && e.stopPropagation()}
+                              >
+                                <button
+                                  type="button"
+                                  className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-stone-200 text-stone-600 hover:bg-stone-50"
+                                  aria-label="Меню блока"
+                                  aria-expanded={mobilePlanBlockMenuId === block.id}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setMobilePlanTimeOpenId(null);
+                                    setMobileTemplateBlockMenuId(null);
+                                    setMobileTemplateOrderOpenId(null);
+                                    setMobilePlanBlockMenuId((id) => (id === block.id ? null : block.id));
+                                  }}
+                                >
+                                  <LuEllipsis className="h-5 w-5" strokeWidth={2.25} />
+                                </button>
+                                {mobilePlanBlockMenuId === block.id ? (
+                                  <div
+                                    className="absolute right-0 top-full z-30 mt-1 w-44 overflow-hidden rounded-lg border border-stone-200 bg-white py-1 shadow-lg"
+                                    onPointerDown={(e) => e.stopPropagation()}
+                                  >
+                                    <button
+                                      type="button"
+                                      className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-stone-700 hover:bg-stone-50"
+                                      onClick={() => {
+                                        setMobilePlanBlockMenuId(null);
+                                        setEditingBlockId(block.id);
+                                      }}
+                                    >
+                                      <LuPencil className="h-4 w-4 shrink-0" />
+                                      Редактировать
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-rose-700 hover:bg-rose-50"
+                                      onClick={() => {
+                                        setMobilePlanBlockMenuId(null);
+                                        setDraft({
+                                          ...draft,
+                                          blocks: draft.blocks.filter((b) => b.id !== block.id),
+                                        });
+                                        void deleteBlockMut.mutateAsync(block.id);
+                                      }}
+                                    >
+                                      <LuTrash2 className="h-4 w-4 shrink-0" />
+                                      Удалить
+                                    </button>
+                                    {!isNarrowViewport ? (
+                                      <button
+                                        type="button"
+                                        {...dragProvided.dragHandleProps}
+                                        className="flex w-full cursor-grab items-center gap-2 px-3 py-2 text-left text-sm text-stone-600 hover:bg-stone-50 active:cursor-grabbing"
+                                      >
+                                        <LuGripVertical className="h-4 w-4 shrink-0" />
+                                        Перетащить
+                                      </button>
+                                    ) : null}
+                                  </div>
+                                ) : null}
+                              </div>
+                            </div>
+                          ) : (
                           <div className="flex items-start gap-2 sm:gap-2.5">
-                            <span className="mt-0.5 inline-flex min-w-[2.75rem] shrink-0 items-center justify-center rounded-md bg-stone-100 px-1.5 py-0.5 text-center text-[11px] font-extrabold leading-none text-stone-900 sm:min-w-[3rem] sm:px-2 sm:py-1 sm:text-xs">
-                              {isSeparatorBlock(block) ? '---' : block.startsAt}
+                            <span className="mt-0.5 hidden min-w-[2.75rem] shrink-0 items-center justify-center rounded-md bg-stone-100 px-1.5 py-0.5 text-center text-[11px] font-extrabold leading-none text-stone-900 sm:min-w-[3rem] sm:inline-flex sm:px-2 sm:py-1 sm:text-xs">
+                              {block.startsAt}
                             </span>
+                            <div
+                              className="relative shrink-0 md:hidden"
+                              data-planner-mobile-time-root
+                              onPointerDown={(e) => isNarrowViewport && e.stopPropagation()}
+                            >
+                              <button
+                                type="button"
+                                className="mt-0.5 inline-flex h-7 w-7 items-center justify-center rounded-md border border-stone-200 text-stone-600 hover:bg-stone-50"
+                                aria-label={`Время начала: ${block.startsAt}`}
+                                aria-expanded={mobilePlanTimeOpenId === block.id}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setMobilePlanBlockMenuId(null);
+                                  setMobileTemplateBlockMenuId(null);
+                                  setMobileTemplateOrderOpenId(null);
+                                  setMobilePlanTimeOpenId((id) => (id === block.id ? null : block.id));
+                                }}
+                              >
+                                <LuClock3 className="h-4 w-4" />
+                              </button>
+                              {mobilePlanTimeOpenId === block.id ? (
+                                <div className="absolute left-0 top-full z-30 mt-0.5 whitespace-nowrap rounded-md border border-stone-200 bg-white px-2 py-1 text-center text-[11px] font-extrabold text-stone-900 shadow-md">
+                                  {block.startsAt}
+                                </div>
+                              ) : null}
+                            </div>
 
-                            {!isSeparatorBlock(block) ? (
-                              getBlockLogoUrl(block) ? (
+                            {getBlockLogoUrl(block) ? (
                                 <img
                                   src={getBlockLogoUrl(block) ?? ''}
                                   alt="Лого блока"
@@ -1920,8 +2301,7 @@ export function ServicePlannerPage() {
                                     </span>
                                   );
                                 })()
-                              )
-                            ) : null}
+                              )}
 
                             <div className="min-w-0 flex-1 space-y-0.5">
                               <div className="flex flex-wrap items-center gap-1.5">
@@ -1991,39 +2371,106 @@ export function ServicePlannerPage() {
                               ) : null}
                             </div>
 
-                            <div className="ml-auto flex shrink-0 items-center gap-0.5 self-start sm:gap-1">
-                              <button
-                                type="button"
-                                onClick={() => setEditingBlockId(block.id)}
-                                className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-stone-200 text-stone-600 hover:bg-stone-50 sm:rounded-lg"
-                                aria-label="Редактировать блок"
+                            <div className="ml-auto flex shrink-0 items-start gap-0.5">
+                              <div
+                                className="relative md:hidden"
+                                data-planner-mobile-menu-root
+                                onPointerDown={(e) => isNarrowViewport && e.stopPropagation()}
                               >
-                                <LuPencil className="h-3.5 w-3.5" />
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setDraft({
-                                    ...draft,
-                                    blocks: draft.blocks.filter((b) => b.id !== block.id),
-                                  });
-                                  void deleteBlockMut.mutateAsync(block.id);
-                                }}
-                                className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-rose-200 text-rose-600 hover:bg-rose-50 sm:rounded-lg"
-                                aria-label="Удалить блок"
-                              >
-                                <LuTrash2 className="h-3.5 w-3.5" />
-                              </button>
-                              <button
-                                type="button"
-                                {...dragProvided.dragHandleProps}
-                                className="inline-flex h-7 w-7 cursor-grab items-center justify-center rounded-md border border-stone-200 text-stone-400 hover:text-stone-600 active:cursor-grabbing sm:rounded-lg"
-                                aria-label="Перетащить блок"
-                              >
-                                <LuGripVertical className="h-3.5 w-3.5" />
-                              </button>
+                                <button
+                                  type="button"
+                                  className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-stone-200 text-stone-600 hover:bg-stone-50"
+                                  aria-label="Меню блока"
+                                  aria-expanded={mobilePlanBlockMenuId === block.id}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setMobilePlanTimeOpenId(null);
+                                    setMobileTemplateBlockMenuId(null);
+                                    setMobileTemplateOrderOpenId(null);
+                                    setMobilePlanBlockMenuId((id) => (id === block.id ? null : block.id));
+                                  }}
+                                >
+                                  <LuEllipsis className="h-5 w-5" strokeWidth={2.25} />
+                                </button>
+                                {mobilePlanBlockMenuId === block.id ? (
+                                  <div
+                                    className="absolute right-0 top-full z-30 mt-1 w-44 overflow-hidden rounded-lg border border-stone-200 bg-white py-1 shadow-lg"
+                                    onPointerDown={(e) => e.stopPropagation()}
+                                  >
+                                    <button
+                                      type="button"
+                                      className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-stone-700 hover:bg-stone-50"
+                                      onClick={() => {
+                                        setMobilePlanBlockMenuId(null);
+                                        setEditingBlockId(block.id);
+                                      }}
+                                    >
+                                      <LuPencil className="h-4 w-4 shrink-0" />
+                                      Редактировать
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-rose-700 hover:bg-rose-50"
+                                      onClick={() => {
+                                        setMobilePlanBlockMenuId(null);
+                                        setDraft({
+                                          ...draft,
+                                          blocks: draft.blocks.filter((b) => b.id !== block.id),
+                                        });
+                                        void deleteBlockMut.mutateAsync(block.id);
+                                      }}
+                                    >
+                                      <LuTrash2 className="h-4 w-4 shrink-0" />
+                                      Удалить
+                                    </button>
+                                    {!isNarrowViewport ? (
+                                      <button
+                                        type="button"
+                                        {...dragProvided.dragHandleProps}
+                                        className="flex w-full cursor-grab items-center gap-2 px-3 py-2 text-left text-sm text-stone-600 hover:bg-stone-50 active:cursor-grabbing"
+                                      >
+                                        <LuGripVertical className="h-4 w-4 shrink-0" />
+                                        Перетащить
+                                      </button>
+                                    ) : null}
+                                  </div>
+                                ) : null}
+                              </div>
+                              <div className="hidden items-center gap-0.5 self-start sm:gap-1 md:flex">
+                                <button
+                                  type="button"
+                                  onClick={() => setEditingBlockId(block.id)}
+                                  className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-stone-200 text-stone-600 hover:bg-stone-50 sm:rounded-lg"
+                                  aria-label="Редактировать блок"
+                                >
+                                  <LuPencil className="h-3.5 w-3.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setDraft({
+                                      ...draft,
+                                      blocks: draft.blocks.filter((b) => b.id !== block.id),
+                                    });
+                                    void deleteBlockMut.mutateAsync(block.id);
+                                  }}
+                                  className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-rose-200 text-rose-600 hover:bg-rose-50 sm:rounded-lg"
+                                  aria-label="Удалить блок"
+                                >
+                                  <LuTrash2 className="h-3.5 w-3.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  {...(!isNarrowViewport ? dragProvided.dragHandleProps : {})}
+                                  className="inline-flex h-7 w-7 cursor-grab items-center justify-center rounded-md border border-stone-200 text-stone-400 hover:text-stone-600 active:cursor-grabbing sm:rounded-lg"
+                                  aria-label="Перетащить блок"
+                                >
+                                  <LuGripVertical className="h-3.5 w-3.5" />
+                                </button>
+                              </div>
                             </div>
                           </div>
+                          )}
                         </article>
                       )}
                     </Draggable>
