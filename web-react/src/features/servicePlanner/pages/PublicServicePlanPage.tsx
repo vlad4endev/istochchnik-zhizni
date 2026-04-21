@@ -17,7 +17,107 @@ import {
 import { LuCalendarDays } from 'react-icons/lu';
 import type { IconType } from 'react-icons';
 
-import { fetchPublicServicePlan } from '../api';
+import { fetchPublicServicePlan, type PublicServicePlanPayload } from '../api';
+
+type PublicPlanBlock = PublicServicePlanPayload['blocks'][number];
+
+type PublicBlockView = {
+  compactMobile: boolean;
+  noteToShow: string;
+  poemSubline: string;
+  birthdays: boolean;
+  birthdaysList: string[];
+  scheduleList: string[];
+  sermon: boolean;
+  sermonScripture: string;
+  headingDisplay: string;
+  showSongLine: boolean;
+  songLine: string;
+};
+
+function derivePublicBlockView(b: PublicPlanBlock): PublicBlockView {
+  const notesRaw = typeof b.content_json.notes === 'string' ? b.content_json.notes.trim() : '';
+  const textRaw = typeof b.content_json.text === 'string' ? b.content_json.text.trim() : '';
+  const fallback = notesRaw || textRaw;
+  const titlePlain = String(b.title ?? '').trim();
+  const titleStripped = stripLeadingBlockIndex(titlePlain);
+  const songVariants = [
+    b.song_title ?? '',
+    b.song_title && b.song_key ? `${b.song_title} [${b.song_key}]` : '',
+    titlePlain,
+    titleStripped,
+  ]
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0)
+    .map((s) => normalizeText(s));
+  const noteIsSongDuplicate = fallback.length > 0 && songVariants.includes(normalizeText(fallback));
+  const noteToShow = noteIsSongDuplicate ? '' : fallback;
+  const poem = isPoem(b.block_type_code, b.block_type_name);
+  const poemAuthor =
+    typeof b.content_json.poem_author === 'string' ? b.content_json.poem_author.trim() : '';
+  const poemTheme =
+    typeof b.content_json.poem_theme === 'string' ? b.content_json.poem_theme.trim() : '';
+  const poemSubline =
+    poemAuthor && poemTheme ? `${poemAuthor} • ${poemTheme}` : poemAuthor || poemTheme;
+  const birthdays = isBirthdays(b.block_type_code, b.block_type_name);
+  const birthdaysList = birthdayRows(b.content_json);
+  const scheduleList = scheduleRows(b.content_json);
+  const sermon = isSermon(b.block_type_code, b.block_type_name);
+  const sermonTopic =
+    typeof b.content_json.sermon_topic === 'string' ? b.content_json.sermon_topic.trim() : '';
+  const sermonScripture =
+    typeof b.content_json.sermon_scripture === 'string' ? b.content_json.sermon_scripture.trim() : '';
+  const sermonPreacher = b.assigned_member_name ?? 'Проповедник';
+  const heading = poem
+    ? `СТИХ - ${b.assigned_member_name ?? 'Чтец'}`
+    : sermon
+      ? sermonTopic
+        ? `${sermonPreacher} - ${sermonTopic}`
+        : sermonPreacher
+      : birthdays
+        ? 'Дни рождения недели'
+        : b.title;
+  const headingDisplay = stripLeadingBlockIndex(String(heading ?? '').trim());
+
+  const songLine =
+    b.song_title && String(b.song_title).trim()
+      ? b.song_key && String(b.song_key).trim()
+        ? `${String(b.song_title).trim()} [${String(b.song_key).trim()}]`
+        : String(b.song_title).trim()
+      : '';
+  const showSongLine =
+    songLine.length > 0 && normalizeText(songLine) !== normalizeText(headingDisplay);
+
+  let extraSections = 0;
+  if (poemSubline) extraSections += 1;
+  if (sermon && sermonScripture) extraSections += 1;
+  if (birthdays) extraSections += 1;
+  if (scheduleList.length > 0) extraSections += 1;
+  if (showSongLine) extraSections += 1;
+  if (noteToShow) extraSections += 1;
+
+  const longNote = noteToShow.length > 200;
+  const manyScheduleLines = scheduleList.length > 4;
+  const longBirthdayLine =
+    birthdaysList.length > 0 && birthdaysList.join(' • ').length > 120;
+
+  const compactMobile =
+    extraSections === 0 && !longNote && !manyScheduleLines && !longBirthdayLine;
+
+  return {
+    compactMobile,
+    noteToShow,
+    poemSubline,
+    birthdays,
+    birthdaysList,
+    scheduleList,
+    sermon,
+    sermonScripture,
+    headingDisplay,
+    showSongLine,
+    songLine,
+  };
+}
 
 const ICON_BY_CODE: Record<string, { Icon: IconType; wrapClass: string; iconClass: string }> = {
   prayer: { Icon: FaHandsPraying, wrapClass: 'bg-violet-100', iconClass: 'text-violet-700' },
@@ -194,19 +294,37 @@ export function PublicServicePlanPage() {
         </header>
 
         <section className="space-y-2.5">
-          {rows.map((b) =>
-            b.separator ? (
-              <div key={b.id} className="rounded-xl border border-dashed border-stone-300 bg-stone-50 px-3 py-2.5">
-                <p className="text-center text-sm font-bold leading-snug text-stone-700 sm:text-base">
-                  {String(b.content_json.separator_text ?? b.title ?? 'Раздел')}
-                </p>
-              </div>
-            ) : (
-              <article key={b.id} className="rounded-xl border border-stone-200 bg-white p-3 shadow-sm sm:p-4">
-                <div className="flex items-start gap-2.5 sm:gap-3">
-                  <div className="w-11 shrink-0 rounded-md bg-stone-100 px-1.5 py-1 text-center text-[11px] font-bold text-stone-700 sm:w-12 sm:bg-transparent sm:px-0 sm:py-0 sm:text-xs">
-                    {b.startsAt}
-                  </div>
+          {rows.map((b) => {
+            if (b.separator) {
+              const sepText = String(b.content_json.separator_text ?? b.title ?? 'Раздел');
+              return (
+                <div
+                  key={b.id}
+                  className="rounded-xl border border-dashed border-stone-300 bg-stone-50 px-3 py-2.5"
+                >
+                  <p className="text-center text-sm font-bold leading-snug text-stone-700 sm:text-base">{sepText}</p>
+                </div>
+              );
+            }
+            const m = derivePublicBlockView(b);
+            const rowGap = m.compactMobile ? 'gap-2 sm:gap-2.5 sm:gap-3' : 'gap-2.5 sm:gap-3';
+            const timeCell = [
+              'w-11 shrink-0 rounded-md bg-stone-100 px-1.5 py-1 text-center text-[11px] font-bold text-stone-700 sm:w-12 sm:bg-transparent sm:px-0 sm:py-0 sm:text-xs',
+              m.compactMobile ? 'max-sm:py-0.5 max-sm:leading-tight max-sm:self-start' : '',
+            ]
+              .join(' ')
+              .trim();
+
+            return (
+              <article
+                key={b.id}
+                className={[
+                  'rounded-xl border border-stone-200 bg-white shadow-sm',
+                  m.compactMobile ? 'p-2.5 sm:p-4' : 'p-3 sm:p-4',
+                ].join(' ')}
+              >
+                <div className={`flex items-start ${rowGap}`}>
+                  <div className={timeCell}>{b.startsAt}</div>
                   {(() => {
                     const custom = typeof b.content_json.block_mark === 'string' ? b.content_json.block_mark.trim() : '';
                     const markIconKey =
@@ -216,15 +334,23 @@ export function PublicServicePlanPage() {
                     const markIcon = markIconKey ? ICON_BY_MARK_KEY[markIconKey] : null;
                     if (markIcon) {
                       const MarkIcon = markIcon.Icon;
+                      const iconBox = m.compactMobile ? 'h-7 w-7 sm:h-8 sm:w-8' : 'h-8 w-8';
                       return (
-                        <div className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${markIcon.wrapClass}`}>
-                          <MarkIcon className={`h-4 w-4 ${markIcon.iconClass}`} />
+                        <div
+                          className={`inline-flex shrink-0 items-center justify-center rounded-lg ${iconBox} ${markIcon.wrapClass}`}
+                        >
+                          <MarkIcon
+                            className={`${m.compactMobile ? 'h-3.5 w-3.5 sm:h-4 sm:w-4' : 'h-4 w-4'} ${markIcon.iconClass}`}
+                          />
                         </div>
                       );
                     }
                     if (custom) {
+                      const iconBox = m.compactMobile ? 'h-7 w-7 text-base sm:h-8 sm:w-8 sm:text-lg' : 'h-8 w-8 text-lg';
                       return (
-                        <div className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-stone-100 text-lg">
+                        <div
+                          className={`inline-flex shrink-0 items-center justify-center rounded-lg bg-stone-100 ${iconBox}`}
+                        >
                           {custom}
                         </div>
                       );
@@ -232,133 +358,83 @@ export function PublicServicePlanPage() {
                     const iconMeta = ICON_BY_CODE[(b.block_type_code ?? '').toLowerCase()];
                     if (iconMeta) {
                       const Icon = iconMeta.Icon;
+                      const iconBox = m.compactMobile ? 'h-7 w-7 sm:h-8 sm:w-8' : 'h-8 w-8';
                       return (
                         <div
-                          className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${iconMeta.wrapClass}`}
+                          className={`inline-flex shrink-0 items-center justify-center rounded-lg ${iconBox} ${iconMeta.wrapClass}`}
                         >
-                          <Icon className={`h-4 w-4 ${iconMeta.iconClass}`} />
+                          <Icon
+                            className={`${m.compactMobile ? 'h-3.5 w-3.5 sm:h-4 sm:w-4' : 'h-4 w-4'} ${iconMeta.iconClass}`}
+                          />
                         </div>
                       );
                     }
+                    const iconBox = m.compactMobile ? 'h-7 w-7 text-[11px] sm:h-8 sm:w-8 sm:text-sm' : 'h-8 w-8 text-sm';
                     return (
-                      <div className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-stone-100 text-sm">
+                      <div
+                        className={`inline-flex shrink-0 items-center justify-center rounded-lg bg-stone-100 ${iconBox}`}
+                      >
                         •
                       </div>
                     );
                   })()}
-                  <div className="min-w-0 flex-1">
-                    {(() => {
-                      const notesRaw =
-                        typeof b.content_json.notes === 'string' ? b.content_json.notes.trim() : '';
-                      const textRaw = typeof b.content_json.text === 'string' ? b.content_json.text.trim() : '';
-                      const fallback = notesRaw || textRaw;
-                      const titlePlain = String(b.title ?? '').trim();
-                      const titleStripped = stripLeadingBlockIndex(titlePlain);
-                      const songVariants = [
-                        b.song_title ?? '',
-                        b.song_title && b.song_key ? `${b.song_title} [${b.song_key}]` : '',
-                        titlePlain,
-                        titleStripped,
-                      ]
-                        .map((s) => s.trim())
-                        .filter((s) => s.length > 0)
-                        .map((s) => normalizeText(s));
-                      const noteIsSongDuplicate =
-                        fallback.length > 0 && songVariants.includes(normalizeText(fallback));
-                      const noteToShow = noteIsSongDuplicate ? '' : fallback;
-                      const poem = isPoem(b.block_type_code, b.block_type_name);
-                      const poemAuthor =
-                        typeof b.content_json.poem_author === 'string' ? b.content_json.poem_author.trim() : '';
-                      const poemTheme =
-                        typeof b.content_json.poem_theme === 'string' ? b.content_json.poem_theme.trim() : '';
-                      const poemSubline =
-                        poemAuthor && poemTheme ? `${poemAuthor} • ${poemTheme}` : poemAuthor || poemTheme;
-                      const birthdays = isBirthdays(b.block_type_code, b.block_type_name);
-                      const birthdaysList = birthdayRows(b.content_json);
-                      const scheduleList = scheduleRows(b.content_json);
-                      const sermon = isSermon(b.block_type_code, b.block_type_name);
-                      const sermonTopic =
-                        typeof b.content_json.sermon_topic === 'string'
-                          ? b.content_json.sermon_topic.trim()
-                          : '';
-                      const sermonScripture =
-                        typeof b.content_json.sermon_scripture === 'string'
-                          ? b.content_json.sermon_scripture.trim()
-                          : '';
-                      const sermonPreacher = b.assigned_member_name ?? 'Проповедник';
-                      const heading = poem
-                        ? `СТИХ - ${b.assigned_member_name ?? 'Чтец'}`
-                        : sermon
-                          ? sermonTopic
-                            ? `${sermonPreacher} - ${sermonTopic}`
-                            : sermonPreacher
-                        : birthdays
-                          ? 'Дни рождения недели'
-                          : b.title;
-                      const headingDisplay = stripLeadingBlockIndex(String(heading ?? '').trim());
-
-                      const songLine =
-                        b.song_title && String(b.song_title).trim()
-                          ? b.song_key && String(b.song_key).trim()
-                            ? `${String(b.song_title).trim()} [${String(b.song_key).trim()}]`
-                            : String(b.song_title).trim()
-                          : '';
-                      const showSongLine =
-                        songLine.length > 0 &&
-                        normalizeText(songLine) !== normalizeText(headingDisplay);
-
-                      return (
-                        <>
+                  <div
+                    className={[
+                      'min-w-0 flex-1 sm:space-y-0',
+                      m.compactMobile ? 'space-y-0.5' : 'space-y-1',
+                    ].join(' ')}
+                  >
                     <h2 className="text-[15px] font-bold leading-snug text-stone-900 sm:text-base">
-                      {headingDisplay}
+                      {m.headingDisplay}
                     </h2>
-                    <p className="mt-0.5 text-xs leading-snug text-stone-500 sm:text-sm">
+                    <p className="mt-0 text-xs leading-snug text-stone-500 sm:mt-0.5 sm:text-sm">
                       {b.block_type_name ?? 'Блок'} • {b.duration_minutes} мин
                       {b.assigned_member_name ? ` • ${b.assigned_member_name}` : ''}
                     </p>
-                    {poemSubline ? <p className="mt-0.5 text-xs leading-snug text-stone-600 sm:text-sm">{poemSubline}</p> : null}
-                    {sermon && sermonScripture ? (
-                      <p className="mt-0.5 text-xs leading-snug text-stone-600 sm:text-sm">
-                        Писание: {sermonScripture}
+                    {m.poemSubline ? (
+                      <p className="mt-0 text-xs leading-snug text-stone-600 sm:mt-0.5 sm:text-sm">{m.poemSubline}</p>
+                    ) : null}
+                    {m.sermon && m.sermonScripture ? (
+                      <p className="mt-0 text-xs leading-snug text-stone-600 sm:mt-0.5 sm:text-sm">
+                        Писание: {m.sermonScripture}
                       </p>
                     ) : null}
-                    {birthdays ? (
-                      birthdaysList.length > 0 ? (
-                        <p className="mt-0.5 text-xs leading-snug text-stone-600 sm:text-sm">
-                          Именинники: {birthdaysList.join(' • ')}
+                    {m.birthdays ? (
+                      m.birthdaysList.length > 0 ? (
+                        <p className="mt-0 text-xs leading-snug text-stone-600 sm:mt-0.5 sm:text-sm">
+                          Именинники: {m.birthdaysList.join(' • ')}
                         </p>
                       ) : (
-                        <p className="mt-0.5 text-xs leading-snug text-stone-500 sm:text-sm">
+                        <p className="mt-0 text-xs leading-snug text-stone-500 sm:mt-0.5 sm:text-sm">
                           На этой неделе именинников нет.
                         </p>
                       )
                     ) : null}
-                    {scheduleList.length > 0 ? (
-                      <div className="mt-0.5 text-xs leading-snug text-stone-600 sm:text-sm">
+                    {m.scheduleList.length > 0 ? (
+                      <div className="mt-0 text-xs leading-snug text-stone-600 sm:mt-0.5 sm:text-sm">
                         <p className="font-semibold">Расписание:</p>
                         <ul className="mt-0.5 space-y-0.5">
-                          {scheduleList.map((line) => (
+                          {m.scheduleList.map((line) => (
                             <li key={line}>{line}</li>
                           ))}
                         </ul>
                       </div>
                     ) : null}
-                    {showSongLine ? (
-                      <p className="mt-1 text-sm font-semibold leading-snug text-stone-700">
-                        {songLine}
+                    {m.showSongLine ? (
+                      <p className="mt-0 text-sm font-semibold leading-snug text-stone-700 sm:mt-1 sm:text-base">
+                        {m.songLine}
                       </p>
                     ) : null}
-                    {noteToShow ? (
-                      <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-stone-700 sm:text-base">{noteToShow}</p>
+                    {m.noteToShow ? (
+                      <p className="mt-0 whitespace-pre-wrap text-sm leading-relaxed text-stone-700 sm:mt-1 sm:text-base">
+                        {m.noteToShow}
+                      </p>
                     ) : null}
-                        </>
-                      );
-                    })()}
                   </div>
                 </div>
               </article>
-            ),
-          )}
+            );
+          })}
         </section>
       </div>
     </div>
