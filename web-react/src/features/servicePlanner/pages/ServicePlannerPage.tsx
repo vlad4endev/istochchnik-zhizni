@@ -1203,7 +1203,7 @@ export function ServicePlannerPage() {
       );
     }
     return (
-      <section className="mx-auto flex w-full max-w-4xl flex-col gap-3 px-3 py-4 pb-6 sm:px-4 md:px-6">
+      <section className="mx-auto flex w-full max-w-[572px] flex-col gap-3 px-3 py-4 pb-6 sm:px-4 md:px-6">
         <header className="rounded-2xl border border-stone-200 bg-white p-4 shadow-sm">
           <div className="flex items-center justify-between gap-2">
             <h1 className="text-xl font-extrabold text-stone-900">
@@ -1594,7 +1594,7 @@ export function ServicePlannerPage() {
 
   if (!draft) {
     return (
-      <section className="mx-auto flex w-full max-w-2xl flex-col gap-3 px-4 py-6">
+      <section className="mx-auto flex w-full max-w-[572px] flex-col gap-3 px-4 py-6">
         <h1 className="text-xl font-extrabold text-stone-900">План не выбран</h1>
         <p className="text-sm text-stone-600">Вернитесь на главную страницу планировщика и выберите программу.</p>
         <button
@@ -1616,7 +1616,7 @@ export function ServicePlannerPage() {
   }).format(new Date(`${draft.service_date}T12:00:00`));
 
   return (
-    <section className="mx-auto flex w-full max-w-4xl flex-col gap-3 px-3 py-4 pb-[calc(104px+env(safe-area-inset-bottom))] sm:px-4 md:px-6 md:pb-6">
+    <section className="mx-auto flex w-full max-w-[572px] flex-col gap-3 px-3 py-4 pb-[calc(104px+env(safe-area-inset-bottom))] sm:px-4 md:px-6 md:pb-6">
       <header className="rounded-2xl border border-stone-200 bg-white p-4 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h1 className="text-xl font-extrabold text-stone-900">План служения</h1>
@@ -2090,7 +2090,7 @@ export function ServicePlannerPage() {
 
       {editingBlock ? (
         <div className="fixed inset-0 z-[70] flex items-end justify-center bg-black/35 p-2 sm:p-3 sm:items-center">
-          <div className="flex w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-2xl max-h-[calc(100dvh-0.75rem)] sm:max-h-[calc(100dvh-2rem)]">
+          <div className="flex w-full max-w-[572px] flex-col overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-2xl max-h-[calc(100dvh-0.75rem)] sm:max-h-[calc(100dvh-2rem)]">
             <div className="flex items-center justify-between gap-2 border-b border-stone-100 px-3 py-3 sm:px-4">
               <h3 className="text-base font-extrabold text-stone-900">Редактирование блока</h3>
               <button
