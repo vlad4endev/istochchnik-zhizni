@@ -51,6 +51,11 @@ function normalizeText(value: string): string {
   return value.replace(/\s+/g, ' ').trim().toLowerCase();
 }
 
+/** Убирает ведущую нумерацию вида «12. » из заголовка блока (из UI или из сохранённого title). */
+function stripLeadingBlockIndex(value: string): string {
+  return value.replace(/^\s*\d+\.\s+/, '').trim();
+}
+
 function isPoem(code: string | null, typeName: string | null): boolean {
   const normalizedName = String(typeName ?? '').toLowerCase();
   return code === 'poem' || normalizedName.includes('стих');
@@ -189,7 +194,7 @@ export function PublicServicePlanPage() {
         </header>
 
         <section className="space-y-2.5">
-          {rows.map((b, idx) =>
+          {rows.map((b) =>
             b.separator ? (
               <div key={b.id} className="rounded-xl border border-dashed border-stone-300 bg-stone-50 px-3 py-2.5">
                 <p className="text-center text-sm font-bold leading-snug text-stone-700 sm:text-base">
@@ -247,10 +252,13 @@ export function PublicServicePlanPage() {
                         typeof b.content_json.notes === 'string' ? b.content_json.notes.trim() : '';
                       const textRaw = typeof b.content_json.text === 'string' ? b.content_json.text.trim() : '';
                       const fallback = notesRaw || textRaw;
+                      const titlePlain = String(b.title ?? '').trim();
+                      const titleStripped = stripLeadingBlockIndex(titlePlain);
                       const songVariants = [
                         b.song_title ?? '',
                         b.song_title && b.song_key ? `${b.song_title} [${b.song_key}]` : '',
-                        b.title ?? '',
+                        titlePlain,
+                        titleStripped,
                       ]
                         .map((s) => s.trim())
                         .filter((s) => s.length > 0)
@@ -287,11 +295,22 @@ export function PublicServicePlanPage() {
                         : birthdays
                           ? 'Дни рождения недели'
                           : b.title;
+                      const headingDisplay = stripLeadingBlockIndex(String(heading ?? '').trim());
+
+                      const songLine =
+                        b.song_title && String(b.song_title).trim()
+                          ? b.song_key && String(b.song_key).trim()
+                            ? `${String(b.song_title).trim()} [${String(b.song_key).trim()}]`
+                            : String(b.song_title).trim()
+                          : '';
+                      const showSongLine =
+                        songLine.length > 0 &&
+                        normalizeText(songLine) !== normalizeText(headingDisplay);
 
                       return (
                         <>
                     <h2 className="text-[15px] font-bold leading-snug text-stone-900 sm:text-base">
-                      {idx + 1}. {heading}
+                      {headingDisplay}
                     </h2>
                     <p className="mt-0.5 text-xs leading-snug text-stone-500 sm:text-sm">
                       {b.block_type_name ?? 'Блок'} • {b.duration_minutes} мин
@@ -324,10 +343,9 @@ export function PublicServicePlanPage() {
                         </ul>
                       </div>
                     ) : null}
-                    {b.song_title ? (
+                    {showSongLine ? (
                       <p className="mt-1 text-sm font-semibold leading-snug text-stone-700">
-                        {b.song_title}
-                        {b.song_key ? ` [${b.song_key}]` : ''}
+                        {songLine}
                       </p>
                     ) : null}
                     {noteToShow ? (
