@@ -27,6 +27,11 @@ const PublicSetlistPage = lazy(async () => {
   return { default: m.PublicSetlistPage };
 });
 
+const PublicServicePlanPage = lazy(async () => {
+  const m = await import('../features/servicePlanner/pages/PublicServicePlanPage');
+  return { default: m.PublicServicePlanPage };
+});
+
 /** Только просмотр песенника + публичные сетлисты (основной домен). */
 export function AppRouterMain() {
   return (
@@ -39,6 +44,14 @@ export function AppRouterMain() {
         element={
           <Suspense fallback={<RouteFallback />}>
             <PublicSetlistPage />
+          </Suspense>
+        }
+      />
+      <Route
+        path="/service-plan/share/:token"
+        element={
+          <Suspense fallback={<RouteFallback />}>
+            <PublicServicePlanPage />
           </Suspense>
         }
       />

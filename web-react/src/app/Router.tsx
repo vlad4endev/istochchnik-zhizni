@@ -107,6 +107,11 @@ const PublicSetlistPage = lazy(async () => {
   return { default: m.PublicSetlistPage };
 });
 
+const PublicServicePlanPage = lazy(async () => {
+  const m = await import('../features/servicePlanner/pages/PublicServicePlanPage');
+  return { default: m.PublicServicePlanPage };
+});
+
 const ServicePlannerPage = lazy(async () => {
   const m = await import('../features/servicePlanner/pages/ServicePlannerPage');
   return { default: m.ServicePlannerPage };
@@ -123,6 +128,14 @@ export function AppRouter() {
         element={
           <Suspense fallback={<RouteFallback />}>
             <PublicSetlistPage />
+          </Suspense>
+        }
+      />
+      <Route
+        path="/service-plan/share/:token"
+        element={
+          <Suspense fallback={<RouteFallback />}>
+            <PublicServicePlanPage />
           </Suspense>
         }
       />

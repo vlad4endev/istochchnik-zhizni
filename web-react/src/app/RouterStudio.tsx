@@ -58,6 +58,11 @@ const PublicSetlistPage = lazy(async () => {
   return { default: m.PublicSetlistPage };
 });
 
+const PublicServicePlanPage = lazy(async () => {
+  const m = await import('../features/servicePlanner/pages/PublicServicePlanPage');
+  return { default: m.PublicServicePlanPage };
+});
+
 /** Редактор, сетлисты, роли — поддомен studio. */
 export function AppRouterStudio() {
   return (
@@ -70,6 +75,14 @@ export function AppRouterStudio() {
         element={
           <Suspense fallback={<RouteFallback />}>
             <PublicSetlistPage />
+          </Suspense>
+        }
+      />
+      <Route
+        path="/service-plan/share/:token"
+        element={
+          <Suspense fallback={<RouteFallback />}>
+            <PublicServicePlanPage />
           </Suspense>
         }
       />

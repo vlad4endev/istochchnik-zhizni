@@ -67,6 +67,33 @@ export type ServicePlanDetails = ServicePlanListItem & {
   blocks: ServicePlanBlock[];
 };
 
+export type PublicServicePlanPayload = {
+  plan: {
+    id: number;
+    service_date: string;
+    start_time: string;
+    status: 'draft' | 'published';
+    total_duration_minutes: number;
+    notes: string | null;
+    share_token: string;
+    template_name: string | null;
+    leader_name: string | null;
+    preacher_name: string | null;
+  };
+  blocks: Array<{
+    id: number;
+    order_index: number;
+    title: string;
+    duration_minutes: number;
+    block_type_name: string | null;
+    block_type_code: string | null;
+    assigned_member_name: string | null;
+    song_title: string | null;
+    song_key: string | null;
+    content_json: Record<string, unknown>;
+  }>;
+};
+
 export async function fetchServiceBlockTypes(): Promise<ServiceBlockType[]> {
   const { data } = await apiClient.get<ServiceBlockType[]>('/api/service-block-types');
   return data;
@@ -196,4 +223,11 @@ export async function createServiceBlock(body: {
 
 export async function deleteServiceBlock(id: number): Promise<void> {
   await apiClient.delete(`/api/service-blocks/${id}`);
+}
+
+export async function fetchPublicServicePlan(token: string): Promise<PublicServicePlanPayload> {
+  const { data } = await apiClient.get<PublicServicePlanPayload>(
+    `/api/public/service-plans/${encodeURIComponent(token)}`,
+  );
+  return data;
 }

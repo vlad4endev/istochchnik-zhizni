@@ -60,6 +60,31 @@ function axiosMessage(err: unknown): string {
   return 'Произошла ошибка';
 }
 
+function normalizeMinistryRoles(value: string): string {
+  const unique = Array.from(
+    new Set(
+      String(value ?? '')
+        .split(/[;,]/)
+        .map((x) => x.trim())
+        .filter((x) => x.length > 0),
+    ),
+  );
+  return unique.join(', ');
+}
+
+function roleArray(value: string): string[] {
+  return normalizeMinistryRoles(value)
+    .split(',')
+    .map((x) => x.trim())
+    .filter((x) => x.length > 0);
+}
+
+function keepAllowedRoles(value: string, allowed: Set<string>): string {
+  const roles = roleArray(value);
+  if (allowed.size === 0) return normalizeMinistryRoles(value);
+  return roles.filter((r) => allowed.has(r)).join(', ');
+}
+
 /* ── Shared class names ──────────────────────────────────── */
 
 const SECTION_TITLE =
@@ -149,7 +174,7 @@ export function ProfilePage() {
         last_name: me.last_name ?? '',
         phone_number: me.phone_number ?? '',
         ministry_direction: me.ministry_direction ?? '',
-        ministry_role: me.ministry_role ?? '',
+        ministry_role: normalizeMinistryRoles(me.ministry_role ?? ''),
         email: me.email ?? '',
         birth_date: dateInputValueFromApi(me.birth_date),
         prayer_request: me.prayer_request ?? '',
@@ -241,7 +266,7 @@ export function ProfilePage() {
         last_name: draft.last_name.trim(),
         phone_number: draft.phone_number.trim(),
         ministry_direction: draft.ministry_direction.trim(),
-        ministry_role: draft.ministry_role.trim(),
+        ministry_role: normalizeMinistryRoles(draft.ministry_role),
         email: draft.email.trim(),
         birth_date: (() => {
           const y = dateInputValueFromApi(draft.birth_date.trim());
@@ -255,7 +280,7 @@ export function ProfilePage() {
         last_name: next.last_name ?? '',
         phone_number: next.phone_number ?? '',
         ministry_direction: next.ministry_direction ?? '',
-        ministry_role: next.ministry_role ?? '',
+        ministry_role: normalizeMinistryRoles(next.ministry_role ?? ''),
         email: next.email ?? '',
         birth_date: dateInputValueFromApi(next.birth_date),
         prayer_request: next.prayer_request ?? '',
@@ -610,7 +635,7 @@ export function ProfilePage() {
                       last_name: user?.last_name ?? '',
                       phone_number: user?.phone_number ?? '',
                     ministry_direction: user?.ministry_direction ?? '',
-                    ministry_role: user?.ministry_role ?? '',
+                    ministry_role: normalizeMinistryRoles(user?.ministry_role ?? ''),
                       email: user?.email ?? '',
                       birth_date: dateInputValueFromApi(user?.birth_date),
                       prayer_request: user?.prayer_request ?? '',
@@ -670,7 +695,7 @@ export function ProfilePage() {
                       setDraft((d) => {
                         const dir = ministryTemplates.find((x) => x.title === nextDir);
                         const allowed = new Set((dir?.roles ?? []).map((r) => r.title));
-                        const nextRole = allowed.size === 0 || allowed.has(d.ministry_role) ? d.ministry_role : '';
+                        const nextRole = keepAllowedRoles(d.ministry_role, allowed);
                         return { ...d, ministry_direction: nextDir, ministry_role: nextRole };
                       });
                     }}
@@ -685,19 +710,19 @@ export function ProfilePage() {
                 </div>
                 <div>
                   <label className={LABEL}>Роль</label>
-                  <select
+                  <input
                     className={INPUT}
                     value={draft.ministry_role}
                     disabled={!draft.ministry_direction}
                     onChange={(e) => setDraft((d) => ({ ...d, ministry_role: e.target.value }))}
-                  >
-                    <option value="">—</option>
-                    {(ministryTemplates.find((x) => x.title === draft.ministry_direction)?.roles ?? []).map((r) => (
-                      <option key={r.id} value={r.title}>
-                        {r.title}
-                      </option>
-                    ))}
-                  </select>
+                    placeholder={`Роли через запятую: ${
+                      (ministryTemplates.find((x) => x.title === draft.ministry_direction)?.roles ?? [])
+                        .map((r) => r.title)
+                        .concat(['Ведущий', 'Проповедник'])
+                        .filter((role, idx, arr) => arr.indexOf(role) === idx)
+                        .join(', ')
+                    }`}
+                  />
                 </div>
               </div>
               <div>

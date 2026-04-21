@@ -182,7 +182,7 @@ function parseBulkMemberPaste(text: string): Omit<BulkMemberRow, 'key'>[] {
     const phone_number = cells[2] ?? '';
     const birthRaw = cells[3] ?? '';
     const ministry_direction = cells[4] ?? '';
-    const ministry_role = cells[5] ?? '';
+    const ministry_role = normalizeMinistryRoles(cells[5] ?? '');
     rows.push({
       last_name,
       first_name,
@@ -193,6 +193,31 @@ function parseBulkMemberPaste(text: string): Omit<BulkMemberRow, 'key'>[] {
     });
   }
   return rows;
+}
+
+function normalizeMinistryRoles(value: string): string {
+  const unique = Array.from(
+    new Set(
+      String(value ?? '')
+        .split(/[;,]/)
+        .map((x) => x.trim())
+        .filter((x) => x.length > 0),
+    ),
+  );
+  return unique.join(', ');
+}
+
+function roleArray(value: string): string[] {
+  return normalizeMinistryRoles(value)
+    .split(',')
+    .map((x) => x.trim())
+    .filter((x) => x.length > 0);
+}
+
+function keepAllowedRoles(value: string, allowed: Set<string>): string {
+  const roles = roleArray(value);
+  if (allowed.size === 0) return normalizeMinistryRoles(value);
+  return roles.filter((r) => allowed.has(r)).join(', ');
 }
 
 function displayName(u: AppUser): string {
@@ -473,8 +498,11 @@ function MembersSection() {
   }, [data, search]);
 
   const dirs = (dirsQ.data ?? []) as MinistryDirectionTemplate[];
-  const rolesForDirection = (directionTitle: string) =>
-    (dirs.find((d) => d.title === directionTitle)?.roles ?? []).map((r) => r.title);
+  const rolesForDirection = (directionTitle: string) => {
+    const fromDirection = (dirs.find((d) => d.title === directionTitle)?.roles ?? []).map((r) => r.title);
+    const mustHave = ['Ведущий', 'Проповедник'];
+    return Array.from(new Set([...fromDirection, ...mustHave]));
+  };
 
   const stats = useMemo(() => {
     const list = data ?? [];
@@ -493,7 +521,7 @@ function MembersSection() {
     last_name: form.last_name.trim(),
     phone_number: form.phone_number.trim(),
     birth_date: dateInputValueFromApi(form.birth_date.trim()),
-    ...(form.ministry_role.trim() ? { ministry_role: form.ministry_role.trim() } : {}),
+    ...(normalizeMinistryRoles(form.ministry_role) ? { ministry_role: normalizeMinistryRoles(form.ministry_role) } : {}),
     ...(form.ministry_direction.trim() ? { ministry_direction: form.ministry_direction.trim() } : {}),
   });
 
@@ -580,7 +608,9 @@ function MembersSection() {
         last_name: r.last_name.trim(),
         phone_number: r.phone_number.trim(),
         birth_date: dateInputValueFromApi(r.birth_date.trim()),
-        ...(r.ministry_role.trim() ? { ministry_role: r.ministry_role.trim() } : {}),
+        ...(normalizeMinistryRoles(r.ministry_role)
+          ? { ministry_role: normalizeMinistryRoles(r.ministry_role) }
+          : {}),
         ...(r.ministry_direction.trim() ? { ministry_direction: r.ministry_direction.trim() } : {}),
       }));
 
@@ -620,7 +650,7 @@ function MembersSection() {
         last_name: editForm.last_name.trim(),
         phone_number: editForm.phone_number.trim(),
         birth_date: dateInputValueFromApi(editForm.birth_date.trim()),
-        ministry_role: editForm.ministry_role.trim(),
+        ministry_role: normalizeMinistryRoles(editForm.ministry_role),
         ministry_direction: editForm.ministry_direction.trim(),
         prayer_request: editForm.prayer_request.trim(),
         is_active: editForm.is_active,
@@ -748,7 +778,7 @@ function MembersSection() {
       last_name: el,
       phone_number: (u.phone_number ?? '').trim(),
       birth_date: dateInputValueFromApi(u.birth_date),
-      ministry_role: (u.ministry_role ?? '').trim(),
+      ministry_role: normalizeMinistryRoles((u.ministry_role ?? '').trim()),
       ministry_direction: (u.ministry_direction ?? '').trim(),
       prayer_request: (u.prayer_request ?? '').trim(),
       is_active: u.is_active,
@@ -1059,8 +1089,7 @@ function MembersSection() {
                             rs.map((r) => {
                               if (r.key !== row.key) return r;
                               const allowed = new Set(rolesForDirection(nextDir));
-                              const nextRole =
-                                allowed.size === 0 || allowed.has(r.ministry_role) ? r.ministry_role : '';
+                              const nextRole = keepAllowedRoles(r.ministry_role, allowed);
                               return { ...r, ministry_direction: nextDir, ministry_role: nextRole };
                             }),
                           );
@@ -1075,7 +1104,7 @@ function MembersSection() {
                       </select>
                     </td>
                     <td className="px-2 py-1.5 align-middle">
-                      <select
+                      <input
                         className={`${fieldClass()} py-1.5 text-xs`}
                         value={row.ministry_role}
                         disabled={!row.ministry_direction}
@@ -1083,14 +1112,8 @@ function MembersSection() {
                           const v = e.target.value;
                           setBulkRows((rs) => rs.map((r) => (r.key === row.key ? { ...r, ministry_role: v } : r)));
                         }}
-                      >
-                        <option value="">—</option>
-                        {rolesForDirection(row.ministry_direction).map((t) => (
-                          <option key={t} value={t}>
-                            {t}
-                          </option>
-                        ))}
-                      </select>
+                        placeholder={`Роли через запятую: ${rolesForDirection(row.ministry_direction).join(', ')}`}
+                      />
                     </td>
                     <td className="px-2 py-1.5 align-middle text-right">
                       <button
@@ -1186,7 +1209,7 @@ function MembersSection() {
                   const nextDir = e.target.value;
                   setForm((s) => {
                     const allowed = new Set(rolesForDirection(nextDir));
-                    const nextRole = allowed.size === 0 || allowed.has(s.ministry_role) ? s.ministry_role : '';
+                    const nextRole = keepAllowedRoles(s.ministry_role, allowed);
                     return { ...s, ministry_direction: nextDir, ministry_role: nextRole };
                   });
                 }}
@@ -1201,19 +1224,13 @@ function MembersSection() {
             </div>
             <div>
               <label className="mb-1 block text-xs font-semibold text-stone-600">Роль служения</label>
-              <select
+              <input
                 className={fieldClass()}
                 value={form.ministry_role}
                 disabled={!form.ministry_direction}
                 onChange={(e) => setForm((s) => ({ ...s, ministry_role: e.target.value }))}
-              >
-                <option value="">—</option>
-                {rolesForDirection(form.ministry_direction).map((t) => (
-                  <option key={t} value={t}>
-                    {t}
-                  </option>
-                ))}
-              </select>
+                placeholder={`Роли через запятую: ${rolesForDirection(form.ministry_direction).join(', ')}`}
+              />
             </div>
             <div className="sm:col-span-2 lg:col-span-3">
               <button
@@ -1538,7 +1555,7 @@ function MembersSection() {
                         const nextDir = e.target.value;
                         setEditForm((s) => {
                           const allowed = new Set(rolesForDirection(nextDir));
-                          const nextRole = allowed.size === 0 || allowed.has(s.ministry_role) ? s.ministry_role : '';
+                          const nextRole = keepAllowedRoles(s.ministry_role, allowed);
                           return { ...s, ministry_direction: nextDir, ministry_role: nextRole };
                         });
                       }}
@@ -1553,19 +1570,13 @@ function MembersSection() {
                   </div>
                   <div>
                     <label className="mb-1 block text-xs font-semibold text-stone-600">Роль служения</label>
-                    <select
+                    <input
                       className={fieldClass()}
                       value={editForm.ministry_role}
                       disabled={!editForm.ministry_direction}
                       onChange={(e) => setEditForm((s) => ({ ...s, ministry_role: e.target.value }))}
-                    >
-                      <option value="">—</option>
-                      {rolesForDirection(editForm.ministry_direction).map((t) => (
-                        <option key={t} value={t}>
-                          {t}
-                        </option>
-                      ))}
-                    </select>
+                      placeholder={`Роли через запятую: ${rolesForDirection(editForm.ministry_direction).join(', ')}`}
+                    />
                   </div>
                 </div>
               </section>

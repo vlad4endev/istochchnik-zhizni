@@ -67,6 +67,33 @@ export type PlannerPlanDetails = PlannerPlanListItem & {
   blocks: PlannerBlock[];
 };
 
+export type PublicPlannerPlanPayload = {
+  plan: {
+    id: number;
+    service_date: string;
+    start_time: string;
+    status: 'draft' | 'published';
+    total_duration_minutes: number;
+    notes: string | null;
+    share_token: string;
+    template_name: string | null;
+    leader_name: string | null;
+    preacher_name: string | null;
+  };
+  blocks: Array<{
+    id: number;
+    order_index: number;
+    title: string;
+    duration_minutes: number;
+    block_type_name: string | null;
+    block_type_code: string | null;
+    assigned_member_name: string | null;
+    song_title: string | null;
+    song_key: string | null;
+    content_json: Record<string, unknown>;
+  }>;
+};
+
 type DbRecord = Record<string, unknown>;
 
 let plannerSchemaInitOnce: Promise<void> | null = null;
@@ -361,6 +388,86 @@ export async function getPlanDetails(planId: number): Promise<PlannerPlanDetails
   };
 }
 
+export async function getPublicPlanByToken(token: string): Promise<PublicPlannerPlanPayload | null> {
+  await ensurePlannerSchema();
+  const normalizedToken = String(token ?? '').trim();
+  if (!/^[0-9a-fA-F-]{36}$/.test(normalizedToken)) return null;
+
+  const planRes = await query(
+    `select
+       p.id,
+       p.service_date::text as service_date,
+       p.start_time,
+       p.status,
+       p.total_duration_minutes,
+       p.notes,
+       p.share_token::text as share_token,
+       t.name as template_name,
+       coalesce(nullif(trim(concat(coalesce(leader.first_name, ''), ' ', coalesce(leader.last_name, ''))), ''), leader.name) as leader_name,
+       coalesce(nullif(trim(concat(coalesce(preacher.first_name, ''), ' ', coalesce(preacher.last_name, ''))), ''), preacher.name) as preacher_name
+     from public.service_plans p
+     left join public.service_templates t on t.id = p.template_id
+     left join public.members leader on leader.id = p.leader_member_id
+     left join public.members preacher on preacher.id = p.preacher_member_id
+     where p.share_token = $1::uuid
+     limit 1`,
+    [normalizedToken],
+  );
+  const row = planRes.rows[0] as DbRecord | undefined;
+  if (!row) return null;
+
+  const blocksRes = await query(
+    `select
+       b.id,
+       b.order_index,
+       b.title,
+       b.duration_minutes,
+       bt.name as block_type_name,
+       bt.code as block_type_code,
+       coalesce(nullif(trim(concat(coalesce(m.first_name, ''), ' ', coalesce(m.last_name, ''))), ''), m.name) as assigned_member_name,
+       s.title as song_title,
+       s.default_key as song_key,
+       b.content_json
+     from public.service_blocks b
+     left join public.block_types bt on bt.id = b.block_type_id
+     left join public.members m on m.id = b.assigned_member_id
+     left join public.songs s on s.id = b.song_id
+     where b.service_plan_id = $1
+     order by b.order_index asc, b.id asc`,
+    [Number(row.id)],
+  );
+
+  return {
+    plan: {
+      id: Number(row.id),
+      service_date: String(row.service_date ?? ''),
+      start_time: toTimeHm(row.start_time),
+      status: row.status === 'published' ? 'published' : 'draft',
+      total_duration_minutes: Number(row.total_duration_minutes ?? 0),
+      notes: row.notes == null ? null : String(row.notes),
+      share_token: String(row.share_token ?? ''),
+      template_name: row.template_name == null ? null : String(row.template_name),
+      leader_name: row.leader_name == null ? null : String(row.leader_name),
+      preacher_name: row.preacher_name == null ? null : String(row.preacher_name),
+    },
+    blocks: blocksRes.rows.map((r) => {
+      const x = r as DbRecord;
+      return {
+        id: Number(x.id),
+        order_index: Number(x.order_index ?? 0),
+        title: String(x.title ?? ''),
+        duration_minutes: Number(x.duration_minutes ?? 0),
+        block_type_name: x.block_type_name == null ? null : String(x.block_type_name),
+        block_type_code: x.block_type_code == null ? null : String(x.block_type_code),
+        assigned_member_name: x.assigned_member_name == null ? null : String(x.assigned_member_name),
+        song_title: x.song_title == null ? null : String(x.song_title),
+        song_key: x.song_key == null ? null : String(x.song_key),
+        content_json: asObject(x.content_json),
+      };
+    }),
+  };
+}
+
 export async function createTemplate(input: {
   name: string;
   description: string | null;
@@ -622,7 +729,7 @@ export async function reorderBlocks(servicePlanId: number, orderedBlockIds: numb
     await client.query('begin');
 
     const existingRes = await client.query(
-      `select id from public.service_blocks where service_plan_id = $1 order by order_index asc`,
+      `select id from public.service_blocks where service_plan_id = $1 order by order_index asc for update`,
       [servicePlanId],
     );
     const existingIds = existingRes.rows.map((r) => Number((r as DbRecord).id)).sort((a, b) => a - b);
@@ -630,6 +737,15 @@ export async function reorderBlocks(servicePlanId: number, orderedBlockIds: numb
     if (existingIds.length !== incoming.length || existingIds.some((id, idx) => id !== incoming[idx])) {
       throw new Error('Ordered block ids do not match service plan blocks');
     }
+
+    // Two-phase reorder to avoid transient unique collisions on
+    // (service_plan_id, order_index) while rows are being updated.
+    await client.query(
+      `update public.service_blocks
+       set order_index = order_index + 100000
+       where service_plan_id = $1`,
+      [servicePlanId],
+    );
 
     for (let i = 0; i < orderedBlockIds.length; i += 1) {
       await client.query(

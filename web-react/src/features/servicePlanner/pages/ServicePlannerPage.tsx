@@ -69,11 +69,27 @@ function reorderTemplateBlocks<
 }
 
 function roleLabel(u: AppUser): string {
+  const ministryRoles = String(u.ministry_role ?? '')
+    .split(/[;,]/)
+    .map((s) => s.trim())
+    .filter((s, idx, arr) => s.length > 0 && arr.indexOf(s) === idx);
+  if (ministryRoles.length > 0) {
+    return ministryRoles.join(', ');
+  }
   if (u.app_role === 'admin') return 'Админ';
   if (u.app_role === 'pastor') return 'Пастор';
   if (u.app_role === 'editor') return 'Редактор';
   if (u.app_role === 'musician') return 'Музыкант';
   return 'Участник';
+}
+
+function hasMinistryRole(u: AppUser, roleName: string): boolean {
+  const target = roleName.trim().toLowerCase();
+  if (!target) return false;
+  return String(u.ministry_role ?? '')
+    .split(/[;,]/)
+    .map((s) => s.trim().toLowerCase())
+    .some((s) => s === target);
 }
 
 function userLabel(u: AppUser): string {
@@ -120,6 +136,10 @@ export function ServicePlannerPage() {
   const qc = useQueryClient();
   const role = useAuthStore((s) => s.role);
   const isAdmin = (role ?? 'member').toLowerCase() === 'admin';
+  const [screen, setScreen] = useState<'home' | 'plan' | 'template'>('home');
+  const [createPlanDate, setCreatePlanDate] = useState(todayIso());
+  const [isTemplateDraftNew, setIsTemplateDraftNew] = useState(false);
+  const [templateImportSourceId, setTemplateImportSourceId] = useState<number | null>(null);
   const [activePlanId, setActivePlanId] = useState<number | null>(null);
   const [draft, setDraft] = useState<ServicePlanDetails | null>(null);
   const [activeTemplateId, setActiveTemplateId] = useState<number | null>(null);
@@ -202,26 +222,17 @@ export function ServicePlannerPage() {
     mutationFn: ({ id, body }: { id: number; body: Parameters<typeof patchServicePlan>[1] }) =>
       patchServicePlan(id, body),
     onSuccess: async () => {
-      await Promise.all([
-        qc.invalidateQueries({ queryKey: ['service-planner', 'plans'] }),
-        qc.invalidateQueries({ queryKey: ['service-planner', 'plan', activePlanId] }),
-      ]);
+      await qc.invalidateQueries({ queryKey: ['service-planner', 'plans'] });
     },
   });
 
   const updateBlockMut = useMutation({
     mutationFn: ({ id, body }: { id: number; body: Parameters<typeof patchServiceBlock>[1] }) =>
       patchServiceBlock(id, body),
-    onSuccess: async () => {
-      await qc.invalidateQueries({ queryKey: ['service-planner', 'plan', activePlanId] });
-    },
   });
 
   const reorderMut = useMutation({
     mutationFn: (body: Parameters<typeof reorderServiceBlocks>[0]) => reorderServiceBlocks(body),
-    onSuccess: async () => {
-      await qc.invalidateQueries({ queryKey: ['service-planner', 'plan', activePlanId] });
-    },
   });
 
   const createPlanMut = useMutation({
@@ -229,6 +240,7 @@ export function ServicePlannerPage() {
     onSuccess: async (data) => {
       await qc.invalidateQueries({ queryKey: ['service-planner', 'plans'] });
       setActivePlanId(data.id);
+      setScreen('plan');
     },
   });
 
@@ -237,21 +249,16 @@ export function ServicePlannerPage() {
     onSuccess: async (data) => {
       await qc.invalidateQueries({ queryKey: ['service-planner', 'templates'] });
       setActiveTemplateId(data.id);
+      setIsTemplateDraftNew(false);
     },
   });
 
   const createBlockMut = useMutation({
     mutationFn: (body: Parameters<typeof createServiceBlock>[0]) => createServiceBlock(body),
-    onSuccess: async () => {
-      await qc.invalidateQueries({ queryKey: ['service-planner', 'plan', activePlanId] });
-    },
   });
 
   const deleteBlockMut = useMutation({
     mutationFn: (id: number) => deleteServiceBlock(id),
-    onSuccess: async () => {
-      await qc.invalidateQueries({ queryKey: ['service-planner', 'plan', activePlanId] });
-    },
   });
 
   const saveProgramMut = useMutation({
@@ -321,6 +328,11 @@ export function ServicePlannerPage() {
   const templates = templatesQ.data ?? [];
   const blockTypes = blockTypesQ.data ?? [];
   const usersById = useMemo(() => new Map(users.map((u) => [u.id, u] as const)), [users]);
+  const leaderCandidates = useMemo(() => users.filter((u) => hasMinistryRole(u, 'Ведущий')), [users]);
+  const preacherCandidates = useMemo(
+    () => users.filter((u) => hasMinistryRole(u, 'Проповедник')),
+    [users],
+  );
 
   const activeTemplate = useMemo(() => {
     const targetId = activeTemplateId ?? draft?.template_id ?? null;
@@ -415,29 +427,78 @@ export function ServicePlannerPage() {
     if (!draft) return;
     const defaultType = blockTypes[0]?.id;
     if (!defaultType) return;
-    void createBlockMut.mutateAsync({
-      service_plan_id: draft.id,
-      block_type_id: defaultType,
-      title: 'Новый блок',
-      duration_minutes: 5,
-      content_json: {},
-    });
+    void (async () => {
+      const created = await createBlockMut.mutateAsync({
+        service_plan_id: draft.id,
+        block_type_id: defaultType,
+        title: 'Новый блок',
+        duration_minutes: 5,
+        content_json: {},
+      });
+      setDraft((prev) => {
+        if (!prev || prev.id !== draft.id) return prev;
+        const nextOrder = prev.blocks.length;
+        return {
+          ...prev,
+          blocks: [
+            ...prev.blocks,
+            {
+              id: created.id,
+              service_plan_id: prev.id,
+              block_type_id: defaultType,
+              title: 'Новый блок',
+              order_index: nextOrder,
+              duration_minutes: 5,
+              assigned_member_id: null,
+              song_id: null,
+              content_json: {},
+            },
+          ],
+        };
+      });
+    })();
   }
 
   function addSeparatorBlock(): void {
     if (!draft) return;
     const separatorType = blockTypes.find((t) => t.code === 'custom')?.id ?? blockTypes[0]?.id;
     if (!separatorType) return;
-    void createBlockMut.mutateAsync({
-      service_plan_id: draft.id,
-      block_type_id: separatorType,
-      title: 'Раздел',
-      duration_minutes: 1,
-      content_json: {
-        is_separator: true,
-        separator_text: 'Новый раздел',
-      },
-    });
+    void (async () => {
+      const created = await createBlockMut.mutateAsync({
+        service_plan_id: draft.id,
+        block_type_id: separatorType,
+        title: 'Раздел',
+        duration_minutes: 1,
+        content_json: {
+          is_separator: true,
+          separator_text: 'Новый раздел',
+        },
+      });
+      setDraft((prev) => {
+        if (!prev || prev.id !== draft.id) return prev;
+        const nextOrder = prev.blocks.length;
+        return {
+          ...prev,
+          blocks: [
+            ...prev.blocks,
+            {
+              id: created.id,
+              service_plan_id: prev.id,
+              block_type_id: separatorType,
+              title: 'Раздел',
+              order_index: nextOrder,
+              duration_minutes: 1,
+              assigned_member_id: null,
+              song_id: null,
+              content_json: {
+                is_separator: true,
+                separator_text: 'Новый раздел',
+              },
+            },
+          ],
+        };
+      });
+    })();
   }
 
   async function copyShareLink(): Promise<void> {
@@ -488,57 +549,85 @@ export function ServicePlannerPage() {
       const parsedRecurrence = JSON.parse(
         recurrenceRuleInput && recurrenceRuleInput.trim() ? recurrenceRuleInput : '{}',
       ) as Record<string, unknown>;
-      await updateTemplateMut.mutateAsync({
-        id: templateDraft.id,
-        body: {
-          name: templateDraft.name,
-          description: templateDraft.description,
-          default_start_time: templateDraft.default_start_time,
-          is_active: templateDraft.is_active,
-          recurrence_rule: parsedRecurrence,
-          blocks: templateDraft.blocks
-            .slice()
-            .sort((a, b) => a.order_index - b.order_index)
-            .map((b, idx) => ({
-              block_type_id: b.block_type_id,
-              title: b.title,
-              order_index: idx,
-              duration_minutes: b.duration_minutes,
-              default_song_id: b.default_song_id,
-              default_content_json: b.default_content_json,
-            })),
-        },
-      });
+      const payload = {
+        name: templateDraft.name,
+        description: templateDraft.description,
+        default_start_time: templateDraft.default_start_time,
+        recurrence_rule: parsedRecurrence,
+        blocks: templateDraft.blocks
+          .slice()
+          .sort((a, b) => a.order_index - b.order_index)
+          .map((b, idx) => ({
+            block_type_id: b.block_type_id,
+            title: b.title,
+            order_index: idx,
+            duration_minutes: b.duration_minutes,
+            default_song_id: b.default_song_id,
+            default_content_json: b.default_content_json,
+          })),
+      };
+      if (isTemplateDraftNew) {
+        await createTemplateMut.mutateAsync(payload);
+      } else {
+        await updateTemplateMut.mutateAsync({
+          id: templateDraft.id,
+          body: {
+            ...payload,
+            is_active: templateDraft.is_active,
+          },
+        });
+      }
     } catch {
       window.alert('Проверьте recurrence_rule: это должен быть корректный JSON.');
     }
   }
 
-  async function createTemplateFromDraft(): Promise<void> {
-    const fallbackType = blockTypes[0]?.id;
-    if (!fallbackType) return;
-    const name = window.prompt('Название шаблона', 'Новое служение')?.trim();
-    if (!name) return;
-    try {
-      await createTemplateMut.mutateAsync({
-        name,
-        description: '',
-        default_start_time: '10:00',
-        recurrence_rule: { frequency: 'weekly', byWeekday: 0 },
-        blocks: [
-          {
-            block_type_id: fallbackType,
-            title: 'Открытие',
-            order_index: 0,
-            duration_minutes: 5,
-            default_song_id: null,
-            default_content_json: {},
-          },
-        ],
-      });
-    } catch {
-      window.alert('Не удалось создать шаблон');
-    }
+  function startTemplateConstructorEmpty(): void {
+    const fallbackType = blockTypes[0]?.id ?? 1;
+    setTemplateDraft({
+      id: 0,
+      name: 'Новый шаблон',
+      description: '',
+      recurrence_rule: { frequency: 'weekly', byWeekday: 0 },
+      default_start_time: '10:00',
+      is_active: true,
+      blocks: [
+        {
+          id: tmpId(),
+          template_id: 0,
+          block_type_id: fallbackType,
+          title: 'Новый блок 1',
+          order_index: 0,
+          duration_minutes: 5,
+          default_song_id: null,
+          default_content_json: {},
+        },
+      ],
+    });
+    setRecurrenceRuleInput(JSON.stringify({ frequency: 'weekly', byWeekday: 0 }, null, 2));
+    setTemplateImportSourceId(null);
+    setIsTemplateDraftNew(true);
+    setScreen('template');
+  }
+
+  async function importFromExistingTemplate(sourceTemplateId: number): Promise<void> {
+    if (!templateDraft) return;
+    const source = await fetchServiceTemplate(sourceTemplateId);
+    const nextName = isTemplateDraftNew ? `${source.name} (копия)` : templateDraft.name;
+    setTemplateDraft({
+      ...templateDraft,
+      name: nextName,
+      description: source.description,
+      default_start_time: source.default_start_time,
+      recurrence_rule: source.recurrence_rule,
+      blocks: source.blocks.map((b, idx) => ({
+        ...b,
+        id: isTemplateDraftNew ? tmpId() - idx : b.id,
+        template_id: templateDraft.id,
+        order_index: idx,
+      })),
+    });
+    setRecurrenceRuleInput(JSON.stringify(source.recurrence_rule ?? {}, null, 2));
   }
 
   const loadingPlanner = plansQ.isLoading || templatesQ.isLoading || (activePlanId != null && planQ.isLoading);
@@ -553,52 +642,392 @@ export function ServicePlannerPage() {
     );
   }
 
+  const plans = plansQ.data ?? [];
+  const today = todayIso();
+  const nearestFuturePlanId = plans
+    .filter((p) => p.service_date >= today)
+    .sort((a, b) => a.service_date.localeCompare(b.service_date))[0]?.id;
+
+  if (screen === 'home') {
+    return (
+      <section className="mx-auto flex w-full max-w-5xl flex-col gap-4 px-4 py-6">
+        <header className="rounded-2xl border border-stone-200 bg-white p-4 shadow-sm">
+          <h1 className="text-2xl font-extrabold text-stone-900">Планировщик служений</h1>
+          <p className="mt-1 text-sm text-stone-600">Все программы, ведущие и быстрый запуск нового плана.</p>
+        </header>
+
+        <section className="grid gap-3 md:grid-cols-2">
+          <div className="rounded-2xl border border-primary/30 bg-primary/5 p-4 shadow-sm">
+            <p className="text-xs font-semibold uppercase tracking-wide text-primary">Новый план</p>
+            <div className="mt-2 grid gap-2 sm:grid-cols-2">
+              <select
+                value={activeTemplateId ?? ''}
+                onChange={(e) => setActiveTemplateId(e.target.value ? Number(e.target.value) : null)}
+                className="rounded-xl border border-stone-300 bg-white px-3 py-2 text-sm"
+              >
+                {templates.map((tpl) => (
+                  <option key={tpl.id} value={tpl.id}>
+                    {tpl.name}
+                  </option>
+                ))}
+              </select>
+              <input
+                type="date"
+                value={createPlanDate}
+                onChange={(e) => setCreatePlanDate(e.target.value || todayIso())}
+                className="rounded-xl border border-stone-300 bg-white px-3 py-2 text-sm"
+              />
+            </div>
+            <button
+              type="button"
+              disabled={!activeTemplate}
+              onClick={() => generateFromTemplate(createPlanDate)}
+              className="mt-3 inline-flex min-h-[48px] w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-bold text-white hover:bg-primary-dark disabled:cursor-not-allowed disabled:bg-stone-300"
+            >
+              <LuPlus className="h-4 w-4" />
+              Создать программу
+            </button>
+          </div>
+
+          {isAdmin ? (
+            <div className="rounded-2xl border border-stone-200 bg-white p-4 shadow-sm">
+              <p className="text-xs font-semibold uppercase tracking-wide text-stone-500">Шаблоны</p>
+              <p className="mt-1 text-sm text-stone-600">
+                Создайте пустой шаблон и при необходимости подтяните блоки из существующего.
+              </p>
+              <button
+                type="button"
+                onClick={startTemplateConstructorEmpty}
+                className="mt-3 inline-flex min-h-[48px] w-full items-center justify-center gap-2 rounded-xl border border-stone-300 px-4 py-2 text-sm font-bold text-stone-800 hover:border-primary hover:text-primary"
+              >
+                <LuPlus className="h-4 w-4" />
+                Создать шаблон
+              </button>
+            </div>
+          ) : (
+            <div className="rounded-2xl border border-stone-200 bg-white p-4 text-sm text-stone-600 shadow-sm">
+              Вы можете открывать и редактировать существующие планы из списка ниже.
+            </div>
+          )}
+        </section>
+
+        <section className="rounded-2xl border border-stone-200 bg-white p-3 shadow-sm">
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <h2 className="text-sm font-extrabold text-stone-900">Созданные программы</h2>
+            <span className="text-xs text-stone-500">{plans.length} шт.</span>
+          </div>
+          {plans.length === 0 ? (
+            <p className="rounded-xl border border-dashed border-stone-300 bg-stone-50 px-3 py-4 text-sm text-stone-600">
+              Программ пока нет. Создайте первую кнопкой выше.
+            </p>
+          ) : (
+            <div className="grid gap-2">
+              {plans.map((plan) => {
+                const leader = plan.leader_member_id ? usersById.get(plan.leader_member_id) : null;
+                const isFuture = plan.service_date >= today;
+                const isNearest = nearestFuturePlanId === plan.id;
+                return (
+                  <button
+                    key={plan.id}
+                    type="button"
+                    onClick={() => {
+                      setActivePlanId(plan.id);
+                      setScreen('plan');
+                    }}
+                    className={[
+                      'w-full rounded-xl border px-3 py-2 text-left transition',
+                      isNearest
+                        ? 'border-primary bg-primary/5 shadow-sm'
+                        : isFuture
+                          ? 'border-emerald-200 bg-emerald-50/40'
+                          : 'border-stone-200 bg-white',
+                    ].join(' ')}
+                  >
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-sm font-bold text-stone-900">{plan.service_date}</span>
+                      <span className="text-xs text-stone-600">{plan.template_name ?? 'Без шаблона'}</span>
+                      {isNearest ? (
+                        <span className="rounded-full bg-primary px-2 py-0.5 text-[10px] font-bold text-white">
+                          Ближайшая
+                        </span>
+                      ) : null}
+                      {plan.status === 'published' ? (
+                        <span className="rounded-full bg-emerald-600 px-2 py-0.5 text-[10px] font-bold text-white">
+                          Опубликован
+                        </span>
+                      ) : (
+                        <span className="rounded-full bg-stone-300 px-2 py-0.5 text-[10px] font-bold text-stone-700">
+                          Черновик
+                        </span>
+                      )}
+                    </div>
+                    <p className="mt-1 text-xs text-stone-600">
+                      Ведущий: {leader ? userLabel(leader) : 'Не назначен'} • Блоков: {plan.blocks_count}
+                    </p>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </section>
+      </section>
+    );
+  }
+
+  if (screen === 'template') {
+    return (
+      <section className="mx-auto flex w-full max-w-4xl flex-col gap-3 px-3 py-4 pb-6 sm:px-4 md:px-6">
+        <header className="rounded-2xl border border-stone-200 bg-white p-4 shadow-sm">
+          <div className="flex items-center justify-between gap-2">
+            <h1 className="text-xl font-extrabold text-stone-900">
+              {isTemplateDraftNew ? 'Новый шаблон' : 'Конструктор шаблона'}
+            </h1>
+            <button
+              type="button"
+              onClick={() => setScreen('home')}
+              className="rounded-lg border border-stone-300 px-3 py-1.5 text-sm font-semibold text-stone-700 hover:border-primary hover:text-primary"
+            >
+              К списку программ
+            </button>
+          </div>
+          <p className="mt-1 text-sm text-stone-600">
+            Соберите структуру блоков и сохраните шаблон для генерации программ.
+          </p>
+        </header>
+
+        {templateDraft ? (
+          <section className="rounded-2xl border border-stone-200 bg-white p-3 shadow-sm">
+            <div className="mb-2 grid gap-2 md:grid-cols-4">
+              <select
+                value={isTemplateDraftNew ? '' : activeTemplateId ?? ''}
+                onChange={(e) => {
+                  const id = e.target.value ? Number(e.target.value) : null;
+                  setActiveTemplateId(id);
+                  setIsTemplateDraftNew(false);
+                }}
+                className="rounded-lg border border-stone-300 px-2 py-1.5 text-sm md:col-span-3"
+              >
+                <option value="">Выберите существующий шаблон...</option>
+                {templates.map((tpl) => (
+                  <option key={tpl.id} value={tpl.id}>
+                    {tpl.name}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={startTemplateConstructorEmpty}
+                className="rounded-lg border border-stone-300 px-3 py-1.5 text-sm font-semibold text-stone-700 hover:border-primary hover:text-primary"
+              >
+                Пустой шаблон
+              </button>
+            </div>
+
+            <div className="grid gap-2 md:grid-cols-3">
+              <input
+                value={templateDraft.name}
+                onChange={(e) => setTemplateDraft({ ...templateDraft, name: e.target.value })}
+                className="rounded-lg border border-stone-300 px-2 py-1.5 text-sm md:col-span-2"
+                placeholder="Название шаблона"
+              />
+              <input
+                type="time"
+                value={templateDraft.default_start_time}
+                onChange={(e) =>
+                  setTemplateDraft({ ...templateDraft, default_start_time: e.target.value || '10:00' })
+                }
+                className="rounded-lg border border-stone-300 px-2 py-1.5 text-sm"
+              />
+              <textarea
+                value={templateDraft.description ?? ''}
+                onChange={(e) => setTemplateDraft({ ...templateDraft, description: e.target.value })}
+                className="min-h-[56px] rounded-lg border border-stone-300 px-2 py-1.5 text-sm md:col-span-3"
+                placeholder="Описание"
+              />
+              <textarea
+                value={recurrenceRuleInput}
+                onChange={(e) => setRecurrenceRuleInput(e.target.value)}
+                className="min-h-[76px] rounded-lg border border-stone-300 px-2 py-1.5 font-mono text-xs md:col-span-3"
+                placeholder='{"frequency":"weekly","byWeekday":0}'
+              />
+            </div>
+
+            <div className="mt-3 rounded-xl border border-stone-200 p-2">
+              <div className="mb-2 grid gap-2 md:grid-cols-4">
+                <select
+                  value={templateImportSourceId ?? ''}
+                  onChange={(e) => setTemplateImportSourceId(e.target.value ? Number(e.target.value) : null)}
+                  className="rounded-lg border border-stone-300 px-2 py-1.5 text-sm md:col-span-3"
+                >
+                  <option value="">Подтянуть данные из другого шаблона...</option>
+                  {templates
+                    .filter((tpl) => (isTemplateDraftNew ? true : tpl.id !== templateDraft.id))
+                    .map((tpl) => (
+                      <option key={tpl.id} value={tpl.id}>
+                        {tpl.name}
+                      </option>
+                    ))}
+                </select>
+                <button
+                  type="button"
+                  disabled={!templateImportSourceId}
+                  onClick={() => void importFromExistingTemplate(templateImportSourceId as number)}
+                  className="rounded-lg border border-stone-300 px-3 py-1.5 text-sm font-semibold text-stone-700 hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  Подтянуть
+                </button>
+              </div>
+
+              <div className="mb-2 flex items-center justify-between">
+                <p className="text-xs font-semibold text-stone-500">Блоки шаблона</p>
+                <button
+                  type="button"
+                  onClick={addTemplateBlock}
+                  className="inline-flex items-center gap-1 rounded border border-stone-300 px-2 py-1 text-xs font-semibold text-stone-700"
+                >
+                  <LuPlus className="h-3.5 w-3.5" />
+                  Блок
+                </button>
+              </div>
+
+              <div className="space-y-2">
+                {templateDraft.blocks
+                  .slice()
+                  .sort((a, b) => a.order_index - b.order_index)
+                  .map((b, idx) => (
+                    <div key={b.id} className="grid gap-1 rounded border border-stone-200 p-2 md:grid-cols-4">
+                      <input
+                        value={b.title}
+                        onChange={(e) =>
+                          setTemplateDraft({
+                            ...templateDraft,
+                            blocks: templateDraft.blocks.map((x) =>
+                              x.id === b.id ? { ...x, title: e.target.value } : x,
+                            ),
+                          })
+                        }
+                        className="rounded border border-stone-300 px-2 py-1 text-xs md:col-span-2"
+                      />
+                      <select
+                        value={b.block_type_id}
+                        onChange={(e) =>
+                          setTemplateDraft({
+                            ...templateDraft,
+                            blocks: templateDraft.blocks.map((x) =>
+                              x.id === b.id ? { ...x, block_type_id: Number(e.target.value) || x.block_type_id } : x,
+                            ),
+                          })
+                        }
+                        className="rounded border border-stone-300 px-2 py-1 text-xs"
+                      >
+                        {blockTypes.map((t) => (
+                          <option key={t.id} value={t.id}>
+                            {t.name}
+                          </option>
+                        ))}
+                      </select>
+                      <input
+                        type="number"
+                        min={1}
+                        value={b.duration_minutes}
+                        onChange={(e) =>
+                          setTemplateDraft({
+                            ...templateDraft,
+                            blocks: templateDraft.blocks.map((x) =>
+                              x.id === b.id ? { ...x, duration_minutes: Math.max(1, Number(e.target.value) || 1) } : x,
+                            ),
+                          })
+                        }
+                        className="rounded border border-stone-300 px-2 py-1 text-xs"
+                      />
+                      <div className="flex gap-1 md:col-span-4">
+                        <button
+                          type="button"
+                          disabled={idx === 0}
+                          onClick={() =>
+                            setTemplateDraft({
+                              ...templateDraft,
+                              blocks: reorderTemplateBlocks(templateDraft.blocks, idx, idx - 1),
+                            })
+                          }
+                          className="rounded border border-stone-300 px-2 py-0.5 text-[10px] font-semibold"
+                        >
+                          Вверх
+                        </button>
+                        <button
+                          type="button"
+                          disabled={idx === templateDraft.blocks.length - 1}
+                          onClick={() =>
+                            setTemplateDraft({
+                              ...templateDraft,
+                              blocks: reorderTemplateBlocks(templateDraft.blocks, idx, idx + 1),
+                            })
+                          }
+                          className="rounded border border-stone-300 px-2 py-0.5 text-[10px] font-semibold"
+                        >
+                          Вниз
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setTemplateDraft({
+                              ...templateDraft,
+                              blocks: templateDraft.blocks
+                                .filter((x) => x.id !== b.id)
+                                .map((x, i) => ({ ...x, order_index: i })),
+                            })
+                          }
+                          className="rounded border border-rose-200 px-2 py-0.5 text-[10px] font-semibold text-rose-700"
+                        >
+                          Удалить
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+              </div>
+            </div>
+
+            <div className="mt-3 flex flex-wrap justify-end gap-2">
+              {!isTemplateDraftNew ? (
+                <button
+                  type="button"
+                  onClick={startTemplateConstructorEmpty}
+                  className="rounded-lg border border-stone-300 px-3 py-2 text-sm font-semibold text-stone-700 hover:border-primary hover:text-primary"
+                >
+                  Новый шаблон
+                </button>
+              ) : null}
+              <button
+                type="button"
+                onClick={() => void saveTemplateDraft()}
+                className="inline-flex items-center justify-center gap-1 rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-white hover:bg-primary-dark"
+              >
+                <LuSave className="h-4 w-4" />
+                {isTemplateDraftNew ? 'Создать шаблон' : 'Сохранить шаблон'}
+              </button>
+            </div>
+          </section>
+        ) : (
+          <div className="rounded-xl border border-stone-200 bg-white p-3 text-sm text-stone-600 shadow-sm">
+            Шаблон не выбран.
+          </div>
+        )}
+      </section>
+    );
+  }
+
   if (!draft) {
     return (
       <section className="mx-auto flex w-full max-w-2xl flex-col gap-3 px-4 py-6">
-        <h1 className="text-xl font-extrabold text-stone-900">Планировщик служений</h1>
-        <p className="text-sm text-stone-600">
-          Планы ещё не созданы. Сначала создайте шаблон, затем сгенерируйте план.
-        </p>
-        <div className="rounded-xl border border-stone-200 bg-white p-3">
-          <div className="mb-2 flex items-center justify-between gap-2">
-            <label className="block text-xs font-semibold text-stone-600">Шаблон</label>
-            <button
-              type="button"
-              onClick={() => void createTemplateFromDraft()}
-              className="inline-flex items-center gap-1 rounded-lg border border-stone-300 px-2 py-1 text-xs font-semibold text-stone-700 hover:border-primary hover:text-primary"
-            >
-              <LuPlus className="h-3.5 w-3.5" />
-              Создать шаблон
-            </button>
-          </div>
-          {templates.length > 0 ? (
-            <select
-              value={activeTemplateId ?? ''}
-              onChange={(e) => setActiveTemplateId(e.target.value ? Number(e.target.value) : null)}
-              className="w-full rounded-xl border border-stone-300 px-3 py-2 text-sm"
-            >
-              {templates.map((tpl) => (
-                <option key={tpl.id} value={tpl.id}>
-                  {tpl.name}
-                </option>
-              ))}
-            </select>
-          ) : (
-            <p className="rounded-lg border border-dashed border-stone-300 bg-stone-50 px-3 py-2 text-xs text-stone-600">
-              Пока нет ни одного шаблона. Нажмите «Создать шаблон».
-            </p>
-          )}
-          <button
-            type="button"
-            disabled={!activeTemplate}
-            onClick={() => generateFromTemplate(todayIso())}
-            className="mt-2 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-3 py-2 text-sm font-semibold text-white hover:bg-primary-dark disabled:cursor-not-allowed disabled:bg-stone-300"
-          >
-            <LuPlus className="h-4 w-4" />
-            Сгенерировать план на сегодня
-          </button>
-        </div>
+        <h1 className="text-xl font-extrabold text-stone-900">План не выбран</h1>
+        <p className="text-sm text-stone-600">Вернитесь на главную страницу планировщика и выберите программу.</p>
+        <button
+          type="button"
+          onClick={() => setScreen('home')}
+          className="inline-flex items-center justify-center gap-2 rounded-xl border border-stone-300 px-3 py-2 text-sm font-semibold text-stone-700 hover:border-primary hover:text-primary"
+        >
+          К списку программ
+        </button>
       </section>
     );
   }
@@ -613,7 +1042,30 @@ export function ServicePlannerPage() {
   return (
     <section className="mx-auto flex w-full max-w-4xl flex-col gap-3 px-3 py-4 pb-24 sm:px-4 md:px-6 md:pb-6">
       <header className="rounded-2xl border border-stone-200 bg-white p-4 shadow-sm">
-        <h1 className="text-xl font-extrabold text-stone-900">План служения</h1>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h1 className="text-xl font-extrabold text-stone-900">План служения</h1>
+          <div className="flex items-center gap-2">
+            {isAdmin ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setIsTemplateDraftNew(false);
+                  setScreen('template');
+                }}
+                className="rounded-lg border border-stone-300 px-3 py-1.5 text-xs font-semibold text-stone-700 hover:border-primary hover:text-primary"
+              >
+                Конструктор шаблона
+              </button>
+            ) : null}
+            <button
+              type="button"
+              onClick={() => setScreen('home')}
+              className="rounded-lg border border-stone-300 px-3 py-1.5 text-xs font-semibold text-stone-700 hover:border-primary hover:text-primary"
+            >
+              Все программы
+            </button>
+          </div>
+        </div>
         <div className="mt-1 flex flex-wrap items-center gap-3 text-sm text-stone-600">
           <span className="capitalize">{dateText}</span>
           <span className="inline-flex items-center gap-1">
@@ -760,11 +1212,11 @@ export function ServicePlannerPage() {
                             <p className="truncate text-xs font-semibold text-stone-900">
                               {isSeparatorBlock(block) ? separatorLabel(block) : block.title}
                             </p>
-                            <p className="text-xs text-stone-500">
-                              {isSeparatorBlock(block)
-                                ? 'Текстовый разделитель'
-                                : `${blockTypes.find((t) => t.id === block.block_type_id)?.name ?? 'Блок'} • ${block.duration_minutes} мин`}
-                            </p>
+                            {!isSeparatorBlock(block) ? (
+                              <p className="text-xs text-stone-500">
+                                {`${blockTypes.find((t) => t.id === block.block_type_id)?.name ?? 'Блок'} • ${block.duration_minutes} мин`}
+                              </p>
+                            ) : null}
                             {!isSeparatorBlock(block) &&
                             (getResponsibleLabel(block) || getDirectionLabel(block)) ? (
                               <p className="truncate text-[11px] text-stone-500">
@@ -829,7 +1281,7 @@ export function ServicePlannerPage() {
             className="rounded-lg border border-stone-300 px-2 py-1.5 text-sm"
           >
             <option value="">Ведущий</option>
-            {users.map((u) => (
+            {(leaderCandidates.length > 0 ? leaderCandidates : users).map((u) => (
               <option key={u.id} value={u.id}>
                 {userLabel(u)}
               </option>
@@ -843,13 +1295,11 @@ export function ServicePlannerPage() {
             className="rounded-lg border border-stone-300 px-2 py-1.5 text-sm"
           >
             <option value="">Проповедник</option>
-            {users
-              .filter((u) => u.app_role === 'pastor' || u.app_role === 'admin')
-              .map((u) => (
-                <option key={u.id} value={u.id}>
-                  {userLabel(u)}
-                </option>
-              ))}
+            {(preacherCandidates.length > 0 ? preacherCandidates : users).map((u) => (
+              <option key={u.id} value={u.id}>
+                {userLabel(u)}
+              </option>
+            ))}
           </select>
           <div className="md:col-span-2 rounded-lg bg-stone-50 px-2 py-1.5 text-xs text-stone-600">
             <LuLink className="mr-1 inline h-3.5 w-3.5" /> /service-plan/share/{draft.share_token}
@@ -896,179 +1346,22 @@ export function ServicePlannerPage() {
       </section>
 
       {isAdmin ? (
-        <details className="rounded-2xl border border-stone-200 bg-white p-3 shadow-sm">
-          <summary className="cursor-pointer text-sm font-bold text-stone-700">Шаблоны (админ)</summary>
-          <div className="mt-3 grid gap-2">
-          <div className="grid gap-2 md:grid-cols-3">
-            <select
-              value={activeTemplateId ?? ''}
-              onChange={(e) => setActiveTemplateId(e.target.value ? Number(e.target.value) : null)}
-              className="rounded-lg border border-stone-300 px-2 py-1.5 text-sm"
-            >
-              {templates.map((tpl) => (
-                <option key={tpl.id} value={tpl.id}>
-                  {tpl.name}
-                </option>
-              ))}
-            </select>
+        <section className="rounded-2xl border border-stone-200 bg-white p-3 shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-sm font-bold text-stone-700">Шаблоны (админ)</p>
             <button
               type="button"
-              onClick={() => void createTemplateFromDraft()}
-              className="inline-flex items-center justify-center gap-1 rounded-lg border border-stone-300 px-2 py-1.5 text-sm font-semibold text-stone-700 hover:border-primary hover:text-primary"
+              onClick={() => {
+                setIsTemplateDraftNew(false);
+                setScreen('template');
+              }}
+              className="inline-flex items-center gap-2 rounded-lg border border-stone-300 px-3 py-1.5 text-xs font-semibold text-stone-700 hover:border-primary hover:text-primary"
             >
-              <LuPlus className="h-4 w-4" />
-              Новый шаблон
-            </button>
-            <button
-              type="button"
-              onClick={() => generateFromTemplate(todayIso())}
-              className="inline-flex items-center justify-center gap-1 rounded-lg border border-stone-300 px-2 py-1.5 text-sm font-semibold text-stone-700 hover:border-primary hover:text-primary"
-            >
-              <LuPlus className="h-4 w-4" />
-              Сгенерировать план
+              <LuPencil className="h-3.5 w-3.5" />
+              Открыть конструктор шаблонов
             </button>
           </div>
-          {templateDraft ? (
-            <>
-              <input
-                value={templateDraft.name}
-                onChange={(e) => setTemplateDraft({ ...templateDraft, name: e.target.value })}
-                className="rounded-lg border border-stone-300 px-2 py-1.5 text-sm"
-                placeholder="Название шаблона"
-              />
-              <textarea
-                value={templateDraft.description ?? ''}
-                onChange={(e) => setTemplateDraft({ ...templateDraft, description: e.target.value })}
-                className="min-h-[52px] rounded-lg border border-stone-300 px-2 py-1.5 text-sm"
-                placeholder="Описание"
-              />
-              <textarea
-                value={recurrenceRuleInput}
-                onChange={(e) => setRecurrenceRuleInput(e.target.value)}
-                className="min-h-[78px] rounded-lg border border-stone-300 px-2 py-1.5 font-mono text-xs"
-              />
-              <div className="rounded-lg border border-stone-200 p-2">
-                <div className="mb-2 flex items-center justify-between">
-                  <p className="text-xs font-semibold text-stone-500">Блоки шаблона</p>
-                  <button
-                    type="button"
-                    onClick={addTemplateBlock}
-                    className="inline-flex items-center gap-1 rounded border border-stone-300 px-2 py-1 text-xs font-semibold text-stone-700"
-                  >
-                    <LuPlus className="h-3.5 w-3.5" />
-                    Блок
-                  </button>
-                </div>
-                <div className="space-y-2">
-                  {templateDraft.blocks
-                    .slice()
-                    .sort((a, b) => a.order_index - b.order_index)
-                    .map((b, idx) => (
-                      <div key={b.id} className="grid gap-1 rounded border border-stone-200 p-2 md:grid-cols-4">
-                        <input
-                          value={b.title}
-                          onChange={(e) =>
-                            setTemplateDraft({
-                              ...templateDraft,
-                              blocks: templateDraft.blocks.map((x) =>
-                                x.id === b.id ? { ...x, title: e.target.value } : x,
-                              ),
-                            })
-                          }
-                          className="rounded border border-stone-300 px-2 py-1 text-xs md:col-span-2"
-                        />
-                        <select
-                          value={b.block_type_id}
-                          onChange={(e) =>
-                            setTemplateDraft({
-                              ...templateDraft,
-                              blocks: templateDraft.blocks.map((x) =>
-                                x.id === b.id ? { ...x, block_type_id: Number(e.target.value) || x.block_type_id } : x,
-                              ),
-                            })
-                          }
-                          className="rounded border border-stone-300 px-2 py-1 text-xs"
-                        >
-                          {blockTypes.map((t) => (
-                            <option key={t.id} value={t.id}>
-                              {t.name}
-                            </option>
-                          ))}
-                        </select>
-                        <input
-                          type="number"
-                          min={1}
-                          value={b.duration_minutes}
-                          onChange={(e) =>
-                            setTemplateDraft({
-                              ...templateDraft,
-                              blocks: templateDraft.blocks.map((x) =>
-                                x.id === b.id
-                                  ? { ...x, duration_minutes: Math.max(1, Number(e.target.value) || 1) }
-                                  : x,
-                              ),
-                            })
-                          }
-                          className="rounded border border-stone-300 px-2 py-1 text-xs"
-                        />
-                        <div className="md:col-span-4 flex gap-1">
-                          <button
-                            type="button"
-                            disabled={idx === 0}
-                            onClick={() =>
-                              setTemplateDraft({
-                                ...templateDraft,
-                                blocks: reorderTemplateBlocks(templateDraft.blocks, idx, idx - 1),
-                              })
-                            }
-                            className="rounded border border-stone-300 px-2 py-0.5 text-[10px] font-semibold"
-                          >
-                            Вверх
-                          </button>
-                          <button
-                            type="button"
-                            disabled={idx === templateDraft.blocks.length - 1}
-                            onClick={() =>
-                              setTemplateDraft({
-                                ...templateDraft,
-                                blocks: reorderTemplateBlocks(templateDraft.blocks, idx, idx + 1),
-                              })
-                            }
-                            className="rounded border border-stone-300 px-2 py-0.5 text-[10px] font-semibold"
-                          >
-                            Вниз
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setTemplateDraft({
-                                ...templateDraft,
-                                blocks: templateDraft.blocks
-                                  .filter((x) => x.id !== b.id)
-                                  .map((x, i) => ({ ...x, order_index: i })),
-                              })
-                            }
-                            className="rounded border border-rose-200 px-2 py-0.5 text-[10px] font-semibold text-rose-700"
-                          >
-                            Удалить
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => void saveTemplateDraft()}
-                className="inline-flex items-center justify-center gap-1 rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-white hover:bg-primary-dark"
-              >
-                <LuSave className="h-4 w-4" />
-                Сохранить шаблон
-              </button>
-            </>
-          ) : null}
-          </div>
-        </details>
+        </section>
       ) : null}
 
       {(songsQ.isLoading || membersQ.isLoading) && (
@@ -1283,6 +1576,17 @@ export function ServicePlannerPage() {
               <button
                 type="button"
                 onClick={() => {
+                  void updateBlockMut.mutateAsync({
+                    id: editingBlock.id,
+                    body: {
+                      title: editingBlock.title,
+                      block_type_id: editingBlock.block_type_id,
+                      duration_minutes: editingBlock.duration_minutes,
+                      assigned_member_id: editingBlock.assigned_member_id,
+                      song_id: editingBlock.song_id,
+                      content_json: editingBlock.content_json,
+                    },
+                  });
                   setEditingBlockId(null);
                 }}
                 className="inline-flex items-center gap-1 rounded-lg bg-primary px-3 py-1.5 text-sm font-semibold text-white hover:bg-primary-dark"
