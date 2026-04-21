@@ -74,6 +74,13 @@ function normalizeMinistryRoles(value: string): string {
   return unique.join(', ');
 }
 
+function roleArray(value: string): string[] {
+  return normalizeMinistryRoles(value)
+    .split(',')
+    .map((x) => x.trim())
+    .filter((x) => x.length > 0);
+}
+
 /* ── Shared class names ──────────────────────────────────── */
 
 const SECTION_TITLE =
@@ -117,6 +124,15 @@ export function ProfilePage() {
   });
 
   const [ministryTemplates, setMinistryTemplates] = useState<MinistryDirectionTemplate[]>([]);
+  const allRoleOptions = useMemo(() => {
+    const fromTemplates = ministryTemplates.flatMap((d) => (d.roles ?? []).map((r) => r.title));
+    return Array.from(new Set([...fromTemplates, 'Ведущий', 'Проповедник']));
+  }, [ministryTemplates]);
+  const roleOptionsForDirection = (directionTitle: string): string[] => {
+    const scoped = (ministryTemplates.find((x) => x.title === directionTitle)?.roles ?? []).map((r) => r.title);
+    const withDefaults = Array.from(new Set([...scoped, 'Ведущий', 'Проповедник']));
+    return withDefaults.length > 0 ? withDefaults : allRoleOptions;
+  };
 
   /* ── Публичная лента (имя и «О себе» на странице /profile/:username) ── */
   const [publicDraft, setPublicDraft] = useState({ display_name: '', bio: '' });
@@ -696,18 +712,22 @@ export function ProfilePage() {
                 </div>
                 <div>
                   <label className={LABEL}>Роль</label>
-                  <input
+                  <select
+                    multiple
+                    size={Math.min(7, Math.max(3, roleOptionsForDirection(draft.ministry_direction).length))}
                     className={INPUT}
-                    value={draft.ministry_role}
-                    onChange={(e) => setDraft((d) => ({ ...d, ministry_role: e.target.value }))}
-                    placeholder={`Роли через запятую: ${
-                      (ministryTemplates.find((x) => x.title === draft.ministry_direction)?.roles ?? [])
-                        .map((r) => r.title)
-                        .concat(['Ведущий', 'Проповедник'])
-                        .filter((role, idx, arr) => arr.indexOf(role) === idx)
-                        .join(', ')
-                    }`}
-                  />
+                    value={roleArray(draft.ministry_role)}
+                    onChange={(e) => {
+                      const selected = Array.from(e.currentTarget.selectedOptions).map((opt) => opt.value);
+                      setDraft((d) => ({ ...d, ministry_role: normalizeMinistryRoles(selected.join(', ')) }));
+                    }}
+                  >
+                    {roleOptionsForDirection(draft.ministry_direction).map((role) => (
+                      <option key={role} value={role}>
+                        {role}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </div>
               <div>

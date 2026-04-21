@@ -212,6 +212,13 @@ function normalizeMinistryRoles(value: string): string {
   return unique.join(', ');
 }
 
+function roleArray(value: string): string[] {
+  return normalizeMinistryRoles(value)
+    .split(',')
+    .map((x) => x.trim())
+    .filter((x) => x.length > 0);
+}
+
 function displayName(u: AppUser): string {
   const f = (u.first_name ?? '').trim();
   const l = (u.last_name ?? '').trim();
@@ -494,6 +501,14 @@ function MembersSection() {
     const fromDirection = (dirs.find((d) => d.title === directionTitle)?.roles ?? []).map((r) => r.title);
     const mustHave = ['Ведущий', 'Проповедник'];
     return Array.from(new Set([...fromDirection, ...mustHave]));
+  };
+  const allRoleOptions = useMemo(() => {
+    const fromDirs = dirs.flatMap((d) => (d.roles ?? []).map((r) => r.title));
+    return Array.from(new Set([...fromDirs, 'Ведущий', 'Проповедник']));
+  }, [dirs]);
+  const roleOptionsForDirection = (directionTitle: string) => {
+    const scoped = rolesForDirection(directionTitle);
+    return scoped.length > 0 ? scoped : allRoleOptions;
   };
 
   const stats = useMemo(() => {
@@ -1094,15 +1109,25 @@ function MembersSection() {
                       </select>
                     </td>
                     <td className="px-2 py-1.5 align-middle">
-                      <input
-                        className={`${fieldClass()} py-1.5 text-xs`}
-                        value={row.ministry_role}
+                      <select
+                        multiple
+                        size={Math.min(6, Math.max(3, roleOptionsForDirection(row.ministry_direction).length))}
+                        className={`${fieldClass()} min-h-[72px] py-1.5 text-xs`}
+                        value={roleArray(row.ministry_role)}
                         onChange={(e) => {
-                          const v = e.target.value;
-                          setBulkRows((rs) => rs.map((r) => (r.key === row.key ? { ...r, ministry_role: v } : r)));
+                          const selected = Array.from(e.currentTarget.selectedOptions).map((opt) => opt.value);
+                          const next = normalizeMinistryRoles(selected.join(', '));
+                          setBulkRows((rs) =>
+                            rs.map((r) => (r.key === row.key ? { ...r, ministry_role: next } : r)),
+                          );
                         }}
-                        placeholder={`Роли через запятую: ${rolesForDirection(row.ministry_direction).join(', ')}`}
-                      />
+                      >
+                        {roleOptionsForDirection(row.ministry_direction).map((t) => (
+                          <option key={t} value={t}>
+                            {t}
+                          </option>
+                        ))}
+                      </select>
                     </td>
                     <td className="px-2 py-1.5 align-middle text-right">
                       <button
@@ -1211,12 +1236,22 @@ function MembersSection() {
             </div>
             <div>
               <label className="mb-1 block text-xs font-semibold text-stone-600">Роль служения</label>
-              <input
+              <select
+                multiple
+                size={Math.min(7, Math.max(3, roleOptionsForDirection(form.ministry_direction).length))}
                 className={fieldClass()}
-                value={form.ministry_role}
-                onChange={(e) => setForm((s) => ({ ...s, ministry_role: e.target.value }))}
-                placeholder={`Роли через запятую: ${rolesForDirection(form.ministry_direction).join(', ')}`}
-              />
+                value={roleArray(form.ministry_role)}
+                onChange={(e) => {
+                  const selected = Array.from(e.currentTarget.selectedOptions).map((opt) => opt.value);
+                  setForm((s) => ({ ...s, ministry_role: normalizeMinistryRoles(selected.join(', ')) }));
+                }}
+              >
+                {roleOptionsForDirection(form.ministry_direction).map((t) => (
+                  <option key={t} value={t}>
+                    {t}
+                  </option>
+                ))}
+              </select>
             </div>
             <div className="sm:col-span-2 lg:col-span-3">
               <button
@@ -1554,12 +1589,22 @@ function MembersSection() {
                   </div>
                   <div>
                     <label className="mb-1 block text-xs font-semibold text-stone-600">Роль служения</label>
-                    <input
+                    <select
+                      multiple
+                      size={Math.min(7, Math.max(3, roleOptionsForDirection(editForm.ministry_direction).length))}
                       className={fieldClass()}
-                      value={editForm.ministry_role}
-                      onChange={(e) => setEditForm((s) => ({ ...s, ministry_role: e.target.value }))}
-                      placeholder={`Роли через запятую: ${rolesForDirection(editForm.ministry_direction).join(', ')}`}
-                    />
+                      value={roleArray(editForm.ministry_role)}
+                      onChange={(e) => {
+                        const selected = Array.from(e.currentTarget.selectedOptions).map((opt) => opt.value);
+                        setEditForm((s) => ({ ...s, ministry_role: normalizeMinistryRoles(selected.join(', ')) }));
+                      }}
+                    >
+                      {roleOptionsForDirection(editForm.ministry_direction).map((t) => (
+                        <option key={t} value={t}>
+                          {t}
+                        </option>
+                      ))}
+                    </select>
                   </div>
                 </div>
               </section>
