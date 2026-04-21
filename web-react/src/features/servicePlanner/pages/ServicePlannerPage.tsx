@@ -4,11 +4,11 @@ import { DragDropContext, Draggable, Droppable, type DropResult } from '@hello-p
 import { addMinutes, format, parse } from 'date-fns';
 import {
   LuClock3,
+  LuCopy,
   LuGripVertical,
   LuLink,
   LuLoaderCircle,
   LuPencil,
-  LuPlay,
   LuPlus,
   LuSave,
   LuTrash2,
@@ -18,6 +18,7 @@ import {
 import { fetchSongs, type SongListItem } from '../../songbook/api';
 import { fetchAdminMembers } from '../../admin/api';
 import type { AppUser } from '../../admin/types';
+import { useAuthStore } from '../../auth/authStore';
 import {
   createServiceBlock,
   createServiceTemplate,
@@ -80,14 +81,52 @@ function userLabel(u: AppUser): string {
   return full || u.name || `Пользователь #${u.id}`;
 }
 
+function songBlockTitle(song: SongListItem): string {
+  const key = (song.default_key ?? '').trim();
+  return key ? `${song.title} [${key}]` : song.title;
+}
+
+function isSeparatorBlock(block: ServicePlanBlock): boolean {
+  return block.content_json?.is_separator === true;
+}
+
+function separatorLabel(block: ServicePlanBlock): string {
+  const fromJson = block.content_json?.separator_text;
+  if (typeof fromJson === 'string' && fromJson.trim()) return fromJson.trim();
+  return block.title.trim() || 'Раздел';
+}
+
+const CATEGORY_MARK_BY_CODE: Record<string, string> = {
+  prayer: '🙏',
+  song: '🎵',
+  scripture: '📖',
+  sermon: '🎙️',
+  announcements: '📢',
+  offering: '🤲',
+  custom: '🧩',
+};
+
+const CATEGORY_MARK_BY_ICON: Record<string, string> = {
+  'hands-praying': '🙏',
+  music: '🎵',
+  'book-bible': '📖',
+  'person-chalkboard': '🎙️',
+  bullhorn: '📢',
+  'hand-holding-dollar': '🤲',
+  'puzzle-piece': '🧩',
+};
+
 export function ServicePlannerPage() {
   const qc = useQueryClient();
+  const role = useAuthStore((s) => s.role);
+  const isAdmin = (role ?? 'member').toLowerCase() === 'admin';
   const [activePlanId, setActivePlanId] = useState<number | null>(null);
   const [draft, setDraft] = useState<ServicePlanDetails | null>(null);
   const [activeTemplateId, setActiveTemplateId] = useState<number | null>(null);
   const [templateDraft, setTemplateDraft] = useState<ServiceTemplateDetails | null>(null);
   const [recurrenceRuleInput, setRecurrenceRuleInput] = useState<string>('{"frequency":"weekly","byWeekday":0}');
   const [editingBlockId, setEditingBlockId] = useState<number | null>(null);
+  const [shareCopied, setShareCopied] = useState(false);
 
   const songsQ = useQuery<SongListItem[]>({
     queryKey: ['songs', 'service-planner'],
@@ -215,6 +254,37 @@ export function ServicePlannerPage() {
     },
   });
 
+  const saveProgramMut = useMutation({
+    mutationFn: async () => {
+      if (!draft) return;
+      await patchServicePlan(draft.id, {
+        service_date: draft.service_date,
+        start_time: draft.start_time,
+        leader_member_id: draft.leader_member_id,
+        preacher_member_id: draft.preacher_member_id,
+        current_block_id: draft.current_block_id,
+        status: draft.status,
+      });
+      const ordered = [...draft.blocks].sort((a, b) => a.order_index - b.order_index);
+      for (const b of ordered) {
+        await patchServiceBlock(b.id, {
+          title: b.title,
+          block_type_id: b.block_type_id,
+          duration_minutes: b.duration_minutes,
+          assigned_member_id: b.assigned_member_id,
+          song_id: b.song_id,
+          content_json: b.content_json,
+        });
+      }
+    },
+    onSuccess: async () => {
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ['service-planner', 'plans'] }),
+        qc.invalidateQueries({ queryKey: ['service-planner', 'plan', activePlanId] }),
+      ]);
+    },
+  });
+
   const updateTemplateMut = useMutation({
     mutationFn: ({ id, body }: { id: number; body: Parameters<typeof patchServiceTemplate>[1] }) =>
       patchServiceTemplate(id, body),
@@ -227,7 +297,8 @@ export function ServicePlannerPage() {
   });
 
   const totalDuration = useMemo(
-    () => draft?.blocks.reduce((acc, b) => acc + Math.max(0, b.duration_minutes), 0) ?? 0,
+    () =>
+      draft?.blocks.reduce((acc, b) => acc + (isSeparatorBlock(b) ? 0 : Math.max(0, b.duration_minutes)), 0) ?? 0,
     [draft],
   );
 
@@ -239,7 +310,8 @@ export function ServicePlannerPage() {
       .sort((a, b) => a.order_index - b.order_index)
       .map((b) => {
         const startsAt = format(cursor, 'HH:mm');
-        cursor = addMinutes(cursor, Math.max(0, b.duration_minutes));
+        const duration = isSeparatorBlock(b) ? 0 : Math.max(0, b.duration_minutes);
+        cursor = addMinutes(cursor, duration);
         return { ...b, startsAt };
       });
   }, [draft]);
@@ -248,6 +320,7 @@ export function ServicePlannerPage() {
   const songs = songsQ.data ?? [];
   const templates = templatesQ.data ?? [];
   const blockTypes = blockTypesQ.data ?? [];
+  const usersById = useMemo(() => new Map(users.map((u) => [u.id, u] as const)), [users]);
 
   const activeTemplate = useMemo(() => {
     const targetId = activeTemplateId ?? draft?.template_id ?? null;
@@ -259,6 +332,61 @@ export function ServicePlannerPage() {
     () => draft?.blocks.find((b) => b.id === editingBlockId) ?? null,
     [draft, editingBlockId],
   );
+
+  function getBlockTypeMeta(block: ServicePlanBlock) {
+    return blockTypes.find((t) => t.id === block.block_type_id) ?? null;
+  }
+
+  function getResponsibleLabel(block: ServicePlanBlock): string | null {
+    if (!draft) return null;
+    const meta = getBlockTypeMeta(block);
+    const isSermon =
+      meta?.code === 'sermon' || (meta?.name ?? '').toLowerCase().includes('проповед');
+    if (isSermon) {
+      const preacher = draft.preacher_member_id ? usersById.get(draft.preacher_member_id) : null;
+      return preacher ? userLabel(preacher) : null;
+    }
+    const assigned = block.assigned_member_id ? usersById.get(block.assigned_member_id) : null;
+    return assigned ? userLabel(assigned) : null;
+  }
+
+  function getDirectionLabel(block: ServicePlanBlock): string | null {
+    const fromContent = block.content_json?.direction;
+    if (typeof fromContent === 'string' && fromContent.trim()) return fromContent.trim();
+    const responsibleId = block.assigned_member_id;
+    if (!responsibleId) return null;
+    const member = usersById.get(responsibleId);
+    if (!member?.ministry_direction) return null;
+    const direction = member.ministry_direction.trim();
+    return direction || null;
+  }
+
+  function getCategoryMark(block: ServicePlanBlock): string | null {
+    const meta = getBlockTypeMeta(block);
+    if (!meta) return null;
+    const iconKey = (meta.icon ?? '').trim().toLowerCase();
+    if (iconKey && CATEGORY_MARK_BY_ICON[iconKey]) return CATEGORY_MARK_BY_ICON[iconKey];
+    const codeKey = (meta.code ?? '').trim().toLowerCase();
+    if (codeKey && CATEGORY_MARK_BY_CODE[codeKey]) return CATEGORY_MARK_BY_CODE[codeKey];
+    return null;
+  }
+
+  function getBlockMark(block: ServicePlanBlock): string | null {
+    const fromContent = block.content_json?.block_mark;
+    if (typeof fromContent === 'string' && fromContent.trim()) return fromContent.trim();
+    return getCategoryMark(block);
+  }
+
+  function getBlockLogoUrl(block: ServicePlanBlock): string | null {
+    const raw = block.content_json?.block_logo_url;
+    if (typeof raw !== 'string') return null;
+    const value = raw.trim();
+    if (!value) return null;
+    if (value.startsWith('http://') || value.startsWith('https://') || value.startsWith('/')) {
+      return value;
+    }
+    return null;
+  }
 
   function onDragEnd(result: DropResult): void {
     const destination = result.destination;
@@ -294,6 +422,34 @@ export function ServicePlannerPage() {
       duration_minutes: 5,
       content_json: {},
     });
+  }
+
+  function addSeparatorBlock(): void {
+    if (!draft) return;
+    const separatorType = blockTypes.find((t) => t.code === 'custom')?.id ?? blockTypes[0]?.id;
+    if (!separatorType) return;
+    void createBlockMut.mutateAsync({
+      service_plan_id: draft.id,
+      block_type_id: separatorType,
+      title: 'Раздел',
+      duration_minutes: 1,
+      content_json: {
+        is_separator: true,
+        separator_text: 'Новый раздел',
+      },
+    });
+  }
+
+  async function copyShareLink(): Promise<void> {
+    if (!draft || typeof window === 'undefined') return;
+    const url = `${window.location.origin}/service-plan/share/${draft.share_token}`;
+    try {
+      await navigator.clipboard.writeText(url);
+      setShareCopied(true);
+      window.setTimeout(() => setShareCopied(false), 1200);
+    } catch {
+      window.prompt('Скопируйте ссылку вручную:', url);
+    }
   }
 
   function updateDraftBlock(blockId: number, patch: Partial<ServicePlanBlock>): void {
@@ -455,7 +611,7 @@ export function ServicePlannerPage() {
   }).format(new Date(`${draft.service_date}T12:00:00`));
 
   return (
-    <section className="mx-auto flex w-full max-w-5xl flex-col gap-3 px-3 py-4 sm:px-4 md:px-6">
+    <section className="mx-auto flex w-full max-w-4xl flex-col gap-3 px-3 py-4 pb-24 sm:px-4 md:px-6 md:pb-6">
       <header className="rounded-2xl border border-stone-200 bg-white p-4 shadow-sm">
         <h1 className="text-xl font-extrabold text-stone-900">План служения</h1>
         <div className="mt-1 flex flex-wrap items-center gap-3 text-sm text-stone-600">
@@ -469,8 +625,30 @@ export function ServicePlannerPage() {
         </div>
       </header>
 
-      <section className="rounded-2xl border border-stone-200 bg-white p-3 shadow-sm">
+      <section className="mx-auto w-full max-w-3xl rounded-2xl border border-stone-200 bg-white p-2 shadow-sm">
+        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-stone-500">
+          Шаг 1: выберите шаблон и сгенерируйте программу
+        </p>
         <div className="grid gap-2 md:grid-cols-3">
+          <select
+            value={activeTemplateId ?? ''}
+            onChange={(e) => setActiveTemplateId(e.target.value ? Number(e.target.value) : null)}
+            className="rounded-xl border border-stone-300 px-3 py-2 text-sm"
+          >
+            {templates.map((tpl) => (
+              <option key={tpl.id} value={tpl.id}>
+                {tpl.name}
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            onClick={() => generateFromTemplate(todayIso())}
+            className="inline-flex items-center justify-center gap-2 rounded-xl border border-stone-300 px-3 py-2 text-sm font-semibold text-stone-700 hover:border-primary hover:text-primary"
+          >
+            <LuPlus className="h-4 w-4" />
+            Сгенерировать программу
+          </button>
           <select
             value={activePlanId ?? ''}
             onChange={(e) => setActivePlanId(e.target.value ? Number(e.target.value) : null)}
@@ -482,6 +660,14 @@ export function ServicePlannerPage() {
               </option>
             ))}
           </select>
+        </div>
+      </section>
+
+      <section className="rounded-2xl border border-stone-200 bg-white p-3 shadow-sm">
+        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-stone-500">
+          Шаг 2: отредактируйте и расставьте блоки
+        </p>
+        <div className="grid gap-2 md:grid-cols-5">
           <button
             type="button"
             onClick={addPlanBlock}
@@ -492,15 +678,36 @@ export function ServicePlannerPage() {
           </button>
           <button
             type="button"
+            onClick={addSeparatorBlock}
+            className="inline-flex items-center justify-center gap-2 rounded-xl border border-stone-300 px-3 py-2 text-sm font-semibold text-stone-700 hover:border-primary hover:text-primary"
+          >
+            <LuPlus className="h-4 w-4" />
+            Разделитель
+          </button>
+          <input
+            type="time"
+            value={draft.start_time}
+            onChange={(e) => setDraft({ ...draft, start_time: e.target.value || '10:00' })}
+            className="rounded-xl border border-stone-300 px-3 py-2 text-sm"
+          />
+          <button
+            type="button"
             onClick={() => {
               const status = draft.status === 'draft' ? 'published' : 'draft';
               setDraft({ ...draft, status });
               void updatePlanMut.mutateAsync({ id: draft.id, body: { status } });
             }}
+            className="inline-flex items-center justify-center gap-2 rounded-xl border border-stone-300 px-3 py-2 text-sm font-semibold text-stone-700 hover:border-primary hover:text-primary"
+          >
+            {draft.status === 'draft' ? 'Черновик' : 'Опубликован'}
+          </button>
+          <button
+            type="button"
+            onClick={() => void saveProgramMut.mutateAsync()}
             className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-3 py-2 text-sm font-semibold text-white hover:bg-primary-dark"
           >
             <LuSave className="h-4 w-4" />
-            {draft.status === 'draft' ? 'Опубликовать' : 'В черновик'}
+            Сохранить программу
           </button>
         </div>
       </section>
@@ -517,7 +724,9 @@ export function ServicePlannerPage() {
                         ref={dragProvided.innerRef}
                         {...dragProvided.draggableProps}
                         className={[
-                          'rounded-xl border border-stone-200 p-3',
+                          isSeparatorBlock(block)
+                            ? 'rounded-xl border border-dashed border-stone-300 bg-stone-50 p-2'
+                            : 'rounded-xl border border-stone-200 p-2',
                           dragSnapshot.isDragging ? 'bg-stone-50 shadow' : 'bg-white',
                           draft.current_block_id === block.id ? 'ring-2 ring-primary/30' : '',
                         ].join(' ')}
@@ -526,23 +735,49 @@ export function ServicePlannerPage() {
                           <button
                             type="button"
                             {...dragProvided.dragHandleProps}
-                            className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-stone-200 text-stone-500"
+                            className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-stone-200 text-stone-500"
                             aria-label="Перетащить блок"
                           >
                             <LuGripVertical className="h-4 w-4" />
                           </button>
-                          <span className="w-14 text-sm font-bold text-stone-900">{block.startsAt}</span>
+                          <span className="w-12 text-xs font-bold text-stone-900">
+                            {isSeparatorBlock(block) ? '---' : block.startsAt}
+                          </span>
+                          {!isSeparatorBlock(block) ? (
+                            getBlockLogoUrl(block) ? (
+                              <img
+                                src={getBlockLogoUrl(block) ?? ''}
+                                alt="Лого блока"
+                                className="h-5 w-5 shrink-0 rounded object-cover"
+                              />
+                            ) : (
+                              <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded bg-stone-100 text-xs">
+                                {getBlockMark(block) ?? '•'}
+                              </span>
+                            )
+                          ) : null}
                           <div className="min-w-0 flex-1">
-                            <p className="truncate text-sm font-semibold text-stone-900">{block.title}</p>
-                            <p className="text-xs text-stone-500">
-                              {blockTypes.find((t) => t.id === block.block_type_id)?.name ?? 'Блок'} •{' '}
-                              {block.duration_minutes} мин
+                            <p className="truncate text-xs font-semibold text-stone-900">
+                              {isSeparatorBlock(block) ? separatorLabel(block) : block.title}
                             </p>
+                            <p className="text-xs text-stone-500">
+                              {isSeparatorBlock(block)
+                                ? 'Текстовый разделитель'
+                                : `${blockTypes.find((t) => t.id === block.block_type_id)?.name ?? 'Блок'} • ${block.duration_minutes} мин`}
+                            </p>
+                            {!isSeparatorBlock(block) &&
+                            (getResponsibleLabel(block) || getDirectionLabel(block)) ? (
+                              <p className="truncate text-[11px] text-stone-500">
+                                {getResponsibleLabel(block) ? `Ответственный: ${getResponsibleLabel(block)}` : ''}
+                                {getResponsibleLabel(block) && getDirectionLabel(block) ? ' • ' : ''}
+                                {getDirectionLabel(block) ? `Направление: ${getDirectionLabel(block)}` : ''}
+                              </p>
+                            ) : null}
                           </div>
                           <button
                             type="button"
                             onClick={() => setEditingBlockId(block.id)}
-                            className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-stone-200 text-stone-700 hover:bg-stone-50"
+                            className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-stone-200 text-stone-700 hover:bg-stone-50"
                             aria-label="Редактировать блок"
                           >
                             <LuPencil className="h-4 w-4" />
@@ -556,26 +791,10 @@ export function ServicePlannerPage() {
                               });
                               void deleteBlockMut.mutateAsync(block.id);
                             }}
-                            className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-rose-200 text-rose-700 hover:bg-rose-50"
+                            className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-rose-200 text-rose-700 hover:bg-rose-50"
                             aria-label="Удалить блок"
                           >
                             <LuTrash2 className="h-4 w-4" />
-                          </button>
-                        </div>
-                        <div className="mt-2">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setDraft({ ...draft, current_block_id: block.id });
-                              void updatePlanMut.mutateAsync({
-                                id: draft.id,
-                                body: { current_block_id: block.id },
-                              });
-                            }}
-                            className="inline-flex items-center gap-1 rounded-lg border border-stone-300 px-2 py-1 text-xs text-stone-700 hover:border-primary hover:text-primary"
-                          >
-                            <LuPlay className="h-3.5 w-3.5" />
-                            Текущий
                           </button>
                         </div>
                       </article>
@@ -656,9 +875,30 @@ export function ServicePlannerPage() {
         </div>
       </details>
 
-      <details className="rounded-2xl border border-stone-200 bg-white p-3 shadow-sm">
-        <summary className="cursor-pointer text-sm font-bold text-stone-700">Шаблоны (админ)</summary>
-        <div className="mt-3 grid gap-2">
+      <section className="rounded-2xl border border-stone-200 bg-white p-3 shadow-sm">
+        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-stone-500">
+          Шаг 3: поделитесь ссылкой
+        </p>
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="min-w-0 flex-1 rounded-lg bg-stone-50 px-2 py-1.5 text-xs text-stone-700">
+            <LuLink className="mr-1 inline h-3.5 w-3.5" />
+            /service-plan/share/{draft.share_token}
+          </div>
+          <button
+            type="button"
+            onClick={() => void copyShareLink()}
+            className="inline-flex items-center gap-1 rounded-lg border border-stone-300 px-3 py-1.5 text-sm font-semibold text-stone-700 hover:border-primary hover:text-primary"
+          >
+            <LuCopy className="h-4 w-4" />
+            {shareCopied ? 'Скопировано' : 'Копировать'}
+          </button>
+        </div>
+      </section>
+
+      {isAdmin ? (
+        <details className="rounded-2xl border border-stone-200 bg-white p-3 shadow-sm">
+          <summary className="cursor-pointer text-sm font-bold text-stone-700">Шаблоны (админ)</summary>
+          <div className="mt-3 grid gap-2">
           <div className="grid gap-2 md:grid-cols-3">
             <select
               value={activeTemplateId ?? ''}
@@ -827,8 +1067,9 @@ export function ServicePlannerPage() {
               </button>
             </>
           ) : null}
-        </div>
-      </details>
+          </div>
+        </details>
+      ) : null}
 
       {(songsQ.isLoading || membersQ.isLoading) && (
         <div className="rounded-xl border border-stone-200 bg-white p-2 text-xs text-stone-500">
@@ -845,11 +1086,23 @@ export function ServicePlannerPage() {
         createTemplateMut.isPending ||
         updateTemplateMut.isPending ||
         createBlockMut.isPending ||
-        deleteBlockMut.isPending) && (
+        deleteBlockMut.isPending ||
+        saveProgramMut.isPending) && (
         <div className="rounded-xl border border-amber-200 bg-amber-50 p-2 text-xs font-semibold text-amber-800">
           Сохраняю изменения...
         </div>
       )}
+
+      <div className="fixed inset-x-0 bottom-0 z-[60] border-t border-stone-200 bg-white/95 px-3 py-2 backdrop-blur md:hidden">
+        <button
+          type="button"
+          onClick={() => void saveProgramMut.mutateAsync()}
+          className="inline-flex min-h-[46px] w-full items-center justify-center gap-2 rounded-xl bg-primary px-3 py-2 text-sm font-bold text-white"
+        >
+          <LuSave className="h-4 w-4" />
+          Сохранить программу
+        </button>
+      </div>
 
       {editingBlock ? (
         <div className="fixed inset-0 z-[70] flex items-end justify-center bg-black/35 p-3 sm:items-center">
@@ -866,80 +1119,158 @@ export function ServicePlannerPage() {
             </div>
             <div className="grid gap-2 sm:grid-cols-2">
               <input
-                value={editingBlock.title}
-                onChange={(e) => updateDraftBlock(editingBlock.id, { title: e.target.value })}
-                className="rounded-lg border border-stone-300 px-2 py-1.5 text-sm sm:col-span-2"
-                placeholder="Название блока"
-              />
-              <select
-                value={editingBlock.block_type_id}
-                onChange={(e) =>
-                  updateDraftBlock(editingBlock.id, {
-                    block_type_id: Number(e.target.value) || editingBlock.block_type_id,
-                  })
-                }
-                className="rounded-lg border border-stone-300 px-2 py-1.5 text-sm"
-              >
-                {blockTypes.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.name}
-                  </option>
-                ))}
-              </select>
-              <input
-                type="number"
-                min={1}
-                max={180}
-                value={editingBlock.duration_minutes}
-                onChange={(e) =>
-                  updateDraftBlock(editingBlock.id, {
-                    duration_minutes: Math.max(1, Number(e.target.value) || 1),
-                  })
-                }
-                className="rounded-lg border border-stone-300 px-2 py-1.5 text-sm"
-              />
-              <select
-                value={editingBlock.assigned_member_id ?? ''}
-                onChange={(e) =>
-                  updateDraftBlock(editingBlock.id, {
-                    assigned_member_id: e.target.value ? Number(e.target.value) : null,
-                  })
-                }
-                className="rounded-lg border border-stone-300 px-2 py-1.5 text-sm sm:col-span-2"
-              >
-                <option value="">Ответственный не назначен</option>
-                {users.map((u) => (
-                  <option key={u.id} value={u.id}>
-                    {userLabel(u)} ({roleLabel(u)})
-                  </option>
-                ))}
-              </select>
-              {(blockTypes.find((t) => t.id === editingBlock.block_type_id)?.kind ?? 'custom') === 'song' ? (
-                <select
-                  value={editingBlock.song_id ?? ''}
-                  onChange={(e) =>
-                    updateDraftBlock(editingBlock.id, { song_id: e.target.value ? Number(e.target.value) : null })
+                value={isSeparatorBlock(editingBlock) ? separatorLabel(editingBlock) : editingBlock.title}
+                onChange={(e) => {
+                  if (isSeparatorBlock(editingBlock)) {
+                    updateDraftBlock(editingBlock.id, {
+                      title: e.target.value,
+                      content_json: { ...editingBlock.content_json, separator_text: e.target.value },
+                    });
+                    return;
                   }
-                  className="rounded-lg border border-stone-300 px-2 py-1.5 text-sm sm:col-span-2"
-                >
-                  <option value="">Выберите песню</option>
-                  {songs.map((s: SongListItem) => (
-                    <option key={s.id} value={Number(s.id)}>
-                      {s.title}
-                    </option>
-                  ))}
-                </select>
-              ) : null}
-              <textarea
-                value={String((editingBlock.content_json?.text as string | undefined) ?? '')}
+                  updateDraftBlock(editingBlock.id, { title: e.target.value });
+                }}
+                className="rounded-lg border border-stone-300 px-2 py-1.5 text-sm sm:col-span-2"
+                placeholder={isSeparatorBlock(editingBlock) ? 'Текст разделителя' : 'Название блока'}
+              />
+              <input
+                value={String((editingBlock.content_json?.block_mark as string | undefined) ?? '')}
                 onChange={(e) =>
                   updateDraftBlock(editingBlock.id, {
-                    content_json: { ...editingBlock.content_json, text: e.target.value },
+                    content_json: { ...editingBlock.content_json, block_mark: e.target.value },
                   })
                 }
-                className="min-h-[84px] rounded-lg border border-stone-300 px-2 py-1.5 text-sm sm:col-span-2"
-                placeholder="Данные блока (текст/заметки)"
+                className="rounded-lg border border-stone-300 px-2 py-1.5 text-sm"
+                placeholder="Эмоджи/маркер (например 🎵)"
               />
+              <input
+                value={String((editingBlock.content_json?.block_logo_url as string | undefined) ?? '')}
+                onChange={(e) =>
+                  updateDraftBlock(editingBlock.id, {
+                    content_json: { ...editingBlock.content_json, block_logo_url: e.target.value },
+                  })
+                }
+                className="rounded-lg border border-stone-300 px-2 py-1.5 text-sm"
+                placeholder="URL лого (опционально)"
+              />
+              <div className="flex flex-wrap gap-1 sm:col-span-2">
+                {['🙏', '🎵', '📖', '🎙️', '📢', '🤲', '🧩'].map((mark) => (
+                  <button
+                    key={mark}
+                    type="button"
+                    onClick={() =>
+                      updateDraftBlock(editingBlock.id, {
+                        content_json: { ...editingBlock.content_json, block_mark: mark },
+                      })
+                    }
+                    className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-stone-300 text-sm hover:border-primary"
+                    title={`Поставить ${mark}`}
+                  >
+                    {mark}
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  onClick={() =>
+                    updateDraftBlock(editingBlock.id, {
+                      content_json: {
+                        ...editingBlock.content_json,
+                        block_mark: '',
+                        block_logo_url: '',
+                      },
+                    })
+                  }
+                  className="rounded-md border border-stone-300 px-2 text-xs font-semibold text-stone-700 hover:border-primary hover:text-primary"
+                >
+                  Сброс
+                </button>
+              </div>
+              {!isSeparatorBlock(editingBlock) ? (
+                <>
+                  <select
+                    value={editingBlock.block_type_id}
+                    onChange={(e) =>
+                      updateDraftBlock(editingBlock.id, {
+                        block_type_id: Number(e.target.value) || editingBlock.block_type_id,
+                      })
+                    }
+                    className="rounded-lg border border-stone-300 px-2 py-1.5 text-sm"
+                  >
+                    {blockTypes.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.name}
+                      </option>
+                    ))}
+                  </select>
+                  <input
+                    type="number"
+                    min={1}
+                    max={180}
+                    value={editingBlock.duration_minutes}
+                    onChange={(e) =>
+                      updateDraftBlock(editingBlock.id, {
+                        duration_minutes: Math.max(1, Number(e.target.value) || 1),
+                      })
+                    }
+                    className="rounded-lg border border-stone-300 px-2 py-1.5 text-sm"
+                  />
+                  <select
+                    value={editingBlock.assigned_member_id ?? ''}
+                    onChange={(e) =>
+                      updateDraftBlock(editingBlock.id, {
+                        assigned_member_id: e.target.value ? Number(e.target.value) : null,
+                      })
+                    }
+                    className="rounded-lg border border-stone-300 px-2 py-1.5 text-sm sm:col-span-2"
+                  >
+                    <option value="">Ответственный не назначен</option>
+                    {users.map((u) => (
+                      <option key={u.id} value={u.id}>
+                        {userLabel(u)} ({roleLabel(u)})
+                      </option>
+                    ))}
+                  </select>
+                  {(blockTypes.find((t) => t.id === editingBlock.block_type_id)?.kind ?? 'custom') === 'song' ? (
+                    <select
+                      value={editingBlock.song_id ?? ''}
+                      onChange={(e) => {
+                        const songId = e.target.value ? Number(e.target.value) : null;
+                        if (!songId) {
+                          updateDraftBlock(editingBlock.id, { song_id: null });
+                          return;
+                        }
+                        const song = songs.find((s) => Number(s.id) === songId);
+                        updateDraftBlock(editingBlock.id, {
+                          song_id: songId,
+                          title: song ? songBlockTitle(song) : editingBlock.title,
+                        });
+                      }}
+                      className="rounded-lg border border-stone-300 px-2 py-1.5 text-sm sm:col-span-2"
+                    >
+                      <option value="">Выберите песню</option>
+                      {songs.map((s: SongListItem) => (
+                        <option key={s.id} value={Number(s.id)}>
+                          {songBlockTitle(s)}
+                        </option>
+                      ))}
+                    </select>
+                  ) : null}
+                  <textarea
+                    value={String((editingBlock.content_json?.text as string | undefined) ?? '')}
+                    onChange={(e) =>
+                      updateDraftBlock(editingBlock.id, {
+                        content_json: { ...editingBlock.content_json, text: e.target.value },
+                      })
+                    }
+                    className="min-h-[84px] rounded-lg border border-stone-300 px-2 py-1.5 text-sm sm:col-span-2"
+                    placeholder="Данные блока (текст/заметки)"
+                  />
+                </>
+              ) : (
+                <p className="rounded-lg border border-dashed border-stone-300 bg-stone-50 px-2 py-2 text-xs text-stone-600 sm:col-span-2">
+                  Разделитель делит программу на части и не добавляет длительность в расчет сверху.
+                </p>
+              )}
             </div>
             <div className="mt-3 flex justify-end gap-2">
               <button
@@ -952,23 +1283,11 @@ export function ServicePlannerPage() {
               <button
                 type="button"
                 onClick={() => {
-                  void updateBlockMut.mutateAsync({
-                    id: editingBlock.id,
-                    body: {
-                      title: editingBlock.title,
-                      block_type_id: editingBlock.block_type_id,
-                      duration_minutes: editingBlock.duration_minutes,
-                      assigned_member_id: editingBlock.assigned_member_id,
-                      song_id: editingBlock.song_id,
-                      content_json: editingBlock.content_json,
-                    },
-                  });
                   setEditingBlockId(null);
                 }}
                 className="inline-flex items-center gap-1 rounded-lg bg-primary px-3 py-1.5 text-sm font-semibold text-white hover:bg-primary-dark"
               >
-                <LuSave className="h-4 w-4" />
-                Сохранить блок
+                Готово
               </button>
             </div>
           </div>
