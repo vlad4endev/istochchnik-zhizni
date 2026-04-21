@@ -70,7 +70,7 @@ export function SongReader({ song, settings, onSettingsChange }: SongReaderProps
 
       <div
         ref={bodyRef}
-        className="max-h-[60dvh] overflow-auto rounded-xl border border-stone-200 bg-stone-50 p-3 md:p-4"
+        className="rounded-xl border border-stone-200 bg-stone-50 p-3 md:p-4"
       >
         <LyricsWithChords
           text={song.content}

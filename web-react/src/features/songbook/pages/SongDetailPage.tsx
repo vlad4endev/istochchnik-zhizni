@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { LuFileDown, LuHeart, LuSettings2, LuSparkles, LuTrash2 } from 'react-icons/lu';
+import { LuArrowLeft, LuSettings2 } from 'react-icons/lu';
 
 import { dispatchLayoutMainChrome } from '../../../app/layoutChrome';
 import { useAuthStore } from '../../auth/authStore';
@@ -10,10 +10,9 @@ import { emitAppToast } from '../../../lib/uiFeedback';
 import { isMainSongbookDeploy } from '../../../lib/appVariant';
 import { studioEditSongPath, useStudioModuleSurface } from '../../studio/studioPaths';
 import { useWakeLock } from '../../../hooks/useWakeLock';
-import { deleteFavorite, deleteSong, fetchSong, forkInStudio, postFavorite, recordSongOpened } from '../api';
+import { deleteSong, fetchSong, forkInStudio, recordSongOpened } from '../api';
 import { LyricsWithChords } from '../components/LyricsWithChords';
 import { SongReaderSettings } from '../components/SongReaderSettings';
-import { exportSongPdf } from '../pdfExport';
 import { useSongbookChrome } from '../SongbookChromeContext';
 
 export function SongDetailPage() {
@@ -90,14 +89,6 @@ export function SongDetailPage() {
     return () => cancelAnimationFrame(raf);
   }, [autoScroll, scrollSpeed, q.data?.tempo]);
 
-  const favMut = useMutation({
-    mutationFn: async (next: boolean) => {
-      if (next) await postFavorite(songId);
-      else await deleteFavorite(songId);
-    },
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ['song', songId] }),
-  });
-
   const forkMut = useMutation({
     mutationFn: () => forkInStudio(songId),
     onSuccess: () => {
@@ -139,28 +130,24 @@ export function SongDetailPage() {
 
   const shell = stageMode
     ? {
-        link: 'text-zinc-400 hover:text-zinc-200',
-        title: 'text-zinc-50',
-        meta: 'text-zinc-400',
-        border: 'border-zinc-800',
-        card: 'border-zinc-800 bg-zinc-950/80',
-        tag: 'bg-zinc-800 text-zinc-200',
-        btn: 'border-zinc-600 bg-zinc-900 text-zinc-100 hover:bg-zinc-800',
-        primary: 'bg-zinc-100 text-zinc-900 hover:bg-white',
+        page: 'text-stone-900',
+        top: 'border-stone-200 bg-[var(--surface)]/95',
+        title: 'text-stone-900',
+        meta: 'text-stone-500',
+        card: 'border border-stone-200 bg-white',
+        settingsBtn: 'border-stone-200 bg-white text-stone-700 hover:bg-stone-50',
       }
     : {
-        link: 'text-stone-500 hover:text-stone-800',
+        page: 'text-stone-900',
+        top: 'border-stone-200 bg-[var(--surface)]/95',
         title: 'text-stone-900',
-        meta: 'text-stone-600',
-        border: 'border-stone-200',
-        card: 'border-stone-200 bg-white',
-        tag: 'bg-stone-100 text-stone-700',
-        btn: 'border-stone-200 bg-white text-stone-800 hover:bg-stone-50',
-        primary: 'bg-stone-900 text-white hover:bg-stone-800',
+        meta: 'text-stone-500',
+        card: 'border border-stone-200 bg-white',
+        settingsBtn: 'border-stone-200 bg-white text-stone-700 hover:bg-stone-50',
       };
 
   return (
-    <div className="relative mx-auto max-w-3xl pb-32">
+    <div className={`relative mx-auto max-w-3xl pb-24 ${shell.page}`}>
       <SongReaderSettings
         open={settingsOpen}
         onOpenChange={setSettingsOpen}
@@ -182,114 +169,52 @@ export function SongDetailPage() {
         stageMode={stageMode}
       />
 
-      <Link to="/songbook" className={`mb-3 inline-flex min-h-[44px] items-center text-sm ${shell.link}`}>
-        ← К списку
-      </Link>
-
       <div
         className={[
-          'sticky top-0 z-30 -mx-3 border-b px-3 py-3 shadow-sm backdrop-blur md:-mx-0 md:px-0',
-          stageMode ? 'border-zinc-800 bg-[#030303]/90' : 'border-stone-200 bg-[var(--surface)]/95',
+          'sticky top-0 z-30 -mx-3 border-b px-3 py-2 backdrop-blur md:-mx-0 md:px-0',
+          shell.top,
         ].join(' ')}
       >
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="min-w-0">
-            <div className="flex items-center gap-2">
-              <h1 className={`truncate text-xl font-bold md:text-2xl ${shell.title}`}>{s.title}</h1>
-              {s.has_studio_version && (
-                <span title="Есть индивидуальная версия в студии">
-                  <LuSparkles className="h-5 w-5 shrink-0 text-amber-500" />
-                </span>
-              )}
-            </div>
-            <p className={`mt-0.5 text-xs md:text-sm ${shell.meta}`}>
-              {metaLine}
-              {capo > 0 ? ` · Капо: ${capo}` : ''}
-            </p>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={() =>
-                exportSongPdf({
-                  title: s.title,
-                  metaLine,
-                  body: s.content,
-                  transposeSemitones: transpose,
-                  fileName: `${s.slug || 'pesnya'}.pdf`,
-                })
-              }
-              className={`inline-flex min-h-[44px] items-center gap-1 rounded-xl border px-3 text-sm font-medium ${shell.btn}`}
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex min-w-0 items-center gap-2">
+            <Link
+              to="/songbook"
+              className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-stone-700 hover:bg-stone-100"
+              aria-label="Назад к списку"
             >
-              <LuFileDown className="h-4 w-4" />
-              PDF
-            </button>
-            <button
-              type="button"
-              onClick={() => favMut.mutate(!s.is_favorite)}
-              className={`inline-flex min-h-[44px] items-center gap-2 rounded-xl border px-3 text-sm font-medium ${shell.btn}`}
-            >
-              <LuHeart className={`h-4 w-4 ${s.is_favorite ? 'fill-red-500 text-red-500' : ''}`} />
-              {s.is_favorite ? 'В избранном' : 'Избранное'}
-            </button>
-            {!mainOnly && studioOk && (
-              <button
-                type="button"
-                onClick={() => forkMut.mutate()}
-                disabled={forkMut.isPending}
-                className={`min-h-[44px] rounded-xl px-4 text-sm font-semibold ${shell.primary}`}
-              >
-                В студии
-              </button>
-            )}
-            {canDeleteCatalog && (
-              <button
-                type="button"
-                onClick={() => {
-                  if (
-                    window.confirm(
-                      `Удалить «${s.title}» из каталога? Связанные версии в студии и позиции в сетлистах будут удалены. Действие необратимо.`,
-                    )
-                  ) {
-                    deleteMut.mutate();
-                  }
-                }}
-                disabled={deleteMut.isPending}
-                className={`inline-flex min-h-[44px] items-center gap-1.5 rounded-xl border px-3 text-sm font-medium ${
-                  stageMode
-                    ? 'border-red-900/60 bg-red-950/40 text-red-300 hover:bg-red-950/70'
-                    : 'border-red-200 bg-red-50 text-red-800 hover:bg-red-100'
-                } disabled:opacity-50`}
-              >
-                <LuTrash2 className="h-4 w-4" aria-hidden />
-                Удалить
-              </button>
-            )}
+              <LuArrowLeft className="h-5 w-5" />
+            </Link>
+            <span className="w-6 shrink-0 text-center text-xl font-medium text-stone-500">{songId}</span>
+            <h1 className={`truncate text-xl font-bold uppercase tracking-wide md:text-2xl ${shell.title}`}>
+              {s.title}
+            </h1>
           </div>
+          <button
+            type="button"
+            onClick={() => setSettingsOpen(true)}
+            className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border ${shell.settingsBtn}`}
+            aria-label="Настройки просмотра"
+          >
+            <LuSettings2 className="h-5 w-5" />
+          </button>
         </div>
       </div>
 
-      <div className="mt-4 space-y-3">
-        {s.tags?.length ? (
-          <p className={`text-xs ${shell.meta}`}>
-            Теги:{' '}
-            {s.tags.map((t) => (
-              <span key={t} className={`mr-2 rounded-full px-2 py-0.5 ${shell.tag}`}>
-                {t}
-              </span>
-            ))}
-          </p>
-        ) : null}
+      <div className="mt-3 space-y-2">
+        <p className={`text-xs ${shell.meta}`}>
+          {metaLine}
+          {capo > 0 ? ` · Капо: ${capo}` : ''}
+        </p>
         <LyricsWithChords
           text={s.content}
           transposeSemitones={currentShift}
           chordsVisible={showChords}
           fontSizePx={fontSize}
-          chordTone={stageMode ? 'dark' : 'light'}
+          chordTone="light"
           className={[
-            'rounded-2xl border p-4 font-sans text-base',
+            'rounded-xl p-4 font-sans text-base',
             shell.card,
-            stageMode ? 'text-zinc-100' : 'text-stone-900',
+            'text-stone-900',
           ].join(' ')}
         />
         {showChords && capo > 0 ? (
@@ -299,23 +224,36 @@ export function SongDetailPage() {
               : `Аккорды для игры с капо (${semitoneLabel(transpose - capo)})`}
           </p>
         ) : null}
-      </div>
 
-      <button
-        type="button"
-        onClick={() => setSettingsOpen(true)}
-        className={[
-          'fixed right-4 z-40 inline-flex min-h-[48px] min-w-[48px] items-center justify-center rounded-full shadow-lg transition-all',
-          stageMode ? 'bottom-24 bg-zinc-800 text-zinc-100 hover:bg-zinc-700' : 'bottom-28 bg-stone-900 text-white hover:bg-stone-800',
-          'md:bottom-auto md:right-6 md:top-24',
-        ].join(' ')}
-        style={{
-          marginBottom: 'env(safe-area-inset-bottom, 0px)',
-        }}
-        aria-label="Настройки просмотра"
-      >
-        <LuSettings2 className="h-6 w-6" />
-      </button>
+        {!mainOnly && studioOk ? (
+          <button
+            type="button"
+            onClick={() => forkMut.mutate()}
+            disabled={forkMut.isPending}
+            className="inline-flex min-h-[42px] items-center justify-center rounded-lg border border-stone-300 bg-white px-3 text-sm text-stone-700 hover:bg-stone-50 disabled:opacity-50"
+          >
+            Открыть в студии
+          </button>
+        ) : null}
+        {canDeleteCatalog ? (
+          <button
+            type="button"
+            onClick={() => {
+              if (
+                window.confirm(
+                  `Удалить «${s.title}» из каталога? Связанные версии в студии и позиции в сетлистах будут удалены. Действие необратимо.`,
+                )
+              ) {
+                deleteMut.mutate();
+              }
+            }}
+            disabled={deleteMut.isPending}
+            className="inline-flex min-h-[42px] items-center justify-center rounded-lg border border-red-700 px-3 text-sm text-red-300 hover:bg-red-900/30 disabled:opacity-50"
+          >
+            Удалить из каталога
+          </button>
+        ) : null}
+      </div>
     </div>
   );
 }

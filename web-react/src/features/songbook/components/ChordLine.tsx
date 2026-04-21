@@ -39,35 +39,26 @@ export function ChordLine({
   }
 
   const hasAnyChord = segments.some((s) => s.chord.trim().length > 0);
+  if (!hasAnyChord) {
+    const plain = segments.map((s) => s.text).join('');
+    return (
+      <span className={['block w-full whitespace-pre-wrap', className].filter(Boolean).join(' ')}>
+        {plain || '\u00a0'}
+      </span>
+    );
+  }
 
   return (
-    <div
-      className={[
-        'w-full',
-        hasAnyChord ? 'overflow-x-auto pt-[1.35rem]' : '',
-        className,
-      ]
-        .filter(Boolean)
-        .join(' ')}
-    >
-      {/* Важно: не резервируем "искусственную" ширину под аккорды, чтобы не растягивать текст. */}
-      <div className="block min-w-0 whitespace-pre-wrap">
+    <div className={['w-full overflow-x-auto', className].filter(Boolean).join(' ')}>
+      <div className="inline-block min-w-full whitespace-pre">
         {segments.map((seg, idx) => (
-          <span
-            key={idx}
-            className="relative inline-block max-w-full align-bottom"
-            style={
-              seg.chord && seg.text.length === 0
-                ? { minWidth: '0.6ch' }
-                : undefined
-            }
-          >
+          <span key={idx} className="inline-grid align-top [grid-template-rows:1.2rem_auto]">
             {seg.chord ? (
               onChordClick ? (
                 <button
                   type="button"
                   className={[
-                    'absolute left-0 top-[-1.5rem] z-[1] whitespace-nowrap font-mono text-sm font-bold leading-none tracking-tight',
+                    'row-start-1 text-left whitespace-nowrap font-mono text-sm font-bold leading-none tracking-tight',
                     tone,
                     'rounded px-0.5 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/50',
                   ].join(' ')}
@@ -78,15 +69,17 @@ export function ChordLine({
               ) : (
                 <span
                   className={[
-                    'pointer-events-none absolute left-0 top-[-1.5rem] z-[1] whitespace-nowrap font-mono text-sm font-bold leading-none tracking-tight',
+                    'pointer-events-none row-start-1 whitespace-nowrap font-mono text-sm font-bold leading-none tracking-tight',
                     tone,
                   ].join(' ')}
                 >
                   {seg.chord}
                 </span>
               )
-            ) : null}
-            <span className="inline-block whitespace-pre-wrap">
+            ) : (
+              <span className="row-start-1" aria-hidden />
+            )}
+            <span className="row-start-2 inline-block whitespace-pre">
               {seg.text.length === 0 && seg.chord ? '\u200b' : seg.text}
             </span>
           </span>

@@ -616,7 +616,7 @@ export function StudioEditor() {
         {showPreview ? (
           <div
             className={[
-              'min-h-[min(70vh,520px)] overflow-auto rounded-2xl border p-4',
+              'rounded-2xl border p-4',
               darkUi ? 'border-slate-800 bg-slate-950/60' : 'border-stone-200 bg-white',
             ].join(' ')}
           >

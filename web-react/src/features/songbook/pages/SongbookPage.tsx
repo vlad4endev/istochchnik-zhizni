@@ -1,241 +1,124 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import Fuse, { type IFuseOptions } from 'fuse.js';
-import { AnimatePresence, motion } from 'framer-motion';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { LuChevronDown, LuSearch, LuTrash2, LuX } from 'react-icons/lu';
+import { LuCheck } from 'react-icons/lu';
 
 import { useAuthStore } from '../../auth/authStore';
-import { canDeleteSongFromCatalog, canModerateSongCatalog } from '../../auth/studioAccess';
 import { emitAppToast } from '../../../lib/uiFeedback';
-import { isMainSongbookDeploy } from '../../../lib/appVariant';
-import { deleteSong, fetchSongs, type SongListItem } from '../api';
-import { SongReader } from '../components/SongReader';
-
-type SongSearchDoc = SongListItem & {
-  _tempoSearch: string;
-};
-
-function toSearchDocs(items: SongListItem[]): SongSearchDoc[] {
-  return items.map((s) => ({
-    ...s,
-    _tempoSearch: s.tempo != null ? `${s.tempo} bpm ${String(s.tempo)}` : '',
-  }));
-}
-
-const FUSE_OPTIONS: IFuseOptions<SongSearchDoc> = {
-  keys: [
-    { name: 'title', weight: 0.35 },
-    { name: 'content', weight: 0.28 },
-    { name: 'default_key', weight: 0.14 },
-    { name: 'tags', weight: 0.1 },
-    { name: 'time_signature', weight: 0.05 },
-    { name: '_tempoSearch', weight: 0.08 },
-  ],
-  threshold: 0.38,
-  ignoreLocation: true,
-  distance: 200,
-  minMatchCharLength: 1,
-};
+import { deleteFavorite, fetchSongs, postFavorite } from '../api';
 
 export function SongbookPage() {
-  const role = useAuthStore((s) => s.role);
   const qc = useQueryClient();
-  const catalogOk = canModerateSongCatalog(role);
-  const deleteOk = canDeleteSongFromCatalog(role);
-  const mainOnly = isMainSongbookDeploy();
-  const searchRef = useRef<HTMLInputElement | null>(null);
-
-  const [search, setSearch] = useState('');
-  const [expandedSongId, setExpandedSongId] = useState<string | null>(null);
-  const [readerSettings, setReaderSettings] = useState({
-    fontSize: 18,
-    showChords: true,
-    transpose: 0,
-    scrollSpeed: 0,
-  });
+  const role = useAuthStore((s) => s.role);
+  const [tab, setTab] = useState<'catalog' | 'favorites'>('catalog');
 
   const query = useQuery({
     queryKey: ['songs', 'catalog'],
     queryFn: () => fetchSongs(),
   });
 
-  const deleteMut = useMutation({
-    mutationFn: (id: number) => deleteSong(id),
-    onSuccess: (_data, id) => {
+  const favoriteMut = useMutation({
+    mutationFn: async ({ id, next }: { id: number; next: boolean }) => {
+      if (next) await postFavorite(id);
+      else await deleteFavorite(id);
+    },
+    onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['songs', 'catalog'] });
       void qc.invalidateQueries({ queryKey: ['songs', 'catalog-all'] });
-      emitAppToast({ kind: 'success', message: 'Песня удалена из каталога' });
-      setExpandedSongId((prev) => (prev === String(id) ? null : prev));
+      emitAppToast({ kind: 'success', message: 'Избранное обновлено' });
     },
-    onError: () => emitAppToast('Не удалось удалить песню'),
+    onError: () => emitAppToast('Не удалось обновить избранное'),
   });
 
-  const docs = useMemo(() => toSearchDocs(query.data ?? []), [query.data]);
-  const fuse = useMemo(() => new Fuse(docs, FUSE_OPTIONS), [docs]);
-
   const rows = useMemo(() => {
-    const term = search.trim();
-    if (!term) return docs;
-    return fuse.search(term).map((r) => r.item);
-  }, [docs, fuse, search]);
-
-  useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
-      const target = e.target as HTMLElement | null;
-      const inEditable =
-        target?.tagName === 'INPUT' ||
-        target?.tagName === 'TEXTAREA' ||
-        target?.isContentEditable;
-      if (inEditable) return;
-      if (e.key === '/') {
-        e.preventDefault();
-        searchRef.current?.focus();
-      }
-      if (e.key === 'Escape' && document.activeElement === searchRef.current) {
-        searchRef.current?.blur();
-      }
-    };
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, []);
+    const source = query.data ?? [];
+    if (tab === 'favorites') return source.filter((s) => s.is_favorite);
+    return source;
+  }, [query.data, tab]);
 
   if (query.isLoading) {
-    return <p className="text-sm text-slate-500">Загрузка песенника…</p>;
+    return <p className="text-sm text-stone-500">Загрузка песенника…</p>;
   }
   if (query.isError) {
     return <p className="text-sm text-red-600">Не удалось загрузить каталог.</p>;
   }
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6 bg-white pb-24 sm:rounded-3xl sm:bg-transparent">
-      <header className="space-y-4">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-          <div className="space-y-1">
-            <h1 className="text-3xl font-bold tracking-tight text-slate-900">Песенник</h1>
-            <p className="text-sm text-slate-500">Поиск по каталогу в реальном времени</p>
-          </div>
-          {!mainOnly && catalogOk ? (
-            <Link
-              to="/songbook/add"
-              className="inline-flex min-h-[44px] shrink-0 items-center justify-center rounded-2xl bg-slate-900 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800"
-            >
-              Добавить песню
-            </Link>
-          ) : null}
-        </div>
-
-        <label className="block w-full">
-          <span className="sr-only">Поиск по песеннику</span>
-          <div className="relative">
-            <LuSearch
-              className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400"
-              strokeWidth={2}
-              aria-hidden
-            />
-            <input
-              ref={searchRef}
-              type="search"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Найти по названию, тексту, тональности, BPM…"
-              autoComplete="off"
-              className="w-full min-h-[52px] rounded-2xl border-0 bg-slate-50 py-3.5 pl-12 pr-11 text-base text-slate-900 shadow-[0_2px_12px_rgba(15,23,42,0.06)] outline-none ring-1 ring-slate-900/[0.06] transition placeholder:text-slate-400 focus:bg-white focus:shadow-[0_4px_20px_rgba(15,23,42,0.08)] focus:ring-slate-900/10 sm:text-[15px]"
-            />
-            {search.trim() ? (
-              <button
-                type="button"
-                onClick={() => {
-                  setSearch('');
-                  searchRef.current?.focus();
-                }}
-                className="absolute right-2 top-1/2 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
-                aria-label="Очистить поиск"
-              >
-                <LuX className="h-4 w-4" />
-              </button>
-            ) : null}
-          </div>
-        </label>
-        <div className="flex items-center justify-between text-xs text-slate-500">
-          <span>
-            Найдено: <span className="font-semibold text-slate-700">{rows.length}</span>
-          </span>
-          <span className="hidden sm:inline">Нажмите `/`, чтобы быстро перейти к поиску</span>
+    <div className="mx-auto max-w-3xl space-y-4 pb-24 text-stone-900">
+      <header className="sticky top-0 z-20 -mx-3 border-b border-stone-200 bg-[var(--surface)]/95 px-3 py-2 backdrop-blur md:mx-0 md:px-0">
+        <div className="grid grid-cols-2 overflow-hidden rounded-xl bg-stone-100">
+          <button
+            type="button"
+            onClick={() => setTab('catalog')}
+            className={[
+              'min-h-[44px] text-center text-base font-medium',
+              tab === 'catalog' ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-500',
+            ].join(' ')}
+          >
+            Сборник
+          </button>
+          <button
+            type="button"
+            onClick={() => setTab('favorites')}
+            className={[
+              'min-h-[44px] text-center text-base font-medium',
+              tab === 'favorites' ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-500',
+            ].join(' ')}
+          >
+            Избранное
+          </button>
         </div>
       </header>
 
-      <ul className="flex flex-col gap-2">
+      <ul className="space-y-1">
         {rows.map((s, idx) => (
-          <li
-            key={s.id}
-            className="rounded-2xl bg-slate-50/80 shadow-[0_1px_3px_rgba(15,23,42,0.04)] transition"
-          >
-            <div className="flex min-h-[56px] items-stretch gap-1 rounded-2xl px-2 py-1.5 hover:bg-slate-50">
+          <li key={s.id} className="rounded-lg border border-stone-200 bg-white">
+            <div className="flex items-center gap-3 px-3 py-3">
+              <Link
+                to={`/songbook/${s.id}`}
+                className="flex min-h-[44px] min-w-0 flex-1 items-center gap-3"
+              >
+                <span className="w-7 shrink-0 text-center text-3xl font-light text-stone-500">
+                  {idx + 1}
+                </span>
+                <h2 className="truncate text-2xl font-extrabold uppercase tracking-wide text-stone-900">
+                  {s.title}
+                </h2>
+              </Link>
               <button
                 type="button"
-                onClick={() => setExpandedSongId((prev) => (prev === s.id ? null : s.id))}
-                className="flex min-w-0 flex-1 items-center justify-between gap-3 rounded-xl px-3 py-2 text-left outline-none ring-offset-2 focus-visible:ring-2 focus-visible:ring-slate-300"
-                aria-expanded={expandedSongId === s.id}
+                onClick={() => favoriteMut.mutate({ id: Number(s.id), next: !s.is_favorite })}
+                disabled={favoriteMut.isPending}
+                className={[
+                  'inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border',
+                  s.is_favorite
+                    ? 'border-stone-300 bg-stone-900 text-white'
+                    : 'border-stone-300 text-stone-400',
+                ].join(' ')}
+                aria-label={s.is_favorite ? 'Убрать из избранного' : 'Добавить в избранное'}
               >
-                <h2 className="truncate text-base font-semibold leading-snug text-slate-900 md:text-lg">
-                  № {idx + 1} {s.title}
-                </h2>
-                <LuChevronDown
-                  className={[
-                    'h-5 w-5 shrink-0 text-slate-500 transition-transform',
-                    expandedSongId === s.id ? 'rotate-180' : '',
-                  ].join(' ')}
-                />
+                {s.is_favorite ? <LuCheck className="h-5 w-5" /> : null}
               </button>
-              {deleteOk ? (
-                <button
-                  type="button"
-                  title="Удалить из каталога"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    if (
-                      window.confirm(
-                        `Удалить «${s.title}» из каталога? Это необратимо, в том числе для сетлистов и студийных версий.`,
-                      )
-                    ) {
-                      deleteMut.mutate(Number(s.id));
-                    }
-                  }}
-                  disabled={deleteMut.isPending}
-                  className="inline-flex shrink-0 items-center justify-center rounded-xl px-3 text-slate-400 transition hover:bg-red-50 hover:text-red-600 disabled:opacity-40"
-                  aria-label={`Удалить «${s.title}»`}
-                >
-                  <LuTrash2 className="h-5 w-5" />
-                </button>
-              ) : null}
             </div>
-            <AnimatePresence initial={false}>
-              {expandedSongId === s.id ? (
-                <motion.div
-                  key={`expanded-${s.id}`}
-                  initial={{ height: 0, opacity: 0 }}
-                  animate={{ height: 'auto', opacity: 1 }}
-                  exit={{ height: 0, opacity: 0 }}
-                  transition={{ duration: 0.22, ease: 'easeInOut' }}
-                  className="overflow-hidden px-3 pb-3"
-                >
-                  <SongReader
-                    song={s}
-                    settings={readerSettings}
-                    onSettingsChange={(patch) => setReaderSettings((prev) => ({ ...prev, ...patch }))}
-                  />
-                </motion.div>
-              ) : null}
-            </AnimatePresence>
           </li>
         ))}
       </ul>
 
       {rows.length === 0 ? (
-        <p className="rounded-2xl bg-slate-50 py-12 text-center text-sm text-slate-500">
-          {search.trim() ? 'Ничего не найдено.' : 'В каталоге пока нет песен.'}
+        <p className="rounded-xl border border-stone-200 bg-white py-10 text-center text-sm text-stone-500">
+          {tab === 'favorites' ? 'В избранном пока нет песен.' : 'В каталоге пока нет песен.'}
         </p>
+      ) : null}
+
+      {role === 'admin' || role === 'editor' ? (
+        <div className="pt-1">
+          <Link
+            to="/songbook/add"
+            className="inline-flex min-h-[42px] items-center justify-center rounded-lg border border-stone-300 bg-white px-3 text-sm text-stone-700 hover:bg-stone-50"
+          >
+            Добавить песню
+          </Link>
+        </div>
       ) : null}
     </div>
   );
