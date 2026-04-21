@@ -1,5 +1,6 @@
 import type { Request, Response } from 'express';
 import { query } from '../config/db';
+import { listUsers } from '../services/userService';
 import {
   createPlan,
   createTemplate,
@@ -38,7 +39,9 @@ function parseTimeHm(raw: unknown): string | null {
 
 function isPlannerManager(req: Request): boolean {
   const role = String(req.authUserRole ?? 'member').toLowerCase();
-  return role === 'admin' || role === 'minister';
+  if (role === 'admin' || role === 'minister') return true;
+  const roles = Array.isArray(req.authUserRoles) ? req.authUserRoles : [];
+  return roles.includes('admin') || roles.includes('minister');
 }
 
 function ensurePlannerManager(req: Request, res: Response): boolean {
@@ -86,6 +89,17 @@ export async function getServiceBlockTypes(_req: Request, res: Response): Promis
   } catch (e) {
     console.error('[service-planner] getServiceBlockTypes:', e);
     res.status(500).json({ error: 'Не удалось получить типы блоков' });
+  }
+}
+
+export async function getServicePlannerMembers(req: Request, res: Response): Promise<void> {
+  if (!ensurePlannerManager(req, res)) return;
+  try {
+    const users = await listUsers();
+    res.json(users.filter((u) => u.is_active));
+  } catch (e) {
+    console.error('[service-planner] getServicePlannerMembers:', e);
+    res.status(500).json({ error: 'Не удалось получить список участников' });
   }
 }
 

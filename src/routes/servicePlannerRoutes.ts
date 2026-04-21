@@ -5,6 +5,7 @@ import {
   deleteServicePlanById,
   deleteServiceTemplateById,
   getServiceBlockTypes,
+  getServicePlannerMembers,
   getServiceTemplateById,
   getServicePlanById,
   getServicePlans,
@@ -21,6 +22,7 @@ import {
 const router = Router();
 
 router.get('/service-block-types', requireAuthSession, getServiceBlockTypes);
+router.get('/service-planner-members', requireAuthSession, getServicePlannerMembers);
 router.get('/service-templates', requireAuthSession, getServiceTemplates);
 router.get('/service-templates/:id', requireAuthSession, getServiceTemplateById);
 router.post('/service-templates', requireAuthSession, postServiceTemplate);

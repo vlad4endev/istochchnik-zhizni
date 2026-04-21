@@ -17,6 +17,7 @@ type RoleRequest = Request & {
   userRole?: UserRole;
   authUserId?: number;
   authUserRole?: AppRole;
+  authUserRoles?: AppRole[];
 };
 
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
@@ -144,6 +145,9 @@ function isStandardParticipantMutation(
 export function enforceRoleAccess(req: Request, res: Response, next: NextFunction): void {
   const roleReq = req as RoleRequest;
   const role = roleReq.userRole ?? 'member';
+  const allRoles = Array.isArray(roleReq.authUserRoles) ? roleReq.authUserRoles : [];
+  const hasRole = (target: AppRole): boolean => role === target || allRoles.includes(target);
+  const isPlannerManager = hasRole('admin') || hasRole('minister');
   const fullPath = fullUrlPath(req);
   const authId = roleReq.authUserId;
 
@@ -197,7 +201,7 @@ export function enforceRoleAccess(req: Request, res: Response, next: NextFunctio
     return;
   }
 
-  if (isServicePlannerMutation(req.method, fullPath) && authId && (role === 'minister' || role === 'admin')) {
+  if (isServicePlannerMutation(req.method, fullPath) && authId && isPlannerManager) {
     next();
     return;
   }
@@ -207,7 +211,7 @@ export function enforceRoleAccess(req: Request, res: Response, next: NextFunctio
     return;
   }
 
-  if (role !== 'admin' && role !== 'minister') {
+  if (!isPlannerManager) {
     res.status(403).json({
       error: 'Access denied. Роль "Пользователь" может только просматривать данные.',
     });

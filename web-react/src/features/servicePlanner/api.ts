@@ -1,4 +1,5 @@
 import { apiClient } from '../../lib/apiClient';
+import type { AppUser } from '../admin/types';
 
 export type ServiceBlockType = {
   id: number;
@@ -98,6 +99,11 @@ export type PublicServicePlanPayload = {
 export async function fetchServiceBlockTypes(): Promise<ServiceBlockType[]> {
   const { data } = await apiClient.get<ServiceBlockType[]>('/api/service-block-types');
   return data;
+}
+
+export async function fetchServicePlannerMembers(): Promise<AppUser[]> {
+  const { data } = await apiClient.get<AppUser[]>('/api/service-planner-members');
+  return Array.isArray(data) ? data : [];
 }
 
 export async function fetchServiceTemplates(): Promise<ServiceTemplate[]> {

@@ -27,6 +27,7 @@ const ICON_BY_CODE: Record<string, { Icon: IconType; wrapClass: string; iconClas
   announcements: { Icon: FaBullhorn, wrapClass: 'bg-emerald-100', iconClass: 'text-emerald-700' },
   offering: { Icon: FaHandHoldingDollar, wrapClass: 'bg-lime-100', iconClass: 'text-lime-700' },
   birthdays: { Icon: FaCakeCandles, wrapClass: 'bg-pink-100', iconClass: 'text-pink-700' },
+  schedule: { Icon: LuCalendarDays, wrapClass: 'bg-indigo-100', iconClass: 'text-indigo-700' },
   custom: { Icon: FaPuzzlePiece, wrapClass: 'bg-stone-200', iconClass: 'text-stone-700' },
 };
 
@@ -55,6 +56,11 @@ function isPoem(code: string | null, typeName: string | null): boolean {
   return code === 'poem' || normalizedName.includes('стих');
 }
 
+function isSermon(code: string | null, typeName: string | null): boolean {
+  const normalizedName = String(typeName ?? '').toLowerCase();
+  return code === 'sermon' || normalizedName.includes('проповед');
+}
+
 function isBirthdays(code: string | null, typeName: string | null): boolean {
   const normalizedName = String(typeName ?? '').toLowerCase();
   return code === 'birthdays' || normalizedName.includes('дни рождения');
@@ -75,6 +81,34 @@ function birthdayRows(content: Record<string, unknown>): string[] {
       if (Number.isNaN(dt.getTime())) return name;
       const dateText = new Intl.DateTimeFormat('ru-RU', { weekday: 'short', day: 'numeric', month: 'short' }).format(dt);
       return `${name} — ${dateText}`;
+    })
+    .filter((x): x is string => Boolean(x));
+}
+
+function scheduleRows(content: Record<string, unknown>): string[] {
+  const raw = content.schedule_events;
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((x) => {
+      if (!x || typeof x !== 'object') return null;
+      const row = x as Record<string, unknown>;
+      const title = typeof row.title === 'string' ? row.title.trim() : '';
+      if (!title) return null;
+      const dateIso = typeof row.event_date === 'string' ? row.event_date.trim() : '';
+      const time = typeof row.event_time === 'string' ? row.event_time.trim().slice(0, 5) : '';
+      let datePart = '';
+      if (/^\d{4}-\d{2}-\d{2}$/.test(dateIso)) {
+        const dt = new Date(`${dateIso}T12:00:00`);
+        if (!Number.isNaN(dt.getTime())) {
+          datePart = new Intl.DateTimeFormat('ru-RU', {
+            weekday: 'short',
+            day: 'numeric',
+            month: 'short',
+          }).format(dt);
+        }
+      }
+      const prefix = [datePart, time].filter((v) => v.length > 0).join(' ');
+      return prefix ? `${prefix} — ${title}` : title;
     })
     .filter((x): x is string => Boolean(x));
 }
@@ -233,8 +267,23 @@ export function PublicServicePlanPage() {
                         poemAuthor && poemTheme ? `${poemAuthor} • ${poemTheme}` : poemAuthor || poemTheme;
                       const birthdays = isBirthdays(b.block_type_code, b.block_type_name);
                       const birthdaysList = birthdayRows(b.content_json);
+                      const scheduleList = scheduleRows(b.content_json);
+                      const sermon = isSermon(b.block_type_code, b.block_type_name);
+                      const sermonTopic =
+                        typeof b.content_json.sermon_topic === 'string'
+                          ? b.content_json.sermon_topic.trim()
+                          : '';
+                      const sermonScripture =
+                        typeof b.content_json.sermon_scripture === 'string'
+                          ? b.content_json.sermon_scripture.trim()
+                          : '';
+                      const sermonPreacher = b.assigned_member_name ?? 'Проповедник';
                       const heading = poem
                         ? `СТИХ - ${b.assigned_member_name ?? 'Чтец'}`
+                        : sermon
+                          ? sermonTopic
+                            ? `${sermonPreacher} - ${sermonTopic}`
+                            : sermonPreacher
                         : birthdays
                           ? 'Дни рождения недели'
                           : b.title;
@@ -249,6 +298,11 @@ export function PublicServicePlanPage() {
                       {b.assigned_member_name ? ` • ${b.assigned_member_name}` : ''}
                     </p>
                     {poemSubline ? <p className="mt-0.5 text-xs leading-snug text-stone-600 sm:text-sm">{poemSubline}</p> : null}
+                    {sermon && sermonScripture ? (
+                      <p className="mt-0.5 text-xs leading-snug text-stone-600 sm:text-sm">
+                        Писание: {sermonScripture}
+                      </p>
+                    ) : null}
                     {birthdays ? (
                       birthdaysList.length > 0 ? (
                         <p className="mt-0.5 text-xs leading-snug text-stone-600 sm:text-sm">
@@ -259,6 +313,11 @@ export function PublicServicePlanPage() {
                           На этой неделе именинников нет.
                         </p>
                       )
+                    ) : null}
+                    {scheduleList.length > 0 ? (
+                      <p className="mt-0.5 text-xs leading-snug text-stone-600 sm:text-sm">
+                        Расписание: {scheduleList.join(' • ')}
+                      </p>
                     ) : null}
                     {b.song_title ? (
                       <p className="mt-1 text-sm font-semibold leading-snug text-stone-700">

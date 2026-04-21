@@ -195,6 +195,7 @@ async function ensurePlannerSchema(): Promise<void> {
            ('announcements', 'Объявления', 'text', 'bullhorn', 5),
            ('offering', 'Сбор пожертвований', 'custom', 'hand-holding-dollar', 3),
            ('birthdays', 'Дни рождения', 'custom', 'cake-candles', 4),
+           ('schedule', 'Расписание', 'text', 'calendar-days', 5),
            ('custom', 'Произвольный блок', 'custom', 'puzzle-piece', 5)
          on conflict (code) do nothing`,
       );
@@ -230,6 +231,21 @@ type BirthdayWeekPayload = {
   items: BirthdayWeekItem[];
 };
 
+type NextWeekScheduleItem = {
+  id: number;
+  title: string;
+  event_date: string;
+  event_time: string;
+  description: string | null;
+  category: string | null;
+};
+
+type NextWeekSchedulePayload = {
+  week_start: string;
+  week_end: string;
+  items: NextWeekScheduleItem[];
+};
+
 function normalizeBirthDateYmd(raw: unknown): string | null {
   if (typeof raw !== 'string') return null;
   const s = raw.trim().slice(0, 10);
@@ -258,6 +274,18 @@ function startOfWeekMonday(baseDate: string): Date {
   const day = d.getDay();
   const diff = day === 0 ? -6 : 1 - day;
   d.setDate(d.getDate() + diff);
+  return d;
+}
+
+function normalizeTimeHm(raw: unknown): string {
+  const value = String(raw ?? '').trim();
+  const m = /^(\d{2}:\d{2})/.exec(value);
+  return m?.[1] ?? '00:00';
+}
+
+function addDays(base: Date, days: number): Date {
+  const d = new Date(base);
+  d.setDate(d.getDate() + days);
   return d;
 }
 
@@ -338,6 +366,117 @@ function withBirthdayWeek(
     birthday_week_start: payload.week_start,
     birthday_week_end: payload.week_end,
     birthday_people: payload.items,
+  };
+}
+
+function isWeeklyScheduleBlock(block: {
+  title?: unknown;
+  content_json?: unknown;
+  block_type_code?: unknown;
+}): boolean {
+  const typeCode = String(block.block_type_code ?? '').trim().toLowerCase();
+  if (typeCode === 'schedule') return true;
+  const content = asObject(block.content_json);
+  const markIcon = typeof content.block_mark_icon === 'string' ? content.block_mark_icon.trim().toLowerCase() : '';
+  if (markIcon === 'schedule') return true;
+  const title = String(block.title ?? '').trim().toLowerCase();
+  return title.includes('расписан');
+}
+
+async function getNextWeekSchedule(serviceDate: string): Promise<NextWeekSchedulePayload> {
+  const currentWeekStart = startOfWeekMonday(serviceDate);
+  const weekStart = addDays(currentWeekStart, 7);
+  const weekEnd = addDays(weekStart, 6);
+  const weekStartYmd = formatYmdLocal(weekStart);
+  const weekEndYmd = formatYmdLocal(weekEnd);
+
+  const eventsRes = await query(
+    `select
+       id,
+       title,
+       description,
+       event_date::text as event_date,
+       to_char(event_time, 'HH24:MI') as event_time,
+       recurrence_type,
+       weekly_day,
+       category
+     from public.church_events
+     where is_active = true`,
+  );
+
+  const items: NextWeekScheduleItem[] = [];
+  for (const rawRow of eventsRes.rows) {
+    const row = rawRow as DbRecord;
+    const id = Number(row.id);
+    if (!Number.isFinite(id)) continue;
+    const title = String(row.title ?? '').trim();
+    if (!title) continue;
+    const recurrence = String(row.recurrence_type ?? 'once').toLowerCase() === 'weekly' ? 'weekly' : 'once';
+    const eventTime = normalizeTimeHm(row.event_time);
+    const description = row.description == null ? null : String(row.description);
+    const category = row.category == null ? null : String(row.category);
+
+    if (recurrence === 'weekly') {
+      const wdRaw = row.weekly_day;
+      let weekDay = Number.isInteger(Number(wdRaw)) ? Number(wdRaw) : NaN;
+      if (!Number.isFinite(weekDay)) {
+        const eventDate = String(row.event_date ?? '').trim();
+        if (/^\d{4}-\d{2}-\d{2}$/.test(eventDate)) {
+          const dt = new Date(`${eventDate}T12:00:00`);
+          if (!Number.isNaN(dt.getTime())) weekDay = dt.getDay();
+        }
+      }
+      if (!Number.isFinite(weekDay)) continue;
+      const offset = weekDay === 0 ? 6 : weekDay - 1;
+      const occurDate = formatYmdLocal(addDays(weekStart, offset));
+      items.push({
+        id,
+        title,
+        event_date: occurDate,
+        event_time: eventTime,
+        description,
+        category,
+      });
+      continue;
+    }
+
+    const eventDate = String(row.event_date ?? '').trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(eventDate)) continue;
+    if (eventDate < weekStartYmd || eventDate > weekEndYmd) continue;
+    items.push({
+      id,
+      title,
+      event_date: eventDate,
+      event_time: eventTime,
+      description,
+      category,
+    });
+  }
+
+  items.sort((a, b) => {
+    const byDate = a.event_date.localeCompare(b.event_date);
+    if (byDate !== 0) return byDate;
+    const byTime = a.event_time.localeCompare(b.event_time);
+    if (byTime !== 0) return byTime;
+    return a.title.localeCompare(b.title, 'ru');
+  });
+
+  return {
+    week_start: weekStartYmd,
+    week_end: weekEndYmd,
+    items,
+  };
+}
+
+function withNextWeekSchedule(
+  content: Record<string, unknown>,
+  payload: NextWeekSchedulePayload,
+): Record<string, unknown> {
+  return {
+    ...content,
+    schedule_week_start: payload.week_start,
+    schedule_week_end: payload.week_end,
+    schedule_events: payload.items,
   };
 }
 
@@ -532,6 +671,8 @@ export async function getPlanDetails(planId: number): Promise<PlannerPlanDetails
     (r) => String((r as DbRecord).block_type_code ?? '').toLowerCase() === 'birthdays',
   );
   const birthdayPayload = hasBirthdayBlocks ? await getWeekBirthdays(base.service_date) : null;
+  const hasScheduleBlocks = blocksRes.rows.some((r) => isWeeklyScheduleBlock(r as DbRecord));
+  const schedulePayload = hasScheduleBlocks ? await getNextWeekSchedule(base.service_date) : null;
   return {
     ...base,
     notes: row.notes == null ? null : String(row.notes),
@@ -540,12 +681,19 @@ export async function getPlanDetails(planId: number): Promise<PlannerPlanDetails
     blocks: blocksRes.rows.map((r) => {
       const record = r as DbRecord;
       const mapped = mapBlockRow(record);
-      if (String(record.block_type_code ?? '').toLowerCase() !== 'birthdays' || !birthdayPayload) {
-        return mapped;
+      const isBirthdays = String(record.block_type_code ?? '').toLowerCase() === 'birthdays';
+      const isSchedule = isWeeklyScheduleBlock(record);
+      if (!isBirthdays && !isSchedule) return mapped;
+      let content = mapped.content_json;
+      if (isBirthdays && birthdayPayload) {
+        content = withBirthdayWeek(content, birthdayPayload);
+      }
+      if (isSchedule && schedulePayload) {
+        content = withNextWeekSchedule(content, schedulePayload);
       }
       return {
         ...mapped,
-        content_json: withBirthdayWeek(mapped.content_json, birthdayPayload),
+        content_json: content,
       };
     }),
   };
@@ -605,6 +753,8 @@ export async function getPublicPlanByToken(token: string): Promise<PublicPlanner
     (r) => String((r as DbRecord).block_type_code ?? '').toLowerCase() === 'birthdays',
   );
   const birthdayPayload = hasBirthdayBlocks ? await getWeekBirthdays(serviceDate) : null;
+  const hasScheduleBlocks = blocksRes.rows.some((r) => isWeeklyScheduleBlock(r as DbRecord));
+  const schedulePayload = hasScheduleBlocks ? await getNextWeekSchedule(serviceDate) : null;
 
   return {
     plan: {
@@ -631,10 +781,18 @@ export async function getPublicPlanByToken(token: string): Promise<PublicPlanner
         assigned_member_name: x.assigned_member_name == null ? null : String(x.assigned_member_name),
         song_title: x.song_title == null ? null : String(x.song_title),
         song_key: x.song_key == null ? null : String(x.song_key),
-        content_json:
-          String(x.block_type_code ?? '').toLowerCase() === 'birthdays' && birthdayPayload
-            ? withBirthdayWeek(asObject(x.content_json), birthdayPayload)
-            : asObject(x.content_json),
+        content_json: (() => {
+          let content = asObject(x.content_json);
+          const isBirthdays = String(x.block_type_code ?? '').toLowerCase() === 'birthdays';
+          const isSchedule = isWeeklyScheduleBlock(x);
+          if (isBirthdays && birthdayPayload) {
+            content = withBirthdayWeek(content, birthdayPayload);
+          }
+          if (isSchedule && schedulePayload) {
+            content = withNextWeekSchedule(content, schedulePayload);
+          }
+          return content;
+        })(),
       };
     }),
   };

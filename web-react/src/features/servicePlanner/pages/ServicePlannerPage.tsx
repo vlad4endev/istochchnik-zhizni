@@ -32,7 +32,6 @@ import {
 import type { IconType } from 'react-icons';
 
 import { fetchSongs, type SongListItem } from '../../songbook/api';
-import { fetchAdminMembers } from '../../admin/api';
 import type { AppUser } from '../../admin/types';
 import { useAuthStore } from '../../auth/authStore';
 import {
@@ -43,6 +42,7 @@ import {
   deleteServicePlan,
   deleteServiceTemplate,
   fetchServiceBlockTypes,
+  fetchServicePlannerMembers,
   fetchServicePlan,
   fetchServiceTemplate,
   fetchServicePlans,
@@ -123,6 +123,12 @@ function hasMinistryRole(u: AppUser, roleName: string): boolean {
     .some((s) => s === target || s.includes(target));
 }
 
+function hasAppRole(u: AppUser, roleName: 'admin' | 'minister'): boolean {
+  if (u.app_role === roleName) return true;
+  if (!Array.isArray(u.app_roles)) return false;
+  return u.app_roles.includes(roleName);
+}
+
 function isPreacherCandidate(u: AppUser): boolean {
   return hasMinistryRole(u, 'Проповедник');
 }
@@ -155,6 +161,7 @@ const CATEGORY_ICON_BY_CODE: Record<string, { Icon: IconType; wrapClass: string;
   announcements: { Icon: FaBullhorn, wrapClass: 'bg-emerald-100', iconClass: 'text-emerald-700' },
   offering: { Icon: FaHandHoldingDollar, wrapClass: 'bg-lime-100', iconClass: 'text-lime-700' },
   birthdays: { Icon: FaCakeCandles, wrapClass: 'bg-pink-100', iconClass: 'text-pink-700' },
+  schedule: { Icon: LuCalendarDays, wrapClass: 'bg-indigo-100', iconClass: 'text-indigo-700' },
   custom: { Icon: FaPuzzlePiece, wrapClass: 'bg-stone-200', iconClass: 'text-stone-700' },
 };
 
@@ -192,7 +199,7 @@ export function ServicePlannerPage() {
   const role = useAuthStore((s) => s.role);
   const authMemberId = useAuthStore((s) => s.memberId);
   const normalizedRole = (role ?? 'member').toLowerCase();
-  const isPlannerManager = normalizedRole === 'admin' || normalizedRole === 'minister';
+  const isPlannerManagerBySession = normalizedRole === 'admin' || normalizedRole === 'minister';
   const [screen, setScreen] = useState<'home' | 'plan' | 'template'>('home');
   const [createPlanDate, setCreatePlanDate] = useState(todayIso());
   const [isTemplateDraftNew, setIsTemplateDraftNew] = useState(false);
@@ -215,8 +222,8 @@ export function ServicePlannerPage() {
   });
 
   const membersQ = useQuery<AppUser[]>({
-    queryKey: ['admin', 'members', 'service-planner'],
-    queryFn: fetchAdminMembers,
+    queryKey: ['service-planner', 'members'],
+    queryFn: fetchServicePlannerMembers,
     staleTime: 60_000,
   });
 
@@ -415,7 +422,11 @@ export function ServicePlannerPage() {
   const blockTypes = blockTypesQ.data ?? [];
   const usersById = useMemo(() => new Map(users.map((u) => [u.id, u] as const)), [users]);
   const authMember = authMemberId ? usersById.get(authMemberId) ?? null : null;
-  const canManageTemplates = isPlannerManager || (authMember ? hasMinistryRole(authMember, 'Ведущий') : false);
+  const isPlannerManagerByProfile = authMember ? hasAppRole(authMember, 'admin') || hasAppRole(authMember, 'minister') : false;
+  const canManageTemplates =
+    isPlannerManagerBySession ||
+    isPlannerManagerByProfile ||
+    (authMember ? hasMinistryRole(authMember, 'Ведущий') : false);
   const leaderCandidates = useMemo(() => users.filter((u) => hasMinistryRole(u, 'Ведущий')), [users]);
   const preacherCandidates = useMemo(() => users.filter((u) => isPreacherCandidate(u)), [users]);
 
@@ -454,6 +465,12 @@ export function ServicePlannerPage() {
     return meta.code === 'birthdays' || (meta.name ?? '').toLowerCase().includes('дни рождения');
   }
 
+  function isSermonBlock(block: ServicePlanBlock): boolean {
+    const meta = getBlockTypeMeta(block);
+    if (!meta) return false;
+    return meta.code === 'sermon' || (meta.name ?? '').toLowerCase().includes('проповед');
+  }
+
   function poemHeading(block: ServicePlanBlock): string {
     const reader = block.assigned_member_id ? usersById.get(block.assigned_member_id) : null;
     return reader ? `СТИХ - ${userLabel(reader)}` : 'СТИХ - Чтец';
@@ -467,6 +484,29 @@ export function ServicePlannerPage() {
     if (!author && !theme) return null;
     if (author && theme) return `${author} • ${theme}`;
     return author || theme;
+  }
+
+  function sermonTopic(block: ServicePlanBlock): string {
+    const raw = block.content_json?.sermon_topic;
+    return typeof raw === 'string' ? raw.trim() : '';
+  }
+
+  function sermonScripture(block: ServicePlanBlock): string {
+    const raw = block.content_json?.sermon_scripture;
+    return typeof raw === 'string' ? raw.trim() : '';
+  }
+
+  function sermonPreacher(block: ServicePlanBlock): AppUser | null {
+    if (block.assigned_member_id) return usersById.get(block.assigned_member_id) ?? null;
+    if (draft?.preacher_member_id) return usersById.get(draft.preacher_member_id) ?? null;
+    return null;
+  }
+
+  function sermonHeading(block: ServicePlanBlock): string {
+    const preacher = sermonPreacher(block);
+    const preacherName = preacher ? userLabel(preacher) : 'Проповедник';
+    const topic = sermonTopic(block);
+    return topic ? `${preacherName} - ${topic}` : preacherName;
   }
 
   function birthdayLines(block: ServicePlanBlock): string[] {
@@ -488,13 +528,38 @@ export function ServicePlannerPage() {
       .filter((x): x is string => Boolean(x));
   }
 
+  function scheduleLines(block: ServicePlanBlock): string[] {
+    const raw = block.content_json?.schedule_events;
+    if (!Array.isArray(raw)) return [];
+    return raw
+      .map((x) => {
+        if (!x || typeof x !== 'object') return null;
+        const row = x as Record<string, unknown>;
+        const title = typeof row.title === 'string' ? row.title.trim() : '';
+        if (!title) return null;
+        const dateIso = typeof row.event_date === 'string' ? row.event_date.trim() : '';
+        const time = typeof row.event_time === 'string' ? row.event_time.trim().slice(0, 5) : '';
+        let datePart = '';
+        if (/^\d{4}-\d{2}-\d{2}$/.test(dateIso)) {
+          const dt = new Date(`${dateIso}T12:00:00`);
+          if (!Number.isNaN(dt.getTime())) {
+            datePart = new Intl.DateTimeFormat('ru-RU', {
+              weekday: 'short',
+              day: 'numeric',
+              month: 'short',
+            }).format(dt);
+          }
+        }
+        const prefix = [datePart, time].filter((v) => v.length > 0).join(' ');
+        return prefix ? `${prefix} — ${title}` : title;
+      })
+      .filter((x): x is string => Boolean(x));
+  }
+
   function getResponsibleLabel(block: ServicePlanBlock): string | null {
     if (!draft) return null;
-    const meta = getBlockTypeMeta(block);
-    const isSermon =
-      meta?.code === 'sermon' || (meta?.name ?? '').toLowerCase().includes('проповед');
-    if (isSermon) {
-      const preacher = draft.preacher_member_id ? usersById.get(draft.preacher_member_id) : null;
+    if (isSermonBlock(block)) {
+      const preacher = sermonPreacher(block);
       return preacher ? userLabel(preacher) : null;
     }
     const assigned = block.assigned_member_id ? usersById.get(block.assigned_member_id) : null;
@@ -542,6 +607,14 @@ export function ServicePlannerPage() {
     const key = keyRaw.trim().toLowerCase();
     if (!key) return null;
     return BLOCK_MARK_ICON_BY_KEY[key] ?? null;
+  }
+
+  function isScheduleBlock(block: ServicePlanBlock): boolean {
+    const meta = getBlockTypeMeta(block);
+    if (meta?.code === 'schedule') return true;
+    const raw = block.content_json?.block_mark_icon;
+    if (typeof raw === 'string' && raw.trim().toLowerCase() === 'schedule') return true;
+    return block.title.trim().toLowerCase().includes('расписан');
   }
 
   function getBlockLogoUrl(block: ServicePlanBlock): string | null {
@@ -1839,6 +1912,8 @@ export function ServicePlannerPage() {
                                 ? separatorLabel(block)
                                 : isPoemBlock(block)
                                   ? poemHeading(block)
+                                  : isSermonBlock(block)
+                                    ? sermonHeading(block)
                                   : isBirthdaysBlock(block)
                                     ? 'Дни рождения недели'
                                   : block.title}
@@ -1860,10 +1935,28 @@ export function ServicePlannerPage() {
                                 <p className="text-xs leading-snug text-stone-500">На этой неделе именинников нет.</p>
                               )
                             ) : null}
+                            {!isSeparatorBlock(block) && isScheduleBlock(block) ? (
+                              scheduleLines(block).length > 0 ? (
+                                <p className="text-xs leading-snug text-stone-600">
+                                  Расписание: {scheduleLines(block).join(' • ')}
+                                </p>
+                              ) : (
+                                <p className="text-xs leading-snug text-stone-500">
+                                  На будущую неделю активных событий не найдено.
+                                </p>
+                              )
+                            ) : null}
+                            {!isSeparatorBlock(block) && isSermonBlock(block) && sermonScripture(block) ? (
+                              <p className="text-xs leading-snug text-stone-600">
+                                Писание: {sermonScripture(block)}
+                              </p>
+                            ) : null}
                             {!isSeparatorBlock(block) &&
                             (getResponsibleLabel(block) || getDirectionLabel(block)) ? (
                               <p className="text-xs leading-snug text-stone-500">
-                                {getResponsibleLabel(block) ? `Ответственный: ${getResponsibleLabel(block)}` : ''}
+                                {getResponsibleLabel(block)
+                                  ? `${isSermonBlock(block) ? 'Проповедник' : 'Ответственный'}: ${getResponsibleLabel(block)}`
+                                  : ''}
                                 {getResponsibleLabel(block) && getDirectionLabel(block) ? ' • ' : ''}
                                 {getDirectionLabel(block) ? `Направление: ${getDirectionLabel(block)}` : ''}
                               </p>
@@ -2063,9 +2156,22 @@ export function ServicePlannerPage() {
                     onChange={(e) => {
                       const nextTypeId = Number(e.target.value) || editingBlock.block_type_id;
                       const typeMeta = blockTypes.find((t) => t.id === nextTypeId);
-                      const nextPatch: Partial<ServicePlanBlock> = { block_type_id: nextTypeId };
+                      const nextPatch: Partial<ServicePlanBlock> = {
+                        block_type_id: nextTypeId,
+                      };
                       if ((typeMeta?.code ?? '').toLowerCase() === 'birthdays') {
                         nextPatch.title = 'Дни рождения недели';
+                      }
+                      if ((typeMeta?.code ?? '').toLowerCase() === 'sermon') {
+                        const preacher =
+                          draft?.preacher_member_id != null
+                            ? usersById.get(draft.preacher_member_id) ?? null
+                            : null;
+                        nextPatch.assigned_member_id = draft?.preacher_member_id ?? null;
+                        const topicRaw = editingBlock.content_json?.sermon_topic;
+                        const topic = typeof topicRaw === 'string' ? topicRaw.trim() : '';
+                        const preacherName = preacher ? userLabel(preacher) : 'Проповедник';
+                        nextPatch.title = topic ? `${preacherName} - ${topic}` : preacherName;
                       }
                       updateDraftBlock(editingBlock.id, nextPatch);
                     }}
@@ -2090,7 +2196,11 @@ export function ServicePlannerPage() {
                     className="rounded-lg border border-stone-300 px-2 py-1.5 text-sm"
                   />
                   <select
-                    value={editingBlock.assigned_member_id ?? ''}
+                    value={
+                      isSermonBlock(editingBlock)
+                        ? editingBlock.assigned_member_id ?? draft?.preacher_member_id ?? ''
+                        : editingBlock.assigned_member_id ?? ''
+                    }
                     onChange={(e) => {
                       const memberId = e.target.value ? Number(e.target.value) : null;
                       const nextPatch: Partial<ServicePlanBlock> = { assigned_member_id: memberId };
@@ -2098,14 +2208,25 @@ export function ServicePlannerPage() {
                         const reader = memberId ? users.find((u) => u.id === memberId) : null;
                         nextPatch.title = reader ? `СТИХ - ${userLabel(reader)}` : 'СТИХ - Чтец';
                       }
+                      if (isSermonBlock(editingBlock)) {
+                        const preacher = memberId ? users.find((u) => u.id === memberId) : null;
+                        const topicRaw = editingBlock.content_json?.sermon_topic;
+                        const topic = typeof topicRaw === 'string' ? topicRaw.trim() : '';
+                        const preacherName = preacher ? userLabel(preacher) : 'Проповедник';
+                        nextPatch.title = topic ? `${preacherName} - ${topic}` : preacherName;
+                      }
                       updateDraftBlock(editingBlock.id, nextPatch);
                     }}
                     className="rounded-lg border border-stone-300 px-2 py-1.5 text-sm sm:col-span-2"
                   >
                     <option value="">
-                      {isPoemBlock(editingBlock) ? 'Чтец не назначен' : 'Ответственный не назначен'}
+                      {isPoemBlock(editingBlock)
+                        ? 'Чтец не назначен'
+                        : isSermonBlock(editingBlock)
+                          ? 'Проповедник не назначен'
+                          : 'Ответственный не назначен'}
                     </option>
-                    {users.map((u) => (
+                    {(isSermonBlock(editingBlock) ? preacherCandidates : users).map((u) => (
                       <option key={u.id} value={u.id}>
                         {userLabel(u)} ({roleLabel(u)})
                       </option>
@@ -2132,6 +2253,35 @@ export function ServicePlannerPage() {
                         }
                         className="rounded-lg border border-stone-300 px-2 py-1.5 text-sm"
                         placeholder="Тема стиха"
+                      />
+                    </>
+                  ) : null}
+                  {isSermonBlock(editingBlock) ? (
+                    <>
+                      <input
+                        value={String((editingBlock.content_json?.sermon_topic as string | undefined) ?? '')}
+                        onChange={(e) => {
+                          const nextTopic = e.target.value;
+                          const preacher = sermonPreacher(editingBlock);
+                          const preacherName = preacher ? userLabel(preacher) : 'Проповедник';
+                          const topicTrim = nextTopic.trim();
+                          updateDraftBlock(editingBlock.id, {
+                            title: topicTrim ? `${preacherName} - ${topicTrim}` : preacherName,
+                            content_json: { ...editingBlock.content_json, sermon_topic: nextTopic },
+                          });
+                        }}
+                        className="rounded-lg border border-stone-300 px-2 py-1.5 text-sm"
+                        placeholder="Тема проповеди"
+                      />
+                      <input
+                        value={String((editingBlock.content_json?.sermon_scripture as string | undefined) ?? '')}
+                        onChange={(e) =>
+                          updateDraftBlock(editingBlock.id, {
+                            content_json: { ...editingBlock.content_json, sermon_scripture: e.target.value },
+                          })
+                        }
+                        className="rounded-lg border border-stone-300 px-2 py-1.5 text-sm"
+                        placeholder="Стихи из Библии"
                       />
                     </>
                   ) : null}
