@@ -79,6 +79,22 @@ export async function deleteSong(id: number): Promise<void> {
   await apiClient.delete(`${SONGS}/${id}`);
 }
 
+export async function updateSong(
+  id: number,
+  body: Partial<{
+    title: string;
+    content: string;
+    default_key: string | null;
+    tempo: number | null;
+    time_signature: string | null;
+    tags: string[];
+    is_published: boolean;
+  }>,
+): Promise<SongListItem> {
+  const { data } = await apiClient.patch<SongListItem>(`${SONGS}/${id}`, body);
+  return data;
+}
+
 export async function createSong(body: {
   song_number?: number | null;
   title: string;

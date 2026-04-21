@@ -14,6 +14,7 @@ type Props = {
   text: string;
   transposeSemitones: number;
   className?: string;
+  fontSizePx?: number;
   /** Показывать слой аккордов; если false — только текст без скобок. */
   chordsVisible?: boolean;
   /** Аккорды: контраст на светлом или тёмном фоне текста. */
@@ -24,6 +25,7 @@ export function LyricsWithChords({
   text,
   transposeSemitones,
   className = '',
+  fontSizePx = 18,
   chordsVisible = true,
   chordTone = 'light',
 }: Props) {
@@ -50,7 +52,10 @@ export function LyricsWithChords({
 
   if (!chordsVisible) {
     return (
-      <div className={['whitespace-pre-wrap leading-relaxed', className].filter(Boolean).join(' ')}>
+      <div
+        className={['whitespace-pre-wrap leading-relaxed', className].filter(Boolean).join(' ')}
+        style={{ fontSize: `${Math.max(12, Math.min(36, fontSizePx))}px` }}
+      >
         {lyricsOnlyBody}
       </div>
     );
@@ -58,7 +63,10 @@ export function LyricsWithChords({
 
   return (
     <>
-      <div className={['leading-[2.35rem]', className].filter(Boolean).join(' ')}>
+      <div
+        className={['leading-[2.35rem]', className].filter(Boolean).join(' ')}
+        style={{ fontSize: `${Math.max(12, Math.min(36, fontSizePx))}px` }}
+      >
         {lines.map((line, lineIdx) => {
           const secTitle = parseSectionTitle(line);
           if (secTitle !== null) {

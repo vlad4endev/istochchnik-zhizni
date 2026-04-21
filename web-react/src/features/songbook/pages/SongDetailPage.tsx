@@ -17,6 +17,7 @@ import { exportSongPdf } from '../pdfExport';
 import { useSongbookChrome } from '../SongbookChromeContext';
 
 export function SongDetailPage() {
+  const semitoneLabel = (n: number) => (n > 0 ? `+${n}` : `${n}`);
   const { id } = useParams<{ id: string }>();
   const songId = Number(id);
   const qc = useQueryClient();
@@ -34,6 +35,9 @@ export function SongDetailPage() {
   const [showChords, setShowChords] = useState(true);
   const [autoScroll, setAutoScroll] = useState(false);
   const [scrollSpeed, setScrollSpeed] = useState(40);
+  const [fontSize, setFontSize] = useState(18);
+  const [capo, setCapo] = useState(0);
+  const [showConcertChords, setShowConcertChords] = useState(false);
 
   const q = useQuery({
     queryKey: ['song', songId],
@@ -78,12 +82,13 @@ export function SongDetailPage() {
     const tick = (now: number) => {
       const dt = Math.min((now - last) / 1000, 0.05);
       last = now;
-      window.scrollBy(0, scrollSpeed * dt);
+      const bpmFactor = q.data?.tempo ? Math.max(0.65, Math.min(2.4, Number(q.data.tempo) / 80)) : 1;
+      window.scrollBy(0, scrollSpeed * bpmFactor * dt);
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [autoScroll, scrollSpeed]);
+  }, [autoScroll, scrollSpeed, q.data?.tempo]);
 
   const favMut = useMutation({
     mutationFn: async (next: boolean) => {
@@ -126,6 +131,11 @@ export function SongDetailPage() {
   if (q.isError || !q.data) return <p className="text-red-600">Песня не найдена</p>;
 
   const s = q.data;
+  const currentShift = showChords
+    ? showConcertChords
+      ? transpose
+      : transpose - capo
+    : 0;
 
   const shell = stageMode
     ? {
@@ -154,6 +164,9 @@ export function SongDetailPage() {
       <SongReaderSettings
         open={settingsOpen}
         onOpenChange={setSettingsOpen}
+        showTrigger={false}
+        fontSize={fontSize}
+        onFontSize={setFontSize}
         transpose={transpose}
         onTranspose={setTranspose}
         showChords={showChords}
@@ -162,6 +175,10 @@ export function SongDetailPage() {
         onAutoScroll={setAutoScroll}
         scrollSpeed={scrollSpeed}
         onScrollSpeed={setScrollSpeed}
+        capo={capo}
+        onCapo={setCapo}
+        showConcertChords={showConcertChords}
+        onShowConcertChords={setShowConcertChords}
         stageMode={stageMode}
       />
 
@@ -185,7 +202,10 @@ export function SongDetailPage() {
                 </span>
               )}
             </div>
-            <p className={`mt-0.5 text-xs md:text-sm ${shell.meta}`}>{metaLine}</p>
+            <p className={`mt-0.5 text-xs md:text-sm ${shell.meta}`}>
+              {metaLine}
+              {capo > 0 ? ` · Капо: ${capo}` : ''}
+            </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <button
@@ -262,8 +282,9 @@ export function SongDetailPage() {
         ) : null}
         <LyricsWithChords
           text={s.content}
-          transposeSemitones={showChords ? transpose : 0}
+          transposeSemitones={currentShift}
           chordsVisible={showChords}
+          fontSizePx={fontSize}
           chordTone={stageMode ? 'dark' : 'light'}
           className={[
             'rounded-2xl border p-4 font-sans text-base',
@@ -271,6 +292,13 @@ export function SongDetailPage() {
             stageMode ? 'text-zinc-100' : 'text-stone-900',
           ].join(' ')}
         />
+        {showChords && capo > 0 ? (
+          <p className={`text-xs ${shell.meta}`}>
+            {showConcertChords
+              ? `Концертные аккорды (${semitoneLabel(transpose)})`
+              : `Аккорды для игры с капо (${semitoneLabel(transpose - capo)})`}
+          </p>
+        ) : null}
       </div>
 
       <button

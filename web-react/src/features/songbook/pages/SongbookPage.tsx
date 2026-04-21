@@ -1,14 +1,16 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Fuse, { type IFuseOptions } from 'fuse.js';
+import { AnimatePresence, motion } from 'framer-motion';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { LuSearch, LuTrash2, LuX } from 'react-icons/lu';
+import { LuChevronDown, LuSearch, LuTrash2, LuX } from 'react-icons/lu';
 
 import { useAuthStore } from '../../auth/authStore';
 import { canDeleteSongFromCatalog, canModerateSongCatalog } from '../../auth/studioAccess';
 import { emitAppToast } from '../../../lib/uiFeedback';
 import { isMainSongbookDeploy } from '../../../lib/appVariant';
 import { deleteSong, fetchSongs, type SongListItem } from '../api';
+import { SongReader } from '../components/SongReader';
 
 type SongSearchDoc = SongListItem & {
   _tempoSearch: string;
@@ -45,6 +47,13 @@ export function SongbookPage() {
   const searchRef = useRef<HTMLInputElement | null>(null);
 
   const [search, setSearch] = useState('');
+  const [expandedSongId, setExpandedSongId] = useState<string | null>(null);
+  const [readerSettings, setReaderSettings] = useState({
+    fontSize: 18,
+    showChords: true,
+    transpose: 0,
+    scrollSpeed: 0,
+  });
 
   const query = useQuery({
     queryKey: ['songs', 'catalog'],
@@ -53,10 +62,11 @@ export function SongbookPage() {
 
   const deleteMut = useMutation({
     mutationFn: (id: number) => deleteSong(id),
-    onSuccess: () => {
+    onSuccess: (_data, id) => {
       void qc.invalidateQueries({ queryKey: ['songs', 'catalog'] });
       void qc.invalidateQueries({ queryKey: ['songs', 'catalog-all'] });
       emitAppToast({ kind: 'success', message: 'Песня удалена из каталога' });
+      setExpandedSongId((prev) => (prev === String(id) ? null : prev));
     },
     onError: () => emitAppToast('Не удалось удалить песню'),
   });
@@ -156,41 +166,68 @@ export function SongbookPage() {
       </header>
 
       <ul className="flex flex-col gap-2">
-        {rows.map((s) => (
+        {rows.map((s, idx) => (
           <li
             key={s.id}
-            className="flex min-h-[52px] items-stretch gap-1 rounded-2xl bg-slate-50/80 shadow-[0_1px_3px_rgba(15,23,42,0.04)] transition hover:bg-slate-50"
+            className="rounded-2xl bg-slate-50/80 shadow-[0_1px_3px_rgba(15,23,42,0.04)] transition"
           >
-            <Link
-              to={`/songbook/${s.id}`}
-              className="flex min-w-0 flex-1 flex-col justify-center rounded-2xl px-4 py-3 outline-none ring-offset-2 transition active:scale-[0.99] focus-visible:ring-2 focus-visible:ring-slate-300"
-            >
-              <h2 className="text-lg font-semibold leading-snug text-slate-900">
-                {s.song_number != null ? `${s.song_number}. ` : ''}
-                {s.title}
-              </h2>
-            </Link>
-            {deleteOk ? (
+            <div className="flex min-h-[56px] items-stretch gap-1 rounded-2xl px-2 py-1.5 hover:bg-slate-50">
               <button
                 type="button"
-                title="Удалить из каталога"
-                onClick={(e) => {
-                  e.preventDefault();
-                  if (
-                    window.confirm(
-                      `Удалить «${s.title}» из каталога? Это необратимо, в том числе для сетлистов и студийных версий.`,
-                    )
-                  ) {
-                    deleteMut.mutate(Number(s.id));
-                  }
-                }}
-                disabled={deleteMut.isPending}
-                className="inline-flex shrink-0 items-center justify-center self-stretch rounded-r-2xl px-3 text-slate-400 transition hover:bg-red-50 hover:text-red-600 disabled:opacity-40"
-                aria-label={`Удалить «${s.title}»`}
+                onClick={() => setExpandedSongId((prev) => (prev === s.id ? null : s.id))}
+                className="flex min-w-0 flex-1 items-center justify-between gap-3 rounded-xl px-3 py-2 text-left outline-none ring-offset-2 focus-visible:ring-2 focus-visible:ring-slate-300"
+                aria-expanded={expandedSongId === s.id}
               >
-                <LuTrash2 className="h-5 w-5" />
+                <h2 className="truncate text-base font-semibold leading-snug text-slate-900 md:text-lg">
+                  № {idx + 1} {s.title}
+                </h2>
+                <LuChevronDown
+                  className={[
+                    'h-5 w-5 shrink-0 text-slate-500 transition-transform',
+                    expandedSongId === s.id ? 'rotate-180' : '',
+                  ].join(' ')}
+                />
               </button>
-            ) : null}
+              {deleteOk ? (
+                <button
+                  type="button"
+                  title="Удалить из каталога"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    if (
+                      window.confirm(
+                        `Удалить «${s.title}» из каталога? Это необратимо, в том числе для сетлистов и студийных версий.`,
+                      )
+                    ) {
+                      deleteMut.mutate(Number(s.id));
+                    }
+                  }}
+                  disabled={deleteMut.isPending}
+                  className="inline-flex shrink-0 items-center justify-center rounded-xl px-3 text-slate-400 transition hover:bg-red-50 hover:text-red-600 disabled:opacity-40"
+                  aria-label={`Удалить «${s.title}»`}
+                >
+                  <LuTrash2 className="h-5 w-5" />
+                </button>
+              ) : null}
+            </div>
+            <AnimatePresence initial={false}>
+              {expandedSongId === s.id ? (
+                <motion.div
+                  key={`expanded-${s.id}`}
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  transition={{ duration: 0.22, ease: 'easeInOut' }}
+                  className="overflow-hidden px-3 pb-3"
+                >
+                  <SongReader
+                    song={s}
+                    settings={readerSettings}
+                    onSettingsChange={(patch) => setReaderSettings((prev) => ({ ...prev, ...patch }))}
+                  />
+                </motion.div>
+              ) : null}
+            </AnimatePresence>
           </li>
         ))}
       </ul>
