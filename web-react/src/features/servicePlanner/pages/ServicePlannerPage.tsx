@@ -1343,7 +1343,6 @@ export function ServicePlannerPage() {
                 </div>
               </div>
 
-              <div className="mx-auto w-full max-w-[572px]">
               <DragDropContext onDragEnd={onTemplateDragEnd}>
                 <Droppable droppableId="template-blocks">
                   {(provided) => (
@@ -1414,7 +1413,6 @@ export function ServicePlannerPage() {
                   )}
                 </Droppable>
               </DragDropContext>
-              </div>
             </div>
 
             <div className="mt-3 flex flex-wrap justify-end gap-2">
@@ -1841,11 +1839,10 @@ export function ServicePlannerPage() {
       </section>
 
       <section className="rounded-2xl border border-stone-200 bg-white p-3 shadow-sm">
-        <div className="mx-auto w-full max-w-[572px]">
         <DragDropContext onDragEnd={onDragEnd}>
           <Droppable droppableId="service-planner-blocks">
             {(provided) => (
-              <div ref={provided.innerRef} {...provided.droppableProps} className="space-y-2">
+              <div ref={provided.innerRef} {...provided.droppableProps} className="space-y-1.5">
                 {timedBlocks.map((block, index) => {
                   const heading = isSeparatorBlock(block)
                     ? separatorLabel(block)
@@ -1867,21 +1864,138 @@ export function ServicePlannerPage() {
                           {...dragProvided.draggableProps}
                           className={[
                             isSeparatorBlock(block)
-                              ? 'rounded-2xl border border-dashed border-stone-300 bg-stone-50 p-3 sm:p-4'
-                              : 'rounded-2xl border border-stone-200 p-3 sm:p-4',
+                              ? 'rounded-xl border border-dashed border-stone-300 bg-stone-50 p-2 sm:p-2.5'
+                              : 'rounded-xl border border-stone-200 p-2 sm:p-2.5',
                             dragSnapshot.isDragging ? 'bg-stone-50 shadow' : 'bg-white',
                             draft.current_block_id === block.id ? 'ring-2 ring-primary/30' : '',
                           ].join(' ')}
                         >
-                          <div className="flex items-center justify-between gap-2">
-                            <span className="inline-flex min-w-[3.25rem] shrink-0 items-center justify-center rounded-md bg-stone-100 px-2 py-1 text-center text-xs font-extrabold text-stone-900">
+                          <div className="flex items-start gap-2 sm:gap-2.5">
+                            <span className="mt-0.5 inline-flex min-w-[2.75rem] shrink-0 items-center justify-center rounded-md bg-stone-100 px-1.5 py-0.5 text-center text-[11px] font-extrabold leading-none text-stone-900 sm:min-w-[3rem] sm:px-2 sm:py-1 sm:text-xs">
                               {isSeparatorBlock(block) ? '---' : block.startsAt}
                             </span>
-                            <div className="flex shrink-0 items-center gap-1">
+
+                            {!isSeparatorBlock(block) ? (
+                              getBlockLogoUrl(block) ? (
+                                <img
+                                  src={getBlockLogoUrl(block) ?? ''}
+                                  alt="Лого блока"
+                                  className="mt-0.5 h-7 w-7 shrink-0 rounded-md object-cover sm:h-8 sm:w-8"
+                                />
+                              ) : (
+                                (() => {
+                                  const customIcon = getBlockMarkIcon(block);
+                                  const customMark = getBlockMark(block);
+                                  const categoryIcon = getCategoryIcon(block);
+                                  if (customIcon) {
+                                    const Icon = customIcon.Icon;
+                                    return (
+                                      <span
+                                        className={`mt-0.5 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md sm:h-8 sm:w-8 sm:rounded-lg ${customIcon.wrapClass}`}
+                                      >
+                                        <Icon className={`h-3.5 w-3.5 sm:h-4 sm:w-4 ${customIcon.iconClass}`} />
+                                      </span>
+                                    );
+                                  }
+                                  if (customMark) {
+                                    return (
+                                      <span className="mt-0.5 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-stone-100 text-sm sm:h-8 sm:w-8 sm:rounded-lg sm:text-base">
+                                        {customMark}
+                                      </span>
+                                    );
+                                  }
+                                  if (categoryIcon) {
+                                    const Icon = categoryIcon.Icon;
+                                    return (
+                                      <span
+                                        className={`mt-0.5 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md sm:h-8 sm:w-8 sm:rounded-lg ${categoryIcon.wrapClass}`}
+                                      >
+                                        <Icon className={`h-3.5 w-3.5 sm:h-4 sm:w-4 ${categoryIcon.iconClass}`} />
+                                      </span>
+                                    );
+                                  }
+                                  return (
+                                    <span className="mt-0.5 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-stone-100 text-[10px] sm:h-8 sm:w-8 sm:rounded-lg sm:text-xs">
+                                      •
+                                    </span>
+                                  );
+                                })()
+                              )
+                            ) : null}
+
+                            <div className="min-w-0 flex-1 space-y-0.5">
+                              <div className="flex flex-wrap items-center gap-1.5">
+                                <p className="text-sm font-semibold leading-snug normal-case text-stone-900">
+                                  {blockTitle}
+                                </p>
+                                {blockKey ? (
+                                  <span className="inline-flex items-center rounded-full bg-stone-100 px-1.5 py-0.5 text-[10px] font-semibold text-stone-700 sm:px-2 sm:text-[11px]">
+                                    [{blockKey}]
+                                  </span>
+                                ) : null}
+                              </div>
+                              {!isSeparatorBlock(block) ? (
+                                <p className="text-[11px] leading-snug text-stone-400 sm:text-xs">
+                                  {`${blockTypeLabel} • ${block.duration_minutes} мин`}
+                                </p>
+                              ) : null}
+                              {!isSeparatorBlock(block) && isPoemBlock(block) && poemSubline(block) ? (
+                                <p className="text-[11px] leading-snug text-stone-600 sm:text-xs">{poemSubline(block)}</p>
+                              ) : null}
+                              {!isSeparatorBlock(block) && isBirthdaysBlock(block) ? (
+                                birthdayLines(block).length > 0 ? (
+                                  <p className="text-[11px] leading-snug text-stone-600 sm:text-xs">
+                                    Именинники: {birthdayLines(block).join(' • ')}
+                                  </p>
+                                ) : (
+                                  <p className="text-[11px] leading-snug text-stone-500 sm:text-xs">
+                                    На этой неделе именинников нет.
+                                  </p>
+                                )
+                              ) : null}
+                              {!isSeparatorBlock(block) && isScheduleBlock(block) ? (
+                                scheduleLines(block).length > 0 ? (
+                                  <div className="text-[11px] leading-snug text-stone-600 sm:text-xs">
+                                    <p className="font-semibold">Расписание:</p>
+                                    <ul className="mt-0.5 space-y-0.5">
+                                      {scheduleLines(block).map((line) => (
+                                        <li key={line}>{line}</li>
+                                      ))}
+                                    </ul>
+                                  </div>
+                                ) : (
+                                  <p className="text-[11px] leading-snug text-stone-500 sm:text-xs">
+                                    На будущую неделю активных событий не найдено.
+                                  </p>
+                                )
+                              ) : null}
+                              {!isSeparatorBlock(block) && isSermonBlock(block) && sermonScripture(block) ? (
+                                <p className="text-[11px] leading-snug text-stone-600 sm:text-xs">
+                                  Писание: {sermonScripture(block)}
+                                </p>
+                              ) : null}
+                              {!isSeparatorBlock(block) &&
+                              (getResponsibleLabel(block) || getDirectionLabel(block)) ? (
+                                <p className="text-[11px] leading-snug text-stone-500 sm:text-xs">
+                                  {getResponsibleLabel(block)
+                                    ? `${isSermonBlock(block) ? 'Проповедник' : 'Ответственный'}: ${getResponsibleLabel(block)}`
+                                    : ''}
+                                  {getResponsibleLabel(block) && getDirectionLabel(block) ? ' • ' : ''}
+                                  {getDirectionLabel(block) ? `Направление: ${getDirectionLabel(block)}` : ''}
+                                </p>
+                              ) : null}
+                              {!isSeparatorBlock(block) && getBlockNotePreview(block) ? (
+                                <p className="text-[11px] leading-snug text-stone-600 sm:text-xs">
+                                  Заметка: {getBlockNotePreview(block)}
+                                </p>
+                              ) : null}
+                            </div>
+
+                            <div className="ml-auto flex shrink-0 items-center gap-0.5 self-start sm:gap-1">
                               <button
                                 type="button"
                                 onClick={() => setEditingBlockId(block.id)}
-                                className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-stone-200 text-stone-600 hover:bg-stone-50"
+                                className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-stone-200 text-stone-600 hover:bg-stone-50 sm:rounded-lg"
                                 aria-label="Редактировать блок"
                               >
                                 <LuPencil className="h-3.5 w-3.5" />
@@ -1895,135 +2009,20 @@ export function ServicePlannerPage() {
                                   });
                                   void deleteBlockMut.mutateAsync(block.id);
                                 }}
-                                className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-rose-200 text-rose-600 hover:bg-rose-50"
+                                className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-rose-200 text-rose-600 hover:bg-rose-50 sm:rounded-lg"
                                 aria-label="Удалить блок"
                               >
                                 <LuTrash2 className="h-3.5 w-3.5" />
                               </button>
+                              <button
+                                type="button"
+                                {...dragProvided.dragHandleProps}
+                                className="inline-flex h-7 w-7 cursor-grab items-center justify-center rounded-md border border-stone-200 text-stone-400 hover:text-stone-600 active:cursor-grabbing sm:rounded-lg"
+                                aria-label="Перетащить блок"
+                              >
+                                <LuGripVertical className="h-3.5 w-3.5" />
+                              </button>
                             </div>
-                          </div>
-
-                          <div className="mt-3 flex flex-col gap-2 sm:gap-3 md:flex-row md:items-start">
-                            {!isSeparatorBlock(block) ? (
-                              getBlockLogoUrl(block) ? (
-                                <img
-                                  src={getBlockLogoUrl(block) ?? ''}
-                                  alt="Лого блока"
-                                  className="h-8 w-8 shrink-0 rounded-lg object-cover"
-                                />
-                              ) : (
-                                (() => {
-                                  const customIcon = getBlockMarkIcon(block);
-                                  const customMark = getBlockMark(block);
-                                  const categoryIcon = getCategoryIcon(block);
-                                  if (customIcon) {
-                                    const Icon = customIcon.Icon;
-                                    return (
-                                      <span className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${customIcon.wrapClass}`}>
-                                        <Icon className={`h-4 w-4 ${customIcon.iconClass}`} />
-                                      </span>
-                                    );
-                                  }
-                                  if (customMark) {
-                                    return (
-                                      <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-stone-100 text-base">
-                                        {customMark}
-                                      </span>
-                                    );
-                                  }
-                                  if (categoryIcon) {
-                                    const Icon = categoryIcon.Icon;
-                                    return (
-                                      <span className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${categoryIcon.wrapClass}`}>
-                                        <Icon className={`h-4 w-4 ${categoryIcon.iconClass}`} />
-                                      </span>
-                                    );
-                                  }
-                                  return (
-                                    <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-stone-100 text-xs">
-                                      •
-                                    </span>
-                                  );
-                                })()
-                              )
-                            ) : null}
-
-                            <div className="min-w-0 flex-1">
-                              <div className="flex flex-wrap items-center gap-1.5">
-                                <p className="text-sm font-semibold leading-snug normal-case text-stone-900">
-                                  {blockTitle}
-                                </p>
-                                {blockKey ? (
-                                  <span className="inline-flex items-center rounded-full bg-stone-100 px-2 py-0.5 text-[11px] font-semibold text-stone-700">
-                                    [{blockKey}]
-                                  </span>
-                                ) : null}
-                              </div>
-                              {!isSeparatorBlock(block) ? (
-                                <p className="text-xs text-stone-400">
-                                  {`${blockTypeLabel} • ${block.duration_minutes} мин`}
-                                </p>
-                              ) : null}
-                              {!isSeparatorBlock(block) && isPoemBlock(block) && poemSubline(block) ? (
-                                <p className="text-xs leading-snug text-stone-600">{poemSubline(block)}</p>
-                              ) : null}
-                              {!isSeparatorBlock(block) && isBirthdaysBlock(block) ? (
-                                birthdayLines(block).length > 0 ? (
-                                  <p className="text-xs leading-snug text-stone-600">
-                                    Именинники: {birthdayLines(block).join(' • ')}
-                                  </p>
-                                ) : (
-                                  <p className="text-xs leading-snug text-stone-500">На этой неделе именинников нет.</p>
-                                )
-                              ) : null}
-                              {!isSeparatorBlock(block) && isScheduleBlock(block) ? (
-                                scheduleLines(block).length > 0 ? (
-                                  <div className="text-xs leading-snug text-stone-600">
-                                    <p className="font-semibold">Расписание:</p>
-                                    <ul className="mt-0.5 space-y-0.5">
-                                      {scheduleLines(block).map((line) => (
-                                        <li key={line}>{line}</li>
-                                      ))}
-                                    </ul>
-                                  </div>
-                                ) : (
-                                  <p className="text-xs leading-snug text-stone-500">
-                                    На будущую неделю активных событий не найдено.
-                                  </p>
-                                )
-                              ) : null}
-                              {!isSeparatorBlock(block) && isSermonBlock(block) && sermonScripture(block) ? (
-                                <p className="text-xs leading-snug text-stone-600">
-                                  Писание: {sermonScripture(block)}
-                                </p>
-                              ) : null}
-                              {!isSeparatorBlock(block) &&
-                              (getResponsibleLabel(block) || getDirectionLabel(block)) ? (
-                                <p className="text-xs leading-snug text-stone-500">
-                                  {getResponsibleLabel(block)
-                                    ? `${isSermonBlock(block) ? 'Проповедник' : 'Ответственный'}: ${getResponsibleLabel(block)}`
-                                    : ''}
-                                  {getResponsibleLabel(block) && getDirectionLabel(block) ? ' • ' : ''}
-                                  {getDirectionLabel(block) ? `Направление: ${getDirectionLabel(block)}` : ''}
-                                </p>
-                              ) : null}
-                              {!isSeparatorBlock(block) && getBlockNotePreview(block) ? (
-                                <p className="mt-0.5 text-xs leading-snug text-stone-600">
-                                  Заметка: {getBlockNotePreview(block)}
-                                </p>
-                              ) : null}
-                            </div>
-                          </div>
-
-                          <div className="mt-2 flex justify-end">
-                            <button
-                              type="button"
-                              {...dragProvided.dragHandleProps}
-                              className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-stone-200 text-stone-400 hover:text-stone-600"
-                              aria-label="Перетащить блок"
-                            >
-                              <LuGripVertical className="h-3.5 w-3.5" />
-                            </button>
                           </div>
                         </article>
                       )}
@@ -2035,7 +2034,6 @@ export function ServicePlannerPage() {
             )}
           </Droppable>
         </DragDropContext>
-        </div>
       </section>
 
       <section className="rounded-2xl border border-stone-200 bg-white p-3 shadow-sm">
