@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 
 import {
   normalizeDetachedChordBeforeCyrillicInText,
@@ -8,7 +8,6 @@ import { transposeBracketChords } from '../chordUtils';
 import { splitChordSegments } from '../utils/chordSegments';
 import { parseSectionTitle } from '../utils/sectionMarkers';
 import { ChordLine } from './ChordLine';
-import { ChordPopover } from './ChordPopover';
 
 type Props = {
   text: string;
@@ -29,8 +28,6 @@ export function LyricsWithChords({
   chordsVisible = true,
   chordTone = 'light',
 }: Props) {
-  const [openSymbol, setOpenSymbol] = useState<string | null>(null);
-
   const tText = useMemo(() => {
     const fixed = normalizeDetachedChordBeforeCyrillicInText(normalizeSplitWordChordsInText(text));
     return transposeBracketChords(fixed, transposeSemitones);
@@ -94,19 +91,11 @@ export function LyricsWithChords({
           const segments = splitChordSegments(line);
           return (
             <div key={lineIdx} className="block w-full">
-              <ChordLine
-                segments={segments}
-                chordsVisible
-                chordTone={chordTone}
-                onChordClick={(sym) => setOpenSymbol(sym)}
-              />
+              <ChordLine segments={segments} chordsVisible chordTone={chordTone} />
             </div>
           );
         })}
       </div>
-      {openSymbol ? (
-        <ChordPopover symbol={openSymbol} onClose={() => setOpenSymbol(null)} />
-      ) : null}
     </>
   );
 }

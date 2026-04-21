@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  extractChordAnchors,
   extractCommonChords,
   parseChordPro,
   renderWithCapo,
@@ -41,5 +42,16 @@ describe('chordProEngine', () => {
     expect(parsed.warnings).toBeDefined();
     expect(parsed.sections).toContain('Куплет 1');
     expect(parsed.chords.length).toBeGreaterThan(0);
+  });
+
+  it('extractChordAnchors keeps exact lyric index per line', () => {
+    const src = 'Пре[C]вет [Bbm]мир\n[F]снова';
+    const anchors = extractChordAnchors(src);
+
+    expect(anchors).toEqual([
+      { lineIndex: 0, charIndex: 3, chord: 'C' },
+      { lineIndex: 0, charIndex: 7, chord: 'Bbm' },
+      { lineIndex: 1, charIndex: 0, chord: 'F' },
+    ]);
   });
 });

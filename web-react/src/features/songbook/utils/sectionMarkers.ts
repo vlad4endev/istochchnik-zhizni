@@ -3,6 +3,8 @@
  * Формат: {sec:Название}
  */
 export const SECTION_MARKER_LINE_RE = /^\{sec:\s*([^}]*?)\s*\}\s*$/i;
+/** ChordPro `{section: Chorus}` — то же назначение, что и `{sec:…}` */
+export const SECTION_DIRECTIVE_LINE_RE = /^\{section:\s*([^}]*?)\s*\}\s*$/i;
 const COMMENT_MARKER_LINE_RE = /^\{(?:comment|c):\s*([^}]*?)\s*\}\s*$/i;
 const BRACKET_TITLE_LINE_RE = /^\[\s*([^\]]+?)\s*\]\s*$/;
 const PLAIN_SECTION_LINE_RE =
@@ -26,6 +28,12 @@ function normalizeSectionName(raw: string): string {
 export function parseSectionTitle(line: string): string | null {
   const trimmed = line.trim();
   if (!trimmed) return null;
+
+  const sectionDirective = trimmed.match(SECTION_DIRECTIVE_LINE_RE);
+  if (sectionDirective) {
+    const t = normalizeSectionName(sectionDirective[1] ?? '');
+    return t.length > 0 ? t : null;
+  }
 
   const sec = trimmed.match(SECTION_MARKER_LINE_RE);
   if (sec) {

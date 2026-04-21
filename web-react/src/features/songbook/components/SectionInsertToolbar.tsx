@@ -15,7 +15,10 @@ const PRESETS = [
 ] as const;
 
 type Props = {
-  onInsert: (markerLine: string) => void;
+  /** Вставка строки `{sec:…}` в текст (песенник / добавление песни) */
+  onInsert?: (markerLine: string) => void;
+  /** Студия: пресеты добавляют структурный блок композитора */
+  onPresetAsBlock?: (title: string) => void;
   /** Тёмная зона (студия / шаг песни в studio) */
   dark?: boolean;
   className?: string;
@@ -24,13 +27,22 @@ type Props = {
 /**
  * Кнопки вставки строки `{sec:…}` — блоки при ручном наборе текста.
  */
-export function SectionInsertToolbar({ onInsert, dark = false, className = '' }: Props) {
+export function SectionInsertToolbar({
+  onInsert,
+  onPresetAsBlock,
+  dark = false,
+  className = '',
+}: Props) {
   const chip = dark
     ? 'border-zinc-600 bg-zinc-800/90 text-zinc-100 hover:bg-zinc-700'
     : 'border-stone-200 bg-stone-50 text-stone-800 hover:bg-stone-100';
 
   const pick = (title: string) => {
-    onInsert(buildSectionMarker(title));
+    if (onPresetAsBlock) {
+      onPresetAsBlock(title);
+      return;
+    }
+    onInsert?.(buildSectionMarker(title));
   };
 
   const custom = () => {
@@ -71,8 +83,9 @@ export function SectionInsertToolbar({ onInsert, dark = false, className = '' }:
         </button>
       </div>
       <p className={`text-[11px] leading-snug ${dark ? 'text-zinc-500' : 'text-stone-500'}`}>
-        В текст добавится строка <code className={dark ? 'text-zinc-300' : 'text-stone-700'}>{'{sec:…}'}</code> — в
-        превью и при просмотре это отображается как заголовок блока.
+        {onPresetAsBlock
+          ? 'Добавляется отдельный блок в композиторе; при сохранении в файл попадёт заголовок секции.'
+          : `В текст добавится строка ${'{sec:…}'} — в превью и при просмотре это отображается как заголовок блока.`}
       </p>
     </div>
   );

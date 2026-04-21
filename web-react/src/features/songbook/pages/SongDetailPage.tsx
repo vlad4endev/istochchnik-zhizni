@@ -127,13 +127,8 @@ export function SongDetailPage() {
 
   return (
     <div className={`relative mx-auto max-w-3xl pb-24 ${shell.page}`}>
-      <div
-        className={[
-          'sticky top-0 z-30 -mx-3 border-b px-3 py-2 backdrop-blur md:-mx-0 md:px-0',
-          shell.top,
-        ].join(' ')}
-      >
-        <div className="flex items-center justify-between gap-2">
+      <div className={['fixed inset-x-0 top-0 z-40 border-b backdrop-blur', shell.top].join(' ')}>
+        <div className="mx-auto flex max-w-3xl items-center justify-between gap-2 px-3 py-2 md:px-0">
           <div className="flex min-w-0 items-center gap-2">
             <Link
               to="/songbook"
@@ -168,7 +163,8 @@ export function SongDetailPage() {
         </div>
       </div>
 
-      <div className="mt-3 space-y-2">
+      <div className="h-14 md:h-[3.75rem]" />
+      <div className="space-y-2">
         <p className={`text-xs ${shell.meta}`}>
           {metaLine}
           {version ? ' · Моя версия' : ''}

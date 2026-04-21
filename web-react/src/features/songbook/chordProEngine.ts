@@ -9,6 +9,13 @@ export type ParsedChordPro = {
   sections: string[];
 };
 
+export type ChordAnchor = {
+  lineIndex: number;
+  /** Позиция аккорда в текстовой строке без [] (нулевой индекс). */
+  charIndex: number;
+  chord: string;
+};
+
 function uniqSorted(values: string[]): string[] {
   return Array.from(new Set(values.map((v) => v.trim()).filter(Boolean))).sort((a, b) =>
     a.localeCompare(b, 'ru'),
@@ -109,4 +116,42 @@ export function extractCommonChords(text: string, limit = 14): string[] {
     .sort((a, b) => (b[1] - a[1]) || a[0].localeCompare(b[0], 'ru'))
     .slice(0, limit)
     .map(([name]) => name);
+}
+
+export function extractChordAnchors(text: string): ChordAnchor[] {
+  const source = typeof text === 'string' ? text : '';
+  if (!source) return [];
+
+  const anchors: ChordAnchor[] = [];
+  const lines = source.split('\n');
+
+  for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
+    const line = lines[lineIndex] ?? '';
+    let i = 0;
+    let textCursor = 0;
+
+    while (i < line.length) {
+      if (line[i] === '[') {
+        const close = line.indexOf(']', i + 1);
+        if (close === -1) break;
+
+        const chord = line.slice(i + 1, close).trim();
+        if (chord) {
+          anchors.push({ lineIndex, charIndex: textCursor, chord });
+        }
+
+        i = close + 1;
+        while (i < line.length && line[i] !== '[') {
+          textCursor += 1;
+          i += 1;
+        }
+        continue;
+      }
+
+      textCursor += 1;
+      i += 1;
+    }
+  }
+
+  return anchors;
 }

@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import {
   LuArrowLeft,
+  LuPlus,
   LuSlidersHorizontal,
   LuSave,
   LuTrash2,
@@ -25,8 +26,38 @@ import { fetchVersionForSong, saveVersion } from '../../studio/api';
 import { studioMySongsPath, getStudioModuleSurface } from '../../studio/studioPaths';
 import { useSongbookChrome } from '../SongbookChromeContext';
 
+import { BlockWrapper } from './BlockWrapper';
+import {
+  blocksToChordPro,
+  chordProToBlocks,
+  createSongBlock,
+  studioPresetToBlockMeta,
+  type SongBlock,
+  type SongBlockType,
+} from './songBlocks';
+
 const KEY_ROOTS = ['C', 'D', 'E', 'F', 'G', 'A', 'B'] as const;
 const CHORD_STRIP = ['C', 'D', 'E', 'F', 'G', 'A', 'B', 'Am', 'Dm', 'Em', 'G', 'C7'];
+
+function studioPreviewFrame(type: SongBlockType, darkUi: boolean): string {
+  switch (type) {
+    case 'chorus':
+      return darkUi
+        ? 'rounded-xl border-l-[5px] border-sky-400 bg-sky-950/40 pl-3 py-2'
+        : 'rounded-xl border-l-[5px] border-sky-600 bg-sky-50 pl-3 py-2';
+    case 'bridge':
+      return darkUi
+        ? 'rounded-xl border-l-[5px] border-amber-400/80 bg-amber-950/30 pl-3 py-2'
+        : 'rounded-xl border-l-[5px] border-amber-500 bg-amber-50/80 pl-3 py-2';
+    case 'intro':
+      return darkUi
+        ? 'rounded-xl py-2 text-[0.92em] italic text-slate-400'
+        : 'rounded-xl py-2 text-[0.92em] italic text-stone-600';
+    case 'verse':
+    default:
+      return darkUi ? 'rounded-xl py-2' : 'rounded-xl py-2';
+  }
+}
 
 /**
  * Редактор студийной версии: основной экран — текст; тональность и справка по BPM — в шторке.
@@ -43,8 +74,9 @@ export function StudioEditor() {
   const canEditCatalogMeta = canModerateSongCatalog(role);
   const { stageMode } = useSongbookChrome();
 
-  const editorRef = useRef<HTMLTextAreaElement>(null);
-  const selRef = useRef({ start: 0, end: 0 });
+  const textareaByBlockRef = useRef<Map<string, HTMLTextAreaElement>>(new Map());
+  const focusedBlockIdRef = useRef<string | null>(null);
+  const selByBlockRef = useRef<Record<string, { start: number; end: number }>>({});
 
   const [importOpen, setImportOpen] = useState(false);
   const [importInitialTab, setImportInitialTab] = useState<SmartImportSourceTab>('text');
@@ -70,7 +102,7 @@ export function StudioEditor() {
     enabled: Number.isInteger(id) && id > 0,
   });
 
-  const [content, setContent] = useState('');
+  const [blocks, setBlocks] = useState<SongBlock[]>(() => [createSongBlock('verse', '')]);
   const [key, setKey] = useState('');
   const [catalogTempo, setCatalogTempo] = useState('');
   const [catalogTimeSignature, setCatalogTimeSignature] = useState('');
@@ -84,16 +116,40 @@ export function StudioEditor() {
     const v = verQ.data as { custom_content?: string | null; custom_key?: string | null } | null;
     if (!s) return;
     const draftKey = `studio:autosave:song:${id}`;
-    let draft: { content?: string; key?: string } | null = null;
+    let draft: {
+      blocks?: SongBlock[];
+      content?: string;
+      key?: string;
+    } | null = null;
     try {
       const raw = localStorage.getItem(draftKey);
-      draft = raw ? (JSON.parse(raw) as { content?: string; key?: string }) : null;
+      draft = raw ? (JSON.parse(raw) as { blocks?: SongBlock[]; content?: string; key?: string }) : null;
     } catch {
       draft = null;
     }
-    setContent(
-      typeof draft?.content === 'string' ? draft.content : (v?.custom_content ?? s.content),
-    );
+
+    const fromChordText = (t: string) => chordProToBlocks(t);
+
+    const normalizeDraftBlocks = (rawBlocks: SongBlock[]): SongBlock[] => {
+      if (!Array.isArray(rawBlocks) || rawBlocks.length === 0) return [createSongBlock('verse', '')];
+      return rawBlocks.map((b) =>
+        createSongBlock(
+          ['intro', 'verse', 'chorus', 'bridge'].includes(b.type) ? b.type : 'verse',
+          typeof b.content === 'string' ? b.content : '',
+          typeof b.sectionHint === 'string' && b.sectionHint.trim() ? b.sectionHint.trim() : undefined,
+          typeof b.id === 'string' && b.id.length > 0 ? b.id : undefined,
+        ),
+      );
+    };
+
+    if (Array.isArray(draft?.blocks) && draft.blocks.length > 0) {
+      setBlocks(normalizeDraftBlocks(draft.blocks));
+    } else if (typeof draft?.content === 'string') {
+      setBlocks(fromChordText(draft.content));
+    } else {
+      setBlocks(fromChordText(v?.custom_content ?? s.content ?? ''));
+    }
+
     setKey(typeof draft?.key === 'string' ? draft.key : (v?.custom_key ?? s.default_key ?? ''));
     setCatalogTempo(s.tempo == null ? '' : String(s.tempo));
     setCatalogTimeSignature(s.time_signature ?? '');
@@ -107,7 +163,7 @@ export function StudioEditor() {
       try {
         localStorage.setItem(
           `studio:autosave:song:${id}`,
-          JSON.stringify({ content, key, updatedAt: Date.now() }),
+          JSON.stringify({ blocks, key, updatedAt: Date.now() }),
         );
       } catch {
         // ignore storage quota/availability errors
@@ -117,10 +173,11 @@ export function StudioEditor() {
     return () => {
       if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
     };
-  }, [id, content, key]);
+  }, [id, blocks, key]);
 
   const saveMut = useMutation({
-    mutationFn: () => saveVersion(id, { custom_content: content, custom_key: key || null }),
+    mutationFn: () =>
+      saveVersion(id, { custom_content: blocksToChordPro(blocks), custom_key: key || null }),
     onSuccess: () => {
       try {
         localStorage.removeItem(`studio:autosave:song:${id}`);
@@ -181,65 +238,100 @@ export function StudioEditor() {
 
   const applyConvert = useCallback((src: string) => convertToChordPro(src), []);
 
-  const syncEditorSelection = () => {
-    const el = editorRef.current;
-    if (!el) return;
-    selRef.current = { start: el.selectionStart, end: el.selectionEnd };
-  };
-
   const insertChord = (symbol: string) => {
-    const el = editorRef.current;
     const chord = `[${symbol}]`;
-    if (!el) {
-      setContent((c) => c + chord);
-      return;
-    }
-    const { start, end } = selRef.current;
-    const v = el.value;
-    const next = v.slice(0, start) + chord + v.slice(end);
-    setContent(next);
+    const bid = focusedBlockIdRef.current ?? blocks[0]?.id;
+    if (!bid) return;
+    const sel = selByBlockRef.current[bid] ?? { start: 0, end: 0 };
+    setBlocks((prev) =>
+      prev.map((b) => {
+        if (b.id !== bid) return b;
+        const v = b.content;
+        return { ...b, content: v.slice(0, sel.start) + chord + v.slice(sel.end) };
+      }),
+    );
+    const pos = sel.start + chord.length;
+    selByBlockRef.current[bid] = { start: pos, end: pos };
     requestAnimationFrame(() => {
-      if (!editorRef.current) return;
-      editorRef.current.focus();
-      const pos = start + chord.length;
-      editorRef.current.setSelectionRange(pos, pos);
-      selRef.current = { start: pos, end: pos };
+      const el = textareaByBlockRef.current.get(bid);
+      if (!el) return;
+      el.focus();
+      el.setSelectionRange(pos, pos);
     });
   };
 
-  const insertSectionMarkerLine = (markerOneLine: string) => {
-    const line = markerOneLine.trim();
-    const el = editorRef.current;
-    if (!el) {
-      setContent((c) => {
-        const base = c.length === 0 || c.endsWith('\n') ? c : `${c}\n`;
-        return `${base}${line}\n`;
-      });
-      return;
-    }
-    const { start, end } = selRef.current;
-    const v = el.value;
-    const before = v.slice(0, start);
-    const needsNl = before.length > 0 && !before.endsWith('\n');
-    const piece = `${needsNl ? '\n' : ''}${line}\n`;
-    const next = before + piece + v.slice(end);
-    setContent(next);
-    const pos = (before + piece).length;
+  const updateBlockContent = (blockId: string, nextContent: string) => {
+    setBlocks((prev) => prev.map((b) => (b.id === blockId ? { ...b, content: nextContent } : b)));
+  };
+
+  const moveBlock = (blockId: string, dir: -1 | 1) => {
+    setBlocks((prev) => {
+      const i = prev.findIndex((b) => b.id === blockId);
+      const j = i + dir;
+      if (i < 0 || j < 0 || j >= prev.length) return prev;
+      const next = [...prev];
+      const [row] = next.splice(i, 1);
+      next.splice(j, 0, row);
+      return next;
+    });
+  };
+
+  const deleteBlock = (blockId: string) => {
+    setBlocks((prev) => {
+      if (prev.length <= 1) return [createSongBlock('verse', '')];
+      return prev.filter((b) => b.id !== blockId);
+    });
+  };
+
+  const addQuickBlock = (type: SongBlockType) => {
+    const nb = createSongBlock(type, '');
+    setBlocks((prev) => [...prev, nb]);
     requestAnimationFrame(() => {
-      if (!editorRef.current) return;
-      editorRef.current.focus();
-      editorRef.current.setSelectionRange(pos, pos);
-      selRef.current = { start: pos, end: pos };
+      focusedBlockIdRef.current = nb.id;
+      textareaByBlockRef.current.get(nb.id)?.focus();
+    });
+  };
+
+  const addBlockFromPreset = (title: string) => {
+    const meta = studioPresetToBlockMeta(title);
+    const nb = createSongBlock(meta.type, '', meta.sectionHint);
+    const focusId = focusedBlockIdRef.current;
+    setBlocks((prev) => {
+      if (!focusId) return [...prev, nb];
+      const ix = prev.findIndex((b) => b.id === focusId);
+      if (ix === -1) return [...prev, nb];
+      const next = [...prev];
+      next.splice(ix + 1, 0, nb);
+      return next;
+    });
+    requestAnimationFrame(() => {
+      focusedBlockIdRef.current = nb.id;
+      textareaByBlockRef.current.get(nb.id)?.focus();
+    });
+  };
+
+  const handleSmartPasteSplit = (blockId: string, paragraphs: string[]) => {
+    if (paragraphs.length < 2) return;
+    const [first, ...rest] = paragraphs;
+    setBlocks((prev) => {
+      const idx = prev.findIndex((b) => b.id === blockId);
+      if (idx === -1) return prev;
+      const next = [...prev];
+      next[idx] = { ...next[idx], content: first };
+      const inserts = rest.map((p) => createSongBlock('verse', p));
+      next.splice(idx + 1, 0, ...inserts);
+      return next;
     });
   };
 
   const handleSmartImport = ({ raw, chordPro }: { raw: string; chordPro: string }) => {
     setRawPaste(raw);
-    setContent(chordPro);
+    setBlocks(chordProToBlocks(chordPro));
   };
 
   const quick = quickChordsForKey(quickRoot, quickMode);
-  const commonChords = useMemo(() => extractCommonChords(content, 12), [content]);
+  const joinedChordPro = useMemo(() => blocksToChordPro(blocks), [blocks]);
+  const commonChords = useMemo(() => extractCommonChords(joinedChordPro, 12), [joinedChordPro]);
   const toolbarChords = useMemo(() => {
     const merged = [...commonChords, ...quick];
     return Array.from(new Set(merged)).slice(0, 16);
@@ -294,7 +386,7 @@ export function StudioEditor() {
 
   return (
     <div
-      className={`mx-auto flex max-w-3xl flex-col gap-4 pb-[calc(7rem+env(safe-area-inset-bottom))] md:pb-10 ${shell.page}`}
+      className={`mx-auto flex max-w-3xl flex-col gap-4 pb-[calc(10.5rem+env(safe-area-inset-bottom))] md:pb-10 ${shell.page}`}
     >
       <SmartImportModal
         open={importOpen}
@@ -458,8 +550,8 @@ export function StudioEditor() {
               <button
                 type="button"
                 onClick={() => {
-                  const next = rawPaste.trim() ? applyConvert(rawPaste) : applyConvert(content);
-                  setContent(next);
+                  const src = rawPaste.trim() ? rawPaste : joinedChordPro;
+                  setBlocks(chordProToBlocks(applyConvert(src)));
                 }}
                 className={
                   darkUi
@@ -560,7 +652,7 @@ export function StudioEditor() {
         Ваш текст ниже — оригинал в каталоге не меняется, пока вы не сохраните и не удалите песню целиком.
       </p>
 
-      <SectionInsertToolbar dark={darkUi} onInsert={insertSectionMarkerLine} className="mb-1" />
+      <SectionInsertToolbar dark={darkUi} onPresetAsBlock={addBlockFromPreset} className="mb-1" />
 
       <div className="mb-2 flex items-center justify-between">
         <p className={`text-xs ${shell.muted}`}>
@@ -600,33 +692,84 @@ export function StudioEditor() {
         </div>
       </div>
 
+      <div
+        className={[
+          'mb-2 hidden flex-wrap items-center justify-center gap-2 rounded-2xl border px-3 py-2 md:flex',
+          darkUi ? 'border-slate-800 bg-slate-950/50' : 'border-stone-200 bg-stone-50/80',
+        ].join(' ')}
+      >
+        <span className={`text-[11px] font-semibold uppercase tracking-wide ${shell.muted}`}>Блоки</span>
+        {(
+          [
+            { type: 'verse' as const, label: 'Куплет' },
+            { type: 'chorus' as const, label: 'Припев' },
+            { type: 'bridge' as const, label: 'Бридж' },
+            { type: 'intro' as const, label: 'Intro' },
+          ] as const
+        ).map(({ type, label }) => (
+          <button
+            key={type}
+            type="button"
+            onClick={() => addQuickBlock(type)}
+            className={`inline-flex min-h-[40px] items-center gap-1 rounded-full border px-3 text-xs font-semibold ${
+              darkUi
+                ? 'border-slate-700 bg-slate-900 text-slate-100 hover:bg-slate-800'
+                : 'border-stone-200 bg-white text-stone-800 hover:bg-stone-100'
+            }`}
+          >
+            <LuPlus className="h-3.5 w-3.5 shrink-0" aria-hidden />
+            {label}
+          </button>
+        ))}
+      </div>
+
       <div className={showPreview ? 'grid gap-3 md:grid-cols-2' : ''}>
-        <textarea
-          ref={editorRef}
-          value={content}
-          onChange={(e) => setContent(e.target.value)}
-          onSelect={syncEditorSelection}
-          onKeyUp={syncEditorSelection}
-          onMouseUp={syncEditorSelection}
-          className={`min-h-[min(70vh,520px)] w-full flex-1 resize-y rounded-2xl px-4 py-4 font-mono text-[15px] leading-relaxed outline-none ${shell.editor}`}
-          placeholder={'ChordPro. Блоки: отдельной строкой {sec:Куплет 1} или кнопки над полем.'}
-          spellCheck={false}
-        />
+        <div className="flex max-h-[min(78vh,640px)] flex-col gap-3 overflow-y-auto pr-0.5 md:pr-1">
+          {blocks.map((b, i) => (
+            <BlockWrapper
+              key={b.id}
+              block={b}
+              shellEditor={shell.editor}
+              darkUi={darkUi}
+              isFirst={i === 0}
+              isLast={i === blocks.length - 1}
+              onChange={updateBlockContent}
+              onDelete={deleteBlock}
+              onMove={moveBlock}
+              onFocusBlock={(blockId) => {
+                focusedBlockIdRef.current = blockId;
+              }}
+              onSelectBlock={(blockId, start, end) => {
+                selByBlockRef.current[blockId] = { start, end };
+              }}
+              onSmartPasteSplit={handleSmartPasteSplit}
+              textareaRef={(el) => {
+                if (el) textareaByBlockRef.current.set(b.id, el);
+                else textareaByBlockRef.current.delete(b.id);
+              }}
+            />
+          ))}
+        </div>
 
         {showPreview ? (
           <div
             className={[
-              'rounded-2xl border p-4',
+              'flex max-h-[min(78vh,640px)] flex-col gap-3 overflow-y-auto rounded-2xl border p-4',
               darkUi ? 'border-slate-800 bg-slate-950/60' : 'border-stone-200 bg-white',
             ].join(' ')}
           >
-            <p className={`mb-3 text-xs ${shell.muted}`}>Live preview</p>
-            <LyricsWithChords
-              text={content}
-              transposeSemitones={0}
-              chordTone={darkUi ? 'dark' : 'light'}
-              className={darkUi ? 'text-slate-100' : 'text-stone-900'}
-            />
+            <p className={`shrink-0 text-xs ${shell.muted}`}>Live preview</p>
+            {blocks.map((b) => (
+              <div key={`pv-${b.id}`} className={studioPreviewFrame(b.type, darkUi)}>
+                <LyricsWithChords
+                  text={b.content}
+                  transposeSemitones={0}
+                  chordTone={darkUi ? 'dark' : 'light'}
+                  fontSizePx={16}
+                  className={darkUi ? 'text-slate-100' : 'text-stone-900'}
+                />
+              </div>
+            ))}
           </div>
         ) : null}
       </div>
@@ -640,6 +783,31 @@ export function StudioEditor() {
           bottom: 'max(5.75rem, calc(4.25rem + env(safe-area-inset-bottom, 0px)))',
         }}
       >
+        <div
+          className={[
+            'flex max-w-full flex-wrap justify-center gap-1 border-b px-2 py-1.5',
+            darkUi ? 'border-slate-800' : 'border-slate-200',
+          ].join(' ')}
+        >
+          {(
+            [
+              { type: 'verse' as const, label: '+ Куплет' },
+              { type: 'chorus' as const, label: '+ Припев' },
+              { type: 'bridge' as const, label: '+ Бридж' },
+            ] as const
+          ).map(({ type, label }) => (
+            <button
+              key={type}
+              type="button"
+              onClick={() => addQuickBlock(type)}
+              className={`min-h-[40px] shrink-0 rounded-lg px-2.5 text-xs font-semibold ${
+                darkUi ? 'bg-slate-800 text-slate-100' : 'bg-stone-100 text-stone-800'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
         <div className="flex max-w-full gap-1 overflow-x-auto px-2 py-2 [scrollbar-width:none]">
           {CHORD_STRIP.map((ch) => (
             <button
