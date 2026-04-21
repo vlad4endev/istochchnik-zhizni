@@ -98,6 +98,28 @@ export function useMessengerWs(): {
 
 function handleWsMessage(msg: any): void {
   const store = useChatStore.getState();
+  const isDev = typeof import.meta !== 'undefined' && Boolean(import.meta.env?.DEV);
+  const debugWs = (event: string, data: Record<string, unknown>): void => {
+    if (!isDev) return;
+    // Dev-only trace for read/delivery diagnostics (excluded from production behavior).
+    // eslint-disable-next-line no-console
+    console.debug(`[messenger:ws] ${event}`, data);
+  };
+  const pickString = (...values: unknown[]): string => {
+    for (const value of values) {
+      const normalized = String(value ?? '').trim();
+      if (normalized) return normalized;
+    }
+    return '';
+  };
+  const pickNumber = (...values: unknown[]): number | null => {
+    for (const value of values) {
+      const parsed =
+        typeof value === 'number' ? value : typeof value === 'string' ? Number(value) : NaN;
+      if (Number.isFinite(parsed) && parsed > 0) return parsed;
+    }
+    return null;
+  };
 
   switch (msg.type) {
     case 'ready':
@@ -156,17 +178,15 @@ function handleWsMessage(msg: any): void {
 
     case 'msg:delivered': {
       const convId =
-        msg.conversationId != null && String(msg.conversationId).trim() !== ''
-          ? String(msg.conversationId)
-          : null;
-      const clientMsgId =
-        msg.clientMsgId != null && String(msg.clientMsgId).trim() !== ''
-          ? String(msg.clientMsgId).trim()
-          : '';
-      const messageId =
-        msg.messageId != null && String(msg.messageId).trim() !== ''
-          ? String(msg.messageId).trim()
-          : '';
+        pickString(msg.conversationId, msg.conversation_id, msg.chatId, msg.chat_id) || null;
+      const clientMsgId = pickString(msg.clientMsgId, msg.client_msg_id);
+      const messageId = pickString(msg.messageId, msg.message_id);
+      debugWs('msg:delivered', {
+        raw: msg,
+        conversationId: convId,
+        clientMsgId,
+        messageId,
+      });
       if (convId && (clientMsgId || messageId)) {
         store.handleMsgDelivered(convId, { clientMsgId, messageId });
       }
@@ -292,13 +312,57 @@ function handleWsMessage(msg: any): void {
       }
       break;
 
-    case 'read:updated':
-      store.handleReadUpdated(msg.conversationId, msg.memberId, msg.lastReadMessageId);
+    case 'read:updated': {
+      const conversationId = pickString(
+        msg.conversationId,
+        msg.conversation_id,
+        msg.chatId,
+        msg.chat_id,
+      );
+      const memberId = pickNumber(msg.memberId, msg.member_id, msg.userId, msg.user_id);
+      const lastReadMessageId = pickString(
+        msg.lastReadMessageId,
+        msg.last_read_message_id,
+        msg.messageId,
+        msg.message_id,
+      );
+      debugWs('read:updated', {
+        raw: msg,
+        conversationId,
+        memberId,
+        lastReadMessageId,
+      });
+      if (conversationId && memberId != null && lastReadMessageId) {
+        store.handleReadUpdated(conversationId, memberId, lastReadMessageId);
+      }
       break;
+    }
 
-    case 'messages_read':
-      store.handleReadUpdated(msg.chatId, msg.userId, msg.lastReadMessageId);
+    case 'messages_read': {
+      const conversationId = pickString(
+        msg.chatId,
+        msg.chat_id,
+        msg.conversationId,
+        msg.conversation_id,
+      );
+      const memberId = pickNumber(msg.userId, msg.user_id, msg.memberId, msg.member_id);
+      const lastReadMessageId = pickString(
+        msg.lastReadMessageId,
+        msg.last_read_message_id,
+        msg.messageId,
+        msg.message_id,
+      );
+      debugWs('messages_read', {
+        raw: msg,
+        conversationId,
+        memberId,
+        lastReadMessageId,
+      });
+      if (conversationId && memberId != null && lastReadMessageId) {
+        store.handleReadUpdated(conversationId, memberId, lastReadMessageId);
+      }
       break;
+    }
 
     case 'presence:online':
       store.handlePresenceOnline(msg.memberId);

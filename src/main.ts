@@ -26,6 +26,7 @@ import songRoutes from './routes/songRoutes';
 import studioRoutes from './routes/studioRoutes';
 import settingsRoutes from './routes/settingsRoutes';
 import messengerRoutes from './routes/messengerRoutes';
+import servicePlannerRoutes from './routes/servicePlannerRoutes';
 import {
   attachRealtimeWebSocket,
   initMessengerFanoutPublisherOnly,
@@ -199,6 +200,7 @@ app.use('/api/studio', studioRoutes);
 app.use('/api/calendar', calendarRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/messenger', messengerRoutes);
+app.use('/api', servicePlannerRoutes);
 app.use('/api', routes);
 app.use('/api/push', pushRoutes);
 app.use('/api/notifications', notificationsRoutes);
