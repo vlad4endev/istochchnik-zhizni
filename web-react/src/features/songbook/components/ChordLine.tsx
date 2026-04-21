@@ -16,6 +16,13 @@ const chordToneClass = {
   dark: 'text-amber-400',
 } as const;
 
+/** Минимальная ширина «столбца» под аккорд без текста (`[Am][Dm]`), чтобы absolute-слои не совпадали в одной точке. */
+function chordColumnMinEm(chordLabel: string): string {
+  const n = chordLabel.trim().length;
+  const em = Math.max(1.5, n * 0.62 + 0.45);
+  return `${em}em`;
+}
+
 /**
  * Одна строка ChordPro: аккорд в абсолютном слое над первой графемой текста;
  * длинный аккорд может наезжать вправо, не раздвигая весь фрагмент лирики.
@@ -88,6 +95,9 @@ export function ChordLine({
               key={idx}
               className="relative inline-flex min-h-[2.2em] flex-col justify-end align-top"
               data-chunk-at={seg.charIndex}
+              style={
+                hasChord && seg.text.length === 0 ? { minWidth: chordColumnMinEm(chordRaw) } : undefined
+              }
             >
               {hasChord ? (
                 <span className={chordLayerClass} aria-hidden>
