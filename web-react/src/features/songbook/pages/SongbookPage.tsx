@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { LuCheck } from 'react-icons/lu';
 
@@ -11,6 +11,16 @@ export function SongbookPage() {
   const qc = useQueryClient();
   const role = useAuthStore((s) => s.role);
   const [tab, setTab] = useState<'catalog' | 'favorites'>('catalog');
+  const [compactList, setCompactList] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return true;
+    const raw = window.localStorage.getItem('songbook.compactList');
+    return raw == null ? true : raw === '1';
+  });
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    window.localStorage.setItem('songbook.compactList', compactList ? '1' : '0');
+  }, [compactList]);
 
   const query = useQuery({
     queryKey: ['songs', 'catalog'],
@@ -68,20 +78,39 @@ export function SongbookPage() {
             Избранное
           </button>
         </div>
+        <div className="mt-2 flex justify-end">
+          <button
+            type="button"
+            onClick={() => setCompactList((v) => !v)}
+            className="inline-flex min-h-[36px] items-center justify-center rounded-lg border border-stone-300 bg-white px-2.5 text-xs font-semibold text-stone-700 hover:bg-stone-50"
+          >
+            {compactList ? 'Обычный список' : 'Плотный список'}
+          </button>
+        </div>
       </header>
 
       <ul className="space-y-1">
         {rows.map((s, idx) => (
           <li key={s.id} className="rounded-lg border border-stone-200 bg-white">
-            <div className="flex items-center gap-3 px-3 py-3">
+            <div className={['flex items-center px-3', compactList ? 'gap-2 py-2' : 'gap-3 py-3'].join(' ')}>
               <Link
                 to={`/songbook/${s.id}`}
-                className="flex min-h-[44px] min-w-0 flex-1 items-center gap-3"
+                className={['flex min-h-[44px] min-w-0 flex-1 items-center', compactList ? 'gap-2' : 'gap-3'].join(' ')}
               >
-                <span className="w-7 shrink-0 text-center text-3xl font-light text-stone-500">
+                <span
+                  className={[
+                    'w-7 shrink-0 text-center text-stone-500',
+                    compactList ? 'text-xl font-semibold' : 'text-3xl font-light',
+                  ].join(' ')}
+                >
                   {idx + 1}
                 </span>
-                <h2 className="truncate text-2xl font-extrabold uppercase tracking-wide text-stone-900">
+                <h2
+                  className={[
+                    'truncate text-stone-900',
+                    compactList ? 'text-base font-bold tracking-normal sm:text-lg' : 'text-2xl font-extrabold uppercase tracking-wide',
+                  ].join(' ')}
+                >
                   {s.title}
                 </h2>
               </Link>
