@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { requireAuthSession } from '../middleware/authSession';
 import {
+  deleteServiceBlockById,
   getServiceBlockTypes,
   getServiceTemplateById,
   getServicePlanById,
@@ -10,6 +11,7 @@ import {
   patchServiceBlocksReorder,
   patchServicePlanById,
   patchServiceTemplateById,
+  postServiceBlock,
   postServicePlan,
   postServiceTemplate,
 } from '../controllers/servicePlannerController';
@@ -28,6 +30,8 @@ router.post('/service-plans', requireAuthSession, postServicePlan);
 router.patch('/service-plans/:id', requireAuthSession, patchServicePlanById);
 
 router.patch('/service-blocks/reorder', requireAuthSession, patchServiceBlocksReorder);
+router.post('/service-blocks', requireAuthSession, postServiceBlock);
 router.patch('/service-blocks/:id', requireAuthSession, patchServiceBlockById);
+router.delete('/service-blocks/:id', requireAuthSession, deleteServiceBlockById);
 
 export default router;

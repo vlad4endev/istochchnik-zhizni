@@ -180,3 +180,20 @@ export async function patchServiceBlock(
 ): Promise<void> {
   await apiClient.patch(`/api/service-blocks/${id}`, body);
 }
+
+export async function createServiceBlock(body: {
+  service_plan_id: number;
+  block_type_id: number;
+  title?: string;
+  duration_minutes?: number;
+  assigned_member_id?: number | null;
+  song_id?: number | null;
+  content_json?: Record<string, unknown>;
+}): Promise<{ id: number }> {
+  const { data } = await apiClient.post<{ id: number }>('/api/service-blocks', body);
+  return data;
+}
+
+export async function deleteServiceBlock(id: number): Promise<void> {
+  await apiClient.delete(`/api/service-blocks/${id}`);
+}

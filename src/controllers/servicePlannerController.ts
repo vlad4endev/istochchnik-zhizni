@@ -2,6 +2,8 @@ import type { Request, Response } from 'express';
 import {
   createPlan,
   createTemplate,
+  createBlock,
+  deleteBlock,
   getPlanDetails,
   getTemplateDetails,
   listBlockTypes,
@@ -358,5 +360,56 @@ export async function patchServiceBlockById(req: Request, res: Response): Promis
   } catch (e) {
     console.error('[service-planner] patchServiceBlockById:', e);
     res.status(500).json({ error: 'Не удалось обновить блок' });
+  }
+}
+
+export async function postServiceBlock(req: Request, res: Response): Promise<void> {
+  if (!ensureAdmin(req, res)) return;
+  const body = parseJsonObject(req.body);
+  const servicePlanId = parseId(body.service_plan_id);
+  const blockTypeId = parseId(body.block_type_id);
+  const duration = Number(body.duration_minutes ?? 5);
+  if (!servicePlanId || !blockTypeId) {
+    res.status(400).json({ error: 'Нужны service_plan_id и block_type_id' });
+    return;
+  }
+  if (!Number.isFinite(duration) || duration <= 0) {
+    res.status(400).json({ error: 'duration_minutes должен быть > 0' });
+    return;
+  }
+  try {
+    const id = await createBlock({
+      service_plan_id: servicePlanId,
+      block_type_id: blockTypeId,
+      title: String(body.title ?? '').trim() || 'Новый блок',
+      duration_minutes: Math.round(duration),
+      assigned_member_id: body.assigned_member_id == null ? null : parseId(body.assigned_member_id),
+      song_id: body.song_id == null ? null : parseId(body.song_id),
+      content_json: parseJsonObject(body.content_json),
+    });
+    res.status(201).json({ id });
+  } catch (e) {
+    console.error('[service-planner] postServiceBlock:', e);
+    res.status(500).json({ error: 'Не удалось создать блок' });
+  }
+}
+
+export async function deleteServiceBlockById(req: Request, res: Response): Promise<void> {
+  if (!ensureAdmin(req, res)) return;
+  const id = parseId(req.params.id);
+  if (!id) {
+    res.status(400).json({ error: 'Некорректный id блока' });
+    return;
+  }
+  try {
+    const ok = await deleteBlock(id);
+    if (!ok) {
+      res.status(404).json({ error: 'Блок не найден' });
+      return;
+    }
+    res.status(204).send();
+  } catch (e) {
+    console.error('[service-planner] deleteServiceBlockById:', e);
+    res.status(500).json({ error: 'Не удалось удалить блок' });
   }
 }

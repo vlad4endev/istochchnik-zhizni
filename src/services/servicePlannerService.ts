@@ -685,3 +685,76 @@ export async function patchBlock(
   );
   return (res.rowCount ?? 0) > 0;
 }
+
+export async function createBlock(input: {
+  service_plan_id: number;
+  block_type_id: number;
+  title: string;
+  duration_minutes: number;
+  assigned_member_id: number | null;
+  song_id: number | null;
+  content_json: Record<string, unknown>;
+}): Promise<number> {
+  await ensurePlannerSchema();
+  const posRes = await query(
+    `select coalesce(max(order_index), -1) + 1 as next_pos
+     from public.service_blocks
+     where service_plan_id = $1`,
+    [input.service_plan_id],
+  );
+  const nextPos = Number((posRes.rows[0] as DbRecord | undefined)?.next_pos ?? 0);
+  const ins = await query(
+    `insert into public.service_blocks
+     (service_plan_id, block_type_id, title, order_index, duration_minutes, assigned_member_id, song_id, content_json)
+     values ($1, $2, $3, $4, $5, $6, $7, $8::jsonb)
+     returning id`,
+    [
+      input.service_plan_id,
+      input.block_type_id,
+      input.title,
+      nextPos,
+      input.duration_minutes,
+      input.assigned_member_id,
+      input.song_id,
+      JSON.stringify(input.content_json ?? {}),
+    ],
+  );
+  return Number((ins.rows[0] as DbRecord).id);
+}
+
+export async function deleteBlock(blockId: number): Promise<boolean> {
+  await ensurePlannerSchema();
+  if (!pool) throw new Error('Database pool not configured');
+  const client = await pool.connect();
+  try {
+    await client.query('begin');
+    const row = await client.query(
+      `select id, service_plan_id from public.service_blocks where id = $1 limit 1`,
+      [blockId],
+    );
+    const found = row.rows[0] as DbRecord | undefined;
+    if (!found) {
+      await client.query('rollback');
+      return false;
+    }
+    const planId = Number(found.service_plan_id);
+    await client.query(`delete from public.service_blocks where id = $1`, [blockId]);
+    const rest = await client.query(
+      `select id from public.service_blocks where service_plan_id = $1 order by order_index asc, id asc`,
+      [planId],
+    );
+    for (let i = 0; i < rest.rows.length; i += 1) {
+      await client.query(`update public.service_blocks set order_index = $1 where id = $2`, [
+        i,
+        Number((rest.rows[i] as DbRecord).id),
+      ]);
+    }
+    await client.query('commit');
+    return true;
+  } catch (e) {
+    await client.query('rollback');
+    throw e;
+  } finally {
+    client.release();
+  }
+}
