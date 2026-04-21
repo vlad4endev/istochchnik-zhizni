@@ -68,7 +68,7 @@ import {
   patchSmsSettings,
   sendTelegramMessage,
   setDirectionTemplateRoles,
-  setMemberAppRole,
+  setMemberAppRoles,
   setOneTimeMemberDate,
   startPrayerCycle,
   updateAdminEvent,
@@ -703,14 +703,14 @@ function MembersSection() {
   const roleMut = useMutation({
     mutationFn: ({
       id,
-      role,
+      roles,
     }: {
       id: number;
-      role: 'member' | 'minister' | 'pastor' | 'musician' | 'editor' | 'admin';
-    }) => setMemberAppRole(id, role),
+      roles: Array<'member' | 'minister' | 'pastor' | 'musician' | 'editor' | 'admin'>;
+    }) => setMemberAppRoles(id, roles),
     onSuccess: (updated) => {
       setEditing((prev) => (prev && prev.id === updated.id ? updated : prev));
-      setBanner({ type: 'ok', text: 'Роль обновлена.' });
+      setBanner({ type: 'ok', text: 'Роли обновлены.' });
       invalidate();
     },
     onError: (e) => setBanner({ type: 'err', text: apiErrorMessage(e, 'Нельзя изменить роль.') }),
@@ -1647,13 +1647,19 @@ function MembersSection() {
                       Роль приложения
                     </span>
                     <select
+                      multiple
+                      size={6}
                       className="max-w-xs rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm"
-                      value={editing.app_role}
+                      value={Array.isArray(editing.app_roles) && editing.app_roles.length > 0
+                        ? editing.app_roles
+                        : [editing.app_role]}
                       disabled={roleMut.isPending}
                       onChange={(e) => {
                         setBanner(null);
-                        const role = e.target.value as AppUser['app_role'];
-                        roleMut.mutate({ id: editing.id, role });
+                        const roles = Array.from(e.currentTarget.selectedOptions).map(
+                          (opt) => opt.value as AppUser['app_role'],
+                        );
+                        roleMut.mutate({ id: editing.id, roles: roles.length > 0 ? roles : ['member'] });
                       }}
                     >
                       <option value="member">Член церкви</option>

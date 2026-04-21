@@ -160,6 +160,9 @@ export function LoginPage() {
         firstName: (user.first_name ?? '').trim(),
         lastName: (user.last_name ?? '').trim(),
         role: (user.app_role ?? 'member').trim() || 'member',
+        roles: Array.isArray((user as { app_roles?: string[] }).app_roles)
+          ? (user as { app_roles: string[] }).app_roles
+          : undefined,
         registrationStatus: normalizeRegistrationStatus(user.registration_status),
         username: ((user as { username?: string }).username ?? '').trim(),
         memberId: typeof (user as { id?: number }).id === 'number' ? (user as { id: number }).id : null,
@@ -251,6 +254,9 @@ export function LoginPage() {
           firstName: (user.first_name ?? '').trim(),
           lastName: (user.last_name ?? '').trim(),
           role: (user.app_role ?? 'member').trim() || 'member',
+          roles: Array.isArray((user as { app_roles?: string[] }).app_roles)
+            ? (user as { app_roles: string[] }).app_roles
+            : undefined,
           registrationStatus: normalizeRegistrationStatus(user.registration_status),
           username: ((user as { username?: string }).username ?? '').trim(),
           memberId: typeof (user as { id?: number }).id === 'number' ? (user as { id: number }).id : null,
@@ -268,6 +274,9 @@ export function LoginPage() {
             firstName: (user.first_name ?? '').trim(),
             lastName: (user.last_name ?? '').trim(),
             role: (user.app_role ?? 'member').trim() || 'member',
+            roles: Array.isArray((user as { app_roles?: string[] }).app_roles)
+              ? (user as { app_roles: string[] }).app_roles
+              : undefined,
             registrationStatus: normalizeRegistrationStatus(
               user.registration_status ?? 'pending_review',
             ),

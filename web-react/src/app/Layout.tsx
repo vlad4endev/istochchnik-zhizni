@@ -309,6 +309,7 @@ export function Layout() {
   const pendingDeliveries = pendingDeliveriesQ.data ?? 0;
   const activityBadgeTotal = Math.min(99, unreadMessages + pendingDeliveries);
   const role = useAuthStore((s) => s.role);
+  const roles = useAuthStore((s) => s.roles ?? [s.role]);
   const sectionVisibilityQ = useQuery({
     queryKey: ['settings', 'sections', 'visibility'],
     queryFn: fetchSectionVisibilitySettingsPublic,
@@ -347,7 +348,9 @@ export function Layout() {
     (item) =>
       (!item.adminOnly || isAdmin) &&
       (!item.studioOnly || canAccessStudioRole(role)) &&
-      (!item.sectionId || isAdmin || canRoleAccessSection(sectionVisibilityQ.data, item.sectionId, role)),
+      (!item.sectionId ||
+        isAdmin ||
+        canRoleAccessSection(sectionVisibilityQ.data, item.sectionId, role, roles)),
   );
   const sidebarItems = items;
   const mobileItems = items;

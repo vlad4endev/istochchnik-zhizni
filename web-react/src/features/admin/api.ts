@@ -151,11 +151,11 @@ export async function swapAllMembersFirstLastNames(): Promise<{
   return data;
 }
 
-export async function setMemberAppRole(
+export async function setMemberAppRoles(
   id: number,
-  app_role: 'member' | 'minister' | 'pastor' | 'musician' | 'editor' | 'admin',
+  app_roles: Array<'member' | 'minister' | 'pastor' | 'musician' | 'editor' | 'admin'>,
 ): Promise<AppUser> {
-  const { data } = await apiClient.patch<AppUser>(`${USERS}/${id}/app-role`, { app_role });
+  const { data } = await apiClient.patch<AppUser>(`${USERS}/${id}/app-role`, { app_roles });
   return data;
 }
 

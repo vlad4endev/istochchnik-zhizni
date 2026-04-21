@@ -21,6 +21,7 @@ CREATE TABLE IF NOT EXISTS members (
   account_id VARCHAR(255),
   is_active BOOLEAN NOT NULL DEFAULT TRUE,
   app_role VARCHAR(16) NOT NULL DEFAULT 'member' CHECK (app_role IN ('member', 'minister', 'pastor', 'musician', 'editor', 'admin')),
+  app_roles TEXT[] NOT NULL DEFAULT ARRAY['member'],
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -215,6 +216,7 @@ ALTER TABLE members ADD COLUMN IF NOT EXISTS phone_number VARCHAR(32);
 ALTER TABLE members ADD COLUMN IF NOT EXISTS ministry_role VARCHAR(120);
 ALTER TABLE members ADD COLUMN IF NOT EXISTS ministry_direction VARCHAR(120);
 ALTER TABLE members ADD COLUMN IF NOT EXISTS app_role VARCHAR(16) NOT NULL DEFAULT 'member';
+ALTER TABLE members ADD COLUMN IF NOT EXISTS app_roles TEXT[];
 ALTER TABLE members ADD COLUMN IF NOT EXISTS email VARCHAR(255);
 ALTER TABLE members ADD COLUMN IF NOT EXISTS account_provider VARCHAR(100);
 ALTER TABLE members ADD COLUMN IF NOT EXISTS account_id VARCHAR(255);
@@ -229,6 +231,11 @@ ALTER TABLE members ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEF
 UPDATE members
 SET app_role = 'member'
 WHERE app_role IS NULL OR app_role NOT IN ('member', 'minister', 'pastor', 'musician', 'editor', 'admin');
+UPDATE members
+SET app_roles = ARRAY[app_role]
+WHERE app_roles IS NULL OR cardinality(app_roles) = 0;
+ALTER TABLE members ALTER COLUMN app_roles SET DEFAULT ARRAY['member'];
+ALTER TABLE members ALTER COLUMN app_roles SET NOT NULL;
 ALTER TABLE members ALTER COLUMN app_role SET DEFAULT 'member';
 ALTER TABLE members ALTER COLUMN app_role SET NOT NULL;
 ALTER TABLE members DROP CONSTRAINT IF EXISTS members_app_role_check;

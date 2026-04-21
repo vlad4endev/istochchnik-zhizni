@@ -5,12 +5,16 @@ import { Link, useParams } from 'react-router-dom';
 import {
   FaBookBible,
   FaBullhorn,
+  FaCakeCandles,
   FaHandHoldingDollar,
+  FaFeatherPointed,
   FaHandsPraying,
   FaMicrophoneLines,
   FaMusic,
   FaPuzzlePiece,
+  FaWineGlass,
 } from 'react-icons/fa6';
+import { LuCalendarDays } from 'react-icons/lu';
 import type { IconType } from 'react-icons';
 
 import { fetchPublicServicePlan } from '../api';
@@ -22,10 +26,17 @@ const ICON_BY_CODE: Record<string, { Icon: IconType; wrapClass: string; iconClas
   sermon: { Icon: FaMicrophoneLines, wrapClass: 'bg-rose-100', iconClass: 'text-rose-700' },
   announcements: { Icon: FaBullhorn, wrapClass: 'bg-emerald-100', iconClass: 'text-emerald-700' },
   offering: { Icon: FaHandHoldingDollar, wrapClass: 'bg-lime-100', iconClass: 'text-lime-700' },
+  birthdays: { Icon: FaCakeCandles, wrapClass: 'bg-pink-100', iconClass: 'text-pink-700' },
   custom: { Icon: FaPuzzlePiece, wrapClass: 'bg-stone-200', iconClass: 'text-stone-700' },
 };
 
-const ICON_BY_MARK_KEY = ICON_BY_CODE;
+const ICON_BY_MARK_KEY: Record<string, { Icon: IconType; wrapClass: string; iconClass: string }> = {
+  ...ICON_BY_CODE,
+  communion: { Icon: FaWineGlass, wrapClass: 'bg-purple-100', iconClass: 'text-purple-700' },
+  schedule: { Icon: LuCalendarDays, wrapClass: 'bg-indigo-100', iconClass: 'text-indigo-700' },
+  donation: { Icon: FaHandHoldingDollar, wrapClass: 'bg-emerald-100', iconClass: 'text-emerald-700' },
+  poem: { Icon: FaFeatherPointed, wrapClass: 'bg-fuchsia-100', iconClass: 'text-fuchsia-700' },
+};
 
 function isSeparator(content: Record<string, unknown>): boolean {
   return content.is_separator === true;
@@ -42,6 +53,30 @@ function normalizeText(value: string): string {
 function isPoem(code: string | null, typeName: string | null): boolean {
   const normalizedName = String(typeName ?? '').toLowerCase();
   return code === 'poem' || normalizedName.includes('стих');
+}
+
+function isBirthdays(code: string | null, typeName: string | null): boolean {
+  const normalizedName = String(typeName ?? '').toLowerCase();
+  return code === 'birthdays' || normalizedName.includes('дни рождения');
+}
+
+function birthdayRows(content: Record<string, unknown>): string[] {
+  const raw = content.birthday_people;
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((x) => {
+      if (!x || typeof x !== 'object') return null;
+      const row = x as Record<string, unknown>;
+      const name = typeof row.name === 'string' ? row.name.trim() : '';
+      if (!name) return null;
+      const weekDate = typeof row.week_date === 'string' ? row.week_date.trim() : '';
+      if (!weekDate) return name;
+      const dt = new Date(`${weekDate}T12:00:00`);
+      if (Number.isNaN(dt.getTime())) return name;
+      const dateText = new Intl.DateTimeFormat('ru-RU', { weekday: 'short', day: 'numeric', month: 'short' }).format(dt);
+      return `${name} — ${dateText}`;
+    })
+    .filter((x): x is string => Boolean(x));
 }
 
 export function PublicServicePlanPage() {
@@ -196,7 +231,13 @@ export function PublicServicePlanPage() {
                         typeof b.content_json.poem_theme === 'string' ? b.content_json.poem_theme.trim() : '';
                       const poemSubline =
                         poemAuthor && poemTheme ? `${poemAuthor} • ${poemTheme}` : poemAuthor || poemTheme;
-                      const heading = poem ? `СТИХ - ${b.assigned_member_name ?? 'Чтец'}` : b.title;
+                      const birthdays = isBirthdays(b.block_type_code, b.block_type_name);
+                      const birthdaysList = birthdayRows(b.content_json);
+                      const heading = poem
+                        ? `СТИХ - ${b.assigned_member_name ?? 'Чтец'}`
+                        : birthdays
+                          ? 'Дни рождения недели'
+                          : b.title;
 
                       return (
                         <>
@@ -208,6 +249,17 @@ export function PublicServicePlanPage() {
                       {b.assigned_member_name ? ` • ${b.assigned_member_name}` : ''}
                     </p>
                     {poemSubline ? <p className="mt-0.5 text-xs leading-snug text-stone-600 sm:text-sm">{poemSubline}</p> : null}
+                    {birthdays ? (
+                      birthdaysList.length > 0 ? (
+                        <p className="mt-0.5 text-xs leading-snug text-stone-600 sm:text-sm">
+                          Именинники: {birthdaysList.join(' • ')}
+                        </p>
+                      ) : (
+                        <p className="mt-0.5 text-xs leading-snug text-stone-500 sm:text-sm">
+                          На этой неделе именинников нет.
+                        </p>
+                      )
+                    ) : null}
                     {b.song_title ? (
                       <p className="mt-1 text-sm font-semibold leading-snug text-stone-700">
                         {b.song_title}

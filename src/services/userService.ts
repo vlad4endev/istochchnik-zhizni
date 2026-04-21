@@ -1,6 +1,6 @@
 import { query } from '../config/db';
 import type { AppRole } from '../types/appRole';
-import { mergeAppRoles, normalizeAppRole } from '../types/appRole';
+import { mergeAppRoles, normalizeAppRole, normalizeAppRoles, pickPrimaryAppRole } from '../types/appRole';
 import { addUtcDaysToIsoDate, getDiffDays } from '../utils/isoDates';
 import { getPrayerDataByDate } from './calendarService';
 import {
@@ -28,6 +28,7 @@ export interface AppUser {
   account_id: string | null;
   is_active: boolean;
   app_role: AppRole;
+  app_roles: AppRole[];
   /** Ответственный за сбор — может назначать участников на дни следующей недели. */
   is_collection_coordinator: boolean;
   /** Участвует в общем молитвенном цикле (очередь по дням). */
@@ -51,6 +52,7 @@ export interface CreateUserInput {
   account_id?: string;
   is_active?: boolean;
   app_role?: AppRole;
+  app_roles?: AppRole[];
   is_collection_coordinator?: boolean;
   merge_if_duplicate?: boolean;
 }
@@ -68,6 +70,7 @@ export interface UpdateUserInput {
   account_id?: string;
   is_active?: boolean;
   app_role?: AppRole;
+  app_roles?: AppRole[];
   is_collection_coordinator?: boolean;
   in_prayer_cycle?: boolean;
 }
@@ -208,12 +211,17 @@ function normalizeOptionalString(value: unknown): string | null {
   return trimmed.length > 0 ? trimmed : null;
 }
 
-function mapUser(row: AppUser & { user_id?: unknown; app_role?: unknown }): AppUser {
+function mapUser(
+  row: AppUser & { user_id?: unknown; app_role?: unknown; app_roles?: unknown },
+): AppUser {
   const uid = row.user_id;
+  const appRoles = normalizeAppRoles(row.app_roles, row.app_role);
+  const primaryRole = pickPrimaryAppRole(appRoles);
   return {
     ...row,
     user_id: uid != null && String(uid).trim() !== '' ? String(uid) : '',
-    app_role: normalizeAppRole(row.app_role),
+    app_role: normalizeAppRole(primaryRole),
+    app_roles: appRoles,
   };
 }
 
@@ -259,6 +267,7 @@ export async function listUsers(): Promise<AppUser[]> {
       m.account_id,
       m.is_active,
       m.app_role,
+      m.app_roles,
       m.is_collection_coordinator,
       m.in_prayer_cycle,
       (m.password_hash IS NOT NULL) AS has_registered,
@@ -291,6 +300,7 @@ export async function getUserById(id: number): Promise<AppUser | null> {
       m.account_id,
       m.is_active,
       m.app_role,
+      m.app_roles,
       m.is_collection_coordinator,
       m.in_prayer_cycle,
       (m.password_hash IS NOT NULL) AS has_registered,
@@ -441,6 +451,10 @@ export async function createUser(input: CreateUserInput): Promise<AppUser> {
         ...(mergedAccountId ? { account_id: mergedAccountId } : {}),
         is_active: existing.is_active || (input.is_active ?? true),
         app_role: mergeAppRoles(existing.app_role, input.app_role ?? 'member'),
+        app_roles: normalizeAppRoles(
+          [...existing.app_roles, ...(input.app_roles ?? []), input.app_role ?? 'member'],
+          existing.app_role,
+        ),
         is_collection_coordinator:
           existing.is_collection_coordinator || (input.is_collection_coordinator ?? false),
       });
@@ -452,10 +466,12 @@ export async function createUser(input: CreateUserInput): Promise<AppUser> {
     throw new MemberNameDuplicateError();
   }
 
+  const appRoles = normalizeAppRoles(input.app_roles, input.app_role ?? 'member');
+  const primaryRole = pickPrimaryAppRole(appRoles);
   const result = await query(
     `INSERT INTO members
-      (first_name, last_name, name, phone_number, ministry_role, ministry_direction, prayer_request, birth_date, email, account_provider, account_id, is_active, app_role, is_collection_coordinator, in_prayer_cycle, updated_at)
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, COALESCE($12, TRUE), COALESCE($13, 'member'), COALESCE($14, FALSE), FALSE, NOW())
+      (first_name, last_name, name, phone_number, ministry_role, ministry_direction, prayer_request, birth_date, email, account_provider, account_id, is_active, app_role, app_roles, is_collection_coordinator, in_prayer_cycle, updated_at)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, COALESCE($12, TRUE), COALESCE($13, 'member'), $14::text[], COALESCE($15, FALSE), FALSE, NOW())
     RETURNING
       id,
       user_id,
@@ -472,6 +488,7 @@ export async function createUser(input: CreateUserInput): Promise<AppUser> {
       account_id,
       is_active,
       app_role,
+      app_roles,
       is_collection_coordinator,
       in_prayer_cycle,
       (password_hash IS NOT NULL) AS has_registered,
@@ -490,7 +507,8 @@ export async function createUser(input: CreateUserInput): Promise<AppUser> {
       normalizeOptionalString(input.account_provider),
       normalizeOptionalString(input.account_id),
       input.is_active ?? true,
-      input.app_role ?? 'member',
+      primaryRole,
+      appRoles,
       input.is_collection_coordinator ?? false,
     ]
   );
@@ -636,9 +654,22 @@ export async function updateUser(id: number, input: UpdateUserInput): Promise<Ap
     values.push(input.is_active);
   }
 
-  if (typeof input.app_role === 'string') {
+  const requestedRoles =
+    Array.isArray(input.app_roles) && input.app_roles.length > 0
+      ? normalizeAppRoles(input.app_roles, input.app_role)
+      : undefined;
+  if (requestedRoles) {
+    const primary = pickPrimaryAppRole(requestedRoles);
+    updates.push(`app_roles = $${values.length + 1}::text[]`);
+    values.push(requestedRoles);
     updates.push(`app_role = $${values.length + 1}`);
-    values.push(input.app_role);
+    values.push(primary);
+  } else if (typeof input.app_role === 'string') {
+    const normalized = normalizeAppRole(input.app_role);
+    updates.push(`app_roles = $${values.length + 1}::text[]`);
+    values.push([normalized]);
+    updates.push(`app_role = $${values.length + 1}`);
+    values.push(normalized);
   }
 
   if (typeof input.is_collection_coordinator === 'boolean') {
@@ -678,6 +709,7 @@ export async function updateUser(id: number, input: UpdateUserInput): Promise<Ap
       account_id,
       is_active,
       app_role,
+      app_roles,
       is_collection_coordinator,
       in_prayer_cycle,
       (password_hash IS NOT NULL) AS has_registered,
@@ -743,28 +775,36 @@ export async function linkUserAccount(id: number, input: LinkAccountInput): Prom
   return result.rows[0] ? mapUser(result.rows[0] as AppUser) : null;
 }
 
-export async function setUserAppRole(id: number, appRole: AppRole): Promise<AppUser | null> {
+export async function setUserAppRoles(id: number, appRolesInput: AppRole[]): Promise<AppUser | null> {
   const currentUser = await getUserById(id);
   if (!currentUser) {
     return null;
   }
-
-  if (currentUser.app_role === 'admin' && appRole !== 'admin') {
+  const appRoles = normalizeAppRoles(appRolesInput, currentUser.app_role);
+  const primaryRole = pickPrimaryAppRole(appRoles);
+  const removingAdmin = currentUser.app_roles.includes('admin') && !appRoles.includes('admin');
+  if (removingAdmin) {
     const adminsCount = await query(
       `SELECT COUNT(*)::int AS count
        FROM members
-       WHERE app_role = 'admin' AND is_active = TRUE`
+       WHERE is_active = TRUE
+         AND id <> $1
+         AND (
+           app_role = 'admin'
+           OR ('admin' = ANY(COALESCE(app_roles, ARRAY[]::text[])))
+         )`,
+      [id],
     );
     const totalAdmins = adminsCount.rows[0]?.count ?? 0;
-    if (totalAdmins <= 1) {
+    if (totalAdmins < 1) {
       throw new Error('Cannot remove the last active administrator');
     }
   }
 
   const result = await query(
     `UPDATE members
-     SET app_role = $1, updated_at = NOW()
-     WHERE id = $2
+     SET app_role = $1, app_roles = $2::text[], updated_at = NOW()
+     WHERE id = $3
      RETURNING
       id,
       user_id,
@@ -781,12 +821,13 @@ export async function setUserAppRole(id: number, appRole: AppRole): Promise<AppU
       account_id,
       is_active,
       app_role,
+      app_roles,
       is_collection_coordinator,
       in_prayer_cycle,
       (password_hash IS NOT NULL) AS has_registered,
       created_at,
       updated_at`,
-    [appRole, id]
+    [primaryRole, appRoles, id]
   );
 
   return result.rows[0] ? mapUser(result.rows[0] as AppUser) : null;

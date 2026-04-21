@@ -5,6 +5,7 @@ declare module 'express-serve-static-core' {
     userRole?: 'member' | 'minister' | 'pastor' | 'musician' | 'editor' | 'admin';
     authUserId?: number;
     authUserRole?: 'member' | 'minister' | 'pastor' | 'musician' | 'editor' | 'admin';
+    authUserRoles?: Array<'member' | 'minister' | 'pastor' | 'musician' | 'editor' | 'admin'>;
     authToken?: string;
   }
 }

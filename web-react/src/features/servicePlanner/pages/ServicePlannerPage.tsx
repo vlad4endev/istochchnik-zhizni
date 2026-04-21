@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { DragDropContext, Draggable, Droppable, type DropResult } from '@hello-pangea/dnd';
 import { addMinutes, format, parse } from 'date-fns';
 import {
+  LuCalendarDays,
   LuClock3,
   LuCopy,
   LuGripVertical,
@@ -17,11 +18,14 @@ import {
 import {
   FaBookBible,
   FaBullhorn,
+  FaCakeCandles,
   FaHandHoldingDollar,
   FaHandsPraying,
+  FaFeatherPointed,
   FaMicrophoneLines,
   FaMusic,
   FaPuzzlePiece,
+  FaWineGlass,
 } from 'react-icons/fa6';
 import type { IconType } from 'react-icons';
 
@@ -147,6 +151,7 @@ const CATEGORY_ICON_BY_CODE: Record<string, { Icon: IconType; wrapClass: string;
   sermon: { Icon: FaMicrophoneLines, wrapClass: 'bg-rose-100', iconClass: 'text-rose-700' },
   announcements: { Icon: FaBullhorn, wrapClass: 'bg-emerald-100', iconClass: 'text-emerald-700' },
   offering: { Icon: FaHandHoldingDollar, wrapClass: 'bg-lime-100', iconClass: 'text-lime-700' },
+  birthdays: { Icon: FaCakeCandles, wrapClass: 'bg-pink-100', iconClass: 'text-pink-700' },
   custom: { Icon: FaPuzzlePiece, wrapClass: 'bg-stone-200', iconClass: 'text-stone-700' },
 };
 
@@ -163,6 +168,11 @@ const BLOCK_MARK_ICON_OPTIONS: Array<{
   { key: 'sermon', label: 'Проповедь', Icon: FaMicrophoneLines, wrapClass: 'bg-rose-100', iconClass: 'text-rose-700' },
   { key: 'announcements', label: 'Объявления', Icon: FaBullhorn, wrapClass: 'bg-emerald-100', iconClass: 'text-emerald-700' },
   { key: 'offering', label: 'Пожертвование', Icon: FaHandHoldingDollar, wrapClass: 'bg-lime-100', iconClass: 'text-lime-700' },
+  { key: 'birthdays', label: 'Дни рождения', Icon: FaCakeCandles, wrapClass: 'bg-pink-100', iconClass: 'text-pink-700' },
+  { key: 'communion', label: 'Причастие', Icon: FaWineGlass, wrapClass: 'bg-purple-100', iconClass: 'text-purple-700' },
+  { key: 'schedule', label: 'Расписание', Icon: LuCalendarDays, wrapClass: 'bg-indigo-100', iconClass: 'text-indigo-700' },
+  { key: 'donation', label: 'Пожертвование+', Icon: FaHandHoldingDollar, wrapClass: 'bg-emerald-100', iconClass: 'text-emerald-700' },
+  { key: 'poem', label: 'Стихи', Icon: FaFeatherPointed, wrapClass: 'bg-fuchsia-100', iconClass: 'text-fuchsia-700' },
   { key: 'custom', label: 'Произвольный', Icon: FaPuzzlePiece, wrapClass: 'bg-stone-200', iconClass: 'text-stone-700' },
   { key: 'users', label: 'Участники', Icon: LuUsers, wrapClass: 'bg-cyan-100', iconClass: 'text-cyan-700' },
   { key: 'clock', label: 'Время', Icon: LuClock3, wrapClass: 'bg-indigo-100', iconClass: 'text-indigo-700' },
@@ -416,6 +426,12 @@ export function ServicePlannerPage() {
     return meta.code === 'poem' || (meta.name ?? '').toLowerCase().includes('стих');
   }
 
+  function isBirthdaysBlock(block: ServicePlanBlock): boolean {
+    const meta = getBlockTypeMeta(block);
+    if (!meta) return false;
+    return meta.code === 'birthdays' || (meta.name ?? '').toLowerCase().includes('дни рождения');
+  }
+
   function poemHeading(block: ServicePlanBlock): string {
     const reader = block.assigned_member_id ? usersById.get(block.assigned_member_id) : null;
     return reader ? `СТИХ - ${userLabel(reader)}` : 'СТИХ - Чтец';
@@ -429,6 +445,25 @@ export function ServicePlannerPage() {
     if (!author && !theme) return null;
     if (author && theme) return `${author} • ${theme}`;
     return author || theme;
+  }
+
+  function birthdayLines(block: ServicePlanBlock): string[] {
+    const raw = block.content_json?.birthday_people;
+    if (!Array.isArray(raw)) return [];
+    return raw
+      .map((x) => {
+        if (!x || typeof x !== 'object') return null;
+        const row = x as Record<string, unknown>;
+        const name = typeof row.name === 'string' ? row.name.trim() : '';
+        if (!name) return null;
+        const weekDate = typeof row.week_date === 'string' ? row.week_date : '';
+        if (!weekDate) return name;
+        const dt = new Date(`${weekDate}T12:00:00`);
+        if (Number.isNaN(dt.getTime())) return name;
+        const dateText = new Intl.DateTimeFormat('ru-RU', { weekday: 'short', day: 'numeric', month: 'short' }).format(dt);
+        return `${name} — ${dateText}`;
+      })
+      .filter((x): x is string => Boolean(x));
   }
 
   function getResponsibleLabel(block: ServicePlanBlock): string | null {
@@ -1666,6 +1701,8 @@ export function ServicePlannerPage() {
                                 ? separatorLabel(block)
                                 : isPoemBlock(block)
                                   ? poemHeading(block)
+                                  : isBirthdaysBlock(block)
+                                    ? 'Дни рождения недели'
                                   : block.title}
                             </p>
                             {!isSeparatorBlock(block) ? (
@@ -1675,6 +1712,15 @@ export function ServicePlannerPage() {
                             ) : null}
                             {!isSeparatorBlock(block) && isPoemBlock(block) && poemSubline(block) ? (
                               <p className="text-xs leading-snug text-stone-600">{poemSubline(block)}</p>
+                            ) : null}
+                            {!isSeparatorBlock(block) && isBirthdaysBlock(block) ? (
+                              birthdayLines(block).length > 0 ? (
+                                <p className="text-xs leading-snug text-stone-600">
+                                  Именинники: {birthdayLines(block).join(' • ')}
+                                </p>
+                              ) : (
+                                <p className="text-xs leading-snug text-stone-500">На этой неделе именинников нет.</p>
+                              )
                             ) : null}
                             {!isSeparatorBlock(block) &&
                             (getResponsibleLabel(block) || getDirectionLabel(block)) ? (
@@ -1874,11 +1920,15 @@ export function ServicePlannerPage() {
                 <>
                   <select
                     value={editingBlock.block_type_id}
-                    onChange={(e) =>
-                      updateDraftBlock(editingBlock.id, {
-                        block_type_id: Number(e.target.value) || editingBlock.block_type_id,
-                      })
-                    }
+                    onChange={(e) => {
+                      const nextTypeId = Number(e.target.value) || editingBlock.block_type_id;
+                      const typeMeta = blockTypes.find((t) => t.id === nextTypeId);
+                      const nextPatch: Partial<ServicePlanBlock> = { block_type_id: nextTypeId };
+                      if ((typeMeta?.code ?? '').toLowerCase() === 'birthdays') {
+                        nextPatch.title = 'Дни рождения недели';
+                      }
+                      updateDraftBlock(editingBlock.id, nextPatch);
+                    }}
                     className="rounded-lg border border-stone-300 px-2 py-1.5 text-sm"
                   >
                     {blockTypes.map((t) => (
@@ -1969,6 +2019,11 @@ export function ServicePlannerPage() {
                         </option>
                       ))}
                     </select>
+                  ) : null}
+                  {isBirthdaysBlock(editingBlock) ? (
+                    <p className="rounded-lg border border-dashed border-pink-300 bg-pink-50 px-2 py-2 text-xs text-pink-800 sm:col-span-2">
+                      Этот блок автоматически показывает участников, у которых день рождения на неделе даты служения.
+                    </p>
                   ) : null}
                   <textarea
                     value={String((editingBlock.content_json?.text as string | undefined) ?? '')}

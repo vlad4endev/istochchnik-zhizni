@@ -12,7 +12,14 @@ const LS_LAST = 'auth_last_name';
 const LS_ROLE = 'auth_role';
 const LS_REG = 'auth_registration_status';
 
-export type AuthRole = 'member' | 'minister' | 'pastor' | 'admin' | (string & {});
+export type AuthRole =
+  | 'member'
+  | 'minister'
+  | 'pastor'
+  | 'musician'
+  | 'editor'
+  | 'admin'
+  | (string & {});
 
 export type RegistrationStatus = 'active' | 'pending_review' | 'rejected';
 
@@ -20,6 +27,7 @@ export interface AuthProfile {
   firstName: string;
   lastName: string;
   role: AuthRole;
+  roles?: AuthRole[];
   registrationStatus: RegistrationStatus;
   /** Публичный слаг профиля; заполняется из `/api/auth/me` или ответа login. */
   username: string;
@@ -153,16 +161,22 @@ export const useAuthStore = create<AuthState>()(
       firstName: '',
       lastName: '',
       role: 'member',
+      roles: ['member'],
       registrationStatus: 'active',
       username: '',
       memberId: null,
 
-      setSession: ({ token, firstName, lastName, role, registrationStatus, username, memberId }) => {
+      setSession: ({ token, firstName, lastName, role, roles, registrationStatus, username, memberId }) => {
+        const normalizedRole = normalizeRole(role);
+        const normalizedRoles = Array.isArray(roles) && roles.length > 0
+          ? Array.from(new Set(roles.map((r) => normalizeRole(String(r)))))
+          : [normalizedRole];
         set({
           token,
           firstName: firstName.trim(),
           lastName: lastName.trim(),
-          role: normalizeRole(role),
+          role: normalizedRole,
+          roles: normalizedRoles,
           registrationStatus: normalizeRegistrationStatus(registrationStatus),
           username: (username ?? '').trim(),
           memberId: memberId ?? null,
@@ -173,15 +187,21 @@ export const useAuthStore = create<AuthState>()(
         firstName,
         lastName,
         role,
+        roles,
         registrationStatus,
         username,
         memberId,
       }) => {
         if (!get().token) return;
+        const normalizedRole = normalizeRole(role);
+        const normalizedRoles = Array.isArray(roles) && roles.length > 0
+          ? Array.from(new Set(roles.map((r) => normalizeRole(String(r)))))
+          : [normalizedRole];
         set({
           firstName: firstName.trim(),
           lastName: lastName.trim(),
-          role: normalizeRole(role),
+          role: normalizedRole,
+          roles: normalizedRoles,
           registrationStatus: normalizeRegistrationStatus(registrationStatus),
           username: (username ?? '').trim(),
           memberId: memberId ?? null,
@@ -194,6 +214,7 @@ export const useAuthStore = create<AuthState>()(
           firstName: '',
           lastName: '',
           role: 'member',
+          roles: ['member'],
           registrationStatus: 'active',
           username: '',
           memberId: null,
@@ -210,6 +231,7 @@ export const useAuthStore = create<AuthState>()(
               first_name?: string;
               last_name?: string;
               app_role?: string;
+              app_roles?: string[];
               registration_status?: string;
               username?: string;
             };
@@ -242,6 +264,7 @@ export const useAuthStore = create<AuthState>()(
             firstName: (user.first_name ?? '').trim(),
             lastName: (user.last_name ?? '').trim(),
             role: (user.app_role ?? 'member').trim() || 'member',
+            roles: Array.isArray(user.app_roles) ? user.app_roles : undefined,
             registrationStatus: normalizeRegistrationStatus(user.registration_status),
             username: (user.username ?? '').trim(),
             memberId: typeof user.id === 'number' ? user.id : null,
@@ -300,6 +323,7 @@ export const useAuthStore = create<AuthState>()(
             first_name?: string | null;
             last_name?: string | null;
             app_role?: string;
+            app_roles?: string[];
             registration_status?: string;
             username?: string;
           };
@@ -308,6 +332,7 @@ export const useAuthStore = create<AuthState>()(
             firstName: (user.first_name ?? '').trim(),
             lastName: (user.last_name ?? '').trim(),
             role: (user.app_role ?? 'member').trim() || 'member',
+            roles: Array.isArray(user.app_roles) ? user.app_roles : undefined,
             registrationStatus: normalizeRegistrationStatus(user.registration_status),
             username: (user.username ?? '').trim(),
             memberId: typeof user.id === 'number' ? user.id : null,
@@ -325,6 +350,7 @@ export const useAuthStore = create<AuthState>()(
         firstName: s.firstName,
         lastName: s.lastName,
         role: s.role,
+        roles: s.roles,
         registrationStatus: s.registrationStatus,
         username: s.username,
         memberId: s.memberId,

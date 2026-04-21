@@ -17,8 +17,8 @@ export function normalizeAppRole(raw: unknown): AppRole {
 const ROLE_RANK: Record<AppRole, number> = {
   member: 0,
   minister: 1,
-  musician: 2,
-  pastor: 3,
+  pastor: 2,
+  musician: 3,
   editor: 4,
   admin: 5,
 };
@@ -26,6 +26,38 @@ const ROLE_RANK: Record<AppRole, number> = {
 /** При слиянии дубликатов участников выбирается более «высокая» роль. */
 export function mergeAppRoles(a: AppRole, b: AppRole): AppRole {
   return ROLE_RANK[a] >= ROLE_RANK[b] ? a : b;
+}
+
+export function normalizeAppRoles(rawRoles: unknown, fallbackRole?: unknown): AppRole[] {
+  const out: AppRole[] = [];
+  const pushRole = (value: unknown) => {
+    const role = normalizeAppRole(value);
+    if (!out.includes(role)) out.push(role);
+  };
+  if (Array.isArray(rawRoles)) {
+    for (const item of rawRoles) {
+      pushRole(item);
+    }
+  } else if (typeof rawRoles === 'string' && rawRoles.trim()) {
+    for (const part of rawRoles.split(/[;,]/)) {
+      pushRole(part);
+    }
+  }
+  if (out.length === 0) {
+    pushRole(fallbackRole);
+  }
+  if (out.length === 0) {
+    out.push('member');
+  }
+  return out;
+}
+
+export function pickPrimaryAppRole(roles: AppRole[]): AppRole {
+  let current: AppRole = 'member';
+  for (const role of roles) {
+    current = mergeAppRoles(current, role);
+  }
+  return current;
 }
 
 export function canAccessStudio(role: AppRole): boolean {

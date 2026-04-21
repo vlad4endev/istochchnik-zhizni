@@ -35,6 +35,7 @@ export function useSyncServerRole(): void {
           firstName: me.first_name ?? '',
           lastName: me.last_name ?? '',
           role: me.app_role ?? 'member',
+          roles: Array.isArray(me.app_roles) ? me.app_roles : undefined,
           registrationStatus: normalizeRegistrationStatus(me.registration_status),
           username: (me.username ?? '').trim(),
           memberId: typeof me.id === 'number' ? me.id : null,

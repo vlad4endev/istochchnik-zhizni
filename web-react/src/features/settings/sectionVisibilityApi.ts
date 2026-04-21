@@ -84,10 +84,17 @@ export function canRoleAccessSection(
   settings: SectionVisibilitySettingsPublic | undefined,
   sectionId: AppSectionId,
   roleRaw: string | null | undefined,
+  rolesRaw?: Array<string | null | undefined>,
 ): boolean {
   if (!settings) return true;
-  const role = normalizeAppRole(roleRaw);
+  const roles = Array.from(
+    new Set(
+      (Array.isArray(rolesRaw) && rolesRaw.length > 0 ? rolesRaw : [roleRaw]).map((r) =>
+        normalizeAppRole(r ?? undefined),
+      ),
+    ),
+  );
   const rule = settings.sections[sectionId];
   if (!rule || !rule.enabled) return false;
-  return rule.roles.includes(role);
+  return roles.some((role) => rule.roles.includes(role));
 }

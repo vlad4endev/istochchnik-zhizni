@@ -20,7 +20,7 @@ import {
   anchorPrayerCycleMemberOnDate,
   getPrayerCycleRosterSnapshot,
   setOneTimeMemberDateOverride,
-  setUserAppRole,
+  setUserAppRoles,
   startPrayerCycle,
   swapAllMembersFirstLastNames,
   swapMemberFirstLastName,
@@ -685,16 +685,33 @@ export async function setUserAppRoleHandler(req: Request, res: Response): Promis
     return;
   }
 
-  const appRole = req.body.app_role;
-  if (!isValidAppRole(appRole)) {
+  const appRolesRaw = (req.body as { app_roles?: unknown }).app_roles;
+  const appRoleSingle = req.body.app_role;
+  const parsedRoles: AppRole[] = [];
+  if (Array.isArray(appRolesRaw)) {
+    for (const role of appRolesRaw) {
+      if (!isValidAppRole(role)) {
+        res.status(400).json({
+          error: 'Field "app_roles" must contain only "member", "minister", "pastor", "musician", "editor", or "admin"',
+        });
+        return;
+      }
+      if (!parsedRoles.includes(role)) parsedRoles.push(role);
+    }
+  }
+  if (isValidAppRole(appRoleSingle) && !parsedRoles.includes(appRoleSingle)) {
+    parsedRoles.push(appRoleSingle);
+  }
+  if (parsedRoles.length === 0) {
     res.status(400).json({
-      error: 'Field "app_role" must be "member", "minister", "pastor", "musician", "editor", or "admin"',
+      error:
+        'Передайте "app_role" или непустой массив "app_roles" со значениями "member", "minister", "pastor", "musician", "editor", "admin"',
     });
     return;
   }
 
   try {
-    const updated = await setUserAppRole(userId, appRole);
+    const updated = await setUserAppRoles(userId, parsedRoles);
     if (!updated) {
       res.status(404).json({ error: 'User not found' });
       return;

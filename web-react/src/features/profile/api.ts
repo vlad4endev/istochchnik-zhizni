@@ -30,6 +30,7 @@ export interface MeResponse {
   /** Текущий цикл: нужда ниже сохраняется на этот цикл. */
   prayer_cycle?: MePrayerCycle | null;
   app_role: string;
+  app_roles?: string[];
   /** Ожидание модерации регистрации или отказ (ограниченный режим приложения). */
   registration_status?: 'active' | 'pending_review' | 'rejected';
   /** Ответственный за сбор — может редактировать назначения на следующую неделю. */

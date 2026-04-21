@@ -190,6 +190,7 @@ async function ensurePlannerSchema(): Promise<void> {
            ('sermon', 'Проповедь', 'speaker', 'person-chalkboard', 35),
            ('announcements', 'Объявления', 'text', 'bullhorn', 5),
            ('offering', 'Сбор пожертвований', 'custom', 'hand-holding-dollar', 3),
+           ('birthdays', 'Дни рождения', 'custom', 'cake-candles', 4),
            ('custom', 'Произвольный блок', 'custom', 'puzzle-piece', 5)
          on conflict (code) do nothing`,
       );
@@ -210,6 +211,130 @@ function toTimeHm(v: unknown, fallback = '10:00'): string {
   const raw = String(v ?? '').trim();
   const m = /^(\d{2}:\d{2})/.exec(raw);
   return m?.[1] ?? fallback;
+}
+
+type BirthdayWeekItem = {
+  id: number;
+  name: string;
+  birth_date: string;
+  week_date: string;
+};
+
+type BirthdayWeekPayload = {
+  week_start: string;
+  week_end: string;
+  items: BirthdayWeekItem[];
+};
+
+function normalizeBirthDateYmd(raw: unknown): string | null {
+  if (typeof raw !== 'string') return null;
+  const s = raw.trim().slice(0, 10);
+  return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : null;
+}
+
+function birthdayForYear(birthDateYmd: string, year: number): Date | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(birthDateYmd);
+  if (!m) return null;
+  const month = Number(m[2]);
+  const day = Number(m[3]);
+  const d = new Date(year, month - 1, day);
+  if (d.getFullYear() !== year || d.getMonth() !== month - 1 || d.getDate() !== day) return null;
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+function startOfWeekMonday(baseDate: string): Date {
+  const d = new Date(`${baseDate}T12:00:00`);
+  if (Number.isNaN(d.getTime())) {
+    const fallback = new Date();
+    fallback.setHours(0, 0, 0, 0);
+    return fallback;
+  }
+  d.setHours(0, 0, 0, 0);
+  const day = d.getDay();
+  const diff = day === 0 ? -6 : 1 - day;
+  d.setDate(d.getDate() + diff);
+  return d;
+}
+
+function formatYmdLocal(d: Date): string {
+  const y = d.getFullYear();
+  const m = `${d.getMonth() + 1}`.padStart(2, '0');
+  const day = `${d.getDate()}`.padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+function personName(row: { first_name?: unknown; last_name?: unknown; name?: unknown }): string {
+  const first = String(row.first_name ?? '').trim();
+  const last = String(row.last_name ?? '').trim();
+  const full = `${first} ${last}`.trim();
+  if (full) return full;
+  const fallback = String(row.name ?? '').trim();
+  return fallback || 'Участник';
+}
+
+async function getWeekBirthdays(serviceDate: string): Promise<BirthdayWeekPayload> {
+  const weekStart = startOfWeekMonday(serviceDate);
+  const weekEnd = new Date(weekStart);
+  weekEnd.setDate(weekStart.getDate() + 6);
+  weekEnd.setHours(23, 59, 59, 999);
+  const years = Array.from(new Set([weekStart.getFullYear(), weekEnd.getFullYear()]));
+
+  const membersRes = await query(
+    `select id, first_name, last_name, name, birth_date::text as birth_date
+     from public.members
+     where is_active = true
+       and birth_date is not null`,
+  );
+
+  const items: BirthdayWeekItem[] = [];
+  for (const rawRow of membersRes.rows) {
+    const row = rawRow as DbRecord;
+    const memberId = Number(row.id);
+    if (!Number.isFinite(memberId)) continue;
+    const birthDateYmd = normalizeBirthDateYmd(row.birth_date);
+    if (!birthDateYmd) continue;
+    let hit: Date | null = null;
+    for (const year of years) {
+      const candidate = birthdayForYear(birthDateYmd, year);
+      if (!candidate) continue;
+      if (candidate.getTime() >= weekStart.getTime() && candidate.getTime() <= weekEnd.getTime()) {
+        hit = candidate;
+        break;
+      }
+    }
+    if (!hit) continue;
+    items.push({
+      id: memberId,
+      name: personName(row),
+      birth_date: birthDateYmd,
+      week_date: formatYmdLocal(hit),
+    });
+  }
+
+  items.sort((a, b) => {
+    const byDate = a.week_date.localeCompare(b.week_date);
+    if (byDate !== 0) return byDate;
+    return a.name.localeCompare(b.name, 'ru');
+  });
+
+  return {
+    week_start: formatYmdLocal(weekStart),
+    week_end: formatYmdLocal(weekEnd),
+    items,
+  };
+}
+
+function withBirthdayWeek(
+  content: Record<string, unknown>,
+  payload: BirthdayWeekPayload,
+): Record<string, unknown> {
+  return {
+    ...content,
+    birthday_week_start: payload.week_start,
+    birthday_week_end: payload.week_end,
+    birthday_people: payload.items,
+  };
 }
 
 function mapPlanRow(row: DbRecord): PlannerPlanListItem {
@@ -372,20 +497,45 @@ export async function getPlanDetails(planId: number): Promise<PlannerPlanDetails
   if (!row) return null;
 
   const blocksRes = await query(
-    `select id, service_plan_id, block_type_id, title, order_index, duration_minutes, assigned_member_id, song_id, content_json
-     from public.service_blocks
+    `select
+       b.id,
+       b.service_plan_id,
+       b.block_type_id,
+       b.title,
+       b.order_index,
+       b.duration_minutes,
+       b.assigned_member_id,
+       b.song_id,
+       b.content_json,
+       bt.code as block_type_code
+     from public.service_blocks b
+     left join public.block_types bt on bt.id = b.block_type_id
      where service_plan_id = $1
-     order by order_index asc, id asc`,
+     order by b.order_index asc, b.id asc`,
     [planId],
   );
 
   const base = mapPlanRow(row);
+  const hasBirthdayBlocks = blocksRes.rows.some(
+    (r) => String((r as DbRecord).block_type_code ?? '').toLowerCase() === 'birthdays',
+  );
+  const birthdayPayload = hasBirthdayBlocks ? await getWeekBirthdays(base.service_date) : null;
   return {
     ...base,
     notes: row.notes == null ? null : String(row.notes),
     created_at: String(row.created_at ?? ''),
     updated_at: String(row.updated_at ?? ''),
-    blocks: blocksRes.rows.map((r) => mapBlockRow(r as DbRecord)),
+    blocks: blocksRes.rows.map((r) => {
+      const record = r as DbRecord;
+      const mapped = mapBlockRow(record);
+      if (String(record.block_type_code ?? '').toLowerCase() !== 'birthdays' || !birthdayPayload) {
+        return mapped;
+      }
+      return {
+        ...mapped,
+        content_json: withBirthdayWeek(mapped.content_json, birthdayPayload),
+      };
+    }),
   };
 }
 
@@ -438,10 +588,16 @@ export async function getPublicPlanByToken(token: string): Promise<PublicPlanner
     [Number(row.id)],
   );
 
+  const serviceDate = String(row.service_date ?? '');
+  const hasBirthdayBlocks = blocksRes.rows.some(
+    (r) => String((r as DbRecord).block_type_code ?? '').toLowerCase() === 'birthdays',
+  );
+  const birthdayPayload = hasBirthdayBlocks ? await getWeekBirthdays(serviceDate) : null;
+
   return {
     plan: {
       id: Number(row.id),
-      service_date: String(row.service_date ?? ''),
+      service_date: serviceDate,
       start_time: toTimeHm(row.start_time),
       status: row.status === 'published' ? 'published' : 'draft',
       total_duration_minutes: Number(row.total_duration_minutes ?? 0),
@@ -463,7 +619,10 @@ export async function getPublicPlanByToken(token: string): Promise<PublicPlanner
         assigned_member_name: x.assigned_member_name == null ? null : String(x.assigned_member_name),
         song_title: x.song_title == null ? null : String(x.song_title),
         song_key: x.song_key == null ? null : String(x.song_key),
-        content_json: asObject(x.content_json),
+        content_json:
+          String(x.block_type_code ?? '').toLowerCase() === 'birthdays' && birthdayPayload
+            ? withBirthdayWeek(asObject(x.content_json), birthdayPayload)
+            : asObject(x.content_json),
       };
     }),
   };

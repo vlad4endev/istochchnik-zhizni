@@ -144,6 +144,7 @@ export function RequireSectionAccess({
   fallbackPath?: string;
 }) {
   const role = useAuthStore((s) => s.role);
+  const roles = useAuthStore((s) => s.roles ?? [s.role]);
   const isAdmin = (role ?? 'member').toLowerCase() === 'admin';
   const settingsQ = useQuery({
     queryKey: ['settings', 'sections', 'visibility'],
@@ -152,7 +153,7 @@ export function RequireSectionAccess({
   });
   if (isAdmin) return <>{children}</>;
   if (settingsQ.isLoading) return <RouteFallback />;
-  const canAccess = canRoleAccessSection(settingsQ.data, sectionId, role);
+  const canAccess = canRoleAccessSection(settingsQ.data, sectionId, role, roles);
   if (!canAccess) {
     return <Navigate to={fallbackPath} replace />;
   }

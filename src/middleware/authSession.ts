@@ -6,6 +6,7 @@ import type { AppRole } from '../types/appRole';
 type AuthRequest = Request & {
   authUserId?: number;
   authUserRole?: AppRole;
+  authUserRoles?: AppRole[];
   authToken?: string;
 };
 
@@ -48,6 +49,7 @@ export async function resolveAuthSession(
     if (principal) {
       authReq.authUserId = principal.userId;
       authReq.authUserRole = principal.role;
+      authReq.authUserRoles = principal.roles;
       authReq.authToken = token;
     }
   } catch (error) {

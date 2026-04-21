@@ -4,7 +4,7 @@ import { query } from '../config/db';
 import type { PrayerCyclePublic } from './prayerCycleService';
 import { getPrayerCycleSnapshotForDate, toPublicCycleInfo } from './prayerCycleService';
 import type { AppRole } from '../types/appRole';
-import { normalizeAppRole } from '../types/appRole';
+import { normalizeAppRole, normalizeAppRoles } from '../types/appRole';
 import { findMemberIdConflictingName, updateUser } from './userService';
 import { postRegistrationAccessRequestMessengerNotification } from './messengerService';
 import { resolveSmsRuntimeConfig } from './smsSettingsService';
@@ -47,6 +47,7 @@ export interface AuthUser {
   email: string | null;
   prayer_request: string | null;
   app_role: AuthRole;
+  app_roles: AuthRole[];
   is_active: boolean;
   /** Ожидание подтверждения регистрации или отказ; для обычных участников — active. */
   registration_status: RegistrationStatus;
@@ -106,6 +107,7 @@ export type RegisterResult =
 export interface SessionPrincipal {
   userId: number;
   role: AuthRole;
+  roles: AuthRole[];
   tokenHash: string;
 }
 
@@ -136,6 +138,7 @@ type MemberRow = {
   email: string | null;
   prayer_request: string | null;
   app_role: string;
+  app_roles?: unknown;
   is_active: boolean;
   registration_status?: string | null;
   is_collection_coordinator?: boolean;
@@ -296,6 +299,7 @@ function mapAuthUser(row: MemberRow): AuthUser {
     email: row.email ?? null,
     prayer_request: row.prayer_request ?? null,
     app_role: normalizeRole(row.app_role),
+    app_roles: normalizeAppRoles(row.app_roles, row.app_role),
     is_active: row.is_active,
     registration_status: normalizeRegistrationStatus(row.registration_status),
     is_collection_coordinator: Boolean(row.is_collection_coordinator),
@@ -1135,18 +1139,22 @@ export async function resolveSessionByToken(token: string): Promise<SessionPrinc
          m.is_active = TRUE
          OR m.registration_status = 'rejected'
        )
-     RETURNING m.id AS member_pk, m.app_role`,
+    RETURNING m.id AS member_pk, m.app_role, m.app_roles`,
     [tokenHash, refreshedExpiresAt.toISOString()]
   );
 
-  const row = result.rows[0] as { member_pk: number; app_role: string } | undefined;
+  const row = result.rows[0] as
+    | { member_pk: number; app_role: string; app_roles?: unknown }
+    | undefined;
   if (!row) {
     return null;
   }
+  const roles = normalizeAppRoles(row.app_roles, row.app_role);
 
   return {
     userId: row.member_pk,
     role: normalizeRole(row.app_role),
+    roles,
     tokenHash,
   };
 }
@@ -1181,6 +1189,7 @@ export async function getAuthUserById(userId: number): Promise<AuthUser | null> 
       m.email,
       COALESCE(mpc.prayer_request, m.prayer_request) AS prayer_request,
       m.app_role,
+      m.app_roles,
       m.is_active,
       m.registration_status,
       m.is_collection_coordinator,
