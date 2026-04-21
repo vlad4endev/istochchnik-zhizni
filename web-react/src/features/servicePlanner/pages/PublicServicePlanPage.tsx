@@ -25,6 +25,8 @@ const ICON_BY_CODE: Record<string, { Icon: IconType; wrapClass: string; iconClas
   custom: { Icon: FaPuzzlePiece, wrapClass: 'bg-stone-200', iconClass: 'text-stone-700' },
 };
 
+const ICON_BY_MARK_KEY = ICON_BY_CODE;
+
 function isSeparator(content: Record<string, unknown>): boolean {
   return content.is_separator === true;
 }
@@ -131,6 +133,21 @@ export function PublicServicePlanPage() {
                   <div className="w-12 shrink-0 text-xs font-bold text-stone-700">{b.startsAt}</div>
                   {(() => {
                     const custom = typeof b.content_json.block_mark === 'string' ? b.content_json.block_mark.trim() : '';
+                    const markIconKey =
+                      typeof b.content_json.block_mark_icon === 'string'
+                        ? b.content_json.block_mark_icon.trim().toLowerCase()
+                        : '';
+                    const markIcon = markIconKey ? ICON_BY_MARK_KEY[markIconKey] : null;
+                    if (markIcon) {
+                      const MarkIcon = markIcon.Icon;
+                      return (
+                        <div
+                          className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${markIcon.wrapClass}`}
+                        >
+                          <MarkIcon className={`h-4 w-4 ${markIcon.iconClass}`} />
+                        </div>
+                      );
+                    }
                     if (custom) {
                       return (
                         <div className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-stone-100 text-lg">

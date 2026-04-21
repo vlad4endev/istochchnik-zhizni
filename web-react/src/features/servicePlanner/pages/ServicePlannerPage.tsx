@@ -153,6 +153,30 @@ const CATEGORY_ICON_BY_CODE: Record<string, { Icon: IconType; wrapClass: string;
   custom: { Icon: FaPuzzlePiece, wrapClass: 'bg-stone-200', iconClass: 'text-stone-700' },
 };
 
+const BLOCK_MARK_ICON_OPTIONS: Array<{
+  key: string;
+  label: string;
+  Icon: IconType;
+  wrapClass: string;
+  iconClass: string;
+}> = [
+  { key: 'prayer', label: 'Молитва', Icon: FaHandsPraying, wrapClass: 'bg-violet-100', iconClass: 'text-violet-700' },
+  { key: 'song', label: 'Песня', Icon: FaMusic, wrapClass: 'bg-sky-100', iconClass: 'text-sky-700' },
+  { key: 'scripture', label: 'Писание', Icon: FaBookBible, wrapClass: 'bg-amber-100', iconClass: 'text-amber-700' },
+  { key: 'sermon', label: 'Проповедь', Icon: FaMicrophoneLines, wrapClass: 'bg-rose-100', iconClass: 'text-rose-700' },
+  { key: 'announcements', label: 'Объявления', Icon: FaBullhorn, wrapClass: 'bg-emerald-100', iconClass: 'text-emerald-700' },
+  { key: 'offering', label: 'Пожертвование', Icon: FaHandHoldingDollar, wrapClass: 'bg-lime-100', iconClass: 'text-lime-700' },
+  { key: 'custom', label: 'Произвольный', Icon: FaPuzzlePiece, wrapClass: 'bg-stone-200', iconClass: 'text-stone-700' },
+  { key: 'users', label: 'Участники', Icon: LuUsers, wrapClass: 'bg-cyan-100', iconClass: 'text-cyan-700' },
+  { key: 'clock', label: 'Время', Icon: LuClock3, wrapClass: 'bg-indigo-100', iconClass: 'text-indigo-700' },
+  { key: 'note', label: 'Заметка', Icon: LuPencil, wrapClass: 'bg-orange-100', iconClass: 'text-orange-700' },
+  { key: 'link', label: 'Ссылка', Icon: LuLink, wrapClass: 'bg-teal-100', iconClass: 'text-teal-700' },
+];
+
+const BLOCK_MARK_ICON_BY_KEY = Object.fromEntries(
+  BLOCK_MARK_ICON_OPTIONS.map((x) => [x.key, x]),
+) as Record<string, (typeof BLOCK_MARK_ICON_OPTIONS)[number]>;
+
 export function ServicePlannerPage() {
   const qc = useQueryClient();
   const role = useAuthStore((s) => s.role);
@@ -443,6 +467,16 @@ export function ServicePlannerPage() {
     return null;
   }
 
+  function getBlockMarkIcon(block: ServicePlanBlock):
+    | { Icon: IconType; wrapClass: string; iconClass: string }
+    | null {
+    const keyRaw = block.content_json?.block_mark_icon;
+    if (typeof keyRaw !== 'string') return null;
+    const key = keyRaw.trim().toLowerCase();
+    if (!key) return null;
+    return BLOCK_MARK_ICON_BY_KEY[key] ?? null;
+  }
+
   function getBlockLogoUrl(block: ServicePlanBlock): string | null {
     const raw = block.content_json?.block_logo_url;
     if (typeof raw !== 'string') return null;
@@ -494,6 +528,45 @@ export function ServicePlannerPage() {
       leader_member_id: draft?.leader_member_id ?? null,
       preacher_member_id: draft?.preacher_member_id ?? null,
     });
+  }
+
+  async function createTemplateFromCurrentPlan(): Promise<void> {
+    if (!draft) return;
+    const fallbackType = blockTypes[0]?.id;
+    if (!fallbackType) return;
+    const suggestedName = `Шаблон из программы ${formatRuDateLong(draft.service_date)}`;
+    const name = window.prompt('Название нового шаблона', suggestedName)?.trim();
+    if (!name) return;
+    const recurrence =
+      templateDraft?.recurrence_rule && Object.keys(templateDraft.recurrence_rule).length > 0
+        ? templateDraft.recurrence_rule
+        : { frequency: 'weekly', byWeekday: 0 };
+    try {
+      await createTemplateMut.mutateAsync({
+        name,
+        description: `Создано из программы от ${formatRuDateLong(draft.service_date)}`,
+        default_start_time: draft.start_time || '10:00',
+        recurrence_rule: recurrence,
+        blocks: draft.blocks
+          .slice()
+          .sort((a, b) => a.order_index - b.order_index)
+          .map((b, idx) => ({
+            block_type_id: b.block_type_id || fallbackType,
+            title: b.title || `Блок ${idx + 1}`,
+            order_index: idx,
+            duration_minutes: Math.max(1, b.duration_minutes || 1),
+            default_song_id: b.song_id ?? null,
+            default_content_json: {
+              ...(b.content_json ?? {}),
+              default_assigned_member_id: b.assigned_member_id ?? null,
+            },
+          })),
+      });
+      setIsTemplateDraftNew(false);
+      setScreen('template');
+    } catch {
+      window.alert('Не удалось создать шаблон из текущей программы');
+    }
   }
 
   function addPlanBlock(): void {
@@ -1305,16 +1378,25 @@ export function ServicePlannerPage() {
           <h1 className="text-xl font-extrabold text-stone-900">План служения</h1>
           <div className="flex items-center gap-2">
             {isAdmin ? (
-              <button
-                type="button"
-                onClick={() => {
-                  setIsTemplateDraftNew(false);
-                  setScreen('template');
-                }}
-                className="rounded-lg border border-stone-300 px-3 py-1.5 text-xs font-semibold text-stone-700 hover:border-primary hover:text-primary"
-              >
-                Конструктор шаблона
-              </button>
+              <>
+                <button
+                  type="button"
+                  onClick={() => void createTemplateFromCurrentPlan()}
+                  className="rounded-lg border border-stone-300 px-3 py-1.5 text-xs font-semibold text-stone-700 hover:border-primary hover:text-primary"
+                >
+                  Сделать шаблон из программы
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsTemplateDraftNew(false);
+                    setScreen('template');
+                  }}
+                  className="rounded-lg border border-stone-300 px-3 py-1.5 text-xs font-semibold text-stone-700 hover:border-primary hover:text-primary"
+                >
+                  Конструктор шаблона
+                </button>
+              </>
             ) : null}
             <button
               type="button"
@@ -1336,48 +1418,75 @@ export function ServicePlannerPage() {
         </div>
       </header>
 
-      <section className="mx-auto w-full max-w-3xl rounded-2xl border border-stone-200 bg-white p-2 shadow-sm">
-        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-stone-500">
-          Шаг 1: выберите шаблон и сгенерируйте программу
-        </p>
-        <div className="grid gap-2 md:grid-cols-3">
-          <select
-            value={activeTemplateId ?? ''}
-            onChange={(e) => setActiveTemplateId(e.target.value ? Number(e.target.value) : null)}
-            className="rounded-xl border border-stone-300 px-3 py-2 text-sm"
-          >
-            {templates.map((tpl) => (
-              <option key={tpl.id} value={tpl.id}>
-                {tpl.name}
-              </option>
-            ))}
-          </select>
+      <section className="rounded-2xl border border-stone-200 bg-white p-3 shadow-sm">
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <p className="text-xs font-semibold uppercase tracking-wide text-stone-500">Настройки плана</p>
           <button
             type="button"
-            onClick={() => generateFromTemplate(todayIso())}
-            className="inline-flex items-center justify-center gap-2 rounded-xl border border-stone-300 px-3 py-2 text-sm font-semibold text-stone-700 hover:border-primary hover:text-primary"
+            onClick={() =>
+              void updatePlanMut.mutateAsync({
+                id: draft.id,
+                body: {
+                  service_date: draft.service_date,
+                  start_time: draft.start_time,
+                  leader_member_id: draft.leader_member_id,
+                  preacher_member_id: draft.preacher_member_id,
+                },
+              })
+            }
+            className="inline-flex items-center justify-center gap-1 rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-white hover:bg-primary-dark"
           >
-            <LuPlus className="h-4 w-4" />
-            Сгенерировать программу
+            <LuSave className="h-3.5 w-3.5" />
+            Сохранить настройки
           </button>
+        </div>
+        <div className="grid gap-2 md:grid-cols-2">
+          <input
+            type="date"
+            value={draft.service_date}
+            onChange={(e) => setDraft({ ...draft, service_date: e.target.value || todayIso() })}
+            className="rounded-xl border border-stone-300 px-3 py-2 text-sm"
+          />
+          <input
+            type="time"
+            value={draft.start_time}
+            onChange={(e) => setDraft({ ...draft, start_time: e.target.value || '10:00' })}
+            className="rounded-xl border border-stone-300 px-3 py-2 text-sm"
+          />
           <select
-            value={activePlanId ?? ''}
-            onChange={(e) => setActivePlanId(e.target.value ? Number(e.target.value) : null)}
+            value={draft.leader_member_id ?? ''}
+            onChange={(e) => setDraft({ ...draft, leader_member_id: e.target.value ? Number(e.target.value) : null })}
             className="rounded-xl border border-stone-300 px-3 py-2 text-sm"
           >
-            {(plansQ.data ?? []).map((plan) => (
-              <option key={plan.id} value={plan.id}>
-                {formatRuDateLong(plan.service_date)} • {plan.status === 'published' ? 'Опубликован' : 'Черновик'}
+            <option value="">Ведущий</option>
+            {(leaderCandidates.length > 0 ? leaderCandidates : users).map((u) => (
+              <option key={u.id} value={u.id}>
+                {userLabel(u)}
               </option>
             ))}
           </select>
+          <select
+            value={draft.preacher_member_id ?? ''}
+            onChange={(e) =>
+              setDraft({ ...draft, preacher_member_id: e.target.value ? Number(e.target.value) : null })
+            }
+            className="rounded-xl border border-stone-300 px-3 py-2 text-sm"
+          >
+            <option value="">Проповедник</option>
+            {(preacherCandidates.length > 0 ? preacherCandidates : users).map((u) => (
+              <option key={u.id} value={u.id}>
+                {userLabel(u)}
+              </option>
+            ))}
+          </select>
+          <div className="md:col-span-2 rounded-xl bg-stone-50 px-3 py-2 text-xs text-stone-600">
+            <LuLink className="mr-1 inline h-3.5 w-3.5" /> /service-plan/share/{draft.share_token}
+          </div>
         </div>
       </section>
 
       <section className="rounded-2xl border border-stone-200 bg-white p-3 shadow-sm">
-        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-stone-500">
-          Шаг 2: отредактируйте и расставьте блоки
-        </p>
+        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-stone-500">Составление программы</p>
         <div className="grid gap-2 md:grid-cols-5">
           <button
             type="button"
@@ -1463,11 +1572,22 @@ export function ServicePlannerPage() {
                               />
                             ) : (
                               (() => {
+                                const customIcon = getBlockMarkIcon(block);
                                 const customMark = getBlockMark(block);
                                 const categoryIcon = getCategoryIcon(block);
+                                if (customIcon) {
+                                  const Icon = customIcon.Icon;
+                                  return (
+                                    <span
+                                      className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${customIcon.wrapClass}`}
+                                    >
+                                      <Icon className={`h-4 w-4 ${customIcon.iconClass}`} />
+                                    </span>
+                                  );
+                                }
                                 if (customMark) {
                                   return (
-                                    <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-stone-100 text-base">
+                                    <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-stone-100 text-base">
                                       {customMark}
                                     </span>
                                   );
@@ -1554,71 +1674,6 @@ export function ServicePlannerPage() {
         </DragDropContext>
       </section>
 
-      <details className="rounded-2xl border border-stone-200 bg-white p-3 shadow-sm">
-        <summary className="cursor-pointer text-sm font-bold text-stone-700">Настройки плана</summary>
-        <div className="mt-3 grid gap-2 md:grid-cols-2">
-          <input
-            type="date"
-            value={draft.service_date}
-            onChange={(e) => setDraft({ ...draft, service_date: e.target.value || todayIso() })}
-            className="rounded-lg border border-stone-300 px-2 py-1.5 text-sm"
-          />
-          <input
-            type="time"
-            value={draft.start_time}
-            onChange={(e) => setDraft({ ...draft, start_time: e.target.value || '10:00' })}
-            className="rounded-lg border border-stone-300 px-2 py-1.5 text-sm"
-          />
-          <select
-            value={draft.leader_member_id ?? ''}
-            onChange={(e) => setDraft({ ...draft, leader_member_id: e.target.value ? Number(e.target.value) : null })}
-            className="rounded-lg border border-stone-300 px-2 py-1.5 text-sm"
-          >
-            <option value="">Ведущий</option>
-            {(leaderCandidates.length > 0 ? leaderCandidates : users).map((u) => (
-              <option key={u.id} value={u.id}>
-                {userLabel(u)}
-              </option>
-            ))}
-          </select>
-          <select
-            value={draft.preacher_member_id ?? ''}
-            onChange={(e) =>
-              setDraft({ ...draft, preacher_member_id: e.target.value ? Number(e.target.value) : null })
-            }
-            className="rounded-lg border border-stone-300 px-2 py-1.5 text-sm"
-          >
-            <option value="">Проповедник</option>
-            {(preacherCandidates.length > 0 ? preacherCandidates : users).map((u) => (
-              <option key={u.id} value={u.id}>
-                {userLabel(u)}
-              </option>
-            ))}
-          </select>
-          <div className="md:col-span-2 rounded-lg bg-stone-50 px-2 py-1.5 text-xs text-stone-600">
-            <LuLink className="mr-1 inline h-3.5 w-3.5" /> /service-plan/share/{draft.share_token}
-          </div>
-          <button
-            type="button"
-            onClick={() =>
-              void updatePlanMut.mutateAsync({
-                id: draft.id,
-                body: {
-                  service_date: draft.service_date,
-                  start_time: draft.start_time,
-                  leader_member_id: draft.leader_member_id,
-                  preacher_member_id: draft.preacher_member_id,
-                },
-              })
-            }
-            className="inline-flex items-center justify-center gap-1 rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-white hover:bg-primary-dark md:col-span-2"
-          >
-            <LuSave className="h-4 w-4" />
-            Сохранить настройки плана
-          </button>
-        </div>
-      </details>
-
       <section className="rounded-2xl border border-stone-200 bg-white p-3 shadow-sm">
         <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-stone-500">
           Шаг 3: поделитесь ссылкой
@@ -1638,25 +1693,6 @@ export function ServicePlannerPage() {
           </button>
         </div>
       </section>
-
-      {isAdmin ? (
-        <section className="rounded-2xl border border-stone-200 bg-white p-3 shadow-sm">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <p className="text-sm font-bold text-stone-700">Шаблоны (админ)</p>
-            <button
-              type="button"
-              onClick={() => {
-                setIsTemplateDraftNew(false);
-                setScreen('template');
-              }}
-              className="inline-flex items-center gap-2 rounded-lg border border-stone-300 px-3 py-1.5 text-xs font-semibold text-stone-700 hover:border-primary hover:text-primary"
-            >
-              <LuPencil className="h-3.5 w-3.5" />
-              Открыть конструктор шаблонов
-            </button>
-          </div>
-        </section>
-      ) : null}
 
       {(songsQ.isLoading || membersQ.isLoading) && (
         <div className="rounded-xl border border-stone-200 bg-white p-2 text-xs text-stone-500">
@@ -1693,7 +1729,7 @@ export function ServicePlannerPage() {
 
       {editingBlock ? (
         <div className="fixed inset-0 z-[70] flex items-end justify-center bg-black/35 p-3 sm:items-center">
-          <div className="w-full max-w-xl rounded-2xl border border-stone-200 bg-white p-4 shadow-2xl">
+          <div className="w-full max-w-2xl rounded-2xl border border-stone-200 bg-white p-4 shadow-2xl">
             <div className="mb-3 flex items-center justify-between gap-2">
               <h3 className="text-base font-extrabold text-stone-900">Редактирование блока</h3>
               <button
@@ -1704,7 +1740,7 @@ export function ServicePlannerPage() {
                 Закрыть
               </button>
             </div>
-            <div className="grid gap-2 sm:grid-cols-2">
+            <div className="grid gap-2 rounded-xl bg-stone-50 p-3 sm:grid-cols-2 [&_input]:bg-white [&_input]:text-stone-900 [&_input]:placeholder:text-stone-400 [&_select]:bg-white [&_select]:text-stone-900 [&_textarea]:bg-white [&_textarea]:text-stone-900 [&_textarea]:placeholder:text-stone-400">
               <input
                 value={isSeparatorBlock(editingBlock) ? separatorLabel(editingBlock) : editingBlock.title}
                 onChange={(e) => {
@@ -1728,7 +1764,7 @@ export function ServicePlannerPage() {
                   })
                 }
                 className="rounded-lg border border-stone-300 px-2 py-1.5 text-sm"
-                placeholder="Эмоджи/маркер (например 🎵)"
+                placeholder="Текстовый маркер (опционально)"
               />
               <input
                 value={String((editingBlock.content_json?.block_logo_url as string | undefined) ?? '')}
@@ -1740,20 +1776,28 @@ export function ServicePlannerPage() {
                 className="rounded-lg border border-stone-300 px-2 py-1.5 text-sm"
                 placeholder="URL лого (опционально)"
               />
-              <div className="flex flex-wrap gap-1 sm:col-span-2">
-                {['🙏', '🎵', '📖', '🎙️', '📢', '🤲', '🧩'].map((mark) => (
+              <div className="sm:col-span-2">
+                <p className="mb-1 text-xs font-semibold text-stone-600">Иконка блока (React)</p>
+                <div className="flex flex-wrap gap-1">
+                {BLOCK_MARK_ICON_OPTIONS.map((markIcon) => (
                   <button
-                    key={mark}
+                    key={markIcon.key}
                     type="button"
                     onClick={() =>
                       updateDraftBlock(editingBlock.id, {
-                        content_json: { ...editingBlock.content_json, block_mark: mark },
+                        content_json: {
+                          ...editingBlock.content_json,
+                          block_mark_icon: markIcon.key,
+                          block_mark: '',
+                        },
                       })
                     }
-                    className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-stone-300 text-sm hover:border-primary"
-                    title={`Поставить ${mark}`}
+                    className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-stone-300 bg-white hover:border-primary"
+                    title={markIcon.label}
                   >
-                    {mark}
+                    <span className={`inline-flex h-7 w-7 items-center justify-center rounded-md ${markIcon.wrapClass}`}>
+                      <markIcon.Icon className={`h-4 w-4 ${markIcon.iconClass}`} />
+                    </span>
                   </button>
                 ))}
                 <button
@@ -1763,14 +1807,16 @@ export function ServicePlannerPage() {
                       content_json: {
                         ...editingBlock.content_json,
                         block_mark: '',
+                        block_mark_icon: '',
                         block_logo_url: '',
                       },
                     })
                   }
-                  className="rounded-md border border-stone-300 px-2 text-xs font-semibold text-stone-700 hover:border-primary hover:text-primary"
+                  className="rounded-md border border-stone-300 bg-white px-2 text-xs font-semibold text-stone-700 hover:border-primary hover:text-primary"
                 >
                   Сброс
                 </button>
+                </div>
               </div>
               {!isSeparatorBlock(editingBlock) ? (
                 <>

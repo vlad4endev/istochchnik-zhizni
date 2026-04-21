@@ -207,19 +207,6 @@ function normalizeMinistryRoles(value: string): string {
   return unique.join(', ');
 }
 
-function roleArray(value: string): string[] {
-  return normalizeMinistryRoles(value)
-    .split(',')
-    .map((x) => x.trim())
-    .filter((x) => x.length > 0);
-}
-
-function keepAllowedRoles(value: string, allowed: Set<string>): string {
-  const roles = roleArray(value);
-  if (allowed.size === 0) return normalizeMinistryRoles(value);
-  return roles.filter((r) => allowed.has(r)).join(', ');
-}
-
 function displayName(u: AppUser): string {
   const f = (u.first_name ?? '').trim();
   const l = (u.last_name ?? '').trim();
@@ -1088,9 +1075,7 @@ function MembersSection() {
                           setBulkRows((rs) =>
                             rs.map((r) => {
                               if (r.key !== row.key) return r;
-                              const allowed = new Set(rolesForDirection(nextDir));
-                              const nextRole = keepAllowedRoles(r.ministry_role, allowed);
-                              return { ...r, ministry_direction: nextDir, ministry_role: nextRole };
+                              return { ...r, ministry_direction: nextDir };
                             }),
                           );
                         }}
@@ -1107,7 +1092,6 @@ function MembersSection() {
                       <input
                         className={`${fieldClass()} py-1.5 text-xs`}
                         value={row.ministry_role}
-                        disabled={!row.ministry_direction}
                         onChange={(e) => {
                           const v = e.target.value;
                           setBulkRows((rs) => rs.map((r) => (r.key === row.key ? { ...r, ministry_role: v } : r)));
@@ -1208,9 +1192,7 @@ function MembersSection() {
                 onChange={(e) => {
                   const nextDir = e.target.value;
                   setForm((s) => {
-                    const allowed = new Set(rolesForDirection(nextDir));
-                    const nextRole = keepAllowedRoles(s.ministry_role, allowed);
-                    return { ...s, ministry_direction: nextDir, ministry_role: nextRole };
+                    return { ...s, ministry_direction: nextDir };
                   });
                 }}
               >
@@ -1227,7 +1209,6 @@ function MembersSection() {
               <input
                 className={fieldClass()}
                 value={form.ministry_role}
-                disabled={!form.ministry_direction}
                 onChange={(e) => setForm((s) => ({ ...s, ministry_role: e.target.value }))}
                 placeholder={`Роли через запятую: ${rolesForDirection(form.ministry_direction).join(', ')}`}
               />
@@ -1554,9 +1535,7 @@ function MembersSection() {
                       onChange={(e) => {
                         const nextDir = e.target.value;
                         setEditForm((s) => {
-                          const allowed = new Set(rolesForDirection(nextDir));
-                          const nextRole = keepAllowedRoles(s.ministry_role, allowed);
-                          return { ...s, ministry_direction: nextDir, ministry_role: nextRole };
+                          return { ...s, ministry_direction: nextDir };
                         });
                       }}
                     >
@@ -1573,7 +1552,6 @@ function MembersSection() {
                     <input
                       className={fieldClass()}
                       value={editForm.ministry_role}
-                      disabled={!editForm.ministry_direction}
                       onChange={(e) => setEditForm((s) => ({ ...s, ministry_role: e.target.value }))}
                       placeholder={`Роли через запятую: ${rolesForDirection(editForm.ministry_direction).join(', ')}`}
                     />

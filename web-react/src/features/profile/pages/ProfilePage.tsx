@@ -72,19 +72,6 @@ function normalizeMinistryRoles(value: string): string {
   return unique.join(', ');
 }
 
-function roleArray(value: string): string[] {
-  return normalizeMinistryRoles(value)
-    .split(',')
-    .map((x) => x.trim())
-    .filter((x) => x.length > 0);
-}
-
-function keepAllowedRoles(value: string, allowed: Set<string>): string {
-  const roles = roleArray(value);
-  if (allowed.size === 0) return normalizeMinistryRoles(value);
-  return roles.filter((r) => allowed.has(r)).join(', ');
-}
-
 /* ── Shared class names ──────────────────────────────────── */
 
 const SECTION_TITLE =
@@ -693,10 +680,7 @@ export function ProfilePage() {
                     onChange={(e) => {
                       const nextDir = e.target.value;
                       setDraft((d) => {
-                        const dir = ministryTemplates.find((x) => x.title === nextDir);
-                        const allowed = new Set((dir?.roles ?? []).map((r) => r.title));
-                        const nextRole = keepAllowedRoles(d.ministry_role, allowed);
-                        return { ...d, ministry_direction: nextDir, ministry_role: nextRole };
+                        return { ...d, ministry_direction: nextDir };
                       });
                     }}
                   >
@@ -713,7 +697,6 @@ export function ProfilePage() {
                   <input
                     className={INPUT}
                     value={draft.ministry_role}
-                    disabled={!draft.ministry_direction}
                     onChange={(e) => setDraft((d) => ({ ...d, ministry_role: e.target.value }))}
                     placeholder={`Роли через запятую: ${
                       (ministryTemplates.find((x) => x.title === draft.ministry_direction)?.roles ?? [])
