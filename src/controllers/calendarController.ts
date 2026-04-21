@@ -2,9 +2,12 @@ import { Request, Response } from 'express';
 import { AiAgentError, chatCompletion } from '../ai';
 import { query } from '../config/db';
 import {
+  countPrayerSectionVisitorsForDate,
   getMemberAssignmentsForWeek,
-  type WeekPlanKind,
   getPrayerDataByDate,
+  getPrayerSectionStatsDateYmd,
+  recordPrayerSectionVisitForMember,
+  type WeekPlanKind,
 } from '../services/calendarService';
 import {
   addManualPreviousPrayerNeed,
@@ -752,5 +755,33 @@ export async function getCuratorDistribution(req: Request, res: Response): Promi
   } catch (err) {
     console.error('Calendar curator distribution GET error:', err);
     res.status(500).json({ error: 'Не удалось получить распределение кураторов' });
+  }
+}
+
+type AuthRequest = Request & { authUserId?: number };
+
+export async function postPrayerSectionVisit(req: Request, res: Response): Promise<void> {
+  const memberId = (req as AuthRequest).authUserId;
+  if (!memberId) {
+    res.status(401).json({ error: 'Authentication required' });
+    return;
+  }
+  try {
+    await recordPrayerSectionVisitForMember(memberId);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('postPrayerSectionVisit error:', err);
+    res.status(500).json({ error: 'Database error' });
+  }
+}
+
+export async function getPrayerSectionTodayViewers(_req: Request, res: Response): Promise<void> {
+  try {
+    const visitDateYmd = getPrayerSectionStatsDateYmd();
+    const unique_viewers_today = await countPrayerSectionVisitorsForDate(visitDateYmd);
+    res.json({ date: visitDateYmd, unique_viewers_today });
+  } catch (err) {
+    console.error('getPrayerSectionTodayViewers error:', err);
+    res.status(500).json({ error: 'Database error' });
   }
 }

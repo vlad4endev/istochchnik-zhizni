@@ -199,4 +199,10 @@ export type WsMessengerEvent =
   | { type: 'messages_read'; chatId: string; userId: number; lastReadMessageId: string }
   | { type: 'read:updated'; conversationId: string; memberId: number; lastReadMessageId: string }
   | { type: 'presence:online'; memberId: number }
-  | { type: 'presence:offline'; memberId: number; lastSeenAt?: string };
+  | { type: 'presence:offline'; memberId: number; lastSeenAt?: string }
+  /** Кто сейчас смотрит/редактирует план в планировщике (комната `sp:<id>` на WS). */
+  | {
+      type: 'service_plan:presence';
+      servicePlanId: number;
+      peers: Array<{ memberId: number; memberName: string }>;
+    };

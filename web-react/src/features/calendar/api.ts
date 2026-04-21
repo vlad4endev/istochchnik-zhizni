@@ -477,3 +477,28 @@ export async function deleteDashboardCoordinatorNote(
   });
   return normalizeDashboardCoordinatorResponse(data);
 }
+
+export interface PrayerSectionTodayViewersResponse {
+  date: string;
+  unique_viewers_today: number;
+}
+
+function normalizePrayerSectionTodayViewers(raw: unknown): PrayerSectionTodayViewersResponse {
+  if (!isRecord(raw)) return { date: '', unique_viewers_today: 0 };
+  const date = typeof raw.date === 'string' ? raw.date : '';
+  const n = raw.unique_viewers_today;
+  const unique_viewers_today =
+    typeof n === 'number' && Number.isFinite(n) ? n : Number.isFinite(Number(n)) ? Number(n) : 0;
+  return { date, unique_viewers_today };
+}
+
+/** Сколько разных участников заходили в раздел «Молитва» за текущий календарный день (по времени церкви на сервере). */
+export async function fetchPrayerSectionTodayViewers(): Promise<PrayerSectionTodayViewersResponse> {
+  const { data } = await apiClient.get<unknown>('/api/calendar/prayer-section/today-viewers');
+  return normalizePrayerSectionTodayViewers(data);
+}
+
+/** Фиксирует визит текущего пользователя (не более одного раза в сутки на человека). */
+export async function postPrayerSectionVisit(): Promise<void> {
+  await apiClient.post('/api/calendar/prayer-section/visit');
+}

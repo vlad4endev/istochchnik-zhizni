@@ -9,10 +9,12 @@ import {
   deleteBlock,
   deleteTemplate,
   getPlanDetails,
+  getServicePlanIdForBlock,
   getTemplateDetails,
   listBlockTypes,
   listPlans,
   listTemplates,
+  markServicePlanLastEdited,
   patchBlock,
   patchPlan,
   patchTemplate,
@@ -302,6 +304,13 @@ export async function postServicePlan(req: Request, res: Response): Promise<void
       preacher_member_id: body.preacher_member_id == null ? null : parseId(body.preacher_member_id),
       created_by_member_id: req.authUserId!,
     });
+    if (req.authUserId) {
+      try {
+        await markServicePlanLastEdited(id, req.authUserId);
+      } catch (e) {
+        console.error('[service-planner] mark last edited (create plan):', e);
+      }
+    }
     res.status(201).json({ id });
   } catch (e) {
     console.error('[service-planner] postServicePlan:', e);
@@ -362,11 +371,19 @@ export async function patchServicePlanById(req: Request, res: Response): Promise
   if (body.notes !== undefined) {
     patch.notes = body.notes == null ? null : String(body.notes);
   }
+  const hadPatch = Object.keys(patch).length > 0;
   try {
     const ok = await patchPlan(id, patch);
     if (!ok) {
       res.status(404).json({ error: 'План не найден' });
       return;
+    }
+    if (hadPatch && req.authUserId) {
+      try {
+        await markServicePlanLastEdited(id, req.authUserId);
+      } catch (e) {
+        console.error('[service-planner] mark last edited (patch plan):', e);
+      }
     }
     res.json({ ok: true });
   } catch (e) {
@@ -387,6 +404,13 @@ export async function patchServiceBlocksReorder(req: Request, res: Response): Pr
   }
   try {
     await reorderBlocks(servicePlanId, orderedBlockIds);
+    if (req.authUserId) {
+      try {
+        await markServicePlanLastEdited(servicePlanId, req.authUserId);
+      } catch (e) {
+        console.error('[service-planner] mark last edited (reorder):', e);
+      }
+    }
     res.json({ ok: true });
   } catch (e) {
     console.error('[service-planner] patchServiceBlocksReorder:', e);
@@ -430,11 +454,20 @@ export async function patchServiceBlockById(req: Request, res: Response): Promis
   if (body.content_json !== undefined) {
     patch.content_json = parseJsonObject(body.content_json);
   }
+  const hadBlockPatch = Object.keys(patch).length > 0;
   try {
+    const planId = hadBlockPatch ? await getServicePlanIdForBlock(id) : null;
     const ok = await patchBlock(id, patch);
     if (!ok) {
       res.status(404).json({ error: 'Блок не найден' });
       return;
+    }
+    if (hadBlockPatch && planId && req.authUserId) {
+      try {
+        await markServicePlanLastEdited(planId, req.authUserId);
+      } catch (e) {
+        console.error('[service-planner] mark last edited (patch block):', e);
+      }
     }
     res.json({ ok: true });
   } catch (e) {
@@ -467,6 +500,13 @@ export async function postServiceBlock(req: Request, res: Response): Promise<voi
       song_id: body.song_id == null ? null : parseId(body.song_id),
       content_json: parseJsonObject(body.content_json),
     });
+    if (req.authUserId) {
+      try {
+        await markServicePlanLastEdited(servicePlanId, req.authUserId);
+      } catch (e) {
+        console.error('[service-planner] mark last edited (create block):', e);
+      }
+    }
     res.status(201).json({ id });
   } catch (e) {
     console.error('[service-planner] postServiceBlock:', e);
@@ -482,10 +522,18 @@ export async function deleteServiceBlockById(req: Request, res: Response): Promi
     return;
   }
   try {
+    const planId = await getServicePlanIdForBlock(id);
     const ok = await deleteBlock(id);
     if (!ok) {
       res.status(404).json({ error: 'Блок не найден' });
       return;
+    }
+    if (planId && req.authUserId) {
+      try {
+        await markServicePlanLastEdited(planId, req.authUserId);
+      } catch (e) {
+        console.error('[service-planner] mark last edited (delete block):', e);
+      }
     }
     res.status(204).send();
   } catch (e) {

@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { DragDropContext, Draggable, Droppable, type DropResult } from '@hello-pangea/dnd';
-import { addMinutes, format, parse } from 'date-fns';
+import { addMinutes, format, parse, parseISO } from 'date-fns';
+import { ru } from 'date-fns/locale';
 import {
   LuArrowLeft,
   LuCalendarDays,
@@ -58,6 +59,18 @@ import {
   type ServicePlanDetails,
   type ServiceTemplateDetails,
 } from '../api';
+import { useServicePlanEditorsPresence } from '../useServicePlanEditorsPresence';
+
+function planEditorInitials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length >= 2) {
+    return `${parts[0]!.charAt(0)}${parts[1]!.charAt(0)}`.toUpperCase();
+  }
+  if (parts.length === 1 && parts[0]!.length > 0) {
+    return parts[0]!.slice(0, 2).toUpperCase();
+  }
+  return '?';
+}
 
 function todayIso(): string {
   return new Date().toISOString().slice(0, 10);
@@ -80,6 +93,29 @@ function formatRuDateLong(dateIso: string): string {
     month: 'long',
     year: 'numeric',
   }).format(dt);
+}
+
+/** Подпись «кто / когда» для последнего сохранения плана (сервер: last_edited_*). */
+function formatPlanLastEditedLine(
+  iso: string | null | undefined,
+  name: string | null | undefined,
+  memberId: number | null | undefined,
+): string | null {
+  if (!iso) return null;
+  try {
+    const d = parseISO(iso);
+    if (Number.isNaN(d.getTime())) return null;
+    const who =
+      name && name.trim()
+        ? name.trim()
+        : memberId != null
+          ? `Участник #${memberId}`
+          : 'Участник';
+    const when = format(d, 'd MMM yyyy, HH:mm', { locale: ru });
+    return `${who} · ${when}`;
+  } catch {
+    return null;
+  }
 }
 
 function reorderBlocks(list: ServicePlanBlock[], from: number, to: number): ServicePlanBlock[] {
@@ -261,6 +297,11 @@ export function ServicePlannerPage() {
     window.addEventListener('scroll', onScroll, { passive: true });
     return () => window.removeEventListener('scroll', onScroll);
   }, [screen, draft]);
+
+  const coEditingPeers = useServicePlanEditorsPresence(
+    screen === 'plan' && draft ? draft.id : null,
+    authMemberId,
+  );
 
   const songsQ = useQuery<SongListItem[]>({
     queryKey: ['songs', 'service-planner'],
@@ -1882,6 +1923,12 @@ export function ServicePlannerPage() {
     year: 'numeric',
   }).format(new Date(`${draft.service_date}T12:00:00`));
 
+  const lastEditedLine = formatPlanLastEditedLine(
+    draft.last_edited_at,
+    draft.last_edited_by_name,
+    draft.last_edited_by_member_id,
+  );
+
   return (
     <>
       {planStickyBackVisible ? (
@@ -1915,6 +1962,30 @@ export function ServicePlannerPage() {
             <h1 className="min-w-0 text-xl font-extrabold leading-tight text-stone-900 sm:text-2xl">
               План служения
             </h1>
+            {coEditingPeers.length > 0 ? (
+              <div
+                className="flex shrink-0 items-center gap-1"
+                title={`Сейчас в программе: ${coEditingPeers.map((p) => p.memberName).join(', ')}`}
+              >
+                <span className="sr-only">Сейчас открыто у других участников</span>
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_10px_rgba(52,211,153,0.95)] ring-2 ring-emerald-200/90" aria-hidden />
+                <span className="-space-x-2 flex">
+                  {coEditingPeers.slice(0, 4).map((p, idx) => (
+                    <span
+                      key={p.memberId}
+                      className="relative inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-2 border-white bg-primary text-[10px] font-bold text-white shadow-[0_0_12px_rgba(59,130,246,0.45)]"
+                      style={{ zIndex: 10 - idx }}
+                      title={p.memberName}
+                    >
+                      {planEditorInitials(p.memberName)}
+                    </span>
+                  ))}
+                </span>
+                {coEditingPeers.length > 4 ? (
+                  <span className="text-[10px] font-semibold text-stone-500">+{coEditingPeers.length - 4}</span>
+                ) : null}
+              </div>
+            ) : null}
           </div>
           <div className="flex w-full flex-wrap items-center gap-1 overflow-x-auto pb-0.5 sm:w-auto sm:justify-end sm:overflow-visible sm:pb-0">
             {canManageTemplates ? (
@@ -1963,6 +2034,12 @@ export function ServicePlannerPage() {
             <LuUsers className="h-4 w-4" /> {timedBlocks.length} блоков / {totalDuration} мин
           </span>
         </div>
+        {lastEditedLine ? (
+          <p className="mt-2 border-t border-stone-100 pt-2 text-xs leading-snug text-stone-500">
+            <span className="font-semibold text-stone-600">Последнее изменение: </span>
+            {lastEditedLine}
+          </p>
+        ) : null}
       </header>
 
       <section className="rounded-2xl border border-stone-200 bg-white p-3 shadow-sm">

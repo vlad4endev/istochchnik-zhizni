@@ -22,6 +22,7 @@ import {
   LuChevronUp,
   LuChurch,
   LuCloudOff,
+  LuEye,
   LuFlame,
   LuHammer,
   LuHandHeart,
@@ -49,8 +50,10 @@ import {
 import {
   deleteDashboardCoordinatorNote,
   fetchDashboardCoordinatorNotes,
+  fetchPrayerSectionTodayViewers,
   formatCalendarDayKey,
   getCalendarDay,
+  postPrayerSectionVisit,
 } from '../api';
 import { loadErrorDescription } from '../prayerPageUtils';
 
@@ -151,6 +154,15 @@ function PrayerCard(props: {
       </div>
     </article>
   );
+}
+
+function ruUniqueVisitorsWord(n: number): string {
+  const m100 = n % 100;
+  if (m100 >= 11 && m100 <= 14) return 'человек';
+  const m10 = n % 10;
+  if (m10 === 1) return 'человек';
+  if (m10 >= 2 && m10 <= 4) return 'человека';
+  return 'человек';
 }
 
 function MemberCard({
@@ -494,6 +506,31 @@ export function DailyPrayerPage() {
     staleTime: 0,
   });
 
+  const prayerSectionViewersQ = useQuery({
+    queryKey: ['calendar', 'prayer-section', 'today-viewers'],
+    queryFn: fetchPrayerSectionTodayViewers,
+    staleTime: 45_000,
+    enabled: Boolean(me?.id),
+  });
+
+  useEffect(() => {
+    if (!me?.id) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        await postPrayerSectionVisit();
+        if (!cancelled) {
+          void qc.invalidateQueries({ queryKey: ['calendar', 'prayer-section', 'today-viewers'] });
+        }
+      } catch {
+        /* сеть / сессия — не мешаем странице */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [me?.id, qc]);
+
   const today = new Date();
   const chipLabel = format(selected, 'd MMMM yyyy', { locale: ru });
   const isToday = isSameDay(selected, today);
@@ -773,6 +810,34 @@ export function DailyPrayerPage() {
           <EmptyBlock />
         )}
       </div>
+
+      {me?.id ? (
+        <div className="px-4 pb-6 pt-2 shell:px-6 shell:pb-8">
+          <div
+            className="mx-auto flex max-w-xl items-center justify-center gap-2.5 rounded-2xl border border-stone-200/70 bg-gradient-to-r from-[var(--surface-elevated)] via-white/90 to-[var(--surface-elevated)] px-4 py-2.5 text-center shadow-[0_2px_12px_rgba(0,0,0,0.04)] backdrop-blur-sm supports-[backdrop-filter]:bg-[var(--surface-elevated)]/75"
+            role="status"
+            aria-live="polite"
+          >
+            <span
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-primary/[0.09] text-primary"
+              aria-hidden
+            >
+              <LuEye className="h-4 w-4" strokeWidth={2.25} />
+            </span>
+            {prayerSectionViewersQ.isPending ? (
+              <span className="text-[12px] font-semibold text-stone-400 sm:text-[13px]">Считаем посещения…</span>
+            ) : (
+              <p className="text-[12px] font-semibold leading-snug text-stone-600 sm:text-[13px]">
+                Сегодня раздел открыли{' '}
+                <span className="tabular-nums font-extrabold text-stone-900">
+                  {prayerSectionViewersQ.data?.unique_viewers_today ?? 0}
+                </span>{' '}
+                {ruUniqueVisitorsWord(prayerSectionViewersQ.data?.unique_viewers_today ?? 0)}
+              </p>
+            )}
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

@@ -66,6 +66,9 @@ export type ServicePlanDetails = ServicePlanListItem & {
   notes: string | null;
   created_at: string;
   updated_at: string;
+  last_edited_by_member_id: number | null;
+  last_edited_at: string | null;
+  last_edited_by_name: string | null;
   blocks: ServicePlanBlock[];
 };
 

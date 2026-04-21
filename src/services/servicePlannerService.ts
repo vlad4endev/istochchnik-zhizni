@@ -65,6 +65,9 @@ export type PlannerPlanDetails = PlannerPlanListItem & {
   notes: string | null;
   created_at: string;
   updated_at: string;
+  last_edited_by_member_id: number | null;
+  last_edited_at: string | null;
+  last_edited_by_name: string | null;
   blocks: PlannerBlock[];
 };
 
@@ -166,6 +169,10 @@ async function ensurePlannerSchema(): Promise<void> {
       );
 
       await query(`alter table public.service_plans add column if not exists is_archived boolean not null default false`);
+      await query(
+        `alter table public.service_plans add column if not exists last_edited_by_member_id integer references public.members (id) on delete set null`,
+      );
+      await query(`alter table public.service_plans add column if not exists last_edited_at timestamptz`);
 
       await query(
         `create table if not exists public.service_blocks (
@@ -630,10 +637,17 @@ export async function getPlanDetails(planId: number): Promise<PlannerPlanDetails
        p.id, p.template_id, p.service_date::text as service_date, p.start_time, p.status, p.is_archived,
        p.leader_member_id, p.preacher_member_id, p.total_duration_minutes, p.current_block_id,
        p.share_token::text as share_token, p.notes, p.created_at::text as created_at, p.updated_at::text as updated_at,
+       p.last_edited_by_member_id,
+       p.last_edited_at::text as last_edited_at,
+       coalesce(
+         nullif(trim(concat(coalesce(ed.first_name, ''), ' ', coalesce(ed.last_name, ''))), ''),
+         ed.name
+       ) as last_edited_by_name,
        t.name as template_name,
        (select count(*) from public.service_blocks b where b.service_plan_id = p.id) as blocks_count
      from public.service_plans p
      left join public.service_templates t on t.id = p.template_id
+     left join public.members ed on ed.id = p.last_edited_by_member_id
      where p.id = $1
      limit 1`,
     [planId],
@@ -672,6 +686,13 @@ export async function getPlanDetails(planId: number): Promise<PlannerPlanDetails
     notes: row.notes == null ? null : String(row.notes),
     created_at: String(row.created_at ?? ''),
     updated_at: String(row.updated_at ?? ''),
+    last_edited_by_member_id:
+      row.last_edited_by_member_id == null ? null : Number(row.last_edited_by_member_id),
+    last_edited_at: row.last_edited_at == null ? null : String(row.last_edited_at),
+    last_edited_by_name:
+      row.last_edited_by_name == null || String(row.last_edited_by_name).trim() === ''
+        ? null
+        : String(row.last_edited_by_name).trim(),
     blocks: blocksRes.rows.map((r) => {
       const record = r as DbRecord;
       const mapped = mapBlockRow(record);
@@ -691,6 +712,62 @@ export async function getPlanDetails(planId: number): Promise<PlannerPlanDetails
       };
     }),
   };
+}
+
+export async function getServicePlanIdForBlock(blockId: number): Promise<number | null> {
+  await ensurePlannerSchema();
+  const res = await query(
+    `select service_plan_id from public.service_blocks where id = $1 limit 1`,
+    [blockId],
+  );
+  const raw = res.rows[0] as { service_plan_id?: unknown } | undefined;
+  if (!raw || raw.service_plan_id == null) return null;
+  const n = Number(raw.service_plan_id);
+  return Number.isFinite(n) ? n : null;
+}
+
+export async function markServicePlanLastEdited(planId: number, editorMemberId: number): Promise<void> {
+  await ensurePlannerSchema();
+  await query(
+    `update public.service_plans
+     set last_edited_by_member_id = $2,
+         last_edited_at = now(),
+         updated_at = now()
+     where id = $1`,
+    [planId, editorMemberId],
+  );
+}
+
+/**
+ * Участник может присоединиться к комнате присутствия плана (тот же круг, что и правка через API:
+ * лидер/проповедник плана либо admin/editor/minister).
+ */
+export async function memberCanJoinServicePlanPresenceSession(
+  planId: number,
+  memberId: number,
+): Promise<boolean> {
+  await ensurePlannerSchema();
+  const res = await query(
+    `select 1
+     from public.service_plans p
+     where p.id = $1
+       and (
+         p.leader_member_id = $2
+         or p.preacher_member_id = $2
+         or exists (
+           select 1
+           from public.members m
+           where m.id = $2
+             and (
+               m.app_role in ('admin', 'editor', 'minister')
+               or coalesce(m.app_roles, array[]::text[]) && array['admin','editor','minister']::text[]
+             )
+         )
+       )
+     limit 1`,
+    [planId, memberId],
+  );
+  return res.rows.length > 0;
 }
 
 export async function getPublicPlanByToken(token: string): Promise<PublicPlannerPlanPayload | null> {

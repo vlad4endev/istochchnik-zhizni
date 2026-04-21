@@ -34,7 +34,7 @@ const MEMBER_ALLOWED_PATCH =
 
 /** То же для координаторов: POST улучшения текста нужды — проверка роли в контроллере. */
 const MEMBER_ALLOWED_CALENDAR_POST =
-  /^\/api\/calendar\/prayer-need\/improve-text\/?$/;
+  /^\/api\/calendar\/(?:prayer-need\/improve-text|prayer-section\/visit)\/?$/;
 
 /** Срочная нужда / объявление на дашборде — только координаторы и админ (проверка в контроллере). */
 const COORDINATOR_DASHBOARD_NOTES_POST = /^\/api\/calendar\/dashboard-coordinator-notes\/?$/;

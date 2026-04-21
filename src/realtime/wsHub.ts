@@ -6,6 +6,7 @@ import { WebSocketServer, WebSocket } from 'ws';
 
 import { resolveSessionByToken } from '../services/authService';
 import { isMemberInConversation, verifyMessageSenderInConversation } from '../services/messengerService';
+import { memberCanJoinServicePlanPresenceSession } from '../services/servicePlannerService';
 import type { WsMessengerEvent } from '../types/messenger';
 
 // ─── Redis pub/sub (ioredis, горизонтальное масштабирование, без Socket.io) ──
@@ -416,6 +417,30 @@ async function handleClientMessage(client: AuthenticatedClient, msg: any): Promi
       safeSend(client.ws, JSON.stringify({ type: 'pong', t: Date.now() }));
       break;
     }
+    case 'service_plan:join': {
+      const planId = typeof msg.planId === 'number' ? msg.planId : Number(msg.planId);
+      if (!Number.isInteger(planId) || planId <= 0) break;
+      try {
+        const allowed = await memberCanJoinServicePlanPresenceSession(planId, client.memberId);
+        if (!allowed) break;
+        const roomId = servicePlanPresenceRoomId(planId);
+        joinRoom(client, roomId);
+        broadcastServicePlanRoomPresence(roomId);
+      } catch {
+        /* ignore */
+      }
+      break;
+    }
+    case 'service_plan:leave': {
+      const planId = typeof msg.planId === 'number' ? msg.planId : Number(msg.planId);
+      if (!Number.isInteger(planId) || planId <= 0) break;
+      const roomId = servicePlanPresenceRoomId(planId);
+      if (client.rooms.has(roomId)) {
+        leaveRoom(client, roomId);
+        broadcastServicePlanRoomPresence(roomId);
+      }
+      break;
+    }
     case 'msg:delivered_signal': {
       const convId =
         typeof msg.conversationId === 'string' && msg.conversationId.trim()
@@ -480,10 +505,44 @@ function leaveRoom(client: AuthenticatedClient, roomId: string): void {
   }
 }
 
+function servicePlanPresenceRoomId(planId: number): string {
+  return `sp:${planId}`;
+}
+
+function collectServicePlanPeers(roomId: string): Array<{ memberId: number; memberName: string }> {
+  const room = rooms.get(roomId);
+  if (!room) return [];
+  const byId = new Map<number, string>();
+  for (const c of room) {
+    if (!byId.has(c.memberId)) {
+      byId.set(c.memberId, (c.memberName || '').trim() || `User ${c.memberId}`);
+    }
+  }
+  return Array.from(byId.entries()).map(([memberId, memberName]) => ({ memberId, memberName }));
+}
+
+function broadcastServicePlanRoomPresence(roomId: string): void {
+  if (!roomId.startsWith('sp:')) return;
+  const planId = Number(roomId.slice(3));
+  if (!Number.isInteger(planId) || planId <= 0) return;
+  const room = rooms.get(roomId);
+  if (!room || room.size === 0) return;
+  const peers = collectServicePlanPeers(roomId);
+  const event: WsMessengerEvent = { type: 'service_plan:presence', servicePlanId: planId, peers };
+  sendToRoomAll(roomId, event);
+}
+
 function removeClient(ws: WebSocket): void {
   const client = clientsByWs.get(ws);
   if (!client) {
     return;
+  }
+
+  const servicePlanRoomsToRefresh = new Set<string>();
+  for (const roomId of client.rooms) {
+    if (roomId.startsWith('sp:')) {
+      servicePlanRoomsToRefresh.add(roomId);
+    }
   }
 
   // Leave all rooms
@@ -493,6 +552,10 @@ function removeClient(ws: WebSocket): void {
       room.delete(client);
       if (room.size === 0) rooms.delete(roomId);
     }
+  }
+
+  for (const roomId of servicePlanRoomsToRefresh) {
+    broadcastServicePlanRoomPresence(roomId);
   }
 
   // Remove from member index

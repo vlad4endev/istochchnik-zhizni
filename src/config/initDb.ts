@@ -1594,6 +1594,14 @@ CREATE TABLE IF NOT EXISTS dashboard_coordinator_notes (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+CREATE TABLE IF NOT EXISTS prayer_section_daily_visits (
+  member_id INTEGER NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+  visit_date DATE NOT NULL,
+  first_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (member_id, visit_date)
+);
+CREATE INDEX IF NOT EXISTS idx_prayer_section_daily_visits_visit_date ON prayer_section_daily_visits (visit_date);
+
 INSERT INTO songs (title, slug, content, default_key, tempo, time_signature, is_published)
 SELECT 'Демо: пример песни', 'demo-primer-pesni',
        '{title: Пример}' || chr(10) || '[C]Строка с аккордами' || chr(10) || 'Текст куплета',

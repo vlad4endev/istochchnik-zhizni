@@ -13,6 +13,7 @@ import {
   getNextWeekMembers,
   getPrayerBotMessage,
   getPrayerData,
+  getPrayerSectionTodayViewers,
   getCuratorDistributionTargetWeek,
   getTodayPrayerBotMessage,
   patchCycleCollectionClaims,
@@ -21,6 +22,7 @@ import {
   postCuratorDistribution,
   patchMemberPreviousPrayerNeed,
   putMemberPreviousPrayerNeed,
+  postPrayerSectionVisit,
 } from '../controllers/calendarController';
 import {
   getThemes,
@@ -85,6 +87,9 @@ router.patch('/events/:id', patchEvent);
 router.delete('/events/:id', deleteEvent);
 router.get('/bot-message/today', getTodayPrayerBotMessage);
 router.get('/bot-message/:date', getPrayerBotMessage);
+
+router.get('/prayer-section/today-viewers', getPrayerSectionTodayViewers);
+router.post('/prayer-section/visit', requireAuthSession, postPrayerSectionVisit);
 
 router.get('/global/themes', getThemes);
 router.post('/global/themes', postTheme);

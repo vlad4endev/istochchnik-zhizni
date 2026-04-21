@@ -1,6 +1,6 @@
 import { query } from '../config/db';
 import { getDiffDays } from '../utils/isoDates';
-import { addCalendarDaysYmd, getZonedNow } from '../utils/zonedTime';
+import { addCalendarDaysYmd, formatYmdInTimeZone, getZonedNow } from '../utils/zonedTime';
 import {
   computeCycleIndex,
   getCycleStartDate,
@@ -512,4 +512,30 @@ async function getMemberAssignmentsForDates(dates: string[]): Promise<NextWeekMe
   await attachManualPreviousPrayerNeedsToMembers(membersOnly);
 
   return out;
+}
+
+/** Календарный день «сегодня» для статистики раздела «Молитва» (как у недели плана молитв). */
+export function getPrayerSectionStatsDateYmd(): string {
+  const tz = resolvePrayerPlanWeekTimeZone();
+  return formatYmdInTimeZone(tz, new Date());
+}
+
+/** Одна запись на пару (участник, день): повторные заходы в тот же день не увеличивают счётчик. */
+export async function recordPrayerSectionVisitForMember(memberId: number): Promise<void> {
+  const ymd = getPrayerSectionStatsDateYmd();
+  await query(
+    `INSERT INTO prayer_section_daily_visits (member_id, visit_date)
+     VALUES ($1, $2::date)
+     ON CONFLICT (member_id, visit_date) DO NOTHING`,
+    [memberId, ymd],
+  );
+}
+
+export async function countPrayerSectionVisitorsForDate(visitDateYmd: string): Promise<number> {
+  const result = await query(
+    `SELECT COUNT(*)::text AS c FROM prayer_section_daily_visits WHERE visit_date = $1::date`,
+    [visitDateYmd],
+  );
+  const row = result.rows[0] as { c?: string } | undefined;
+  return Number(row?.c ?? 0);
 }
