@@ -185,6 +185,7 @@ async function ensurePlannerSchema(): Promise<void> {
          values
            ('prayer', 'Молитва', 'text', 'hands-praying', 5),
            ('song', 'Песня', 'song', 'music', 6),
+           ('poem', 'Стих', 'speaker', 'book-open', 4),
            ('scripture', 'Чтение Писания', 'text', 'book-bible', 5),
            ('sermon', 'Проповедь', 'speaker', 'person-chalkboard', 35),
            ('announcements', 'Объявления', 'text', 'bullhorn', 5),
@@ -662,7 +663,11 @@ export async function createPlan(input: {
            tb.title,
            tb.order_index,
            tb.duration_minutes,
-           null,
+           case
+             when coalesce(tb.default_content_json->>'default_assigned_member_id', '') ~ '^\d+$'
+               then (tb.default_content_json->>'default_assigned_member_id')::integer
+             else null
+           end,
            tb.default_song_id,
            tb.default_content_json,
            tb.id

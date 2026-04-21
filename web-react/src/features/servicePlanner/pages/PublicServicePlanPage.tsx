@@ -2,17 +2,27 @@ import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { addMinutes, format, parse } from 'date-fns';
 import { Link, useParams } from 'react-router-dom';
+import {
+  FaBookBible,
+  FaBullhorn,
+  FaHandHoldingDollar,
+  FaHandsPraying,
+  FaMicrophoneLines,
+  FaMusic,
+  FaPuzzlePiece,
+} from 'react-icons/fa6';
+import type { IconType } from 'react-icons';
 
 import { fetchPublicServicePlan } from '../api';
 
-const MARK_BY_CODE: Record<string, string> = {
-  prayer: '🙏',
-  song: '🎵',
-  scripture: '📖',
-  sermon: '🎙️',
-  announcements: '📢',
-  offering: '🤲',
-  custom: '🧩',
+const ICON_BY_CODE: Record<string, { Icon: IconType; wrapClass: string; iconClass: string }> = {
+  prayer: { Icon: FaHandsPraying, wrapClass: 'bg-violet-100', iconClass: 'text-violet-700' },
+  song: { Icon: FaMusic, wrapClass: 'bg-sky-100', iconClass: 'text-sky-700' },
+  scripture: { Icon: FaBookBible, wrapClass: 'bg-amber-100', iconClass: 'text-amber-700' },
+  sermon: { Icon: FaMicrophoneLines, wrapClass: 'bg-rose-100', iconClass: 'text-rose-700' },
+  announcements: { Icon: FaBullhorn, wrapClass: 'bg-emerald-100', iconClass: 'text-emerald-700' },
+  offering: { Icon: FaHandHoldingDollar, wrapClass: 'bg-lime-100', iconClass: 'text-lime-700' },
+  custom: { Icon: FaPuzzlePiece, wrapClass: 'bg-stone-200', iconClass: 'text-stone-700' },
 };
 
 function isSeparator(content: Record<string, unknown>): boolean {
@@ -21,6 +31,15 @@ function isSeparator(content: Record<string, unknown>): boolean {
 
 function parseStartClock(dateIso: string, time: string): Date {
   return parse(`${dateIso} ${time}`, 'yyyy-MM-dd HH:mm', new Date());
+}
+
+function normalizeText(value: string): string {
+  return value.replace(/\s+/g, ' ').trim().toLowerCase();
+}
+
+function isPoem(code: string | null, typeName: string | null): boolean {
+  const normalizedName = String(typeName ?? '').toLowerCase();
+  return code === 'poem' || normalizedName.includes('стих');
 }
 
 export function PublicServicePlanPage() {
@@ -67,7 +86,6 @@ export function PublicServicePlanPage() {
 
   const { plan } = q.data;
   const dateText = new Intl.DateTimeFormat('ru-RU', {
-    weekday: 'long',
     day: 'numeric',
     month: 'long',
     year: 'numeric',
@@ -84,7 +102,9 @@ export function PublicServicePlanPage() {
 
         <header className="rounded-2xl border border-stone-200 bg-white p-4 shadow-sm">
           <h1 className="text-2xl font-extrabold text-stone-900">{plan.template_name ?? 'Программа служения'}</h1>
-          <p className="mt-1 text-sm capitalize text-stone-600">{dateText}</p>
+          <p className="mt-1 text-sm text-stone-600">
+            На собрание: <span className="font-semibold text-stone-800">{dateText}</span>
+          </p>
           <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-stone-600">
             <span className="rounded-full bg-stone-100 px-2 py-0.5">Старт: {plan.start_time}</span>
             <span className="rounded-full bg-stone-100 px-2 py-0.5">{plan.total_duration_minutes} мин</span>
@@ -109,28 +129,80 @@ export function PublicServicePlanPage() {
               <article key={b.id} className="rounded-xl border border-stone-200 bg-white p-3 shadow-sm">
                 <div className="flex items-start gap-3">
                   <div className="w-12 shrink-0 text-xs font-bold text-stone-700">{b.startsAt}</div>
-                  <div className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded bg-stone-100 text-sm">
-                    {typeof b.content_json.block_mark === 'string' && b.content_json.block_mark.trim()
-                      ? b.content_json.block_mark
-                      : MARK_BY_CODE[(b.block_type_code ?? '').toLowerCase()] ?? '•'}
-                  </div>
+                  {(() => {
+                    const custom = typeof b.content_json.block_mark === 'string' ? b.content_json.block_mark.trim() : '';
+                    if (custom) {
+                      return (
+                        <div className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-stone-100 text-lg">
+                          {custom}
+                        </div>
+                      );
+                    }
+                    const iconMeta = ICON_BY_CODE[(b.block_type_code ?? '').toLowerCase()];
+                    if (iconMeta) {
+                      const Icon = iconMeta.Icon;
+                      return (
+                        <div
+                          className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${iconMeta.wrapClass}`}
+                        >
+                          <Icon className={`h-4 w-4 ${iconMeta.iconClass}`} />
+                        </div>
+                      );
+                    }
+                    return (
+                      <div className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-stone-100 text-sm">
+                        •
+                      </div>
+                    );
+                  })()}
                   <div className="min-w-0 flex-1">
+                    {(() => {
+                      const notesRaw =
+                        typeof b.content_json.notes === 'string' ? b.content_json.notes.trim() : '';
+                      const textRaw = typeof b.content_json.text === 'string' ? b.content_json.text.trim() : '';
+                      const fallback = notesRaw || textRaw;
+                      const songVariants = [
+                        b.song_title ?? '',
+                        b.song_title && b.song_key ? `${b.song_title} [${b.song_key}]` : '',
+                        b.title ?? '',
+                      ]
+                        .map((s) => s.trim())
+                        .filter((s) => s.length > 0)
+                        .map((s) => normalizeText(s));
+                      const noteIsSongDuplicate =
+                        fallback.length > 0 && songVariants.includes(normalizeText(fallback));
+                      const noteToShow = noteIsSongDuplicate ? '' : fallback;
+                      const poem = isPoem(b.block_type_code, b.block_type_name);
+                      const poemAuthor =
+                        typeof b.content_json.poem_author === 'string' ? b.content_json.poem_author.trim() : '';
+                      const poemTheme =
+                        typeof b.content_json.poem_theme === 'string' ? b.content_json.poem_theme.trim() : '';
+                      const poemSubline =
+                        poemAuthor && poemTheme ? `${poemAuthor} • ${poemTheme}` : poemAuthor || poemTheme;
+                      const heading = poem ? `СТИХ - ${b.assigned_member_name ?? 'Чтец'}` : b.title;
+
+                      return (
+                        <>
                     <h2 className="text-sm font-bold text-stone-900">
-                      {idx + 1}. {b.title}
+                      {idx + 1}. {heading}
                     </h2>
                     <p className="mt-0.5 text-xs text-stone-500">
                       {b.block_type_name ?? 'Блок'} • {b.duration_minutes} мин
                       {b.assigned_member_name ? ` • ${b.assigned_member_name}` : ''}
                     </p>
+                    {poemSubline ? <p className="mt-0.5 text-xs text-stone-600">{poemSubline}</p> : null}
                     {b.song_title ? (
                       <p className="mt-1 text-xs font-semibold text-stone-700">
                         {b.song_title}
                         {b.song_key ? ` [${b.song_key}]` : ''}
                       </p>
                     ) : null}
-                    {typeof b.content_json.text === 'string' && b.content_json.text.trim() ? (
-                      <p className="mt-1 whitespace-pre-wrap text-sm text-stone-700">{b.content_json.text}</p>
+                    {noteToShow ? (
+                      <p className="mt-1 whitespace-pre-wrap text-sm text-stone-700">{noteToShow}</p>
                     ) : null}
+                        </>
+                      );
+                    })()}
                   </div>
                 </div>
               </article>

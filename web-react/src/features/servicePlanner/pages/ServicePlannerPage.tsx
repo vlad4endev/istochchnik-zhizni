@@ -14,6 +14,16 @@ import {
   LuTrash2,
   LuUsers,
 } from 'react-icons/lu';
+import {
+  FaBookBible,
+  FaBullhorn,
+  FaHandHoldingDollar,
+  FaHandsPraying,
+  FaMicrophoneLines,
+  FaMusic,
+  FaPuzzlePiece,
+} from 'react-icons/fa6';
+import type { IconType } from 'react-icons';
 
 import { fetchSongs, type SongListItem } from '../../songbook/api';
 import { fetchAdminMembers } from '../../admin/api';
@@ -50,6 +60,17 @@ function parseStartClock(dateIso: string, time: string): Date {
   return parse(`${dateIso} ${time}`, 'yyyy-MM-dd HH:mm', new Date());
 }
 
+function formatRuDateLong(dateIso: string): string {
+  if (!dateIso) return '';
+  const dt = new Date(`${dateIso}T12:00:00`);
+  if (Number.isNaN(dt.getTime())) return dateIso;
+  return new Intl.DateTimeFormat('ru-RU', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  }).format(dt);
+}
+
 function reorderBlocks(list: ServicePlanBlock[], from: number, to: number): ServicePlanBlock[] {
   const next = [...list];
   const [item] = next.splice(from, 1);
@@ -84,12 +105,22 @@ function roleLabel(u: AppUser): string {
 }
 
 function hasMinistryRole(u: AppUser, roleName: string): boolean {
-  const target = roleName.trim().toLowerCase();
+  const normalize = (v: string) => v.trim().toLowerCase().replace(/ё/g, 'е');
+  const target = normalize(roleName);
   if (!target) return false;
   return String(u.ministry_role ?? '')
     .split(/[;,]/)
-    .map((s) => s.trim().toLowerCase())
-    .some((s) => s === target);
+    .map((s) => normalize(s))
+    .some((s) => s === target || s.includes(target));
+}
+
+function isPreacherCandidate(u: AppUser): boolean {
+  if (u.app_role === 'pastor' || u.app_role === 'admin') return true;
+  if (hasMinistryRole(u, 'Проповедник')) return true;
+  const normalizedRoles = String(u.ministry_role ?? '')
+    .toLowerCase()
+    .replace(/ё/g, 'е');
+  return normalizedRoles.includes('проповед');
 }
 
 function userLabel(u: AppUser): string {
@@ -112,24 +143,14 @@ function separatorLabel(block: ServicePlanBlock): string {
   return block.title.trim() || 'Раздел';
 }
 
-const CATEGORY_MARK_BY_CODE: Record<string, string> = {
-  prayer: '🙏',
-  song: '🎵',
-  scripture: '📖',
-  sermon: '🎙️',
-  announcements: '📢',
-  offering: '🤲',
-  custom: '🧩',
-};
-
-const CATEGORY_MARK_BY_ICON: Record<string, string> = {
-  'hands-praying': '🙏',
-  music: '🎵',
-  'book-bible': '📖',
-  'person-chalkboard': '🎙️',
-  bullhorn: '📢',
-  'hand-holding-dollar': '🤲',
-  'puzzle-piece': '🧩',
+const CATEGORY_ICON_BY_CODE: Record<string, { Icon: IconType; wrapClass: string; iconClass: string }> = {
+  prayer: { Icon: FaHandsPraying, wrapClass: 'bg-violet-100', iconClass: 'text-violet-700' },
+  song: { Icon: FaMusic, wrapClass: 'bg-sky-100', iconClass: 'text-sky-700' },
+  scripture: { Icon: FaBookBible, wrapClass: 'bg-amber-100', iconClass: 'text-amber-700' },
+  sermon: { Icon: FaMicrophoneLines, wrapClass: 'bg-rose-100', iconClass: 'text-rose-700' },
+  announcements: { Icon: FaBullhorn, wrapClass: 'bg-emerald-100', iconClass: 'text-emerald-700' },
+  offering: { Icon: FaHandHoldingDollar, wrapClass: 'bg-lime-100', iconClass: 'text-lime-700' },
+  custom: { Icon: FaPuzzlePiece, wrapClass: 'bg-stone-200', iconClass: 'text-stone-700' },
 };
 
 export function ServicePlannerPage() {
@@ -144,6 +165,7 @@ export function ServicePlannerPage() {
   const [draft, setDraft] = useState<ServicePlanDetails | null>(null);
   const [activeTemplateId, setActiveTemplateId] = useState<number | null>(null);
   const [templateDraft, setTemplateDraft] = useState<ServiceTemplateDetails | null>(null);
+  const [editingTemplateBlockId, setEditingTemplateBlockId] = useState<number | null>(null);
   const [recurrenceRuleInput, setRecurrenceRuleInput] = useState<string>('{"frequency":"weekly","byWeekday":0}');
   const [editingBlockId, setEditingBlockId] = useState<number | null>(null);
   const [shareCopied, setShareCopied] = useState(false);
@@ -329,10 +351,7 @@ export function ServicePlannerPage() {
   const blockTypes = blockTypesQ.data ?? [];
   const usersById = useMemo(() => new Map(users.map((u) => [u.id, u] as const)), [users]);
   const leaderCandidates = useMemo(() => users.filter((u) => hasMinistryRole(u, 'Ведущий')), [users]);
-  const preacherCandidates = useMemo(
-    () => users.filter((u) => hasMinistryRole(u, 'Проповедник')),
-    [users],
-  );
+  const preacherCandidates = useMemo(() => users.filter((u) => isPreacherCandidate(u)), [users]);
 
   const activeTemplate = useMemo(() => {
     const targetId = activeTemplateId ?? draft?.template_id ?? null;
@@ -344,9 +363,38 @@ export function ServicePlannerPage() {
     () => draft?.blocks.find((b) => b.id === editingBlockId) ?? null,
     [draft, editingBlockId],
   );
+  const templateBlocksSorted = useMemo(
+    () => (templateDraft ? templateDraft.blocks.slice().sort((a, b) => a.order_index - b.order_index) : []),
+    [templateDraft],
+  );
+  const editingTemplateBlock = useMemo(
+    () => templateDraft?.blocks.find((b) => b.id === editingTemplateBlockId) ?? null,
+    [templateDraft, editingTemplateBlockId],
+  );
 
   function getBlockTypeMeta(block: ServicePlanBlock) {
     return blockTypes.find((t) => t.id === block.block_type_id) ?? null;
+  }
+
+  function isPoemBlock(block: ServicePlanBlock): boolean {
+    const meta = getBlockTypeMeta(block);
+    if (!meta) return false;
+    return meta.code === 'poem' || (meta.name ?? '').toLowerCase().includes('стих');
+  }
+
+  function poemHeading(block: ServicePlanBlock): string {
+    const reader = block.assigned_member_id ? usersById.get(block.assigned_member_id) : null;
+    return reader ? `СТИХ - ${userLabel(reader)}` : 'СТИХ - Чтец';
+  }
+
+  function poemSubline(block: ServicePlanBlock): string | null {
+    const authorRaw = block.content_json?.poem_author;
+    const themeRaw = block.content_json?.poem_theme;
+    const author = typeof authorRaw === 'string' ? authorRaw.trim() : '';
+    const theme = typeof themeRaw === 'string' ? themeRaw.trim() : '';
+    if (!author && !theme) return null;
+    if (author && theme) return `${author} • ${theme}`;
+    return author || theme;
   }
 
   function getResponsibleLabel(block: ServicePlanBlock): string | null {
@@ -373,20 +421,26 @@ export function ServicePlannerPage() {
     return direction || null;
   }
 
-  function getCategoryMark(block: ServicePlanBlock): string | null {
+  function getBlockNotePreview(block: ServicePlanBlock): string | null {
+    const noteRaw = block.content_json?.notes;
+    if (typeof noteRaw === 'string' && noteRaw.trim()) return noteRaw.trim();
+    const textRaw = block.content_json?.text;
+    if (typeof textRaw === 'string' && textRaw.trim()) return textRaw.trim();
+    return null;
+  }
+
+  function getCategoryIcon(block: ServicePlanBlock): { Icon: IconType; wrapClass: string; iconClass: string } | null {
     const meta = getBlockTypeMeta(block);
     if (!meta) return null;
-    const iconKey = (meta.icon ?? '').trim().toLowerCase();
-    if (iconKey && CATEGORY_MARK_BY_ICON[iconKey]) return CATEGORY_MARK_BY_ICON[iconKey];
     const codeKey = (meta.code ?? '').trim().toLowerCase();
-    if (codeKey && CATEGORY_MARK_BY_CODE[codeKey]) return CATEGORY_MARK_BY_CODE[codeKey];
+    if (codeKey && CATEGORY_ICON_BY_CODE[codeKey]) return CATEGORY_ICON_BY_CODE[codeKey];
     return null;
   }
 
   function getBlockMark(block: ServicePlanBlock): string | null {
     const fromContent = block.content_json?.block_mark;
     if (typeof fromContent === 'string' && fromContent.trim()) return fromContent.trim();
-    return getCategoryMark(block);
+    return null;
   }
 
   function getBlockLogoUrl(block: ServicePlanBlock): string | null {
@@ -421,6 +475,14 @@ export function ServicePlannerPage() {
         // Re-sync with backend order if optimistic reorder failed.
         void qc.invalidateQueries({ queryKey: ['service-planner', 'plan', draft.id] });
       });
+  }
+
+  function onTemplateDragEnd(result: DropResult): void {
+    const destination = result.destination;
+    if (!destination || !templateDraft) return;
+    if (destination.index === result.source.index) return;
+    const reordered = reorderTemplateBlocks(templateBlocksSorted, result.source.index, destination.index);
+    setTemplateDraft({ ...templateDraft, blocks: reordered });
   }
 
   function generateFromTemplate(date: string): void {
@@ -551,6 +613,56 @@ export function ServicePlannerPage() {
           default_content_json: {},
         },
       ],
+    });
+  }
+
+  function addTemplateSeparatorBlock(): void {
+    if (!templateDraft) return;
+    const separatorType = blockTypes.find((t) => t.code === 'custom')?.id ?? blockTypes[0]?.id;
+    if (!separatorType) return;
+    setTemplateDraft({
+      ...templateDraft,
+      blocks: [
+        ...templateDraft.blocks,
+        {
+          id: tmpId(),
+          template_id: templateDraft.id,
+          block_type_id: separatorType,
+          title: 'Раздел',
+          order_index: templateDraft.blocks.length,
+          duration_minutes: 1,
+          default_song_id: null,
+          default_content_json: {
+            is_separator: true,
+            separator_text: 'Новый раздел',
+          },
+        },
+      ],
+    });
+  }
+
+  function isTemplateSeparatorBlock(
+    b: ServiceTemplateDetails['blocks'][number],
+  ): boolean {
+    return b.default_content_json?.is_separator === true;
+  }
+
+  function templateSeparatorLabel(
+    b: ServiceTemplateDetails['blocks'][number],
+  ): string {
+    const fromJson = b.default_content_json?.separator_text;
+    if (typeof fromJson === 'string' && fromJson.trim()) return fromJson.trim();
+    return b.title.trim() || 'Раздел';
+  }
+
+  function updateTemplateBlock(
+    blockId: number,
+    patch: Partial<ServiceTemplateDetails['blocks'][number]>,
+  ): void {
+    if (!templateDraft) return;
+    setTemplateDraft({
+      ...templateDraft,
+      blocks: templateDraft.blocks.map((x) => (x.id === blockId ? { ...x, ...patch } : x)),
     });
   }
 
@@ -689,6 +801,9 @@ export function ServicePlannerPage() {
                 className="rounded-xl border border-stone-300 bg-white px-3 py-2 text-sm"
               />
             </div>
+            <p className="mt-2 text-xs text-stone-600">
+              Дата служения: <span className="font-semibold text-stone-800">{formatRuDateLong(createPlanDate)}</span>
+            </p>
             <button
               type="button"
               disabled={!activeTemplate}
@@ -755,7 +870,7 @@ export function ServicePlannerPage() {
                     ].join(' ')}
                   >
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-sm font-bold text-stone-900">{plan.service_date}</span>
+                      <span className="text-sm font-bold text-stone-900">{formatRuDateLong(plan.service_date)}</span>
                       <span className="text-xs text-stone-600">{plan.template_name ?? 'Без шаблона'}</span>
                       {isNearest ? (
                         <span className="rounded-full bg-primary px-2 py-0.5 text-[10px] font-bold text-white">
@@ -889,113 +1004,98 @@ export function ServicePlannerPage() {
                 </button>
               </div>
 
-              <div className="mb-2 flex items-center justify-between">
+              <div className="mb-2 flex items-center justify-between gap-2">
                 <p className="text-xs font-semibold text-stone-500">Блоки шаблона</p>
-                <button
-                  type="button"
-                  onClick={addTemplateBlock}
-                  className="inline-flex items-center gap-1 rounded border border-stone-300 px-2 py-1 text-xs font-semibold text-stone-700"
-                >
-                  <LuPlus className="h-3.5 w-3.5" />
-                  Блок
-                </button>
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={addTemplateBlock}
+                    className="inline-flex items-center gap-1 rounded border border-stone-300 px-2 py-1 text-xs font-semibold text-stone-700"
+                  >
+                    <LuPlus className="h-3.5 w-3.5" />
+                    Блок
+                  </button>
+                  <button
+                    type="button"
+                    onClick={addTemplateSeparatorBlock}
+                    className="inline-flex items-center gap-1 rounded border border-stone-300 px-2 py-1 text-xs font-semibold text-stone-700"
+                  >
+                    <LuPlus className="h-3.5 w-3.5" />
+                    Разделитель
+                  </button>
+                </div>
               </div>
 
-              <div className="space-y-2">
-                {templateDraft.blocks
-                  .slice()
-                  .sort((a, b) => a.order_index - b.order_index)
-                  .map((b, idx) => (
-                    <div key={b.id} className="grid gap-1 rounded border border-stone-200 p-2 md:grid-cols-4">
-                      <input
-                        value={b.title}
-                        onChange={(e) =>
-                          setTemplateDraft({
-                            ...templateDraft,
-                            blocks: templateDraft.blocks.map((x) =>
-                              x.id === b.id ? { ...x, title: e.target.value } : x,
-                            ),
-                          })
-                        }
-                        className="rounded border border-stone-300 px-2 py-1 text-xs md:col-span-2"
-                      />
-                      <select
-                        value={b.block_type_id}
-                        onChange={(e) =>
-                          setTemplateDraft({
-                            ...templateDraft,
-                            blocks: templateDraft.blocks.map((x) =>
-                              x.id === b.id ? { ...x, block_type_id: Number(e.target.value) || x.block_type_id } : x,
-                            ),
-                          })
-                        }
-                        className="rounded border border-stone-300 px-2 py-1 text-xs"
-                      >
-                        {blockTypes.map((t) => (
-                          <option key={t.id} value={t.id}>
-                            {t.name}
-                          </option>
-                        ))}
-                      </select>
-                      <input
-                        type="number"
-                        min={1}
-                        value={b.duration_minutes}
-                        onChange={(e) =>
-                          setTemplateDraft({
-                            ...templateDraft,
-                            blocks: templateDraft.blocks.map((x) =>
-                              x.id === b.id ? { ...x, duration_minutes: Math.max(1, Number(e.target.value) || 1) } : x,
-                            ),
-                          })
-                        }
-                        className="rounded border border-stone-300 px-2 py-1 text-xs"
-                      />
-                      <div className="flex gap-1 md:col-span-4">
-                        <button
-                          type="button"
-                          disabled={idx === 0}
-                          onClick={() =>
-                            setTemplateDraft({
-                              ...templateDraft,
-                              blocks: reorderTemplateBlocks(templateDraft.blocks, idx, idx - 1),
-                            })
-                          }
-                          className="rounded border border-stone-300 px-2 py-0.5 text-[10px] font-semibold"
-                        >
-                          Вверх
-                        </button>
-                        <button
-                          type="button"
-                          disabled={idx === templateDraft.blocks.length - 1}
-                          onClick={() =>
-                            setTemplateDraft({
-                              ...templateDraft,
-                              blocks: reorderTemplateBlocks(templateDraft.blocks, idx, idx + 1),
-                            })
-                          }
-                          className="rounded border border-stone-300 px-2 py-0.5 text-[10px] font-semibold"
-                        >
-                          Вниз
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setTemplateDraft({
-                              ...templateDraft,
-                              blocks: templateDraft.blocks
-                                .filter((x) => x.id !== b.id)
-                                .map((x, i) => ({ ...x, order_index: i })),
-                            })
-                          }
-                          className="rounded border border-rose-200 px-2 py-0.5 text-[10px] font-semibold text-rose-700"
-                        >
-                          Удалить
-                        </button>
-                      </div>
+              <DragDropContext onDragEnd={onTemplateDragEnd}>
+                <Droppable droppableId="template-blocks">
+                  {(provided) => (
+                    <div ref={provided.innerRef} {...provided.droppableProps} className="space-y-2">
+                      {templateBlocksSorted.map((b, idx) => (
+                        <Draggable key={String(b.id)} draggableId={`tpl-${b.id}`} index={idx}>
+                          {(dragProvided, dragSnapshot) => (
+                            <article
+                              ref={dragProvided.innerRef}
+                              {...dragProvided.draggableProps}
+                              className={[
+                                isTemplateSeparatorBlock(b)
+                                  ? 'rounded-xl border border-dashed border-stone-300 bg-stone-50 p-2'
+                                  : 'rounded-xl border border-stone-200 bg-white p-2',
+                                dragSnapshot.isDragging ? 'shadow' : '',
+                              ].join(' ')}
+                            >
+                              <div className="flex items-center gap-2">
+                                <button
+                                  type="button"
+                                  {...dragProvided.dragHandleProps}
+                                  className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-stone-200 text-stone-500"
+                                  aria-label="Перетащить блок шаблона"
+                                >
+                                  <LuGripVertical className="h-4 w-4" />
+                                </button>
+                                <span className="w-8 text-xs font-bold text-stone-700">{idx + 1}</span>
+                                <div className="min-w-0 flex-1">
+                                  <p className="truncate text-xs font-semibold text-stone-900">
+                                    {isTemplateSeparatorBlock(b) ? templateSeparatorLabel(b) : b.title}
+                                  </p>
+                                  {!isTemplateSeparatorBlock(b) ? (
+                                    <p className="text-xs text-stone-500">
+                                      {blockTypes.find((t) => t.id === b.block_type_id)?.name ?? 'Блок'} • {b.duration_minutes} мин
+                                    </p>
+                                  ) : null}
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => setEditingTemplateBlockId(b.id)}
+                                  className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-stone-200 text-stone-700 hover:bg-stone-50"
+                                  aria-label="Редактировать блок шаблона"
+                                >
+                                  <LuPencil className="h-4 w-4" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setTemplateDraft({
+                                      ...templateDraft,
+                                      blocks: templateBlocksSorted
+                                        .filter((x) => x.id !== b.id)
+                                        .map((x, i) => ({ ...x, order_index: i })),
+                                    })
+                                  }
+                                  className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-rose-200 text-rose-700 hover:bg-rose-50"
+                                  aria-label="Удалить блок шаблона"
+                                >
+                                  <LuTrash2 className="h-4 w-4" />
+                                </button>
+                              </div>
+                            </article>
+                          )}
+                        </Draggable>
+                      ))}
+                      {provided.placeholder}
                     </div>
-                  ))}
-              </div>
+                  )}
+                </Droppable>
+              </DragDropContext>
             </div>
 
             <div className="mt-3 flex flex-wrap justify-end gap-2">
@@ -1023,6 +1123,154 @@ export function ServicePlannerPage() {
             Шаблон не выбран.
           </div>
         )}
+
+        {editingTemplateBlock ? (
+          <div className="fixed inset-0 z-[70] flex items-end justify-center bg-black/35 p-3 sm:items-center">
+            <div className="w-full max-w-xl rounded-2xl border border-stone-200 bg-white p-4 shadow-2xl">
+              <div className="mb-3 flex items-center justify-between gap-2">
+                <h3 className="text-base font-extrabold text-stone-900">Редактирование блока шаблона</h3>
+                <button
+                  type="button"
+                  onClick={() => setEditingTemplateBlockId(null)}
+                  className="rounded-lg border border-stone-300 px-2 py-1 text-xs font-semibold text-stone-700"
+                >
+                  Закрыть
+                </button>
+              </div>
+
+              <div className="grid gap-2 sm:grid-cols-2">
+                <input
+                  value={isTemplateSeparatorBlock(editingTemplateBlock) ? templateSeparatorLabel(editingTemplateBlock) : editingTemplateBlock.title}
+                  onChange={(e) => {
+                    if (isTemplateSeparatorBlock(editingTemplateBlock)) {
+                      updateTemplateBlock(editingTemplateBlock.id, {
+                        title: e.target.value,
+                        default_content_json: {
+                          ...editingTemplateBlock.default_content_json,
+                          separator_text: e.target.value,
+                        },
+                      });
+                      return;
+                    }
+                    updateTemplateBlock(editingTemplateBlock.id, { title: e.target.value });
+                  }}
+                  className="rounded-lg border border-stone-300 px-2 py-1.5 text-sm sm:col-span-2"
+                  placeholder={isTemplateSeparatorBlock(editingTemplateBlock) ? 'Текст разделителя' : 'Название блока'}
+                />
+
+                {!isTemplateSeparatorBlock(editingTemplateBlock) ? (
+                  <>
+                    <select
+                      value={editingTemplateBlock.block_type_id}
+                      onChange={(e) =>
+                        updateTemplateBlock(editingTemplateBlock.id, {
+                          block_type_id: Number(e.target.value) || editingTemplateBlock.block_type_id,
+                        })
+                      }
+                      className="rounded-lg border border-stone-300 px-2 py-1.5 text-sm"
+                    >
+                      {blockTypes.map((t) => (
+                        <option key={t.id} value={t.id}>
+                          {t.name}
+                        </option>
+                      ))}
+                    </select>
+                    <input
+                      type="number"
+                      min={1}
+                      max={180}
+                      value={editingTemplateBlock.duration_minutes}
+                      onChange={(e) =>
+                        updateTemplateBlock(editingTemplateBlock.id, {
+                          duration_minutes: Math.max(1, Number(e.target.value) || 1),
+                        })
+                      }
+                      className="rounded-lg border border-stone-300 px-2 py-1.5 text-sm"
+                    />
+                    {(blockTypes.find((t) => t.id === editingTemplateBlock.block_type_id)?.kind ?? 'custom') ===
+                    'song' ? (
+                      <select
+                        value={editingTemplateBlock.default_song_id ?? ''}
+                        onChange={(e) => {
+                          const songId = e.target.value ? Number(e.target.value) : null;
+                          const song = songId ? songs.find((s) => Number(s.id) === songId) : null;
+                          updateTemplateBlock(editingTemplateBlock.id, {
+                            default_song_id: songId,
+                            title: song ? songBlockTitle(song) : editingTemplateBlock.title,
+                          });
+                        }}
+                        className="rounded-lg border border-stone-300 px-2 py-1.5 text-sm sm:col-span-2"
+                      >
+                        <option value="">Песня по умолчанию</option>
+                        {songs.map((s: SongListItem) => (
+                          <option key={s.id} value={Number(s.id)}>
+                            {songBlockTitle(s)}
+                          </option>
+                        ))}
+                      </select>
+                    ) : null}
+                    <select
+                      value={String(
+                        (editingTemplateBlock.default_content_json?.default_assigned_member_id as number | undefined) ??
+                          '',
+                      )}
+                      onChange={(e) =>
+                        updateTemplateBlock(editingTemplateBlock.id, {
+                          default_content_json: {
+                            ...editingTemplateBlock.default_content_json,
+                            default_assigned_member_id: e.target.value ? Number(e.target.value) : null,
+                          },
+                        })
+                      }
+                      className="rounded-lg border border-stone-300 px-2 py-1.5 text-sm sm:col-span-2"
+                    >
+                      <option value="">Ответственный по умолчанию</option>
+                      {users.map((u) => (
+                        <option key={u.id} value={u.id}>
+                          {userLabel(u)} ({roleLabel(u)})
+                        </option>
+                      ))}
+                    </select>
+                    <textarea
+                      value={String((editingTemplateBlock.default_content_json?.text as string | undefined) ?? '')}
+                      onChange={(e) =>
+                        updateTemplateBlock(editingTemplateBlock.id, {
+                          default_content_json: {
+                            ...editingTemplateBlock.default_content_json,
+                            text: e.target.value,
+                          },
+                        })
+                      }
+                      className="min-h-[84px] rounded-lg border border-stone-300 px-2 py-1.5 text-sm sm:col-span-2"
+                      placeholder="Данные блока по умолчанию (текст/заметки)"
+                    />
+                  </>
+                ) : (
+                  <p className="rounded-lg border border-dashed border-stone-300 bg-stone-50 px-2 py-2 text-xs text-stone-600 sm:col-span-2">
+                    Разделитель делит программу на части в сгенерированном плане.
+                  </p>
+                )}
+              </div>
+
+              <div className="mt-3 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setEditingTemplateBlockId(null)}
+                  className="rounded-lg border border-stone-300 px-3 py-1.5 text-sm font-semibold text-stone-700"
+                >
+                  Отмена
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEditingTemplateBlockId(null)}
+                  className="inline-flex items-center gap-1 rounded-lg bg-primary px-3 py-1.5 text-sm font-semibold text-white hover:bg-primary-dark"
+                >
+                  Готово
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null}
       </section>
     );
   }
@@ -1119,7 +1367,7 @@ export function ServicePlannerPage() {
           >
             {(plansQ.data ?? []).map((plan) => (
               <option key={plan.id} value={plan.id}>
-                {plan.service_date} • {plan.status === 'published' ? 'Опубликован' : 'Черновик'}
+                {formatRuDateLong(plan.service_date)} • {plan.status === 'published' ? 'Опубликован' : 'Черновик'}
               </option>
             ))}
           </select>
@@ -1211,22 +1459,52 @@ export function ServicePlannerPage() {
                               <img
                                 src={getBlockLogoUrl(block) ?? ''}
                                 alt="Лого блока"
-                                className="h-5 w-5 shrink-0 rounded object-cover"
+                                className="h-7 w-7 shrink-0 rounded-lg object-cover"
                               />
                             ) : (
-                              <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded bg-stone-100 text-xs">
-                                {getBlockMark(block) ?? '•'}
-                              </span>
+                              (() => {
+                                const customMark = getBlockMark(block);
+                                const categoryIcon = getCategoryIcon(block);
+                                if (customMark) {
+                                  return (
+                                    <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-stone-100 text-base">
+                                      {customMark}
+                                    </span>
+                                  );
+                                }
+                                if (categoryIcon) {
+                                  const Icon = categoryIcon.Icon;
+                                  return (
+                                    <span
+                                      className={`inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${categoryIcon.wrapClass}`}
+                                    >
+                                      <Icon className={`h-4 w-4 ${categoryIcon.iconClass}`} />
+                                    </span>
+                                  );
+                                }
+                                return (
+                                  <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-stone-100 text-xs">
+                                    •
+                                  </span>
+                                );
+                              })()
                             )
                           ) : null}
                           <div className="min-w-0 flex-1">
                             <p className="truncate text-xs font-semibold text-stone-900">
-                              {isSeparatorBlock(block) ? separatorLabel(block) : block.title}
+                              {isSeparatorBlock(block)
+                                ? separatorLabel(block)
+                                : isPoemBlock(block)
+                                  ? poemHeading(block)
+                                  : block.title}
                             </p>
                             {!isSeparatorBlock(block) ? (
                               <p className="text-xs text-stone-500">
                                 {`${blockTypes.find((t) => t.id === block.block_type_id)?.name ?? 'Блок'} • ${block.duration_minutes} мин`}
                               </p>
+                            ) : null}
+                            {!isSeparatorBlock(block) && isPoemBlock(block) && poemSubline(block) ? (
+                              <p className="truncate text-[11px] text-stone-600">{poemSubline(block)}</p>
                             ) : null}
                             {!isSeparatorBlock(block) &&
                             (getResponsibleLabel(block) || getDirectionLabel(block)) ? (
@@ -1234,6 +1512,11 @@ export function ServicePlannerPage() {
                                 {getResponsibleLabel(block) ? `Ответственный: ${getResponsibleLabel(block)}` : ''}
                                 {getResponsibleLabel(block) && getDirectionLabel(block) ? ' • ' : ''}
                                 {getDirectionLabel(block) ? `Направление: ${getDirectionLabel(block)}` : ''}
+                              </p>
+                            ) : null}
+                            {!isSeparatorBlock(block) && getBlockNotePreview(block) ? (
+                              <p className="mt-0.5 truncate text-[11px] text-stone-600">
+                                Заметка: {getBlockNotePreview(block)}
                               </p>
                             ) : null}
                           </div>
@@ -1520,20 +1803,50 @@ export function ServicePlannerPage() {
                   />
                   <select
                     value={editingBlock.assigned_member_id ?? ''}
-                    onChange={(e) =>
-                      updateDraftBlock(editingBlock.id, {
-                        assigned_member_id: e.target.value ? Number(e.target.value) : null,
-                      })
-                    }
+                    onChange={(e) => {
+                      const memberId = e.target.value ? Number(e.target.value) : null;
+                      const nextPatch: Partial<ServicePlanBlock> = { assigned_member_id: memberId };
+                      if (isPoemBlock(editingBlock)) {
+                        const reader = memberId ? users.find((u) => u.id === memberId) : null;
+                        nextPatch.title = reader ? `СТИХ - ${userLabel(reader)}` : 'СТИХ - Чтец';
+                      }
+                      updateDraftBlock(editingBlock.id, nextPatch);
+                    }}
                     className="rounded-lg border border-stone-300 px-2 py-1.5 text-sm sm:col-span-2"
                   >
-                    <option value="">Ответственный не назначен</option>
+                    <option value="">
+                      {isPoemBlock(editingBlock) ? 'Чтец не назначен' : 'Ответственный не назначен'}
+                    </option>
                     {users.map((u) => (
                       <option key={u.id} value={u.id}>
                         {userLabel(u)} ({roleLabel(u)})
                       </option>
                     ))}
                   </select>
+                  {isPoemBlock(editingBlock) ? (
+                    <>
+                      <input
+                        value={String((editingBlock.content_json?.poem_author as string | undefined) ?? '')}
+                        onChange={(e) =>
+                          updateDraftBlock(editingBlock.id, {
+                            content_json: { ...editingBlock.content_json, poem_author: e.target.value },
+                          })
+                        }
+                        className="rounded-lg border border-stone-300 px-2 py-1.5 text-sm"
+                        placeholder="Автор стиха"
+                      />
+                      <input
+                        value={String((editingBlock.content_json?.poem_theme as string | undefined) ?? '')}
+                        onChange={(e) =>
+                          updateDraftBlock(editingBlock.id, {
+                            content_json: { ...editingBlock.content_json, poem_theme: e.target.value },
+                          })
+                        }
+                        className="rounded-lg border border-stone-300 px-2 py-1.5 text-sm"
+                        placeholder="Тема стиха"
+                      />
+                    </>
+                  ) : null}
                   {(blockTypes.find((t) => t.id === editingBlock.block_type_id)?.kind ?? 'custom') === 'song' ? (
                     <select
                       value={editingBlock.song_id ?? ''}
