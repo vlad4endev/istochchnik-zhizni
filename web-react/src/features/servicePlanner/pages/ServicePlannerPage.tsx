@@ -38,6 +38,7 @@ import {
   createServiceTemplate,
   createServicePlan,
   deleteServiceBlock,
+  deleteServicePlan,
   deleteServiceTemplate,
   fetchServiceBlockTypes,
   fetchServicePlan,
@@ -201,6 +202,7 @@ export function ServicePlannerPage() {
   const [recurrenceRuleInput, setRecurrenceRuleInput] = useState<string>('{"frequency":"weekly","byWeekday":0}');
   const [editingBlockId, setEditingBlockId] = useState<number | null>(null);
   const [shareCopied, setShareCopied] = useState(false);
+  const [showArchivedPlans, setShowArchivedPlans] = useState(false);
 
   const songsQ = useQuery<SongListItem[]>({
     queryKey: ['songs', 'service-planner'],
@@ -233,8 +235,8 @@ export function ServicePlannerPage() {
   });
 
   const plansQ = useQuery({
-    queryKey: ['service-planner', 'plans'],
-    queryFn: () => fetchServicePlans(),
+    queryKey: ['service-planner', 'plans', 'all'],
+    queryFn: () => fetchServicePlans({ include_archived: true }),
     staleTime: 20_000,
   });
 
@@ -246,7 +248,8 @@ export function ServicePlannerPage() {
 
   useEffect(() => {
     if (!activePlanId && (plansQ.data?.length ?? 0) > 0) {
-      setActivePlanId(plansQ.data![0].id);
+      const firstActive = plansQ.data!.find((p) => !p.is_archived) ?? plansQ.data![0];
+      setActivePlanId(firstActive.id);
     }
   }, [activePlanId, plansQ.data]);
 
@@ -363,6 +366,21 @@ export function ServicePlannerPage() {
       await qc.invalidateQueries({ queryKey: ['service-planner', 'templates'] });
       setTemplateDraft(null);
       setActiveTemplateId(null);
+      setScreen('home');
+    },
+  });
+
+  const deletePlanMut = useMutation({
+    mutationFn: (id: number) => deleteServicePlan(id),
+    onSuccess: async () => {
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ['service-planner', 'plans'] }),
+        activePlanId != null
+          ? qc.invalidateQueries({ queryKey: ['service-planner', 'plan', activePlanId] })
+          : Promise.resolve(),
+      ]);
+      setDraft(null);
+      setActivePlanId(null);
       setScreen('home');
     },
   });
@@ -705,6 +723,35 @@ export function ServicePlannerPage() {
     }
   }
 
+  async function toggleArchiveCurrentPlan(): Promise<void> {
+    if (!draft) return;
+    const nextArchived = !draft.is_archived;
+    const ok = window.confirm(
+      nextArchived
+        ? 'Отправить эту программу в архив?'
+        : 'Вернуть эту программу из архива в активные?',
+    );
+    if (!ok) return;
+    await updatePlanMut.mutateAsync({
+      id: draft.id,
+      body: { is_archived: nextArchived },
+    });
+    setDraft({ ...draft, is_archived: nextArchived });
+    if (nextArchived) {
+      setShowArchivedPlans(true);
+      setScreen('home');
+    }
+  }
+
+  async function deleteCurrentPlan(): Promise<void> {
+    if (!draft) return;
+    const ok = window.confirm(
+      'Удалить программу безвозвратно? Это действие нельзя отменить.',
+    );
+    if (!ok) return;
+    await deletePlanMut.mutateAsync(draft.id);
+  }
+
   function updateDraftBlock(blockId: number, patch: Partial<ServicePlanBlock>): void {
     if (!draft) return;
     setDraft({
@@ -885,8 +932,9 @@ export function ServicePlannerPage() {
   }
 
   const plans = plansQ.data ?? [];
+  const visiblePlans = plans.filter((p) => Boolean(p.is_archived) === showArchivedPlans);
   const today = todayIso();
-  const nearestFuturePlanId = plans
+  const nearestFuturePlanId = visiblePlans
     .filter((p) => p.service_date >= today)
     .sort((a, b) => a.service_date.localeCompare(b.service_date))[0]?.id;
 
@@ -958,16 +1006,46 @@ export function ServicePlannerPage() {
 
         <section className="rounded-2xl border border-stone-200 bg-white p-3 shadow-sm">
           <div className="mb-2 flex items-center justify-between gap-2">
-            <h2 className="text-sm font-extrabold text-stone-900">Созданные программы</h2>
-            <span className="text-xs text-stone-500">{plans.length} шт.</span>
+            <h2 className="text-sm font-extrabold text-stone-900">
+              {showArchivedPlans ? 'Архив программ' : 'Созданные программы'}
+            </h2>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setShowArchivedPlans(false)}
+                className={[
+                  'rounded-lg border px-2 py-1 text-xs font-semibold',
+                  !showArchivedPlans
+                    ? 'border-primary bg-primary/10 text-primary'
+                    : 'border-stone-300 text-stone-600 hover:border-primary hover:text-primary',
+                ].join(' ')}
+              >
+                Активные
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowArchivedPlans(true)}
+                className={[
+                  'rounded-lg border px-2 py-1 text-xs font-semibold',
+                  showArchivedPlans
+                    ? 'border-primary bg-primary/10 text-primary'
+                    : 'border-stone-300 text-stone-600 hover:border-primary hover:text-primary',
+                ].join(' ')}
+              >
+                Архив
+              </button>
+              <span className="text-xs text-stone-500">{visiblePlans.length} шт.</span>
+            </div>
           </div>
-          {plans.length === 0 ? (
+          {visiblePlans.length === 0 ? (
             <p className="rounded-xl border border-dashed border-stone-300 bg-stone-50 px-3 py-4 text-sm text-stone-600">
-              Программ пока нет. Создайте первую кнопкой выше.
+              {showArchivedPlans
+                ? 'В архиве пока нет программ.'
+                : 'Программ пока нет. Создайте первую кнопкой выше.'}
             </p>
           ) : (
             <div className="grid gap-2">
-              {plans.map((plan) => {
+              {visiblePlans.map((plan) => {
                 const leader = plan.leader_member_id ? usersById.get(plan.leader_member_id) : null;
                 const isFuture = plan.service_date >= today;
                 const isNearest = nearestFuturePlanId === plan.id;
@@ -1005,6 +1083,11 @@ export function ServicePlannerPage() {
                           Черновик
                         </span>
                       )}
+                      {plan.is_archived ? (
+                        <span className="rounded-full bg-stone-800 px-2 py-0.5 text-[10px] font-bold text-white">
+                          Архив
+                        </span>
+                      ) : null}
                     </div>
                     <p className="mt-1 text-xs text-stone-600">
                       Ведущий: {leader ? userLabel(leader) : 'Не назначен'} • Блоков: {plan.blocks_count}
@@ -1483,6 +1566,20 @@ export function ServicePlannerPage() {
             >
               Все программы
             </button>
+            <button
+              type="button"
+              onClick={() => void toggleArchiveCurrentPlan()}
+              className="shrink-0 whitespace-nowrap rounded-lg border border-amber-300 px-2.5 py-1 text-[11px] font-semibold text-amber-800 hover:bg-amber-50 sm:px-3 sm:py-1.5 sm:text-xs"
+            >
+              {draft.is_archived ? 'Вернуть из архива' : 'В архив'}
+            </button>
+            <button
+              type="button"
+              onClick={() => void deleteCurrentPlan()}
+              className="shrink-0 whitespace-nowrap rounded-lg border border-rose-300 px-2.5 py-1 text-[11px] font-semibold text-rose-700 hover:bg-rose-50 sm:px-3 sm:py-1.5 sm:text-xs"
+            >
+              Удалить программу
+            </button>
           </div>
         </div>
         <div className="mt-1 flex flex-wrap items-center gap-3 text-sm text-stone-600">
@@ -1808,6 +1905,7 @@ export function ServicePlannerPage() {
         updateTemplateMut.isPending ||
         createBlockMut.isPending ||
         deleteBlockMut.isPending ||
+        deletePlanMut.isPending ||
         saveProgramMut.isPending) && (
         <div className="rounded-xl border border-amber-200 bg-amber-50 p-2 text-xs font-semibold text-amber-800">
           Сохраняю изменения...

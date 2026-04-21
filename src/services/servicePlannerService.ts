@@ -39,6 +39,7 @@ export type PlannerPlanListItem = {
   service_date: string;
   start_time: string;
   status: 'draft' | 'published';
+  is_archived: boolean;
   leader_member_id: number | null;
   preacher_member_id: number | null;
   total_duration_minutes: number;
@@ -149,6 +150,7 @@ async function ensurePlannerSchema(): Promise<void> {
            service_date date not null,
            start_time time not null default '10:00',
            status varchar(20) not null default 'draft' check (status in ('draft', 'published')),
+           is_archived boolean not null default false,
            leader_member_id integer references public.members (id) on delete set null,
            preacher_member_id integer references public.members (id) on delete set null,
            total_duration_minutes integer not null default 0 check (total_duration_minutes >= 0),
@@ -162,6 +164,8 @@ async function ensurePlannerSchema(): Promise<void> {
            unique (template_id, service_date)
          )`,
       );
+
+      await query(`alter table public.service_plans add column if not exists is_archived boolean not null default false`);
 
       await query(
         `create table if not exists public.service_blocks (
@@ -344,6 +348,7 @@ function mapPlanRow(row: DbRecord): PlannerPlanListItem {
     service_date: String(row.service_date ?? ''),
     start_time: toTimeHm(row.start_time),
     status: row.status === 'published' ? 'published' : 'draft',
+    is_archived: Boolean(row.is_archived),
     leader_member_id: row.leader_member_id == null ? null : Number(row.leader_member_id),
     preacher_member_id: row.preacher_member_id == null ? null : Number(row.preacher_member_id),
     total_duration_minutes: Number(row.total_duration_minutes ?? 0),
@@ -447,7 +452,11 @@ export async function getTemplateDetails(templateId: number): Promise<PlannerTem
   };
 }
 
-export async function listPlans(input: { from?: string; to?: string }): Promise<PlannerPlanListItem[]> {
+export async function listPlans(input: {
+  from?: string;
+  to?: string;
+  include_archived?: boolean;
+}): Promise<PlannerPlanListItem[]> {
   await ensurePlannerSchema();
   const params: unknown[] = [];
   const where: string[] = [];
@@ -459,10 +468,13 @@ export async function listPlans(input: { from?: string; to?: string }): Promise<
     params.push(input.to);
     where.push(`p.service_date <= $${params.length}::date`);
   }
+  if (!input.include_archived) {
+    where.push(`p.is_archived = false`);
+  }
   const whereSql = where.length ? `where ${where.join(' and ')}` : '';
   const { rows } = await query(
     `select
-       p.id, p.template_id, p.service_date::text as service_date, p.start_time, p.status,
+       p.id, p.template_id, p.service_date::text as service_date, p.start_time, p.status, p.is_archived,
        p.leader_member_id, p.preacher_member_id, p.total_duration_minutes, p.current_block_id,
        p.share_token::text as share_token,
        t.name as template_name,
@@ -482,7 +494,7 @@ export async function getPlanDetails(planId: number): Promise<PlannerPlanDetails
   await ensurePlannerSchema();
   const planRes = await query(
     `select
-       p.id, p.template_id, p.service_date::text as service_date, p.start_time, p.status,
+       p.id, p.template_id, p.service_date::text as service_date, p.start_time, p.status, p.is_archived,
        p.leader_member_id, p.preacher_member_id, p.total_duration_minutes, p.current_block_id,
        p.share_token::text as share_token, p.notes, p.created_at::text as created_at, p.updated_at::text as updated_at,
        t.name as template_name,
@@ -859,6 +871,7 @@ export async function patchPlan(
     service_date: string;
     start_time: string;
     status: 'draft' | 'published';
+    is_archived: boolean;
     leader_member_id: number | null;
     preacher_member_id: number | null;
     current_block_id: number | null;
@@ -875,6 +888,7 @@ export async function patchPlan(
   if (patch.service_date !== undefined) push('service_date = ?::date', patch.service_date);
   if (patch.start_time !== undefined) push('start_time = ?::time', patch.start_time);
   if (patch.status !== undefined) push('status = ?', patch.status);
+  if (patch.is_archived !== undefined) push('is_archived = ?', patch.is_archived);
   if (patch.leader_member_id !== undefined) push('leader_member_id = ?', patch.leader_member_id);
   if (patch.preacher_member_id !== undefined) push('preacher_member_id = ?', patch.preacher_member_id);
   if (patch.current_block_id !== undefined) push('current_block_id = ?', patch.current_block_id);
@@ -888,6 +902,12 @@ export async function patchPlan(
      where id = $${values.length}`,
     values,
   );
+  return (res.rowCount ?? 0) > 0;
+}
+
+export async function deletePlan(planId: number): Promise<boolean> {
+  await ensurePlannerSchema();
+  const res = await query(`delete from public.service_plans where id = $1`, [planId]);
   return (res.rowCount ?? 0) > 0;
 }
 

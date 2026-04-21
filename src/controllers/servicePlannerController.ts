@@ -4,6 +4,7 @@ import {
   createPlan,
   createTemplate,
   createBlock,
+  deletePlan,
   deleteBlock,
   deleteTemplate,
   getPlanDetails,
@@ -232,8 +233,17 @@ export async function deleteServiceTemplateById(req: Request, res: Response): Pr
 export async function getServicePlans(req: Request, res: Response): Promise<void> {
   const from = parseDateYmd(req.query.from);
   const to = parseDateYmd(req.query.to);
+  const includeArchived =
+    req.query.include_archived === '1' ||
+    req.query.include_archived === 'true';
   try {
-    res.json(await listPlans({ from: from ?? undefined, to: to ?? undefined }));
+    res.json(
+      await listPlans({
+        from: from ?? undefined,
+        to: to ?? undefined,
+        include_archived: includeArchived,
+      }),
+    );
   } catch (e) {
     console.error('[service-planner] getServicePlans:', e);
     res.status(500).json({ error: 'Не удалось получить планы' });
@@ -316,6 +326,13 @@ export async function patchServicePlanById(req: Request, res: Response): Promise
       return;
     }
     patch.status = body.status;
+  }
+  if (body.is_archived !== undefined) {
+    if (typeof body.is_archived !== 'boolean') {
+      res.status(400).json({ error: 'is_archived должен быть boolean' });
+      return;
+    }
+    patch.is_archived = body.is_archived;
   }
   if (body.leader_member_id !== undefined) {
     patch.leader_member_id = body.leader_member_id == null ? null : parseId(body.leader_member_id);
@@ -459,5 +476,25 @@ export async function deleteServiceBlockById(req: Request, res: Response): Promi
   } catch (e) {
     console.error('[service-planner] deleteServiceBlockById:', e);
     res.status(500).json({ error: 'Не удалось удалить блок' });
+  }
+}
+
+export async function deleteServicePlanById(req: Request, res: Response): Promise<void> {
+  if (!ensureAdmin(req, res)) return;
+  const id = parseId(req.params.id);
+  if (!id) {
+    res.status(400).json({ error: 'Некорректный id плана' });
+    return;
+  }
+  try {
+    const ok = await deletePlan(id);
+    if (!ok) {
+      res.status(404).json({ error: 'План не найден' });
+      return;
+    }
+    res.status(204).send();
+  } catch (e) {
+    console.error('[service-planner] deleteServicePlanById:', e);
+    res.status(500).json({ error: 'Не удалось удалить план' });
   }
 }

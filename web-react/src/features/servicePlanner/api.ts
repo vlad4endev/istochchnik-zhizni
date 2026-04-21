@@ -39,6 +39,7 @@ export type ServicePlanListItem = {
   service_date: string;
   start_time: string;
   status: 'draft' | 'published';
+  is_archived: boolean;
   leader_member_id: number | null;
   preacher_member_id: number | null;
   total_duration_minutes: number;
@@ -155,6 +156,7 @@ export async function deleteServiceTemplate(id: number): Promise<void> {
 export async function fetchServicePlans(params?: {
   from?: string;
   to?: string;
+  include_archived?: boolean;
 }): Promise<ServicePlanListItem[]> {
   const { data } = await apiClient.get<ServicePlanListItem[]>('/api/service-plans', { params });
   return data;
@@ -182,6 +184,7 @@ export async function patchServicePlan(
     service_date: string;
     start_time: string;
     status: 'draft' | 'published';
+    is_archived: boolean;
     leader_member_id: number | null;
     preacher_member_id: number | null;
     current_block_id: number | null;
@@ -227,6 +230,10 @@ export async function createServiceBlock(body: {
 
 export async function deleteServiceBlock(id: number): Promise<void> {
   await apiClient.delete(`/api/service-blocks/${id}`);
+}
+
+export async function deleteServicePlan(id: number): Promise<void> {
+  await apiClient.delete(`/api/service-plans/${id}`);
 }
 
 export async function fetchPublicServicePlan(token: string): Promise<PublicServicePlanPayload> {

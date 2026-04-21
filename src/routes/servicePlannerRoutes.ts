@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { requireAuthSession } from '../middleware/authSession';
 import {
   deleteServiceBlockById,
+  deleteServicePlanById,
   deleteServiceTemplateById,
   getServiceBlockTypes,
   getServiceTemplateById,
@@ -30,6 +31,7 @@ router.get('/service-plans', requireAuthSession, getServicePlans);
 router.get('/service-plans/:id', requireAuthSession, getServicePlanById);
 router.post('/service-plans', requireAuthSession, postServicePlan);
 router.patch('/service-plans/:id', requireAuthSession, patchServicePlanById);
+router.delete('/service-plans/:id', requireAuthSession, deleteServicePlanById);
 
 router.patch('/service-blocks/reorder', requireAuthSession, patchServiceBlocksReorder);
 router.post('/service-blocks', requireAuthSession, postServiceBlock);
