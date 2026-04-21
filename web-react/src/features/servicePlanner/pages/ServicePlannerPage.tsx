@@ -4,6 +4,8 @@ import { DragDropContext, Draggable, Droppable, type DropResult } from '@hello-p
 import { addMinutes, format, parse } from 'date-fns';
 import {
   LuCalendarDays,
+  LuChevronDown,
+  LuChevronUp,
   LuClock3,
   LuCopy,
   LuGripVertical,
@@ -204,6 +206,7 @@ export function ServicePlannerPage() {
   const [editingBlockId, setEditingBlockId] = useState<number | null>(null);
   const [shareCopied, setShareCopied] = useState(false);
   const [showArchivedPlans, setShowArchivedPlans] = useState(false);
+  const [isPlanSettingsOpenMobile, setIsPlanSettingsOpenMobile] = useState(false);
 
   const songsQ = useQuery<SongListItem[]>({
     queryKey: ['songs', 'service-planner'],
@@ -1599,6 +1602,23 @@ export function ServicePlannerPage() {
           <p className="text-xs font-semibold uppercase tracking-wide text-stone-500">Настройки плана</p>
           <button
             type="button"
+            onClick={() => setIsPlanSettingsOpenMobile((v) => !v)}
+            className="inline-flex min-h-[36px] items-center justify-center gap-1 rounded-lg border border-stone-300 px-2.5 py-1.5 text-xs font-semibold text-stone-700 md:hidden"
+          >
+            {isPlanSettingsOpenMobile ? (
+              <>
+                <LuChevronUp className="h-3.5 w-3.5" />
+                Скрыть
+              </>
+            ) : (
+              <>
+                <LuChevronDown className="h-3.5 w-3.5" />
+                Показать
+              </>
+            )}
+          </button>
+          <button
+            type="button"
             onClick={() =>
               void updatePlanMut.mutateAsync({
                 id: draft.id,
@@ -1610,12 +1630,13 @@ export function ServicePlannerPage() {
                 },
               })
             }
-            className="inline-flex min-h-[36px] items-center justify-center gap-1 rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-white hover:bg-primary-dark sm:min-h-0"
+            className="hidden min-h-[36px] items-center justify-center gap-1 rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-white hover:bg-primary-dark md:inline-flex md:min-h-0"
           >
             <LuSave className="h-3.5 w-3.5" />
             Сохранить настройки
           </button>
         </div>
+        <div className={isPlanSettingsOpenMobile ? 'block md:block' : 'hidden md:block'}>
         <p className="mb-2 text-xs text-stone-500">Укажите дату, время и ответственных служителей.</p>
         <div className="grid gap-2 md:grid-cols-2 [&_input]:bg-white [&_input]:text-stone-900 [&_select]:bg-white [&_select]:text-stone-900">
           <input
@@ -1659,6 +1680,25 @@ export function ServicePlannerPage() {
           <div className="md:col-span-2 rounded-xl bg-stone-50 px-3 py-2 text-xs text-stone-600">
             <LuLink className="mr-1 inline h-3.5 w-3.5" /> /service-plan/share/{draft.share_token}
           </div>
+        </div>
+        <button
+          type="button"
+          onClick={() =>
+            void updatePlanMut.mutateAsync({
+              id: draft.id,
+              body: {
+                service_date: draft.service_date,
+                start_time: draft.start_time,
+                leader_member_id: draft.leader_member_id,
+                preacher_member_id: draft.preacher_member_id,
+              },
+            })
+          }
+          className="mt-2 inline-flex min-h-[36px] items-center justify-center gap-1 rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-white hover:bg-primary-dark md:hidden"
+        >
+          <LuSave className="h-3.5 w-3.5" />
+          Сохранить настройки
+        </button>
         </div>
       </section>
 
@@ -1711,7 +1751,7 @@ export function ServicePlannerPage() {
           <button
             type="button"
             onClick={() => void saveProgramMut.mutateAsync()}
-            className="inline-flex min-h-[40px] shrink-0 items-center justify-center gap-2 rounded-xl bg-primary px-3 py-2 text-sm font-semibold text-white hover:bg-primary-dark md:min-h-[44px] md:min-w-0"
+            className="hidden min-h-[40px] shrink-0 items-center justify-center gap-2 rounded-xl bg-primary px-3 py-2 text-sm font-semibold text-white hover:bg-primary-dark md:inline-flex md:min-h-[44px] md:min-w-0"
           >
             <LuSave className="h-4 w-4" />
             Сохранить программу
@@ -1925,9 +1965,9 @@ export function ServicePlannerPage() {
       </div>
 
       {editingBlock ? (
-        <div className="fixed inset-0 z-[70] flex items-end justify-center bg-black/35 p-3 sm:items-center">
-          <div className="w-full max-w-2xl rounded-2xl border border-stone-200 bg-white p-4 shadow-2xl">
-            <div className="mb-3 flex items-center justify-between gap-2">
+        <div className="fixed inset-0 z-[70] flex items-end justify-center bg-black/35 p-2 sm:p-3 sm:items-center">
+          <div className="flex w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-2xl max-h-[calc(100dvh-0.75rem)] sm:max-h-[calc(100dvh-2rem)]">
+            <div className="flex items-center justify-between gap-2 border-b border-stone-100 px-3 py-3 sm:px-4">
               <h3 className="text-base font-extrabold text-stone-900">Редактирование блока</h3>
               <button
                 type="button"
@@ -1937,7 +1977,8 @@ export function ServicePlannerPage() {
                 Закрыть
               </button>
             </div>
-            <div className="grid gap-2 rounded-xl bg-stone-50 p-3 sm:grid-cols-2 [&_input]:bg-white [&_input]:text-stone-900 [&_input]:placeholder:text-stone-400 [&_select]:bg-white [&_select]:text-stone-900 [&_textarea]:bg-white [&_textarea]:text-stone-900 [&_textarea]:placeholder:text-stone-400">
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-3 sm:px-4">
+            <div className="grid min-w-0 gap-2 rounded-xl bg-stone-50 p-3 sm:grid-cols-2 [&_input]:w-full [&_input]:bg-white [&_input]:text-stone-900 [&_input]:placeholder:text-stone-400 [&_select]:w-full [&_select]:bg-white [&_select]:text-stone-900 [&_textarea]:w-full [&_textarea]:bg-white [&_textarea]:text-stone-900 [&_textarea]:placeholder:text-stone-400">
               <input
                 value={isSeparatorBlock(editingBlock) ? separatorLabel(editingBlock) : editingBlock.title}
                 onChange={(e) => {
@@ -1975,7 +2016,7 @@ export function ServicePlannerPage() {
               />
               <div className="sm:col-span-2">
                 <p className="mb-1 text-xs font-semibold text-stone-600">Иконка блока (React)</p>
-                <div className="flex flex-wrap gap-1">
+                <div className="flex max-h-28 flex-wrap gap-1 overflow-y-auto pr-1">
                 {BLOCK_MARK_ICON_OPTIONS.map((markIcon) => (
                   <button
                     key={markIcon.key}
@@ -2141,7 +2182,8 @@ export function ServicePlannerPage() {
                 </p>
               )}
             </div>
-            <div className="mt-3 flex justify-end gap-2">
+            </div>
+            <div className="flex flex-wrap justify-end gap-2 border-t border-stone-100 bg-white px-3 py-3 sm:px-4">
               <button
                 type="button"
                 onClick={() => setEditingBlockId(null)}
