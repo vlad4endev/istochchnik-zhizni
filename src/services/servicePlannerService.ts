@@ -69,6 +69,110 @@ export type PlannerPlanDetails = PlannerPlanListItem & {
 
 type DbRecord = Record<string, unknown>;
 
+let plannerSchemaInitOnce: Promise<void> | null = null;
+
+async function ensurePlannerSchema(): Promise<void> {
+  if (!plannerSchemaInitOnce) {
+    plannerSchemaInitOnce = (async () => {
+      await query(
+        `create table if not exists public.block_types (
+           id smallserial primary key,
+           code varchar(64) not null unique,
+           name varchar(120) not null,
+           kind varchar(32) not null check (kind in ('song', 'text', 'speaker', 'custom')),
+           icon varchar(64),
+           default_duration_minutes smallint not null default 5 check (default_duration_minutes > 0),
+           created_at timestamptz not null default now()
+         )`,
+      );
+
+      await query(
+        `create table if not exists public.service_templates (
+           id bigserial primary key,
+           name varchar(255) not null,
+           description text,
+           recurrence_rule jsonb not null default '{}'::jsonb,
+           default_start_time time not null default '10:00',
+           is_active boolean not null default true,
+           created_by_member_id integer references public.members (id) on delete set null,
+           created_at timestamptz not null default now(),
+           updated_at timestamptz not null default now()
+         )`,
+      );
+
+      await query(
+        `create table if not exists public.service_template_blocks (
+           id bigserial primary key,
+           template_id bigint not null references public.service_templates (id) on delete cascade,
+           block_type_id smallint not null references public.block_types (id) on delete restrict,
+           title varchar(255) not null default '',
+           order_index integer not null check (order_index >= 0),
+           duration_minutes smallint not null default 5 check (duration_minutes > 0),
+           default_song_id bigint,
+           default_content_json jsonb not null default '{}'::jsonb,
+           created_at timestamptz not null default now(),
+           unique (template_id, order_index)
+         )`,
+      );
+
+      await query(
+        `create table if not exists public.service_plans (
+           id bigserial primary key,
+           template_id bigint references public.service_templates (id) on delete set null,
+           service_date date not null,
+           start_time time not null default '10:00',
+           status varchar(20) not null default 'draft' check (status in ('draft', 'published')),
+           leader_member_id integer references public.members (id) on delete set null,
+           preacher_member_id integer references public.members (id) on delete set null,
+           total_duration_minutes integer not null default 0 check (total_duration_minutes >= 0),
+           current_block_id bigint,
+           share_token uuid not null default gen_random_uuid() unique,
+           church_event_id bigint,
+           notes text,
+           created_by_member_id integer references public.members (id) on delete set null,
+           created_at timestamptz not null default now(),
+           updated_at timestamptz not null default now(),
+           unique (template_id, service_date)
+         )`,
+      );
+
+      await query(
+        `create table if not exists public.service_blocks (
+           id bigserial primary key,
+           service_plan_id bigint not null references public.service_plans (id) on delete cascade,
+           block_type_id smallint not null references public.block_types (id) on delete restrict,
+           title varchar(255) not null default '',
+           order_index integer not null check (order_index >= 0),
+           duration_minutes smallint not null default 5 check (duration_minutes > 0),
+           assigned_member_id integer references public.members (id) on delete set null,
+           song_id bigint,
+           content_json jsonb not null default '{}'::jsonb,
+           source_template_block_id bigint references public.service_template_blocks (id) on delete set null,
+           created_at timestamptz not null default now(),
+           unique (service_plan_id, order_index)
+         )`,
+      );
+
+      await query(
+        `insert into public.block_types (code, name, kind, icon, default_duration_minutes)
+         values
+           ('prayer', 'Молитва', 'text', 'hands-praying', 5),
+           ('song', 'Песня', 'song', 'music', 6),
+           ('scripture', 'Чтение Писания', 'text', 'book-bible', 5),
+           ('sermon', 'Проповедь', 'speaker', 'person-chalkboard', 35),
+           ('announcements', 'Объявления', 'text', 'bullhorn', 5),
+           ('offering', 'Сбор пожертвований', 'custom', 'hand-holding-dollar', 3),
+           ('custom', 'Произвольный блок', 'custom', 'puzzle-piece', 5)
+         on conflict (code) do nothing`,
+      );
+    })().catch((e) => {
+      plannerSchemaInitOnce = null;
+      throw e;
+    });
+  }
+  await plannerSchemaInitOnce;
+}
+
 function asObject(v: unknown): Record<string, unknown> {
   if (!v || typeof v !== 'object' || Array.isArray(v)) return {};
   return v as Record<string, unknown>;
@@ -125,6 +229,7 @@ function mapTemplateBlockRow(row: DbRecord): PlannerTemplateBlock {
 }
 
 export async function listBlockTypes(): Promise<PlannerBlockType[]> {
+  await ensurePlannerSchema();
   const { rows } = await query(
     `select id, code, name, kind, icon, default_duration_minutes
      from public.block_types
@@ -141,6 +246,7 @@ export async function listBlockTypes(): Promise<PlannerBlockType[]> {
 }
 
 export async function listTemplates(): Promise<PlannerTemplateListItem[]> {
+  await ensurePlannerSchema();
   const { rows } = await query(
     `select id, name, description, recurrence_rule, default_start_time, is_active
      from public.service_templates
@@ -160,6 +266,7 @@ export async function listTemplates(): Promise<PlannerTemplateListItem[]> {
 }
 
 export async function getTemplateDetails(templateId: number): Promise<PlannerTemplateDetails | null> {
+  await ensurePlannerSchema();
   const tRes = await query(
     `select id, name, description, recurrence_rule, default_start_time, is_active
      from public.service_templates
@@ -188,6 +295,7 @@ export async function getTemplateDetails(templateId: number): Promise<PlannerTem
 }
 
 export async function listPlans(input: { from?: string; to?: string }): Promise<PlannerPlanListItem[]> {
+  await ensurePlannerSchema();
   const params: unknown[] = [];
   const where: string[] = [];
   if (input.from) {
@@ -218,6 +326,7 @@ export async function listPlans(input: { from?: string; to?: string }): Promise<
 }
 
 export async function getPlanDetails(planId: number): Promise<PlannerPlanDetails | null> {
+  await ensurePlannerSchema();
   const planRes = await query(
     `select
        p.id, p.template_id, p.service_date::text as service_date, p.start_time, p.status,
@@ -267,6 +376,7 @@ export async function createTemplate(input: {
   }>;
   created_by_member_id: number;
 }): Promise<number> {
+  await ensurePlannerSchema();
   if (!pool) throw new Error('Database pool not configured');
   const client = await pool.connect();
   try {
@@ -329,6 +439,7 @@ export async function patchTemplate(
     }>;
   },
 ): Promise<boolean> {
+  await ensurePlannerSchema();
   if (!pool) throw new Error('Database pool not configured');
   const client = await pool.connect();
   try {
@@ -391,6 +502,7 @@ export async function createPlan(input: {
   preacher_member_id: number | null;
   created_by_member_id: number;
 }): Promise<number> {
+  await ensurePlannerSchema();
   if (!pool) throw new Error('Database pool not configured');
   const client = await pool.connect();
   try {
@@ -476,6 +588,7 @@ export async function patchPlan(
     notes: string | null;
   }>,
 ): Promise<boolean> {
+  await ensurePlannerSchema();
   const set: string[] = [];
   const values: unknown[] = [];
   const push = (sql: string, value: unknown) => {
@@ -502,6 +615,7 @@ export async function patchPlan(
 }
 
 export async function reorderBlocks(servicePlanId: number, orderedBlockIds: number[]): Promise<void> {
+  await ensurePlannerSchema();
   if (!pool) throw new Error('Database pool not configured');
   const client = await pool.connect();
   try {
@@ -545,6 +659,7 @@ export async function patchBlock(
     content_json: Record<string, unknown>;
   }>,
 ): Promise<boolean> {
+  await ensurePlannerSchema();
   const set: string[] = [];
   const values: unknown[] = [];
   const push = (sql: string, value: unknown) => {
