@@ -92,6 +92,17 @@ function isStudioApiPath(path: string): boolean {
   return path.startsWith('/api/studio/');
 }
 
+function isServicePlannerMutation(method: string, path: string): boolean {
+  if (SAFE_METHODS.has(method)) return false;
+  const p = path.split('?')[0];
+  return (
+    p.startsWith('/api/service-plans') ||
+    p.startsWith('/api/service-templates') ||
+    p.startsWith('/api/service-blocks') ||
+    p.startsWith('/api/service-block-types')
+  );
+}
+
 function fullUrlPath(req: Request): string {
   return (req.originalUrl || req.url || req.path || '').split('?')[0] || '';
 }
@@ -186,12 +197,17 @@ export function enforceRoleAccess(req: Request, res: Response, next: NextFunctio
     return;
   }
 
+  if (isServicePlannerMutation(req.method, fullPath) && authId && (role === 'minister' || role === 'admin')) {
+    next();
+    return;
+  }
+
   if (isStandardParticipantMutation(role, req.method, fullPath, authId)) {
     next();
     return;
   }
 
-  if (role !== 'admin') {
+  if (role !== 'admin' && role !== 'minister') {
     res.status(403).json({
       error: 'Access denied. Роль "Пользователь" может только просматривать данные.',
     });
