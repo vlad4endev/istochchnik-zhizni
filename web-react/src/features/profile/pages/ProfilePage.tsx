@@ -49,6 +49,8 @@ function displayName(user: MeResponse): string {
 function roleLabel(role: string): string {
   const r = (role ?? '').trim().toLowerCase();
   if (r === 'admin') return 'Администратор';
+  if (r === 'minister') return 'Служитель';
+  if (r === 'pastor') return 'Пастор';
   return 'Пользователь';
 }
 

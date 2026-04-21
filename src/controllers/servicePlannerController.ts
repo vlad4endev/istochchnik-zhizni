@@ -1,4 +1,5 @@
 import type { Request, Response } from 'express';
+import { query } from '../config/db';
 import {
   createPlan,
   createTemplate,
@@ -46,6 +47,32 @@ function ensureAdmin(req: Request, res: Response): boolean {
   return true;
 }
 
+function hasMinistryRole(raw: unknown, roleName: string): boolean {
+  const normalize = (v: string) => v.trim().toLowerCase().replace(/ё/g, 'е');
+  const target = normalize(roleName);
+  return String(raw ?? '')
+    .split(/[;,]/)
+    .map((s) => normalize(s))
+    .some((s) => s === target || s.includes(target));
+}
+
+async function ensureTemplateManager(req: Request, res: Response): Promise<boolean> {
+  if (isAdmin(req)) return true;
+  if (!req.authUserId) {
+    res.status(401).json({ error: 'Требуется авторизация' });
+    return false;
+  }
+  try {
+    const r = await query(`select ministry_role from public.members where id = $1 limit 1`, [req.authUserId]);
+    const row = r.rows[0] as { ministry_role?: string | null } | undefined;
+    if (row && hasMinistryRole(row.ministry_role, 'Ведущий')) return true;
+  } catch (e) {
+    console.error('[service-planner] ensureTemplateManager lookup failed:', e);
+  }
+  res.status(403).json({ error: 'Недостаточно прав (админ или ведущий)' });
+  return false;
+}
+
 function parseJsonObject(raw: unknown): Record<string, unknown> {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
   return raw as Record<string, unknown>;
@@ -70,7 +97,7 @@ export async function getServiceTemplates(_req: Request, res: Response): Promise
 }
 
 export async function postServiceTemplate(req: Request, res: Response): Promise<void> {
-  if (!ensureAdmin(req, res)) return;
+  if (!(await ensureTemplateManager(req, res))) return;
   const body = parseJsonObject(req.body);
   const name = String(body.name ?? '').trim();
   if (!name) {
@@ -132,7 +159,7 @@ export async function getServiceTemplateById(req: Request, res: Response): Promi
 }
 
 export async function patchServiceTemplateById(req: Request, res: Response): Promise<void> {
-  if (!ensureAdmin(req, res)) return;
+  if (!(await ensureTemplateManager(req, res))) return;
   const id = parseId(req.params.id);
   if (!id) {
     res.status(400).json({ error: 'Некорректный id шаблона' });
@@ -183,7 +210,7 @@ export async function patchServiceTemplateById(req: Request, res: Response): Pro
 }
 
 export async function deleteServiceTemplateById(req: Request, res: Response): Promise<void> {
-  if (!ensureAdmin(req, res)) return;
+  if (!(await ensureTemplateManager(req, res))) return;
   const id = parseId(req.params.id);
   if (!id) {
     res.status(400).json({ error: 'Некорректный id шаблона' });

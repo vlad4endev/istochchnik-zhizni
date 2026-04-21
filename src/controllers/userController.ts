@@ -318,7 +318,7 @@ export async function createUserHandler(req: Request, res: Response): Promise<vo
 
   if (req.body.app_role !== undefined && !isValidAppRole(req.body.app_role)) {
     res.status(400).json({
-      error: 'Field "app_role" must be "member", "pastor", "musician", "editor", or "admin"',
+      error: 'Field "app_role" must be "member", "minister", "pastor", "musician", "editor", or "admin"',
     });
     return;
   }
@@ -575,7 +575,7 @@ export async function updateUserHandler(req: Request, res: Response): Promise<vo
 
   if (req.body.app_role !== undefined && !isValidAppRole(req.body.app_role)) {
     res.status(400).json({
-      error: 'Field "app_role" must be "member", "pastor", "musician", "editor", or "admin"',
+      error: 'Field "app_role" must be "member", "minister", "pastor", "musician", "editor", or "admin"',
     });
     return;
   }
@@ -688,7 +688,7 @@ export async function setUserAppRoleHandler(req: Request, res: Response): Promis
   const appRole = req.body.app_role;
   if (!isValidAppRole(appRole)) {
     res.status(400).json({
-      error: 'Field "app_role" must be "member", "pastor", "musician", "editor", or "admin"',
+      error: 'Field "app_role" must be "member", "minister", "pastor", "musician", "editor", or "admin"',
     });
     return;
   }

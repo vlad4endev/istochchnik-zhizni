@@ -99,6 +99,7 @@ function roleLabel(u: AppUser): string {
     return ministryRoles.join(', ');
   }
   if (u.app_role === 'admin') return 'Админ';
+  if (u.app_role === 'minister') return 'Служитель';
   if (u.app_role === 'pastor') return 'Пастор';
   if (u.app_role === 'editor') return 'Редактор';
   if (u.app_role === 'musician') return 'Музыкант';
@@ -181,6 +182,7 @@ const BLOCK_MARK_ICON_BY_KEY = Object.fromEntries(
 export function ServicePlannerPage() {
   const qc = useQueryClient();
   const role = useAuthStore((s) => s.role);
+  const authMemberId = useAuthStore((s) => s.memberId);
   const isAdmin = (role ?? 'member').toLowerCase() === 'admin';
   const [screen, setScreen] = useState<'home' | 'plan' | 'template'>('home');
   const [createPlanDate, setCreatePlanDate] = useState(todayIso());
@@ -385,6 +387,8 @@ export function ServicePlannerPage() {
   const templates = templatesQ.data ?? [];
   const blockTypes = blockTypesQ.data ?? [];
   const usersById = useMemo(() => new Map(users.map((u) => [u.id, u] as const)), [users]);
+  const authMember = authMemberId ? usersById.get(authMemberId) ?? null : null;
+  const canManageTemplates = isAdmin || (authMember ? hasMinistryRole(authMember, 'Ведущий') : false);
   const leaderCandidates = useMemo(() => users.filter((u) => hasMinistryRole(u, 'Ведущий')), [users]);
   const preacherCandidates = useMemo(() => users.filter((u) => isPreacherCandidate(u)), [users]);
 
@@ -542,6 +546,7 @@ export function ServicePlannerPage() {
   }
 
   async function createTemplateFromCurrentPlan(): Promise<void> {
+    if (!canManageTemplates) return;
     if (!draft) return;
     const fallbackType = blockTypes[0]?.id;
     if (!fallbackType) return;
@@ -899,7 +904,7 @@ export function ServicePlannerPage() {
             </button>
           </div>
 
-          {isAdmin ? (
+          {canManageTemplates ? (
             <div className="rounded-2xl border border-stone-200 bg-white p-4 shadow-sm">
               <p className="text-xs font-semibold uppercase tracking-wide text-stone-500">Шаблоны</p>
               <p className="mt-1 text-sm text-stone-600">
@@ -985,6 +990,22 @@ export function ServicePlannerPage() {
   }
 
   if (screen === 'template') {
+    if (!canManageTemplates) {
+      return (
+        <section className="mx-auto flex w-full max-w-3xl flex-col gap-3 px-3 py-4 pb-6 sm:px-4 md:px-6">
+          <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 shadow-sm">
+            Создание и редактирование шаблонов доступно только администраторам и ведущим.
+          </div>
+          <button
+            type="button"
+            onClick={() => setScreen('home')}
+            className="inline-flex items-center justify-center gap-2 rounded-xl border border-stone-300 px-3 py-2 text-sm font-semibold text-stone-700 hover:border-primary hover:text-primary"
+          >
+            К списку программ
+          </button>
+        </section>
+      );
+    }
     return (
       <section className="mx-auto flex w-full max-w-4xl flex-col gap-3 px-3 py-4 pb-6 sm:px-4 md:px-6">
         <header className="rounded-2xl border border-stone-200 bg-white p-4 shadow-sm">
@@ -1404,7 +1425,7 @@ export function ServicePlannerPage() {
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h1 className="text-xl font-extrabold text-stone-900">План служения</h1>
           <div className="flex w-full items-center gap-1 overflow-x-auto pb-1 sm:w-auto sm:overflow-visible sm:pb-0">
-            {isAdmin ? (
+            {canManageTemplates ? (
               <>
                 <button
                   type="button"
@@ -1532,6 +1553,17 @@ export function ServicePlannerPage() {
             <LuPlus className="h-4 w-4" />
             Разделитель
           </button>
+          <div
+            className={[
+              'inline-flex min-h-[40px] shrink-0 items-center justify-center gap-2 rounded-xl border px-3 py-2 text-sm font-semibold md:min-h-[44px] md:min-w-0',
+              draft.status === 'published'
+                ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+                : 'border-amber-200 bg-amber-50 text-amber-800',
+            ].join(' ')}
+            aria-live="polite"
+          >
+            Статус: {draft.status === 'published' ? 'Опубликован' : 'Черновик'}
+          </div>
           <button
             type="button"
             onClick={() => {
@@ -1539,9 +1571,14 @@ export function ServicePlannerPage() {
               setDraft({ ...draft, status });
               void updatePlanMut.mutateAsync({ id: draft.id, body: { status } });
             }}
-            className="inline-flex min-h-[40px] shrink-0 items-center justify-center gap-2 rounded-xl border border-stone-300 px-3 py-2 text-sm font-semibold text-stone-700 hover:border-primary hover:text-primary md:min-h-[44px] md:min-w-0"
+            className={[
+              'inline-flex min-h-[40px] shrink-0 items-center justify-center gap-2 rounded-xl border px-3 py-2 text-sm font-semibold md:min-h-[44px] md:min-w-0',
+              draft.status === 'draft'
+                ? 'border-emerald-300 text-emerald-700 hover:bg-emerald-50'
+                : 'border-amber-300 text-amber-700 hover:bg-amber-50',
+            ].join(' ')}
           >
-            {draft.status === 'draft' ? 'Черновик' : 'Опубликован'}
+            {draft.status === 'draft' ? 'Опубликовать' : 'Вернуть в черновик'}
           </button>
           <button
             type="button"

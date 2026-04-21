@@ -98,6 +98,8 @@ function appRoleLabel(role: string): string {
   switch (role) {
     case 'admin':
       return 'Администратор';
+    case 'minister':
+      return 'Служитель';
     case 'pastor':
       return 'Пастор';
     case 'editor':
@@ -115,6 +117,9 @@ function appRoleBadgeClass(role: string): string {
   }
   if (role === 'pastor') {
     return 'rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-semibold text-emerald-900';
+  }
+  if (role === 'minister') {
+    return 'rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-900';
   }
   if (role === 'editor') {
     return 'rounded-full bg-violet-100 px-2.5 py-0.5 text-xs font-semibold text-violet-800';
@@ -686,7 +691,7 @@ function MembersSection() {
       role,
     }: {
       id: number;
-      role: 'member' | 'pastor' | 'musician' | 'editor' | 'admin';
+      role: 'member' | 'minister' | 'pastor' | 'musician' | 'editor' | 'admin';
     }) => setMemberAppRole(id, role),
     onSuccess: (updated) => {
       setEditing((prev) => (prev && prev.id === updated.id ? updated : prev));
@@ -1607,6 +1612,7 @@ function MembersSection() {
                       }}
                     >
                       <option value="member">Член церкви</option>
+                      <option value="minister">Служитель</option>
                       <option value="pastor">Пастор</option>
                       <option value="musician">Музыкант (студия)</option>
                       <option value="editor">Редактор каталога</option>
