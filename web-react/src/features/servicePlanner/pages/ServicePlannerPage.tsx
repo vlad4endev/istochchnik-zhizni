@@ -356,24 +356,43 @@ export function ServicePlannerPage() {
     return (
       <section className="mx-auto flex w-full max-w-2xl flex-col gap-3 px-4 py-6">
         <h1 className="text-xl font-extrabold text-stone-900">Планировщик служений</h1>
-        <p className="text-sm text-stone-600">Планы ещё не созданы. Создайте план из шаблона.</p>
+        <p className="text-sm text-stone-600">
+          Планы ещё не созданы. Сначала создайте шаблон, затем сгенерируйте план.
+        </p>
         <div className="rounded-xl border border-stone-200 bg-white p-3">
-          <label className="mb-1 block text-xs font-semibold text-stone-600">Шаблон</label>
-          <select
-            value={activeTemplateId ?? ''}
-            onChange={(e) => setActiveTemplateId(e.target.value ? Number(e.target.value) : null)}
-            className="w-full rounded-xl border border-stone-300 px-3 py-2 text-sm"
-          >
-            {templates.map((tpl) => (
-              <option key={tpl.id} value={tpl.id}>
-                {tpl.name}
-              </option>
-            ))}
-          </select>
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <label className="block text-xs font-semibold text-stone-600">Шаблон</label>
+            <button
+              type="button"
+              onClick={() => void createTemplateFromDraft()}
+              className="inline-flex items-center gap-1 rounded-lg border border-stone-300 px-2 py-1 text-xs font-semibold text-stone-700 hover:border-primary hover:text-primary"
+            >
+              <LuPlus className="h-3.5 w-3.5" />
+              Создать шаблон
+            </button>
+          </div>
+          {templates.length > 0 ? (
+            <select
+              value={activeTemplateId ?? ''}
+              onChange={(e) => setActiveTemplateId(e.target.value ? Number(e.target.value) : null)}
+              className="w-full rounded-xl border border-stone-300 px-3 py-2 text-sm"
+            >
+              {templates.map((tpl) => (
+                <option key={tpl.id} value={tpl.id}>
+                  {tpl.name}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <p className="rounded-lg border border-dashed border-stone-300 bg-stone-50 px-3 py-2 text-xs text-stone-600">
+              Пока нет ни одного шаблона. Нажмите «Создать шаблон».
+            </p>
+          )}
           <button
             type="button"
+            disabled={!activeTemplate}
             onClick={() => generateFromTemplate(todayIso())}
-            className="mt-2 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-3 py-2 text-sm font-semibold text-white hover:bg-primary-dark"
+            className="mt-2 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-3 py-2 text-sm font-semibold text-white hover:bg-primary-dark disabled:cursor-not-allowed disabled:bg-stone-300"
           >
             <LuPlus className="h-4 w-4" />
             Сгенерировать план на сегодня
