@@ -404,12 +404,23 @@ export function ServicePlannerPage() {
     const destination = result.destination;
     if (!destination || !draft) return;
     if (destination.index === result.source.index) return;
-    const reordered = reorderBlocks(draft.blocks, result.source.index, destination.index);
-    setDraft({ ...draft, blocks: reordered });
-    void reorderMut.mutateAsync({
-      service_plan_id: draft.id,
-      ordered_block_ids: reordered.map((b) => b.id),
-    });
+    const visible = timedBlocks.slice().sort((a, b) => a.order_index - b.order_index);
+    const reorderedVisible = reorderBlocks(visible, result.source.index, destination.index);
+    const nextById = new Map(reorderedVisible.map((b, idx) => [b.id, { ...b, order_index: idx }] as const));
+    const nextBlocks = draft.blocks
+      .map((b) => nextById.get(b.id) ?? b)
+      .sort((a, b) => a.order_index - b.order_index);
+
+    setDraft({ ...draft, blocks: nextBlocks });
+    void reorderMut
+      .mutateAsync({
+        service_plan_id: draft.id,
+        ordered_block_ids: reorderedVisible.map((b) => b.id),
+      })
+      .catch(() => {
+        // Re-sync with backend order if optimistic reorder failed.
+        void qc.invalidateQueries({ queryKey: ['service-planner', 'plan', draft.id] });
+      });
   }
 
   function generateFromTemplate(date: string): void {
