@@ -117,12 +117,7 @@ function hasMinistryRole(u: AppUser, roleName: string): boolean {
 }
 
 function isPreacherCandidate(u: AppUser): boolean {
-  if (u.app_role === 'pastor' || u.app_role === 'admin') return true;
-  if (hasMinistryRole(u, 'Проповедник')) return true;
-  const normalizedRoles = String(u.ministry_role ?? '')
-    .toLowerCase()
-    .replace(/ё/g, 'е');
-  return normalizedRoles.includes('проповед');
+  return hasMinistryRole(u, 'Проповедник');
 }
 
 function userLabel(u: AppUser): string {
@@ -1508,7 +1503,7 @@ export function ServicePlannerPage() {
             className="rounded-xl border border-stone-300 px-3 py-2 text-sm shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
           >
             <option value="">Ведущий</option>
-            {(leaderCandidates.length > 0 ? leaderCandidates : users).map((u) => (
+            {leaderCandidates.map((u) => (
               <option key={u.id} value={u.id}>
                 {userLabel(u)}
               </option>
@@ -1522,7 +1517,7 @@ export function ServicePlannerPage() {
             className="rounded-xl border border-stone-300 px-3 py-2 text-sm shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
           >
             <option value="">Проповедник</option>
-            {(preacherCandidates.length > 0 ? preacherCandidates : users).map((u) => (
+            {preacherCandidates.map((u) => (
               <option key={u.id} value={u.id}>
                 {userLabel(u)}
               </option>

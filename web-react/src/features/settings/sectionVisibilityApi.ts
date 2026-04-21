@@ -11,7 +11,7 @@ export const APP_SECTION_IDS = [
 ] as const;
 export type AppSectionId = (typeof APP_SECTION_IDS)[number];
 
-export const APP_ROLE_IDS = ['member', 'pastor', 'musician', 'editor', 'admin'] as const;
+export const APP_ROLE_IDS = ['member', 'minister', 'pastor', 'musician', 'editor', 'admin'] as const;
 export type AppRole = (typeof APP_ROLE_IDS)[number];
 
 export interface SectionVisibilityRule {
@@ -32,6 +32,7 @@ export interface SectionVisibilitySettingsAdmin extends SectionVisibilitySetting
 
 export function appRoleLabel(role: AppRole): string {
   if (role === 'admin') return 'Администратор';
+  if (role === 'minister') return 'Служитель';
   if (role === 'pastor') return 'Пастор';
   if (role === 'editor') return 'Редактор';
   if (role === 'musician') return 'Музыкант';
@@ -50,7 +51,13 @@ export function appSectionLabel(section: AppSectionId): string {
 
 export function normalizeAppRole(raw: string | null | undefined): AppRole {
   const value = (raw ?? '').trim().toLowerCase();
-  if (value === 'admin' || value === 'pastor' || value === 'editor' || value === 'musician') {
+  if (
+    value === 'admin' ||
+    value === 'minister' ||
+    value === 'pastor' ||
+    value === 'editor' ||
+    value === 'musician'
+  ) {
     return value;
   }
   return 'member';
