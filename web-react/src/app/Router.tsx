@@ -107,6 +107,11 @@ const PublicSetlistPage = lazy(async () => {
   return { default: m.PublicSetlistPage };
 });
 
+const ServicePlannerPage = lazy(async () => {
+  const m = await import('../features/servicePlanner/pages/ServicePlannerPage');
+  return { default: m.ServicePlannerPage };
+});
+
 export function AppRouter() {
   return (
     <Routes>
@@ -262,6 +267,18 @@ export function AppRouter() {
           element={
             <RequireFullMember>
               <ServiceFlowPage />
+            </RequireFullMember>
+          }
+        />
+        <Route
+          path="service-planner"
+          element={
+            <RequireFullMember>
+              <RequireSectionAccess sectionId="service_planner">
+                <Suspense fallback={<RouteFallback />}>
+                  <ServicePlannerPage />
+                </Suspense>
+              </RequireSectionAccess>
             </RequireFullMember>
           }
         />

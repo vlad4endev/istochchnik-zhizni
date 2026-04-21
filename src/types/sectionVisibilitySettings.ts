@@ -2,6 +2,7 @@ export const APP_SECTION_IDS = [
   'dashboard',
   'prayer',
   'songbook',
+  'service_planner',
   'studio',
   'sermons',
   'messenger',
@@ -36,6 +37,10 @@ export function defaultSectionVisibilitySettings(): SectionVisibilitySettingsDoc
       dashboard: defaultRule(),
       prayer: defaultRule(),
       songbook: defaultRule(),
+      service_planner: {
+        enabled: true,
+        roles: ['admin'],
+      },
       studio: defaultRule(),
       sermons: defaultRule(),
       messenger: defaultRule(),

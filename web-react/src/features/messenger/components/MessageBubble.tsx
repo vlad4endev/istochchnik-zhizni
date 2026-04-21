@@ -491,8 +491,16 @@ function MessageBubbleInner({
 
   const payloadType = message.payload_type ?? 'text';
   const payload = (message.payload ?? {}) as Record<string, unknown>;
-  const attachmentRawUrl = String(payload.url ?? '').trim();
-  const attachmentObjectPath = String(payload.objectPath ?? payload.object_path ?? '').trim();
+  const albumImages = Array.isArray(payload.images)
+    ? payload.images
+        .map((x) => (typeof x === 'object' && x !== null ? (x as Record<string, unknown>) : null))
+        .filter((x): x is Record<string, unknown> => Boolean(x))
+    : [];
+  const firstAlbumImage = albumImages[0] ?? null;
+  const attachmentRawUrl = String(payload.url ?? firstAlbumImage?.url ?? '').trim();
+  const attachmentObjectPath = String(
+    payload.objectPath ?? payload.object_path ?? firstAlbumImage?.objectPath ?? firstAlbumImage?.object_path ?? '',
+  ).trim();
   const [resolvedAttachmentUrl, setResolvedAttachmentUrl] = useState<string | null>(null);
 
   useEffect(() => {
@@ -500,6 +508,7 @@ function MessageBubbleInner({
     setResolvedAttachmentUrl(fallback);
     if (
       (payloadType !== 'image' && payloadType !== 'file') ||
+      (payloadType === 'image' && albumImages.length > 0) ||
       !attachmentObjectPath ||
       !/^\d+$/.test(String(message.id))
     ) {
@@ -518,7 +527,7 @@ function MessageBubbleInner({
     return () => {
       cancelled = true;
     };
-  }, [attachmentRawUrl, attachmentObjectPath, message.id, payloadType]);
+  }, [attachmentRawUrl, attachmentObjectPath, message.id, payloadType, albumImages.length]);
 
   /** Время и галочки в одной строке с текстом (как в Telegram), если нет цитаты и не «особый» контент. */
   const useInlineTextMeta =
@@ -592,6 +601,71 @@ function MessageBubbleInner({
     }
 
     if (payloadType === 'image') {
+      if (albumImages.length > 0) {
+        const caption = String(message.content ?? '').trim();
+        const colsClass = albumImages.length === 1 ? 'grid-cols-1' : albumImages.length === 2 ? 'grid-cols-2' : 'grid-cols-3';
+        return (
+          <div className="w-full max-w-[min(78vw,22rem)] overflow-hidden rounded-2xl">
+            <div className={['grid gap-1.5', colsClass].join(' ')}>
+              {albumImages.map((img, idx) => {
+                const rawUrl = String(img.url ?? '').trim();
+                const src = resolvePublicUrl(rawUrl) ?? rawUrl;
+                const mime = String(img.mimeType ?? img.mimetype ?? '').trim().toLowerCase();
+                const name = String(img.name ?? img.filename ?? '').trim().toLowerCase();
+                const urlPath = rawUrl.split('?')[0].toLowerCase();
+                const isHeicLike =
+                  mime === 'image/heic' ||
+                  mime === 'image/heif' ||
+                  urlPath.endsWith('.heic') ||
+                  urlPath.endsWith('.heif') ||
+                  name.endsWith('.heic') ||
+                  name.endsWith('.heif');
+                if (!src) return null;
+                if (isHeicLike) {
+                  return (
+                    <a
+                      key={`${src}-${idx}`}
+                      href={src}
+                      target="_blank"
+                      rel="noreferrer"
+                      className={[
+                        'grid min-h-[84px] place-items-center rounded-xl text-[11px] font-semibold',
+                        isMine ? 'bg-white/10 text-white/90' : 'bg-gray-100 text-gray-700',
+                      ].join(' ')}
+                    >
+                      HEIC
+                    </a>
+                  );
+                }
+                return (
+                  <button
+                    key={`${src}-${idx}`}
+                    type="button"
+                    onClick={() => setLightboxSrc(src)}
+                    className={['overflow-hidden rounded-xl', isMine ? 'bg-white/10' : 'bg-black/[0.04]'].join(' ')}
+                    aria-label={`Открыть изображение ${idx + 1}`}
+                  >
+                    <img
+                      src={src}
+                      alt=""
+                      className="max-h-[220px] w-full object-cover"
+                      loading="lazy"
+                      decoding="async"
+                      referrerPolicy="no-referrer"
+                    />
+                  </button>
+                );
+              })}
+            </div>
+            {caption ? (
+              <div className={['px-3 py-2 text-[14px] leading-relaxed', isMine ? 'text-white/95' : 'text-gray-900'].join(' ')}>
+                <MentionRichText text={caption} namesById={participantLabelById} isMine={isMine} />
+              </div>
+            ) : null}
+          </div>
+        );
+      }
+
       const rawUrl = attachmentRawUrl;
       const src = resolvedAttachmentUrl ?? (resolvePublicUrl(rawUrl) ?? rawUrl);
       const caption = String(message.content ?? '').trim();

@@ -407,7 +407,17 @@ export function ChatWindow({
     const out: { messageId: string; src: string }[] = [];
     for (const m of messages) {
       if (m.is_deleted || m.payload_type !== 'image') continue;
-      const raw = String((m.payload as { url?: string }).url ?? '').trim();
+      const payload = (m.payload ?? {}) as { url?: string; images?: Array<{ url?: string }> };
+      const album = Array.isArray(payload.images) ? payload.images : [];
+      if (album.length > 0) {
+        for (const img of album) {
+          const raw = String(img?.url ?? '').trim();
+          const src = resolvePublicUrl(raw) ?? raw;
+          if (src) out.push({ messageId: String(m.id), src });
+        }
+        continue;
+      }
+      const raw = String(payload.url ?? '').trim();
       const src = resolvePublicUrl(raw) ?? raw;
       if (src) out.push({ messageId: String(m.id), src });
     }

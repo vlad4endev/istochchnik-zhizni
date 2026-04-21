@@ -24,6 +24,14 @@ export function parseDraftPrivateMemberId(id: string): number | null {
 
 /** Дебаунс markReadUpTo при потоке входящих WS-сообщений — иначе сотни параллельных POST → ERR_INSUFFICIENT_RESOURCES. */
 const markReadDebounceByConv = new Map<string, ReturnType<typeof setTimeout>>();
+/** Один in-flight mark-read на чат + очередь последнего id, чтобы не плодить timeout'ы. */
+const markReadInFlightByConv = new Map<string, bigint>();
+const markReadQueuedByConv = new Map<string, bigint>();
+const markReadCommittedByConv = new Map<string, bigint>();
+/** Один in-flight vote на сообщение, защита от double-click. */
+const pollVoteInFlightByMsg = new Set<string>();
+/** Один in-flight reaction-запрос на пару message+emoji. */
+const reactionInFlightByKey = new Set<string>();
 
 function debouncedMarkReadUpTo(
   convId: string,
@@ -40,6 +48,19 @@ function debouncedMarkReadUpTo(
       fn(convId, msgId);
     }, delayMs),
   );
+}
+
+function parseNumericMessageId(value: string): bigint | null {
+  if (!/^\d+$/.test(value)) return null;
+  try {
+    return BigInt(value);
+  } catch {
+    return null;
+  }
+}
+
+function reactionRequestKey(messageId: string, emoji: string): string {
+  return `${String(messageId)}::${String(emoji)}`;
 }
 
 // ─── Types ────────────────────────────────────────────────────
@@ -1240,7 +1261,20 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   markReadUpTo: async (conversationId, messageId) => {
     const normalizedId = String(messageId || '').trim();
-    if (!/^\d+$/.test(normalizedId)) return;
+    const targetId = parseNumericMessageId(normalizedId);
+    if (targetId == null) return;
+    const convKey = String(conversationId);
+    const committed = markReadCommittedByConv.get(convKey) ?? 0n;
+    if (targetId <= committed) return;
+
+    const inFlight = markReadInFlightByConv.get(convKey);
+    if (inFlight != null) {
+      const prevQueued = markReadQueuedByConv.get(convKey) ?? 0n;
+      if (targetId > prevQueued) {
+        markReadQueuedByConv.set(convKey, targetId);
+      }
+      return;
+    }
 
     // Optimistic: set unread to 0
     set((s) => ({
@@ -1250,10 +1284,29 @@ export const useChatStore = create<ChatState>((set, get) => ({
       totalUnread: Math.max(0, s.totalUnread - (s.conversations.find((c) => c.id === conversationId)?.unread_count ?? 0)),
     }));
 
+    markReadInFlightByConv.set(convKey, targetId);
     try {
       await api.markConversationRead(conversationId, normalizedId);
+      const prevCommitted = markReadCommittedByConv.get(convKey) ?? 0n;
+      if (targetId > prevCommitted) {
+        markReadCommittedByConv.set(convKey, targetId);
+      }
     } catch (e) {
+      if (axios.isAxiosError(e) && (e.code === 'ECONNABORTED' || e.message.includes('timeout'))) {
+        // Не шумим в консоли на временных сетевых лагax — следующий flush/read-up событие догонит.
+        return;
+      }
       console.error('[chatStore] markReadUpTo error:', e);
+    } finally {
+      markReadInFlightByConv.delete(convKey);
+      const queued = markReadQueuedByConv.get(convKey);
+      if (queued != null) {
+        markReadQueuedByConv.delete(convKey);
+        const latestCommitted = markReadCommittedByConv.get(convKey) ?? 0n;
+        if (queued > latestCommitted) {
+          void get().markReadUpTo(convKey, String(queued));
+        }
+      }
     }
   },
 
@@ -1264,6 +1317,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const me = state.currentMemberId;
     const convId = findConversationIdContainingMessage(state.messagesByConv, String(messageId));
     if (!convId || me == null) return;
+    const reqKey = reactionRequestKey(messageId, emoji);
+    if (reactionInFlightByKey.has(reqKey)) return;
+    reactionInFlightByKey.add(reqKey);
 
     // Optimistic: add reaction immediately
     get().handleReaction(convId, String(messageId), emoji, me, 'add');
@@ -1275,6 +1331,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
       // Rollback
       get().handleReaction(convId, String(messageId), emoji, me, 'remove');
       emitAppToast('Не удалось добавить реакцию', 'error');
+    } finally {
+      reactionInFlightByKey.delete(reqKey);
     }
   },
 
@@ -1283,6 +1341,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const me = state.currentMemberId;
     const convId = findConversationIdContainingMessage(state.messagesByConv, String(messageId));
     if (!convId || me == null) return;
+    const reqKey = reactionRequestKey(messageId, emoji);
+    if (reactionInFlightByKey.has(reqKey)) return;
+    reactionInFlightByKey.add(reqKey);
 
     // Optimistic: remove reaction immediately
     get().handleReaction(convId, String(messageId), emoji, me, 'remove');
@@ -1294,6 +1355,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
       // Rollback
       get().handleReaction(convId, String(messageId), emoji, me, 'add');
       emitAppToast('Не удалось убрать реакцию', 'error');
+    } finally {
+      reactionInFlightByKey.delete(reqKey);
     }
   },
 
@@ -1576,6 +1639,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
   votePoll: async (messageId, optionIndexes) => {
     const state = get();
     const mid = String(messageId);
+    if (pollVoteInFlightByMsg.has(mid)) return;
+    pollVoteInFlightByMsg.add(mid);
 
     // Find message for optimistic update
     let convId: string | null = null;
@@ -1618,6 +1683,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
       } else {
         emitAppToast('Не удалось сохранить голос', 'error');
       }
+    } finally {
+      pollVoteInFlightByMsg.delete(mid);
     }
   },
 
@@ -1636,6 +1703,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
             if (action === 'add') {
               if (existingIdx >= 0) {
                 const prev = reactions[existingIdx];
+                // Idempotency for own reactions:
+                // local optimistic "add" may already be applied before WS echo arrives.
+                if (memberId === me && prev.reacted_by_me) {
+                  return m;
+                }
                 reactions[existingIdx] = {
                   ...prev,
                   count: prev.count + 1,
@@ -1647,6 +1719,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
             } else {
               if (existingIdx >= 0) {
                 const prev = reactions[existingIdx];
+                // Idempotency for own reactions:
+                // local optimistic "remove" may already be applied before WS echo arrives.
+                if (memberId === me && !prev.reacted_by_me) {
+                  return m;
+                }
                 const newCount = prev.count - 1;
                 const reactedByMe = memberId === me ? false : prev.reacted_by_me;
                 if (newCount <= 0) {

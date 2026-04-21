@@ -93,12 +93,13 @@ export function ChatInput({
 
   const [content, setContent] = useState('');
   const [pending, setPending] = useState<PendingAttachment | null>(null);
+  const [pendingImages, setPendingImages] = useState<PendingAttachment[]>([]);
   const [uploading, setUploading] = useState<{ name: string; size: number } | null>(null);
   const [uploadPct, setUploadPct] = useState<number>(0);
   const [uploadErr, setUploadErr] = useState<string | null>(null);
   const [uploadsHealthy, setUploadsHealthy] = useState(true);
   const [uploadsHealthChecking, setUploadsHealthChecking] = useState(false);
-  const [showPreview, setShowPreview] = useState(false);
+  const [previewSrc, setPreviewSrc] = useState<string | null>(null);
   const [attachMenuOpen, setAttachMenuOpen] = useState(false);
   const [emojiOpen, setEmojiOpen] = useState(false);
   const [attachMenuPresent, setAttachMenuPresent] = useState(false);
@@ -117,6 +118,7 @@ export function ChatInput({
   const [attachPos, setAttachPos] = useState<PopoverPos>(null);
   const [emojiPos, setEmojiPos] = useState<PopoverPos>(null);
   const uploadAbortRef = useRef<AbortController | null>(null);
+  const filePickerModeRef = useRef<'image' | 'file'>('image');
   const typingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const typingStartDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const draftSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -200,17 +202,20 @@ export function ChatInput({
   useEffect(() => {
     return () => {
       if (pending?.previewUrl) URL.revokeObjectURL(pending.previewUrl);
+      for (const img of pendingImages) {
+        if (img.previewUrl) URL.revokeObjectURL(img.previewUrl);
+      }
     };
-  }, [pending?.previewUrl]);
+  }, [pending?.previewUrl, pendingImages]);
 
   useEffect(() => {
-    if (!showPreview) return;
+    if (!previewSrc) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setShowPreview(false);
+      if (e.key === 'Escape') setPreviewSrc(null);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [showPreview]);
+  }, [previewSrc]);
 
   useEffect(() => {
     if (!attachMenuOpen) return;
@@ -364,6 +369,77 @@ export function ChatInput({
   const handleSend = async () => {
     haptic(10);
     const text = content.trim();
+    if (pendingImages.length > 0) {
+      if (!uploadsHealthy) {
+        setUploadErr('Хранилище файлов сейчас недоступно. Повторите отправку позже.');
+        return;
+      }
+      setUploadErr(null);
+      setUploadPct(0);
+      try {
+        const uploadedImages: api.UploadedFile[] = [];
+        for (let i = 0; i < pendingImages.length; i += 1) {
+          const item = pendingImages[i];
+          let uploaded = item.uploaded ?? null;
+          if (!uploaded) {
+            setUploading({ name: item.file.name, size: item.file.size });
+            const ctrl = new AbortController();
+            uploadAbortRef.current = ctrl;
+            const fileToUpload = await compressImageForMessengerUpload(item.file, ctrl.signal);
+            uploaded = await api.uploadFile(fileToUpload, {
+              onProgress: (pct) => setUploadPct(pct),
+              signal: ctrl.signal,
+            });
+            const up = uploaded;
+            setPendingImages((prev) =>
+              prev.map((x, idx) => (idx === i ? { ...x, uploaded: up } : x)),
+            );
+          }
+          uploadedImages.push(uploaded);
+          setUploadPct(0);
+        }
+        const first = uploadedImages[0];
+        await sendMessage(conversationId, text, replyingTo?.id || null, 'image', {
+          // Backward compatibility with old single-image rendering fields.
+          url: first?.url ?? '',
+          name: first?.name ?? '',
+          objectPath: first?.objectPath,
+          mimeType: first?.mimeType ?? '',
+          size: first?.size ?? 0,
+          is_album: true,
+          images: uploadedImages.map((u) => ({
+            url: u.url,
+            name: u.name,
+            objectPath: u.objectPath,
+            mimeType: u.mimeType,
+            size: u.size,
+          })),
+        });
+        setReplyingTo(null);
+        setReplyTo(null);
+        setContent('');
+        clearDraft(conversationId);
+        for (const item of pendingImages) {
+          if (item.previewUrl) URL.revokeObjectURL(item.previewUrl);
+        }
+        setPendingImages([]);
+        setPreviewSrc(null);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        if (msg.toLowerCase().includes('canceled') || msg.toLowerCase().includes('abort')) {
+          setUploadErr('Загрузка отменена');
+        } else {
+          setUploadErr('Не удалось загрузить или отправить фотографии');
+        }
+      } finally {
+        setUploading(null);
+        setUploadPct(0);
+        uploadAbortRef.current = null;
+        if (fileInputRef.current) fileInputRef.current.value = '';
+      }
+      return;
+    }
+
     if (pending) {
       if (!uploadsHealthy) {
         setUploadErr('Хранилище файлов сейчас недоступно. Повторите отправку позже.');
@@ -401,6 +477,7 @@ export function ChatInput({
         clearDraft(conversationId);
         if (pending.previewUrl) URL.revokeObjectURL(pending.previewUrl);
         setPending(null);
+        setPreviewSrc(null);
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
         if (msg.toLowerCase().includes('canceled') || msg.toLowerCase().includes('abort')) {
@@ -450,6 +527,8 @@ export function ChatInput({
     haptic(12);
     const input = fileInputRef.current;
     if (!input) return;
+    filePickerModeRef.current = kind;
+    input.multiple = kind === 'image';
     input.accept =
       kind === 'image'
         ? 'image/*'
@@ -457,9 +536,48 @@ export function ChatInput({
     input.click();
   };
 
-  const handleFileSelected = async (file: File | null) => {
-    if (!file) return;
+  const handleFileSelected = async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
     setUploadErr(null);
+    const selected = Array.from(files);
+    const pickerMode = filePickerModeRef.current;
+    if (pickerMode === 'image' && selected.length > 1) {
+      const maxBytes = 20 * 1024 * 1024;
+      const tooBig = selected.find((f) => f.size > maxBytes);
+      if (tooBig) {
+        setUploadErr('Одна из фотографий больше 20MB');
+        if (fileInputRef.current) fileInputRef.current.value = '';
+        return;
+      }
+      const bad = selected.find((f) => {
+        const isImage =
+          (f.type || '').startsWith('image/') ||
+          IMAGE_NAME_EXT_RE.test(String(f.name || '').trim());
+        return !isImage;
+      });
+      if (bad) {
+        setUploadErr('Можно выбрать несколько файлов только в режиме фото');
+        if (fileInputRef.current) fileInputRef.current.value = '';
+        return;
+      }
+      if (pending?.previewUrl) URL.revokeObjectURL(pending.previewUrl);
+      for (const item of pendingImages) {
+        if (item.previewUrl) URL.revokeObjectURL(item.previewUrl);
+      }
+      setPending(null);
+      setPendingImages(
+        selected.map((file) => ({
+          file,
+          isImage: true,
+          previewUrl: URL.createObjectURL(file),
+          uploaded: null,
+        })),
+      );
+      textareaRef.current?.focus();
+      return;
+    }
+
+    const file = selected[0];
     // Validate before preview/upload
     const maxBytes = 20 * 1024 * 1024;
     if (file.size > maxBytes) {
@@ -485,6 +603,10 @@ export function ChatInput({
       return;
     }
     if (pending?.previewUrl) URL.revokeObjectURL(pending.previewUrl);
+    for (const item of pendingImages) {
+      if (item.previewUrl) URL.revokeObjectURL(item.previewUrl);
+    }
+    setPendingImages([]);
     const isImage =
       (file.type || '').startsWith('image/') ||
       IMAGE_NAME_EXT_RE.test(String(file.name || '').trim());
@@ -702,14 +824,53 @@ export function ChatInput({
         </div>
       ) : null}
 
-      {pending ? (
+      {pendingImages.length > 0 ? (
+        <div className="mb-2 overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
+          <div className="flex items-start gap-3 p-3">
+            <div className="grid min-w-0 flex-1 grid-cols-3 gap-2">
+              {pendingImages.slice(0, 6).map((item, idx) => (
+                <button
+                  key={`${item.file.name}-${idx}`}
+                  type="button"
+                  onClick={() => item.previewUrl && setPreviewSrc(item.previewUrl)}
+                  className="aspect-square overflow-hidden rounded-xl bg-gray-100 ring-1 ring-gray-200/70"
+                  aria-label={`Открыть фото ${idx + 1}`}
+                >
+                  {item.previewUrl ? (
+                    <img src={item.previewUrl} alt="" className="h-full w-full object-cover" />
+                  ) : null}
+                </button>
+              ))}
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                for (const item of pendingImages) {
+                  if (item.previewUrl) URL.revokeObjectURL(item.previewUrl);
+                }
+                setPendingImages([]);
+                setPreviewSrc(null);
+                if (fileInputRef.current) fileInputRef.current.value = '';
+              }}
+              className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-gray-500 transition-colors duration-200 hover:bg-gray-100"
+              aria-label="Убрать фотографии"
+              title="Убрать фотографии"
+            >
+              <LuX />
+            </button>
+          </div>
+          <div className="px-3 pb-3 text-[11px] text-gray-500">
+            Выбрано фото: {pendingImages.length}. Можно добавить подпись и отправить одним сообщением.
+          </div>
+        </div>
+      ) : pending ? (
         <div className="mb-2 overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
           <div className="flex items-start gap-3 p-3">
             {pending.isImage && pending.previewUrl ? (
               <div className="h-14 w-14 overflow-hidden rounded-xl bg-gray-100 ring-1 ring-gray-200/70">
                 <button
                   type="button"
-                  onClick={() => setShowPreview(true)}
+                  onClick={() => setPreviewSrc(pending.previewUrl)}
                   className="h-full w-full"
                   aria-label="Открыть превью"
                 >
@@ -737,7 +898,7 @@ export function ChatInput({
               onClick={() => {
                 if (pending.previewUrl) URL.revokeObjectURL(pending.previewUrl);
                 setPending(null);
-                setShowPreview(false);
+                setPreviewSrc(null);
                 if (fileInputRef.current) fileInputRef.current.value = '';
               }}
               className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-gray-500 transition-colors duration-200 hover:bg-gray-100"
@@ -750,10 +911,10 @@ export function ChatInput({
         </div>
       ) : null}
 
-      {showPreview && pending?.isImage && pending.previewUrl ? (
+      {previewSrc ? (
         <div
           className="fixed inset-0 z-[4000] bg-black/70 p-4"
-          onClick={() => setShowPreview(false)}
+          onClick={() => setPreviewSrc(null)}
           role="dialog"
           aria-modal="true"
           aria-label="Превью перед отправкой"
@@ -762,7 +923,7 @@ export function ChatInput({
             type="button"
             onClick={(e) => {
               e.stopPropagation();
-              setShowPreview(false);
+              setPreviewSrc(null);
             }}
             className="absolute right-4 top-4 z-[4001] flex h-11 w-11 items-center justify-center rounded-full bg-white/15 text-white backdrop-blur-sm transition hover:bg-white/25"
             aria-label="Закрыть превью"
@@ -771,7 +932,7 @@ export function ChatInput({
           </button>
           <div className="mx-auto flex h-full max-w-xl items-center justify-center">
             <img
-              src={pending.previewUrl}
+              src={previewSrc}
               alt=""
               className="max-h-full max-w-full rounded-2xl object-contain shadow-2xl"
               onClick={(e) => e.stopPropagation()}
@@ -852,7 +1013,7 @@ export function ChatInput({
             type="file"
             className="hidden"
             accept="image/*"
-            onChange={(e) => void handleFileSelected(e.target.files?.[0] ?? null)}
+            onChange={(e) => void handleFileSelected(e.target.files)}
           />
           <div ref={attachMenuRef} className="relative z-[5000]">
             <button
@@ -889,9 +1050,11 @@ export function ChatInput({
               Наберите символ собака, чтобы упомянуть участника
             </span>
           ) : null}
-          {pending ? (
+          {pending || pendingImages.length > 0 ? (
             <span id="chat-input-attachment-hint" className="sr-only">
-              К сообщению прикреплено вложение: {pending.file.name}. Будет отправлено вместе с текстом.
+              {pendingImages.length > 0
+                ? `К сообщению прикреплено фотографий: ${pendingImages.length}. Будут отправлены одним сообщением.`
+                : `К сообщению прикреплено вложение: ${pending?.file.name}. Будет отправлено вместе с текстом.`}
             </span>
           ) : null}
           {uploading ? (
@@ -909,7 +1072,7 @@ export function ChatInput({
             aria-describedby={
               [
                 mentionParticipants.length > 0 ? 'chat-input-mention-hint' : null,
-                pending ? 'chat-input-attachment-hint' : null,
+                pending || pendingImages.length > 0 ? 'chat-input-attachment-hint' : null,
                 uploading ? 'chat-input-uploading-hint' : null,
               ]
                 .filter((id): id is string => Boolean(id))
@@ -944,8 +1107,8 @@ export function ChatInput({
           type="button"
           className="tg-send-btn transition-colors duration-200"
           onClick={() => void handleSend()}
-          disabled={(!content.trim() && !pending) || uploading != null}
-          style={{ opacity: (content.trim() || pending) && !uploading ? 1 : 0.5 }}
+          disabled={(!content.trim() && !pending && pendingImages.length === 0) || uploading != null}
+          style={{ opacity: (content.trim() || pending || pendingImages.length > 0) && !uploading ? 1 : 0.5 }}
         >
           <LuSend size={18} style={{ marginLeft: '1px' }} />
         </button>

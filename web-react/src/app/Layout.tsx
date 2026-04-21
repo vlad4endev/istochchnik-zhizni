@@ -5,6 +5,7 @@ import type { IconType } from 'react-icons';
 import {
   LuChevronLeft,
   LuChevronRight,
+  LuCalendarDays,
   LuChurch,
   LuDisc3,
   LuLayoutDashboard,
@@ -59,6 +60,7 @@ const NAV_ITEMS: NavItem[] = [
   { to: '/dashboard', label: 'Главная', Icon: LuLayoutDashboard, sectionId: 'dashboard' },
   { to: '/prayer', label: 'Молитва', Icon: LuChurch, sectionId: 'prayer' },
   { to: '/songbook', label: 'Песенник', Icon: LuMusic2, sectionId: 'songbook' },
+  { to: '/service-planner', label: 'Планировщик', Icon: LuCalendarDays, sectionId: 'service_planner' },
   { to: '/studio', label: 'Студия', Icon: LuDisc3, studioOnly: true, sectionId: 'studio' },
   { to: '/sermons', label: 'Проповеди', Icon: LuMic, sectionId: 'sermons' },
   { to: '/messenger', label: 'Чаты', Icon: LuMessageCircle, sectionId: 'messenger' },

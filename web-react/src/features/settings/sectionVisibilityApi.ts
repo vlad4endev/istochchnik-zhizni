@@ -4,6 +4,7 @@ export const APP_SECTION_IDS = [
   'dashboard',
   'prayer',
   'songbook',
+  'service_planner',
   'studio',
   'sermons',
   'messenger',
@@ -41,6 +42,7 @@ export function appSectionLabel(section: AppSectionId): string {
   if (section === 'dashboard') return 'Главная';
   if (section === 'prayer') return 'Молитва';
   if (section === 'songbook') return 'Песенник';
+  if (section === 'service_planner') return 'Планировщик';
   if (section === 'studio') return 'Студия';
   if (section === 'sermons') return 'Проповеди';
   return 'Чаты';
