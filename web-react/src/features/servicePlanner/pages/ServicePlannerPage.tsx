@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { DragDropContext, Draggable, Droppable, type DropResult } from '@hello-pangea/dnd';
 import { addMinutes, format, parse } from 'date-fns';
 import {
+  LuArrowLeft,
   LuCalendarDays,
   LuChevronDown,
   LuChevronUp,
@@ -242,6 +243,24 @@ export function ServicePlannerPage() {
     mq.addEventListener('change', sync);
     return () => mq.removeEventListener('change', sync);
   }, []);
+
+  const [planStickyBackVisible, setPlanStickyBackVisible] = useState(false);
+  useEffect(() => {
+    if (screen !== 'plan' || !draft) {
+      setPlanStickyBackVisible(false);
+      return undefined;
+    }
+    const onScroll = () => {
+      if (!window.matchMedia('(max-width: 767px)').matches) {
+        setPlanStickyBackVisible(false);
+        return;
+      }
+      setPlanStickyBackVisible(window.scrollY > 56);
+    };
+    onScroll();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, [screen, draft]);
 
   const songsQ = useQuery<SongListItem[]>({
     queryKey: ['songs', 'service-planner'],
@@ -1864,11 +1883,40 @@ export function ServicePlannerPage() {
   }).format(new Date(`${draft.service_date}T12:00:00`));
 
   return (
-    <section className="mx-auto flex w-full max-w-4xl flex-col gap-3 px-3 py-4 pb-[calc(104px+env(safe-area-inset-bottom))] sm:px-4 md:px-6 md:pb-6">
+    <>
+      {planStickyBackVisible ? (
+        <div
+          className="fixed inset-x-0 top-0 z-[45] flex items-center border-b border-stone-200/90 bg-white/90 px-2 py-1.5 pl-[max(0.5rem,env(safe-area-inset-left))] pt-[max(0.35rem,env(safe-area-inset-top))] pr-[max(0.5rem,env(safe-area-inset-right))] backdrop-blur-md md:hidden"
+          role="navigation"
+          aria-label="Быстрый возврат"
+        >
+          <button
+            type="button"
+            onClick={() => setScreen('home')}
+            className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-stone-200 bg-white text-stone-800 shadow-sm active:bg-stone-50"
+            aria-label="Назад к списку программ"
+          >
+            <LuArrowLeft className="h-5 w-5" aria-hidden />
+          </button>
+        </div>
+      ) : null}
+      <section className="mx-auto flex w-full max-w-4xl flex-col gap-3 px-3 py-4 pb-[calc(104px+env(safe-area-inset-bottom))] sm:px-4 md:px-6 md:pb-6">
       <header className="rounded-2xl border border-stone-200 bg-white p-4 shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <h1 className="text-xl font-extrabold text-stone-900">План служения</h1>
-          <div className="flex w-full items-center gap-1 overflow-x-auto pb-1 sm:w-auto sm:overflow-visible sm:pb-0">
+        <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-2">
+          <div className="flex min-w-0 items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setScreen('home')}
+              className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-stone-200 text-stone-700 hover:bg-stone-50 sm:h-10 sm:w-10"
+              aria-label="Назад к списку программ"
+            >
+              <LuArrowLeft className="h-5 w-5" aria-hidden />
+            </button>
+            <h1 className="min-w-0 text-xl font-extrabold leading-tight text-stone-900 sm:text-2xl">
+              План служения
+            </h1>
+          </div>
+          <div className="flex w-full flex-wrap items-center gap-1 overflow-x-auto pb-0.5 sm:w-auto sm:justify-end sm:overflow-visible sm:pb-0">
             {canManageTemplates ? (
               <>
                 <button
@@ -1890,13 +1938,6 @@ export function ServicePlannerPage() {
                 </button>
               </>
             ) : null}
-            <button
-              type="button"
-              onClick={() => setScreen('home')}
-              className="shrink-0 whitespace-nowrap rounded-lg border border-stone-300 px-2.5 py-1 text-[11px] font-semibold text-stone-700 hover:border-primary hover:text-primary sm:px-3 sm:py-1.5 sm:text-xs"
-            >
-              Все программы
-            </button>
             <button
               type="button"
               onClick={() => void toggleArchiveCurrentPlan()}
@@ -2846,5 +2887,6 @@ export function ServicePlannerPage() {
         </div>
       ) : null}
     </section>
+    </>
   );
 }
