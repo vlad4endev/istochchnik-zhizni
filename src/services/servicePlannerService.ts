@@ -399,7 +399,7 @@ async function getNextWeekSchedule(serviceDate: string): Promise<NextWeekSchedul
        to_char(event_time, 'HH24:MI') as event_time,
        recurrence_type,
        weekly_day,
-       category
+       null::text as category
      from public.church_events
      where is_active = true`,
   );
