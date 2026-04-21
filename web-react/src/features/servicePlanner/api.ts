@@ -148,6 +148,10 @@ export async function patchServiceTemplate(
   await apiClient.patch(`/api/service-templates/${id}`, body);
 }
 
+export async function deleteServiceTemplate(id: number): Promise<void> {
+  await apiClient.delete(`/api/service-templates/${id}`);
+}
+
 export async function fetchServicePlans(params?: {
   from?: string;
   to?: string;

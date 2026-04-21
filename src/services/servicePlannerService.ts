@@ -602,6 +602,12 @@ export async function patchTemplate(
   }
 }
 
+export async function deleteTemplate(templateId: number): Promise<boolean> {
+  await ensurePlannerSchema();
+  const res = await query(`delete from public.service_templates where id = $1`, [templateId]);
+  return (res.rowCount ?? 0) > 0;
+}
+
 export async function createPlan(input: {
   template_id: number;
   service_date: string;

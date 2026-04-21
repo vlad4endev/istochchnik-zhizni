@@ -95,19 +95,19 @@ export function PublicServicePlanPage() {
 
   return (
     <div className="min-h-[100dvh] bg-[var(--surface)]">
-      <div className="mx-auto max-w-3xl space-y-6 px-4 py-8 pb-24">
+      <div className="mx-auto max-w-3xl space-y-4 px-3 py-5 pb-[calc(84px+env(safe-area-inset-bottom))] sm:space-y-6 sm:px-4 sm:py-8 sm:pb-24">
         <p className="text-sm">
           <Link to="/login" className="text-sky-600 hover:underline">
             Войти
           </Link>
         </p>
 
-        <header className="rounded-2xl border border-stone-200 bg-white p-4 shadow-sm">
-          <h1 className="text-2xl font-extrabold text-stone-900">{plan.template_name ?? 'Программа служения'}</h1>
-          <p className="mt-1 text-sm text-stone-600">
+        <header className="rounded-2xl border border-stone-200 bg-white p-3 shadow-sm sm:p-4">
+          <h1 className="text-xl font-extrabold text-stone-900 sm:text-2xl">{plan.template_name ?? 'Программа служения'}</h1>
+          <p className="mt-1 text-sm text-stone-600 sm:text-base">
             На собрание: <span className="font-semibold text-stone-800">{dateText}</span>
           </p>
-          <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-stone-600">
+          <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-stone-600 sm:text-sm">
             <span className="rounded-full bg-stone-100 px-2 py-0.5">Старт: {plan.start_time}</span>
             <span className="rounded-full bg-stone-100 px-2 py-0.5">{plan.total_duration_minutes} мин</span>
             <span className="rounded-full bg-stone-100 px-2 py-0.5">
@@ -119,18 +119,20 @@ export function PublicServicePlanPage() {
           </div>
         </header>
 
-        <section className="space-y-2">
+        <section className="space-y-2.5">
           {rows.map((b, idx) =>
             b.separator ? (
-              <div key={b.id} className="rounded-xl border border-dashed border-stone-300 bg-stone-50 px-3 py-2">
-                <p className="text-center text-sm font-bold text-stone-700">
+              <div key={b.id} className="rounded-xl border border-dashed border-stone-300 bg-stone-50 px-3 py-2.5">
+                <p className="text-center text-sm font-bold leading-snug text-stone-700 sm:text-base">
                   {String(b.content_json.separator_text ?? b.title ?? 'Раздел')}
                 </p>
               </div>
             ) : (
-              <article key={b.id} className="rounded-xl border border-stone-200 bg-white p-3 shadow-sm">
-                <div className="flex items-start gap-3">
-                  <div className="w-12 shrink-0 text-xs font-bold text-stone-700">{b.startsAt}</div>
+              <article key={b.id} className="rounded-xl border border-stone-200 bg-white p-3 shadow-sm sm:p-4">
+                <div className="flex items-start gap-2.5 sm:gap-3">
+                  <div className="w-11 shrink-0 rounded-md bg-stone-100 px-1.5 py-1 text-center text-[11px] font-bold text-stone-700 sm:w-12 sm:bg-transparent sm:px-0 sm:py-0 sm:text-xs">
+                    {b.startsAt}
+                  </div>
                   {(() => {
                     const custom = typeof b.content_json.block_mark === 'string' ? b.content_json.block_mark.trim() : '';
                     const markIconKey =
@@ -141,9 +143,7 @@ export function PublicServicePlanPage() {
                     if (markIcon) {
                       const MarkIcon = markIcon.Icon;
                       return (
-                        <div
-                          className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${markIcon.wrapClass}`}
-                        >
+                        <div className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${markIcon.wrapClass}`}>
                           <MarkIcon className={`h-4 w-4 ${markIcon.iconClass}`} />
                         </div>
                       );
@@ -200,22 +200,22 @@ export function PublicServicePlanPage() {
 
                       return (
                         <>
-                    <h2 className="text-sm font-bold text-stone-900">
+                    <h2 className="text-[15px] font-bold leading-snug text-stone-900 sm:text-base">
                       {idx + 1}. {heading}
                     </h2>
-                    <p className="mt-0.5 text-xs text-stone-500">
+                    <p className="mt-0.5 text-xs leading-snug text-stone-500 sm:text-sm">
                       {b.block_type_name ?? 'Блок'} • {b.duration_minutes} мин
                       {b.assigned_member_name ? ` • ${b.assigned_member_name}` : ''}
                     </p>
-                    {poemSubline ? <p className="mt-0.5 text-xs text-stone-600">{poemSubline}</p> : null}
+                    {poemSubline ? <p className="mt-0.5 text-xs leading-snug text-stone-600 sm:text-sm">{poemSubline}</p> : null}
                     {b.song_title ? (
-                      <p className="mt-1 text-xs font-semibold text-stone-700">
+                      <p className="mt-1 text-sm font-semibold leading-snug text-stone-700">
                         {b.song_title}
                         {b.song_key ? ` [${b.song_key}]` : ''}
                       </p>
                     ) : null}
                     {noteToShow ? (
-                      <p className="mt-1 whitespace-pre-wrap text-sm text-stone-700">{noteToShow}</p>
+                      <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-stone-700 sm:text-base">{noteToShow}</p>
                     ) : null}
                         </>
                       );

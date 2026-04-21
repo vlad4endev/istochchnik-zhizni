@@ -4,6 +4,7 @@ import {
   createTemplate,
   createBlock,
   deleteBlock,
+  deleteTemplate,
   getPlanDetails,
   getTemplateDetails,
   listBlockTypes,
@@ -178,6 +179,26 @@ export async function patchServiceTemplateById(req: Request, res: Response): Pro
     console.error('[service-planner] patchServiceTemplateById:', e);
     const msg = e instanceof Error ? e.message : 'Не удалось обновить шаблон';
     res.status(400).json({ error: msg });
+  }
+}
+
+export async function deleteServiceTemplateById(req: Request, res: Response): Promise<void> {
+  if (!ensureAdmin(req, res)) return;
+  const id = parseId(req.params.id);
+  if (!id) {
+    res.status(400).json({ error: 'Некорректный id шаблона' });
+    return;
+  }
+  try {
+    const ok = await deleteTemplate(id);
+    if (!ok) {
+      res.status(404).json({ error: 'Шаблон не найден' });
+      return;
+    }
+    res.status(204).send();
+  } catch (e) {
+    console.error('[service-planner] deleteServiceTemplateById:', e);
+    res.status(500).json({ error: 'Не удалось удалить шаблон' });
   }
 }
 
