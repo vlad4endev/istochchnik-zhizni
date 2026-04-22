@@ -280,21 +280,6 @@ export async function fetchPublicServicePlan(token: string): Promise<PublicServi
   return data;
 }
 
-export async function patchPublicServicePlanBlockByToken(
-  token: string,
-  blockId: number,
-  body: Partial<{
-    title: string;
-    duration_minutes: number;
-    content_json: Record<string, unknown>;
-  }>,
-): Promise<void> {
-  await apiClient.patch(
-    `/api/public/service-plans/${encodeURIComponent(token)}/blocks/${blockId}`,
-    body,
-  );
-}
-
 export async function fetchEditableServicePlan(token: string): Promise<EditableServicePlanPayload> {
   const { data } = await apiClient.get<EditableServicePlanPayload>(
     `/api/public/service-plans-edit/${encodeURIComponent(token)}`,

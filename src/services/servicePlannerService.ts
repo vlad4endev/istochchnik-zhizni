@@ -1039,58 +1039,6 @@ export async function patchEditableBlockByToken(
   return true;
 }
 
-export async function patchPublicBlockByShareToken(
-  token: string,
-  blockId: number,
-  patch: Partial<{ title: string; duration_minutes: number; content_json: Record<string, unknown> }>,
-): Promise<boolean> {
-  await ensurePlannerSchema();
-  const normalizedToken = String(token ?? '').trim();
-  if (!/^[0-9a-fA-F-]{36}$/.test(normalizedToken)) return false;
-  if (!Number.isInteger(blockId) || blockId <= 0) return false;
-
-  const set: string[] = [];
-  const values: unknown[] = [];
-  const push = (sql: string, value: unknown) => {
-    values.push(value);
-    set.push(sql.replace('?', `$${values.length}`));
-  };
-
-  if (patch.title !== undefined) push('title = ?', patch.title);
-  if (patch.duration_minutes !== undefined) push('duration_minutes = ?', patch.duration_minutes);
-  if (patch.content_json !== undefined) {
-    values.push(JSON.stringify(patch.content_json ?? {}));
-    set.push(`content_json = $${values.length}::jsonb`);
-  }
-  if (set.length === 0) return true;
-
-  values.push(blockId);
-  values.push(normalizedToken);
-  const result = await query(
-    `update public.service_blocks b
-     set ${set.join(', ')}
-     from public.service_plans p
-     where b.id = $${values.length - 1}
-       and p.share_token = $${values.length}::uuid
-       and p.status = 'draft'
-       and p.id = b.service_plan_id
-     returning b.service_plan_id`,
-    values,
-  );
-  if ((result.rowCount ?? 0) === 0) return false;
-  const updatedPlanId = Number((result.rows[0] as DbRecord).service_plan_id);
-  if (Number.isFinite(updatedPlanId)) {
-    await query(
-      `update public.service_plans
-       set last_edited_by_member_id = null,
-           last_edited_at = now(),
-           updated_at = now()
-       where id = $1`,
-      [updatedPlanId],
-    );
-  }
-  return true;
-}
 
 export async function createTemplate(input: {
   name: string;
