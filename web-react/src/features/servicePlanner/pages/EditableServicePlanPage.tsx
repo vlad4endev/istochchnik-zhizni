@@ -244,6 +244,11 @@ function isSermonBlockType(block: { block_type_code: string | null; block_type_n
   return block.block_type_code === 'sermon' || normalizeText(block.block_type_name ?? '').includes('проповед');
 }
 
+function sermonTopicText(content: Record<string, unknown>): string {
+  const raw = content.sermon_topic;
+  return typeof raw === 'string' ? raw.trim() : '';
+}
+
 /** Служебные / уже обрабатываемые поля — не выводим как «доп. поля» и не показываем в UI. */
 const CONTENT_JSON_EXCLUDED_FOR_GENERIC: Set<string> = new Set([
   'is_separator',
@@ -381,7 +386,7 @@ export function EditableServicePlanPage() {
     queryKey: ['editable-service-plan', token],
     queryFn: () => fetchEditableServicePlan(token ?? ''),
     enabled: Boolean(token && token.length > 20),
-    refetchInterval: 2500,
+    refetchInterval: editingBlockId == null ? 2500 : false,
     refetchIntervalInBackground: true,
     retry: false,
   });
@@ -391,11 +396,34 @@ export function EditableServicePlanPage() {
     enabled: Boolean(token && token.length > 20),
     retry: false,
   });
+  const planPreacherId = planQ.data?.plan.preacher_member_id ?? null;
+  const planPreacherName = planQ.data?.plan.preacher_name ?? null;
 
   useEffect(() => {
     if (!planQ.data) return;
-    setDraftBlocks(planQ.data.blocks.slice().sort((a, b) => a.order_index - b.order_index));
-  }, [planQ.data]);
+    if (editingBlockId != null) return;
+    const preacherId = planQ.data.plan.preacher_member_id ?? null;
+    const preacherRaw = preacherId
+      ? (metaQ.data?.members ?? []).find((m) => m.id === preacherId) ?? null
+      : null;
+    const preacherLabel = preacherRaw ? userLabel(preacherRaw) : (planQ.data.plan.preacher_name ?? '').trim();
+    setDraftBlocks(
+      planQ.data.blocks
+        .slice()
+        .sort((a, b) => a.order_index - b.order_index)
+        .map((block) => {
+          if (!isSermonBlockType(block)) return block;
+          const preacherName = preacherLabel || 'Проповедник';
+          const topic = sermonTopicText(block.content_json);
+          return {
+            ...block,
+            assigned_member_id: preacherId,
+            assigned_member_name: preacherLabel || null,
+            title: topic ? `${preacherName} - ${topic}` : preacherName,
+          };
+        }),
+    );
+  }, [planQ.data, metaQ.data, editingBlockId]);
 
   const rows = useMemo(() => {
     if (!planQ.data) return [];
@@ -417,20 +445,31 @@ export function EditableServicePlanPage() {
   const saveBlockMut = useMutation({
     mutationFn: async (block: EditableBlock) => {
       if (!token) return;
+      const isSermon = isSermonBlockType(block);
+      const preacherName = (planPreacherName ?? '').trim() || 'Проповедник';
+      const topic = sermonTopicText(block.content_json);
+      const normalizedBlock = isSermon
+        ? {
+            ...block,
+            assigned_member_id: planPreacherId,
+            assigned_member_name: planPreacherName,
+            title: topic ? `${preacherName} - ${topic}` : preacherName,
+          }
+        : block;
       await patchEditableServicePlanBlockByToken(token, block.id, {
-        title: block.title,
-        duration_minutes: Math.max(1, Number(block.duration_minutes) || 1),
-        assigned_member_id: block.assigned_member_id,
-        song_id: block.song_id,
-        content_json: block.content_json,
+        title: normalizedBlock.title,
+        duration_minutes: Math.max(1, Number(normalizedBlock.duration_minutes) || 1),
+        assigned_member_id: normalizedBlock.assigned_member_id,
+        song_id: normalizedBlock.song_id,
+        content_json: normalizedBlock.content_json,
       });
     },
     onSuccess: async () => {
+      setEditingBlockId(null);
       await Promise.all([
         qc.invalidateQueries({ queryKey: ['editable-service-plan', token] }),
         qc.invalidateQueries({ queryKey: ['editable-service-plan-meta', token] }),
       ]);
-      setEditingBlockId(null);
     },
   });
 
@@ -697,8 +736,9 @@ export function EditableServicePlanPage() {
                       </label>
                       <select
                         id={`block-responsible-${editingBlock.id}`}
-                        value={editingBlock.assigned_member_id ?? ''}
+                            value={isEditingSermonBlock ? (planPreacherId ?? '') : (editingBlock.assigned_member_id ?? '')}
                         onChange={(e) => {
+                              if (isEditingSermonBlock) return;
                           const memberId = e.target.value ? Number(e.target.value) : null;
                           const member = memberId ? members.find((u) => u.id === memberId) : null;
                           setDraftBlocks((prev) =>
@@ -726,19 +766,24 @@ export function EditableServicePlanPage() {
                           );
                         }}
                         className="min-h-11 w-full min-w-0 max-w-full rounded-lg border border-stone-300 bg-white px-2 py-2 text-base text-stone-900 touch-manipulation sm:min-h-0 sm:py-1.5 sm:text-sm"
+                            disabled={isEditingSermonBlock}
                       >
-                        <option value="">
-                          {isEditingSermonBlock
-                            ? 'Проповедник не назначен'
-                            : isEditingPrayerBlock
-                              ? 'Служитель молитвы не назначен'
-                              : 'Ответственный не назначен'}
-                        </option>
-                        {responsibleCandidates.map((u) => (
-                          <option key={u.id} value={u.id}>
-                            {userLabel(u)} ({roleLabel(u)})
-                          </option>
-                        ))}
+                            {isEditingSermonBlock ? (
+                              <option value={planPreacherId ?? ''}>
+                                {planPreacherId ? (planPreacherName ?? 'Проповедник') : 'В настройках программы не выбран проповедник'}
+                              </option>
+                            ) : (
+                              <>
+                                <option value="">
+                                  {isEditingPrayerBlock ? 'Служитель молитвы не назначен' : 'Ответственный не назначен'}
+                                </option>
+                                {responsibleCandidates.map((u) => (
+                                  <option key={u.id} value={u.id}>
+                                    {userLabel(u)} ({roleLabel(u)})
+                                  </option>
+                                ))}
+                              </>
+                            )}
                       </select>
                     </div>
                     {isEditingSongBlock ? (
@@ -844,11 +889,12 @@ export function EditableServicePlanPage() {
                                   prev.map((x) => {
                                     if (x.id !== editingBlock.id) return x;
                                     const nextTopic = e.target.value;
-                                    const preacherRaw = members.find((u) => u.id === x.assigned_member_id) ?? null;
-                                    const preacherName = preacherRaw ? userLabel(preacherRaw) : 'Проповедник';
+                                    const preacherName = (planPreacherName ?? '').trim() || 'Проповедник';
                                     const topicTrim = nextTopic.trim();
                                     return {
                                       ...x,
+                                      assigned_member_id: planPreacherId,
+                                      assigned_member_name: planPreacherName,
                                       title: topicTrim ? `${preacherName} - ${topicTrim}` : preacherName,
                                       content_json: { ...x.content_json, sermon_topic: nextTopic },
                                     };

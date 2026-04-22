@@ -111,6 +111,7 @@ export type EditableServicePlanPayload = {
     edit_token: string;
     template_name: string | null;
     leader_name: string | null;
+    preacher_member_id: number | null;
     preacher_name: string | null;
   };
   blocks: Array<{

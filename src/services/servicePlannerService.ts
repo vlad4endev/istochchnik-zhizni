@@ -110,6 +110,7 @@ export type PublicEditablePlannerPlanPayload = {
     edit_token: string;
     template_name: string | null;
     leader_name: string | null;
+    preacher_member_id: number | null;
     preacher_name: string | null;
   };
   blocks: Array<{
@@ -951,6 +952,7 @@ export async function getEditablePlanByToken(token: string): Promise<PublicEdita
        p.total_duration_minutes,
        p.notes,
        p.edit_token::text as edit_token,
+       p.preacher_member_id,
        t.name as template_name,
        coalesce(nullif(trim(concat(coalesce(leader.first_name, ''), ' ', coalesce(leader.last_name, ''))), ''), leader.name) as leader_name,
        coalesce(nullif(trim(concat(coalesce(preacher.first_name, ''), ' ', coalesce(preacher.last_name, ''))), ''), preacher.name) as preacher_name
@@ -1009,6 +1011,7 @@ export async function getEditablePlanByToken(token: string): Promise<PublicEdita
       edit_token: String(row.edit_token ?? ''),
       template_name: row.template_name == null ? null : String(row.template_name),
       leader_name: row.leader_name == null ? null : String(row.leader_name),
+      preacher_member_id: row.preacher_member_id == null ? null : Number(row.preacher_member_id),
       preacher_name: row.preacher_name == null ? null : String(row.preacher_name),
     },
     blocks: blocksRes.rows.map((r) => {

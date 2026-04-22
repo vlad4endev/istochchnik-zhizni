@@ -407,12 +407,36 @@ export function ServicePlannerPage() {
 
   useEffect(() => {
     if (planQ.data) {
-      setDraft(planQ.data);
+      const sermonTypeIds = new Set(
+        (blockTypesQ.data ?? [])
+          .filter((t) => t.code === 'sermon' || (t.name ?? '').toLowerCase().includes('проповед'))
+          .map((t) => t.id),
+      );
+      const preacherId = planQ.data.preacher_member_id ?? null;
+      const preacher = preacherId ? (membersQ.data ?? []).find((u) => u.id === preacherId) ?? null : null;
+      const preacherName = preacher ? userLabel(preacher) : 'Проповедник';
+      const normalized =
+        sermonTypeIds.size === 0
+          ? planQ.data
+          : {
+              ...planQ.data,
+              blocks: planQ.data.blocks.map((b) => {
+                if (!sermonTypeIds.has(b.block_type_id)) return b;
+                const topicRaw = b.content_json?.sermon_topic;
+                const topic = typeof topicRaw === 'string' ? topicRaw.trim() : '';
+                return {
+                  ...b,
+                  assigned_member_id: preacherId,
+                  title: topic ? `${preacherName} - ${topic}` : preacherName,
+                };
+              }),
+            };
+      setDraft(normalized);
       if (planQ.data.template_id) {
         setActiveTemplateId(planQ.data.template_id);
       }
     }
-  }, [planQ.data]);
+  }, [planQ.data, blockTypesQ.data, membersQ.data]);
 
   useEffect(() => {
     if (
@@ -2193,9 +2217,28 @@ export function ServicePlannerPage() {
           </select>
           <select
             value={draft.preacher_member_id ?? ''}
-            onChange={(e) =>
-              setDraft({ ...draft, preacher_member_id: e.target.value ? Number(e.target.value) : null })
-            }
+            onChange={(e) => {
+              const preacherId = e.target.value ? Number(e.target.value) : null;
+              const preacher = preacherId ? usersById.get(preacherId) ?? null : null;
+              const preacherName = preacher ? userLabel(preacher) : 'Проповедник';
+              setDraft((prev) => {
+                if (!prev) return prev;
+                return {
+                  ...prev,
+                  preacher_member_id: preacherId,
+                  blocks: prev.blocks.map((b) => {
+                    if (!isSermonBlock(b)) return b;
+                    const topicRaw = b.content_json?.sermon_topic;
+                    const topic = typeof topicRaw === 'string' ? topicRaw.trim() : '';
+                    return {
+                      ...b,
+                      assigned_member_id: preacherId,
+                      title: topic ? `${preacherName} - ${topic}` : preacherName,
+                    };
+                  }),
+                };
+              });
+            }}
             className="rounded-xl border border-stone-300 px-3 py-2 text-sm shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
           >
             <option value="">Проповедник</option>
@@ -2969,12 +3012,9 @@ export function ServicePlannerPage() {
                     className="rounded-lg border border-stone-300 px-2 py-1.5 text-sm"
                   />
                   <select
-                    value={
-                      isSermonBlock(editingBlock)
-                        ? editingBlock.assigned_member_id ?? draft?.preacher_member_id ?? ''
-                        : editingBlock.assigned_member_id ?? ''
-                    }
+                    value={isSermonBlock(editingBlock) ? (draft?.preacher_member_id ?? '') : (editingBlock.assigned_member_id ?? '')}
                     onChange={(e) => {
+                      if (isSermonBlock(editingBlock)) return;
                       const memberId = e.target.value ? Number(e.target.value) : null;
                       const nextPatch: Partial<ServicePlanBlock> = { assigned_member_id: memberId };
                       if (isPoemBlock(editingBlock)) {
@@ -2991,25 +3031,32 @@ export function ServicePlannerPage() {
                       updateDraftBlock(editingBlock.id, nextPatch);
                     }}
                     className="rounded-lg border border-stone-300 px-2 py-1.5 text-sm sm:col-span-2"
+                    disabled={isSermonBlock(editingBlock)}
                   >
-                    <option value="">
-                      {isPoemBlock(editingBlock)
-                        ? 'Чтец не назначен'
-                        : isSermonBlock(editingBlock)
-                          ? 'Проповедник не назначен'
-                          : 'Ответственный не назначен'}
-                    </option>
-                    {(
-                      isSermonBlock(editingBlock)
-                        ? preacherCandidates
-                        : (blockTypes.find((t) => t.id === editingBlock.block_type_id)?.kind ?? 'custom') === 'song'
+                    {isSermonBlock(editingBlock) ? (
+                      <option value={draft?.preacher_member_id ?? ''}>
+                        {draft?.preacher_member_id
+                          ? (() => {
+                              const preacher = usersById.get(draft.preacher_member_id) ?? null;
+                              return preacher ? userLabel(preacher) : 'Проповедник';
+                            })()
+                          : 'В настройках программы не выбран проповедник'}
+                      </option>
+                    ) : (
+                      <>
+                        <option value="">
+                          {isPoemBlock(editingBlock) ? 'Чтец не назначен' : 'Ответственный не назначен'}
+                        </option>
+                        {((blockTypes.find((t) => t.id === editingBlock.block_type_id)?.kind ?? 'custom') === 'song'
                           ? musicianDirectionCandidates
                           : users
-                    ).map((u) => (
-                      <option key={u.id} value={u.id}>
-                        {userLabel(u)} ({roleLabel(u)})
-                      </option>
-                    ))}
+                        ).map((u) => (
+                          <option key={u.id} value={u.id}>
+                            {userLabel(u)} ({roleLabel(u)})
+                          </option>
+                        ))}
+                      </>
+                    )}
                   </select>
                   {isPoemBlock(editingBlock) ? (
                     <>
