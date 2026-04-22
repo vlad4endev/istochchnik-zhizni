@@ -687,10 +687,11 @@ export function EditableServicePlanPage() {
                 </div>
                 {editingBlockId === b.id && editingBlock ? (
                   <div className="mt-3 grid w-full min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-2">
-                    <div className="rounded-lg border border-stone-200 bg-stone-50 px-2.5 py-2 text-sm font-medium text-stone-700 sm:py-1.5">
-                      {editingBlock.block_type_name ?? 'Блок'}
-                    </div>
-                    <div className="min-w-0">
+                    <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_7rem] items-end gap-2 sm:col-span-2">
+                      <div className="rounded-lg border border-stone-200 bg-stone-50 px-2.5 py-2 text-sm font-medium text-stone-700 sm:py-1.5">
+                        {editingBlock.block_type_name ?? 'Блок'}
+                      </div>
+                      <div className="min-w-0">
                       <label className="mb-1 block text-xs font-medium text-stone-600" htmlFor={`block-duration-${editingBlock.id}`}>
                         Длительность, мин
                       </label>
@@ -712,6 +713,7 @@ export function EditableServicePlanPage() {
                         className="min-h-11 w-full min-w-0 max-w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-base text-stone-900 touch-manipulation sm:min-h-0 sm:px-2 sm:py-1.5 sm:text-sm"
                         inputMode="numeric"
                       />
+                    </div>
                     </div>
                     <div className="min-w-0 sm:col-span-2">
                       <label className="mb-1 block text-xs font-medium text-stone-600" htmlFor={`block-title-${editingBlock.id}`}>
