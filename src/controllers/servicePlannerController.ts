@@ -1,5 +1,6 @@
 import type { Request, Response } from 'express';
 import { query } from '../config/db';
+import { notifyRealtime } from '../realtime/notify';
 import { listUsers } from '../services/userService';
 import {
   createPlan,
@@ -85,6 +86,10 @@ function parseJsonObject(raw: unknown): Record<string, unknown> {
   return raw as Record<string, unknown>;
 }
 
+function notifyServicePlannerRealtime(): void {
+  notifyRealtime(['service-planner']);
+}
+
 export async function getServiceBlockTypes(_req: Request, res: Response): Promise<void> {
   try {
     res.json(await listBlockTypes());
@@ -149,6 +154,7 @@ export async function postServiceTemplate(req: Request, res: Response): Promise<
       blocks,
       created_by_member_id: req.authUserId!,
     });
+    notifyServicePlannerRealtime();
     res.status(201).json({ id: createdId });
   } catch (e) {
     console.error('[service-planner] postServiceTemplate:', e);
@@ -219,6 +225,7 @@ export async function patchServiceTemplateById(req: Request, res: Response): Pro
       res.status(404).json({ error: 'Шаблон не найден' });
       return;
     }
+    notifyServicePlannerRealtime();
     res.json({ ok: true });
   } catch (e) {
     console.error('[service-planner] patchServiceTemplateById:', e);
@@ -240,6 +247,7 @@ export async function deleteServiceTemplateById(req: Request, res: Response): Pr
       res.status(404).json({ error: 'Шаблон не найден' });
       return;
     }
+    notifyServicePlannerRealtime();
     res.status(204).send();
   } catch (e) {
     console.error('[service-planner] deleteServiceTemplateById:', e);
@@ -311,6 +319,7 @@ export async function postServicePlan(req: Request, res: Response): Promise<void
         console.error('[service-planner] mark last edited (create plan):', e);
       }
     }
+    notifyServicePlannerRealtime();
     res.status(201).json({ id });
   } catch (e) {
     console.error('[service-planner] postServicePlan:', e);
@@ -385,6 +394,7 @@ export async function patchServicePlanById(req: Request, res: Response): Promise
         console.error('[service-planner] mark last edited (patch plan):', e);
       }
     }
+    notifyServicePlannerRealtime();
     res.json({ ok: true });
   } catch (e) {
     console.error('[service-planner] patchServicePlanById:', e);
@@ -411,6 +421,7 @@ export async function patchServiceBlocksReorder(req: Request, res: Response): Pr
         console.error('[service-planner] mark last edited (reorder):', e);
       }
     }
+    notifyServicePlannerRealtime();
     res.json({ ok: true });
   } catch (e) {
     console.error('[service-planner] patchServiceBlocksReorder:', e);
@@ -469,6 +480,7 @@ export async function patchServiceBlockById(req: Request, res: Response): Promis
         console.error('[service-planner] mark last edited (patch block):', e);
       }
     }
+    notifyServicePlannerRealtime();
     res.json({ ok: true });
   } catch (e) {
     console.error('[service-planner] patchServiceBlockById:', e);
@@ -507,6 +519,7 @@ export async function postServiceBlock(req: Request, res: Response): Promise<voi
         console.error('[service-planner] mark last edited (create block):', e);
       }
     }
+    notifyServicePlannerRealtime();
     res.status(201).json({ id });
   } catch (e) {
     console.error('[service-planner] postServiceBlock:', e);
@@ -535,6 +548,7 @@ export async function deleteServiceBlockById(req: Request, res: Response): Promi
         console.error('[service-planner] mark last edited (delete block):', e);
       }
     }
+    notifyServicePlannerRealtime();
     res.status(204).send();
   } catch (e) {
     console.error('[service-planner] deleteServiceBlockById:', e);
@@ -555,6 +569,7 @@ export async function deleteServicePlanById(req: Request, res: Response): Promis
       res.status(404).json({ error: 'План не найден' });
       return;
     }
+    notifyServicePlannerRealtime();
     res.status(204).send();
   } catch (e) {
     console.error('[service-planner] deleteServicePlanById:', e);

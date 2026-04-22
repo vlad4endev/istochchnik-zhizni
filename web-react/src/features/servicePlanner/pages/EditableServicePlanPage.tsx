@@ -5,6 +5,7 @@ import {
   FaBookBible,
   FaBullhorn,
   FaCakeCandles,
+  FaFeatherPointed,
   FaHandHoldingDollar,
   FaHandsPraying,
   FaMicrophoneLines,
@@ -12,7 +13,7 @@ import {
   FaPuzzlePiece,
   FaWineGlass,
 } from 'react-icons/fa6';
-import { LuCalendarDays, LuLoaderCircle, LuPencil, LuSave } from 'react-icons/lu';
+import { LuCalendarDays, LuClock3, LuLink, LuLoaderCircle, LuPencil, LuSave, LuUsers } from 'react-icons/lu';
 import type { IconType } from 'react-icons';
 import { useParams } from 'react-router-dom';
 
@@ -21,9 +22,11 @@ import {
   fetchEditableServicePlanMeta,
   patchEditableServicePlanBlockByToken,
   type EditableServicePlanPayload,
+  type EditableServicePlanMetaPayload,
 } from '../api';
 
 type EditableBlock = EditableServicePlanPayload['blocks'][number];
+type EditableMember = EditableServicePlanMetaPayload['members'][number];
 
 const ICON_BY_CODE: Record<string, { Icon: IconType; wrapClass: string; iconClass: string }> = {
   prayer: { Icon: FaHandsPraying, wrapClass: 'bg-violet-100', iconClass: 'text-violet-700' },
@@ -38,8 +41,68 @@ const ICON_BY_CODE: Record<string, { Icon: IconType; wrapClass: string; iconClas
   custom: { Icon: FaPuzzlePiece, wrapClass: 'bg-stone-200', iconClass: 'text-stone-700' },
 };
 
+const BLOCK_MARK_ICON_OPTIONS: Array<{
+  key: string;
+  label: string;
+  Icon: IconType;
+  wrapClass: string;
+  iconClass: string;
+}> = [
+  { key: 'prayer', label: 'Молитва', Icon: FaHandsPraying, wrapClass: 'bg-violet-100', iconClass: 'text-violet-700' },
+  { key: 'song', label: 'Песня', Icon: FaMusic, wrapClass: 'bg-sky-100', iconClass: 'text-sky-700' },
+  { key: 'scripture', label: 'Писание', Icon: FaBookBible, wrapClass: 'bg-amber-100', iconClass: 'text-amber-700' },
+  { key: 'sermon', label: 'Проповедь', Icon: FaMicrophoneLines, wrapClass: 'bg-rose-100', iconClass: 'text-rose-700' },
+  { key: 'announcements', label: 'Объявления', Icon: FaBullhorn, wrapClass: 'bg-emerald-100', iconClass: 'text-emerald-700' },
+  { key: 'offering', label: 'Пожертвование', Icon: FaHandHoldingDollar, wrapClass: 'bg-lime-100', iconClass: 'text-lime-700' },
+  { key: 'birthdays', label: 'Дни рождения', Icon: FaCakeCandles, wrapClass: 'bg-pink-100', iconClass: 'text-pink-700' },
+  { key: 'communion', label: 'Причастие', Icon: FaWineGlass, wrapClass: 'bg-purple-100', iconClass: 'text-purple-700' },
+  { key: 'schedule', label: 'Расписание', Icon: LuCalendarDays, wrapClass: 'bg-indigo-100', iconClass: 'text-indigo-700' },
+  { key: 'donation', label: 'Пожертвование+', Icon: FaHandHoldingDollar, wrapClass: 'bg-emerald-100', iconClass: 'text-emerald-700' },
+  { key: 'poem', label: 'Стихи', Icon: FaFeatherPointed, wrapClass: 'bg-fuchsia-100', iconClass: 'text-fuchsia-700' },
+  { key: 'custom', label: 'Произвольный', Icon: FaPuzzlePiece, wrapClass: 'bg-stone-200', iconClass: 'text-stone-700' },
+  { key: 'users', label: 'Участники', Icon: LuUsers, wrapClass: 'bg-cyan-100', iconClass: 'text-cyan-700' },
+  { key: 'clock', label: 'Время', Icon: LuClock3, wrapClass: 'bg-indigo-100', iconClass: 'text-indigo-700' },
+  { key: 'note', label: 'Заметка', Icon: LuPencil, wrapClass: 'bg-orange-100', iconClass: 'text-orange-700' },
+  { key: 'link', label: 'Ссылка', Icon: LuLink, wrapClass: 'bg-teal-100', iconClass: 'text-teal-700' },
+];
+
+const BLOCK_MARK_ICON_BY_KEY = Object.fromEntries(
+  BLOCK_MARK_ICON_OPTIONS.map((x) => [x.key, x]),
+) as Record<string, (typeof BLOCK_MARK_ICON_OPTIONS)[number]>;
+
 function isSeparator(content: Record<string, unknown>): boolean {
   return content.is_separator === true;
+}
+
+function getCategoryIcon(block: EditableBlock): { Icon: IconType; wrapClass: string; iconClass: string } | null {
+  const codeKey = (block.block_type_code ?? '').trim().toLowerCase();
+  if (codeKey && ICON_BY_CODE[codeKey]) return ICON_BY_CODE[codeKey];
+  return null;
+}
+
+function getBlockMark(block: EditableBlock): string | null {
+  const fromContent = block.content_json?.block_mark;
+  if (typeof fromContent === 'string' && fromContent.trim()) return fromContent.trim();
+  return null;
+}
+
+function getBlockMarkIcon(block: EditableBlock): { Icon: IconType; wrapClass: string; iconClass: string } | null {
+  const keyRaw = block.content_json?.block_mark_icon;
+  if (typeof keyRaw !== 'string') return null;
+  const key = keyRaw.trim().toLowerCase();
+  if (!key) return null;
+  return BLOCK_MARK_ICON_BY_KEY[key] ?? null;
+}
+
+function getBlockLogoUrl(block: EditableBlock): string | null {
+  const raw = block.content_json?.block_logo_url;
+  if (typeof raw !== 'string') return null;
+  const value = raw.trim();
+  if (!value) return null;
+  if (value.startsWith('http://') || value.startsWith('https://') || value.startsWith('/')) {
+    return value;
+  }
+  return null;
 }
 
 function parseStartClock(dateIso: string, time: string): Date {
@@ -109,6 +172,50 @@ function userLabel(u: { first_name: string | null; last_name: string | null; nam
   return full || u.name || `Пользователь #${u.id}`;
 }
 
+function normalizeText(v: string): string {
+  return v.trim().toLowerCase().replace(/ё/g, 'е');
+}
+
+function roleLabel(u: EditableMember): string {
+  const ministryRoles = String(u.ministry_role ?? '')
+    .split(/[;,]/)
+    .map((s) => s.trim())
+    .filter((s, idx, arr) => s.length > 0 && arr.indexOf(s) === idx);
+  if (ministryRoles.length > 0) return ministryRoles.join(', ');
+  if (u.app_role === 'admin') return 'Админ';
+  if (u.app_role === 'minister') return 'Служитель';
+  if (u.app_role === 'pastor') return 'Пастор';
+  if (u.app_role === 'editor') return 'Редактор';
+  if (u.app_role === 'musician') return 'Музыкант';
+  return 'Участник';
+}
+
+function hasMinistryRole(u: EditableMember, roleName: string): boolean {
+  const target = normalizeText(roleName);
+  if (!target) return false;
+  return String(u.ministry_role ?? '')
+    .split(/[;,]/)
+    .map((s) => normalizeText(s))
+    .some((s) => s === target || s.includes(target));
+}
+
+function hasMinistryDirection(u: EditableMember, directionName: string): boolean {
+  const target = normalizeText(directionName);
+  if (!target) return false;
+  return String(u.ministry_direction ?? '')
+    .split(/[;,]/)
+    .map((s) => normalizeText(s))
+    .some((s) => s === target || s.includes(target));
+}
+
+function isPreacherCandidate(u: EditableMember): boolean {
+  return hasMinistryRole(u, 'Проповедник');
+}
+
+function isPrayerCandidate(u: EditableMember): boolean {
+  return hasMinistryRole(u, 'Дьякон') || hasMinistryRole(u, 'Пастор') || u.app_role === 'pastor';
+}
+
 export function EditableServicePlanPage() {
   const { token } = useParams<{ token: string }>();
   const qc = useQueryClient();
@@ -119,6 +226,8 @@ export function EditableServicePlanPage() {
     queryKey: ['editable-service-plan', token],
     queryFn: () => fetchEditableServicePlan(token ?? ''),
     enabled: Boolean(token && token.length > 20),
+    refetchInterval: 2500,
+    refetchIntervalInBackground: true,
     retry: false,
   });
   const metaQ = useQuery({
@@ -199,6 +308,28 @@ export function EditableServicePlanPage() {
     month: 'long',
     year: 'numeric',
   }).format(new Date(`${plan.service_date}T12:00:00`));
+  const preacherCandidates = useMemo(() => members.filter((u) => isPreacherCandidate(u)), [members]);
+  const musicianDirectionCandidates = useMemo(
+    () => members.filter((u) => hasMinistryDirection(u, 'Музыкальное служение')),
+    [members],
+  );
+  const prayerCandidates = useMemo(() => members.filter((u) => isPrayerCandidate(u)), [members]);
+  const editingBlockTypeMeta = useMemo(
+    () => blockTypes.find((t) => t.id === editingBlock?.block_type_id) ?? null,
+    [blockTypes, editingBlock?.block_type_id],
+  );
+  const isEditingSongBlock = (editingBlockTypeMeta?.kind ?? 'custom') === 'song';
+  const isEditingSermonBlock =
+    editingBlockTypeMeta?.code === 'sermon' || normalizeText(editingBlockTypeMeta?.name ?? '').includes('проповед');
+  const isEditingPrayerBlock =
+    editingBlockTypeMeta?.code === 'prayer' || normalizeText(editingBlockTypeMeta?.name ?? '').includes('молитв');
+  const responsibleCandidates = isEditingSermonBlock
+    ? preacherCandidates
+    : isEditingSongBlock
+      ? musicianDirectionCandidates
+      : isEditingPrayerBlock
+        ? prayerCandidates
+        : members;
 
   return (
     <div className="min-h-[100dvh] bg-[var(--surface)]">
@@ -230,8 +361,10 @@ export function EditableServicePlanPage() {
                 </div>
               );
             }
-            const iconMeta = ICON_BY_CODE[(b.block_type_code ?? '').toLowerCase()] ?? ICON_BY_CODE.custom;
-            const Icon = iconMeta.Icon;
+            const blockLogoUrl = getBlockLogoUrl(b);
+            const customIcon = getBlockMarkIcon(b);
+            const customMark = getBlockMark(b);
+            const categoryIcon = getCategoryIcon(b);
             const birthdays = birthdayRows(b.content_json);
             const schedule = scheduleRows(b.content_json);
             return (
@@ -245,9 +378,39 @@ export function EditableServicePlanPage() {
                   <div className="w-11 shrink-0 rounded-md bg-stone-100 px-1.5 py-1 text-center text-[11px] font-bold text-stone-700 sm:w-12 sm:bg-transparent sm:px-0 sm:py-0 sm:text-xs">
                     {b.startsAt}
                   </div>
-                  <div className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${iconMeta.wrapClass}`}>
-                    <Icon className={`h-4 w-4 ${iconMeta.iconClass}`} />
-                  </div>
+                  {blockLogoUrl ? (
+                    <img src={blockLogoUrl} alt="Лого блока" className="h-8 w-8 shrink-0 rounded-lg object-cover" />
+                  ) : customIcon ? (
+                    (() => {
+                      const Icon = customIcon.Icon;
+                      return (
+                        <span
+                          className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${customIcon.wrapClass}`}
+                        >
+                          <Icon className={`h-4 w-4 ${customIcon.iconClass}`} />
+                        </span>
+                      );
+                    })()
+                  ) : customMark ? (
+                    <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-stone-100 text-sm">
+                      {customMark}
+                    </span>
+                  ) : categoryIcon ? (
+                    (() => {
+                      const Icon = categoryIcon.Icon;
+                      return (
+                        <span
+                          className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${categoryIcon.wrapClass}`}
+                        >
+                          <Icon className={`h-4 w-4 ${categoryIcon.iconClass}`} />
+                        </span>
+                      );
+                    })()
+                  ) : (
+                    <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-stone-100 text-sm">
+                      •
+                    </span>
+                  )}
                   <div className="min-w-0 flex-1">
                     <div className="flex items-start justify-between gap-2">
                       <div>
@@ -303,7 +466,7 @@ export function EditableServicePlanPage() {
                               ),
                             );
                           }}
-                          className="rounded-lg border border-stone-300 px-2 py-1.5 text-sm"
+                          className="rounded-lg border border-stone-300 bg-white px-2 py-1.5 text-sm text-stone-900"
                         >
                           {blockTypes.map((t) => (
                             <option key={t.id} value={t.id}>
@@ -325,7 +488,7 @@ export function EditableServicePlanPage() {
                               ),
                             )
                           }
-                          className="rounded-lg border border-stone-300 px-2 py-1.5 text-sm"
+                          className="rounded-lg border border-stone-300 bg-white px-2 py-1.5 text-sm text-stone-900"
                         />
                         <input
                           value={editingBlock.title}
@@ -334,7 +497,7 @@ export function EditableServicePlanPage() {
                               prev.map((x) => (x.id === editingBlock.id ? { ...x, title: e.target.value } : x)),
                             )
                           }
-                          className="rounded-lg border border-stone-300 px-2 py-1.5 text-sm sm:col-span-2"
+                          className="rounded-lg border border-stone-300 bg-white px-2 py-1.5 text-sm text-stone-900 placeholder:text-stone-500 sm:col-span-2"
                           placeholder="Заголовок блока"
                         />
                         <select
@@ -354,16 +517,22 @@ export function EditableServicePlanPage() {
                               ),
                             );
                           }}
-                          className="rounded-lg border border-stone-300 px-2 py-1.5 text-sm"
+                          className="rounded-lg border border-stone-300 bg-white px-2 py-1.5 text-sm text-stone-900"
                         >
-                          <option value="">Ответственный не назначен</option>
-                          {members.map((u) => (
+                          <option value="">
+                            {isEditingSermonBlock
+                              ? 'Проповедник не назначен'
+                              : isEditingPrayerBlock
+                                ? 'Служитель молитвы не назначен'
+                                : 'Ответственный не назначен'}
+                          </option>
+                          {responsibleCandidates.map((u) => (
                             <option key={u.id} value={u.id}>
-                              {userLabel(u)}
+                              {userLabel(u)} ({roleLabel(u)})
                             </option>
                           ))}
                         </select>
-                        {(blockTypes.find((t) => t.id === editingBlock.block_type_id)?.kind ?? 'custom') === 'song' ? (
+                        {isEditingSongBlock ? (
                           <select
                             value={editingBlock.song_id ?? ''}
                             onChange={(e) => {
@@ -383,7 +552,7 @@ export function EditableServicePlanPage() {
                                 ),
                               );
                             }}
-                            className="rounded-lg border border-stone-300 px-2 py-1.5 text-sm"
+                            className="rounded-lg border border-stone-300 bg-white px-2 py-1.5 text-sm text-stone-900"
                           >
                             <option value="">Песня не назначена</option>
                             {songs.map((s) => (
@@ -408,7 +577,7 @@ export function EditableServicePlanPage() {
                               ),
                             )
                           }
-                          className="min-h-[84px] rounded-lg border border-stone-300 px-2 py-1.5 text-sm sm:col-span-2"
+                          className="min-h-[84px] rounded-lg border border-stone-300 bg-white px-2 py-1.5 text-sm text-stone-900 placeholder:text-stone-500 sm:col-span-2"
                           placeholder="Заметка блока"
                         />
                         {birthdayRows(editingBlock.content_json).length > 0 ? (

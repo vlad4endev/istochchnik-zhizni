@@ -35,6 +35,14 @@ function applyScopes(scopes: string[], invalidate: QueryClient['invalidateQuerie
       void invalidate({ queryKey: ['notification-settings'] });
     } else if (s === 'admin') {
       void invalidate({ queryKey: ['admin'] });
+    } else if (s === 'service-planner') {
+      void invalidate({
+        predicate: (q) => Array.isArray(q.queryKey) && String(q.queryKey[0] ?? '').startsWith('service-planner'),
+      });
+      void invalidate({ queryKey: ['editable-service-plan'] });
+      void invalidate({ queryKey: ['editable-service-plan-meta'] });
+      void invalidate({ queryKey: ['public', 'service-plan'] });
+      void invalidate({ queryKey: ['songs', 'service-planner'] });
     }
   }
 }

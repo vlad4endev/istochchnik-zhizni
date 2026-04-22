@@ -1,5 +1,6 @@
 import type { Request, Response } from 'express';
 
+import { notifyRealtime } from '../realtime/notify';
 import { getPublicSetlistByToken } from '../services/studioService';
 import {
   getEditablePlanMetaByToken,
@@ -145,6 +146,7 @@ export async function patchEditableServicePlanBlock(req: Request, res: Response)
       res.status(404).json({ error: 'Программа или блок не найдены' });
       return;
     }
+    notifyRealtime(['service-planner']);
     res.json({ ok: true });
   } catch (e) {
     console.error(e);

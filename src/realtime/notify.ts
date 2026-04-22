@@ -10,7 +10,8 @@ export type RealtimeScope =
   | 'broadcast'
   | 'resources'
   | 'notification-settings'
-  | 'admin';
+  | 'admin'
+  | 'service-planner';
 
 export function notifyRealtime(scopes: RealtimeScope[]): void {
   const unique = [...new Set(scopes)];
