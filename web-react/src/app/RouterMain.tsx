@@ -32,6 +32,11 @@ const PublicServicePlanPage = lazy(async () => {
   return { default: m.PublicServicePlanPage };
 });
 
+const EditableServicePlanPage = lazy(async () => {
+  const m = await import('../features/servicePlanner/pages/EditableServicePlanPage');
+  return { default: m.EditableServicePlanPage };
+});
+
 /** Только просмотр песенника + публичные сетлисты (основной домен). */
 export function AppRouterMain() {
   return (
@@ -52,6 +57,14 @@ export function AppRouterMain() {
         element={
           <Suspense fallback={<RouteFallback />}>
             <PublicServicePlanPage />
+          </Suspense>
+        }
+      />
+      <Route
+        path="/service-plan/edit/:token"
+        element={
+          <Suspense fallback={<RouteFallback />}>
+            <EditableServicePlanPage />
           </Suspense>
         }
       />

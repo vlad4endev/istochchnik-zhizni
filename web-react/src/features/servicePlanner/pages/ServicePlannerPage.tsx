@@ -162,6 +162,16 @@ function hasMinistryRole(u: AppUser, roleName: string): boolean {
     .some((s) => s === target || s.includes(target));
 }
 
+function hasMinistryDirection(u: AppUser, directionName: string): boolean {
+  const normalize = (v: string) => v.trim().toLowerCase().replace(/ё/g, 'е');
+  const target = normalize(directionName);
+  if (!target) return false;
+  return String(u.ministry_direction ?? '')
+    .split(/[;,]/)
+    .map((s) => normalize(s))
+    .some((s) => s === target || s.includes(target));
+}
+
 function hasAppRole(u: AppUser, roleName: 'admin' | 'minister'): boolean {
   if (u.app_role === roleName) return true;
   if (!Array.isArray(u.app_roles)) return false;
@@ -260,6 +270,7 @@ export function ServicePlannerPage() {
   const [recurrenceRuleInput, setRecurrenceRuleInput] = useState<string>('{"frequency":"weekly","byWeekday":0}');
   const [editingBlockId, setEditingBlockId] = useState<number | null>(null);
   const [shareCopied, setShareCopied] = useState(false);
+  const [editShareCopied, setEditShareCopied] = useState(false);
   const [showArchivedPlans, setShowArchivedPlans] = useState(false);
   const [isPlanSettingsOpenMobile, setIsPlanSettingsOpenMobile] = useState(false);
   /** Мобильная панель: меню действий и показ времени блока */
@@ -544,8 +555,14 @@ export function ServicePlannerPage() {
     isPlannerManagerBySession ||
     isPlannerManagerByProfile ||
     (authMember ? hasMinistryRole(authMember, 'Ведущий') : false);
+  const canCreateTemplateFromPlan =
+    normalizedRole === 'admin' || (authMember ? hasAppRole(authMember, 'admin') : false);
   const leaderCandidates = useMemo(() => users.filter((u) => hasMinistryRole(u, 'Ведущий')), [users]);
   const preacherCandidates = useMemo(() => users.filter((u) => isPreacherCandidate(u)), [users]);
+  const musicianDirectionCandidates = useMemo(
+    () => users.filter((u) => hasMinistryDirection(u, 'Музыкальное служение')),
+    [users],
+  );
 
   const activeTemplate = useMemo(() => {
     const targetId = activeTemplateId ?? draft?.template_id ?? null;
@@ -785,7 +802,7 @@ export function ServicePlannerPage() {
   }
 
   async function createTemplateFromCurrentPlan(): Promise<void> {
-    if (!canManageTemplates) return;
+    if (!canCreateTemplateFromPlan) return;
     if (!draft) return;
     const fallbackType = blockTypes[0]?.id;
     if (!fallbackType) return;
@@ -909,6 +926,18 @@ export function ServicePlannerPage() {
       await navigator.clipboard.writeText(url);
       setShareCopied(true);
       window.setTimeout(() => setShareCopied(false), 1200);
+    } catch {
+      window.prompt('Скопируйте ссылку вручную:', url);
+    }
+  }
+
+  async function copyEditShareLink(): Promise<void> {
+    if (!draft || typeof window === 'undefined') return;
+    const url = `${window.location.origin}/service-plan/edit/${draft.edit_token}`;
+    try {
+      await navigator.clipboard.writeText(url);
+      setEditShareCopied(true);
+      window.setTimeout(() => setEditShareCopied(false), 1200);
     } catch {
       window.prompt('Скопируйте ссылку вручную:', url);
     }
@@ -1850,7 +1879,11 @@ export function ServicePlannerPage() {
                       className="rounded-lg border border-stone-300 px-2 py-1.5 text-sm sm:col-span-2"
                     >
                       <option value="">Ответственный по умолчанию</option>
-                      {users.map((u) => (
+                      {(
+                        (blockTypes.find((t) => t.id === editingTemplateBlock.block_type_id)?.kind ?? 'custom') === 'song'
+                          ? musicianDirectionCandidates
+                          : users
+                      ).map((u) => (
                         <option key={u.id} value={u.id}>
                           {userLabel(u)} ({roleLabel(u)})
                         </option>
@@ -1990,13 +2023,15 @@ export function ServicePlannerPage() {
           <div className="flex w-full flex-wrap items-center gap-1 overflow-x-auto pb-0.5 sm:w-auto sm:justify-end sm:overflow-visible sm:pb-0">
             {canManageTemplates ? (
               <>
-                <button
-                  type="button"
-                  onClick={() => void createTemplateFromCurrentPlan()}
-                  className="shrink-0 whitespace-nowrap rounded-lg border border-stone-300 px-2.5 py-1 text-[11px] font-semibold text-stone-700 hover:border-primary hover:text-primary sm:px-3 sm:py-1.5 sm:text-xs"
-                >
-                  Сделать шаблон из программы
-                </button>
+                {canCreateTemplateFromPlan ? (
+                  <button
+                    type="button"
+                    onClick={() => void createTemplateFromCurrentPlan()}
+                    className="shrink-0 whitespace-nowrap rounded-lg border border-stone-300 px-2.5 py-1 text-[11px] font-semibold text-stone-700 hover:border-primary hover:text-primary sm:px-3 sm:py-1.5 sm:text-xs"
+                  >
+                    Сделать шаблон из программы
+                  </button>
+                ) : null}
                 <button
                   type="button"
                   onClick={() => {
@@ -2124,6 +2159,9 @@ export function ServicePlannerPage() {
           </select>
           <div className="md:col-span-2 rounded-xl bg-stone-50 px-3 py-2 text-xs text-stone-600">
             <LuLink className="mr-1 inline h-3.5 w-3.5" /> /service-plan/share/{draft.share_token}
+          </div>
+          <div className="md:col-span-2 rounded-xl bg-stone-50 px-3 py-2 text-xs text-stone-600">
+            <LuPencil className="mr-1 inline h-3.5 w-3.5" /> /service-plan/edit/{draft.edit_token}
           </div>
         </div>
         <button
@@ -2619,6 +2657,23 @@ export function ServicePlannerPage() {
             {shareCopied ? 'Скопировано' : 'Копировать'}
           </button>
         </div>
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <div className="min-w-0 flex-1 rounded-lg bg-stone-50 px-2 py-1.5 text-xs text-stone-700">
+            <LuPencil className="mr-1 inline h-3.5 w-3.5" />
+            /service-plan/edit/{draft.edit_token}
+          </div>
+          <button
+            type="button"
+            onClick={() => void copyEditShareLink()}
+            className="inline-flex items-center gap-1 rounded-lg border border-stone-300 px-3 py-1.5 text-sm font-semibold text-stone-700 hover:border-primary hover:text-primary"
+          >
+            <LuCopy className="h-4 w-4" />
+            {editShareCopied ? 'Скопировано' : 'Копировать'}
+          </button>
+        </div>
+        <p className="mt-2 text-xs text-stone-500">
+          Первая ссылка — только просмотр. Вторая — упрощённое редактирование блоков программы.
+        </p>
       </section>
 
       {(songsQ.isLoading || membersQ.isLoading) && (
@@ -2824,7 +2879,13 @@ export function ServicePlannerPage() {
                           ? 'Проповедник не назначен'
                           : 'Ответственный не назначен'}
                     </option>
-                    {(isSermonBlock(editingBlock) ? preacherCandidates : users).map((u) => (
+                    {(
+                      isSermonBlock(editingBlock)
+                        ? preacherCandidates
+                        : (blockTypes.find((t) => t.id === editingBlock.block_type_id)?.kind ?? 'custom') === 'song'
+                          ? musicianDirectionCandidates
+                          : users
+                    ).map((u) => (
                       <option key={u.id} value={u.id}>
                         {userLabel(u)} ({roleLabel(u)})
                       </option>

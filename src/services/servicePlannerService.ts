@@ -45,6 +45,7 @@ export type PlannerPlanListItem = {
   total_duration_minutes: number;
   current_block_id: number | null;
   share_token: string;
+  edit_token: string;
   blocks_count: number;
   template_name: string | null;
 };
@@ -80,6 +81,33 @@ export type PublicPlannerPlanPayload = {
     total_duration_minutes: number;
     notes: string | null;
     share_token: string;
+    template_name: string | null;
+    leader_name: string | null;
+    preacher_name: string | null;
+  };
+  blocks: Array<{
+    id: number;
+    order_index: number;
+    title: string;
+    duration_minutes: number;
+    block_type_name: string | null;
+    block_type_code: string | null;
+    assigned_member_name: string | null;
+    song_title: string | null;
+    song_key: string | null;
+    content_json: Record<string, unknown>;
+  }>;
+};
+
+export type PublicEditablePlannerPlanPayload = {
+  plan: {
+    id: number;
+    service_date: string;
+    start_time: string;
+    status: 'draft' | 'published';
+    total_duration_minutes: number;
+    notes: string | null;
+    edit_token: string;
     template_name: string | null;
     leader_name: string | null;
     preacher_name: string | null;
@@ -159,6 +187,7 @@ async function ensurePlannerSchema(): Promise<void> {
            total_duration_minutes integer not null default 0 check (total_duration_minutes >= 0),
            current_block_id bigint,
            share_token uuid not null default gen_random_uuid() unique,
+           edit_token uuid not null default gen_random_uuid() unique,
            church_event_id bigint,
            notes text,
            created_by_member_id integer references public.members (id) on delete set null,
@@ -169,6 +198,11 @@ async function ensurePlannerSchema(): Promise<void> {
       );
 
       await query(`alter table public.service_plans add column if not exists is_archived boolean not null default false`);
+      await query(`alter table public.service_plans add column if not exists edit_token uuid`);
+      await query(`update public.service_plans set edit_token = gen_random_uuid() where edit_token is null`);
+      await query(`alter table public.service_plans alter column edit_token set default gen_random_uuid()`);
+      await query(`alter table public.service_plans alter column edit_token set not null`);
+      await query(`create unique index if not exists idx_service_plans_edit_token on public.service_plans (edit_token)`);
       await query(
         `alter table public.service_plans add column if not exists last_edited_by_member_id integer references public.members (id) on delete set null`,
       );
@@ -494,6 +528,7 @@ function mapPlanRow(row: DbRecord): PlannerPlanListItem {
     total_duration_minutes: Number(row.total_duration_minutes ?? 0),
     current_block_id: row.current_block_id == null ? null : Number(row.current_block_id),
     share_token: String(row.share_token ?? ''),
+    edit_token: String(row.edit_token ?? ''),
     blocks_count: Number(row.blocks_count ?? 0),
     template_name: row.template_name == null ? null : String(row.template_name),
   };
@@ -616,7 +651,7 @@ export async function listPlans(input: {
     `select
        p.id, p.template_id, p.service_date::text as service_date, p.start_time, p.status, p.is_archived,
        p.leader_member_id, p.preacher_member_id, p.total_duration_minutes, p.current_block_id,
-       p.share_token::text as share_token,
+       p.share_token::text as share_token, p.edit_token::text as edit_token,
        t.name as template_name,
        coalesce(count(b.id), 0) as blocks_count
      from public.service_plans p
@@ -636,7 +671,8 @@ export async function getPlanDetails(planId: number): Promise<PlannerPlanDetails
     `select
        p.id, p.template_id, p.service_date::text as service_date, p.start_time, p.status, p.is_archived,
        p.leader_member_id, p.preacher_member_id, p.total_duration_minutes, p.current_block_id,
-       p.share_token::text as share_token, p.notes, p.created_at::text as created_at, p.updated_at::text as updated_at,
+       p.share_token::text as share_token, p.edit_token::text as edit_token,
+       p.notes, p.created_at::text as created_at, p.updated_at::text as updated_at,
        p.last_edited_by_member_id,
        p.last_edited_at::text as last_edited_at,
        coalesce(
@@ -867,6 +903,138 @@ export async function getPublicPlanByToken(token: string): Promise<PublicPlanner
       };
     }),
   };
+}
+
+export async function getEditablePlanByToken(token: string): Promise<PublicEditablePlannerPlanPayload | null> {
+  await ensurePlannerSchema();
+  const normalizedToken = String(token ?? '').trim();
+  if (!/^[0-9a-fA-F-]{36}$/.test(normalizedToken)) return null;
+
+  const planRes = await query(
+    `select
+       p.id,
+       p.service_date::text as service_date,
+       p.start_time,
+       p.status,
+       p.total_duration_minutes,
+       p.notes,
+       p.edit_token::text as edit_token,
+       t.name as template_name,
+       coalesce(nullif(trim(concat(coalesce(leader.first_name, ''), ' ', coalesce(leader.last_name, ''))), ''), leader.name) as leader_name,
+       coalesce(nullif(trim(concat(coalesce(preacher.first_name, ''), ' ', coalesce(preacher.last_name, ''))), ''), preacher.name) as preacher_name
+     from public.service_plans p
+     left join public.service_templates t on t.id = p.template_id
+     left join public.members leader on leader.id = p.leader_member_id
+     left join public.members preacher on preacher.id = p.preacher_member_id
+     where p.edit_token = $1::uuid
+     limit 1`,
+    [normalizedToken],
+  );
+  const row = planRes.rows[0] as DbRecord | undefined;
+  if (!row) return null;
+
+  const blocksRes = await query(
+    `select
+       b.id,
+       b.order_index,
+       b.title,
+       b.duration_minutes,
+       bt.name as block_type_name,
+       bt.code as block_type_code,
+       coalesce(nullif(trim(concat(coalesce(m.first_name, ''), ' ', coalesce(m.last_name, ''))), ''), m.name) as assigned_member_name,
+       s.title as song_title,
+       s.default_key as song_key,
+       b.content_json
+     from public.service_blocks b
+     left join public.block_types bt on bt.id = b.block_type_id
+     left join public.members m on m.id = b.assigned_member_id
+     left join public.songs s on s.id = b.song_id
+     where b.service_plan_id = $1
+     order by b.order_index asc, b.id asc`,
+    [Number(row.id)],
+  );
+
+  return {
+    plan: {
+      id: Number(row.id),
+      service_date: String(row.service_date ?? ''),
+      start_time: toTimeHm(row.start_time),
+      status: row.status === 'published' ? 'published' : 'draft',
+      total_duration_minutes: Number(row.total_duration_minutes ?? 0),
+      notes: row.notes == null ? null : String(row.notes),
+      edit_token: String(row.edit_token ?? ''),
+      template_name: row.template_name == null ? null : String(row.template_name),
+      leader_name: row.leader_name == null ? null : String(row.leader_name),
+      preacher_name: row.preacher_name == null ? null : String(row.preacher_name),
+    },
+    blocks: blocksRes.rows.map((r) => {
+      const x = r as DbRecord;
+      return {
+        id: Number(x.id),
+        order_index: Number(x.order_index ?? 0),
+        title: String(x.title ?? ''),
+        duration_minutes: Number(x.duration_minutes ?? 0),
+        block_type_name: x.block_type_name == null ? null : String(x.block_type_name),
+        block_type_code: x.block_type_code == null ? null : String(x.block_type_code),
+        assigned_member_name: x.assigned_member_name == null ? null : String(x.assigned_member_name),
+        song_title: x.song_title == null ? null : String(x.song_title),
+        song_key: x.song_key == null ? null : String(x.song_key),
+        content_json: asObject(x.content_json),
+      };
+    }),
+  };
+}
+
+export async function patchEditableBlockByToken(
+  token: string,
+  blockId: number,
+  patch: Partial<{ title: string; duration_minutes: number; content_json: Record<string, unknown> }>,
+): Promise<boolean> {
+  await ensurePlannerSchema();
+  const normalizedToken = String(token ?? '').trim();
+  if (!/^[0-9a-fA-F-]{36}$/.test(normalizedToken)) return false;
+  if (!Number.isInteger(blockId) || blockId <= 0) return false;
+
+  const set: string[] = [];
+  const values: unknown[] = [];
+  const push = (sql: string, value: unknown) => {
+    values.push(value);
+    set.push(sql.replace('?', `$${values.length}`));
+  };
+
+  if (patch.title !== undefined) push('title = ?', patch.title);
+  if (patch.duration_minutes !== undefined) push('duration_minutes = ?', patch.duration_minutes);
+  if (patch.content_json !== undefined) {
+    values.push(JSON.stringify(patch.content_json ?? {}));
+    set.push(`content_json = $${values.length}::jsonb`);
+  }
+  if (set.length === 0) return true;
+
+  values.push(blockId);
+  values.push(normalizedToken);
+  const result = await query(
+    `update public.service_blocks b
+     set ${set.join(', ')}
+     from public.service_plans p
+     where b.id = $${values.length - 1}
+       and p.edit_token = $${values.length}::uuid
+       and p.id = b.service_plan_id
+     returning b.service_plan_id`,
+    values,
+  );
+  if ((result.rowCount ?? 0) === 0) return false;
+  const updatedPlanId = Number((result.rows[0] as DbRecord).service_plan_id);
+  if (Number.isFinite(updatedPlanId)) {
+    await query(
+      `update public.service_plans
+       set last_edited_by_member_id = null,
+           last_edited_at = now(),
+           updated_at = now()
+       where id = $1`,
+      [updatedPlanId],
+    );
+  }
+  return true;
 }
 
 export async function createTemplate(input: {
