@@ -265,7 +265,6 @@ export function EditableServicePlanPage() {
       await patchEditableServicePlanBlockByToken(token, block.id, {
         title: block.title,
         duration_minutes: Math.max(1, Number(block.duration_minutes) || 1),
-        block_type_id: block.block_type_id,
         assigned_member_id: block.assigned_member_id,
         song_id: block.song_id,
         content_json: block.content_json,
@@ -295,7 +294,8 @@ export function EditableServicePlanPage() {
     return (
       <div className="mx-auto max-w-2xl p-6">
         <p className="text-red-600">
-          Ссылка недействительна или редактирование недоступно. Для опубликованных программ доступен только просмотр.
+          Программа опубликована, редактирование закрыта. Опубликованную версию получите у ответственного за сбор
+          программы.
         </p>
       </div>
     );
@@ -443,33 +443,9 @@ export function EditableServicePlanPage() {
 
                     {editingBlockId === b.id && editingBlock ? (
                       <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                        <select
-                          value={editingBlock.block_type_id}
-                          onChange={(e) => {
-                            const nextTypeId = Number(e.target.value) || editingBlock.block_type_id;
-                            const nextType = blockTypes.find((x) => x.id === nextTypeId);
-                            setDraftBlocks((prev) =>
-                              prev.map((x) =>
-                                x.id === editingBlock.id
-                                  ? {
-                                      ...x,
-                                      block_type_id: nextTypeId,
-                                      block_type_code: nextType?.code ?? x.block_type_code,
-                                      block_type_name: nextType?.name ?? x.block_type_name,
-                                      song_id: nextType?.kind === 'song' ? x.song_id : null,
-                                    }
-                                  : x,
-                              ),
-                            );
-                          }}
-                          className="rounded-lg border border-stone-300 bg-white px-2 py-1.5 text-sm text-stone-900"
-                        >
-                          {blockTypes.map((t) => (
-                            <option key={t.id} value={t.id}>
-                              {t.name}
-                            </option>
-                          ))}
-                        </select>
+                        <div className="rounded-lg border border-stone-200 bg-stone-50 px-2 py-1.5 text-sm text-stone-700">
+                          Тип блока: {editingBlock.block_type_name ?? 'Блок'}
+                        </div>
                         <input
                           type="number"
                           min={1}
