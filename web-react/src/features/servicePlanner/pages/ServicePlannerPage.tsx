@@ -1242,18 +1242,6 @@ export function ServicePlannerPage() {
     setRecurrenceRuleInput(JSON.stringify(source.recurrence_rule ?? {}, null, 2));
   }
 
-  const loadingPlanner = plansQ.isLoading || templatesQ.isLoading || (activePlanId != null && planQ.isLoading);
-  if (loadingPlanner) {
-    return (
-      <div className="p-6 text-sm text-stone-600">
-        <span className="inline-flex items-center gap-2">
-          <LuLoaderCircle className="h-4 w-4 animate-spin" />
-          Загружаю планировщик...
-        </span>
-      </div>
-    );
-  }
-
   const plans = plansQ.data ?? [];
   const visiblePlans = useMemo(() => {
     const filtered = plans.filter((p) => Boolean(p.is_archived) === showArchivedPlans);
@@ -1267,6 +1255,17 @@ export function ServicePlannerPage() {
   const nearestFuturePlanId = visiblePlans
     .filter((p) => p.service_date >= today)
     .sort((a, b) => a.service_date.localeCompare(b.service_date))[0]?.id;
+  const loadingPlanner = plansQ.isLoading || templatesQ.isLoading || (activePlanId != null && planQ.isLoading);
+  if (loadingPlanner) {
+    return (
+      <div className="p-6 text-sm text-stone-600">
+        <span className="inline-flex items-center gap-2">
+          <LuLoaderCircle className="h-4 w-4 animate-spin" />
+          Загружаю планировщик...
+        </span>
+      </div>
+    );
+  }
 
   if (screen === 'home') {
     return (
