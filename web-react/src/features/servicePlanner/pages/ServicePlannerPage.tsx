@@ -80,6 +80,10 @@ function todayIso(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
+function isIsoDate(value: string): boolean {
+  return /^\d{4}-\d{2}-\d{2}$/.test(value);
+}
+
 function tmpId(): number {
   return -Math.floor(Math.random() * 1_000_000_000);
 }
@@ -862,9 +866,10 @@ export function ServicePlannerPage() {
     void createPlanMut.mutateAsync({
       template_id: activeTemplate.id,
       service_date: date,
-      start_time: activeTemplate.default_start_time,
-      leader_member_id: draft?.leader_member_id ?? null,
-      preacher_member_id: draft?.preacher_member_id ?? null,
+      // Для новой программы по шаблону сохраняем только дату.
+      // Остальные настройки должны стартовать пустыми/по умолчанию шаблона.
+      leader_member_id: null,
+      preacher_member_id: null,
     });
   }
 
@@ -1256,7 +1261,10 @@ export function ServicePlannerPage() {
               <input
                 type="date"
                 value={createPlanDate}
-                onChange={(e) => setCreatePlanDate(e.target.value || todayIso())}
+                onChange={(e) => {
+                  const next = e.target.value;
+                  if (isIsoDate(next)) setCreatePlanDate(next);
+                }}
                 className="rounded-xl border border-stone-300 bg-white px-3 py-2 text-sm"
               />
             </div>
@@ -2194,7 +2202,10 @@ export function ServicePlannerPage() {
           <input
             type="date"
             value={draft.service_date}
-            onChange={(e) => setDraft({ ...draft, service_date: e.target.value || todayIso() })}
+            onChange={(e) => {
+              const next = e.target.value;
+              if (isIsoDate(next)) setDraft({ ...draft, service_date: next });
+            }}
             className="rounded-xl border border-stone-300 px-3 py-2 text-sm shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
           />
           <input

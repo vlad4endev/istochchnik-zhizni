@@ -1357,8 +1357,8 @@ export async function createPlan(input: {
        values ($1, $2::date, $3::time, 'draft', $4, $5, $6)
        on conflict (template_id, service_date) do update
          set start_time = excluded.start_time,
-             leader_member_id = coalesce(excluded.leader_member_id, public.service_plans.leader_member_id),
-             preacher_member_id = coalesce(excluded.preacher_member_id, public.service_plans.preacher_member_id),
+            leader_member_id = excluded.leader_member_id,
+            preacher_member_id = excluded.preacher_member_id,
              updated_at = now()
        returning id`,
       [
