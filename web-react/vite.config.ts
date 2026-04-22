@@ -50,6 +50,7 @@ export default defineConfig(({ mode }) => {
   const pwaOrigin = String(env.VITE_PWA_ORIGIN ?? '').trim().replace(/\/+$/, '');
   const pwaStartUrl = pwaOrigin ? `${pwaOrigin}/` : base;
   const pwaScope = pwaOrigin ? `${pwaOrigin}/` : base;
+  const canHandleLinks = /^https:\/\//i.test(pwaOrigin);
 
   return {
     resolve: {
@@ -107,6 +108,21 @@ export default defineConfig(({ mode }) => {
               purpose: 'maskable',
             },
           ],
+          ...(canHandleLinks
+            ? ({
+                /**
+                 * Позволяет ОС/браузеру (где поддерживается) открывать https-ссылки
+                 * этого origin сразу в установленной PWA вместо обычной вкладки.
+                 * После изменения манифеста пользователю обычно нужно обновить/переустановить PWA.
+                 */
+                url_handlers: [{ origin: pwaOrigin }],
+                /**
+                 * При открытии ссылки стараемся фокусировать существующее окно приложения,
+                 * а не плодить отдельные инстансы.
+                 */
+                launch_handler: { client_mode: 'focus-existing' },
+              } as Record<string, unknown>)
+            : {}),
         },
         workbox: {
           globPatterns: ['**/*.{js,css,html,ico,png,svg,webp,woff2,woff,ttf}'],
