@@ -17,6 +17,7 @@ import { LuCalendarDays, LuClock3, LuLink, LuLoaderCircle, LuLock, LuPencil, LuS
 import type { IconType } from 'react-icons';
 import { useParams } from 'react-router-dom';
 
+import { meaningfulNoteLinesFromRaw } from '../plannerNoteText';
 import {
   fetchEditableServicePlan,
   fetchEditableServicePlanMeta,
@@ -228,7 +229,7 @@ function isSermonBlockType(block: { block_type_code: string | null; block_type_n
   return block.block_type_code === 'sermon' || normalizeText(block.block_type_name ?? '').includes('проповед');
 }
 
-/** Строки, которые обрабатываем явно; остальные строки в `content_json` выводим как «доп. поля». */
+/** Служебные / уже обрабатываемые поля — не выводим как «доп. поля» и не показываем в UI. */
 const CONTENT_JSON_EXCLUDED_FOR_GENERIC: Set<string> = new Set([
   'is_separator',
   'separator_text',
@@ -237,6 +238,10 @@ const CONTENT_JSON_EXCLUDED_FOR_GENERIC: Set<string> = new Set([
   'block_logo_url',
   'birthday_people',
   'schedule_events',
+  'birthday_week_start',
+  'birthday_week_end',
+  'schedule_week_start',
+  'schedule_week_end',
   'poem_author',
   'poem_theme',
   'sermon_topic',
@@ -246,35 +251,22 @@ const CONTENT_JSON_EXCLUDED_FOR_GENERIC: Set<string> = new Set([
   'text',
 ]);
 
+function isInternalContentStringKey(key: string): boolean {
+  if (CONTENT_JSON_EXCLUDED_FOR_GENERIC.has(key)) return true;
+  if (/^birthday_week_/i.test(key)) return true;
+  if (/^schedule_week_/i.test(key)) return true;
+  return false;
+}
+
 const GENERIC_STRING_LABELS: Record<string, string> = {
   default_assigned_member_id: 'ID ответственного',
 };
 
 type ExtraDisplayRow = { label: string; value: string };
 
-function poemSubline(author: string, theme: string): string {
-  if (author && theme) return `${author} • ${theme}`;
-  return author || theme;
-}
-
-function getBlockExtraDisplayRows(
-  b: EditableBlock,
-  opts?: { forCard?: boolean },
-): ExtraDisplayRow[] {
+function getBlockExtraDisplayRows(b: EditableBlock): ExtraDisplayRow[] {
   const cj = b.content_json;
-  const forCard = opts?.forCard ?? false;
   const rows: ExtraDisplayRow[] = [];
-  if (isPoemBlockType(b)) {
-    const author = typeof cj.poem_author === 'string' ? cj.poem_author.trim() : '';
-    const theme = typeof cj.poem_theme === 'string' ? cj.poem_theme.trim() : '';
-    if (forCard) {
-      const line = poemSubline(author, theme);
-      if (line) rows.push({ label: 'Стих', value: line });
-    } else {
-      if (author) rows.push({ label: 'Автор', value: author });
-      if (theme) rows.push({ label: 'Тема', value: theme });
-    }
-  }
   if (isSermonBlockType(b)) {
     const topic = typeof cj.sermon_topic === 'string' ? cj.sermon_topic.trim() : '';
     const scripture = typeof cj.sermon_scripture === 'string' ? cj.sermon_scripture.trim() : '';
@@ -284,11 +276,13 @@ function getBlockExtraDisplayRows(
   const direction = typeof cj.direction === 'string' ? cj.direction.trim() : '';
   if (direction) rows.push({ label: 'Направление', value: direction });
   for (const [key, v] of Object.entries(cj)) {
-    if (CONTENT_JSON_EXCLUDED_FOR_GENERIC.has(key)) continue;
+    if (isInternalContentStringKey(key)) continue;
     if (typeof v !== 'string' || !v.trim()) continue;
     rows.push({ label: GENERIC_STRING_LABELS[key] ?? key, value: v.trim() });
   }
-  const note = blockNote(cj).trim();
+  const noteSource =
+    isPoemBlockType(b) && typeof cj.notes === 'string' ? cj.notes : blockNote(cj);
+  const note = meaningfulNoteLinesFromRaw(noteSource, cj);
   if (note) rows.push({ label: 'Заметка', value: note });
   return rows;
 }
@@ -300,7 +294,7 @@ function getEditFormAuxiliaryRows(b: EditableBlock): ExtraDisplayRow[] {
   const direction = typeof cj.direction === 'string' ? cj.direction.trim() : '';
   if (direction) rows.push({ label: 'Направление', value: direction });
   for (const [key, v] of Object.entries(cj)) {
-    if (CONTENT_JSON_EXCLUDED_FOR_GENERIC.has(key)) continue;
+    if (isInternalContentStringKey(key)) continue;
     if (typeof v !== 'string' || !v.trim()) continue;
     rows.push({ label: GENERIC_STRING_LABELS[key] ?? key, value: v.trim() });
   }
@@ -314,20 +308,60 @@ function BlockExtraInfoPanel({ rows, variant }: { rows: ExtraDisplayRow[]; varia
       className={
         variant === 'card'
           ? 'mt-2 space-y-1.5 rounded-lg border border-stone-200/90 bg-stone-50/90 px-2.5 py-2'
-          : 'sm:col-span-2 space-y-1.5 rounded-lg border border-stone-200/90 bg-stone-50/90 px-2.5 py-2'
+          : 'col-span-1 w-full min-w-0 sm:col-span-2 space-y-1.5 rounded-lg border border-stone-200/90 bg-stone-50/90 px-2.5 py-2'
       }
     >
       {variant === 'edit' ? (
         <p className="text-[10px] font-semibold uppercase tracking-wide text-stone-500">Дополнительно</p>
       ) : null}
-      <dl className="space-y-1 text-xs text-stone-700">
-        {rows.map((r) => (
-          <div key={`${r.label}-${r.value.slice(0, 32)}`} className="flex flex-col gap-0.5 sm:flex-row sm:gap-2">
-            <dt className="shrink-0 font-semibold text-stone-600 sm:min-w-[7.5rem]">{r.label}</dt>
-            <dd className="min-w-0 whitespace-pre-wrap leading-snug text-stone-800">{r.value}</dd>
+      <dl className="space-y-1.5 text-stone-700">
+        {rows.map((r, i) => (
+          <div key={`${variant}-extra-${i}-${r.label}`} className="flex flex-col gap-0.5 sm:flex-row sm:gap-2">
+            <dt className="shrink-0 text-xs font-semibold text-stone-600 sm:min-w-[7.5rem]">{r.label}</dt>
+            <dd
+              className={
+                r.label === 'Заметка'
+                  ? 'min-w-0 whitespace-pre-wrap text-sm leading-relaxed text-stone-800 sm:text-[15px]'
+                  : 'min-w-0 whitespace-pre-wrap text-xs leading-snug text-stone-800 sm:text-sm'
+              }
+            >
+              {r.value}
+            </dd>
           </div>
         ))}
       </dl>
+    </div>
+  );
+}
+
+function PoemBlockCardDetails({ contentJson }: { contentJson: Record<string, unknown> }) {
+  const author = typeof contentJson.poem_author === 'string' ? contentJson.poem_author.trim() : '';
+  const theme = typeof contentJson.poem_theme === 'string' ? contentJson.poem_theme.trim() : '';
+  const textBody = meaningfulNoteLinesFromRaw(
+    typeof contentJson.text === 'string' ? contentJson.text : '',
+    contentJson,
+  );
+  if (!author && !theme && !textBody) return null;
+  return (
+    <div className="mt-2 rounded-xl border border-fuchsia-200/90 bg-gradient-to-br from-fuchsia-50/95 to-white px-3 py-3 sm:px-4 sm:py-3.5">
+      {author ? (
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-fuchsia-900/75">Автор</p>
+          <p className="mt-0.5 text-base font-bold leading-snug text-stone-900 sm:text-lg">{author}</p>
+        </div>
+      ) : null}
+      {theme ? (
+        <div className={author ? 'mt-3' : ''}>
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-fuchsia-900/75">Название / тема стиха</p>
+          <p className="mt-0.5 text-base font-bold leading-snug text-stone-900 sm:text-lg">{theme}</p>
+        </div>
+      ) : null}
+      {textBody ? (
+        <div className={author || theme ? 'mt-3' : ''}>
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-fuchsia-900/75">Текст</p>
+          <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-stone-800 sm:text-[15px]">{textBody}</p>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -490,11 +524,11 @@ export function EditableServicePlanPage() {
             return (
               <article
                 key={b.id}
-                className={`rounded-xl border bg-white shadow-sm ${
+                className={`max-w-full overflow-x-hidden rounded-xl border bg-white shadow-sm ${
                   editingBlockId === b.id ? 'border-primary/60' : 'border-stone-200'
-                } p-3 sm:p-4`}
+                } p-2.5 sm:p-4 ${editingBlockId === b.id ? 'max-sm:pb-[env(safe-area-inset-bottom)]' : ''}`}
               >
-                <div className="flex items-start gap-2.5 sm:gap-3">
+                <div className="flex min-w-0 items-start gap-2 sm:gap-3">
                   <div className="w-11 shrink-0 rounded-md bg-stone-100 px-1.5 py-1 text-center text-[11px] font-bold text-stone-700 sm:w-12 sm:bg-transparent sm:px-0 sm:py-0 sm:text-xs">
                     {b.startsAt}
                   </div>
@@ -532,9 +566,11 @@ export function EditableServicePlanPage() {
                     </span>
                   )}
                   <div className="min-w-0 flex-1">
-                    <div className="flex items-start justify-between gap-2">
-                      <div>
-                        <h2 className="text-[15px] font-bold leading-snug text-stone-900 sm:text-base">{b.title}</h2>
+                    <div className="flex min-w-0 items-start justify-between gap-1.5 sm:gap-2">
+                      <div className="min-w-0 flex-1 pr-0.5">
+                        <h2 className="break-words text-[15px] font-bold leading-snug text-stone-900 sm:text-base">
+                          {b.title}
+                        </h2>
                         <p className="text-xs text-stone-500">
                           {b.block_type_name ?? 'Блок'} • {b.duration_minutes} мин
                           {b.assigned_member_name ? ` • ${b.assigned_member_name}` : ''}
@@ -554,19 +590,17 @@ export function EditableServicePlanPage() {
                             </ul>
                           </div>
                         ) : null}
-                        <BlockExtraInfoPanel
-                          rows={getBlockExtraDisplayRows(b, { forCard: true })}
-                          variant="card"
-                        />
+                        {isPoemBlockType(b) ? <PoemBlockCardDetails contentJson={b.content_json} /> : null}
+                        <BlockExtraInfoPanel rows={getBlockExtraDisplayRows(b)} variant="card" />
                       </div>
                       <button
                         type="button"
                         onClick={() => setEditingBlockId((prev) => (prev === b.id ? null : b.id))}
                         aria-label={editingBlockId === b.id ? 'Скрыть редактирование' : 'Редактировать блок'}
                         title={editingBlockId === b.id ? 'Скрыть' : 'Редактировать'}
-                        className="inline-flex shrink-0 items-center justify-center gap-1 rounded-lg border border-stone-300 p-1.5 text-stone-700 hover:border-primary hover:text-primary sm:px-2.5 sm:py-1 sm:text-xs sm:font-semibold"
+                        className="inline-flex h-9 w-9 shrink-0 touch-manipulation items-center justify-center gap-1 rounded-lg border border-stone-300 text-stone-700 hover:border-primary hover:text-primary sm:h-auto sm:w-auto sm:px-2.5 sm:py-1 sm:text-xs sm:font-semibold"
                       >
-                        <LuPencil className="h-3.5 w-3.5" />
+                        <LuPencil className="h-4 w-4 sm:h-3.5 sm:w-3.5" />
                         <span className="hidden sm:inline">
                           {editingBlockId === b.id ? 'Скрыть' : 'Редактировать'}
                         </span>
@@ -574,39 +608,71 @@ export function EditableServicePlanPage() {
                     </div>
 
                     {editingBlockId === b.id && editingBlock ? (
-                      <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                        <div className="rounded-lg border border-stone-200 bg-stone-50 px-2 py-1.5 text-sm text-stone-700">
+                      <div className="mt-3 grid w-full min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-2">
+                        <div className="rounded-lg border border-stone-200 bg-stone-50 px-2.5 py-2 text-sm text-stone-700 sm:py-1.5">
                           Тип блока: {editingBlock.block_type_name ?? 'Блок'}
                         </div>
-                        <input
-                          type="number"
-                          min={1}
-                          max={180}
-                          value={editingBlock.duration_minutes}
-                          onChange={(e) =>
-                            setDraftBlocks((prev) =>
-                              prev.map((x) =>
-                                x.id === editingBlock.id
-                                  ? { ...x, duration_minutes: Math.max(1, Number(e.target.value) || 1) }
-                                  : x,
-                              ),
-                            )
-                          }
-                          className="rounded-lg border border-stone-300 bg-white px-2 py-1.5 text-sm text-stone-900"
-                        />
-                        <input
-                          value={editingBlock.title}
-                          onChange={(e) =>
-                            setDraftBlocks((prev) =>
-                              prev.map((x) => (x.id === editingBlock.id ? { ...x, title: e.target.value } : x)),
-                            )
-                          }
-                          className="rounded-lg border border-stone-300 bg-white px-2 py-1.5 text-sm text-stone-900 placeholder:text-stone-500 sm:col-span-2"
-                          placeholder="Заголовок блока"
-                        />
-                        <select
-                          value={editingBlock.assigned_member_id ?? ''}
-                          onChange={(e) => {
+                        <div className="min-w-0">
+                          <label
+                            className="mb-1 block text-xs font-medium text-stone-600"
+                            htmlFor={`block-duration-${editingBlock.id}`}
+                          >
+                            Длительность, мин
+                          </label>
+                          <input
+                            id={`block-duration-${editingBlock.id}`}
+                            type="number"
+                            min={1}
+                            max={180}
+                            value={editingBlock.duration_minutes}
+                            onChange={(e) =>
+                              setDraftBlocks((prev) =>
+                                prev.map((x) =>
+                                  x.id === editingBlock.id
+                                    ? { ...x, duration_minutes: Math.max(1, Number(e.target.value) || 1) }
+                                    : x,
+                                ),
+                              )
+                            }
+                            className="min-h-11 w-full min-w-0 max-w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-base text-stone-900 touch-manipulation sm:min-h-0 sm:px-2 sm:py-1.5 sm:text-sm"
+                            inputMode="numeric"
+                          />
+                        </div>
+                        <div className="min-w-0 sm:col-span-2">
+                          <label
+                            className="mb-1 block text-xs font-medium text-stone-600"
+                            htmlFor={`block-title-${editingBlock.id}`}
+                          >
+                            Заголовок
+                          </label>
+                          <input
+                            id={`block-title-${editingBlock.id}`}
+                            value={editingBlock.title}
+                            onChange={(e) =>
+                              setDraftBlocks((prev) =>
+                                prev.map((x) => (x.id === editingBlock.id ? { ...x, title: e.target.value } : x)),
+                              )
+                            }
+                            className="min-h-11 w-full min-w-0 max-w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-base text-stone-900 placeholder:text-stone-500 touch-manipulation sm:min-h-0 sm:px-2 sm:py-1.5 sm:text-sm"
+                            placeholder="Заголовок блока"
+                            autoComplete="off"
+                          />
+                        </div>
+                        <div className="min-w-0">
+                          <label
+                            className="mb-1 block text-xs font-medium text-stone-600"
+                            htmlFor={`block-responsible-${editingBlock.id}`}
+                          >
+                            {isEditingSermonBlock
+                              ? 'Проповедник'
+                              : isEditingPrayerBlock
+                                ? 'Молитва'
+                                : 'Ответственный'}
+                          </label>
+                          <select
+                            id={`block-responsible-${editingBlock.id}`}
+                            value={editingBlock.assigned_member_id ?? ''}
+                            onChange={(e) => {
                             const memberId = e.target.value ? Number(e.target.value) : null;
                             const member = memberId ? members.find((u) => u.id === memberId) : null;
                             setDraftBlocks((prev) =>
@@ -633,7 +699,7 @@ export function EditableServicePlanPage() {
                               ),
                             );
                           }}
-                          className="rounded-lg border border-stone-300 bg-white px-2 py-1.5 text-sm text-stone-900"
+                            className="min-h-11 w-full min-w-0 max-w-full rounded-lg border border-stone-300 bg-white px-2 py-2 text-base text-stone-900 touch-manipulation sm:min-h-0 sm:py-1.5 sm:text-sm"
                         >
                           <option value="">
                             {isEditingSermonBlock
@@ -648,10 +714,19 @@ export function EditableServicePlanPage() {
                             </option>
                           ))}
                         </select>
+                        </div>
                         {isEditingSongBlock ? (
-                          <select
-                            value={editingBlock.song_id ?? ''}
-                            onChange={(e) => {
+                          <div className="min-w-0">
+                            <label
+                              className="mb-1 block text-xs font-medium text-stone-600"
+                              htmlFor={`block-song-${editingBlock.id}`}
+                            >
+                              Песня
+                            </label>
+                            <select
+                              id={`block-song-${editingBlock.id}`}
+                              value={editingBlock.song_id ?? ''}
+                              onChange={(e) => {
                               const songId = e.target.value ? Number(e.target.value) : null;
                               const song = songId ? songs.find((s) => s.id === songId) : null;
                               setDraftBlocks((prev) =>
@@ -668,8 +743,8 @@ export function EditableServicePlanPage() {
                                 ),
                               );
                             }}
-                            className="rounded-lg border border-stone-300 bg-white px-2 py-1.5 text-sm text-stone-900"
-                          >
+                              className="min-h-11 w-full min-w-0 max-w-full rounded-lg border border-stone-300 bg-white px-2 py-2 text-base text-stone-900 touch-manipulation sm:min-h-0 sm:py-1.5 sm:text-sm"
+                            >
                             <option value="">Песня не назначена</option>
                             {songs.map((s) => (
                               <option key={s.id} value={s.id}>
@@ -677,13 +752,14 @@ export function EditableServicePlanPage() {
                               </option>
                             ))}
                           </select>
+                          </div>
                         ) : (
-                          <div className="rounded-lg border border-dashed border-stone-300 bg-stone-50 px-2 py-1.5 text-xs text-stone-500">
+                          <div className="rounded-lg border border-dashed border-stone-300 bg-stone-50 px-2.5 py-2 text-xs leading-snug text-stone-500 sm:col-span-2 sm:py-1.5">
                             Для этого типа блока выбор песни не используется.
                           </div>
                         )}
                         {isEditingPoemBlock ? (
-                          <div className="sm:col-span-2 space-y-2 rounded-xl border border-fuchsia-200/90 bg-fuchsia-50/50 p-3">
+                          <div className="col-span-1 w-full min-w-0 sm:col-span-2 space-y-2 rounded-xl border border-fuchsia-200/90 bg-fuchsia-50/50 p-3">
                             <p className="text-[11px] font-semibold uppercase tracking-wide text-fuchsia-800/90">Стих</p>
                             <div className="grid gap-3 sm:grid-cols-2">
                               <div>
@@ -702,7 +778,7 @@ export function EditableServicePlanPage() {
                                       ),
                                     )
                                   }
-                                  className="w-full rounded-lg border border-stone-300 bg-white px-2.5 py-1.5 text-sm text-stone-900 placeholder:text-stone-500"
+                                  className="min-h-11 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-base text-stone-900 placeholder:text-stone-500 touch-manipulation sm:min-h-0 sm:px-2.5 sm:py-1.5 sm:text-sm"
                                   placeholder="Автор стиха"
                                 />
                               </div>
@@ -722,7 +798,7 @@ export function EditableServicePlanPage() {
                                       ),
                                     )
                                   }
-                                  className="w-full rounded-lg border border-stone-300 bg-white px-2.5 py-1.5 text-sm text-stone-900 placeholder:text-stone-500"
+                                  className="min-h-11 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-base text-stone-900 placeholder:text-stone-500 touch-manipulation sm:min-h-0 sm:px-2.5 sm:py-1.5 sm:text-sm"
                                   placeholder="Тема стиха"
                                 />
                               </div>
@@ -730,7 +806,7 @@ export function EditableServicePlanPage() {
                           </div>
                         ) : null}
                         {isEditingSermonBlock ? (
-                          <div className="sm:col-span-2 space-y-2 rounded-xl border border-rose-200/90 bg-rose-50/50 p-3">
+                          <div className="col-span-1 w-full min-w-0 sm:col-span-2 space-y-2 rounded-xl border border-rose-200/90 bg-rose-50/50 p-3">
                             <p className="text-[11px] font-semibold uppercase tracking-wide text-rose-800/90">Проповедь</p>
                             <div className="grid gap-3 sm:grid-cols-2">
                               <div>
@@ -759,7 +835,7 @@ export function EditableServicePlanPage() {
                                       }),
                                     )
                                   }
-                                  className="w-full rounded-lg border border-stone-300 bg-white px-2.5 py-1.5 text-sm text-stone-900 placeholder:text-stone-500"
+                                  className="min-h-11 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-base text-stone-900 placeholder:text-stone-500 touch-manipulation sm:min-h-0 sm:px-2.5 sm:py-1.5 sm:text-sm"
                                   placeholder="Тема проповеди"
                                 />
                               </div>
@@ -782,7 +858,7 @@ export function EditableServicePlanPage() {
                                       ),
                                     )
                                   }
-                                  className="w-full rounded-lg border border-stone-300 bg-white px-2.5 py-1.5 text-sm text-stone-900 placeholder:text-stone-500"
+                                  className="min-h-11 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-base text-stone-900 placeholder:text-stone-500 touch-manipulation sm:min-h-0 sm:px-2.5 sm:py-1.5 sm:text-sm"
                                   placeholder="Стихи из Библии"
                                 />
                               </div>
@@ -790,7 +866,7 @@ export function EditableServicePlanPage() {
                           </div>
                         ) : null}
                         <BlockExtraInfoPanel rows={getEditFormAuxiliaryRows(editingBlock)} variant="edit" />
-                        <div className="sm:col-span-2">
+                        <div className="col-span-1 w-full min-w-0 sm:col-span-2">
                           <label className="mb-1 block text-xs font-medium text-stone-600" htmlFor={`block-note-${editingBlock.id}`}>
                             Заметка
                           </label>
@@ -813,12 +889,13 @@ export function EditableServicePlanPage() {
                                 }),
                               )
                             }
-                            className="min-h-[84px] w-full rounded-lg border border-stone-300 bg-white px-2 py-1.5 text-sm text-stone-900 placeholder:text-stone-500"
+                            className="min-h-[100px] w-full min-w-0 max-w-full rounded-lg border border-stone-300 bg-white px-3 py-2.5 text-base text-stone-900 placeholder:text-stone-500 touch-manipulation sm:min-h-[84px] sm:px-2 sm:py-1.5 sm:text-sm"
                             placeholder="Заметка блока"
+                            rows={4}
                           />
                         </div>
                         {isBirthdaysBlock(editingBlock) ? (
-                          <div className="rounded-lg border border-stone-200 bg-stone-50 px-2 py-2 text-xs text-stone-600 sm:col-span-2">
+                          <div className="col-span-1 w-full min-w-0 rounded-lg border border-stone-200 bg-stone-50 px-2.5 py-2 text-xs text-stone-600 sm:col-span-2 sm:px-2">
                             <p className="font-semibold">Именинники недели:</p>
                             <p className="mt-1">
                               {birthdayRows(editingBlock.content_json).length > 0
@@ -828,7 +905,7 @@ export function EditableServicePlanPage() {
                           </div>
                         ) : null}
                         {scheduleRows(editingBlock.content_json).length > 0 ? (
-                          <div className="rounded-lg border border-stone-200 bg-stone-50 px-2 py-2 text-xs text-stone-600 sm:col-span-2">
+                          <div className="col-span-1 w-full min-w-0 rounded-lg border border-stone-200 bg-stone-50 px-2.5 py-2 text-xs text-stone-600 sm:col-span-2 sm:px-2">
                             <p className="font-semibold">Расписание:</p>
                             <ul className="mt-1 space-y-0.5">
                               {scheduleRows(editingBlock.content_json).map((line) => (
@@ -837,17 +914,17 @@ export function EditableServicePlanPage() {
                             </ul>
                           </div>
                         ) : null}
-                        <div className="sm:col-span-2 flex justify-end">
+                        <div className="mt-1 flex w-full min-w-0 sm:col-span-2 sm:mt-0 sm:justify-end">
                           <button
                             type="button"
                             onClick={() => void saveBlockMut.mutateAsync(editingBlock)}
                             disabled={saveBlockMut.isPending}
-                            className="inline-flex items-center gap-1 rounded-lg bg-primary px-3 py-1.5 text-sm font-semibold text-white hover:bg-primary-dark disabled:cursor-not-allowed disabled:opacity-70"
+                            className="inline-flex w-full min-h-12 items-center justify-center gap-2 rounded-lg bg-primary px-4 text-base font-semibold text-white touch-manipulation hover:bg-primary-dark disabled:cursor-not-allowed disabled:opacity-70 sm:w-auto sm:min-h-0 sm:px-3 sm:py-1.5 sm:text-sm"
                           >
                             {saveBlockMut.isPending ? (
-                              <LuLoaderCircle className="h-4 w-4 animate-spin" />
+                              <LuLoaderCircle className="h-5 w-5 shrink-0 animate-spin sm:h-4 sm:w-4" />
                             ) : (
-                              <LuSave className="h-4 w-4" />
+                              <LuSave className="h-5 w-5 shrink-0 sm:h-4 sm:w-4" />
                             )}
                             Сохранить блок
                           </button>

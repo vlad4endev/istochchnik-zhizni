@@ -21,6 +21,7 @@ import {
   fetchPublicServicePlan,
   type PublicServicePlanPayload,
 } from '../api';
+import { meaningfulNoteLinesFromRaw } from '../plannerNoteText';
 
 type PublicPlanBlock = PublicServicePlanPayload['blocks'][number];
 
@@ -41,7 +42,8 @@ type PublicBlockView = {
 function derivePublicBlockView(b: PublicPlanBlock): PublicBlockView {
   const notesRaw = typeof b.content_json.notes === 'string' ? b.content_json.notes.trim() : '';
   const textRaw = typeof b.content_json.text === 'string' ? b.content_json.text.trim() : '';
-  const fallback = notesRaw || textRaw;
+  const rawForNote = notesRaw || textRaw;
+  const fallback = meaningfulNoteLinesFromRaw(rawForNote, b.content_json);
   const titlePlain = String(b.title ?? '').trim();
   const titleStripped = stripLeadingBlockIndex(titlePlain);
   const songVariants = [

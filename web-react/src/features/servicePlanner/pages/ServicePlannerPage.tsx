@@ -60,6 +60,7 @@ import {
   type ServicePlanDetails,
   type ServiceTemplateDetails,
 } from '../api';
+import { meaningfulNoteLinesFromRaw } from '../plannerNoteText';
 import { useServicePlanEditorsPresence } from '../useServicePlanEditorsPresence';
 
 function planEditorInitials(name: string): string {
@@ -731,11 +732,12 @@ export function ServicePlannerPage() {
   }
 
   function getBlockNotePreview(block: ServicePlanBlock): string | null {
-    const noteRaw = block.content_json?.notes;
-    if (typeof noteRaw === 'string' && noteRaw.trim()) return noteRaw.trim();
-    const textRaw = block.content_json?.text;
-    if (typeof textRaw === 'string' && textRaw.trim()) return textRaw.trim();
-    return null;
+    const cj = block.content_json ?? {};
+    const noteRaw = typeof cj.notes === 'string' ? cj.notes : '';
+    const textRaw = typeof cj.text === 'string' ? cj.text : '';
+    const raw = noteRaw.trim() ? noteRaw : textRaw;
+    const cleaned = meaningfulNoteLinesFromRaw(raw, cj);
+    return cleaned || null;
   }
 
   function getCategoryIcon(block: ServicePlanBlock): { Icon: IconType; wrapClass: string; iconClass: string } | null {
