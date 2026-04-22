@@ -13,7 +13,18 @@ import {
   FaPuzzlePiece,
   FaWineGlass,
 } from 'react-icons/fa6';
-import { LuCalendarDays, LuClock3, LuLink, LuLoaderCircle, LuLock, LuPencil, LuSave, LuUsers } from 'react-icons/lu';
+import {
+  LuCalendarDays,
+  LuClock3,
+  LuEye,
+  LuEyeOff,
+  LuLink,
+  LuLoaderCircle,
+  LuLock,
+  LuPencil,
+  LuSave,
+  LuUsers,
+} from 'react-icons/lu';
 import type { IconType } from 'react-icons';
 import { useParams } from 'react-router-dom';
 
@@ -73,6 +84,10 @@ const BLOCK_MARK_ICON_BY_KEY = Object.fromEntries(
 
 function isSeparator(content: Record<string, unknown>): boolean {
   return content.is_separator === true;
+}
+
+function isHiddenFromPublic(content: Record<string, unknown>): boolean {
+  return content.hide_in_public === true;
 }
 
 function getCategoryIcon(block: EditableBlock): { Icon: IconType; wrapClass: string; iconClass: string } | null {
@@ -242,6 +257,7 @@ const CONTENT_JSON_EXCLUDED_FOR_GENERIC: Set<string> = new Set([
   'birthday_week_end',
   'schedule_week_start',
   'schedule_week_end',
+  'hide_in_public',
   'poem_author',
   'poem_theme',
   'sermon_topic',
@@ -414,6 +430,7 @@ export function EditableServicePlanPage() {
         qc.invalidateQueries({ queryKey: ['editable-service-plan', token] }),
         qc.invalidateQueries({ queryKey: ['editable-service-plan-meta', token] }),
       ]);
+      setEditingBlockId(null);
     },
   });
 
@@ -509,11 +526,16 @@ export function EditableServicePlanPage() {
             const birthdays = birthdayRows(b.content_json);
             const birthdaysBlock = isBirthdaysBlock(b);
             const schedule = scheduleRows(b.content_json);
+            const hiddenFromPublic = isHiddenFromPublic(b.content_json);
             return (
               <article
                 key={b.id}
                 className={`max-w-full overflow-x-hidden rounded-xl border bg-white shadow-sm ${
-                  editingBlockId === b.id ? 'border-primary/60' : 'border-stone-200'
+                  hiddenFromPublic
+                    ? 'border-stone-300 bg-stone-100/80 opacity-70'
+                    : editingBlockId === b.id
+                      ? 'border-primary/60'
+                      : 'border-stone-200'
                 } p-2.5 sm:p-4 ${editingBlockId === b.id ? 'max-sm:pb-[env(safe-area-inset-bottom)]' : ''}`}
               >
                 <div className="flex min-w-0 items-start gap-2 sm:gap-3">
@@ -563,6 +585,9 @@ export function EditableServicePlanPage() {
                           {b.block_type_name ?? 'Блок'} • {b.duration_minutes} мин
                           {b.assigned_member_name ? ` • ${b.assigned_member_name}` : ''}
                         </p>
+                        {hiddenFromPublic ? (
+                          <p className="mt-1 text-[11px] font-semibold text-stone-500">Скрыт в опубликованной версии</p>
+                        ) : null}
                         {birthdaysBlock ? (
                           <p className="mt-1 text-xs leading-snug text-stone-600">
                             Именинники: {birthdays.length > 0 ? birthdays.join(' • ') : 'На этой неделе именинников нет'}
@@ -581,20 +606,44 @@ export function EditableServicePlanPage() {
                         {isPoemBlockType(b) ? <PoemInlineDetails contentJson={b.content_json} /> : null}
                         <BlockExtraInfoPanel rows={getBlockExtraDisplayRows(b)} variant="card" />
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => setEditingBlockId((prev) => (prev === b.id ? null : b.id))}
-                        aria-label={editingBlockId === b.id ? 'Скрыть редактирование' : 'Редактировать блок'}
-                        title={editingBlockId === b.id ? 'Скрыть' : 'Редактировать'}
-                        className="inline-flex h-9 w-9 shrink-0 touch-manipulation items-center justify-center gap-1 rounded-lg border border-stone-300 text-stone-700 hover:border-primary hover:text-primary sm:h-auto sm:w-auto sm:px-2.5 sm:py-1 sm:text-xs sm:font-semibold"
-                      >
-                        <LuPencil className="h-4 w-4 sm:h-3.5 sm:w-3.5" />
-                        <span className="hidden sm:inline">
-                          {editingBlockId === b.id ? 'Скрыть' : 'Редактировать'}
-                        </span>
-                      </button>
+                      <div className="flex shrink-0 items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setDraftBlocks((prev) =>
+                              prev.map((x) =>
+                                x.id === b.id
+                                  ? {
+                                      ...x,
+                                      content_json: { ...x.content_json, hide_in_public: !hiddenFromPublic },
+                                    }
+                                  : x,
+                              ),
+                            );
+                            if (!hiddenFromPublic && editingBlockId === b.id) setEditingBlockId(null);
+                          }}
+                          aria-label={hiddenFromPublic ? 'Показать в публикации' : 'Скрыть из публикации'}
+                          title={hiddenFromPublic ? 'Показать в публикации' : 'Скрыть из публикации'}
+                          className={`inline-flex h-9 w-9 items-center justify-center rounded-lg border text-stone-700 hover:border-primary hover:text-primary ${
+                            hiddenFromPublic ? 'border-stone-400 bg-stone-200/80' : 'border-stone-300'
+                          }`}
+                        >
+                          {hiddenFromPublic ? <LuEyeOff className="h-4 w-4" /> : <LuEye className="h-4 w-4" />}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setEditingBlockId((prev) => (prev === b.id ? null : b.id))}
+                          aria-label={editingBlockId === b.id ? 'Скрыть редактирование' : 'Редактировать блок'}
+                          title={editingBlockId === b.id ? 'Скрыть' : 'Редактировать'}
+                          className="inline-flex h-9 w-9 shrink-0 touch-manipulation items-center justify-center gap-1 rounded-lg border border-stone-300 text-stone-700 hover:border-primary hover:text-primary sm:h-auto sm:w-auto sm:px-2.5 sm:py-1 sm:text-xs sm:font-semibold"
+                        >
+                          <LuPencil className="h-4 w-4 sm:h-3.5 sm:w-3.5" />
+                          <span className="hidden sm:inline">
+                            {editingBlockId === b.id ? 'Скрыть' : 'Редактировать'}
+                          </span>
+                        </button>
+                      </div>
                     </div>
-
                   </div>
                 </div>
                 {editingBlockId === b.id && editingBlock ? (

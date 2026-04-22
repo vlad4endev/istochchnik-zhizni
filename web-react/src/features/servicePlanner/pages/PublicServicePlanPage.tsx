@@ -149,6 +149,10 @@ function isSeparator(content: Record<string, unknown>): boolean {
   return content.is_separator === true;
 }
 
+function isHiddenFromPublic(content: Record<string, unknown>): boolean {
+  return content.hide_in_public === true;
+}
+
 function parseStartClock(dateIso: string, time: string): Date {
   return parse(`${dateIso} ${time}`, 'yyyy-MM-dd HH:mm', new Date());
 }
@@ -243,6 +247,7 @@ export function PublicServicePlanPage() {
     return blocks
       .slice()
       .sort((a, b) => a.order_index - b.order_index)
+      .filter((b) => !isHiddenFromPublic(b.content_json))
       .map((b) => {
         const startsAt = format(cursor, 'HH:mm');
         const separator = isSeparator(b.content_json);
