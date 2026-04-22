@@ -308,16 +308,10 @@ export function EditableServicePlanPage() {
     month: 'long',
     year: 'numeric',
   }).format(new Date(`${plan.service_date}T12:00:00`));
-  const preacherCandidates = useMemo(() => members.filter((u) => isPreacherCandidate(u)), [members]);
-  const musicianDirectionCandidates = useMemo(
-    () => members.filter((u) => hasMinistryDirection(u, 'Музыкальное служение')),
-    [members],
-  );
-  const prayerCandidates = useMemo(() => members.filter((u) => isPrayerCandidate(u)), [members]);
-  const editingBlockTypeMeta = useMemo(
-    () => blockTypes.find((t) => t.id === editingBlock?.block_type_id) ?? null,
-    [blockTypes, editingBlock?.block_type_id],
-  );
+  const preacherCandidates = members.filter((u) => isPreacherCandidate(u));
+  const musicianDirectionCandidates = members.filter((u) => hasMinistryDirection(u, 'Музыкальное служение'));
+  const prayerCandidates = members.filter((u) => isPrayerCandidate(u));
+  const editingBlockTypeMeta = blockTypes.find((t) => t.id === editingBlock?.block_type_id) ?? null;
   const isEditingSongBlock = (editingBlockTypeMeta?.kind ?? 'custom') === 'song';
   const isEditingSermonBlock =
     editingBlockTypeMeta?.code === 'sermon' || normalizeText(editingBlockTypeMeta?.name ?? '').includes('проповед');
