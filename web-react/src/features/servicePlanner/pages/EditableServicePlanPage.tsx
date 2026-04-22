@@ -280,8 +280,7 @@ function getBlockExtraDisplayRows(b: EditableBlock): ExtraDisplayRow[] {
     if (typeof v !== 'string' || !v.trim()) continue;
     rows.push({ label: GENERIC_STRING_LABELS[key] ?? key, value: v.trim() });
   }
-  const noteSource =
-    isPoemBlockType(b) && typeof cj.notes === 'string' ? cj.notes : blockNote(cj);
+  const noteSource = isPoemBlockType(b) ? (typeof cj.notes === 'string' ? cj.notes : '') : blockNote(cj);
   const note = meaningfulNoteLinesFromRaw(noteSource, cj);
   if (note) rows.push({ label: 'Заметка', value: note });
   return rows;
@@ -334,33 +333,23 @@ function BlockExtraInfoPanel({ rows, variant }: { rows: ExtraDisplayRow[]; varia
   );
 }
 
-function PoemBlockCardDetails({ contentJson }: { contentJson: Record<string, unknown> }) {
+function PoemInlineDetails({ contentJson }: { contentJson: Record<string, unknown> }) {
   const author = typeof contentJson.poem_author === 'string' ? contentJson.poem_author.trim() : '';
   const theme = typeof contentJson.poem_theme === 'string' ? contentJson.poem_theme.trim() : '';
-  const textBody = meaningfulNoteLinesFromRaw(
-    typeof contentJson.text === 'string' ? contentJson.text : '',
-    contentJson,
-  );
-  if (!author && !theme && !textBody) return null;
+  if (!author && !theme) return null;
   return (
-    <div className="mt-2 rounded-xl border border-fuchsia-200/90 bg-gradient-to-br from-fuchsia-50/95 to-white px-3 py-3 sm:px-4 sm:py-3.5">
+    <div className="mt-1 space-y-0.5 text-xs leading-snug text-stone-600 sm:mt-0.5 sm:text-sm">
       {author ? (
-        <div>
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-fuchsia-900/75">Автор</p>
-          <p className="mt-0.5 text-base font-bold leading-snug text-stone-900 sm:text-lg">{author}</p>
-        </div>
+        <p>
+          <span className="font-semibold text-stone-700">Автор:</span>{' '}
+          <span className="font-bold text-stone-900">{author}</span>
+        </p>
       ) : null}
       {theme ? (
-        <div className={author ? 'mt-3' : ''}>
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-fuchsia-900/75">Название / тема стиха</p>
-          <p className="mt-0.5 text-base font-bold leading-snug text-stone-900 sm:text-lg">{theme}</p>
-        </div>
-      ) : null}
-      {textBody ? (
-        <div className={author || theme ? 'mt-3' : ''}>
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-fuchsia-900/75">Текст</p>
-          <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-stone-800 sm:text-[15px]">{textBody}</p>
-        </div>
+        <p>
+          <span className="font-semibold text-stone-700">Тема:</span>{' '}
+          <span className="font-bold text-stone-900">{theme}</span>
+        </p>
       ) : null}
     </div>
   );
@@ -425,7 +414,6 @@ export function EditableServicePlanPage() {
         qc.invalidateQueries({ queryKey: ['editable-service-plan', token] }),
         qc.invalidateQueries({ queryKey: ['editable-service-plan-meta', token] }),
       ]);
-      setEditingBlockId(null);
     },
   });
 
@@ -590,7 +578,7 @@ export function EditableServicePlanPage() {
                             </ul>
                           </div>
                         ) : null}
-                        {isPoemBlockType(b) ? <PoemBlockCardDetails contentJson={b.content_json} /> : null}
+                        {isPoemBlockType(b) ? <PoemInlineDetails contentJson={b.content_json} /> : null}
                         <BlockExtraInfoPanel rows={getBlockExtraDisplayRows(b)} variant="card" />
                       </div>
                       <button
@@ -607,332 +595,306 @@ export function EditableServicePlanPage() {
                       </button>
                     </div>
 
-                    {editingBlockId === b.id && editingBlock ? (
-                      <div className="mt-3 grid w-full min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-2">
-                        <div className="rounded-lg border border-stone-200 bg-stone-50 px-2.5 py-2 text-sm text-stone-700 sm:py-1.5">
-                          Тип блока: {editingBlock.block_type_name ?? 'Блок'}
-                        </div>
-                        <div className="min-w-0">
-                          <label
-                            className="mb-1 block text-xs font-medium text-stone-600"
-                            htmlFor={`block-duration-${editingBlock.id}`}
-                          >
-                            Длительность, мин
-                          </label>
-                          <input
-                            id={`block-duration-${editingBlock.id}`}
-                            type="number"
-                            min={1}
-                            max={180}
-                            value={editingBlock.duration_minutes}
-                            onChange={(e) =>
-                              setDraftBlocks((prev) =>
-                                prev.map((x) =>
-                                  x.id === editingBlock.id
-                                    ? { ...x, duration_minutes: Math.max(1, Number(e.target.value) || 1) }
-                                    : x,
-                                ),
-                              )
-                            }
-                            className="min-h-11 w-full min-w-0 max-w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-base text-stone-900 touch-manipulation sm:min-h-0 sm:px-2 sm:py-1.5 sm:text-sm"
-                            inputMode="numeric"
-                          />
-                        </div>
-                        <div className="min-w-0 sm:col-span-2">
-                          <label
-                            className="mb-1 block text-xs font-medium text-stone-600"
-                            htmlFor={`block-title-${editingBlock.id}`}
-                          >
-                            Заголовок
-                          </label>
-                          <input
-                            id={`block-title-${editingBlock.id}`}
-                            value={editingBlock.title}
-                            onChange={(e) =>
-                              setDraftBlocks((prev) =>
-                                prev.map((x) => (x.id === editingBlock.id ? { ...x, title: e.target.value } : x)),
-                              )
-                            }
-                            className="min-h-11 w-full min-w-0 max-w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-base text-stone-900 placeholder:text-stone-500 touch-manipulation sm:min-h-0 sm:px-2 sm:py-1.5 sm:text-sm"
-                            placeholder="Заголовок блока"
-                            autoComplete="off"
-                          />
-                        </div>
-                        <div className="min-w-0">
-                          <label
-                            className="mb-1 block text-xs font-medium text-stone-600"
-                            htmlFor={`block-responsible-${editingBlock.id}`}
-                          >
-                            {isEditingSermonBlock
-                              ? 'Проповедник'
-                              : isEditingPrayerBlock
-                                ? 'Молитва'
-                                : 'Ответственный'}
-                          </label>
-                          <select
-                            id={`block-responsible-${editingBlock.id}`}
-                            value={editingBlock.assigned_member_id ?? ''}
-                            onChange={(e) => {
-                            const memberId = e.target.value ? Number(e.target.value) : null;
-                            const member = memberId ? members.find((u) => u.id === memberId) : null;
+                  </div>
+                </div>
+                {editingBlockId === b.id && editingBlock ? (
+                  <div className="mt-3 grid w-full min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-2">
+                    <div className="rounded-lg border border-stone-200 bg-stone-50 px-2.5 py-2 text-sm font-medium text-stone-700 sm:py-1.5">
+                      {editingBlock.block_type_name ?? 'Блок'}
+                    </div>
+                    <div className="min-w-0">
+                      <label className="mb-1 block text-xs font-medium text-stone-600" htmlFor={`block-duration-${editingBlock.id}`}>
+                        Длительность, мин
+                      </label>
+                      <input
+                        id={`block-duration-${editingBlock.id}`}
+                        type="number"
+                        min={1}
+                        max={180}
+                        value={editingBlock.duration_minutes}
+                        onChange={(e) =>
+                          setDraftBlocks((prev) =>
+                            prev.map((x) =>
+                              x.id === editingBlock.id
+                                ? { ...x, duration_minutes: Math.max(1, Number(e.target.value) || 1) }
+                                : x,
+                            ),
+                          )
+                        }
+                        className="min-h-11 w-full min-w-0 max-w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-base text-stone-900 touch-manipulation sm:min-h-0 sm:px-2 sm:py-1.5 sm:text-sm"
+                        inputMode="numeric"
+                      />
+                    </div>
+                    <div className="min-w-0 sm:col-span-2">
+                      <label className="mb-1 block text-xs font-medium text-stone-600" htmlFor={`block-title-${editingBlock.id}`}>
+                        Заголовок
+                      </label>
+                      <input
+                        id={`block-title-${editingBlock.id}`}
+                        value={editingBlock.title}
+                        onChange={(e) =>
+                          setDraftBlocks((prev) =>
+                            prev.map((x) => (x.id === editingBlock.id ? { ...x, title: e.target.value } : x)),
+                          )
+                        }
+                        className="min-h-11 w-full min-w-0 max-w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-base text-stone-900 placeholder:text-stone-500 touch-manipulation sm:min-h-0 sm:px-2 sm:py-1.5 sm:text-sm"
+                        placeholder="Заголовок блока"
+                        autoComplete="off"
+                      />
+                    </div>
+                    <div className="min-w-0">
+                      <label className="mb-1 block text-xs font-medium text-stone-600" htmlFor={`block-responsible-${editingBlock.id}`}>
+                        {isEditingSermonBlock ? 'Проповедник' : isEditingPrayerBlock ? 'Молитва' : 'Ответственный'}
+                      </label>
+                      <select
+                        id={`block-responsible-${editingBlock.id}`}
+                        value={editingBlock.assigned_member_id ?? ''}
+                        onChange={(e) => {
+                          const memberId = e.target.value ? Number(e.target.value) : null;
+                          const member = memberId ? members.find((u) => u.id === memberId) : null;
+                          setDraftBlocks((prev) =>
+                            prev.map((x) =>
+                              x.id === editingBlock.id
+                                ? {
+                                    ...x,
+                                    title: isEditingPoemBlock
+                                      ? member
+                                        ? `СТИХ - ${userLabel(member)}`
+                                        : 'СТИХ - Чтец'
+                                      : isEditingSermonBlock
+                                        ? (() => {
+                                            const topicRaw = x.content_json?.sermon_topic;
+                                            const topic = typeof topicRaw === 'string' ? topicRaw.trim() : '';
+                                            const preacherName = member ? userLabel(member) : 'Проповедник';
+                                            return topic ? `${preacherName} - ${topic}` : preacherName;
+                                          })()
+                                        : x.title,
+                                    assigned_member_id: memberId,
+                                    assigned_member_name: member ? userLabel(member) : null,
+                                  }
+                                : x,
+                            ),
+                          );
+                        }}
+                        className="min-h-11 w-full min-w-0 max-w-full rounded-lg border border-stone-300 bg-white px-2 py-2 text-base text-stone-900 touch-manipulation sm:min-h-0 sm:py-1.5 sm:text-sm"
+                      >
+                        <option value="">
+                          {isEditingSermonBlock
+                            ? 'Проповедник не назначен'
+                            : isEditingPrayerBlock
+                              ? 'Служитель молитвы не назначен'
+                              : 'Ответственный не назначен'}
+                        </option>
+                        {responsibleCandidates.map((u) => (
+                          <option key={u.id} value={u.id}>
+                            {userLabel(u)} ({roleLabel(u)})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    {isEditingSongBlock ? (
+                      <div className="min-w-0">
+                        <label className="mb-1 block text-xs font-medium text-stone-600" htmlFor={`block-song-${editingBlock.id}`}>
+                          Песня
+                        </label>
+                        <select
+                          id={`block-song-${editingBlock.id}`}
+                          value={editingBlock.song_id ?? ''}
+                          onChange={(e) => {
+                            const songId = e.target.value ? Number(e.target.value) : null;
+                            const song = songId ? songs.find((s) => s.id === songId) : null;
                             setDraftBlocks((prev) =>
                               prev.map((x) =>
                                 x.id === editingBlock.id
                                   ? {
                                       ...x,
-                                      title: isEditingPoemBlock
-                                        ? member
-                                          ? `СТИХ - ${userLabel(member)}`
-                                          : 'СТИХ - Чтец'
-                                        : isEditingSermonBlock
-                                          ? (() => {
-                                              const topicRaw = x.content_json?.sermon_topic;
-                                              const topic = typeof topicRaw === 'string' ? topicRaw.trim() : '';
-                                              const preacherName = member ? userLabel(member) : 'Проповедник';
-                                              return topic ? `${preacherName} - ${topic}` : preacherName;
-                                            })()
-                                          : x.title,
-                                      assigned_member_id: memberId,
-                                      assigned_member_name: member ? userLabel(member) : null,
+                                      song_id: songId,
+                                      song_title: song?.title ?? null,
+                                      song_key: song?.default_key ?? null,
+                                      title: song ? songBlockTitle(song) : x.title,
                                     }
                                   : x,
                               ),
                             );
                           }}
-                            className="min-h-11 w-full min-w-0 max-w-full rounded-lg border border-stone-300 bg-white px-2 py-2 text-base text-stone-900 touch-manipulation sm:min-h-0 sm:py-1.5 sm:text-sm"
+                          className="min-h-11 w-full min-w-0 max-w-full rounded-lg border border-stone-300 bg-white px-2 py-2 text-base text-stone-900 touch-manipulation sm:min-h-0 sm:py-1.5 sm:text-sm"
                         >
-                          <option value="">
-                            {isEditingSermonBlock
-                              ? 'Проповедник не назначен'
-                              : isEditingPrayerBlock
-                                ? 'Служитель молитвы не назначен'
-                                : 'Ответственный не назначен'}
-                          </option>
-                          {responsibleCandidates.map((u) => (
-                            <option key={u.id} value={u.id}>
-                              {userLabel(u)} ({roleLabel(u)})
+                          <option value="">Песня не назначена</option>
+                          {songs.map((s) => (
+                            <option key={s.id} value={s.id}>
+                              {s.default_key ? `${s.title} [${s.default_key}]` : s.title}
                             </option>
                           ))}
                         </select>
-                        </div>
-                        {isEditingSongBlock ? (
-                          <div className="min-w-0">
-                            <label
-                              className="mb-1 block text-xs font-medium text-stone-600"
-                              htmlFor={`block-song-${editingBlock.id}`}
-                            >
-                              Песня
+                      </div>
+                    ) : (
+                      <div className="rounded-lg border border-dashed border-stone-300 bg-stone-50 px-2.5 py-2 text-xs leading-snug text-stone-500 sm:col-span-2 sm:py-1.5">
+                        Для этого типа блока выбор песни не используется.
+                      </div>
+                    )}
+                    {isEditingPoemBlock ? (
+                      <div className="col-span-1 w-full min-w-0 space-y-2 rounded-xl border border-fuchsia-200/90 bg-fuchsia-50/50 p-3 sm:col-span-2">
+                        <p className="text-[11px] font-semibold uppercase tracking-wide text-fuchsia-800/90">Стих</p>
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          <div>
+                            <label className="mb-1 block text-xs font-medium text-stone-600" htmlFor={`poem-author-${editingBlock.id}`}>
+                              Автор
                             </label>
-                            <select
-                              id={`block-song-${editingBlock.id}`}
-                              value={editingBlock.song_id ?? ''}
-                              onChange={(e) => {
-                              const songId = e.target.value ? Number(e.target.value) : null;
-                              const song = songId ? songs.find((s) => s.id === songId) : null;
-                              setDraftBlocks((prev) =>
-                                prev.map((x) =>
-                                  x.id === editingBlock.id
-                                    ? {
-                                        ...x,
-                                        song_id: songId,
-                                        song_title: song?.title ?? null,
-                                        song_key: song?.default_key ?? null,
-                                        title: song ? songBlockTitle(song) : x.title,
-                                      }
-                                    : x,
-                                ),
-                              );
-                            }}
-                              className="min-h-11 w-full min-w-0 max-w-full rounded-lg border border-stone-300 bg-white px-2 py-2 text-base text-stone-900 touch-manipulation sm:min-h-0 sm:py-1.5 sm:text-sm"
-                            >
-                            <option value="">Песня не назначена</option>
-                            {songs.map((s) => (
-                              <option key={s.id} value={s.id}>
-                                {s.default_key ? `${s.title} [${s.default_key}]` : s.title}
-                              </option>
-                            ))}
-                          </select>
+                            <input
+                              id={`poem-author-${editingBlock.id}`}
+                              value={String((editingBlock.content_json?.poem_author as string | undefined) ?? '')}
+                              onChange={(e) =>
+                                setDraftBlocks((prev) =>
+                                  prev.map((x) =>
+                                    x.id === editingBlock.id
+                                      ? { ...x, content_json: { ...x.content_json, poem_author: e.target.value } }
+                                      : x,
+                                  ),
+                                )
+                              }
+                              className="min-h-11 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-base text-stone-900 placeholder:text-stone-500 touch-manipulation sm:min-h-0 sm:px-2.5 sm:py-1.5 sm:text-sm"
+                              placeholder="Автор стиха"
+                            />
                           </div>
-                        ) : (
-                          <div className="rounded-lg border border-dashed border-stone-300 bg-stone-50 px-2.5 py-2 text-xs leading-snug text-stone-500 sm:col-span-2 sm:py-1.5">
-                            Для этого типа блока выбор песни не используется.
+                          <div>
+                            <label className="mb-1 block text-xs font-medium text-stone-600" htmlFor={`poem-theme-${editingBlock.id}`}>
+                              Тема
+                            </label>
+                            <input
+                              id={`poem-theme-${editingBlock.id}`}
+                              value={String((editingBlock.content_json?.poem_theme as string | undefined) ?? '')}
+                              onChange={(e) =>
+                                setDraftBlocks((prev) =>
+                                  prev.map((x) =>
+                                    x.id === editingBlock.id
+                                      ? { ...x, content_json: { ...x.content_json, poem_theme: e.target.value } }
+                                      : x,
+                                  ),
+                                )
+                              }
+                              className="min-h-11 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-base text-stone-900 placeholder:text-stone-500 touch-manipulation sm:min-h-0 sm:px-2.5 sm:py-1.5 sm:text-sm"
+                              placeholder="Тема стиха"
+                            />
                           </div>
-                        )}
-                        {isEditingPoemBlock ? (
-                          <div className="col-span-1 w-full min-w-0 sm:col-span-2 space-y-2 rounded-xl border border-fuchsia-200/90 bg-fuchsia-50/50 p-3">
-                            <p className="text-[11px] font-semibold uppercase tracking-wide text-fuchsia-800/90">Стих</p>
-                            <div className="grid gap-3 sm:grid-cols-2">
-                              <div>
-                                <label className="mb-1 block text-xs font-medium text-stone-600" htmlFor={`poem-author-${editingBlock.id}`}>
-                                  Автор
-                                </label>
-                                <input
-                                  id={`poem-author-${editingBlock.id}`}
-                                  value={String((editingBlock.content_json?.poem_author as string | undefined) ?? '')}
-                                  onChange={(e) =>
-                                    setDraftBlocks((prev) =>
-                                      prev.map((x) =>
-                                        x.id === editingBlock.id
-                                          ? { ...x, content_json: { ...x.content_json, poem_author: e.target.value } }
-                                          : x,
-                                      ),
-                                    )
-                                  }
-                                  className="min-h-11 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-base text-stone-900 placeholder:text-stone-500 touch-manipulation sm:min-h-0 sm:px-2.5 sm:py-1.5 sm:text-sm"
-                                  placeholder="Автор стиха"
-                                />
-                              </div>
-                              <div>
-                                <label className="mb-1 block text-xs font-medium text-stone-600" htmlFor={`poem-theme-${editingBlock.id}`}>
-                                  Тема
-                                </label>
-                                <input
-                                  id={`poem-theme-${editingBlock.id}`}
-                                  value={String((editingBlock.content_json?.poem_theme as string | undefined) ?? '')}
-                                  onChange={(e) =>
-                                    setDraftBlocks((prev) =>
-                                      prev.map((x) =>
-                                        x.id === editingBlock.id
-                                          ? { ...x, content_json: { ...x.content_json, poem_theme: e.target.value } }
-                                          : x,
-                                      ),
-                                    )
-                                  }
-                                  className="min-h-11 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-base text-stone-900 placeholder:text-stone-500 touch-manipulation sm:min-h-0 sm:px-2.5 sm:py-1.5 sm:text-sm"
-                                  placeholder="Тема стиха"
-                                />
-                              </div>
-                            </div>
-                          </div>
-                        ) : null}
-                        {isEditingSermonBlock ? (
-                          <div className="col-span-1 w-full min-w-0 sm:col-span-2 space-y-2 rounded-xl border border-rose-200/90 bg-rose-50/50 p-3">
-                            <p className="text-[11px] font-semibold uppercase tracking-wide text-rose-800/90">Проповедь</p>
-                            <div className="grid gap-3 sm:grid-cols-2">
-                              <div>
-                                <label
-                                  className="mb-1 block text-xs font-medium text-stone-600"
-                                  htmlFor={`sermon-topic-${editingBlock.id}`}
-                                >
-                                  Тема
-                                </label>
-                                <input
-                                  id={`sermon-topic-${editingBlock.id}`}
-                                  value={String((editingBlock.content_json?.sermon_topic as string | undefined) ?? '')}
-                                  onChange={(e) =>
-                                    setDraftBlocks((prev) =>
-                                      prev.map((x) => {
-                                        if (x.id !== editingBlock.id) return x;
-                                        const nextTopic = e.target.value;
-                                        const preacherRaw = members.find((u) => u.id === x.assigned_member_id) ?? null;
-                                        const preacherName = preacherRaw ? userLabel(preacherRaw) : 'Проповедник';
-                                        const topicTrim = nextTopic.trim();
-                                        return {
-                                          ...x,
-                                          title: topicTrim ? `${preacherName} - ${topicTrim}` : preacherName,
-                                          content_json: { ...x.content_json, sermon_topic: nextTopic },
-                                        };
-                                      }),
-                                    )
-                                  }
-                                  className="min-h-11 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-base text-stone-900 placeholder:text-stone-500 touch-manipulation sm:min-h-0 sm:px-2.5 sm:py-1.5 sm:text-sm"
-                                  placeholder="Тема проповеди"
-                                />
-                              </div>
-                              <div>
-                                <label
-                                  className="mb-1 block text-xs font-medium text-stone-600"
-                                  htmlFor={`sermon-scripture-${editingBlock.id}`}
-                                >
-                                  Писание
-                                </label>
-                                <input
-                                  id={`sermon-scripture-${editingBlock.id}`}
-                                  value={String((editingBlock.content_json?.sermon_scripture as string | undefined) ?? '')}
-                                  onChange={(e) =>
-                                    setDraftBlocks((prev) =>
-                                      prev.map((x) =>
-                                        x.id === editingBlock.id
-                                          ? { ...x, content_json: { ...x.content_json, sermon_scripture: e.target.value } }
-                                          : x,
-                                      ),
-                                    )
-                                  }
-                                  className="min-h-11 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-base text-stone-900 placeholder:text-stone-500 touch-manipulation sm:min-h-0 sm:px-2.5 sm:py-1.5 sm:text-sm"
-                                  placeholder="Стихи из Библии"
-                                />
-                              </div>
-                            </div>
-                          </div>
-                        ) : null}
-                        <BlockExtraInfoPanel rows={getEditFormAuxiliaryRows(editingBlock)} variant="edit" />
-                        <div className="col-span-1 w-full min-w-0 sm:col-span-2">
-                          <label className="mb-1 block text-xs font-medium text-stone-600" htmlFor={`block-note-${editingBlock.id}`}>
-                            Заметка
-                          </label>
-                          <textarea
-                            id={`block-note-${editingBlock.id}`}
-                            value={blockNote(editingBlock.content_json)}
-                            onChange={(e) =>
-                              setDraftBlocks((prev) =>
-                                prev.map((x) => {
-                                  if (x.id !== editingBlock.id) return x;
-                                  const hasNotes = typeof x.content_json?.notes === 'string';
-                                  const hasText = typeof x.content_json?.text === 'string';
-                                  if (hasNotes) {
-                                    return { ...x, content_json: { ...x.content_json, notes: e.target.value } };
-                                  }
-                                  if (hasText) {
-                                    return { ...x, content_json: { ...x.content_json, text: e.target.value } };
-                                  }
-                                  return { ...x, content_json: { ...x.content_json, notes: e.target.value } };
-                                }),
-                              )
-                            }
-                            className="min-h-[100px] w-full min-w-0 max-w-full rounded-lg border border-stone-300 bg-white px-3 py-2.5 text-base text-stone-900 placeholder:text-stone-500 touch-manipulation sm:min-h-[84px] sm:px-2 sm:py-1.5 sm:text-sm"
-                            placeholder="Заметка блока"
-                            rows={4}
-                          />
-                        </div>
-                        {isBirthdaysBlock(editingBlock) ? (
-                          <div className="col-span-1 w-full min-w-0 rounded-lg border border-stone-200 bg-stone-50 px-2.5 py-2 text-xs text-stone-600 sm:col-span-2 sm:px-2">
-                            <p className="font-semibold">Именинники недели:</p>
-                            <p className="mt-1">
-                              {birthdayRows(editingBlock.content_json).length > 0
-                                ? birthdayRows(editingBlock.content_json).join(' • ')
-                                : 'На этой неделе именинников нет'}
-                            </p>
-                          </div>
-                        ) : null}
-                        {scheduleRows(editingBlock.content_json).length > 0 ? (
-                          <div className="col-span-1 w-full min-w-0 rounded-lg border border-stone-200 bg-stone-50 px-2.5 py-2 text-xs text-stone-600 sm:col-span-2 sm:px-2">
-                            <p className="font-semibold">Расписание:</p>
-                            <ul className="mt-1 space-y-0.5">
-                              {scheduleRows(editingBlock.content_json).map((line) => (
-                                <li key={line}>{line}</li>
-                              ))}
-                            </ul>
-                          </div>
-                        ) : null}
-                        <div className="mt-1 flex w-full min-w-0 sm:col-span-2 sm:mt-0 sm:justify-end">
-                          <button
-                            type="button"
-                            onClick={() => void saveBlockMut.mutateAsync(editingBlock)}
-                            disabled={saveBlockMut.isPending}
-                            className="inline-flex w-full min-h-12 items-center justify-center gap-2 rounded-lg bg-primary px-4 text-base font-semibold text-white touch-manipulation hover:bg-primary-dark disabled:cursor-not-allowed disabled:opacity-70 sm:w-auto sm:min-h-0 sm:px-3 sm:py-1.5 sm:text-sm"
-                          >
-                            {saveBlockMut.isPending ? (
-                              <LuLoaderCircle className="h-5 w-5 shrink-0 animate-spin sm:h-4 sm:w-4" />
-                            ) : (
-                              <LuSave className="h-5 w-5 shrink-0 sm:h-4 sm:w-4" />
-                            )}
-                            Сохранить блок
-                          </button>
                         </div>
                       </div>
                     ) : null}
+                    {isEditingSermonBlock ? (
+                      <div className="col-span-1 w-full min-w-0 space-y-2 rounded-xl border border-rose-200/90 bg-rose-50/50 p-3 sm:col-span-2">
+                        <p className="text-[11px] font-semibold uppercase tracking-wide text-rose-800/90">Проповедь</p>
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          <div>
+                            <label className="mb-1 block text-xs font-medium text-stone-600" htmlFor={`sermon-topic-${editingBlock.id}`}>
+                              Тема
+                            </label>
+                            <input
+                              id={`sermon-topic-${editingBlock.id}`}
+                              value={String((editingBlock.content_json?.sermon_topic as string | undefined) ?? '')}
+                              onChange={(e) =>
+                                setDraftBlocks((prev) =>
+                                  prev.map((x) => {
+                                    if (x.id !== editingBlock.id) return x;
+                                    const nextTopic = e.target.value;
+                                    const preacherRaw = members.find((u) => u.id === x.assigned_member_id) ?? null;
+                                    const preacherName = preacherRaw ? userLabel(preacherRaw) : 'Проповедник';
+                                    const topicTrim = nextTopic.trim();
+                                    return {
+                                      ...x,
+                                      title: topicTrim ? `${preacherName} - ${topicTrim}` : preacherName,
+                                      content_json: { ...x.content_json, sermon_topic: nextTopic },
+                                    };
+                                  }),
+                                )
+                              }
+                              className="min-h-11 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-base text-stone-900 placeholder:text-stone-500 touch-manipulation sm:min-h-0 sm:px-2.5 sm:py-1.5 sm:text-sm"
+                              placeholder="Тема проповеди"
+                            />
+                          </div>
+                          <div>
+                            <label className="mb-1 block text-xs font-medium text-stone-600" htmlFor={`sermon-scripture-${editingBlock.id}`}>
+                              Писание
+                            </label>
+                            <input
+                              id={`sermon-scripture-${editingBlock.id}`}
+                              value={String((editingBlock.content_json?.sermon_scripture as string | undefined) ?? '')}
+                              onChange={(e) =>
+                                setDraftBlocks((prev) =>
+                                  prev.map((x) =>
+                                    x.id === editingBlock.id
+                                      ? { ...x, content_json: { ...x.content_json, sermon_scripture: e.target.value } }
+                                      : x,
+                                  ),
+                                )
+                              }
+                              className="min-h-11 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-base text-stone-900 placeholder:text-stone-500 touch-manipulation sm:min-h-0 sm:px-2.5 sm:py-1.5 sm:text-sm"
+                              placeholder="Стихи из Библии"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    ) : null}
+                    <BlockExtraInfoPanel rows={getEditFormAuxiliaryRows(editingBlock)} variant="edit" />
+                    <div className="col-span-1 w-full min-w-0 sm:col-span-2">
+                      <label className="mb-1 block text-xs font-medium text-stone-600" htmlFor={`block-note-${editingBlock.id}`}>
+                        Заметка
+                      </label>
+                      <textarea
+                        id={`block-note-${editingBlock.id}`}
+                        value={blockNote(editingBlock.content_json)}
+                        onChange={(e) =>
+                          setDraftBlocks((prev) =>
+                            prev.map((x) => {
+                              if (x.id !== editingBlock.id) return x;
+                              const hasNotes = typeof x.content_json?.notes === 'string';
+                              const hasText = typeof x.content_json?.text === 'string';
+                              if (hasNotes) return { ...x, content_json: { ...x.content_json, notes: e.target.value } };
+                              if (hasText) return { ...x, content_json: { ...x.content_json, text: e.target.value } };
+                              return { ...x, content_json: { ...x.content_json, notes: e.target.value } };
+                            }),
+                          )
+                        }
+                        className="min-h-[100px] w-full min-w-0 max-w-full rounded-lg border border-stone-300 bg-white px-3 py-2.5 text-base text-stone-900 placeholder:text-stone-500 touch-manipulation sm:min-h-[84px] sm:px-2 sm:py-1.5 sm:text-sm"
+                        placeholder="Заметка блока"
+                        rows={4}
+                      />
+                    </div>
+                    {isBirthdaysBlock(editingBlock) ? (
+                      <div className="col-span-1 w-full min-w-0 rounded-lg border border-stone-200 bg-stone-50 px-2.5 py-2 text-xs text-stone-600 sm:col-span-2 sm:px-2">
+                        <p className="font-semibold">Именинники недели:</p>
+                        <p className="mt-1">
+                          {birthdayRows(editingBlock.content_json).length > 0
+                            ? birthdayRows(editingBlock.content_json).join(' • ')
+                            : 'На этой неделе именинников нет'}
+                        </p>
+                      </div>
+                    ) : null}
+                    {scheduleRows(editingBlock.content_json).length > 0 ? (
+                      <div className="col-span-1 w-full min-w-0 rounded-lg border border-stone-200 bg-stone-50 px-2.5 py-2 text-xs text-stone-600 sm:col-span-2 sm:px-2">
+                        <p className="font-semibold">Расписание:</p>
+                        <ul className="mt-1 space-y-0.5">
+                          {scheduleRows(editingBlock.content_json).map((line) => (
+                            <li key={line}>{line}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    ) : null}
+                    <div className="mt-1 flex w-full min-w-0 sm:col-span-2 sm:mt-0 sm:justify-end">
+                      <button
+                        type="button"
+                        onClick={() => void saveBlockMut.mutateAsync(editingBlock)}
+                        disabled={saveBlockMut.isPending}
+                        className="inline-flex w-full max-w-full min-h-12 items-center justify-center gap-2 rounded-lg bg-primary px-3 text-base font-semibold text-white touch-manipulation hover:bg-primary-dark disabled:cursor-not-allowed disabled:opacity-70 sm:w-auto sm:min-h-0 sm:px-3 sm:py-1.5 sm:text-sm"
+                      >
+                        {saveBlockMut.isPending ? (
+                          <LuLoaderCircle className="h-5 w-5 shrink-0 animate-spin sm:h-4 sm:w-4" />
+                        ) : (
+                          <LuSave className="h-5 w-5 shrink-0 sm:h-4 sm:w-4" />
+                        )}
+                        Сохранить блок
+                      </button>
+                    </div>
                   </div>
-                </div>
+                ) : null}
               </article>
             );
           })}
