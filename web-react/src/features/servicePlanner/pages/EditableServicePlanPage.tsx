@@ -220,6 +220,118 @@ function isBirthdaysBlock(block: { block_type_code: string | null; block_type_na
   return block.block_type_code === 'birthdays' || normalizeText(block.block_type_name ?? '').includes('дни рождения');
 }
 
+function isPoemBlockType(block: { block_type_code: string | null; block_type_name: string | null }): boolean {
+  return block.block_type_code === 'poem' || normalizeText(block.block_type_name ?? '').includes('стих');
+}
+
+function isSermonBlockType(block: { block_type_code: string | null; block_type_name: string | null }): boolean {
+  return block.block_type_code === 'sermon' || normalizeText(block.block_type_name ?? '').includes('проповед');
+}
+
+/** Строки, которые обрабатываем явно; остальные строки в `content_json` выводим как «доп. поля». */
+const CONTENT_JSON_EXCLUDED_FOR_GENERIC: Set<string> = new Set([
+  'is_separator',
+  'separator_text',
+  'block_mark',
+  'block_mark_icon',
+  'block_logo_url',
+  'birthday_people',
+  'schedule_events',
+  'poem_author',
+  'poem_theme',
+  'sermon_topic',
+  'sermon_scripture',
+  'direction',
+  'notes',
+  'text',
+]);
+
+const GENERIC_STRING_LABELS: Record<string, string> = {
+  default_assigned_member_id: 'ID ответственного',
+};
+
+type ExtraDisplayRow = { label: string; value: string };
+
+function poemSubline(author: string, theme: string): string {
+  if (author && theme) return `${author} • ${theme}`;
+  return author || theme;
+}
+
+function getBlockExtraDisplayRows(
+  b: EditableBlock,
+  opts?: { forCard?: boolean },
+): ExtraDisplayRow[] {
+  const cj = b.content_json;
+  const forCard = opts?.forCard ?? false;
+  const rows: ExtraDisplayRow[] = [];
+  if (isPoemBlockType(b)) {
+    const author = typeof cj.poem_author === 'string' ? cj.poem_author.trim() : '';
+    const theme = typeof cj.poem_theme === 'string' ? cj.poem_theme.trim() : '';
+    if (forCard) {
+      const line = poemSubline(author, theme);
+      if (line) rows.push({ label: 'Стих', value: line });
+    } else {
+      if (author) rows.push({ label: 'Автор', value: author });
+      if (theme) rows.push({ label: 'Тема', value: theme });
+    }
+  }
+  if (isSermonBlockType(b)) {
+    const topic = typeof cj.sermon_topic === 'string' ? cj.sermon_topic.trim() : '';
+    const scripture = typeof cj.sermon_scripture === 'string' ? cj.sermon_scripture.trim() : '';
+    if (topic) rows.push({ label: 'Тема проповеди', value: topic });
+    if (scripture) rows.push({ label: 'Писание', value: scripture });
+  }
+  const direction = typeof cj.direction === 'string' ? cj.direction.trim() : '';
+  if (direction) rows.push({ label: 'Направление', value: direction });
+  for (const [key, v] of Object.entries(cj)) {
+    if (CONTENT_JSON_EXCLUDED_FOR_GENERIC.has(key)) continue;
+    if (typeof v !== 'string' || !v.trim()) continue;
+    rows.push({ label: GENERIC_STRING_LABELS[key] ?? key, value: v.trim() });
+  }
+  const note = blockNote(cj).trim();
+  if (note) rows.push({ label: 'Заметка', value: note });
+  return rows;
+}
+
+/** В форме редактирования: направление и прочие строки без дублирования полей стиха/проповеди/заметки. */
+function getEditFormAuxiliaryRows(b: EditableBlock): ExtraDisplayRow[] {
+  const cj = b.content_json;
+  const rows: ExtraDisplayRow[] = [];
+  const direction = typeof cj.direction === 'string' ? cj.direction.trim() : '';
+  if (direction) rows.push({ label: 'Направление', value: direction });
+  for (const [key, v] of Object.entries(cj)) {
+    if (CONTENT_JSON_EXCLUDED_FOR_GENERIC.has(key)) continue;
+    if (typeof v !== 'string' || !v.trim()) continue;
+    rows.push({ label: GENERIC_STRING_LABELS[key] ?? key, value: v.trim() });
+  }
+  return rows;
+}
+
+function BlockExtraInfoPanel({ rows, variant }: { rows: ExtraDisplayRow[]; variant: 'card' | 'edit' }) {
+  if (rows.length === 0) return null;
+  return (
+    <div
+      className={
+        variant === 'card'
+          ? 'mt-2 space-y-1.5 rounded-lg border border-stone-200/90 bg-stone-50/90 px-2.5 py-2'
+          : 'sm:col-span-2 space-y-1.5 rounded-lg border border-stone-200/90 bg-stone-50/90 px-2.5 py-2'
+      }
+    >
+      {variant === 'edit' ? (
+        <p className="text-[10px] font-semibold uppercase tracking-wide text-stone-500">Дополнительно</p>
+      ) : null}
+      <dl className="space-y-1 text-xs text-stone-700">
+        {rows.map((r) => (
+          <div key={`${r.label}-${r.value.slice(0, 32)}`} className="flex flex-col gap-0.5 sm:flex-row sm:gap-2">
+            <dt className="shrink-0 font-semibold text-stone-600 sm:min-w-[7.5rem]">{r.label}</dt>
+            <dd className="min-w-0 whitespace-pre-wrap leading-snug text-stone-800">{r.value}</dd>
+          </div>
+        ))}
+      </dl>
+    </div>
+  );
+}
+
 export function EditableServicePlanPage() {
   const { token } = useParams<{ token: string }>();
   const qc = useQueryClient();
@@ -442,14 +554,22 @@ export function EditableServicePlanPage() {
                             </ul>
                           </div>
                         ) : null}
+                        <BlockExtraInfoPanel
+                          rows={getBlockExtraDisplayRows(b, { forCard: true })}
+                          variant="card"
+                        />
                       </div>
                       <button
                         type="button"
                         onClick={() => setEditingBlockId((prev) => (prev === b.id ? null : b.id))}
-                        className="inline-flex items-center gap-1 rounded-lg border border-stone-300 px-2.5 py-1 text-xs font-semibold text-stone-700 hover:border-primary hover:text-primary"
+                        aria-label={editingBlockId === b.id ? 'Скрыть редактирование' : 'Редактировать блок'}
+                        title={editingBlockId === b.id ? 'Скрыть' : 'Редактировать'}
+                        className="inline-flex shrink-0 items-center justify-center gap-1 rounded-lg border border-stone-300 p-1.5 text-stone-700 hover:border-primary hover:text-primary sm:px-2.5 sm:py-1 sm:text-xs sm:font-semibold"
                       >
                         <LuPencil className="h-3.5 w-3.5" />
-                        {editingBlockId === b.id ? 'Скрыть' : 'Редактировать'}
+                        <span className="hidden sm:inline">
+                          {editingBlockId === b.id ? 'Скрыть' : 'Редактировать'}
+                        </span>
                       </button>
                     </div>
 
@@ -563,97 +683,140 @@ export function EditableServicePlanPage() {
                           </div>
                         )}
                         {isEditingPoemBlock ? (
-                          <>
-                            <input
-                              value={String((editingBlock.content_json?.poem_author as string | undefined) ?? '')}
-                              onChange={(e) =>
-                                setDraftBlocks((prev) =>
-                                  prev.map((x) =>
-                                    x.id === editingBlock.id
-                                      ? { ...x, content_json: { ...x.content_json, poem_author: e.target.value } }
-                                      : x,
-                                  ),
-                                )
-                              }
-                              className="rounded-lg border border-stone-300 bg-white px-2 py-1.5 text-sm text-stone-900 placeholder:text-stone-500"
-                              placeholder="Автор стиха"
-                            />
-                            <input
-                              value={String((editingBlock.content_json?.poem_theme as string | undefined) ?? '')}
-                              onChange={(e) =>
-                                setDraftBlocks((prev) =>
-                                  prev.map((x) =>
-                                    x.id === editingBlock.id
-                                      ? { ...x, content_json: { ...x.content_json, poem_theme: e.target.value } }
-                                      : x,
-                                  ),
-                                )
-                              }
-                              className="rounded-lg border border-stone-300 bg-white px-2 py-1.5 text-sm text-stone-900 placeholder:text-stone-500"
-                              placeholder="Тема стиха"
-                            />
-                          </>
+                          <div className="sm:col-span-2 space-y-2 rounded-xl border border-fuchsia-200/90 bg-fuchsia-50/50 p-3">
+                            <p className="text-[11px] font-semibold uppercase tracking-wide text-fuchsia-800/90">Стих</p>
+                            <div className="grid gap-3 sm:grid-cols-2">
+                              <div>
+                                <label className="mb-1 block text-xs font-medium text-stone-600" htmlFor={`poem-author-${editingBlock.id}`}>
+                                  Автор
+                                </label>
+                                <input
+                                  id={`poem-author-${editingBlock.id}`}
+                                  value={String((editingBlock.content_json?.poem_author as string | undefined) ?? '')}
+                                  onChange={(e) =>
+                                    setDraftBlocks((prev) =>
+                                      prev.map((x) =>
+                                        x.id === editingBlock.id
+                                          ? { ...x, content_json: { ...x.content_json, poem_author: e.target.value } }
+                                          : x,
+                                      ),
+                                    )
+                                  }
+                                  className="w-full rounded-lg border border-stone-300 bg-white px-2.5 py-1.5 text-sm text-stone-900 placeholder:text-stone-500"
+                                  placeholder="Автор стиха"
+                                />
+                              </div>
+                              <div>
+                                <label className="mb-1 block text-xs font-medium text-stone-600" htmlFor={`poem-theme-${editingBlock.id}`}>
+                                  Тема
+                                </label>
+                                <input
+                                  id={`poem-theme-${editingBlock.id}`}
+                                  value={String((editingBlock.content_json?.poem_theme as string | undefined) ?? '')}
+                                  onChange={(e) =>
+                                    setDraftBlocks((prev) =>
+                                      prev.map((x) =>
+                                        x.id === editingBlock.id
+                                          ? { ...x, content_json: { ...x.content_json, poem_theme: e.target.value } }
+                                          : x,
+                                      ),
+                                    )
+                                  }
+                                  className="w-full rounded-lg border border-stone-300 bg-white px-2.5 py-1.5 text-sm text-stone-900 placeholder:text-stone-500"
+                                  placeholder="Тема стиха"
+                                />
+                              </div>
+                            </div>
+                          </div>
                         ) : null}
                         {isEditingSermonBlock ? (
-                          <>
-                            <input
-                              value={String((editingBlock.content_json?.sermon_topic as string | undefined) ?? '')}
-                              onChange={(e) =>
-                                setDraftBlocks((prev) =>
-                                  prev.map((x) => {
-                                    if (x.id !== editingBlock.id) return x;
-                                    const nextTopic = e.target.value;
-                                    const preacherRaw = members.find((u) => u.id === x.assigned_member_id) ?? null;
-                                    const preacherName = preacherRaw ? userLabel(preacherRaw) : 'Проповедник';
-                                    const topicTrim = nextTopic.trim();
-                                    return {
-                                      ...x,
-                                      title: topicTrim ? `${preacherName} - ${topicTrim}` : preacherName,
-                                      content_json: { ...x.content_json, sermon_topic: nextTopic },
-                                    };
-                                  }),
-                                )
-                              }
-                              className="rounded-lg border border-stone-300 bg-white px-2 py-1.5 text-sm text-stone-900 placeholder:text-stone-500"
-                              placeholder="Тема проповеди"
-                            />
-                            <input
-                              value={String((editingBlock.content_json?.sermon_scripture as string | undefined) ?? '')}
-                              onChange={(e) =>
-                                setDraftBlocks((prev) =>
-                                  prev.map((x) =>
-                                    x.id === editingBlock.id
-                                      ? { ...x, content_json: { ...x.content_json, sermon_scripture: e.target.value } }
-                                      : x,
-                                  ),
-                                )
-                              }
-                              className="rounded-lg border border-stone-300 bg-white px-2 py-1.5 text-sm text-stone-900 placeholder:text-stone-500"
-                              placeholder="Стихи из Библии"
-                            />
-                          </>
+                          <div className="sm:col-span-2 space-y-2 rounded-xl border border-rose-200/90 bg-rose-50/50 p-3">
+                            <p className="text-[11px] font-semibold uppercase tracking-wide text-rose-800/90">Проповедь</p>
+                            <div className="grid gap-3 sm:grid-cols-2">
+                              <div>
+                                <label
+                                  className="mb-1 block text-xs font-medium text-stone-600"
+                                  htmlFor={`sermon-topic-${editingBlock.id}`}
+                                >
+                                  Тема
+                                </label>
+                                <input
+                                  id={`sermon-topic-${editingBlock.id}`}
+                                  value={String((editingBlock.content_json?.sermon_topic as string | undefined) ?? '')}
+                                  onChange={(e) =>
+                                    setDraftBlocks((prev) =>
+                                      prev.map((x) => {
+                                        if (x.id !== editingBlock.id) return x;
+                                        const nextTopic = e.target.value;
+                                        const preacherRaw = members.find((u) => u.id === x.assigned_member_id) ?? null;
+                                        const preacherName = preacherRaw ? userLabel(preacherRaw) : 'Проповедник';
+                                        const topicTrim = nextTopic.trim();
+                                        return {
+                                          ...x,
+                                          title: topicTrim ? `${preacherName} - ${topicTrim}` : preacherName,
+                                          content_json: { ...x.content_json, sermon_topic: nextTopic },
+                                        };
+                                      }),
+                                    )
+                                  }
+                                  className="w-full rounded-lg border border-stone-300 bg-white px-2.5 py-1.5 text-sm text-stone-900 placeholder:text-stone-500"
+                                  placeholder="Тема проповеди"
+                                />
+                              </div>
+                              <div>
+                                <label
+                                  className="mb-1 block text-xs font-medium text-stone-600"
+                                  htmlFor={`sermon-scripture-${editingBlock.id}`}
+                                >
+                                  Писание
+                                </label>
+                                <input
+                                  id={`sermon-scripture-${editingBlock.id}`}
+                                  value={String((editingBlock.content_json?.sermon_scripture as string | undefined) ?? '')}
+                                  onChange={(e) =>
+                                    setDraftBlocks((prev) =>
+                                      prev.map((x) =>
+                                        x.id === editingBlock.id
+                                          ? { ...x, content_json: { ...x.content_json, sermon_scripture: e.target.value } }
+                                          : x,
+                                      ),
+                                    )
+                                  }
+                                  className="w-full rounded-lg border border-stone-300 bg-white px-2.5 py-1.5 text-sm text-stone-900 placeholder:text-stone-500"
+                                  placeholder="Стихи из Библии"
+                                />
+                              </div>
+                            </div>
+                          </div>
                         ) : null}
-                        <textarea
-                          value={blockNote(editingBlock.content_json)}
-                          onChange={(e) =>
-                            setDraftBlocks((prev) =>
-                              prev.map((x) => {
-                                if (x.id !== editingBlock.id) return x;
-                                const hasNotes = typeof x.content_json?.notes === 'string';
-                                const hasText = typeof x.content_json?.text === 'string';
-                                if (hasNotes) {
+                        <BlockExtraInfoPanel rows={getEditFormAuxiliaryRows(editingBlock)} variant="edit" />
+                        <div className="sm:col-span-2">
+                          <label className="mb-1 block text-xs font-medium text-stone-600" htmlFor={`block-note-${editingBlock.id}`}>
+                            Заметка
+                          </label>
+                          <textarea
+                            id={`block-note-${editingBlock.id}`}
+                            value={blockNote(editingBlock.content_json)}
+                            onChange={(e) =>
+                              setDraftBlocks((prev) =>
+                                prev.map((x) => {
+                                  if (x.id !== editingBlock.id) return x;
+                                  const hasNotes = typeof x.content_json?.notes === 'string';
+                                  const hasText = typeof x.content_json?.text === 'string';
+                                  if (hasNotes) {
+                                    return { ...x, content_json: { ...x.content_json, notes: e.target.value } };
+                                  }
+                                  if (hasText) {
+                                    return { ...x, content_json: { ...x.content_json, text: e.target.value } };
+                                  }
                                   return { ...x, content_json: { ...x.content_json, notes: e.target.value } };
-                                }
-                                if (hasText) {
-                                  return { ...x, content_json: { ...x.content_json, text: e.target.value } };
-                                }
-                                return { ...x, content_json: { ...x.content_json, notes: e.target.value } };
-                              }),
-                            )
-                          }
-                          className="min-h-[84px] rounded-lg border border-stone-300 bg-white px-2 py-1.5 text-sm text-stone-900 placeholder:text-stone-500 sm:col-span-2"
-                          placeholder="Заметка блока"
-                        />
+                                }),
+                              )
+                            }
+                            className="min-h-[84px] w-full rounded-lg border border-stone-300 bg-white px-2 py-1.5 text-sm text-stone-900 placeholder:text-stone-500"
+                            placeholder="Заметка блока"
+                          />
+                        </div>
                         {isBirthdaysBlock(editingBlock) ? (
                           <div className="rounded-lg border border-stone-200 bg-stone-50 px-2 py-2 text-xs text-stone-600 sm:col-span-2">
                             <p className="font-semibold">Именинники недели:</p>
