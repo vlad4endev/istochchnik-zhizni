@@ -313,6 +313,8 @@ export function EditableServicePlanPage() {
   const prayerCandidates = members.filter((u) => isPrayerCandidate(u));
   const editingBlockTypeMeta = blockTypes.find((t) => t.id === editingBlock?.block_type_id) ?? null;
   const isEditingSongBlock = (editingBlockTypeMeta?.kind ?? 'custom') === 'song';
+  const isEditingPoemBlock =
+    editingBlockTypeMeta?.code === 'poem' || normalizeText(editingBlockTypeMeta?.name ?? '').includes('стих');
   const isEditingSermonBlock =
     editingBlockTypeMeta?.code === 'sermon' || normalizeText(editingBlockTypeMeta?.name ?? '').includes('проповед');
   const isEditingPrayerBlock =
@@ -504,6 +506,18 @@ export function EditableServicePlanPage() {
                                 x.id === editingBlock.id
                                   ? {
                                       ...x,
+                                      title: isEditingPoemBlock
+                                        ? member
+                                          ? `СТИХ - ${userLabel(member)}`
+                                          : 'СТИХ - Чтец'
+                                        : isEditingSermonBlock
+                                          ? (() => {
+                                              const topicRaw = x.content_json?.sermon_topic;
+                                              const topic = typeof topicRaw === 'string' ? topicRaw.trim() : '';
+                                              const preacherName = member ? userLabel(member) : 'Проповедник';
+                                              return topic ? `${preacherName} - ${topic}` : preacherName;
+                                            })()
+                                          : x.title,
                                       assigned_member_id: memberId,
                                       assigned_member_name: member ? userLabel(member) : null,
                                     }
@@ -560,6 +574,77 @@ export function EditableServicePlanPage() {
                             Для этого типа блока выбор песни не используется.
                           </div>
                         )}
+                        {isEditingPoemBlock ? (
+                          <>
+                            <input
+                              value={String((editingBlock.content_json?.poem_author as string | undefined) ?? '')}
+                              onChange={(e) =>
+                                setDraftBlocks((prev) =>
+                                  prev.map((x) =>
+                                    x.id === editingBlock.id
+                                      ? { ...x, content_json: { ...x.content_json, poem_author: e.target.value } }
+                                      : x,
+                                  ),
+                                )
+                              }
+                              className="rounded-lg border border-stone-300 bg-white px-2 py-1.5 text-sm text-stone-900 placeholder:text-stone-500"
+                              placeholder="Автор стиха"
+                            />
+                            <input
+                              value={String((editingBlock.content_json?.poem_theme as string | undefined) ?? '')}
+                              onChange={(e) =>
+                                setDraftBlocks((prev) =>
+                                  prev.map((x) =>
+                                    x.id === editingBlock.id
+                                      ? { ...x, content_json: { ...x.content_json, poem_theme: e.target.value } }
+                                      : x,
+                                  ),
+                                )
+                              }
+                              className="rounded-lg border border-stone-300 bg-white px-2 py-1.5 text-sm text-stone-900 placeholder:text-stone-500"
+                              placeholder="Тема стиха"
+                            />
+                          </>
+                        ) : null}
+                        {isEditingSermonBlock ? (
+                          <>
+                            <input
+                              value={String((editingBlock.content_json?.sermon_topic as string | undefined) ?? '')}
+                              onChange={(e) =>
+                                setDraftBlocks((prev) =>
+                                  prev.map((x) => {
+                                    if (x.id !== editingBlock.id) return x;
+                                    const nextTopic = e.target.value;
+                                    const preacherRaw = members.find((u) => u.id === x.assigned_member_id) ?? null;
+                                    const preacherName = preacherRaw ? userLabel(preacherRaw) : 'Проповедник';
+                                    const topicTrim = nextTopic.trim();
+                                    return {
+                                      ...x,
+                                      title: topicTrim ? `${preacherName} - ${topicTrim}` : preacherName,
+                                      content_json: { ...x.content_json, sermon_topic: nextTopic },
+                                    };
+                                  }),
+                                )
+                              }
+                              className="rounded-lg border border-stone-300 bg-white px-2 py-1.5 text-sm text-stone-900 placeholder:text-stone-500"
+                              placeholder="Тема проповеди"
+                            />
+                            <input
+                              value={String((editingBlock.content_json?.sermon_scripture as string | undefined) ?? '')}
+                              onChange={(e) =>
+                                setDraftBlocks((prev) =>
+                                  prev.map((x) =>
+                                    x.id === editingBlock.id
+                                      ? { ...x, content_json: { ...x.content_json, sermon_scripture: e.target.value } }
+                                      : x,
+                                  ),
+                                )
+                              }
+                              className="rounded-lg border border-stone-300 bg-white px-2 py-1.5 text-sm text-stone-900 placeholder:text-stone-500"
+                              placeholder="Стихи из Библии"
+                            />
+                          </>
+                        ) : null}
                         <textarea
                           value={blockNote(editingBlock.content_json)}
                           onChange={(e) =>
