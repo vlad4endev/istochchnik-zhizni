@@ -114,15 +114,41 @@ export type PublicEditablePlannerPlanPayload = {
   };
   blocks: Array<{
     id: number;
+    block_type_id: number;
     order_index: number;
     title: string;
     duration_minutes: number;
+    assigned_member_id: number | null;
+    song_id: number | null;
     block_type_name: string | null;
     block_type_code: string | null;
     assigned_member_name: string | null;
     song_title: string | null;
     song_key: string | null;
     content_json: Record<string, unknown>;
+  }>;
+};
+
+export type PublicEditablePlannerPlanMetaPayload = {
+  block_types: Array<{
+    id: number;
+    code: string;
+    name: string;
+    kind: PlannerBlockType['kind'];
+  }>;
+  members: Array<{
+    id: number;
+    first_name: string | null;
+    last_name: string | null;
+    name: string;
+    ministry_role: string | null;
+    ministry_direction: string | null;
+    app_role: string;
+  }>;
+  songs: Array<{
+    id: number;
+    title: string;
+    default_key: string | null;
   }>;
 };
 
@@ -837,9 +863,12 @@ export async function getPublicPlanByToken(token: string): Promise<PublicPlanner
   const blocksRes = await query(
     `select
        b.id,
+       b.block_type_id,
        b.order_index,
        b.title,
        b.duration_minutes,
+       b.assigned_member_id,
+       b.song_id,
        bt.name as block_type_name,
        bt.code as block_type_code,
        coalesce(nullif(trim(concat(coalesce(m.first_name, ''), ' ', coalesce(m.last_name, ''))), ''), m.name) as assigned_member_name,
@@ -880,9 +909,12 @@ export async function getPublicPlanByToken(token: string): Promise<PublicPlanner
       const x = r as DbRecord;
       return {
         id: Number(x.id),
+        block_type_id: Number(x.block_type_id),
         order_index: Number(x.order_index ?? 0),
         title: String(x.title ?? ''),
         duration_minutes: Number(x.duration_minutes ?? 0),
+        assigned_member_id: x.assigned_member_id == null ? null : Number(x.assigned_member_id),
+        song_id: x.song_id == null ? null : Number(x.song_id),
         block_type_name: x.block_type_name == null ? null : String(x.block_type_name),
         block_type_code: x.block_type_code == null ? null : String(x.block_type_code),
         assigned_member_name: x.assigned_member_name == null ? null : String(x.assigned_member_name),
@@ -937,9 +969,12 @@ export async function getEditablePlanByToken(token: string): Promise<PublicEdita
   const blocksRes = await query(
     `select
        b.id,
+       b.block_type_id,
        b.order_index,
        b.title,
        b.duration_minutes,
+       b.assigned_member_id,
+       b.song_id,
        bt.name as block_type_name,
        bt.code as block_type_code,
        coalesce(nullif(trim(concat(coalesce(m.first_name, ''), ' ', coalesce(m.last_name, ''))), ''), m.name) as assigned_member_name,
@@ -972,9 +1007,12 @@ export async function getEditablePlanByToken(token: string): Promise<PublicEdita
       const x = r as DbRecord;
       return {
         id: Number(x.id),
+        block_type_id: Number(x.block_type_id),
         order_index: Number(x.order_index ?? 0),
         title: String(x.title ?? ''),
         duration_minutes: Number(x.duration_minutes ?? 0),
+        assigned_member_id: x.assigned_member_id == null ? null : Number(x.assigned_member_id),
+        song_id: x.song_id == null ? null : Number(x.song_id),
         block_type_name: x.block_type_name == null ? null : String(x.block_type_name),
         block_type_code: x.block_type_code == null ? null : String(x.block_type_code),
         assigned_member_name: x.assigned_member_name == null ? null : String(x.assigned_member_name),
@@ -986,10 +1024,93 @@ export async function getEditablePlanByToken(token: string): Promise<PublicEdita
   };
 }
 
+export async function getEditablePlanMetaByToken(
+  token: string,
+): Promise<PublicEditablePlannerPlanMetaPayload | null> {
+  await ensurePlannerSchema();
+  const normalizedToken = String(token ?? '').trim();
+  if (!/^[0-9a-fA-F-]{36}$/.test(normalizedToken)) return null;
+
+  const canEditRes = await query(
+    `select id
+     from public.service_plans
+     where edit_token = $1::uuid
+       and status = 'draft'
+     limit 1`,
+    [normalizedToken],
+  );
+  if ((canEditRes.rowCount ?? 0) === 0) return null;
+
+  const [blockTypesRes, membersRes, songsRes] = await Promise.all([
+    query(
+      `select id, code, name, kind
+       from public.block_types
+       order by id asc`,
+    ),
+    query(
+      `select
+         id,
+         first_name,
+         last_name,
+         coalesce(name, '') as name,
+         ministry_role,
+         ministry_direction,
+         app_role
+       from public.members
+       where coalesce(is_active, true) = true
+       order by coalesce(first_name, ''), coalesce(last_name, ''), coalesce(name, '')`,
+    ),
+    query(
+      `select id, title, default_key
+       from public.songs
+       order by title asc`,
+    ),
+  ]);
+
+  return {
+    block_types: blockTypesRes.rows.map((r) => {
+      const x = r as DbRecord;
+      return {
+        id: Number(x.id),
+        code: String(x.code ?? ''),
+        name: String(x.name ?? ''),
+        kind: (x.kind as PlannerBlockType['kind']) || 'custom',
+      };
+    }),
+    members: membersRes.rows.map((r) => {
+      const x = r as DbRecord;
+      return {
+        id: Number(x.id),
+        first_name: x.first_name == null ? null : String(x.first_name),
+        last_name: x.last_name == null ? null : String(x.last_name),
+        name: String(x.name ?? ''),
+        ministry_role: x.ministry_role == null ? null : String(x.ministry_role),
+        ministry_direction: x.ministry_direction == null ? null : String(x.ministry_direction),
+        app_role: String(x.app_role ?? 'member'),
+      };
+    }),
+    songs: songsRes.rows.map((r) => {
+      const x = r as DbRecord;
+      return {
+        id: Number(x.id),
+        title: String(x.title ?? ''),
+        default_key: x.default_key == null ? null : String(x.default_key),
+      };
+    }),
+  };
+}
+
 export async function patchEditableBlockByToken(
   token: string,
   blockId: number,
-  patch: Partial<{ title: string; duration_minutes: number; content_json: Record<string, unknown> }>,
+  patch: Partial<{
+    title: string;
+    duration_minutes: number;
+    block_type_id: number;
+    assigned_member_id: number | null;
+    song_id: number | null;
+    content_json: Record<string, unknown>;
+  }>,
 ): Promise<boolean> {
   await ensurePlannerSchema();
   const normalizedToken = String(token ?? '').trim();
@@ -1005,6 +1126,9 @@ export async function patchEditableBlockByToken(
 
   if (patch.title !== undefined) push('title = ?', patch.title);
   if (patch.duration_minutes !== undefined) push('duration_minutes = ?', patch.duration_minutes);
+  if (patch.block_type_id !== undefined) push('block_type_id = ?', patch.block_type_id);
+  if (patch.assigned_member_id !== undefined) push('assigned_member_id = ?', patch.assigned_member_id);
+  if (patch.song_id !== undefined) push('song_id = ?', patch.song_id);
   if (patch.content_json !== undefined) {
     values.push(JSON.stringify(patch.content_json ?? {}));
     set.push(`content_json = $${values.length}::jsonb`);

@@ -115,15 +115,41 @@ export type EditableServicePlanPayload = {
   };
   blocks: Array<{
     id: number;
+    block_type_id: number;
     order_index: number;
     title: string;
     duration_minutes: number;
+    assigned_member_id: number | null;
+    song_id: number | null;
     block_type_name: string | null;
     block_type_code: string | null;
     assigned_member_name: string | null;
     song_title: string | null;
     song_key: string | null;
     content_json: Record<string, unknown>;
+  }>;
+};
+
+export type EditableServicePlanMetaPayload = {
+  block_types: Array<{
+    id: number;
+    code: string;
+    name: string;
+    kind: ServiceBlockType['kind'];
+  }>;
+  members: Array<{
+    id: number;
+    first_name: string | null;
+    last_name: string | null;
+    name: string;
+    ministry_role: string | null;
+    ministry_direction: string | null;
+    app_role: string;
+  }>;
+  songs: Array<{
+    id: number;
+    title: string;
+    default_key: string | null;
   }>;
 };
 
@@ -287,12 +313,22 @@ export async function fetchEditableServicePlan(token: string): Promise<EditableS
   return data;
 }
 
+export async function fetchEditableServicePlanMeta(token: string): Promise<EditableServicePlanMetaPayload> {
+  const { data } = await apiClient.get<EditableServicePlanMetaPayload>(
+    `/api/public/service-plans-edit/${encodeURIComponent(token)}/meta`,
+  );
+  return data;
+}
+
 export async function patchEditableServicePlanBlockByToken(
   token: string,
   blockId: number,
   body: Partial<{
     title: string;
     duration_minutes: number;
+    block_type_id: number;
+    assigned_member_id: number | null;
+    song_id: number | null;
     content_json: Record<string, unknown>;
   }>,
 ): Promise<void> {

@@ -280,10 +280,9 @@ export function PublicServicePlanPage() {
         </p>
 
         <header className="rounded-2xl border border-stone-200 bg-white p-3 shadow-sm sm:p-4">
-          <h1 className="text-xl font-extrabold text-stone-900 sm:text-2xl">{plan.template_name ?? 'Программа служения'}</h1>
-          <p className="mt-1 text-sm text-stone-600 sm:text-base">
-            На собрание: <span className="font-semibold text-stone-800">{dateText}</span>
-          </p>
+          <h1 className="text-xl font-extrabold text-stone-900 sm:text-2xl">
+            План собрания на {dateText}
+          </h1>
           <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-stone-600 sm:text-sm">
             <span className="rounded-full bg-stone-100 px-2 py-0.5">Старт: {plan.start_time}</span>
             <span className="rounded-full bg-stone-100 px-2 py-0.5">{plan.total_duration_minutes} мин</span>
