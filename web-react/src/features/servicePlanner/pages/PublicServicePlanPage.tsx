@@ -89,7 +89,8 @@ function derivePublicBlockView(b: PublicPlanBlock): PublicBlockView {
         : String(b.song_title).trim()
       : '';
   const showSongLine =
-    songLine.length > 0 && normalizeText(songLine) !== normalizeText(headingDisplay);
+    songLine.length > 0 &&
+    normalizeText(stripSongKeySuffix(songLine)) !== normalizeText(stripSongKeySuffix(headingDisplay));
 
   let extraSections = 0;
   if (poemSubline) extraSections += 1;
@@ -152,6 +153,10 @@ function parseStartClock(dateIso: string, time: string): Date {
 
 function normalizeText(value: string): string {
   return value.replace(/\s+/g, ' ').trim().toLowerCase();
+}
+
+function stripSongKeySuffix(value: string): string {
+  return value.replace(/\s*\[[^\]]+\]\s*$/, '').trim();
 }
 
 /** Убирает ведущую нумерацию вида «12. » из заголовка блока (из UI или из сохранённого title). */

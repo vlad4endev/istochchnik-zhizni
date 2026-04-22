@@ -109,12 +109,6 @@ function parseStartClock(dateIso: string, time: string): Date {
   return parse(`${dateIso} ${time}`, 'yyyy-MM-dd HH:mm', new Date());
 }
 
-function blockNote(content: Record<string, unknown>): string {
-  if (typeof content.notes === 'string') return content.notes;
-  if (typeof content.text === 'string') return content.text;
-  return '';
-}
-
 function birthdayRows(content: Record<string, unknown>): string[] {
   const raw = content.birthday_people;
   if (!Array.isArray(raw)) return [];
@@ -160,6 +154,12 @@ function scheduleRows(content: Record<string, unknown>): string[] {
       return prefix ? `${prefix} — ${title}` : title;
     })
     .filter((x): x is string => Boolean(x));
+}
+
+function blockNote(content: Record<string, unknown>): string {
+  if (typeof content.notes === 'string') return content.notes;
+  if (typeof content.text === 'string') return content.text;
+  return '';
 }
 
 function songBlockTitle(song: { title: string; default_key: string | null }): string {
@@ -214,6 +214,10 @@ function isPreacherCandidate(u: EditableMember): boolean {
 
 function isPrayerCandidate(u: EditableMember): boolean {
   return hasMinistryRole(u, 'Дьякон') || hasMinistryRole(u, 'Пастор') || u.app_role === 'pastor';
+}
+
+function isBirthdaysBlock(block: { block_type_code: string | null; block_type_name: string | null }): boolean {
+  return block.block_type_code === 'birthdays' || normalizeText(block.block_type_name ?? '').includes('дни рождения');
 }
 
 export function EditableServicePlanPage() {
@@ -369,6 +373,7 @@ export function EditableServicePlanPage() {
             const customMark = getBlockMark(b);
             const categoryIcon = getCategoryIcon(b);
             const birthdays = birthdayRows(b.content_json);
+            const birthdaysBlock = isBirthdaysBlock(b);
             const schedule = scheduleRows(b.content_json);
             return (
               <article
@@ -422,9 +427,9 @@ export function EditableServicePlanPage() {
                           {b.block_type_name ?? 'Блок'} • {b.duration_minutes} мин
                           {b.assigned_member_name ? ` • ${b.assigned_member_name}` : ''}
                         </p>
-                        {birthdays.length > 0 ? (
+                        {birthdaysBlock ? (
                           <p className="mt-1 text-xs leading-snug text-stone-600">
-                            Именинники: {birthdays.join(' • ')}
+                            Именинники: {birthdays.length > 0 ? birthdays.join(' • ') : 'На этой неделе именинников нет'}
                           </p>
                         ) : null}
                         {schedule.length > 0 ? (
@@ -632,20 +637,31 @@ export function EditableServicePlanPage() {
                           value={blockNote(editingBlock.content_json)}
                           onChange={(e) =>
                             setDraftBlocks((prev) =>
-                              prev.map((x) =>
-                                x.id === editingBlock.id
-                                  ? { ...x, content_json: { ...x.content_json, notes: e.target.value } }
-                                  : x,
-                              ),
+                              prev.map((x) => {
+                                if (x.id !== editingBlock.id) return x;
+                                const hasNotes = typeof x.content_json?.notes === 'string';
+                                const hasText = typeof x.content_json?.text === 'string';
+                                if (hasNotes) {
+                                  return { ...x, content_json: { ...x.content_json, notes: e.target.value } };
+                                }
+                                if (hasText) {
+                                  return { ...x, content_json: { ...x.content_json, text: e.target.value } };
+                                }
+                                return { ...x, content_json: { ...x.content_json, notes: e.target.value } };
+                              }),
                             )
                           }
                           className="min-h-[84px] rounded-lg border border-stone-300 bg-white px-2 py-1.5 text-sm text-stone-900 placeholder:text-stone-500 sm:col-span-2"
                           placeholder="Заметка блока"
                         />
-                        {birthdayRows(editingBlock.content_json).length > 0 ? (
+                        {isBirthdaysBlock(editingBlock) ? (
                           <div className="rounded-lg border border-stone-200 bg-stone-50 px-2 py-2 text-xs text-stone-600 sm:col-span-2">
                             <p className="font-semibold">Именинники недели:</p>
-                            <p className="mt-1">{birthdayRows(editingBlock.content_json).join(' • ')}</p>
+                            <p className="mt-1">
+                              {birthdayRows(editingBlock.content_json).length > 0
+                                ? birthdayRows(editingBlock.content_json).join(' • ')
+                                : 'На этой неделе именинников нет'}
+                            </p>
                           </div>
                         ) : null}
                         {scheduleRows(editingBlock.content_json).length > 0 ? (
