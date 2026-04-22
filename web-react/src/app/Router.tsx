@@ -112,11 +112,6 @@ const PublicServicePlanPage = lazy(async () => {
   return { default: m.PublicServicePlanPage };
 });
 
-const EditableServicePlanPage = lazy(async () => {
-  const m = await import('../features/servicePlanner/pages/EditableServicePlanPage');
-  return { default: m.EditableServicePlanPage };
-});
-
 const ServicePlannerPage = lazy(async () => {
   const m = await import('../features/servicePlanner/pages/ServicePlannerPage');
   return { default: m.ServicePlannerPage };
@@ -144,15 +139,6 @@ export function AppRouter() {
           </Suspense>
         }
       />
-      <Route
-        path="/service-plan/edit/:token"
-        element={
-          <Suspense fallback={<RouteFallback />}>
-            <EditableServicePlanPage />
-          </Suspense>
-        }
-      />
-
       <Route element={<RequireAuth />}>
         <Route
           path="studio"

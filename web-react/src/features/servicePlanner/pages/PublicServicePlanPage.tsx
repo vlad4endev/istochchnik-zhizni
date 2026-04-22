@@ -1,5 +1,5 @@
-import { useMemo } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useEffect, useMemo, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { addMinutes, format, parse } from 'date-fns';
 import { Link, useParams } from 'react-router-dom';
 import {
@@ -14,10 +14,14 @@ import {
   FaPuzzlePiece,
   FaWineGlass,
 } from 'react-icons/fa6';
-import { LuCalendarDays } from 'react-icons/lu';
+import { LuCalendarDays, LuLoaderCircle, LuSave } from 'react-icons/lu';
 import type { IconType } from 'react-icons';
 
-import { fetchPublicServicePlan, type PublicServicePlanPayload } from '../api';
+import {
+  fetchPublicServicePlan,
+  patchPublicServicePlanBlockByToken,
+  type PublicServicePlanPayload,
+} from '../api';
 
 type PublicPlanBlock = PublicServicePlanPayload['blocks'][number];
 
@@ -218,12 +222,57 @@ function scheduleRows(content: Record<string, unknown>): string[] {
     .filter((x): x is string => Boolean(x));
 }
 
+function normalizeNotes(value: unknown): string {
+  return typeof value === 'string' ? value : '';
+}
+
 export function PublicServicePlanPage() {
   const { token } = useParams<{ token: string }>();
+  const qc = useQueryClient();
   const q = useQuery({
     queryKey: ['public', 'service-plan', token],
     queryFn: () => fetchPublicServicePlan(token ?? ''),
     enabled: Boolean(token && token.length > 20),
+  });
+  const [draftBlocks, setDraftBlocks] = useState<PublicPlanBlock[]>([]);
+
+  useEffect(() => {
+    if (q.data?.plan.status === 'draft') {
+      setDraftBlocks(q.data.blocks.slice().sort((a, b) => a.order_index - b.order_index));
+    } else {
+      setDraftBlocks([]);
+    }
+  }, [q.data]);
+
+  const saveMut = useMutation({
+    mutationFn: async () => {
+      if (!token || !q.data || q.data.plan.status !== 'draft') return;
+      const originalById = new Map(q.data.blocks.map((b) => [b.id, b] as const));
+      for (const block of draftBlocks) {
+        const original = originalById.get(block.id);
+        if (!original) continue;
+        const changedTitle = block.title !== original.title;
+        const changedDuration = block.duration_minutes !== original.duration_minutes;
+        const nextNotes = normalizeNotes(block.content_json.notes);
+        const prevNotes = normalizeNotes(original.content_json.notes);
+        const changedNotes = nextNotes !== prevNotes;
+        const separatorTextChanged =
+          String(block.content_json.separator_text ?? '') !== String(original.content_json.separator_text ?? '');
+        if (!changedTitle && !changedDuration && !changedNotes && !separatorTextChanged) continue;
+        await patchPublicServicePlanBlockByToken(token, block.id, {
+          title: block.title,
+          duration_minutes: Math.max(1, Number(block.duration_minutes) || 1),
+          content_json: {
+            ...original.content_json,
+            ...block.content_json,
+            notes: nextNotes,
+          },
+        });
+      }
+    },
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ['public', 'service-plan', token] });
+    },
   });
 
   const rows = useMemo(() => {
@@ -266,6 +315,123 @@ export function PublicServicePlanPage() {
     month: 'long',
     year: 'numeric',
   }).format(new Date(`${plan.service_date}T12:00:00`));
+
+  if (plan.status === 'draft') {
+    const totalDuration = draftBlocks.reduce((sum, b) => {
+      if (isSeparator(b.content_json)) return sum;
+      return sum + Math.max(0, Number(b.duration_minutes) || 0);
+    }, 0);
+
+    return (
+      <div className="min-h-[100dvh] bg-[var(--surface)]">
+        <div className="mx-auto max-w-3xl space-y-4 px-3 py-5 pb-[calc(88px+env(safe-area-inset-bottom))] sm:px-4 sm:py-8">
+          <header className="rounded-2xl border border-stone-200 bg-white p-4 shadow-sm">
+            <h1 className="text-xl font-extrabold text-stone-900 sm:text-2xl">{plan.template_name ?? 'Программа служения'}</h1>
+            <p className="mt-1 text-sm text-stone-600">
+              На собрание: <span className="font-semibold text-stone-800">{dateText}</span>
+            </p>
+            <p className="mt-1 text-xs text-emerald-700">
+              Статус: Черновик. Редактирование по этой ссылке включено.
+            </p>
+            <p className="mt-1 text-sm text-stone-600">Старт: {plan.start_time} · {totalDuration} мин</p>
+          </header>
+
+          <section className="space-y-2.5">
+            {draftBlocks.map((block) => {
+              const separator = isSeparator(block.content_json);
+              const notes = normalizeNotes(block.content_json.notes);
+              return (
+                <article key={block.id} className="rounded-xl border border-stone-200 bg-white p-3 shadow-sm sm:p-4">
+                  <div className="mb-2 flex items-center justify-between gap-2">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-stone-500">
+                      {block.block_type_name ?? 'Блок'}
+                    </p>
+                    <p className="text-xs text-stone-500">#{block.order_index + 1}</p>
+                  </div>
+                  {separator ? (
+                    <input
+                      value={String(block.content_json.separator_text ?? block.title ?? '')}
+                      onChange={(e) =>
+                        setDraftBlocks((prev) =>
+                          prev.map((x) =>
+                            x.id === block.id
+                              ? {
+                                  ...x,
+                                  title: e.target.value,
+                                  content_json: { ...x.content_json, separator_text: e.target.value },
+                                }
+                              : x,
+                          ),
+                        )
+                      }
+                      className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm"
+                      placeholder="Название разделителя"
+                    />
+                  ) : (
+                    <div className="grid gap-2 sm:grid-cols-4">
+                      <input
+                        value={block.title}
+                        onChange={(e) =>
+                          setDraftBlocks((prev) =>
+                            prev.map((x) => (x.id === block.id ? { ...x, title: e.target.value } : x)),
+                          )
+                        }
+                        className="rounded-lg border border-stone-300 px-3 py-2 text-sm sm:col-span-3"
+                        placeholder="Название блока"
+                      />
+                      <input
+                        type="number"
+                        min={1}
+                        max={180}
+                        value={block.duration_minutes}
+                        onChange={(e) =>
+                          setDraftBlocks((prev) =>
+                            prev.map((x) =>
+                              x.id === block.id
+                                ? { ...x, duration_minutes: Math.max(1, Number(e.target.value) || 1) }
+                                : x,
+                            ),
+                          )
+                        }
+                        className="rounded-lg border border-stone-300 px-3 py-2 text-sm"
+                        placeholder="Мин"
+                      />
+                      <textarea
+                        value={notes}
+                        onChange={(e) =>
+                          setDraftBlocks((prev) =>
+                            prev.map((x) =>
+                              x.id === block.id
+                                ? { ...x, content_json: { ...x.content_json, notes: e.target.value } }
+                                : x,
+                            ),
+                          )
+                        }
+                        className="min-h-[84px] rounded-lg border border-stone-300 px-3 py-2 text-sm sm:col-span-4"
+                        placeholder="Заметка блока"
+                      />
+                    </div>
+                  )}
+                </article>
+              );
+            })}
+          </section>
+
+          <div className="sticky bottom-3 z-10 flex justify-end">
+            <button
+              type="button"
+              onClick={() => void saveMut.mutateAsync()}
+              disabled={saveMut.isPending}
+              className="inline-flex min-h-[42px] items-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-primary-dark disabled:cursor-not-allowed disabled:opacity-70"
+            >
+              {saveMut.isPending ? <LuLoaderCircle className="h-4 w-4 animate-spin" /> : <LuSave className="h-4 w-4" />}
+              {saveMut.isPending ? 'Сохраняю...' : 'Сохранить изменения'}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-[100dvh] bg-[var(--surface)]">
