@@ -3,6 +3,7 @@
  * подхватывает Express как serverless и ломает деплой статического фронта (web-react).
  */
 import http from 'node:http';
+import fs from 'node:fs';
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
@@ -36,6 +37,7 @@ import { initPushCronJobs } from './cron/pushJobs';
 import { ensureUploadsDirs, getUploadsRoot } from './config/uploadsRoot';
 import { ensureAccessRequestsMessengerChannel } from './services/messengerService';
 import { writeAppLog } from './services/appLogService';
+import { getEditablePlanByToken, getPublicPlanByToken } from './services/servicePlannerService';
 
 dotenv.config();
 
@@ -57,6 +59,73 @@ function httpStatusText(status: number): string {
   if (status >= 400) return 'Проблема в запросе';
   if (status >= 300) return 'Перенаправление';
   return 'Запрос выполнен';
+}
+
+type SeoMeta = {
+  title: string;
+  description: string;
+  robots?: string;
+};
+
+const DEFAULT_SPA_TITLE = 'Моя церковь — молитвенный календарь';
+const DEFAULT_SPA_DESCRIPTION = 'Планирование служений, расписание и командная работа в одном приложении.';
+
+function escapeHtml(input: string): string {
+  return input
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function formatDateRuForSeo(dateIso: string): string {
+  const dt = new Date(`${dateIso}T12:00:00`);
+  if (Number.isNaN(dt.getTime())) return dateIso;
+  return new Intl.DateTimeFormat('ru-RU', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  }).format(dt);
+}
+
+function buildSeoHead(meta: SeoMeta, absoluteUrl: string): string {
+  const title = escapeHtml(meta.title);
+  const description = escapeHtml(meta.description);
+  const url = escapeHtml(absoluteUrl);
+  const robots = escapeHtml(meta.robots ?? 'index,follow');
+  const image = escapeHtml(
+    absoluteUrl.replace(/\/service-plan\/(share|edit)\/[^/]+$/i, '/assets/apple-touch-icon-180x180.png'),
+  );
+  return [
+    `<title>${title}</title>`,
+    `<meta name="description" content="${description}" />`,
+    `<meta name="robots" content="${robots}" />`,
+    `<meta property="og:type" content="website" />`,
+    `<meta property="og:locale" content="ru_RU" />`,
+    `<meta property="og:title" content="${title}" />`,
+    `<meta property="og:description" content="${description}" />`,
+    `<meta property="og:url" content="${url}" />`,
+    `<meta property="og:image" content="${image}" />`,
+    `<meta name="twitter:card" content="summary_large_image" />`,
+    `<meta name="twitter:title" content="${title}" />`,
+    `<meta name="twitter:description" content="${description}" />`,
+    `<meta name="twitter:image" content="${image}" />`,
+  ].join('\n    ');
+}
+
+let cachedSpaIndexHtml: string | null = null;
+function readSpaIndexHtml(webDist: string): string {
+  if (cachedSpaIndexHtml) return cachedSpaIndexHtml;
+  const html = fs.readFileSync(path.join(webDist, 'index.html'), 'utf8');
+  cachedSpaIndexHtml = html;
+  return html;
+}
+
+function renderSpaWithMeta(webDist: string, meta: SeoMeta, absoluteUrl: string): string {
+  const baseHtml = readSpaIndexHtml(webDist);
+  const seoHead = buildSeoHead(meta, absoluteUrl);
+  return baseHtml.replace(/<title>[\s\S]*?<\/title>/i, `${seoHead}`);
 }
 
 /**
@@ -222,6 +291,47 @@ app.get('/api/version', (_req, res) => {
 // - /assets/*, /manifest.webmanifest, /sw.js, etc.
 // - любые не-/api пути → index.html (React Router)
 const webDist = path.join(process.cwd(), 'web-react', 'dist');
+
+app.get('/service-plan/share/:token', async (req, res, next) => {
+  try {
+    const token = String(req.params.token ?? '').trim();
+    const payload = await getPublicPlanByToken(token);
+    const dateText = payload ? formatDateRuForSeo(payload.plan.service_date) : '';
+    const leader = payload?.plan.leader_name ?? 'не назначен';
+    const preacher = payload?.plan.preacher_name ?? 'не назначен';
+    const title = payload
+      ? `Финальная программа служения — ${dateText}`
+      : DEFAULT_SPA_TITLE;
+    const description = payload
+      ? `Финальная версия программы на ${dateText}. Ведущий: ${leader}. Проповедник: ${preacher}.`
+      : DEFAULT_SPA_DESCRIPTION;
+    const absoluteUrl = `${req.protocol}://${req.get('host')}${req.originalUrl}`;
+    res.type('html').send(renderSpaWithMeta(webDist, { title, description, robots: 'index,follow' }, absoluteUrl));
+  } catch (e) {
+    next(e);
+  }
+});
+
+app.get('/service-plan/edit/:token', async (req, res, next) => {
+  try {
+    const token = String(req.params.token ?? '').trim();
+    const payload = await getEditablePlanByToken(token);
+    const dateText = payload ? formatDateRuForSeo(payload.plan.service_date) : '';
+    const leader = payload?.plan.leader_name ?? 'не назначен';
+    const preacher = payload?.plan.preacher_name ?? 'не назначен';
+    const title = payload
+      ? `Черновик программы служения — ${dateText}`
+      : DEFAULT_SPA_TITLE;
+    const description = payload
+      ? `Редактирование программы на ${dateText}. Ответственным за служение нужно заполнить и проверить блоки. Ведущий: ${leader}. Проповедник: ${preacher}.`
+      : DEFAULT_SPA_DESCRIPTION;
+    const absoluteUrl = `${req.protocol}://${req.get('host')}${req.originalUrl}`;
+    res.type('html').send(renderSpaWithMeta(webDist, { title, description, robots: 'noindex,nofollow' }, absoluteUrl));
+  } catch (e) {
+    next(e);
+  }
+});
+
 app.use(express.static(webDist, { fallthrough: true }));
 app.get(/^\/(?!api\/).*/, (req, res) => {
   res.sendFile(path.join(webDist, 'index.html'));
