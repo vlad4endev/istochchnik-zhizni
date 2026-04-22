@@ -990,6 +990,14 @@ export async function getEditablePlanByToken(token: string): Promise<PublicEdita
     [Number(row.id)],
   );
 
+  const serviceDate = String(row.service_date ?? '');
+  const hasBirthdayBlocks = blocksRes.rows.some(
+    (r) => String((r as DbRecord).block_type_code ?? '').toLowerCase() === 'birthdays',
+  );
+  const birthdayPayload = hasBirthdayBlocks ? await getWeekBirthdays(serviceDate) : null;
+  const hasScheduleBlocks = blocksRes.rows.some((r) => isWeeklyScheduleBlock(r as DbRecord));
+  const schedulePayload = hasScheduleBlocks ? await getNextWeekSchedule(serviceDate) : null;
+
   return {
     plan: {
       id: Number(row.id),
@@ -1018,7 +1026,18 @@ export async function getEditablePlanByToken(token: string): Promise<PublicEdita
         assigned_member_name: x.assigned_member_name == null ? null : String(x.assigned_member_name),
         song_title: x.song_title == null ? null : String(x.song_title),
         song_key: x.song_key == null ? null : String(x.song_key),
-        content_json: asObject(x.content_json),
+        content_json: (() => {
+          let content = asObject(x.content_json);
+          const isBirthdays = String(x.block_type_code ?? '').toLowerCase() === 'birthdays';
+          const isSchedule = isWeeklyScheduleBlock(x);
+          if (isBirthdays && birthdayPayload) {
+            content = withBirthdayWeek(content, birthdayPayload);
+          }
+          if (isSchedule && schedulePayload) {
+            content = withNextWeekSchedule(content, schedulePayload);
+          }
+          return content;
+        })(),
       };
     }),
   };

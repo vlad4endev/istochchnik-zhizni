@@ -52,6 +52,58 @@ function blockNote(content: Record<string, unknown>): string {
   return '';
 }
 
+function birthdayRows(content: Record<string, unknown>): string[] {
+  const raw = content.birthday_people;
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((x) => {
+      if (!x || typeof x !== 'object') return null;
+      const row = x as Record<string, unknown>;
+      const name = typeof row.name === 'string' ? row.name.trim() : '';
+      if (!name) return null;
+      const weekDate = typeof row.week_date === 'string' ? row.week_date.trim() : '';
+      if (!weekDate) return name;
+      const dt = new Date(`${weekDate}T12:00:00`);
+      if (Number.isNaN(dt.getTime())) return name;
+      const dateText = new Intl.DateTimeFormat('ru-RU', { weekday: 'short', day: 'numeric', month: 'short' }).format(dt);
+      return `${name} — ${dateText}`;
+    })
+    .filter((x): x is string => Boolean(x));
+}
+
+function scheduleRows(content: Record<string, unknown>): string[] {
+  const raw = content.schedule_events;
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((x) => {
+      if (!x || typeof x !== 'object') return null;
+      const row = x as Record<string, unknown>;
+      const title = typeof row.title === 'string' ? row.title.trim() : '';
+      if (!title) return null;
+      const dateIso = typeof row.event_date === 'string' ? row.event_date.trim() : '';
+      const time = typeof row.event_time === 'string' ? row.event_time.trim().slice(0, 5) : '';
+      let datePart = '';
+      if (/^\d{4}-\d{2}-\d{2}$/.test(dateIso)) {
+        const dt = new Date(`${dateIso}T12:00:00`);
+        if (!Number.isNaN(dt.getTime())) {
+          datePart = new Intl.DateTimeFormat('ru-RU', {
+            weekday: 'short',
+            day: 'numeric',
+            month: 'short',
+          }).format(dt);
+        }
+      }
+      const prefix = [datePart, time].filter((v) => v.length > 0).join(' ');
+      return prefix ? `${prefix} — ${title}` : title;
+    })
+    .filter((x): x is string => Boolean(x));
+}
+
+function songBlockTitle(song: { title: string; default_key: string | null }): string {
+  const key = String(song.default_key ?? '').trim();
+  return key ? `${song.title} [${key}]` : song.title;
+}
+
 function userLabel(u: { first_name: string | null; last_name: string | null; name: string; id: number }): string {
   const full = `${u.first_name ?? ''} ${u.last_name ?? ''}`.trim();
   return full || u.name || `Пользователь #${u.id}`;
@@ -156,13 +208,32 @@ export function EditableServicePlanPage() {
           <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-stone-600 sm:text-sm">
             <span className="rounded-full bg-stone-100 px-2 py-0.5">Старт: {plan.start_time}</span>
             <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-emerald-800">Черновик · редактирование</span>
+            <span className="rounded-full bg-stone-100 px-2 py-0.5">
+              Ведущий: {plan.leader_name ?? 'Не назначен'}
+            </span>
+            <span className="rounded-full bg-stone-100 px-2 py-0.5">
+              Проповедник: {plan.preacher_name ?? 'Не назначен'}
+            </span>
           </div>
         </header>
 
         <section className="space-y-2.5">
           {rows.map((b) => {
+            if (b.separator) {
+              const sepText = String(b.content_json.separator_text ?? b.title ?? 'Раздел');
+              return (
+                <div
+                  key={b.id}
+                  className="rounded-xl border border-dashed border-stone-300 bg-stone-50 px-3 py-2.5"
+                >
+                  <p className="text-center text-sm font-bold leading-snug text-stone-700 sm:text-base">{sepText}</p>
+                </div>
+              );
+            }
             const iconMeta = ICON_BY_CODE[(b.block_type_code ?? '').toLowerCase()] ?? ICON_BY_CODE.custom;
             const Icon = iconMeta.Icon;
+            const birthdays = birthdayRows(b.content_json);
+            const schedule = scheduleRows(b.content_json);
             return (
               <article
                 key={b.id}
@@ -185,6 +256,21 @@ export function EditableServicePlanPage() {
                           {b.block_type_name ?? 'Блок'} • {b.duration_minutes} мин
                           {b.assigned_member_name ? ` • ${b.assigned_member_name}` : ''}
                         </p>
+                        {birthdays.length > 0 ? (
+                          <p className="mt-1 text-xs leading-snug text-stone-600">
+                            Именинники: {birthdays.join(' • ')}
+                          </p>
+                        ) : null}
+                        {schedule.length > 0 ? (
+                          <div className="mt-1 text-xs leading-snug text-stone-600">
+                            <p className="font-semibold">Расписание:</p>
+                            <ul className="mt-0.5 space-y-0.5">
+                              {schedule.map((line) => (
+                                <li key={line}>{line}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        ) : null}
                       </div>
                       <button
                         type="button"
@@ -291,6 +377,7 @@ export function EditableServicePlanPage() {
                                         song_id: songId,
                                         song_title: song?.title ?? null,
                                         song_key: song?.default_key ?? null,
+                                        title: song ? songBlockTitle(song) : x.title,
                                       }
                                     : x,
                                 ),
@@ -324,6 +411,22 @@ export function EditableServicePlanPage() {
                           className="min-h-[84px] rounded-lg border border-stone-300 px-2 py-1.5 text-sm sm:col-span-2"
                           placeholder="Заметка блока"
                         />
+                        {birthdayRows(editingBlock.content_json).length > 0 ? (
+                          <div className="rounded-lg border border-stone-200 bg-stone-50 px-2 py-2 text-xs text-stone-600 sm:col-span-2">
+                            <p className="font-semibold">Именинники недели:</p>
+                            <p className="mt-1">{birthdayRows(editingBlock.content_json).join(' • ')}</p>
+                          </div>
+                        ) : null}
+                        {scheduleRows(editingBlock.content_json).length > 0 ? (
+                          <div className="rounded-lg border border-stone-200 bg-stone-50 px-2 py-2 text-xs text-stone-600 sm:col-span-2">
+                            <p className="font-semibold">Расписание:</p>
+                            <ul className="mt-1 space-y-0.5">
+                              {scheduleRows(editingBlock.content_json).map((line) => (
+                                <li key={line}>{line}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        ) : null}
                         <div className="sm:col-span-2 flex justify-end">
                           <button
                             type="button"
