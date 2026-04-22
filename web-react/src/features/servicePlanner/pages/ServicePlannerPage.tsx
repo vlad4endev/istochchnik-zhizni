@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { DragDropContext, Draggable, Droppable, type DropResult } from '@hello-pangea/dnd';
 import { addMinutes, format, parse, parseISO } from 'date-fns';
@@ -291,6 +291,7 @@ export function ServicePlannerPage() {
   const [mobilePlanTimeOpenId, setMobilePlanTimeOpenId] = useState<number | null>(null);
   const [mobileTemplateBlockMenuId, setMobileTemplateBlockMenuId] = useState<number | null>(null);
   const [mobileTemplateOrderOpenId, setMobileTemplateOrderOpenId] = useState<number | null>(null);
+  const autoArchivingPlanIdsRef = useRef<Set<number>>(new Set());
   /** Совпадает с Tailwind `md:` — на мобильной весь блок — ручка перетаскивания */
   const [isNarrowViewport, setIsNarrowViewport] = useState(
     () => typeof window !== 'undefined' && window.matchMedia('(max-width: 767px)').matches,
@@ -483,6 +484,31 @@ export function ServicePlannerPage() {
       setRecurrenceRuleInput(JSON.stringify(templateQ.data.recurrence_rule ?? {}, null, 2));
     }
   }, [templateQ.data]);
+
+  useEffect(() => {
+    const plans = plansQ.data ?? [];
+    if (plans.length === 0) return;
+    const today = todayIso();
+    const toArchive = plans.filter(
+      (p) => !p.is_archived && p.service_date < today && !autoArchivingPlanIdsRef.current.has(p.id),
+    );
+    if (toArchive.length === 0) return;
+    toArchive.forEach((p) => autoArchivingPlanIdsRef.current.add(p.id));
+    void (async () => {
+      try {
+        for (const plan of toArchive) {
+          await patchServicePlan(plan.id, { is_archived: true });
+          if (activePlanId === plan.id) {
+            setDraft((prev) => (prev ? { ...prev, is_archived: true } : prev));
+            setScreen('home');
+          }
+        }
+        await qc.invalidateQueries({ queryKey: ['service-planner', 'plans'] });
+      } catch {
+        for (const plan of toArchive) autoArchivingPlanIdsRef.current.delete(plan.id);
+      }
+    })();
+  }, [plansQ.data, activePlanId, qc]);
 
   const updatePlanMut = useMutation({
     mutationFn: ({ id, body }: { id: number; body: Parameters<typeof patchServicePlan>[1] }) =>
@@ -1229,7 +1255,14 @@ export function ServicePlannerPage() {
   }
 
   const plans = plansQ.data ?? [];
-  const visiblePlans = plans.filter((p) => Boolean(p.is_archived) === showArchivedPlans);
+  const visiblePlans = useMemo(() => {
+    const filtered = plans.filter((p) => Boolean(p.is_archived) === showArchivedPlans);
+    return filtered.sort((a, b) =>
+      showArchivedPlans
+        ? b.service_date.localeCompare(a.service_date)
+        : a.service_date.localeCompare(b.service_date),
+    );
+  }, [plans, showArchivedPlans]);
   const today = todayIso();
   const nearestFuturePlanId = visiblePlans
     .filter((p) => p.service_date >= today)
