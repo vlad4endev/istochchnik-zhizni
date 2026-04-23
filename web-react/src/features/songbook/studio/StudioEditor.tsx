@@ -6,7 +6,6 @@ import {
   LuArrowLeft,
   LuCircleHelp,
   LuClock3,
-  LuPlus,
   LuSlidersHorizontal,
   LuSave,
   LuTrash2,
@@ -58,32 +57,72 @@ function studioPreviewFrame(type: SongBlockType, darkUi: boolean): string {
   switch (type) {
     case 'chorus':
       return darkUi
-        ? 'rounded-xl border-l-[5px] border-sky-400 bg-sky-950/40 pl-3 py-2'
-        : 'rounded-xl border-l-[5px] border-sky-600 bg-sky-50 pl-3 py-2';
+        ? 'rounded-xl border-l-[5px] border-orange-400 bg-orange-950/30 px-3 py-2'
+        : 'rounded-xl border-l-[5px] border-orange-500 bg-orange-50 px-3 py-2';
     case 'prechorus':
       return darkUi
-        ? 'rounded-xl border-l-[5px] border-indigo-400/90 bg-indigo-950/30 pl-3 py-2'
-        : 'rounded-xl border-l-[5px] border-indigo-500 bg-indigo-50/70 pl-3 py-2';
+        ? 'rounded-xl border-l-[5px] border-amber-300 bg-amber-950/25 px-3 py-2'
+        : 'rounded-xl border-l-[5px] border-amber-400 bg-amber-50 px-3 py-2';
     case 'bridge':
       return darkUi
-        ? 'rounded-xl border-l-[5px] border-amber-400/80 bg-amber-950/30 pl-3 py-2'
-        : 'rounded-xl border-l-[5px] border-amber-500 bg-amber-50/80 pl-3 py-2';
+        ? 'rounded-xl border-l-[5px] border-violet-400 bg-violet-950/30 px-3 py-2'
+        : 'rounded-xl border-l-[5px] border-violet-500 bg-violet-50 px-3 py-2';
     case 'solo':
       return darkUi
-        ? 'rounded-xl border-l-[5px] border-fuchsia-400/80 bg-fuchsia-950/20 pl-3 py-2'
-        : 'rounded-xl border-l-[5px] border-fuchsia-500 bg-fuchsia-50/70 pl-3 py-2';
+        ? 'rounded-xl border-l-[5px] border-fuchsia-400/80 bg-fuchsia-950/20 px-3 py-2'
+        : 'rounded-xl border-l-[5px] border-fuchsia-500 bg-fuchsia-50/70 px-3 py-2';
     case 'outro':
       return darkUi
-        ? 'rounded-xl border-l-[5px] border-emerald-400/80 bg-emerald-950/20 pl-3 py-2'
-        : 'rounded-xl border-l-[5px] border-emerald-500 bg-emerald-50/70 pl-3 py-2';
+        ? 'rounded-xl border-l-[5px] border-slate-400 bg-slate-900/70 px-3 py-2'
+        : 'rounded-xl border-l-[5px] border-slate-400 bg-slate-50 px-3 py-2';
     case 'intro':
       return darkUi
-        ? 'rounded-xl py-2 text-[0.92em] italic text-slate-400'
-        : 'rounded-xl py-2 text-[0.92em] italic text-stone-600';
+        ? 'rounded-xl border-l-[5px] border-emerald-400 bg-emerald-950/20 px-3 py-2'
+        : 'rounded-xl border-l-[5px] border-emerald-500 bg-emerald-50 px-3 py-2';
     case 'verse':
     default:
-      return darkUi ? 'rounded-xl py-2' : 'rounded-xl py-2';
+      return darkUi
+        ? 'rounded-xl border-l-[5px] border-sky-400 bg-sky-950/20 px-3 py-2'
+        : 'rounded-xl border-l-[5px] border-sky-500 bg-sky-50/70 px-3 py-2';
   }
+}
+
+const STUDIO_BLOCK_PRESETS: ReadonlyArray<{ type: SongBlockType; label: string; icon: string }> = [
+  { type: 'verse', label: 'Куплет', icon: '📝' },
+  { type: 'chorus', label: 'Припев', icon: '🎤' },
+  { type: 'prechorus', label: 'Предприпев', icon: '🔀' },
+  { type: 'bridge', label: 'Бридж', icon: '🌉' },
+  { type: 'intro', label: 'Intro', icon: '🎸' },
+  { type: 'outro', label: 'Outro', icon: '🎭' },
+  { type: 'solo', label: 'Соло', icon: '🎼' },
+];
+
+function blockTypeLabel(type: SongBlockType): string {
+  const preset = STUDIO_BLOCK_PRESETS.find((x) => x.type === type);
+  return preset?.label ?? type;
+}
+
+function studioTypeTone(type: SongBlockType, darkUi: boolean, active = false): string {
+  const base = (() => {
+    switch (type) {
+      case 'chorus':
+        return darkUi ? 'border-orange-400 bg-orange-950/40 text-orange-100' : 'border-orange-300 bg-orange-50 text-orange-900';
+      case 'prechorus':
+        return darkUi ? 'border-amber-300 bg-amber-950/30 text-amber-100' : 'border-amber-300 bg-amber-50 text-amber-900';
+      case 'bridge':
+        return darkUi ? 'border-violet-400 bg-violet-950/35 text-violet-100' : 'border-violet-300 bg-violet-50 text-violet-900';
+      case 'intro':
+        return darkUi ? 'border-emerald-400 bg-emerald-950/35 text-emerald-100' : 'border-emerald-300 bg-emerald-50 text-emerald-900';
+      case 'outro':
+        return darkUi ? 'border-slate-500 bg-slate-900 text-slate-100' : 'border-slate-300 bg-slate-50 text-slate-800';
+      case 'solo':
+        return darkUi ? 'border-fuchsia-400 bg-fuchsia-950/30 text-fuchsia-100' : 'border-fuchsia-300 bg-fuchsia-50 text-fuchsia-900';
+      case 'verse':
+      default:
+        return darkUi ? 'border-sky-400 bg-sky-950/35 text-sky-100' : 'border-sky-300 bg-sky-50 text-sky-900';
+    }
+  })();
+  return active ? `${base} ring-2 ring-primary/45` : base;
 }
 
 /**
@@ -111,7 +150,7 @@ export function StudioEditor() {
   const [rawPaste, setRawPaste] = useState('');
   const [showPreview, setShowPreview] = useState(true);
   const [chordPickerOpen, setChordPickerOpen] = useState(false);
-  const [mobilePane, setMobilePane] = useState<'editor' | 'preview' | 'outline'>('editor');
+  const [mobilePane, setMobilePane] = useState<'editor' | 'preview'>('editor');
 
   const songQ = useQuery({
     queryKey: ['song', id],
@@ -387,6 +426,20 @@ export function StudioEditor() {
     });
   };
 
+  const insertBlockAfter = (index: number, type: SongBlockType = 'verse') => {
+    const nb = createSongBlock(type, '');
+    setBlocks((prev) => {
+      const next = [...prev];
+      next.splice(index + 1, 0, nb);
+      return next;
+    });
+    requestAnimationFrame(() => {
+      focusedBlockIdRef.current = nb.id;
+      setActiveBlockId(nb.id);
+      textareaByBlockRef.current.get(nb.id)?.focus();
+    });
+  };
+
   const addBlockFromPreset = (title: string) => {
     const meta = studioPresetToBlockMeta(title);
     const nb = createSongBlock(meta.type, '', meta.sectionHint);
@@ -404,6 +457,14 @@ export function StudioEditor() {
       setActiveBlockId(nb.id);
       textareaByBlockRef.current.get(nb.id)?.focus();
     });
+  };
+
+  const addCustomBlock = () => {
+    const raw = window.prompt('Название блока', '');
+    if (raw == null) return;
+    const normalized = raw.trim();
+    if (!normalized) return;
+    addBlockFromPreset(normalized);
   };
 
   const handleSmartPasteSplit = (blockId: string, paragraphs: string[]) => {
@@ -444,7 +505,11 @@ export function StudioEditor() {
   const backTo = studioMySongsPath(surface);
   const showEditorPane = mobilePane === 'editor';
   const showPreviewPane = showPreview && mobilePane === 'preview';
-  const showOutlinePane = mobilePane === 'outline';
+  const presentTypes = useMemo(() => new Set(blocks.map((b) => b.type)), [blocks]);
+  const activeBlock = useMemo(
+    () => blocks.find((block) => block.id === activeBlockId) ?? blocks[0] ?? null,
+    [blocks, activeBlockId],
+  );
 
   /** Тёмный интерфейс только в режиме сцены внутри песенника; отдельная /studio — светлая тема. */
   const darkUi = surface === 'songbook' && stageMode;
@@ -514,7 +579,7 @@ export function StudioEditor() {
 
   return (
     <div
-      className={`mx-auto flex max-w-3xl flex-col gap-4 pb-[calc(13.5rem+env(safe-area-inset-bottom))] md:pb-10 ${shell.page}`}
+      className={`mx-auto flex w-full max-w-[1520px] flex-col gap-4 px-2 pb-[calc(13.5rem+env(safe-area-inset-bottom))] sm:px-3 md:px-4 md:pb-10 ${shell.page}`}
     >
       <SmartImportModal
         open={importOpen}
@@ -828,8 +893,13 @@ export function StudioEditor() {
         </div>
       ) : null}
 
-      <div className={`rounded-xl border p-2 ${darkUi ? 'border-slate-800 bg-slate-950/40' : 'border-stone-200 bg-white'}`}>
-        <div className="flex flex-wrap items-center gap-2">
+      <section
+        className={`rounded-2xl border px-4 py-4 sm:px-6 ${
+          darkUi ? 'border-slate-800 bg-slate-950/50' : 'border-stone-200 bg-white'
+        }`}
+      >
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <p className={`text-sm font-semibold uppercase tracking-[0.05em] ${shell.muted}`}>+ Добавить блок</p>
           <button
             type="button"
             onClick={() => setChordPickerOpen((v) => !v)}
@@ -840,47 +910,49 @@ export function StudioEditor() {
             + Аккорд
             <LuCircleHelp className="h-3.5 w-3.5 opacity-70" title="Вставляет [Am] в позицию курсора" />
           </button>
-          {(
-            [
-              { type: 'verse' as const, label: 'Куплет' },
-              { type: 'chorus' as const, label: 'Припев' },
-              { type: 'bridge' as const, label: 'Бридж' },
-              { type: 'intro' as const, label: 'Интро' },
-              { type: 'outro' as const, label: 'Аутро' },
-              { type: 'solo' as const, label: 'Соло' },
-            ] as const
-          ).map(({ type, label }) => (
+        </div>
+        <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
+          {STUDIO_BLOCK_PRESETS.map(({ type, label, icon }) => (
             <button
               key={`toolbar-block-${type}`}
               type="button"
               onClick={() => addQuickBlock(type)}
-              className={`inline-flex min-h-[40px] items-center rounded-lg border px-3 text-sm font-semibold ${
-                darkUi ? 'border-slate-700 bg-slate-900 text-slate-100' : 'border-stone-200 bg-stone-50 text-stone-900'
-              }`}
+              className={`inline-flex min-h-[44px] items-center justify-center gap-2 rounded-xl border px-3 text-sm font-semibold transition-transform duration-200 hover:-translate-y-[1px] ${studioTypeTone(type, darkUi)} ${presentTypes.has(type) ? 'opacity-70' : ''}`}
             >
-              {label}
+              <span aria-hidden>{icon}</span>
+              <span>{label}</span>
             </button>
           ))}
+          <button
+            type="button"
+            onClick={addCustomBlock}
+            className={`inline-flex min-h-[44px] items-center justify-center gap-2 rounded-xl border border-dashed px-3 text-sm font-semibold transition-transform duration-200 hover:-translate-y-[1px] ${
+              darkUi ? 'border-slate-600 bg-slate-900 text-slate-200 hover:bg-slate-800' : 'border-stone-300 bg-stone-50 text-stone-800 hover:bg-stone-100'
+            }`}
+          >
+            <span aria-hidden>➕</span>
+            <span>Свой</span>
+          </button>
         </div>
         {chordPickerOpen ? (
-          <div className="mt-2 flex flex-wrap gap-1.5">
+          <div className="mt-3 flex gap-1.5 overflow-x-auto pb-1 [scrollbar-width:none]">
             {(toolbarChords.length > 0 ? toolbarChords : CHORD_STRIP).map((ch) => (
               <button
                 key={`picker-${ch}`}
                 type="button"
                 onClick={() => insertChord(ch)}
-                className={`min-h-[36px] rounded-lg px-2.5 ${shell.chordBtn}`}
+                className={`min-h-[36px] shrink-0 rounded-lg px-2.5 ${shell.chordBtn}`}
               >
                 {ch}
               </button>
             ))}
           </div>
         ) : null}
-      </div>
+      </section>
 
       <SectionInsertToolbar dark={darkUi} onPresetAsBlock={addBlockFromPreset} className="mb-1" />
 
-      <div className="mb-2 flex items-center justify-between">
+      <div className="mb-1 flex items-center justify-between">
         <p className={`inline-flex items-center gap-1 text-xs ${shell.muted}`}>
           <LuClock3 className="h-3.5 w-3.5" />
           Автосохранение черновика каждые 30 секунд
@@ -895,113 +967,47 @@ export function StudioEditor() {
         </button>
       </div>
 
-      <div className="md:hidden">
-        <div
-          className={`grid grid-cols-3 gap-1 rounded-xl p-1 ${
-            darkUi ? 'bg-slate-900/80' : 'bg-stone-100'
-          }`}
-        >
-          {(
-            [
-              { id: 'editor', label: 'Редактор' },
-              { id: 'preview', label: 'Превью' },
-              { id: 'outline', label: 'Структура' },
-            ] as const
-          ).map((x) => (
-            <button
-              key={x.id}
-              type="button"
-              onClick={() => setMobilePane(x.id)}
-              className={`min-h-[40px] rounded-lg text-xs font-semibold ${
-                mobilePane === x.id
-                  ? darkUi
-                    ? 'bg-slate-700 text-white'
-                    : 'bg-white text-stone-900 shadow-sm'
-                  : darkUi
-                    ? 'text-slate-300'
-                    : 'text-stone-600'
-              }`}
-            >
-              {x.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div
-        className={[
-          'sticky z-20 -mx-1 rounded-xl border px-2 py-2 backdrop-blur',
-          darkUi
-            ? 'top-[3.9rem] border-slate-800 bg-slate-950/90'
-            : 'top-[3.9rem] border-stone-200 bg-white/95',
-          mobilePane !== 'editor' ? 'hidden md:block' : '',
-        ].join(' ')}
+      <section
+        className={`rounded-2xl border p-3 xl:hidden ${
+          darkUi ? 'border-slate-800 bg-slate-950/35' : 'border-stone-200 bg-white'
+        }`}
       >
-        <p className={`mb-1 text-[11px] font-semibold uppercase tracking-wide ${shell.muted}`}>
-          Частые аккорды в этой песне
-        </p>
-        <div className="flex max-w-full gap-1 overflow-x-auto [scrollbar-width:none]">
-          {(toolbarChords.length > 0 ? toolbarChords : CHORD_STRIP).map((ch) => (
-            <button
-              key={`toolbar-${ch}`}
-              type="button"
-              onClick={() => insertChord(ch)}
-              className={`min-h-[40px] shrink-0 rounded-lg px-2.5 ${shell.chordBtn}`}
-            >
-              {ch}
-            </button>
-          ))}
+        <div className="flex items-center gap-2 overflow-x-auto [scrollbar-width:none]">
+          {blocks.map((block, idx) => {
+            const preset = STUDIO_BLOCK_PRESETS.find((x) => x.type === block.type);
+            return (
+              <div key={`mini-outline-${block.id}`} className="inline-flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveBlockId(block.id);
+                    setMobilePane('editor');
+                    blockCardRef.current.get(block.id)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                  }}
+                  className={`inline-flex shrink-0 items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold ${studioTypeTone(block.type, darkUi, activeBlockId === block.id)}`}
+                >
+                  <span aria-hidden>{preset?.icon ?? '🎵'}</span>
+                  <span>{block.sectionHint || blockTypeLabel(block.type)}</span>
+                </button>
+                {idx < blocks.length - 1 ? <span className={shell.muted}>→</span> : null}
+              </div>
+            );
+          })}
         </div>
-      </div>
+      </section>
 
-      <div
-        className={[
-          'mb-2 hidden flex-wrap items-center justify-center gap-2 rounded-2xl border px-3 py-2 md:flex',
-          darkUi ? 'border-slate-800 bg-slate-950/50' : 'border-stone-200 bg-stone-50/80',
-        ].join(' ')}
-      >
-        <span className={`text-[11px] font-semibold uppercase tracking-wide ${shell.muted}`}>Блоки</span>
-        {(
-          [
-            { type: 'verse' as const, label: 'Куплет' },
-            { type: 'prechorus' as const, label: 'Предприпев' },
-            { type: 'chorus' as const, label: 'Припев' },
-            { type: 'bridge' as const, label: 'Бридж' },
-            { type: 'intro' as const, label: 'Intro' },
-            { type: 'outro' as const, label: 'Outro' },
-            { type: 'solo' as const, label: 'Solo' },
-          ] as const
-        ).map(({ type, label }) => (
-          <button
-            key={type}
-            type="button"
-            onClick={() => addQuickBlock(type)}
-            className={`inline-flex min-h-[40px] items-center gap-1 rounded-full border px-3 text-xs font-semibold ${
-              darkUi
-                ? 'border-slate-700 bg-slate-900 text-slate-100 hover:bg-slate-800'
-                : 'border-stone-200 bg-white text-stone-800 hover:bg-stone-100'
-            }`}
-          >
-            <LuPlus className="h-3.5 w-3.5 shrink-0" aria-hidden />
-            {label}
-          </button>
-        ))}
-      </div>
-
-      <div className={showPreview ? 'grid gap-3 xl:grid-cols-[1fr_0.8fr_0.6fr]' : 'grid gap-3 lg:grid-cols-[1fr_0.55fr]'}>
+      <div className={['grid gap-4', showPreview ? 'xl:grid-cols-[minmax(0,3fr)_minmax(320px,2fr)]' : ''].join(' ')}>
         <DragDropContext onDragEnd={onDragEnd}>
           <Droppable droppableId="studio-blocks">
             {(dropProvided) => (
               <div
                 ref={dropProvided.innerRef}
                 {...dropProvided.droppableProps}
-                className={`flex max-h-[min(78vh,640px)] flex-col gap-3 overflow-y-auto pr-0.5 md:pr-1 ${
-                  showEditorPane ? '' : 'hidden md:flex'
-                }`}
+                className={`flex flex-col gap-4 ${showEditorPane ? '' : 'hidden md:flex'}`}
               >
                 {blocks.map((b, i) => (
                   <Draggable key={b.id} draggableId={b.id} index={i}>
-                    {(dragProvided) => (
+                    {(dragProvided, dragSnapshot) => (
                       <div
                         ref={(el) => {
                           dragProvided.innerRef(el);
@@ -1009,6 +1015,7 @@ export function StudioEditor() {
                           else blockCardRef.current.delete(b.id);
                         }}
                         {...dragProvided.draggableProps}
+                        className={dragSnapshot.isDragging ? 'group rounded-2xl shadow-2xl' : 'group studio-block-enter'}
                       >
                         <BlockWrapper
                           block={b}
@@ -1036,6 +1043,19 @@ export function StudioEditor() {
                           }}
                           dragHandleProps={dragProvided.dragHandleProps ?? undefined}
                         />
+                        <div className="mt-2 hidden justify-center md:flex">
+                          <button
+                            type="button"
+                            onClick={() => insertBlockAfter(i, 'verse')}
+                            className={`rounded-full border border-dashed px-3 py-1 text-xs font-semibold opacity-0 transition group-hover:opacity-100 ${
+                              darkUi
+                                ? 'border-slate-600 bg-slate-900/80 text-slate-300 hover:bg-slate-800'
+                                : 'border-stone-300 bg-white text-stone-600 hover:bg-stone-50'
+                            }`}
+                          >
+                            + Добавить блок здесь
+                          </button>
+                        </div>
                       </div>
                     )}
                   </Draggable>
@@ -1047,110 +1067,91 @@ export function StudioEditor() {
         </DragDropContext>
 
         {showPreview ? (
-          <div
+          <aside
             className={[
-              'flex max-h-[min(78vh,640px)] flex-col gap-3 overflow-y-auto rounded-2xl border p-4',
+              'hidden rounded-2xl border p-4 xl:sticky xl:top-24 xl:flex xl:max-h-[calc(100vh-8rem)] xl:flex-col xl:overflow-y-auto',
               darkUi ? 'border-slate-800 bg-slate-950/60' : 'border-stone-200 bg-white',
-              showPreviewPane ? '' : 'hidden md:flex',
             ].join(' ')}
           >
-            <p className={`shrink-0 text-xs ${shell.muted}`}>Live preview</p>
+            <p className={`mb-3 shrink-0 text-xs font-semibold uppercase tracking-[0.05em] ${shell.muted}`}>
+              Live preview · {activeBlock ? blockTypeLabel(activeBlock.type) : '—'}
+            </p>
+            <div className="space-y-3">
+              {blocks.map((b) => (
+                <div
+                  key={`pv-desktop-${b.id}`}
+                  className={`${studioPreviewFrame(b.type, darkUi)} ${activeBlockId === b.id ? 'ring-2 ring-primary/50' : ''}`}
+                >
+                  <LyricsWithChords
+                    text={b.content}
+                    transposeSemitones={0}
+                    chordTone={darkUi ? 'dark' : 'light'}
+                    fontSizePx={16}
+                    className={`break-words ${darkUi ? 'text-slate-100' : 'text-stone-900'}`}
+                  />
+                </div>
+              ))}
+            </div>
+          </aside>
+        ) : null}
+      </div>
+
+      {showPreview ? (
+        <section
+          className={`hidden rounded-2xl border p-4 md:block xl:hidden ${
+            darkUi ? 'border-slate-800 bg-slate-950/60' : 'border-stone-200 bg-white'
+          }`}
+        >
+          <p className={`mb-3 text-xs font-semibold uppercase tracking-[0.05em] ${shell.muted}`}>
+            Live preview · {activeBlock ? blockTypeLabel(activeBlock.type) : '—'}
+          </p>
+          <div className="space-y-3">
             {blocks.map((b) => (
-              <div key={`pv-${b.id}`} className={studioPreviewFrame(b.type, darkUi)}>
+              <div
+                key={`pv-tablet-${b.id}`}
+                className={`${studioPreviewFrame(b.type, darkUi)} ${activeBlockId === b.id ? 'ring-2 ring-primary/50' : ''}`}
+              >
                 <LyricsWithChords
                   text={b.content}
                   transposeSemitones={0}
                   chordTone={darkUi ? 'dark' : 'light'}
                   fontSizePx={16}
-                  className={darkUi ? 'text-slate-100' : 'text-stone-900'}
+                  className={`break-words ${darkUi ? 'text-slate-100' : 'text-stone-900'}`}
                 />
               </div>
             ))}
           </div>
-        ) : null}
+        </section>
+      ) : null}
 
-        <aside
-          className={`max-h-[min(78vh,640px)] overflow-y-auto rounded-2xl border p-3 ${
-            darkUi ? 'border-slate-800 bg-slate-950/40' : 'border-stone-200 bg-white'
-          } ${showOutlinePane ? '' : 'hidden md:block'}`}
-        >
-          <p className={`mb-2 text-xs font-semibold uppercase tracking-wide ${shell.muted}`}>Структура песни</p>
-          <div className="space-y-1.5">
-            {blocks.map((block, idx) => (
-              <button
-                key={`outline-${block.id}`}
-                type="button"
-                className={`w-full rounded-lg px-2 py-2 text-left text-sm ${
-                  activeBlockId === block.id
-                    ? darkUi
-                      ? 'bg-slate-800 text-white'
-                      : 'bg-sky-50 text-sky-900'
-                    : darkUi
-                      ? 'text-slate-300 hover:bg-slate-900'
-                      : 'text-stone-700 hover:bg-stone-50'
-                }`}
-                onClick={() => {
-                  setActiveBlockId(block.id);
-                  blockCardRef.current.get(block.id)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                }}
-              >
-                {idx + 1}. {block.sectionHint || block.type}
-              </button>
-            ))}
-          </div>
-        </aside>
-      </div>
-
-      <div
-        className={[
-          'fixed left-0 right-0 z-40 border-t md:hidden',
-          darkUi ? 'border-slate-800 bg-slate-950/95' : 'border-slate-200 bg-white/95',
-          mobilePane !== 'editor' ? 'hidden' : '',
-        ].join(' ')}
-        style={{
-          bottom: 'max(9.25rem, calc(7.75rem + env(safe-area-inset-bottom, 0px)))',
-        }}
+      <section
+        className={`hidden rounded-2xl border p-3 xl:block ${
+          darkUi ? 'border-slate-800 bg-slate-950/35' : 'border-stone-200 bg-white'
+        }`}
       >
-        <div
-          className={[
-            'flex max-w-full flex-wrap justify-center gap-1 border-b px-2 py-1.5',
-            darkUi ? 'border-slate-800' : 'border-slate-200',
-          ].join(' ')}
-        >
-          {(
-            [
-              { type: 'verse' as const, label: '+ Куплет' },
-              { type: 'prechorus' as const, label: '+ Предприпев' },
-              { type: 'chorus' as const, label: '+ Припев' },
-              { type: 'bridge' as const, label: '+ Бридж' },
-              { type: 'solo' as const, label: '+ Соло' },
-            ] as const
-          ).map(({ type, label }) => (
-            <button
-              key={type}
-              type="button"
-              onClick={() => addQuickBlock(type)}
-              className={`min-h-[40px] shrink-0 rounded-lg px-2.5 text-xs font-semibold ${
-                darkUi ? 'bg-slate-800 text-slate-100' : 'bg-stone-100 text-stone-800'
-              }`}
-            >
-              {label}
-            </button>
-          ))}
+        <p className={`mb-3 text-xs font-semibold uppercase tracking-[0.05em] ${shell.muted}`}>Структура песни</p>
+        <div className="flex items-center gap-2 overflow-x-auto [scrollbar-width:none]">
+          {blocks.map((block, idx) => {
+            const preset = STUDIO_BLOCK_PRESETS.find((x) => x.type === block.type);
+            return (
+              <div key={`outline-${block.id}`} className="inline-flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveBlockId(block.id);
+                    blockCardRef.current.get(block.id)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                  }}
+                  className={`inline-flex shrink-0 items-center gap-2 rounded-full border px-3 py-2 text-xs font-semibold ${studioTypeTone(block.type, darkUi, activeBlockId === block.id)}`}
+                >
+                  <span aria-hidden>{preset?.icon ?? '🎵'}</span>
+                  <span>{block.sectionHint || blockTypeLabel(block.type)}</span>
+                </button>
+                {idx < blocks.length - 1 ? <span className={shell.muted}>→</span> : null}
+              </div>
+            );
+          })}
         </div>
-        <div className="flex max-w-full gap-1 overflow-x-auto px-2 py-2 [scrollbar-width:none]">
-          {CHORD_STRIP.map((ch) => (
-            <button
-              key={ch}
-              type="button"
-              onClick={() => insertChord(ch)}
-              className={`min-h-[44px] shrink-0 rounded-xl px-3 ${shell.chordBtn}`}
-            >
-              {ch}
-            </button>
-          ))}
-        </div>
-      </div>
+      </section>
 
       <div
         className={[
@@ -1159,6 +1160,15 @@ export function StudioEditor() {
         ].join(' ')}
       >
         <div className="mx-auto flex max-w-3xl items-center gap-2 px-3 py-2">
+          <button
+            type="button"
+            onClick={() => setMobilePane((prev) => (prev === 'preview' ? 'editor' : 'preview'))}
+            className={`min-h-[44px] rounded-xl px-4 text-sm font-semibold ${
+              darkUi ? 'bg-slate-800 text-slate-100' : 'bg-stone-100 text-stone-900'
+            }`}
+          >
+            {mobilePane === 'preview' ? 'Редактор' : 'Предпросмотр'}
+          </button>
           <button
             type="button"
             disabled={!hasUnsavedChanges || saveMut.isPending}
@@ -1185,6 +1195,41 @@ export function StudioEditor() {
           </button>
         </div>
       </div>
+
+      {showPreviewPane ? (
+        <div className="fixed inset-0 z-[70] bg-black/45 px-3 pb-24 pt-20 md:hidden">
+          <div
+            className={`h-full overflow-y-auto rounded-2xl border p-4 ${
+              darkUi ? 'border-slate-700 bg-slate-950 text-slate-100' : 'border-stone-200 bg-white text-stone-900'
+            }`}
+          >
+            <div className="mb-3 flex items-center justify-between">
+              <p className={`text-xs font-semibold uppercase tracking-[0.05em] ${shell.muted}`}>
+                Live preview · {activeBlock ? blockTypeLabel(activeBlock.type) : '—'}
+              </p>
+              <button type="button" onClick={() => setMobilePane('editor')} className={`rounded-lg px-2 py-1 text-xs ${shell.iconBtn}`}>
+                Закрыть
+              </button>
+            </div>
+            <div className="space-y-3">
+              {blocks.map((b) => (
+                <div
+                  key={`pv-mobile-${b.id}`}
+                  className={`${studioPreviewFrame(b.type, darkUi)} ${activeBlockId === b.id ? 'ring-2 ring-primary/50' : ''}`}
+                >
+                  <LyricsWithChords
+                    text={b.content}
+                    transposeSemitones={0}
+                    chordTone={darkUi ? 'dark' : 'light'}
+                    fontSizePx={16}
+                    className={`break-words ${darkUi ? 'text-slate-100' : 'text-stone-900'}`}
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

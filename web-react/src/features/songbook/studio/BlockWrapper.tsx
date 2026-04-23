@@ -1,4 +1,4 @@
-import { useState, type HTMLAttributes, type RefCallback } from 'react';
+import { useLayoutEffect, useRef, useState, type HTMLAttributes, type RefCallback } from 'react';
 import { LuChevronDown, LuChevronUp, LuCopy, LuGripVertical, LuPencil, LuTrash2 } from 'react-icons/lu';
 
 import { splitPasteByDoubleNewlines, type SongBlock, type SongBlockType } from './songBlocks';
@@ -11,6 +11,16 @@ const BADGE: Record<SongBlockType, string> = {
   bridge: 'BRIDGE',
   solo: 'SOLO',
   outro: 'OUTRO',
+};
+
+const ACCENT_BY_TYPE: Record<SongBlockType, string> = {
+  intro: 'border-l-emerald-500',
+  verse: 'border-l-sky-500',
+  prechorus: 'border-l-amber-400',
+  chorus: 'border-l-orange-500',
+  bridge: 'border-l-violet-500',
+  solo: 'border-l-fuchsia-500',
+  outro: 'border-l-slate-400',
 };
 
 type BlockWrapperProps = {
@@ -53,8 +63,9 @@ export function BlockWrapper({
 }: BlockWrapperProps) {
   const [renaming, setRenaming] = useState(false);
   const [sectionName, setSectionName] = useState(block.sectionHint ?? '');
+  const localTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const card = darkUi
-    ? `border-slate-800 bg-slate-950/50 ring-1 ${isActive ? 'ring-sky-500/80' : 'ring-slate-800/80'}`
+    ? `border-slate-800 bg-slate-950/60 ring-1 ${isActive ? 'ring-sky-400/80' : 'ring-slate-800/90'}`
     : `border-stone-200 bg-white ring-1 ${isActive ? 'ring-sky-400/70' : 'ring-stone-200/90'}`;
 
   const badge = darkUi
@@ -65,29 +76,38 @@ export function BlockWrapper({
     ? 'rounded-lg border border-slate-700 text-slate-400 hover:bg-slate-800 hover:text-slate-100'
     : 'rounded-lg border border-stone-200 text-stone-600 hover:bg-stone-50 hover:text-stone-900';
 
+  useLayoutEffect(() => {
+    const el = localTextareaRef.current;
+    if (!el) return;
+    el.style.height = '0px';
+    el.style.height = `${Math.max(el.scrollHeight, 116)}px`;
+  }, [block.content, renaming]);
+
   return (
-    <div className={`rounded-2xl border p-3 ${card}`}>
-      <div className="mb-2 flex items-start justify-between gap-2">
-        <span
-          className={`inline-flex items-center rounded-md border px-2 py-0.5 ${badge}`}
-          title={block.sectionHint ?? BADGE[block.type]}
-        >
+    <div className={`group rounded-2xl border border-l-4 p-5 shadow-sm transition-shadow hover:shadow-md ${ACCENT_BY_TYPE[block.type]} ${card}`}>
+      <div className="mb-3 flex items-start justify-between gap-3">
+        <div className="inline-flex min-w-0 items-center gap-2">
           <button
             type="button"
-            className="mr-1 inline-flex h-5 w-5 items-center justify-center rounded hover:bg-black/10"
+            className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-slate-500 transition hover:bg-black/10 hover:text-slate-900"
             aria-label="Перетащить блок"
             {...dragHandleProps}
           >
-            <LuGripVertical className="h-3.5 w-3.5" />
+            <LuGripVertical className="h-4 w-4" />
           </button>
-          {BADGE[block.type]}
-          {block.sectionHint ? (
-            <span className="ml-1.5 max-w-[10rem] truncate font-normal normal-case opacity-80">
-              · {block.sectionHint}
-            </span>
-          ) : null}
-        </span>
-        <div className="flex shrink-0 items-center gap-1">
+          <span
+            className={`inline-flex min-w-0 items-center rounded-md border px-2.5 py-1 ${badge}`}
+            title={block.sectionHint ?? BADGE[block.type]}
+          >
+            <span className="text-[12px] font-semibold uppercase tracking-[0.05em]">{BADGE[block.type]}</span>
+            {block.sectionHint ? (
+              <span className="ml-2 max-w-[14rem] truncate text-[14px] font-medium normal-case opacity-90">
+                · {block.sectionHint}
+              </span>
+            ) : null}
+          </span>
+        </div>
+        <div className="flex shrink-0 items-center gap-1 opacity-100 transition md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100">
           <button
             type="button"
             disabled={isFirst}
@@ -155,6 +175,11 @@ export function BlockWrapper({
       <textarea
         value={block.content}
         onChange={(e) => onChange(block.id, e.target.value)}
+        onInput={(e) => {
+          const target = e.currentTarget;
+          target.style.height = '0px';
+          target.style.height = `${Math.max(target.scrollHeight, 116)}px`;
+        }}
         onFocus={() => onFocusBlock(block.id)}
         onSelect={(e) => {
           const t = e.currentTarget;
@@ -180,8 +205,12 @@ export function BlockWrapper({
               }
             : undefined
         }
-        ref={textareaRef}
-        className={`min-h-[140px] w-full resize-y rounded-xl px-3 py-3 font-mono text-[15px] leading-relaxed outline-none ${shellEditor}`}
+        ref={(el) => {
+          localTextareaRef.current = el;
+          textareaRef?.(el);
+        }}
+        rows={3}
+        className={`w-full rounded-xl px-4 py-3 font-["JetBrains_Mono","Fira_Code","Courier_New",monospace] text-[16px] leading-[1.8] outline-none resize-none overflow-hidden ${shellEditor}`}
         spellCheck={false}
         placeholder={'# Куплет 1\n[Am]Когда качаются [C]фонарики\n\n# Припев\n[F]Пой со мной'}
         aria-label={`Редактор блока ${BADGE[block.type]}`}

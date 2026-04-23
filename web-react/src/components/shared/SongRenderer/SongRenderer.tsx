@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 
-import { parseChordLine, type ParsedChordLine } from './chordParser';
+import { parseChordLine, type ParsedChordLine, type ChordAnchor } from './chordParser';
 import { SongLine } from './SongLine';
 import { useTranspose } from './useTranspose';
 
@@ -18,6 +18,55 @@ type SongRendererProps = {
 };
 
 const identityTranspose = (symbol: string) => symbol;
+type RenderRow =
+  | { kind: 'section'; key: string; title: string }
+  | { kind: 'line'; key: string; line: ParsedChordLine };
+
+const CHORD_TOKEN_RE =
+  /^(?:[A-GH](?:#|b)?|До|Ре|Ми|Фа|Соль|Ля|Си(?:#|b)?)(?:maj|min|m|sus|dim|aug|add)?[0-9]*(?:\/(?:[A-GH](?:#|b)?|До|Ре|Ми|Фа|Соль|Ля|Си(?:#|b)?))?(?:[a-z0-9#+/()\-]*)$/i;
+
+function splitGraphemeClusters(input: string, locale = 'ru'): string[] {
+  const source = typeof input === 'string' ? input : '';
+  if (source.length === 0) return [];
+  try {
+    const IntlAny = Intl as typeof Intl & {
+      Segmenter?: new (loc: string, opts: { granularity: 'grapheme' }) => {
+        segment: (s: string) => Iterable<{ segment: string }>;
+      };
+    };
+    const Segmenter = IntlAny.Segmenter;
+    if (typeof Segmenter === 'function') {
+      const iter = new Segmenter(locale, { granularity: 'grapheme' }).segment(source);
+      return Array.from(iter, (s) => s.segment);
+    }
+  } catch {
+    // fallback below
+  }
+  return Array.from(source);
+}
+
+function parsePlainChordOnlyLine(line: string): ChordAnchor[] | null {
+  const source = typeof line === 'string' ? line : '';
+  if (!source.trim()) return null;
+  const matches = Array.from(source.matchAll(/\S+/g));
+  if (matches.length === 0) return null;
+
+  const chords = matches
+    .map((m) => {
+      const rawToken = m[0] ?? '';
+      const token = rawToken.replace(/^[|()[\]{}]+|[|()[\]{}]+$/g, '');
+      if (!token || !CHORD_TOKEN_RE.test(token)) return null;
+      const index = m.index ?? 0;
+      return {
+        position: splitGraphemeClusters(source.slice(0, index)).length,
+        chord: token,
+      };
+    })
+    .filter((v): v is ChordAnchor => v != null);
+
+  if (chords.length === 0 || chords.length !== matches.length) return null;
+  return chords;
+}
 
 function sectionToneClass(title: string, tone: 'light' | 'dark'): string {
   const lower = title.toLowerCase();
@@ -59,42 +108,95 @@ export function SongRenderer({
     return preprocessText ? preprocessText(source) : source;
   }, [text, preprocessText]);
 
-  const lineRows = useMemo(
+  const rawLines = useMemo(
     () =>
       preparedText
         .replace(/\r\n/g, '\n')
         .replace(/\r/g, '\n')
-        .split('\n')
-        .map((raw) => {
-          const secTitle = parseSectionTitle ? parseSectionTitle(raw) : null;
-          return { raw, sectionTitle: secTitle };
-        }),
-    [preparedText, parseSectionTitle],
+        .split('\n'),
+    [preparedText],
   );
 
-  const parsedLines = useMemo(
-    () =>
-      lineRows.map((row) => {
-        if (row.sectionTitle !== null) return { text: '', chords: [] } as ParsedChordLine;
-        return parseChordLine(row.raw);
-      }),
-    [lineRows],
+  const parsedRows = useMemo(() => {
+    const rows: RenderRow[] = [];
+    let i = 0;
+    while (i < rawLines.length) {
+      const raw = rawLines[i] ?? '';
+      const secTitle = parseSectionTitle ? parseSectionTitle(raw) : null;
+      if (secTitle !== null) {
+        rows.push({ kind: 'section', key: `sec-${i}`, title: secTitle });
+        i += 1;
+        continue;
+      }
+
+      const bracketParsed = parseChordLine(raw);
+      if (bracketParsed.chords.length > 0) {
+        rows.push({ kind: 'line', key: `line-${i}`, line: bracketParsed });
+        i += 1;
+        continue;
+      }
+
+      const chordOnlyAnchors = parsePlainChordOnlyLine(raw);
+      const nextRaw = rawLines[i + 1] ?? '';
+      const nextSectionTitle = parseSectionTitle ? parseSectionTitle(nextRaw) : null;
+      const nextBracketParsed = parseChordLine(nextRaw);
+      const nextChordOnlyAnchors = parsePlainChordOnlyLine(nextRaw);
+
+      const canAttachToNextLyric =
+        chordOnlyAnchors != null &&
+        i + 1 < rawLines.length &&
+        nextSectionTitle === null &&
+        nextBracketParsed.chords.length === 0 &&
+        nextChordOnlyAnchors == null;
+
+      if (canAttachToNextLyric) {
+        rows.push({
+          kind: 'line',
+          key: `line-${i}-${i + 1}`,
+          line: {
+            text: nextRaw || '\u00a0',
+            chords: chordOnlyAnchors,
+          },
+        });
+        i += 2;
+        continue;
+      }
+
+      rows.push({ kind: 'line', key: `line-${i}`, line: bracketParsed });
+      i += 1;
+    }
+    return rows;
+  }, [rawLines, parseSectionTitle]);
+
+  const contentLines = useMemo(
+    () => parsedRows.filter((row): row is Extract<RenderRow, { kind: 'line' }> => row.kind === 'line').map((row) => row.line),
+    [parsedRows],
   );
 
   const transposedLines = useTranspose({
-    lines: parsedLines,
+    lines: contentLines,
     semitones: transposeSemitones,
     transposeChord: transposeChordSymbol,
   });
 
+  const transposedRows = useMemo(() => {
+    let lineIdx = 0;
+    return parsedRows.map((row) => {
+      if (row.kind === 'section') return row;
+      const line = transposedLines[lineIdx] ?? row.line;
+      lineIdx += 1;
+      return { ...row, line } as RenderRow;
+    });
+  }, [parsedRows, transposedLines]);
+
   return (
     <div className={className} style={{ fontSize: `${normalizedFontSize}px`, lineHeight }}>
-      {lineRows.map((row, idx) => {
-        if (row.sectionTitle !== null) {
-          const bar = sectionToneClass(row.sectionTitle, chordTone);
+      {transposedRows.map((row) => {
+        if (row.kind === 'section') {
+          const bar = sectionToneClass(row.title, chordTone);
           return (
             <div
-              key={`sec-${idx}`}
+              key={row.key}
               className={[
                 'my-3 rounded-r-lg border-l-[4px] px-3 py-1.5 text-sm font-bold uppercase tracking-wide first:mt-0',
                 bar,
@@ -102,14 +204,14 @@ export function SongRenderer({
               role="heading"
               aria-level={3}
             >
-              {row.sectionTitle}
+              {row.title}
             </div>
           );
         }
         return (
           <SongLine
-            key={`line-${idx}`}
-            line={transposedLines[idx] ?? { text: '', chords: [] }}
+            key={row.key}
+            line={row.line}
             chordsVisible={chordsVisible}
             chordTone={chordTone}
             layoutMode={chordLayoutMode}

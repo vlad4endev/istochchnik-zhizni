@@ -251,9 +251,25 @@ body {
     }
   }
 
+  @keyframes studio-block-enter {
+    from {
+      opacity: 0;
+      transform: translateY(-8px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .studio-block-enter {
+    animation: studio-block-enter 200ms ease-out both;
+  }
+
   @media (prefers-reduced-motion: reduce) {
     .dashboard-backdrop,
-    .dashboard-sheet {
+    .dashboard-sheet,
+    .studio-block-enter {
       animation: none !important;
     }
   }

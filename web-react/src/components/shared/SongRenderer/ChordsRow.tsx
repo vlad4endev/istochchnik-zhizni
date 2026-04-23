@@ -11,7 +11,7 @@ type ChordsRowProps = {
 };
 
 const toneClass = {
-  light: 'text-sky-700',
+  light: 'text-primary',
   dark: 'text-amber-300',
 } as const;
 

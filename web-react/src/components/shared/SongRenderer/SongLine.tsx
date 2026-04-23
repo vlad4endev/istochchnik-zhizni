@@ -88,15 +88,15 @@ export function SongLine({ line, chordsVisible, chordTone, layoutMode, className
   );
 
   return (
-    <div className={['w-full overflow-x-auto', className].filter(Boolean).join(' ')}>
+    <div className={['w-full min-w-0', className].filter(Boolean).join(' ')}>
       <div
         className={[
-          'inline-block min-w-full whitespace-pre leading-[1.35]',
+          'block w-full whitespace-pre-wrap break-words leading-[1.45]',
           layoutMode === 'mono' ? 'font-["JetBrains_Mono","Courier_New",monospace]' : 'font-sans',
         ].join(' ')}
       >
         <ChordsRow chords={rowChords} visible={chordsVisible} tone={chordTone} />
-        <div ref={lyricRef} className="whitespace-pre">
+        <div ref={lyricRef} className="whitespace-pre-wrap break-words">
           {text}
         </div>
       </div>
