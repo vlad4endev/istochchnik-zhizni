@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import axios from 'axios';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useBeforeUnload, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { DragDropContext, Draggable, Droppable, type DropResult } from '@hello-pangea/dnd';
@@ -322,14 +323,36 @@ export function StudioEditor() {
   const aiChordPlacementMut = useMutation({
     mutationFn: (content: string) => aiChordPlacement(content),
     onSuccess: (result) => {
-      setBlocks(chordProToBlocks(result.content));
+      const nextBlocks = chordProToBlocks(result.content);
+      const nextChordPro = blocksToChordPro(nextBlocks);
+      const prevChordPro = blocksToChordPro(blocks);
+      if (nextChordPro === prevChordPro || result.changedLines === 0) {
+        const donor = blocks.find((block) => hasAnyChordsInBlock(block));
+        if (donor) {
+          const targetIds = blocks.filter((block) => block.id !== donor.id).map((block) => block.id);
+          const fallback = autoDistributeChords(blocks, donor.id, targetIds);
+          const fallbackChanged = fallback.some((block, idx) => block.content !== (blocks[idx]?.content ?? ''));
+          if (fallbackChanged) {
+            setBlocks(fallback);
+            emitAppToast({
+              kind: 'success',
+              message: `AI не дал правок, применён автопаттерн к ${targetIds.length} блокам ✓`,
+            });
+            return;
+          }
+        }
+        emitAppToast('AI не предложил изменений аккордов для этого текста');
+        return;
+      }
+      setBlocks(nextBlocks);
       emitAppToast({
         kind: 'success',
         message: `AI расставил аккорды: обновлено строк ${result.changedLines}, всего аккордов ${result.totalChords}`,
       });
     },
     onError: (err: unknown) => {
-      const msg = err instanceof Error && err.message ? err.message : 'AI не смог расставить аккорды';
+      const apiMsg = axios.isAxiosError(err) ? (err.response?.data as { error?: string } | undefined)?.error : undefined;
+      const msg = apiMsg || (err instanceof Error && err.message ? err.message : 'AI не смог расставить аккорды');
       emitAppToast(msg);
     },
   });
@@ -567,6 +590,38 @@ export function StudioEditor() {
     setAutoChordDonorId(preferredDonor.id);
     setAutoChordTargetIds(sameTypeIds);
     setAutoChordModalOpen(true);
+  };
+
+  const runAutoChordPlacementForAll = () => {
+    const donor = blocks.find((block) => hasAnyChordsInBlock(block));
+    if (!donor) {
+      emitAppToast('Нужен хотя бы один блок с аккордами (донор паттерна)');
+      return;
+    }
+    const targetIds = blocks.filter((block) => block.id !== donor.id).map((block) => block.id);
+    if (targetIds.length === 0) {
+      emitAppToast('Нет блоков для автоподстановки');
+      return;
+    }
+    const nextBlocks = autoDistributeChords(blocks, donor.id, targetIds);
+    const changedCount = nextBlocks.reduce((acc, block, idx) => {
+      return acc + (block.content !== (blocks[idx]?.content ?? '') ? 1 : 0);
+    }, 0);
+    if (changedCount === 0) {
+      emitAppToast('Автоподстановка не изменила блоки (проверьте донор)');
+      return;
+    }
+    const previousBlocks = blocks;
+    setBlocks(nextBlocks);
+    emitAppToast({ kind: 'success', message: `Автоподстановка применена: изменено ${changedCount} блоков ✓` });
+    if (undoTimeoutRef.current) clearTimeout(undoTimeoutRef.current);
+    const expiresAt = Date.now() + 10000;
+    setChordAutoUndo({ previousBlocks, appliedCount: changedCount, expiresAt });
+    setUndoNow(Date.now());
+    undoTimeoutRef.current = setTimeout(() => {
+      setChordAutoUndo(null);
+      undoTimeoutRef.current = null;
+    }, 10000);
   };
 
   const handleAutoChordDonorChange = (donorId: string) => {
@@ -1154,6 +1209,20 @@ export function StudioEditor() {
         >
           <LuSlidersHorizontal className="h-5 w-5" />
         </button>
+        <button
+          type="button"
+          onClick={runAiChordPlacement}
+          disabled={aiChordPlacementMut.isPending}
+          className={`inline-flex min-h-[44px] items-center gap-1.5 rounded-xl border px-3 text-sm font-semibold disabled:opacity-60 ${
+            darkUi
+              ? 'border-violet-500/60 bg-violet-950/30 text-violet-100 hover:bg-violet-950/45'
+              : 'border-violet-200 bg-violet-50 text-violet-900 hover:bg-violet-100'
+          }`}
+          aria-label="AI-разбор аккордов"
+        >
+          <LuWand className="h-4 w-4" />
+          <span>{aiChordPlacementMut.isPending ? 'AI…' : 'AI-разбор'}</span>
+        </button>
         {canDeleteCatalog ? (
           <button
             type="button"
@@ -1246,7 +1315,7 @@ export function StudioEditor() {
             </button>
             <button
               type="button"
-              onClick={openAutoChordModal}
+              onClick={runAutoChordPlacementForAll}
               className={`inline-flex min-h-[40px] items-center gap-1 rounded-lg border px-3 text-sm font-semibold ${
                 darkUi
                   ? 'border-amber-500/70 bg-amber-950/30 text-amber-100 hover:bg-amber-950/50'
@@ -1254,7 +1323,16 @@ export function StudioEditor() {
               }`}
             >
               <LuSparkles className="h-4 w-4" />
-              🎸 Авторасстановка
+              🎸 Автоподстановка
+            </button>
+            <button
+              type="button"
+              onClick={openAutoChordModal}
+              className={`inline-flex min-h-[40px] items-center gap-1 rounded-lg border px-3 text-sm font-semibold ${
+                darkUi ? 'border-slate-700 bg-slate-900 text-slate-200 hover:bg-slate-800' : 'border-stone-200 bg-white text-stone-800 hover:bg-stone-50'
+              }`}
+            >
+              Точный выбор
             </button>
             <button
               type="button"
