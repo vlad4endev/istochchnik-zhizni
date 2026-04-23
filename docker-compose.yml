@@ -29,6 +29,8 @@ services:
       VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
       VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
       VAPID_SUBJECT: ${VAPID_SUBJECT:-}
+      # Хост RSS-фида для DNS healthcheck подкастов.
+      PODCAST_RSS_HEALTH_HOST: ${PODCAST_RSS_HEALTH_HOST:-rss.castbox.fm}
     networks:
       - default
       - supabase_network
@@ -37,7 +39,11 @@ services:
     ports:
       - "${API_PUBLISH:-127.0.0.1}:${PORT:-40978}:40978"
     healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:40978/health >/dev/null || exit 1"]
+      test:
+        [
+          "CMD-SHELL",
+          "curl -fsS http://127.0.0.1:40978/health >/dev/null || exit 1; node -e \"const dns=require('node:dns').promises; const host=process.env.PODCAST_RSS_HEALTH_HOST||'rss.castbox.fm'; dns.lookup(host).then(()=>process.exit(0)).catch(()=>process.exit(1));\"",
+        ]
       interval: 15s
       timeout: 5s
       retries: 6

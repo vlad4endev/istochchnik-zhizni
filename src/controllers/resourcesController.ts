@@ -130,6 +130,42 @@ let cache: { fetchedAtMs: number; payload: PodcastFeedResponse } | null = null;
 
 type PodcastSettings = { rssUrl: string | null };
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function extractErrorCode(err: unknown): string | null {
+  if (!err || typeof err !== 'object') return null;
+  const code = (err as { code?: unknown }).code;
+  return typeof code === 'string' ? code : null;
+}
+
+function isTransientNetworkError(err: unknown): boolean {
+  const code = extractErrorCode(err);
+  return code === 'EAI_AGAIN' || code === 'ETIMEDOUT' || code === 'ECONNRESET' || code === 'ENOTFOUND';
+}
+
+async function parseFeedWithRetry(rssUrl: string): Promise<Parser.Output<RssFeedWithItunes>> {
+  const maxAttempts = 3;
+  let lastError: unknown = null;
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      return await parser.parseURL(rssUrl);
+    } catch (e) {
+      lastError = e;
+      if (!isTransientNetworkError(e) || attempt === maxAttempts) {
+        throw e;
+      }
+      const waitMs = 400 * 2 ** (attempt - 1);
+      console.warn(
+        `[resources] podcasts parse transient error (${extractErrorCode(e) ?? 'unknown'}), retry ${attempt}/${maxAttempts} in ${waitMs}ms`,
+      );
+      await sleep(waitMs);
+    }
+  }
+  throw lastError;
+}
+
 async function ensureSettingsColumn(): Promise<void> {
   if (!pool) return;
   await pool.query('ALTER TABLE global_settings ADD COLUMN IF NOT EXISTS podcasts_rss_url TEXT;');
@@ -224,11 +260,13 @@ export async function getPodcastEpisodes(req: Request, res: Response): Promise<v
       return;
     }
 
-    const feed = await parser.parseURL(rssUrl);
+    const feed = (await parseFeedWithRetry(rssUrl)) as Parser.Output<RssFeedWithItunes> & {
+      items?: RssItemWithItunes[];
+    };
     const items = Array.isArray(feed.items) ? feed.items : [];
     const episodes = items
-      .map((it, idx) => normalizeEpisode(it as RssItemWithItunes, idx, feed as RssFeedWithItunes))
-      .filter((x): x is PodcastEpisode => Boolean(x));
+      .map((it: RssItemWithItunes, idx: number) => normalizeEpisode(it, idx, feed as RssFeedWithItunes))
+      .filter((x: PodcastEpisode | null): x is PodcastEpisode => Boolean(x));
 
     const payload: PodcastFeedResponse = {
       feed: {
@@ -247,6 +285,20 @@ export async function getPodcastEpisodes(req: Request, res: Response): Promise<v
     cache = { fetchedAtMs: now, payload };
     res.json(payload);
   } catch (e) {
+    const isTransient = isTransientNetworkError(e);
+    if (isTransient && cache && cache.payload.feed.rssUrl === rssUrl) {
+      console.warn(
+        '[resources] podcasts parse transient error, serving stale cache:',
+        extractErrorCode(e) ?? 'unknown',
+      );
+      const cachedPayload: PodcastFeedResponse = {
+        ...cache.payload,
+        feed: { ...cache.payload.feed, cached: true },
+        episodes: cache.payload.episodes.slice(0, limit),
+      };
+      res.json(cachedPayload);
+      return;
+    }
     console.error('[resources] podcasts parse error:', e);
     res.status(500).json({ error: 'Failed to load podcast feed' });
   }
