@@ -4,6 +4,7 @@ import axios from 'axios';
 
 import { convertToChordPro } from './chordProConversion';
 import { extractTextFromPdfBuffer } from './extractTextFromPdf';
+import { analyzeImportedSongText, type ImportedTextAnalysis } from './analyzeImportedSongText';
 import { fetchImportUrlText } from '../api';
 
 export type SmartImportSourceTab = 'text' | 'pdf' | 'url';
@@ -37,6 +38,8 @@ export function SmartImportModal({
   const [pdfError, setPdfError] = useState<string | null>(null);
   const [pdfName, setPdfName] = useState<string | null>(null);
   const [pdfBuffer, setPdfBuffer] = useState<ArrayBuffer | null>(null);
+  const [pdfExtractedText, setPdfExtractedText] = useState('');
+  const [pdfAnalysis, setPdfAnalysis] = useState<ImportedTextAnalysis | null>(null);
   const fileTxtRef = useRef<HTMLInputElement>(null);
   const filePdfRef = useRef<HTMLInputElement>(null);
 
@@ -53,6 +56,8 @@ export function SmartImportModal({
     setPdfBusy(false);
     setPdfName(null);
     setPdfBuffer(null);
+    setPdfExtractedText('');
+    setPdfAnalysis(null);
   }, [open, initialRaw, initialTab]);
 
   if (!open) return null;
@@ -134,13 +139,25 @@ export function SmartImportModal({
         setPdfError('В PDF не найден текст (возможно, только картинки). Скопируйте текст вручную во вкладке «Текст».');
         return;
       }
-      setRaw(text);
-      setTab('text');
+      setPdfExtractedText(text);
+      setPdfAnalysis(analyzeImportedSongText(text));
     } catch {
       setPdfError('Не удалось прочитать PDF. Проверьте файл или попробуйте экспорт в текст из другого приложения.');
     } finally {
       setPdfBusy(false);
     }
+  };
+
+  const applyPdfAndContinueEditing = () => {
+    if (!pdfExtractedText.trim()) return;
+    setRaw(pdfExtractedText);
+    setTab('text');
+  };
+
+  const applyPdfImmediately = () => {
+    if (!pdfExtractedText.trim()) return;
+    onApply({ raw: pdfExtractedText, chordPro: convertToChordPro(pdfExtractedText) });
+    onClose();
   };
 
   const runUrlFetch = async () => {
@@ -292,23 +309,42 @@ export function SmartImportModal({
         {tab === 'pdf' ? (
           <div id={`${baseId}-panel-pdf`} role="tabpanel" aria-labelledby={`${baseId}-tab-pdf`} className="space-y-4">
             <p className={`text-sm leading-relaxed ${muted}`}>
-              Подойдёт PDF с выделяемым текстом (не скан без OCR). Текст появится во вкладке «Текст», где его
-              при необходимости поправьте и нажмите «Вставить в форму».
+              Перетащите PDF сюда или нажмите для выбора. Подойдёт PDF с выделяемым текстом (не скан без OCR).
             </p>
-            <div className="flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                onClick={() => filePdfRef.current?.click()}
-                className={`inline-flex min-h-[44px] items-center gap-2 rounded-xl border px-4 py-2 text-sm font-semibold ${btnGhost}`}
-              >
-                <LuUpload className="h-4 w-4" />
-                Выбрать PDF
-              </button>
-              {pdfName ? (
-                <span className={`text-sm ${isStudio ? 'text-zinc-300' : 'text-stone-700'}`}>{pdfName}</span>
-              ) : (
-                <span className={`text-sm ${muted}`}>Файл не выбран</span>
-              )}
+            <div
+              className={`rounded-xl border-2 border-dashed p-4 ${
+                isStudio ? 'border-zinc-700 bg-zinc-950/60' : 'border-stone-200 bg-stone-50'
+              }`}
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={(e) => {
+                e.preventDefault();
+                const f = e.dataTransfer.files?.[0];
+                if (!f) return;
+                if (!/\.pdf$/i.test(f.name)) {
+                  setPdfError('Нужен PDF-файл.');
+                  return;
+                }
+                setPdfName(f.name);
+                setPdfError(null);
+                void f.arrayBuffer().then((b) => setPdfBuffer(b));
+              }}
+            >
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => filePdfRef.current?.click()}
+                  className={`inline-flex min-h-[44px] items-center gap-2 rounded-xl border px-4 py-2 text-sm font-semibold ${btnGhost}`}
+                >
+                  <LuUpload className="h-4 w-4" />
+                  Выбрать PDF
+                </button>
+                {pdfName ? (
+                  <span className={`text-sm ${isStudio ? 'text-zinc-300' : 'text-stone-700'}`}>{pdfName}</span>
+                ) : (
+                  <span className={`text-sm ${muted}`}>Файл не выбран</span>
+                )}
+              </div>
+              <p className={`mt-2 text-xs ${muted}`}>Drag & drop работает прямо в эту область.</p>
             </div>
             {pdfError ? <p className="text-sm text-red-500">{pdfError}</p> : null}
             <button
@@ -320,6 +356,56 @@ export function SmartImportModal({
               {pdfBusy ? <LuLoader className="h-4 w-4 animate-spin" /> : null}
               Извлечь текст из PDF
             </button>
+
+            {pdfExtractedText.trim() ? (
+              <div className={`space-y-3 rounded-xl border p-3 ${isStudio ? 'border-zinc-700 bg-zinc-950/50' : 'border-stone-200 bg-white'}`}>
+                <p className={`text-sm font-medium ${isStudio ? 'text-zinc-100' : 'text-stone-900'}`}>
+                  Предпросмотр извлечённого текста
+                </p>
+                <textarea
+                  value={pdfExtractedText}
+                  onChange={(e) => {
+                    const next = e.target.value;
+                    setPdfExtractedText(next);
+                    setPdfAnalysis(analyzeImportedSongText(next));
+                  }}
+                  rows={8}
+                  className={`w-full resize-y rounded-lg border p-3 font-mono text-sm ${textarea}`}
+                />
+                {pdfAnalysis ? (
+                  <div className={`space-y-2 rounded-lg p-2 text-xs ${isStudio ? 'bg-zinc-900 text-zinc-300' : 'bg-stone-50 text-stone-700'}`}>
+                    <p>
+                      Мы нашли <strong>{pdfAnalysis.chordCount}</strong> аккордов и <strong>{pdfAnalysis.sectionCount}</strong>{' '}
+                      блоков. Всё верно?
+                    </p>
+                    {pdfAnalysis.sectionTitles.length > 0 ? (
+                      <p>Блоки: {pdfAnalysis.sectionTitles.join(', ')}</p>
+                    ) : null}
+                    {pdfAnalysis.uncertainChords.length > 0 ? (
+                      <p className="text-amber-500">
+                        Проверьте сомнительные аккорды: {pdfAnalysis.uncertainChords.join(', ')}
+                      </p>
+                    ) : null}
+                  </div>
+                ) : null}
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={applyPdfImmediately}
+                    className={`inline-flex min-h-[44px] items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold ${btnPrimary}`}
+                  >
+                    Загрузить
+                  </button>
+                  <button
+                    type="button"
+                    onClick={applyPdfAndContinueEditing}
+                    className={`rounded-xl border px-4 py-2 text-sm ${btnGhost}`}
+                  >
+                    Редактировать перед загрузкой
+                  </button>
+                </div>
+              </div>
+            ) : null}
           </div>
         ) : null}
 

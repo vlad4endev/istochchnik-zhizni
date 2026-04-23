@@ -1,5 +1,5 @@
 import { useMutation } from '@tanstack/react-query';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type RefObject } from 'react';
 import {
   LuArrowLeft,
   LuArrowRight,
@@ -38,6 +38,12 @@ export function AddSongPage() {
   const role = useAuthStore((s) => s.role);
   const editorRef = useRef<HTMLTextAreaElement>(null);
   const selRef = useRef({ start: 0, end: 0 });
+  const titleRef = useRef<HTMLInputElement>(null);
+  const keyRef = useRef<HTMLInputElement>(null);
+  const tempoRef = useRef<HTMLInputElement>(null);
+  const timeSigRef = useRef<HTMLInputElement>(null);
+  const youtubeRef = useRef<HTMLInputElement>(null);
+  const tagsRef = useRef<HTMLInputElement>(null);
 
   const [step, setStep] = useState(1);
   const [importOpen, setImportOpen] = useState(false);
@@ -56,6 +62,8 @@ export function AddSongPage() {
   const [timeSig, setTimeSig] = useState('');
   const [tags, setTags] = useState('');
   const [keyHint, setKeyHint] = useState<string | null>(null);
+  const [showWelcome, setShowWelcome] = useState(false);
+  const [mobileEditorPane, setMobileEditorPane] = useState<'editor' | 'preview'>('editor');
 
   const applyConvert = useCallback((src: string) => convertToChordPro(src), []);
 
@@ -64,6 +72,14 @@ export function AddSongPage() {
     importAutoOpened.current = true;
     setImportOpen(true);
   }, [step]);
+
+  useEffect(() => {
+    try {
+      setShowWelcome(localStorage.getItem('studio:addsong:welcome:dismissed') !== '1');
+    } catch {
+      setShowWelcome(false);
+    }
+  }, []);
 
   const theme = isStudio
     ? {
@@ -246,9 +262,22 @@ export function AddSongPage() {
   const manualSongNumberInvalid =
     !autoSongNumber &&
     (!!songNumber.trim() ? !Number.isInteger(Number(songNumber)) || Number(songNumber) <= 0 : true);
+  const hasImportedText = Boolean((content.trim() || rawPaste.trim()).length > 0);
+  const canSaveSong = Boolean(title.trim()) && !createMut.isPending && !manualSongNumberInvalid;
+  const backPath = isStudio
+    ? location.pathname.startsWith('/songbook')
+      ? '/songbook/studio'
+      : '/studio/my-songs'
+    : '/songbook';
+
+  const onEnterFocusNext = (e: KeyboardEvent<HTMLInputElement>, next: RefObject<HTMLInputElement>) => {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    next.current?.focus();
+  };
 
   return (
-    <div className={`mx-auto max-w-6xl space-y-6 pb-24 ${theme.page}`}>
+    <div className={`mx-auto max-w-6xl space-y-6 pb-36 md:pb-24 ${theme.page}`}>
       <SmartImportModal
         open={importOpen}
         onClose={() => {
@@ -276,7 +305,7 @@ export function AddSongPage() {
       </div>
 
       {/* Stepper */}
-      <ol className="flex flex-wrap gap-2">
+      <ol className="flex flex-nowrap gap-2 overflow-x-auto pb-1 md:flex-wrap md:overflow-visible">
         {(['Источник текста', 'Редактор и превью', 'Метаданные'] as const).map((label, i) => {
           const n = i + 1;
           const active = step === n;
@@ -286,7 +315,7 @@ export function AddSongPage() {
                 type="button"
                 onClick={() => n < step && setStep(n)}
                 disabled={n > step}
-                className={`rounded-full px-4 py-2 text-sm font-medium transition-colors ${
+                className={`whitespace-nowrap rounded-full px-4 py-2 text-sm font-medium transition-colors ${
                   active ? theme.stepActive : n < step ? theme.stepDone : theme.stepTodo
                 }`}
               >
@@ -296,6 +325,26 @@ export function AddSongPage() {
           );
         })}
       </ol>
+
+      {showWelcome ? (
+        <div className={`rounded-xl border p-3 text-sm ${isStudio ? 'border-sky-900/50 bg-sky-950/30 text-sky-100' : 'border-sky-200 bg-sky-50 text-sky-900'}`}>
+          <p>Вставьте текст песни, расставьте аккорды в квадратных скобках [Am] прямо в тексте и разделите песню на блоки.</p>
+          <button
+            type="button"
+            className={`mt-2 rounded-lg border px-3 py-1.5 text-xs font-semibold ${theme.btnOutline}`}
+            onClick={() => {
+              setShowWelcome(false);
+              try {
+                localStorage.setItem('studio:addsong:welcome:dismissed', '1');
+              } catch {
+                // noop
+              }
+            }}
+          >
+            Понятно
+          </button>
+        </div>
+      ) : null}
 
       {step === 1 && (
         <section className="space-y-4">
@@ -336,10 +385,11 @@ export function AddSongPage() {
               {!content.trim() && !rawPaste.trim() && 'Пока текста нет — завершите импорт в окне или откройте его кнопкой выше.'}
             </p>
           </div>
-          <div className="flex justify-end">
+          <div className="hidden justify-end md:flex">
             <button
               type="button"
               onClick={goNext}
+              disabled={!hasImportedText}
               className={`inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-semibold ${theme.primaryBtn}`}
             >
               Далее
@@ -351,6 +401,38 @@ export function AddSongPage() {
 
       {step === 2 && (
         <section className="space-y-4">
+          <div className={`grid grid-cols-2 gap-1 rounded-xl p-1 md:hidden ${isStudio ? 'bg-zinc-900/80' : 'bg-stone-100'}`}>
+            <button
+              type="button"
+              onClick={() => setMobileEditorPane('editor')}
+              className={`min-h-[40px] rounded-lg text-xs font-semibold ${
+                mobileEditorPane === 'editor'
+                  ? isStudio
+                    ? 'bg-zinc-700 text-white'
+                    : 'bg-white text-stone-900 shadow-sm'
+                  : isStudio
+                    ? 'text-zinc-400'
+                    : 'text-stone-600'
+              }`}
+            >
+              Редактор
+            </button>
+            <button
+              type="button"
+              onClick={() => setMobileEditorPane('preview')}
+              className={`min-h-[40px] rounded-lg text-xs font-semibold ${
+                mobileEditorPane === 'preview'
+                  ? isStudio
+                    ? 'bg-zinc-700 text-white'
+                    : 'bg-white text-stone-900 shadow-sm'
+                  : isStudio
+                    ? 'text-zinc-400'
+                    : 'text-stone-600'
+              }`}
+            >
+              Превью
+            </button>
+          </div>
           <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
@@ -386,7 +468,7 @@ export function AddSongPage() {
           </div>
 
           <div className="grid gap-4 lg:grid-cols-2">
-            <div>
+            <div className={mobileEditorPane === 'preview' ? 'hidden md:block' : ''}>
               <p className={`mb-2 text-xs font-bold uppercase ${theme.muted}`}>Редактор</p>
               <SectionInsertToolbar dark={isStudio} onInsert={insertSectionMarkerLine} className="mb-3" />
               <textarea
@@ -398,9 +480,10 @@ export function AddSongPage() {
                 onMouseUp={syncEditorSelection}
                 rows={18}
                 className={`w-full resize-y rounded-xl border p-4 font-mono text-sm ${theme.input}`}
+                placeholder={'# Куплет 1\n[Am]Когда качаются [C]фонарики [G]ночные\n\n# Припев\n[F]...'}
               />
             </div>
-            <div>
+            <div className={mobileEditorPane === 'editor' ? 'hidden md:block' : ''}>
               <p className={`mb-2 text-xs font-bold uppercase ${theme.muted}`}>Превью</p>
               <div className={`min-h-[12rem] rounded-xl border p-4 ${theme.preview}`}>
                 <LyricsWithChords
@@ -458,7 +541,7 @@ export function AddSongPage() {
             </div>
           </div>
 
-          <div className="flex flex-wrap justify-between gap-2">
+          <div className="hidden flex-wrap justify-between gap-2 md:flex">
             <button
               type="button"
               onClick={goPrev}
@@ -481,22 +564,30 @@ export function AddSongPage() {
 
       {step === 3 && (
         <section className="space-y-4">
+          <p className={`text-sm ${theme.muted}`}>
+            Заполните минимум название и тональность. Остальное можно добавить позже.
+          </p>
           <div className="grid gap-4 sm:grid-cols-2">
             <label className="block">
               <span className={`text-xs font-bold uppercase ${theme.muted}`}>Название *</span>
               <input
+                ref={titleRef}
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
-                className={`mt-1 w-full rounded-xl border px-3 py-2 text-sm ${theme.input}`}
+                onKeyDown={(e) => onEnterFocusNext(e, keyRef)}
+                autoFocus
+                className={`mt-1 min-h-[48px] w-full rounded-xl border px-3 py-2 text-sm ${theme.input}`}
                 placeholder="Название песни"
               />
             </label>
             <label className="block">
               <span className={`text-xs font-bold uppercase ${theme.muted}`}>Тональность</span>
               <input
+                ref={keyRef}
                 value={defaultKey}
                 onChange={(e) => setDefaultKey(e.target.value)}
-                className={`mt-1 w-full rounded-xl border px-3 py-2 text-sm ${theme.input}`}
+                onKeyDown={(e) => onEnterFocusNext(e, tempoRef)}
+                className={`mt-1 min-h-[48px] w-full rounded-xl border px-3 py-2 text-sm ${theme.input}`}
                 placeholder="G, Am, …"
               />
             </label>
@@ -518,7 +609,7 @@ export function AddSongPage() {
                       min={1}
                       value={songNumber}
                       onChange={(e) => setSongNumber(e.target.value)}
-                      className={`w-28 rounded-xl border px-3 py-2 text-sm ${theme.input}`}
+                      className={`min-h-[46px] w-28 rounded-xl border px-3 py-2 text-sm ${theme.input}`}
                       placeholder="№"
                     />
                     {manualSongNumberInvalid ? (
@@ -533,21 +624,49 @@ export function AddSongPage() {
             <label className="block">
               <span className={`text-xs font-bold uppercase ${theme.muted}`}>BPM</span>
               <input
+                ref={tempoRef}
                 type="number"
                 value={tempo}
                 onChange={(e) => setTempo(e.target.value)}
-                className={`mt-1 w-full rounded-xl border px-3 py-2 text-sm ${theme.input}`}
+                onKeyDown={(e) => onEnterFocusNext(e, timeSigRef)}
+                className={`mt-1 min-h-[48px] w-full rounded-xl border px-3 py-2 text-sm ${theme.input}`}
                 placeholder="120"
               />
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {['60', '72', '90', '120'].map((x) => (
+                  <button
+                    key={x}
+                    type="button"
+                    onClick={() => setTempo(x)}
+                    className={`rounded-lg border px-2.5 py-1.5 text-xs font-semibold ${theme.btnOutline}`}
+                  >
+                    {x}
+                  </button>
+                ))}
+              </div>
             </label>
             <label className="block">
               <span className={`text-xs font-bold uppercase ${theme.muted}`}>Размер</span>
               <input
+                ref={timeSigRef}
                 value={timeSig}
                 onChange={(e) => setTimeSig(e.target.value)}
-                className={`mt-1 w-full rounded-xl border px-3 py-2 text-sm ${theme.input}`}
+                onKeyDown={(e) => onEnterFocusNext(e, youtubeRef)}
+                className={`mt-1 min-h-[48px] w-full rounded-xl border px-3 py-2 text-sm ${theme.input}`}
                 placeholder="4/4"
               />
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {['4/4', '3/4', '6/8'].map((x) => (
+                  <button
+                    key={x}
+                    type="button"
+                    onClick={() => setTimeSig(x)}
+                    className={`rounded-lg border px-2.5 py-1.5 text-xs font-semibold ${theme.btnOutline}`}
+                  >
+                    {x}
+                  </button>
+                ))}
+              </div>
             </label>
           </div>
 
@@ -558,9 +677,11 @@ export function AddSongPage() {
             </p>
             <div className="flex flex-wrap gap-2">
               <input
+                ref={youtubeRef}
                 value={youtubeUrl}
                 onChange={(e) => setYoutubeUrl(e.target.value)}
-                className={`min-w-[200px] flex-1 rounded-xl border px-3 py-2 text-sm ${theme.input}`}
+                onKeyDown={(e) => onEnterFocusNext(e, tagsRef)}
+                className={`min-h-[48px] min-w-[200px] flex-1 rounded-xl border px-3 py-2 text-sm ${theme.input}`}
                 placeholder="https://www.youtube.com/watch?v=…"
               />
               <button
@@ -579,9 +700,10 @@ export function AddSongPage() {
           <label className="block">
             <span className={`text-xs font-bold uppercase ${theme.muted}`}>Теги (через запятую)</span>
             <input
+              ref={tagsRef}
               value={tags}
               onChange={(e) => setTags(e.target.value)}
-              className={`mt-1 w-full rounded-xl border px-3 py-2 text-sm ${theme.input}`}
+              className={`mt-1 min-h-[48px] w-full rounded-xl border px-3 py-2 text-sm ${theme.input}`}
               placeholder="worship, fast"
             />
           </label>
@@ -592,7 +714,7 @@ export function AddSongPage() {
             </p>
           )}
 
-          <div className="flex flex-wrap justify-between gap-2">
+          <div className="hidden flex-wrap justify-between gap-2 md:flex">
             <button
               type="button"
               onClick={goPrev}
@@ -603,7 +725,7 @@ export function AddSongPage() {
             </button>
             <button
               type="button"
-              disabled={!title.trim() || createMut.isPending || manualSongNumberInvalid}
+              disabled={!canSaveSong}
               onClick={() => createMut.mutate()}
               className={`inline-flex items-center gap-2 rounded-xl px-6 py-2.5 text-sm font-semibold disabled:opacity-50 ${theme.saveBtn}`}
             >
@@ -613,6 +735,69 @@ export function AddSongPage() {
           </div>
         </section>
       )}
+
+      <div className={`fixed inset-x-0 bottom-0 z-50 border-t p-2 md:hidden ${isStudio ? 'border-zinc-700 bg-zinc-950/95' : 'border-stone-200 bg-white/95'}`}>
+        <div className="mx-auto flex max-w-6xl items-center gap-2">
+          {step === 1 ? (
+            <>
+              <button
+                type="button"
+                onClick={() => void navigate(backPath)}
+                className={`min-h-[44px] rounded-xl border px-4 text-sm ${theme.btnOutline}`}
+              >
+                Назад
+              </button>
+              <button
+                type="button"
+                onClick={goNext}
+                disabled={!hasImportedText}
+                className={`min-h-[44px] flex-1 rounded-xl text-sm font-semibold disabled:opacity-50 ${theme.primaryBtn}`}
+              >
+                Далее
+              </button>
+            </>
+          ) : null}
+
+          {step === 2 ? (
+            <>
+              <button
+                type="button"
+                onClick={goPrev}
+                className={`min-h-[44px] rounded-xl border px-4 text-sm ${theme.btnOutline}`}
+              >
+                Назад
+              </button>
+              <button
+                type="button"
+                onClick={goNext}
+                className={`min-h-[44px] flex-1 rounded-xl text-sm font-semibold ${theme.primaryBtn}`}
+              >
+                Далее
+              </button>
+            </>
+          ) : null}
+
+          {step === 3 ? (
+            <>
+              <button
+                type="button"
+                onClick={goPrev}
+                className={`min-h-[44px] rounded-xl border px-4 text-sm ${theme.btnOutline}`}
+              >
+                Назад
+              </button>
+              <button
+                type="button"
+                disabled={!canSaveSong}
+                onClick={() => createMut.mutate()}
+                className={`min-h-[44px] flex-1 rounded-xl text-sm font-semibold disabled:opacity-50 ${theme.saveBtn}`}
+              >
+                {createMut.isPending ? 'Сохраняем…' : 'Сохранить в каталог'}
+              </button>
+            </>
+          ) : null}
+        </div>
+      </div>
     </div>
   );
 }

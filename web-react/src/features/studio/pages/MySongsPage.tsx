@@ -97,6 +97,8 @@ export function MySongsPage() {
   const [tab, setTab] = useState<MySongsTab>('saved');
   const [draftTitle, setDraftTitle] = useState('');
   const [draftContent, setDraftContent] = useState('');
+  const [savedSearch, setSavedSearch] = useState('');
+  const [savedKeyFilter, setSavedKeyFilter] = useState('');
 
   const createMut = useMutation({
     mutationFn: () => createDraft(draftTitle || 'Без названия', draftContent),
@@ -128,6 +130,12 @@ export function MySongsPage() {
   }
 
   const rows = q.data ?? [];
+  const filteredRows = rows.filter((v) => {
+    const qText = savedSearch.trim().toLowerCase();
+    const okText = qText.length === 0 || v.song_title.toLowerCase().includes(qText);
+    const okKey = savedKeyFilter.trim().length === 0 || (v.custom_key ?? '').toLowerCase() === savedKeyFilter.trim().toLowerCase();
+    return okText && okKey;
+  });
   const recent = recentQ.data ?? [];
   const drafts = draftsQ.data ?? [];
   const showRecentTab = recent.length > 0;
@@ -162,6 +170,14 @@ export function MySongsPage() {
           <p className="mt-1 max-w-xl text-sm leading-relaxed text-stone-600">
             Три зоны: правки к песням каталога, свободные черновики и быстрый возврат к недавним песням.
           </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Link
+            to="/studio/add-song"
+            className="inline-flex min-h-[44px] items-center rounded-xl bg-sky-600 px-4 text-sm font-semibold text-white hover:bg-sky-500"
+          >
+            + Добавить песню
+          </Link>
         </div>
         <div
           className="flex w-full gap-1 rounded-2xl bg-stone-100 p-1"
@@ -253,6 +269,20 @@ export function MySongsPage() {
             <p className="text-sm text-stone-600">
               Это ваши сохранённые правки к песням из общего каталога. Оригинал в песеннике не меняется.
             </p>
+            <div className="grid gap-2 rounded-xl border border-stone-200 bg-stone-50 p-3 sm:grid-cols-2">
+              <input
+                value={savedSearch}
+                onChange={(e) => setSavedSearch(e.target.value)}
+                placeholder="Поиск по названию"
+                className="min-h-[42px] rounded-lg border border-stone-200 bg-white px-3 text-sm outline-none"
+              />
+              <input
+                value={savedKeyFilter}
+                onChange={(e) => setSavedKeyFilter(e.target.value)}
+                placeholder="Фильтр по тональности"
+                className="min-h-[42px] rounded-lg border border-stone-200 bg-white px-3 text-sm outline-none"
+              />
+            </div>
             {rows.length === 0 ? (
               <div className="space-y-3 rounded-xl border border-dashed border-stone-300 bg-stone-50 px-4 py-6 text-sm text-stone-600">
                 <p>Пока нет сохранённых версий. Откройте песню в песеннике и выберите «В студию».</p>
@@ -261,24 +291,30 @@ export function MySongsPage() {
                 </Link>
               </div>
             ) : (
-              <ul className="flex flex-col gap-2">
-                {rows.map((v) => (
-                  <li key={v.id}>
-                    <Link
-                      to={studioEditSongPath(surface, Number(v.song_id))}
-                      className="flex min-h-[52px] items-center justify-between gap-3 rounded-xl border border-stone-200 bg-white px-4 py-3 shadow-sm transition hover:border-stone-300 hover:bg-stone-50"
-                    >
-                      <div className="min-w-0">
-                        <p className="truncate font-medium text-stone-900">{v.song_title}</p>
-                        <p className="mt-0.5 text-xs text-stone-500">
-                          {v.custom_key ?? '—'} · {new Date(v.updated_at).toLocaleString()}
-                        </p>
-                      </div>
-                      <LuPenLine className="h-5 w-5 shrink-0 text-stone-400" aria-hidden />
-                    </Link>
-                  </li>
-                ))}
-              </ul>
+              <>
+                {filteredRows.length === 0 ? (
+                  <p className="text-sm text-stone-500">По выбранным фильтрам ничего не найдено.</p>
+                ) : (
+                  <ul className="flex flex-col gap-2">
+                    {filteredRows.map((v) => (
+                      <li key={v.id}>
+                        <Link
+                          to={studioEditSongPath(surface, Number(v.song_id))}
+                          className="flex min-h-[52px] items-center justify-between gap-3 rounded-xl border border-stone-200 bg-white px-4 py-3 shadow-sm transition hover:border-stone-300 hover:bg-stone-50"
+                        >
+                          <div className="min-w-0">
+                            <p className="truncate font-medium text-stone-900">{v.song_title}</p>
+                            <p className="mt-0.5 text-xs text-stone-500">
+                              {v.custom_key ?? '—'} · {new Date(v.updated_at).toLocaleString()}
+                            </p>
+                          </div>
+                          <LuPenLine className="h-5 w-5 shrink-0 text-stone-400" aria-hidden />
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </>
             )}
           </section>
         ) : null}

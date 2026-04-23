@@ -1,6 +1,4 @@
-import { buildSectionMarker } from '../utils/sectionMarkers';
-
-export type SongBlockType = 'intro' | 'verse' | 'chorus' | 'bridge';
+export type SongBlockType = 'intro' | 'verse' | 'prechorus' | 'chorus' | 'bridge' | 'solo' | 'outro';
 
 export type SongBlock = {
   id: string;
@@ -15,6 +13,7 @@ export type SongBlock = {
 };
 
 const HEADER_LINE_RE = /^\{(?:section|sec):\s*([^}]+?)\s*\}\s*$/i;
+const HASH_HEADER_RE = /^\s*#\s*(.+?)\s*$/;
 
 function newBlockId(): string {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
@@ -41,8 +40,11 @@ function typeToSectionDirective(type: SongBlockType): string {
   const map: Record<SongBlockType, string> = {
     intro: 'Intro',
     verse: 'Verse',
+    prechorus: 'Pre-Chorus',
     chorus: 'Chorus',
     bridge: 'Bridge',
+    solo: 'Solo',
+    outro: 'Outro',
   };
   return `{section: ${map[type]}}`;
 }
@@ -50,7 +52,7 @@ function typeToSectionDirective(type: SongBlockType): string {
 /** Заголовок одного блока в ChordPro-файле */
 export function blockToChordProHeader(block: SongBlock): string {
   if (block.sectionHint?.trim()) {
-    return buildSectionMarker(block.sectionHint.trim());
+    return `{sec:${block.sectionHint.trim()}}`;
   }
   return typeToSectionDirective(block.type);
 }
@@ -73,13 +75,22 @@ function labelToBlockMeta(label: string): { type: SongBlockType; sectionHint?: s
   if (/припев/i.test(raw) || lower === 'chorus') {
     return /припев/i.test(raw) ? { type: 'chorus', sectionHint: raw } : { type: 'chorus' };
   }
+  if (/предприпев/i.test(raw) || lower === 'pre-chorus' || lower === 'prechorus') {
+    return /предприпев/i.test(raw) ? { type: 'prechorus', sectionHint: raw } : { type: 'prechorus' };
+  }
   if (/^verse$|куплет/i.test(lower)) {
     return lower === 'verse' ? { type: 'verse' } : { type: 'verse', sectionHint: raw };
   }
   if (/^bridge$|бридж|мост/i.test(lower)) {
     return lower === 'bridge' ? { type: 'bridge' } : { type: 'bridge', sectionHint: raw };
   }
-  if (/^intro$|вступлен|проигрыш|инструментал|финал|аутро|outro/i.test(lower)) {
+  if (/^solo$|соло/i.test(lower)) {
+    return lower === 'solo' ? { type: 'solo' } : { type: 'solo', sectionHint: raw };
+  }
+  if (/^outro$|аутро|финал/i.test(lower)) {
+    return lower === 'outro' ? { type: 'outro' } : { type: 'outro', sectionHint: raw };
+  }
+  if (/^intro$|интро|вступлен|проигрыш|инструментал/i.test(lower)) {
     return lower === 'intro' ? { type: 'intro' } : { type: 'intro', sectionHint: raw };
   }
 
@@ -87,6 +98,9 @@ function labelToBlockMeta(label: string): { type: SongBlockType; sectionHint?: s
 }
 
 function parseHeaderLine(line: string): { type: SongBlockType; sectionHint?: string } | null {
+  const hash = line.trim().match(HASH_HEADER_RE);
+  if (hash?.[1]) return labelToBlockMeta(hash[1]);
+
   const m = line.trim().match(HEADER_LINE_RE);
   if (!m) return null;
   const inner = (m[1] ?? '').trim();
@@ -95,8 +109,11 @@ function parseHeaderLine(line: string): { type: SongBlockType; sectionHint?: str
   const lower = inner.toLowerCase();
   if (lower === 'chorus') return { type: 'chorus' };
   if (lower === 'verse') return { type: 'verse' };
+  if (lower === 'pre-chorus' || lower === 'prechorus') return { type: 'prechorus' };
   if (lower === 'bridge') return { type: 'bridge' };
   if (lower === 'intro') return { type: 'intro' };
+  if (lower === 'solo') return { type: 'solo' };
+  if (lower === 'outro') return { type: 'outro' };
 
   return labelToBlockMeta(inner);
 }
@@ -144,6 +161,7 @@ export function studioPresetToBlockMeta(
 ): { type: SongBlockType; sectionHint?: string } {
   const t = label.trim();
   switch (t) {
+    case 'Интро':
     case 'Вступление':
     case 'Проигрыш':
     case 'Инструментал':
@@ -152,14 +170,19 @@ export function studioPresetToBlockMeta(
     case 'Куплет 1':
     case 'Куплет 2':
     case 'Куплет 3':
+    case 'Куплет':
       return { type: 'verse', sectionHint: t };
     case 'Припев':
       return { type: 'chorus', sectionHint: t };
     case 'Предприпев':
-      return { type: 'verse', sectionHint: t };
+      return { type: 'prechorus', sectionHint: t };
     case 'Мост':
     case 'Бридж':
       return { type: 'bridge', sectionHint: t };
+    case 'Соло':
+      return { type: 'solo', sectionHint: t };
+    case 'Аутро':
+      return { type: 'outro', sectionHint: t };
     default:
       return { type: 'verse', sectionHint: t };
   }

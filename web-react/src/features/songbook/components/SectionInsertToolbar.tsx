@@ -1,17 +1,13 @@
-import { buildSectionMarker } from '../utils/sectionMarkers';
-
 const PRESETS = [
-  'Вступление',
-  'Куплет 1',
-  'Куплет 2',
-  'Куплет 3',
+  'Интро',
+  'Куплет',
   'Припев',
-  'Предприпев',
-  'Мост',
   'Бридж',
+  'Предприпев',
+  'Соло',
+  'Аутро',
+  'Куплет 1',
   'Инструментал',
-  'Проигрыш',
-  'Финал',
 ] as const;
 
 type Props = {
@@ -42,7 +38,7 @@ export function SectionInsertToolbar({
       onPresetAsBlock(title);
       return;
     }
-    onInsert?.(buildSectionMarker(title));
+    onInsert?.(`# ${title.trim()}`);
   };
 
   const custom = () => {
@@ -85,7 +81,7 @@ export function SectionInsertToolbar({
       <p className={`text-[11px] leading-snug ${dark ? 'text-zinc-500' : 'text-stone-500'}`}>
         {onPresetAsBlock
           ? 'Добавляется отдельный блок в композиторе; при сохранении в файл попадёт заголовок секции.'
-          : `В текст добавится строка ${'{sec:…}'} — в превью и при просмотре это отображается как заголовок блока.`}
+          : 'В текст добавится строка вида # Куплет 1 — в превью и просмотре это будет заголовок блока.'}
       </p>
     </div>
   );

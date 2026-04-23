@@ -9,7 +9,7 @@ type ReaderSettings = {
   fontSize: number;
   showChords: boolean;
   transpose: number;
-  scrollSpeed: number;
+  scrollSpeedLevel: number;
 };
 
 type SongReaderProps = {
@@ -22,18 +22,19 @@ export function SongReader({ song, settings, onSettingsChange }: SongReaderProps
   const bodyRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (settings.scrollSpeed <= 0) return;
+    const speed = 20 + (Math.max(1, Math.min(10, settings.scrollSpeedLevel)) - 1) * 20;
+    if (speed <= 0) return;
     let raf = 0;
     let last = performance.now();
     const tick = (now: number) => {
       const dt = Math.min((now - last) / 1000, 0.05);
       last = now;
-      if (bodyRef.current) bodyRef.current.scrollTop += settings.scrollSpeed * dt;
+      if (bodyRef.current) bodyRef.current.scrollTop += speed * dt;
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [settings.scrollSpeed, song.id]);
+  }, [settings.scrollSpeedLevel, song.id]);
 
   const keyLabel = song.default_key
     ? transposeChordSymbol(song.default_key, settings.transpose)
@@ -58,8 +59,8 @@ export function SongReader({ song, settings, onSettingsChange }: SongReaderProps
           currentKeyLabel={keyLabel}
           showChords={settings.showChords}
           onShowChords={(v) => onSettingsChange({ showChords: v })}
-          scrollSpeed={settings.scrollSpeed}
-          onScrollSpeed={(v) => onSettingsChange({ scrollSpeed: v })}
+          scrollSpeedLevel={settings.scrollSpeedLevel}
+          onScrollSpeedLevel={(v) => onSettingsChange({ scrollSpeedLevel: v })}
           stageMode={false}
           capo={0}
           onCapo={() => {}}

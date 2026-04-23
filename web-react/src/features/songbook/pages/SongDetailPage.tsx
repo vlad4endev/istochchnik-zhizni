@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { LuArrowLeft } from 'react-icons/lu';
+import { LuArrowLeft, LuSettings2 } from 'react-icons/lu';
 
 import { dispatchLayoutMainChrome } from '../../../app/layoutChrome';
 import { useAuthStore } from '../../auth/authStore';
@@ -24,10 +24,16 @@ export function SongDetailPage() {
   const [transpose, setTranspose] = useState(0);
   const [showChords, setShowChords] = useState(true);
   const [autoScroll, setAutoScroll] = useState(false);
-  const [scrollSpeed, setScrollSpeed] = useState(40);
-  const [fontSize, setFontSize] = useState(15);
+  const [scrollSpeedLevel, setScrollSpeedLevel] = useState(2);
+  const [fontSize, setFontSize] = useState(16);
   const [capo, setCapo] = useState(0);
   const [showConcertChords, setShowConcertChords] = useState(false);
+  const [chordLayoutMode, setChordLayoutMode] = useState<'mono' | 'measured'>('mono');
+  const [fullscreen, setFullscreen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [scrollProgress, setScrollProgress] = useState(0);
+  const resumeAutoscrollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const resumeAutoscrollWantedRef = useRef(false);
 
   const q = useQuery({
     queryKey: ['song', songId],
@@ -47,10 +53,50 @@ export function SongDetailPage() {
     void recordSongOpened(songId).catch(() => {});
   }, [token, songId]);
 
+  const scrollSpeedPxPerSec = 20 + (Math.max(1, Math.min(10, scrollSpeedLevel)) - 1) * 20;
+
+  const stopAutoScroll = () => {
+    resumeAutoscrollWantedRef.current = false;
+    if (resumeAutoscrollTimeoutRef.current) {
+      clearTimeout(resumeAutoscrollTimeoutRef.current);
+      resumeAutoscrollTimeoutRef.current = null;
+    }
+    setAutoScroll(false);
+  };
+
+  const startAutoScroll = () => {
+    resumeAutoscrollWantedRef.current = false;
+    if (resumeAutoscrollTimeoutRef.current) {
+      clearTimeout(resumeAutoscrollTimeoutRef.current);
+      resumeAutoscrollTimeoutRef.current = null;
+    }
+    setAutoScroll(true);
+  };
+
+  const pauseAutoScrollByUser = () => {
+    if (!autoScroll) return;
+    setAutoScroll(false);
+    resumeAutoscrollWantedRef.current = true;
+    if (resumeAutoscrollTimeoutRef.current) {
+      clearTimeout(resumeAutoscrollTimeoutRef.current);
+      resumeAutoscrollTimeoutRef.current = null;
+    }
+    resumeAutoscrollTimeoutRef.current = setTimeout(() => {
+      if (!resumeAutoscrollWantedRef.current) return;
+      setAutoScroll(true);
+      resumeAutoscrollTimeoutRef.current = null;
+    }, 3000);
+  };
+
   /** Режим «чистого чтения»: при прокрутке вниз скрываем основной хром приложения. */
   useEffect(() => {
     const isMobileViewport = () =>
       typeof window !== 'undefined' && window.matchMedia('(max-width: 767px)').matches;
+
+    if (fullscreen) {
+      dispatchLayoutMainChrome(false);
+      return () => dispatchLayoutMainChrome(true);
+    }
 
     if (!isMobileViewport()) {
       dispatchLayoutMainChrome(true);
@@ -68,7 +114,7 @@ export function SongDetailPage() {
       window.removeEventListener('scroll', onScroll);
       dispatchLayoutMainChrome(true);
     };
-  }, []);
+  }, [fullscreen]);
 
   useEffect(() => {
     if (!autoScroll) return;
@@ -78,12 +124,55 @@ export function SongDetailPage() {
       const dt = Math.min((now - last) / 1000, 0.05);
       last = now;
       const bpmFactor = q.data?.tempo ? Math.max(0.65, Math.min(2.4, Number(q.data.tempo) / 80)) : 1;
-      window.scrollBy(0, scrollSpeed * bpmFactor * dt);
+      window.scrollBy(0, scrollSpeedPxPerSec * bpmFactor * dt);
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [autoScroll, scrollSpeed, q.data?.tempo]);
+  }, [autoScroll, scrollSpeedPxPerSec, q.data?.tempo]);
+
+  useEffect(() => {
+    const updateProgress = () => {
+      const maxScroll = Math.max(1, document.documentElement.scrollHeight - window.innerHeight);
+      const current = Math.max(0, Math.min(maxScroll, window.scrollY || document.documentElement.scrollTop));
+      setScrollProgress(current / maxScroll);
+    };
+    updateProgress();
+    window.addEventListener('scroll', updateProgress, { passive: true });
+    window.addEventListener('resize', updateProgress);
+    return () => {
+      window.removeEventListener('scroll', updateProgress);
+      window.removeEventListener('resize', updateProgress);
+    };
+  }, []);
+
+  useEffect(() => {
+    const onWheel = () => pauseAutoScrollByUser();
+    const onTouchMove = () => pauseAutoScrollByUser();
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'PageDown' || e.key === 'PageUp' || e.key === ' ') {
+        pauseAutoScrollByUser();
+      }
+    };
+    window.addEventListener('wheel', onWheel, { passive: true });
+    window.addEventListener('touchmove', onTouchMove, { passive: true });
+    window.addEventListener('keydown', onKeyDown);
+    return () => {
+      window.removeEventListener('wheel', onWheel);
+      window.removeEventListener('touchmove', onTouchMove);
+      window.removeEventListener('keydown', onKeyDown);
+    };
+  }, [autoScroll]);
+
+  useEffect(() => {
+    if (!autoScroll) return;
+    return () => {
+      if (resumeAutoscrollTimeoutRef.current) {
+        clearTimeout(resumeAutoscrollTimeoutRef.current);
+        resumeAutoscrollTimeoutRef.current = null;
+      }
+    };
+  }, [autoScroll]);
 
   if (!Number.isInteger(songId) || songId <= 0) {
     return <p className="text-red-600">Некорректная ссылка</p>;
@@ -95,17 +184,21 @@ export function SongDetailPage() {
   const version = (versionQ.data as { custom_content?: string | null; custom_key?: string | null } | null) ?? null;
   const effectiveContent = version?.custom_content ?? s.content;
   const effectiveKey = version?.custom_key ?? s.default_key;
-  const metaLine = `Тональность: ${effectiveKey ?? '—'} · Темп: ${s.tempo ?? '—'} · Размер: ${s.time_signature ?? '—'}`;
   const currentShift = showChords
     ? showConcertChords
       ? transpose
       : transpose - capo
     : 0;
+  const transposedKey = useMemo(
+    () => (effectiveKey ? transposeChordSymbol(effectiveKey, currentShift) : null),
+    [effectiveKey, currentShift],
+  );
   const keyLabel = effectiveKey
-    ? transposeChordSymbol(effectiveKey, currentShift)
+    ? `${effectiveKey} \u2192 ${transposedKey ?? effectiveKey}`
     : currentShift === 0
-      ? 'без сдвига'
-      : `сдвиг ${currentShift > 0 ? '+' : ''}${currentShift}`;
+      ? 'Тональность: без сдвига'
+      : `Тональность: сдвиг ${currentShift > 0 ? '+' : ''}${currentShift}`;
+  const metaLine = `Темп: ${s.tempo ?? '—'} · Размер: ${s.time_signature ?? '—'}`;
 
   const shell = stageMode
     ? {
@@ -127,7 +220,10 @@ export function SongDetailPage() {
 
   return (
     <div className={`relative mx-auto max-w-3xl pb-24 ${shell.page}`}>
-      <div className={['fixed inset-x-0 top-0 z-40 border-b backdrop-blur', shell.top].join(' ')}>
+      <div className="fixed inset-x-0 top-0 z-[55] h-1 bg-stone-200/70">
+        <div className="h-full bg-primary transition-[width] duration-150" style={{ width: `${scrollProgress * 100}%` }} />
+      </div>
+      <div className={['fixed inset-x-0 top-0 z-40 border-b backdrop-blur', shell.top, fullscreen ? 'hidden' : ''].join(' ')}>
         <div className="mx-auto flex max-w-3xl items-center justify-between gap-2 px-3 py-2 md:px-0">
           <div className="flex min-w-0 items-center gap-2">
             <Link
@@ -138,47 +234,77 @@ export function SongDetailPage() {
               <LuArrowLeft className="h-5 w-5" />
             </Link>
             <span className="w-6 shrink-0 text-center text-xl font-medium text-stone-500">{songId}</span>
-            <h1 className={`truncate text-xl font-bold uppercase tracking-wide md:text-2xl ${shell.title}`}>
-              {s.title}
-            </h1>
+            <div className="min-w-0">
+              <h1 className={`truncate text-xl font-bold uppercase tracking-wide md:text-2xl ${shell.title}`}>
+                {s.title}
+              </h1>
+              <p className={`truncate text-xs ${shell.meta}`}>Исполнитель: — · {effectiveKey ?? '—'}</p>
+            </div>
           </div>
-          <SongReaderSettings
-            currentKeyLabel={keyLabel}
-            fontSize={fontSize}
-            onFontSize={setFontSize}
-            transpose={transpose}
-            onTranspose={setTranspose}
-            showChords={showChords}
-            onShowChords={setShowChords}
-            autoScroll={autoScroll}
-            onAutoScroll={setAutoScroll}
-            scrollSpeed={scrollSpeed}
-            onScrollSpeed={setScrollSpeed}
-            capo={capo}
-            onCapo={setCapo}
-            showConcertChords={showConcertChords}
-            onShowConcertChords={setShowConcertChords}
-            stageMode={stageMode}
-          />
+          <div className="text-right">
+            <p className="text-xs font-semibold text-stone-700">{transposedKey ?? effectiveKey ?? '—'}</p>
+            <p className={`text-[11px] ${shell.meta}`}>{autoScroll ? 'Автопрокрутка' : 'Ручной режим'}</p>
+          </div>
         </div>
       </div>
 
-      <div className="h-14 md:h-[3.75rem]" />
+      <div className="fixed right-4 z-[60]" style={{ bottom: 'calc(env(safe-area-inset-bottom, 0px) + 1rem)' }}>
+        <SongReaderSettings
+          open={settingsOpen}
+          onOpenChange={setSettingsOpen}
+          showTrigger={false}
+          currentKeyLabel={keyLabel}
+          fontSize={fontSize}
+          onFontSize={setFontSize}
+          transpose={transpose}
+          onTranspose={setTranspose}
+          onResetTranspose={() => setTranspose(0)}
+          showChords={showChords}
+          onShowChords={setShowChords}
+          autoScroll={autoScroll}
+          onAutoScroll={(next) => (next ? startAutoScroll() : stopAutoScroll())}
+          onAutoScrollStart={startAutoScroll}
+          onAutoScrollStop={stopAutoScroll}
+          scrollSpeedLevel={scrollSpeedLevel}
+          onScrollSpeedLevel={setScrollSpeedLevel}
+          capo={capo}
+          onCapo={setCapo}
+          showConcertChords={showConcertChords}
+          onShowConcertChords={setShowConcertChords}
+          chordLayoutMode={chordLayoutMode}
+          onChordLayoutMode={setChordLayoutMode}
+          fullscreen={fullscreen}
+          onFullscreen={setFullscreen}
+          stageMode={stageMode}
+        />
+        <button
+          type="button"
+          onClick={() => setSettingsOpen((v) => !v)}
+          className="inline-flex h-12 w-12 items-center justify-center rounded-full border border-stone-200 bg-white/90 text-stone-800 shadow-lg backdrop-blur hover:bg-white"
+          aria-label="Настройки песни"
+        >
+          <LuSettings2 className="h-5 w-5" />
+        </button>
+      </div>
+
+      <div className={fullscreen ? 'h-3' : 'h-14 md:h-[3.75rem]'} />
       <div className="space-y-2">
         <p className={`text-xs ${shell.meta}`}>
-          {metaLine}
+          {keyLabel} · {metaLine}
           {version ? ' · Моя версия' : ''}
         </p>
         <LyricsWithChords
           text={effectiveContent}
           transposeSemitones={currentShift}
+          chordLayoutMode={chordLayoutMode}
           chordsVisible={showChords}
-          fontSizePx={fontSize}
+          fontSizePx={Math.max(16, fontSize)}
           chordTone="light"
           className={[
             'rounded-xl p-4 font-sans text-base',
             shell.card,
             'text-stone-900',
+            fullscreen ? 'min-h-[calc(100dvh-4rem)]' : '',
           ].join(' ')}
         />
       </div>

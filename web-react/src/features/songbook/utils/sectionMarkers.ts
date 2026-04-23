@@ -7,6 +7,7 @@ export const SECTION_MARKER_LINE_RE = /^\{sec:\s*([^}]*?)\s*\}\s*$/i;
 export const SECTION_DIRECTIVE_LINE_RE = /^\{section:\s*([^}]*?)\s*\}\s*$/i;
 const COMMENT_MARKER_LINE_RE = /^\{(?:comment|c):\s*([^}]*?)\s*\}\s*$/i;
 const BRACKET_TITLE_LINE_RE = /^\[\s*([^\]]+?)\s*\]\s*$/;
+const HASH_SECTION_LINE_RE = /^\s*#\s*(.+?)\s*$/;
 const PLAIN_SECTION_LINE_RE =
   /^\s*(куплет|припев|бридж|проигрыш|verse|chorus|bridge|intro|outro)\s*([0-9ivx]+)?\s*:?\s*$/i;
 const START_SECTION_RE = /^\{(?:start_of_|s)(chorus|verse|bridge)\}\s*$/i;
@@ -64,6 +65,12 @@ export function parseSectionTitle(line: string): string | null {
     const base = normalizeSectionName(plain[1] ?? '');
     const n = (plain[2] ?? '').trim();
     return n ? `${base} ${n}` : base;
+  }
+
+  const hash = trimmed.match(HASH_SECTION_LINE_RE);
+  if (hash) {
+    const t = normalizeSectionName(hash[1] ?? '');
+    return t.length > 0 ? t : null;
   }
 
   const bracket = trimmed.match(BRACKET_TITLE_LINE_RE);

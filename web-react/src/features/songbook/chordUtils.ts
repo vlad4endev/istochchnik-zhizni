@@ -1,12 +1,163 @@
 import { Chord, Note } from '@tonaljs/tonal';
 import guitarData from '@tombatossals/chords-db/lib/guitar.json';
 
+const SHARP_NOTES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'] as const;
+const FLAT_NOTES = ['C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab', 'A', 'Bb', 'B'] as const;
+const CYRILLIC_NOTES = ['До', 'До#', 'Ре', 'Ре#', 'Ми', 'Фа', 'Фа#', 'Соль', 'Соль#', 'Ля', 'Ля#', 'Си'] as const;
+const CYRILLIC_NOTES_FLAT = ['До', 'Реb', 'Ре', 'Миb', 'Ми', 'Фа', 'Сольb', 'Соль', 'Ляb', 'Ля', 'Сиb', 'Си'] as const;
+
+const NOTE_TO_INDEX: Record<string, number> = {
+  C: 0,
+  'C#': 1,
+  Db: 1,
+  D: 2,
+  'D#': 3,
+  Eb: 3,
+  E: 4,
+  F: 5,
+  'F#': 6,
+  Gb: 6,
+  G: 7,
+  'G#': 8,
+  Ab: 8,
+  A: 9,
+  'A#': 10,
+  Bb: 10,
+  B: 11,
+  H: 11,
+  До: 0,
+  'До#': 1,
+  Реб: 1,
+  Ре: 2,
+  'Ре#': 3,
+  Миб: 3,
+  Ми: 4,
+  Фа: 5,
+  'Фа#': 6,
+  Сольб: 6,
+  Соль: 7,
+  'Соль#': 8,
+  Ляб: 8,
+  Ля: 9,
+  'Ля#': 10,
+  Сиб: 10,
+  Си: 11,
+};
+
+type NoteStyle = 'latin' | 'cyrillic';
+
+type ParsedNote = {
+  start: number;
+  end: number;
+  index: number;
+  preferFlats: boolean;
+  style: NoteStyle;
+};
+
+function normalizeAccidental(acc: string | undefined): '' | '#' | 'b' {
+  if (!acc) return '';
+  if (acc === '#' || acc === '♯') return '#';
+  if (acc === 'b' || acc === '♭') return 'b';
+  return '';
+}
+
+function normalizeLatinRoot(raw: string): string {
+  return raw
+    .replace(/А/g, 'A')
+    .replace(/а/g, 'a')
+    .replace(/В/g, 'B')
+    .replace(/в/g, 'b')
+    .replace(/С/g, 'C')
+    .replace(/с/g, 'c')
+    .replace(/Е/g, 'E')
+    .replace(/е/g, 'e')
+    .replace(/Н/g, 'H')
+    .replace(/н/g, 'h');
+}
+
+function parseCyrillicNoteAt(input: string, from: number): ParsedNote | null {
+  const chunk = input.slice(from);
+  const m = chunk.match(/^(До|Ре|Ми|Фа|Соль|Ля|Си)([#b♯♭]?)/i);
+  if (!m) return null;
+
+  const baseRaw = m[1] ?? '';
+  const accidental = normalizeAccidental(m[2]);
+  const base = baseRaw[0]?.toUpperCase() + baseRaw.slice(1).toLowerCase();
+  const key = `${base}${accidental}` as keyof typeof NOTE_TO_INDEX;
+  const index = NOTE_TO_INDEX[key];
+  if (index == null) return null;
+
+  return {
+    start: from,
+    end: from + m[0].length,
+    index,
+    preferFlats: accidental === 'b',
+    style: 'cyrillic',
+  };
+}
+
+function parseLatinNoteAt(input: string, from: number): ParsedNote | null {
+  const chunk = input.slice(from);
+  const m = chunk.match(/^([A-GHАВСЕНавсен])([#b♯♭]?)/);
+  if (!m) return null;
+
+  const baseRaw = normalizeLatinRoot(m[1] ?? '').toUpperCase();
+  const accidental = normalizeAccidental(m[2]);
+  const key = `${baseRaw}${accidental}` as keyof typeof NOTE_TO_INDEX;
+  const index = NOTE_TO_INDEX[key];
+  if (index == null) return null;
+
+  return {
+    start: from,
+    end: from + m[0].length,
+    index,
+    preferFlats: accidental === 'b',
+    style: 'latin',
+  };
+}
+
+function parseNoteAt(input: string, from: number): ParsedNote | null {
+  return parseCyrillicNoteAt(input, from) ?? parseLatinNoteAt(input, from);
+}
+
+function renderNote(index: number, style: NoteStyle, preferFlats: boolean): string {
+  const n = ((index % 12) + 12) % 12;
+  if (style === 'cyrillic') {
+    return preferFlats ? CYRILLIC_NOTES_FLAT[n] : CYRILLIC_NOTES[n];
+  }
+  return preferFlats ? FLAT_NOTES[n] : SHARP_NOTES[n];
+}
+
+function transposeParsedNote(note: ParsedNote, semitones: number): string {
+  return renderNote(note.index + semitones, note.style, note.preferFlats);
+}
+
+function transposeWithStructuredParsing(symbol: string, semitones: number): string | null {
+  const root = parseNoteAt(symbol, 0);
+  if (!root) return null;
+
+  let out = `${transposeParsedNote(root, semitones)}${symbol.slice(root.end)}`;
+  const slashPos = out.lastIndexOf('/');
+  if (slashPos <= 0 || slashPos >= out.length - 1) return out;
+
+  const bass = parseNoteAt(out, slashPos + 1);
+  if (!bass) return out;
+
+  out = `${out.slice(0, bass.start)}${transposeParsedNote(bass, semitones)}${out.slice(bass.end)}`;
+  return out;
+}
+
 export function transposeChordSymbol(symbol: string, semitones: number): string {
   const s = symbol.trim();
   if (!s || semitones === 0) return s;
-  const dir = semitones > 0 ? '2m' : '-2m';
+  const shift = Math.trunc(semitones);
+
+  const structured = transposeWithStructuredParsing(s, shift);
+  if (structured) return structured;
+
+  const dir = shift > 0 ? '2m' : '-2m';
   let out = s;
-  const n = Math.abs(semitones);
+  const n = Math.abs(shift);
   for (let i = 0; i < n; i++) {
     const next = Chord.transpose(out, dir);
     if (next === out) return s;

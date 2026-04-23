@@ -1,8 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
+import { Link, useBeforeUnload, useLocation, useNavigate, useParams } from 'react-router-dom';
+import { DragDropContext, Draggable, Droppable, type DropResult } from '@hello-pangea/dnd';
 import {
   LuArrowLeft,
+  LuCircleHelp,
+  LuClock3,
   LuPlus,
   LuSlidersHorizontal,
   LuSave,
@@ -38,6 +41,18 @@ import {
 
 const KEY_ROOTS = ['C', 'D', 'E', 'F', 'G', 'A', 'B'] as const;
 const CHORD_STRIP = ['C', 'D', 'E', 'F', 'G', 'A', 'B', 'Am', 'Dm', 'Em', 'G', 'C7'];
+const ARCHIVE_TAG = '__archived';
+type SongStatus = 'draft' | 'published' | 'archived';
+
+function detectSongStatus(isPublished: boolean, tags: string[]): SongStatus {
+  if (isPublished) return 'published';
+  return tags.includes(ARCHIVE_TAG) ? 'archived' : 'draft';
+}
+
+function withArchiveTag(tags: string[], status: SongStatus): string[] {
+  const clean = tags.filter((t) => t !== ARCHIVE_TAG);
+  return status === 'archived' ? [...clean, ARCHIVE_TAG] : clean;
+}
 
 function studioPreviewFrame(type: SongBlockType, darkUi: boolean): string {
   switch (type) {
@@ -45,10 +60,22 @@ function studioPreviewFrame(type: SongBlockType, darkUi: boolean): string {
       return darkUi
         ? 'rounded-xl border-l-[5px] border-sky-400 bg-sky-950/40 pl-3 py-2'
         : 'rounded-xl border-l-[5px] border-sky-600 bg-sky-50 pl-3 py-2';
+    case 'prechorus':
+      return darkUi
+        ? 'rounded-xl border-l-[5px] border-indigo-400/90 bg-indigo-950/30 pl-3 py-2'
+        : 'rounded-xl border-l-[5px] border-indigo-500 bg-indigo-50/70 pl-3 py-2';
     case 'bridge':
       return darkUi
         ? 'rounded-xl border-l-[5px] border-amber-400/80 bg-amber-950/30 pl-3 py-2'
         : 'rounded-xl border-l-[5px] border-amber-500 bg-amber-50/80 pl-3 py-2';
+    case 'solo':
+      return darkUi
+        ? 'rounded-xl border-l-[5px] border-fuchsia-400/80 bg-fuchsia-950/20 pl-3 py-2'
+        : 'rounded-xl border-l-[5px] border-fuchsia-500 bg-fuchsia-50/70 pl-3 py-2';
+    case 'outro':
+      return darkUi
+        ? 'rounded-xl border-l-[5px] border-emerald-400/80 bg-emerald-950/20 pl-3 py-2'
+        : 'rounded-xl border-l-[5px] border-emerald-500 bg-emerald-50/70 pl-3 py-2';
     case 'intro':
       return darkUi
         ? 'rounded-xl py-2 text-[0.92em] italic text-slate-400'
@@ -83,6 +110,8 @@ export function StudioEditor() {
   const [toolsOpen, setToolsOpen] = useState(false);
   const [rawPaste, setRawPaste] = useState('');
   const [showPreview, setShowPreview] = useState(true);
+  const [chordPickerOpen, setChordPickerOpen] = useState(false);
+  const [mobilePane, setMobilePane] = useState<'editor' | 'preview' | 'outline'>('editor');
 
   const songQ = useQuery({
     queryKey: ['song', id],
@@ -107,9 +136,15 @@ export function StudioEditor() {
   const [catalogTempo, setCatalogTempo] = useState('');
   const [catalogTimeSignature, setCatalogTimeSignature] = useState('');
   const [catalogTags, setCatalogTags] = useState('');
+  const [songStatus, setSongStatus] = useState<SongStatus>('published');
   const [quickRoot, setQuickRoot] = useState('G');
   const [quickMode, setQuickMode] = useState<'major' | 'minor'>('major');
-  const autosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [activeBlockId, setActiveBlockId] = useState<string | null>(null);
+  const [draftSavedAt, setDraftSavedAt] = useState<number | null>(null);
+  const [showWelcome, setShowWelcome] = useState(false);
+  const autosaveIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const lastSavedSnapshotRef = useRef('');
+  const blockCardRef = useRef<Map<string, HTMLDivElement>>(new Map());
 
   useEffect(() => {
     const s = songQ.data;
@@ -134,7 +169,7 @@ export function StudioEditor() {
       if (!Array.isArray(rawBlocks) || rawBlocks.length === 0) return [createSongBlock('verse', '')];
       return rawBlocks.map((b) =>
         createSongBlock(
-          ['intro', 'verse', 'chorus', 'bridge'].includes(b.type) ? b.type : 'verse',
+          ['intro', 'verse', 'prechorus', 'chorus', 'bridge', 'solo', 'outro'].includes(b.type) ? b.type : 'verse',
           typeof b.content === 'string' ? b.content : '',
           typeof b.sectionHint === 'string' && b.sectionHint.trim() ? b.sectionHint.trim() : undefined,
           typeof b.id === 'string' && b.id.length > 0 ? b.id : undefined,
@@ -153,25 +188,37 @@ export function StudioEditor() {
     setKey(typeof draft?.key === 'string' ? draft.key : (v?.custom_key ?? s.default_key ?? ''));
     setCatalogTempo(s.tempo == null ? '' : String(s.tempo));
     setCatalogTimeSignature(s.time_signature ?? '');
-    setCatalogTags(Array.isArray(s.tags) ? s.tags.join(', ') : '');
+    const initialTags = Array.isArray(s.tags) ? s.tags : [];
+    setCatalogTags(initialTags.filter((t) => t !== ARCHIVE_TAG).join(', '));
+    setSongStatus(detectSongStatus(Boolean(s.is_published), initialTags));
+    try {
+      setShowWelcome(localStorage.getItem('studio:welcome:dismissed') !== '1');
+    } catch {
+      setShowWelcome(false);
+    }
+    lastSavedSnapshotRef.current = JSON.stringify({
+      content: blocksToChordPro(chordProToBlocks(v?.custom_content ?? s.content ?? '')),
+      key: v?.custom_key ?? s.default_key ?? '',
+    });
   }, [songQ.data, verQ.data]);
 
   useEffect(() => {
     if (!Number.isInteger(id) || id <= 0) return;
-    if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
-    autosaveTimerRef.current = setTimeout(() => {
+    if (autosaveIntervalRef.current) clearInterval(autosaveIntervalRef.current);
+    autosaveIntervalRef.current = setInterval(() => {
       try {
         localStorage.setItem(
           `studio:autosave:song:${id}`,
           JSON.stringify({ blocks, key, updatedAt: Date.now() }),
         );
+        setDraftSavedAt(Date.now());
       } catch {
         // ignore storage quota/availability errors
       }
-    }, 700);
+    }, 30000);
 
     return () => {
-      if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
+      if (autosaveIntervalRef.current) clearInterval(autosaveIntervalRef.current);
     };
   }, [id, blocks, key]);
 
@@ -187,7 +234,11 @@ export function StudioEditor() {
       void qc.invalidateQueries({ queryKey: ['studio', 'versions'] });
       void qc.invalidateQueries({ queryKey: ['songs'] });
       void qc.invalidateQueries({ queryKey: ['song', id] });
-      emitAppToast({ kind: 'success', message: 'Версия сохранена' });
+      lastSavedSnapshotRef.current = JSON.stringify({
+        content: blocksToChordPro(blocks),
+        key,
+      });
+      emitAppToast({ kind: 'success', message: 'Песня сохранена ✓' });
     },
   });
 
@@ -218,10 +269,12 @@ export function StudioEditor() {
         .split(',')
         .map((t) => t.trim())
         .filter(Boolean);
+      const isPublished = songStatus === 'published';
       await updateSong(id, {
         tempo: tempoNum,
         time_signature: catalogTimeSignature.trim() || null,
-        tags,
+        tags: withArchiveTag(tags, songStatus),
+        is_published: isPublished,
       });
     },
     onSuccess: () => {
@@ -276,6 +329,22 @@ export function StudioEditor() {
     });
   };
 
+  const reorderBlocks = (startIndex: number, endIndex: number) => {
+    if (startIndex === endIndex) return;
+    setBlocks((prev) => {
+      const next = [...prev];
+      const [picked] = next.splice(startIndex, 1);
+      if (!picked) return prev;
+      next.splice(endIndex, 0, picked);
+      return next;
+    });
+  };
+
+  const onDragEnd = (result: DropResult) => {
+    if (!result.destination) return;
+    reorderBlocks(result.source.index, result.destination.index);
+  };
+
   const deleteBlock = (blockId: string) => {
     setBlocks((prev) => {
       if (prev.length <= 1) return [createSongBlock('verse', '')];
@@ -283,11 +352,37 @@ export function StudioEditor() {
     });
   };
 
+  const duplicateBlock = (blockId: string) => {
+    setBlocks((prev) => {
+      const ix = prev.findIndex((b) => b.id === blockId);
+      if (ix < 0) return prev;
+      const base = prev[ix];
+      const clone = createSongBlock(base.type, base.content, base.sectionHint ? `${base.sectionHint} (копия)` : undefined);
+      const next = [...prev];
+      next.splice(ix + 1, 0, clone);
+      return next;
+    });
+  };
+
+  const renameBlock = (blockId: string, sectionHint: string) => {
+    setBlocks((prev) =>
+      prev.map((b) =>
+        b.id === blockId
+          ? {
+              ...b,
+              sectionHint: sectionHint || undefined,
+            }
+          : b,
+      ),
+    );
+  };
+
   const addQuickBlock = (type: SongBlockType) => {
     const nb = createSongBlock(type, '');
     setBlocks((prev) => [...prev, nb]);
     requestAnimationFrame(() => {
       focusedBlockIdRef.current = nb.id;
+      setActiveBlockId(nb.id);
       textareaByBlockRef.current.get(nb.id)?.focus();
     });
   };
@@ -306,6 +401,7 @@ export function StudioEditor() {
     });
     requestAnimationFrame(() => {
       focusedBlockIdRef.current = nb.id;
+      setActiveBlockId(nb.id);
       textareaByBlockRef.current.get(nb.id)?.focus();
     });
   };
@@ -336,7 +432,19 @@ export function StudioEditor() {
     const merged = [...commonChords, ...quick];
     return Array.from(new Set(merged)).slice(0, 16);
   }, [commonChords, quick]);
+  const currentSnapshot = useMemo(
+    () =>
+      JSON.stringify({
+        content: joinedChordPro,
+        key,
+      }),
+    [joinedChordPro, key],
+  );
+  const hasUnsavedChanges = currentSnapshot !== lastSavedSnapshotRef.current;
   const backTo = studioMySongsPath(surface);
+  const showEditorPane = mobilePane === 'editor';
+  const showPreviewPane = showPreview && mobilePane === 'preview';
+  const showOutlinePane = mobilePane === 'outline';
 
   /** Тёмный интерфейс только в режиме сцены внутри песенника; отдельная /studio — светлая тема. */
   const darkUi = surface === 'songbook' && stageMode;
@@ -374,6 +482,26 @@ export function StudioEditor() {
   const isSongbookShell = surface === 'songbook';
   const importVariant = stageMode || !isSongbookShell ? 'studio' : 'default';
 
+  useBeforeUnload(
+    useCallback(
+      (event) => {
+        if (!hasUnsavedChanges) return;
+        event.preventDefault();
+      },
+      [hasUnsavedChanges],
+    ),
+  );
+
+  useEffect(() => {
+    if (showPreview) return;
+    if (mobilePane === 'preview') setMobilePane('editor');
+  }, [showPreview, mobilePane]);
+
+  const confirmLeaveIfDirty = () => {
+    if (!hasUnsavedChanges) return true;
+    return window.confirm('Есть несохранённые изменения. Сохранить перед выходом?');
+  };
+
   if (!Number.isInteger(id) || id <= 0) {
     return <p className="text-red-600">Некорректный id песни</p>;
   }
@@ -386,7 +514,7 @@ export function StudioEditor() {
 
   return (
     <div
-      className={`mx-auto flex max-w-3xl flex-col gap-4 pb-[calc(10.5rem+env(safe-area-inset-bottom))] md:pb-10 ${shell.page}`}
+      className={`mx-auto flex max-w-3xl flex-col gap-4 pb-[calc(13.5rem+env(safe-area-inset-bottom))] md:pb-10 ${shell.page}`}
     >
       <SmartImportModal
         open={importOpen}
@@ -486,6 +614,19 @@ export function StudioEditor() {
                     className={`w-full min-h-[42px] rounded-lg px-2 py-1.5 text-sm outline-none ${shell.field} disabled:opacity-60`}
                     placeholder="praise, worship, fast"
                   />
+                </label>
+                <label className="space-y-1">
+                  <span className={`text-[11px] ${shell.muted}`}>Статус песни</span>
+                  <select
+                    value={songStatus}
+                    onChange={(e) => setSongStatus(e.target.value as SongStatus)}
+                    disabled={!canEditCatalogMeta}
+                    className={`w-full min-h-[42px] rounded-lg px-2 py-1.5 text-sm outline-none ${shell.field} disabled:opacity-60`}
+                  >
+                    <option value="draft">Черновик</option>
+                    <option value="published">Опубликована</option>
+                    <option value="archived">Архив</option>
+                  </select>
                 </label>
                 {canEditCatalogMeta ? (
                   <button
@@ -587,6 +728,10 @@ export function StudioEditor() {
       <div className="flex flex-wrap items-center gap-2 gap-y-3">
         <Link
           to={backTo}
+          onClick={(e) => {
+            if (confirmLeaveIfDirty()) return;
+            e.preventDefault();
+          }}
           className={`inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-xl ${shell.iconBtn}`}
           aria-label="Назад к списку"
         >
@@ -644,19 +789,102 @@ export function StudioEditor() {
           disabled={saveMut.isPending}
           className={`${shell.primary} disabled:opacity-50`}
         >
-          Сохранить
+          Сохранить песню
         </button>
       </div>
+
+      <p className={`text-xs ${hasUnsavedChanges ? 'text-amber-500' : shell.muted}`}>
+        {hasUnsavedChanges ? 'Есть несохранённые изменения' : 'Все изменения сохранены'}
+      </p>
 
       <p className={`text-xs ${shell.muted}`}>
         Ваш текст ниже — оригинал в каталоге не меняется, пока вы не сохраните и не удалите песню целиком.
       </p>
 
+      {showWelcome ? (
+        <div
+          className={`rounded-xl border p-3 text-sm ${
+            darkUi ? 'border-sky-900/70 bg-sky-950/30 text-sky-100' : 'border-sky-200 bg-sky-50 text-sky-900'
+          }`}
+        >
+          <p>
+            Вставьте текст песни, расставьте аккорды в квадратных скобках вида <strong>[Am]</strong> прямо в тексте и
+            разделите песню на блоки.
+          </p>
+          <button
+            type="button"
+            className="mt-2 rounded-lg border px-3 py-1.5 text-xs font-semibold"
+            onClick={() => {
+              setShowWelcome(false);
+              try {
+                localStorage.setItem('studio:welcome:dismissed', '1');
+              } catch {
+                // noop
+              }
+            }}
+          >
+            Понятно
+          </button>
+        </div>
+      ) : null}
+
+      <div className={`rounded-xl border p-2 ${darkUi ? 'border-slate-800 bg-slate-950/40' : 'border-stone-200 bg-white'}`}>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setChordPickerOpen((v) => !v)}
+            className={`inline-flex min-h-[40px] items-center gap-1 rounded-lg border px-3 text-sm font-semibold ${
+              darkUi ? 'border-slate-700 bg-slate-900 text-slate-100' : 'border-stone-200 bg-stone-50 text-stone-900'
+            }`}
+          >
+            + Аккорд
+            <LuCircleHelp className="h-3.5 w-3.5 opacity-70" title="Вставляет [Am] в позицию курсора" />
+          </button>
+          {(
+            [
+              { type: 'verse' as const, label: 'Куплет' },
+              { type: 'chorus' as const, label: 'Припев' },
+              { type: 'bridge' as const, label: 'Бридж' },
+              { type: 'intro' as const, label: 'Интро' },
+              { type: 'outro' as const, label: 'Аутро' },
+              { type: 'solo' as const, label: 'Соло' },
+            ] as const
+          ).map(({ type, label }) => (
+            <button
+              key={`toolbar-block-${type}`}
+              type="button"
+              onClick={() => addQuickBlock(type)}
+              className={`inline-flex min-h-[40px] items-center rounded-lg border px-3 text-sm font-semibold ${
+                darkUi ? 'border-slate-700 bg-slate-900 text-slate-100' : 'border-stone-200 bg-stone-50 text-stone-900'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        {chordPickerOpen ? (
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {(toolbarChords.length > 0 ? toolbarChords : CHORD_STRIP).map((ch) => (
+              <button
+                key={`picker-${ch}`}
+                type="button"
+                onClick={() => insertChord(ch)}
+                className={`min-h-[36px] rounded-lg px-2.5 ${shell.chordBtn}`}
+              >
+                {ch}
+              </button>
+            ))}
+          </div>
+        ) : null}
+      </div>
+
       <SectionInsertToolbar dark={darkUi} onPresetAsBlock={addBlockFromPreset} className="mb-1" />
 
       <div className="mb-2 flex items-center justify-between">
-        <p className={`text-xs ${shell.muted}`}>
-          Автосохранение черновика включено (локально каждые ~700мс).
+        <p className={`inline-flex items-center gap-1 text-xs ${shell.muted}`}>
+          <LuClock3 className="h-3.5 w-3.5" />
+          Автосохранение черновика каждые 30 секунд
+          {draftSavedAt ? ` · Черновик сохранён в ${new Date(draftSavedAt).toLocaleTimeString()}` : ''}
         </p>
         <button
           type="button"
@@ -667,12 +895,46 @@ export function StudioEditor() {
         </button>
       </div>
 
+      <div className="md:hidden">
+        <div
+          className={`grid grid-cols-3 gap-1 rounded-xl p-1 ${
+            darkUi ? 'bg-slate-900/80' : 'bg-stone-100'
+          }`}
+        >
+          {(
+            [
+              { id: 'editor', label: 'Редактор' },
+              { id: 'preview', label: 'Превью' },
+              { id: 'outline', label: 'Структура' },
+            ] as const
+          ).map((x) => (
+            <button
+              key={x.id}
+              type="button"
+              onClick={() => setMobilePane(x.id)}
+              className={`min-h-[40px] rounded-lg text-xs font-semibold ${
+                mobilePane === x.id
+                  ? darkUi
+                    ? 'bg-slate-700 text-white'
+                    : 'bg-white text-stone-900 shadow-sm'
+                  : darkUi
+                    ? 'text-slate-300'
+                    : 'text-stone-600'
+              }`}
+            >
+              {x.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
       <div
         className={[
           'sticky z-20 -mx-1 rounded-xl border px-2 py-2 backdrop-blur',
           darkUi
             ? 'top-[3.9rem] border-slate-800 bg-slate-950/90'
             : 'top-[3.9rem] border-stone-200 bg-white/95',
+          mobilePane !== 'editor' ? 'hidden md:block' : '',
         ].join(' ')}
       >
         <p className={`mb-1 text-[11px] font-semibold uppercase tracking-wide ${shell.muted}`}>
@@ -702,9 +964,12 @@ export function StudioEditor() {
         {(
           [
             { type: 'verse' as const, label: 'Куплет' },
+            { type: 'prechorus' as const, label: 'Предприпев' },
             { type: 'chorus' as const, label: 'Припев' },
             { type: 'bridge' as const, label: 'Бридж' },
             { type: 'intro' as const, label: 'Intro' },
+            { type: 'outro' as const, label: 'Outro' },
+            { type: 'solo' as const, label: 'Solo' },
           ] as const
         ).map(({ type, label }) => (
           <button
@@ -723,39 +988,70 @@ export function StudioEditor() {
         ))}
       </div>
 
-      <div className={showPreview ? 'grid gap-3 md:grid-cols-2' : ''}>
-        <div className="flex max-h-[min(78vh,640px)] flex-col gap-3 overflow-y-auto pr-0.5 md:pr-1">
-          {blocks.map((b, i) => (
-            <BlockWrapper
-              key={b.id}
-              block={b}
-              shellEditor={shell.editor}
-              darkUi={darkUi}
-              isFirst={i === 0}
-              isLast={i === blocks.length - 1}
-              onChange={updateBlockContent}
-              onDelete={deleteBlock}
-              onMove={moveBlock}
-              onFocusBlock={(blockId) => {
-                focusedBlockIdRef.current = blockId;
-              }}
-              onSelectBlock={(blockId, start, end) => {
-                selByBlockRef.current[blockId] = { start, end };
-              }}
-              onSmartPasteSplit={handleSmartPasteSplit}
-              textareaRef={(el) => {
-                if (el) textareaByBlockRef.current.set(b.id, el);
-                else textareaByBlockRef.current.delete(b.id);
-              }}
-            />
-          ))}
-        </div>
+      <div className={showPreview ? 'grid gap-3 xl:grid-cols-[1fr_0.8fr_0.6fr]' : 'grid gap-3 lg:grid-cols-[1fr_0.55fr]'}>
+        <DragDropContext onDragEnd={onDragEnd}>
+          <Droppable droppableId="studio-blocks">
+            {(dropProvided) => (
+              <div
+                ref={dropProvided.innerRef}
+                {...dropProvided.droppableProps}
+                className={`flex max-h-[min(78vh,640px)] flex-col gap-3 overflow-y-auto pr-0.5 md:pr-1 ${
+                  showEditorPane ? '' : 'hidden md:flex'
+                }`}
+              >
+                {blocks.map((b, i) => (
+                  <Draggable key={b.id} draggableId={b.id} index={i}>
+                    {(dragProvided) => (
+                      <div
+                        ref={(el) => {
+                          dragProvided.innerRef(el);
+                          if (el) blockCardRef.current.set(b.id, el);
+                          else blockCardRef.current.delete(b.id);
+                        }}
+                        {...dragProvided.draggableProps}
+                      >
+                        <BlockWrapper
+                          block={b}
+                          shellEditor={shell.editor}
+                          darkUi={darkUi}
+                          isFirst={i === 0}
+                          isLast={i === blocks.length - 1}
+                          isActive={activeBlockId === b.id}
+                          onChange={updateBlockContent}
+                          onDelete={deleteBlock}
+                          onDuplicate={duplicateBlock}
+                          onRename={renameBlock}
+                          onMove={moveBlock}
+                          onFocusBlock={(blockId) => {
+                            focusedBlockIdRef.current = blockId;
+                            setActiveBlockId(blockId);
+                          }}
+                          onSelectBlock={(blockId, start, end) => {
+                            selByBlockRef.current[blockId] = { start, end };
+                          }}
+                          onSmartPasteSplit={handleSmartPasteSplit}
+                          textareaRef={(el) => {
+                            if (el) textareaByBlockRef.current.set(b.id, el);
+                            else textareaByBlockRef.current.delete(b.id);
+                          }}
+                          dragHandleProps={dragProvided.dragHandleProps ?? undefined}
+                        />
+                      </div>
+                    )}
+                  </Draggable>
+                ))}
+                {dropProvided.placeholder}
+              </div>
+            )}
+          </Droppable>
+        </DragDropContext>
 
         {showPreview ? (
           <div
             className={[
               'flex max-h-[min(78vh,640px)] flex-col gap-3 overflow-y-auto rounded-2xl border p-4',
               darkUi ? 'border-slate-800 bg-slate-950/60' : 'border-stone-200 bg-white',
+              showPreviewPane ? '' : 'hidden md:flex',
             ].join(' ')}
           >
             <p className={`shrink-0 text-xs ${shell.muted}`}>Live preview</p>
@@ -772,15 +1068,47 @@ export function StudioEditor() {
             ))}
           </div>
         ) : null}
+
+        <aside
+          className={`max-h-[min(78vh,640px)] overflow-y-auto rounded-2xl border p-3 ${
+            darkUi ? 'border-slate-800 bg-slate-950/40' : 'border-stone-200 bg-white'
+          } ${showOutlinePane ? '' : 'hidden md:block'}`}
+        >
+          <p className={`mb-2 text-xs font-semibold uppercase tracking-wide ${shell.muted}`}>Структура песни</p>
+          <div className="space-y-1.5">
+            {blocks.map((block, idx) => (
+              <button
+                key={`outline-${block.id}`}
+                type="button"
+                className={`w-full rounded-lg px-2 py-2 text-left text-sm ${
+                  activeBlockId === block.id
+                    ? darkUi
+                      ? 'bg-slate-800 text-white'
+                      : 'bg-sky-50 text-sky-900'
+                    : darkUi
+                      ? 'text-slate-300 hover:bg-slate-900'
+                      : 'text-stone-700 hover:bg-stone-50'
+                }`}
+                onClick={() => {
+                  setActiveBlockId(block.id);
+                  blockCardRef.current.get(block.id)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }}
+              >
+                {idx + 1}. {block.sectionHint || block.type}
+              </button>
+            ))}
+          </div>
+        </aside>
       </div>
 
       <div
         className={[
           'fixed left-0 right-0 z-40 border-t md:hidden',
           darkUi ? 'border-slate-800 bg-slate-950/95' : 'border-slate-200 bg-white/95',
+          mobilePane !== 'editor' ? 'hidden' : '',
         ].join(' ')}
         style={{
-          bottom: 'max(5.75rem, calc(4.25rem + env(safe-area-inset-bottom, 0px)))',
+          bottom: 'max(9.25rem, calc(7.75rem + env(safe-area-inset-bottom, 0px)))',
         }}
       >
         <div
@@ -792,8 +1120,10 @@ export function StudioEditor() {
           {(
             [
               { type: 'verse' as const, label: '+ Куплет' },
+              { type: 'prechorus' as const, label: '+ Предприпев' },
               { type: 'chorus' as const, label: '+ Припев' },
               { type: 'bridge' as const, label: '+ Бридж' },
+              { type: 'solo' as const, label: '+ Соло' },
             ] as const
           ).map(({ type, label }) => (
             <button
@@ -819,6 +1149,40 @@ export function StudioEditor() {
               {ch}
             </button>
           ))}
+        </div>
+      </div>
+
+      <div
+        className={[
+          'fixed inset-x-0 bottom-0 z-50 border-t md:hidden',
+          darkUi ? 'border-slate-800 bg-slate-950/95' : 'border-slate-200 bg-white/95',
+        ].join(' ')}
+      >
+        <div className="mx-auto flex max-w-3xl items-center gap-2 px-3 py-2">
+          <button
+            type="button"
+            disabled={!hasUnsavedChanges || saveMut.isPending}
+            onClick={() => saveMut.mutate()}
+            className={`min-h-[44px] flex-1 rounded-xl text-sm font-semibold ${
+              hasUnsavedChanges
+                ? darkUi
+                  ? 'bg-emerald-600 text-white'
+                  : 'bg-slate-900 text-white'
+                : darkUi
+                  ? 'bg-slate-800 text-slate-400'
+                  : 'bg-stone-200 text-stone-500'
+            } disabled:opacity-70`}
+          >
+            {saveMut.isPending ? 'Сохраняем…' : 'Сохранить песню'}
+          </button>
+          <button
+            type="button"
+            onClick={() => setToolsOpen(true)}
+            className={`inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-xl ${shell.iconBtn}`}
+            aria-label="Параметры"
+          >
+            <LuSlidersHorizontal className="h-5 w-5" />
+          </button>
         </div>
       </div>
     </div>
