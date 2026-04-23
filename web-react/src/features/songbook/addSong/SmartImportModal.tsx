@@ -41,6 +41,7 @@ export function SmartImportModal({
   const [pdfExtractedText, setPdfExtractedText] = useState('');
   const [pdfAnalysis, setPdfAnalysis] = useState<ImportedTextAnalysis | null>(null);
   const [pdfSafeModeInfo, setPdfSafeModeInfo] = useState<string | null>(null);
+  const [pdfProgressText, setPdfProgressText] = useState<string | null>(null);
   const fileTxtRef = useRef<HTMLInputElement>(null);
   const filePdfRef = useRef<HTMLInputElement>(null);
 
@@ -60,6 +61,7 @@ export function SmartImportModal({
     setPdfExtractedText('');
     setPdfAnalysis(null);
     setPdfSafeModeInfo(null);
+    setPdfProgressText(null);
   }, [open, initialRaw, initialTab]);
 
   if (!open) return null;
@@ -136,8 +138,11 @@ export function SmartImportModal({
     setPdfBusy(true);
     setPdfError(null);
     setPdfSafeModeInfo(null);
+    setPdfProgressText('Подготовка распознавания PDF…');
     try {
-      const { text, mode } = await extractTextFromPdfBufferWithMeta(buf);
+      const { text, mode } = await extractTextFromPdfBufferWithMeta(buf, {
+        onProgress: (p) => setPdfProgressText(p.message),
+      });
       if (!text.trim()) {
         setPdfError('В PDF не найден текст (возможно, только картинки). Скопируйте текст вручную во вкладке «Текст».');
         return;
@@ -148,10 +153,17 @@ export function SmartImportModal({
         setPdfSafeModeInfo(
           'PDF прочитан в безопасном режиме (без worker). Это обход MIME-ограничений сервера и не влияет на результат распознавания текста.',
         );
+      } else if (mode === 'ocr-fallback') {
+        setPdfSafeModeInfo(
+          'Текстовый слой PDF не найден — применён OCR (распознавание изображения). Проверьте орфографию и аккорды перед загрузкой.',
+        );
       }
-    } catch {
-      setPdfError('Не удалось прочитать PDF. Проверьте файл или попробуйте экспорт в текст из другого приложения.');
+    } catch (err) {
+      const details = err instanceof Error && err.message ? err.message : '';
+      const base = 'Не удалось прочитать PDF.';
+      setPdfError(details ? `${base} ${details}` : `${base} Проверьте файл или попробуйте экспорт в текст из другого приложения.`);
     } finally {
+      setPdfProgressText(null);
       setPdfBusy(false);
     }
   };
@@ -355,6 +367,9 @@ export function SmartImportModal({
               <p className={`mt-2 text-xs ${muted}`}>Drag & drop работает прямо в эту область.</p>
             </div>
             {pdfError ? <p className="text-sm text-red-500">{pdfError}</p> : null}
+            {pdfBusy && pdfProgressText ? (
+              <p className={`text-xs ${muted}`}>{pdfProgressText}</p>
+            ) : null}
             {pdfSafeModeInfo ? (
               <p
                 className={`rounded-lg px-3 py-2 text-xs ${
