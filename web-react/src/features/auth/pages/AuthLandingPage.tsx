@@ -35,10 +35,10 @@ export function AuthLandingPage() {
 
         <div className="flex flex-col items-center">
           <div
-            className="flex h-40 w-40 shrink-0 items-center justify-center rounded-[2rem] bg-white/10 p-5 text-white shadow-[0_12px_40px_rgba(0,0,0,0.2)] ring-1 ring-white/25 sm:h-48 sm:w-48 sm:p-6"
+            className="flex h-40 w-40 shrink-0 items-center justify-center rounded-[2rem] bg-white/5 p-2 text-white shadow-[0_18px_44px_rgba(0,0,0,0.24)] ring-1 ring-white/15 sm:h-48 sm:w-48 sm:p-3"
             aria-hidden
           >
-            <img src="/assets/logo.svg" alt="" className="h-full w-full object-contain drop-shadow-md" />
+            <img src="/assets/logo.svg" alt="" className="h-full w-full object-contain drop-shadow-[0_8px_22px_rgba(0,0,0,0.26)]" />
           </div>
 
           <h1 className="mt-9 text-center text-2xl font-extrabold tracking-tight text-white sm:mt-10 sm:text-3xl md:text-4xl">
