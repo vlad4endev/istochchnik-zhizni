@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { LuArrowLeft, LuSettings2 } from 'react-icons/lu';
 
@@ -189,10 +189,7 @@ export function SongDetailPage() {
       ? transpose
       : transpose - capo
     : 0;
-  const transposedKey = useMemo(
-    () => (effectiveKey ? transposeChordSymbol(effectiveKey, currentShift) : null),
-    [effectiveKey, currentShift],
-  );
+  const transposedKey = effectiveKey ? transposeChordSymbol(effectiveKey, currentShift) : null;
   const keyLabel = effectiveKey
     ? `${effectiveKey} \u2192 ${transposedKey ?? effectiveKey}`
     : currentShift === 0
