@@ -188,3 +188,12 @@ export async function fetchInstrumentSettings(): Promise<{
 export async function patchInstrumentSettings(patch: Record<string, unknown>): Promise<void> {
   await apiClient.patch(`${STUDIO}/instruments`, patch);
 }
+
+export async function aiChordPlacement(content: string): Promise<{
+  content: string;
+  changedLines: number;
+  totalChords: number;
+}> {
+  const { data } = await apiClient.post(`${STUDIO}/ai/chord-placement`, { content });
+  return data as { content: string; changedLines: number; totalChords: number };
+}

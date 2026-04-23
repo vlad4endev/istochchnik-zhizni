@@ -23,6 +23,7 @@ import {
   updateSetlistItemMusicianNotes,
   upsertStudioVersion,
 } from '../services/studioService';
+import { AiAgentError, improveChordPlacementWithAi } from '../services/studioAiChordService';
 
 type AuthReq = Request & { authUserId?: number; authUserRole?: AppRole };
 
@@ -445,5 +446,43 @@ export async function performanceGet(req: Request, res: Response): Promise<void>
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: 'Ошибка' });
+  }
+}
+
+export async function postAiChordPlacement(req: Request, res: Response): Promise<void> {
+  try {
+    const r = req as AuthReq;
+    if (!ensureStudio(r, res)) return;
+
+    const body = req.body as { content?: unknown } | null;
+    const content = typeof body?.content === 'string' ? body.content : '';
+    if (!content.trim()) {
+      res.status(400).json({ error: 'Ожидается content (строка)' });
+      return;
+    }
+
+    const out = await improveChordPlacementWithAi(content);
+    res.json(out);
+  } catch (e) {
+    if (e instanceof AiAgentError) {
+      const status =
+        e.code === 'ai_disabled'
+          ? 409
+          : e.code === 'ai_not_configured'
+            ? 400
+            : e.code === 'ai_http_error'
+              ? e.status && e.status >= 400 && e.status < 600
+                ? e.status
+                : 502
+              : 502;
+      res.status(status).json({
+        error: e.message,
+        code: e.code,
+        details: e.bodySnippet ? { bodySnippet: e.bodySnippet } : undefined,
+      });
+      return;
+    }
+    const msg = e instanceof Error ? e.message : 'Не удалось расставить аккорды';
+    res.status(422).json({ error: msg });
   }
 }

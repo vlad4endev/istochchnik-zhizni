@@ -11,6 +11,7 @@ import {
   instrumentsGet,
   instrumentsPatch,
   performanceGet,
+  postAiChordPlacement,
   putVersion,
   recentSongsList,
   setlistItemsAdd,
@@ -53,5 +54,6 @@ router.delete('/setlists/:id/items/:itemId', setlistItemsRemove);
 router.patch('/setlists/:id/items/:itemId', setlistItemPatch);
 router.post('/setlists/:id/reorder', setlistItemsReorder);
 router.get('/setlists/:id/performance', performanceGet);
+router.post('/ai/chord-placement', postAiChordPlacement);
 
 export default router;

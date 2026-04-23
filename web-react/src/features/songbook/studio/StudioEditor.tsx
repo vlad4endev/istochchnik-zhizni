@@ -6,8 +6,10 @@ import {
   LuArrowLeft,
   LuCircleHelp,
   LuClock3,
+  LuHistory,
   LuSlidersHorizontal,
   LuSave,
+  LuSparkles,
   LuTrash2,
   LuUpload,
   LuWand,
@@ -24,7 +26,7 @@ import { LyricsWithChords } from '../components/LyricsWithChords';
 import { SectionInsertToolbar } from '../components/SectionInsertToolbar';
 import { quickChordsForKey } from '../addSong/quickChords';
 import { extractCommonChords } from '../chordProEngine';
-import { fetchVersionForSong, saveVersion } from '../../studio/api';
+import { aiChordPlacement, fetchVersionForSong, saveVersion } from '../../studio/api';
 import { studioMySongsPath, getStudioModuleSurface } from '../../studio/studioPaths';
 import { useSongbookChrome } from '../SongbookChromeContext';
 
@@ -37,11 +39,23 @@ import {
   type SongBlock,
   type SongBlockType,
 } from './songBlocks';
+import {
+  applyChordPattern,
+  autoDistributeChords,
+  extractChordPattern,
+  getSameTypeBlocks,
+  hasAnyChordsInBlock,
+} from './chordPattern';
 
 const KEY_ROOTS = ['C', 'D', 'E', 'F', 'G', 'A', 'B'] as const;
 const CHORD_STRIP = ['C', 'D', 'E', 'F', 'G', 'A', 'B', 'Am', 'Dm', 'Em', 'G', 'C7'];
 const ARCHIVE_TAG = '__archived';
 type SongStatus = 'draft' | 'published' | 'archived';
+type ChordAutoUndoState = {
+  previousBlocks: SongBlock[];
+  appliedCount: number;
+  expiresAt: number;
+};
 
 function detectSongStatus(isPublished: boolean, tags: string[]): SongStatus {
   if (isPublished) return 'published';
@@ -102,6 +116,11 @@ function blockTypeLabel(type: SongBlockType): string {
   return preset?.label ?? type;
 }
 
+function blockDisplayLabel(block: SongBlock, index: number): string {
+  if (block.sectionHint?.trim()) return block.sectionHint.trim();
+  return `${blockTypeLabel(block.type)} ${index + 1}`;
+}
+
 function studioTypeTone(type: SongBlockType, darkUi: boolean, active = false): string {
   const base = (() => {
     switch (type) {
@@ -151,6 +170,11 @@ export function StudioEditor() {
   const [showPreview, setShowPreview] = useState(true);
   const [chordPickerOpen, setChordPickerOpen] = useState(false);
   const [mobilePane, setMobilePane] = useState<'editor' | 'preview'>('editor');
+  const [autoChordModalOpen, setAutoChordModalOpen] = useState(false);
+  const [autoChordDonorId, setAutoChordDonorId] = useState<string>('');
+  const [autoChordTargetIds, setAutoChordTargetIds] = useState<string[]>([]);
+  const [chordAutoUndo, setChordAutoUndo] = useState<ChordAutoUndoState | null>(null);
+  const [undoNow, setUndoNow] = useState(() => Date.now());
 
   const songQ = useQuery({
     queryKey: ['song', id],
@@ -184,6 +208,7 @@ export function StudioEditor() {
   const autosaveIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const lastSavedSnapshotRef = useRef('');
   const blockCardRef = useRef<Map<string, HTMLDivElement>>(new Map());
+  const undoTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     const s = songQ.data;
@@ -261,6 +286,19 @@ export function StudioEditor() {
     };
   }, [id, blocks, key]);
 
+  useEffect(
+    () => () => {
+      if (undoTimeoutRef.current) clearTimeout(undoTimeoutRef.current);
+    },
+    [],
+  );
+
+  useEffect(() => {
+    if (!chordAutoUndo) return;
+    const timer = setInterval(() => setUndoNow(Date.now()), 250);
+    return () => clearInterval(timer);
+  }, [chordAutoUndo]);
+
   const saveMut = useMutation({
     mutationFn: () =>
       saveVersion(id, { custom_content: blocksToChordPro(blocks), custom_key: key || null }),
@@ -278,6 +316,21 @@ export function StudioEditor() {
         key,
       });
       emitAppToast({ kind: 'success', message: 'Песня сохранена ✓' });
+    },
+  });
+
+  const aiChordPlacementMut = useMutation({
+    mutationFn: (content: string) => aiChordPlacement(content),
+    onSuccess: (result) => {
+      setBlocks(chordProToBlocks(result.content));
+      emitAppToast({
+        kind: 'success',
+        message: `AI расставил аккорды: обновлено строк ${result.changedLines}, всего аккордов ${result.totalChords}`,
+      });
+    },
+    onError: (err: unknown) => {
+      const msg = err instanceof Error && err.message ? err.message : 'AI не смог расставить аккорды';
+      emitAppToast(msg);
     },
   });
 
@@ -486,6 +539,98 @@ export function StudioEditor() {
     setBlocks(chordProToBlocks(chordPro));
   };
 
+  const runAiChordPlacement = () => {
+    const source = blocksToChordPro(blocks);
+    if (!source.trim()) {
+      emitAppToast('Добавьте текст песни перед AI-разбором');
+      return;
+    }
+    if (
+      !window.confirm(
+        'AI проанализирует весь текст и переставит только аккорды (слова и структура строк останутся без изменений). Продолжить?',
+      )
+    ) {
+      return;
+    }
+    aiChordPlacementMut.mutate(source);
+  };
+
+  const openAutoChordModal = () => {
+    const withChords = blocks.filter((block) => hasAnyChordsInBlock(block));
+    if (withChords.length === 0) {
+      emitAppToast('Сначала расставьте аккорды хотя бы в одном блоке');
+      return;
+    }
+    const preferredDonor = withChords.find((block) => block.type === 'verse') ?? withChords[0];
+    if (!preferredDonor) return;
+    const sameTypeIds = getSameTypeBlocks(blocks, preferredDonor).map((block) => block.id);
+    setAutoChordDonorId(preferredDonor.id);
+    setAutoChordTargetIds(sameTypeIds);
+    setAutoChordModalOpen(true);
+  };
+
+  const handleAutoChordDonorChange = (donorId: string) => {
+    setAutoChordDonorId(donorId);
+    const donor = blocks.find((block) => block.id === donorId);
+    if (!donor) {
+      setAutoChordTargetIds([]);
+      return;
+    }
+    const sameTypeIds = getSameTypeBlocks(blocks, donor).map((block) => block.id);
+    setAutoChordTargetIds(sameTypeIds);
+  };
+
+  const toggleAutoChordTarget = (targetId: string) => {
+    setAutoChordTargetIds((prev) =>
+      prev.includes(targetId) ? prev.filter((idItem) => idItem !== targetId) : [...prev, targetId],
+    );
+  };
+
+  const applyAutoChordPattern = () => {
+    const donor = blocks.find((block) => block.id === autoChordDonorId);
+    if (!donor) {
+      emitAppToast('Источник паттерна не найден');
+      return;
+    }
+    const targetIds = autoChordTargetIds.filter((idItem) => idItem !== donor.id);
+    if (targetIds.length === 0) {
+      emitAppToast('Выберите хотя бы один целевой блок');
+      return;
+    }
+
+    const previousBlocks = blocks;
+    const pattern = extractChordPattern(donor);
+    if (pattern.length === 0) {
+      emitAppToast('В источнике нет строк для паттерна');
+      return;
+    }
+    const nextBlocks = autoDistributeChords(blocks, donor.id, targetIds);
+
+    setBlocks(nextBlocks);
+    setAutoChordModalOpen(false);
+    emitAppToast({ kind: 'success', message: `Аккорды расставлены в ${targetIds.length} блоках ✓` });
+
+    if (undoTimeoutRef.current) clearTimeout(undoTimeoutRef.current);
+    const expiresAt = Date.now() + 10000;
+    setChordAutoUndo({ previousBlocks, appliedCount: targetIds.length, expiresAt });
+    setUndoNow(Date.now());
+    undoTimeoutRef.current = setTimeout(() => {
+      setChordAutoUndo(null);
+      undoTimeoutRef.current = null;
+    }, 10000);
+  };
+
+  const undoAutoChordPattern = () => {
+    if (!chordAutoUndo) return;
+    setBlocks(chordAutoUndo.previousBlocks);
+    setChordAutoUndo(null);
+    if (undoTimeoutRef.current) {
+      clearTimeout(undoTimeoutRef.current);
+      undoTimeoutRef.current = null;
+    }
+    emitAppToast({ kind: 'success', message: 'Авторасстановка отменена' });
+  };
+
   const quick = quickChordsForKey(quickRoot, quickMode);
   const joinedChordPro = useMemo(() => blocksToChordPro(blocks), [blocks]);
   const commonChords = useMemo(() => extractCommonChords(joinedChordPro, 12), [joinedChordPro]);
@@ -510,6 +655,45 @@ export function StudioEditor() {
     () => blocks.find((block) => block.id === activeBlockId) ?? blocks[0] ?? null,
     [blocks, activeBlockId],
   );
+  const autoChordDonor = useMemo(
+    () => blocks.find((block) => block.id === autoChordDonorId) ?? null,
+    [blocks, autoChordDonorId],
+  );
+  const autoChordPattern = useMemo(
+    () => (autoChordDonor ? extractChordPattern(autoChordDonor) : []),
+    [autoChordDonor],
+  );
+  const autoChordTargets = useMemo(
+    () => blocks.filter((block) => block.id !== autoChordDonorId),
+    [blocks, autoChordDonorId],
+  );
+  const selectedAutoChordTargets = useMemo(
+    () => autoChordTargets.filter((block) => autoChordTargetIds.includes(block.id)),
+    [autoChordTargets, autoChordTargetIds],
+  );
+  const selectedOtherTypeCount = useMemo(() => {
+    if (!autoChordDonor) return 0;
+    return selectedAutoChordTargets.filter((block) => block.type !== autoChordDonor.type).length;
+  }, [selectedAutoChordTargets, autoChordDonor]);
+  const selectedTargetsWithChordsCount = useMemo(
+    () => selectedAutoChordTargets.filter((block) => hasAnyChordsInBlock(block)).length,
+    [selectedAutoChordTargets],
+  );
+  const autoChordPreview = useMemo(
+    () =>
+      selectedAutoChordTargets.slice(0, 3).map((target) => {
+        const applied = applyChordPattern(target, autoChordPattern);
+        const beforeFirst = target.content.split('\n').find((line) => line.trim().length > 0) ?? '';
+        const afterFirst = applied.content.split('\n').find((line) => line.trim().length > 0) ?? '';
+        return {
+          targetId: target.id,
+          beforeFirst,
+          afterFirst,
+        };
+      }),
+    [selectedAutoChordTargets, autoChordPattern],
+  );
+  const undoSecondsLeft = chordAutoUndo ? Math.max(0, Math.ceil((chordAutoUndo.expiresAt - undoNow) / 1000)) : 0;
 
   /** Тёмный интерфейс только в режиме сцены внутри песенника; отдельная /studio — светлая тема. */
   const darkUi = surface === 'songbook' && stageMode;
@@ -561,6 +745,15 @@ export function StudioEditor() {
     if (showPreview) return;
     if (mobilePane === 'preview') setMobilePane('editor');
   }, [showPreview, mobilePane]);
+
+  useEffect(() => {
+    if (!autoChordModalOpen) return;
+    setAutoChordTargetIds((prev) => prev.filter((targetId) => blocks.some((block) => block.id === targetId)));
+    if (autoChordDonorId && blocks.some((block) => block.id === autoChordDonorId)) return;
+    const fallback = blocks.find((block) => hasAnyChordsInBlock(block));
+    if (!fallback) return;
+    setAutoChordDonorId(fallback.id);
+  }, [autoChordModalOpen, autoChordDonorId, blocks]);
 
   const confirmLeaveIfDirty = () => {
     if (!hasUnsavedChanges) return true;
@@ -790,6 +983,143 @@ export function StudioEditor() {
         </>
       ) : null}
 
+      {autoChordModalOpen ? (
+        <>
+          <button
+            type="button"
+            className={[
+              'fixed inset-0 z-[104] backdrop-blur-[2px]',
+              darkUi ? 'bg-slate-950/45' : 'bg-stone-900/30',
+            ].join(' ')}
+            aria-label="Закрыть авторасстановку"
+            onClick={() => setAutoChordModalOpen(false)}
+          />
+          <div
+            className={`fixed inset-x-0 bottom-0 z-[105] max-h-[90vh] overflow-y-auto rounded-t-3xl p-5 md:inset-auto md:right-6 md:top-16 md:w-[min(720px,calc(100vw-3rem))] md:rounded-2xl ${shell.drawer}`}
+            role="dialog"
+            aria-labelledby="auto-chords-title"
+          >
+            <div className="mb-4 flex items-start justify-between gap-3">
+              <div>
+                <h2 id="auto-chords-title" className="text-base font-semibold">
+                  🎸 Авторасстановка аккордов
+                </h2>
+                <p className={`mt-1 text-xs ${shell.muted}`}>
+                  Копирует паттерн аккордов из донора и применяет к выбранным блокам.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setAutoChordModalOpen(false)}
+                className={`inline-flex min-h-[44px] min-w-[44px] items-center justify-center ${shell.iconBtn}`}
+                aria-label="Закрыть"
+              >
+                <LuX className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div className="space-y-1">
+                <p className={`text-xs font-semibold uppercase tracking-wide ${shell.muted}`}>Источник паттерна</p>
+                <select
+                  value={autoChordDonorId}
+                  onChange={(e) => handleAutoChordDonorChange(e.target.value)}
+                  className={`w-full min-h-[44px] rounded-xl px-3 py-2.5 text-sm outline-none ${shell.field}`}
+                >
+                  {blocks
+                    .map((block, index) => ({ block, index }))
+                    .filter(({ block }) => hasAnyChordsInBlock(block))
+                    .map(({ block, index }) => (
+                      <option key={`donor-${block.id}`} value={block.id}>
+                        {blockDisplayLabel(block, index)}
+                      </option>
+                    ))}
+                </select>
+              </div>
+
+              <div className="space-y-2">
+                <p className={`text-xs font-semibold uppercase tracking-wide ${shell.muted}`}>Применить к</p>
+                <div className={`max-h-[220px] space-y-2 overflow-y-auto rounded-xl border p-3 ${darkUi ? 'border-slate-700' : 'border-stone-200'}`}>
+                  {autoChordTargets.map((target) => {
+                    const idx = blocks.findIndex((b) => b.id === target.id);
+                    const checked = autoChordTargetIds.includes(target.id);
+                    const differentType = autoChordDonor ? target.type !== autoChordDonor.type : false;
+                    const hasChords = hasAnyChordsInBlock(target);
+                    return (
+                      <label key={`target-${target.id}`} className="flex items-start gap-2 text-sm">
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => toggleAutoChordTarget(target.id)}
+                          className="mt-[2px]"
+                        />
+                        <span className="min-w-0">
+                          <span className="font-medium">{blockDisplayLabel(target, idx)}</span>
+                          {differentType ? <span className="ml-2 text-amber-500">⚠️ другой тип</span> : null}
+                          {hasChords ? <span className="ml-2 text-amber-500">заменит аккорды</span> : null}
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {selectedTargetsWithChordsCount > 0 ? (
+                <p className={`rounded-lg px-3 py-2 text-xs ${darkUi ? 'bg-amber-950/35 text-amber-100' : 'bg-amber-50 text-amber-900'}`}>
+                  ⚠️ Существующие аккорды будут заменены в {selectedTargetsWithChordsCount} блоках.
+                </p>
+              ) : null}
+
+              {selectedOtherTypeCount > 0 ? (
+                <p className={`rounded-lg px-3 py-2 text-xs ${darkUi ? 'bg-orange-950/35 text-orange-100' : 'bg-orange-50 text-orange-900'}`}>
+                  ⚠️ Выбраны блоки другого типа: {selectedOtherTypeCount}. Проверьте превью перед применением.
+                </p>
+              ) : null}
+
+              <div className={`rounded-xl border p-3 ${darkUi ? 'border-slate-700 bg-slate-950/40' : 'border-stone-200 bg-stone-50'}`}>
+                <p className={`mb-2 text-xs font-semibold uppercase tracking-wide ${shell.muted}`}>Превью</p>
+                {autoChordPreview.length === 0 ? (
+                  <p className={`text-xs ${shell.muted}`}>Выберите целевые блоки для предпросмотра.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {autoChordPreview.map((item) => (
+                      <div key={`preview-${item.targetId}`} className={`rounded-lg border p-2 ${darkUi ? 'border-slate-700' : 'border-stone-200'}`}>
+                        <p className={`mb-1 text-[11px] font-semibold ${shell.muted}`}>До</p>
+                        <pre className="m-0 whitespace-pre-wrap break-words text-xs">{item.beforeFirst || '—'}</pre>
+                        <p className={`mb-1 mt-2 text-[11px] font-semibold ${shell.muted}`}>После</p>
+                        <pre className="m-0 whitespace-pre-wrap break-words text-xs">{item.afterFirst || '—'}</pre>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setAutoChordModalOpen(false)}
+                  className={`min-h-[42px] rounded-lg px-4 text-sm font-semibold ${shell.iconBtn}`}
+                >
+                  Отмена
+                </button>
+                <button
+                  type="button"
+                  onClick={applyAutoChordPattern}
+                  disabled={autoChordTargetIds.length === 0}
+                  className={`min-h-[42px] rounded-lg px-4 text-sm font-semibold ${
+                    darkUi
+                      ? 'bg-emerald-600 text-white hover:bg-emerald-500'
+                      : 'bg-slate-900 text-white hover:bg-slate-800'
+                  } disabled:opacity-50`}
+                >
+                  Применить к выбранным
+                </button>
+              </div>
+            </div>
+          </div>
+        </>
+      ) : null}
+
       <div className="flex flex-wrap items-center gap-2 gap-y-3">
         <Link
           to={backTo}
@@ -900,16 +1230,43 @@ export function StudioEditor() {
       >
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <p className={`text-sm font-semibold uppercase tracking-[0.05em] ${shell.muted}`}>+ Добавить блок</p>
-          <button
-            type="button"
-            onClick={() => setChordPickerOpen((v) => !v)}
-            className={`inline-flex min-h-[40px] items-center gap-1 rounded-lg border px-3 text-sm font-semibold ${
-              darkUi ? 'border-slate-700 bg-slate-900 text-slate-100' : 'border-stone-200 bg-stone-50 text-stone-900'
-            }`}
-          >
-            + Аккорд
-            <LuCircleHelp className="h-3.5 w-3.5 opacity-70" title="Вставляет [Am] в позицию курсора" />
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={runAiChordPlacement}
+              disabled={aiChordPlacementMut.isPending}
+              className={`inline-flex min-h-[40px] items-center gap-1 rounded-lg border px-3 text-sm font-semibold disabled:opacity-60 ${
+                darkUi
+                  ? 'border-violet-400/70 bg-violet-950/30 text-violet-100 hover:bg-violet-950/45'
+                  : 'border-violet-200 bg-violet-50 text-violet-900 hover:bg-violet-100'
+              }`}
+            >
+              <LuWand className="h-4 w-4" />
+              {aiChordPlacementMut.isPending ? 'AI анализирует…' : '✨ AI-разбор'}
+            </button>
+            <button
+              type="button"
+              onClick={openAutoChordModal}
+              className={`inline-flex min-h-[40px] items-center gap-1 rounded-lg border px-3 text-sm font-semibold ${
+                darkUi
+                  ? 'border-amber-500/70 bg-amber-950/30 text-amber-100 hover:bg-amber-950/50'
+                  : 'border-amber-200 bg-amber-50 text-amber-900 hover:bg-amber-100'
+              }`}
+            >
+              <LuSparkles className="h-4 w-4" />
+              🎸 Авторасстановка
+            </button>
+            <button
+              type="button"
+              onClick={() => setChordPickerOpen((v) => !v)}
+              className={`inline-flex min-h-[40px] items-center gap-1 rounded-lg border px-3 text-sm font-semibold ${
+                darkUi ? 'border-slate-700 bg-slate-900 text-slate-100' : 'border-stone-200 bg-stone-50 text-stone-900'
+              }`}
+            >
+              + Аккорд
+              <LuCircleHelp className="h-3.5 w-3.5 opacity-70" title="Вставляет [Am] в позицию курсора" />
+            </button>
+          </div>
         </div>
         <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
           {STUDIO_BLOCK_PRESETS.map(({ type, label, icon }) => (
@@ -1152,6 +1509,31 @@ export function StudioEditor() {
           })}
         </div>
       </section>
+
+      {chordAutoUndo && undoSecondsLeft > 0 ? (
+        <div
+          className={`fixed bottom-[5.5rem] left-1/2 z-[120] w-[min(92vw,520px)] -translate-x-1/2 rounded-xl border px-3 py-2 shadow-xl md:bottom-6 ${
+            darkUi ? 'border-amber-600/60 bg-slate-900 text-slate-100' : 'border-amber-200 bg-white text-stone-900'
+          }`}
+        >
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-sm">
+              Аккорды расставлены в {chordAutoUndo.appliedCount} блоках.
+              <span className={`ml-1 ${shell.muted}`}>Отмена: {undoSecondsLeft}с</span>
+            </p>
+            <button
+              type="button"
+              onClick={undoAutoChordPattern}
+              className={`inline-flex min-h-[36px] items-center gap-1 rounded-lg px-3 text-sm font-semibold ${
+                darkUi ? 'bg-amber-500 text-slate-900 hover:bg-amber-400' : 'bg-amber-100 text-amber-900 hover:bg-amber-200'
+              }`}
+            >
+              <LuHistory className="h-4 w-4" />
+              Отменить
+            </button>
+          </div>
+        </div>
+      ) : null}
 
       <div
         className={[
