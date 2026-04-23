@@ -291,9 +291,18 @@ app.get('/api/version', (_req, res) => {
 // - /assets/*, /manifest.webmanifest, /sw.js, etc.
 // - любые не-/api пути → index.html (React Router)
 const webDist = path.join(process.cwd(), 'web-react', 'dist');
+const spaIndexPath = path.join(webDist, 'index.html');
+const hasSpaIndex = fs.existsSync(spaIndexPath);
+if (!hasSpaIndex) {
+  console.warn(`[web] SPA bundle is missing, static serving disabled: ${spaIndexPath}`);
+}
 
 app.get('/service-plan/share/:token', async (req, res, next) => {
   try {
+    if (!hasSpaIndex) {
+      res.status(503).type('text/plain').send('Web client is not available in this API deployment');
+      return;
+    }
     const token = String(req.params.token ?? '').trim();
     const payload = await getPublicPlanByToken(token);
     const dateText = payload ? formatDateRuForSeo(payload.plan.service_date) : '';
@@ -314,6 +323,10 @@ app.get('/service-plan/share/:token', async (req, res, next) => {
 
 app.get('/service-plan/edit/:token', async (req, res, next) => {
   try {
+    if (!hasSpaIndex) {
+      res.status(503).type('text/plain').send('Web client is not available in this API deployment');
+      return;
+    }
     const token = String(req.params.token ?? '').trim();
     const payload = await getEditablePlanByToken(token);
     const dateText = payload ? formatDateRuForSeo(payload.plan.service_date) : '';
@@ -332,10 +345,12 @@ app.get('/service-plan/edit/:token', async (req, res, next) => {
   }
 });
 
-app.use(express.static(webDist, { fallthrough: true }));
-app.get(/^\/(?!api\/).*/, (req, res) => {
-  res.sendFile(path.join(webDist, 'index.html'));
-});
+if (hasSpaIndex) {
+  app.use(express.static(webDist, { fallthrough: true }));
+  app.get(/^\/(?!api\/).*/, (_req, res) => {
+    res.sendFile(spaIndexPath);
+  });
+}
 
 async function start(): Promise<void> {
   if (process.env.DATABASE_URL) {

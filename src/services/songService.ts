@@ -307,7 +307,9 @@ export async function removeFavorite(memberId: number, songId: number): Promise<
 export async function recordSongOpened(memberId: number, songId: number): Promise<void> {
   await query(
     `INSERT INTO studio_song_recents (member_id, song_id, last_opened_at)
-     VALUES ($1, $2, NOW())
+     SELECT $1, s.id, NOW()
+     FROM songs s
+     WHERE s.id = $2
      ON CONFLICT (member_id, song_id) DO UPDATE SET last_opened_at = EXCLUDED.last_opened_at`,
     [memberId, songId]
   );
