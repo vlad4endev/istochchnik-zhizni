@@ -1,7 +1,4 @@
-import { useLayoutEffect, useMemo, useRef, useState } from 'react';
-
 import type { ParsedChordLine } from './chordParser';
-import { ChordsRow } from './ChordsRow';
 
 type SongLineProps = {
   line: ParsedChordLine;
@@ -31,75 +28,94 @@ function splitGraphemeClusters(input: string, locale = 'ru'): string[] {
   return Array.from(source);
 }
 
-export function SongLine({ line, chordsVisible, chordTone, layoutMode, className = '' }: SongLineProps) {
-  const lyricRef = useRef<HTMLDivElement>(null);
-  const [offsetsPx, setOffsetsPx] = useState<number[] | null>(null);
-  const text = line.text || '\u00a0';
-  const graphemes = useMemo(() => splitGraphemeClusters(text), [text]);
+type ChordAnchorForLayout = {
+  position: number;
+  chord: string;
+};
 
-  useLayoutEffect(() => {
-    if (layoutMode !== 'measured') {
-      setOffsetsPx(null);
-      return;
+export function resolveOverlaps(chords: ChordAnchorForLayout[]): ChordAnchorForLayout[] {
+  if (!Array.isArray(chords) || chords.length === 0) return [];
+  const sorted = chords
+    .map((item) => ({
+      position: Number.isFinite(item.position) ? Math.max(0, Math.floor(item.position)) : 0,
+      chord: typeof item.chord === 'string' ? item.chord : '',
+    }))
+    .filter((item) => item.chord.length > 0)
+    .sort((a, b) => a.position - b.position);
+
+  for (let i = 1; i < sorted.length; i += 1) {
+    const prev = sorted[i - 1];
+    const curr = sorted[i];
+    const minPos = prev.position + splitGraphemeClusters(prev.chord).length + 1;
+    if (curr.position < minPos) {
+      curr.position = minPos;
     }
-    const el = lyricRef.current;
-    if (!el) return;
-    const updateOffsets = () => {
-      const style = window.getComputedStyle(el);
-      const canvas = document.createElement('canvas');
-      const ctx = canvas.getContext('2d');
-      if (!ctx) {
-        setOffsetsPx(null);
-        return;
-      }
-      ctx.font = `${style.fontStyle} ${style.fontVariant} ${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
-      const next: number[] = [0];
-      let sum = 0;
-      for (const g of graphemes) {
-        sum += ctx.measureText(g).width;
-        next.push(sum);
-      }
-      setOffsetsPx(next);
-    };
-    updateOffsets();
-    const ro = new ResizeObserver(() => updateOffsets());
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, [layoutMode, graphemes]);
+  }
+  return sorted;
+}
 
-  const rowChords = useMemo(
-    () =>
-      line.chords.map((item, idx) => {
-        if (layoutMode === 'measured' && offsetsPx != null) {
-          const clamped = Math.max(0, Math.min(item.position, offsetsPx.length - 1));
-          return {
-            key: `${item.position}-${item.chord}-${idx}`,
-            label: item.chord,
-            left: `${offsetsPx[clamped]}px`,
-          };
-        }
-        return {
-          key: `${item.position}-${item.chord}-${idx}`,
-          label: item.chord,
-          left: `${item.position}ch`,
-        };
-      }),
-    [line.chords, layoutMode, offsetsPx],
-  );
+export function buildChordLine(text: string, chords: ChordAnchorForLayout[]): string | null {
+  const normalizedText = typeof text === 'string' ? text : '';
+  const normalizedChords = resolveOverlaps(chords);
+  if (normalizedChords.length === 0) return null;
+
+  if (splitGraphemeClusters(normalizedText).length === 0) {
+    return normalizedChords.map((item) => item.chord).join('  ');
+  }
+
+  const chordTail = normalizedChords.reduce((max, item) => {
+    return Math.max(max, item.position + splitGraphemeClusters(item.chord).length);
+  }, 0);
+  const textLength = splitGraphemeClusters(normalizedText).length;
+  const lineLength = Math.max(textLength, chordTail) + 10;
+  const chars = new Array(lineLength).fill(' ');
+
+  normalizedChords.forEach(({ position, chord }) => {
+    const chordParts = splitGraphemeClusters(chord);
+    for (let i = 0; i < chordParts.length; i += 1) {
+      const idx = position + i;
+      if (idx < chars.length) {
+        chars[idx] = chordParts[i] ?? ' ';
+      }
+    }
+  });
+
+  return chars.join('').trimEnd();
+}
+
+export function SongLine({ line, chordsVisible, chordTone, layoutMode, className = '' }: SongLineProps) {
+  const text = typeof line.text === 'string' ? line.text : '';
+  const chordLine = buildChordLine(text, line.chords);
+  const showChordLine = chordsVisible && chordLine;
+  const hasText = splitGraphemeClusters(text).length > 0;
+  const chordToneClass = chordTone === 'dark' ? 'text-amber-300' : 'text-[#4A90D9]';
+  const rootClassName = ['song-line-wrapper mb-[2px] w-full min-w-0', className].filter(Boolean).join(' ');
+
+  if (!hasText && !showChordLine) {
+    return <div className="song-line-gap h-4 w-full" data-layout-mode={layoutMode} />;
+  }
 
   return (
-    <div className={['w-full min-w-0', className].filter(Boolean).join(' ')}>
-      <div
-        className={[
-          'block w-full whitespace-pre-wrap break-words leading-[1.45]',
-          layoutMode === 'mono' ? 'font-["JetBrains_Mono","Courier_New",monospace]' : 'font-sans',
-        ].join(' ')}
-      >
-        <ChordsRow chords={rowChords} visible={chordsVisible} tone={chordTone} />
-        <div ref={lyricRef} className="whitespace-pre-wrap break-words">
+    <div className={rootClassName} data-layout-mode={layoutMode}>
+      {showChordLine ? (
+        <pre
+          className={[
+            'chords-line m-0 overflow-visible p-0 text-[1em] font-bold leading-[1.4] whitespace-pre',
+            chordToneClass,
+          ].join(' ')}
+          style={{ fontFamily: '"Courier New", Courier, monospace' }}
+        >
+          {chordLine}
+        </pre>
+      ) : null}
+      {hasText ? (
+        <pre
+          className="text-line m-0 overflow-visible p-0 text-[1em] font-normal leading-[1.4] whitespace-pre"
+          style={{ fontFamily: '"Courier New", Courier, monospace' }}
+        >
           {text}
-        </div>
-      </div>
+        </pre>
+      ) : null}
     </div>
   );
 }

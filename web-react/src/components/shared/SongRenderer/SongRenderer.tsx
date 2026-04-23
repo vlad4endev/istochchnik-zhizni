@@ -68,24 +68,18 @@ function parsePlainChordOnlyLine(line: string): ChordAnchor[] | null {
   return chords;
 }
 
-function sectionToneClass(title: string, tone: 'light' | 'dark'): string {
+function sectionTypeClass(title: string): string {
   const lower = title.toLowerCase();
   if (/(припев|chorus)/.test(lower)) {
-    return tone === 'dark' ? 'border-sky-300/80 bg-sky-950/30 text-sky-100' : 'border-sky-600/70 bg-sky-50 text-sky-900';
+    return 'chorus';
   }
   if (/(бридж|bridge)/.test(lower)) {
-    return tone === 'dark'
-      ? 'border-amber-300/80 bg-amber-950/30 text-amber-100'
-      : 'border-amber-600/70 bg-amber-50 text-amber-900';
+    return 'bridge';
   }
   if (/(куплет|verse)/.test(lower)) {
-    return tone === 'dark'
-      ? 'border-emerald-300/80 bg-emerald-950/20 text-emerald-100'
-      : 'border-emerald-600/70 bg-emerald-50 text-emerald-900';
+    return 'verse';
   }
-  return tone === 'dark'
-    ? 'border-violet-300/80 bg-violet-950/25 text-violet-100'
-    : 'border-violet-600/70 bg-violet-50 text-violet-900';
+  return 'other';
 }
 
 export function SongRenderer({
@@ -193,13 +187,15 @@ export function SongRenderer({
     <div className={className} style={{ fontSize: `${normalizedFontSize}px`, lineHeight }}>
       {transposedRows.map((row) => {
         if (row.kind === 'section') {
-          const bar = sectionToneClass(row.title, chordTone);
+          const sectionType = sectionTypeClass(row.title);
           return (
             <div
               key={row.key}
               className={[
-                'my-3 rounded-r-lg border-l-[4px] px-3 py-1.5 text-sm font-bold uppercase tracking-wide first:mt-0',
-                bar,
+                'block-header mt-6 mb-2 text-[0.78em] font-bold uppercase tracking-[0.08em] first:mt-0',
+                sectionType === 'chorus' ? 'chorus' : '',
+                sectionType === 'verse' ? 'verse' : '',
+                sectionType === 'bridge' ? 'bridge' : '',
               ].join(' ')}
               role="heading"
               aria-level={3}
