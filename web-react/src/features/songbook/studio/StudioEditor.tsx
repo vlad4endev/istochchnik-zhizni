@@ -327,21 +327,7 @@ export function StudioEditor() {
       const nextChordPro = blocksToChordPro(nextBlocks);
       const prevChordPro = blocksToChordPro(blocks);
       if (nextChordPro === prevChordPro || result.changedLines === 0) {
-        const donor = blocks.find((block) => hasAnyChordsInBlock(block));
-        if (donor) {
-          const targetIds = blocks.filter((block) => block.id !== donor.id).map((block) => block.id);
-          const fallback = autoDistributeChords(blocks, donor.id, targetIds);
-          const fallbackChanged = fallback.some((block, idx) => block.content !== (blocks[idx]?.content ?? ''));
-          if (fallbackChanged) {
-            setBlocks(fallback);
-            emitAppToast({
-              kind: 'success',
-              message: `AI не дал правок, применён автопаттерн к ${targetIds.length} блокам ✓`,
-            });
-            return;
-          }
-        }
-        emitAppToast('AI не предложил изменений аккордов для этого текста');
+        runLocalAutoFallback('AI не предложил изменений аккордов для этого текста');
         return;
       }
       setBlocks(nextBlocks);
@@ -353,7 +339,7 @@ export function StudioEditor() {
     onError: (err: unknown) => {
       const apiMsg = axios.isAxiosError(err) ? (err.response?.data as { error?: string } | undefined)?.error : undefined;
       const msg = apiMsg || (err instanceof Error && err.message ? err.message : 'AI не смог расставить аккорды');
-      emitAppToast(msg);
+      runLocalAutoFallback(msg);
     },
   });
 
@@ -614,6 +600,36 @@ export function StudioEditor() {
     const previousBlocks = blocks;
     setBlocks(nextBlocks);
     emitAppToast({ kind: 'success', message: `Автоподстановка применена: изменено ${changedCount} блоков ✓` });
+    if (undoTimeoutRef.current) clearTimeout(undoTimeoutRef.current);
+    const expiresAt = Date.now() + 10000;
+    setChordAutoUndo({ previousBlocks, appliedCount: changedCount, expiresAt });
+    setUndoNow(Date.now());
+    undoTimeoutRef.current = setTimeout(() => {
+      setChordAutoUndo(null);
+      undoTimeoutRef.current = null;
+    }, 10000);
+  };
+
+  const runLocalAutoFallback = (reason: string) => {
+    const donor = blocks.find((block) => hasAnyChordsInBlock(block));
+    if (!donor) {
+      emitAppToast(reason);
+      return;
+    }
+    const targetIds = blocks.filter((block) => block.id !== donor.id).map((block) => block.id);
+    if (targetIds.length === 0) {
+      emitAppToast(reason);
+      return;
+    }
+    const fallback = autoDistributeChords(blocks, donor.id, targetIds);
+    const changedCount = fallback.reduce((acc, block, idx) => acc + (block.content !== (blocks[idx]?.content ?? '') ? 1 : 0), 0);
+    if (changedCount === 0) {
+      emitAppToast(reason);
+      return;
+    }
+    const previousBlocks = blocks;
+    setBlocks(fallback);
+    emitAppToast({ kind: 'success', message: `Применён резервный автопаттерн: изменено ${changedCount} блоков ✓` });
     if (undoTimeoutRef.current) clearTimeout(undoTimeoutRef.current);
     const expiresAt = Date.now() + 10000;
     setChordAutoUndo({ previousBlocks, appliedCount: changedCount, expiresAt });

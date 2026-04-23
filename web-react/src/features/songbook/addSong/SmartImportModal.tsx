@@ -3,7 +3,7 @@ import { LuFileText, LuLink2, LuLoader, LuUpload, LuWand, LuX } from 'react-icon
 import axios from 'axios';
 
 import { convertToChordPro } from './chordProConversion';
-import { extractTextFromPdfBuffer } from './extractTextFromPdf';
+import { extractTextFromPdfBufferWithMeta } from './extractTextFromPdf';
 import { analyzeImportedSongText, type ImportedTextAnalysis } from './analyzeImportedSongText';
 import { fetchImportUrlText } from '../api';
 
@@ -40,6 +40,7 @@ export function SmartImportModal({
   const [pdfBuffer, setPdfBuffer] = useState<ArrayBuffer | null>(null);
   const [pdfExtractedText, setPdfExtractedText] = useState('');
   const [pdfAnalysis, setPdfAnalysis] = useState<ImportedTextAnalysis | null>(null);
+  const [pdfSafeModeInfo, setPdfSafeModeInfo] = useState<string | null>(null);
   const fileTxtRef = useRef<HTMLInputElement>(null);
   const filePdfRef = useRef<HTMLInputElement>(null);
 
@@ -58,6 +59,7 @@ export function SmartImportModal({
     setPdfBuffer(null);
     setPdfExtractedText('');
     setPdfAnalysis(null);
+    setPdfSafeModeInfo(null);
   }, [open, initialRaw, initialTab]);
 
   if (!open) return null;
@@ -133,14 +135,20 @@ export function SmartImportModal({
     }
     setPdfBusy(true);
     setPdfError(null);
+    setPdfSafeModeInfo(null);
     try {
-      const text = await extractTextFromPdfBuffer(buf);
+      const { text, mode } = await extractTextFromPdfBufferWithMeta(buf);
       if (!text.trim()) {
         setPdfError('В PDF не найден текст (возможно, только картинки). Скопируйте текст вручную во вкладке «Текст».');
         return;
       }
       setPdfExtractedText(text);
       setPdfAnalysis(analyzeImportedSongText(text));
+      if (mode === 'safe-main-thread') {
+        setPdfSafeModeInfo(
+          'PDF прочитан в безопасном режиме (без worker). Это обход MIME-ограничений сервера и не влияет на результат распознавания текста.',
+        );
+      }
     } catch {
       setPdfError('Не удалось прочитать PDF. Проверьте файл или попробуйте экспорт в текст из другого приложения.');
     } finally {
@@ -347,6 +355,15 @@ export function SmartImportModal({
               <p className={`mt-2 text-xs ${muted}`}>Drag & drop работает прямо в эту область.</p>
             </div>
             {pdfError ? <p className="text-sm text-red-500">{pdfError}</p> : null}
+            {pdfSafeModeInfo ? (
+              <p
+                className={`rounded-lg px-3 py-2 text-xs ${
+                  isStudio ? 'bg-sky-950/40 text-sky-200' : 'bg-sky-50 text-sky-900'
+                }`}
+              >
+                {pdfSafeModeInfo}
+              </p>
+            ) : null}
             <button
               type="button"
               disabled={pdfBusy || !pdfBuffer}

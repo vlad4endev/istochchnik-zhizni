@@ -1,7 +1,4 @@
 import * as pdfjs from 'pdfjs-dist';
-import pdfWorkerSrc from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
-
-pdfjs.GlobalWorkerOptions.workerSrc = pdfWorkerSrc;
 
 type Piece = {
   str: string;
@@ -10,6 +7,14 @@ type Piece = {
   w: number;
   h: number;
   hasEOL: boolean;
+};
+
+export type PdfExtractMeta = {
+  text: string;
+  /**
+   * `safe-main-thread` — извлечение без PDF worker (обходит MIME-проблемы на части серверов).
+   */
+  mode: 'safe-main-thread';
 };
 
 function isRenderableTextItem(item: unknown): item is {
@@ -104,7 +109,13 @@ function layoutPageLines(pieces: Piece[]): string {
  */
 export async function extractTextFromPdfBuffer(buffer: ArrayBuffer): Promise<string> {
   const data = buffer.byteLength === 0 ? new Uint8Array() : new Uint8Array(buffer);
-  const loadingTask = pdfjs.getDocument({ data, useSystemFonts: true });
+  // На некоторых nginx-конфигах `.mjs` отдаётся как application/octet-stream,
+  // из-за чего worker не стартует. Явно выключаем worker и парсим в main-thread.
+  const loadingTask = pdfjs.getDocument({
+    data,
+    useSystemFonts: true,
+    disableWorker: true,
+  } as unknown as Parameters<typeof pdfjs.getDocument>[0]);
   const pdf = await loadingTask.promise;
   const pageTexts: string[] = [];
 
@@ -117,4 +128,9 @@ export async function extractTextFromPdfBuffer(buffer: ArrayBuffer): Promise<str
   }
 
   return pageTexts.join('\n\n').trim();
+}
+
+export async function extractTextFromPdfBufferWithMeta(buffer: ArrayBuffer): Promise<PdfExtractMeta> {
+  const text = await extractTextFromPdfBuffer(buffer);
+  return { text, mode: 'safe-main-thread' };
 }

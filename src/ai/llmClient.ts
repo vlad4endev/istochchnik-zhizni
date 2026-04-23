@@ -49,6 +49,7 @@ export async function chatCompletion(
   messages: ChatMessage[],
   options: ChatCompletionOptions = {},
 ): Promise<string> {
+  const aiDebug = process.env.AI_DEBUG === '1';
   const cfg = await resolveLlmRuntimeConfig();
   if (!cfg.enabled) {
     throw new AiAgentError('Модуль ИИ отключён в настройках.', 'ai_disabled');
@@ -75,6 +76,20 @@ export async function chatCompletion(
   }
 
   const url = `${cfg.base_url}/chat/completions`;
+  if (aiDebug) {
+    const userChars = msgs
+      .filter((m) => m.role === 'user')
+      .reduce((acc, m) => acc + m.content.length, 0);
+    console.info('[ai] request', {
+      section: options.section ?? null,
+      base_url: cfg.base_url,
+      model,
+      message_count: msgs.length,
+      user_chars: userChars,
+      temperature,
+      max_tokens,
+    });
+  }
   const res = await fetch(url, {
     method: 'POST',
     headers: {
@@ -90,6 +105,13 @@ export async function chatCompletion(
   });
 
   const rawText = await res.text();
+  if (aiDebug) {
+    console.info('[ai] response', {
+      status: res.status,
+      ok: res.ok,
+      body_chars: rawText.length,
+    });
+  }
   let json: OpenAiCompatResponse;
   try {
     json = JSON.parse(rawText) as OpenAiCompatResponse;

@@ -108,7 +108,8 @@ export async function getVersionForSong(req: Request, res: Response): Promise<vo
     }
     const v = await getStudioVersionForSong(r.authUserId!, songId);
     if (!v) {
-      res.status(404).json({ error: 'Нет личной версии' });
+      // Не считаем отсутствие личной версии ошибкой запроса — фронту нужен "пустой" ответ.
+      res.json(null);
       return;
     }
     res.json(v);
