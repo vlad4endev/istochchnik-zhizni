@@ -95,3 +95,68 @@ export interface ProjectAuditResult {
   serverSnapshot?: ServerDiagnosticResult;
   fallback?: boolean;
 }
+
+export type DiagnosticCheckStatus = 'passed' | 'warning' | 'failed';
+
+export interface DiagnosticCheck {
+  name: string;
+  status: DiagnosticCheckStatus;
+  details: string;
+  durationMs: number;
+}
+
+export interface JournalAnalysisResult {
+  total: number;
+  byLevel: {
+    info: number;
+    warn: number;
+    error: number;
+  };
+  topEvents: Array<{ event: string; count: number }>;
+  recentErrors: Array<{ message: string; created_at: string; scope: string }>;
+}
+
+export interface FullDiagnosticsReport {
+  generatedAt: string;
+  readiness: {
+    overall: 'healthy' | 'degraded' | 'critical';
+    checks: DiagnosticCheck[];
+  };
+  environment: {
+    criticalEnv: Array<{ key: string; present: boolean }>;
+    missingCritical: string[];
+  };
+  smoke: {
+    baseUrl: string;
+    endpoints: Array<{ path: string; ok: boolean; status: number; durationMs: number; note?: string }>;
+  };
+  integrations: {
+    redis: { configured: boolean; reachable: boolean; details: string };
+    supabase: { configured: boolean; reachable: boolean; details: string };
+  };
+  server: ServerDiagnosticResult;
+  project: ProjectScanResult;
+  performance: {
+    eventLoopLagMs: number;
+    healthCheckMs: number;
+    serverCheckMs: number;
+    scanCheckMs: number;
+    httpDurationP95Ms: number;
+  };
+  journal: JournalAnalysisResult;
+  audit: ProjectAuditResult;
+  releaseValidation: {
+    pass: boolean;
+    blockers: string[];
+  };
+  regression: {
+    hasRegression: boolean;
+    items: string[];
+    previous?: {
+      generatedAt: string;
+      httpDurationP95Ms: number;
+      errorRate: number;
+    };
+  };
+  truthfulnessNote: string;
+}

@@ -1,10 +1,14 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { Router, type Request, type Response } from 'express';
+import Redis from 'ioredis';
 import { analyzeCodeWithClaude } from '../analyzers/codeAnalyzer';
 import { collectServerDiagnostics } from '../analyzers/serverAnalyzer';
 import { resolveSafeScanDir, scanProject } from '../analyzers/projectScanner';
-import { ProjectAuditResult } from '../types';
+import { FullDiagnosticsReport, ProjectAuditResult } from '../types';
+import { pool } from '../../config/db';
+import { listAppLogs } from '../../services/appLogService';
+import { isSupabaseStorageConfigured } from '../../lib/supabaseStorage';
 
 export const diagnosticsRouter = Router();
 
@@ -136,6 +140,385 @@ async function runAuditWithClaude(description: string, payload: unknown): Promis
   }
 }
 
+async function measure<T>(fn: () => Promise<T>): Promise<{ value: T; durationMs: number }> {
+  const started = Date.now();
+  const value = await fn();
+  return { value, durationMs: Date.now() - started };
+}
+
+async function sampleEventLoopLag(sampleMs = 120): Promise<number> {
+  const started = performance.now();
+  return new Promise((resolve) => {
+    setTimeout(() => {
+      const drift = performance.now() - started - sampleMs;
+      resolve(Number(Math.max(0, drift).toFixed(2)));
+    }, sampleMs);
+  });
+}
+
+async function buildJournalAnalysis() {
+  const logs = await listAppLogs({ limit: 200, offset: 0 });
+  const byLevel = { info: 0, warn: 0, error: 0 };
+  const eventCounts = new Map<string, number>();
+  for (const log of logs) {
+    if (log.level === 'info') byLevel.info += 1;
+    else if (log.level === 'warn') byLevel.warn += 1;
+    else if (log.level === 'error') byLevel.error += 1;
+    eventCounts.set(log.event, (eventCounts.get(log.event) ?? 0) + 1);
+  }
+  const topEvents = Array.from(eventCounts.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 8)
+    .map(([event, count]) => ({ event, count }));
+
+  const recentErrors = logs
+    .filter((log) => log.level === 'error')
+    .slice(0, 8)
+    .map((log) => ({
+      message: log.message,
+      created_at: log.created_at,
+      scope: log.scope,
+    }));
+
+  return {
+    total: logs.length,
+    byLevel,
+    topEvents,
+    recentErrors,
+  };
+}
+
+function percentile(values: number[], p: number): number {
+  if (values.length === 0) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  const idx = Math.min(sorted.length - 1, Math.max(0, Math.ceil((p / 100) * sorted.length) - 1));
+  return sorted[idx] ?? 0;
+}
+
+function buildEnvironmentSummary() {
+  const keys = [
+    'NODE_ENV',
+    'PORT',
+    'DATABASE_URL',
+    'ANTHROPIC_API_KEY',
+    'REDIS_URL',
+    'SUPABASE_URL',
+    'SUPABASE_SERVICE_ROLE_KEY',
+  ];
+  const criticalEnv = keys.map((key) => ({
+    key,
+    present: Boolean(String(process.env[key] ?? '').trim()),
+  }));
+  const missingCritical = criticalEnv
+    .filter((item) => !item.present && ['NODE_ENV', 'PORT', 'DATABASE_URL'].includes(item.key))
+    .map((item) => item.key);
+  return { criticalEnv, missingCritical };
+}
+
+async function checkRedisConnectivity(): Promise<{ configured: boolean; reachable: boolean; details: string }> {
+  const redisUrl = String(process.env.REDIS_URL ?? '').trim();
+  if (!redisUrl) {
+    return { configured: false, reachable: false, details: 'REDIS_URL не задан' };
+  }
+  const client = new Redis(redisUrl, {
+    lazyConnect: true,
+    connectTimeout: 2000,
+    maxRetriesPerRequest: 1,
+    retryStrategy: () => null,
+  });
+  try {
+    await client.connect();
+    const pong = await client.ping();
+    return {
+      configured: true,
+      reachable: pong === 'PONG',
+      details: pong === 'PONG' ? 'PING/PONG успешно' : `Неожиданный ответ: ${pong}`,
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return { configured: true, reachable: false, details: message };
+  } finally {
+    client.disconnect();
+  }
+}
+
+async function checkSupabaseConnectivity(): Promise<{ configured: boolean; reachable: boolean; details: string }> {
+  const url = String(process.env.SUPABASE_URL ?? '').trim();
+  const serviceRole = String(process.env.SUPABASE_SERVICE_ROLE_KEY ?? '').trim();
+  if (!isSupabaseStorageConfigured() || !url || !serviceRole) {
+    return { configured: false, reachable: false, details: 'SUPABASE_URL или SUPABASE_SERVICE_ROLE_KEY не заданы' };
+  }
+  const target = `${url.replace(/\/+$/, '')}/rest/v1/`;
+  try {
+    const response = await fetch(target, {
+      method: 'GET',
+      headers: {
+        apikey: serviceRole,
+        Authorization: `Bearer ${serviceRole}`,
+      },
+    });
+    if (response.status < 500) {
+      return { configured: true, reachable: true, details: `HTTP ${response.status}` };
+    }
+    return { configured: true, reachable: false, details: `HTTP ${response.status}` };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return { configured: true, reachable: false, details: message };
+  }
+}
+
+async function runSmokeEndpoints(baseUrl: string) {
+  const endpoints: Array<{ path: string; expectedStatuses: number[]; note?: string }> = [
+    { path: '/health', expectedStatuses: [200] },
+    { path: '/', expectedStatuses: [200] },
+    { path: '/api/version', expectedStatuses: [200] },
+    { path: '/api/diagnostics/health', expectedStatuses: [200] },
+    { path: '/api/resources/podcasts', expectedStatuses: [200, 204], note: 'Публичный контент endpoint' },
+    {
+      path: '/api/settings/logs/admin',
+      expectedStatuses: [401, 403],
+      note: 'Защищенный endpoint должен быть закрыт без сессии',
+    },
+  ];
+  const results: Array<{ path: string; ok: boolean; status: number; durationMs: number; note?: string }> = [];
+  for (const endpoint of endpoints) {
+    const started = Date.now();
+    try {
+      const response = await fetch(`${baseUrl}${endpoint.path}`);
+      results.push({
+        path: endpoint.path,
+        ok: endpoint.expectedStatuses.includes(response.status),
+        status: response.status,
+        durationMs: Date.now() - started,
+        note: endpoint.note,
+      });
+    } catch {
+      results.push({
+        path: endpoint.path,
+        ok: false,
+        status: 0,
+        durationMs: Date.now() - started,
+        note: endpoint.note,
+      });
+    }
+  }
+  return results;
+}
+
+type BaselineSnapshot = {
+  generatedAt: string;
+  httpDurationP95Ms: number;
+  errorRate: number;
+};
+
+const BASELINE_FILE = path.join(process.cwd(), '.diagnostics-baseline.json');
+
+async function readBaseline(): Promise<BaselineSnapshot | null> {
+  try {
+    const raw = await fs.readFile(BASELINE_FILE, 'utf8');
+    const parsed = JSON.parse(raw) as BaselineSnapshot;
+    if (!parsed?.generatedAt) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+async function writeBaseline(snapshot: BaselineSnapshot): Promise<void> {
+  try {
+    await fs.writeFile(BASELINE_FILE, JSON.stringify(snapshot, null, 2), 'utf8');
+  } catch {
+    // ignore baseline write failures
+  }
+}
+
+function aggregateOverall(checks: FullDiagnosticsReport['readiness']['checks']): 'healthy' | 'degraded' | 'critical' {
+  if (checks.some((item) => item.status === 'failed')) return 'critical';
+  if (checks.some((item) => item.status === 'warning')) return 'degraded';
+  return 'healthy';
+}
+
+async function runFullDiagnostics(description: string, req: Request): Promise<FullDiagnosticsReport> {
+  const checks: FullDiagnosticsReport['readiness']['checks'] = [];
+  const baseUrl = `${req.protocol}://${req.get('host')}`;
+  const environment = buildEnvironmentSummary();
+
+  const healthMeasured = await measure(async () => {
+    if (!pool) {
+      return { ok: true, details: 'DATABASE_URL не задан, БД-проверка пропущена' };
+    }
+    await pool.query('SELECT 1');
+    return { ok: true, details: 'Подключение к PostgreSQL успешно' };
+  });
+  checks.push({
+    name: 'Database connectivity',
+    status: healthMeasured.value.ok ? 'passed' : 'failed',
+    details: healthMeasured.value.details,
+    durationMs: healthMeasured.durationMs,
+  });
+
+  const smokeMeasured = await measure(async () => runSmokeEndpoints(baseUrl));
+  checks.push({
+    name: 'Smoke endpoints',
+    status: smokeMeasured.value.every((item) => item.ok) ? 'passed' : 'failed',
+    details: smokeMeasured.value.map((item) => `${item.path}:${item.status || 'ERR'}`).join(', '),
+    durationMs: smokeMeasured.durationMs,
+  });
+
+  const serverMeasured = await measure(async () => collectServerDiagnostics());
+  checks.push({
+    name: 'Server metrics',
+    status:
+      (serverMeasured.value.cpu.usagePercent > 90 || serverMeasured.value.memory.usagePercent > 92)
+        ? 'warning'
+        : 'passed',
+    details: `CPU ${serverMeasured.value.cpu.usagePercent.toFixed(1)}%, RAM ${serverMeasured.value.memory.usagePercent.toFixed(1)}%`,
+    durationMs: serverMeasured.durationMs,
+  });
+
+  const scanMeasured = await measure(async () => scanProject(process.cwd()));
+  checks.push({
+    name: 'Project scan',
+    status: scanMeasured.value.filesScanned > 0 ? 'passed' : 'failed',
+    details: `Просканировано файлов: ${scanMeasured.value.filesScanned}, LOC: ${scanMeasured.value.linesOfCode}`,
+    durationMs: scanMeasured.durationMs,
+  });
+
+  const journalMeasured = await measure(async () => buildJournalAnalysis());
+  const p95 = percentile(
+    (await listAppLogs({ limit: 300, offset: 0 })).map((log) => Number(log.duration_ms ?? 0)).filter((v) => Number.isFinite(v) && v > 0),
+    95,
+  );
+  checks.push({
+    name: 'Journal analysis',
+    status:
+      journalMeasured.value.total > 0 && journalMeasured.value.byLevel.error / journalMeasured.value.total > 0.15
+        ? 'warning'
+        : 'passed',
+    details: `Логов: ${journalMeasured.value.total}, ошибок: ${journalMeasured.value.byLevel.error}`,
+    durationMs: journalMeasured.durationMs,
+  });
+
+  const eventLoopLagMs = await sampleEventLoopLag(120);
+  checks.push({
+    name: 'Event loop lag',
+    status: eventLoopLagMs > 70 ? 'warning' : 'passed',
+    details: `Lag: ${eventLoopLagMs} ms`,
+    durationMs: 120,
+  });
+
+  const [redisStatus, supabaseStatus] = await Promise.all([
+    checkRedisConnectivity(),
+    checkSupabaseConnectivity(),
+  ]);
+  checks.push({
+    name: 'Redis integration',
+    status: !redisStatus.configured ? 'warning' : redisStatus.reachable ? 'passed' : 'failed',
+    details: redisStatus.details,
+    durationMs: 0,
+  });
+  checks.push({
+    name: 'Supabase integration',
+    status: !supabaseStatus.configured ? 'warning' : supabaseStatus.reachable ? 'passed' : 'failed',
+    details: supabaseStatus.details,
+    durationMs: 0,
+  });
+  checks.push({
+    name: 'Critical env',
+    status: environment.missingCritical.length === 0 ? 'passed' : 'failed',
+    details:
+      environment.missingCritical.length === 0
+        ? 'Все критичные env заданы'
+        : `Отсутствуют: ${environment.missingCritical.join(', ')}`,
+    durationMs: 0,
+  });
+
+  const auditPayload = {
+    description,
+    checks,
+    server: serverMeasured.value,
+    project: scanMeasured.value,
+    journal: journalMeasured.value,
+    eventLoopLagMs,
+  };
+  const audit = await runAuditWithClaude(description, auditPayload);
+
+  const currentErrorRate =
+    journalMeasured.value.total > 0 ? journalMeasured.value.byLevel.error / journalMeasured.value.total : 0;
+  const previousBaseline = await readBaseline();
+  const regressionItems: string[] = [];
+  if (previousBaseline) {
+    if (p95 > previousBaseline.httpDurationP95Ms * 1.3 && p95 - previousBaseline.httpDurationP95Ms > 40) {
+      regressionItems.push(
+        `p95 вырос: ${previousBaseline.httpDurationP95Ms.toFixed(2)}ms -> ${p95.toFixed(2)}ms`,
+      );
+    }
+    if (currentErrorRate > previousBaseline.errorRate + 0.05) {
+      regressionItems.push(
+        `error rate вырос: ${(previousBaseline.errorRate * 100).toFixed(1)}% -> ${(currentErrorRate * 100).toFixed(1)}%`,
+      );
+    }
+  }
+
+  const blockers: string[] = [];
+  if (checks.some((item) => item.status === 'failed')) blockers.push('Есть проваленные обязательные проверки.');
+  if (!smokeMeasured.value.every((item) => item.ok)) blockers.push('Smoke тесты не пройдены полностью.');
+  if (environment.missingCritical.length > 0) blockers.push(`Отсутствуют critical env: ${environment.missingCritical.join(', ')}`);
+  if (regressionItems.length > 0) blockers.push('Обнаружена регрессия относительно прошлого запуска.');
+
+  const baselineToWrite: BaselineSnapshot = {
+    generatedAt: new Date().toISOString(),
+    httpDurationP95Ms: Number(p95.toFixed(2)),
+    errorRate: currentErrorRate,
+  };
+  await writeBaseline(baselineToWrite);
+
+  return {
+    generatedAt: new Date().toISOString(),
+    readiness: {
+      overall: aggregateOverall(checks),
+      checks,
+    },
+    environment,
+    smoke: {
+      baseUrl,
+      endpoints: smokeMeasured.value,
+    },
+    integrations: {
+      redis: redisStatus,
+      supabase: supabaseStatus,
+    },
+    server: serverMeasured.value,
+    project: scanMeasured.value,
+    performance: {
+      eventLoopLagMs,
+      healthCheckMs: healthMeasured.durationMs,
+      serverCheckMs: serverMeasured.durationMs,
+      scanCheckMs: scanMeasured.durationMs,
+      httpDurationP95Ms: Number(p95.toFixed(2)),
+    },
+    journal: journalMeasured.value,
+    audit,
+    releaseValidation: {
+      pass: blockers.length === 0,
+      blockers,
+    },
+    regression: {
+      hasRegression: regressionItems.length > 0,
+      items: regressionItems,
+      previous: previousBaseline
+        ? {
+            generatedAt: previousBaseline.generatedAt,
+            httpDurationP95Ms: previousBaseline.httpDurationP95Ms,
+            errorRate: previousBaseline.errorRate,
+          }
+        : undefined,
+    },
+    truthfulnessNote:
+      'Отчет основан на реальных метриках и логах на момент запуска. Это честный технический снимок текущего состояния, но не абсолютная гарантия 100% отсутствия скрытых дефектов.',
+  };
+}
+
 diagnosticsRouter.get('/health', async (_req: Request, res: Response) => {
   const version = await resolveVersion();
   res.json({
@@ -191,4 +574,16 @@ diagnosticsRouter.post('/audit', async (req: Request, res: Response) => {
   audit.scanSnapshot = scanSnapshot;
   audit.serverSnapshot = serverSnapshot;
   res.json(audit);
+});
+
+diagnosticsRouter.post('/full-report', async (req: Request, res: Response) => {
+  const description = String(req.body?.description ?? 'Полная проверка здоровья проекта');
+  try {
+    const report = await runFullDiagnostics(description, req);
+    res.json(report);
+  } catch (error) {
+    res.status(500).json({
+      error: error instanceof Error ? error.message : 'Не удалось сформировать полный отчет',
+    });
+  }
 });
