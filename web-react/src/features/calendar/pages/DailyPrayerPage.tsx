@@ -38,6 +38,8 @@ import {
   isApiUrlProbablyWrongForWeb,
   resolveAxiosBaseURL,
 } from '../../../lib/config';
+import { SectionHeroToolbarEnd } from '@/components/SectionHeroToolbarEnd';
+import { sectionHeroHeaderClass, sectionHeroStickyClass } from '../../../lib/sectionHeroChrome';
 import { memberRosterName } from '../../../lib/memberRosterName';
 import type { Backslider, DayPrayerData, GlobalTheme, Member, Ministry } from '../../../types';
 import { fetchMe, patchProfile } from '../../profile/api';
@@ -603,8 +605,8 @@ export function DailyPrayerPage() {
 
   return (
     <div className="prayer-page-bg min-h-full pb-6 shell:pb-8">
-      <div className="sticky top-0 z-40 pb-2 bg-[var(--surface)]/95 shadow-[0_4px_16px_rgba(0,0,0,0.02)] backdrop-blur-md supports-[backdrop-filter]:bg-[var(--surface)]/80">
-      <header className="relative overflow-hidden bg-gradient-to-br from-primary via-[#6d3039] to-primary-dark px-4 py-4 text-white shadow-[0_8px_32px_rgba(92,40,48,0.35)] sm:px-5 sm:py-5 md:px-6 md:py-5 shell:rounded-none">
+      <div className={sectionHeroStickyClass}>
+      <header className={sectionHeroHeaderClass}>
         <div
           className="pointer-events-none absolute -right-4 -top-20 h-48 w-48 rounded-full bg-white/[0.13] blur-3xl animate-prayer-header-breathe motion-reduce:animate-none"
           aria-hidden
@@ -613,13 +615,16 @@ export function DailyPrayerPage() {
           className="pointer-events-none absolute -bottom-12 -left-10 h-40 w-40 rounded-full bg-black/18 blur-2xl"
           aria-hidden
         />
-        <h1 className="relative text-xl font-extrabold leading-tight tracking-tight sm:text-2xl md:text-3xl lg:text-[1.65rem] xl:text-[26px] animate-prayer-fade-up motion-reduce:animate-none">
-          Молитва
-        </h1>
+        <div className="relative flex items-center justify-between gap-3">
+          <h1 className="min-w-0 flex-1 text-xl font-extrabold leading-tight tracking-tight sm:text-2xl md:text-3xl lg:text-[1.65rem] xl:text-[26px] animate-prayer-fade-up motion-reduce:animate-none">
+            Молитва
+          </h1>
+          <SectionHeroToolbarEnd />
+        </div>
       </header>
 
       {/* Чип даты */}
-      <div className="px-4 pt-3 shell:px-6">
+      <div className="pt-3">
         <button
           type="button"
           onClick={() => setCalendarExpanded((e) => !e)}
@@ -653,7 +658,7 @@ export function DailyPrayerPage() {
         className={`grid transition-[grid-template-rows] duration-300 ease-in-out motion-reduce:transition-none ${calendarExpanded ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}
       >
         <div className="overflow-hidden">
-          <div className="mx-4 mt-3 rounded-b-3xl border border-t-0 border-stone-200/80 bg-[var(--surface-elevated)] px-3 py-5 shadow-[var(--shadow)] shell:mx-6">
+          <div className="mx-0 mt-3 rounded-b-3xl border border-t-0 border-stone-200/80 bg-[var(--surface-elevated)] px-3 py-5 shadow-[var(--shadow)]">
             {calendarView === 'week' ? (
               <WeekStripPicker
                 selected={selected}
@@ -726,7 +731,7 @@ export function DailyPrayerPage() {
       </div>
       </div>
 
-      <div className="px-4 pt-4 shell:px-6">
+      <div className="px-3 pt-4 sm:px-4 shell:px-6 md:px-6 lg:px-8 xl:px-10">
         {userCanViewNextWeekPrayerPlan(me) ? (
           <NextWeekPrayerPlanSection
             canView

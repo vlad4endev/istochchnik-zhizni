@@ -1,6 +1,9 @@
 import { Link } from 'react-router-dom';
 import { LuArrowUpRight, LuBookOpen } from 'react-icons/lu';
 
+import { SectionHeroToolbarEnd } from '@/components/SectionHeroToolbarEnd';
+import { sectionHeroHeaderClass, sectionHeroStickyClass } from '../../../lib/sectionHeroChrome';
+
 type ReadLink = { title: string; url: string; subtitle?: string };
 
 const READ_LINKS: ReadLink[] = [
@@ -11,8 +14,8 @@ const READ_LINKS: ReadLink[] = [
 export function ReadingPage() {
   return (
     <div className="min-h-full bg-[var(--surface)] pb-6 shell:pb-8">
-      <div className="sticky top-0 z-40 pb-2 bg-[var(--surface)]/95 shadow-[0_4px_16px_rgba(0,0,0,0.02)] backdrop-blur-md supports-[backdrop-filter]:bg-[var(--surface)]/80">
-        <header className="relative overflow-hidden bg-gradient-to-br from-primary via-[#6d3039] to-primary-dark px-4 py-4 text-white shadow-[0_8px_32px_rgba(92,40,48,0.35)] sm:px-5 sm:py-5 md:px-6 md:py-5 shell:rounded-none">
+      <div className={sectionHeroStickyClass}>
+        <header className={sectionHeroHeaderClass}>
           <div
             className="pointer-events-none absolute -right-4 -top-20 h-48 w-48 rounded-full bg-white/[0.13] blur-3xl animate-prayer-header-breathe motion-reduce:animate-none"
             aria-hidden
@@ -22,18 +25,20 @@ export function ReadingPage() {
             aria-hidden
           />
           <div className="relative flex items-start justify-between gap-3">
-            <div>
+            <div className="min-w-0 flex-1">
               <h1 className="text-xl font-extrabold leading-tight tracking-tight sm:text-2xl md:text-3xl lg:text-[1.65rem] xl:text-[26px] animate-prayer-fade-up motion-reduce:animate-none">
                 Читать
               </h1>
               <p className="mt-1 max-w-3xl text-sm text-white/85 md:text-base">Материалы и ссылки.</p>
             </div>
-            <Link
-              to="/resources"
-              className="inline-flex h-10 items-center rounded-xl bg-white/15 px-4 text-sm font-extrabold text-white hover:bg-white/20"
-            >
-              Назад
-            </Link>
+            <SectionHeroToolbarEnd>
+              <Link
+                to="/resources"
+                className="inline-flex h-10 shrink-0 items-center rounded-xl bg-white/15 px-3 text-sm font-extrabold text-white hover:bg-white/20 sm:px-4"
+              >
+                Назад
+              </Link>
+            </SectionHeroToolbarEnd>
           </div>
         </header>
       </div>

@@ -39,27 +39,31 @@ function roundStep(n: number, step: number): number {
 type Props = {
   /** Компактная раскладка для страницы профиля */
   dense?: boolean;
+  /** Темы в один столбец (узкие шапки / мобильный sheet) */
+  stackThemes?: boolean;
   /** id префикс для связи label/inputs */
   formIdPrefix?: string;
 };
 
-export function AccessibilityControls({ dense, formIdPrefix = 'a11y' }: Props) {
+export function AccessibilityControls({ dense, stackThemes, formIdPrefix = 'a11y' }: Props) {
   const { state, patchA11y } = useAccessibilitySettings();
   const gid = (s: string) => `${formIdPrefix}-${s}`;
 
   const fontPct = Math.round(state.fontScale * 100);
 
+  const themeGridClass = dense
+    ? 'grid grid-cols-2 gap-2 sm:grid-cols-4'
+    : stackThemes
+      ? 'grid grid-cols-1 gap-2 sm:grid-cols-2'
+      : 'grid grid-cols-1 min-[340px]:grid-cols-2 gap-2';
+
   return (
-    <div className={dense ? 'grid gap-5' : 'grid gap-4'}>
-      <div className="grid gap-2">
+    <div className={dense ? 'grid min-w-0 gap-5' : 'grid min-w-0 gap-4'}>
+      <div className="grid min-w-0 gap-2">
         <p id={gid('theme-label')} className="text-[11px] font-extrabold uppercase tracking-[0.14em] text-stone-500">
           Тема оформления
         </p>
-        <div
-          className={dense ? 'grid grid-cols-2 gap-2 sm:grid-cols-4' : 'grid grid-cols-2 gap-2'}
-          role="radiogroup"
-          aria-labelledby={gid('theme-label')}
-        >
+        <div className={themeGridClass} role="radiogroup" aria-labelledby={gid('theme-label')}>
           {THEMES.map((t) => {
             const selected = state.colorTheme === t.id;
             return (
@@ -71,7 +75,7 @@ export function AccessibilityControls({ dense, formIdPrefix = 'a11y' }: Props) {
                 title={t.hint}
                 onClick={() => patchA11y({ colorTheme: t.id })}
                 className={[
-                  'flex min-h-[44px] items-center justify-center gap-2 rounded-2xl border px-3 py-2.5 text-left text-[13px] font-bold transition',
+                  'flex min-h-[44px] w-full min-w-0 items-center justify-center gap-2 rounded-2xl border px-2.5 py-2.5 text-left text-[13px] font-bold transition sm:px-3',
                   selected
                     ? 'border-[color:var(--primary)] bg-[color:color-mix(in_srgb,var(--primary)_12%,var(--surface-elevated))] text-[color:var(--text)] shadow-sm'
                     : 'border-stone-200/90 bg-white/50 text-stone-700 hover:bg-white/80',
@@ -93,8 +97,8 @@ export function AccessibilityControls({ dense, formIdPrefix = 'a11y' }: Props) {
         </div>
       </div>
 
-      <div className="grid gap-2">
-        <div className="flex flex-wrap items-center justify-between gap-2">
+      <div className="grid min-w-0 gap-2">
+        <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
           <label id={gid('font-label')} htmlFor={gid('font-range')} className="flex items-center gap-2 text-[11px] font-extrabold uppercase tracking-[0.14em] text-stone-500">
             <LuType className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
             Размер текста
@@ -103,7 +107,7 @@ export function AccessibilityControls({ dense, formIdPrefix = 'a11y' }: Props) {
             {fontPct}%
           </span>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex min-w-0 items-center gap-2">
           <button
             type="button"
             className="grid h-11 w-11 shrink-0 place-items-center rounded-xl border border-stone-200/90 bg-white/70 text-stone-800 shadow-sm backdrop-blur transition hover:bg-white"

@@ -1,6 +1,6 @@
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { IconType } from 'react-icons';
 import {
   LuChevronLeft,
@@ -8,6 +8,7 @@ import {
   LuCalendarDays,
   LuChurch,
   LuDisc3,
+  LuEllipsis,
   LuLayoutDashboard,
   LuMessageCircle,
   LuMic,
@@ -37,7 +38,6 @@ import { useProfileDraftStore } from '../features/profile/profileDraftStore';
 import { canAccessStudioRole } from '../features/auth/studioAccess';
 import { LAYOUT_MAIN_CHROME_EVENT } from './layoutChrome';
 import { AppAvatar } from '../components/AppAvatar';
-import { AccessibilityHeaderMenu } from '../components/accessibility/AccessibilityHeaderMenu';
 import { CoordinatorDashboardNoteFab } from '../features/dashboard/components/CoordinatorDashboardNoteFab';
 import { apiClient } from '../lib/apiClient';
 import {
@@ -278,6 +278,132 @@ function navClassName(isActive: boolean, compact = false): string {
   return `${base} ${size} ${active}`.replace(/\s+/g, ' ').trim();
 }
 
+/** Активный маршрут для нижней панели (в т.ч. вложенные пути). */
+function mobileBottomRouteActive(pathname: string, to: string): boolean {
+  if (to === '/dashboard') {
+    return pathname === '/dashboard' || pathname === '/dashboard/';
+  }
+  return pathname === to || pathname.startsWith(`${to}/`);
+}
+
+/**
+ * Мобильный таббар: Главная, Молитва, Чаты, затем планировщик (если доступен) иначе песенник;
+ * остальные разделы — в «Ещё».
+ */
+function splitMobileBottomNavItems(visible: NavItem[]): { primary: NavItem[]; overflow: NavItem[] } {
+  const byTo = (path: string) => visible.find((i) => i.to === path);
+  const primary: NavItem[] = [];
+  const take = (path: string) => {
+    const it = byTo(path);
+    if (it) primary.push(it);
+  };
+  take('/dashboard');
+  take('/prayer');
+  take('/messenger');
+  const planner = byTo('/service-planner');
+  const songbook = byTo('/songbook');
+  if (planner) primary.push(planner);
+  else if (songbook) primary.push(songbook);
+  const primaryTos = new Set(primary.map((p) => p.to));
+  const overflow = visible.filter((i) => !primaryTos.has(i.to));
+  return { primary, overflow };
+}
+
+function MobileNavOverflow({
+  items,
+  activityBadgeTotal,
+  pathname,
+}: {
+  items: NavItem[];
+  activityBadgeTotal: number;
+  pathname: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const menuId = useId();
+
+  useEffect(() => {
+    setOpen(false);
+  }, [pathname]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (e: MouseEvent | TouchEvent) => {
+      const el = wrapRef.current;
+      if (!el?.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('mousedown', onDoc);
+    document.addEventListener('touchstart', onDoc, { passive: true });
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDoc);
+      document.removeEventListener('touchstart', onDoc);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+
+  const isMoreTabActive = items.some((item) => mobileBottomRouteActive(pathname, item.to));
+
+  return (
+    <div ref={wrapRef} className="relative flex min-w-0 flex-1 flex-col items-stretch">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className={navClassName(isMoreTabActive, true)}
+        aria-expanded={open}
+        aria-haspopup="menu"
+        aria-controls={menuId}
+      >
+        <LuEllipsis className={navIconClass(isMoreTabActive, true)} strokeWidth={2} aria-hidden />
+        <span className="mt-1 truncate px-0.5 text-center text-[11px] font-medium tracking-tight">Ещё</span>
+      </button>
+      {open ? (
+        <div
+          id={menuId}
+          role="menu"
+          aria-label="Другие разделы"
+          className="absolute bottom-[calc(100%+0.35rem)] left-1/2 z-[60] w-[min(19rem,calc(100vw-1.25rem))] -translate-x-1/2 rounded-2xl border border-stone-200/90 bg-white/98 py-1.5 shadow-lg shadow-stone-900/10 backdrop-blur-md supports-[backdrop-filter]:bg-white/95"
+        >
+          {items.map((item) => {
+            const Icon = item.Icon;
+            return (
+              <NavLink
+                key={item.to}
+                role="menuitem"
+                to={item.to}
+                onClick={() => setOpen(false)}
+                className={({ isActive }) =>
+                  [
+                    'flex min-h-[48px] items-center gap-3 px-4 py-2.5 text-left text-sm font-semibold transition-colors tap-highlight-transparent',
+                    isActive ? 'bg-primary/10 text-primary' : 'text-stone-700 hover:bg-stone-50',
+                  ].join(' ')
+                }
+              >
+                {({ isActive }) => (
+                  <>
+                    <span className="relative inline-flex shrink-0">
+                      <Icon className={navIconClass(isActive, true)} strokeWidth={2} aria-hidden />
+                      {item.to === '/messenger' && activityBadgeTotal > 0 ? (
+                        <span className="absolute -right-2.5 top-0 z-[5] inline-flex min-h-[18px] min-w-[18px] items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-extrabold leading-none text-white shadow-sm ring-2 ring-white">
+                          {formatNavBadgeCount(activityBadgeTotal)}
+                        </span>
+                      ) : null}
+                    </span>
+                    <span className="min-w-0 truncate">{item.label}</span>
+                  </>
+                )}
+              </NavLink>
+            );
+          })}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 const UNREAD_DELIVERIES_QK = ['notifications', 'unread-deliveries-count'] as const;
 
 export function Layout() {
@@ -326,6 +452,8 @@ export function Layout() {
   const description = useBrandingStore((s) => s.description);
   const customLogoDataUrl = useBrandingStore((s) => s.customLogoDataUrl);
   const logoScalePercent = useBrandingStore((s) => s.logoScalePercent);
+  /** В сайдбаре не увеличиваем выше 100% — иначе transform вылезает из клетки и перекрывает соседей */
+  const sidebarLogoScalePercent = Math.min(100, logoScalePercent);
 
   const isAdmin = (role ?? 'member').toLowerCase() === 'admin';
   const registrationStatus = useAuthStore((s) => s.registrationStatus ?? 'active');
@@ -353,7 +481,10 @@ export function Layout() {
         canRoleAccessSection(sectionVisibilityQ.data, item.sectionId, role, roles)),
   );
   const sidebarItems = items;
-  const mobileItems = items;
+  const { primary: mobilePrimaryItems, overflow: mobileOverflowItems } = useMemo(
+    () => splitMobileBottomNavItems(items),
+    [items],
+  );
   const isDashboardRoute =
     location.pathname === '/dashboard' || location.pathname === '/dashboard/';
 
@@ -527,15 +658,6 @@ export function Layout() {
       >
         Перейти к содержимому
       </a>
-      {mainChromeVisible ? (
-        <div
-          className="pointer-events-none fixed right-[max(0.65rem,env(safe-area-inset-right,0px))] top-[max(0.45rem,env(safe-area-inset-top,0px))] z-[55] md:right-5 md:top-[max(0.6rem,env(safe-area-inset-top,0px))]"
-        >
-          <div className="pointer-events-auto">
-            <AccessibilityHeaderMenu tone="on-surface" />
-          </div>
-        </div>
-      ) : null}
       <div
         className={[
           'flex min-h-0 min-w-0 w-full max-w-full flex-1 flex-col box-border',
@@ -561,7 +683,7 @@ export function Layout() {
                   src={customLogoDataUrl}
                   alt=""
                   className="max-h-full max-w-full object-contain"
-                  style={{ transform: `scale(${logoScalePercent / 100})` }}
+                  style={{ transform: `scale(${sidebarLogoScalePercent / 100})` }}
                 />
               ) : (
                 <img src="/assets/logo.svg" alt="" className="h-full w-full object-contain drop-shadow-sm" />
@@ -748,8 +870,8 @@ export function Layout() {
         aria-label="Основная навигация"
         aria-hidden={!mainChromeVisible}
       >
-        <div className="mx-auto flex max-w-md items-center justify-around px-2 pb-1 pt-1">
-          {mobileItems.map((item) => {
+        <div className="mx-auto flex max-w-md items-stretch justify-center gap-0.5 px-1 pb-1 pt-1 sm:px-2">
+          {mobilePrimaryItems.map((item) => {
             const Icon = item.Icon;
             return (
               <NavLink
@@ -780,6 +902,13 @@ export function Layout() {
               </NavLink>
             );
           })}
+          {mobileOverflowItems.length > 0 ? (
+            <MobileNavOverflow
+              items={mobileOverflowItems}
+              activityBadgeTotal={activityBadgeTotal}
+              pathname={location.pathname}
+            />
+          ) : null}
         </div>
       </nav>
       </div>

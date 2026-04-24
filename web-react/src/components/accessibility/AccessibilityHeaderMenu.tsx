@@ -6,6 +6,10 @@ import { LuEye, LuUndo2, LuX } from 'react-icons/lu';
 
 export type AccessibilityHeaderMenuTone = 'on-gradient' | 'on-surface';
 
+const SHEET_BREAKPOINT_PX = 640;
+
+type PanelLayout = 'sheet' | 'popover';
+
 type Props = {
   tone?: AccessibilityHeaderMenuTone;
   /** Дополнительные классы для круглой кнопки-триггера */
@@ -15,7 +19,8 @@ type Props = {
 export function AccessibilityHeaderMenu({ tone = 'on-gradient', triggerClassName }: Props) {
   const menuId = useId();
   const [open, setOpen] = useState(false);
-  const [panelPos, setPanelPos] = useState({ top: 0, left: 0, width: 380 });
+  const [layout, setLayout] = useState<PanelLayout>('popover');
+  const [panelPos, setPanelPos] = useState({ top: 0, left: 0, width: 360 });
   const btnRef = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const wasOpenRef = useRef(false);
@@ -33,13 +38,34 @@ export function AccessibilityHeaderMenu({ tone = 'on-gradient', triggerClassName
 
     const update = () => {
       const btn = btnRef.current;
+      const vw = typeof window !== 'undefined' ? window.innerWidth : 360;
+      const vh = typeof window !== 'undefined' ? window.innerHeight : 640;
+
+      if (vw < SHEET_BREAKPOINT_PX) {
+        setLayout('sheet');
+        return;
+      }
+
+      setLayout('popover');
       if (!btn) return;
+
       const r = btn.getBoundingClientRect();
-      const menuWidth = Math.min(380, window.innerWidth - 24);
-      setPanelPos({
-        top: r.bottom + 8,
-        left: Math.max(12, r.right - menuWidth),
-        width: menuWidth,
+      const gutter = 12;
+      const menuWidth = Math.min(380, Math.max(280, vw - gutter * 2));
+      let left = r.right - menuWidth;
+      left = Math.max(gutter, Math.min(left, vw - menuWidth - gutter));
+      const topBelow = r.bottom + 8;
+      setPanelPos({ top: topBelow, left, width: menuWidth });
+
+      requestAnimationFrame(() => {
+        const panel = panelRef.current;
+        if (!panel) return;
+        const ph = panel.offsetHeight;
+        let top = topBelow;
+        if (top + ph > vh - gutter) {
+          top = Math.max(gutter, r.top - ph - 8);
+        }
+        setPanelPos({ top, left, width: menuWidth });
       });
     };
 
@@ -86,6 +112,9 @@ export function AccessibilityHeaderMenu({ tone = 'on-gradient', triggerClassName
     wasOpenRef.current = open;
   }, [open]);
 
+  const panelBaseClass =
+    'z-[90] box-border min-w-0 overflow-y-auto overflow-x-hidden overscroll-contain rounded-3xl border border-stone-200/80 bg-white/90 p-3 shadow-[0_20px_50px_rgba(0,0,0,0.18)] backdrop-blur-xl supports-[backdrop-filter]:bg-white/80 sm:p-4 [touch-action:manipulation]';
+
   const panel = open ? (
     <div
       ref={panelRef}
@@ -93,15 +122,23 @@ export function AccessibilityHeaderMenu({ tone = 'on-gradient', triggerClassName
       role="dialog"
       aria-modal="true"
       aria-labelledby={`${menuId}-title`}
-      className="fixed z-[90] max-h-[min(72vh,540px)] overflow-y-auto overflow-x-hidden rounded-3xl border border-stone-200/80 bg-white/90 p-4 shadow-[0_20px_50px_rgba(0,0,0,0.18)] backdrop-blur-xl supports-[backdrop-filter]:bg-white/80"
-      style={{
-        top: panelPos.top,
-        left: panelPos.left,
-        width: panelPos.width,
-      }}
+      className={
+        layout === 'sheet'
+          ? `${panelBaseClass} fixed inset-x-3 top-[max(0.5rem,env(safe-area-inset-top,0px))] mx-auto w-auto max-w-lg max-h-[min(88dvh,calc(100dvh-env(safe-area-inset-top,0px)-env(safe-area-inset-bottom,0px)-5.5rem))]`
+          : `${panelBaseClass} fixed max-h-[min(85dvh,560px)]`
+      }
+      style={
+        layout === 'sheet'
+          ? undefined
+          : {
+              top: panelPos.top,
+              left: panelPos.left,
+              width: panelPos.width,
+            }
+      }
     >
-      <div className="flex items-start justify-between gap-3 border-b border-stone-200/70 pb-3">
-        <div>
+      <div className="flex min-w-0 items-start justify-between gap-2 border-b border-stone-200/70 pb-3 sm:gap-3">
+        <div className="min-w-0 pr-1">
           <p id={`${menuId}-title`} className="text-[15px] font-extrabold leading-tight text-stone-900">
             Доступность
           </p>
@@ -119,11 +156,15 @@ export function AccessibilityHeaderMenu({ tone = 'on-gradient', triggerClassName
         </button>
       </div>
 
-      <div className="pt-4">
-        <AccessibilityControls formIdPrefix="a11y-header-menu" />
+      <div className="min-w-0 pt-3 sm:pt-4">
+        <AccessibilityControls
+          formIdPrefix="a11y-header-menu"
+          dense={layout === 'sheet'}
+          stackThemes={layout === 'sheet'}
+        />
       </div>
 
-      <div className="mt-4 border-t border-stone-200/70 pt-3">
+      <div className="mt-3 border-t border-stone-200/70 pt-3 sm:mt-4 sm:pt-3">
         <button
           type="button"
           onClick={() => {
@@ -132,7 +173,7 @@ export function AccessibilityHeaderMenu({ tone = 'on-gradient', triggerClassName
           }}
           className="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-2xl border border-stone-200/90 bg-stone-50/95 px-3 text-[13px] font-bold text-stone-800 transition hover:bg-stone-100"
         >
-          <LuUndo2 className="h-4 w-4" strokeWidth={2} aria-hidden />
+          <LuUndo2 className="h-4 w-4 shrink-0" strokeWidth={2} aria-hidden />
           Сбросить всё
         </button>
       </div>

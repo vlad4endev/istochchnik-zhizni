@@ -31,6 +31,8 @@ import {
 import { NextWeekPrayerPlanSection, userCanViewNextWeekPrayerPlan } from '../../calendar/components/NextWeekPrayerPlanSection';
 import { fetchMe } from '../../profile/api';
 import { fetchProfileByUsername } from '../../profile/publicProfileApi';
+import { SectionHeroToolbarEnd } from '@/components/SectionHeroToolbarEnd';
+import { sectionHeroHeaderClass, sectionHeroStickyClassNested } from '../../../lib/sectionHeroChrome';
 import { apiBoolean } from '../../../lib/apiBoolean';
 import { resolvePublicUrl } from '../../../lib/resolvePublicUrl';
 import { memberRosterName } from '../../../lib/memberRosterName';
@@ -527,10 +529,10 @@ function DashboardMain() {
   }
 
   return (
-    <div className="min-h-full bg-[var(--surface)] px-3 pb-[max(2rem,env(safe-area-inset-bottom,0px))] pt-2 sm:px-4 sm:pt-3 shell:px-6 md:px-8 xl:px-10">
+    <div className="min-h-full bg-[var(--surface)] px-3 pb-[max(2rem,env(safe-area-inset-bottom,0px))] sm:px-4 shell:px-6 md:px-8 xl:px-10">
       <div className="mx-auto w-full max-w-7xl 2xl:max-w-[1480px]">
-        <div className="sticky top-0 z-40 pb-2 bg-[var(--surface)]/95 shadow-[0_4px_16px_rgba(0,0,0,0.02)] backdrop-blur-md supports-[backdrop-filter]:bg-[var(--surface)]/80">
-          <header className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-primary via-[#6d3039] to-primary-dark px-4 py-4 text-white shadow-[0_8px_32px_rgba(92,40,48,0.35)] sm:px-5 sm:py-5 md:px-6 md:py-5 shell:rounded-none">
+        <div className={sectionHeroStickyClassNested}>
+          <header className={sectionHeroHeaderClass}>
             <div
               className="pointer-events-none absolute -right-4 -top-20 h-48 w-48 rounded-full bg-white/[0.13] blur-3xl animate-prayer-header-breathe motion-reduce:animate-none"
               aria-hidden
@@ -540,17 +542,19 @@ function DashboardMain() {
               aria-hidden
             />
             <div className="relative flex items-center justify-between gap-3">
-              <h1 className="min-w-0 text-xl font-extrabold leading-tight tracking-tight sm:text-2xl md:text-3xl lg:text-[1.65rem] xl:text-[26px] animate-prayer-fade-up motion-reduce:animate-none">
+              <h1 className="min-w-0 flex-1 text-xl font-extrabold leading-tight tracking-tight sm:text-2xl md:text-3xl lg:text-[1.65rem] xl:text-[26px] animate-prayer-fade-up motion-reduce:animate-none">
                 Главная
               </h1>
-              <Link
-                to="/profile"
-                className="tap-highlight-transparent flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-white/25 bg-white/15 text-white shadow-sm transition hover:bg-white/25 active:scale-[0.98] md:hidden"
-                aria-label="Настройки профиля"
-                title="Настройки"
-              >
-                <LuSettings className="h-5 w-5" strokeWidth={2} aria-hidden />
-              </Link>
+              <SectionHeroToolbarEnd>
+                <Link
+                  to="/profile"
+                  className="tap-highlight-transparent flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-white/25 bg-white/15 text-white shadow-sm transition hover:bg-white/25 active:scale-[0.98] md:hidden"
+                  aria-label="Настройки профиля"
+                  title="Настройки"
+                >
+                  <LuSettings className="h-5 w-5" strokeWidth={2} aria-hidden />
+                </Link>
+              </SectionHeroToolbarEnd>
             </div>
           </header>
         </div>
