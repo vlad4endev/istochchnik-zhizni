@@ -29,6 +29,7 @@ import { AiSettingsSection } from '../AiSettingsSection';
 import { AppSectionsAccessSection } from '../AppSectionsAccessSection';
 import { NotificationsSettingsSection } from '../NotificationsSettingsSection';
 import { ProjectJournalSection } from '../ProjectJournalSection';
+import { DiagnosticsDashboardSection } from '../DiagnosticsDashboardSection';
 import { useBrandingStore } from '../../branding/brandingStore';
 import {
   addAdminPrayerRequestHistory,
@@ -383,6 +384,7 @@ export function AdminPage() {
       {tab === 'journal' && <ProjectJournalSection />}
       {tab === 'notifications' && <NotificationsSettingsSection />}
       {tab === 'telegram' && <TelegramSection />}
+      {tab === 'diagnostics' && <DiagnosticsDashboardSection />}
       {tab === 'integrations' && <IntegrationsSection />}
     </div>
   );

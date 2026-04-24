@@ -28,6 +28,7 @@ import studioRoutes from './routes/studioRoutes';
 import settingsRoutes from './routes/settingsRoutes';
 import messengerRoutes from './routes/messengerRoutes';
 import servicePlannerRoutes from './routes/servicePlannerRoutes';
+import { diagnosticsRouter } from './diagnostics/routes/diagnostics.router';
 import {
   attachRealtimeWebSocket,
   initMessengerFanoutPublisherOnly,
@@ -239,6 +240,11 @@ app.use('/api/uploads', (_req, res) => {
 });
 
 app.use('/api/auth', authRoutes);
+app.use('/api/diagnostics', diagnosticsRouter);
+const diagnosticsClientDist = path.join(__dirname, 'diagnostics', 'client');
+const diagnosticsClientSrc = path.join(process.cwd(), 'src', 'diagnostics', 'client');
+const diagnosticsClientPath = fs.existsSync(diagnosticsClientDist) ? diagnosticsClientDist : diagnosticsClientSrc;
+app.use('/diagnostics', express.static(diagnosticsClientPath));
 
 app.use(resolveUserRole);
 app.use(enforceRoleAccess);

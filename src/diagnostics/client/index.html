@@ -1,0 +1,277 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Diagnostics Dashboard</title>
+  <style>
+    :root {
+      --bg: #0d0d0f;
+      --panel: #17171c;
+      --panel-2: #1f1f27;
+      --text: #d4d4da;
+      --muted: #8d8d99;
+      --ok: #22c55e;
+      --warn: #f59e0b;
+      --err: #ef4444;
+      --accent: #7c6aff;
+      --border: #2b2b37;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+    .layout { display: grid; grid-template-columns: 260px 1fr; min-height: 100vh; }
+    .sidebar {
+      background: var(--panel);
+      border-right: 1px solid var(--border);
+      padding: 20px 14px;
+    }
+    .sidebar h1 { font-size: 16px; margin: 0 0 18px; color: var(--accent); }
+    .nav-btn {
+      display: block; width: 100%; text-align: left; padding: 10px 12px;
+      margin-bottom: 8px; border: 1px solid var(--border); border-radius: 8px;
+      background: transparent; color: var(--text); cursor: pointer;
+    }
+    .nav-btn.active, .nav-btn:hover { background: var(--panel-2); border-color: var(--accent); }
+    .content { padding: 20px; }
+    .section { display: none; }
+    .section.active { display: block; }
+    .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 16px; }
+    .card { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 12px; }
+    .label { color: var(--muted); font-size: 12px; margin-bottom: 8px; }
+    .value { font-size: 20px; font-weight: 700; }
+    .grid { display: grid; gap: 12px; }
+    textarea, input, select {
+      width: 100%; border-radius: 8px; border: 1px solid var(--border);
+      background: #101016; color: var(--text); padding: 10px;
+      font: inherit;
+    }
+    button.action {
+      border: 1px solid var(--accent);
+      background: var(--accent);
+      color: white;
+      border-radius: 8px;
+      padding: 10px 12px;
+      cursor: pointer;
+    }
+    pre {
+      background: #0a0a0d; border: 1px solid var(--border);
+      border-radius: 8px; padding: 10px; overflow: auto;
+      max-height: 320px;
+    }
+    .badge {
+      display: inline-block; padding: 3px 7px; border-radius: 999px; font-size: 11px;
+      border: 1px solid transparent; margin-left: 8px;
+    }
+    .sev-CRITICAL { background: rgba(239, 68, 68, 0.2); color: var(--err); border-color: var(--err); }
+    .sev-HIGH { background: rgba(245, 158, 11, 0.2); color: var(--warn); border-color: var(--warn); }
+    .sev-MEDIUM { background: rgba(245, 158, 11, 0.2); color: var(--warn); border-color: var(--warn); }
+    .sev-LOW { background: rgba(34, 197, 94, 0.2); color: var(--ok); border-color: var(--ok); }
+    .issues { display: grid; gap: 8px; }
+    .issue {
+      border: 1px solid var(--border); border-radius: 8px; background: var(--panel);
+      padding: 10px;
+    }
+    .ring-wrap { display: flex; gap: 16px; align-items: center; }
+    .ring-label { font-size: 24px; font-weight: 700; }
+    .log {
+      height: 180px;
+      overflow: auto;
+      background: #050508;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px;
+      font-size: 12px;
+      white-space: pre-wrap;
+    }
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar">
+      <h1>Diagnostics</h1>
+      <button class="nav-btn active" data-section="overview">Overview</button>
+      <button class="nav-btn" data-section="code">Code Analyzer</button>
+      <button class="nav-btn" data-section="server">Server</button>
+      <button class="nav-btn" data-section="project">Project</button>
+      <button class="nav-btn" data-section="audit">Audit</button>
+    </aside>
+    <main class="content">
+      <section id="overview" class="section active">
+        <div class="cards">
+          <div class="card"><div class="label">Status</div><div class="value" id="healthStatus">...</div></div>
+          <div class="card"><div class="label">Version</div><div class="value" id="healthVersion">...</div></div>
+          <div class="card"><div class="label">Timestamp</div><div class="value" id="healthTimestamp">...</div></div>
+        </div>
+        <div class="card ring-wrap">
+          <svg width="120" height="120" viewBox="0 0 120 120">
+            <circle cx="60" cy="60" r="52" stroke="#2b2b37" stroke-width="10" fill="none"></circle>
+            <circle id="scoreRing" cx="60" cy="60" r="52" stroke="var(--ok)" stroke-width="10" fill="none" stroke-linecap="round" stroke-dasharray="326.7" stroke-dashoffset="326.7" transform="rotate(-90 60 60)"></circle>
+          </svg>
+          <div class="ring-label" id="overviewScore">0</div>
+        </div>
+        <div class="card">
+          <div class="label">System Log</div>
+          <div id="systemLog" class="log"></div>
+        </div>
+      </section>
+
+      <section id="code" class="section">
+        <div class="grid">
+          <label>Mode <select id="modeSelect"><option>general</option><option>security</option><option>performance</option><option>bugs</option></select></label>
+          <label>Language <select id="langSelect"><option>typescript</option><option>javascript</option><option>sql</option><option>python</option></select></label>
+          <label>Code <textarea id="codeInput" rows="12" placeholder="Вставьте код для анализа..."></textarea></label>
+          <button class="action" id="analyzeBtn">Analyze Code</button>
+          <div class="card"><div class="label">Summary</div><div id="codeSummary">—</div></div>
+          <div class="card"><div class="label">AI recommendations</div><div id="codeReco">—</div></div>
+          <div class="issues" id="codeIssues"></div>
+        </div>
+      </section>
+
+      <section id="server" class="section">
+        <button class="action" id="refreshServerBtn">Refresh Metrics</button>
+        <div class="cards" style="margin-top: 12px;">
+          <div class="card"><div class="label">CPU%</div><div class="value" id="cpuVal">0</div></div>
+          <div class="card"><div class="label">RAM%</div><div class="value" id="ramVal">0</div></div>
+          <div class="card"><div class="label">Disk%</div><div class="value" id="diskVal">0</div></div>
+          <div class="card"><div class="label">Uptime</div><div class="value" id="uptimeVal">0</div></div>
+        </div>
+        <pre id="serverRecommendations"></pre>
+      </section>
+
+      <section id="project" class="section">
+        <button class="action" id="scanProjectBtn">Scan Project</button>
+        <pre id="projectScanOutput"></pre>
+      </section>
+
+      <section id="audit" class="section">
+        <label>Audit description<input id="auditDescription" value="Полный архитектурный и эксплуатационный аудит проекта" /></label>
+        <button class="action" id="runAuditBtn" style="margin-top: 10px;">Run Audit</button>
+        <div class="card" style="margin-top: 12px;"><div class="label">Audit Summary</div><div id="auditSummary">—</div></div>
+        <div class="card"><div class="label">AI recommendations</div><div id="auditReco">—</div></div>
+        <div class="issues" id="auditIssues"></div>
+      </section>
+    </main>
+  </div>
+
+  <script>
+    const logEl = document.getElementById('systemLog');
+    const scoreRing = document.getElementById('scoreRing');
+    const circumference = 326.7;
+
+    function addLog(message) {
+      const line = `[${new Date().toISOString()}] ${message}\n`;
+      logEl.textContent += line;
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+
+    function setScore(score) {
+      const clamped = Math.max(0, Math.min(100, Number(score) || 0));
+      const offset = circumference - (clamped / 100) * circumference;
+      scoreRing.setAttribute('stroke-dashoffset', String(offset));
+      scoreRing.setAttribute('stroke', clamped >= 75 ? '#22c55e' : clamped >= 45 ? '#f59e0b' : '#ef4444');
+      document.getElementById('overviewScore').textContent = String(clamped);
+    }
+
+    function renderIssues(container, issues) {
+      container.innerHTML = '';
+      if (!Array.isArray(issues) || !issues.length) {
+        container.innerHTML = '<div class="card">Проблем не найдено.</div>';
+        return;
+      }
+      issues.forEach((issue) => {
+        const item = document.createElement('div');
+        item.className = 'issue';
+        item.innerHTML = `
+          <div><strong>⚠ ${issue.title || 'Issue'}</strong><span class="badge sev-${issue.severity || 'LOW'}">${issue.severity || 'LOW'}</span></div>
+          <div>${issue.description || ''}</div>
+          <div><em>Suggestion:</em> ${issue.suggestion || ''}</div>
+        `;
+        container.appendChild(item);
+      });
+    }
+
+    document.querySelectorAll('.nav-btn').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.nav-btn').forEach((node) => node.classList.remove('active'));
+        document.querySelectorAll('.section').forEach((node) => node.classList.remove('active'));
+        btn.classList.add('active');
+        document.getElementById(btn.dataset.section).classList.add('active');
+      });
+    });
+
+    async function loadHealth() {
+      const res = await fetch('/api/diagnostics/health');
+      const data = await res.json();
+      document.getElementById('healthStatus').textContent = data.status || '-';
+      document.getElementById('healthVersion').textContent = data.version || '-';
+      document.getElementById('healthTimestamp').textContent = data.timestamp || '-';
+      addLog('Health loaded');
+    }
+
+    async function loadServer() {
+      const res = await fetch('/api/diagnostics/server');
+      const data = await res.json();
+      document.getElementById('cpuVal').textContent = Number(data.cpu?.usagePercent || 0).toFixed(2);
+      document.getElementById('ramVal').textContent = Number(data.memory?.usagePercent || 0).toFixed(2);
+      document.getElementById('diskVal').textContent = Number(data.disk?.usagePercent || 0).toFixed(2);
+      document.getElementById('uptimeVal').textContent = `${Math.round(data.runtime?.processUptimeSec || 0)}s`;
+      document.getElementById('serverRecommendations').textContent = (data.recommendations || []).join('\n');
+      addLog('Server metrics refreshed');
+    }
+
+    async function runAnalyze() {
+      const body = {
+        code: document.getElementById('codeInput').value,
+        mode: document.getElementById('modeSelect').value,
+        language: document.getElementById('langSelect').value
+      };
+      const res = await fetch('/api/diagnostics/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      const data = await res.json();
+      document.getElementById('codeSummary').textContent = data.summary || '-';
+      document.getElementById('codeReco').textContent = (data.recommendations || []).join('\n');
+      renderIssues(document.getElementById('codeIssues'), data.issues || []);
+      setScore(data.score || 0);
+      addLog('Code analyzed');
+    }
+
+    async function runProjectScan() {
+      const res = await fetch('/api/diagnostics/scan');
+      const data = await res.json();
+      document.getElementById('projectScanOutput').textContent = JSON.stringify(data, null, 2);
+      addLog('Project scan completed');
+    }
+
+    async function runAudit() {
+      const description = document.getElementById('auditDescription').value;
+      const res = await fetch('/api/diagnostics/audit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ description })
+      });
+      const data = await res.json();
+      document.getElementById('auditSummary').textContent = data.summary || '-';
+      document.getElementById('auditReco').textContent = (data.recommendations || []).join('\n');
+      renderIssues(document.getElementById('auditIssues'), data.issues || []);
+      setScore(data.overallScore || 0);
+      addLog('Audit completed');
+    }
+
+    document.getElementById('analyzeBtn').addEventListener('click', runAnalyze);
+    document.getElementById('refreshServerBtn').addEventListener('click', loadServer);
+    document.getElementById('scanProjectBtn').addEventListener('click', runProjectScan);
+    document.getElementById('runAuditBtn').addEventListener('click', runAudit);
+
+    loadHealth().catch((e) => addLog(`Health error: ${e.message || e}`));
+    loadServer().catch((e) => addLog(`Server error: ${e.message || e}`));
+  </script>
+</body>
+</html>

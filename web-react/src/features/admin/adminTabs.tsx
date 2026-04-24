@@ -3,6 +3,7 @@ import {
   LuBell,
   LuCalendarDays,
   LuCalendarRange,
+  LuChartColumnBig,
   LuHistory,
   LuInbox,
   LuLink2,
@@ -25,7 +26,8 @@ export interface AdminTabConfig {
     | 'journal'
     | 'notifications'
     | 'telegram'
-    | 'integrations';
+    | 'integrations'
+    | 'diagnostics';
   label: string;
   Icon: IconType;
   short: string;
@@ -106,6 +108,14 @@ export const ADMIN_TABS: readonly AdminTabConfig[] = [
     Icon: LuSend,
     short: 'Бот',
     description: 'Скрытый админ-модуль для отправки молитв и недельных списков в Telegram.',
+  },
+  {
+    id: 'diagnostics',
+    label: 'Диагностика проекта',
+    Icon: LuChartColumnBig,
+    short: 'Диагностика',
+    description:
+      'Полный срез состояния API и проекта: health, серверные метрики, скан структуры и AI-аудит в одном дашборде.',
   },
   {
     id: 'integrations',
