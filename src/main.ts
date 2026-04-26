@@ -29,6 +29,8 @@ import studioRoutes from './routes/studioRoutes';
 import settingsRoutes from './routes/settingsRoutes';
 import messengerRoutes from './routes/messengerRoutes';
 import servicePlannerRoutes from './routes/servicePlannerRoutes';
+import analyticsRoutes from './routes/analyticsRoutes';
+import { analyticsMiddleware } from './middleware/analyticsMiddleware';
 import { diagnosticsRouter } from './diagnostics/routes/diagnostics.router';
 import {
   attachRealtimeWebSocket,
@@ -40,6 +42,7 @@ import { ensureUploadsDirs, getUploadsRoot } from './config/uploadsRoot';
 import { ensureAccessRequestsMessengerChannel } from './services/messengerService';
 import { writeAppLog } from './services/appLogService';
 import { getEditablePlanByToken, getPublicPlanByToken } from './services/servicePlannerService';
+import { startAnalyticsMaintenance } from './services/analyticsService';
 
 dotenv.config();
 
@@ -202,6 +205,7 @@ app.use((req, res, next) => {
 });
 app.use(express.json());
 app.use(resolveAuthSession);
+app.use(analyticsMiddleware);
 
 // Журналируем API-запросы (длительность, статус, пользователь) для админки "Журнал".
 app.use((req, res, next) => {
@@ -299,6 +303,7 @@ app.use('/api/studio', studioRoutes);
 app.use('/api/calendar', calendarRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/messenger', messengerRoutes);
+app.use('/api/analytics', analyticsRoutes);
 app.use('/api', servicePlannerRoutes);
 app.use('/api', routes);
 app.use('/api/push', pushRoutes);
@@ -411,6 +416,7 @@ async function start(): Promise<void> {
   attachRealtimeWebSocket(server);
   
   initPushCronJobs();
+  startAnalyticsMaintenance();
   
   server.listen(Number(PORT), () => {
     console.log(`Server is running on http://localhost:${PORT}`);

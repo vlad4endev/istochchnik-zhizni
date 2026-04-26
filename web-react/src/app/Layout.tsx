@@ -15,6 +15,7 @@ import {
   LuMusic2,
   LuSettings,
   LuShield,
+  LuChartColumnBig,
   LuUser,
   LuWifiOff,
   LuX,
@@ -66,6 +67,7 @@ const NAV_ITEMS: NavItem[] = [
   { to: '/messenger', label: 'Чаты', Icon: LuMessageCircle, sectionId: 'messenger' },
   // { to: '/broadcast', label: 'Трансляции', Icon: LuTv },
   { to: '/admin', label: 'Админ', Icon: LuShield, adminOnly: true },
+  { to: '/admin/analytics', label: 'Аналитика', Icon: LuChartColumnBig, adminOnly: true },
 ];
 
 function navIconClass(isActive: boolean, compact: boolean) {

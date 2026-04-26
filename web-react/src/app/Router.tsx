@@ -6,6 +6,7 @@ import { LoginPage } from '../features/auth/pages/LoginPage';
 
 import { Layout } from './Layout';
 import { ProfileRouteBoundary } from './ProfileRouteBoundary';
+import { usePageTracking } from '../hooks/usePageTracking';
 import {
   LOGIN_PATH,
   RequireAdmin,
@@ -72,6 +73,11 @@ const MessengerRoutes = lazy(async () => {
 const AdminPage = lazy(async () => {
   const m = await import('../features/admin/pages/AdminPage');
   return { default: m.AdminPage };
+});
+
+const AnalyticsPage = lazy(async () => {
+  const m = await import('../pages/admin/AnalyticsPage');
+  return { default: m.AnalyticsPage };
 });
 
 const StudioLayout = lazy(async () => {
@@ -150,6 +156,7 @@ const ServicePlannerPage = lazy(async () => {
 });
 
 export function AppRouter() {
+  usePageTracking();
   return (
     <Routes>
       <Route path={LOGIN_PATH} element={<AuthLandingPage />} />
@@ -461,6 +468,16 @@ export function AppRouter() {
             <RequireAdmin>
               <Suspense fallback={<RouteFallback />}>
                 <AdminPage />
+              </Suspense>
+            </RequireAdmin>
+          }
+        />
+        <Route
+          path="admin/analytics"
+          element={
+            <RequireAdmin>
+              <Suspense fallback={<RouteFallback />}>
+                <AnalyticsPage />
               </Suspense>
             </RequireAdmin>
           }

@@ -1630,6 +1630,100 @@ SELECT d.id, r.id
 FROM ministry_direction_templates d
 CROSS JOIN ministry_role_templates r
 ON CONFLICT (direction_template_id, role_template_id) DO NOTHING;
+
+-- ═══════════════════════════════════════════════════════════════════
+-- ANALYTICS & STATISTICS
+-- ═══════════════════════════════════════════════════════════════════
+CREATE TABLE IF NOT EXISTS analytics_sessions (
+  id VARCHAR(64) PRIMARY KEY,
+  user_id INTEGER REFERENCES members(id) ON DELETE SET NULL,
+  started_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  last_active_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  pages_visited INTEGER NOT NULL DEFAULT 0,
+  device_type VARCHAR(20),
+  os VARCHAR(50),
+  browser VARCHAR(50),
+  ip_hash CHAR(64)
+);
+
+CREATE INDEX IF NOT EXISTS idx_analytics_sessions_user
+  ON analytics_sessions (user_id);
+CREATE INDEX IF NOT EXISTS idx_analytics_sessions_last_active
+  ON analytics_sessions (last_active_at DESC);
+
+CREATE TABLE IF NOT EXISTS page_views (
+  id BIGSERIAL PRIMARY KEY,
+  page_key VARCHAR(100) NOT NULL,
+  page_url TEXT,
+  user_id INTEGER REFERENCES members(id) ON DELETE SET NULL,
+  session_id VARCHAR(64),
+  ip_hash CHAR(64),
+  user_agent TEXT,
+  device_type VARCHAR(20),
+  os VARCHAR(50),
+  browser VARCHAR(50),
+  referrer TEXT,
+  duration_seconds INTEGER,
+  viewed_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_page_views_page_key
+  ON page_views (page_key);
+CREATE INDEX IF NOT EXISTS idx_page_views_user_id
+  ON page_views (user_id);
+CREATE INDEX IF NOT EXISTS idx_page_views_viewed_at
+  ON page_views (viewed_at);
+CREATE INDEX IF NOT EXISTS idx_page_views_page_user
+  ON page_views (page_key, user_id);
+CREATE INDEX IF NOT EXISTS idx_page_views_session
+  ON page_views (session_id);
+CREATE INDEX IF NOT EXISTS idx_page_views_page_viewed
+  ON page_views (page_key, viewed_at DESC);
+
+CREATE TABLE IF NOT EXISTS feature_events (
+  id BIGSERIAL PRIMARY KEY,
+  event_type VARCHAR(100) NOT NULL,
+  page_key VARCHAR(100),
+  user_id INTEGER REFERENCES members(id) ON DELETE SET NULL,
+  metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_feature_events_type
+  ON feature_events (event_type);
+CREATE INDEX IF NOT EXISTS idx_feature_events_user
+  ON feature_events (user_id);
+CREATE INDEX IF NOT EXISTS idx_feature_events_created
+  ON feature_events (created_at);
+
+CREATE MATERIALIZED VIEW IF NOT EXISTS analytics_page_daily_mv AS
+SELECT
+  date_trunc('day', pv.viewed_at) AS day,
+  pv.page_key,
+  COUNT(*)::bigint AS total_views,
+  COUNT(DISTINCT pv.user_id)::bigint AS unique_users,
+  COUNT(DISTINCT COALESCE(pv.session_id, pv.user_id::text))::bigint AS unique_sessions,
+  COALESCE(AVG(pv.duration_seconds)::numeric(12,2), 0::numeric) AS avg_duration_seconds
+FROM page_views pv
+GROUP BY 1, 2;
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_analytics_page_daily_mv_day_page
+  ON analytics_page_daily_mv (day, page_key);
+
+CREATE INDEX IF NOT EXISTS idx_analytics_page_daily_mv_page_day
+  ON analytics_page_daily_mv (page_key, day DESC);
+
+CREATE MATERIALIZED VIEW IF NOT EXISTS analytics_page_hourly_mv AS
+SELECT
+  pv.page_key,
+  EXTRACT(DOW FROM pv.viewed_at)::int AS day_of_week,
+  EXTRACT(HOUR FROM pv.viewed_at)::int AS hour,
+  COUNT(*)::bigint AS views
+FROM page_views pv
+GROUP BY 1, 2, 3;
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_analytics_page_hourly_mv_key
+  ON analytics_page_hourly_mv (page_key, day_of_week, hour);
 `;
 
 export async function initDb(): Promise<void> {
