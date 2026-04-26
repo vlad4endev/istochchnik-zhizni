@@ -53,7 +53,44 @@ export function eventPosterUploadMiddleware(req: Request, res: Response, next: N
       res.status(400).json({ error: err.message });
       return;
     }
-    const message = err instanceof Error ? err.message : 'Ошибка загрузки';
-    res.status(400).json({ error: message });
+    if (err) {
+      const message = err instanceof Error ? err.message : 'Ошибка загрузки';
+      res.status(400).json({ error: message });
+      return;
+    }
+    const file = (req as Request & { file?: Express.Multer.File }).file;
+    // SECURITY FIX: проверяем сигнатуру изображения, чтобы избежать подмены MIME/расширения.
+    if (!file?.buffer || file.buffer.length < 4) {
+      res.status(400).json({ error: 'Некорректный файл изображения' });
+      return;
+    }
+    const isJpeg = file.buffer[0] === 0xff && file.buffer[1] === 0xd8 && file.buffer[2] === 0xff;
+    const isPng =
+      file.buffer.length >= 8 &&
+      file.buffer[0] === 0x89 &&
+      file.buffer[1] === 0x50 &&
+      file.buffer[2] === 0x4e &&
+      file.buffer[3] === 0x47 &&
+      file.buffer[4] === 0x0d &&
+      file.buffer[5] === 0x0a &&
+      file.buffer[6] === 0x1a &&
+      file.buffer[7] === 0x0a;
+    const isGif =
+      file.buffer.length >= 6 &&
+      (file.buffer.subarray(0, 6).toString('ascii') === 'GIF87a' ||
+        file.buffer.subarray(0, 6).toString('ascii') === 'GIF89a');
+    const isWebp =
+      file.buffer.length >= 12 &&
+      file.buffer.subarray(0, 4).toString('ascii') === 'RIFF' &&
+      file.buffer.subarray(8, 12).toString('ascii') === 'WEBP';
+    const isHeifFamily =
+      file.buffer.length >= 12 &&
+      file.buffer.subarray(4, 8).toString('ascii') === 'ftyp' &&
+      ['heic', 'heif', 'mif1', 'msf1'].includes(file.buffer.subarray(8, 12).toString('ascii').toLowerCase());
+    if (!(isJpeg || isPng || isGif || isWebp || isHeifFamily)) {
+      res.status(400).json({ error: 'Файл не похож на валидное изображение' });
+      return;
+    }
+    next();
   });
 }

@@ -1,8 +1,0 @@
-{
-  "appId": "com.istochnikzhizni.molitva",
-  "appName": "Источник жизни",
-  "webDir": "dist",
-  "server": {
-    "androidScheme": "https"
-  }
-}

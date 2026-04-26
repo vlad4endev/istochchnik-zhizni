@@ -4,7 +4,6 @@ import { Navigate, Route, Routes } from 'react-router-dom';
 import { AuthLandingPage } from '../features/auth/pages/AuthLandingPage';
 import { LoginPage } from '../features/auth/pages/LoginPage';
 import { PendingReviewPage } from '../features/auth/pages/PendingReviewPage';
-import { SongbookLayout } from '../features/songbook/SongbookLayout';
 import {
   LOGIN_PATH,
   RequireAuth,
@@ -15,6 +14,11 @@ import {
 const SongbookPage = lazy(async () => {
   const m = await import('../features/songbook/pages/SongbookPage');
   return { default: m.SongbookPage };
+});
+
+const SongbookLayout = lazy(async () => {
+  const m = await import('../features/songbook/SongbookLayout');
+  return { default: m.SongbookLayout };
 });
 
 const SongDetailPage = lazy(async () => {
@@ -75,7 +79,9 @@ export function AppRouterMain() {
           path="songbook"
           element={
             <RequireFullMember>
-              <SongbookLayout />
+              <Suspense fallback={<RouteFallback />}>
+                <SongbookLayout />
+              </Suspense>
             </RequireFullMember>
           }
         >

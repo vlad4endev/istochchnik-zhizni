@@ -118,6 +118,12 @@ async function getByIndex<T>(
   index: number,
   orderColumn = 'id'
 ): Promise<T[]> {
+  const allowedTables = new Set(['global_themes', 'ministries', 'backsliders']);
+  const allowedOrderColumns = new Set(['id']);
+  if (!allowedTables.has(table) || !allowedOrderColumns.has(orderColumn)) {
+    // SECURITY FIX: явный whitelist для динамических SQL-идентификаторов.
+    throw new Error('Invalid table or order column');
+  }
   const result = await query(
     `SELECT * FROM ${table} ORDER BY ${orderColumn} LIMIT 1 OFFSET $1`,
     [index]

@@ -1557,12 +1557,18 @@ CREATE TABLE IF NOT EXISTS setlists (
   event_date DATE,
   is_public BOOLEAN NOT NULL DEFAULT FALSE,
   share_token UUID UNIQUE DEFAULT gen_random_uuid(),
+  share_token_issued_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 ALTER TABLE setlists ADD COLUMN IF NOT EXISTS is_public BOOLEAN NOT NULL DEFAULT FALSE;
 ALTER TABLE setlists ADD COLUMN IF NOT EXISTS share_token UUID UNIQUE DEFAULT gen_random_uuid();
 UPDATE setlists SET share_token = gen_random_uuid() WHERE share_token IS NULL;
+-- SECURITY FIX: срок жизни публичной ссылки сетлиста считаем от момента выдачи токена.
+ALTER TABLE setlists ADD COLUMN IF NOT EXISTS share_token_issued_at TIMESTAMPTZ;
+UPDATE setlists SET share_token_issued_at = COALESCE(share_token_issued_at, created_at, NOW());
+ALTER TABLE setlists ALTER COLUMN share_token_issued_at SET DEFAULT NOW();
+ALTER TABLE setlists ALTER COLUMN share_token_issued_at SET NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_setlists_member ON setlists (member_id);
 
 CREATE TABLE IF NOT EXISTS setlist_items (

@@ -155,6 +155,16 @@ export type PublicEditablePlannerPlanMetaPayload = {
 
 type DbRecord = Record<string, unknown>;
 
+function resolveTokenTtlDays(envName: string, fallbackDays: number): number {
+  const raw = Number(process.env[envName] ?? fallbackDays);
+  if (!Number.isFinite(raw)) return fallbackDays;
+  return Math.min(3650, Math.max(1, Math.floor(raw)));
+}
+
+// SECURITY FIX: ограничиваем срок жизни публичных токенов, чтобы снизить риск долгоживущих утечек ссылок.
+const SHARE_TOKEN_MAX_AGE_DAYS = resolveTokenTtlDays('PUBLIC_SHARE_TOKEN_MAX_AGE_DAYS', 365);
+const EDIT_TOKEN_MAX_AGE_DAYS = resolveTokenTtlDays('PUBLIC_EDIT_TOKEN_MAX_AGE_DAYS', 30);
+
 let plannerSchemaInitOnce: Promise<void> | null = null;
 
 async function ensurePlannerSchema(): Promise<void> {
@@ -214,7 +224,9 @@ async function ensurePlannerSchema(): Promise<void> {
            total_duration_minutes integer not null default 0 check (total_duration_minutes >= 0),
            current_block_id bigint,
            share_token uuid not null default gen_random_uuid() unique,
+           share_token_issued_at timestamptz not null default now(),
            edit_token uuid not null default gen_random_uuid() unique,
+           edit_token_issued_at timestamptz not null default now(),
            church_event_id bigint,
            notes text,
            created_by_member_id integer references public.members (id) on delete set null,
@@ -230,6 +242,17 @@ async function ensurePlannerSchema(): Promise<void> {
       await query(`alter table public.service_plans alter column edit_token set default gen_random_uuid()`);
       await query(`alter table public.service_plans alter column edit_token set not null`);
       await query(`create unique index if not exists idx_service_plans_edit_token on public.service_plans (edit_token)`);
+      // SECURITY FIX: срок жизни публичных токенов считаем от момента выдачи, а не от updated_at.
+      await query(`alter table public.service_plans add column if not exists share_token_issued_at timestamptz`);
+      await query(`alter table public.service_plans add column if not exists edit_token_issued_at timestamptz`);
+      await query(`update public.service_plans set share_token_issued_at = coalesce(share_token_issued_at, created_at, now())`);
+      await query(`update public.service_plans set edit_token_issued_at = coalesce(edit_token_issued_at, created_at, now())`);
+      await query(`alter table public.service_plans alter column share_token_issued_at set default now()`);
+      await query(`alter table public.service_plans alter column edit_token_issued_at set default now()`);
+      await query(`alter table public.service_plans alter column share_token_issued_at set not null`);
+      await query(`alter table public.service_plans alter column edit_token_issued_at set not null`);
+      await query(`create index if not exists idx_service_plans_share_token_issued_at on public.service_plans (share_token_issued_at)`);
+      await query(`create index if not exists idx_service_plans_edit_token_issued_at on public.service_plans (edit_token_issued_at)`);
       await query(
         `alter table public.service_plans add column if not exists last_edited_by_member_id integer references public.members (id) on delete set null`,
       );
@@ -855,8 +878,9 @@ export async function getPublicPlanByToken(token: string): Promise<PublicPlanner
      left join public.members leader on leader.id = p.leader_member_id
      left join public.members preacher on preacher.id = p.preacher_member_id
      where p.share_token = $1::uuid
+       and p.share_token_issued_at >= now() - ($2::int * interval '1 day')
      limit 1`,
-    [normalizedToken],
+    [normalizedToken, SHARE_TOKEN_MAX_AGE_DAYS],
   );
   const row = planRes.rows[0] as DbRecord | undefined;
   if (!row) return null;
@@ -962,8 +986,9 @@ export async function getEditablePlanByToken(token: string): Promise<PublicEdita
      left join public.members preacher on preacher.id = p.preacher_member_id
      where p.edit_token = $1::uuid
        and p.status = 'draft'
+       and p.edit_token_issued_at >= now() - ($2::int * interval '1 day')
      limit 1`,
-    [normalizedToken],
+    [normalizedToken, EDIT_TOKEN_MAX_AGE_DAYS],
   );
   const row = planRes.rows[0] as DbRecord | undefined;
   if (!row) return null;
@@ -1058,8 +1083,9 @@ export async function getEditablePlanMetaByToken(
      from public.service_plans
      where edit_token = $1::uuid
        and status = 'draft'
+       and edit_token_issued_at >= now() - ($2::int * interval '1 day')
      limit 1`,
-    [normalizedToken],
+    [normalizedToken, EDIT_TOKEN_MAX_AGE_DAYS],
   );
   if ((canEditRes.rowCount ?? 0) === 0) return null;
 
@@ -1166,9 +1192,10 @@ export async function patchEditableBlockByToken(
      where b.id = $${values.length - 1}
        and p.edit_token = $${values.length}::uuid
        and p.status = 'draft'
+       and p.edit_token_issued_at >= now() - ($${values.length + 1}::int * interval '1 day')
        and p.id = b.service_plan_id
      returning b.service_plan_id`,
-    values,
+    [...values, EDIT_TOKEN_MAX_AGE_DAYS],
   );
   if ((result.rowCount ?? 0) === 0) return false;
   const updatedPlanId = Number((result.rows[0] as DbRecord).service_plan_id);

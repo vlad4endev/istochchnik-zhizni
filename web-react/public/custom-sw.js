@@ -67,6 +67,18 @@ self.addEventListener('push', function (event) {
   );
 });
 
+self.addEventListener('fetch', function (event) {
+  if (event.request.mode !== 'navigate') return;
+
+  event.respondWith(
+    fetch(event.request).catch(async function () {
+      const cachedOffline = await caches.match('/offline.html');
+      if (cachedOffline) return cachedOffline;
+      return Response.redirect('/offline.html', 302);
+    }),
+  );
+});
+
 function markDeliveryOpenedById(deliveryIdRaw) {
   const deliveryId =
     typeof deliveryIdRaw === 'string'

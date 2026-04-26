@@ -1,13 +1,21 @@
-import { useEffect, useCallback, useState, useRef } from 'react';
+import { useEffect, useCallback, useState, useRef, lazy, Suspense } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useChatStore, isDraftPrivateConversationId } from '../chatStore';
 import { useMessengerWsContext } from '../MessengerWsContext';
 import { useSwipeGesture } from '../hooks/useSwipeGesture';
 import { ChatList } from './ChatList';
-import { ChatWindow } from './ChatWindow';
-import { NewChatDialog } from './NewChatDialog';
 import { LuPlus, LuMessageSquare } from 'react-icons/lu';
 import './messenger.css';
+
+const ChatWindow = lazy(async () => {
+  const m = await import('./ChatWindow');
+  return { default: m.ChatWindow };
+});
+
+const NewChatDialog = lazy(async () => {
+  const m = await import('./NewChatDialog');
+  return { default: m.NewChatDialog };
+});
 function blurActiveElement() {
   try {
     const el = document.activeElement as HTMLElement | null;
@@ -113,12 +121,14 @@ export function MessengerPage() {
       {/* Main chat area */}
       <main className={`tg-main ${mobileView === 'chat' ? 'tg-main--visible' : ''}`}>
         {activeId ? (
-          <ChatWindow
-            conversationId={activeId}
-            onBack={handleBack}
-            sendTypingStart={ws.sendTypingStart}
-            sendTypingStop={ws.sendTypingStop}
-          />
+          <Suspense fallback={<div className="tg-empty-sub">Загрузка чата…</div>}>
+            <ChatWindow
+              conversationId={activeId}
+              onBack={handleBack}
+              sendTypingStart={ws.sendTypingStart}
+              sendTypingStop={ws.sendTypingStop}
+            />
+          </Suspense>
         ) : (
           <div className="tg-empty-state">
             <div className="tg-empty-icon">
@@ -131,13 +141,15 @@ export function MessengerPage() {
       </main>
 
       {showNewChat && (
-        <NewChatDialog
-          onClose={() => setShowNewChat(false)}
-          onCreated={(id) => { 
-            setShowNewChat(false); 
-            handleSelectConversation(id); 
-          }}
-        />
+        <Suspense fallback={<div className="tg-empty-sub">Загрузка…</div>}>
+          <NewChatDialog
+            onClose={() => setShowNewChat(false)}
+            onCreated={(id) => {
+              setShowNewChat(false);
+              handleSelectConversation(id);
+            }}
+          />
+        </Suspense>
       )}
       </div>
     </div>

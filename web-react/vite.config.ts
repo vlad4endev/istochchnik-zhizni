@@ -76,6 +76,7 @@ export default defineConfig(({ mode }) => {
           theme_color: '#7d3640',
           background_color: '#f4f1ed',
           display: 'standalone',
+          orientation: 'portrait',
           /* Не задаём display_override: на iOS WebKit это часто игнорируется или ведёт себя иначе, чем один display. */
           start_url: pwaStartUrl,
           scope: pwaScope,
@@ -96,6 +97,12 @@ export default defineConfig(({ mode }) => {
               purpose: 'any',
             },
             {
+              src: 'assets/maskable-icon-192x192.png',
+              sizes: '192x192',
+              type: 'image/png',
+              purpose: 'maskable',
+            },
+            {
               src: 'assets/pwa-512x512.png',
               sizes: '512x512',
               type: 'image/png',
@@ -106,6 +113,42 @@ export default defineConfig(({ mode }) => {
               sizes: '512x512',
               type: 'image/png',
               purpose: 'maskable',
+            },
+          ],
+          shortcuts: [
+            {
+              name: 'Открыть мессенджер',
+              short_name: 'Чат',
+              url: '/messenger',
+              icons: [{ src: '/assets/pwa-192x192.png', sizes: '192x192', type: 'image/png' }],
+            },
+            {
+              name: 'Календарь',
+              short_name: 'Календарь',
+              url: '/calendar',
+              icons: [{ src: '/assets/pwa-192x192.png', sizes: '192x192', type: 'image/png' }],
+            },
+            {
+              name: 'Студия',
+              short_name: 'Студия',
+              url: '/studio',
+              icons: [{ src: '/assets/pwa-192x192.png', sizes: '192x192', type: 'image/png' }],
+            },
+          ],
+          screenshots: [
+            {
+              src: '/assets/screenshot-mobile.png',
+              sizes: '390x844',
+              type: 'image/png',
+              form_factor: 'narrow',
+              label: 'Главный экран',
+            },
+            {
+              src: '/assets/screenshot-desktop.png',
+              sizes: '1280x800',
+              type: 'image/png',
+              form_factor: 'wide',
+              label: 'Десктоп версия',
             },
           ],
           ...(canHandleLinks
@@ -125,7 +168,7 @@ export default defineConfig(({ mode }) => {
             : {}),
         },
         workbox: {
-          globPatterns: ['**/*.{js,css,html,ico,png,svg,webp,woff2,woff,ttf}'],
+          globPatterns: ['**/*.{js,css,html,ico,png,svg,webp,woff2,woff,ttf,otf,eot}'],
           /**
            * Иконки из `manifest.icons` плагин уже кладёт в precache с `__WB_REVISION__`.
            * globPatterns дублирует те же `assets/*.png` без revision → Workbox: add-to-cache-list-conflicting-entries.
@@ -134,29 +177,73 @@ export default defineConfig(({ mode }) => {
             '**/pwa-64x64.png',
             '**/pwa-192x192.png',
             '**/pwa-512x512.png',
+            '**/maskable-icon-192x192.png',
             '**/maskable-icon-512x512.png',
           ],
-          // Активирует новый SW сразу без ожидания закрытия старых вкладок
           skipWaiting: true,
           clientsClaim: true,
-          navigateFallback: 'index.html',
-          navigateFallbackDenylist: [/^\/api\//, /^\/uploads\//],
+          navigateFallback: '/index.html',
+          navigateFallbackDenylist: [/^\/api/, /^\/uploads/, /^\/health/],
           /**
            * `public/custom-sw.js` — обработчики Web Push (`push`, `notificationclick`, бейдж).
            * Без importScripts файл только прекэшируется и не выполняется в контексте SW.
            */
           importScripts: ['custom-sw.js'],
-          // Версионирование для инвалидации кэша
           runtimeCaching: [
             {
-              urlPattern: /^https:\/\/api\//,
+              urlPattern: ({ request }) => request.mode === 'navigate',
+              handler: 'StaleWhileRevalidate',
+              options: {
+                cacheName: 'navigation-cache',
+              },
+            },
+            {
+              urlPattern: /\/api\//,
               handler: 'NetworkFirst',
               options: {
                 cacheName: 'api-cache',
+                networkTimeoutSeconds: 3,
                 expiration: {
-                  maxEntries: 50,
-                  maxAgeSeconds: 3600, // 1 час
+                  maxEntries: 100,
+                  maxAgeSeconds: 60 * 60,
                 },
+                cacheableResponse: { statuses: [0, 200] },
+              },
+            },
+            {
+              urlPattern: /\.(?:png|jpg|jpeg|svg|gif|webp|ico)$/,
+              handler: 'CacheFirst',
+              options: {
+                cacheName: 'images-cache',
+                expiration: {
+                  maxEntries: 100,
+                  maxAgeSeconds: 30 * 24 * 60 * 60,
+                },
+                cacheableResponse: { statuses: [0, 200] },
+              },
+            },
+            {
+              urlPattern: /\.(?:woff|woff2|ttf|otf|eot)$/,
+              handler: 'CacheFirst',
+              options: {
+                cacheName: 'fonts-cache',
+                expiration: {
+                  maxEntries: 20,
+                  maxAgeSeconds: 30 * 24 * 60 * 60,
+                },
+                cacheableResponse: { statuses: [0, 200] },
+              },
+            },
+            {
+              urlPattern: /\.(?:js|css)$/,
+              handler: 'CacheFirst',
+              options: {
+                cacheName: 'static-cache',
+                expiration: {
+                  maxEntries: 60,
+                  maxAgeSeconds: 7 * 24 * 60 * 60,
+                },
+                cacheableResponse: { statuses: [0, 200] },
               },
             },
           ],
@@ -183,7 +270,19 @@ export default defineConfig(({ mode }) => {
       outDir: 'dist',
       assetsDir: 'assets',
       sourcemap: true,
-      chunkSizeWarningLimit: 650,
+      rollupOptions: {
+        output: {
+          manualChunks: {
+            'vendor-react': ['react', 'react-dom', 'react-router-dom'],
+            'vendor-ui': ['zustand', '@tanstack/react-query'],
+            'vendor-utils': ['axios', 'date-fns'],
+            'vendor-icons': ['react-icons'],
+            'vendor-emoji-react': ['@emoji-mart/react'],
+            'vendor-emoji-data': ['@emoji-mart/data'],
+          },
+        },
+      },
+      chunkSizeWarningLimit: 600,
     },
   };
 });

@@ -1,16 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { LuDownload, LuX, LuSmartphone } from 'react-icons/lu';
 import { useBrandingStore } from '../features/branding/brandingStore';
+import { usePwaStore } from '../stores/pwaStore';
 
 const DISMISSED_KEY = 'android-install-banner-dismissed';
 // Через сколько дней показать снова, если пользователь закрыл (не установил)
 const DISMISS_TTL_DAYS = 3;
-
-interface BeforeInstallPromptEvent extends Event {
-  readonly platforms: string[];
-  readonly userChoice: Promise<{ outcome: 'accepted' | 'dismissed'; platform: string }>;
-  prompt(): Promise<void>;
-}
 
 function isDismissed(): boolean {
   try {
@@ -37,7 +32,12 @@ type BannerState = 'hidden' | 'visible' | 'installing' | 'installed';
 
 export function AndroidInstallBanner() {
   const [state, setState] = useState<BannerState>('hidden');
-  const promptRef = useRef<BeforeInstallPromptEvent | null>(null);
+  const showTimerRef = useRef<number | null>(null);
+  const deferredPrompt = usePwaStore((s) => s.deferredPrompt);
+  const setDeferredPrompt = usePwaStore((s) => s.setDeferredPrompt);
+  const isInstallable = usePwaStore((s) => s.isInstallable);
+  const setInstallable = usePwaStore((s) => s.setInstallable);
+  const isInstalled = usePwaStore((s) => s.isInstalled);
 
   const appName = useBrandingStore((s) => s.appName);
   const customLogoDataUrl = useBrandingStore((s) => s.customLogoDataUrl);
@@ -47,20 +47,30 @@ export function AndroidInstallBanner() {
     if (!isAndroid()) return;
     if (isStandalone()) return;
     if (isDismissed()) return;
-
-    const handler = (e: Event) => {
-      e.preventDefault();
-      promptRef.current = e as BeforeInstallPromptEvent;
-      // Пауза 2 с, чтобы пользователь успел осмотреться
-      setTimeout(() => setState('visible'), 2000);
-    };
-
-    window.addEventListener('beforeinstallprompt', handler);
-    return () => window.removeEventListener('beforeinstallprompt', handler);
   }, []);
 
+  useEffect(() => {
+    if (!isAndroid() || isStandalone() || isDismissed()) return;
+    if (!isInstallable || !deferredPrompt || isInstalled) return;
+
+    showTimerRef.current = window.setTimeout(() => setState('visible'), 2000);
+    return () => {
+      if (showTimerRef.current !== null) {
+        window.clearTimeout(showTimerRef.current);
+      }
+    };
+  }, [deferredPrompt, isInstallable, isInstalled]);
+
+  useEffect(() => {
+    if (isInstalled) {
+      setState('installed');
+      const hideId = window.setTimeout(() => setState('hidden'), 3000);
+      return () => window.clearTimeout(hideId);
+    }
+  }, [isInstalled]);
+
   async function handleInstall() {
-    const prompt = promptRef.current;
+    const prompt = deferredPrompt;
     if (!prompt) return;
 
     setState('installing');
@@ -68,6 +78,8 @@ export function AndroidInstallBanner() {
       await prompt.prompt();
       const { outcome } = await prompt.userChoice;
       if (outcome === 'accepted') {
+        setInstallable(false);
+        setDeferredPrompt(null);
         setState('installed');
         setTimeout(() => setState('hidden'), 3000);
       } else {
@@ -80,6 +92,7 @@ export function AndroidInstallBanner() {
 
   function dismiss() {
     setState('hidden');
+    setInstallable(false);
     try {
       localStorage.setItem(DISMISSED_KEY, String(Date.now()));
     } catch { /* ignore */ }

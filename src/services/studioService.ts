@@ -2,6 +2,15 @@ import { query } from '../config/db';
 
 import type { SongRow } from './songService';
 
+function resolvePublicTokenTtlDays(): number {
+  const raw = Number(process.env.PUBLIC_SHARE_TOKEN_MAX_AGE_DAYS ?? 365);
+  if (!Number.isFinite(raw)) return 365;
+  return Math.min(3650, Math.max(1, Math.floor(raw)));
+}
+
+// SECURITY FIX: ограничиваем срок жизни публичного share_token для сетлистов.
+const PUBLIC_SETLIST_TOKEN_MAX_AGE_DAYS = resolvePublicTokenTtlDays();
+
 function mapSong(row: Record<string, unknown>): SongRow {
   const rawTags = row.tags;
   const tags = Array.isArray(rawTags) ? rawTags.map((t) => String(t)) : [];
@@ -640,8 +649,11 @@ export async function getPublicSetlistByToken(
     return null;
   }
   const sl = await query(
-    `SELECT * FROM setlists WHERE share_token = $1::uuid AND is_public = TRUE`,
-    [t]
+    `SELECT * FROM setlists
+     WHERE share_token = $1::uuid
+       AND is_public = TRUE
+       AND share_token_issued_at >= now() - ($2::int * interval '1 day')`,
+    [t, PUBLIC_SETLIST_TOKEN_MAX_AGE_DAYS]
   );
   const row = sl.rows[0] as Record<string, unknown> | undefined;
   if (!row) return null;

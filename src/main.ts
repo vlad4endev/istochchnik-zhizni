@@ -8,6 +8,7 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import path from 'node:path';
+import type { Request as ExpressRequest } from 'express';
 
 import { pool } from './config/db';
 import { initDb } from './config/initDb';
@@ -41,6 +42,8 @@ import { writeAppLog } from './services/appLogService';
 import { getEditablePlanByToken, getPublicPlanByToken } from './services/servicePlannerService';
 
 dotenv.config();
+
+type RequestWithAuthUser = ExpressRequest & { authUserId?: number };
 
 const app = express();
 const PORT = process.env.PORT || 40978;
@@ -163,11 +166,15 @@ function corsOptions(): Parameters<typeof cors>[0] | undefined {
   if (origins.length === 0) {
     if (process.env.NODE_ENV === 'production') {
       console.warn(
-        '[cors] CORS_ALLOWED_ORIGINS / CORS_ORIGIN не заданы — разрешены запросы с любых Origin. ' +
-          'Для публичного API укажите домены фронтенда через запятую.',
+        '[cors] CORS_ALLOWED_ORIGINS / CORS_ORIGIN не заданы — cross-origin browser запросы будут отклонены.',
       );
+      return {
+        // SECURITY FIX: в production без явного allowlist блокируем cross-origin вместо permissive fallback.
+        origin: (origin, cb) => cb(origin ? new Error('Origin is not allowed by CORS policy') : null, !origin),
+        credentials: true,
+      };
     }
-    return undefined;
+    return { origin: true, credentials: true };
   }
   return {
     origin: origins.length === 1 ? origins[0] : origins,
@@ -176,6 +183,23 @@ function corsOptions(): Parameters<typeof cors>[0] | undefined {
 }
 
 app.use(cors(corsOptions()));
+app.use((req, res, next) => {
+  // SECURITY FIX: базовые security headers для снижения XSS/clickjacking/MIME sniffing рисков.
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+  if (process.env.NODE_ENV === 'production') {
+    res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+  }
+  res.setHeader(
+    'Content-Security-Policy',
+    "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; " +
+      "img-src 'self' data: blob: https:; script-src 'self'; style-src 'self' 'unsafe-inline'; " +
+      "connect-src 'self' https: wss: ws:; form-action 'self'",
+  );
+  next();
+});
 app.use(express.json());
 app.use(resolveAuthSession);
 
@@ -203,7 +227,7 @@ app.use((req, res, next) => {
       request_path: targetPath,
       status_code: status,
       duration_ms: Date.now() - startedAt,
-      user_id: req.authUserId,
+      user_id: (req as RequestWithAuthUser).authUserId,
       ip: req.ip,
       user_agent: req.get('user-agent') ?? '',
     });

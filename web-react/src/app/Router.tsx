@@ -4,16 +4,8 @@ import { Navigate, Route, Routes } from 'react-router-dom';
 import { AuthLandingPage } from '../features/auth/pages/AuthLandingPage';
 import { LoginPage } from '../features/auth/pages/LoginPage';
 
-import { DailyPrayerPage } from '../features/calendar/pages/DailyPrayerPage';
-import { BroadcastPage } from '../features/broadcast/pages/BroadcastPage';
-import { ResourcesRoutes } from '../features/resources/routes/ResourcesRoutes';
-import { PodcastsPage } from '../features/resources/pages/PodcastsPage';
-import { ServiceFlowPage } from '../features/serviceFlow/pages/ServiceFlowPage';
-import { DashboardPage } from '../features/dashboard/pages/DashboardPage';
-
 import { Layout } from './Layout';
 import { ProfileRouteBoundary } from './ProfileRouteBoundary';
-import { SongbookLayout } from '../features/songbook/SongbookLayout';
 import {
   LOGIN_PATH,
   RequireAdmin,
@@ -35,6 +27,41 @@ const LazyProfilePage = lazy(async () => {
 const LazyPublicProfilePage = lazy(async () => {
   const m = await import('@features/profile/pages/PublicProfilePage');
   return { default: m.PublicProfilePage };
+});
+
+const DashboardPage = lazy(async () => {
+  const m = await import('../features/dashboard/pages/DashboardPage');
+  return { default: m.DashboardPage };
+});
+
+const DailyPrayerPage = lazy(async () => {
+  const m = await import('../features/calendar/pages/DailyPrayerPage');
+  return { default: m.DailyPrayerPage };
+});
+
+const BroadcastPage = lazy(async () => {
+  const m = await import('../features/broadcast/pages/BroadcastPage');
+  return { default: m.BroadcastPage };
+});
+
+const PodcastsPage = lazy(async () => {
+  const m = await import('../features/resources/pages/PodcastsPage');
+  return { default: m.PodcastsPage };
+});
+
+const ResourcesRoutes = lazy(async () => {
+  const m = await import('../features/resources/routes/ResourcesRoutes');
+  return { default: m.ResourcesRoutes };
+});
+
+const ServiceFlowPage = lazy(async () => {
+  const m = await import('../features/serviceFlow/pages/ServiceFlowPage');
+  return { default: m.ServiceFlowPage };
+});
+
+const SongbookLayout = lazy(async () => {
+  const m = await import('../features/songbook/SongbookLayout');
+  return { default: m.SongbookLayout };
 });
 
 const MessengerRoutes = lazy(async () => {
@@ -235,7 +262,9 @@ export function AppRouter() {
             path="dashboard"
             element={
               <RequireSectionAccess sectionId="dashboard">
-                <DashboardPage />
+                <Suspense fallback={<RouteFallback />}>
+                  <DashboardPage />
+                </Suspense>
               </RequireSectionAccess>
             }
           />
@@ -244,7 +273,9 @@ export function AppRouter() {
           element={
             <RequireFullMember>
               <RequireSectionAccess sectionId="prayer">
-                <DailyPrayerPage />
+                <Suspense fallback={<RouteFallback />}>
+                  <DailyPrayerPage />
+                </Suspense>
               </RequireSectionAccess>
             </RequireFullMember>
           }
@@ -265,7 +296,9 @@ export function AppRouter() {
           path="broadcast"
           element={
             <RequireFullMember>
-              <BroadcastPage />
+              <Suspense fallback={<RouteFallback />}>
+                <BroadcastPage />
+              </Suspense>
             </RequireFullMember>
           }
         />
@@ -274,7 +307,9 @@ export function AppRouter() {
           element={
             <RequireFullMember>
               <RequireSectionAccess sectionId="sermons">
-                <PodcastsPage />
+                <Suspense fallback={<RouteFallback />}>
+                  <PodcastsPage />
+                </Suspense>
               </RequireSectionAccess>
             </RequireFullMember>
           }
@@ -283,7 +318,9 @@ export function AppRouter() {
           path="resources/*"
           element={
             <RequireFullMember>
-              <ResourcesRoutes />
+              <Suspense fallback={<RouteFallback />}>
+                <ResourcesRoutes />
+              </Suspense>
             </RequireFullMember>
           }
         />
@@ -291,7 +328,9 @@ export function AppRouter() {
           path="service-flow"
           element={
             <RequireFullMember>
-              <ServiceFlowPage />
+              <Suspense fallback={<RouteFallback />}>
+                <ServiceFlowPage />
+              </Suspense>
             </RequireFullMember>
           }
         />
@@ -312,7 +351,9 @@ export function AppRouter() {
           element={
             <RequireFullMember>
               <RequireSectionAccess sectionId="songbook">
-                <SongbookLayout />
+                <Suspense fallback={<RouteFallback />}>
+                  <SongbookLayout />
+                </Suspense>
               </RequireSectionAccess>
             </RequireFullMember>
           }

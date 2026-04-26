@@ -13,8 +13,11 @@
     "pwa:icons": "npx @vite-pwa/assets-generator assets/logo.svg -r ./public -p minimal -o",
     "pwa:splash": "npx pwa-asset-generator@8.1.4 public/assets/logo.svg public/pwa -b \"#f4f1ed\" -p \"18%\" -t png --splash-only --portrait-only -o",
     "cap:sync": "cap sync",
+    "cap:add:ios": "cap add ios",
+    "cap:add:android": "cap add android",
     "cap:open:android": "cap open android",
     "cap:open:ios": "cap open ios",
+    "cap:build": "npm run build && cap sync",
     "mobile:icons": "npx @capacitor/assets generate --ios --android --iconBackgroundColor '#7d3640' --iconBackgroundColorDark '#5c2830' --splashBackgroundColor '#f4f1ed' --splashBackgroundColorDark '#1c1917'",
     "mobile:build": "npm run build && cap sync"
   },

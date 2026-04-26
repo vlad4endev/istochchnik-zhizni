@@ -10,6 +10,7 @@ import { AppRouterMain } from './app/RouterMain';
 import { AppRouterStudio } from './app/RouterStudio';
 import { AccessibilityProvider } from './lib/accessibility/AccessibilityProvider';
 import { getAppVariant } from './lib/appVariant';
+import { usePwaStore, type BeforeInstallPromptEvent } from './stores/pwaStore';
 import './index.css';
 
 applyNativeShellViewportLock();
@@ -75,6 +76,22 @@ if (import.meta.env.PROD) {
   }
 }
 
+if (typeof window !== 'undefined') {
+  const pwaStore = usePwaStore.getState();
+
+  window.addEventListener('beforeinstallprompt', (event) => {
+    event.preventDefault();
+    pwaStore.setDeferredPrompt(event as BeforeInstallPromptEvent);
+    pwaStore.setInstallable(true);
+  });
+
+  window.addEventListener('appinstalled', () => {
+    pwaStore.setInstalled(true);
+    pwaStore.setInstallable(false);
+    pwaStore.setDeferredPrompt(null);
+  });
+}
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <div className="flex min-h-0 w-full max-w-full flex-1 flex-col overflow-x-clip">
@@ -88,3 +105,7 @@ createRoot(document.getElementById('root')!).render(
     </div>
   </StrictMode>,
 );
+
+if ('storage' in navigator && 'persist' in navigator.storage) {
+  void navigator.storage.persist();
+}
