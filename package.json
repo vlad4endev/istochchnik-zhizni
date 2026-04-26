@@ -97,5 +97,8 @@
     "ts-node": "^10.9.2",
     "ts-node-dev": "^2.0.0",
     "typescript": "^5.5.4"
+  },
+  "overrides": {
+    "path-to-regexp": "0.1.13"
   }
 }
