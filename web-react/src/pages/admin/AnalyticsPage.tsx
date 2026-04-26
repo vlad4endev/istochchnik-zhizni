@@ -100,6 +100,8 @@ export function AnalyticsPage() {
     () => (overview.data?.retention ?? []).map((r: any) => ({ name: `D+${r.day}`, returned_percent: r.returned_percent })),
     [overview.data],
   );
+  const overviewByDay = overview.data?.views_by_day ?? [];
+  const pageByDay = pageDetail.data?.views_by_day ?? [];
 
   return (
     <div className="space-y-4 p-3 text-stone-200 md:p-6">
@@ -137,36 +139,44 @@ export function AnalyticsPage() {
       <div className="rounded-2xl border border-white/10 bg-stone-950/40 p-4">
         <h2 className="mb-3 text-base font-semibold text-white">Просмотры по дням</h2>
         <ChartSkeleton loading={overview.isLoading}>
-          <div className="h-72">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={overview.data?.views_by_day ?? []}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                <XAxis dataKey="day" stroke="#a8a29e" />
-                <YAxis stroke="#a8a29e" />
-                <Tooltip />
-                <Legend />
-                <Line type="monotone" dataKey="views" stroke="#60a5fa" strokeWidth={2} name="Просмотры" />
-                <Line type="monotone" dataKey="unique_users" stroke="#34d399" strokeWidth={2} name="Уникальные" />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
+          {overviewByDay.length > 0 ? (
+            <div style={{ width: '100%', height: 300, minWidth: 0 }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={overviewByDay}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                  <XAxis dataKey="day" stroke="#a8a29e" />
+                  <YAxis stroke="#a8a29e" />
+                  <Tooltip />
+                  <Legend />
+                  <Line type="monotone" dataKey="views" stroke="#60a5fa" strokeWidth={2} name="Просмотры" />
+                  <Line type="monotone" dataKey="unique_users" stroke="#34d399" strokeWidth={2} name="Уникальные" />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          ) : (
+            <NoChartData />
+          )}
         </ChartSkeleton>
       </div>
 
       <div className="rounded-2xl border border-white/10 bg-stone-950/40 p-4">
         <h2 className="mb-3 text-base font-semibold text-white">Retention (возврат пользователей)</h2>
         <ChartSkeleton loading={overview.isLoading}>
-          <div className="h-60">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={retentionData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                <XAxis dataKey="name" stroke="#a8a29e" />
-                <YAxis stroke="#a8a29e" unit="%" />
-                <Tooltip />
-                <Line type="monotone" dataKey="returned_percent" stroke="#f472b6" strokeWidth={2} name="Вернулись, %" />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
+          {retentionData.length > 0 ? (
+            <div style={{ width: '100%', height: 300, minWidth: 0 }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={retentionData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                  <XAxis dataKey="name" stroke="#a8a29e" />
+                  <YAxis stroke="#a8a29e" unit="%" />
+                  <Tooltip />
+                  <Line type="monotone" dataKey="returned_percent" stroke="#f472b6" strokeWidth={2} name="Вернулись, %" />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          ) : (
+            <NoChartData />
+          )}
         </ChartSkeleton>
       </div>
 
@@ -207,17 +217,21 @@ export function AnalyticsPage() {
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
         <Panel title={`Детально: ${pageDetail.data?.page_name ?? selectedPage ?? ''}`}>
           <ChartSkeleton loading={pageDetail.isLoading}>
-            <div className="h-60">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={pageDetail.data?.views_by_day ?? []}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                  <XAxis dataKey="day" stroke="#a8a29e" />
-                  <YAxis stroke="#a8a29e" />
-                  <Tooltip />
-                  <Line type="monotone" dataKey="views" stroke="#f59e0b" strokeWidth={2} />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
+            {pageByDay.length > 0 ? (
+              <div style={{ width: '100%', height: 300, minWidth: 0 }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={pageByDay}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                    <XAxis dataKey="day" stroke="#a8a29e" />
+                    <YAxis stroke="#a8a29e" />
+                    <Tooltip />
+                    <Line type="monotone" dataKey="views" stroke="#f59e0b" strokeWidth={2} />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            ) : (
+              <NoChartData />
+            )}
             <div className="mt-4">
               <div className="mb-2 grid grid-cols-12 gap-1 text-[10px] text-stone-400">
                 <div className="col-span-1" />
@@ -247,22 +261,30 @@ export function AnalyticsPage() {
         </Panel>
         <Panel title="Устройства и ОС">
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            <div className="h-56">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie data={deviceData} dataKey="value" nameKey="name" outerRadius={70} fill="#60a5fa" />
-                  <Tooltip />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
-            <div className="h-56">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie data={osData} dataKey="value" nameKey="name" outerRadius={70} fill="#34d399" />
-                  <Tooltip />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
+            {deviceData.length > 0 ? (
+              <div style={{ width: '100%', height: 300, minWidth: 0 }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie data={deviceData} dataKey="value" nameKey="name" outerRadius={70} fill="#60a5fa" />
+                    <Tooltip />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+            ) : (
+              <NoChartData />
+            )}
+            {osData.length > 0 ? (
+              <div style={{ width: '100%', height: 300, minWidth: 0 }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie data={osData} dataKey="value" nameKey="name" outerRadius={70} fill="#34d399" />
+                    <Tooltip />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+            ) : (
+              <NoChartData />
+            )}
           </div>
         </Panel>
       </div>
@@ -358,6 +380,14 @@ function ChartSkeleton({ loading, children }: { loading: boolean; children: Reac
     return <div className="h-64 animate-pulse rounded-xl bg-stone-800/70" />;
   }
   return <>{children}</>;
+}
+
+function NoChartData() {
+  return (
+    <div style={{ height: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#666' }}>
+      Нет данных за выбранный период
+    </div>
+  );
 }
 
 export default AnalyticsPage;

@@ -254,20 +254,28 @@ export async function getOverview(periodRaw: unknown): Promise<unknown> {
     ORDER BY m.day_n ASC
   `;
 
-  const [summary, topPages, byDay, newVsReturning, retention] = await Promise.all([
+  const [summary, topPages, byDay, newVsReturning] = await Promise.all([
     pool.query(summarySql, range.params),
     pool.query(topPagesSql, range.params),
     pool.query(byDaySql, range.params),
     pool.query(newVsReturningSql, [...range.params, startMarker.toISOString()]),
-    pool.query(
+  ]);
+
+  let retentionRows: Array<{ day_n: unknown; cohort_size: unknown; returned_users: unknown }> = [];
+  try {
+    const retention = await pool.query(
       retentionSql,
       [
         ...range.params,
         (range.nowRange.from ?? new Date(0)).toISOString().slice(0, 10),
         range.nowRange.to.toISOString().slice(0, 10),
       ],
-    ),
-  ]);
+    );
+    retentionRows = retention.rows;
+  } catch (err) {
+    console.error('Retention calculation failed:', err);
+    retentionRows = [];
+  }
 
   const result = {
     total_views: Number(summary.rows[0]?.total_views ?? 0),
@@ -289,7 +297,7 @@ export async function getOverview(periodRaw: unknown): Promise<unknown> {
       new: Number(newVsReturning.rows[0]?.new_users ?? 0),
       returning: Number(newVsReturning.rows[0]?.returning_users ?? 0),
     },
-    retention: retention.rows.map((r) => {
+    retention: retentionRows.map((r) => {
       const cohortSize = Number(r.cohort_size ?? 0);
       const returned = Number(r.returned_users ?? 0);
       return {
