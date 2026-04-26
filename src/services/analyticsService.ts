@@ -218,7 +218,6 @@ export async function getOverview(periodRaw: unknown): Promise<unknown> {
     FROM scoped
   `;
 
-  const startMarker = range.nowRange.from ?? new Date(0);
   const retentionSql = `
     WITH first_visit AS (
       SELECT user_id, MIN(viewed_at)::date AS first_day
@@ -229,8 +228,8 @@ export async function getOverview(periodRaw: unknown): Promise<unknown> {
     cohort AS (
       SELECT *
       FROM first_visit
-      WHERE first_day >= $${range.params.length + 1}::date
-        AND first_day <= $${range.params.length + 2}::date
+      WHERE first_day >= $1::date
+        AND first_day <= $2::date
     ),
     markers AS (
       SELECT 1::int AS day_n
@@ -258,7 +257,7 @@ export async function getOverview(periodRaw: unknown): Promise<unknown> {
     pool.query(summarySql, range.params),
     pool.query(topPagesSql, range.params),
     pool.query(byDaySql, range.params),
-    pool.query(newVsReturningSql, [...range.params, startMarker.toISOString()]),
+    pool.query(newVsReturningSql, [...range.params, (range.nowRange.from ?? new Date(0)).toISOString()]),
   ]);
 
   let retentionRows: Array<{ day_n: unknown; cohort_size: unknown; returned_users: unknown }> = [];
@@ -266,14 +265,13 @@ export async function getOverview(periodRaw: unknown): Promise<unknown> {
     const retention = await pool.query(
       retentionSql,
       [
-        ...range.params,
         (range.nowRange.from ?? new Date(0)).toISOString().slice(0, 10),
         range.nowRange.to.toISOString().slice(0, 10),
       ],
     );
     retentionRows = retention.rows;
   } catch (err) {
-    console.error('Retention calculation failed:', err);
+    console.warn('Retention calculation failed:', err);
     retentionRows = [];
   }
 

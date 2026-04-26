@@ -158,7 +158,7 @@ async function flushQueue(): Promise<void> {
         batch = rawItems
           .map((item) => {
             try {
-              return JSON.parse(item) as QueuedPageView;
+              return normalizeQueuedPageView(JSON.parse(item) as Partial<QueuedPageView>);
             } catch {
               return null;
             }
@@ -172,7 +172,7 @@ async function flushQueue(): Promise<void> {
     const values: unknown[] = [];
     const rowsSql = batch
       .map((item, i) => {
-        const p = i * 13;
+        const p = i * 12;
         values.push(
           item.pageKey,
           item.pageUrl,
@@ -235,6 +235,31 @@ export function enqueuePageView(item: QueuedPageView): void {
       void flushQueue();
     }
   });
+}
+
+function normalizeQueuedPageView(item: Partial<QueuedPageView>): QueuedPageView | null {
+  if (!item || !item.pageKey) return null;
+  return {
+    pageKey: item.pageKey,
+    pageUrl: item.pageUrl ?? null,
+    userId: item.userId ?? null,
+    sessionId: item.sessionId ?? null,
+    ipHash: item.ipHash ?? null,
+    userAgent: item.userAgent ?? null,
+    deviceType: item.deviceType ?? null,
+    os: item.os ?? null,
+    browser: item.browser ?? null,
+    referrer: item.referrer ?? null,
+    durationSeconds: item.durationSeconds ?? null,
+    viewedAt: toDateSafe(item.viewedAt),
+  };
+}
+
+function toDateSafe(value: unknown): Date {
+  if (value instanceof Date && !Number.isNaN(value.getTime())) return value;
+  const parsed = new Date(String(value ?? ''));
+  if (!Number.isNaN(parsed.getTime())) return parsed;
+  return new Date();
 }
 
 export function analyticsMiddleware(req: Request, res: Response, next: NextFunction): void {
