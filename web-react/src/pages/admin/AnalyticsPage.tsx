@@ -194,10 +194,10 @@ export function AnalyticsPage() {
   ];
 
   return (
-    <div className="space-y-5 p-3 md:p-6" style={{ color: 'var(--color-text-primary)' }}>
+    <div className="mx-auto max-w-[1500px] space-y-5 p-3 md:p-6" style={{ color: 'var(--color-text-primary)' }}>
       <div className={`flex flex-col gap-3 rounded-xl p-4 md:flex-row md:items-center md:justify-between ${SURFACE_CLASS}`}>
         <div>
-          <h1 className="text-2xl font-semibold">Аналитика</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Аналитика</h1>
           <p className="text-sm text-[var(--color-text-muted)]">Пользователи, трафик, устройства и retention по периодам.</p>
         </div>
         <div className="flex flex-wrap items-center justify-start gap-2 md:justify-end">
@@ -212,6 +212,7 @@ export function AnalyticsPage() {
                 style={{
                   backgroundColor: active ? '#7a1f2e' : 'var(--color-background-primary)',
                   color: active ? '#fff' : 'var(--color-text-secondary)',
+                  border: active ? '2px solid #b45e6e' : '1px solid rgba(122,31,46,0.16)',
                 }}
               >
                 {item.label}

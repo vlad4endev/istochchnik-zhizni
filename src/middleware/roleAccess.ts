@@ -70,6 +70,14 @@ function isSongOpenPost(method: string, path: string): boolean {
   return method === 'POST' && /^\/api\/songs\/\d+\/open\/?$/.test(path);
 }
 
+/**
+ * Сбор аналитики (page-view/event) должен работать для всех пользователей и гостей.
+ * Read-only ограничения по роли не должны блокировать эти технические POST-запросы.
+ */
+function isAnalyticsTrackingPost(method: string, path: string): boolean {
+  return method === 'POST' && /^\/api\/analytics\/track\/(?:page-view|event)\/?$/.test(path);
+}
+
 /** POST/PATCH каталога (создание и правка — редакторы и админ). */
 function isSongCatalogModerateMutation(method: string, path: string): boolean {
   if (SAFE_METHODS.has(method)) return false;
@@ -182,6 +190,11 @@ export function enforceRoleAccess(req: Request, res: Response, next: NextFunctio
   }
 
   if (isSongOpenPost(req.method, fullPath) && authId) {
+    next();
+    return;
+  }
+
+  if (isAnalyticsTrackingPost(req.method, fullPath)) {
     next();
     return;
   }

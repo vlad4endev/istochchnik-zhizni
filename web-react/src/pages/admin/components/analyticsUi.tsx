@@ -1,7 +1,9 @@
 import type { CSSProperties, ReactNode } from 'react';
 
-export const PANEL_CLASS = 'rounded-xl bg-[var(--color-background-secondary)]/80 p-4';
-export const SURFACE_CLASS = 'bg-[var(--color-background-primary)]/70';
+export const PANEL_CLASS =
+  'rounded-xl border border-[color:var(--color-border,rgba(122,31,46,0.18))] bg-[var(--color-background-secondary)]/92 p-4 shadow-[0_8px_24px_rgba(20,10,15,0.06)]';
+export const SURFACE_CLASS =
+  'border border-[color:var(--color-border,rgba(122,31,46,0.14))] bg-[var(--color-background-primary)]/88';
 export const TOOLTIP_STYLE: CSSProperties = {
   border: '1px solid rgba(180,94,110,0.25)',
   borderRadius: 10,
@@ -23,7 +25,7 @@ export function KpiCard({
 }) {
   const isPositive = delta >= 0;
   return (
-    <div className={PANEL_CLASS}>
+    <div className={`${PANEL_CLASS} transition hover:translate-y-[-1px]`}>
       <div className="mb-2 flex items-center gap-2 text-xs text-[var(--color-text-muted)]">
         {title}
         {isOnline ? <PulseDot /> : null}
@@ -42,7 +44,7 @@ export function KpiCard({
 export function Panel({ title, className, children }: { title: ReactNode; className?: string; children: ReactNode }) {
   return (
     <section className={`${PANEL_CLASS} ${className ?? ''}`}>
-      <h2 className="mb-3 text-base font-semibold">{title}</h2>
+      <h2 className="mb-4 border-b border-[color:var(--color-border,rgba(122,31,46,0.12))] pb-2 text-base font-semibold">{title}</h2>
       {children}
     </section>
   );
@@ -104,7 +106,7 @@ export function NoChartData({ compact = false }: { compact?: boolean }) {
   return (
     <div
       style={{ minWidth: 0, height: compact ? 120 : 280 }}
-      className={`flex items-center justify-center rounded-lg text-sm text-[var(--color-text-muted)] ${SURFACE_CLASS}`}
+      className={`flex items-center justify-center rounded-lg border-dashed text-sm text-[var(--color-text-muted)] ${SURFACE_CLASS}`}
     >
       Нет данных
     </div>
