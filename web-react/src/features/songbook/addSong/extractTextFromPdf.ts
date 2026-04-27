@@ -285,6 +285,7 @@ export async function extractTextFromPdfBufferWithMeta(
   // обходя nginx-проблему с MIME для .mjs). pdfjs v4 найдёт WorkerMessageHandler
   // через globalThis.pdfjsWorker и переключится на FakeWorker (main-thread).
   await ensurePdfjsWorker();
+
   let pdf: Awaited<ReturnType<typeof pdfjs.getDocument>['promise']>;
   try {
     const loadingTask = pdfjs.getDocument({
@@ -318,14 +319,16 @@ export async function extractTextFromPdfBufferWithMeta(
   }
 
   const extracted = pageTexts.join('\n\n').trim();
-  // Текстовый слой есть, но не «мусорный» → возвращаем напрямую.
-  if (extracted.length > 0 && !isLikelyGarbled(extracted)) {
+
+  const garbled = extracted.length > 0 && isLikelyGarbled(extracted);
+
+  // Текстовый слой есть, не «мусорный» → возвращаем напрямую.
+  if (extracted.length > 0 && !garbled) {
     return { text: extracted, mode: 'safe-main-thread' };
   }
 
   // Либо текст пуст, либо похож на побуквенный «мусор» из-за нестандартной
   // кодировки шрифта (нет ToUnicode-таблицы) → пробуем OCR по изображению.
-  const garbled = extracted.length > 0; // для информативного сообщения об ошибке
 
   try {
     const ocrText = await runPdfOcrFallback(pdf, onProgress);

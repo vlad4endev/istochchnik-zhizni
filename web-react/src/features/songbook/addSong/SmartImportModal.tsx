@@ -152,7 +152,13 @@ export function SmartImportModal({
         return;
       }
       setPdfExtractedText(text);
-      setPdfAnalysis(analyzeImportedSongText(text));
+      let analysis = null;
+      try {
+        analysis = analyzeImportedSongText(text);
+      } catch {
+        /* разбор метаданных не критичен для извлечения текста */
+      }
+      setPdfAnalysis(analysis);
       if (mode === 'safe-main-thread') {
         setPdfSafeModeInfo(
           'PDF прочитан в безопасном режиме (без worker). Это обход MIME-ограничений сервера и не влияет на результат распознавания текста.',
