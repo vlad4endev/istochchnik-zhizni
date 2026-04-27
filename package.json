@@ -41,6 +41,8 @@
     "lint:fix": "npx eslint src --ext .ts --fix",
     "format": "npx prettier --write \"src/**/*.ts\"",
     "db:init": "npx ts-node scripts/runInitDb.ts",
+    "analytics:dedupe": "npx ts-node scripts/cleanupAnalyticsDuplicates.ts",
+    "analytics:dedupe:apply": "npx ts-node scripts/cleanupAnalyticsDuplicates.ts --apply",
     "db:init:dist": "node dist/cli/runInitDb.js",
     "db:init:docker": "node -e \"require('./dist/config/initDb').initDb().then(function(){console.log('[db] initDb OK');process.exit(0);}).catch(function(e){console.error(e);process.exit(1);})\"",
     "db:seed-members": "npx ts-node scripts/seedMembersOnly.ts",

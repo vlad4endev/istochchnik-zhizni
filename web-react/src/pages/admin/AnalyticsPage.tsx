@@ -142,6 +142,23 @@ export function AnalyticsPage() {
     }
   }, [pages.data]);
 
+  const selectedSectionName = useMemo(() => {
+    const selected = topSections.find((section) => section.key === selectedPage);
+    return selected?.name ?? pageDetail.data?.page_name ?? 'раздел';
+  }, [pageDetail.data?.page_name, selectedPage, topSections]);
+
+  const sectionViewers = useMemo(() => {
+    try {
+      return (pageDetail.data?.viewers ?? []).map((viewer: any) => ({
+        userId: Number(viewer.user_id ?? 0),
+        name: String(viewer.name ?? 'Неизвестный пользователь'),
+        viewsCount: Number(viewer.views_count ?? 0),
+      }));
+    } catch {
+      return [];
+    }
+  }, [pageDetail.data]);
+
   const onlineUsers = useMemo(() => {
     try {
       return (realtime.data?.users ?? []) as RealtimeUser[];
@@ -300,7 +317,16 @@ export function AnalyticsPage() {
             ) : (
               <div className="space-y-3">
                 {topSections.map((section) => (
-                  <div key={section.key} className="space-y-1.5">
+                  <button
+                    key={section.key}
+                    type="button"
+                    onClick={() => setSelectedPage(section.key)}
+                    className={`w-full space-y-1.5 rounded-lg p-2 text-left transition ${
+                      selectedPage === section.key
+                        ? 'bg-[rgba(122,31,46,0.08)]'
+                        : 'hover:bg-[rgba(122,31,46,0.04)]'
+                    }`}
+                  >
                     <div className="flex items-center justify-between text-sm">
                       <div className="flex items-center gap-2 truncate">
                         <span>{section.icon}</span>
@@ -315,7 +341,7 @@ export function AnalyticsPage() {
                       />
                     </div>
                     <div className="text-xs text-[var(--color-text-muted)]">{section.percent}% от лидера</div>
-                  </div>
+                  </button>
                 ))}
               </div>
             )}
@@ -359,6 +385,34 @@ export function AnalyticsPage() {
           </ChartSkeleton>
         </Panel>
       </div>
+
+      <Panel title={`Кто посещал раздел: ${selectedSectionName}`} className="min-w-0">
+        <ChartSkeleton loading={pageDetail.isLoading && !pageDetail.data}>
+          {sectionViewers.length === 0 ? (
+            <NoChartData compact />
+          ) : (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between rounded-lg border border-[color:var(--color-border,rgba(122,31,46,0.16))] bg-[rgba(122,31,46,0.04)] px-3 py-2 text-sm">
+                <span className="text-[var(--color-text-secondary)]">
+                  Всего людей в разделе
+                </span>
+                <span className="font-semibold">{formatNumber(Number(pageDetail.data?.unique_users ?? sectionViewers.length))}</span>
+              </div>
+              {sectionViewers.map((viewer: { userId: number; name: string; viewsCount: number }) => (
+                <div
+                  key={viewer.userId > 0 ? viewer.userId : viewer.name}
+                  className={`flex items-center justify-between rounded-lg px-3 py-2 ${SURFACE_CLASS}`}
+                >
+                  <div className="truncate text-sm font-medium">{viewer.name}</div>
+                  <div className="text-sm text-[var(--color-text-secondary)]">
+                    {formatNumber(viewer.viewsCount)} просмотров
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </ChartSkeleton>
+      </Panel>
 
       <Panel title="Retention" className="min-w-0">
         <ChartSkeleton loading={overview.isLoading && !overview.data}>

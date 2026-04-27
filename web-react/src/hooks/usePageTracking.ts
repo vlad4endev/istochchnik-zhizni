@@ -21,7 +21,7 @@ export function usePageTracking(): void {
   const location = useLocation();
   const startRef = useRef<number>(Date.now());
   const prevPathRef = useRef<string | null>(null);
-  const debounceTimerRef = useRef<number | null>(null);
+  const flushedRef = useRef<boolean>(false);
 
   const currentUrl = useMemo(
     () => `${window.location.pathname}${window.location.search}${window.location.hash}`,
@@ -29,60 +29,61 @@ export function usePageTracking(): void {
   );
 
   useEffect(() => {
-    const sendCurrent = (durationOverride?: number) => {
-      const duration = durationOverride ?? Math.max(1, Math.round((Date.now() - startRef.current) / 1000));
+    const sendCurrent = (path: string) => {
+      const duration = Math.max(1, Math.round((Date.now() - startRef.current) / 1000));
       void trackPageView({
-        page_key: resolvePageKey(window.location.pathname),
-        page_url: `${window.location.origin}${currentUrl}`,
+        page_key: resolvePageKey(path.split('?')[0].split('#')[0] || '/'),
+        page_url: `${window.location.origin}${path}`,
         referrer: document.referrer || null,
         duration_seconds: duration,
       });
     };
-    const sendWithBeacon = () => {
-      const pageKey = resolvePageKey(window.location.pathname);
+    const sendWithBeacon = (path: string) => {
       const durationMs = Math.max(0, Date.now() - startRef.current);
       const payload = JSON.stringify({
-        page_key: pageKey,
-        page_url: `${window.location.origin}${currentUrl}`,
+        page_key: resolvePageKey(path.split('?')[0].split('#')[0] || '/'),
+        page_url: `${window.location.origin}${path}`,
         referrer: document.referrer || null,
         duration_ms: durationMs,
       });
       const blob = new Blob([payload], { type: 'application/json' });
       if (typeof navigator !== 'undefined' && typeof navigator.sendBeacon === 'function') {
         navigator.sendBeacon('/api/analytics/track/page-view', blob);
+      } else {
+        sendCurrent(path);
       }
     };
 
-    if (debounceTimerRef.current) {
-      window.clearTimeout(debounceTimerRef.current);
+    const previousPath = prevPathRef.current;
+    if (previousPath && previousPath !== currentUrl && !flushedRef.current) {
+      sendCurrent(previousPath);
     }
 
-    if (prevPathRef.current && prevPathRef.current !== currentUrl) {
-      sendCurrent();
-    }
-
-    debounceTimerRef.current = window.setTimeout(() => {
-      startRef.current = Date.now();
-      prevPathRef.current = currentUrl;
-      sendCurrent(0);
-    }, 500);
+    startRef.current = Date.now();
+    prevPathRef.current = currentUrl;
+    flushedRef.current = false;
 
     const onVisibility = () => {
-      if (document.visibilityState === 'hidden') {
-        sendWithBeacon();
+      if (document.visibilityState === 'hidden' && !flushedRef.current && prevPathRef.current) {
+        sendWithBeacon(prevPathRef.current);
+        flushedRef.current = true;
       }
     };
-    const onBeforeUnload = () => {
-      // Fallback for desktop browsers where beforeunload still fires reliably.
-      sendCurrent();
+    const flushOnLeave = () => {
+      if (!flushedRef.current && prevPathRef.current) {
+        sendWithBeacon(prevPathRef.current);
+        flushedRef.current = true;
+      }
     };
 
     document.addEventListener('visibilitychange', onVisibility);
-    window.addEventListener('beforeunload', onBeforeUnload);
+    window.addEventListener('pagehide', flushOnLeave);
+    window.addEventListener('beforeunload', flushOnLeave);
 
     return () => {
       document.removeEventListener('visibilitychange', onVisibility);
-      window.removeEventListener('beforeunload', onBeforeUnload);
+      window.removeEventListener('pagehide', flushOnLeave);
+      window.removeEventListener('beforeunload', flushOnLeave);
     };
   }, [currentUrl]);
 }
