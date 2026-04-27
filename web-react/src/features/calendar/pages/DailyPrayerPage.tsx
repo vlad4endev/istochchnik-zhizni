@@ -487,6 +487,9 @@ export function DailyPrayerPage() {
   const sectionMemberId = useId();
   const sectionBacksliderId = useId();
   const themesMinistriesRegionId = useId();
+  const normalizedAppRole = me?.app_role?.trim().toLowerCase() ?? '';
+  const canViewPrayerSectionViewersStats =
+    normalizedAppRole === 'pastor' || normalizedAppRole === 'admin';
 
   const dateKey = formatCalendarDayKey(selected);
 
@@ -512,7 +515,7 @@ export function DailyPrayerPage() {
     queryKey: ['calendar', 'prayer-section', 'today-viewers'],
     queryFn: fetchPrayerSectionTodayViewers,
     staleTime: 45_000,
-    enabled: Boolean(me?.id),
+    enabled: Boolean(me?.id) && canViewPrayerSectionViewersStats,
   });
 
   useEffect(() => {
@@ -816,7 +819,7 @@ export function DailyPrayerPage() {
         )}
       </div>
 
-      {me?.id ? (
+      {me?.id && canViewPrayerSectionViewersStats ? (
         <div className="px-4 pb-6 pt-2 shell:px-6 shell:pb-8">
           <div
             className="mx-auto flex max-w-xl items-center justify-center gap-2.5 rounded-2xl border border-stone-200/70 bg-gradient-to-r from-[var(--surface-elevated)] via-white/90 to-[var(--surface-elevated)] px-4 py-2.5 text-center shadow-[0_2px_12px_rgba(0,0,0,0.04)] backdrop-blur-sm supports-[backdrop-filter]:bg-[var(--surface-elevated)]/75"

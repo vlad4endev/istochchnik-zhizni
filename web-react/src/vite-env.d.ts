@@ -1,6 +1,12 @@
 /// <reference types="vite/client" />
 /// <reference types="vite-plugin-pwa/client" />
 
+// pdfjs-dist v4: worker entry — нет отдельного .d.ts, объявляем вручную.
+// Используется в extractTextFromPdf.ts для FakeWorker (main-thread режим).
+declare module 'pdfjs-dist/build/pdf.worker.min.mjs' {
+  export const WorkerMessageHandler: unknown;
+}
+
 declare const __WEB_REACT_BUILD_STAMP__: string;
 
 interface ImportMetaEnv {

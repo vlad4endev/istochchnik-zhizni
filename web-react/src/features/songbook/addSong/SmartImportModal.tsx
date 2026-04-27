@@ -120,8 +120,12 @@ export function SmartImportModal({
     const f = e.target.files?.[0];
     e.target.value = '';
     if (!f) return;
-    if (!/\.pdf$/i.test(f.name)) {
-      setPdfError('Выберите файл с расширением .pdf');
+    if (f.size > 20 * 1024 * 1024) {
+      setPdfError('Файл слишком большой. Максимум 20 МБ.');
+      return;
+    }
+    if (!f.name.toLowerCase().endsWith('.pdf') && f.type !== 'application/pdf') {
+      setPdfError('Пожалуйста, выберите PDF файл.');
       return;
     }
     setPdfName(f.name);
@@ -160,8 +164,19 @@ export function SmartImportModal({
       }
     } catch (err) {
       const details = err instanceof Error && err.message ? err.message : '';
-      const base = 'Не удалось прочитать PDF.';
-      setPdfError(details ? `${base} ${details}` : `${base} Проверьте файл или попробуйте экспорт в текст из другого приложения.`);
+      const isOcrUnavailable =
+        details.includes('OCR-модуль недоступен') ||
+        details.includes('OCR не помог') ||
+        details.includes('даже после OCR');
+      if (isOcrUnavailable) {
+        setPdfError(
+          'PDF содержит только изображения, а OCR-модуль сейчас недоступен. ' +
+          'Попробуйте PDF с текстовым слоем или введите текст вручную.',
+        );
+      } else {
+        const base = 'Не удалось прочитать PDF.';
+        setPdfError(details ? `${base} ${details}` : `${base} Проверьте файл или попробуйте экспорт в текст из другого приложения.`);
+      }
     } finally {
       setPdfProgressText(null);
       setPdfBusy(false);

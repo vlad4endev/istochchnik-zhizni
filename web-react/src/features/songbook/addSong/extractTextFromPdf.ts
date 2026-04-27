@@ -1,5 +1,32 @@
 import * as pdfjs from 'pdfjs-dist';
 
+/**
+ * pdfjs-dist v4 удалил опцию `disableWorker` из DocumentInitParameters.
+ * Единственный способ запустить обработку в main-thread (FakeWorker) в v4 —
+ * выставить globalThis.pdfjsWorker до первого вызова getDocument.
+ * pdfjs проверяет это через внутренний геттер #Ts:
+ *   `globalThis.pdfjsWorker?.WorkerMessageHandler || null`
+ * Если WorkerMessageHandler найден — сразу уходит в _setupFakeWorker() без
+ * создания Web Worker и без import(workerSrc) (что падало с пустым строкой).
+ *
+ * Используем динамический import чтобы:
+ * 1. Не грузить ~1.5 МБ worker-кода при каждом открытии страницы.
+ * 2. Vite пересохраняет chunk как .js (а не .mjs), обходя nginx-проблему MIME.
+ */
+let _pdfjsWorkerSetup: Promise<void> | null = null;
+
+function ensurePdfjsWorker(): Promise<void> {
+  if ((globalThis as Record<string, unknown>).pdfjsWorker) {
+    return Promise.resolve();
+  }
+  if (!_pdfjsWorkerSetup) {
+    _pdfjsWorkerSetup = import('pdfjs-dist/build/pdf.worker.min.mjs').then((worker) => {
+      (globalThis as Record<string, unknown>).pdfjsWorker = worker;
+    });
+  }
+  return _pdfjsWorkerSetup;
+}
+
 type Piece = {
   str: string;
   x: number;
@@ -222,15 +249,16 @@ export async function extractTextFromPdfBufferWithMeta(
 ): Promise<PdfExtractMeta> {
   const { onProgress } = options;
   const data = buffer.byteLength === 0 ? new Uint8Array() : new Uint8Array(buffer);
+  // Загружаем worker-код как обычный lazy chunk (Vite пересохраняет как .js,
+  // обходя nginx-проблему с MIME для .mjs). pdfjs v4 найдёт WorkerMessageHandler
+  // через globalThis.pdfjsWorker и переключится на FakeWorker (main-thread).
+  await ensurePdfjsWorker();
   let pdf: Awaited<ReturnType<typeof pdfjs.getDocument>['promise']>;
   try {
-    // На некоторых nginx-конфигах `.mjs` отдаётся как application/octet-stream,
-    // из-за чего worker не стартует. Явно выключаем worker и парсим в main-thread.
     const loadingTask = pdfjs.getDocument({
       data,
       useSystemFonts: true,
-      disableWorker: true,
-    } as unknown as Parameters<typeof pdfjs.getDocument>[0]);
+    });
     pdf = await loadingTask.promise;
   } catch (err) {
     throw new Error(describePdfError(err));
