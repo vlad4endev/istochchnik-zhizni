@@ -97,6 +97,14 @@ async function main(): Promise<void> {
 void main()
   .catch((error) => {
     console.error('[analytics:dedupe] failed:', error);
+    const err = error as { code?: string; hostname?: string };
+    if ((err?.code === 'EAI_AGAIN' || err?.code === 'ENOTFOUND') && err?.hostname) {
+      console.error(
+        `[analytics:dedupe] DNS error for host "${err.hostname}". ` +
+          'Likely DATABASE_URL points to an internal Docker hostname. ' +
+          'Run this script where that hostname resolves, or use a public/localhost DATABASE_URL.'
+      );
+    }
     process.exitCode = 1;
   })
   .finally(async () => {
