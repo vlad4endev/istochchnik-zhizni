@@ -190,8 +190,14 @@ function median(nums: number[]): number {
   return s.length % 2 ? s[m]! : (s[m - 1]! + s[m]!) / 2;
 }
 
-/** Одна визуальная строка: крупные зазоры → таб (аккорды над текстом в PDF). */
-function mergeLinePieces(row: Piece[], gapForTab: number): string {
+/**
+ * Одна визуальная строка: крупные зазоры → таб (аккорды над текстом в PDF).
+ *
+ * `spaceThreshold` — минимальный зазор для вставки пробела между фрагментами.
+ * Без порога каждый символ-TextItem получал пробел при любом gap > 0
+ * (характерно для PDF с пословно/побуквенно расставленными глифами).
+ */
+function mergeLinePieces(row: Piece[], gapForTab: number, spaceThreshold: number): string {
   row.sort((a, b) => a.x - b.x);
   let s = '';
   let lastEnd = -Infinity;
@@ -200,13 +206,35 @@ function mergeLinePieces(row: Piece[], gapForTab: number): string {
     if (i > 0 && lastEnd > -Infinity) {
       const gap = p.x - lastEnd;
       if (gap >= gapForTab) s += '\t';
-      else if (!s.endsWith('\n') && !s.endsWith('\t')) s += ' ';
+      else if (gap >= spaceThreshold && !s.endsWith('\n') && !s.endsWith('\t')) s += ' ';
+      // gap < spaceThreshold: соседние символы вплотную — разделитель не нужен
     }
     s += p.str;
     lastEnd = p.x + p.w;
     if (p.hasEOL) s += '\n';
   }
   return s.replace(/[ \t]+\n/g, '\n').trimEnd();
+}
+
+/**
+ * Возвращает true, если текстовый слой PDF извлечён с ошибками кодировки:
+ * глифы декодированы в неверные Unicode-символы (нет ToUnicode-таблицы).
+ *
+ * Признаки: среднее «слово» (не аккорд) содержит менее ~2 букв →
+ * текст выглядит как набор одиночных символов с пробелами.
+ */
+function isLikelyGarbled(text: string): boolean {
+  // Убираем ChordPro/inline аккорды и строки только из аккордов
+  const clean = text
+    .replace(/\[[^\]]{1,8}\]/g, ' ')  // [Am], [F#m7], ...
+    .replace(/^[ \t]*[A-G][^\n]{0,10}$/gm, ' '); // строки типа "Am C F G"
+  const words = clean
+    .split(/\s+/)
+    .filter((w) => w.length > 0 && /[a-zA-Zа-яёА-ЯЁ\u0400-\u04FF]/.test(w));
+  if (words.length < 8) return false; // слишком мало материала для вывода
+  const avgLen = words.reduce((sum, w) => sum + w.length, 0) / words.length;
+  // Нормальный текст: avg ≥ 3. Побуквенный «мусор»: avg ≈ 1.
+  return avgLen < 1.9;
 }
 
 /**
@@ -217,6 +245,10 @@ function layoutPageLines(pieces: Piece[]): string {
   const heights = pieces.map((p) => p.h);
   const lineTol = Math.min(12, Math.max(2.2, median(heights) * 0.5));
   const gapForTab = Math.max(14, median(heights) * 3.8);
+  // Минимальный зазор для вставки пробела (~15% высоты шрифта).
+  // Типичный межбуквенный gap в хорошо закодированном PDF ≈ 0;
+  // межсловный пробел ≥ 0.2–0.3 * h — выше порога.
+  const spaceThreshold = Math.max(0.8, median(heights) * 0.15);
 
   const byY = [...pieces].sort((a, b) => b.y - a.y);
   const rows: Piece[][] = [];
@@ -231,7 +263,7 @@ function layoutPageLines(pieces: Piece[]): string {
     else rows.push([p]);
   }
 
-  return rows.map((r) => mergeLinePieces(r, gapForTab)).join('\n');
+  return rows.map((r) => mergeLinePieces(r, gapForTab, spaceThreshold)).join('\n');
 }
 
 /**
@@ -286,9 +318,14 @@ export async function extractTextFromPdfBufferWithMeta(
   }
 
   const extracted = pageTexts.join('\n\n').trim();
-  if (extracted.length > 0) {
+  // Текстовый слой есть, но не «мусорный» → возвращаем напрямую.
+  if (extracted.length > 0 && !isLikelyGarbled(extracted)) {
     return { text: extracted, mode: 'safe-main-thread' };
   }
+
+  // Либо текст пуст, либо похож на побуквенный «мусор» из-за нестандартной
+  // кодировки шрифта (нет ToUnicode-таблицы) → пробуем OCR по изображению.
+  const garbled = extracted.length > 0; // для информативного сообщения об ошибке
 
   try {
     const ocrText = await runPdfOcrFallback(pdf, onProgress);
@@ -296,10 +333,17 @@ export async function extractTextFromPdfBufferWithMeta(
       return { text: ocrText, mode: 'ocr-fallback' };
     }
   } catch (ocrErr) {
-    if (pageErrors.length > 0) {
-      throw new Error(`OCR не помог: ${describePdfError(ocrErr)}. Ошибка чтения PDF: ${pageErrors[0]}`);
+    const ocrMsg = describePdfError(ocrErr);
+    if (garbled) {
+      throw new Error(
+        `PDF использует нестандартную кодировку шрифта, а OCR-модуль недоступен: ${ocrMsg}. ` +
+        'Откройте PDF в другой программе и скопируйте текст вручную.',
+      );
     }
-    throw new Error(`OCR не помог: ${describePdfError(ocrErr)}`);
+    if (pageErrors.length > 0) {
+      throw new Error(`OCR не помог: ${ocrMsg}. Ошибка чтения PDF: ${pageErrors[0]}`);
+    }
+    throw new Error(`OCR не помог: ${ocrMsg}`);
   }
 
   if (pageErrors.length > 0) {
