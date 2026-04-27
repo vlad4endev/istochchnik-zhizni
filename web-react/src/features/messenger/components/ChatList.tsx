@@ -40,8 +40,8 @@ export function ChatList({ onSelect, activeId }: ChatListProps) {
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col bg-white">
-      <div className="shrink-0 border-b border-gray-200/60 px-3 pt-2 pb-2">
+    <div className="tg-chatlist-root flex min-h-0 flex-1 flex-col bg-white">
+      <div className="shrink-0 border-b border-gray-200/60 px-3 pt-2 pb-2 md:px-4">
         <SmartTabs
           activeTab={activeTab}
           onChange={setActiveTab}
@@ -52,7 +52,7 @@ export function ChatList({ onSelect, activeId }: ChatListProps) {
         />
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable]">
+      <div className="tg-chatlist-scroll min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable]">
         <ul className="list-none" role="list">
           {filtered.map((conv: ConversationListItem, index: number) => (
             <li key={conv.id}>

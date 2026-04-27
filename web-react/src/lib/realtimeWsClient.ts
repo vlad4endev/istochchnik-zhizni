@@ -4,8 +4,9 @@
  */
 import { useEffect } from 'react';
 
-import { useAuthStore } from '../features/auth/authStore';
-import { resolveRealtimeWebSocketUrl } from './config';
+import { normalizeRegistrationStatus, useAuthStore } from '../features/auth/authStore';
+import { COOKIE_ONLY_SESSION_TOKEN } from './authSessionConstants';
+import { AUTH_API_PREFIX, resolveAxiosBaseURL, resolveRealtimeWebSocketUrl } from './config';
 
 const LOG_PREFIX = '[realtime:ws]';
 
@@ -20,7 +21,7 @@ let ws: WebSocket | null = null;
 let authToken: string | null = null;
 let stopped = false;
 let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
-let attempt = 0;
+let reconnectAttempt = 0;
 
 /**
  * Таймеры heartbeat привязаны к конкретному экземпляру `WebSocket`, а не к модулю:
@@ -49,7 +50,7 @@ function attachGlobalNetworkListeners(): void {
     if (stopped || !authToken) return;
     if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) return;
     clearTimers();
-    attempt = 0;
+    reconnectAttempt = 0;
     openSocket();
   });
 
@@ -70,7 +71,7 @@ function attachGlobalNetworkListeners(): void {
     if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) return;
     if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
     clearTimers();
-    attempt = 0;
+    reconnectAttempt = 0;
     openSocket();
   });
 }
@@ -159,18 +160,6 @@ function dispatchOpen(detail: OpenDetail): void {
   }
 }
 
-/**
- * Jitter ±20% (коэффициент 0.8–1.2) к экспоненциальному бэкаффу.
- * Зачем: после падения ноды API все активные клиенты одновременно
- * получают `close` и через фиксированный `attempt²`-тайминг вернутся
- * строго синхронно → «thundering herd» по API + load balancer.
- * Рандомизация размазывает возврат по окну и снимает пиковую нагрузку.
- */
-function applyReconnectJitter(baseDelayMs: number): number {
-  const factor = 0.8 + Math.random() * 0.4;
-  return Math.round(baseDelayMs * factor);
-}
-
 function scheduleReconnect(): void {
   if (stopped || !authToken) return;
   clearTimers();
@@ -178,14 +167,48 @@ function scheduleReconnect(): void {
     logInfo('reconnect: ждём online (offline)');
     return;
   }
-  attempt += 1;
-  const baseDelay = Math.min(30_000, 1000 * 2 ** Math.min(attempt, 5));
-  const delay = applyReconnectJitter(baseDelay);
-  logInfo(`reconnect: попытка ${attempt} через ${delay}ms (base ${baseDelay}ms ±20% jitter)`);
+  const delay = Math.min(1000 * 2 ** reconnectAttempt, 30_000);
+  reconnectAttempt += 1;
+  logInfo(`reconnect: попытка ${reconnectAttempt} через ${delay}ms`);
   reconnectTimer = setTimeout(() => {
     reconnectTimer = undefined;
     openSocket();
   }, delay);
+}
+
+async function refreshAccessToken(): Promise<void> {
+  const origin =
+    resolveAxiosBaseURL() ||
+    (typeof window !== 'undefined' && window.location?.origin ? window.location.origin : '');
+  if (!origin) {
+    throw new Error('missing base URL for auth refresh');
+  }
+  const response = await fetch(`${origin}${AUTH_API_PREFIX}/me`, {
+    credentials: 'include',
+  });
+  if (response.status !== 200) {
+    throw new Error(`auth refresh failed (${response.status})`);
+  }
+  const user = (await response.json()) as {
+    id?: number;
+    first_name?: string | null;
+    last_name?: string | null;
+    app_role?: string;
+    app_roles?: string[];
+    registration_status?: string;
+    username?: string;
+  };
+  useAuthStore.getState().setSession({
+    token: COOKIE_ONLY_SESSION_TOKEN,
+    firstName: (user.first_name ?? '').trim(),
+    lastName: (user.last_name ?? '').trim(),
+    role: (user.app_role ?? 'member').trim() || 'member',
+    roles: Array.isArray(user.app_roles) ? user.app_roles : undefined,
+    registrationStatus: normalizeRegistrationStatus(user.registration_status),
+    username: (user.username ?? '').trim(),
+    memberId: typeof user.id === 'number' ? user.id : null,
+  });
+  authToken = useAuthStore.getState().token;
 }
 
 function openSocket(): void {
@@ -215,8 +238,8 @@ function openSocket(): void {
   socketTimers.set(socket, timers);
 
   socket.onopen = () => {
-    const wasReconnected = attempt > 0;
-    attempt = 0;
+    const wasReconnected = reconnectAttempt > 0;
+    reconnectAttempt = 0;
     logInfo('open', { wasReconnected });
     try {
       socket.send(JSON.stringify({ type: 'auth', token: authToken }));
@@ -287,9 +310,19 @@ function openSocket(): void {
     if (ws === socket) {
       ws = null;
     }
-    if (!stopped && authToken) {
-      scheduleReconnect();
+    if (stopped || !authToken) return;
+    if (ev.code === 1008) {
+      logWarn('auth rejected, refreshing token before reconnect');
+      void refreshAccessToken()
+        .then(() => {
+          scheduleReconnect();
+        })
+        .catch(() => {
+          void useAuthStore.getState().logout();
+        });
+      return;
     }
+    scheduleReconnect();
   };
 }
 
@@ -331,7 +364,7 @@ export function openRealtimeWs(token: string): void {
     /* ignore */
   }
   ws = null;
-  attempt = 0;
+  reconnectAttempt = 0;
   openSocket();
 }
 

@@ -121,3 +121,72 @@ export async function upsertMemberPrayerForCycle(
     [memberId, cycleIndex, prayerRequest]
   );
 }
+
+/** Слияние: сначала порядок из сохранёнки (только актуальные id), затем остальные из alpha по А–Я. */
+export function mergePrayerCycleRosterOrderIds(
+  alphaIds: readonly number[],
+  stored: readonly number[] | null,
+): number[] {
+  if (!stored?.length) {
+    return [...alphaIds];
+  }
+  const alphaSet = new Set(alphaIds);
+  const seen = new Set<number>();
+  const out: number[] = [];
+  for (const id of stored) {
+    if (alphaSet.has(id) && !seen.has(id)) {
+      out.push(id);
+      seen.add(id);
+    }
+  }
+  for (const id of alphaIds) {
+    if (!seen.has(id)) {
+      out.push(id);
+    }
+  }
+  return out;
+}
+
+export async function getAlphaPrayerCycleRosterMemberIds(): Promise<number[]> {
+  const rosterRes = await query(
+    `SELECT m.id
+     FROM members m
+     WHERE ${PRAYER_CYCLE_MEMBERS_WHERE_M}
+     ORDER BY ${PRAYER_CYCLE_ROSTER_ORDER_SQL}`,
+  );
+  return rosterRes.rows.map((row) => Number((row as { id: unknown }).id));
+}
+
+export async function getPrayerCycleCustomOrderMemberIds(cycleIndex: number): Promise<number[] | null> {
+  const r = await query(
+    `SELECT member_ids FROM prayer_cycle_roster_custom_order WHERE cycle_index = $1`,
+    [cycleIndex],
+  );
+  const raw = (r.rows[0] as { member_ids?: unknown } | undefined)?.member_ids;
+  if (!raw || !Array.isArray(raw)) {
+    return null;
+  }
+  const ids = raw.map((x) => Number(x)).filter((n) => Number.isInteger(n) && n > 0);
+  return ids.length ? ids : null;
+}
+
+export async function upsertPrayerCycleRosterCustomOrder(
+  cycleIndex: number,
+  memberIds: number[],
+): Promise<void> {
+  await query(
+    `INSERT INTO prayer_cycle_roster_custom_order (cycle_index, member_ids, updated_at)
+     VALUES ($1, $2::integer[], NOW())
+     ON CONFLICT (cycle_index)
+     DO UPDATE SET member_ids = EXCLUDED.member_ids, updated_at = NOW()`,
+    [cycleIndex, memberIds],
+  );
+}
+
+export async function getMergedPrayerCycleRosterMemberIdsForCycleIndex(
+  cycleIndex: number,
+): Promise<number[]> {
+  const alphaIds = await getAlphaPrayerCycleRosterMemberIds();
+  const custom = await getPrayerCycleCustomOrderMemberIds(cycleIndex);
+  return mergePrayerCycleRosterOrderIds(alphaIds, custom);
+}

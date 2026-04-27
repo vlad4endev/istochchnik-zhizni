@@ -78,7 +78,7 @@ function isAnalyticsTrackingPost(method: string, path: string): boolean {
   return method === 'POST' && /^\/api\/analytics\/track\/(?:page-view|event)\/?$/.test(path);
 }
 
-/** POST/PATCH каталога (создание и правка — редакторы и админ). */
+/** POST/PATCH каталога (создание и правка — музыканты студии, редакторы и админ). */
 function isSongCatalogModerateMutation(method: string, path: string): boolean {
   if (SAFE_METHODS.has(method)) return false;
   const p = path.split('?')[0];

@@ -147,6 +147,12 @@ CREATE TABLE IF NOT EXISTS member_prayer_by_cycle (
 CREATE INDEX IF NOT EXISTS idx_member_prayer_by_cycle_cycle
   ON member_prayer_by_cycle (cycle_index);
 
+CREATE TABLE IF NOT EXISTS prayer_cycle_roster_custom_order (
+  cycle_index BIGINT NOT NULL PRIMARY KEY,
+  member_ids INTEGER[] NOT NULL,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 CREATE INDEX IF NOT EXISTS idx_member_previous_prayer_needs_manual_member_created
   ON member_previous_prayer_needs_manual (member_id, created_at DESC);
 
@@ -437,7 +443,63 @@ CREATE INDEX IF NOT EXISTS idx_app_logs_scope_created
   ON app_logs (scope, created_at DESC, id DESC);
 
 
--- RPC aligned with src/services/calendarService.ts (overrides + is_active + per-cycle prayer_request).
+CREATE OR REPLACE FUNCTION resolve_prayer_cycle_roster_member_ids(p_cycle_index bigint)
+RETURNS integer[]
+LANGUAGE plpgsql
+STABLE
+SET search_path = public
+AS $fn$
+DECLARE
+  v_alpha integer[];
+  v_custom integer[];
+  v_out integer[];
+  r int;
+  k int;
+BEGIN
+  SELECT array_agg(sub.id ORDER BY sub.sn)
+  INTO v_alpha
+  FROM (
+    SELECT
+      m.id,
+      ROW_NUMBER() OVER (
+        ORDER BY
+          LOWER(COALESCE(NULLIF(trim(m.last_name), ''), split_part(trim(m.name), ' ', 1))) ASC,
+          LOWER(COALESCE(NULLIF(trim(m.first_name), ''), m.name)) ASC,
+          m.id ASC
+      ) AS sn
+    FROM members m
+    WHERE m.is_active = TRUE AND m.in_prayer_cycle = TRUE
+  ) sub;
+
+  IF v_alpha IS NULL THEN
+    RETURN ARRAY[]::integer[];
+  END IF;
+
+  SELECT cro.member_ids
+  INTO v_custom
+  FROM prayer_cycle_roster_custom_order cro
+  WHERE cro.cycle_index = p_cycle_index;
+
+  IF v_custom IS NULL OR cardinality(v_custom) = 0 THEN
+    RETURN v_alpha;
+  END IF;
+
+  v_out := ARRAY[]::integer[];
+  FOREACH r IN ARRAY v_custom LOOP
+    IF r = ANY(v_alpha) AND NOT (r = ANY(v_out)) THEN
+      v_out := v_out || r;
+    END IF;
+  END LOOP;
+  FOREACH k IN ARRAY v_alpha LOOP
+    IF NOT (k = ANY(v_out)) THEN
+      v_out := v_out || k;
+    END IF;
+  END LOOP;
+  RETURN v_out;
+END;
+$fn$;
+
+-- RPC aligned with src/services/calendarService.ts (overrides + is_active + per-cycle prayer_request + custom roster order).
 CREATE OR REPLACE FUNCTION get_daily_prayer(target_date date)
 RETURNS json
 LANGUAGE plpgsql
@@ -450,6 +512,8 @@ DECLARE
   v_index integer;
   v_cycle_index bigint;
   v_member_json json;
+  v_ids integer[];
+  v_pick integer;
 BEGIN
   INSERT INTO global_settings (id, start_date)
   VALUES (1, CURRENT_DATE)
@@ -488,6 +552,13 @@ BEGIN
     RETURN json_build_object('date', target_date, 'member', v_member_json);
   END IF;
 
+  v_ids := resolve_prayer_cycle_roster_member_ids(v_cycle_index);
+  IF v_ids IS NULL OR cardinality(v_ids) = 0 THEN
+    RETURN json_build_object('date', target_date, 'member', NULL);
+  END IF;
+
+  v_pick := v_ids[v_index + 1];
+
   SELECT (jsonb_set(
     to_jsonb(m),
     '{prayer_request}',
@@ -496,12 +567,10 @@ BEGIN
   INTO v_member_json
   FROM members m
   LEFT JOIN member_prayer_by_cycle mpc ON mpc.member_id = m.id AND mpc.cycle_index = v_cycle_index
-  WHERE m.is_active = TRUE AND m.in_prayer_cycle = TRUE
-  ORDER BY
-    LOWER(COALESCE(NULLIF(trim(m.last_name), ''), split_part(trim(m.name), ' ', 1))) ASC,
-    LOWER(COALESCE(NULLIF(trim(m.first_name), ''), m.name)) ASC,
-    m.id ASC
-  LIMIT 1 OFFSET v_index;
+  WHERE m.is_active = TRUE
+    AND m.in_prayer_cycle = TRUE
+    AND m.id = v_pick
+  LIMIT 1;
 
   RETURN json_build_object('date', target_date, 'member', v_member_json);
 END;

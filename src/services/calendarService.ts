@@ -4,6 +4,7 @@ import { addCalendarDaysYmd, formatYmdInTimeZone, getZonedNow } from '../utils/z
 import {
   computeCycleIndex,
   getCycleStartDate,
+  getMergedPrayerCycleRosterMemberIdsForCycleIndex,
   getPrayerCycleSnapshotForDate,
   PRAYER_CYCLE_MEMBERS_WHERE,
   PRAYER_CYCLE_MEMBERS_WHERE_M,
@@ -344,6 +345,11 @@ export async function getPrayerDataByDate(targetDate: string): Promise<PrayerDat
       return [overrideMember];
     }
 
+    const mergedIds = await getMergedPrayerCycleRosterMemberIdsForCycleIndex(cycleIndexForDate);
+    const pickedId = mergedIds[memberIndex];
+    if (pickedId == null) {
+      return [];
+    }
     const result = await query(
       `SELECT m.id, m.name, m.first_name, m.last_name,
               m.in_prayer_cycle AS in_prayer_cycle,
@@ -352,10 +358,9 @@ export async function getPrayerDataByDate(targetDate: string): Promise<PrayerDat
        FROM members m
        LEFT JOIN member_prayer_by_cycle mpc
          ON mpc.member_id = m.id AND mpc.cycle_index = $2
-       WHERE ${PRAYER_CYCLE_MEMBERS_WHERE_M}
-       ORDER BY ${PRAYER_CYCLE_ROSTER_ORDER_SQL}
-       LIMIT 1 OFFSET $1`,
-      [memberIndex, cycleIndexForDate]
+       WHERE m.id = $1
+         AND ${PRAYER_CYCLE_MEMBERS_WHERE_M}`,
+      [pickedId, cycleIndexForDate]
     );
     return result.rows as Member[];
   })();
@@ -412,11 +417,10 @@ async function getMemberAssignmentsForDates(dates: string[]): Promise<NextWeekMe
     return dates.map((date) => ({ date, member: null }));
   }
 
-  const sortedBase = await query(
+  const cycleMembers = await query(
     `SELECT m.id, m.name, m.first_name, m.last_name, m.in_prayer_cycle AS in_prayer_cycle
      FROM members m
-     WHERE ${PRAYER_CYCLE_MEMBERS_WHERE_M}
-     ORDER BY ${PRAYER_CYCLE_ROSTER_ORDER_SQL}`
+     WHERE ${PRAYER_CYCLE_MEMBERS_WHERE_M}`,
   ).then(
     (result) =>
       result.rows as {
@@ -427,6 +431,16 @@ async function getMemberAssignmentsForDates(dates: string[]): Promise<NextWeekMe
         in_prayer_cycle: boolean;
       }[],
   );
+  const memberById = new Map(cycleMembers.map((m) => [m.id, m]));
+  const mergedIdsCache = new Map<number, number[]>();
+  const mergedForCycle = async (cIdx: number): Promise<number[]> => {
+    let cached = mergedIdsCache.get(cIdx);
+    if (!cached) {
+      cached = await getMergedPrayerCycleRosterMemberIdsForCycleIndex(cIdx);
+      mergedIdsCache.set(cIdx, cached);
+    }
+    return cached;
+  };
 
   const overrides = await query(
     `SELECT o.target_date::text AS target_date, m.id
@@ -475,7 +489,9 @@ async function getMemberAssignmentsForDates(dates: string[]): Promise<NextWeekMe
     const diffDays = getDiffDays(date, cycleStartDate);
     const index = ((diffDays % totalMembers) + totalMembers) % totalMembers;
     const cIdx = computeCycleIndex(diffDays, totalMembers);
-    const base = sortedBase[index];
+    const mergedIds = await mergedForCycle(cIdx);
+    const baseId = mergedIds[index];
+    const base = baseId != null ? memberById.get(baseId) : undefined;
     if (!base) {
       out.push({ date, member: null });
       continue;

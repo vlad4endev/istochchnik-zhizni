@@ -66,6 +66,8 @@ export function ChatWindow({
   const nearBottomRef = useRef(true);
   const restoreScrollRef = useRef<{ scrollHeight: number; scrollTop: number } | null>(null);
   const [showSearch, setShowSearch] = useState(false);
+  /** Плашка «к новым», если лента уехала вверх и пришло чужое сообщение. */
+  const [showNewBelow, setShowNewBelow] = useState(false);
   const [showMediaGallery, setShowMediaGallery] = useState(false);
   const nodeByMsgIdRef = useRef<Map<string, HTMLElement>>(new Map());
   const autoJumpUnreadKeyRef = useRef<string | null>(null);
@@ -76,6 +78,8 @@ export function ChatWindow({
   const markReadCommittedRef = useRef<bigint>(0n);
   const scrollMeasureRafRef = useRef<number | null>(null);
   const readObserverRef = useRef<IntersectionObserver | null>(null);
+  /** Последний известный id хвоста ленты — для кнопки «Новые» при входящих вне низа. */
+  const lastTailIdSeenRef = useRef<string | null>(null);
 
   /**
    * A11y-announcer'ы (sr-only live regions) — три независимых буфера.
@@ -379,6 +383,37 @@ export function ChatWindow({
     autoJumpUnreadKeyRef.current = null;
   }, [conversationId]);
 
+  /** Сброс «новые внизу» и якоря хвоста при смене чата. */
+  useEffect(() => {
+    setShowNewBelow(false);
+    lastTailIdSeenRef.current = null;
+  }, [conversationId]);
+
+  /** Если хвост списка сменился, пользователь не у низа — показываем FAB (только входящие). */
+  useEffect(() => {
+    if (messages.length === 0) {
+      lastTailIdSeenRef.current = null;
+      return;
+    }
+    const last = messages[messages.length - 1];
+    if (!last) return;
+    const idStr = String(last.id);
+    const prevTail = lastTailIdSeenRef.current;
+    lastTailIdSeenRef.current = idStr;
+    if (prevTail == null) return;
+    if (idStr === prevTail) return;
+    if (nearBottomRef.current) {
+      setShowNewBelow(false);
+      return;
+    }
+    const isOwn =
+      currentMemberId != null &&
+      last.sender_id != null &&
+      Number(last.sender_id) === Number(currentMemberId);
+    if (isOwn) return;
+    setShowNewBelow(true);
+  }, [messages, currentMemberId]);
+
   const firstUnreadMessageId = useMemo(() => {
     if (isDraft || currentMemberId == null || chatMeta == null) return null;
     const lr = chatMeta.my_last_read_message_id;
@@ -488,6 +523,18 @@ export function ChatWindow({
     };
   }, [conversationId, currentMemberId, flushVisibleReads, isDraft]);
 
+  const scrollToBottomSmooth = useCallback(() => {
+    nearBottomRef.current = true;
+    setShowNewBelow(false);
+    const n = groupedMessages.length;
+    if (n > 0) {
+      rowVirtualizer.scrollToIndex(n - 1, { align: 'end', behavior: 'smooth' });
+    } else {
+      const el = scrollRef.current;
+      if (el) el.scrollTop = el.scrollHeight;
+    }
+  }, [groupedMessages.length, rowVirtualizer]);
+
   const handleScroll = useCallback(() => {
     if (scrollMeasureRafRef.current != null) return;
     scrollMeasureRafRef.current = requestAnimationFrame(() => {
@@ -495,7 +542,9 @@ export function ChatWindow({
       const el = scrollRef.current;
       if (!el) return;
       const pad = 140;
-      nearBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < pad;
+      const near = el.scrollHeight - el.scrollTop - el.clientHeight < pad;
+      nearBottomRef.current = near;
+      if (near) setShowNewBelow(false);
 
       if (el.scrollTop < 72 && hasMore && !loading && !restoreScrollRef.current) {
         restoreScrollRef.current = { scrollHeight: el.scrollHeight, scrollTop: el.scrollTop };
@@ -529,11 +578,13 @@ export function ChatWindow({
 
     if (nearBottomRef.current && listCount > 0) {
       rowVirtualizer.scrollToIndex(listCount - 1, { align: 'end', behavior: 'auto' });
+      setShowNewBelow(false);
       return;
     }
 
     if (nearBottomRef.current && listCount === 0) {
       el.scrollTop = el.scrollHeight;
+      setShowNewBelow(false);
     }
   }, [messages, conversationId, listCount, virtualListTotalSize, rowVirtualizer]);
 
@@ -573,7 +624,7 @@ export function ChatWindow({
 
   const headerSubtitle = useMemo(() => {
     if (typingUsers.length > 0) {
-      return `${typingUsers.map((u: { memberName: string }) => u.memberName.split(' ')[0]).join(', ')} печатает…`;
+      return '';
     }
     if (isDraft) return 'черновик · чат появится после 1 сообщения';
     if (!conv) return '';
@@ -595,15 +646,15 @@ export function ChatWindow({
       return conv.type === 'channel' ? 'канал' : 'группа';
     }
     return 'чат';
-  }, [
-    conv,
-    typingUsers,
-    isOnline,
-    isDraft,
-    memberLastSeenAt,
-    groupParticipantIds.length,
-    onlineInGroupCount,
-  ]);
+  }, [conv, typingUsers, isOnline, isDraft, memberLastSeenAt, groupParticipantIds.length, onlineInGroupCount]);
+
+  const typingFirstNames = useMemo(
+    () =>
+      typingUsers
+        .map((u: { memberName: string }) => u.memberName.split(' ')[0])
+        .filter((n: string) => Boolean(n)),
+    [typingUsers],
+  );
 
   const headerStatusClass =
     typingUsers.length > 0
@@ -639,8 +690,8 @@ export function ChatWindow({
       {/* Safe-area только на корне (.tg-chat-window) в messenger.css для iOS — не дублировать здесь */}
       <header className="sticky top-0 z-[100] w-full min-w-0 shrink-0 border-b border-gray-200/60 bg-white">
         <div className="mx-auto flex min-h-[52px] w-full min-w-0 max-w-full items-center gap-1 px-1 py-1.5 sm:gap-2 sm:px-2 sm:py-2">
-          {/* Слева: «Назад» (как в Telegram / iOS). */}
-          <div className="flex shrink-0 items-center">
+          {/* Слева: «Назад» — только мобилка; на ПК список чатов всегда слева. */}
+          <div className="flex shrink-0 items-center md:hidden">
             <button
               type="button"
               onClick={onBack}
@@ -681,7 +732,19 @@ export function ChatWindow({
             </div>
             <div className="min-w-0 flex-1 overflow-hidden">
               <div className="truncate text-[16px] font-semibold leading-[1.2] text-gray-900 sm:text-[17px]">{displayName}</div>
-              {headerSubtitle ? (
+              {typingUsers.length > 0 ? (
+                <div
+                  className={['truncate text-xs leading-tight sm:text-[13px]', headerStatusClass].join(' ')}
+                  aria-label={`${typingFirstNames.join(', ')} печатает`}
+                >
+                  <span>{typingFirstNames.join(', ')} печатает</span>
+                  <span className="tg-typing-dots" aria-hidden>
+                    <span className="tg-typing-dots__dot" />
+                    <span className="tg-typing-dots__dot" />
+                    <span className="tg-typing-dots__dot" />
+                  </span>
+                </div>
+              ) : headerSubtitle ? (
                 <div className={['truncate text-xs leading-tight sm:text-[13px]', headerStatusClass].join(' ')}>
                   {headerSubtitle}
                 </div>
@@ -773,12 +836,23 @@ export function ChatWindow({
         </div>
 
         <div
-          className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto bg-transparent px-3 py-3 sm:gap-3 sm:p-4"
+          className="relative flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto bg-transparent px-3 py-3 sm:gap-3 sm:p-4"
           ref={scrollRef}
           onScroll={handleScroll}
           role="log"
           aria-label="Сообщения в чате"
         >
+        {showNewBelow ? (
+          <button
+            type="button"
+            className="tg-scroll-new-fab"
+            onClick={scrollToBottomSmooth}
+            aria-label="Прокрутить к новым сообщениям"
+          >
+            <span aria-hidden>↓</span>
+            <span>Новые</span>
+          </button>
+        ) : null}
         {hasMore ? (
           <div className="flex justify-center">
             <div className="rounded-full bg-white/90 px-3 py-1 text-[11px] font-semibold text-stone-600 shadow-sm ring-1 ring-stone-200/50">
@@ -883,7 +957,14 @@ export function ChatWindow({
 
       {showSearch && typeof document !== 'undefined'
         ? createPortal(
-            <SearchChat conversationId={conversationId} onClose={() => setShowSearch(false)} />,
+            <SearchChat
+              conversationId={conversationId}
+              onClose={() => setShowSearch(false)}
+              onJumpToMessage={(id) => {
+                jumpToMessage(id);
+                setShowSearch(false);
+              }}
+            />,
             document.body,
           )
         : null}

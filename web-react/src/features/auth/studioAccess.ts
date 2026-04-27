@@ -7,7 +7,7 @@ export function canAccessStudioRole(role: AuthRole | undefined): boolean {
 
 export function canModerateSongCatalog(role: AuthRole | undefined): boolean {
   const r = (role ?? 'member').toLowerCase();
-  return r === 'editor' || r === 'admin';
+  return r === 'musician' || r === 'editor' || r === 'admin';
 }
 
 /** Удаление песни из каталога (студия / песенник): музыкант, редактор, админ. */

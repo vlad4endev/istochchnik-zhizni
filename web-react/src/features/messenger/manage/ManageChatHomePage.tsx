@@ -1,15 +1,27 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { LuCake, LuCamera, LuChevronRight, LuPhone, LuPencil, LuShield, LuSettings2, LuUsers } from 'react-icons/lu';
+import {
+  LuCake,
+  LuChevronRight,
+  LuImagePlus,
+  LuLock,
+  LuPhone,
+  LuPencil,
+  LuShield,
+  LuSettings2,
+  LuUsers,
+} from 'react-icons/lu';
 import * as api from '../api/messengerApi';
 import { compressImageForMessengerUpload } from '../compressImageForUpload';
 import { useChatStore } from '../chatStore';
 import { formatMessengerLastSeen } from '../lastSeenUtils';
 import { resolvePublicUrl } from '../../../lib/resolvePublicUrl';
 import { emitAppToast } from '../../../lib/uiFeedback';
+import { useAuthStore } from '../../auth/authStore';
 import { ManageScreenShell, ManageSettingsGroup } from './ManageScreenShell';
 import { AppAvatar } from '../../../components/AppAvatar';
 import { getAvatarInitial } from '../avatarUtils';
+import { canManageGroupMessenger, isAppAdministratorRole } from './messengerManageAccess';
 
 function GroupManageControls({
   chatId,
@@ -65,7 +77,7 @@ function GroupManageControls({
   const titleChanged = draftTitle.trim() !== (initialTitle || '').trim();
 
   return (
-    <div className="mt-3 space-y-2">
+    <div className="mt-4 space-y-4 rounded-2xl border border-primary/15 bg-gradient-to-b from-white to-stone-50/80 p-4 shadow-sm ring-1 ring-stone-200/60 sm:p-5">
       <input
         ref={fileRef}
         type="file"
@@ -73,36 +85,45 @@ function GroupManageControls({
         className="hidden"
         onChange={(e) => void onPickPhoto(e.target.files?.[0] ?? null)}
       />
-      <div className="flex flex-wrap items-center gap-2">
+      <div>
+        <p className="text-[11px] font-extrabold uppercase tracking-wide text-primary/90">Оформление</p>
+        <p className="mt-1 text-[13px] leading-snug text-stone-600">Аватар и название видят все участники.</p>
+      </div>
+      <div className="flex flex-wrap gap-2">
         <button
           type="button"
           onClick={() => fileRef.current?.click()}
           disabled={uploading}
-          className="inline-flex min-h-[40px] items-center gap-2 rounded-xl bg-stone-100 px-3 py-2 text-xs font-extrabold text-stone-800 ring-1 ring-stone-200/80 transition hover:bg-stone-200/80 disabled:opacity-50"
+          className="inline-flex min-h-[44px] items-center gap-2 rounded-xl bg-white px-4 py-2.5 text-sm font-bold text-stone-800 shadow-sm ring-1 ring-stone-200/90 transition hover:bg-stone-50 active:scale-[0.99] disabled:opacity-50"
         >
-          <LuCamera size={18} />
+          <LuImagePlus size={18} className="text-primary" aria-hidden />
           {uploading ? 'Загрузка…' : 'Сменить фото'}
         </button>
       </div>
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-        <input
-          value={draftTitle}
-          onChange={(e) => setDraftTitle(e.target.value)}
-          placeholder="Название чата"
-          maxLength={120}
-          className="min-h-[44px] min-w-0 flex-1 rounded-xl border border-stone-200 bg-white px-3 py-2 text-sm font-semibold text-stone-900 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
-        />
-        <button
-          type="button"
-          onClick={() => void saveTitle()}
-          disabled={saving || !titleChanged || !draftTitle.trim()}
-          className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-extrabold text-white shadow-sm transition disabled:opacity-45"
-        >
-          <LuPencil size={18} />
-          {saving ? 'Сохранение…' : 'Сохранить название'}
-        </button>
+      <div className="space-y-2">
+        <label className="block text-[12px] font-bold text-stone-500" htmlFor="group-chat-title-input">
+          Название
+        </label>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-stretch">
+          <input
+            id="group-chat-title-input"
+            value={draftTitle}
+            onChange={(e) => setDraftTitle(e.target.value)}
+            placeholder="Название группы или канала"
+            maxLength={120}
+            className="min-h-[48px] min-w-0 flex-1 rounded-xl border border-stone-200 bg-white px-4 py-3 text-[16px] font-semibold text-stone-900 shadow-inner outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
+          />
+          <button
+            type="button"
+            onClick={() => void saveTitle()}
+            disabled={saving || !titleChanged || !draftTitle.trim()}
+            className="inline-flex min-h-[48px] shrink-0 items-center justify-center gap-2 rounded-xl bg-primary px-5 py-3 text-[15px] font-extrabold text-white shadow-md transition hover:opacity-95 active:scale-[0.99] disabled:pointer-events-none disabled:opacity-40"
+          >
+            <LuPencil size={18} aria-hidden />
+            {saving ? 'Сохранение…' : 'Сохранить'}
+          </button>
+        </div>
       </div>
-      <p className="text-[11px] font-semibold text-stone-400">Менять название и фото могут только администраторы с правом «управление чатом».</p>
     </div>
   );
 }
@@ -117,7 +138,12 @@ function axiosMessage(err: unknown): string {
 
 export function ManageChatHomePage() {
   const { chatId } = useParams<{ chatId: string }>();
-  const me = useChatStore((s) => s.currentMemberId);
+  const authRole = useAuthStore((s) => s.role);
+  const authRoles = useAuthStore((s) => s.roles);
+  const isAppAdministrator = useMemo(
+    () => isAppAdministratorRole(authRole, authRoles),
+    [authRole, authRoles],
+  );
   const onlineMembers = useChatStore((s) => s.onlineMembers);
   const memberLastSeenAt = useChatStore((s) => s.memberLastSeenAt);
   const conversations = useChatStore((s) => s.conversations);
@@ -183,9 +209,8 @@ export function ManageChatHomePage() {
 
   const subtitle = meta?.type === 'channel' ? 'Канал' : meta?.type === 'group' ? 'Группа' : 'Личный чат';
   const isPrivate = conv?.type === 'private';
-  const canManageGroup =
-    !isPrivate &&
-    Boolean(meta?.my_effective_permissions?.can_manage_chat === true);
+  const canEditGroupAppearance =
+    !isPrivate && canManageGroupMessenger(meta?.my_effective_permissions, isAppAdministrator);
   const groupAvatarSrc =
     resolvePublicUrl(conv?.avatar_url ?? meta?.avatar_url ?? null) ?? null;
   const isOnline = privateProfile ? onlineMembers.has(privateProfile.id) : false;
@@ -207,24 +232,26 @@ export function ManageChatHomePage() {
   return (
     <ManageScreenShell>
       {!isPrivate ? (
-        <ManageSettingsGroup className="mt-4">
-          <div className="flex items-start gap-4 p-4">
-            <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-full bg-primary/10 ring-1 ring-gray-200/80">
+        <ManageSettingsGroup className="mt-4 overflow-hidden">
+          <div className="flex items-start gap-4 p-4 sm:gap-5 sm:p-5">
+            <div className="relative h-[4.5rem] w-[4.5rem] shrink-0 overflow-hidden rounded-2xl bg-gradient-to-br from-primary/15 to-primary/5 shadow-md ring-2 ring-white">
               <AppAvatar
                 src={groupAvatarSrc}
                 className="h-full w-full"
                 imgClassName="h-full w-full object-cover"
                 fallback={
                   <div className="grid h-full w-full place-items-center text-primary">
-                    <LuUsers size={26} />
+                    <LuUsers size={28} />
                   </div>
                 }
               />
             </div>
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-[17px] font-semibold text-gray-900">{title}</p>
-              <p className="mt-0.5 text-[13px] text-gray-500">{subtitle}</p>
-              {canManageGroup && chatId ? (
+            <div className="min-w-0 flex-1 pt-0.5">
+              <p className="truncate text-[18px] font-bold tracking-tight text-gray-900">{title}</p>
+              <p className="mt-1 inline-flex items-center rounded-full bg-stone-100 px-2.5 py-0.5 text-[12px] font-semibold text-stone-600">
+                {subtitle}
+              </p>
+              {canEditGroupAppearance && chatId ? (
                 <GroupManageControls
                   chatId={chatId}
                   initialTitle={meta?.title ?? conv?.title ?? ''}
@@ -238,8 +265,25 @@ export function ManageChatHomePage() {
                     }
                   }}
                 />
-              ) : me ? (
-                <p className="mt-1 text-xs text-gray-400">Ваш ID: {me}</p>
+              ) : !loading && !err ? (
+                <div
+                  className="mt-4 flex gap-3 rounded-2xl border border-amber-200/90 bg-amber-50/95 p-4 shadow-sm"
+                  role="status"
+                >
+                  <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-amber-100 text-amber-800">
+                    <LuLock size={20} aria-hidden />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[14px] font-bold leading-snug text-amber-950">Редактирование недоступно</p>
+                    <p className="mt-1.5 text-[13px] leading-relaxed text-amber-900/85">
+                      Менять название, фото и настройки могут только{' '}
+                      <strong className="font-semibold text-amber-950">администраторы приложения</strong> или участники с
+                      включённым правом <strong className="font-semibold text-amber-950">«Управление чатом»</strong> в
+                      списке участников. У новых участников это право по умолчанию выключено — его может включить владелец
+                      или админ чата.
+                    </p>
+                  </div>
+                </div>
               ) : null}
             </div>
           </div>

@@ -916,6 +916,22 @@ export async function isMemberInConversation(
 }
 
 /**
+ * Глобальная роль в приложении (`members.app_role`): администратор может управлять группами/каналами
+ * даже без персонального флага «управление чатом» у участника.
+ */
+export async function isMemberAppAdministrator(memberId: number): Promise<boolean> {
+  try {
+    const result = await dbQuery(
+      `SELECT LOWER(TRIM(COALESCE(app_role, ''))) AS r FROM members WHERE id = $1 LIMIT 1`,
+      [memberId],
+    );
+    return String(result.rows[0]?.r ?? '').trim() === 'admin';
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Get participant role in a conversation.
  */
 export async function getParticipantRole(

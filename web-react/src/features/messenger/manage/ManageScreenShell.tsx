@@ -16,7 +16,7 @@ export function ManageScreenShell({ children, trailing }: ManageScreenShellProps
 
   return (
     <div className="w-full bg-[#F2F2F7] pb-4">
-      <div className="mx-auto w-full max-w-xl px-4 pb-24 pt-3">
+      <div className="mx-auto w-full max-w-xl px-4 pb-24 pt-3 md:max-w-2xl md:px-6 lg:max-w-3xl">
         <div className="flex items-center justify-between gap-2">
           <button
             type="button"

@@ -133,6 +133,7 @@ export function ChatInput({
   useEffect(() => {
     const draft = drafts[conversationId] || '';
     setContent(draft);
+    requestAnimationFrame(() => scheduleTextareaAutosize(textareaRef.current));
   }, [conversationId, drafts]);
 
   useEffect(() => {
@@ -615,6 +616,22 @@ export function ChatInput({
     textareaRef.current?.focus();
   };
 
+  /** Вставка из буфера / drag-and-drop — та же ветка, что и выбор файла из меню. */
+  const ingestExternalFiles = (files: File[]) => {
+    if (!uploadsHealthy || files.length === 0) return;
+    const allImage = files.every(
+      (f) =>
+        (f.type || '').startsWith('image/') ||
+        IMAGE_NAME_EXT_RE.test(String(f.name || '').trim()),
+    );
+    filePickerModeRef.current = allImage ? 'image' : 'file';
+    const dt = new DataTransfer();
+    for (const f of files) {
+      dt.items.add(f);
+    }
+    void handleFileSelected(dt.files);
+  };
+
   const pickMention = (memberId: number) => {
     const el = textareaRef.current;
     if (!el) return;
@@ -982,7 +999,21 @@ export function ChatInput({
         </p>
       ) : null}
 
-      <div className="tg-input-area min-w-0 items-center gap-2 sm:gap-2.5">
+      <div
+        className="tg-input-area min-w-0 items-center gap-2 sm:gap-2.5"
+        onDragOver={(e) => {
+          if (!uploadsHealthy) return;
+          e.preventDefault();
+          e.dataTransfer.dropEffect = 'copy';
+        }}
+        onDrop={(e) => {
+          if (!uploadsHealthy) return;
+          e.preventDefault();
+          const fl = e.dataTransfer?.files;
+          if (!fl?.length) return;
+          ingestExternalFiles(Array.from(fl));
+        }}
+      >
         {mentionOpen && mentionFiltered.length > 0 ? (
           <div
             className="mb-1 max-h-40 w-full overflow-y-auto rounded-2xl border border-gray-200 bg-white py-1 shadow-md"
@@ -1083,6 +1114,12 @@ export function ChatInput({
             value={content}
             onChange={handleChange}
             onKeyDown={handleKeyDown}
+            onPaste={(e) => {
+              const fl = e.clipboardData?.files;
+              if (!fl || fl.length === 0) return;
+              e.preventDefault();
+              ingestExternalFiles(Array.from(fl));
+            }}
           />
           <div ref={emojiRef} className="relative z-[5000]">
             <button

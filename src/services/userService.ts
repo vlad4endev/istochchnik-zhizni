@@ -6,9 +6,14 @@ import { getPrayerDataByDate } from './calendarService';
 import {
   getCurrentCycleIndexForUpsert,
   getCycleStartDate,
+  getPrayerCycleSnapshotForDate,
+  getAlphaPrayerCycleRosterMemberIds,
+  getPrayerCycleCustomOrderMemberIds,
+  mergePrayerCycleRosterOrderIds,
+  upsertMemberPrayerForCycle,
+  upsertPrayerCycleRosterCustomOrder,
   PRAYER_CYCLE_MEMBERS_WHERE_M,
   PRAYER_CYCLE_ROSTER_ORDER_SQL,
-  upsertMemberPrayerForCycle,
 } from './prayerCycleService';
 
 export interface AppUser {
@@ -161,6 +166,10 @@ export interface PrayerCycleRosterSnapshot {
   total: number;
   today_index: number;
   today_member_id: number | null;
+  /** Индекс цикла для anchor_date (0-based). */
+  cycle_index: number;
+  /** Есть сохранённый порядок на этот цикл (на следующем цикле записи нет — снова А–Я). */
+  has_custom_roster_order: boolean;
   roster: PrayerCycleRosterEntry[];
 }
 
@@ -876,14 +885,34 @@ export async function getPrayerCycleRosterSnapshot(anchorDateYmd: string): Promi
     name: unknown;
     is_active: unknown;
   }[];
-  const roster: PrayerCycleRosterEntry[] = rows.map((r, i) => ({
-    id: Number(r.id),
-    roster_index: i,
-    first_name: r.first_name != null ? String(r.first_name) : null,
-    last_name: r.last_name != null ? String(r.last_name) : null,
-    name: String(r.name ?? ''),
-    is_active: Boolean(r.is_active),
-  }));
+  const alphaIds = rows.map((r) => Number(r.id));
+  const rowById = new Map(
+    rows.map((r) => [
+      Number(r.id),
+      r as {
+        id: unknown;
+        first_name: unknown;
+        last_name: unknown;
+        name: unknown;
+        is_active: unknown;
+      },
+    ]),
+  );
+  const snap = await getPrayerCycleSnapshotForDate(anchorDate);
+  const cycleIndex = snap?.cycle_index ?? 0;
+  const custom = await getPrayerCycleCustomOrderMemberIds(cycleIndex);
+  const mergedIds = mergePrayerCycleRosterOrderIds(alphaIds, custom);
+  const roster: PrayerCycleRosterEntry[] = mergedIds.map((id, roster_index) => {
+    const r = rowById.get(id)!;
+    return {
+      id,
+      roster_index,
+      first_name: r.first_name != null ? String(r.first_name) : null,
+      last_name: r.last_name != null ? String(r.last_name) : null,
+      name: String(r.name ?? ''),
+      is_active: Boolean(r.is_active),
+    };
+  });
   const n = roster.length;
   const todayIndex = n > 0 ? ((diffDays % n) + n) % n : 0;
   const todayMemberId = n > 0 ? roster[todayIndex]?.id ?? null : null;
@@ -894,6 +923,8 @@ export async function getPrayerCycleRosterSnapshot(anchorDateYmd: string): Promi
     roster,
     today_index: todayIndex,
     today_member_id: todayMemberId,
+    cycle_index: cycleIndex,
+    has_custom_roster_order: Boolean(custom?.length),
   };
 }
 
@@ -902,23 +933,14 @@ export async function anchorPrayerCycleMemberOnDate(
   anchorDateYmd: string,
 ): Promise<AnchorPrayerCycleMemberResult> {
   const anchorDate = normalizeIsoDate(anchorDateYmd.trim());
-  const idxRes = await query(
-    `WITH ranked AS (
-       SELECT
-         m.id,
-         (ROW_NUMBER() OVER (ORDER BY ${PRAYER_CYCLE_ROSTER_ORDER_SQL}) - 1)::int AS idx
-       FROM members m
-       WHERE ${PRAYER_CYCLE_MEMBERS_WHERE_M}
-     )
-     SELECT idx FROM ranked WHERE id = $1`,
-    [memberId],
-  );
-  if (idxRes.rows.length === 0) {
+  const snap = await getPrayerCycleSnapshotForDate(anchorDate);
+  const cycleIdx = snap?.cycle_index ?? 0;
+  const alphaIds = await getAlphaPrayerCycleRosterMemberIds();
+  const custom = await getPrayerCycleCustomOrderMemberIds(cycleIdx);
+  const mergedIds = mergePrayerCycleRosterOrderIds(alphaIds, custom);
+  const rosterIndex = mergedIds.indexOf(memberId);
+  if (rosterIndex < 0) {
     throw new Error('Member not in active prayer cycle');
-  }
-  const rosterIndex = Number((idxRes.rows[0] as { idx: number }).idx);
-  if (!Number.isInteger(rosterIndex) || rosterIndex < 0) {
-    throw new Error('Invalid roster index');
   }
   const newStartDate = addUtcDaysToIsoDate(anchorDate, -rosterIndex);
   await query(
@@ -933,6 +955,38 @@ export async function anchorPrayerCycleMemberOnDate(
     roster_index: rosterIndex,
     member_id: memberId,
   };
+}
+
+/**
+ * Сохранить порядок участников только для цикла, в который попадает anchor_date.
+ * Состав должен совпадать с активными участниками цикла (как у снимка roster).
+ */
+export async function savePrayerCycleRosterCustomOrderForAnchorDate(
+  anchorDateYmd: string,
+  orderedMemberIds: number[],
+): Promise<{ cycle_index: number }> {
+  const anchorDate = normalizeIsoDate(anchorDateYmd.trim());
+  const snap = await getPrayerCycleSnapshotForDate(anchorDate);
+  if (!snap || snap.member_count <= 0) {
+    throw new Error('Empty prayer cycle roster');
+  }
+  const alphaIds = await getAlphaPrayerCycleRosterMemberIds();
+  if (orderedMemberIds.length !== alphaIds.length) {
+    throw new Error('Roster size mismatch');
+  }
+  const alphaSet = new Set(alphaIds);
+  const seen = new Set<number>();
+  for (const id of orderedMemberIds) {
+    if (!alphaSet.has(id)) {
+      throw new Error('Invalid roster member');
+    }
+    if (seen.has(id)) {
+      throw new Error('Duplicate roster member');
+    }
+    seen.add(id);
+  }
+  await upsertPrayerCycleRosterCustomOrder(snap.cycle_index, orderedMemberIds);
+  return { cycle_index: snap.cycle_index };
 }
 
 export async function setOneTimeMemberDateOverride(

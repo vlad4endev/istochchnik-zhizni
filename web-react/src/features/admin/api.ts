@@ -181,6 +181,8 @@ export interface PrayerCycleRosterSnapshot {
   total: number;
   today_index: number;
   today_member_id: number | null;
+  cycle_index: number;
+  has_custom_roster_order: boolean;
   roster: PrayerCycleRosterEntry[];
 }
 
@@ -188,6 +190,14 @@ export async function fetchPrayerCycleRoster(date: string): Promise<PrayerCycleR
   const { data } = await apiClient.get<PrayerCycleRosterSnapshot>(`${USERS}/prayer-cycle/roster`, {
     params: { date },
   });
+  return data;
+}
+
+export async function savePrayerCycleRosterOrder(body: {
+  anchor_date: string;
+  ordered_member_ids: number[];
+}): Promise<{ cycle_index: number }> {
+  const { data } = await apiClient.put<{ cycle_index: number }>(`${USERS}/prayer-cycle/roster-order`, body);
   return data;
 }
 

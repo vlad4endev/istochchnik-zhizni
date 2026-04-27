@@ -620,7 +620,8 @@ router.delete('/conversations/:id/participants/:memberId', async (req: Request, 
     // Allow: owner/admin removing anyone, or member removing themselves
     if (targetId !== userId) {
       const role = await svc.getParticipantRole(convId, userId);
-      if (!role || role === 'member') {
+      const appAdmin = await svc.isMemberAppAdministrator(userId);
+      if ((!role || role === 'member') && !appAdmin) {
         res.status(403).json({ error: 'Only admins can remove participants' });
         return;
       }

@@ -1,4 +1,4 @@
-import type { Server } from 'node:http';
+import type { IncomingMessage, Server } from 'node:http';
 import { existsSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import Redis from 'ioredis';
@@ -122,7 +122,7 @@ interface AuthenticatedClient {
   memberName: string;
   /** Conversation IDs this client has joined */
   rooms: Set<string>;
-  isAlive: boolean;
+  lastPongAtMs: number;
 }
 
 /** All authenticated clients indexed by WebSocket instance */
@@ -136,15 +136,72 @@ const onlineMembers = new Set<number>();
 /**
  * Нативный WebSocket ping (ответ — pong от клиента).
  *
- * 30 секунд — компромисс между:
+ * 25 секунд — компромисс между:
  *   - типичным nginx/Cloudflare `proxy_read_timeout` (60 с) — ниже него нужно успеть;
  *   - клиентским pong-deadline 35 с (`realtimeWsClient.ts`) — сервер должен быть
  *     не агрессивнее клиента, иначе на 2G/3G возникает «реконнект-шторм»:
  *     RTT + потеря пакета легко превышает 15 с, и прежнее значение рвало
  *     соединения, которые клиент всё ещё считал живыми.
  */
-const HEARTBEAT_INTERVAL_MS = 30_000;
+const HEARTBEAT_INTERVAL_MS = 25_000;
+const PONG_TIMEOUT_MS = 10_000;
+const HEARTBEAT_STALE_AFTER_MS = HEARTBEAT_INTERVAL_MS + PONG_TIMEOUT_MS;
 const MAX_WS_MESSAGE_BYTES = 64 * 1024;
+
+type AuthFailRecord = { count: number; windowStartedAt: number; until: number };
+const AUTH_SPAM_WINDOW_MS = 60_000;
+const AUTH_SPAM_BLOCK_MS = 60_000;
+const AUTH_SPAM_LIMIT = 5;
+const authFailMap = new Map<string, AuthFailRecord>();
+
+function getClientIp(req: IncomingMessage): string {
+  const xff = req.headers['x-forwarded-for'];
+  if (typeof xff === 'string' && xff.trim()) {
+    return xff.split(',')[0]?.trim() || 'unknown';
+  }
+  if (Array.isArray(xff) && xff.length > 0) {
+    return String(xff[0]).split(',')[0]?.trim() || 'unknown';
+  }
+  return req.socket.remoteAddress ?? 'unknown';
+}
+
+function isAuthSpam(ip: string): boolean {
+  const now = Date.now();
+  const rec = authFailMap.get(ip);
+  return Boolean(rec && now < rec.until);
+}
+
+function recordAuthFail(ip: string): void {
+  const now = Date.now();
+  const rec = authFailMap.get(ip) ?? { count: 0, windowStartedAt: now, until: 0 };
+  if (now - rec.windowStartedAt > AUTH_SPAM_WINDOW_MS) {
+    rec.count = 0;
+    rec.windowStartedAt = now;
+    rec.until = 0;
+  }
+  rec.count += 1;
+  if (rec.count >= AUTH_SPAM_LIMIT) {
+    rec.until = now + AUTH_SPAM_BLOCK_MS;
+    rec.count = 0;
+    rec.windowStartedAt = now;
+    console.warn(`[realtime] auth spam block: ${ip} for 60s`);
+  }
+  authFailMap.set(ip, rec);
+}
+
+function clearAuthFail(ip: string): void {
+  authFailMap.delete(ip);
+}
+
+const authFailCleanupTimer = setInterval(() => {
+  const now = Date.now();
+  for (const [ip, rec] of authFailMap) {
+    if (now > rec.until + AUTH_SPAM_WINDOW_MS) {
+      authFailMap.delete(ip);
+    }
+  }
+}, 5 * 60_000);
+authFailCleanupTimer.unref?.();
 
 let safeSendFailLogLastMs = 0;
 function logSafeSendFailureThrottled(err: unknown): void {
@@ -160,8 +217,9 @@ function logSafeSendFailureThrottled(err: unknown): void {
 export function attachRealtimeWebSocket(server: Server): void {
   const wss = new WebSocketServer({ noServer: true });
   const heartbeatTimer = setInterval(() => {
+    const now = Date.now();
     for (const [, client] of clientsByWs) {
-      if (!client.isAlive) {
+      if (now - client.lastPongAtMs > HEARTBEAT_STALE_AFTER_MS) {
         console.warn('[realtime] heartbeat: нет pong, разрываю сокет', { memberId: client.memberId });
         removeClient(client.ws);
         try {
@@ -171,7 +229,6 @@ export function attachRealtimeWebSocket(server: Server): void {
         }
         continue;
       }
-      client.isAlive = false;
       try {
         client.ws.ping();
       } catch (e) {
@@ -201,14 +258,14 @@ export function attachRealtimeWebSocket(server: Server): void {
     }
 
     wss.handleUpgrade(request, socket, head, (ws) => {
-      void handleNewSocket(ws);
+      void handleNewSocket(ws, getClientIp(request));
     });
   });
 }
 
 const AUTH_TIMEOUT_MS = 12_000;
 
-async function handleNewSocket(ws: WebSocket): Promise<void> {
+async function handleNewSocket(ws: WebSocket, ip: string): Promise<void> {
   let closed = false;
 
   const fail = (code: number, reason: string) => {
@@ -221,7 +278,16 @@ async function handleNewSocket(ws: WebSocket): Promise<void> {
     }
   };
 
-  const timer = setTimeout(() => fail(1008, 'auth timeout'), AUTH_TIMEOUT_MS);
+  const timer = setTimeout(() => {
+    recordAuthFail(ip);
+    fail(1008, 'auth timeout');
+  }, AUTH_TIMEOUT_MS);
+
+  if (isAuthSpam(ip)) {
+    clearTimeout(timer);
+    fail(1008, 'auth spam blocked');
+    return;
+  }
 
   ws.once('message', async (raw) => {
     if (closed) return;
@@ -230,16 +296,19 @@ async function handleNewSocket(ws: WebSocket): Promise<void> {
       const msg = JSON.parse(text) as { type?: string; token?: string };
       if (msg.type !== 'auth' || typeof msg.token !== 'string' || !msg.token.trim()) {
         clearTimeout(timer);
+        recordAuthFail(ip);
         fail(1008, 'invalid auth');
         return;
       }
       const sessionOk = await resolveSessionByToken(msg.token.trim());
       if (!sessionOk) {
         clearTimeout(timer);
+        recordAuthFail(ip);
         console.warn('[realtime] auth rejected (invalid or expired token)');
         fail(1008, 'unauthorized');
         return;
       }
+      clearAuthFail(ip);
       clearTimeout(timer);
       if (closed) return;
 
@@ -249,7 +318,7 @@ async function handleNewSocket(ws: WebSocket): Promise<void> {
         memberId: sessionOk.userId,
         memberName: '',
         rooms: new Set(),
-        isAlive: true,
+        lastPongAtMs: Date.now(),
       };
 
       // Try to fetch member name
@@ -326,7 +395,7 @@ async function handleNewSocket(ws: WebSocket): Promise<void> {
         }
       });
       ws.on('pong', () => {
-        client.isAlive = true;
+        client.lastPongAtMs = Date.now();
       });
 
       ws.on('close', (code, reason) => {

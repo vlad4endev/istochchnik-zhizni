@@ -4,6 +4,8 @@ import { fetchVapidPublicKey } from '../../profile/api';
 
 /** Последний известный публичный VAPID с сервера — чтобы при смене ключей пересоздать подписку. */
 const LS_VAPID_PUBLIC_KEY = 'web_push_vapid_public_key';
+let pushSyncInFlight: Promise<void> | null = null;
+let lastSyncedEndpoint: string | null = null;
 
 function subscriptionToJsonBody(sub: PushSubscription): Record<string, unknown> {
   let body: Record<string, unknown>;
@@ -62,6 +64,30 @@ function readPushSubscribeError(err: unknown): string {
 }
 
 export async function initMessengerPushNotifications(): Promise<void> {
+  if (pushSyncInFlight) {
+    await pushSyncInFlight;
+    return;
+  }
+  pushSyncInFlight = initMessengerPushNotificationsInternal();
+  try {
+    await pushSyncInFlight;
+  } finally {
+    pushSyncInFlight = null;
+  }
+}
+
+async function syncSubscriptionWithServer(
+  subscription: PushSubscription,
+  vapidPublicKey: string,
+): Promise<void> {
+  const endpoint = subscription.endpoint;
+  if (lastSyncedEndpoint === endpoint) return;
+  await apiClient.post('/api/notifications/subscribe', subscriptionToJsonBody(subscription));
+  localStorage.setItem(LS_VAPID_PUBLIC_KEY, vapidPublicKey);
+  lastSyncedEndpoint = endpoint;
+}
+
+async function initMessengerPushNotificationsInternal(): Promise<void> {
   if (!('serviceWorker' in navigator)) return;
   if (!('PushManager' in window)) return;
 
@@ -100,8 +126,7 @@ export async function initMessengerPushNotifications(): Promise<void> {
 
     if (existing) {
       try {
-        await apiClient.post('/api/notifications/subscribe', subscriptionToJsonBody(existing));
-        localStorage.setItem(LS_VAPID_PUBLIC_KEY, vapidPublicKey);
+        await syncSubscriptionWithServer(existing, vapidPublicKey);
       } catch (err) {
         console.error('[push] POST /subscribe (sync existing) failed:', err);
         emitAppToast(readPushSubscribeError(err), 'error');
@@ -116,9 +141,8 @@ export async function initMessengerPushNotifications(): Promise<void> {
       applicationServerKey: convertedVapidKey,
     });
 
-    localStorage.setItem(LS_VAPID_PUBLIC_KEY, vapidPublicKey);
     try {
-      await apiClient.post('/api/notifications/subscribe', subscriptionToJsonBody(subscription));
+      await syncSubscriptionWithServer(subscription, vapidPublicKey);
     } catch (err) {
       console.error('[push] POST /subscribe (new) failed:', err);
       emitAppToast(readPushSubscribeError(err), 'error');
@@ -128,6 +152,7 @@ export async function initMessengerPushNotifications(): Promise<void> {
         /* ignore */
       }
       localStorage.removeItem(LS_VAPID_PUBLIC_KEY);
+      lastSyncedEndpoint = null;
     }
   } catch (err) {
     console.error('[push] initMessengerPushNotifications failed:', err);

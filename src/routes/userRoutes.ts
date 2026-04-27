@@ -18,6 +18,7 @@ import {
   setOneTimeMemberDateOverrideHandler,
   anchorPrayerCycleMemberHandler,
   getPrayerCycleRosterHandler,
+  savePrayerCycleRosterOrderHandler,
   startPrayerCycleHandler,
   updateUserHandler,
   bulkCreateUsersHandler,
@@ -40,6 +41,7 @@ router.post('/bulk', bulkCreateUsersHandler);
 router.post('/merge-duplicates', mergeDuplicateMembersHandler);
 router.post('/swap-all-first-last-names', swapAllMembersFirstLastNamesHandler);
 router.get('/prayer-cycle/roster', getPrayerCycleRosterHandler);
+router.put('/prayer-cycle/roster-order', savePrayerCycleRosterOrderHandler);
 router.post('/prayer-cycle/anchor-member', anchorPrayerCycleMemberHandler);
 router.post('/prayer-cycle/start', startPrayerCycleHandler);
 router.get('/:id', getUser);

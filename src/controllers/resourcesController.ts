@@ -1,5 +1,6 @@
 import type { Request, Response } from 'express';
 import Parser from 'rss-parser';
+import Redis from 'ioredis';
 import { pool } from '../config/db';
 import { notifyRealtime } from '../realtime/notify';
 
@@ -127,11 +128,70 @@ function parseLimit(raw: unknown, fallback: number): number {
 
 const CACHE_TTL_MS = 5 * 60 * 1000;
 let cache: { fetchedAtMs: number; payload: PodcastFeedResponse } | null = null;
+const REDIS_CACHE_TTL_SECONDS = 60 * 60;
+const REDIS_PODCAST_CACHE_PREFIX = 'resources:podcasts:rss:';
+let redisCacheClient: Redis | null = null;
+let redisCacheInitAttempted = false;
 
 type PodcastSettings = { rssUrl: string | null };
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function getRedisCacheClient(): Redis | null {
+  if (redisCacheInitAttempted) return redisCacheClient;
+  redisCacheInitAttempted = true;
+  const redisUrl = process.env.REDIS_URL?.trim();
+  if (!redisUrl) return null;
+  const client = new Redis(redisUrl, {
+    connectionName: 'resources-podcasts-cache',
+    lazyConnect: true,
+    maxRetriesPerRequest: 1,
+    retryStrategy: () => null,
+  });
+  client.on('error', (err) => {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.warn('[resources] redis cache unavailable:', msg);
+  });
+  void client.connect().catch(() => {
+    client.disconnect();
+  });
+  redisCacheClient = client;
+  return redisCacheClient;
+}
+
+function getRedisCacheKey(rssUrl: string): string {
+  return `${REDIS_PODCAST_CACHE_PREFIX}${encodeURIComponent(rssUrl)}`;
+}
+
+async function readPodcastCacheFromRedis(rssUrl: string): Promise<PodcastFeedResponse | null> {
+  const redis = getRedisCacheClient();
+  if (!redis || redis.status !== 'ready') return null;
+  try {
+    const raw = await redis.get(getRedisCacheKey(rssUrl));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as PodcastFeedResponse;
+    if (!parsed?.feed?.rssUrl || !Array.isArray(parsed?.episodes)) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+async function writePodcastCacheToRedis(rssUrl: string, payload: PodcastFeedResponse): Promise<void> {
+  const redis = getRedisCacheClient();
+  if (!redis || redis.status !== 'ready') return;
+  try {
+    await redis.set(
+      getRedisCacheKey(rssUrl),
+      JSON.stringify(payload),
+      'EX',
+      REDIS_CACHE_TTL_SECONDS,
+    );
+  } catch {
+    /* best effort */
+  }
 }
 
 function extractErrorCode(err: unknown): string | null {
@@ -146,19 +206,20 @@ function isTransientNetworkError(err: unknown): boolean {
 }
 
 async function parseFeedWithRetry(rssUrl: string): Promise<Parser.Output<RssFeedWithItunes>> {
-  const maxAttempts = 3;
+  const maxRetries = 3;
+  const retryDelaysMs = [400, 1600, 6400];
   let lastError: unknown = null;
-  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+  for (let attempt = 1; attempt <= maxRetries + 1; attempt += 1) {
     try {
       return await parser.parseURL(rssUrl);
     } catch (e) {
       lastError = e;
-      if (!isTransientNetworkError(e) || attempt === maxAttempts) {
+      if (!isTransientNetworkError(e) || attempt > maxRetries) {
         throw e;
       }
-      const waitMs = 400 * 2 ** (attempt - 1);
+      const waitMs = retryDelaysMs[attempt - 1] ?? retryDelaysMs[retryDelaysMs.length - 1]!;
       console.warn(
-        `[resources] podcasts parse transient error (${extractErrorCode(e) ?? 'unknown'}), retry ${attempt}/${maxAttempts} in ${waitMs}ms`,
+        `[resources] podcasts parse transient error (${extractErrorCode(e) ?? 'unknown'}), retry ${attempt}/${maxRetries} in ${waitMs}ms`,
       );
       await sleep(waitMs);
     }
@@ -283,6 +344,7 @@ export async function getPodcastEpisodes(req: Request, res: Response): Promise<v
     };
 
     cache = { fetchedAtMs: now, payload };
+    await writePodcastCacheToRedis(rssUrl, payload);
     res.json(payload);
   } catch (e) {
     const isTransient = isTransientNetworkError(e);
@@ -299,7 +361,28 @@ export async function getPodcastEpisodes(req: Request, res: Response): Promise<v
       res.json(cachedPayload);
       return;
     }
-    console.error('[resources] podcasts parse error:', e);
+    if (isTransient) {
+      const redisPayload = await readPodcastCacheFromRedis(rssUrl);
+      if (redisPayload) {
+        console.warn(
+          '[resources] podcasts parse transient error, serving redis cache:',
+          extractErrorCode(e) ?? 'unknown',
+        );
+        const cachedPayload: PodcastFeedResponse = {
+          ...redisPayload,
+          feed: { ...redisPayload.feed, cached: true },
+          episodes: redisPayload.episodes.slice(0, limit),
+        };
+        res.json(cachedPayload);
+        return;
+      }
+      console.warn(
+        '[resources] podcasts parse transient error, retries exhausted:',
+        extractErrorCode(e) ?? 'unknown',
+      );
+    } else {
+      console.error('[resources] podcasts parse error:', e);
+    }
     res.status(500).json({ error: 'Failed to load podcast feed' });
   }
 }

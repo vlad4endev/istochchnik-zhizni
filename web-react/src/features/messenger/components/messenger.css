@@ -3,7 +3,10 @@
 @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,400..700;1,400..700&display=swap');
 
 :root {
-  --tg-sidebar-width: min(400px, 100vw);
+  /* 100vw шире колонки main (игнорирует сайдбар приложения) → переполнение и «плавание» при md:pl-* */
+  --tg-sidebar-width: min(400px, 100%);
+  /* ПК: макс. ширина колонки переписки (центрирование на ультрашироких) */
+  --tg-desktop-thread-max: 880px;
   --tg-primary: #7d3640;
   --tg-primary-hover: #5c2830;
   --tg-primary-light: rgba(125, 54, 64, 0.12);
@@ -40,6 +43,7 @@
   flex-direction: column;
   width: 100%;
   max-width: 100%;
+  min-width: 0;
   min-height: 0;
   flex: 1 1 auto;
   /* Не используем height: 100%: у процента «ломается» контейнер до фикса flex+min-h-0 на <main>. */
@@ -48,6 +52,9 @@
 .tg-messenger {
   display: flex;
   flex: 1;
+  min-width: 0;
+  width: 100%;
+  max-width: 100%;
   min-height: 0;
   height: 100%;
   max-height: 100%;
@@ -75,6 +82,8 @@
 /* Sidebar */
 .tg-sidebar {
   width: var(--tg-sidebar-width);
+  max-width: 100%;
+  min-height: 0;
   background: var(--tg-surface);
   border-right: 1px solid var(--tg-border);
   display: flex;
@@ -331,6 +340,154 @@
   font-weight: 700;
 }
 
+/* ─── ПК (≥769px): стабильный split-view, без мобильных absolute-слоёв ─── */
+@media (min-width: 769px) {
+  :root {
+    --tg-sidebar-width: clamp(300px, 32vw, 420px);
+  }
+
+  .tg-messenger-page {
+    min-height: 0;
+    flex: 1 1 auto;
+  }
+
+  .tg-messenger {
+    flex-direction: row;
+    align-items: stretch;
+    min-height: 0;
+    height: 100%;
+    max-height: 100%;
+    background: var(--tg-bg);
+    box-shadow: inset 1px 0 0 var(--tg-border);
+  }
+
+  .tg-sidebar {
+    position: relative;
+    left: auto;
+    top: auto;
+    bottom: auto;
+    width: var(--tg-sidebar-width);
+    min-width: 0;
+    min-height: 0;
+    max-height: none;
+    height: auto;
+    flex-shrink: 0;
+    transform: none !important;
+    pointer-events: auto !important;
+    z-index: 5;
+    border-right: 1px solid rgba(28, 25, 23, 0.1);
+    box-shadow: 4px 0 28px rgba(28, 25, 23, 0.045);
+  }
+
+  .tg-sidebar--visible,
+  .tg-sidebar--hidden {
+    transform: none !important;
+    pointer-events: auto !important;
+  }
+
+  .tg-sidebar-header {
+    padding: 14px 18px;
+    min-height: 58px;
+  }
+
+  .tg-main {
+    position: relative;
+    left: auto;
+    top: auto;
+    bottom: auto;
+    right: auto;
+    width: auto;
+    flex: 1 1 0%;
+    min-width: 0;
+    min-height: 0;
+    height: auto;
+    max-height: none;
+    opacity: 1 !important;
+    pointer-events: auto !important;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    background: var(--tg-bg);
+  }
+
+  .tg-main--visible {
+    opacity: 1 !important;
+    pointer-events: auto !important;
+  }
+
+  .tg-chat-window {
+    position: relative;
+    left: auto;
+    top: auto;
+    bottom: auto;
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+    transform: none !important;
+    pointer-events: auto !important;
+    z-index: 1;
+  }
+
+  /* Шапка и поле ввода — та же логическая ширина, что и лента */
+  .tg-chat-window > header > div {
+    max-width: var(--tg-desktop-thread-max);
+    margin-left: auto;
+    margin-right: auto;
+    width: 100%;
+  }
+
+  .tg-chat-window .tg-chat-window__body > div[role='log'] {
+    box-sizing: border-box;
+    padding-left: max(1rem, calc(50% - var(--tg-desktop-thread-max) / 2)) !important;
+    padding-right: max(1rem, calc(50% - var(--tg-desktop-thread-max) / 2)) !important;
+  }
+
+  .tg-chat-window__composer {
+    box-sizing: border-box;
+    padding-left: max(0.75rem, calc(50% - var(--tg-desktop-thread-max) / 2)) !important;
+    padding-right: max(0.75rem, calc(50% - var(--tg-desktop-thread-max) / 2)) !important;
+  }
+
+  .tg-scroll-new-fab {
+    right: max(12px, calc(50% - var(--tg-desktop-thread-max) / 2 + 8px));
+  }
+
+  .tg-empty-state {
+    padding: 48px 40px;
+    max-width: 520px;
+    margin: 0 auto;
+    width: 100%;
+  }
+
+  .tg-empty-sub {
+    max-width: 360px;
+  }
+
+  .tg-empty-title {
+    font-size: 1.375rem;
+  }
+
+  .tg-bubble-wrap {
+    max-width: min(78%, 26rem);
+  }
+
+  .tg-search-overlay {
+    align-items: center;
+    padding: 24px;
+  }
+
+  .tg-search-panel {
+    border-radius: 16px;
+    max-height: min(720px, 85vh);
+    box-shadow: var(--tg-shadow), 0 24px 64px rgba(0, 0, 0, 0.12);
+  }
+
+  .tg-chatlist-scroll {
+    padding-left: 6px;
+    padding-right: 4px;
+  }
+}
+
 .tg-sidebar-title {
   font-size: 1.125rem;
   font-weight: 700;
@@ -406,6 +563,75 @@
 .tg-header-status--typing {
   color: var(--tg-primary);
   font-weight: 500;
+}
+
+/* Три точки «печатает» (лёгкая stagger-анимация, без лишних ре-рендеров React) */
+.tg-typing-dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-left: 2px;
+  vertical-align: -2px;
+}
+
+.tg-typing-dots__dot {
+  width: 4px;
+  height: 4px;
+  border-radius: 9999px;
+  background: currentColor;
+  opacity: 0.35;
+  animation: tg-typing-dot 1.05s ease-in-out infinite;
+}
+
+.tg-typing-dots__dot:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.tg-typing-dots__dot:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+@keyframes tg-typing-dot {
+  0%,
+  80%,
+  100% {
+    opacity: 0.3;
+    transform: translateY(0);
+  }
+  40% {
+    opacity: 1;
+    transform: translateY(-2px);
+  }
+}
+
+/* FAB «вниз к новым» при прокрутке вверх */
+.tg-scroll-new-fab {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  z-index: 15;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: 9999px;
+  border: none;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 800;
+  color: #fff;
+  background: var(--tg-primary, #7d3640);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
+  transition: transform 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
+}
+
+.tg-scroll-new-fab:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.22);
+}
+
+.tg-scroll-new-fab:active {
+  transform: translateY(0);
 }
 
 .tg-header-actions {

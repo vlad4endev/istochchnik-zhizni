@@ -130,6 +130,9 @@ export function checkChatPermission(action: Action) {
       const { permissions: memberPermissions, muted_until: mutedUntil } =
         await svc.getParticipantChatAuthRow(convId, userId);
 
+      step = 'isAppAdministrator';
+      const isAppAdministrator = await svc.isMemberAppAdministrator(userId);
+
       step = 'mergePermissions';
       // base from chat + role superpowers (then allow override to restrict)
       const roleBase = superpowers(String(role));
@@ -164,13 +167,17 @@ export function checkChatPermission(action: Action) {
       } else if (action === 'send_media') {
         if (!require('can_send_media')) return;
       } else if (action === 'add_users') {
-        if (!require('can_add_users')) return;
+        if (!effective.can_add_users && !isAppAdministrator) {
+          return deny(res, 403, 'Forbidden');
+        }
       } else if (action === 'pin_messages') {
         if (!require('can_pin_messages')) return;
       } else if (action === 'manage_chat') {
-        if (!require('can_manage_chat')) return;
+        if (!effective.can_manage_chat && !isAppAdministrator) {
+          return deny(res, 403, 'Forbidden');
+        }
       } else if (action === 'set_admin' || action === 'set_permissions' || action === 'remove_member') {
-        if (role !== 'owner' && !effective.can_manage_chat) {
+        if (role !== 'owner' && !effective.can_manage_chat && !isAppAdministrator) {
           return deny(res, 403, 'Forbidden');
         }
       } else if (action === 'edit_message' || action === 'delete_message') {

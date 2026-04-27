@@ -12,6 +12,7 @@ import {
   LuCalendarDays,
   LuChevronDown,
   LuClipboardList,
+  LuGripVertical,
   LuHistory,
   LuImage,
   LuMessageSquare,
@@ -20,6 +21,7 @@ import {
   LuTable2,
   LuX,
 } from 'react-icons/lu';
+import { DragDropContext, Draggable, Droppable, type DropResult } from '@hello-pangea/dnd';
 import { format } from 'date-fns';
 import { ru } from 'date-fns/locale';
 
@@ -53,6 +55,7 @@ import {
   deleteRoleTemplate,
   fetchAdminMembers,
   fetchPrayerCycleRoster,
+  savePrayerCycleRosterOrder,
   fetchDirectionTemplates,
   fetchAdminEvents,
   fetchChurchEventCategoryOptions,
@@ -1983,6 +1986,13 @@ function formatAdminDate(dateStr: string): string {
   }
 }
 
+function reorderArray<T>(list: readonly T[], from: number, to: number): T[] {
+  const next = [...list];
+  const [x] = next.splice(from, 1);
+  next.splice(to, 0, x);
+  return next;
+}
+
 /**
  * Очередь молитвенного цикла: флаг `in_prayer_cycle` (как в карточке пользователя).
  * Две колонки: текущий состав и добавление из активных вне цикла.
@@ -2034,6 +2044,7 @@ function CalendarPrayerCycleRoster() {
       });
       await qc.invalidateQueries({ queryKey: Q_MEMBERS });
       await qc.invalidateQueries({ queryKey: ['calendar'] });
+      await qc.invalidateQueries({ queryKey: ['admin', 'prayer-cycle-roster'] });
     },
     onError: (e) =>
       setBanner({ type: 'err', text: apiErrorMessage(e, 'Не удалось сохранить изменение.') }),
@@ -2085,6 +2096,53 @@ function CalendarPrayerCycleRoster() {
     return [...rows].sort(compareMembersByPrayerCycleOrder);
   }, [data, addSearch]);
 
+  const rosterDnDEnabled =
+    Boolean(data?.length) &&
+    !listSearch.trim() &&
+    Boolean(rosterSnapQ.data?.roster?.length) &&
+    !rosterSnapQ.isLoading &&
+    !rosterSnapQ.isFetching &&
+    (rosterSnapQ.data?.roster ?? []).every((e) => (data ?? []).some((u) => u.id === e.id));
+
+  const inactiveOnlyInCycle = useMemo(() => {
+    const list = data ?? [];
+    const q = listSearch.trim().toLowerCase();
+    let rows = list.filter((u) => u.in_prayer_cycle && !u.is_active);
+    if (q) {
+      rows = rows.filter((u) => {
+        const blob =
+          `${memberRosterName(u)} ${displayName(u)} ${u.phone_number ?? ''} ${u.email ?? ''}`.toLowerCase();
+        return blob.includes(q);
+      });
+    }
+    return [...rows].sort(compareMembersByPrayerCycleOrder);
+  }, [data, listSearch]);
+
+  const saveOrderMut = useMutation({
+    mutationFn: (orderedIds: number[]) =>
+      savePrayerCycleRosterOrder({ anchor_date: rosterAnchorYmd, ordered_member_ids: orderedIds }),
+    onSuccess: async () => {
+      setBanner({
+        type: 'ok',
+        text: 'Порядок очереди на этот молитвенный цикл сохранён. На новом цикле снова действует сортировка по фамилии А–Я.',
+      });
+      await qc.invalidateQueries({ queryKey: ['admin', 'prayer-cycle-roster'] });
+      await qc.invalidateQueries({ queryKey: ['calendar'] });
+    },
+    onError: (e) =>
+      setBanner({ type: 'err', text: apiErrorMessage(e, 'Не удалось сохранить порядок очереди.') }),
+  });
+
+  const handleRosterDragEnd = (result: DropResult) => {
+    const roster = rosterSnapQ.data?.roster;
+    if (!result.destination || !roster?.length) return;
+    if (result.source.index === result.destination.index) return;
+    const ids = roster.map((e) => e.id);
+    const next = reorderArray(ids, result.source.index, result.destination.index);
+    setBanner(null);
+    saveOrderMut.mutate(next);
+  };
+
   if (isLoading && !data) {
     return <p className="text-sm text-stone-600">Загрузка членов церкви…</p>;
   }
@@ -2117,13 +2175,23 @@ function CalendarPrayerCycleRoster() {
             </span>
           </>
         ) : null}
+        {rosterSnapQ.data?.has_custom_roster_order ? (
+          <>
+            <span className="hidden h-4 w-px bg-stone-200 sm:block" aria-hidden />
+            <span className="rounded-full bg-violet-100 px-2 py-0.5 text-[11px] font-semibold text-violet-900">
+              Свой порядок · цикл {rosterSnapQ.data.cycle_index + 1}
+            </span>
+          </>
+        ) : null}
         {isFetching ? <span className="text-xs text-stone-400">Обновление…</span> : null}
       </div>
 
       <p className="border-b border-stone-100 px-4 py-3 text-sm leading-relaxed text-stone-600">
         В приложении «Молитва» по дням показываются только <strong>активные</strong> члены церкви с флагом «в цикле» (как
-        в карточке в разделе «Пользователи»). Таблица слева — по фамилии А–Я; «№» — порядок в таблице, не день цикла.
-        «Первым сегодня» сдвигает очередь так, чтобы выбранный человек был первым именно сегодня.
+        в карточке в разделе «Пользователи»). Без поиска слева показывается <strong>очередь цикла</strong> (по умолчанию
+        А–Я; если для этого цикла сохраняли порядок — он). Перетаскивание за иконку слева действует только на{' '}
+        <strong>текущий молитвенный цикл</strong>; на новом цикле снова сортировка по фамилии. «Первым сегодня» сдвигает
+        дату старта так, чтобы выбранный человек пришёлся на сегодня по этой очереди.
       </p>
 
       {rosterSnapQ.isError ? (
@@ -2166,6 +2234,201 @@ function CalendarPrayerCycleRoster() {
                   ? 'Никого не найдено.'
                   : 'Список пуст — добавьте людей справа.'}
               </p>
+            ) : rosterDnDEnabled && rosterSnapQ.data ? (
+              <DragDropContext onDragEnd={handleRosterDragEnd}>
+                <table className="min-w-full border-collapse text-left text-sm">
+                  <thead>
+                    <tr className="sticky top-0 z-[1] border-b border-stone-200 bg-stone-50/95 text-xs font-semibold uppercase tracking-wide text-stone-600 backdrop-blur-sm">
+                      <th className="w-9 px-1 py-2.5 text-center" scope="col">
+                        <span className="sr-only">Перетаскивание</span>
+                      </th>
+                      <th className="whitespace-nowrap px-3 py-2.5">№</th>
+                      <th className="min-w-[10rem] px-3 py-2.5">Член церкви</th>
+                      <th className="hidden px-3 py-2.5 sm:table-cell">Телефон</th>
+                      <th className="whitespace-nowrap px-3 py-2.5">Статус</th>
+                      <th className="min-w-[11rem] px-3 py-2.5 text-right">Действия</th>
+                    </tr>
+                  </thead>
+                  <Droppable droppableId="prayer-cycle-in-roster">
+                    {(droppableProvided) => (
+                      <tbody
+                        ref={droppableProvided.innerRef}
+                        {...droppableProvided.droppableProps}
+                        className="divide-y divide-stone-100 bg-white/90"
+                      >
+                        {rosterSnapQ.data.roster.map((e, qIdx) => {
+                          const u = data!.find((x) => x.id === e.id)!;
+                          const isFormulaToday = rosterSnapQ.data!.today_member_id === u.id;
+                          const canAnchor = u.is_active && activeCycleMemberIds.has(u.id);
+                          return (
+                            <Draggable
+                              key={u.id}
+                              draggableId={`pc-roster-${u.id}`}
+                              index={qIdx}
+                              isDragDisabled={
+                                saveOrderMut.isPending || patchMut.isPending || anchorQueueMut.isPending
+                              }
+                            >
+                              {(dragProvided, dragSnapshot) => (
+                                <tr
+                                  ref={dragProvided.innerRef}
+                                  {...dragProvided.draggableProps}
+                                  className={[
+                                    isFormulaToday ? 'bg-primary/[0.04]' : '',
+                                    dragSnapshot.isDragging ? 'bg-stone-100 shadow-sm ring-1 ring-stone-200' : '',
+                                  ]
+                                    .filter(Boolean)
+                                    .join(' ')}
+                                >
+                                  <td
+                                    {...dragProvided.dragHandleProps}
+                                    className="w-9 cursor-grab px-1 py-2.5 text-center text-stone-400 hover:text-stone-600 active:cursor-grabbing"
+                                    title="Перетащите выше или ниже"
+                                  >
+                                    <LuGripVertical className="mx-auto inline-block h-4 w-4" aria-hidden />
+                                  </td>
+                                  <td className="whitespace-nowrap px-3 py-2.5 tabular-nums text-stone-600">
+                                    {qIdx + 1}
+                                  </td>
+                                  <td className="px-3 py-2.5">
+                                    <span className="font-semibold text-stone-900">{memberRosterName(u)}</span>
+                                    {isFormulaToday ? (
+                                      <span className="ml-2 inline-block rounded-full bg-primary/12 px-2 py-0.5 text-[10px] font-bold text-primary">
+                                        сегодня
+                                      </span>
+                                    ) : null}
+                                    <p className="mt-0.5 text-xs text-stone-500 sm:hidden">{u.phone_number ?? '—'}</p>
+                                  </td>
+                                  <td className="hidden px-3 py-2.5 text-stone-600 sm:table-cell">
+                                    {u.phone_number ?? '—'}
+                                  </td>
+                                  <td className="px-3 py-2.5">
+                                    {u.is_active ? (
+                                      <span className="inline-block rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-800">
+                                        В очереди
+                                      </span>
+                                    ) : (
+                                      <span className="inline-block rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-900">
+                                        Неактивен
+                                      </span>
+                                    )}
+                                  </td>
+                                  <td className="px-3 py-2.5">
+                                    <div className="flex flex-col items-stretch gap-1.5 sm:flex-row sm:justify-end sm:gap-2">
+                                      <button
+                                        type="button"
+                                        className={btnPrimary('text-xs whitespace-nowrap')}
+                                        disabled={
+                                          anchorQueueMut.isPending ||
+                                          patchMut.isPending ||
+                                          saveOrderMut.isPending ||
+                                          !canAnchor
+                                        }
+                                        title={
+                                          !u.is_active
+                                            ? 'Сначала активируйте карточку'
+                                            : !activeCycleMemberIds.has(u.id)
+                                              ? 'Нет в расчёте очереди'
+                                              : undefined
+                                        }
+                                        onClick={() => {
+                                          setBanner(null);
+                                          anchorQueueMut.mutate(u.id);
+                                        }}
+                                      >
+                                        Первым сегодня
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className={btnDangerOutline('text-xs whitespace-nowrap')}
+                                        disabled={
+                                          patchMut.isPending || anchorQueueMut.isPending || saveOrderMut.isPending
+                                        }
+                                        onClick={() => {
+                                          setBanner(null);
+                                          patchMut.mutate({ id: u.id, in_prayer_cycle: false });
+                                        }}
+                                      >
+                                        Убрать
+                                      </button>
+                                    </div>
+                                  </td>
+                                </tr>
+                              )}
+                            </Draggable>
+                          );
+                        })}
+                        {droppableProvided.placeholder}
+                        {inactiveOnlyInCycle.map((u) => {
+                          const isFormulaToday = rosterSnapQ.data?.today_member_id === u.id;
+                          const canAnchor = u.is_active && activeCycleMemberIds.has(u.id);
+                          return (
+                            <tr key={u.id} className="bg-stone-50/90">
+                              <td className="w-9 px-1 py-2.5" aria-hidden />
+                              <td className="whitespace-nowrap px-3 py-2.5 tabular-nums text-stone-400">—</td>
+                              <td className="px-3 py-2.5">
+                                <span className="font-semibold text-stone-900">{memberRosterName(u)}</span>
+                                {isFormulaToday ? (
+                                  <span className="ml-2 inline-block rounded-full bg-primary/12 px-2 py-0.5 text-[10px] font-bold text-primary">
+                                    сегодня
+                                  </span>
+                                ) : null}
+                                <p className="mt-0.5 text-xs text-stone-500 sm:hidden">{u.phone_number ?? '—'}</p>
+                              </td>
+                              <td className="hidden px-3 py-2.5 text-stone-600 sm:table-cell">{u.phone_number ?? '—'}</td>
+                              <td className="px-3 py-2.5">
+                                <span className="inline-block rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-900">
+                                  Неактивен
+                                </span>
+                              </td>
+                              <td className="px-3 py-2.5">
+                                <div className="flex flex-col items-stretch gap-1.5 sm:flex-row sm:justify-end sm:gap-2">
+                                  <button
+                                    type="button"
+                                    className={btnPrimary('text-xs whitespace-nowrap')}
+                                    disabled={
+                                      anchorQueueMut.isPending ||
+                                      patchMut.isPending ||
+                                      saveOrderMut.isPending ||
+                                      !canAnchor
+                                    }
+                                    title={
+                                      !u.is_active
+                                        ? 'Сначала активируйте карточку'
+                                        : !activeCycleMemberIds.has(u.id)
+                                          ? 'Нет в расчёте очереди'
+                                          : undefined
+                                    }
+                                    onClick={() => {
+                                      setBanner(null);
+                                      anchorQueueMut.mutate(u.id);
+                                    }}
+                                  >
+                                    Первым сегодня
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className={btnDangerOutline('text-xs whitespace-nowrap')}
+                                    disabled={
+                                      patchMut.isPending || anchorQueueMut.isPending || saveOrderMut.isPending
+                                    }
+                                    onClick={() => {
+                                      setBanner(null);
+                                      patchMut.mutate({ id: u.id, in_prayer_cycle: false });
+                                    }}
+                                  >
+                                    Убрать
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    )}
+                  </Droppable>
+                </table>
+              </DragDropContext>
             ) : (
               <table className="min-w-full border-collapse text-left text-sm">
                 <thead>

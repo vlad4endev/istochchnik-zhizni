@@ -1,8 +1,12 @@
 import { query } from '../config/db';
 import { getCalendarWeekStartDate, type WeekPlanKind } from './calendarService';
-import { getPrayerCycleSnapshotForDate, PRAYER_CYCLE_MEMBERS_WHERE_M } from './prayerCycleService';
+import {
+  getMergedPrayerCycleRosterMemberIdsForCycleIndex,
+  getPrayerCycleSnapshotForDate,
+  PRAYER_CYCLE_MEMBERS_WHERE_M,
+} from './prayerCycleService';
 
-const MEMBER_ORDER_SQL = `LOWER(COALESCE(NULLIF(trim(m.first_name), ''), split_part(trim(m.name), ' ', 1))) ASC,
+const COORDINATOR_MEMBER_ORDER_SQL = `LOWER(COALESCE(NULLIF(trim(m.first_name), ''), split_part(trim(m.name), ' ', 1))) ASC,
   LOWER(COALESCE(NULLIF(trim(m.last_name), ''), NULLIF(trim(split_part(trim(m.name), ' ', 2)), ''), trim(m.name))) ASC,
   m.id ASC`;
 
@@ -68,19 +72,24 @@ export async function getCycleCollectionClaimsSnapshot(
      FROM members m
      WHERE m.is_active = TRUE
        AND m.is_collection_coordinator = TRUE
-     ORDER BY ${MEMBER_ORDER_SQL}`,
+     ORDER BY ${COORDINATOR_MEMBER_ORDER_SQL}`,
     [],
   );
 
 
   const cycleIndex = snap.cycle_index;
 
-  const membersResult = await query(
-    `SELECT m.id, m.name, m.first_name, m.last_name FROM members m
-     WHERE ${PRAYER_CYCLE_MEMBERS_WHERE_M}
-     ORDER BY ${MEMBER_ORDER_SQL}`,
-    []
-  );
+  const mergedIds = await getMergedPrayerCycleRosterMemberIdsForCycleIndex(cycleIndex);
+  const membersResult =
+    mergedIds.length === 0
+      ? { rows: [] as { id: number; name: string; first_name: string | null; last_name: string | null }[] }
+      : await query(
+          `SELECT m.id, m.name, m.first_name, m.last_name
+           FROM members m
+           WHERE m.id = ANY($1::int[])
+           ORDER BY array_position($1::int[], m.id)`,
+          [mergedIds],
+        );
 
   const claimsResult =
     weekKind === undefined

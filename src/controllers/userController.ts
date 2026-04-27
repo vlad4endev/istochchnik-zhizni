@@ -19,6 +19,7 @@ import {
   setMinistryDirectionTemplateRoles,
   anchorPrayerCycleMemberOnDate,
   getPrayerCycleRosterSnapshot,
+  savePrayerCycleRosterCustomOrderForAnchorDate,
   setOneTimeMemberDateOverride,
   setUserAppRoles,
   startPrayerCycle,
@@ -800,6 +801,60 @@ export async function anchorPrayerCycleMemberHandler(req: Request, res: Response
       return;
     }
     console.error('Failed to anchor prayer cycle member', error);
+    res.status(500).json({ error: 'Database error' });
+  }
+}
+
+export async function savePrayerCycleRosterOrderHandler(req: Request, res: Response): Promise<void> {
+  if (!ensureAdmin(req, res)) {
+    return;
+  }
+  const body = req.body as { anchor_date?: unknown; ordered_member_ids?: unknown };
+  const dateRaw = typeof body.anchor_date === 'string' ? body.anchor_date.trim() : '';
+  const anchorYmd = coerceToYmd(dateRaw);
+  if (!anchorYmd) {
+    res.status(400).json({ error: 'Field "anchor_date" is required (YYYY-MM-DD)' });
+    return;
+  }
+  const rawIds = body.ordered_member_ids;
+  if (!Array.isArray(rawIds)) {
+    res.status(400).json({ error: 'Field "ordered_member_ids" must be an array of member ids' });
+    return;
+  }
+  const orderedMemberIds: number[] = [];
+  for (const x of rawIds) {
+    const n = typeof x === 'number' ? x : typeof x === 'string' ? Number(x) : NaN;
+    if (!Number.isInteger(n) || n <= 0) {
+      res.status(400).json({ error: 'Each entry in "ordered_member_ids" must be a positive integer' });
+      return;
+    }
+    orderedMemberIds.push(n);
+  }
+
+  try {
+    const result = await savePrayerCycleRosterCustomOrderForAnchorDate(anchorYmd, orderedMemberIds);
+    notifyRealtime(['calendar', 'members', 'me', 'coordinator-notes']);
+    res.json(result);
+  } catch (error) {
+    if (error instanceof Error) {
+      if (error.message === 'Roster size mismatch') {
+        res.status(400).json({ error: 'Состав очереди изменился — обновите страницу и попробуйте снова.' });
+        return;
+      }
+      if (error.message === 'Invalid roster member') {
+        res.status(400).json({ error: 'В порядке есть участник вне текущего цикла.' });
+        return;
+      }
+      if (error.message === 'Duplicate roster member') {
+        res.status(400).json({ error: 'В порядке указан один и тот же участник дважды.' });
+        return;
+      }
+      if (error.message === 'Empty prayer cycle roster') {
+        res.status(400).json({ error: 'Очередь цикла пуста.' });
+        return;
+      }
+    }
+    console.error('Failed to save prayer cycle roster order', error);
     res.status(500).json({ error: 'Database error' });
   }
 }

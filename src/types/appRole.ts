@@ -1,4 +1,4 @@
-/** Роли приложения: member — пользователь; minister — служитель; pastor — пастор; musician — студия; editor — модерация каталога; admin — полный доступ. */
+/** Роли приложения: member — пользователь; minister — служитель; pastor — пастор; musician — студия и добавление песен в песенник; editor — модерация каталога; admin — полный доступ. */
 export type AppRole = 'member' | 'minister' | 'pastor' | 'musician' | 'editor' | 'admin';
 
 export function normalizeAppRole(raw: unknown): AppRole {
@@ -65,7 +65,7 @@ export function canAccessStudio(role: AppRole): boolean {
 }
 
 export function canModerateCatalog(role: AppRole): boolean {
-  return role === 'editor' || role === 'admin';
+  return role === 'musician' || role === 'editor' || role === 'admin';
 }
 
 /** Удаление песни из общего каталога — музыканты студии, редакторы и админ. */

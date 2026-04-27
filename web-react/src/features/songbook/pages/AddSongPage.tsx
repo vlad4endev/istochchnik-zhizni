@@ -227,7 +227,7 @@ export function AddSongPage() {
   if (!canModerateSongCatalog(role)) {
     return (
       <div className={`mx-auto max-w-lg p-6 ${isStudio ? 'text-zinc-300' : 'text-stone-600'}`}>
-        <p>Добавление песен доступно редакторам каталога.</p>
+        <p>Добавление песен в песенник доступно музыкантам студии и редакторам каталога.</p>
         <Link
           to={isStudio ? (location.pathname.startsWith('/songbook') ? '/songbook/studio' : '/studio/my-songs') : '/songbook'}
           className={`mt-4 inline-block ${isStudio ? 'text-sky-400' : 'text-sky-600'}`}

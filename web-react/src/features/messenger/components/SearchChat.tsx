@@ -4,12 +4,16 @@ import { useChatStore } from '../chatStore';
 import { MessageBubble } from './MessageBubble';
 import './messenger.css';
 
+const SEARCH_DEBOUNCE_MS = 320;
+
 interface SearchChatProps {
   conversationId: string;
   onClose: () => void;
+  /** Перейти к сообщению в ленте (виртуализатор + подсветка) и закрыть поиск. */
+  onJumpToMessage: (messageId: string) => void;
 }
 
-export function SearchChat({ conversationId, onClose }: SearchChatProps) {
+export function SearchChat({ conversationId, onClose, onJumpToMessage }: SearchChatProps) {
   const [query, setQuery] = useState('');
   const searchMessages = useChatStore((s) => s.searchMessages);
   const clearSearch = useChatStore((s) => s.clearSearch);
@@ -17,24 +21,64 @@ export function SearchChat({ conversationId, onClose }: SearchChatProps) {
   const searchLoading = useChatStore((s) => s.searchLoading);
   const searchQuery = useChatStore((s) => s.searchQuery);
   const inputRef = useRef<HTMLInputElement>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    inputRef.current?.focus();
-  }, []);
+    clearSearch();
+    setQuery('');
+    queueMicrotask(() => inputRef.current?.focus());
+  }, [conversationId, clearSearch]);
 
-  const handleSearch = async (value: string) => {
-    setQuery(value);
-    if (value.trim().length < 1) {
+  useEffect(() => {
+    return () => {
+      if (debounceRef.current != null) {
+        clearTimeout(debounceRef.current);
+        debounceRef.current = null;
+      }
+      clearSearch();
+    };
+  }, [clearSearch]);
+
+  useEffect(() => {
+    if (debounceRef.current != null) {
+      clearTimeout(debounceRef.current);
+      debounceRef.current = null;
+    }
+
+    const trimmed = query.trim();
+    if (trimmed.length < 1) {
       clearSearch();
       return;
     }
-    await searchMessages(value, conversationId);
-  };
+
+    debounceRef.current = setTimeout(() => {
+      debounceRef.current = null;
+      void searchMessages(trimmed, conversationId);
+    }, SEARCH_DEBOUNCE_MS);
+
+    return () => {
+      if (debounceRef.current != null) {
+        clearTimeout(debounceRef.current);
+        debounceRef.current = null;
+      }
+    };
+  }, [query, conversationId, searchMessages, clearSearch]);
 
   const handleClose = () => {
+    if (debounceRef.current != null) {
+      clearTimeout(debounceRef.current);
+      debounceRef.current = null;
+    }
     clearSearch();
     setQuery('');
     onClose();
+  };
+
+  const handlePickResult = (messageId: string | number) => {
+    const id = String(messageId ?? '').trim();
+    if (!/^\d+$/.test(id)) return;
+    onJumpToMessage(id);
+    handleClose();
   };
 
   return (
@@ -47,40 +91,42 @@ export function SearchChat({ conversationId, onClose }: SearchChatProps) {
               ref={inputRef}
               type="text"
               className="tg-search-input"
-              placeholder="Поиск сообщений..."
+              placeholder="Поиск сообщений…"
               value={query}
-              onChange={(e) => void handleSearch(e.target.value)}
+              onChange={(e) => setQuery(e.target.value)}
+              autoComplete="off"
+              spellCheck={false}
             />
-            {query && (
+            {query ? (
               <button
                 type="button"
                 className="tg-search-clear"
-                onClick={() => void handleSearch('')}
+                onClick={() => setQuery('')}
                 aria-label="Очистить"
               >
                 <LuX size={18} />
               </button>
-            )}
+            ) : null}
           </div>
-          <button
-            type="button"
-            className="tg-icon-btn"
-            onClick={handleClose}
-            aria-label="Закрыть поиск"
-          >
+          <button type="button" className="tg-icon-btn" onClick={handleClose} aria-label="Закрыть поиск">
             <LuX size={24} />
           </button>
         </div>
 
         <div className="tg-search-results">
-          {searchLoading && <div className="tg-search-loading">Поиск...</div>}
-          {!searchLoading && searchQuery && searchResults.length === 0 && (
-            <div className="tg-search-empty">Нет результатов для "{searchQuery}"</div>
-          )}
+          {searchLoading && query.trim().length > 0 ? <div className="tg-search-loading">Поиск…</div> : null}
+          {!searchLoading && searchQuery && searchResults.length === 0 ? (
+            <div className="tg-search-empty">Нет результатов для «{searchQuery}»</div>
+          ) : null}
           {searchResults.map((msg) => (
-            <div key={msg.id} className="tg-search-result-item">
+            <button
+              key={msg.id}
+              type="button"
+              className="tg-search-result-item tg-search-result-item--clickable block w-full cursor-pointer rounded-lg border-0 bg-transparent p-0 text-left transition-colors hover:bg-stone-100/80"
+              onClick={() => handlePickResult(msg.id)}
+            >
               <MessageBubble message={msg} isGroupedPrev={false} isGroupedNext={false} />
-            </div>
+            </button>
           ))}
         </div>
       </div>

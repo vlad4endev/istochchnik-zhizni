@@ -2,9 +2,11 @@ import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { LuCrown, LuPlus, LuSearch, LuSettings2, LuShield, LuUser, LuX } from 'react-icons/lu';
 import * as api from '../api/messengerApi';
+import { useAuthStore } from '../../auth/authStore';
 import { ManageScreenShell, ManageSettingsGroup } from './ManageScreenShell';
 import { AppAvatar } from '../../../components/AppAvatar';
 import { getAvatarColor } from '../avatarUtils';
+import { canAddParticipantsToGroup, canManageGroupMessenger, isAppAdministratorRole } from './messengerManageAccess';
 
 /** Единый ключ для сравнения id участника (API может отдать number | string). */
 function normalizeMemberId(raw: unknown): string | null {
@@ -26,6 +28,12 @@ function normalizeMemberId(raw: unknown): string | null {
 
 export function ChatMembersPage() {
   const { chatId } = useParams<{ chatId: string }>();
+  const authRole = useAuthStore((s) => s.role);
+  const authRoles = useAuthStore((s) => s.roles);
+  const isAppAdministrator = useMemo(
+    () => isAppAdministratorRole(authRole, authRoles),
+    [authRole, authRoles],
+  );
   const [members, setMembers] = useState<api.ConversationMember[]>([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
@@ -72,8 +80,9 @@ export function ChatMembersPage() {
     });
   }, [members, q]);
 
-  const canAddMembers = meta?.my_effective_permissions?.can_add_users === true;
-  const canManageMembers = meta?.my_effective_permissions?.can_manage_chat === true;
+  const eff = meta?.my_effective_permissions;
+  const canAddMembers = canAddParticipantsToGroup(eff, isAppAdministrator);
+  const canManageMembers = canManageGroupMessenger(eff, isAppAdministrator);
 
   return (
     <ManageScreenShell

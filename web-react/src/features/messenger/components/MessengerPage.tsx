@@ -98,8 +98,8 @@ export function MessengerPage() {
   }, [activeId, setActive]);
 
   return (
-    <div className="tg-messenger-page">
-      <div className={`tg-messenger ${isTransitioning ? 'transitioning' : ''}`} ref={messengerRef}>
+    <div className="tg-messenger-page flex min-h-0 flex-1 flex-col">
+      <div className={`tg-messenger min-h-0 flex-1 ${isTransitioning ? 'transitioning' : ''}`} ref={messengerRef}>
       {/* Sidebar */}
       <aside
         className={`tg-sidebar ${mobileView === 'list' ? 'tg-sidebar--visible' : ''} ${mobileView === 'chat' ? 'tg-sidebar--hidden' : ''}`}
