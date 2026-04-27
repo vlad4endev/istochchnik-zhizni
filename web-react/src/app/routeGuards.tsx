@@ -70,15 +70,16 @@ export function RequireAuth() {
   }
 
   if (!token) {
+    const fromPath = `${location.pathname}${location.search}${location.hash}`;
+    const encodedFrom =
+      fromPath && fromPath !== '/' ? `?from=${encodeURIComponent(fromPath)}` : '';
     const ext = isChatStandaloneApp() ? resolveMainAppOrigin() : '';
     if (ext) {
       const next = `${ext}/login`;
-      window.location.replace(
-        `${next}${location.pathname && location.pathname !== '/' ? `?from=${encodeURIComponent(location.pathname)}` : ''}`,
-      );
+      window.location.replace(`${next}${encodedFrom}`);
       return null;
     }
-    return <Navigate to={LOGIN_PATH} replace state={{ from: location.pathname }} />;
+    return <Navigate to={`${LOGIN_PATH}${encodedFrom}`} replace state={{ from: fromPath }} />;
   }
 
   return <Outlet />;

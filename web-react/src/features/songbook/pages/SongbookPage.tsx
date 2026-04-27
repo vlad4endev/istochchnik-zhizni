@@ -4,10 +4,14 @@ import { Link } from 'react-router-dom';
 import { LuCheck, LuSearch, LuX } from 'react-icons/lu';
 
 import { emitAppToast } from '../../../lib/uiFeedback';
+import { useAuthStore } from '../../auth/authStore';
+import { canModerateSongCatalog } from '../../auth/studioAccess';
 import { deleteFavorite, fetchSongs, postFavorite } from '../api';
 
 export function SongbookPage() {
   const qc = useQueryClient();
+  const role = useAuthStore((s) => s.role);
+  const canAddSong = canModerateSongCatalog(role);
   const [tab, setTab] = useState<'catalog' | 'favorites'>('catalog');
   const [search, setSearch] = useState('');
   const [compactList, setCompactList] = useState<boolean>(() => {
@@ -111,6 +115,14 @@ export function SongbookPage() {
           </button>
         </div>
         <div className="mt-2 flex justify-end">
+          {canAddSong ? (
+            <Link
+              to="/songbook/add"
+              className="mr-2 inline-flex min-h-[36px] items-center justify-center rounded-lg bg-stone-900 px-3 text-xs font-semibold text-white hover:bg-stone-800"
+            >
+              Новая песня
+            </Link>
+          ) : null}
           <button
             type="button"
             onClick={() => setCompactList((v) => !v)}

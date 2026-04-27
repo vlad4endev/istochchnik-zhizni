@@ -7,9 +7,11 @@ import { PendingReviewPage } from '../features/auth/pages/PendingReviewPage';
 import {
   LOGIN_PATH,
   RequireAuth,
+  RequireCatalogModerator,
   RequireFullMember,
   RouteFallback,
 } from './routeGuards';
+import { ModuleErrorBoundary } from './ModuleErrorBoundary';
 
 const SongbookPage = lazy(async () => {
   const m = await import('../features/songbook/pages/SongbookPage');
@@ -24,6 +26,11 @@ const SongbookLayout = lazy(async () => {
 const SongDetailPage = lazy(async () => {
   const m = await import('../features/songbook/pages/SongDetailPage');
   return { default: m.SongDetailPage };
+});
+
+const AddSongPage = lazy(async () => {
+  const m = await import('../features/songbook/pages/AddSongPage');
+  return { default: m.AddSongPage };
 });
 
 const PublicSetlistPage = lazy(async () => {
@@ -85,6 +92,18 @@ export function AppRouterMain() {
             </RequireFullMember>
           }
         >
+          <Route
+            path="add"
+            element={
+              <RequireCatalogModerator>
+                <ModuleErrorBoundary moduleName="добавление песни">
+                  <Suspense fallback={<RouteFallback />}>
+                    <AddSongPage />
+                  </Suspense>
+                </ModuleErrorBoundary>
+              </RequireCatalogModerator>
+            }
+          />
           <Route
             index
             element={

@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 
 import { useAuthSessionReady } from '../../../hooks/useAuthSessionReady';
 import { defaultPostLoginPath } from '../../../lib/appVariant';
@@ -10,15 +10,27 @@ const DEFAULT_DESCRIPTION = 'Цифровая платформа';
 
 export function AuthLandingPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const sessionReady = useAuthSessionReady();
   const token = useAuthStore((s) => s.token);
+  const fromState =
+    typeof (location.state as { from?: string } | null)?.from === 'string'
+      ? ((location.state as { from?: string } | null)?.from ?? '').trim()
+      : '';
+  const fromQuery = new URLSearchParams(location.search).get('from')?.trim() ?? '';
+  const returnPathRaw = fromState || fromQuery;
+  const postLoginPath =
+    returnPathRaw.startsWith('/') && !returnPathRaw.startsWith('/login')
+      ? returnPathRaw
+      : defaultPostLoginPath();
+  const loginFormPath = fromQuery ? `/login/form?from=${encodeURIComponent(fromQuery)}` : '/login/form';
 
   useEffect(() => {
     if (!sessionReady) return;
     if (token) {
-      navigate(defaultPostLoginPath(), { replace: true });
+      navigate(postLoginPath, { replace: true });
     }
-  }, [sessionReady, token, navigate]);
+  }, [sessionReady, token, navigate, postLoginPath]);
 
   if (!sessionReady) {
     return (
@@ -56,15 +68,15 @@ export function AuthLandingPage() {
 
         <div className="flex flex-col gap-3 pb-2">
           <Link
-            to="/login/form"
-            state={{ mode: 'signIn' as const }}
+            to={loginFormPath}
+            state={{ mode: 'signIn' as const, from: fromQuery || undefined }}
             className="touch-manipulation flex h-14 w-full items-center justify-center rounded-2xl bg-white text-center text-base font-bold text-primary shadow-lg shadow-stone-900/15 transition-[transform,opacity] active:scale-[0.98] hover:opacity-95"
           >
             Войти
           </Link>
           <Link
-            to="/login/form"
-            state={{ mode: 'signUp' as const }}
+            to={loginFormPath}
+            state={{ mode: 'signUp' as const, from: fromQuery || undefined }}
             className="touch-manipulation flex h-14 w-full items-center justify-center rounded-2xl border border-white/25 bg-white/10 text-center text-base font-bold text-white shadow-inner backdrop-blur-sm transition-[transform,opacity] active:scale-[0.98] hover:bg-white/15"
           >
             Зарегистрироваться

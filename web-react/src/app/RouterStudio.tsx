@@ -12,6 +12,7 @@ import {
   RequireStudioAccess,
   RouteFallback,
 } from './routeGuards';
+import { ModuleErrorBoundary } from './ModuleErrorBoundary';
 
 const StudioLayout = lazy(async () => {
   const m = await import('../features/studio/StudioLayout');
@@ -168,9 +169,11 @@ export function AppRouterStudio() {
             path="add-song"
             element={
               <RequireCatalogModerator>
-                <Suspense fallback={<RouteFallback />}>
-                  <AddSongPage />
-                </Suspense>
+                <ModuleErrorBoundary moduleName="добавление песни">
+                  <Suspense fallback={<RouteFallback />}>
+                    <AddSongPage />
+                  </Suspense>
+                </ModuleErrorBoundary>
               </RequireCatalogModerator>
             }
           />

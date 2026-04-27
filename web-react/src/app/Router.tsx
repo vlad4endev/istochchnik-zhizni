@@ -5,6 +5,7 @@ import { AuthLandingPage } from '../features/auth/pages/AuthLandingPage';
 import { LoginPage } from '../features/auth/pages/LoginPage';
 
 import { Layout } from './Layout';
+import { ModuleErrorBoundary } from './ModuleErrorBoundary';
 import { ProfileRouteBoundary } from './ProfileRouteBoundary';
 import { usePageTracking } from '../hooks/usePageTracking';
 import {
@@ -255,9 +256,11 @@ export function AppRouter() {
             path="add-song"
             element={
               <RequireCatalogModerator>
-                <Suspense fallback={<RouteFallback />}>
-                  <AddSongPage />
-                </Suspense>
+                <ModuleErrorBoundary moduleName="добавление песни">
+                  <Suspense fallback={<RouteFallback />}>
+                    <AddSongPage />
+                  </Suspense>
+                </ModuleErrorBoundary>
               </RequireCatalogModerator>
             }
           />
@@ -377,9 +380,11 @@ export function AppRouter() {
             path="add"
             element={
               <RequireCatalogModerator>
-                <Suspense fallback={<RouteFallback />}>
-                  <AddSongPage />
-                </Suspense>
+                <ModuleErrorBoundary moduleName="добавление песни">
+                  <Suspense fallback={<RouteFallback />}>
+                    <AddSongPage />
+                  </Suspense>
+                </ModuleErrorBoundary>
               </RequireCatalogModerator>
             }
           />

@@ -11,7 +11,7 @@ import { humanizeServerError, mapAxiosAuthError } from '../authErrors';
 import { normalizeRegistrationStatus, useAuthStore } from '../authStore';
 import { formatRuPhoneInput, phoneInputAllowedKeys } from '../utils/formatRuPhone';
 
-type LocationState = { mode?: 'signIn' | 'signUp' };
+type LocationState = { mode?: 'signIn' | 'signUp'; from?: string };
 
 type LoginResponse = {
   token?: string;
@@ -55,6 +55,13 @@ export function LoginPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const state = (location.state ?? {}) as LocationState;
+  const fromState = typeof state.from === 'string' ? state.from.trim() : '';
+  const fromQuery = new URLSearchParams(location.search).get('from')?.trim() ?? '';
+  const returnPathRaw = fromState || fromQuery;
+  const postLoginPath =
+    returnPathRaw.startsWith('/') && !returnPathRaw.startsWith('/login')
+      ? returnPathRaw
+      : defaultPostLoginPath();
 
   const sessionReady = useAuthSessionReady();
   const token = useAuthStore((s) => s.token);
@@ -86,9 +93,9 @@ export function LoginPage() {
   useEffect(() => {
     if (!sessionReady) return;
     if (token) {
-      navigate(defaultPostLoginPath(), { replace: true });
+      navigate(postLoginPath, { replace: true });
     }
-  }, [sessionReady, token, navigate]);
+  }, [sessionReady, token, navigate, postLoginPath]);
 
   if (!sessionReady) {
     return (
@@ -167,7 +174,7 @@ export function LoginPage() {
         username: ((user as { username?: string }).username ?? '').trim(),
         memberId: typeof (user as { id?: number }).id === 'number' ? (user as { id: number }).id : null,
       });
-      navigate(defaultPostLoginPath(), { replace: true });
+      navigate(postLoginPath, { replace: true });
     } catch (e) {
       if (axios.isAxiosError(e) && (e.response?.status === 401 || e.response?.status === 403)) {
         setStatusText('Неверный телефон или пароль.');
@@ -261,7 +268,7 @@ export function LoginPage() {
           username: ((user as { username?: string }).username ?? '').trim(),
           memberId: typeof (user as { id?: number }).id === 'number' ? (user as { id: number }).id : null,
         });
-        navigate(defaultPostLoginPath(), { replace: true });
+        navigate(postLoginPath, { replace: true });
         return;
       }
 
