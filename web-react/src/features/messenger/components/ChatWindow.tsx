@@ -41,6 +41,7 @@ export function ChatWindow({
   sendTypingStop,
 }: ChatWindowProps) {
   const navigate = useNavigate();
+  const chatScrollStorageKey = `messenger:chat-window-scroll:${conversationId}`;
   const isDraft = isDraftPrivateConversationId(conversationId);
   const messages = useChatStore((s) => s.messagesByConv[conversationId] || EMPTY_ARRAY);
   const loading = useChatStore((s) => s.messagesLoading[conversationId] || false);
@@ -65,6 +66,7 @@ export function ChatWindow({
   const [chatHeadReady, setChatHeadReady] = useState(false);
 
   const scrollRef = useRef<HTMLDivElement>(null);
+  const restoredChatScrollRef = useRef(false);
   const nearBottomRef = useRef(true);
   const restoreScrollRef = useRef<{ scrollHeight: number; scrollTop: number } | null>(null);
   const [showSearch, setShowSearch] = useState(false);
@@ -276,6 +278,7 @@ export function ChatWindow({
 
   useEffect(() => {
     nearBottomRef.current = true;
+    restoredChatScrollRef.current = false;
     restoreScrollRef.current = null;
     if (!isDraft) {
       // При открытии чата всегда подтягиваем первую страницу (как в Telegram), без антидребезга 1.5s.
@@ -569,6 +572,26 @@ export function ChatWindow({
     });
   }, [conversationId, hasMore, loading, loadMessages]);
 
+  useLayoutEffect(() => {
+    if (restoredChatScrollRef.current) return;
+    const el = scrollRef.current;
+    if (!el) return;
+    const raw = sessionStorage.getItem(chatScrollStorageKey);
+    if (!raw) {
+      restoredChatScrollRef.current = true;
+      return;
+    }
+    const top = Number(raw);
+    restoredChatScrollRef.current = true;
+    if (!Number.isFinite(top) || top <= 0) return;
+    nearBottomRef.current = false;
+    requestAnimationFrame(() => {
+      const node = scrollRef.current;
+      if (!node) return;
+      node.scrollTop = top;
+    });
+  }, [chatScrollStorageKey, messages.length]);
+
   useEffect(() => {
     return () => {
       if (scrollMeasureRafRef.current != null) {
@@ -694,12 +717,15 @@ export function ChatWindow({
   }, [isDraft, draftPeer, conv]);
 
   const onHeaderInfoClick = useCallback(() => {
+    const currentTop = scrollRef.current?.scrollTop ?? 0;
+    sessionStorage.setItem(chatScrollStorageKey, String(currentTop));
+    const backTo = `/messenger?conversationId=${encodeURIComponent(conversationId)}`;
     if (interlocutorProfilePath) {
-      navigate(interlocutorProfilePath);
+      navigate(interlocutorProfilePath, { state: { backTo, backLabel: 'В чат' } });
       return;
     }
     navigate(`/messenger/chat/${conversationId}/manage`);
-  }, [interlocutorProfilePath, navigate, conversationId]);
+  }, [interlocutorProfilePath, navigate, conversationId, chatScrollStorageKey]);
 
   const headerInfoAriaLabel =
     interlocutorProfilePath != null ? 'Открыть страницу собеседника' : 'Сведения о чате';

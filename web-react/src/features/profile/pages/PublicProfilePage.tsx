@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import {
   LuCamera,
   LuChevronLeft,
@@ -111,7 +111,17 @@ function EmbeddedPostCard({ embed }: { embed: ProfileFeedPostEmbedded }) {
 
 export function PublicProfilePage() {
   const { username } = useParams<{ username: string }>();
+  const location = useLocation();
+  const navigate = useNavigate();
   const decoded = username ? decodeURIComponent(username) : '';
+  const backTo =
+    typeof (location.state as { backTo?: unknown } | null)?.backTo === 'string'
+      ? ((location.state as { backTo: string }).backTo || '/dashboard')
+      : '/dashboard';
+  const backLabel =
+    typeof (location.state as { backLabel?: unknown } | null)?.backLabel === 'string'
+      ? ((location.state as { backLabel: string }).backLabel || 'Назад')
+      : 'Назад';
 
   const [me, setMe] = useState<MeResponse | null>(null);
   const [data, setData] = useState<ProfileFeedResponse | null>(null);
@@ -356,9 +366,15 @@ export function PublicProfilePage() {
   return (
     <div className={profileRootCn} data-profile-root>
       <div className={styles.igTopBar}>
-        <Link to="/dashboard" className={styles.igTopBarIconBtn} aria-label="Назад на главную">
+        <button
+          type="button"
+          onClick={() => navigate(backTo)}
+          className={styles.igTopBarIconBtn}
+          aria-label={backLabel}
+          title={backLabel}
+        >
           <LuChevronLeft className="h-6 w-6" strokeWidth={2.25} aria-hidden />
-        </Link>
+        </button>
         <span className={styles.igTopBarTitle}>{topBarHandle}</span>
         <div className={styles.igTopBarRight}>
           {isOwner ? (

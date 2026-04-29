@@ -348,6 +348,8 @@ export type ConversationMember = {
   first_name: string | null;
   last_name: string | null;
   avatar_url?: string | null;
+  is_online?: boolean;
+  last_seen_at?: string | null;
   previous_prayer_requests?: Array<{
     cycle_index: number;
     prayer_request: string;
