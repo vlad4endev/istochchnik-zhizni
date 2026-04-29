@@ -100,7 +100,7 @@ function formatRuDateFromYmd(ymd: string): string {
   }).format(dt);
 }
 
-async function syncBroadcastFromPublishedPlan(_planId: number): Promise<void> {
+async function syncBroadcastFromPublishedPlan(planId: number): Promise<void> {
   await query(`
     CREATE TABLE IF NOT EXISTS broadcasts (
       id BIGSERIAL PRIMARY KEY,
