@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { useChatStore, isDraftPrivateConversationId } from '../chatStore';
-import { LuPaperclip, LuPlus, LuSmile, LuSend, LuX, LuImage, LuFileText, LuChartColumn } from 'react-icons/lu';
+import { LuPaperclip, LuSmile, LuSend, LuX, LuImage, LuFileText, LuChartColumn, LuMic } from 'react-icons/lu';
 import * as api from '../api/messengerApi';
 import Picker from '@emoji-mart/react';
 import emojiData from '@emoji-mart/data';
@@ -785,6 +785,12 @@ export function ChatInput({
     }
   };
 
+  const handleMic = () => {
+    haptic(8);
+    textareaRef.current?.focus();
+  };
+  const hasSendAction = Boolean(content.trim() || pending || pendingImages.length > 0);
+
   if (!canSend) {
     return (
       <div className="tg-input-area" style={{ justifyContent: 'center' }}>
@@ -798,9 +804,7 @@ export function ChatInput({
       {/* Reply/Edit Banners */}
       {(replyTo || editing) && (
         <div className="tg-input-banner">
-          <div className="tg-input-banner-icon">
-            {replyTo ? '↩️' : '✏️'}
-          </div>
+          <div className="tg-input-banner-bar" aria-hidden />
           <div className="tg-input-banner-content">
             <div className="tg-input-banner-title">
               {replyTo ? `Ответ ${replyTo.sender_name}` : 'Редактирование'}
@@ -1065,7 +1069,7 @@ export function ChatInput({
               aria-haspopup="menu"
               title="Вложения"
             >
-              <LuPlus size={22} />
+              <LuPaperclip size={19} />
             </button>
           </div>
           {/*
@@ -1129,7 +1133,7 @@ export function ChatInput({
             <button
               ref={emojiBtnRef}
               type="button"
-              className="tg-input-icon-btn transition-colors duration-200"
+              className="tg-input-icon-btn tg-emoji-btn transition-colors duration-200"
               onClick={() => {
                 haptic(8);
                 setEmojiOpen((v) => !v);
@@ -1145,11 +1149,45 @@ export function ChatInput({
           <button
             type="button"
             className="tg-send-btn transition-colors duration-200"
-            onClick={() => void handleSend()}
-            disabled={(!content.trim() && !pending && pendingImages.length === 0) || uploading != null}
-            style={{ opacity: (content.trim() || pending || pendingImages.length > 0) && !uploading ? 1 : 0.5 }}
+            onClick={() => {
+              if (hasSendAction) {
+                void handleSend();
+              } else {
+                handleMic();
+              }
+            }}
+            disabled={uploading != null}
+            aria-label={hasSendAction ? 'Отправить' : 'Голосовое сообщение'}
+            style={{
+              background: hasSendAction ? 'var(--tg-primary)' : 'transparent',
+              color: hasSendAction ? '#fff' : '#888',
+              boxShadow: hasSendAction ? '0 2px 8px rgba(125,54,64,0.35)' : 'none',
+            }}
           >
-            <LuSend size={18} style={{ marginLeft: '1px' }} />
+            <span
+              style={{
+                display: 'grid',
+                placeItems: 'center',
+                position: 'absolute',
+                transition: 'transform 0.2s ease, opacity 0.2s ease',
+                transform: hasSendAction ? 'scale(1) rotate(0deg)' : 'scale(0.7) rotate(-30deg)',
+                opacity: hasSendAction ? 1 : 0,
+              }}
+            >
+              <LuSend size={20} />
+            </span>
+            <span
+              style={{
+                display: 'grid',
+                placeItems: 'center',
+                position: 'absolute',
+                transition: 'transform 0.2s ease, opacity 0.2s ease',
+                transform: hasSendAction ? 'scale(0.7) rotate(30deg)' : 'scale(1) rotate(0deg)',
+                opacity: hasSendAction ? 0 : 1,
+              }}
+            >
+              <LuMic size={20} />
+            </span>
           </button>
         </div>
       </div>

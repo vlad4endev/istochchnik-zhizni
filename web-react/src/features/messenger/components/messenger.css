@@ -1000,9 +1000,10 @@
 
 /* Input Area */
 .tg-input-area-wrap {
-  background: linear-gradient(180deg, transparent 0%, var(--tg-bg) 28%);
-  padding: 0 16px 16px;
-  padding-bottom: max(16px, env(safe-area-inset-bottom, 0px));
+  padding: 8px 12px;
+  padding-bottom: max(10px, env(safe-area-inset-bottom, 10px));
+  background: #fff;
+  border-top: 1px solid rgba(0, 0, 0, 0.08);
   display: flex;
   flex-direction: column;
   width: 100%;
@@ -1013,45 +1014,52 @@
 
 .tg-input-area {
   display: flex;
+  flex-direction: row;
   align-items: flex-end;
-  gap: 10px;
+  gap: 6px;
   position: relative;
   min-width: 0;
+  width: 100%;
 }
 
 .tg-input-container {
   flex: 1;
-  background: #f3f4f6;
-  border-radius: 9999px;
-  display: flex;
-  align-items: flex-end;
-  padding: 4px 10px;
-  border: none;
-  transition: background 0.2s ease, box-shadow 0.2s ease;
   min-width: 0;
-  max-width: 100%;
+  display: flex;
+  flex-direction: row;
+  align-items: flex-end;
+  background: #f1f1f1;
+  border-radius: 24px;
+  padding: 6px 6px 6px 12px;
+  gap: 4px;
+  border: none;
+  transition: background 0.2s ease;
 }
 
 .tg-input-container:focus-within {
-  background: #e5e7eb;
-  box-shadow: 0 0 0 2px rgba(125, 54, 64, 0.15);
+  background: #ebebeb;
 }
 
 .tg-input-textarea {
   flex: 1;
   min-width: 0;
-  width: 100%;
   border: none !important;
   outline: none !important;
   background: transparent;
-  padding: 10px 8px;
-  font-size: 1rem;
-  min-height: 40px;
+  font-size: 16px;
   line-height: 1.5;
+  min-height: 24px;
+  max-height: 144px;
+  padding: 4px 0;
   resize: none;
-  max-height: 120px;
   overflow-y: auto;
-  color: var(--tg-text);
+  color: #1c1917;
+  font-family: inherit;
+  align-self: flex-end;
+}
+
+.tg-input-textarea::placeholder {
+  color: #aaa;
 }
 
 .chat-header {
@@ -1109,33 +1117,33 @@
 }
 
 .tg-send-btn {
-  width: 38px;
-  height: 38px;
-  min-width: 38px;
-  min-height: 38px;
+  width: 42px;
+  height: 42px;
+  min-width: 42px;
+  min-height: 42px;
   outline: none;
   border-radius: 50%;
-  background: var(--tg-bubble-out);
-  color: white;
+  background: var(--tg-primary);
+  color: #fff;
   border: none;
   display: flex;
   align-items: center;
   justify-content: center;
+  position: relative;
   cursor: pointer;
-  box-shadow: 0 3px 10px rgba(125, 54, 64, 0.3);
+  box-shadow: 0 2px 8px rgba(125, 54, 64, 0.35);
   flex-shrink: 0;
-  transition: transform 0.14s ease, opacity 0.2s ease, box-shadow 0.18s ease, filter 0.18s ease;
-  margin-right: 0;
-  margin-left: 2px;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.2s ease;
+  align-self: flex-end;
 }
 
 .tg-send-btn:hover:not(:disabled) {
-  box-shadow: 0 6px 18px rgba(125, 54, 64, 0.42);
+  box-shadow: 0 4px 14px rgba(125, 54, 64, 0.45);
+  transform: scale(1.05);
 }
 
 .tg-send-btn:active:not(:disabled) {
   transform: scale(0.96);
-  filter: saturate(1.05);
 }
 
 .tg-send-btn:focus-visible {
@@ -1143,18 +1151,21 @@
 }
 
 .tg-input-banner {
-  background: var(--tg-surface);
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   padding: 8px 16px;
-  border-top: 1px solid var(--tg-border);
-  animation: tg-slide-up 0.2s ease;
+  background: #fff;
+  border-top: 1px solid rgba(0, 0, 0, 0.06);
+  animation: tg-slide-up 0.18s ease;
 }
 
-.tg-input-banner-icon {
-  font-size: 1.2rem;
-  color: var(--tg-primary);
+.tg-input-banner-bar {
+  width: 3px;
+  min-height: 32px;
+  border-radius: 3px;
+  background: var(--tg-primary);
+  flex-shrink: 0;
 }
 
 .tg-input-banner-content {
@@ -1163,63 +1174,77 @@
 }
 
 .tg-input-banner-title {
-  font-size: 0.75rem;
+  font-size: 12px;
   font-weight: 700;
   color: var(--tg-primary);
+  margin-bottom: 1px;
 }
 
 .tg-input-banner-text {
-  font-size: 0.8125rem;
-  color: var(--tg-text-secondary);
+  font-size: 13px;
+  color: #666;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
 .tg-input-banner-close {
-  background: transparent;
+  width: 32px;
+  height: 32px;
   border: none;
-  color: var(--tg-text-muted);
-  font-size: 1rem;
-  cursor: pointer;
-  padding: 4px;
-}
-
-.tg-input-icon-btn {
-  background: transparent;
-  border: none;
-  color: var(--tg-text-muted);
-  width: 38px;
-  height: 38px;
-  min-width: 38px;
-  min-height: 38px;
-  padding: 0;
-  flex-shrink: 0;
+  background: rgba(0, 0, 0, 0.05);
+  border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: color 0.18s ease, background 0.18s ease, transform 0.14s ease, box-shadow 0.18s ease;
+  color: #888;
+  flex-shrink: 0;
+}
+
+.tg-input-icon-btn {
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
+  min-height: 36px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: #888;
   border-radius: 50%;
+  cursor: pointer;
+  transition: color 0.18s ease, background 0.18s ease;
+  align-self: flex-end;
 }
 
 .tg-input-icon-btn svg {
-  width: 20px;
-  height: 20px;
+  width: 19px;
+  height: 19px;
 }
 
 .tg-input-icon-btn:hover {
   color: var(--tg-primary);
-  background: rgba(0,0,0,0.04);
-}
-
-.tg-input-icon-btn:active {
-  transform: scale(0.96);
-  background: rgba(0,0,0,0.06);
+  background: rgba(0, 0, 0, 0.05);
 }
 
 .tg-input-icon-btn:focus-visible {
   box-shadow: 0 0 0 3px rgba(125, 54, 64, 0.22);
+}
+
+.tg-emoji-btn {
+  width: 34px;
+  height: 34px;
+  min-width: 34px;
+  min-height: 34px;
+  margin-bottom: 1px;
+}
+
+.tg-emoji-btn svg {
+  width: 20px;
+  height: 20px;
 }
 
 /* Messenger: remove iOS tap highlight globally */
@@ -1514,7 +1539,8 @@
 
 .msg-content {
   white-space: pre-wrap;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
+  word-wrap: break-word;
   word-break: break-word;
 }
 
@@ -2084,9 +2110,7 @@
     /* Keep composer actions inside viewport on iOS (keyboard/safe-area edge cases). */
     html[data-chat-open="1"] .tg-main--visible .tg-chat-window .tg-input-area,
     html[data-chat-open="1"] .tg-chat-window .tg-input-area {
-      display: grid;
-      grid-template-columns: minmax(0, 1fr);
-      column-gap: 6px;
+      display: flex;
       align-items: flex-end;
       width: 100%;
       max-width: 100%;
@@ -2095,9 +2119,7 @@
 
     html[data-chat-open="1"] .tg-main--visible .tg-chat-window .tg-input-container,
     html[data-chat-open="1"] .tg-chat-window .tg-input-container {
-      display: grid;
-      grid-template-columns: auto minmax(0, 1fr) auto auto;
-      column-gap: 2px;
+      display: flex;
       align-items: flex-end;
       width: 100%;
       min-width: 0;
@@ -2109,11 +2131,6 @@
     html[data-chat-open="1"] .tg-chat-window .tg-input-textarea {
       min-width: 0;
       width: 100%;
-    }
-
-    html[data-chat-open="1"] .tg-main--visible .tg-chat-window .tg-send-btn,
-    html[data-chat-open="1"] .tg-chat-window .tg-send-btn {
-      justify-self: end;
     }
 
     html[data-chat-open="1"] .tg-main--visible .tg-chat-window .tg-messages,
@@ -2149,10 +2166,10 @@
   }
 
   .tg-send-btn {
-    width: 38px;
-    height: 38px;
-    min-width: 38px;
-    min-height: 38px;
+    width: 42px;
+    height: 42px;
+    min-width: 42px;
+    min-height: 42px;
     flex-shrink: 0;
   }
 
@@ -2179,19 +2196,19 @@
   }
 
   .tg-input-area-wrap {
-    padding: 0 10px;
-    padding-bottom: max(10px, env(safe-area-inset-bottom, 0px));
+    padding: 8px 10px;
+    padding-bottom: max(10px, env(safe-area-inset-bottom, 10px));
   }
 
   .tg-input-container {
-    border-radius: 9999px;
-    padding: 3px 6px;
+    border-radius: 24px;
+    padding: 6px 6px 6px 10px;
   }
 
   .tg-input-textarea {
-    padding: 8px 4px;
-    font-size: 1rem;
-    max-height: 150px;
+    padding: 4px 0;
+    font-size: 16px;
+    max-height: 144px;
   }
 
   .tg-input-area {
@@ -2226,10 +2243,10 @@
   }
 
   .tg-send-btn {
-    width: 36px;
-    height: 36px;
-    min-width: 36px;
-    min-height: 36px;
+    width: 42px;
+    height: 42px;
+    min-width: 42px;
+    min-height: 42px;
   }
 
   .tg-input-icon-btn {
@@ -2240,8 +2257,8 @@
   }
 
   .tg-input-icon-btn svg {
-    width: 18px;
-    height: 18px;
+    width: 19px;
+    height: 19px;
   }
 
   .tg-bubble {
@@ -2254,9 +2271,7 @@
   }
 
   .tg-input-textarea {
-    font-size: 1rem;
-    padding-left: 2px;
-    padding-right: 2px;
+    font-size: 16px;
   }
 }
 

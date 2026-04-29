@@ -416,7 +416,7 @@ interface MessageBubbleProps {
 function MessageBubbleInner({
   message,
   isGroupedPrev,
-  isGroupedNext,
+  isGroupedNext: _isGroupedNext,
   onJumpToMessage,
   participantLabelById,
   canPinMessages = false,
@@ -901,7 +901,7 @@ function MessageBubbleInner({
     return (
       <div
         className={[
-          'flex w-fit max-w-[min(88%,20.5rem)] flex-col sm:max-w-[min(84%,24rem)]',
+          'flex w-fit min-w-[80px] max-w-[75%] flex-col',
           isMine ? 'ml-auto items-end' : 'mr-auto items-start',
         ].join(' ')}
       >
@@ -918,20 +918,8 @@ function MessageBubbleInner({
   }
 
   const bubbleShapeClass = isMine
-    ? !isGroupedPrev && !isGroupedNext
-      ? 'rounded-[18px]'
-      : !isGroupedPrev && isGroupedNext
-        ? 'rounded-t-[18px] rounded-bl-[18px] rounded-br-[4px]'
-        : isGroupedPrev && isGroupedNext
-          ? 'rounded-tl-[18px] rounded-tr-[4px] rounded-bl-[18px] rounded-br-[4px]'
-          : 'rounded-tl-[18px] rounded-tr-[4px] rounded-bl-[18px] rounded-br-[18px]'
-    : !isGroupedPrev && !isGroupedNext
-      ? 'rounded-[18px]'
-      : !isGroupedPrev && isGroupedNext
-        ? 'rounded-t-[18px] rounded-bl-[4px] rounded-br-[18px]'
-        : isGroupedPrev && isGroupedNext
-          ? 'rounded-tl-[4px] rounded-tr-[18px] rounded-bl-[4px] rounded-br-[18px]'
-          : 'rounded-tl-[4px] rounded-tr-[18px] rounded-bl-[18px] rounded-br-[18px]';
+    ? 'rounded-tl-[18px] rounded-tr-[4px] rounded-br-[18px] rounded-bl-[18px]'
+    : 'rounded-tl-[4px] rounded-tr-[18px] rounded-br-[18px] rounded-bl-[18px]';
 
   const bubbleClasses = [
     'relative px-3 py-2 sm:px-3.5 sm:py-2',
@@ -1034,7 +1022,7 @@ function MessageBubbleInner({
     <>
     <div
       className={[
-        'msg-bubble-shell message-bubble relative flex w-fit max-w-[min(88%,20.5rem)] flex-col sm:max-w-[min(84%,24rem)]',
+        'msg-bubble-shell message-bubble relative flex w-fit min-w-[80px] max-w-[75%] flex-col',
         !isGroupedPrev ? 'group-start' : '',
         isMine ? 'outgoing' : 'incoming',
         isMine ? 'ml-auto items-end' : 'mr-auto items-start',
