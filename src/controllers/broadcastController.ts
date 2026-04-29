@@ -47,6 +47,7 @@ async function ensureBroadcastSchema(): Promise<void> {
       title VARCHAR(255),
       description TEXT,
       starts_at TIMESTAMP,
+      source_service_plan_id BIGINT,
       platform VARCHAR(20) NOT NULL DEFAULT 'youtube',
       stream_url TEXT,
       notify_members BOOLEAN NOT NULL DEFAULT TRUE,
@@ -60,12 +61,18 @@ async function ensureBroadcastSchema(): Promise<void> {
   await pool.query(`ALTER TABLE broadcasts ADD COLUMN IF NOT EXISTS title VARCHAR(255);`);
   await pool.query(`ALTER TABLE broadcasts ADD COLUMN IF NOT EXISTS description TEXT;`);
   await pool.query(`ALTER TABLE broadcasts ADD COLUMN IF NOT EXISTS starts_at TIMESTAMP;`);
+  await pool.query(`ALTER TABLE broadcasts ADD COLUMN IF NOT EXISTS source_service_plan_id BIGINT;`);
   await pool.query(`ALTER TABLE broadcasts ADD COLUMN IF NOT EXISTS platform VARCHAR(20) DEFAULT 'youtube';`);
   await pool.query(`ALTER TABLE broadcasts ADD COLUMN IF NOT EXISTS stream_url TEXT;`);
   await pool.query(`ALTER TABLE broadcasts ADD COLUMN IF NOT EXISTS notify_members BOOLEAN DEFAULT TRUE;`);
   await pool.query(`ALTER TABLE broadcasts ADD COLUMN IF NOT EXISTS is_public BOOLEAN DEFAULT FALSE;`);
   await pool.query(`ALTER TABLE broadcasts ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'scheduled';`);
   await pool.query(`ALTER TABLE broadcasts ADD COLUMN IF NOT EXISTS notification_sent BOOLEAN DEFAULT FALSE;`);
+  await pool.query(
+    `CREATE UNIQUE INDEX IF NOT EXISTS idx_broadcasts_source_service_plan_id
+      ON broadcasts (source_service_plan_id)
+      WHERE source_service_plan_id IS NOT NULL;`,
+  );
 }
 
 export async function getActiveBroadcast(_req: Request, res: Response): Promise<void> {
@@ -79,6 +86,7 @@ export async function getActiveBroadcast(_req: Request, res: Response): Promise<
       `SELECT id, title, description, starts_at, platform, stream_url, notify_members, is_public, status, notification_sent
          FROM broadcasts
         WHERE status IN ('live', 'scheduled')
+          AND (status = 'live' OR starts_at IS NULL OR starts_at >= (NOW() - INTERVAL '6 hours'))
         ORDER BY CASE WHEN status = 'live' THEN 0 ELSE 1 END, starts_at ASC NULLS LAST, id DESC
         LIMIT 1`,
     );

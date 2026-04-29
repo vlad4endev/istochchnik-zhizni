@@ -90,6 +90,111 @@ function notifyServicePlannerRealtime(): void {
   notifyRealtime(['service-planner']);
 }
 
+function formatRuDateFromYmd(ymd: string): string {
+  const dt = new Date(`${ymd}T12:00:00`);
+  if (Number.isNaN(dt.getTime())) return ymd;
+  return new Intl.DateTimeFormat('ru-RU', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  }).format(dt);
+}
+
+async function syncBroadcastFromPublishedPlan(_planId: number): Promise<void> {
+  await query(`
+    CREATE TABLE IF NOT EXISTS broadcasts (
+      id BIGSERIAL PRIMARY KEY,
+      title VARCHAR(255),
+      description TEXT,
+      starts_at TIMESTAMP,
+      source_service_plan_id BIGINT,
+      platform VARCHAR(20) NOT NULL DEFAULT 'youtube',
+      stream_url TEXT,
+      notify_members BOOLEAN NOT NULL DEFAULT TRUE,
+      is_public BOOLEAN NOT NULL DEFAULT FALSE,
+      status VARCHAR(20) NOT NULL DEFAULT 'scheduled',
+      notification_sent BOOLEAN NOT NULL DEFAULT FALSE,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await query(`ALTER TABLE broadcasts ADD COLUMN IF NOT EXISTS source_service_plan_id BIGINT`);
+  await query(
+    `CREATE UNIQUE INDEX IF NOT EXISTS idx_broadcasts_source_service_plan_id
+      ON broadcasts (source_service_plan_id)
+      WHERE source_service_plan_id IS NOT NULL`,
+  );
+
+  const planRes = await query(
+    `select
+       p.id,
+       p.service_date::text as service_date,
+       to_char(p.start_time, 'HH24:MI') as start_time,
+       p.status,
+       coalesce(nullif(trim(concat(coalesce(preacher.first_name, ''), ' ', coalesce(preacher.last_name, ''))), ''), preacher.name) as preacher_name
+     from public.service_plans p
+     left join public.members preacher on preacher.id = p.preacher_member_id
+     where p.status = 'published'
+       and coalesce(p.is_archived, false) = false
+       and (p.service_date::timestamp + p.start_time) >= (now() - interval '6 hours')
+     order by (p.service_date::timestamp + p.start_time) asc
+     limit 1`,
+  );
+  const plan = planRes.rows[0] as
+    | {
+        id: number;
+        service_date: string;
+        start_time: string;
+        status: 'draft' | 'published';
+        preacher_name: string | null;
+      }
+    | undefined;
+  if (!plan || plan.status !== 'published') return;
+
+  const sermonRes = await query(
+    `select b.content_json
+     from public.service_blocks b
+     left join public.block_types bt on bt.id = b.block_type_id
+     where b.service_plan_id = $1
+       and bt.code = 'sermon'
+     order by b.order_index asc, b.id asc
+     limit 1`,
+    [planId],
+  );
+  const sermonRow = sermonRes.rows[0] as { content_json?: Record<string, unknown> } | undefined;
+  const sermonTopic = String(sermonRow?.content_json?.sermon_topic ?? '').trim();
+  const sermonScripture = String(sermonRow?.content_json?.sermon_scripture ?? '').trim();
+  const preacher = String(plan.preacher_name ?? '').trim() || 'Не назначен';
+  const ruDate = formatRuDateFromYmd(plan.service_date);
+  const title = `Воскресное собрание | ${ruDate}`;
+  const startsAt = `${plan.service_date} ${plan.start_time}:00`;
+  const description = [
+    `Проповедник: ${preacher}`,
+    `Тема: ${sermonTopic || '—'}`,
+    `Стих: ${sermonScripture || '—'}`,
+  ].join('\n');
+
+  await query(
+    `insert into broadcasts (title, description, starts_at, status, source_service_plan_id, notify_members)
+     values ($1, $2, $3::timestamp, 'scheduled', $4, true)
+     on conflict (source_service_plan_id)
+     do update set
+       title = excluded.title,
+       description = excluded.description,
+       starts_at = excluded.starts_at,
+       status = 'scheduled',
+       updated_at = now()`,
+    [title, description, startsAt, planId],
+  );
+  notifyRealtime(['broadcast']);
+}
+
+async function isPlanPublished(planId: number): Promise<boolean> {
+  const res = await query(`select status from public.service_plans where id = $1 limit 1`, [planId]);
+  const status = String((res.rows[0] as { status?: string } | undefined)?.status ?? 'draft');
+  return status === 'published';
+}
+
 export async function getServiceBlockTypes(_req: Request, res: Response): Promise<void> {
   try {
     res.json(await listBlockTypes());
@@ -382,6 +487,8 @@ export async function patchServicePlanById(req: Request, res: Response): Promise
   }
   const hadPatch = Object.keys(patch).length > 0;
   try {
+    const beforeRes = await query(`select status from public.service_plans where id = $1 limit 1`, [id]);
+    const previousStatus = String((beforeRes.rows[0] as { status?: string } | undefined)?.status ?? 'draft');
     const ok = await patchPlan(id, patch);
     if (!ok) {
       res.status(404).json({ error: 'План не найден' });
@@ -392,6 +499,17 @@ export async function patchServicePlanById(req: Request, res: Response): Promise
         await markServicePlanLastEdited(id, req.authUserId);
       } catch (e) {
         console.error('[service-planner] mark last edited (patch plan):', e);
+      }
+    }
+    const shouldSyncBroadcast =
+      patch.status === 'published' ||
+      previousStatus === 'published' ||
+      (patch.status === undefined && hadPatch);
+    if (shouldSyncBroadcast) {
+      try {
+        await syncBroadcastFromPublishedPlan(id);
+      } catch (syncErr) {
+        console.error('[service-planner] syncBroadcastFromPublishedPlan:', syncErr);
       }
     }
     notifyServicePlannerRealtime();
@@ -419,6 +537,13 @@ export async function patchServiceBlocksReorder(req: Request, res: Response): Pr
         await markServicePlanLastEdited(servicePlanId, req.authUserId);
       } catch (e) {
         console.error('[service-planner] mark last edited (reorder):', e);
+      }
+    }
+    if (await isPlanPublished(servicePlanId)) {
+      try {
+        await syncBroadcastFromPublishedPlan(servicePlanId);
+      } catch (syncErr) {
+        console.error('[service-planner] syncBroadcastFromPublishedPlan (reorder):', syncErr);
       }
     }
     notifyServicePlannerRealtime();
@@ -480,6 +605,13 @@ export async function patchServiceBlockById(req: Request, res: Response): Promis
         console.error('[service-planner] mark last edited (patch block):', e);
       }
     }
+    if (planId && (await isPlanPublished(planId))) {
+      try {
+        await syncBroadcastFromPublishedPlan(planId);
+      } catch (syncErr) {
+        console.error('[service-planner] syncBroadcastFromPublishedPlan (patch block):', syncErr);
+      }
+    }
     notifyServicePlannerRealtime();
     res.json({ ok: true });
   } catch (e) {
@@ -519,6 +651,13 @@ export async function postServiceBlock(req: Request, res: Response): Promise<voi
         console.error('[service-planner] mark last edited (create block):', e);
       }
     }
+    if (await isPlanPublished(servicePlanId)) {
+      try {
+        await syncBroadcastFromPublishedPlan(servicePlanId);
+      } catch (syncErr) {
+        console.error('[service-planner] syncBroadcastFromPublishedPlan (create block):', syncErr);
+      }
+    }
     notifyServicePlannerRealtime();
     res.status(201).json({ id });
   } catch (e) {
@@ -546,6 +685,13 @@ export async function deleteServiceBlockById(req: Request, res: Response): Promi
         await markServicePlanLastEdited(planId, req.authUserId);
       } catch (e) {
         console.error('[service-planner] mark last edited (delete block):', e);
+      }
+    }
+    if (planId && (await isPlanPublished(planId))) {
+      try {
+        await syncBroadcastFromPublishedPlan(planId);
+      } catch (syncErr) {
+        console.error('[service-planner] syncBroadcastFromPublishedPlan (delete block):', syncErr);
       }
     }
     notifyServicePlannerRealtime();

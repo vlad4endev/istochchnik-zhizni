@@ -38,6 +38,11 @@ export async function patchBroadcast(id: number, payload: Partial<BroadcastData>
   return data;
 }
 
+export async function createBroadcast(payload: Partial<BroadcastData>): Promise<BroadcastData> {
+  const { data } = await apiClient.post<BroadcastData>('/api/broadcasts', payload);
+  return data;
+}
+
 export async function fetchFinishedBroadcasts(limit = 10): Promise<BroadcastListResponse> {
   const { data } = await apiClient.get<BroadcastListResponse>('/api/broadcasts', {
     params: { status: 'finished', limit },

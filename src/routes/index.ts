@@ -9,7 +9,7 @@ import {
 } from '../controllers/broadcastController';
 import { getPodcastEpisodes, getPodcastSettings, patchPodcastSettings } from '../controllers/resourcesController';
 import { requireAuthSession } from '../middleware/authSession';
-import { requireRole } from '../middleware/requireRole';
+import { requireBroadcastManager } from '../middleware/requireBroadcastManager';
 import {
   deleteLike,
   deletePost,
@@ -28,11 +28,11 @@ import { profilePostUploadIfMultipart } from '../middleware/profileMediaUpload';
 const router = Router();
 
 router.get('/broadcasts/active', getActiveBroadcast);
-router.get('/broadcasts', requireRole('admin', 'minister'), listBroadcasts);
-router.post('/broadcasts', requireRole('admin', 'minister'), createBroadcast);
-router.patch('/broadcasts/:id', requireRole('admin', 'minister'), patchBroadcast);
+router.get('/broadcasts', requireBroadcastManager, listBroadcasts);
+router.post('/broadcasts', requireBroadcastManager, createBroadcast);
+router.patch('/broadcasts/:id', requireBroadcastManager, patchBroadcast);
 router.get('/broadcast', getBroadcastEmbed);
-router.patch('/broadcast', requireRole('admin', 'minister'), updateBroadcastEmbed);
+router.patch('/broadcast', requireBroadcastManager, updateBroadcastEmbed);
 
 /** GET /api/resources/podcasts */
 router.get('/resources/podcasts', getPodcastEpisodes);

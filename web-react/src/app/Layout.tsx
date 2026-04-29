@@ -309,7 +309,6 @@ function splitMobileBottomNavItems(visible: NavItem[]): { primary: NavItem[]; ov
   take('/dashboard');
   take('/prayer');
   take('/messenger');
-  take('/broadcast');
   const planner = byTo('/service-planner');
   const songbook = byTo('/songbook');
   if (planner) primary.push(planner);
@@ -889,6 +888,7 @@ export function Layout() {
         tabIndex={-1}
         className={[
           'app-main-content flex min-h-0 min-w-0 w-full max-w-full flex-1 flex-col overflow-x-clip lg:pb-0 2xl:px-8 min-[1920px]:px-12 outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--a11y-focus-ring,var(--primary))] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)]',
+          navCollapsed ? 'lg:pr-[88px]' : 'lg:pr-[260px] xl:pr-[272px]',
           'page-content',
           mainChromeVisible
             ? 'pb-[max(7.5rem,calc(5.25rem+env(safe-area-inset-bottom,16px)))]'

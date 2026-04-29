@@ -32,8 +32,10 @@ export function SongDetailPage() {
   const [fullscreen, setFullscreen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [scrollProgress, setScrollProgress] = useState(0);
+  const [topOffset, setTopOffset] = useState(118);
   const resumeAutoscrollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const resumeAutoscrollWantedRef = useRef(false);
+  const topBarRef = useRef<HTMLDivElement | null>(null);
 
   const q = useQuery({
     queryKey: ['song', songId],
@@ -147,6 +149,26 @@ export function SongDetailPage() {
   }, []);
 
   useEffect(() => {
+    if (fullscreen) return;
+    const node = topBarRef.current;
+    if (!node) return;
+
+    const updateOffset = () => {
+      const next = Math.ceil(node.getBoundingClientRect().height);
+      if (next > 0) setTopOffset(next);
+    };
+    updateOffset();
+
+    const observer = new ResizeObserver(() => updateOffset());
+    observer.observe(node);
+    window.addEventListener('resize', updateOffset);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', updateOffset);
+    };
+  }, [fullscreen]);
+
+  useEffect(() => {
     const onWheel = () => pauseAutoScrollByUser();
     const onTouchMove = () => pauseAutoScrollByUser();
     const onKeyDown = (e: KeyboardEvent) => {
@@ -210,7 +232,10 @@ export function SongDetailPage() {
       <div className="fixed inset-x-0 top-0 z-[55] h-1 bg-stone-200/70">
         <div className="h-full bg-primary transition-[width] duration-150" style={{ width: `${scrollProgress * 100}%` }} />
       </div>
-      <div className={['fixed inset-x-0 top-0 z-40 border-b backdrop-blur', shell.top, fullscreen ? 'hidden' : ''].join(' ')}>
+      <div
+        ref={topBarRef}
+        className={['fixed inset-x-0 top-0 z-40 border-b backdrop-blur', shell.top, fullscreen ? 'hidden' : ''].join(' ')}
+      >
         <div className="mx-auto max-w-3xl px-3 py-2 md:px-0">
           <div className="mb-1 flex min-w-0 items-center gap-2">
             <Link
@@ -318,7 +343,7 @@ export function SongDetailPage() {
         </button>
       </div>
 
-      <div className={fullscreen ? 'h-3' : 'h-14 md:h-[3.75rem]'} />
+      <div style={{ height: fullscreen ? 12 : topOffset }} />
       <div className="space-y-2">
         <LyricsWithChords
           text={effectiveContent}

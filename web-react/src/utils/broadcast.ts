@@ -27,3 +27,18 @@ export function detectPlatform(url: string | null | undefined): 'youtube' | 'rut
   if (raw.includes('vk.com')) return 'vk';
   return 'other';
 }
+
+export function parseBroadcastInputToEmbed(input: string): string | null {
+  const raw = String(input ?? '').trim();
+  if (!raw) return null;
+  const iframeSrc = raw.match(/<iframe[^>]*\s+src=["']([^"']+)["']/i)?.[1]?.trim() ?? null;
+  const candidate = iframeSrc || raw;
+  const embed = getEmbedUrl(candidate);
+  if (embed) return embed;
+  try {
+    new URL(candidate);
+    return candidate;
+  } catch {
+    return null;
+  }
+}

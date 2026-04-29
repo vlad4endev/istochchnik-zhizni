@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import { LuBell, LuExpand, LuPlay, LuTv } from 'react-icons/lu';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { fetchActiveBroadcast, fetchFinishedBroadcasts, patchBroadcast, type BroadcastData } from '../../../api/broadcast';
+import { createBroadcast, fetchActiveBroadcast, fetchFinishedBroadcasts, patchBroadcast, type BroadcastData } from '../../../api/broadcast';
+import { fetchMe } from '../../profile/api';
 import { SectionHeroToolbarEnd } from '@/components/SectionHeroToolbarEnd';
 import { sectionHeroHeaderClass, sectionHeroStickyClass } from '../../../lib/sectionHeroChrome';
 import { useAuthStore } from '../../auth/authStore';
-import { detectPlatform, getEmbedUrl } from '../../../utils/broadcast';
+import { detectPlatform, getEmbedUrl, parseBroadcastInputToEmbed } from '../../../utils/broadcast';
 import { emitAppToast } from '../../../lib/uiFeedback';
 
 function btnPrimary(c = '') { return `flex h-10 items-center justify-center rounded-xl bg-primary px-4 text-sm font-bold text-white shadow hover:border-transparent hover:!bg-[#e34254] disabled:pointer-events-none disabled:opacity-50 transition-colors ${c}`; }
@@ -41,10 +42,23 @@ function platformIcon(platform: string): string {
   return '🎬';
 }
 
+function platformLabel(platform: string): string {
+  if (platform === 'youtube') return 'YouTube';
+  if (platform === 'rutube') return 'RuTube';
+  if (platform === 'vk') return 'VK Видео';
+  return 'Не определена';
+}
+
 export function BroadcastPage() {
   const qc = useQueryClient();
   const role = useAuthStore((s) => s.role);
-  const isAdmin = role === 'admin' || role === 'minister';
+  const meQ = useQuery({
+    queryKey: ['auth', 'me', 'broadcast-page'],
+    queryFn: fetchMe,
+    staleTime: 60_000,
+  });
+  const ministryDirection = String(meQ.data?.ministry_direction ?? '').trim().toLowerCase().replace(/ё/g, 'е');
+  const isAdmin = role === 'admin' || role === 'minister' || ministryDirection.includes('медиа');
   const { data, isLoading: broadcastLoading, error } = useQuery({
     queryKey: ['broadcast', 'active'],
     queryFn: fetchActiveBroadcast,
@@ -54,6 +68,8 @@ export function BroadcastPage() {
   const [countdown, setCountdown] = useState<string | null>(null);
   const [datePart, setDatePart] = useState('');
   const [timePart, setTimePart] = useState('');
+  const [smartInput, setSmartInput] = useState('');
+  const [streamUrlError, setStreamUrlError] = useState<string | null>(null);
   const [formState, setFormState] = useState<{
     title: string;
     stream_url: string;
@@ -104,10 +120,15 @@ export function BroadcastPage() {
     return () => window.clearInterval(id);
   }, [activeBroadcast?.starts_at, activeBroadcast?.status]);
 
-  const patchMutation = useMutation({
-    mutationFn: (payload: Partial<BroadcastData>) => {
-      if (!activeBroadcast?.id) throw new Error('No active broadcast');
-      return patchBroadcast(activeBroadcast.id, payload);
+  const saveMutation = useMutation({
+    mutationFn: async (payload: Partial<BroadcastData>) => {
+      if (activeBroadcast?.id) {
+        return patchBroadcast(activeBroadcast.id, payload);
+      }
+      return createBroadcast({
+        ...payload,
+        status: 'scheduled',
+      });
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['broadcast'] });
@@ -122,11 +143,20 @@ export function BroadcastPage() {
   }, [datePart, timePart]);
 
   const onSave = () => {
-    if (!activeBroadcast?.id) {
-      emitAppToast({ kind: 'error', message: 'Нет активной трансляции для сохранения' });
-      return;
+    const streamRaw = formState.stream_url.trim();
+    if (streamRaw) {
+      const parsed = parseBroadcastInputToEmbed(streamRaw);
+      if (!parsed) {
+        setStreamUrlError('Укажите корректную ссылку или iframe-код плеера.');
+        emitAppToast({ kind: 'error', message: 'Сохранение невозможно: ссылка трансляции некорректна' });
+        return;
+      }
+      if (parsed !== streamRaw) {
+        setFormState((prev) => ({ ...prev, stream_url: parsed, platform: detectPlatform(parsed) }));
+      }
     }
-    patchMutation.mutate({
+    setStreamUrlError(null);
+    saveMutation.mutate({
       title: formState.title || null,
       stream_url: formState.stream_url || null,
       description: formState.description || null,
@@ -144,6 +174,25 @@ export function BroadcastPage() {
     }
     localStorage.setItem('broadcast_reminder_at', activeBroadcast.starts_at);
     emitAppToast({ kind: 'success', message: 'Напоминание сохранено' });
+  };
+
+  const applySmartEmbedInput = () => {
+    const parsed = parseBroadcastInputToEmbed(smartInput);
+    if (!parsed) {
+      emitAppToast({
+        kind: 'error',
+        message: 'Не удалось распознать ссылку. Вставьте URL или iframe-код плеера.',
+      });
+      return;
+    }
+    setStreamUrlError(null);
+    setFormState((prev) => ({
+      ...prev,
+      stream_url: parsed,
+      platform: detectPlatform(parsed),
+    }));
+    setPlayerUrl(parsed);
+    emitAppToast({ kind: 'success', message: 'Ссылка распознана и подставлена в трансляцию' });
   };
 
   return (
@@ -223,6 +272,23 @@ export function BroadcastPage() {
 
                 <section className="rounded-2xl border border-stone-200 bg-white p-5 shadow-[var(--shadow-card)]">
                   <h3 className="mb-4 text-base font-extrabold text-stone-900">Настройки трансляции</h3>
+                  <div className="mb-4 rounded-xl border border-stone-200 bg-stone-50/70 p-3">
+                    <p className="text-xs font-semibold text-stone-700">Умное добавление плеера</p>
+                    <p className="mt-1 text-xs text-stone-500">
+                      Вставьте ссылку YouTube/RuTube/VK или готовый iframe. Мы автоматически извлечем embed-ссылку.
+                    </p>
+                    <div className="mt-2 flex flex-col gap-2 sm:flex-row">
+                      <textarea
+                        className={`${fieldClass()} min-h-[74px] flex-1`}
+                        placeholder='Например: https://youtu.be/... или <iframe src="..."></iframe>'
+                        value={smartInput}
+                        onChange={(e) => setSmartInput(e.target.value)}
+                      />
+                      <button type="button" className={btnSecondary('shrink-0')} onClick={applySmartEmbedInput}>
+                        Применить
+                      </button>
+                    </div>
+                  </div>
                   <div className="grid gap-3 sm:grid-cols-2">
                     <label className="text-xs font-semibold text-stone-600">
                       Название
@@ -233,7 +299,16 @@ export function BroadcastPage() {
                       <input
                         className={fieldClass()}
                         value={formState.stream_url}
-                        onChange={(e) => setFormState((prev) => ({ ...prev, stream_url: e.target.value }))}
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          setFormState((prev) => ({ ...prev, stream_url: value }));
+                          if (!value.trim()) {
+                            setStreamUrlError(null);
+                            return;
+                          }
+                          const parsed = parseBroadcastInputToEmbed(value);
+                          setStreamUrlError(parsed ? null : 'Ссылка не распознана. Вставьте URL или iframe-код.');
+                        }}
                         onBlur={(e) => {
                           const embed = getEmbedUrl(e.target.value);
                           setFormState((prev) => ({
@@ -241,8 +316,22 @@ export function BroadcastPage() {
                             stream_url: embed ?? e.target.value,
                             platform: detectPlatform(embed ?? e.target.value),
                           }));
+                          if (!e.target.value.trim()) {
+                            setStreamUrlError(null);
+                            return;
+                          }
+                          const parsed = parseBroadcastInputToEmbed(e.target.value);
+                          setStreamUrlError(parsed ? null : 'Ссылка не распознана. Вставьте URL или iframe-код.');
                         }}
                       />
+                      <div className="mt-1 flex flex-wrap items-center gap-2">
+                        <span className="rounded-full bg-stone-100 px-2 py-0.5 text-[11px] font-semibold text-stone-700">
+                          Платформа: {platformIcon(formState.platform)} {platformLabel(formState.platform)}
+                        </span>
+                        {streamUrlError ? (
+                          <span className="text-[11px] font-semibold text-red-600">{streamUrlError}</span>
+                        ) : null}
+                      </div>
                     </label>
                     <label className="text-xs font-semibold text-stone-600">
                       Дата начала
@@ -265,8 +354,13 @@ export function BroadcastPage() {
                       Публичная трансляция
                     </label>
                   </div>
-                  <button type="button" className={btnPrimary('mt-4 w-full sm:w-auto')} onClick={onSave} disabled={patchMutation.isPending}>
-                    {patchMutation.isPending ? 'Сохранение...' : 'Сохранить'}
+                  <button
+                    type="button"
+                    className={btnPrimary('mt-4 w-full sm:w-auto')}
+                    onClick={onSave}
+                    disabled={saveMutation.isPending || Boolean(streamUrlError)}
+                  >
+                    {saveMutation.isPending ? 'Сохранение...' : 'Сохранить'}
                   </button>
                 </section>
 

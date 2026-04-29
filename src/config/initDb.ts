@@ -117,6 +117,7 @@ CREATE TABLE IF NOT EXISTS broadcasts (
   title VARCHAR(255),
   description TEXT,
   starts_at TIMESTAMP,
+  source_service_plan_id BIGINT,
   platform VARCHAR(20) NOT NULL DEFAULT 'youtube',
   stream_url TEXT,
   notify_members BOOLEAN NOT NULL DEFAULT TRUE,
@@ -325,12 +326,16 @@ ALTER TABLE global_settings ADD COLUMN IF NOT EXISTS notification_settings_json 
 ALTER TABLE broadcasts ADD COLUMN IF NOT EXISTS title VARCHAR(255);
 ALTER TABLE broadcasts ADD COLUMN IF NOT EXISTS description TEXT;
 ALTER TABLE broadcasts ADD COLUMN IF NOT EXISTS starts_at TIMESTAMP;
+ALTER TABLE broadcasts ADD COLUMN IF NOT EXISTS source_service_plan_id BIGINT;
 ALTER TABLE broadcasts ADD COLUMN IF NOT EXISTS platform VARCHAR(20) DEFAULT 'youtube';
 ALTER TABLE broadcasts ADD COLUMN IF NOT EXISTS stream_url TEXT;
 ALTER TABLE broadcasts ADD COLUMN IF NOT EXISTS notify_members BOOLEAN DEFAULT TRUE;
 ALTER TABLE broadcasts ADD COLUMN IF NOT EXISTS is_public BOOLEAN DEFAULT FALSE;
 ALTER TABLE broadcasts ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'scheduled';
 ALTER TABLE broadcasts ADD COLUMN IF NOT EXISTS notification_sent BOOLEAN DEFAULT FALSE;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_broadcasts_source_service_plan_id
+  ON broadcasts (source_service_plan_id)
+  WHERE source_service_plan_id IS NOT NULL;
 
 ALTER TABLE church_events ADD COLUMN IF NOT EXISTS recurrence_type VARCHAR(16);
 UPDATE church_events

@@ -148,11 +148,34 @@ async function notifyMissingPrayerNeedForDate(
   }
 }
 
-async function readRutubeEmbed(): Promise<string | null> {
+type BroadcastStartCandidate = {
+  id: number;
+  title: string | null;
+  stream_url: string | null;
+  starts_at: string | null;
+};
+
+async function getPendingBroadcastStartCandidate(): Promise<BroadcastStartCandidate | null> {
   if (!pool) return null;
-  const { rows } = await pool.query('SELECT rutube_embed_code FROM global_settings WHERE id = 1');
-  const code = rows[0]?.rutube_embed_code;
-  return typeof code === 'string' ? code : null;
+  const { rows } = await pool.query(
+    `select id, title, stream_url, starts_at::text as starts_at
+       from broadcasts
+      where coalesce(notify_members, true) = true
+        and coalesce(notification_sent, false) = false
+        and starts_at is not null
+        and starts_at <= now()
+      order by starts_at asc, id asc
+      limit 1`,
+  );
+  const row = rows[0] as BroadcastStartCandidate | undefined;
+  return row ?? null;
+}
+
+async function markBroadcastStartNotificationSent(broadcastId: number): Promise<void> {
+  if (!pool) return;
+  await pool.query(`update broadcasts set notification_sent = true, updated_at = now() where id = $1`, [
+    broadcastId,
+  ]);
 }
 
 async function readLatestEventCreatedAt(): Promise<string | null> {
@@ -221,31 +244,21 @@ async function handleRule(rule: NotificationRule, doc: NotificationSettingsDocum
       return;
     }
     case 'broadcast_start': {
-      const embed = await readRutubeEmbed();
-      const code = embed?.trim() ?? '';
-      const h = hashStr(code);
-      if (!rs.broadcastInitialized) {
-        await patchNotificationRuntimeState((d) => ({
-          ...d,
-          runtimeState: {
-            ...d.runtimeState,
-            lastBroadcastHash: h,
-            broadcastInitialized: true,
-          },
-        }));
+      const candidate = await getPendingBroadcastStartCandidate();
+      if (!candidate) return;
+      const streamUrl = String(candidate.stream_url ?? '').trim();
+      // Если до старта ссылка не была задана — не объявляем о старте и гасим повторные попытки.
+      if (!streamUrl) {
+        await markBroadcastStartNotificationSent(candidate.id);
         return;
       }
-      if (!code) return;
-      if (rs.lastBroadcastHash === h) return;
+      const title = String(candidate.title ?? '').trim() || 'Трансляция';
       await pushToAllMembers(
-        'Трансляция',
-        resolveBody(rule, 'Обновлён код плеера — эфир доступен в приложении.'),
+        title,
+        resolveBody(rule, 'Трансляция началась — присоединяйтесь к эфиру.'),
         '/dashboard',
       );
-      await patchNotificationRuntimeState((d) => ({
-        ...d,
-        runtimeState: { ...d.runtimeState, lastBroadcastHash: h },
-      }));
+      await markBroadcastStartNotificationSent(candidate.id);
       return;
     }
     case 'system_update': {
