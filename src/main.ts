@@ -199,7 +199,7 @@ app.use((req, res, next) => {
     'Content-Security-Policy',
     "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; " +
       "img-src 'self' data: blob: https:; script-src 'self'; style-src 'self' 'unsafe-inline'; " +
-      "connect-src 'self' https: wss: ws:; form-action 'self'",
+      "connect-src 'self' https: wss: ws:; frame-src 'self' https://rutube.ru https://www.youtube.com https://vk.com; form-action 'self'",
   );
   next();
 });

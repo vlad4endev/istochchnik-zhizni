@@ -16,6 +16,7 @@ import {
   LuSettings,
   LuShield,
   LuChartColumnBig,
+  LuTv,
   LuUser,
   LuWifiOff,
   LuX,
@@ -46,6 +47,7 @@ import {
   fetchSectionVisibilitySettingsPublic,
   type AppSectionId,
 } from '../features/settings/sectionVisibilityApi';
+import { fetchMe } from '../features/profile/api';
 
 type NavItem = {
   to: string;
@@ -54,6 +56,7 @@ type NavItem = {
   adminOnly?: boolean;
   studioOnly?: boolean;
   sectionId?: AppSectionId;
+  adminOrMediaMinistryOnly?: boolean;
 };
 
 const NAV_ITEMS: NavItem[] = [
@@ -65,10 +68,14 @@ const NAV_ITEMS: NavItem[] = [
   { to: '/studio', label: 'Студия', Icon: LuDisc3, studioOnly: true, sectionId: 'studio' },
   { to: '/sermons', label: 'Проповеди', Icon: LuMic, sectionId: 'sermons' },
   { to: '/messenger', label: 'Чаты', Icon: LuMessageCircle, sectionId: 'messenger' },
-  // { to: '/broadcast', label: 'Трансляции', Icon: LuTv },
+  { to: '/broadcast', label: 'Трансляция', Icon: LuTv, adminOrMediaMinistryOnly: true },
   { to: '/admin', label: 'Админ', Icon: LuShield, adminOnly: true },
   { to: '/analytics', label: 'Аналитика', Icon: LuChartColumnBig, adminOnly: true },
 ];
+
+function normalizeMinistryDirection(value: unknown): string {
+  return String(value ?? '').trim().toLowerCase();
+}
 
 function navIconClass(isActive: boolean, compact: boolean) {
   return [
@@ -302,6 +309,7 @@ function splitMobileBottomNavItems(visible: NavItem[]): { primary: NavItem[]; ov
   take('/dashboard');
   take('/prayer');
   take('/messenger');
+  take('/broadcast');
   const planner = byTo('/service-planner');
   const songbook = byTo('/songbook');
   if (planner) primary.push(planner);
@@ -478,6 +486,13 @@ export function Layout() {
   const sidebarLogoScalePercent = Math.min(100, logoScalePercent);
 
   const isAdmin = (role ?? 'member').toLowerCase() === 'admin';
+  const meQ = useQuery({
+    queryKey: ['auth', 'me', 'layout'],
+    queryFn: fetchMe,
+    enabled: Boolean(token),
+    staleTime: 60_000,
+  });
+  const canSeeBroadcastNav = isAdmin || normalizeMinistryDirection(meQ.data?.ministry_direction) === 'медиа служения';
   const registrationStatus = useAuthStore((s) => s.registrationStatus ?? 'active');
   const profileUsername = useAuthStore((s) => s.username ?? '');
   const profileMemberId = useAuthStore((s) => s.memberId);
@@ -498,6 +513,7 @@ export function Layout() {
     (item) =>
       (!item.adminOnly || isAdmin) &&
       (!item.studioOnly || canAccessStudioRole(role)) &&
+      (!item.adminOrMediaMinistryOnly || canSeeBroadcastNav) &&
       (!item.sectionId ||
         isAdmin ||
         canRoleAccessSection(sectionVisibilityQ.data, item.sectionId, role, roles)),

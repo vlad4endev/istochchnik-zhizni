@@ -9,12 +9,11 @@ import {
   LuChurch,
   LuHeart,
   LuPlay,
-  LuTv,
   LuSettings,
   LuUser,
 } from 'react-icons/lu';
 
-import { fetchBroadcastEmbed } from '../../../api/broadcast';
+import { fetchActiveBroadcast, type BroadcastData } from '../../../api/broadcast';
 import { fetchPodcastFeed, type PodcastEpisode } from '../../../api/resources';
 import {
   deleteDashboardCoordinatorNote,
@@ -38,11 +37,6 @@ import { resolvePublicUrl } from '../../../lib/resolvePublicUrl';
 import { memberRosterName } from '../../../lib/memberRosterName';
 import { pluralizeRu } from '../../../lib/pluralizeRu';
 import type { Member } from '../../../types';
-import {
-  extractBroadcastDateLabel,
-  grantBroadcastAccess,
-  isBroadcastLiveNow,
-} from '../../broadcast/liveAccess';
 import { useAuthStore } from '../../auth/authStore';
 import { useProfileDraftStore } from '../../profile/profileDraftStore';
 import { useCoordinatorNoteEditorRequestStore } from '../coordinatorNoteEditorRequestStore';
@@ -186,6 +180,120 @@ function memberFirstLastLine(m: Member): string {
   return s || m.name.trim() || '—';
 }
 
+function formatBroadcastTimer(nowMs: number, broadcast: BroadcastData | null): string {
+  if (!broadcast?.starts_at) return '—';
+  if (broadcast.status === 'finished') return '—';
+  const startsAtMs = new Date(broadcast.starts_at).getTime();
+  if (!Number.isFinite(startsAtMs)) return '—';
+  const diff = broadcast.status === 'live'
+    ? Math.max(0, nowMs - startsAtMs)
+    : Math.max(0, startsAtMs - nowMs);
+  const hours = Math.floor(diff / 3_600_000);
+  const minutes = Math.floor((diff % 3_600_000) / 60_000);
+  const seconds = Math.floor((diff % 60_000) / 1_000);
+  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+}
+
+function formatBroadcastDateTime(value: string | null): string {
+  if (!value) return '—';
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return '—';
+  return format(d, 'dd.MM.yyyy HH:mm');
+}
+
+function mapPlatformLabel(platform: string | null | undefined): string {
+  const p = String(platform ?? '').toLowerCase();
+  if (p === 'youtube') return 'YouTube';
+  if (p === 'rutube') return 'RuTube';
+  if (p === 'vk') return 'VK Видео';
+  return 'Платформа';
+}
+
+function shouldShowBroadcastWidget(nowMs: number, broadcast: BroadcastData | null): boolean {
+  if (!broadcast) return false;
+  if (broadcast.status === 'live') return true;
+  if (broadcast.status !== 'scheduled' || !broadcast.starts_at) return false;
+  const startsAtMs = new Date(broadcast.starts_at).getTime();
+  if (!Number.isFinite(startsAtMs)) return false;
+  const twoHoursMs = 2 * 60 * 60 * 1000;
+  return nowMs >= startsAtMs - twoHoursMs;
+}
+
+function BroadcastCompactCard({
+  broadcast,
+  timerText,
+  onOpen,
+}: {
+  broadcast: BroadcastData | null;
+  timerText: string;
+  onOpen: () => void;
+}) {
+  const status = broadcast?.status ?? 'none';
+  const title = broadcast?.title?.trim() || 'Трансляция';
+  const platform = mapPlatformLabel(broadcast?.platform);
+  const timerLabel = status === 'live'
+    ? 'Идёт трансляция'
+    : status === 'scheduled'
+      ? 'До начала'
+      : 'Завершена';
+  const dateLabel = status === 'live' ? 'Началась' : 'Начало';
+  const description = (broadcast?.description ?? '').trim() || '—';
+  const statusBadge = status === 'live'
+    ? (
+      <span className="inline-flex items-center gap-1 rounded-full bg-[#D64035] px-2 py-0.5 text-[10px] font-bold text-white">
+        <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-white" aria-hidden />
+        LIVE
+      </span>
+    )
+    : status === 'scheduled'
+      ? <span className="inline-flex rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-700">Скоро</span>
+      : <span className="inline-flex rounded-full bg-stone-200 px-2 py-0.5 text-[10px] font-bold text-stone-600">Нет трансляций</span>;
+
+  return (
+    <section className="overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-[var(--shadow-card)]">
+      <div className="flex items-center gap-3 bg-[#1a1a1a] px-3 py-2.5">
+        <div className="grid h-[36px] w-[52px] place-items-center rounded-md bg-[#111] text-white/85">
+          <LuPlay className="h-4 w-4" strokeWidth={2} aria-hidden />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-bold text-white">{title}</p>
+          <div className="mt-1 flex items-center gap-2">
+            {statusBadge}
+            <span className="text-[11px] font-medium text-white/70">{platform}</span>
+          </div>
+        </div>
+      </div>
+
+      <div className="h-px bg-stone-200" />
+
+      <div className="flex items-center justify-between gap-2 px-3 py-2.5">
+        <div className="min-w-0">
+          <p className={`text-[11px] font-semibold ${status === 'live' ? 'text-[#D64035]' : 'text-stone-500'}`}>{timerLabel}</p>
+          <p className={`text-xl font-extrabold tabular-nums ${status === 'live' ? 'text-[#D64035]' : 'text-stone-900'}`}>{timerText}</p>
+        </div>
+        <button
+          type="button"
+          onClick={onOpen}
+          className="inline-flex min-h-[36px] items-center justify-center rounded-xl bg-[#D64035] px-4 text-sm font-bold text-white hover:bg-[#bc342c]"
+        >
+          Смотреть
+        </button>
+      </div>
+
+      <div className="h-px bg-stone-200" />
+
+      <div className="flex items-center justify-between gap-3 px-3 py-2 text-xs">
+        <span className="font-semibold text-stone-500">{dateLabel}</span>
+        <span className="font-semibold text-stone-800">{formatBroadcastDateTime(broadcast?.starts_at ?? null)}</span>
+      </div>
+      <div className="flex items-center justify-between gap-3 px-3 pb-3 text-xs">
+        <span className="font-semibold text-stone-500">Описание</span>
+        <span className="max-w-[70%] truncate font-medium text-stone-700">{description}</span>
+      </div>
+    </section>
+  );
+}
+
 function DashboardMain() {
   const qc = useQueryClient();
   const requestOpenCoordinatorNoteEditor = useCoordinatorNoteEditorRequestStore((s) => s.requestOpenEditor);
@@ -206,9 +314,14 @@ function DashboardMain() {
   const [activeAudioTitle, setActiveAudioTitle] = useState<string>('');
   const [eventOpen, setEventOpen] = useState(false);
   const [announcementExpanded, setAnnouncementExpanded] = useState(false);
+  const [broadcastNowMs, setBroadcastNowMs] = useState(() => Date.now());
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(new Date()), 30_000);
+    return () => window.clearInterval(timer);
+  }, []);
+  useEffect(() => {
+    const timer = window.setInterval(() => setBroadcastNowMs(Date.now()), 1_000);
     return () => window.clearInterval(timer);
   }, []);
 
@@ -284,8 +397,8 @@ function DashboardMain() {
   });
 
   const broadcastQ = useQuery({
-    queryKey: ['broadcast'],
-    queryFn: fetchBroadcastEmbed,
+    queryKey: ['broadcast', 'active'],
+    queryFn: fetchActiveBroadcast,
     staleTime: 60_000,
   });
 
@@ -380,8 +493,9 @@ function DashboardMain() {
   const memberToday = prayerQ.data?.members?.[0] ?? null;
   const todayLabel = formatTodayLabel(now);
 
-  const showBroadcastCard = isAdmin || isBroadcastLiveNow(now);
-  const broadcastDateLabel = extractBroadcastDateLabel(broadcastQ.data?.rutube_embed_code) ?? 'Сегодня, 10:30';
+  const activeBroadcast = broadcastQ.data?.broadcast ?? null;
+  const broadcastTimerText = formatBroadcastTimer(broadcastNowMs, activeBroadcast);
+  const showBroadcastWidget = shouldShowBroadcastWidget(broadcastNowMs, activeBroadcast);
 
   const latestEpisode = pickLatestEpisode(sermonsQ.data?.episodes ?? []);
   const event = pickUpcomingEvent(now, eventsQ.data ?? []);
@@ -464,6 +578,24 @@ function DashboardMain() {
       Math.min(100, (adminNextWeekRosterStats.filled / adminNextWeekRosterStats.withMember) * 100),
     );
   }, [adminNextWeekRosterStats]);
+  const coordinatorProgressStats = useMemo(() => {
+    if (isAdmin || isPastor) {
+      return {
+        total: adminNextWeekRosterStats.withMember,
+        filled: adminNextWeekRosterStats.filled,
+      };
+    }
+    const total = coordinatorAssignedRows.length;
+    const filled = Math.max(0, total - coordinatorUnfilledRows.length);
+    return { total, filled };
+  }, [
+    isAdmin,
+    isPastor,
+    adminNextWeekRosterStats.withMember,
+    adminNextWeekRosterStats.filled,
+    coordinatorAssignedRows.length,
+    coordinatorUnfilledRows.length,
+  ]);
 
   /**
    * Следующая неделя: среди участников, закреплённых за координатором, у кого ещё пустая нужда
@@ -557,21 +689,21 @@ function DashboardMain() {
           <header
             className={[
               sectionHeroHeaderClass,
-              'rounded-[22px] bg-[#6B2D3E] px-4 pb-6 pt-5 shadow-[0_12px_34px_rgba(72,20,34,0.36)]',
+              'rounded-[22px] bg-[#6B2D3E] px-4 pb-6 pt-5 shadow-[0_12px_34px_rgba(72,20,34,0.36)] lg:rounded-none lg:px-7 lg:py-[22px]',
             ].join(' ')}
           >
             <div
-              className="pointer-events-none absolute -right-6 -top-6 h-[130px] w-[130px] rounded-full bg-white/[0.07]"
+              className="pointer-events-none absolute -right-6 -top-6 h-[130px] w-[130px] rounded-full bg-white/[0.07] lg:-top-10 lg:right-[120px] lg:h-[180px] lg:w-[180px]"
               aria-hidden
             />
             <div
-              className="pointer-events-none absolute -bottom-8 left-6 h-[90px] w-[90px] rounded-full bg-white/[0.04]"
+              className="pointer-events-none absolute -bottom-8 left-6 h-[90px] w-[90px] rounded-full bg-white/[0.04] lg:-bottom-[50px] lg:-right-[30px] lg:left-auto lg:h-[130px] lg:w-[130px]"
               aria-hidden
             />
             <div className="relative flex items-center justify-between gap-3">
               <div className="min-w-0 flex-1 animate-prayer-fade-up motion-reduce:animate-none">
                 <p className="text-[13px] font-medium text-white/65">Добро пожаловать</p>
-                <h1 className="mt-0.5 truncate text-[22px] font-semibold leading-tight tracking-tight text-white">
+                <h1 className="mt-0.5 truncate text-[22px] font-semibold leading-tight tracking-tight text-white lg:text-[24px]">
                   {greetingName}
                 </h1>
                 <p className="mt-1 text-xs font-medium text-white/50">{dashboardDateLabel}</p>
@@ -581,6 +713,24 @@ function DashboardMain() {
                   {birthdayBadgeText}
                 </div>
               ) : null}
+              <div className="hidden items-center gap-2 lg:flex">
+                <Link
+                  to="/profile"
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-white/15 text-white transition hover:bg-white/25"
+                  aria-label="Профиль"
+                  title="Профиль"
+                >
+                  <LuUser className="h-[18px] w-[18px]" strokeWidth={2} aria-hidden />
+                </Link>
+                <Link
+                  to="/profile"
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-white/15 text-white transition hover:bg-white/25"
+                  aria-label="Настройки"
+                  title="Настройки"
+                >
+                  <LuSettings className="h-[18px] w-[18px]" strokeWidth={2} aria-hidden />
+                </Link>
+              </div>
               <SectionHeroToolbarEnd>
                 <Link
                   to="/profile"
@@ -596,11 +746,20 @@ function DashboardMain() {
         </div>
 
         <div className="hidden lg:block">
-          <div className="grid grid-cols-3 gap-3">
-            <section className="rounded-2xl border border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] px-4 py-3">
-              <p className="mb-2 text-[11px] font-semibold tracking-[0.02em] text-[var(--color-text-secondary)]">Мой профиль</p>
-              <div className="flex items-center gap-3">
-                <div className="h-11 w-11 shrink-0 overflow-hidden rounded-xl bg-stone-100 ring-1 ring-stone-200/70">
+          <div className="grid grid-cols-3 gap-[14px] px-0 py-4">
+            <button
+              type="button"
+              onClick={() =>
+                navigate(
+                  publicProfileSlug
+                    ? `/profile/${encodeURIComponent(publicProfileSlug)}`
+                    : '/profile',
+                )
+              }
+              className="group rounded-[14px] border border-[#E8E0DC] bg-white p-0 text-left transition hover:-translate-y-0.5 hover:shadow-[0_4px_16px_rgba(107,45,62,0.1)]"
+            >
+              <div className="flex items-center gap-3.5 p-[16px]">
+                <div className="h-[52px] w-[52px] shrink-0 overflow-hidden rounded-full border-2 border-[#E8D8DC] bg-stone-100">
                   {avatarUrl ? (
                     <img src={avatarUrl} alt="" className="h-full w-full object-cover" />
                   ) : (
@@ -609,165 +768,233 @@ function DashboardMain() {
                     </div>
                   )}
                 </div>
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-extrabold text-stone-900">{profileDisplayTitle}</p>
-                  <p className="truncate text-xs font-semibold text-stone-600">{publicationsCount} {publicationsLabel}</p>
-                </div>
-              </div>
-            </section>
-
-            <section className="rounded-2xl border border-[#BFC9F7] bg-gradient-to-br from-[#EEF2FF] to-[#E5EAFF] px-4 py-3">
-              <p className="mb-2 text-[11px] font-semibold tracking-[0.02em] text-[#3042A8]">Молимся сегодня</p>
-              <div className="flex items-center gap-3">
-                <div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-[#4A5FD5] text-white">
-                  <LuChurch className="h-5 w-5" strokeWidth={2} aria-hidden />
-                </div>
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-extrabold text-[#1A2560]">{memberToday?.name ?? 'Не назначен'}</p>
-                  <p className="truncate text-xs font-semibold text-[#4A5FD5]">{todayLabel}</p>
-                </div>
-              </div>
-            </section>
-
-            <section className="rounded-2xl border border-[#A8E4C0] bg-gradient-to-br from-[#EDFBF3] to-[#D9F5E6] px-4 py-3">
-              <p className="mb-2 text-[11px] font-semibold tracking-[0.02em] text-[#0F6636]">Ближайшее событие</p>
-              <p className="truncate text-sm font-extrabold text-[#0A2E18]">{event.title}</p>
-              <p className="mt-1 truncate text-xs font-semibold text-[#1A9A55]">{event.whenLabel}</p>
-            </section>
-          </div>
-
-          <div className="mt-3 grid grid-cols-[1.4fr_1fr] gap-4">
-            <div className="space-y-3">
-              {dashboardNotesQ.data?.announcement ? (
-                <section className="rounded-2xl border border-[#F5D99A] bg-gradient-to-br from-[#FFF8EC] to-[#FEF0D6] px-4 py-3">
-                  <div className="mb-2 flex items-center justify-between gap-2">
-                    <p className="text-[11px] font-semibold tracking-[0.02em] text-[#9A6200]">Объявление</p>
-                    {canManageCoordinatorNotes ? (
-                      <details className="group relative">
-                        <summary className="inline-flex min-h-[28px] min-w-[28px] cursor-pointer list-none items-center justify-center rounded-lg border border-stone-200 bg-white text-sm font-bold text-stone-700 marker:hidden [&::-webkit-details-marker]:hidden">
-                          ⋯
-                        </summary>
-                        <div className="absolute right-0 z-10 mt-1 w-40 space-y-1 rounded-xl border border-stone-200 bg-white p-1.5 shadow-lg">
-                          <button
-                            type="button"
-                            className="inline-flex min-h-[34px] w-full items-center justify-start rounded-lg px-2.5 text-xs font-extrabold text-stone-800 hover:bg-stone-50"
-                            onClick={() => requestOpenCoordinatorNoteEditor('announcement')}
-                          >
-                            Изменить
-                          </button>
-                          <button
-                            type="button"
-                            className="inline-flex min-h-[34px] w-full items-center justify-start rounded-lg px-2.5 text-xs font-extrabold text-red-800 hover:bg-red-50"
-                            onClick={() => void onDeleteAnnouncement()}
-                          >
-                            Удалить
-                          </button>
-                        </div>
-                      </details>
-                    ) : null}
-                  </div>
-                  <p className={announcementExpanded ? 'whitespace-pre-wrap text-sm font-semibold leading-[1.55] text-[#3D2800]' : 'line-clamp-3 whitespace-pre-wrap text-sm font-semibold leading-[1.55] text-[#3D2800]'}>
-                    {dashboardNotesQ.data.announcement.text}
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-[15px] font-semibold text-stone-900">{profileDisplayTitle}</p>
+                  <span className="mt-1 inline-block rounded-full bg-[#F0ECF9] px-2 py-0.5 text-[11px] font-semibold text-[#6B47B8]">
+                    {publicationsCount} {publicationsLabel}
+                  </span>
+                  <p className="mt-1 truncate text-xs text-stone-500">
+                    {bioText || 'Откройте профиль для обновления информации'}
                   </p>
-                  <button
-                    type="button"
-                    className="mt-2 text-sm font-bold text-[#B87800] hover:underline"
-                    onClick={() => setAnnouncementExpanded((v) => !v)}
-                  >
-                    {announcementExpanded ? 'Свернуть ↑' : 'Читать полностью →'}
-                  </button>
-                </section>
-              ) : null}
-
-              <section className="rounded-2xl border border-stone-200 bg-white px-4 py-3">
-                <div className="flex items-center justify-between gap-2">
-                  <p className="mb-2 text-[11px] font-semibold tracking-[0.02em] text-[#0E7E6A]">Медиа</p>
-                  <button
-                    type="button"
-                    onClick={() => navigate('/sermons')}
-                    className="mb-2 inline-flex min-h-[30px] items-center gap-1 rounded-lg border border-stone-200 bg-white px-2 text-xs font-bold text-stone-700 hover:bg-stone-50"
-                  >
-                    Все
-                    <LuArrowRight className="h-3.5 w-3.5" aria-hidden />
-                  </button>
                 </div>
-                {latestEpisode ? (
-                  <>
-                    <p className="line-clamp-2 text-base font-extrabold text-stone-900">{latestEpisode.title}</p>
-                    <div className="mt-3 flex flex-wrap items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => void onPlayLatest()}
-                        className="inline-flex min-h-[40px] items-center justify-center gap-2 rounded-xl bg-[#0E7E6A] px-4 text-sm font-extrabold text-white hover:bg-[#0C6E5D]"
-                      >
-                        <LuPlay className="h-4 w-4" strokeWidth={2.25} aria-hidden />
-                        Слушать
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => onToggleFavorite(latestEpisode.id)}
-                        className={[
-                          'inline-flex min-h-[40px] items-center justify-center gap-2 rounded-xl px-4 text-sm font-extrabold transition',
-                          favorites[latestEpisode.id]
-                            ? 'bg-rose-50 text-rose-700 ring-1 ring-rose-200/70 hover:bg-rose-100'
-                            : 'border-[1.5px] border-[#0E7E6A] bg-white text-[#0E7E6A] hover:bg-[#ECF8F5]',
-                        ].join(' ')}
-                      >
-                        <LuHeart className="h-4 w-4" strokeWidth={2} aria-hidden />
-                        В избранное
-                      </button>
-                    </div>
-                  </>
-                ) : (
-                  <p className="text-sm font-semibold text-stone-500">Новая проповедь пока не найдена.</p>
-                )}
-              </section>
-            </div>
+              </div>
+            </button>
 
-            <div className="space-y-3">
-              {showBroadcastCard ? (
-                <section className="rounded-2xl border border-[#F9BAB3] bg-gradient-to-br from-[#FEEFED] to-[#FDE3E0] px-4 py-3">
-                  <div className="mb-2 flex items-center justify-between gap-2">
-                    <p className="text-[11px] font-semibold tracking-[0.02em] text-[#A03028]">Трансляция</p>
-                    <span className="inline-flex items-center rounded-full bg-[#D64035] px-3 py-1 text-[11px] font-semibold text-white">
-                      Смотреть
-                    </span>
+            <section className="rounded-[14px] border border-[#F9C0D0] bg-gradient-to-br from-[#FFF0F3] to-[#FFE4EC] p-4 transition hover:-translate-y-0.5 hover:shadow-[0_4px_16px_rgba(107,45,62,0.1)]">
+              <p className="text-[11px] font-semibold tracking-[0.02em] text-[#C23D57]">Дни рождения</p>
+              {birthdaysThisWeek[0] ? (
+                <div className="mt-3 flex items-start gap-3">
+                  <div className="grid h-[42px] w-[42px] shrink-0 place-items-center rounded-[11px] bg-[#E8536B] text-white">
+                    <span className="text-lg" aria-hidden>🎂</span>
                   </div>
-                  <p className="text-base font-extrabold text-[#3D1410]">{broadcastDateLabel}</p>
-                  <button
-                    type="button"
-                    className="mt-2 text-sm font-bold text-[#A03028] hover:underline"
-                    onClick={() => {
-                      grantBroadcastAccess();
-                      navigate('/broadcast', { state: { fromDashboard: true } });
-                    }}
-                  >
-                    Открыть →
-                  </button>
-                </section>
-              ) : null}
+                  <div className="min-w-0">
+                    <p className="truncate text-[14px] font-semibold text-[#3D1520]">{birthdaysThisWeek[0].name}</p>
+                    <p className="mt-1 text-xs text-[#C23D57]">{formatBirthdayChipDate(birthdaysThisWeek[0].week_date)}</p>
+                  </div>
+                </div>
+              ) : (
+                <p className="mt-3 text-sm font-medium text-[#C23D57]">На этой неделе дней рождения не запланировано.</p>
+              )}
+            </section>
 
-              {showPrayerPlanOnDashboard ? (
-                <section className="rounded-2xl border border-[#E8E0DC] bg-[#F8F5F3] px-4 py-3">
-                  <p className="mb-2 text-[11px] font-semibold tracking-[0.02em] text-[#6B2D3E]">Координаторам сбора</p>
-                  {((isAdmin || isPastor ? unfilledWeekRowsAdmin : coordinatorUnfilledRows).length === 0) ? (
-                    <p className="text-sm font-medium text-stone-600">Незаполненных нужд нет.</p>
-                  ) : (
-                    <ul className="max-h-[260px] space-y-2 overflow-auto pr-1">
-                      {(isAdmin || isPastor ? unfilledWeekRowsAdmin : coordinatorUnfilledRows).slice(0, 4).map((row) => (
-                        <li
-                          key={`${row.date}-${row.member.id}`}
-                          className="flex items-center justify-between gap-2 rounded-[10px] border border-[#E8E0DC] bg-white px-3 py-2 text-sm"
+            <button
+              type="button"
+              onClick={() => navigate('/prayer')}
+              className="rounded-[14px] border border-[#BFC9F7] bg-gradient-to-br from-[#EEF2FF] to-[#E5EAFF] p-4 text-left transition hover:-translate-y-0.5 hover:shadow-[0_4px_16px_rgba(107,45,62,0.1)]"
+            >
+              <p className="text-[11px] font-semibold tracking-[0.02em] text-[#3042A8]">Молимся сегодня</p>
+              <div className="mt-3 flex items-start gap-3">
+                <div className="grid h-[42px] w-[42px] shrink-0 place-items-center rounded-[11px] bg-[#4A5FD5] text-white">
+                  <LuChurch className="h-[18px] w-[18px]" strokeWidth={2} aria-hidden />
+                </div>
+                <div className="min-w-0">
+                  <p className="truncate text-[14px] font-semibold text-[#1A2560]">{memberToday?.name ?? 'Не назначен'}</p>
+                  <p className="mt-1 text-xs text-[#4A5FD5]">{todayLabel}</p>
+                </div>
+              </div>
+            </button>
+
+            {dashboardNotesQ.data?.announcement ? (
+              <section className="col-span-2 rounded-[14px] border border-[#F5D99A] bg-gradient-to-br from-[#FFF8EC] to-[#FEF0D6] p-4 transition hover:-translate-y-0.5 hover:shadow-[0_4px_16px_rgba(107,45,62,0.1)]">
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className="grid h-8 w-8 place-items-center rounded-[9px] bg-[#E8960F] text-white">
+                      <LuArrowRight className="h-4 w-4 rotate-45" strokeWidth={2} aria-hidden />
+                    </span>
+                    <p className="text-[11px] font-semibold tracking-[0.02em] text-[#9A6200]">Объявление</p>
+                  </div>
+                  {canManageCoordinatorNotes ? (
+                    <details className="group relative">
+                      <summary className="inline-flex min-h-[28px] min-w-[28px] cursor-pointer list-none items-center justify-center rounded-lg border border-amber-200 bg-white text-sm font-bold text-amber-900 marker:hidden [&::-webkit-details-marker]:hidden">
+                        ⋯
+                      </summary>
+                      <div className="absolute right-0 z-10 mt-1 w-40 space-y-1 rounded-[10px] border border-amber-200 bg-white p-1.5 shadow-lg">
+                        <button
+                          type="button"
+                          className="inline-flex min-h-[34px] w-full items-center justify-start rounded-lg px-2.5 text-xs font-extrabold text-amber-950 hover:bg-amber-50"
+                          onClick={() => requestOpenCoordinatorNoteEditor('announcement')}
                         >
-                          <span className="truncate font-bold text-stone-900">{memberFirstLastLine(row.member)}</span>
-                          <span className="shrink-0 text-xs font-semibold text-stone-500">{formatWeekDayChip(row.date)}</span>
-                        </li>
-                      ))}
-                    </ul>
+                          Изменить
+                        </button>
+                        <button
+                          type="button"
+                          className="inline-flex min-h-[34px] w-full items-center justify-start rounded-lg px-2.5 text-xs font-extrabold text-red-800 hover:bg-red-50"
+                          onClick={() => void onDeleteAnnouncement()}
+                        >
+                          Удалить
+                        </button>
+                      </div>
+                    </details>
+                  ) : null}
+                </div>
+                <p className={announcementExpanded ? 'whitespace-pre-wrap text-[13px] font-semibold leading-[1.55] text-[#3D2800]' : 'line-clamp-3 whitespace-pre-wrap text-[13px] font-semibold leading-[1.55] text-[#3D2800]'}>
+                  {dashboardNotesQ.data.announcement.text}
+                </p>
+                <button
+                  type="button"
+                  className="mt-2 text-xs font-semibold text-[#B87800] hover:underline"
+                  onClick={() => setAnnouncementExpanded((v) => !v)}
+                >
+                  {announcementExpanded ? 'Свернуть' : 'Читать полностью'}
+                </button>
+              </section>
+            ) : null}
+
+            <section className="rounded-[14px] border border-stone-200 bg-white p-4 transition hover:-translate-y-0.5 hover:shadow-[0_4px_16px_rgba(107,45,62,0.1)]">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <span className="grid h-8 w-8 place-items-center rounded-[9px] bg-[#0E7E6A] text-white">
+                    <LuPlay className="h-4 w-4" strokeWidth={2} aria-hidden />
+                  </span>
+                  <p className="text-[11px] font-semibold tracking-[0.02em] text-[#0A5A4C]">Медиа</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => navigate('/sermons')}
+                  className="inline-flex min-h-[30px] items-center gap-1 rounded-[9px] border border-stone-200 bg-white px-2 text-xs font-semibold text-stone-700 hover:bg-stone-50"
+                >
+                  Все
+                  <LuArrowRight className="h-3.5 w-3.5" aria-hidden />
+                </button>
+              </div>
+              {latestEpisode ? (
+                <>
+                  <p className="mt-2 line-clamp-2 text-[14px] font-semibold text-stone-900">{latestEpisode.title}</p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => void onPlayLatest()}
+                      className="inline-flex min-h-[40px] items-center gap-2 rounded-[9px] bg-[#0E7E6A] px-4 text-[13px] font-semibold text-white hover:bg-[#0C6E5D]"
+                    >
+                      <LuPlay className="h-4 w-4" strokeWidth={2.25} aria-hidden />
+                      Воспроизвести
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onToggleFavorite(latestEpisode.id)}
+                      className={[
+                        'inline-flex min-h-[40px] items-center gap-2 rounded-[9px] px-4 text-[13px] font-semibold transition',
+                        favorites[latestEpisode.id]
+                          ? 'bg-rose-50 text-rose-700 ring-1 ring-rose-200/70 hover:bg-rose-100'
+                          : 'border-[1.5px] border-[#0E7E6A] bg-white text-[#0E7E6A] hover:bg-[#ECF8F5]',
+                      ].join(' ')}
+                    >
+                      <LuHeart className="h-4 w-4" strokeWidth={2} aria-hidden />
+                      В избранное
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <p className="mt-3 text-sm font-semibold text-stone-500">Новая проповедь пока не найдена.</p>
+              )}
+            </section>
+
+            {showBroadcastWidget ? (
+              <BroadcastCompactCard broadcast={activeBroadcast} timerText={broadcastTimerText} onOpen={() => navigate('/broadcast')} />
+            ) : (
+              <div />
+            )}
+
+            <button
+              type="button"
+              onClick={() => setEventOpen(true)}
+              className="col-span-2 rounded-[14px] border border-[#A8E4C0] bg-gradient-to-br from-[#EDFBF3] to-[#D9F5E6] p-4 text-left transition hover:-translate-y-0.5 hover:shadow-[0_4px_16px_rgba(107,45,62,0.1)]"
+            >
+              <p className="text-[11px] font-semibold tracking-[0.02em] text-[#0F6636]">Событие</p>
+              <div className="mt-3 flex items-start gap-3">
+                <div className="grid h-[42px] w-[42px] shrink-0 place-items-center rounded-[11px] bg-[#1A9A55] text-white">
+                  <LuCalendarDays className="h-[18px] w-[18px]" strokeWidth={2} aria-hidden />
+                </div>
+                <div className="min-w-0">
+                  <p className="truncate text-[14px] font-semibold text-[#0A2E18]">{event.title}</p>
+                  <p className="mt-1 text-xs text-[#1A9A55]">{event.whenLabel}</p>
+                </div>
+              </div>
+            </button>
+
+            {showPrayerPlanOnDashboard ? (
+              <section className="col-span-3 rounded-[14px] border border-[#E8E0DC] bg-[#F8F5F3] p-4 transition hover:-translate-y-0.5 hover:shadow-[0_4px_16px_rgba(107,45,62,0.1)]">
+                <p className="text-[11px] font-semibold tracking-[0.02em] text-[#6B2D3E]">Координаторы</p>
+                <div className="mt-3 grid grid-cols-3 gap-[10px]">
+                  <div className="col-span-3">
+                    <div className="mb-1 flex items-center justify-between text-xs text-stone-600">
+                      <span>Заполнение нужд</span>
+                      <span>{coordinatorProgressStats.filled} из {coordinatorProgressStats.total || 0}</span>
+                    </div>
+                    <div className="h-1.5 overflow-hidden rounded bg-[#E8E0DC]">
+                      <div
+                        className="h-full rounded bg-[#6B2D3E] transition-[width] duration-500 ease-out"
+                        style={{
+                          width: coordinatorProgressStats.total > 0
+                            ? `${(coordinatorProgressStats.filled / coordinatorProgressStats.total) * 100}%`
+                            : '0%',
+                        }}
+                      />
+                    </div>
+                  </div>
+
+                  {(isAdmin || isPastor ? unfilledWeekRowsAdmin : coordinatorUnfilledRows).slice(0, 6).map((row) => (
+                    <div
+                      key={`desk-coordinator-${row.date}-${row.member.id}`}
+                      className="rounded-[10px] border border-[#E8E0DC] bg-white px-3 py-2.5"
+                    >
+                      <p className="truncate text-[13px] font-semibold text-[#1a1a1a]">{memberFirstLastLine(row.member)}</p>
+                      <p className="mt-1 text-[11px] text-[#888]">{formatWeekDayChip(row.date)}</p>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-4">
+                  {isAdmin ? (
+                    <details className="group rounded-2xl border border-stone-200/70 bg-white/70 p-1 shadow-sm">
+                      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 rounded-[10px] px-3 py-2 text-sm font-extrabold text-stone-900 marker:hidden [&::-webkit-details-marker]:hidden">
+                        <span>Назначения координаторов и правки плана</span>
+                        <span className="shrink-0 rounded-full border border-stone-200/80 bg-white px-2 py-1 text-[11px] font-bold tracking-[0.02em] text-stone-600 group-open:hidden">
+                          Развернуть
+                        </span>
+                        <span className="hidden shrink-0 rounded-full border border-stone-200/80 bg-white px-2 py-1 text-[11px] font-bold tracking-[0.02em] text-stone-600 group-open:inline">
+                          Свернуть
+                        </span>
+                      </summary>
+                      <div className="px-2 pb-2 pt-1">
+                        <NextWeekPrayerPlanSection
+                          canView
+                          currentUserId={me?.id ?? null}
+                          currentUserRole={me?.app_role ?? null}
+                          isAdmin={isAdmin}
+                        />
+                      </div>
+                    </details>
+                  ) : (
+                    <NextWeekPrayerPlanSection
+                      canView
+                      currentUserId={me?.id ?? null}
+                      currentUserRole={me?.app_role ?? null}
+                      isAdmin={isAdmin}
+                    />
                   )}
-                </section>
-              ) : null}
-            </div>
+                </div>
+              </section>
+            ) : null}
           </div>
         </div>
 
@@ -911,33 +1138,10 @@ function DashboardMain() {
             </div>
           </button>
 
-          {showBroadcastCard ? (
-            <button
-              type="button"
-              onClick={() => {
-                grantBroadcastAccess();
-                navigate('/broadcast', { state: { fromDashboard: true } });
-              }}
-              className="tap-highlight-transparent touch-manipulation group min-h-[146px] overflow-hidden rounded-2xl border border-[#F9BAB3] bg-gradient-to-br from-[#FEEFED] to-[#FDE3E0] p-4 text-left shadow-[var(--shadow-card)] transition hover:-translate-y-0.5 hover:shadow-[var(--shadow)] sm:col-span-2 sm:min-h-[152px] sm:p-5 xl:col-span-6"
-            >
-              <div className="flex items-start justify-between gap-2">
-                <p className="text-[11px] font-semibold tracking-[0.02em] text-[#A03028]">Трансляция</p>
-                <span className="inline-flex items-center rounded-full bg-[#D64035] px-3 py-1 text-[11px] font-semibold text-white">
-                  Смотреть
-                </span>
-              </div>
-              <div className="mt-4 flex items-start gap-3">
-                <div className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-[#D64035] text-white">
-                  <LuTv className="h-6 w-6" strokeWidth={2} aria-hidden />
-                </div>
-                <div className="min-w-0">
-                  <p className="text-base font-extrabold text-[#3D1410]">{broadcastDateLabel}</p>
-                  <p className="mt-1 text-sm font-semibold text-[#A03028]">
-                    {broadcastQ.data?.rutube_embed_code ? 'Эфир доступен, открыть раздел трансляции' : 'Открыть раздел трансляции'}
-                  </p>
-                </div>
-              </div>
-            </button>
+          {showBroadcastWidget ? (
+            <div className="sm:col-span-2 xl:col-span-6">
+              <BroadcastCompactCard broadcast={activeBroadcast} timerText={broadcastTimerText} onOpen={() => navigate('/broadcast')} />
+            </div>
           ) : null}
 
           <section className="overflow-hidden rounded-2xl border border-stone-200/70 bg-white p-4 shadow-[var(--shadow-card)] sm:col-span-2 sm:p-5 xl:col-span-6">

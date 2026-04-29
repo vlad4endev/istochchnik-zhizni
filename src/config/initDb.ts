@@ -112,6 +112,21 @@ CREATE TABLE IF NOT EXISTS global_settings (
   telegram_enabled BOOLEAN NOT NULL DEFAULT FALSE
 );
 
+CREATE TABLE IF NOT EXISTS broadcasts (
+  id BIGSERIAL PRIMARY KEY,
+  title VARCHAR(255),
+  description TEXT,
+  starts_at TIMESTAMP,
+  platform VARCHAR(20) NOT NULL DEFAULT 'youtube',
+  stream_url TEXT,
+  notify_members BOOLEAN NOT NULL DEFAULT TRUE,
+  is_public BOOLEAN NOT NULL DEFAULT FALSE,
+  status VARCHAR(20) NOT NULL DEFAULT 'scheduled',
+  notification_sent BOOLEAN NOT NULL DEFAULT FALSE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 CREATE TABLE IF NOT EXISTS member_cycle_overrides (
   target_date DATE PRIMARY KEY,
   member_id INTEGER NOT NULL REFERENCES members(id) ON DELETE CASCADE,
@@ -307,6 +322,15 @@ ALTER TABLE global_settings ADD COLUMN IF NOT EXISTS telegram_default_chat_id TE
 ALTER TABLE global_settings ADD COLUMN IF NOT EXISTS telegram_prayer_template TEXT;
 ALTER TABLE global_settings ADD COLUMN IF NOT EXISTS telegram_enabled BOOLEAN NOT NULL DEFAULT FALSE;
 ALTER TABLE global_settings ADD COLUMN IF NOT EXISTS notification_settings_json TEXT;
+ALTER TABLE broadcasts ADD COLUMN IF NOT EXISTS title VARCHAR(255);
+ALTER TABLE broadcasts ADD COLUMN IF NOT EXISTS description TEXT;
+ALTER TABLE broadcasts ADD COLUMN IF NOT EXISTS starts_at TIMESTAMP;
+ALTER TABLE broadcasts ADD COLUMN IF NOT EXISTS platform VARCHAR(20) DEFAULT 'youtube';
+ALTER TABLE broadcasts ADD COLUMN IF NOT EXISTS stream_url TEXT;
+ALTER TABLE broadcasts ADD COLUMN IF NOT EXISTS notify_members BOOLEAN DEFAULT TRUE;
+ALTER TABLE broadcasts ADD COLUMN IF NOT EXISTS is_public BOOLEAN DEFAULT FALSE;
+ALTER TABLE broadcasts ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'scheduled';
+ALTER TABLE broadcasts ADD COLUMN IF NOT EXISTS notification_sent BOOLEAN DEFAULT FALSE;
 
 ALTER TABLE church_events ADD COLUMN IF NOT EXISTS recurrence_type VARCHAR(16);
 UPDATE church_events
