@@ -1232,15 +1232,29 @@ export const useChatStore = create<ChatState>((set, get) => ({
   // ─── Mark read ────────────────────────────────────────────
 
   markRead: async (conversationId) => {
+    if (!conversationId) return;
     const msgs = get().messagesByConv[conversationId];
     if (!msgs || msgs.length === 0) return;
     const lastMsg = msgs[msgs.length - 1];
-    if (lastMsg.id.startsWith('temp-')) return;
+    const lastMsgId = String(lastMsg?.id ?? '').trim();
+    if (!/^\d+$/.test(lastMsgId)) return;
 
-    await get().markReadUpTo(conversationId, lastMsg.id);
+    await get().markReadUpTo(conversationId, lastMsgId);
   },
 
   markAsRead: async (conversationId) => {
+    if (!conversationId) return;
+    const msgs = get().messagesByConv[conversationId] || [];
+    if (msgs.length === 0) return;
+    const latestNumericMessageId = (() => {
+      for (let i = msgs.length - 1; i >= 0; i -= 1) {
+        const id = String(msgs[i]?.id ?? '').trim();
+        if (/^\d+$/.test(id)) return id;
+      }
+      return null;
+    })();
+    if (!latestNumericMessageId) return;
+
     // Always clear local counter immediately on open.
     set((s) => ({
       conversations: s.conversations.map((c) =>
@@ -1252,14 +1266,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
           (s.conversations.find((c) => c.id === conversationId)?.unread_count ?? 0),
       ),
     }));
-    const latestNumericMessageId = (() => {
-      const msgs = get().messagesByConv[conversationId] || [];
-      for (let i = msgs.length - 1; i >= 0; i -= 1) {
-        const id = String(msgs[i]?.id ?? '').trim();
-        if (/^\d+$/.test(id)) return id;
-      }
-      return null;
-    })();
     // Best-effort: update server read cursor immediately.
     try {
       await api.markConversationRead(conversationId, {

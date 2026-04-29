@@ -1958,6 +1958,9 @@ export async function markRead(
   input: { lastReadMessageId?: string | null; readAt?: string | null },
 ): Promise<boolean> {
   const normalizedMessageId = String(input.lastReadMessageId || '').trim();
+  if (!normalizedMessageId) {
+    return false;
+  }
   const normalizedReadAt = String(input.readAt || '').trim();
   const hasMessageId = /^\d+$/.test(normalizedMessageId);
   const hasReadAt = normalizedReadAt.length > 0;

@@ -78,6 +78,7 @@ export function ChatWindow({
   const lastSentReadIdRef = useRef<bigint>(0n);
   const visibleForeignIdsRef = useRef<Set<string>>(new Set());
   const flushTimerRef = useRef<number | null>(null);
+  const markAsReadTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const markReadInFlightRef = useRef<bigint>(0n);
   const markReadCommittedRef = useRef<bigint>(0n);
   const scrollMeasureRafRef = useRef<number | null>(null);
@@ -286,28 +287,62 @@ export function ChatWindow({
     }
   }, [conversationId, loadMessages]);
 
-  // On open: mark read; если есть непрочитанное — чуть откладываем, чтобы успел сработать автоскролл к первому непрочитанному.
+  const lastNumericMessageId = useMemo(() => {
+    for (let i = messages.length - 1; i >= 0; i -= 1) {
+      const id = String(messages[i]?.id ?? '').trim();
+      if (/^\d+$/.test(id)) return id;
+    }
+    return null;
+  }, [messages]);
+
+  const unreadCount = useMemo(
+    () => conversations.find((c) => c.id === conversationId)?.unread_count ?? 0,
+    [conversations, conversationId],
+  );
+
+  const debouncedMarkAsRead = useCallback(
+    (convId: string) => {
+      if (markAsReadTimerRef.current) {
+        clearTimeout(markAsReadTimerRef.current);
+      }
+      markAsReadTimerRef.current = setTimeout(() => {
+        void markAsRead(convId);
+      }, 400);
+    },
+    [markAsRead],
+  );
+
+  // On open: mark read only when we have a real numeric tail id.
   useEffect(() => {
     if (isDraft) return;
-    const unread = conversations.find((c) => c.id === conversationId)?.unread_count ?? 0;
-    const delay = unread > 0 ? 700 : 0;
-    const t = window.setTimeout(() => {
-      if (!isMessengerChatReadSurfaceOpen()) return;
-      void markAsRead(conversationId);
-    }, delay);
-    return () => window.clearTimeout(t);
-  }, [conversationId, markAsRead, isDraft, conversations]);
+    if (!conversationId || !lastNumericMessageId) return;
+    if (messages.length === 0) return;
+    if (unreadCount <= 0) return;
+    if (!isMessengerChatReadSurfaceOpen()) return;
+    debouncedMarkAsRead(conversationId);
+  }, [conversationId, lastNumericMessageId, messages.length, unreadCount, isDraft, debouncedMarkAsRead]);
 
   useEffect(() => {
     if (isDraft) return;
     const onVisibilityChange = () => {
       if (document.visibilityState !== 'visible') return;
       if (!isMessengerChatReadSurfaceOpen()) return;
-      void markAsRead(conversationId);
+      if (!conversationId || !lastNumericMessageId) return;
+      if (messages.length === 0) return;
+      debouncedMarkAsRead(conversationId);
     };
     document.addEventListener('visibilitychange', onVisibilityChange);
     return () => document.removeEventListener('visibilitychange', onVisibilityChange);
-  }, [conversationId, isDraft, markAsRead]);
+  }, [conversationId, isDraft, lastNumericMessageId, messages.length, debouncedMarkAsRead]);
+
+  useEffect(() => {
+    return () => {
+      if (markAsReadTimerRef.current) {
+        clearTimeout(markAsReadTimerRef.current);
+        markAsReadTimerRef.current = null;
+      }
+    };
+  }, []);
 
   const flushVisibleReads = useCallback(() => {
     if (flushTimerRef.current != null) {

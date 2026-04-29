@@ -1123,13 +1123,17 @@ router.post('/conversations/:id/read', async (req: Request, res: Response) => {
   const convId = req.params.id;
   const rawMessageId = req.body?.messageId ?? req.body?.lastReadMessageId;
   const messageId = String(rawMessageId ?? '').trim();
+  if (!messageId) {
+    res.json({ ok: true, updated: false });
+    return;
+  }
   const readAt = String(req.body?.readAt ?? req.body?.read_at ?? '').trim();
   if (readAt && Number.isNaN(Date.parse(readAt))) {
     res.status(400).json({ error: 'readAt must be a valid ISO datetime' });
     return;
   }
-  if ((!messageId || !/^\d+$/.test(messageId)) && !readAt) {
-    res.status(400).json({ error: 'messageId (numeric) or readAt is required' });
+  if (!/^\d+$/.test(messageId)) {
+    res.status(400).json({ error: 'messageId must be numeric' });
     return;
   }
   try {
