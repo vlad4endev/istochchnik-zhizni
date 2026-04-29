@@ -116,6 +116,11 @@ export async function deleteAdminMember(id: number): Promise<void> {
   await apiClient.delete(`${USERS}/${id}`);
 }
 
+export async function resetAdminMemberPassword(id: number): Promise<AppUser> {
+  const { data } = await apiClient.post<AppUser>(`${USERS}/${id}/reset-password`);
+  return data;
+}
+
 /** Ручная запись в историю молитвенных нужд (только админ). */
 export async function addAdminPrayerRequestHistory(
   memberId: number,

@@ -92,6 +92,13 @@ export interface LoginResult {
   user: AuthUser;
 }
 
+export interface LoginPasswordResetRequiredResult {
+  status: 'password_reset_required';
+  phone_number: string;
+}
+
+export type LoginAttemptResult = LoginResult | LoginPasswordResetRequiredResult;
+
 export type RegisterResult =
   | ({ status: 'approved' } & LoginResult)
   | {
@@ -146,6 +153,7 @@ type MemberRow = {
   created_at: string;
   updated_at: string;
   password_hash?: string | null;
+  password_reset_required?: boolean;
   profile_username?: string | null;
 };
 
@@ -1054,11 +1062,13 @@ export async function confirmPasswordResetViaSms(
   );
 }
 
-export async function loginUser(phoneInput: string, password: string): Promise<LoginResult | null> {
+export async function loginUser(phoneInput: string, password: string): Promise<LoginAttemptResult | null> {
   const phoneDigits = normalizePhoneDigits(phoneInput.trim());
   const phoneVariants = getPhoneDigitsVariants(phoneDigits);
   ensureValidPhone(phoneInput);
-  ensureValidPassword(password);
+  if (password.trim().length > 0) {
+    ensureValidPassword(password);
+  }
 
   const result = await query(
     `SELECT
@@ -1077,10 +1087,10 @@ export async function loginUser(phoneInput: string, password: string): Promise<L
       in_prayer_cycle,
       created_at,
       updated_at,
-      password_hash
+      password_hash,
+      password_reset_required
     FROM members
     WHERE regexp_replace(COALESCE(phone_number, ''), '\\D', '', 'g') = ANY($1::text[])
-      AND password_hash IS NOT NULL
     ORDER BY id ASC
     LIMIT 2`,
     [phoneVariants]
@@ -1102,6 +1112,17 @@ export async function loginUser(phoneInput: string, password: string): Promise<L
     return null;
   }
 
+  if (Boolean(row.password_reset_required)) {
+    return {
+      status: 'password_reset_required',
+      phone_number: row.phone_number ?? phoneInput.trim(),
+    };
+  }
+
+  if (!password.trim() || !row.password_hash) {
+    return null;
+  }
+
   const isPasswordValid = await verifyPassword(password, row.password_hash);
   if (!isPasswordValid) {
     return null;
@@ -1117,6 +1138,37 @@ export async function loginUser(phoneInput: string, password: string): Promise<L
     expires_at: expiresAt,
     user,
   };
+}
+
+export async function completePasswordSetupAfterAdminReset(
+  phoneInput: string,
+  newPassword: string
+): Promise<'ok' | 'not_required' | 'not_found'> {
+  ensureValidPhone(phoneInput);
+  ensureValidPassword(newPassword);
+  const member = await findMemberByPhoneDigits(normalizePhoneDigits(phoneInput));
+  if (!member) {
+    return 'not_found';
+  }
+  const row = await query(
+    `SELECT password_reset_required FROM members WHERE id = $1 LIMIT 1`,
+    [member.id]
+  );
+  const required = Boolean((row.rows[0] as { password_reset_required?: unknown } | undefined)?.password_reset_required);
+  if (!required) {
+    return 'not_required';
+  }
+  const newHash = await hashPassword(newPassword);
+  await query(
+    `UPDATE members
+     SET password_hash = $1,
+         password_reset_required = FALSE,
+         updated_at = NOW()
+     WHERE id = $2`,
+    [newHash, member.id]
+  );
+  await query(`DELETE FROM auth_sessions WHERE member_id = $1`, [member.id]);
+  return 'ok';
 }
 
 export async function resolveSessionByToken(token: string): Promise<SessionPrincipal | null> {

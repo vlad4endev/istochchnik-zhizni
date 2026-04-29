@@ -278,6 +278,7 @@ ALTER TABLE members ADD COLUMN IF NOT EXISTS last_seen_at TIMESTAMPTZ;
 -- Участие в общем молитвенном цикле: новые записи по умолчанию вне цикла, существующие при добавлении колонки — в цикле.
 ALTER TABLE members ADD COLUMN IF NOT EXISTS in_prayer_cycle BOOLEAN NOT NULL DEFAULT TRUE;
 ALTER TABLE members ALTER COLUMN in_prayer_cycle SET DEFAULT FALSE;
+ALTER TABLE members ADD COLUMN IF NOT EXISTS password_reset_required BOOLEAN NOT NULL DEFAULT FALSE;
 
 -- Одноразово: меняем местами имя и фамилию (значения в first_name и last_name), пересобираем name.
 CREATE TABLE IF NOT EXISTS app_data_patches (

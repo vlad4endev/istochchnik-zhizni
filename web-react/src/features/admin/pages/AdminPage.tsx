@@ -67,6 +67,7 @@ import {
   fetchTelegramSettings,
   fetchSmsSettings,
   mergeDuplicateMembers,
+  resetAdminMemberPassword,
   swapAllMembersFirstLastNames,
   patchTelegramSettings,
   patchSmsSettings,
@@ -221,6 +222,10 @@ function roleArray(value: string): string[] {
     .split(',')
     .map((x) => x.trim())
     .filter((x) => x.length > 0);
+}
+
+function directionArray(value: string): string[] {
+  return roleArray(value);
 }
 
 function displayName(u: AppUser): string {
@@ -510,8 +515,11 @@ function MembersSection() {
   }, [data, search]);
 
   const dirs = (dirsQ.data ?? []) as MinistryDirectionTemplate[];
-  const rolesForDirection = (directionTitle: string) => {
-    const fromDirection = (dirs.find((d) => d.title === directionTitle)?.roles ?? []).map((r) => r.title);
+  const rolesForDirection = (directionTitlesRaw: string) => {
+    const selectedDirs = directionArray(directionTitlesRaw);
+    const fromDirection = dirs
+      .filter((d) => selectedDirs.includes(d.title))
+      .flatMap((d) => (d.roles ?? []).map((r) => r.title));
     const mustHave = ['Ведущий', 'Проповедник'];
     return Array.from(new Set([...fromDirection, ...mustHave]));
   };
@@ -711,6 +719,19 @@ function MembersSection() {
       invalidate();
     },
     onError: (e) => setBanner({ type: 'err', text: apiErrorMessage(e, 'Не удалось удалить.') }),
+  });
+
+  const resetPasswordMut = useMutation({
+    mutationFn: (id: number) => resetAdminMemberPassword(id),
+    onSuccess: (updated) => {
+      setEditing(updated);
+      setBanner({
+        type: 'ok',
+        text: 'Пароль сброшен. При следующем входе пользователь задаст новый пароль по номеру телефона.',
+      });
+      invalidate();
+    },
+    onError: (e) => setBanner({ type: 'err', text: apiErrorMessage(e, 'Не удалось сбросить пароль.') }),
   });
 
   const roleMut = useMutation({
@@ -1576,37 +1597,136 @@ function MembersSection() {
                 <div className="grid gap-3 sm:grid-cols-2">
                   <div>
                     <label className="mb-1 block text-xs font-semibold text-stone-600">Направление</label>
-                    <select
-                      className={fieldClass()}
-                      value={editForm.ministry_direction}
-                      onChange={(e) => {
-                        const nextDir = e.target.value;
-                        setEditForm((s) => {
-                          return { ...s, ministry_direction: nextDir };
-                        });
-                      }}
-                    >
-                      <option value="">—</option>
-                      {dirs.map((d) => (
-                        <option key={d.id} value={d.title}>
-                          {d.title}
-                        </option>
-                      ))}
-                    </select>
+                    <details className="group relative">
+                      <summary
+                        className={`${fieldClass()} list-none cursor-pointer pr-9 [&::-webkit-details-marker]:hidden`}
+                      >
+                        {directionArray(editForm.ministry_direction).length > 0
+                          ? directionArray(editForm.ministry_direction).join(', ')
+                          : 'Выберите направление(я)'}
+                        <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 transition group-open:rotate-180">
+                          ▾
+                        </span>
+                      </summary>
+                      <div className="absolute z-20 mt-1 max-h-56 w-full overflow-auto rounded-xl border border-stone-200 bg-white p-2 shadow-lg">
+                        <div className="mb-2 flex gap-2 border-b border-stone-200 pb-2">
+                          <button
+                            type="button"
+                            className="rounded-lg border border-stone-200 px-2 py-1 text-xs font-semibold text-stone-700 hover:bg-stone-100"
+                            onClick={() =>
+                              setEditForm((s) => ({
+                                ...s,
+                                ministry_direction: normalizeMinistryRoles(dirs.map((d) => d.title).join(', ')),
+                              }))
+                            }
+                          >
+                            Выбрать все
+                          </button>
+                          <button
+                            type="button"
+                            className="rounded-lg border border-stone-200 px-2 py-1 text-xs font-semibold text-stone-700 hover:bg-stone-100"
+                            onClick={() => setEditForm((s) => ({ ...s, ministry_direction: '' }))}
+                          >
+                            Очистить
+                          </button>
+                        </div>
+                        {dirs.map((d) => {
+                          const selected = directionArray(editForm.ministry_direction).includes(d.title);
+                          return (
+                            <label
+                              key={d.id}
+                              className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-stone-700 hover:bg-stone-100"
+                            >
+                              <input
+                                type="checkbox"
+                                className="h-4 w-4 rounded border-stone-300 text-primary"
+                                checked={selected}
+                                onChange={(e) => {
+                                  const current = directionArray(editForm.ministry_direction);
+                                  const next = e.target.checked
+                                    ? Array.from(new Set([...current, d.title]))
+                                    : current.filter((x) => x !== d.title);
+                                  setEditForm((s) => ({
+                                    ...s,
+                                    ministry_direction: normalizeMinistryRoles(next.join(', ')),
+                                  }));
+                                }}
+                              />
+                              <span>{d.title}</span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </details>
                   </div>
                   <div>
                     <label className="mb-1 block text-xs font-semibold text-stone-600">Роль служения</label>
-                    <input
-                      className={fieldClass()}
-                      value={editForm.ministry_role}
-                      onChange={(e) => setEditForm((s) => ({ ...s, ministry_role: e.target.value }))}
-                      list={`ministry-role-options-${editing.id}`}
-                    />
-                    <datalist id={`ministry-role-options-${editing.id}`}>
-                      {roleOptionsForDirection(editForm.ministry_direction).map((t) => (
-                        <option key={t} value={t} />
-                      ))}
-                    </datalist>
+                    <details className="group relative">
+                      <summary
+                        className={`${fieldClass()} list-none cursor-pointer pr-9 [&::-webkit-details-marker]:hidden`}
+                      >
+                        {roleArray(editForm.ministry_role).length > 0
+                          ? roleArray(editForm.ministry_role).join(', ')
+                          : 'Выберите роль(и)'}
+                        <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 transition group-open:rotate-180">
+                          ▾
+                        </span>
+                      </summary>
+                      <div className="absolute z-20 mt-1 max-h-56 w-full overflow-auto rounded-xl border border-stone-200 bg-white p-2 shadow-lg">
+                        <div className="mb-2 flex gap-2 border-b border-stone-200 pb-2">
+                          <button
+                            type="button"
+                            className="rounded-lg border border-stone-200 px-2 py-1 text-xs font-semibold text-stone-700 hover:bg-stone-100"
+                            onClick={() =>
+                              setEditForm((s) => ({
+                                ...s,
+                                ministry_role: normalizeMinistryRoles(
+                                  roleOptionsForDirection(s.ministry_direction).join(', '),
+                                ),
+                              }))
+                            }
+                          >
+                            Выбрать все
+                          </button>
+                          <button
+                            type="button"
+                            className="rounded-lg border border-stone-200 px-2 py-1 text-xs font-semibold text-stone-700 hover:bg-stone-100"
+                            onClick={() => setEditForm((s) => ({ ...s, ministry_role: '' }))}
+                          >
+                            Очистить
+                          </button>
+                        </div>
+                        {roleOptionsForDirection(editForm.ministry_direction).map((role) => {
+                          const selected = roleArray(editForm.ministry_role).includes(role);
+                          return (
+                            <label
+                              key={role}
+                              className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-stone-700 hover:bg-stone-100"
+                            >
+                              <input
+                                type="checkbox"
+                                className="h-4 w-4 rounded border-stone-300 text-primary"
+                                checked={selected}
+                                onChange={(e) => {
+                                  const current = roleArray(editForm.ministry_role);
+                                  const next = e.target.checked
+                                    ? Array.from(new Set([...current, role]))
+                                    : current.filter((x) => x !== role);
+                                  setEditForm((s) => ({
+                                    ...s,
+                                    ministry_role: normalizeMinistryRoles(next.join(', ')),
+                                  }));
+                                }}
+                              />
+                              <span>{role}</span>
+                            </label>
+                          );
+                        })}
+                        {roleOptionsForDirection(editForm.ministry_direction).length === 0 ? (
+                          <p className="px-2 py-1.5 text-xs text-stone-500">Нет ролей для выбранного направления</p>
+                        ) : null}
+                      </div>
+                    </details>
                   </div>
                 </div>
               </section>
@@ -1640,7 +1760,7 @@ function MembersSection() {
                     >
                       <option value="">—</option>
                       <option value="member">Член церкви</option>
-                      <option value="minister">Служащий</option>
+                      <option value="minister">Служитель</option>
                       <option value="pastor">Пастор</option>
                       <option value="musician">Музыкант (студия)</option>
                       <option value="editor">Редактор каталога</option>
@@ -1675,16 +1795,40 @@ function MembersSection() {
                   </label>
                   <div className="rounded-xl bg-stone-100 px-3 py-2.5 text-sm text-stone-700">
                     <div className="flex items-center gap-2 border-b border-stone-200 pb-2">
-                      <span className="inline-block h-2.5 w-2.5 rounded-full bg-emerald-500" />
+                      <span
+                        className={`inline-block h-2.5 w-2.5 rounded-full ${editing.password_reset_required ? 'bg-amber-500' : 'bg-emerald-500'}`}
+                      />
                       <span>
                         Статус входа:{' '}
-                        <strong>{editing.has_registered ? 'пароль создан, вход доступен' : 'вход не оформлен'}</strong>
+                        <strong>
+                          {editing.password_reset_required
+                            ? 'требуется задать новый пароль'
+                            : editing.has_registered
+                              ? 'пароль создан, вход доступен'
+                              : 'вход не оформлен'}
+                        </strong>
                       </span>
                     </div>
                     <div className="mt-2 flex items-center gap-2">
                       <span className="inline-block h-2.5 w-2.5 rounded-full bg-stone-400" />
                       <span>Логин: {editForm.phone_number.trim() || '—'}</span>
                     </div>
+                  </div>
+                  <div className="flex justify-end">
+                    <button
+                      type="button"
+                      className={btnSecondary('text-xs')}
+                      disabled={resetPasswordMut.isPending}
+                      onClick={() => {
+                        if (!window.confirm('Сбросить пароль пользователя? При следующем входе он задаст новый пароль.')) {
+                          return;
+                        }
+                        setBanner(null);
+                        resetPasswordMut.mutate(editing.id);
+                      }}
+                    >
+                      {resetPasswordMut.isPending ? 'Сбрасываем…' : 'Сбросить пароль'}
+                    </button>
                   </div>
                 </div>
               </section>

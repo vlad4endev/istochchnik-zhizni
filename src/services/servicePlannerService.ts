@@ -877,10 +877,12 @@ export async function getPublicPlanByToken(token: string): Promise<PublicPlanner
      left join public.service_templates t on t.id = p.template_id
      left join public.members leader on leader.id = p.leader_member_id
      left join public.members preacher on preacher.id = p.preacher_member_id
-     where p.share_token = $1::uuid
-       and p.share_token_issued_at >= now() - ($2::int * interval '1 day')
+     where (
+       (p.share_token = $1::uuid and p.share_token_issued_at >= now() - ($2::int * interval '1 day'))
+       or (p.edit_token = $1::uuid and p.edit_token_issued_at >= now() - ($3::int * interval '1 day'))
+     )
      limit 1`,
-    [normalizedToken, SHARE_TOKEN_MAX_AGE_DAYS],
+    [normalizedToken, SHARE_TOKEN_MAX_AGE_DAYS, EDIT_TOKEN_MAX_AGE_DAYS],
   );
   const row = planRes.rows[0] as DbRecord | undefined;
   if (!row) return null;

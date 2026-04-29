@@ -40,6 +40,8 @@ export interface AppUser {
   in_prayer_cycle: boolean;
   /** Есть пароль для входа в приложение (прошёл регистрацию). */
   has_registered: boolean;
+  /** Требуется установить новый пароль при следующем входе. */
+  password_reset_required?: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -78,6 +80,7 @@ export interface UpdateUserInput {
   app_roles?: AppRole[];
   is_collection_coordinator?: boolean;
   in_prayer_cycle?: boolean;
+  password_reset_required?: boolean;
 }
 
 export interface LinkAccountInput {
@@ -280,6 +283,7 @@ export async function listUsers(): Promise<AppUser[]> {
       m.is_collection_coordinator,
       m.in_prayer_cycle,
       (m.password_hash IS NOT NULL) AS has_registered,
+      m.password_reset_required,
       m.created_at,
       m.updated_at
     FROM members m
@@ -313,6 +317,7 @@ export async function getUserById(id: number): Promise<AppUser | null> {
       m.is_collection_coordinator,
       m.in_prayer_cycle,
       (m.password_hash IS NOT NULL) AS has_registered,
+      m.password_reset_required,
       m.created_at,
       m.updated_at
     FROM members m
@@ -501,6 +506,7 @@ export async function createUser(input: CreateUserInput): Promise<AppUser> {
       is_collection_coordinator,
       in_prayer_cycle,
       (password_hash IS NOT NULL) AS has_registered,
+      password_reset_required,
       created_at,
       updated_at`,
     [
@@ -691,6 +697,11 @@ export async function updateUser(id: number, input: UpdateUserInput): Promise<Ap
     values.push(input.in_prayer_cycle);
   }
 
+  if (typeof input.password_reset_required === 'boolean') {
+    updates.push(`password_reset_required = $${values.length + 1}`);
+    values.push(input.password_reset_required);
+  }
+
   if (updates.length === 0) {
     return getUserById(id);
   }
@@ -722,6 +733,7 @@ export async function updateUser(id: number, input: UpdateUserInput): Promise<Ap
       is_collection_coordinator,
       in_prayer_cycle,
       (password_hash IS NOT NULL) AS has_registered,
+      password_reset_required,
       created_at,
       updated_at`,
     values
@@ -776,6 +788,7 @@ export async function linkUserAccount(id: number, input: LinkAccountInput): Prom
       is_collection_coordinator,
       in_prayer_cycle,
       (password_hash IS NOT NULL) AS has_registered,
+      password_reset_required,
       created_at,
       updated_at`,
     [input.account_provider.trim(), input.account_id.trim(), id]
@@ -834,12 +847,26 @@ export async function setUserAppRoles(id: number, appRolesInput: AppRole[]): Pro
       is_collection_coordinator,
       in_prayer_cycle,
       (password_hash IS NOT NULL) AS has_registered,
+      password_reset_required,
       created_at,
       updated_at`,
     [primaryRole, appRoles, id]
   );
 
   return result.rows[0] ? mapUser(result.rows[0] as AppUser) : null;
+}
+
+export async function adminForceResetMemberPassword(id: number): Promise<AppUser | null> {
+  await query(
+    `UPDATE members
+     SET password_hash = NULL,
+         password_reset_required = TRUE,
+         updated_at = NOW()
+     WHERE id = $1`,
+    [id]
+  );
+  await query(`DELETE FROM auth_sessions WHERE member_id = $1`, [id]);
+  return getUserById(id);
 }
 
 function normalizeIsoDate(dateInput: string): string {

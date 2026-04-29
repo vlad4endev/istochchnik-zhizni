@@ -20,13 +20,12 @@ import {
   LuEyeOff,
   LuLink,
   LuLoaderCircle,
-  LuLock,
   LuPencil,
   LuSave,
   LuUsers,
 } from 'react-icons/lu';
 import type { IconType } from 'react-icons';
-import { useParams } from 'react-router-dom';
+import { Navigate, useParams } from 'react-router-dom';
 
 import { meaningfulNoteLinesFromRaw } from '../plannerNoteText';
 import {
@@ -484,22 +483,11 @@ export function EditableServicePlanPage() {
       </div>
     );
   }
-  if (planQ.isError || !planQ.data || metaQ.isError || !metaQ.data) {
-    return (
-      <div className="mx-auto max-w-2xl p-6">
-        <div className="rounded-2xl border border-rose-200 bg-gradient-to-br from-rose-50 via-white to-amber-50 p-5 shadow-sm">
-          <div className="mb-3 inline-flex h-10 w-10 items-center justify-center rounded-xl bg-rose-100 text-rose-700">
-            <LuLock className="h-5 w-5" />
-          </div>
-          <h2 className="text-lg font-extrabold text-stone-900 sm:text-xl">Программа уже бережно запечатана</h2>
-          <p className="mt-2 text-sm leading-relaxed text-stone-700 sm:text-base">
-            Этот план переведен в статус публикации, поэтому редактирование здесь закрыто. Актуальную опубликованную
-            версию подскажет и отправит ответственный за сбор программы.
-          </p>
-          <p className="mt-3 text-xs font-semibold uppercase tracking-wide text-rose-700/90">Финальная версия • только для просмотра</p>
-        </div>
-      </div>
-    );
+  if (planQ.isError || !planQ.data) {
+    return <Navigate to={`/service-plan/share/${token}`} replace />;
+  }
+  if (metaQ.isError || !metaQ.data) {
+    return <p className="p-6 text-red-600">Не удалось загрузить данные для редактирования</p>;
   }
 
   const { plan } = planQ.data;

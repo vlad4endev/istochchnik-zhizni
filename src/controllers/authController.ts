@@ -5,6 +5,7 @@ import {
   approveAccessRequest,
   changeMemberPhone,
   changeMemberPassword,
+  completePasswordSetupAfterAdminReset,
   confirmPasswordResetViaSms,
   getAuthUserById,
   listAccessRequests,
@@ -211,9 +212,9 @@ export async function loginHandler(req: Request, res: Response): Promise<void> {
   const phoneNumber = readStringField(req.body.phone_number || req.body.login);
   const password = readStringField(req.body.password);
 
-  const credentialsError = ensureCredentialsShape(phoneNumber, password);
-  if (credentialsError) {
-    res.status(400).json({ error: credentialsError });
+  const digits = normalizePhoneDigits(phoneNumber);
+  if (digits.length < PHONE_DIGITS_MIN || digits.length > PHONE_DIGITS_MAX) {
+    res.status(400).json({ error: 'Field "phone_number" must contain 7-20 digits' });
     return;
   }
 
@@ -221,6 +222,14 @@ export async function loginHandler(req: Request, res: Response): Promise<void> {
     const result = await loginUser(phoneNumber, password);
     if (!result) {
       res.status(401).json({ error: 'Неверный телефон или пароль' });
+      return;
+    }
+    if ('status' in result && result.status === 'password_reset_required') {
+      res.status(428).json({
+        error: 'Требуется задать новый пароль',
+        code: 'password_reset_required',
+        phone_number: result.phone_number,
+      });
       return;
     }
     if (typeof result.token === 'string' && result.token.length > 0) {
@@ -239,6 +248,38 @@ export async function loginHandler(req: Request, res: Response): Promise<void> {
       return;
     }
     console.error('Failed to login user', error);
+    res.status(500).json({ error: 'Database error' });
+  }
+}
+
+export async function completeAdminPasswordResetHandler(req: Request, res: Response): Promise<void> {
+  const phoneNumber = readStringField(req.body.phone_number);
+  const newPassword = readStringField(req.body.new_password);
+  if (!phoneNumber || !newPassword) {
+    res.status(400).json({ error: 'Fields "phone_number" and "new_password" are required' });
+    return;
+  }
+  try {
+    const result = await completePasswordSetupAfterAdminReset(phoneNumber, newPassword);
+    if (result === 'ok') {
+      res.status(204).send();
+      return;
+    }
+    if (result === 'not_required') {
+      res.status(409).json({ error: 'Сброс пароля для этого номера не запрошен администратором' });
+      return;
+    }
+    res.status(404).json({ error: 'Аккаунт с таким номером не найден' });
+  } catch (error) {
+    if (error instanceof Error && error.message === 'Invalid phone number') {
+      res.status(400).json({ error: 'Неверный номер телефона' });
+      return;
+    }
+    if (error instanceof Error && error.message === 'Invalid password') {
+      res.status(400).json({ error: `Пароль должен быть не короче ${MIN_PASSWORD_LENGTH} символов` });
+      return;
+    }
+    console.error('Failed to complete admin-forced password reset', error);
     res.status(500).json({ error: 'Database error' });
   }
 }

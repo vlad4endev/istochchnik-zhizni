@@ -3,6 +3,7 @@ import {
   approveAccessRequestHandler,
   changePhoneHandler,
   changePasswordHandler,
+  completeAdminPasswordResetHandler,
   completePasswordResetSmsHandler,
   forgotPasswordRequestHandler,
   listAccessRequestsHandler,
@@ -134,6 +135,7 @@ router.post('/forgot-password-request', authResetRateLimit, forgotPasswordReques
 router.post('/password-reset/sms/request', authResetRateLimit, startPasswordResetSmsHandler);
 router.post('/password-reset/sms/verify', authResetRateLimit, verifyPasswordResetSmsHandler);
 router.post('/password-reset/sms/complete', authResetRateLimit, completePasswordResetSmsHandler);
+router.post('/password-reset/admin-complete', authResetRateLimit, completeAdminPasswordResetHandler);
 router.get('/me', requireAuthSession, meHandler);
 router.patch('/me', requireAuthSession, patchProfileHandler);
 router.post('/me/avatar', requireAuthSession, avatarUploadMiddleware, uploadAvatarHandler);

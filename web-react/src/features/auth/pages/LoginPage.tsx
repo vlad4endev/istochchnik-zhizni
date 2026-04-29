@@ -15,6 +15,8 @@ type LocationState = { mode?: 'signIn' | 'signUp'; from?: string };
 
 type LoginResponse = {
   token?: string;
+  code?: string;
+  phone_number?: string;
   user?: {
     first_name?: string;
     last_name?: string;
@@ -87,6 +89,7 @@ export function LoginPage() {
   const [resetConfirmPassword, setResetConfirmPassword] = useState('');
   const [showResetPassword, setShowResetPassword] = useState(true);
   const [showResetConfirm, setShowResetConfirm] = useState(true);
+  const [adminForcedResetMode, setAdminForcedResetMode] = useState(false);
 
   const apiMismatch = isApiUrlProbablyWrongForWeb();
 
@@ -143,6 +146,17 @@ export function LoginPage() {
       if (response.status === 401) {
         setStatusText('Неверный телефон или пароль.');
         setStatusIsError(true);
+        return;
+      }
+      if (response.status === 428 && response.data?.code === 'password_reset_required') {
+        setShowResetForm(true);
+        setAdminForcedResetMode(true);
+        setResetPhone(formatRuPhoneInput(response.data.phone_number ?? p));
+        setResetCode('');
+        setResetToken('');
+        setResetCodeVerified(true);
+        setStatusText('Для этого номера администратор сбросил пароль. Придумайте и подтвердите новый пароль.');
+        setStatusIsError(false);
         return;
       }
 
@@ -387,7 +401,7 @@ export function LoginPage() {
     const p = resetPhone.trim();
     const pw = resetPassword;
     const cpw = resetConfirmPassword;
-    if (!resetCodeVerified || !resetToken) {
+    if (!adminForcedResetMode && (!resetCodeVerified || !resetToken)) {
       setStatusText('Сначала подтвердите код из SMS.');
       setStatusIsError(true);
       return;
@@ -411,8 +425,10 @@ export function LoginPage() {
     clearStatus();
     try {
       const response = await apiClient.post(
-        '/api/auth/password-reset/sms/complete',
-        { phone_number: p, reset_token: resetToken, new_password: pw },
+        adminForcedResetMode ? '/api/auth/password-reset/admin-complete' : '/api/auth/password-reset/sms/complete',
+        adminForcedResetMode
+          ? { phone_number: p, new_password: pw }
+          : { phone_number: p, reset_token: resetToken, new_password: pw },
         { validateStatus: (s) => s != null && s < 600 },
       );
       if (response.status === 204) {
@@ -423,6 +439,7 @@ export function LoginPage() {
         setResetCodeVerified(false);
         setResetPassword('');
         setResetConfirmPassword('');
+        setAdminForcedResetMode(false);
         setStatusText('Пароль успешно обновлён. Теперь войдите с новым паролем.');
         setStatusIsError(false);
         return;
@@ -503,6 +520,7 @@ export function LoginPage() {
                   onClick={() => {
                     setIsRegisterMode(false);
                     setShowResetForm(false);
+                    setAdminForcedResetMode(false);
                     setResetCodeVerified(false);
                     setResetToken('');
                     clearStatus();
@@ -520,6 +538,7 @@ export function LoginPage() {
                   onClick={() => {
                     setIsRegisterMode(true);
                     setShowResetForm(false);
+                    setAdminForcedResetMode(false);
                     setResetCodeVerified(false);
                     setResetToken('');
                     clearStatus();
@@ -603,6 +622,7 @@ export function LoginPage() {
                     className="text-xs font-semibold text-primary hover:underline"
                     onClick={() => {
                       setShowResetForm((v) => !v);
+                    setAdminForcedResetMode(false);
                       setResetCodeVerified(false);
                       setResetToken('');
                       setResetCode('');
@@ -646,7 +666,9 @@ export function LoginPage() {
               {!isRegisterMode && showResetForm && (
                 <div className="rounded-xl border border-primary/20 bg-primary/[0.04] p-3">
                   <p className="text-xs font-semibold text-stone-700">
-                    Восстановление по SMS: введите телефон, подтвердите код и установите новый пароль.
+                    {adminForcedResetMode
+                      ? 'Администратор запросил смену пароля. Укажите новый пароль и подтвердите его.'
+                      : 'Восстановление по SMS: введите телефон, подтвердите код и установите новый пароль.'}
                   </p>
                   <label className="mt-3 block">
                     <span className="mb-1 block text-xs font-semibold text-stone-600">Телефон</span>
@@ -662,37 +684,41 @@ export function LoginPage() {
                       autoComplete="tel"
                     />
                   </label>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      disabled={submitting}
-                      onClick={() => void requestResetCode()}
-                      className="rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-white shadow-md shadow-primary/20 disabled:opacity-50"
-                    >
-                      Получить код
-                    </button>
-                  </div>
-                  <label className="mt-3 block">
-                    <span className="mb-1 block text-xs font-semibold text-stone-600">Код из SMS</span>
-                    <input
-                      className={inputClass}
-                      value={resetCode}
-                      onChange={(e) => setResetCode(e.target.value.replace(/\D+/g, '').slice(0, 6))}
-                      placeholder="6 цифр"
-                      inputMode="numeric"
-                      autoComplete="one-time-code"
-                    />
-                  </label>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      disabled={submitting}
-                      onClick={() => void verifyResetCode()}
-                      className="rounded-xl border border-primary/40 bg-white px-4 py-2.5 text-sm font-bold text-primary disabled:opacity-50"
-                    >
-                      Подтвердить код
-                    </button>
-                  </div>
+                  {!adminForcedResetMode && (
+                    <>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          disabled={submitting}
+                          onClick={() => void requestResetCode()}
+                          className="rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-white shadow-md shadow-primary/20 disabled:opacity-50"
+                        >
+                          Получить код
+                        </button>
+                      </div>
+                      <label className="mt-3 block">
+                        <span className="mb-1 block text-xs font-semibold text-stone-600">Код из SMS</span>
+                        <input
+                          className={inputClass}
+                          value={resetCode}
+                          onChange={(e) => setResetCode(e.target.value.replace(/\D+/g, '').slice(0, 6))}
+                          placeholder="6 цифр"
+                          inputMode="numeric"
+                          autoComplete="one-time-code"
+                        />
+                      </label>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          disabled={submitting}
+                          onClick={() => void verifyResetCode()}
+                          className="rounded-xl border border-primary/40 bg-white px-4 py-2.5 text-sm font-bold text-primary disabled:opacity-50"
+                        >
+                          Подтвердить код
+                        </button>
+                      </div>
+                    </>
+                  )}
                   {resetCodeVerified && (
                   <>
                   <div className="mt-3 grid gap-3 sm:grid-cols-2">

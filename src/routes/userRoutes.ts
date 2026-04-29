@@ -17,6 +17,7 @@ import {
   setUserAppRoleHandler,
   setOneTimeMemberDateOverrideHandler,
   anchorPrayerCycleMemberHandler,
+  adminResetUserPasswordHandler,
   getPrayerCycleRosterHandler,
   savePrayerCycleRosterOrderHandler,
   startPrayerCycleHandler,
@@ -51,6 +52,7 @@ router.post('/', createUserHandler);
 router.patch('/:id', updateUserHandler);
 router.patch('/:id/app-role', setUserAppRoleHandler);
 router.delete('/:id', deleteUserHandler);
+router.post('/:id/reset-password', adminResetUserPasswordHandler);
 router.post('/:id/link-account', linkUserAccountHandler);
 router.post('/:id/prayer-cycle/one-time-date', setOneTimeMemberDateOverrideHandler);
 

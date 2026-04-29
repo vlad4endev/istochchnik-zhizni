@@ -13,6 +13,7 @@ import {
   listMinistryDirectionTemplates,
   listPrayerRequestHistory,
   addPrayerRequestHistoryManual,
+  adminForceResetMemberPassword,
   listMinistryRoleTemplates,
   listUsers,
   MemberNameDuplicateError,
@@ -636,6 +637,29 @@ export async function deleteUserHandler(req: Request, res: Response): Promise<vo
     res.status(204).send();
   } catch (error) {
     console.error('Failed to delete user', error);
+    res.status(500).json({ error: 'Database error' });
+  }
+}
+
+export async function adminResetUserPasswordHandler(req: Request, res: Response): Promise<void> {
+  if (!ensureAdmin(req, res)) {
+    return;
+  }
+  const userId = parseUserId(req.params.id);
+  if (!userId) {
+    res.status(400).json({ error: 'Invalid user id' });
+    return;
+  }
+  try {
+    const updated = await adminForceResetMemberPassword(userId);
+    if (!updated) {
+      res.status(404).json({ error: 'User not found' });
+      return;
+    }
+    notifyRealtime(['members', 'me']);
+    res.json(updated);
+  } catch (error) {
+    console.error('Failed to reset member password by admin', error);
     res.status(500).json({ error: 'Database error' });
   }
 }

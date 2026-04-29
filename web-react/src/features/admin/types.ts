@@ -22,6 +22,7 @@ export interface AppUser {
   in_prayer_cycle: boolean;
   /** Задан пароль для входа (прошёл регистрацию в приложении). */
   has_registered: boolean;
+  password_reset_required?: boolean;
   created_at: string;
   updated_at: string;
 }
