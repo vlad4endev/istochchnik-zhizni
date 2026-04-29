@@ -26,6 +26,7 @@
   --a11y-font-scale: 1;
   --a11y-line-height: 1.55;
   --a11y-focus-ring: var(--primary);
+  --sidebar-width: 88px;
 }
 
 /* ── Темы оформления (глобально на <html data-color-theme>) ── */
@@ -210,6 +211,19 @@ body {
   min-height: -webkit-fill-available;
   display: flex;
   flex-direction: column;
+}
+
+.app-main-content {
+  padding-left: 0;
+  padding-right: 0;
+}
+
+@media (min-width: 1024px) {
+  .app-main-content {
+    margin-left: var(--sidebar-width, 88px);
+    width: calc(100vw - var(--sidebar-width, 88px));
+    transition: margin-left 0.2s ease, width 0.2s ease;
+  }
 }
 
 .player-ratio-box {

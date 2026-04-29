@@ -553,6 +553,12 @@ export function Layout() {
   }, []);
 
   useEffect(() => {
+    const sidebarWidth = navCollapsed ? '88px' : '272px';
+    document.documentElement.style.setProperty('--sidebar-width', sidebarWidth);
+    document.documentElement.dataset.sidebar = navCollapsed ? 'collapsed' : 'expanded';
+  }, [navCollapsed]);
+
+  useEffect(() => {
     const onChrome = (e: Event) => {
       const ce = e as CustomEvent<{ visible?: boolean }>;
       setMainChromeVisible(ce.detail?.visible !== false);
@@ -698,7 +704,6 @@ export function Layout() {
       <div
         className={[
           'flex min-h-0 min-w-0 w-full max-w-full flex-1 flex-col box-border',
-          navCollapsed ? 'lg:pl-[88px]' : 'lg:pl-[260px] xl:pl-[272px]',
         ].join(' ')}
       >
       <div className="shrink-0">
@@ -708,11 +713,11 @@ export function Layout() {
       {/* Планшет/десктоп: фиксированный сайдбар (не в потоке, не растягивается по ширине main). На узких — нижняя навигация. */}
       <aside
         className={[
-          'hidden shrink-0 flex-col overflow-y-auto overflow-x-hidden border-r border-stone-200/80 bg-[var(--surface-elevated)] shadow-[4px_0_16px_rgba(0,0,0,0.06)] lg:fixed lg:bottom-0 lg:left-0 lg:top-0 lg:z-30 lg:flex [padding-bottom:env(safe-area-inset-bottom,0px)] [padding-top:env(safe-area-inset-top,0px)]',
+          'hidden shrink-0 flex-col overflow-hidden border-r border-stone-200/80 bg-[var(--surface-elevated)] shadow-[4px_0_16px_rgba(0,0,0,0.06)] lg:fixed lg:bottom-0 lg:left-0 lg:top-0 lg:z-30 lg:flex [padding-bottom:env(safe-area-inset-bottom,0px)] [padding-top:env(safe-area-inset-top,0px)]',
           navCollapsed ? 'w-[88px] max-w-[88px]' : 'w-[260px] max-w-[260px] xl:w-[272px] xl:max-w-[272px]',
         ].join(' ')}
       >
-        <div className={navCollapsed ? 'flex min-h-0 flex-1 flex-col gap-1 p-4' : 'flex min-h-0 flex-1 flex-col gap-1 p-6'}>
+        <div className={navCollapsed ? 'flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto p-4' : 'flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto p-6'}>
           <div className={navCollapsed ? 'mb-4 flex items-center justify-center' : 'mb-6 flex items-start gap-3'}>
             <div className={navCollapsed ? 'flex h-11 w-11 items-center justify-center overflow-hidden rounded-2xl bg-primary/10 p-1 text-primary' : 'flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-primary/10 text-primary p-1 xl:rounded-[0.9rem]'}>
               {customLogoDataUrl ? (
@@ -800,7 +805,7 @@ export function Layout() {
           </nav>
         </div>
 
-        <div className="mt-auto border-t border-stone-200/80 p-4">
+        <div className="flex-shrink-0 border-t border-stone-200/80 p-4">
           {registrationStatus === 'active' ? (
             <>
               <NavLink
@@ -887,8 +892,7 @@ export function Layout() {
         id="main-content"
         tabIndex={-1}
         className={[
-          'app-main-content flex min-h-0 min-w-0 w-full max-w-full flex-1 flex-col overflow-x-clip lg:pb-0 2xl:px-8 min-[1920px]:px-12 outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--a11y-focus-ring,var(--primary))] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)]',
-          navCollapsed ? 'lg:pr-[88px]' : 'lg:pr-[260px] xl:pr-[272px]',
+          'app-main-content flex min-h-0 min-w-0 w-full max-w-full flex-1 flex-col overflow-x-clip lg:pb-0 outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--a11y-focus-ring,var(--primary))] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)]',
           'page-content',
           mainChromeVisible
             ? 'pb-[max(7.5rem,calc(5.25rem+env(safe-area-inset-bottom,16px)))]'
