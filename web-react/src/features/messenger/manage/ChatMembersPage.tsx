@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate, useParams } from 'react-router-dom';
-import { LuCrown, LuPlus, LuSearch, LuSettings2, LuShield, LuUser, LuX } from 'react-icons/lu';
+import { LuCrown, LuEllipsisVertical, LuMessageSquare, LuPlus, LuSearch, LuSettings2, LuShield, LuTrash2, LuUser, LuX } from 'react-icons/lu';
 import * as api from '../api/messengerApi';
 import { useAuthStore } from '../../auth/authStore';
 import { ManageScreenShell, ManageSettingsGroup } from './ManageScreenShell';
@@ -43,6 +44,7 @@ export function ChatMembersPage() {
   const [showAdd, setShowAdd] = useState(false);
   const [meta, setMeta] = useState<api.ConversationMeta | null>(null);
   const [permTarget, setPermTarget] = useState<api.ConversationMember | null>(null);
+  const [memberMenu, setMemberMenu] = useState<api.ConversationMember | null>(null);
   const scrollKey = `messenger:chat-members:scroll:${chatId ?? 'unknown'}`;
 
   useEffect(() => {
@@ -96,6 +98,10 @@ export function ChatMembersPage() {
       return name.includes(term);
     });
   }, [members, q]);
+  const recentMembers = useMemo(
+    () => [...members].sort((a, b) => Date.parse(b.joined_at) - Date.parse(a.joined_at)).slice(0, 5),
+    [members],
+  );
 
   const eff = meta?.my_effective_permissions;
   const canAddMembers = canAddParticipantsToGroup(eff, isAppAdministrator);
@@ -143,6 +149,36 @@ export function ChatMembersPage() {
           <p className="mt-8 text-center text-sm text-gray-500">Никого не нашли</p>
         ) : (
           <ManageSettingsGroup>
+            <button
+              type="button"
+              onClick={() => setShowAdd(true)}
+              className="flex w-full items-center gap-3 border-b border-gray-200/70 px-4 py-3 text-left"
+            >
+              <span className="grid h-9 w-9 place-items-center rounded-full bg-primary/10 text-primary">
+                <LuPlus size={18} />
+              </span>
+              <span className="text-[15px] font-semibold text-primary">Добавить участника</span>
+            </button>
+            {recentMembers.length > 0 ? (
+              <div className="flex items-center gap-2 border-b border-gray-200/70 px-4 py-3">
+                <span className="text-[12px] font-semibold text-gray-500">Недавно добавлены:</span>
+                <div className="flex items-center">
+                  {recentMembers.map((m) => {
+                    const displayName = (m.first_name ? `${m.first_name} ${m.last_name ?? ''}`.trim() : m.name) || `Участник ${m.member_id}`;
+                    return (
+                      <span key={m.member_id} className="-ml-1 first:ml-0 inline-block h-7 w-7 overflow-hidden rounded-full ring-2 ring-white" title={displayName}>
+                        <AppAvatar
+                          src={m.avatar_url ?? null}
+                          fallback={displayName[0]?.toUpperCase() ?? 'U'}
+                          className="grid h-full w-full place-items-center bg-primary/10 text-[11px] font-semibold text-primary"
+                          imgClassName="h-full w-full object-cover"
+                        />
+                      </span>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : null}
             {filtered.map((m, i) => (
               <MemberRow
                 key={m.member_id}
@@ -150,6 +186,7 @@ export function ChatMembersPage() {
                 isLast={i === filtered.length - 1}
                 canEditPermissions={canManageMembers && m.role !== 'owner'}
                 onEditPermissions={() => setPermTarget(m)}
+                onOpenActions={() => setMemberMenu(m)}
                 onOpenProfile={() => {
                   sessionStorage.setItem(scrollKey, String(window.scrollY || 0));
                   navigate(`/profile/member-${m.member_id}`);
@@ -185,6 +222,43 @@ export function ChatMembersPage() {
           }}
         />
       ) : null}
+
+      {memberMenu && chatId
+        ? createPortal(
+            <MemberActionsMenu
+              member={memberMenu}
+              canManageMembers={canManageMembers}
+              onClose={() => setMemberMenu(null)}
+              onDirectMessage={async () => {
+                try {
+                  const created = await api.createPersonalChat(memberMenu.member_id);
+                  navigate(`/messenger?conversationId=${encodeURIComponent(created.conversationId)}`);
+                } catch {
+                  setErr('Не удалось открыть личный чат');
+                }
+              }}
+              onPromoteAdmin={async () => {
+                try {
+                  await api.patchConversationMember(chatId, memberMenu.member_id, { role: 'admin' });
+                  const next = await api.fetchConversationMembers(chatId);
+                  setMembers(next);
+                } catch {
+                  setErr('Не удалось назначить администратором');
+                }
+              }}
+              onRemove={async () => {
+                try {
+                  await api.removeParticipant(chatId, memberMenu.member_id);
+                  const next = await api.fetchConversationMembers(chatId);
+                  setMembers(next);
+                } catch {
+                  setErr('Не удалось удалить участника');
+                }
+              }}
+            />,
+            document.body,
+          )
+        : null}
     </ManageScreenShell>
   );
 }
@@ -205,12 +279,14 @@ function MemberRow({
   isLast,
   canEditPermissions,
   onEditPermissions,
+  onOpenActions,
   onOpenProfile,
 }: {
   m: api.ConversationMember;
   isLast?: boolean;
   canEditPermissions: boolean;
   onEditPermissions: () => void;
+  onOpenActions: () => void;
   onOpenProfile: () => void;
 }) {
   const displayName = (m.first_name ? `${m.first_name} ${m.last_name ?? ''}`.trim() : m.name) || `Участник ${m.member_id}`;
@@ -252,6 +328,17 @@ function MemberRow({
         <p className="mt-0.5 text-xs text-gray-500">{memberPresence}</p>
       </div>
       <div className="flex shrink-0 flex-col items-end gap-2">
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onOpenActions();
+          }}
+          className="grid h-7 w-7 place-items-center rounded-full text-gray-500 hover:bg-gray-100"
+          aria-label="Действия"
+        >
+          <LuEllipsisVertical size={15} />
+        </button>
         {canEditPermissions ? (
           <button
             type="button"
@@ -269,6 +356,52 @@ function MemberRow({
           <badge.Icon size={14} />
           {badge.text}
         </div>
+      </div>
+    </div>
+  );
+}
+
+function MemberActionsMenu({
+  member,
+  canManageMembers,
+  onClose,
+  onDirectMessage,
+  onPromoteAdmin,
+  onRemove,
+}: {
+  member: api.ConversationMember;
+  canManageMembers: boolean;
+  onClose: () => void;
+  onDirectMessage: () => void | Promise<void>;
+  onPromoteAdmin: () => void | Promise<void>;
+  onRemove: () => void | Promise<void>;
+}) {
+  const displayName =
+    (member.first_name ? `${member.first_name} ${member.last_name ?? ''}`.trim() : member.name) ||
+    `Участник ${member.member_id}`;
+  return (
+    <div className="fixed inset-0 z-[4200] bg-black/30" onClick={onClose}>
+      <div
+        className="absolute bottom-0 left-0 right-0 rounded-t-3xl bg-white p-4 shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <p className="mb-2 text-center text-sm font-semibold text-gray-500">{displayName}</p>
+        <button type="button" onClick={() => { void onDirectMessage(); onClose(); }} className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left hover:bg-gray-50">
+          <LuMessageSquare size={18} />
+          <span className="text-[15px]">Написать личное сообщение</span>
+        </button>
+        {canManageMembers ? (
+          <button type="button" onClick={() => { void onPromoteAdmin(); onClose(); }} className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left hover:bg-gray-50">
+            <LuShield size={18} />
+            <span className="text-[15px]">Назначить администратором</span>
+          </button>
+        ) : null}
+        {canManageMembers ? (
+          <button type="button" onClick={() => { void onRemove(); onClose(); }} className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-red-600 hover:bg-red-50">
+            <LuTrash2 size={18} />
+            <span className="text-[15px]">Удалить из группы</span>
+          </button>
+        ) : null}
       </div>
     </div>
   );

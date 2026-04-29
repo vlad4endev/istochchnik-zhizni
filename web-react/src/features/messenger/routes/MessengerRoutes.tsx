@@ -4,6 +4,7 @@ import { ManageChatHomePage } from '../manage/ManageChatHomePage';
 import { ChatMembersPage } from '../manage/ChatMembersPage';
 import { ChatAdminsPage } from '../manage/ChatAdminsPage';
 import { ChatPermissionsPage } from '../manage/ChatPermissionsPage';
+import { ChatMediaPage } from '../manage/ChatMediaPage';
 
 export function MessengerRoutes() {
   return (
@@ -13,6 +14,7 @@ export function MessengerRoutes() {
       <Route path="chat/:chatId/manage/members" element={<ChatMembersPage />} />
       <Route path="chat/:chatId/manage/admins" element={<ChatAdminsPage />} />
       <Route path="chat/:chatId/manage/permissions" element={<ChatPermissionsPage />} />
+      <Route path="chat/:chatId/manage/media" element={<ChatMediaPage />} />
       <Route path="*" element={<Navigate to="/messenger" replace />} />
     </Routes>
   );

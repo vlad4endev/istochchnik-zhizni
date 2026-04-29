@@ -284,6 +284,7 @@ export type ConversationMeta = {
   type: ConversationType;
   title: string | null;
   avatar_url: string | null;
+  description?: string | null;
   updated_at: string;
   default_permissions?: Record<string, boolean>;
   settings?: Record<string, unknown>;
@@ -467,7 +468,10 @@ export async function fetchParticipants(conversationId: string): Promise<Partici
   return data;
 }
 
-export async function updateConversation(conversationId: string, updates: { title?: string; avatar_url?: string }) {
+export async function updateConversation(
+  conversationId: string,
+  updates: { title?: string; avatar_url?: string | null; description?: string | null },
+) {
   await apiClient.patch(`${BASE}/conversations/${conversationId}`, updates);
   conversationMetaCache.delete(String(conversationId));
 }

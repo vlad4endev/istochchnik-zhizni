@@ -158,6 +158,21 @@ async function getConversationListItemForMember(memberId: number, convId: string
   return list.find((c) => String(c.id) === String(convId)) ?? null;
 }
 
+async function getMemberDisplayName(memberId: number): Promise<string> {
+  try {
+    const { query: dbQuery } = await import('../config/db');
+    const r = await dbQuery(
+      `SELECT name, first_name, last_name FROM members WHERE id = $1 LIMIT 1`,
+      [memberId],
+    );
+    const row = r.rows[0] as { name?: string; first_name?: string; last_name?: string } | undefined;
+    const full = `${String(row?.first_name ?? '').trim()} ${String(row?.last_name ?? '').trim()}`.trim();
+    return full || String(row?.name ?? '').trim() || 'Участник';
+  } catch {
+    return 'Участник';
+  }
+}
+
 /** GET /api/messenger/uploads/health */
 router.get('/uploads/health', async (_req: Request, res: Response) => {
   if (!isSupabaseStorageConfigured()) {
@@ -571,6 +586,7 @@ router.post(
   '/conversations/:id/participants',
   checkChatPermission('add_users'),
   async (req: Request, res: Response) => {
+    const userId = (req as AuthReq).authUserId!;
     const convId = req.params.id;
     const { memberId } = req.body ?? {};
     const parsed = Number(memberId);
@@ -602,6 +618,30 @@ router.post(
         sendToMember(parsed, { type: 'conv:created', conversation: convForMember });
       }
       sendToRoomAll(String(convId), { type: 'conv:updated', conversationId: String(convId) });
+
+      void (async () => {
+        try {
+          const inviterName = await getMemberDisplayName(userId);
+          const cmeta = await svc.getConversationMeta(String(convId));
+          const chatLabel =
+            cmeta?.title?.trim() ||
+            convForMember?.title?.trim() ||
+            (cmeta?.type === 'channel' ? 'Канал' : 'Группа');
+          await sendPushNotification(parsed, {
+            title: `Вас добавили в чат «${chatLabel}»`,
+            body: `${inviterName} добавил(а) вас в чат`,
+            conversationId: String(convId),
+            url: resolveMessengerConversationDeepLink(String(convId)),
+            tag: `chat-added-${String(convId)}`,
+            renotify: true,
+            badge: '/assets/pwa-64x64.png',
+            icon: '/assets/pwa-192x192.png',
+          });
+        } catch (e) {
+          console.warn('[messenger] addParticipant push failed (best-effort):', e);
+        }
+      })();
+
       res.json({ ok: true });
     } catch (e) {
       console.error('[messenger] addParticipant error:', e);
@@ -611,23 +651,35 @@ router.post(
 );
 
 /** DELETE /api/messenger/conversations/:id/participants/:memberId */
-router.delete('/conversations/:id/participants/:memberId', async (req: Request, res: Response) => {
+router.delete('/conversations/:id/participants/:memberId', checkChatPermission('view'), async (req: Request, res: Response) => {
   const userId = (req as AuthReq).authUserId!;
-  const convId = req.params.id;
+  const convId = String(req.params.id);
   const targetId = Number(req.params.memberId);
 
   try {
-    // Allow: owner/admin removing anyone, or member removing themselves
+    const convType = await svc.getConversationType(convId);
+    if (!convType) {
+      res.status(404).json({ error: 'Conversation not found' });
+      return;
+    }
+    if (convType === 'private' && targetId !== userId) {
+      res.status(400).json({ error: 'Cannot remove another member from private chat' });
+      return;
+    }
+
+    // Self-leave is always allowed for an active member (group/channel/private).
     if (targetId !== userId) {
-      const role = await svc.getParticipantRole(convId, userId);
+      const auth = req.chatAuth;
       const appAdmin = await svc.isMemberAppAdministrator(userId);
-      if ((!role || role === 'member') && !appAdmin) {
-        res.status(403).json({ error: 'Only admins can remove participants' });
+      const canKickByRole = auth?.role === 'owner' || auth?.role === 'admin';
+      const canKickByPermission = auth?.effective?.can_manage_chat === true;
+      if (!canKickByRole && !canKickByPermission && !appAdmin) {
+        res.status(403).json({ error: 'Forbidden' });
         return;
       }
     }
     await svc.removeParticipant(convId, targetId);
-    sendToRoomAll(String(convId), { type: 'conv:updated', conversationId: String(convId) });
+    sendToRoomAll(convId, { type: 'conv:updated', conversationId: convId });
     res.json({ ok: true });
   } catch (e) {
     console.error('[messenger] removeParticipant error:', e);
