@@ -6,15 +6,15 @@ import {
   FaBookBible,
   FaBullhorn,
   FaCakeCandles,
-  FaHandHoldingDollar,
   FaFeatherPointed,
+  FaHandHoldingDollar,
   FaHandsPraying,
   FaMicrophoneLines,
   FaMusic,
   FaPuzzlePiece,
   FaWineGlass,
 } from 'react-icons/fa6';
-import { LuCalendarDays } from 'react-icons/lu';
+import { LuCalendarDays, LuClock3, LuLink, LuPencil, LuUsers } from 'react-icons/lu';
 import type { IconType } from 'react-icons';
 
 import {
@@ -141,9 +141,12 @@ const ICON_BY_CODE: Record<string, { Icon: IconType; wrapClass: string; iconClas
 const ICON_BY_MARK_KEY: Record<string, { Icon: IconType; wrapClass: string; iconClass: string }> = {
   ...ICON_BY_CODE,
   communion: { Icon: FaWineGlass, wrapClass: 'bg-purple-100', iconClass: 'text-purple-700' },
-  schedule: { Icon: LuCalendarDays, wrapClass: 'bg-indigo-100', iconClass: 'text-indigo-700' },
   donation: { Icon: FaHandHoldingDollar, wrapClass: 'bg-emerald-100', iconClass: 'text-emerald-700' },
   poem: { Icon: FaFeatherPointed, wrapClass: 'bg-fuchsia-100', iconClass: 'text-fuchsia-700' },
+  users: { Icon: LuUsers, wrapClass: 'bg-cyan-100', iconClass: 'text-cyan-700' },
+  clock: { Icon: LuClock3, wrapClass: 'bg-indigo-100', iconClass: 'text-indigo-700' },
+  note: { Icon: LuPencil, wrapClass: 'bg-orange-100', iconClass: 'text-orange-700' },
+  link: { Icon: LuLink, wrapClass: 'bg-teal-100', iconClass: 'text-teal-700' },
 };
 
 function isSeparator(content: Record<string, unknown>): boolean {
@@ -152,6 +155,17 @@ function isSeparator(content: Record<string, unknown>): boolean {
 
 function isHiddenFromPublic(content: Record<string, unknown>): boolean {
   return content.hide_in_public === true;
+}
+
+function getBlockLogoUrl(content: Record<string, unknown>): string | null {
+  const raw = content.block_logo_url;
+  if (typeof raw !== 'string') return null;
+  const value = raw.trim();
+  if (!value) return null;
+  if (value.startsWith('http://') || value.startsWith('https://') || value.startsWith('/')) {
+    return value;
+  }
+  return null;
 }
 
 function parseStartClock(dateIso: string, time: string): Date {
@@ -344,12 +358,22 @@ export function PublicServicePlanPage() {
                 <div className={`flex items-start ${rowGap}`}>
                   <div className={timeCell}>{b.startsAt}</div>
                   {(() => {
+                    const logoUrl = getBlockLogoUrl(b.content_json);
                     const custom = typeof b.content_json.block_mark === 'string' ? b.content_json.block_mark.trim() : '';
                     const markIconKey =
                       typeof b.content_json.block_mark_icon === 'string'
                         ? b.content_json.block_mark_icon.trim().toLowerCase()
                         : '';
                     const markIcon = markIconKey ? ICON_BY_MARK_KEY[markIconKey] : null;
+                    if (logoUrl) {
+                      return (
+                        <img
+                          src={logoUrl}
+                          alt="Лого блока"
+                          className={m.compactMobile ? 'h-7 w-7 shrink-0 rounded-lg object-cover sm:h-8 sm:w-8' : 'h-8 w-8 shrink-0 rounded-lg object-cover'}
+                        />
+                      );
+                    }
                     if (markIcon) {
                       const MarkIcon = markIcon.Icon;
                       const iconBox = m.compactMobile ? 'h-7 w-7 sm:h-8 sm:w-8' : 'h-8 w-8';

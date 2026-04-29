@@ -1,6 +1,7 @@
 import type { Request, Response } from 'express';
 import { query } from '../config/db';
 import { notifyRealtime } from '../realtime/notify';
+import { sendPush } from '../services/pushService';
 import { listUsers } from '../services/userService';
 import {
   createPlan,
@@ -98,6 +99,66 @@ function formatRuDateFromYmd(ymd: string): string {
     month: '2-digit',
     year: 'numeric',
   }).format(dt);
+}
+
+async function notifyLeaderAssigned(input: {
+  leaderMemberId: number;
+  serviceDate: string;
+  shareUrl: string;
+}): Promise<void> {
+  const dateText = formatRuDateFromYmd(input.serviceDate);
+  await sendPush(
+    input.leaderMemberId,
+    'Назначение ведущего',
+    `${dateText} вы назначены ведущим, приступайте к составлению программы.`,
+    {
+      url: input.shareUrl,
+      type: 'service_plan_leader_assigned',
+      service_date: input.serviceDate,
+    },
+  );
+}
+
+async function notifyPreacherAssigned(input: {
+  preacherMemberId: number;
+  serviceDate: string;
+  leaderName: string | null;
+  shareUrl: string;
+}): Promise<void> {
+  const dateText = formatRuDateFromYmd(input.serviceDate);
+  const leaderPart = input.leaderName
+    ? `передайте ведущему ${input.leaderName} тему и отрывки из Библии`
+    : 'передайте ведущему тему и отрывки из Библии';
+  await sendPush(
+    input.preacherMemberId,
+    'Назначение проповедника',
+    `${dateText} вы проповедуете — ${leaderPart} или сами заполните блок проповеди.`,
+    {
+      url: input.shareUrl,
+      type: 'service_plan_preacher_assigned',
+      service_date: input.serviceDate,
+    },
+  );
+}
+
+async function getMemberNamesByIds(memberIds: number[]): Promise<Map<number, string>> {
+  const normalized = memberIds.filter((id) => Number.isInteger(id) && id > 0);
+  const unique = Array.from(new Set(normalized));
+  if (unique.length === 0) return new Map();
+  const res = await query(
+    `select
+       id,
+       coalesce(nullif(trim(concat(coalesce(first_name, ''), ' ', coalesce(last_name, ''))), ''), name) as display_name
+     from public.members
+     where id = any($1::bigint[])`,
+    [unique],
+  );
+  return new Map(
+    res.rows.map((row) => [
+      Number((row as { id?: number }).id ?? 0),
+      String((row as { display_name?: string | null }).display_name ?? '').trim(),
+    ]),
+  );
 }
 
 async function syncBroadcastFromPublishedPlan(planId: number): Promise<void> {
@@ -487,8 +548,29 @@ export async function patchServicePlanById(req: Request, res: Response): Promise
   }
   const hadPatch = Object.keys(patch).length > 0;
   try {
-    const beforeRes = await query(`select status from public.service_plans where id = $1 limit 1`, [id]);
-    const previousStatus = String((beforeRes.rows[0] as { status?: string } | undefined)?.status ?? 'draft');
+    const beforeRes = await query(
+      `select status, leader_member_id, preacher_member_id, share_token::text as share_token, service_date::text as service_date
+       from public.service_plans
+       where id = $1
+       limit 1`,
+      [id],
+    );
+    const beforeRow = beforeRes.rows[0] as
+      | {
+          status?: string;
+          leader_member_id?: number | null;
+          preacher_member_id?: number | null;
+          share_token?: string | null;
+          service_date?: string | null;
+        }
+      | undefined;
+    const previousStatus = String(beforeRow?.status ?? 'draft');
+    const previousLeaderId =
+      beforeRow?.leader_member_id == null ? null : Number(beforeRow.leader_member_id);
+    const previousPreacherId =
+      beforeRow?.preacher_member_id == null ? null : Number(beforeRow.preacher_member_id);
+    const shareToken = String(beforeRow?.share_token ?? '').trim();
+    const shareUrl = shareToken ? `/service-plan/share/${shareToken}` : '/service-planner';
     const ok = await patchPlan(id, patch);
     if (!ok) {
       res.status(404).json({ error: 'План не найден' });
@@ -499,6 +581,50 @@ export async function patchServicePlanById(req: Request, res: Response): Promise
         await markServicePlanLastEdited(id, req.authUserId);
       } catch (e) {
         console.error('[service-planner] mark last edited (patch plan):', e);
+      }
+    }
+    const nextLeaderId =
+      patch.leader_member_id !== undefined
+        ? patch.leader_member_id
+        : previousLeaderId;
+    const nextServiceDate =
+      patch.service_date !== undefined
+        ? patch.service_date
+        : String(beforeRow?.service_date ?? '');
+    const leaderChanged =
+      patch.leader_member_id !== undefined && nextLeaderId !== previousLeaderId;
+    const nextPreacherId =
+      patch.preacher_member_id !== undefined
+        ? patch.preacher_member_id
+        : previousPreacherId;
+    const preacherChanged =
+      patch.preacher_member_id !== undefined && nextPreacherId !== previousPreacherId;
+    const memberNames = await getMemberNamesByIds([
+      nextLeaderId ?? 0,
+      nextPreacherId ?? 0,
+    ]);
+    const nextLeaderName = nextLeaderId ? (memberNames.get(nextLeaderId) ?? null) : null;
+    if (leaderChanged && nextLeaderId && nextServiceDate) {
+      try {
+        await notifyLeaderAssigned({
+          leaderMemberId: nextLeaderId,
+          serviceDate: nextServiceDate,
+          shareUrl,
+        });
+      } catch (pushErr) {
+        console.warn('[service-planner] leader assignment push failed:', pushErr);
+      }
+    }
+    if (preacherChanged && nextPreacherId && nextServiceDate) {
+      try {
+        await notifyPreacherAssigned({
+          preacherMemberId: nextPreacherId,
+          serviceDate: nextServiceDate,
+          leaderName: nextLeaderName,
+          shareUrl,
+        });
+      } catch (pushErr) {
+        console.warn('[service-planner] preacher assignment push failed:', pushErr);
       }
     }
     const shouldSyncBroadcast =

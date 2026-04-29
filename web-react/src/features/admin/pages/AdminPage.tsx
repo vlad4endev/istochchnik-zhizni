@@ -276,6 +276,12 @@ function splitNameForEditForm(u: AppUser): { first_name: string; last_name: stri
   return { first_name: p.first, last_name: p.last };
 }
 
+function memberInitials(u: AppUser): string {
+  const { first, last } = splitMemberNameParts(u);
+  const initials = `${(first || '').trim().charAt(0)}${(last || '').trim().charAt(0)}`.toUpperCase();
+  return initials || '??';
+}
+
 function fieldClass() {
   return (
     'w-full rounded-xl border border-stone-200/90 bg-white px-3 py-2.5 text-sm text-stone-900 outline-none ' +
@@ -470,6 +476,8 @@ function MembersSection() {
   ]);
   const [bulkMergeDupes, setBulkMergeDupes] = useState(false);
   const [bulkPasteText, setBulkPasteText] = useState('');
+  const [isPrayerRequestEditing, setIsPrayerRequestEditing] = useState(false);
+  const [showPrayerHistory, setShowPrayerHistory] = useState(false);
   const memberEditTitleId = useId();
 
   useEffect(() => {
@@ -784,6 +792,8 @@ function MembersSection() {
 
   function openEdit(u: AppUser) {
     setEditing(u);
+    setIsPrayerRequestEditing(false);
+    setShowPrayerHistory(false);
     const { first_name: ef, last_name: el } = splitNameForEditForm(u);
     setEditForm({
       first_name: ef,
@@ -1454,59 +1464,51 @@ function MembersSection() {
           }}
         >
           <div
-            className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white shadow-2xl"
+            className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl bg-white shadow-2xl"
             role="dialog"
             aria-modal="true"
             aria-labelledby={memberEditTitleId}
           >
             {/* Header */}
-            <div className="sticky top-0 z-10 border-b border-stone-100 bg-gradient-to-r from-primary/[0.06] via-white to-stone-50/80 px-5 py-4 backdrop-blur-sm">
+            <div className="sticky top-0 z-10 border-b border-stone-100 bg-white px-5 py-4 backdrop-blur-sm">
               <div className="flex items-start justify-between gap-3">
                 <div className="flex min-w-0 flex-1 items-center gap-3">
-                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary/12 text-primary">
-                  <LuPenLine className="h-5 w-5" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <h3 id={memberEditTitleId} className="text-lg font-extrabold tracking-tight text-stone-900">
-                    {memberRosterName(editing)}
-                  </h3>
-                  <div className="mt-1 flex flex-wrap items-center gap-2">
-                    <MemberRegistrationBadge u={editing} />
-                    <span
-                      className={`${appRoleBadgeClass(editing.app_role)} text-[10px] font-bold uppercase tracking-wide`}
-                    >
-                      {appRoleLabel(editing.app_role)}
-                    </span>
-                    <span
-                      className={
-                        editing.is_active
-                          ? 'rounded-full bg-emerald-100 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-800'
-                          : 'rounded-full bg-stone-100 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-stone-500'
-                      }
-                    >
-                      {editing.is_active ? 'Активен' : 'Неактивен'}
-                    </span>
-                    {editing.is_collection_coordinator ? (
-                      <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-900">
-                        Сбор
-                      </span>
-                    ) : null}
+                  <div
+                    className="flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-full text-base font-semibold"
+                    style={{ backgroundColor: '#F3EEF0', color: '#7B2D3F' }}
+                  >
+                    {memberInitials(editing)}
                   </div>
-                </div>
+                  <div className="min-w-0 flex-1">
+                    <h3 id={memberEditTitleId} className="text-[18px] font-medium tracking-tight text-stone-900">
+                      {memberRosterName(editing)}
+                    </h3>
+                    <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                      <span className="rounded-full bg-emerald-100 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-800">
+                        В приложении
+                      </span>
+                      <span className="rounded-full border border-stone-300 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-stone-600">
+                        {appRoleLabel(editing.app_role)}
+                      </span>
+                      <span className="rounded-full bg-teal-100 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-teal-800">
+                        Активен
+                      </span>
+                    </div>
+                  </div>
                 </div>
                 <button
                   type="button"
                   onClick={() => setEditing(null)}
-                  className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-stone-500 transition hover:bg-stone-100 hover:text-stone-800"
+                  className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-stone-200 text-stone-500 transition hover:bg-stone-100 hover:text-stone-800"
                   aria-label="Закрыть карточку"
                   title="Закрыть"
                 >
-                  <LuX className="h-6 w-6" strokeWidth={2} aria-hidden />
+                  <LuX className="h-4.5 w-4.5" strokeWidth={2} aria-hidden />
                 </button>
               </div>
             </div>
 
-            <div className="p-5 space-y-5">
+            <div className="space-y-5 p-5">
               {/* Personal info */}
               <section>
                 <p className="mb-3 text-[10px] font-extrabold uppercase tracking-[0.15em] text-stone-400">Личные данные</p>
@@ -1530,7 +1532,7 @@ function MembersSection() {
                   <div className="sm:col-span-2">
                     <button
                       type="button"
-                      className={btnSecondary('text-xs')}
+                      className="text-xs font-semibold text-primary underline-offset-2 hover:underline"
                       disabled={swapNameFieldsMut.isPending}
                       onClick={() => {
                         if (
@@ -1544,7 +1546,7 @@ function MembersSection() {
                         swapNameFieldsMut.mutate();
                       }}
                     >
-                      {swapNameFieldsMut.isPending ? 'Меняем…' : 'Поменять имя и фамилию местами в базе'}
+                      {swapNameFieldsMut.isPending ? 'Меняем…' : 'поменять местами →'}
                     </button>
                   </div>
                   <div>
@@ -1594,87 +1596,157 @@ function MembersSection() {
                   </div>
                   <div>
                     <label className="mb-1 block text-xs font-semibold text-stone-600">Роль служения</label>
-                    <select
-                      multiple
-                      size={Math.min(7, Math.max(3, roleOptionsForDirection(editForm.ministry_direction).length))}
+                    <input
                       className={fieldClass()}
-                      value={roleArray(editForm.ministry_role)}
-                      onChange={(e) => {
-                        const selected = Array.from(e.currentTarget.selectedOptions).map((opt) => opt.value);
-                        setEditForm((s) => ({ ...s, ministry_role: normalizeMinistryRoles(selected.join(', ')) }));
-                      }}
-                    >
+                      value={editForm.ministry_role}
+                      onChange={(e) => setEditForm((s) => ({ ...s, ministry_role: e.target.value }))}
+                      list={`ministry-role-options-${editing.id}`}
+                    />
+                    <datalist id={`ministry-role-options-${editing.id}`}>
                       {roleOptionsForDirection(editForm.ministry_direction).map((t) => (
-                        <option key={t} value={t}>
-                          {t}
-                        </option>
+                        <option key={t} value={t} />
                       ))}
-                    </select>
+                    </datalist>
                   </div>
                 </div>
               </section>
 
-              {/* Status */}
-              <section className="space-y-3">
-                <label className="flex items-center gap-2 text-sm text-stone-700">
-                  <input
-                    type="checkbox"
-                    className="h-4 w-4 rounded border-stone-300 text-primary"
-                    checked={editForm.is_active}
-                    onChange={(e) => setEditForm((s) => ({ ...s, is_active: e.target.checked }))}
-                  />
-                  Активен (может войти в приложение)
-                </label>
-                <label className="flex cursor-pointer items-start gap-2 text-sm text-stone-700">
-                  <input
-                    type="checkbox"
-                    className="mt-0.5 h-4 w-4 shrink-0 rounded border-stone-300 text-primary"
-                    checked={editForm.in_prayer_cycle}
-                    onChange={(e) => setEditForm((s) => ({ ...s, in_prayer_cycle: e.target.checked }))}
-                  />
-                  <span>
-                    <span className="font-semibold text-stone-900">В молитвенном цикле</span>
-                    <span className="mt-0.5 block text-xs font-normal text-stone-500">
-                      Включите вручную: новый пользователь по умолчанию не попадает в очередь «день за днём».
-                    </span>
-                  </span>
-                </label>
-              </section>
-
-              {/* Admin controls */}
+              {/* Access and role */}
               <section>
-                <p className="mb-3 text-[10px] font-extrabold uppercase tracking-[0.15em] text-stone-400">
-                  Действия администратора
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  <label className="flex flex-col gap-1 text-sm text-stone-700">
-                    <span className="text-[10px] font-extrabold uppercase tracking-wider text-stone-400">
+                <p className="mb-3 text-[10px] font-extrabold uppercase tracking-[0.15em] text-stone-400">Доступ и роль</p>
+                <div className="space-y-3">
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold text-stone-600">Роль приложения</label>
+                    <span
+                      className="sr-only"
+                    >
                       Роль приложения
                     </span>
                     <select
-                      multiple
-                      size={6}
-                      className="max-w-xs rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm"
-                      value={Array.isArray(editing.app_roles) && editing.app_roles.length > 0
-                        ? editing.app_roles
-                        : [editing.app_role]}
+                      className={fieldClass()}
+                      value={
+                        Array.isArray(editing.app_roles) && editing.app_roles.length > 0
+                          ? editing.app_roles[0]!
+                          : editing.app_role
+                      }
                       disabled={roleMut.isPending}
                       onChange={(e) => {
                         setBanner(null);
-                        const roles = Array.from(e.currentTarget.selectedOptions).map(
-                          (opt) => opt.value as AppUser['app_role'],
-                        );
-                        roleMut.mutate({ id: editing.id, roles: roles.length > 0 ? roles : ['member'] });
+                        roleMut.mutate({
+                          id: editing.id,
+                          roles: [e.target.value as AppUser['app_role']],
+                        });
                       }}
                     >
+                      <option value="">—</option>
                       <option value="member">Член церкви</option>
-                      <option value="minister">Служитель</option>
+                      <option value="minister">Служащий</option>
                       <option value="pastor">Пастор</option>
                       <option value="musician">Музыкант (студия)</option>
                       <option value="editor">Редактор каталога</option>
                       <option value="admin">Администратор</option>
                     </select>
+                  </div>
+                  <label className="flex cursor-pointer items-center justify-between rounded-xl border border-stone-200 px-3 py-2.5">
+                    <span className="text-sm text-stone-800">Активен (может войти в приложение)</span>
+                    <span className="relative inline-flex h-6 w-11 items-center">
+                      <input
+                        type="checkbox"
+                        className="peer sr-only"
+                        checked={editForm.is_active}
+                        onChange={(e) => setEditForm((s) => ({ ...s, is_active: e.target.checked }))}
+                      />
+                      <span className="h-6 w-11 rounded-full bg-stone-300 transition-colors peer-checked:bg-primary" />
+                      <span className="absolute left-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform peer-checked:translate-x-5" />
+                    </span>
                   </label>
+                  <label className="flex cursor-pointer items-center justify-between rounded-xl border border-stone-200 px-3 py-2.5">
+                    <span className="text-sm text-stone-800">В молитвенном цикле</span>
+                    <span className="relative inline-flex h-6 w-11 items-center">
+                      <input
+                        type="checkbox"
+                        className="peer sr-only"
+                        checked={editForm.in_prayer_cycle}
+                        onChange={(e) => setEditForm((s) => ({ ...s, in_prayer_cycle: e.target.checked }))}
+                      />
+                      <span className="h-6 w-11 rounded-full bg-stone-300 transition-colors peer-checked:bg-primary" />
+                      <span className="absolute left-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform peer-checked:translate-x-5" />
+                    </span>
+                  </label>
+                  <div className="rounded-xl bg-stone-100 px-3 py-2.5 text-sm text-stone-700">
+                    <div className="flex items-center gap-2 border-b border-stone-200 pb-2">
+                      <span className="inline-block h-2.5 w-2.5 rounded-full bg-emerald-500" />
+                      <span>
+                        Статус входа:{' '}
+                        <strong>{editing.has_registered ? 'пароль создан, вход доступен' : 'вход не оформлен'}</strong>
+                      </span>
+                    </div>
+                    <div className="mt-2 flex items-center gap-2">
+                      <span className="inline-block h-2.5 w-2.5 rounded-full bg-stone-400" />
+                      <span>Логин: {editForm.phone_number.trim() || '—'}</span>
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              {/* Prayer request */}
+              <section>
+                <p className="mb-3 text-[10px] font-extrabold uppercase tracking-[0.15em] text-stone-400">Молитвенная нужда</p>
+                {isPrayerRequestEditing ? (
+                  <textarea
+                    className={`${fieldClass()} min-h-[100px] resize-y`}
+                    value={editForm.prayer_request}
+                    onChange={(e) => setEditForm((s) => ({ ...s, prayer_request: e.target.value }))}
+                    placeholder="Текст молитвенной нужды…"
+                  />
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setIsPrayerRequestEditing(true)}
+                    className="w-full overflow-hidden rounded-xl border border-stone-200 text-left"
+                  >
+                    {(editForm.prayer_request || '')
+                      .split('\n')
+                      .map((line) => line.trim())
+                      .filter(Boolean)
+                      .map((line, i) => (
+                        <div
+                          key={`${line}-${i}`}
+                          className="border-b border-stone-200 px-3 py-2.5 text-sm text-stone-700 last:border-b-0"
+                        >
+                          {line}
+                        </div>
+                      ))}
+                    {!editForm.prayer_request.trim() ? (
+                      <div className="px-3 py-2.5 text-sm text-stone-400">Нажмите, чтобы добавить молитвенную нужду…</div>
+                    ) : null}
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setShowPrayerHistory((v) => !v)}
+                  className="mt-2 text-xs font-semibold text-primary underline-offset-2 hover:underline"
+                >
+                  История молитвенных нужд →
+                </button>
+                {showPrayerHistory ? <AdminPrayerHistory memberId={editing.id} /> : null}
+              </section>
+
+              {/* Danger zone */}
+              <section className="rounded-2xl border border-red-200 bg-red-50/40 p-4">
+                <p className="mb-3 text-[10px] font-extrabold uppercase tracking-[0.15em] text-red-700">Опасная зона</p>
+                <div className="grid gap-2 sm:grid-cols-3">
+                  <button
+                    type="button"
+                    className={btnSecondary()}
+                    onClick={() => {
+                      setOneTimeId(editing.id);
+                      setOneTimeDate('');
+                      setBanner(null);
+                    }}
+                  >
+                    Разовая дата в цикле
+                  </button>
                   <button
                     type="button"
                     className={btnSecondary()}
@@ -1692,42 +1764,11 @@ function MembersSection() {
                       );
                     }}
                   >
-                    {editing.is_collection_coordinator
-                      ? 'Снять ответственного за сбор'
-                      : 'Назначить ответственным за сбор'}
+                    Ответственный за сбор
                   </button>
                   <button
                     type="button"
-                    className={btnSecondary()}
-                    onClick={() => {
-                      setBanner(null);
-                      void updateAdminMember(editing.id, { is_active: !editing.is_active }).then(
-                        (updated) => {
-                          setEditing(updated);
-                          setEditForm((s) => ({ ...s, is_active: updated.is_active }));
-                          setBanner({ type: 'ok', text: 'Статус обновлён.' });
-                          invalidate();
-                        },
-                        (e) => setBanner({ type: 'err', text: apiErrorMessage(e, 'Ошибка.') }),
-                      );
-                    }}
-                  >
-                    {editing.is_active ? 'Деактивировать' : 'Активировать'}
-                  </button>
-                  <button
-                    type="button"
-                    className={btnSecondary()}
-                    onClick={() => {
-                      setOneTimeId(editing.id);
-                      setOneTimeDate('');
-                      setBanner(null);
-                    }}
-                  >
-                    Разовая дата в цикле
-                  </button>
-                  <button
-                    type="button"
-                    className={btnDangerOutline()}
+                    className="rounded-xl border border-red-300 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700 transition hover:bg-red-100"
                     disabled={deleteMut.isPending}
                     onClick={() => {
                       if (!window.confirm(`Удалить ${memberRosterName(editing)}?`)) return;
@@ -1740,45 +1781,14 @@ function MembersSection() {
                 </div>
               </section>
 
-              {/* Access transparency */}
-              <section className="rounded-2xl border border-sky-200/60 bg-gradient-to-br from-sky-50 to-indigo-50/40 p-4">
-                <p className="text-[10px] font-extrabold uppercase tracking-[0.15em] text-sky-900/70">
-                  Прозрачность входа
-                </p>
-                <div className="mt-2 space-y-1.5 text-sm text-stone-700">
-                  <p>
-                    Статус входа:{' '}
-                    <strong>{editing.has_registered ? 'пароль создан, вход доступен' : 'вход не оформлен'}</strong>
-                  </p>
-                  <p>
-                    Логин: <strong>{editing.phone_number?.trim() || '—'}</strong>
-                  </p>
-                  <p className="text-xs text-stone-500">
-                    Открытый пароль система не хранит, поэтому показать «придуманный пароль» невозможно.
-                    Для безопасности доступен только факт регистрации и управление доступом.
-                  </p>
-                </div>
-              </section>
-
-              {/* Prayer request */}
-              <section>
-                <p className="mb-3 text-[10px] font-extrabold uppercase tracking-[0.15em] text-stone-400">Молитвенная нужда</p>
-                <textarea
-                  className={`${fieldClass()} min-h-[100px] resize-y`}
-                  value={editForm.prayer_request}
-                  onChange={(e) => setEditForm((s) => ({ ...s, prayer_request: e.target.value }))}
-                  placeholder="Текст молитвенной нужды…"
-                />
-              </section>
-
-              {/* Prayer history */}
-              <AdminPrayerHistory memberId={editing.id} />
-
               {/* Actions */}
-              <div className="flex flex-wrap gap-2 border-t border-stone-100 pt-4">
+              <div className="flex justify-end gap-2 border-t border-stone-100 pt-4">
+                <button type="button" className={btnSecondary()} onClick={() => setEditing(null)}>
+                  Отмена
+                </button>
                 <button
                   type="button"
-                  className={btnPrimary('flex-1')}
+                  className={btnPrimary()}
                   disabled={saveEditMut.isPending}
                   onClick={() => {
                     setBanner(null);
@@ -1786,9 +1796,6 @@ function MembersSection() {
                   }}
                 >
                   {saveEditMut.isPending ? 'Сохранение…' : 'Сохранить'}
-                </button>
-                <button type="button" className={btnSecondary()} onClick={() => setEditing(null)}>
-                  Отмена
                 </button>
               </div>
             </div>
