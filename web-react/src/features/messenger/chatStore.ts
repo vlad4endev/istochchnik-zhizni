@@ -237,11 +237,12 @@ export const EMPTY_OBJECT: any = {};
  * Без `sender_id` не считаем (нет надёжного отличия «своё / чужое»).
  */
 function messageCountsAsUnreadForCurrentUser(
-  msg: Pick<MessageWithSender, 'is_read' | 'sender_id'>,
+  msg: Pick<MessageWithSender, 'is_read' | 'sender_id' | 'payload_type'>,
   currentMemberId: number | null,
 ): boolean {
   if (currentMemberId == null) return false;
   if (msg.sender_id != null && Number(msg.sender_id) === Number(currentMemberId)) return false;
+  if (msg.payload_type === 'access_request') return false;
   return msg.is_read === false;
 }
 
@@ -1251,9 +1252,20 @@ export const useChatStore = create<ChatState>((set, get) => ({
           (s.conversations.find((c) => c.id === conversationId)?.unread_count ?? 0),
       ),
     }));
-    // Best-effort: update server read cursor to the last known message.
+    const latestNumericMessageId = (() => {
+      const msgs = get().messagesByConv[conversationId] || [];
+      for (let i = msgs.length - 1; i >= 0; i -= 1) {
+        const id = String(msgs[i]?.id ?? '').trim();
+        if (/^\d+$/.test(id)) return id;
+      }
+      return null;
+    })();
+    // Best-effort: update server read cursor immediately.
     try {
-      await get().markRead(conversationId);
+      await api.markConversationRead(conversationId, {
+        messageId: latestNumericMessageId,
+        readAt: new Date().toISOString(),
+      });
     } catch (e) {
       console.error('[chatStore] markAsRead error:', e);
     }
@@ -1286,7 +1298,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
     markReadInFlightByConv.set(convKey, targetId);
     try {
-      await api.markConversationRead(conversationId, normalizedId);
+      await api.markConversationRead(conversationId, { messageId: normalizedId });
       const prevCommitted = markReadCommittedByConv.get(convKey) ?? 0n;
       if (targetId > prevCommitted) {
         markReadCommittedByConv.set(convKey, targetId);
@@ -1402,6 +1414,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
         s.currentMemberId != null &&
         msg.sender_id != null &&
         Number(msg.sender_id) === Number(s.currentMemberId);
+      const isPageVisible =
+        typeof document === 'undefined' ? true : document.visibilityState === 'visible';
       const targetConversation = s.conversations.find((c) => c.id === idKey) || null;
 
       // Already present by definitive server id.
@@ -1426,7 +1440,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         !hasProvisionalTwin &&
         !alreadyPresentByClientId &&
         messageCountsAsUnreadForCurrentUser(msg, s.currentMemberId) &&
-        !isActiveConversation;
+        (!isActiveConversation || !isPageVisible);
 
       const merged = hasProvisionalTwin
         ? existing.map((m) => {

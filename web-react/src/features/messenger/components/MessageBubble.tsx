@@ -1034,7 +1034,9 @@ function MessageBubbleInner({
     <>
     <div
       className={[
-        'msg-bubble-shell relative flex w-fit max-w-[min(88%,20.5rem)] flex-col sm:max-w-[min(84%,24rem)]',
+        'msg-bubble-shell message-bubble relative flex w-fit max-w-[min(88%,20.5rem)] flex-col sm:max-w-[min(84%,24rem)]',
+        !isGroupedPrev ? 'group-start' : '',
+        isMine ? 'outgoing' : 'incoming',
         isMine ? 'ml-auto items-end' : 'mr-auto items-start',
       ].join(' ')}
       onContextMenu={handleContextMenu}
@@ -1042,10 +1044,6 @@ function MessageBubbleInner({
       onPointerMoveCapture={handlePointerMoveCapture}
       onPointerUpCapture={() => clearLongPressTimer()}
       onPointerCancelCapture={() => clearLongPressTimer()}
-      style={{ 
-        marginTop: isGroupedPrev ? '2px' : '8px',
-        marginBottom: isGroupedNext ? '0' : '4px'
-      }}
     >
       <div className="relative">
         {showReactionBar ? (
@@ -1122,14 +1120,14 @@ function MessageBubbleInner({
         >
         {/* Sender name (only if first message in group and not mine) */}
         {!isMine && !isGroupedPrev && message.sender_name && (
-          <div className="mb-1.5 px-1 text-xs font-semibold text-gray-500">{message.sender_name}</div>
+          <div className="sender-name mb-1.5 px-1 text-xs font-semibold text-gray-500">{message.sender_name}</div>
         )}
 
         {/* Reply preview (tap to jump) */}
         {message.reply_preview && (
           <button
             type="button"
-            className={`msg-reply-preview ${isMine ? 'msg-reply-preview--out' : 'msg-reply-preview--in'}`}
+            className={`msg-reply-preview message-quote ${isMine ? 'msg-reply-preview--out' : 'msg-reply-preview--in'}`}
             onClick={(e) => {
               e.stopPropagation();
               const id = String(message.reply_preview?.id ?? '').trim();
@@ -1139,7 +1137,9 @@ function MessageBubbleInner({
             title="Перейти к сообщению"
           >
             <div className="msg-reply-author">
+              <span className="quote-author">
               {message.reply_preview.sender_name || 'Удалённый пользователь'}
+              </span>
             </div>
             <div className="msg-reply-text">
               {message.reply_preview.is_deleted ? 'Сообщение удалено' : message.reply_preview.content}

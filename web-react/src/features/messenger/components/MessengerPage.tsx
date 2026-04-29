@@ -98,11 +98,11 @@ export function MessengerPage() {
   }, [activeId, setActive]);
 
   return (
-    <div className="tg-messenger-page flex min-h-0 flex-1 flex-col">
+    <div className="tg-messenger-page messenger-layout flex min-h-0 flex-1 flex-col">
       <div className={`tg-messenger min-h-0 flex-1 ${isTransitioning ? 'transitioning' : ''}`} ref={messengerRef}>
       {/* Sidebar */}
       <aside
-        className={`tg-sidebar ${mobileView === 'list' ? 'tg-sidebar--visible' : ''} ${mobileView === 'chat' ? 'tg-sidebar--hidden' : ''}`}
+        className={`tg-sidebar chat-list-panel ${mobileView === 'list' ? 'tg-sidebar--visible' : ''} ${mobileView === 'chat' ? 'tg-sidebar--hidden' : ''}`}
       >
         <div className="tg-sidebar-header">
           <h1 className="tg-sidebar-title">Мессенджер</h1>
@@ -127,7 +127,7 @@ export function MessengerPage() {
       ) : null}
 
       {/* Main chat area */}
-      <main className={`tg-main ${mobileView === 'chat' ? 'tg-main--visible' : ''}`}>
+      <main className={`tg-main chat-window-panel ${mobileView === 'chat' ? 'tg-main--visible' : ''}`}>
         {activeId ? (
           <Suspense fallback={<div className="tg-empty-sub">Загрузка чата…</div>}>
             <ChatWindow
@@ -138,7 +138,7 @@ export function MessengerPage() {
             />
           </Suspense>
         ) : (
-          <div className="tg-empty-state">
+          <div className="tg-empty-state chat-empty-state">
             <div className="tg-empty-icon">
               <LuMessageSquare size={80} strokeWidth={1} />
             </div>

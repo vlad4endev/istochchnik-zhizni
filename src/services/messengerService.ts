@@ -168,7 +168,8 @@ export async function listConversations(memberId: number): Promise<ConversationL
         (SELECT COUNT(*)::int FROM messages m2
          WHERE m2.conversation_id = c.id
            AND m2.id > COALESCE(cp.last_read_message_id, 0)
-           AND m2.sender_id IS DISTINCT FROM $1),
+           AND m2.sender_id IS DISTINCT FROM $1
+           AND m2.payload_type::text NOT IN ('access_request', 'system', 'notification')),
         0
       ) AS unread_count,
       -- other member for private chats
@@ -615,7 +616,8 @@ export async function getConversationListItem(
         (SELECT COUNT(*)::int FROM messages m2
          WHERE m2.conversation_id = c.id
            AND m2.id > COALESCE(cp.last_read_message_id, 0)
-           AND m2.sender_id IS DISTINCT FROM $1),
+           AND m2.sender_id IS DISTINCT FROM $1
+           AND m2.payload_type::text NOT IN ('access_request', 'system', 'notification')),
         0
       ) AS unread_count,
       -- other member for private chats
@@ -1953,19 +1955,28 @@ export async function deleteMessage(
 export async function markRead(
   conversationId: string,
   memberId: number,
-  lastReadMessageId: string,
+  input: { lastReadMessageId?: string | null; readAt?: string | null },
 ): Promise<boolean> {
-  const normalizedMessageId = String(lastReadMessageId || '').trim();
-  if (!/^\d+$/.test(normalizedMessageId)) {
-    throw new Error('Invalid messageId');
+  const normalizedMessageId = String(input.lastReadMessageId || '').trim();
+  const normalizedReadAt = String(input.readAt || '').trim();
+  const hasMessageId = /^\d+$/.test(normalizedMessageId);
+  const hasReadAt = normalizedReadAt.length > 0;
+  if (!hasMessageId && !hasReadAt) {
+    throw new Error('Invalid read marker');
   }
 
   const result = await dbQuery(
     `WITH target_message AS (
        SELECT id
        FROM messages
-       WHERE id = $3::bigint
-         AND conversation_id = $1::bigint
+       WHERE conversation_id = $1::bigint
+         AND (
+           ($3::text <> '' AND id = $3::bigint)
+           OR
+           ($3::text = '' AND $4::timestamptz IS NOT NULL AND created_at <= $4::timestamptz)
+         )
+         AND payload_type::text NOT IN ('access_request', 'system', 'notification')
+       ORDER BY id DESC
        LIMIT 1
      )
      UPDATE conversation_participants cp
@@ -1979,14 +1990,15 @@ export async function markRead(
        AND cp.left_at IS NULL
        AND EXISTS (SELECT 1 FROM target_message)
      RETURNING cp.last_read_message_id`,
-    [conversationId, memberId, normalizedMessageId],
+    [conversationId, memberId, hasMessageId ? normalizedMessageId : '', hasReadAt ? normalizedReadAt : null],
   );
 
   if (result.rows.length === 0) {
     console.warn('[messenger] markRead skipped (no matching message or not a participant)', {
       conversationId,
       memberId,
-      messageId: normalizedMessageId,
+      messageId: hasMessageId ? normalizedMessageId : null,
+      readAt: hasReadAt ? normalizedReadAt : null,
     });
     return false;
   }
@@ -2008,6 +2020,7 @@ export async function getTotalUnreadCount(memberId: number): Promise<number> {
         AND cp.left_at IS NULL
         AND m.id > COALESCE(cp.last_read_message_id, 0)
         AND m.sender_id IS DISTINCT FROM cp.member_id
+        AND m.payload_type::text NOT IN ('access_request', 'system', 'notification')
     ) sub
     `,
     [memberId],

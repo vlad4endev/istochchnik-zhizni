@@ -1065,19 +1065,27 @@ router.delete('/messages/:id', async (req: Request, res: Response) => {
 
 // ─── Read Receipts ────────────────────────────────────────────
 
-/** POST /api/messenger/conversations/:id/read { messageId } */
+/** POST /api/messenger/conversations/:id/read { messageId?, readAt? } */
 router.post('/conversations/:id/read', async (req: Request, res: Response) => {
   const userId = (req as AuthReq).authUserId!;
   const convId = req.params.id;
   const rawMessageId = req.body?.messageId ?? req.body?.lastReadMessageId;
   const messageId = String(rawMessageId ?? '').trim();
-  if (!messageId || !/^\d+$/.test(messageId)) {
-    res.status(400).json({ error: 'messageId must be a numeric string' });
+  const readAt = String(req.body?.readAt ?? req.body?.read_at ?? '').trim();
+  if (readAt && Number.isNaN(Date.parse(readAt))) {
+    res.status(400).json({ error: 'readAt must be a valid ISO datetime' });
+    return;
+  }
+  if ((!messageId || !/^\d+$/.test(messageId)) && !readAt) {
+    res.status(400).json({ error: 'messageId (numeric) or readAt is required' });
     return;
   }
   try {
-    const updated = await svc.markRead(convId, userId, messageId);
-    if (updated) {
+    const updated = await svc.markRead(convId, userId, {
+      lastReadMessageId: /^\d+$/.test(messageId) ? messageId : null,
+      readAt: readAt || null,
+    });
+    if (updated && /^\d+$/.test(messageId)) {
       // Notify other participants (Telegram-like read cursor).
       sendToRoom(String(convId), {
         type: 'messages_read',
@@ -1097,7 +1105,7 @@ router.post('/conversations/:id/read', async (req: Request, res: Response) => {
   } catch (e) {
     console.error('[messenger] markRead error:', e);
     const message = e instanceof Error ? e.message : String(e);
-    if (message.includes('Invalid messageId')) {
+    if (message.includes('Invalid messageId') || message.includes('Invalid read marker')) {
       res.status(400).json({ error: message });
       return;
     }

@@ -52,7 +52,7 @@ export function ChatList({ onSelect, activeId }: ChatListProps) {
         />
       </div>
 
-      <div className="tg-chatlist-scroll min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable]">
+      <div className="tg-chatlist-scroll chats-scroll-area min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable]">
         <ul className="list-none" role="list">
           {filtered.map((conv: ConversationListItem, index: number) => (
             <li key={conv.id}>

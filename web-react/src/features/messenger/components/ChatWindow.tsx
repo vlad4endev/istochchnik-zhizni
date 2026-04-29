@@ -61,6 +61,8 @@ export function ChatWindow({
   const [mentionList, setMentionList] = useState<{ id: number; label: string }[]>([]);
   /** Все member_id в группе/канале — для подзаголовка «N в сети» (как в Telegram). */
   const [groupParticipantIds, setGroupParticipantIds] = useState<number[]>([]);
+  /** Готовность "пакета" данных шапки/инпута для предотвращения визуального дёргания на мобиле. */
+  const [chatHeadReady, setChatHeadReady] = useState(false);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const nearBottomRef = useRef(true);
@@ -106,45 +108,48 @@ export function ChatWindow({
       setPinnedMessages([]);
       setMentionList([]);
       setGroupParticipantIds([]);
+      setChatHeadReady(true);
       return;
     }
     let alive = true;
-    void api.fetchConversationMeta(conversationId).then((m) => {
-      if (alive) setChatMeta(m);
-    }).catch(() => {
-      if (alive) setChatMeta(null);
-    });
-    if (conv && conv.type !== 'private') {
-      void api.fetchPinnedMessages(conversationId).then((pins) => {
-        if (alive) setPinnedMessages(pins);
-      }).catch(() => {
-        if (alive) setPinnedMessages([]);
-      });
-      void api.fetchParticipants(conversationId).then((parts) => {
-        if (!alive) return;
-        const me = useChatStore.getState().currentMemberId;
-        setGroupParticipantIds(parts.map((p) => p.member_id));
-        setMentionList(
-          parts
-            .filter((p) => me == null || p.member_id !== me)
-            .map((p) => ({
-              id: p.member_id,
-              label:
-                (p.first_name ? `${p.first_name} ${p.last_name ?? ''}`.trim() : p.name) ||
-                `Участник ${p.member_id}`,
-            })),
-        );
-      }).catch(() => {
-        if (alive) {
-          setMentionList([]);
-          setGroupParticipantIds([]);
-        }
-      });
-    } else {
+    setChatHeadReady(false);
+
+    const loadChatHeadData = async () => {
+      const isGroupLike = Boolean(conv && conv.type !== 'private');
+      const [metaRes, pinsRes, participantsRes] = await Promise.all([
+        api.fetchConversationMeta(conversationId),
+        isGroupLike ? api.fetchPinnedMessages(conversationId) : Promise.resolve<api.MessageWithSender[]>([]),
+        isGroupLike ? api.fetchParticipants(conversationId) : Promise.resolve<api.Participant[]>([]),
+      ]);
+      const me = useChatStore.getState().currentMemberId;
+      const nextParticipantIds = participantsRes.map((p) => p.member_id);
+      const nextMentionList = participantsRes
+        .filter((p) => me == null || p.member_id !== me)
+        .map((p) => ({
+          id: p.member_id,
+          label:
+            (p.first_name ? `${p.first_name} ${p.last_name ?? ''}`.trim() : p.name) ||
+            `Участник ${p.member_id}`,
+        }));
+
+      if (!alive) return;
+      // Один проход обновлений вместо каскада независимых setState.
+      setChatMeta(metaRes);
+      setPinnedMessages(pinsRes);
+      setGroupParticipantIds(nextParticipantIds);
+      setMentionList(nextMentionList);
+      setChatHeadReady(true);
+    };
+
+    void loadChatHeadData().catch(() => {
+      if (!alive) return;
+      setChatMeta(null);
       setPinnedMessages([]);
       setMentionList([]);
       setGroupParticipantIds([]);
-    }
+      setChatHeadReady(true);
+    });
+
     return () => {
       alive = false;
     };
@@ -289,6 +294,17 @@ export function ChatWindow({
     }, delay);
     return () => window.clearTimeout(t);
   }, [conversationId, markAsRead, isDraft, conversations]);
+
+  useEffect(() => {
+    if (isDraft) return;
+    const onVisibilityChange = () => {
+      if (document.visibilityState !== 'visible') return;
+      if (!isMessengerChatReadSurfaceOpen()) return;
+      void markAsRead(conversationId);
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', onVisibilityChange);
+  }, [conversationId, isDraft, markAsRead]);
 
   const flushVisibleReads = useCallback(() => {
     if (flushTimerRef.current != null) {
@@ -635,6 +651,9 @@ export function ChatWindow({
       return formatMessengerLastSeen(iso);
     }
     if (conv.type === 'group' || conv.type === 'channel') {
+      if (!chatHeadReady) {
+        return ' ';
+      }
       const n = groupParticipantIds.length;
       if (n > 0 && onlineInGroupCount > 0) {
         const onWord = `${onlineInGroupCount} в сети`;
@@ -646,7 +665,7 @@ export function ChatWindow({
       return conv.type === 'channel' ? 'канал' : 'группа';
     }
     return 'чат';
-  }, [conv, typingUsers, isOnline, isDraft, memberLastSeenAt, groupParticipantIds.length, onlineInGroupCount]);
+  }, [chatHeadReady, conv, typingUsers, isOnline, isDraft, memberLastSeenAt, groupParticipantIds.length, onlineInGroupCount]);
 
   const typingFirstNames = useMemo(
     () =>
@@ -684,6 +703,7 @@ export function ChatWindow({
 
   const headerInfoAriaLabel =
     interlocutorProfilePath != null ? 'Открыть страницу собеседника' : 'Сведения о чате';
+  const showHeaderSkeleton = !isDraft && (conv?.type === 'group' || conv?.type === 'channel') && !chatHeadReady;
 
   return (
     <div className="tg-chat-window box-border flex w-full max-w-full min-w-0 min-h-0 flex-1 flex-col overflow-hidden overflow-x-hidden">
@@ -718,83 +738,105 @@ export function ChatWindow({
             title={interlocutorProfilePath != null ? 'Открыть страницу пользователя' : undefined}
             className="flex min-w-0 flex-1 cursor-pointer items-center gap-2.5 rounded-lg py-0.5 pl-0.5 pr-1 text-left transition-colors active:bg-gray-100/80 sm:gap-3 sm:pr-2"
           >
-            <div
-              className="grid h-9 w-9 shrink-0 place-items-center overflow-hidden rounded-full text-[13px] font-semibold text-white sm:h-10 sm:w-10"
-              style={{ backgroundColor: headerAvatarColor }}
-            >
-              <AppAvatar
-                src={headerAvatarUrl}
-                fallback={<span>{headerInitial}</span>}
-                priority
-                className="grid h-full w-full place-items-center"
-                imgClassName="h-full w-full object-cover"
-              />
-            </div>
-            <div className="min-w-0 flex-1 overflow-hidden">
-              <div className="truncate text-[16px] font-semibold leading-[1.2] text-gray-900 sm:text-[17px]">{displayName}</div>
-              {typingUsers.length > 0 ? (
+            {showHeaderSkeleton ? (
+              <>
+                <div className="tg-chat-header-skeleton tg-chat-header-skeleton--avatar h-9 w-9 shrink-0 rounded-full sm:h-10 sm:w-10" />
+                <div className="min-w-0 flex-1 overflow-hidden py-0.5">
+                  <div className="tg-chat-header-skeleton tg-chat-header-skeleton--title max-w-[10.5rem] rounded-md" />
+                  <div className="tg-chat-header-skeleton tg-chat-header-skeleton--subtitle mt-1 max-w-[8rem] rounded-md" />
+                </div>
+              </>
+            ) : (
+              <>
                 <div
-                  className={['truncate text-xs leading-tight sm:text-[13px]', headerStatusClass].join(' ')}
-                  aria-label={`${typingFirstNames.join(', ')} печатает`}
+                  className="grid h-9 w-9 shrink-0 place-items-center overflow-hidden rounded-full text-[13px] font-semibold text-white sm:h-10 sm:w-10"
+                  style={{ backgroundColor: headerAvatarColor }}
                 >
-                  <span>{typingFirstNames.join(', ')} печатает</span>
-                  <span className="tg-typing-dots" aria-hidden>
-                    <span className="tg-typing-dots__dot" />
-                    <span className="tg-typing-dots__dot" />
-                    <span className="tg-typing-dots__dot" />
-                  </span>
+                  <AppAvatar
+                    src={headerAvatarUrl}
+                    fallback={<span>{headerInitial}</span>}
+                    priority
+                    className="grid h-full w-full place-items-center"
+                    imgClassName="h-full w-full object-cover"
+                  />
                 </div>
-              ) : headerSubtitle ? (
-                <div className={['last-seen truncate text-xs leading-tight sm:text-[13px]', headerStatusClass].join(' ')}>
-                  {headerSubtitle}
+                <div className="min-w-0 flex-1 overflow-hidden">
+                  <div className="truncate text-[16px] font-semibold leading-[1.2] text-gray-900 sm:text-[17px]">{displayName}</div>
+                  {typingUsers.length > 0 ? (
+                    <div
+                      className={['truncate text-xs leading-tight sm:text-[13px]', headerStatusClass].join(' ')}
+                      aria-label={`${typingFirstNames.join(', ')} печатает`}
+                    >
+                      <span>{typingFirstNames.join(', ')} печатает</span>
+                      <span className="tg-typing-dots" aria-hidden>
+                        <span className="tg-typing-dots__dot" />
+                        <span className="tg-typing-dots__dot" />
+                        <span className="tg-typing-dots__dot" />
+                      </span>
+                    </div>
+                  ) : headerSubtitle ? (
+                    <div className={['last-seen user-status truncate text-xs leading-tight sm:text-[13px]', headerStatusClass].join(' ')}>
+                      {headerSubtitle}
+                    </div>
+                  ) : null}
                 </div>
-              ) : null}
-            </div>
+              </>
+            )}
           </div>
 
           {/* Справа: действия */}
           <div className="flex shrink-0 items-center justify-end gap-0.5 sm:gap-1">
-            {!isDraft && firstUnreadMessageId && (conv?.unread_count ?? 0) > 0 ? (
-              <button
-                type="button"
-                onClick={() => firstUnreadMessageId && jumpToMessage(firstUnreadMessageId)}
-                aria-label="К первому непрочитанному"
-                title="К непрочитанным"
-                className="inline-flex h-10 min-w-[2rem] items-center justify-center rounded-full px-1.5 text-[13px] font-extrabold text-primary transition-colors hover:bg-primary/10 active:bg-primary/15"
-              >
-                ↓
-              </button>
-            ) : null}
-            {!isDraft && mediaItems.length > 0 ? (
-              <button
-                type="button"
-                onClick={() => setShowMediaGallery(true)}
-                aria-label="Медиа в этом чате"
-                title="Медиа"
-                className="inline-flex h-10 w-10 items-center justify-center rounded-full text-gray-600 transition-colors active:bg-gray-100"
-              >
-                <LuLayers size={20} strokeWidth={2.25} />
-              </button>
-            ) : null}
-            <button
-              type="button"
-              onClick={() => navigate(`/messenger/chat/${conversationId}/manage`)}
-              aria-label="Управление чатом"
-              title="Управление"
-              className="inline-flex h-10 w-10 items-center justify-center rounded-full text-gray-600 transition-colors active:bg-gray-100"
-            >
-              <span className="text-lg font-black leading-none" aria-hidden>
-                ⋮
-              </span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setShowSearch(true)}
-              aria-label="Поиск по сообщениям"
-              className="inline-flex h-10 w-10 items-center justify-center rounded-full text-gray-600 transition-colors active:bg-gray-100"
-            >
-              <LuSearch size={20} strokeWidth={2.25} />
-            </button>
+            {showHeaderSkeleton ? (
+              <>
+                <span className="tg-chat-header-skeleton tg-chat-header-skeleton--action rounded-full" aria-hidden />
+                <span className="tg-chat-header-skeleton tg-chat-header-skeleton--action rounded-full" aria-hidden />
+                <span className="tg-chat-header-skeleton tg-chat-header-skeleton--action rounded-full" aria-hidden />
+              </>
+            ) : (
+              <>
+                {!isDraft && firstUnreadMessageId && (conv?.unread_count ?? 0) > 0 ? (
+                  <button
+                    type="button"
+                    onClick={() => firstUnreadMessageId && jumpToMessage(firstUnreadMessageId)}
+                    aria-label="К первому непрочитанному"
+                    title="К непрочитанным"
+                    className="inline-flex h-10 min-w-[2rem] items-center justify-center rounded-full px-1.5 text-[13px] font-extrabold text-primary transition-colors hover:bg-primary/10 active:bg-primary/15"
+                  >
+                    ↓
+                  </button>
+                ) : null}
+                {!isDraft && mediaItems.length > 0 ? (
+                  <button
+                    type="button"
+                    onClick={() => setShowMediaGallery(true)}
+                    aria-label="Медиа в этом чате"
+                    title="Медиа"
+                    className="inline-flex h-10 w-10 items-center justify-center rounded-full text-gray-600 transition-colors active:bg-gray-100"
+                  >
+                    <LuLayers size={20} strokeWidth={2.25} />
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  onClick={() => navigate(`/messenger/chat/${conversationId}/manage`)}
+                  aria-label="Управление чатом"
+                  title="Управление"
+                  className="inline-flex h-10 w-10 items-center justify-center rounded-full text-gray-600 transition-colors active:bg-gray-100"
+                >
+                  <span className="text-lg font-black leading-none" aria-hidden>
+                    ⋮
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowSearch(true)}
+                  aria-label="Поиск по сообщениям"
+                  className="inline-flex h-10 w-10 items-center justify-center rounded-full text-gray-600 transition-colors active:bg-gray-100"
+                >
+                  <LuSearch size={20} strokeWidth={2.25} />
+                </button>
+              </>
+            )}
           </div>
         </div>
       </header>
@@ -836,7 +878,7 @@ export function ChatWindow({
         </div>
 
         <div
-          className="relative flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto bg-transparent px-3 py-3 sm:gap-3 sm:p-4"
+          className="messages-area relative flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto bg-transparent px-3 py-3 sm:gap-3 sm:p-4"
           ref={scrollRef}
           onScroll={handleScroll}
           role="log"
@@ -944,7 +986,7 @@ export function ChatWindow({
         </div>
       </div>
 
-      <div className="tg-chat-window__composer sticky bottom-0 z-20 w-full min-w-0 max-w-full shrink-0 border-t bg-white p-3">
+      <div className="tg-chat-window__composer message-input-bar sticky bottom-0 z-20 w-full min-w-0 max-w-full shrink-0 border-t bg-white p-3">
         <ChatInput
           conversationId={conversationId}
           sendTypingStart={sendTypingStart}
