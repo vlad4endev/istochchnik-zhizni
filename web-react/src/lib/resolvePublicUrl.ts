@@ -82,6 +82,24 @@ function rewritePrivateSupabaseStorageUrl(v: string): string {
   }
 }
 
+/**
+ * Если backend/Supabase вернул приватный HTTP host (`172.17.x.x`) для `/storage/v1/*`,
+ * а страница открыта по HTTPS — браузер заблокирует mixed content.
+ * В таком случае пробуем использовать HTTPS origin текущего приложения
+ * (обычно nginx проксирует `/storage/v1/*` на Supabase/Kong).
+ */
+function rewritePrivateSupabaseStorageUrlToAppOrigin(v: string): string {
+  if (typeof window === 'undefined' || window.location.protocol !== 'https:') return v;
+  try {
+    const u = new URL(v);
+    if (!u.pathname.includes('/storage/v1/')) return v;
+    if (!isNonPublicHttpHost(u.hostname)) return v;
+    return `${window.location.origin}${u.pathname}${u.search}${u.hash}`;
+  } catch {
+    return v;
+  }
+}
+
 function normalizeAbsoluteUploadUrl(v: string): string {
   try {
     const u = new URL(v);
@@ -139,6 +157,7 @@ export function resolvePublicUrl(raw: string | null | undefined): string | null 
 
   if (/^https?:\/\//i.test(v)) {
     v = rewritePrivateSupabaseStorageUrl(v);
+    v = rewritePrivateSupabaseStorageUrlToAppOrigin(v);
     if (
       typeof window !== 'undefined' &&
       window.location.protocol === 'https:' &&
