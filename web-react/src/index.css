@@ -302,6 +302,41 @@ nav[aria-label='Основная навигация'] svg {
   flex-shrink: 0;
 }
 
+@media (max-width: 1023px) {
+  .dashboard-grid,
+  [class*='grid-cols-2'] {
+    grid-template-columns: 1fr !important;
+  }
+
+  .announcement-text:not(.announcement-text--expanded) {
+    display: -webkit-box;
+    -webkit-line-clamp: 4;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .announcement-expand-btn {
+    display: inline-flex;
+  }
+
+  .bottom-nav {
+    padding-bottom: env(safe-area-inset-bottom, 8px);
+    min-height: 56px;
+  }
+
+  .page-content {
+    padding-bottom: calc(64px + env(safe-area-inset-bottom, 8px)) !important;
+  }
+
+  * {
+    scrollbar-width: none;
+  }
+
+  ::-webkit-scrollbar {
+    display: none;
+  }
+}
+
 button {
   font: inherit;
   cursor: pointer;

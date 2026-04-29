@@ -489,7 +489,17 @@ function MessageBubbleInner({
     return d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
   }, [message.created_at]);
 
-  const payloadType = message.payload_type ?? 'text';
+  const payloadType = useMemo(() => {
+    if (message.payload_type) return message.payload_type;
+    const p = (message.payload ?? {}) as Record<string, unknown>;
+    const rawUrl = String(p.url ?? '').trim();
+    const mime = String(p.mimeType ?? p.mimetype ?? '').trim().toLowerCase();
+    const images = Array.isArray(p.images) ? p.images : [];
+    if (images.length > 0) return 'image';
+    if (mime.startsWith('image/') || /\.(jpe?g|png|webp|gif|heic|heif)$/i.test(rawUrl)) return 'image';
+    if (rawUrl) return 'file';
+    return 'text';
+  }, [message.payload, message.payload_type]);
   const payload = (message.payload ?? {}) as Record<string, unknown>;
   const albumImages = Array.isArray(payload.images)
     ? payload.images
@@ -907,12 +917,26 @@ function MessageBubbleInner({
     );
   }
 
+  const bubbleShapeClass = isMine
+    ? !isGroupedPrev && !isGroupedNext
+      ? 'rounded-[18px]'
+      : !isGroupedPrev && isGroupedNext
+        ? 'rounded-t-[18px] rounded-bl-[18px] rounded-br-[4px]'
+        : isGroupedPrev && isGroupedNext
+          ? 'rounded-tl-[18px] rounded-tr-[4px] rounded-bl-[18px] rounded-br-[4px]'
+          : 'rounded-tl-[18px] rounded-tr-[4px] rounded-bl-[18px] rounded-br-[18px]'
+    : !isGroupedPrev && !isGroupedNext
+      ? 'rounded-[18px]'
+      : !isGroupedPrev && isGroupedNext
+        ? 'rounded-t-[18px] rounded-bl-[4px] rounded-br-[18px]'
+        : isGroupedPrev && isGroupedNext
+          ? 'rounded-tl-[4px] rounded-tr-[18px] rounded-bl-[4px] rounded-br-[18px]'
+          : 'rounded-tl-[4px] rounded-tr-[18px] rounded-bl-[18px] rounded-br-[18px]';
+
   const bubbleClasses = [
-    'relative rounded-2xl px-3 py-2 sm:px-3.5 sm:py-2',
-    isMine
-      ? 'rounded-br-[4px] bg-primary text-white'
-      : 'rounded-bl-[4px] bg-white text-gray-900 shadow-[0_1px_0.5px_rgba(0,0,0,0.06)]',
-    isGroupedPrev ? (isMine ? 'rounded-br-2xl' : 'rounded-bl-2xl') : '',
+    'relative px-3 py-2 sm:px-3.5 sm:py-2',
+    bubbleShapeClass,
+    isMine ? 'bg-primary text-white' : 'bg-white text-gray-900 shadow-[0_1px_0.5px_rgba(0,0,0,0.06)]',
   ]
     .filter(Boolean)
     .join(' ');
@@ -1010,7 +1034,7 @@ function MessageBubbleInner({
     <>
     <div
       className={[
-        'relative flex w-fit max-w-[min(88%,20.5rem)] flex-col sm:max-w-[min(84%,24rem)]',
+        'msg-bubble-shell relative flex w-fit max-w-[min(88%,20.5rem)] flex-col sm:max-w-[min(84%,24rem)]',
         isMine ? 'ml-auto items-end' : 'mr-auto items-start',
       ].join(' ')}
       onContextMenu={handleContextMenu}
@@ -1105,7 +1129,7 @@ function MessageBubbleInner({
         {message.reply_preview && (
           <button
             type="button"
-            className="msg-reply-preview"
+            className={`msg-reply-preview ${isMine ? 'msg-reply-preview--out' : 'msg-reply-preview--in'}`}
             onClick={(e) => {
               e.stopPropagation();
               const id = String(message.reply_preview?.id ?? '').trim();
@@ -1148,7 +1172,7 @@ function MessageBubbleInner({
 
       {/* Reactions Display */}
       {message.reactions.length > 0 && (
-        <div className={`msg-reactions ${isMine ? 'msg-reactions--mine' : ''}`}>
+        <div className={`msg-reactions ${isMine ? 'msg-reactions--mine' : 'msg-reactions--in'}`}>
           {message.reactions.map((r) => (
             <button
               key={r.emoji}

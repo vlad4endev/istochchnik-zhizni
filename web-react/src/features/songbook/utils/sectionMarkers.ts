@@ -14,6 +14,25 @@ const START_SECTION_RE = /^\{(?:start_of_|s)(chorus|verse|bridge)\}\s*$/i;
 const END_SECTION_RE = /^\{(?:end_of_|e)(chorus|verse|bridge)\}\s*$/i;
 const SHORT_START_SECTION_RE = /^\{(soc|sov|sob)\}\s*$/i;
 const SHORT_END_SECTION_RE = /^\{(eoc|eov|eob)\}\s*$/i;
+const CHORDPRO_DIRECTIVE_LINE_RE = /^\{\s*([a-z_]+)(?::[^}]*)?\s*\}\s*$/i;
+const RENDER_ALLOWED_DIRECTIVES = new Set([
+  'sec',
+  'section',
+  'comment',
+  'c',
+  'start_of_chorus',
+  'start_of_verse',
+  'start_of_bridge',
+  'end_of_chorus',
+  'end_of_verse',
+  'end_of_bridge',
+  'soc',
+  'sov',
+  'sob',
+  'eoc',
+  'eov',
+  'eob',
+]);
 
 function normalizeSectionName(raw: string): string {
   const t = raw.trim();
@@ -89,6 +108,22 @@ export function parseSectionTitle(line: string): string | null {
 export function buildSectionMarker(title: string): string {
   const t = title.trim().replace(/\s+/g, ' ').replace(/}/g, '');
   return `{sec:${t}}`;
+}
+
+/** Убирает служебные ChordPro-директивы, которые не должны попадать в пользовательский рендер. */
+export function stripHiddenChordProDirectives(text: string): string {
+  return text
+    .split('\n')
+    .map((line) => {
+      const t = line.trim();
+      if (!t) return line;
+      const m = t.match(CHORDPRO_DIRECTIVE_LINE_RE);
+      if (!m) return line;
+      const directive = (m[1] ?? '').toLowerCase();
+      if (RENDER_ALLOWED_DIRECTIVES.has(directive)) return line;
+      return '';
+    })
+    .join('\n');
 }
 
 /** Для экспорта в плоский текст/PDF — подзаголовок вместо директивы. */

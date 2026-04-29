@@ -3,7 +3,7 @@ import {
   normalizeSplitWordChordsInText,
 } from '../addSong/chordProConversion';
 import { transposeChordSymbol } from '../chordUtils';
-import { parseSectionTitle } from '../utils/sectionMarkers';
+import { parseSectionTitle, stripHiddenChordProDirectives } from '../utils/sectionMarkers';
 import { SongRenderer } from '../../../components/shared/SongRenderer';
 
 type Props = {
@@ -38,7 +38,9 @@ export function LyricsWithChords({
       chordTone={chordTone}
       parseSectionTitle={parseSectionTitle}
       preprocessText={(source) =>
-        normalizeDetachedChordBeforeCyrillicInText(normalizeSplitWordChordsInText(source))
+        normalizeDetachedChordBeforeCyrillicInText(
+          normalizeSplitWordChordsInText(stripHiddenChordProDirectives(source)),
+        )
       }
       transposeChordSymbol={transposeChordSymbol}
     />

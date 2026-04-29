@@ -117,6 +117,14 @@ export function MessengerPage() {
         </div>
         <ChatList onSelect={handleSelectConversation} activeId={activeId} />
       </aside>
+      {mobileView === 'list' && activeId ? (
+        <button
+          type="button"
+          className="tg-sidebar-overlay"
+          onClick={() => setMobileView('chat')}
+          aria-label="Закрыть список чатов"
+        />
+      ) : null}
 
       {/* Main chat area */}
       <main className={`tg-main ${mobileView === 'chat' ? 'tg-main--visible' : ''}`}>

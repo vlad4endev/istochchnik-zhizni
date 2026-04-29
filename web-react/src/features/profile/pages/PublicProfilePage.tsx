@@ -27,6 +27,7 @@ import {
   unlikeProfilePost,
 } from '../publicProfileApi';
 import { resolvePublicUrl } from '../../../lib/resolvePublicUrl';
+import { pluralizeRu } from '../../../lib/pluralizeRu';
 import { ProfileComposeModal } from '../components/ProfileComposeModal';
 import { EditPostModal } from '../components/EditPostModal';
 
@@ -166,6 +167,7 @@ export function PublicProfilePage() {
   const isOwner = me != null && data != null && me.id === data.profile.member_id;
   const postsVisible = data && (!data.profile.is_private || isOwner);
   const posts = postsVisible ? data.posts : [];
+  const postsLabel = pluralizeRu(posts.length, ['публикация', 'публикации', 'публикаций']);
 
   const displayName = useMemo(() => {
     if (!data) return decoded;
@@ -414,14 +416,14 @@ export function PublicProfilePage() {
               <div className={styles.igStatColumns} role="group" aria-label="Статистика профиля">
                 <div className={styles.igStatCell}>
                   <span className={styles.igStatCellNum}>{posts.length}</span>
-                  <span className={styles.igStatCellLabel}>публикации</span>
+                  <span className={styles.igStatCellLabel}>{postsLabel}</span>
                 </div>
-                <div className={styles.igStatCellMuted} title="Скоро">
-                  <span className={styles.igStatCellNum}>—</span>
+                <div className={styles.igStatCellMuted}>
+                  <span className={styles.igStatCellNum}>0</span>
                   <span className={styles.igStatCellLabel}>подписчики</span>
                 </div>
-                <div className={styles.igStatCellMuted} title="Скоро">
-                  <span className={styles.igStatCellNum}>—</span>
+                <div className={styles.igStatCellMuted}>
+                  <span className={styles.igStatCellNum}>0</span>
                   <span className={styles.igStatCellLabel}>подписки</span>
                 </div>
               </div>

@@ -661,7 +661,7 @@ export function ChatWindow({
       ? 'font-medium text-primary'
       : isDraft || (conv && conv.type !== 'private')
         ? 'text-gray-500'
-        : 'text-blue-500';
+        : 'text-gray-500';
 
   /** Публичная «Моя страница» собеседника: `/profile/member-:id` (как в API профиля). */
   const interlocutorProfilePath = useMemo(() => {
@@ -688,7 +688,7 @@ export function ChatWindow({
   return (
     <div className="tg-chat-window box-border flex w-full max-w-full min-w-0 min-h-0 flex-1 flex-col overflow-hidden overflow-x-hidden">
       {/* Safe-area только на корне (.tg-chat-window) в messenger.css для iOS — не дублировать здесь */}
-      <header className="sticky top-0 z-[100] w-full min-w-0 shrink-0 border-b border-gray-200/60 bg-white">
+      <header className="chat-header sticky top-0 z-[100] w-full min-w-0 shrink-0 border-b border-gray-200/60 bg-white">
         <div className="mx-auto flex min-h-[52px] w-full min-w-0 max-w-full items-center gap-1 px-1 py-1.5 sm:gap-2 sm:px-2 sm:py-2">
           {/* Слева: «Назад» — только мобилка; на ПК список чатов всегда слева. */}
           <div className="flex shrink-0 items-center md:hidden">
@@ -696,7 +696,7 @@ export function ChatWindow({
               type="button"
               onClick={onBack}
               aria-label="Назад к списку чатов"
-              className="flex max-w-[min(7rem,28vw)] items-center gap-0.5 rounded-lg py-1.5 pl-1 pr-1 text-[17px] leading-none text-blue-500 transition-colors active:bg-gray-100 sm:max-w-[7.5rem] sm:pl-1.5 sm:pr-2"
+              className="chat-back-btn flex max-w-[min(7rem,28vw)] items-center gap-0.5 rounded-lg py-1.5 pl-1 pr-1 text-[17px] leading-none text-blue-500 transition-colors active:bg-gray-100 sm:max-w-[7.5rem] sm:pl-1.5 sm:pr-2"
             >
               <LuArrowLeft className="h-[22px] w-[22px] shrink-0" strokeWidth={2.2} aria-hidden />
               <span className="truncate font-normal">Назад</span>
@@ -745,7 +745,7 @@ export function ChatWindow({
                   </span>
                 </div>
               ) : headerSubtitle ? (
-                <div className={['truncate text-xs leading-tight sm:text-[13px]', headerStatusClass].join(' ')}>
+                <div className={['last-seen truncate text-xs leading-tight sm:text-[13px]', headerStatusClass].join(' ')}>
                   {headerSubtitle}
                 </div>
               ) : null}

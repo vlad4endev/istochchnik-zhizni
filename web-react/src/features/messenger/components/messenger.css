@@ -952,10 +952,27 @@
   background: transparent;
   padding: 10px 8px;
   font-size: 1rem;
-  line-height: 1.3;
+  min-height: 40px;
+  line-height: 1.5;
   resize: none;
-  max-height: 200px;
+  max-height: 120px;
+  overflow-y: auto;
   color: var(--tg-text);
+}
+
+.chat-header {
+  background: var(--color-background-primary, #fff);
+  border-bottom: 0.5px solid var(--color-border-tertiary, var(--tg-border));
+  border-radius: var(--border-radius-lg, 14px) var(--border-radius-lg, 14px) 0 0;
+}
+
+.chat-header .last-seen {
+  color: var(--color-text-secondary, #6b7280);
+  font-size: 13px;
+}
+
+.chat-back-btn {
+  display: none;
 }
 
 .tg-send-btn {
@@ -1276,9 +1293,24 @@
   width: 100%;
 }
 
-.tg-bubble--out .msg-reply-preview {
-  background: rgba(255, 255, 255, 0.12);
-  border-left-color: rgba(255, 255, 255, 0.65);
+.msg-reply-preview--out {
+  background: rgba(255, 255, 255, 0.15);
+  border-left: 2px solid rgba(255, 255, 255, 0.5);
+  color: rgba(255, 255, 255, 0.85);
+  border-radius: 4px;
+  padding: 4px 8px;
+  margin-bottom: 6px;
+  font-size: 13px;
+}
+
+.msg-reply-preview--in {
+  background: rgba(0, 0, 0, 0.06);
+  border-left: 2px solid #6b2d3e;
+  color: var(--color-text-secondary, #6b7280);
+  border-radius: 4px;
+  padding: 4px 8px;
+  margin-bottom: 6px;
+  font-size: 13px;
 }
 
 /* Jump-to-reply highlight */
@@ -1308,7 +1340,7 @@
   overflow: hidden;
 }
 
-.tg-bubble--out .msg-reply-text {
+.msg-reply-preview--out .msg-reply-text {
   color: rgba(255, 255, 255, 0.88);
 }
 
@@ -1343,15 +1375,26 @@
 
 /* Reactions row */
 .msg-reactions {
+  position: absolute;
+  bottom: -10px;
+  z-index: 1;
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  margin-top: 6px;
   max-width: 100%;
 }
 
 .msg-reactions--mine {
-  align-self: flex-end;
+  right: 8px;
+}
+
+.msg-reactions--in {
+  left: 8px;
+}
+
+.msg-bubble-shell {
+  position: relative;
+  margin-bottom: 14px;
 }
 
 .msg-reaction-chip {
@@ -1360,12 +1403,12 @@
   gap: 4px;
   padding: 4px 10px;
   border-radius: 999px;
-  border: 1px solid var(--tg-border);
-  background: var(--tg-surface);
+  border: 0.5px solid var(--color-border-tertiary, var(--tg-border));
+  background: var(--color-background-primary, var(--tg-surface));
   font-size: 0.8125rem;
   cursor: pointer;
   transition: background 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
-  box-shadow: 0 1px 2px rgba(28, 25, 23, 0.05);
+  box-shadow: none;
 }
 
 .msg-reaction-chip:hover {
@@ -1611,7 +1654,30 @@
 }
 
 /* Mobile Adjustments */
-@media (max-width: 768px) {
+@media (max-width: 767px) {
+  .tg-messenger {
+    display: block;
+  }
+
+  .chat-back-btn {
+    display: flex;
+  }
+
+  .tg-sidebar--hidden {
+    display: none;
+  }
+
+  .tg-sidebar--visible {
+    display: flex;
+    width: 100%;
+  }
+
+  .tg-main--visible {
+    display: flex;
+    width: 100%;
+    height: 100%;
+  }
+
   /* Заполняем область main с учётом нижней навигации — без 100dvh, иначе слой «выше» контента и кажется оверлеем */
   .tg-messenger-page {
     overflow: hidden;

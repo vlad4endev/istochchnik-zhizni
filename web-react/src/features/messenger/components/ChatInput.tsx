@@ -369,6 +369,10 @@ export function ChatInput({
 
   const handleSend = async () => {
     haptic(10);
+    if (draftSaveTimerRef.current) {
+      clearTimeout(draftSaveTimerRef.current);
+      draftSaveTimerRef.current = null;
+    }
     const text = content.trim();
     if (pendingImages.length > 0) {
       if (!uploadsHealthy) {

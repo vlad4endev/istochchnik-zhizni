@@ -80,6 +80,10 @@ const AnalyticsPage = lazy(async () => {
   const m = await import('../pages/admin/AnalyticsPage');
   return { default: m.AnalyticsPage };
 });
+const SettingsPage = lazy(async () => {
+  const m = await import('../pages/SettingsPage');
+  return { default: m.SettingsPage };
+});
 
 const StudioLayout = lazy(async () => {
   const m = await import('../features/studio/StudioLayout');
@@ -448,6 +452,16 @@ export function AppRouter() {
           />
         </Route>
         <Route
+          path="settings"
+          element={
+            <RequireFullMember>
+              <Suspense fallback={<RouteFallback />}>
+                <SettingsPage />
+              </Suspense>
+            </RequireFullMember>
+          }
+        />
+        <Route
           path="profile"
           element={
             <RequireFullMember>
@@ -478,7 +492,7 @@ export function AppRouter() {
           }
         />
         <Route
-          path="admin/analytics"
+          path="analytics"
           element={
             <RequireAdmin>
               <Suspense fallback={<RouteFallback />}>
@@ -486,6 +500,10 @@ export function AppRouter() {
               </Suspense>
             </RequireAdmin>
           }
+        />
+        <Route
+          path="admin/analytics"
+          element={<Navigate to="/analytics" replace />}
         />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Route>

@@ -67,7 +67,7 @@ const NAV_ITEMS: NavItem[] = [
   { to: '/messenger', label: 'Чаты', Icon: LuMessageCircle, sectionId: 'messenger' },
   // { to: '/broadcast', label: 'Трансляции', Icon: LuTv },
   { to: '/admin', label: 'Админ', Icon: LuShield, adminOnly: true },
-  { to: '/admin/analytics', label: 'Аналитика', Icon: LuChartColumnBig, adminOnly: true },
+  { to: '/analytics', label: 'Аналитика', Icon: LuChartColumnBig, adminOnly: true },
 ];
 
 function navIconClass(isActive: boolean, compact: boolean) {
@@ -321,8 +321,8 @@ function MobileNavOverflow({
   pathname: string;
 }) {
   const [open, setOpen] = useState(false);
-  const wrapRef = useRef<HTMLDivElement>(null);
   const menuId = useId();
+  const touchStartYRef = useRef<number | null>(null);
 
   useEffect(() => {
     setOpen(false);
@@ -330,27 +330,22 @@ function MobileNavOverflow({
 
   useEffect(() => {
     if (!open) return;
-    const onDoc = (e: MouseEvent | TouchEvent) => {
-      const el = wrapRef.current;
-      if (!el?.contains(e.target as Node)) setOpen(false);
-    };
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') setOpen(false);
     };
-    document.addEventListener('mousedown', onDoc);
-    document.addEventListener('touchstart', onDoc, { passive: true });
     document.addEventListener('keydown', onKey);
+    const prevBodyOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
     return () => {
-      document.removeEventListener('mousedown', onDoc);
-      document.removeEventListener('touchstart', onDoc);
       document.removeEventListener('keydown', onKey);
+      document.body.style.overflow = prevBodyOverflow;
     };
   }, [open]);
 
   const isMoreTabActive = items.some((item) => mobileBottomRouteActive(pathname, item.to));
 
   return (
-    <div ref={wrapRef} className="relative flex min-w-0 flex-1 flex-col items-stretch">
+    <div className="relative flex min-w-0 flex-1 flex-col items-stretch">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
@@ -363,43 +358,68 @@ function MobileNavOverflow({
         <span className="mt-1 truncate px-0.5 text-center text-[11px] font-medium tracking-tight">Ещё</span>
       </button>
       {open ? (
-        <div
-          id={menuId}
-          role="menu"
-          aria-label="Другие разделы"
-          className="absolute bottom-[calc(100%+0.35rem)] left-1/2 z-[60] w-[min(19rem,calc(100vw-1.25rem))] -translate-x-1/2 rounded-2xl border border-stone-200/90 bg-white/98 py-1.5 shadow-lg shadow-stone-900/10 backdrop-blur-md supports-[backdrop-filter]:bg-white/95"
-        >
-          {items.map((item) => {
-            const Icon = item.Icon;
-            return (
-              <NavLink
-                key={item.to}
-                role="menuitem"
-                to={item.to}
-                onClick={() => setOpen(false)}
-                className={({ isActive }) =>
-                  [
-                    'flex min-h-[48px] items-center gap-3 px-4 py-2.5 text-left text-sm font-semibold transition-colors tap-highlight-transparent',
-                    isActive ? 'bg-primary/10 text-primary' : 'text-stone-700 hover:bg-stone-50',
-                  ].join(' ')
-                }
-              >
-                {({ isActive }) => (
-                  <>
-                    <span className="relative inline-flex shrink-0">
-                      <Icon className={navIconClass(isActive, true)} strokeWidth={2} aria-hidden />
-                      {item.to === '/messenger' && activityBadgeTotal > 0 ? (
-                        <span className="absolute -right-2.5 top-0 z-[5] inline-flex min-h-[18px] min-w-[18px] items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-extrabold leading-none text-white shadow-sm ring-2 ring-white">
-                          {formatNavBadgeCount(activityBadgeTotal)}
+        <div className="fixed inset-0 z-[60]" aria-hidden={false}>
+          <button
+            type="button"
+            aria-label="Закрыть дополнительные разделы"
+            className="absolute inset-0 bg-black/40"
+            onClick={() => setOpen(false)}
+          />
+          <div
+            id={menuId}
+            role="menu"
+            aria-label="Другие разделы"
+            className="absolute bottom-0 left-0 right-0 max-h-[75vh] overflow-y-auto rounded-t-3xl border-t border-stone-200/90 bg-white pb-[max(0.75rem,env(safe-area-inset-bottom,8px))] pt-2 shadow-2xl"
+            onTouchStart={(e) => {
+              touchStartYRef.current = e.touches[0]?.clientY ?? null;
+            }}
+            onTouchEnd={(e) => {
+              const startY = touchStartYRef.current;
+              const endY = e.changedTouches[0]?.clientY ?? null;
+              touchStartYRef.current = null;
+              if (startY != null && endY != null && endY - startY > 50) {
+                setOpen(false);
+              }
+            }}
+          >
+            <div className="mx-auto mb-2 h-1.5 w-12 rounded-full bg-stone-300" aria-hidden />
+            <div className="px-4 pb-2">
+              <p className="text-sm font-bold text-stone-800">Разделы</p>
+            </div>
+            <div className="grid grid-cols-3 gap-2 px-3">
+              {items.map((item) => {
+                const Icon = item.Icon;
+                return (
+                  <NavLink
+                    key={item.to}
+                    role="menuitem"
+                    to={item.to}
+                    onClick={() => setOpen(false)}
+                    className={({ isActive }) =>
+                      [
+                        'relative flex min-h-[84px] flex-col items-center justify-center gap-1 rounded-2xl px-2 py-2 text-center text-xs font-semibold transition-colors tap-highlight-transparent',
+                        isActive ? 'bg-primary/10 text-primary' : 'text-stone-700 hover:bg-stone-50',
+                      ].join(' ')
+                    }
+                  >
+                    {({ isActive }) => (
+                      <>
+                        <span className="relative inline-flex">
+                          <Icon className={navIconClass(isActive, true)} strokeWidth={2} aria-hidden />
+                          {item.to === '/messenger' && activityBadgeTotal > 0 ? (
+                            <span className="absolute -right-2.5 top-0 z-[5] inline-flex min-h-[18px] min-w-[18px] items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-extrabold leading-none text-white shadow-sm ring-2 ring-white">
+                              {formatNavBadgeCount(activityBadgeTotal)}
+                            </span>
+                          ) : null}
                         </span>
-                      ) : null}
-                    </span>
-                    <span className="min-w-0 truncate">{item.label}</span>
-                  </>
-                )}
-              </NavLink>
-            );
-          })}
+                        <span className="line-clamp-2">{item.label}</span>
+                      </>
+                    )}
+                  </NavLink>
+                );
+              })}
+            </div>
+          </div>
         </div>
       ) : null}
     </div>
@@ -663,7 +683,7 @@ export function Layout() {
       <div
         className={[
           'flex min-h-0 min-w-0 w-full max-w-full flex-1 flex-col box-border',
-          navCollapsed ? 'md:pl-[88px]' : 'md:pl-[260px] lg:pl-[272px]',
+          navCollapsed ? 'lg:pl-[88px]' : 'lg:pl-[260px] xl:pl-[272px]',
         ].join(' ')}
       >
       <div className="shrink-0">
@@ -673,8 +693,8 @@ export function Layout() {
       {/* Планшет/десктоп: фиксированный сайдбар (не в потоке, не растягивается по ширине main). На узких — нижняя навигация. */}
       <aside
         className={[
-          'hidden shrink-0 flex-col overflow-y-auto overflow-x-hidden border-r border-stone-200/80 bg-[var(--surface-elevated)] shadow-[4px_0_16px_rgba(0,0,0,0.06)] md:fixed md:bottom-0 md:left-0 md:top-0 md:z-30 md:flex [padding-bottom:env(safe-area-inset-bottom,0px)] [padding-top:env(safe-area-inset-top,0px)]',
-          navCollapsed ? 'w-[88px] max-w-[88px]' : 'w-[260px] max-w-[260px] lg:w-[272px] lg:max-w-[272px]',
+          'hidden shrink-0 flex-col overflow-y-auto overflow-x-hidden border-r border-stone-200/80 bg-[var(--surface-elevated)] shadow-[4px_0_16px_rgba(0,0,0,0.06)] lg:fixed lg:bottom-0 lg:left-0 lg:top-0 lg:z-30 lg:flex [padding-bottom:env(safe-area-inset-bottom,0px)] [padding-top:env(safe-area-inset-top,0px)]',
+          navCollapsed ? 'w-[88px] max-w-[88px]' : 'w-[260px] max-w-[260px] xl:w-[272px] xl:max-w-[272px]',
         ].join(' ')}
       >
         <div className={navCollapsed ? 'flex min-h-0 flex-1 flex-col gap-1 p-4' : 'flex min-h-0 flex-1 flex-col gap-1 p-6'}>
@@ -813,7 +833,7 @@ export function Layout() {
                 )}
               </NavLink>
               <NavLink
-                to="/profile"
+                to="/settings"
                 end
                 className={({ isActive }) =>
                   [
@@ -822,8 +842,8 @@ export function Layout() {
                     isActive ? 'bg-primary text-white shadow-md shadow-primary/25' : 'text-stone-600 hover:bg-stone-100',
                   ].join(' ')
                 }
-                title={navCollapsed ? 'Настройки профиля' : undefined}
-                aria-label={navCollapsed ? 'Настройки профиля' : undefined}
+                title={navCollapsed ? 'Настройки' : undefined}
+                aria-label={navCollapsed ? 'Настройки' : undefined}
               >
                 {({ isActive }) => (
                   <>
@@ -852,7 +872,8 @@ export function Layout() {
         id="main-content"
         tabIndex={-1}
         className={[
-          'app-main-content flex min-h-0 min-w-0 w-full max-w-full flex-1 flex-col overflow-x-clip md:pb-0 2xl:px-8 min-[1920px]:px-12 outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--a11y-focus-ring,var(--primary))] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)]',
+          'app-main-content flex min-h-0 min-w-0 w-full max-w-full flex-1 flex-col overflow-x-clip lg:pb-0 2xl:px-8 min-[1920px]:px-12 outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--a11y-focus-ring,var(--primary))] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)]',
+          'page-content',
           mainChromeVisible
             ? 'pb-[max(7.5rem,calc(5.25rem+env(safe-area-inset-bottom,16px)))]'
             : 'pb-[max(1rem,env(safe-area-inset-bottom,16px))]',
@@ -866,13 +887,13 @@ export function Layout() {
       {/* Телефон: нижняя навигация (иконка + подпись, как в нативных приложениях) */}
       <nav
         className={[
-          'app-bottom-nav fixed bottom-0 left-0 right-0 z-50 border-t border-gray-100 bg-white/95 pb-[env(safe-area-inset-bottom,16px)] shadow-sm backdrop-blur-xl supports-[backdrop-filter]:bg-white/90 md:hidden transition-transform duration-200',
+          'app-bottom-nav bottom-nav fixed bottom-0 left-0 right-0 z-50 border-t border-gray-100 bg-white/95 pb-[env(safe-area-inset-bottom,8px)] shadow-sm backdrop-blur-xl supports-[backdrop-filter]:bg-white/90 lg:hidden transition-transform duration-200',
           mainChromeVisible ? 'translate-y-0' : 'pointer-events-none translate-y-full opacity-0',
         ].join(' ')}
         aria-label="Основная навигация"
         aria-hidden={!mainChromeVisible}
       >
-        <div className="mx-auto flex max-w-md items-stretch justify-center gap-0.5 px-1 pb-1 pt-1 sm:px-2">
+        <div className="mx-auto flex min-h-[56px] max-w-md items-stretch justify-center gap-0.5 px-1 pb-1 pt-1 sm:px-2">
           {mobilePrimaryItems.map((item) => {
             const Icon = item.Icon;
             return (
