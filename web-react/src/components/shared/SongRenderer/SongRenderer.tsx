@@ -185,14 +185,17 @@ export function SongRenderer({
 
   return (
     <div className={className} style={{ fontSize: `${normalizedFontSize}px`, lineHeight }}>
-      {transposedRows.map((row) => {
+      {(() => {
+        let currentSectionType: ReturnType<typeof sectionTypeClass> = 'other';
+        return transposedRows.map((row) => {
         if (row.kind === 'section') {
           const sectionType = sectionTypeClass(row.title);
+          currentSectionType = sectionType;
           return (
             <div
               key={row.key}
               className={[
-                'block-header mt-6 mb-2 text-[0.78em] font-bold uppercase tracking-[0.08em] first:mt-0',
+                'section-label mb-3 mt-7 first:mt-0',
                 sectionType === 'chorus' ? 'chorus' : '',
                 sectionType === 'verse' ? 'verse' : '',
                 sectionType === 'bridge' ? 'bridge' : '',
@@ -211,9 +214,11 @@ export function SongRenderer({
             chordsVisible={chordsVisible}
             chordTone={chordTone}
             layoutMode={chordLayoutMode}
+            className={currentSectionType === 'chorus' ? 'chorus-block' : ''}
           />
         );
-      })}
+      });
+      })()}
     </div>
   );
 }

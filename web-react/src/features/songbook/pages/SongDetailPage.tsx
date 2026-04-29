@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { LuArrowLeft, LuSettings2 } from 'react-icons/lu';
+import { LuArrowLeft, LuPlus, LuMinus, LuSettings2 } from 'react-icons/lu';
 
 import { dispatchLayoutMainChrome } from '../../../app/layoutChrome';
 import { useAuthStore } from '../../auth/authStore';
@@ -20,7 +20,7 @@ export function SongDetailPage() {
   const role = useAuthStore((s) => s.role);
   const studioOk = canAccessStudioRole(role);
   const token = useAuthStore((s) => s.token);
-  const { stageMode } = useSongbookChrome();
+  const { stageMode, toggleStageMode } = useSongbookChrome();
   const [transpose, setTranspose] = useState(0);
   const [showChords, setShowChords] = useState(true);
   const [autoScroll, setAutoScroll] = useState(false);
@@ -195,25 +195,15 @@ export function SongDetailPage() {
     : currentShift === 0
       ? 'Тональность: без сдвига'
       : `Тональность: сдвиг ${currentShift > 0 ? '+' : ''}${currentShift}`;
-  const metaLine = `Темп: ${s.tempo ?? '—'} · Размер: ${s.time_signature ?? '—'}`;
 
-  const shell = stageMode
-    ? {
-        page: 'text-stone-900',
-        top: 'border-stone-200 bg-[var(--surface)]/95',
-        title: 'text-stone-900',
-        meta: 'text-stone-500',
-        card: 'border border-stone-200 bg-white',
-        settingsBtn: 'border-stone-200 bg-white text-stone-700 hover:bg-stone-50',
-      }
-    : {
-        page: 'text-stone-900',
-        top: 'border-stone-200 bg-[var(--surface)]/95',
-        title: 'text-stone-900',
-        meta: 'text-stone-500',
-        card: 'border border-stone-200 bg-white',
-        settingsBtn: 'border-stone-200 bg-white text-stone-700 hover:bg-stone-50',
-      };
+  const shell = {
+    page: 'text-stone-900',
+    top: 'border-stone-200 bg-[var(--surface)]/95',
+    title: 'text-stone-900',
+    meta: 'text-stone-500',
+    card: 'border border-stone-200 bg-white',
+    settingsBtn: 'border-stone-200 bg-white text-stone-700 hover:bg-stone-50',
+  };
 
   return (
     <div className={`relative mx-auto max-w-3xl pb-24 ${shell.page}`}>
@@ -221,27 +211,71 @@ export function SongDetailPage() {
         <div className="h-full bg-primary transition-[width] duration-150" style={{ width: `${scrollProgress * 100}%` }} />
       </div>
       <div className={['fixed inset-x-0 top-0 z-40 border-b backdrop-blur', shell.top, fullscreen ? 'hidden' : ''].join(' ')}>
-        <div className="mx-auto flex max-w-3xl items-center justify-between gap-2 px-3 py-2 md:px-0">
-          <div className="flex min-w-0 items-center gap-2">
+        <div className="mx-auto max-w-3xl px-3 py-2 md:px-0">
+          <div className="mb-1 flex min-w-0 items-center gap-2">
             <Link
               to="/songbook"
-              className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-stone-700 hover:bg-stone-100"
+              className="inline-flex items-center gap-1.5 rounded-md px-1 py-1 text-[12px] text-stone-500 hover:bg-stone-100"
               aria-label="Назад к списку"
             >
-              <LuArrowLeft className="h-5 w-5" />
+              <LuArrowLeft className="h-4 w-4" />
+              <span>Назад</span>
             </Link>
-            <span className="w-6 shrink-0 text-center text-xl font-medium text-stone-500">{songId}</span>
+          </div>
+          <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
-              <h1 className={`truncate text-xl font-bold uppercase tracking-wide md:text-2xl ${shell.title}`}>
+              <h1 className={`truncate text-[20px] font-medium tracking-normal ${shell.title}`}>
                 {s.title}
               </h1>
-              <p className={`truncate text-xs ${shell.meta}`}>Исполнитель: — · {effectiveKey ?? '—'}</p>
+              <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                {transposedKey || effectiveKey ? (
+                  <span className="inline-flex h-6 items-center rounded-full bg-[#F3EEF0] px-2.5 text-[11px] font-semibold text-[#7B2D3F]">
+                    {transposedKey ?? effectiveKey}
+                  </span>
+                ) : null}
+                {(s.tags[0] ?? '').trim() ? (
+                  <span className="inline-flex h-6 items-center rounded-full border border-stone-300 px-2.5 text-[11px] font-medium text-stone-600">
+                    {s.tags[0]}
+                  </span>
+                ) : null}
+              </div>
             </div>
+            <div className={`pt-0.5 text-right text-[11px] ${shell.meta}`}>{autoScroll ? 'Автопрокрутка' : 'Ручной режим'}</div>
           </div>
-          <div className="text-right">
-            <p className="text-xs font-semibold text-stone-700">{transposedKey ?? effectiveKey ?? '—'}</p>
-            <p className={`text-[11px] ${shell.meta}`}>{autoScroll ? 'Автопрокрутка' : 'Ручной режим'}</p>
+        </div>
+        <div className="mx-auto mt-2 flex max-w-3xl flex-wrap items-center gap-1.5 px-3 pb-2 md:px-0">
+          <div className="inline-flex min-h-[28px] items-center rounded-md border border-stone-300 bg-white px-1 text-[11px] text-stone-700">
+            <button
+              type="button"
+              onClick={() => setTranspose((v) => Math.max(-11, v - 1))}
+              className="inline-flex h-6 w-6 items-center justify-center rounded hover:bg-stone-100"
+              aria-label="Уменьшить тональность"
+            >
+              <LuMinus className="h-3.5 w-3.5" />
+            </button>
+            <span className="px-1">Тональность</span>
+            <button
+              type="button"
+              onClick={() => setTranspose((v) => Math.min(11, v + 1))}
+              className="inline-flex h-6 w-6 items-center justify-center rounded hover:bg-stone-100"
+              aria-label="Повысить тональность"
+            >
+              <LuPlus className="h-3.5 w-3.5" />
+            </button>
           </div>
+          <button
+            type="button"
+            className="inline-flex min-h-[28px] items-center rounded-md border border-stone-300 bg-white px-2.5 text-[11px] font-medium text-stone-700"
+          >
+            Темп {s.tempo ?? '—'}
+          </button>
+          <button
+            type="button"
+            onClick={toggleStageMode}
+            className="inline-flex min-h-[28px] items-center rounded-md border border-stone-300 bg-white px-2.5 text-[11px] font-medium text-stone-700"
+          >
+            Режим сцены
+          </button>
         </div>
       </div>
 
@@ -286,19 +320,16 @@ export function SongDetailPage() {
 
       <div className={fullscreen ? 'h-3' : 'h-14 md:h-[3.75rem]'} />
       <div className="space-y-2">
-        <p className={`text-xs ${shell.meta}`}>
-          {keyLabel} · {metaLine}
-          {version ? ' · Моя версия' : ''}
-        </p>
         <LyricsWithChords
           text={effectiveContent}
           transposeSemitones={currentShift}
           chordLayoutMode={chordLayoutMode}
-          chordsVisible={showChords}
-          fontSizePx={Math.max(16, fontSize)}
+          chordsVisible={stageMode ? false : showChords}
+          fontSizePx={stageMode ? 22 : Math.max(16, fontSize)}
           chordTone="light"
           className={[
-            'rounded-xl p-4 font-sans text-base',
+            'songbook-reader rounded-xl p-4 font-sans text-base',
+            stageMode ? 'songbook-reader--stage' : '',
             shell.card,
             'text-stone-900',
             fullscreen ? 'min-h-[calc(100dvh-4rem)]' : '',

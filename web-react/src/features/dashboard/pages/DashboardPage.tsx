@@ -578,25 +578,6 @@ function DashboardMain() {
       Math.min(100, (adminNextWeekRosterStats.filled / adminNextWeekRosterStats.withMember) * 100),
     );
   }, [adminNextWeekRosterStats]);
-  const coordinatorProgressStats = useMemo(() => {
-    if (isAdmin || isPastor) {
-      return {
-        total: adminNextWeekRosterStats.withMember,
-        filled: adminNextWeekRosterStats.filled,
-      };
-    }
-    const total = coordinatorAssignedRows.length;
-    const filled = Math.max(0, total - coordinatorUnfilledRows.length);
-    return { total, filled };
-  }, [
-    isAdmin,
-    isPastor,
-    adminNextWeekRosterStats.withMember,
-    adminNextWeekRosterStats.filled,
-    coordinatorAssignedRows.length,
-    coordinatorUnfilledRows.length,
-  ]);
-
   /**
    * Следующая неделя: среди участников, закреплённых за координатором, у кого ещё пустая нужда
    * (по дням плана следующей недели — то же окно, что и «назначены»).
@@ -634,6 +615,25 @@ function DashboardMain() {
     rows.sort((a, b) => a.date.localeCompare(b.date));
     return rows;
   }, [collectionClaimsQ.data?.members, weekMembersQ.data, me?.id]);
+
+  const coordinatorProgressStats = useMemo(() => {
+    if (isAdmin || isPastor) {
+      return {
+        total: adminNextWeekRosterStats.withMember,
+        filled: adminNextWeekRosterStats.filled,
+      };
+    }
+    const total = coordinatorAssignedRows.length;
+    const filled = Math.max(0, total - coordinatorUnfilledRows.length);
+    return { total, filled };
+  }, [
+    isAdmin,
+    isPastor,
+    adminNextWeekRosterStats.withMember,
+    adminNextWeekRosterStats.filled,
+    coordinatorAssignedRows.length,
+    coordinatorUnfilledRows.length,
+  ]);
 
   const isCollectionCoordinator = apiBoolean(me?.is_collection_coordinator);
   const canManageCoordinatorNotes =

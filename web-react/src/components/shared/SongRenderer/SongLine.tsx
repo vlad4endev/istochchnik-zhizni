@@ -88,8 +88,8 @@ export function SongLine({ line, chordsVisible, chordTone, layoutMode, className
   const chordLine = buildChordLine(text, line.chords);
   const showChordLine = chordsVisible && chordLine;
   const hasText = splitGraphemeClusters(text).length > 0;
-  const chordToneClass = chordTone === 'dark' ? 'text-amber-300' : 'text-[#4A90D9]';
-  const rootClassName = ['song-line-wrapper mb-[2px] w-full min-w-0', className].filter(Boolean).join(' ');
+  const chordToneClass = chordTone === 'dark' ? 'text-amber-300' : 'text-[#2563EB]';
+  const rootClassName = ['line-pair w-full min-w-0', className].filter(Boolean).join(' ');
 
   if (!hasText && !showChordLine) {
     return <div className="song-line-gap h-4 w-full" data-layout-mode={layoutMode} />;
@@ -100,18 +100,16 @@ export function SongLine({ line, chordsVisible, chordTone, layoutMode, className
       {showChordLine ? (
         <pre
           className={[
-            'chords-line m-0 overflow-visible p-0 text-[1em] font-bold leading-[1.4] whitespace-pre',
+            'chord-line m-0 overflow-visible p-0 whitespace-pre',
             chordToneClass,
           ].join(' ')}
-          style={{ fontFamily: '"Courier New", Courier, monospace' }}
         >
           {chordLine}
         </pre>
       ) : null}
       {hasText ? (
         <pre
-          className="text-line m-0 overflow-visible p-0 text-[1em] font-normal leading-[1.4] whitespace-pre"
-          style={{ fontFamily: '"Courier New", Courier, monospace' }}
+          className="lyric-line m-0 overflow-visible p-0 whitespace-pre-wrap"
         >
           {text}
         </pre>

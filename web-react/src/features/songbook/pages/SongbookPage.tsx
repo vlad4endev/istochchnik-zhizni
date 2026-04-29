@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { LuCheck, LuSearch, LuX } from 'react-icons/lu';
+import { LuHeart, LuSearch, LuX } from 'react-icons/lu';
 
 import { emitAppToast } from '../../../lib/uiFeedback';
 import { useAuthStore } from '../../auth/authStore';
@@ -11,19 +11,9 @@ import { deleteFavorite, fetchSongs, postFavorite } from '../api';
 export function SongbookPage() {
   const qc = useQueryClient();
   const role = useAuthStore((s) => s.role);
-  const canAddSong = canModerateSongCatalog(role);
+  const canAddSong = canModerateSongCatalog(role) && (role ?? '').toLowerCase() === 'admin';
   const [tab, setTab] = useState<'catalog' | 'favorites'>('catalog');
   const [search, setSearch] = useState('');
-  const [compactList, setCompactList] = useState<boolean>(() => {
-    if (typeof window === 'undefined') return true;
-    const raw = window.localStorage.getItem('songbook.compactList');
-    return raw == null ? true : raw === '1';
-  });
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    window.localStorage.setItem('songbook.compactList', compactList ? '1' : '0');
-  }, [compactList]);
 
   const query = useQuery({
     queryKey: ['songs', 'catalog'],
@@ -63,8 +53,9 @@ export function SongbookPage() {
   }
 
   return (
-    <div className="mx-auto max-w-3xl space-y-4 pb-24 text-stone-900">
+    <div className="mx-auto max-w-3xl space-y-3 pb-24 text-stone-900">
       <header className="sticky top-0 z-20 -mx-3 border-b border-stone-200 bg-[var(--surface)]/95 px-3 py-2 backdrop-blur md:mx-0 md:px-0">
+        <p className="mb-2 text-[13px] font-medium uppercase tracking-[0.08em] text-stone-500">Песенник</p>
         <label className="mb-2 block">
           <span className="sr-only">Поиск по номеру или названию</span>
           <div className="relative">
@@ -78,7 +69,7 @@ export function SongbookPage() {
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Поиск: номер или название"
               autoComplete="off"
-              className="w-full min-h-[42px] rounded-xl border border-stone-200 bg-white py-2 pl-9 pr-9 text-sm text-stone-900 outline-none placeholder:text-stone-400 focus:border-stone-300"
+              className="w-full min-h-[40px] rounded-xl border border-stone-200/70 bg-white py-2 pl-9 pr-9 text-sm text-stone-900 outline-none placeholder:text-stone-400 focus:border-stone-300"
             />
             {search.trim() ? (
               <button
@@ -92,13 +83,13 @@ export function SongbookPage() {
             ) : null}
           </div>
         </label>
-        <div className="grid grid-cols-2 overflow-hidden rounded-xl bg-stone-100">
+        <div className="inline-flex rounded-full bg-stone-100 p-0.5">
           <button
             type="button"
             onClick={() => setTab('catalog')}
             className={[
-              'min-h-[44px] text-center text-base font-medium',
-              tab === 'catalog' ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-500',
+              'min-h-[34px] min-w-[116px] rounded-full px-3 text-center text-sm font-medium transition-colors',
+              tab === 'catalog' ? 'bg-[#7B2D3F] text-white' : 'text-stone-600',
             ].join(' ')}
           >
             Сборник
@@ -107,72 +98,61 @@ export function SongbookPage() {
             type="button"
             onClick={() => setTab('favorites')}
             className={[
-              'min-h-[44px] text-center text-base font-medium',
-              tab === 'favorites' ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-500',
+              'min-h-[34px] min-w-[116px] rounded-full px-3 text-center text-sm font-medium transition-colors',
+              tab === 'favorites' ? 'bg-[#7B2D3F] text-white' : 'text-stone-600',
             ].join(' ')}
           >
             Избранное
           </button>
         </div>
-        <div className="mt-2 flex justify-end">
-          {canAddSong ? (
+        {canAddSong ? (
+          <div className="mt-2 flex justify-end">
             <Link
               to="/songbook/add"
-              className="mr-2 inline-flex min-h-[36px] items-center justify-center rounded-lg bg-stone-900 px-3 text-xs font-semibold text-white hover:bg-stone-800"
+              className="inline-flex min-h-[34px] items-center justify-center rounded-lg border border-stone-300 bg-white px-3 text-xs font-semibold text-stone-700 hover:bg-stone-50"
             >
               Новая песня
             </Link>
-          ) : null}
-          <button
-            type="button"
-            onClick={() => setCompactList((v) => !v)}
-            className="inline-flex min-h-[36px] items-center justify-center rounded-lg border border-stone-300 bg-white px-2.5 text-xs font-semibold text-stone-700 hover:bg-stone-50"
-          >
-            {compactList ? 'Обычный список' : 'Плотный список'}
-          </button>
-        </div>
+          </div>
+        ) : null}
       </header>
 
-      <ul className="space-y-1">
+      <ul className="overflow-hidden rounded-xl border border-stone-200 bg-white">
         {rows.map((s, idx) => (
-          <li key={s.id} className="rounded-lg border border-stone-200 bg-white">
-            <div className={['flex items-center px-3', compactList ? 'gap-2 py-1.5' : 'gap-2.5 py-2'].join(' ')}>
+          <li key={s.id} className="border-b border-stone-200/80 last:border-b-0">
+            <div className="flex min-h-[44px] items-center gap-2 px-2.5">
               <Link
                 to={`/songbook/${s.id}`}
-                className={['flex min-h-[44px] min-w-0 flex-1 items-center', compactList ? 'gap-2' : 'gap-3'].join(' ')}
+                className="flex min-h-[44px] min-w-0 flex-1 items-center gap-2.5"
               >
-                <span
-                  className={[
-                    'w-7 shrink-0 text-center text-stone-500',
-                    compactList ? 'text-lg font-semibold' : 'text-2xl font-medium',
-                  ].join(' ')}
-                >
-                  {idx + 1}
+                <span className="w-[22px] shrink-0 text-right text-[12px] font-medium text-stone-500">
+                  {s.song_number ?? idx + 1}
                 </span>
-                <h2
-                  className={[
-                    'truncate text-stone-900',
-                    compactList
-                      ? 'text-sm font-semibold tracking-normal sm:text-base'
-                      : 'text-lg font-semibold tracking-normal sm:text-xl',
-                  ].join(' ')}
-                >
-                  {s.title}
-                </h2>
+                <div className="min-w-0">
+                  <h2 className="truncate text-[14px] font-medium text-stone-900">{s.title}</h2>
+                  <p className="truncate text-[12px] text-stone-500">
+                    {s.tags.find((t) => t.toLowerCase().startsWith('artist:'))?.split(':').slice(1).join(':').trim() ||
+                      s.tags[0] ||
+                      '—'}
+                  </p>
+                </div>
               </Link>
+              {s.default_key ? (
+                <span className="inline-flex h-6 min-w-[26px] shrink-0 items-center justify-center rounded-full bg-[#F3EEF0] px-2 text-[11px] font-semibold text-[#7B2D3F]">
+                  {s.default_key}
+                </span>
+              ) : null}
               <button
                 type="button"
                 onClick={() => favoriteMut.mutate({ id: Number(s.id), next: !s.is_favorite })}
                 disabled={favoriteMut.isPending}
                 className={[
-                  'inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border',
-                  s.is_favorite
-                    ? 'border-stone-300 bg-stone-900 text-white'
-                    : 'border-stone-300 text-stone-400',
+                  'inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-colors',
+                  s.is_favorite ? 'text-[#D64035]' : 'text-stone-400 hover:text-stone-600',
                 ].join(' ')}
                 aria-label={s.is_favorite ? 'Убрать из избранного' : 'Добавить в избранное'}
               >
-                {s.is_favorite ? <LuCheck className="h-5 w-5" /> : null}
+                <LuHeart className={['h-4 w-4', s.is_favorite ? 'fill-current' : ''].join(' ')} />
               </button>
             </div>
           </li>
