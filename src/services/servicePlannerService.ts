@@ -984,11 +984,13 @@ export async function getEditablePlanByToken(token: string): Promise<PublicEdita
      left join public.service_templates t on t.id = p.template_id
      left join public.members leader on leader.id = p.leader_member_id
      left join public.members preacher on preacher.id = p.preacher_member_id
-     where p.edit_token = $1::uuid
-       and p.status = 'draft'
-       and p.edit_token_issued_at >= now() - ($2::int * interval '1 day')
+     where p.status = 'draft'
+       and (
+         (p.edit_token = $1::uuid and p.edit_token_issued_at >= now() - ($2::int * interval '1 day'))
+         or (p.share_token = $1::uuid and p.share_token_issued_at >= now() - ($3::int * interval '1 day'))
+       )
      limit 1`,
-    [normalizedToken, EDIT_TOKEN_MAX_AGE_DAYS],
+    [normalizedToken, EDIT_TOKEN_MAX_AGE_DAYS, SHARE_TOKEN_MAX_AGE_DAYS],
   );
   const row = planRes.rows[0] as DbRecord | undefined;
   if (!row) return null;
@@ -1081,11 +1083,13 @@ export async function getEditablePlanMetaByToken(
   const canEditRes = await query(
     `select id
      from public.service_plans
-     where edit_token = $1::uuid
-       and status = 'draft'
-       and edit_token_issued_at >= now() - ($2::int * interval '1 day')
+     where status = 'draft'
+       and (
+         (edit_token = $1::uuid and edit_token_issued_at >= now() - ($2::int * interval '1 day'))
+         or (share_token = $1::uuid and share_token_issued_at >= now() - ($3::int * interval '1 day'))
+       )
      limit 1`,
-    [normalizedToken, EDIT_TOKEN_MAX_AGE_DAYS],
+    [normalizedToken, EDIT_TOKEN_MAX_AGE_DAYS, SHARE_TOKEN_MAX_AGE_DAYS],
   );
   if ((canEditRes.rowCount ?? 0) === 0) return null;
 
@@ -1190,12 +1194,14 @@ export async function patchEditableBlockByToken(
      set ${set.join(', ')}
      from public.service_plans p
      where b.id = $${values.length - 1}
-       and p.edit_token = $${values.length}::uuid
        and p.status = 'draft'
-       and p.edit_token_issued_at >= now() - ($${values.length + 1}::int * interval '1 day')
+       and (
+         (p.edit_token = $${values.length}::uuid and p.edit_token_issued_at >= now() - ($${values.length + 1}::int * interval '1 day'))
+         or (p.share_token = $${values.length}::uuid and p.share_token_issued_at >= now() - ($${values.length + 2}::int * interval '1 day'))
+       )
        and p.id = b.service_plan_id
      returning b.service_plan_id`,
-    [...values, EDIT_TOKEN_MAX_AGE_DAYS],
+    [...values, EDIT_TOKEN_MAX_AGE_DAYS, SHARE_TOKEN_MAX_AGE_DAYS],
   );
   if ((result.rowCount ?? 0) === 0) return false;
   const updatedPlanId = Number((result.rows[0] as DbRecord).service_plan_id);

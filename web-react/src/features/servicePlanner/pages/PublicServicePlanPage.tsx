@@ -22,6 +22,7 @@ import {
   type PublicServicePlanPayload,
 } from '../api';
 import { meaningfulNoteLinesFromRaw } from '../plannerNoteText';
+import { EditableServicePlanPage } from './EditableServicePlanPage';
 
 type PublicPlanBlock = PublicServicePlanPayload['blocks'][number];
 
@@ -276,6 +277,9 @@ export function PublicServicePlanPage() {
   }
 
   const { plan } = q.data;
+  if (plan.status === 'draft') {
+    return <EditableServicePlanPage />;
+  }
   const dateText = new Intl.DateTimeFormat('ru-RU', {
     day: 'numeric',
     month: 'long',

@@ -283,7 +283,6 @@ export function ServicePlannerPage() {
   const [recurrenceRuleInput, setRecurrenceRuleInput] = useState<string>('{"frequency":"weekly","byWeekday":0}');
   const [editingBlockId, setEditingBlockId] = useState<number | null>(null);
   const [shareCopied, setShareCopied] = useState(false);
-  const [editShareCopied, setEditShareCopied] = useState(false);
   const [showArchivedPlans, setShowArchivedPlans] = useState(false);
   const [isPlanSettingsOpenMobile, setIsPlanSettingsOpenMobile] = useState(false);
   /** Мобильная панель: меню действий и показ времени блока */
@@ -1024,23 +1023,6 @@ export function ServicePlannerPage() {
       await navigator.clipboard.writeText(url);
       setShareCopied(true);
       window.setTimeout(() => setShareCopied(false), 1200);
-    } catch {
-      window.prompt('Скопируйте ссылку вручную:', url);
-    }
-  }
-
-  async function copyEditShareLink(): Promise<void> {
-    if (!draft || typeof window === 'undefined') return;
-    const token = String(draft.edit_token ?? '').trim();
-    if (!token) {
-      window.alert('Ссылка для редактирования пока недоступна. Обновите страницу и попробуйте снова.');
-      return;
-    }
-    const url = `${window.location.origin}/service-plan/edit/${token}`;
-    try {
-      await navigator.clipboard.writeText(url);
-      setEditShareCopied(true);
-      window.setTimeout(() => setEditShareCopied(false), 1200);
     } catch {
       window.prompt('Скопируйте ссылку вручную:', url);
     }
@@ -2291,15 +2273,9 @@ export function ServicePlannerPage() {
               </option>
             ))}
           </select>
-          {draft.status === 'draft' ? (
-            <div className="md:col-span-2 rounded-xl bg-stone-50 px-3 py-2 text-xs text-stone-600">
-              <LuPencil className="mr-1 inline h-3.5 w-3.5" /> /service-plan/edit/{draft.edit_token}
-            </div>
-          ) : (
-            <div className="md:col-span-2 rounded-xl bg-stone-50 px-3 py-2 text-xs text-stone-600">
-              <LuLink className="mr-1 inline h-3.5 w-3.5" /> /service-plan/share/{draft.share_token}
-            </div>
-          )}
+          <div className="md:col-span-2 rounded-xl bg-stone-50 px-3 py-2 text-xs text-stone-600">
+            <LuLink className="mr-1 inline h-3.5 w-3.5" /> /service-plan/share/{draft.share_token}
+          </div>
         </div>
         <button
           type="button"
@@ -2835,39 +2811,22 @@ export function ServicePlannerPage() {
         <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-stone-500">
           Шаг 3: поделитесь ссылкой
         </p>
-        {draft.status === 'draft' ? (
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="min-w-0 flex-1 rounded-lg bg-stone-50 px-2 py-1.5 text-xs text-stone-700">
-              <LuPencil className="mr-1 inline h-3.5 w-3.5" />
-              /service-plan/edit/{draft.edit_token}
-            </div>
-            <button
-              type="button"
-              onClick={() => void copyEditShareLink()}
-              className="inline-flex items-center gap-1 rounded-lg border border-stone-300 px-3 py-1.5 text-sm font-semibold text-stone-700 hover:border-primary hover:text-primary"
-            >
-              <LuCopy className="h-4 w-4" />
-              {editShareCopied ? 'Скопировано' : 'Копировать'}
-            </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="min-w-0 flex-1 rounded-lg bg-stone-50 px-2 py-1.5 text-xs text-stone-700">
+            <LuLink className="mr-1 inline h-3.5 w-3.5" />
+            /service-plan/share/{draft.share_token}
           </div>
-        ) : (
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="min-w-0 flex-1 rounded-lg bg-stone-50 px-2 py-1.5 text-xs text-stone-700">
-              <LuLink className="mr-1 inline h-3.5 w-3.5" />
-              /service-plan/share/{draft.share_token}
-            </div>
-            <button
-              type="button"
-              onClick={() => void copyShareLink()}
-              className="inline-flex items-center gap-1 rounded-lg border border-stone-300 px-3 py-1.5 text-sm font-semibold text-stone-700 hover:border-primary hover:text-primary"
-            >
-              <LuCopy className="h-4 w-4" />
-              {shareCopied ? 'Скопировано' : 'Копировать'}
-            </button>
-          </div>
-        )}
+          <button
+            type="button"
+            onClick={() => void copyShareLink()}
+            className="inline-flex items-center gap-1 rounded-lg border border-stone-300 px-3 py-1.5 text-sm font-semibold text-stone-700 hover:border-primary hover:text-primary"
+          >
+            <LuCopy className="h-4 w-4" />
+            {shareCopied ? 'Скопировано' : 'Копировать'}
+          </button>
+        </div>
         <p className="mt-2 text-xs text-stone-500">
-          В статусе «Черновик» доступна ссылка редактирования. После публикации показывается ссылка просмотра.
+          Одна и та же ссылка: в статусе «Черновик» открывается редактирование, после публикации — только просмотр.
         </p>
       </section>
 
