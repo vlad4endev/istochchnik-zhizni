@@ -4,7 +4,7 @@ import { useChatStore, isDraftPrivateConversationId } from '../chatStore';
 import { useMessengerWsContext } from '../MessengerWsContext';
 import { useSwipeGesture } from '../hooks/useSwipeGesture';
 import { ChatList } from './ChatList';
-import { LuPlus, LuMessageSquare } from 'react-icons/lu';
+import { LuPlus, LuMessageSquare, LuSlidersHorizontal } from 'react-icons/lu';
 import './messenger.css';
 
 const ChatWindow = lazy(async () => {
@@ -32,6 +32,10 @@ export function MessengerPage() {
   const [showNewChat, setShowNewChat] = useState(false);
   const [mobileView, setMobileView] = useState<'list' | 'chat'>('list');
   const [isTransitioning, setIsTransitioning] = useState(false);
+  const [density, setDensity] = useState<'comfortable' | 'compact'>(() => {
+    if (typeof window === 'undefined') return 'comfortable';
+    return window.localStorage.getItem('messenger:desktop-density') === 'compact' ? 'compact' : 'comfortable';
+  });
   const messengerRef = useRef<HTMLDivElement>(null);
   const location = useLocation();
 
@@ -64,6 +68,11 @@ export function MessengerPage() {
   useEffect(() => {
     void loadConversations();
   }, [loadConversations]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    window.localStorage.setItem('messenger:desktop-density', density);
+  }, [density]);
 
   // Deep-link from push notification: /messenger?conversationId=123
   useEffect(() => {
@@ -99,21 +108,35 @@ export function MessengerPage() {
 
   return (
     <div className="tg-messenger-page messenger-layout flex min-h-0 flex-1 flex-col">
-      <div className={`tg-messenger min-h-0 flex-1 ${isTransitioning ? 'transitioning' : ''}`} ref={messengerRef}>
+      <div
+        className={`tg-messenger min-h-0 flex-1 tg-density--${density} ${isTransitioning ? 'transitioning' : ''}`}
+        ref={messengerRef}
+      >
       {/* Sidebar */}
       <aside
         className={`tg-sidebar chat-list-panel ${mobileView === 'list' ? 'tg-sidebar--visible' : ''} ${mobileView === 'chat' ? 'tg-sidebar--hidden' : ''}`}
       >
         <div className="tg-sidebar-header">
           <h1 className="tg-sidebar-title">Мессенджер</h1>
-          <button
-            type="button"
-            className="tg-compose-btn-sm"
-            onClick={() => setShowNewChat(true)}
-            aria-label="Новый чат"
-          >
-            <LuPlus size={20} strokeWidth={2.5} />
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              className={`tg-density-toggle hidden md:inline-flex ${density === 'compact' ? 'tg-density-toggle--compact' : ''}`}
+              onClick={() => setDensity((d) => (d === 'comfortable' ? 'compact' : 'comfortable'))}
+              aria-label={density === 'comfortable' ? 'Сделать плотнее' : 'Сделать свободнее'}
+              title={density === 'comfortable' ? 'Компактно' : 'Свободно'}
+            >
+              <LuSlidersHorizontal size={16} strokeWidth={2.3} aria-hidden />
+            </button>
+            <button
+              type="button"
+              className="tg-compose-btn-sm"
+              onClick={() => setShowNewChat(true)}
+              aria-label="Новый чат"
+            >
+              <LuPlus size={20} strokeWidth={2.5} />
+            </button>
+          </div>
         </div>
         <ChatList onSelect={handleSelectConversation} activeId={activeId} />
       </aside>

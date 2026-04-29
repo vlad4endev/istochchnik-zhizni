@@ -379,6 +379,34 @@
   box-shadow: 0 0 0 3px rgba(125, 54, 64, 0.22);
 }
 
+.tg-density-toggle {
+  width: 36px;
+  height: 36px;
+  border: 1px solid rgba(125, 54, 64, 0.2);
+  background: rgba(125, 54, 64, 0.08);
+  color: var(--tg-primary);
+  border-radius: 10px;
+  padding: 0;
+  cursor: pointer;
+  transition: background 0.18s ease, border-color 0.18s ease, color 0.18s ease;
+  align-items: center;
+  justify-content: center;
+}
+
+.tg-density-toggle:hover {
+  background: rgba(125, 54, 64, 0.14);
+  border-color: rgba(125, 54, 64, 0.35);
+}
+
+.tg-density-toggle:focus-visible {
+  box-shadow: 0 0 0 3px rgba(125, 54, 64, 0.22);
+}
+
+.tg-density-toggle--compact {
+  background: rgba(125, 54, 64, 0.18);
+  border-color: rgba(125, 54, 64, 0.4);
+}
+
 .chatlist-spinner {
   width: 36px;
   height: 36px;
@@ -524,7 +552,7 @@
 
   /* Шапка и поле ввода — та же логическая ширина, что и лента */
   .tg-chat-window > header > div {
-    max-width: var(--tg-desktop-thread-max);
+    max-width: none;
     margin-left: auto;
     margin-right: auto;
     width: 100%;
@@ -532,18 +560,18 @@
 
   .tg-chat-window .tg-chat-window__body > div[role='log'] {
     box-sizing: border-box;
-    padding-left: max(1rem, calc(50% - var(--tg-desktop-thread-max) / 2)) !important;
-    padding-right: max(1rem, calc(50% - var(--tg-desktop-thread-max) / 2)) !important;
+    padding-left: 1rem !important;
+    padding-right: 1rem !important;
   }
 
   .tg-chat-window__composer {
     box-sizing: border-box;
-    padding-left: max(0.75rem, calc(50% - var(--tg-desktop-thread-max) / 2)) !important;
-    padding-right: max(0.75rem, calc(50% - var(--tg-desktop-thread-max) / 2)) !important;
+    padding-left: 0.75rem !important;
+    padding-right: 0.75rem !important;
   }
 
   .tg-scroll-new-fab {
-    right: max(12px, calc(50% - var(--tg-desktop-thread-max) / 2 + 8px));
+    right: 12px;
   }
 
   .tg-empty-state {
@@ -562,7 +590,7 @@
   }
 
   .tg-bubble-wrap {
-    max-width: min(78%, 26rem);
+    max-width: min(84%, 38rem);
   }
 
   .tg-search-overlay {
@@ -579,6 +607,61 @@
   .tg-chatlist-scroll {
     padding-left: 6px;
     padding-right: 4px;
+  }
+}
+
+/* Ultra-wide desktop tuning: keeps layout spacious on 2K/4K screens. */
+@media (min-width: 1440px) {
+  :root {
+    --tg-sidebar-width: clamp(340px, 26vw, 480px);
+  }
+
+  .tg-chat-window .tg-chat-window__body > div[role='log'] {
+    padding-left: 1.5rem !important;
+    padding-right: 1.5rem !important;
+  }
+
+  .tg-chat-window__composer {
+    padding-left: 1.25rem !important;
+    padding-right: 1.25rem !important;
+  }
+
+  .tg-bubble-wrap {
+    max-width: min(88%, 46rem);
+  }
+}
+
+@media (min-width: 1920px) {
+  .tg-bubble-wrap {
+    max-width: min(90%, 52rem);
+  }
+}
+
+@media (min-width: 769px) {
+  .tg-messenger.tg-density--compact .tg-chat-window .tg-chat-window__body > div[role='log'] {
+    padding-left: 0.75rem !important;
+    padding-right: 0.75rem !important;
+  }
+
+  .tg-messenger.tg-density--compact .tg-chat-window__composer {
+    padding-left: 0.5rem !important;
+    padding-right: 0.5rem !important;
+  }
+
+  .tg-messenger.tg-density--compact .tg-bubble-wrap {
+    max-width: min(78%, 32rem);
+  }
+
+  .tg-messenger.tg-density--compact .messages-area {
+    gap: 0.4rem;
+  }
+
+  .tg-messenger.tg-density--compact .tg-sidebar {
+    width: clamp(300px, 22vw, 380px);
+  }
+
+  .tg-messenger.tg-density--comfortable .tg-sidebar {
+    width: var(--tg-sidebar-width);
   }
 }
 
