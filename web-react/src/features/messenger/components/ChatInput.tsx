@@ -1004,7 +1004,7 @@ export function ChatInput({
       ) : null}
 
       <div
-        className="tg-input-area min-w-0 items-center gap-2 sm:gap-2.5"
+        className="tg-input-area min-w-0 items-center"
         onDragOver={(e) => {
           if (!uploadsHealthy) return;
           e.preventDefault();
@@ -1142,17 +1142,16 @@ export function ChatInput({
               <LuSmile size={22} />
             </button>
           </div>
+          <button
+            type="button"
+            className="tg-send-btn transition-colors duration-200"
+            onClick={() => void handleSend()}
+            disabled={(!content.trim() && !pending && pendingImages.length === 0) || uploading != null}
+            style={{ opacity: (content.trim() || pending || pendingImages.length > 0) && !uploading ? 1 : 0.5 }}
+          >
+            <LuSend size={18} style={{ marginLeft: '1px' }} />
+          </button>
         </div>
-
-        <button
-          type="button"
-          className="tg-send-btn transition-colors duration-200"
-          onClick={() => void handleSend()}
-          disabled={(!content.trim() && !pending && pendingImages.length === 0) || uploading != null}
-          style={{ opacity: (content.trim() || pending || pendingImages.length > 0) && !uploading ? 1 : 0.5 }}
-        >
-          <LuSend size={18} style={{ marginLeft: '1px' }} />
-        </button>
       </div>
 
       {typeof document !== 'undefined' && attachMenuPresent && attachPos
