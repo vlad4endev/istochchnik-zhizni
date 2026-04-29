@@ -457,6 +457,13 @@ function DashboardMain() {
     }
     return { withMember, filled, inCycle };
   }, [adminNextWeekRosterRows]);
+  const adminNextWeekProgress = useMemo(() => {
+    if (adminNextWeekRosterStats.withMember <= 0) return 0;
+    return Math.max(
+      0,
+      Math.min(100, (adminNextWeekRosterStats.filled / adminNextWeekRosterStats.withMember) * 100),
+    );
+  }, [adminNextWeekRosterStats]);
 
   /**
    * Следующая неделя: среди участников, закреплённых за координатором, у кого ещё пустая нужда
@@ -547,21 +554,27 @@ function DashboardMain() {
     <div className="min-h-full bg-[var(--surface)] px-3 pb-[max(2rem,env(safe-area-inset-bottom,0px))] sm:px-4 shell:px-6 md:px-8 xl:px-10">
       <div className="mx-auto w-full max-w-7xl 2xl:max-w-[1480px]">
         <div className={sectionHeroStickyClassNested}>
-          <header className={sectionHeroHeaderClass}>
+          <header
+            className={[
+              sectionHeroHeaderClass,
+              'rounded-[22px] bg-[#6B2D3E] px-4 pb-6 pt-5 shadow-[0_12px_34px_rgba(72,20,34,0.36)]',
+            ].join(' ')}
+          >
             <div
-              className="pointer-events-none absolute -right-4 -top-20 h-48 w-48 rounded-full bg-white/[0.13] blur-3xl animate-prayer-header-breathe motion-reduce:animate-none"
+              className="pointer-events-none absolute -right-6 -top-6 h-[130px] w-[130px] rounded-full bg-white/[0.07]"
               aria-hidden
             />
             <div
-              className="pointer-events-none absolute -bottom-12 -left-10 h-40 w-40 rounded-full bg-black/18 blur-2xl"
+              className="pointer-events-none absolute -bottom-8 left-6 h-[90px] w-[90px] rounded-full bg-white/[0.04]"
               aria-hidden
             />
             <div className="relative flex items-center justify-between gap-3">
               <div className="min-w-0 flex-1 animate-prayer-fade-up motion-reduce:animate-none">
-                <h1 className="truncate text-xl font-extrabold leading-tight tracking-tight sm:text-2xl md:text-3xl lg:text-[1.65rem] xl:text-[26px]">
-                  Добрый день, {greetingName}!
+                <p className="text-[13px] font-medium text-white/65">Добро пожаловать</p>
+                <h1 className="mt-0.5 truncate text-[22px] font-semibold leading-tight tracking-tight text-white">
+                  {greetingName}
                 </h1>
-                <p className="mt-1 text-sm font-semibold text-white/85 sm:text-base">{dashboardDateLabel}</p>
+                <p className="mt-1 text-xs font-medium text-white/50">{dashboardDateLabel}</p>
               </div>
               {birthdayBadgeText ? (
                 <div className="hidden max-w-[42%] shrink-0 truncate rounded-full border border-white/30 bg-white/15 px-3 py-1 text-xs font-semibold text-white/95 lg:block">
@@ -584,8 +597,8 @@ function DashboardMain() {
 
         <div className="hidden lg:block">
           <div className="grid grid-cols-3 gap-3">
-            <section className="rounded-xl border border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] px-4 py-3">
-              <p className="mb-2 text-[11px] font-medium uppercase tracking-[0.06em] text-[var(--color-text-secondary)]">Мой профиль</p>
+            <section className="rounded-2xl border border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] px-4 py-3">
+              <p className="mb-2 text-[11px] font-semibold tracking-[0.02em] text-[var(--color-text-secondary)]">Мой профиль</p>
               <div className="flex items-center gap-3">
                 <div className="h-11 w-11 shrink-0 overflow-hidden rounded-xl bg-stone-100 ring-1 ring-stone-200/70">
                   {avatarUrl ? (
@@ -603,32 +616,32 @@ function DashboardMain() {
               </div>
             </section>
 
-            <section className="rounded-xl border border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] px-4 py-3">
-              <p className="mb-2 text-[11px] font-medium uppercase tracking-[0.06em] text-[var(--color-text-secondary)]">Молимся сегодня</p>
+            <section className="rounded-2xl border border-[#BFC9F7] bg-gradient-to-br from-[#EEF2FF] to-[#E5EAFF] px-4 py-3">
+              <p className="mb-2 text-[11px] font-semibold tracking-[0.02em] text-[#3042A8]">Молимся сегодня</p>
               <div className="flex items-center gap-3">
-                <div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary">
+                <div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-[#4A5FD5] text-white">
                   <LuChurch className="h-5 w-5" strokeWidth={2} aria-hidden />
                 </div>
                 <div className="min-w-0">
-                  <p className="truncate text-sm font-extrabold text-stone-900">{memberToday?.name ?? 'Не назначен'}</p>
-                  <p className="truncate text-xs font-semibold text-stone-600">{todayLabel}</p>
+                  <p className="truncate text-sm font-extrabold text-[#1A2560]">{memberToday?.name ?? 'Не назначен'}</p>
+                  <p className="truncate text-xs font-semibold text-[#4A5FD5]">{todayLabel}</p>
                 </div>
               </div>
             </section>
 
-            <section className="rounded-xl border border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] px-4 py-3">
-              <p className="mb-2 text-[11px] font-medium uppercase tracking-[0.06em] text-[var(--color-text-secondary)]">Ближайшее событие</p>
-              <p className="truncate text-sm font-extrabold text-stone-900">{event.title}</p>
-              <p className="mt-1 truncate text-xs font-semibold text-stone-600">{event.whenLabel}</p>
+            <section className="rounded-2xl border border-[#A8E4C0] bg-gradient-to-br from-[#EDFBF3] to-[#D9F5E6] px-4 py-3">
+              <p className="mb-2 text-[11px] font-semibold tracking-[0.02em] text-[#0F6636]">Ближайшее событие</p>
+              <p className="truncate text-sm font-extrabold text-[#0A2E18]">{event.title}</p>
+              <p className="mt-1 truncate text-xs font-semibold text-[#1A9A55]">{event.whenLabel}</p>
             </section>
           </div>
 
           <div className="mt-3 grid grid-cols-[1.4fr_1fr] gap-4">
             <div className="space-y-3">
               {dashboardNotesQ.data?.announcement ? (
-                <section className="rounded-xl border border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] px-4 py-3">
+                <section className="rounded-2xl border border-[#F5D99A] bg-gradient-to-br from-[#FFF8EC] to-[#FEF0D6] px-4 py-3">
                   <div className="mb-2 flex items-center justify-between gap-2">
-                    <p className="text-[11px] font-medium uppercase tracking-[0.06em] text-[var(--color-text-secondary)]">Объявление</p>
+                    <p className="text-[11px] font-semibold tracking-[0.02em] text-[#9A6200]">Объявление</p>
                     {canManageCoordinatorNotes ? (
                       <details className="group relative">
                         <summary className="inline-flex min-h-[28px] min-w-[28px] cursor-pointer list-none items-center justify-center rounded-lg border border-stone-200 bg-white text-sm font-bold text-stone-700 marker:hidden [&::-webkit-details-marker]:hidden">
@@ -653,12 +666,12 @@ function DashboardMain() {
                       </details>
                     ) : null}
                   </div>
-                  <p className={announcementExpanded ? 'whitespace-pre-wrap text-sm font-semibold leading-snug text-stone-900' : 'line-clamp-3 whitespace-pre-wrap text-sm font-semibold leading-snug text-stone-900'}>
+                  <p className={announcementExpanded ? 'whitespace-pre-wrap text-sm font-semibold leading-[1.55] text-[#3D2800]' : 'line-clamp-3 whitespace-pre-wrap text-sm font-semibold leading-[1.55] text-[#3D2800]'}>
                     {dashboardNotesQ.data.announcement.text}
                   </p>
                   <button
                     type="button"
-                    className="mt-2 text-sm font-bold text-primary hover:underline"
+                    className="mt-2 text-sm font-bold text-[#B87800] hover:underline"
                     onClick={() => setAnnouncementExpanded((v) => !v)}
                   >
                     {announcementExpanded ? 'Свернуть ↑' : 'Читать полностью →'}
@@ -666,9 +679,9 @@ function DashboardMain() {
                 </section>
               ) : null}
 
-              <section className="rounded-xl border border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] px-4 py-3">
+              <section className="rounded-2xl border border-stone-200 bg-white px-4 py-3">
                 <div className="flex items-center justify-between gap-2">
-                  <p className="mb-2 text-[11px] font-medium uppercase tracking-[0.06em] text-[var(--color-text-secondary)]">Медиа</p>
+                  <p className="mb-2 text-[11px] font-semibold tracking-[0.02em] text-[#0E7E6A]">Медиа</p>
                   <button
                     type="button"
                     onClick={() => navigate('/sermons')}
@@ -685,7 +698,7 @@ function DashboardMain() {
                       <button
                         type="button"
                         onClick={() => void onPlayLatest()}
-                        className="inline-flex min-h-[40px] items-center justify-center gap-2 rounded-xl bg-stone-900 px-4 text-sm font-extrabold text-white hover:bg-stone-800"
+                        className="inline-flex min-h-[40px] items-center justify-center gap-2 rounded-xl bg-[#0E7E6A] px-4 text-sm font-extrabold text-white hover:bg-[#0C6E5D]"
                       >
                         <LuPlay className="h-4 w-4" strokeWidth={2.25} aria-hidden />
                         Слушать
@@ -697,7 +710,7 @@ function DashboardMain() {
                           'inline-flex min-h-[40px] items-center justify-center gap-2 rounded-xl px-4 text-sm font-extrabold transition',
                           favorites[latestEpisode.id]
                             ? 'bg-rose-50 text-rose-700 ring-1 ring-rose-200/70 hover:bg-rose-100'
-                            : 'border border-stone-200 bg-white text-stone-700 hover:bg-stone-50',
+                            : 'border-[1.5px] border-[#0E7E6A] bg-white text-[#0E7E6A] hover:bg-[#ECF8F5]',
                         ].join(' ')}
                       >
                         <LuHeart className="h-4 w-4" strokeWidth={2} aria-hidden />
@@ -713,12 +726,17 @@ function DashboardMain() {
 
             <div className="space-y-3">
               {showBroadcastCard ? (
-                <section className="rounded-xl border border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] px-4 py-3">
-                  <p className="mb-2 text-[11px] font-medium uppercase tracking-[0.06em] text-[var(--color-text-secondary)]">Трансляция</p>
-                  <p className="text-base font-extrabold text-stone-900">{broadcastDateLabel}</p>
+                <section className="rounded-2xl border border-[#F9BAB3] bg-gradient-to-br from-[#FEEFED] to-[#FDE3E0] px-4 py-3">
+                  <div className="mb-2 flex items-center justify-between gap-2">
+                    <p className="text-[11px] font-semibold tracking-[0.02em] text-[#A03028]">Трансляция</p>
+                    <span className="inline-flex items-center rounded-full bg-[#D64035] px-3 py-1 text-[11px] font-semibold text-white">
+                      Смотреть
+                    </span>
+                  </div>
+                  <p className="text-base font-extrabold text-[#3D1410]">{broadcastDateLabel}</p>
                   <button
                     type="button"
-                    className="mt-2 text-sm font-bold text-primary hover:underline"
+                    className="mt-2 text-sm font-bold text-[#A03028] hover:underline"
                     onClick={() => {
                       grantBroadcastAccess();
                       navigate('/broadcast', { state: { fromDashboard: true } });
@@ -730,8 +748,8 @@ function DashboardMain() {
               ) : null}
 
               {showPrayerPlanOnDashboard ? (
-                <section className="rounded-xl border border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] px-4 py-3">
-                  <p className="mb-2 text-[11px] font-medium uppercase tracking-[0.06em] text-[var(--color-text-secondary)]">Координаторам сбора</p>
+                <section className="rounded-2xl border border-[#E8E0DC] bg-[#F8F5F3] px-4 py-3">
+                  <p className="mb-2 text-[11px] font-semibold tracking-[0.02em] text-[#6B2D3E]">Координаторам сбора</p>
                   {((isAdmin || isPastor ? unfilledWeekRowsAdmin : coordinatorUnfilledRows).length === 0) ? (
                     <p className="text-sm font-medium text-stone-600">Незаполненных нужд нет.</p>
                   ) : (
@@ -739,7 +757,7 @@ function DashboardMain() {
                       {(isAdmin || isPastor ? unfilledWeekRowsAdmin : coordinatorUnfilledRows).slice(0, 4).map((row) => (
                         <li
                           key={`${row.date}-${row.member.id}`}
-                          className="flex items-center justify-between gap-2 rounded-lg border border-stone-200/80 bg-stone-50/70 px-3 py-2 text-sm"
+                          className="flex items-center justify-between gap-2 rounded-[10px] border border-[#E8E0DC] bg-white px-3 py-2 text-sm"
                         >
                           <span className="truncate font-bold text-stone-900">{memberFirstLastLine(row.member)}</span>
                           <span className="shrink-0 text-xs font-semibold text-stone-500">{formatWeekDayChip(row.date)}</span>
@@ -755,19 +773,19 @@ function DashboardMain() {
 
         <div className="dashboard-grid grid grid-cols-1 gap-3.5 sm:grid-cols-2 sm:gap-4 xl:grid-cols-12 lg:hidden">
           {birthdaysThisWeek.length > 0 ? (
-            <section className="overflow-hidden rounded-3xl border border-violet-200/70 bg-gradient-to-br from-violet-50/80 via-white to-fuchsia-50/70 p-4 shadow-[var(--shadow-card)] sm:col-span-2 sm:p-5 xl:col-span-12">
-              <p className="text-[11px] font-extrabold uppercase tracking-[0.14em] text-violet-700">
+            <section className="overflow-hidden rounded-2xl border border-[#F9C0D0] bg-gradient-to-br from-[#FFF0F3] to-[#FFE4EC] p-4 shadow-[var(--shadow-card)] sm:col-span-2 sm:p-5 xl:col-span-12">
+              <p className="text-[11px] font-semibold tracking-[0.02em] text-[#C23D57]">
                 Предстоящие дни рождения на этой неделе
               </p>
               <div className="mt-3 flex flex-wrap gap-2">
                 {birthdaysThisWeek.map((row) => (
                   <span
                     key={`${row.id}-${row.week_date}`}
-                    className="inline-flex items-center gap-2 rounded-2xl border border-violet-200/70 bg-white/90 px-3 py-2 text-sm font-bold text-stone-800"
+                    className="inline-flex items-center gap-2 rounded-2xl border border-[#F9C0D0] bg-white/90 px-3 py-2 text-sm font-bold text-[#3D1520]"
                   >
                     <span aria-hidden>🎉</span>
                     <span>{row.name}</span>
-                    <span className="text-violet-700">{formatBirthdayChipDate(row.week_date)}</span>
+                    <span className="text-[#C23D57]">{formatBirthdayChipDate(row.week_date)}</span>
                   </span>
                 ))}
               </div>
@@ -784,14 +802,14 @@ function DashboardMain() {
                     : '/profile',
                 )
               }
-              className="tap-highlight-transparent touch-manipulation relative w-full overflow-hidden rounded-3xl border border-stone-200/70 bg-white/90 p-4 text-left shadow-[var(--shadow-card)] transition hover:-translate-y-0.5 hover:shadow-[var(--shadow)] sm:min-h-[132px] sm:p-4"
+                className="tap-highlight-transparent touch-manipulation relative w-full overflow-hidden rounded-2xl border border-stone-200/70 bg-white/90 p-4 text-left shadow-[var(--shadow-card)] transition hover:-translate-y-0.5 hover:shadow-[var(--shadow)] sm:min-h-[132px] sm:p-4"
             >
               <div className="pointer-events-none absolute right-0 top-0 h-20 w-20 rounded-full bg-primary/[0.06] blur-2xl" />
               <div className="relative flex items-start justify-between gap-2">
-                <p className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-stone-500">Мой профиль</p>
+                <p className="text-[11px] font-semibold tracking-[0.02em] text-[#6B2D3E]">Мой профиль</p>
                 {hasProfilePostDraft ? (
                   <span
-                    className="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wide text-amber-900"
+                    className="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold tracking-[0.02em] text-amber-900"
                     title="Есть черновик поста на странице"
                   >
                     Черновик
@@ -826,16 +844,16 @@ function DashboardMain() {
             {dashboardNotesQ.data?.announcement ? (
               <section
                 aria-label="Объявление"
-                className="overflow-hidden rounded-3xl border border-amber-200/90 bg-gradient-to-br from-amber-50/95 to-orange-50/80 p-4 shadow-[var(--shadow-card)]"
+                className="overflow-hidden rounded-2xl border border-[#F5D99A] bg-gradient-to-br from-[#FFF8EC] to-[#FEF0D6] p-4 shadow-[var(--shadow-card)]"
               >
                 {canManageCoordinatorNotes ? (
                   <div className="mb-3 flex justify-end">
                     <details className="group relative">
-                      <summary className="tap-highlight-transparent inline-flex min-h-[36px] min-w-[36px] cursor-pointer list-none items-center justify-center rounded-xl border border-amber-300/80 bg-white/90 px-2.5 text-base font-extrabold text-amber-950 hover:bg-amber-50 marker:hidden [&::-webkit-details-marker]:hidden">
+                      <summary className="tap-highlight-transparent inline-flex min-h-[36px] min-w-[36px] cursor-pointer list-none items-center justify-center rounded-[10px] border border-amber-300/80 bg-white/90 px-2.5 text-base font-extrabold text-amber-950 hover:bg-amber-50 marker:hidden [&::-webkit-details-marker]:hidden">
                         <span aria-hidden>⋯</span>
                         <span className="sr-only">Действия с объявлением</span>
                       </summary>
-                      <div className="absolute right-0 z-10 mt-1 w-40 space-y-1 rounded-xl border border-amber-200 bg-white p-1.5 shadow-lg">
+                      <div className="absolute right-0 z-10 mt-1 w-40 space-y-1 rounded-[10px] border border-amber-200 bg-white p-1.5 shadow-lg">
                         <button
                           type="button"
                           className="tap-highlight-transparent inline-flex min-h-[34px] w-full items-center justify-start rounded-lg px-2.5 text-xs font-extrabold text-amber-950 hover:bg-amber-50"
@@ -854,10 +872,10 @@ function DashboardMain() {
                     </details>
                   </div>
                 ) : null}
-                <p className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-amber-900/90">Объявление</p>
+                <p className="text-[11px] font-semibold tracking-[0.02em] text-[#9A6200]">Объявление</p>
                 <p
                   className={[
-                    'announcement-text mt-2 whitespace-pre-wrap text-sm font-semibold leading-snug text-stone-900',
+                    'announcement-text mt-2 whitespace-pre-wrap text-sm font-semibold leading-[1.55] text-[#3D2800]',
                     announcementExpanded ? 'announcement-text--expanded' : '',
                   ].join(' ')}
                 >
@@ -865,7 +883,7 @@ function DashboardMain() {
                 </p>
                 <button
                   type="button"
-                  className="announcement-expand-btn mt-2 hidden text-sm font-bold text-amber-900 underline underline-offset-2"
+                  className="announcement-expand-btn mt-2 hidden text-sm font-bold text-[#B87800] underline underline-offset-2"
                   onClick={() => setAnnouncementExpanded((v) => !v)}
                 >
                   {announcementExpanded ? 'Свернуть' : 'Читать полностью'}
@@ -877,16 +895,16 @@ function DashboardMain() {
           <button
             type="button"
             onClick={() => navigate('/prayer')}
-            className="tap-highlight-transparent touch-manipulation group min-h-[146px] overflow-hidden rounded-3xl border border-stone-200/70 bg-white/85 p-4 text-left shadow-[var(--shadow-card)] transition hover:-translate-y-0.5 hover:shadow-[var(--shadow)] sm:min-h-[152px] sm:p-5 xl:col-span-8"
+            className="tap-highlight-transparent touch-manipulation group min-h-[146px] overflow-hidden rounded-2xl border border-[#BFC9F7] bg-gradient-to-br from-[#EEF2FF] to-[#E5EAFF] p-4 text-left shadow-[var(--shadow-card)] transition hover:-translate-y-0.5 hover:shadow-[var(--shadow)] sm:min-h-[152px] sm:p-5 xl:col-span-8"
           >
-            <p className="text-[11px] font-extrabold uppercase tracking-[0.14em] text-stone-500">Молимся сегодня</p>
+            <p className="text-[11px] font-semibold tracking-[0.02em] text-[#3042A8]">Молимся сегодня</p>
             <div className="mt-4 flex items-start gap-3">
-              <div className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-primary/10 text-primary">
+              <div className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-[#4A5FD5] text-white">
                 <LuChurch className="h-6 w-6" strokeWidth={2} aria-hidden />
               </div>
               <div className="min-w-0">
-                <p className="text-base font-extrabold text-stone-900">{todayLabel}</p>
-                <p className="mt-1 text-sm font-semibold text-stone-600">
+                <p className="text-base font-extrabold text-[#1A2560]">{todayLabel}</p>
+                <p className="mt-1 text-sm font-semibold text-[#4A5FD5]">
                   {memberToday ? `Молимся за ${memberToday.name}` : 'Сегодня в цикле участник не назначен'}
                 </p>
               </div>
@@ -900,16 +918,21 @@ function DashboardMain() {
                 grantBroadcastAccess();
                 navigate('/broadcast', { state: { fromDashboard: true } });
               }}
-              className="tap-highlight-transparent touch-manipulation group min-h-[146px] overflow-hidden rounded-3xl border border-stone-200/70 bg-white/85 p-4 text-left shadow-[var(--shadow-card)] transition hover:-translate-y-0.5 hover:shadow-[var(--shadow)] sm:col-span-2 sm:min-h-[152px] sm:p-5 xl:col-span-6"
+              className="tap-highlight-transparent touch-manipulation group min-h-[146px] overflow-hidden rounded-2xl border border-[#F9BAB3] bg-gradient-to-br from-[#FEEFED] to-[#FDE3E0] p-4 text-left shadow-[var(--shadow-card)] transition hover:-translate-y-0.5 hover:shadow-[var(--shadow)] sm:col-span-2 sm:min-h-[152px] sm:p-5 xl:col-span-6"
             >
-              <p className="text-[11px] font-extrabold uppercase tracking-[0.14em] text-stone-500">Трансляция</p>
+              <div className="flex items-start justify-between gap-2">
+                <p className="text-[11px] font-semibold tracking-[0.02em] text-[#A03028]">Трансляция</p>
+                <span className="inline-flex items-center rounded-full bg-[#D64035] px-3 py-1 text-[11px] font-semibold text-white">
+                  Смотреть
+                </span>
+              </div>
               <div className="mt-4 flex items-start gap-3">
-                <div className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-rose-50 text-rose-600">
+                <div className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-[#D64035] text-white">
                   <LuTv className="h-6 w-6" strokeWidth={2} aria-hidden />
                 </div>
                 <div className="min-w-0">
-                  <p className="text-base font-extrabold text-stone-900">{broadcastDateLabel}</p>
-                  <p className="mt-1 text-sm font-semibold text-stone-600">
+                  <p className="text-base font-extrabold text-[#3D1410]">{broadcastDateLabel}</p>
+                  <p className="mt-1 text-sm font-semibold text-[#A03028]">
                     {broadcastQ.data?.rutube_embed_code ? 'Эфир доступен, открыть раздел трансляции' : 'Открыть раздел трансляции'}
                   </p>
                 </div>
@@ -917,13 +940,13 @@ function DashboardMain() {
             </button>
           ) : null}
 
-          <section className="overflow-hidden rounded-3xl border border-stone-200/70 bg-white/85 p-4 shadow-[var(--shadow-card)] sm:col-span-2 sm:p-5 xl:col-span-6">
+          <section className="overflow-hidden rounded-2xl border border-stone-200/70 bg-white p-4 shadow-[var(--shadow-card)] sm:col-span-2 sm:p-5 xl:col-span-6">
             <div className="flex flex-col items-start justify-between gap-2 sm:flex-row sm:items-center">
-              <p className="text-[11px] font-extrabold uppercase tracking-[0.14em] text-stone-500">Медиа</p>
+              <p className="text-[11px] font-semibold tracking-[0.02em] text-[#0E7E6A]">Медиа</p>
               <button
                 type="button"
                 onClick={() => navigate('/sermons')}
-                className="tap-highlight-transparent touch-manipulation inline-flex min-h-[44px] items-center gap-2 rounded-xl border border-stone-200 bg-white px-3 text-xs font-extrabold text-stone-700 hover:bg-stone-50"
+                className="tap-highlight-transparent touch-manipulation inline-flex min-h-[44px] items-center gap-2 rounded-[10px] border border-stone-200 bg-white px-3 text-xs font-extrabold text-stone-700 hover:bg-stone-50"
               >
                 Все проповеди
                 <LuArrowRight className="h-4 w-4" strokeWidth={2} aria-hidden />
@@ -937,7 +960,7 @@ function DashboardMain() {
                   <button
                     type="button"
                     onClick={() => void onPlayLatest()}
-                    className="tap-highlight-transparent touch-manipulation inline-flex min-h-[44px] w-full items-center justify-center gap-2 rounded-2xl bg-stone-900 px-4 text-sm font-extrabold text-white hover:bg-stone-800 sm:w-auto"
+                    className="tap-highlight-transparent touch-manipulation inline-flex min-h-[44px] w-full items-center justify-center gap-2 rounded-[12px] bg-[#0E7E6A] px-4 text-sm font-extrabold text-white hover:bg-[#0C6E5D] sm:w-auto"
                   >
                     <LuPlay className="h-4 w-4" strokeWidth={2.25} aria-hidden />
                     Воспроизвести
@@ -946,10 +969,10 @@ function DashboardMain() {
                     type="button"
                     onClick={() => onToggleFavorite(latestEpisode.id)}
                     className={[
-                      'tap-highlight-transparent touch-manipulation inline-flex min-h-[44px] w-full items-center justify-center gap-2 rounded-2xl px-4 text-sm font-extrabold transition sm:w-auto',
+                      'tap-highlight-transparent touch-manipulation inline-flex min-h-[44px] w-full items-center justify-center gap-2 rounded-[12px] px-4 text-sm font-extrabold transition sm:w-auto',
                       favorites[latestEpisode.id]
                         ? 'bg-rose-50 text-rose-700 ring-1 ring-rose-200/70 hover:bg-rose-100'
-                        : 'border border-stone-200 bg-white text-stone-700 hover:bg-stone-50',
+                        : 'border-[1.5px] border-[#0E7E6A] bg-white text-[#0E7E6A] hover:bg-[#ECF8F5]',
                     ].join(' ')}
                   >
                     <LuHeart className="h-4 w-4" strokeWidth={2} aria-hidden />
@@ -972,24 +995,24 @@ function DashboardMain() {
           <button
             type="button"
             onClick={() => setEventOpen(true)}
-            className="tap-highlight-transparent touch-manipulation group min-h-[132px] overflow-hidden rounded-3xl border border-stone-200/70 bg-white/85 p-4 text-left shadow-[var(--shadow-card)] transition hover:-translate-y-0.5 hover:shadow-[var(--shadow)] sm:col-span-2 sm:min-h-[140px] sm:p-5 xl:col-span-12"
+            className="tap-highlight-transparent touch-manipulation group min-h-[132px] overflow-hidden rounded-2xl border border-[#A8E4C0] bg-gradient-to-br from-[#EDFBF3] to-[#D9F5E6] p-4 text-left shadow-[var(--shadow-card)] transition hover:-translate-y-0.5 hover:shadow-[var(--shadow)] sm:col-span-2 sm:min-h-[140px] sm:p-5 xl:col-span-12"
           >
-            <p className="text-[11px] font-extrabold uppercase tracking-[0.14em] text-stone-500">События</p>
+            <p className="text-[11px] font-semibold tracking-[0.02em] text-[#0F6636]">События</p>
             <div className="mt-4 flex items-start gap-3">
-              <div className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-amber-50 text-amber-700">
+              <div className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-[#1A9A55] text-white">
                 <LuCalendarDays className="h-6 w-6" strokeWidth={2} aria-hidden />
               </div>
               <div className="min-w-0">
-                <p className="text-base font-extrabold text-stone-900">{event.title}</p>
-                <p className="mt-1 text-sm font-semibold text-stone-600">{event.whenLabel}</p>
-                <p className="mt-2 line-clamp-2 text-sm font-medium text-stone-500">Нажмите, чтобы открыть описание события.</p>
+                <p className="text-base font-extrabold text-[#0A2E18]">{event.title}</p>
+                <p className="mt-1 text-sm font-semibold text-[#1A9A55]">{event.whenLabel}</p>
+                <p className="mt-2 line-clamp-2 text-sm font-medium text-[#2F6D49]">Нажмите, чтобы открыть описание события.</p>
               </div>
             </div>
           </button>
 
           {showPrayerPlanOnDashboard ? (
-            <section className="rounded-3xl border border-primary/20 bg-gradient-to-br from-primary/[0.06] to-[var(--surface-elevated)] p-4 shadow-[var(--shadow-card)] sm:col-span-2 xl:col-span-12">
-              <p className="text-[11px] font-extrabold uppercase tracking-[0.14em] text-primary/90">
+            <section className="rounded-2xl border border-[#E8E0DC] bg-[#F8F5F3] p-4 shadow-[var(--shadow-card)] sm:col-span-2 xl:col-span-12">
+              <p className="text-[11px] font-semibold tracking-[0.02em] text-[#6B2D3E]">
                 Координаторам сбора
               </p>
               {isAdmin || isPastor ? (
@@ -1007,7 +1030,7 @@ function DashboardMain() {
                           {leaderUnfilledRows.map((row) => (
                             <li
                               key={`${row.date}-${row.member.id}`}
-                              className="flex flex-col gap-0.5 rounded-xl border border-stone-200/80 bg-white/80 px-3 py-2 text-sm sm:flex-row sm:flex-wrap sm:items-center sm:justify-between"
+                            className="flex flex-col gap-0.5 rounded-[10px] border border-[#E8E0DC] bg-white px-3 py-2 text-sm sm:flex-row sm:flex-wrap sm:items-center sm:justify-between"
                             >
                               <span className="font-bold text-stone-900">{memberFirstLastLine(row.member)}</span>
                               <span className="text-xs font-semibold text-stone-500">{formatWeekDayChip(row.date)}</span>
@@ -1029,21 +1052,29 @@ function DashboardMain() {
 
                   {isAdmin ? (
                     <details className="group mt-4 rounded-2xl border border-stone-200/70 bg-white/70 p-1 shadow-sm">
-                      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 rounded-xl px-3 py-2 text-sm font-extrabold text-stone-900 marker:hidden [&::-webkit-details-marker]:hidden">
+                      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 rounded-[10px] px-3 py-2 text-sm font-extrabold text-stone-900 marker:hidden [&::-webkit-details-marker]:hidden">
                         <span className="min-w-0">
                           Список на следующую неделю
                           <span className="mt-0.5 block text-xs font-semibold text-stone-500">
                             {weekMembersQ.isFetching && !weekMembersQ.data
                               ? 'Загружаем…'
                               : adminNextWeekRosterStats.withMember > 0
-                                ? `заполнено ${adminNextWeekRosterStats.filled} из ${adminNextWeekRosterStats.withMember}`
+                                ? `${adminNextWeekRosterStats.filled} из ${adminNextWeekRosterStats.withMember} заполнено`
                                 : 'пока нет данных'}
                           </span>
+                          {adminNextWeekRosterStats.withMember > 0 ? (
+                            <span className="mt-2 block h-1.5 w-full overflow-hidden rounded bg-[#E8E0DC]">
+                              <span
+                                className="block h-full rounded bg-[#6B2D3E] transition-[width] duration-300 ease-out"
+                                style={{ width: `${adminNextWeekProgress}%` }}
+                              />
+                            </span>
+                          ) : null}
                         </span>
-                        <span className="shrink-0 rounded-full border border-stone-200/80 bg-white px-2 py-1 text-[11px] font-extrabold uppercase tracking-wide text-stone-600 group-open:hidden">
+                        <span className="shrink-0 rounded-full border border-stone-200/80 bg-white px-2 py-1 text-[11px] font-bold tracking-[0.02em] text-stone-600 group-open:hidden">
                           Показать
                         </span>
-                        <span className="hidden shrink-0 rounded-full border border-stone-200/80 bg-white px-2 py-1 text-[11px] font-extrabold uppercase tracking-wide text-stone-600 group-open:inline">
+                        <span className="hidden shrink-0 rounded-full border border-stone-200/80 bg-white px-2 py-1 text-[11px] font-bold tracking-[0.02em] text-stone-600 group-open:inline">
                           Скрыть
                         </span>
                       </summary>
@@ -1062,7 +1093,7 @@ function DashboardMain() {
                               return (
                                 <li
                                   key={`roster-${row.date}-${m?.id ?? 'none'}`}
-                                  className="rounded-xl border border-stone-200/70 bg-white/85 px-3 py-2 text-sm"
+                                  className="rounded-[10px] border border-stone-200/70 bg-white/85 px-3 py-2 text-sm"
                                 >
                                   <div className="flex flex-wrap items-start justify-between gap-2">
                                     <div className="min-w-0">
@@ -1072,11 +1103,11 @@ function DashboardMain() {
                                       <p className="mt-0.5 text-xs font-semibold text-stone-500">{formatWeekDayChip(row.date)}</p>
                                     </div>
                                     <div className="shrink-0 text-right">
-                                      <p className="text-[11px] font-extrabold uppercase tracking-wide text-stone-500">
+                                      <p className="text-[11px] font-bold tracking-[0.02em] text-stone-500">
                                         {m ? (inCycle ? 'в цикле' : 'вне цикла') : '—'}
                                       </p>
                                       <p
-                                        className={`mt-1 text-[11px] font-extrabold uppercase tracking-wide ${
+                                        className={`mt-1 text-[11px] font-bold tracking-[0.02em] ${
                                           filled ? 'text-emerald-700' : 'text-amber-800'
                                         }`}
                                       >
@@ -1109,7 +1140,7 @@ function DashboardMain() {
                         {coordinatorAssignedRows.map((row) => (
                           <li
                             key={`assigned-${row.date}-${row.member.id}`}
-                            className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-primary/20 bg-white/80 px-3 py-2 text-sm"
+                            className="flex flex-wrap items-center justify-between gap-2 rounded-[10px] border border-[#E8E0DC] bg-white px-3 py-2 text-sm"
                           >
                             <span className="font-bold text-stone-900">{memberFirstLastLine(row.member)}</span>
                             <span className="text-xs font-semibold text-stone-600">{formatWeekDayChip(row.date)}</span>
@@ -1131,7 +1162,7 @@ function DashboardMain() {
                       {coordinatorUnfilledRows.map((row) => (
                         <li
                           key={`${row.date}-${row.member.id}`}
-                          className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-200/70 bg-amber-50/60 px-3 py-2 text-sm"
+                          className="flex flex-wrap items-center justify-between gap-2 rounded-[10px] border border-[#E8E0DC] bg-white px-3 py-2 text-sm"
                         >
                           <span className="font-bold text-stone-900">{memberFirstLastLine(row.member)}</span>
                           <span className="text-xs font-semibold text-stone-600">{formatWeekDayChip(row.date)}</span>
@@ -1155,12 +1186,12 @@ function DashboardMain() {
               )}
               {isAdmin ? (
                 <details className="group mt-4 rounded-2xl border border-stone-200/70 bg-white/70 p-1 shadow-sm">
-                  <summary className="flex cursor-pointer list-none items-center justify-between gap-3 rounded-xl px-3 py-2 text-sm font-extrabold text-stone-900 marker:hidden [&::-webkit-details-marker]:hidden">
+                  <summary className="flex cursor-pointer list-none items-center justify-between gap-3 rounded-[10px] px-3 py-2 text-sm font-extrabold text-stone-900 marker:hidden [&::-webkit-details-marker]:hidden">
                     <span>Назначения координаторов и правки плана</span>
-                    <span className="shrink-0 rounded-full border border-stone-200/80 bg-white px-2 py-1 text-[11px] font-extrabold uppercase tracking-wide text-stone-600 group-open:hidden">
+                    <span className="shrink-0 rounded-full border border-stone-200/80 bg-white px-2 py-1 text-[11px] font-bold tracking-[0.02em] text-stone-600 group-open:hidden">
                       Развернуть
                     </span>
-                    <span className="hidden shrink-0 rounded-full border border-stone-200/80 bg-white px-2 py-1 text-[11px] font-extrabold uppercase tracking-wide text-stone-600 group-open:inline">
+                    <span className="hidden shrink-0 rounded-full border border-stone-200/80 bg-white px-2 py-1 text-[11px] font-bold tracking-[0.02em] text-stone-600 group-open:inline">
                       Свернуть
                     </span>
                   </summary>
@@ -1196,14 +1227,14 @@ function DashboardMain() {
           aria-modal="true"
         >
           <div
-            className="dashboard-sheet w-full max-w-lg max-h-[min(82vh,700px)] overflow-y-auto rounded-3xl border border-stone-200/80 bg-white p-4 shadow-[0_24px_70px_rgba(0,0,0,0.2)] [webkit-overflow-scrolling:touch] sm:max-h-[88vh] sm:p-5"
+            className="dashboard-sheet w-full max-w-lg max-h-[min(82vh,700px)] overflow-y-auto rounded-2xl border border-stone-200/80 bg-white p-4 shadow-[0_24px_70px_rgba(0,0,0,0.2)] [webkit-overflow-scrolling:touch] sm:max-h-[88vh] sm:p-5"
             onClick={(e) => e.stopPropagation()}
           >
-            <p className="text-[11px] font-extrabold uppercase tracking-[0.14em] text-stone-500">Описание события</p>
+            <p className="text-[11px] font-semibold tracking-[0.02em] text-[#0F6636]">Описание события</p>
             <h2 className="mt-2 text-xl font-extrabold tracking-tight text-stone-900">{event.title}</h2>
             <p className="mt-1 text-sm font-semibold text-primary">{event.whenLabel}</p>
             {event.posterUrl ? (
-              <div className="mt-4 overflow-hidden rounded-3xl border border-stone-200/70 bg-stone-50">
+              <div className="mt-4 overflow-hidden rounded-2xl border border-stone-200/70 bg-stone-50">
                 <img
                   src={event.posterUrl}
                   alt=""
@@ -1217,7 +1248,7 @@ function DashboardMain() {
               <button
                 type="button"
                 onClick={() => setEventOpen(false)}
-                className="tap-highlight-transparent touch-manipulation inline-flex min-h-[44px] items-center justify-center rounded-xl border border-stone-200 bg-white px-4 text-sm font-extrabold text-stone-700 hover:bg-stone-50"
+                className="tap-highlight-transparent touch-manipulation inline-flex min-h-[44px] items-center justify-center rounded-[12px] border border-stone-200 bg-white px-4 text-sm font-extrabold text-stone-700 hover:bg-stone-50"
               >
                 Закрыть
               </button>
