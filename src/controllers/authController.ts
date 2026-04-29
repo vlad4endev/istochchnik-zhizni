@@ -232,6 +232,10 @@ export async function loginHandler(req: Request, res: Response): Promise<void> {
       });
       return;
     }
+    if (!('token' in result)) {
+      res.status(500).json({ error: 'Unexpected login result' });
+      return;
+    }
     if (typeof result.token === 'string' && result.token.length > 0) {
       appendSetAuthCookie(res, result.token);
     }
