@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto';
 import Redis from 'ioredis';
 import { WebSocketServer, WebSocket } from 'ws';
 
+import { readAuthTokenFromCookies } from '../config/authCookie';
 import { resolveSessionByToken } from '../services/authService';
 import { isMemberInConversation, verifyMessageSenderInConversation } from '../services/messengerService';
 import { memberCanJoinServicePlanPresenceSession } from '../services/servicePlannerService';
@@ -258,14 +259,14 @@ export function attachRealtimeWebSocket(server: Server): void {
     }
 
     wss.handleUpgrade(request, socket, head, (ws) => {
-      void handleNewSocket(ws, getClientIp(request));
+      void handleNewSocket(ws, getClientIp(request), request);
     });
   });
 }
 
 const AUTH_TIMEOUT_MS = 12_000;
 
-async function handleNewSocket(ws: WebSocket, ip: string): Promise<void> {
+async function handleNewSocket(ws: WebSocket, ip: string, request: IncomingMessage): Promise<void> {
   let closed = false;
 
   const fail = (code: number, reason: string) => {
@@ -300,7 +301,27 @@ async function handleNewSocket(ws: WebSocket, ip: string): Promise<void> {
         fail(1008, 'invalid auth');
         return;
       }
-      const sessionOk = await resolveSessionByToken(msg.token.trim());
+      const rawToken = msg.token.trim();
+      const cookieToken = readAuthTokenFromCookies({ headers: { cookie: request.headers.cookie } });
+      const candidateTokens: string[] = [];
+      if (rawToken && rawToken !== '__cookie_session__') {
+        candidateTokens.push(rawToken);
+      }
+      if (cookieToken && !candidateTokens.includes(cookieToken)) {
+        candidateTokens.push(cookieToken);
+      }
+      if (candidateTokens.length === 0) {
+        clearTimeout(timer);
+        recordAuthFail(ip);
+        fail(1008, 'invalid auth');
+        return;
+      }
+      let sessionOk: Awaited<ReturnType<typeof resolveSessionByToken>> = null;
+      for (const token of candidateTokens) {
+        // Browser can authenticate WS either by explicit Bearer-like token or HttpOnly cookie session.
+        sessionOk = await resolveSessionByToken(token);
+        if (sessionOk) break;
+      }
       if (!sessionOk) {
         clearTimeout(timer);
         recordAuthFail(ip);
