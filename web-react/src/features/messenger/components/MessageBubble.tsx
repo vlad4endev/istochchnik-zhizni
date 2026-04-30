@@ -100,9 +100,9 @@ function MessengerPollCard({
     setMultiEdit(false);
   };
 
-  const muted = isMine ? 'text-white/80' : 'text-gray-500';
-  const qCls = isMine ? 'text-white' : 'text-gray-900';
-  const barBg = isMine ? 'bg-white/20' : 'bg-gray-200';
+  const muted = isMine ? 'text-white/80' : 'text-[var(--text-secondary)]';
+  const qCls = isMine ? 'text-white' : 'text-[var(--text)]';
+  const barBg = isMine ? 'bg-white/20' : 'bg-[var(--surface)]';
   const barFill = isMine ? 'bg-white' : 'bg-primary';
 
   if (!options.length) {
@@ -112,15 +112,15 @@ function MessengerPollCard({
   if (isOptimistic) {
     return (
       <div className="w-full max-w-[20rem] space-y-2">
-        <div className={['text-[12px] font-extrabold tracking-wide', muted].join(' ')}>Опрос</div>
-        <p className={['text-[15px] font-semibold leading-snug', qCls].join(' ')}>{message.content || '—'}</p>
+        <div className={['text-xs font-extrabold tracking-wide', muted].join(' ')}>Опрос</div>
+        <p className={['text-base font-semibold leading-snug', qCls].join(' ')}>{message.content || '—'}</p>
         <ul className="space-y-1.5">
           {options.map((label, i) => (
             <li
               key={i}
               className={[
-                'rounded-xl px-3 py-2 text-[14px] font-medium',
-                isMine ? 'bg-white/10 text-white/95' : 'bg-gray-100 text-gray-800',
+                'rounded-xl px-3 py-2 text-sm font-medium',
+                isMine ? 'bg-white/10 text-white/95' : 'bg-[var(--surface)] text-[var(--text-secondary)]',
               ].join(' ')}
             >
               {label || `Вариант ${i + 1}`}
@@ -136,8 +136,8 @@ function MessengerPollCard({
 
   return (
     <div className="w-full max-w-[20rem] space-y-2">
-      <div className={['text-[12px] font-extrabold tracking-wide', muted].join(' ')}>Опрос</div>
-      <p className={['text-[15px] font-semibold leading-snug', qCls].join(' ')}>{message.content || '—'}</p>
+      <div className={['text-xs font-extrabold tracking-wide', muted].join(' ')}>Опрос</div>
+      <p className={['text-base font-semibold leading-snug', qCls].join(' ')}>{message.content || '—'}</p>
 
       <ul className="space-y-2">
         {options.map((label, i) => {
@@ -152,10 +152,10 @@ function MessengerPollCard({
                   type="button"
                   onClick={() => void votePoll(message.id, [i])}
                   className={[
-                    'w-full rounded-xl px-3 py-2.5 text-left text-[14px] font-semibold transition-colors active:scale-[0.99]',
+                    'w-full rounded-xl px-3 py-2.5 text-left text-sm font-semibold transition-colors active:scale-[0.99]',
                     isMine
                       ? 'bg-white/12 text-white hover:bg-white/18'
-                      : 'bg-gray-100 text-gray-900 hover:bg-gray-200/90',
+                      : 'bg-[var(--surface)] text-[var(--text)] hover:bg-stone-200/90',
                   ].join(' ')}
                 >
                   {label}
@@ -172,20 +172,20 @@ function MessengerPollCard({
                   type="button"
                   onClick={() => toggleMulti(i)}
                   className={[
-                    'flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-[14px] font-semibold transition-colors',
+                    'flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold transition-colors',
                     isMine
                       ? checked
                         ? 'bg-white/20 text-white ring-1 ring-white/35'
                         : 'bg-white/10 text-white/95 hover:bg-white/14'
                       : checked
                         ? 'bg-primary/12 text-primary ring-1 ring-primary/25'
-                        : 'bg-gray-100 text-gray-900 hover:bg-gray-200/90',
+                        : 'bg-[var(--surface)] text-[var(--text)] hover:bg-stone-200/90',
                   ].join(' ')}
                 >
                   <span
                     className={[
-                      'grid h-5 w-5 shrink-0 place-items-center rounded border-2 text-[11px]',
-                      isMine ? 'border-white/50' : 'border-gray-300',
+                      'grid h-5 w-5 shrink-0 place-items-center rounded border-2 text-xs',
+                      isMine ? 'border-white/50' : 'border-stone-300',
                       checked ? (isMine ? 'bg-white text-primary' : 'bg-primary text-white') : '',
                     ].join(' ')}
                     aria-hidden
@@ -209,10 +209,10 @@ function MessengerPollCard({
                 className={[
                   'w-full rounded-xl px-3 py-2 text-left',
                   allowsMultiple ? 'cursor-default' : 'transition-colors active:scale-[0.99]',
-                  isMine ? 'bg-white/10 hover:bg-white/14' : 'bg-gray-50 hover:bg-gray-100',
+                  isMine ? 'bg-white/10 hover:bg-white/14' : 'bg-[var(--surface)] hover:bg-stone-100',
                 ].join(' ')}
               >
-                <div className="flex items-center justify-between gap-2 text-[13px] font-semibold">
+                <div className="flex items-center justify-between gap-2 text-sm font-semibold">
                   <span className={['min-w-0 flex-1', qCls].join(' ')}>{label}</span>
                   <span className={muted}>{pct}%</span>
                 </div>
@@ -222,7 +222,7 @@ function MessengerPollCard({
                     style={{ width: `${pct}%`, opacity: picked ? 1 : 0.85 }}
                   />
                 </div>
-                <div className={['mt-0.5 text-[11px] font-bold', muted].join(' ')}>{count} голосов</div>
+                <div className={['mt-0.5 text-xs font-bold', muted].join(' ')}>{count} голосов</div>
               </button>
             </li>
           );
@@ -237,7 +237,7 @@ function MessengerPollCard({
               onClick={() => setMultiEdit(false)}
               className={[
                 'rounded-full px-3 py-1.5 text-xs font-bold',
-                isMine ? 'bg-white/15 text-white' : 'bg-gray-200 text-gray-800',
+                isMine ? 'bg-white/15 text-white' : 'bg-[var(--surface)] text-[var(--text-secondary)]',
               ].join(' ')}
             >
               Отмена
@@ -268,7 +268,7 @@ function MessengerPollCard({
       ) : null}
 
       {!allowsMultiple && hasMyVote ? (
-        <p className={['text-[11px] font-semibold', muted].join(' ')}>Нажмите другой вариант, чтобы изменить голос</p>
+        <p className={['text-xs font-semibold', muted].join(' ')}>Нажмите другой вариант, чтобы изменить голос</p>
       ) : null}
     </div>
   );
@@ -316,8 +316,8 @@ function AccessRequestMessengerCard({
     }
   };
 
-  const muted = isMine ? 'text-white/80' : 'text-gray-500';
-  const qCls = isMine ? 'text-white' : 'text-gray-900';
+  const muted = isMine ? 'text-white/80' : 'text-[var(--text-secondary)]';
+  const qCls = isMine ? 'text-white' : 'text-[var(--text)]';
 
   if (isOptimistic) {
     return <span className={qCls}>Заявка…</span>;
@@ -325,22 +325,22 @@ function AccessRequestMessengerCard({
 
   return (
     <div className="w-full max-w-[22rem] space-y-3">
-      <div className={['text-[12px] font-extrabold tracking-wide', muted].join(' ')}>Новый пользователь</div>
+      <div className={['text-xs font-extrabold tracking-wide', muted].join(' ')}>Новый пользователь</div>
       <div
         className={[
-          'space-y-2 rounded-2xl border p-3 text-[14px] leading-snug shadow-sm',
-          isMine ? 'border-white/10 bg-white/10 backdrop-blur-sm' : 'border-gray-100 bg-gray-50',
+          'space-y-2 rounded-2xl border p-3 text-sm leading-snug shadow-sm',
+          isMine ? 'border-white/10 bg-white/10 backdrop-blur-sm' : 'border-gray-100 bg-[var(--surface)]',
         ].join(' ')}
       >
         <div className={['font-semibold', qCls].join(' ')}>{full}</div>
         <div className={muted}>
-          <span className={['font-bold', isMine ? 'text-white/90' : 'text-gray-600'].join(' ')}>
+          <span className={['font-bold', isMine ? 'text-white/90' : 'text-[var(--text-secondary)]'].join(' ')}>
             Телефон:
           </span>{' '}
           {phone}
         </div>
         {isRegistration ? (
-          <div className={['text-[12px]', muted].join(' ')}>Регистрация в приложении</div>
+          <div className={['text-xs', muted].join(' ')}>Регистрация в приложении</div>
         ) : null}
       </div>
 
@@ -351,7 +351,7 @@ function AccessRequestMessengerCard({
             disabled={busy || !Number.isFinite(requestId)}
             onClick={() => void run('approve')}
             className={[
-              'rounded-full px-4 py-2 text-[13px] font-extrabold transition-colors disabled:opacity-40',
+              'rounded-full px-4 py-2 text-sm font-extrabold transition-colors disabled:opacity-40',
               isMine ? 'bg-white text-primary' : 'bg-emerald-600 text-white hover:bg-emerald-700',
             ].join(' ')}
           >
@@ -362,8 +362,8 @@ function AccessRequestMessengerCard({
             disabled={busy || !Number.isFinite(requestId)}
             onClick={() => void run('reject')}
             className={[
-              'rounded-full px-4 py-2 text-[13px] font-extrabold transition-colors disabled:opacity-40',
-              isMine ? 'bg-white/20 text-white hover:bg-white/28' : 'bg-stone-200 text-stone-800 hover:bg-stone-300',
+              'rounded-full px-4 py-2 text-sm font-extrabold transition-colors disabled:opacity-40',
+              isMine ? 'bg-white/20 text-white hover:bg-white/28' : 'bg-stone-200 text-[var(--text)] hover:bg-stone-300',
             ].join(' ')}
           >
             Отклонить
@@ -372,14 +372,14 @@ function AccessRequestMessengerCard({
       ) : (
         <p
           className={[
-            'text-[13px] font-bold',
+            'text-sm font-bold',
             resolution === 'approved' ? 'text-emerald-600' : 'text-red-600',
           ].join(' ')}
         >
           {resolution === 'approved' ? 'Заявка принята' : 'Заявка отклонена'}
         </p>
       )}
-      {err ? <p className="text-[12px] font-semibold text-red-600">{err}</p> : null}
+      {err ? <p className="text-xs font-semibold text-red-600">{err}</p> : null}
     </div>
   );
 }
@@ -573,15 +573,15 @@ function MessageBubbleInner({
           <div
             className={[
               'rounded-2xl border p-3 shadow-sm',
-              isMine ? 'border-white/10 bg-white/10 backdrop-blur-sm' : 'border-gray-100 bg-gray-50',
+              isMine ? 'border-white/10 bg-white/10 backdrop-blur-sm' : 'border-gray-100 bg-[var(--surface)]',
             ].join(' ')}
           >
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0">
-                <div className={['text-[12px] font-extrabold tracking-wide', isMine ? 'text-white/75' : 'text-gray-500'].join(' ')}>
+                <div className={['text-xs font-extrabold tracking-wide', isMine ? 'text-white/75' : 'text-[var(--text-secondary)]'].join(' ')}>
                   Молитвенная нужда
                 </div>
-                <div className={['mt-1 whitespace-pre-wrap break-words text-[14px] leading-5', isMine ? 'text-white/95' : 'text-gray-900'].join(' ')}>
+                <div className={['mt-1 whitespace-pre-wrap break-words text-sm leading-5', isMine ? 'text-white/95' : 'text-[var(--text)]'].join(' ')}>
                   {text || '—'}
                 </div>
               </div>
@@ -592,7 +592,7 @@ function MessageBubbleInner({
                 type="button"
                 onClick={handlePrayClick}
                 className={[
-                  'inline-flex items-center gap-2 rounded-full px-3 py-2 text-[13px] font-semibold transition-colors duration-200 active:scale-[0.99]',
+                  'inline-flex items-center gap-2 rounded-full px-3 py-2 text-sm font-semibold transition-colors duration-200 active:scale-[0.99]',
                   isMine
                     ? 'bg-white/10 text-white/95 hover:bg-white/15'
                     : 'bg-primary/10 text-primary hover:bg-primary/15',
@@ -600,7 +600,7 @@ function MessageBubbleInner({
               >
                 <span aria-hidden>🙏</span>
                 <span>Я молюсь</span>
-                <span className={['rounded-full px-2 py-0.5 text-[12px] font-bold', isMine ? 'bg-white/15' : 'bg-primary/15'].join(' ')}>
+                <span className={['rounded-full px-2 py-0.5 text-xs font-bold', isMine ? 'bg-white/15' : 'bg-primary/15'].join(' ')}>
                   {Number.isFinite(count) ? count : 0}
                 </span>
               </button>
@@ -639,8 +639,8 @@ function MessageBubbleInner({
                       target="_blank"
                       rel="noreferrer"
                       className={[
-                        'grid min-h-[84px] place-items-center rounded-xl text-[11px] font-semibold',
-                        isMine ? 'bg-white/10 text-white/90' : 'bg-gray-100 text-gray-700',
+                        'grid min-h-[84px] place-items-center rounded-xl text-xs font-semibold',
+                        isMine ? 'bg-white/10 text-white/90' : 'bg-[var(--surface)] text-[var(--text-secondary)]',
                       ].join(' ')}
                     >
                       HEIC
@@ -668,7 +668,7 @@ function MessageBubbleInner({
               })}
             </div>
             {caption ? (
-              <div className={['px-3 py-2 text-[14px] leading-relaxed', isMine ? 'text-white/95' : 'text-gray-900'].join(' ')}>
+              <div className={['px-3 py-2 text-sm leading-relaxed', isMine ? 'text-white/95' : 'text-[var(--text)]'].join(' ')}>
                 <MentionRichText text={caption} namesById={participantLabelById} isMine={isMine} />
               </div>
             ) : null}
@@ -699,18 +699,18 @@ function MessageBubbleInner({
               'flex max-w-[20rem] items-center justify-between gap-3 rounded-2xl px-3 py-2 ring-1 transition-colors duration-200',
               isMine
                 ? 'bg-white/10 ring-white/10 hover:bg-white/15'
-                : 'bg-gray-50 ring-gray-100 hover:bg-gray-100',
+                : 'bg-[var(--surface)] ring-gray-100 hover:bg-stone-100',
             ].join(' ')}
           >
             <span className="min-w-0">
-              <span className={['block truncate text-[14px] font-semibold', isMine ? 'text-white/95' : 'text-gray-900'].join(' ')}>
+              <span className={['block truncate text-sm font-semibold', isMine ? 'text-white/95' : 'text-[var(--text)]'].join(' ')}>
                 HEIC/HEIF изображение
               </span>
-              <span className={['mt-0.5 block text-[11px] font-semibold', isMine ? 'text-white/70' : 'text-gray-500'].join(' ')}>
+              <span className={['mt-0.5 block text-xs font-semibold', isMine ? 'text-white/70' : 'text-[var(--text-secondary)]'].join(' ')}>
                 Просмотр в браузере ограничен, откройте или скачайте файл
               </span>
             </span>
-            <span className={['inline-flex shrink-0 items-center gap-1 rounded-full px-3 py-1 text-[11px] font-extrabold', isMine ? 'bg-white/12 text-white/90' : 'bg-primary/10 text-primary'].join(' ')}>
+            <span className={['inline-flex shrink-0 items-center gap-1 rounded-full px-3 py-1 text-xs font-extrabold', isMine ? 'bg-white/12 text-white/90' : 'bg-primary/10 text-primary'].join(' ')}>
               <LuDownload size={14} />
               Открыть
             </span>
@@ -738,7 +738,7 @@ function MessageBubbleInner({
             />
           </button>
           {caption ? (
-            <div className={['px-3 py-2 text-[14px] leading-relaxed', isMine ? 'text-white/95' : 'text-gray-900'].join(' ')}>
+            <div className={['px-3 py-2 text-sm leading-relaxed', isMine ? 'text-white/95' : 'text-[var(--text)]'].join(' ')}>
               <MentionRichText text={caption} namesById={participantLabelById} isMine={isMine} />
             </div>
           ) : null}
@@ -763,21 +763,21 @@ function MessageBubbleInner({
             'flex max-w-[20rem] items-center justify-between gap-3 rounded-2xl px-3 py-2 ring-1 transition-colors duration-200',
             isMine
               ? 'bg-white/10 ring-white/10 hover:bg-white/15'
-              : 'bg-gray-50 ring-gray-100 hover:bg-gray-100',
+              : 'bg-[var(--surface)] ring-gray-100 hover:bg-stone-100',
           ].join(' ')}
         >
           <span className="flex min-w-0 items-center gap-3">
-            <span className={['grid h-10 w-10 place-items-center rounded-xl', isMine ? 'bg-white/12 text-white' : 'bg-white text-gray-600 ring-1 ring-gray-100'].join(' ')}>
+            <span className={['grid h-10 w-10 place-items-center rounded-xl', isMine ? 'bg-white/12 text-white' : 'bg-[var(--surface-elevated)] text-[var(--text-secondary)] ring-1 ring-gray-100'].join(' ')}>
               <LuFileText size={18} />
             </span>
             <span className="min-w-0">
-              <span className={['block truncate text-[14px] font-semibold', isMine ? 'text-white/95' : 'text-gray-900'].join(' ')}>{name}</span>
-              <span className={['mt-0.5 block text-[11px] font-semibold', isMine ? 'text-white/70' : 'text-gray-500'].join(' ')}>
+              <span className={['block truncate text-sm font-semibold', isMine ? 'text-white/95' : 'text-[var(--text)]'].join(' ')}>{name}</span>
+              <span className={['mt-0.5 block text-xs font-semibold', isMine ? 'text-white/70' : 'text-[var(--text-secondary)]'].join(' ')}>
                 {sizeLabel ?? 'Файл'}
               </span>
             </span>
           </span>
-          <span className={['inline-flex shrink-0 items-center gap-1 rounded-full px-3 py-1 text-[11px] font-extrabold', isMine ? 'bg-white/12 text-white/90' : 'bg-primary/10 text-primary'].join(' ')}>
+          <span className={['inline-flex shrink-0 items-center gap-1 rounded-full px-3 py-1 text-xs font-extrabold', isMine ? 'bg-white/12 text-white/90' : 'bg-primary/10 text-primary'].join(' ')}>
             <LuDownload size={14} />
             Скачать
           </span>
@@ -908,7 +908,7 @@ function MessageBubbleInner({
         <div
           className={[
             'msg-bubble--deleted rounded-2xl px-4 py-2 text-sm',
-            isMine ? 'rounded-br-sm bg-primary/20 text-white/80' : 'rounded-bl-sm bg-gray-100 text-gray-500',
+            isMine ? 'rounded-br-sm bg-primary/20 text-white/80' : 'rounded-bl-sm bg-[var(--surface)] text-[var(--text-secondary)]',
           ].join(' ')}
         >
           <span className="msg-deleted-text">Сообщение удалено</span>
@@ -924,14 +924,14 @@ function MessageBubbleInner({
   const bubbleClasses = [
     'relative px-3 py-2 sm:px-3.5 sm:py-2',
     bubbleShapeClass,
-    isMine ? 'bg-primary text-white' : 'bg-white text-gray-900 shadow-[0_1px_0.5px_rgba(0,0,0,0.06)]',
+    isMine ? 'bg-primary text-white' : 'bg-[var(--surface-elevated)] text-[var(--text)] shadow-[0_1px_0.5px_rgba(0,0,0,0.06)]',
   ]
     .filter(Boolean)
     .join(' ');
 
   const metaRowClass = [
-    'inline-flex shrink-0 items-center gap-0.5 whitespace-nowrap text-[11px] leading-none',
-    isMine ? 'text-white/70' : 'text-gray-400',
+    'inline-flex shrink-0 items-center gap-0.5 whitespace-nowrap text-xs leading-none',
+    isMine ? 'text-white/70' : 'text-[var(--text-muted)]',
   ].join(' ');
 
   /*
@@ -1108,7 +1108,7 @@ function MessageBubbleInner({
         >
         {/* Sender name (only if first message in group and not mine) */}
         {!isMine && !isGroupedPrev && message.sender_name && (
-          <div className="sender-name mb-1.5 px-1 text-xs font-semibold text-gray-500">{message.sender_name}</div>
+          <div className="sender-name mb-1.5 px-1 text-xs font-semibold text-[var(--text-secondary)]">{message.sender_name}</div>
         )}
 
         {/* Reply preview (tap to jump) */}
@@ -1137,17 +1137,17 @@ function MessageBubbleInner({
 
         {useInlineTextMeta ? (
           <div className="flex min-w-0 flex-row flex-wrap items-end gap-x-2 gap-y-0.5">
-            <div className="msg-content min-w-0 flex-1 whitespace-pre-wrap break-words text-[14px] leading-relaxed sm:text-[15px]">
+            <div className="msg-content min-w-0 flex-1 whitespace-pre-wrap break-words text-sm leading-relaxed sm:text-base">
               {renderContent()}
             </div>
             <div className="ml-auto">{bubbleMeta}</div>
           </div>
         ) : (
           <>
-            <div className="msg-content whitespace-pre-wrap break-words text-[14px] leading-relaxed sm:text-[15px]">{renderContent()}</div>
+            <div className="msg-content whitespace-pre-wrap break-words text-sm leading-relaxed sm:text-base">{renderContent()}</div>
             {message.is_pinned ? (
               <div
-                className={['mt-1 text-[10px] font-bold uppercase tracking-wide', isMine ? 'text-white/60' : 'text-amber-600'].join(' ')}
+                className={['mt-1 text-xs font-bold uppercase tracking-wide', isMine ? 'text-white/60' : 'text-amber-600'].join(' ')}
               >
                 📌 Закреплено
               </div>

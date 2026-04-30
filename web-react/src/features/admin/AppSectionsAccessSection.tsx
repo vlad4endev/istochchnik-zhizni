@@ -65,14 +65,14 @@ export function AppSectionsAccessSection() {
 
   return (
     <section className="space-y-4">
-      <div className="rounded-2xl border border-indigo-200/70 bg-gradient-to-br from-indigo-50 to-white p-4 shadow-[var(--shadow)]">
+      <div className="rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] p-4 shadow-[var(--shadow)]">
         <div className="flex items-start gap-3">
-          <span className="mt-0.5 rounded-xl bg-indigo-100 p-2 text-indigo-700">
+          <span className="mt-0.5 rounded-xl bg-primary/10 p-2 text-primary">
             <LuShieldCheck className="h-5 w-5" />
           </span>
           <div>
-            <h3 className="text-base font-extrabold text-stone-900">Видимость разделов для пользователей</h3>
-            <p className="mt-1 text-sm text-stone-600">
+            <h3 className="text-base font-extrabold text-[var(--text)]">Видимость разделов для пользователей</h3>
+            <p className="mt-1 text-sm text-[var(--text-secondary)]">
               Отключайте ненужные разделы и выбирайте, для каких ролей они будут доступны в меню и по прямой ссылке.
             </p>
           </div>
@@ -92,7 +92,7 @@ export function AppSectionsAccessSection() {
             <article
               key={sectionId}
               className={[
-                'flex flex-wrap items-center gap-4 rounded-[10px] border border-[#F0E9EA] bg-white px-4 py-3.5 transition-opacity',
+                'flex flex-wrap items-center gap-4 rounded-[10px] border border-stone-200/80 bg-[var(--surface-elevated)] px-4 py-3.5 transition-opacity',
                 rule.enabled ? '' : 'opacity-45',
               ].join(' ')}
             >
@@ -105,12 +105,12 @@ export function AppSectionsAccessSection() {
                     disabled={isBusy}
                     onChange={() => void toggleSection(sectionId, !rule.enabled)}
                   />
-                  <span className="absolute inset-0 cursor-pointer rounded-[10px] bg-stone-200 transition-colors peer-checked:bg-[#7B2D3F]" />
-                  <span className="absolute left-[3px] top-[3px] h-[14px] w-[14px] rounded-full bg-white transition-transform peer-checked:translate-x-4" />
+                  <span className="absolute inset-0 cursor-pointer rounded-[10px] bg-stone-200 transition-colors dark:bg-[var(--bg-interactive)] peer-checked:bg-[var(--primary)]" />
+                  <span className="absolute left-[3px] top-[3px] h-[14px] w-[14px] rounded-full bg-[var(--surface-elevated)] transition-transform peer-checked:translate-x-4" />
                 </label>
                 <div className="min-w-0">
-                  <div className="text-sm font-medium text-stone-900">{appSectionLabel(sectionId)}</div>
-                  <div className="text-[11px] text-stone-400">Раздел «{appSectionLabel(sectionId)}»</div>
+                  <div className="text-sm font-medium text-[var(--text)]">{appSectionLabel(sectionId)}</div>
+                  <div className="text-xs text-[var(--text-muted)]">Раздел «{appSectionLabel(sectionId)}»</div>
                 </div>
               </div>
 
@@ -126,8 +126,8 @@ export function AppSectionsAccessSection() {
                       className={[
                         'rounded-[14px] border px-2.5 py-1 text-xs font-medium transition',
                         checked
-                          ? 'border-[#D4B8BE] bg-[#F3EEF0] text-[#7B2D3F]'
-                          : 'border-stone-200 bg-transparent text-stone-500 hover:bg-stone-50',
+                          ? 'border-primary/35 bg-primary/10 text-[var(--primary)]'
+                          : 'border-stone-200 bg-transparent text-[var(--text-secondary)] hover:bg-[var(--surface)]',
                       ].join(' ')}
                     >
                       {appRoleLabel(roleId)}
@@ -140,11 +140,11 @@ export function AppSectionsAccessSection() {
         })}
       </div>
 
-      <div className="mt-4 flex items-center justify-between rounded-[10px] border border-[#F0E9EA] bg-white px-4 py-3">
-        <span className="text-sm text-stone-400">Изменения сохраняются автоматически</span>
+      <div className="mt-4 flex items-center justify-between rounded-[10px] border border-stone-200/80 bg-[var(--surface-elevated)] px-4 py-3">
+        <span className="text-sm text-[var(--text-muted)]">Изменения сохраняются автоматически</span>
         <button
           type="button"
-          className="rounded-lg bg-[#7B2D3F] px-3.5 py-2 text-sm font-semibold text-white transition hover:opacity-95 disabled:opacity-50"
+          className="rounded-lg bg-[var(--primary)] px-3.5 py-2 text-sm font-semibold text-[var(--text-on-primary)] transition hover:opacity-95 disabled:opacity-50"
           disabled={isBusy}
           onClick={() => void qc.invalidateQueries({ queryKey: keys.sections })}
         >

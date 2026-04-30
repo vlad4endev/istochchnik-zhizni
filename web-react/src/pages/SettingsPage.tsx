@@ -1,37 +1,130 @@
 import { Link } from 'react-router-dom';
-import { LuChevronRight, LuSettings, LuUserRound } from 'react-icons/lu';
+import { LuChevronRight, LuMoon, LuSettings, LuSun, LuUserRound } from 'react-icons/lu';
+import { useAppearanceStore } from '../stores/useAppearanceStore';
 
 export function SettingsPage() {
+  const { theme, fontSize, setTheme, setFontSize } = useAppearanceStore();
+  const darkEnabled = theme === 'dark';
+
   return (
     <div className="mx-auto w-full max-w-3xl px-4 py-4 sm:px-6">
-      <section className="rounded-3xl border border-stone-200/80 bg-white p-5 shadow-[var(--shadow-card)]">
+      <section className="rounded-3xl border border-stone-200/80 bg-[var(--surface-elevated)] p-5 shadow-[var(--shadow-card)]">
         <div className="mb-4">
-          <h1 className="text-2xl font-extrabold tracking-tight text-stone-900">Настройки</h1>
-          <p className="mt-1 text-sm font-medium text-stone-500">
+          <h1 className="text-2xl font-extrabold tracking-tight text-[var(--text)]">Настройки</h1>
+          <p className="mt-1 text-sm font-medium text-[var(--text-secondary)]">
             Управление параметрами приложения и профиля.
           </p>
         </div>
 
-        <div className="space-y-2">
+        <div className="space-y-2 pb-2">
           <Link
             to="/profile"
-            className="flex min-h-[52px] items-center justify-between rounded-2xl border border-stone-200/80 bg-stone-50/70 px-4 py-3 hover:bg-stone-100/80"
+            className="flex min-h-[52px] items-center justify-between rounded-2xl border border-stone-200/80 bg-[var(--surface)] px-4 py-3 hover:opacity-90"
           >
-            <span className="inline-flex items-center gap-3 text-sm font-semibold text-stone-800">
+            <span className="inline-flex items-center gap-3 text-sm font-semibold text-[var(--text)]">
               <LuUserRound className="h-4 w-4" aria-hidden />
               Настройки профиля
             </span>
-            <LuChevronRight className="h-4 w-4 text-stone-400" aria-hidden />
+            <LuChevronRight className="h-4 w-4 text-[var(--text-muted)]" aria-hidden />
           </Link>
 
           <div className="flex min-h-[52px] items-center justify-between rounded-2xl border border-stone-200/80 bg-stone-50/50 px-4 py-3">
-            <span className="inline-flex items-center gap-3 text-sm font-semibold text-stone-700">
+            <span className="inline-flex items-center gap-3 text-sm font-semibold text-[var(--text-secondary)]">
               <LuSettings className="h-4 w-4" aria-hidden />
               Общие настройки
             </span>
-            <span className="rounded-full bg-stone-200/80 px-2 py-0.5 text-[11px] font-bold text-stone-700">
+            <span className="rounded-full bg-[var(--surface)] px-2 py-0.5 text-xs font-bold text-[var(--text-secondary)]">
               Скоро
             </span>
+          </div>
+        </div>
+
+        <div className="space-y-6 pt-4">
+          <div>
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <h3 className="text-base font-semibold text-[var(--text)]">Тема оформления</h3>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={darkEnabled}
+                aria-label="Переключить тёмную тему"
+                onClick={() => setTheme(darkEnabled ? 'light' : 'dark')}
+                className="group relative inline-flex h-9 w-[74px] items-center rounded-full border border-stone-300/80 bg-[var(--surface)] px-1 transition-all duration-300 ease-out dark:border-[var(--border-hover)] dark:shadow-[0_0_12px_var(--accent-glow)]"
+              >
+                <span
+                  className={`absolute left-1 inline-flex h-7 w-7 items-center justify-center rounded-full bg-[var(--surface-elevated)] text-amber-500 shadow-sm transition-transform duration-300 ease-out ${darkEnabled ? 'translate-x-9 text-primary' : 'translate-x-0'}`}
+                >
+                  {darkEnabled ? (
+                    <LuMoon className="h-4 w-4 filter dark:drop-shadow-[0_0_4px_var(--primary)]" aria-hidden />
+                  ) : (
+                    <LuSun className="h-4 w-4" aria-hidden />
+                  )}
+                </span>
+                <span className="ml-[10px] flex w-full items-center justify-between px-0.5 text-[10px] font-extrabold uppercase tracking-[0.08em] text-[var(--text-muted)]">
+                  <LuSun className="h-3.5 w-3.5" aria-hidden />
+                  <LuMoon className="h-3.5 w-3.5" aria-hidden />
+                </span>
+              </button>
+            </div>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              {([
+                { key: 'light', label: 'Светлая', preview: 'bg-white border-gray-200' },
+                {
+                  key: 'dark',
+                  label: 'Тёмная',
+                  preview:
+                    'border-[rgba(255,255,255,0.12)] bg-[linear-gradient(145deg,#111114_0%,#15151a_62%,#1b1b20_100%)] shadow-[inset_0_0_0_1px_rgba(255,255,255,0.04)]',
+                },
+                { key: 'sepia', label: 'Сепия', preview: 'bg-amber-50 border-amber-200' },
+                { key: 'system', label: 'Системная', preview: 'bg-gradient-to-br from-white to-gray-900 border-gray-400' },
+              ] as const).map((t) => (
+                <button
+                  key={t.key}
+                  onClick={() => setTheme(t.key)}
+                  className={`flex flex-col items-center gap-2 rounded-2xl border-2 p-3 transition-all ${
+                    theme === t.key ? 'border-[var(--primary)]' : 'border-transparent bg-[var(--surface)]'
+                  }`}
+                >
+                  <div className={`relative h-8 w-12 overflow-hidden rounded-lg border ${t.preview}`}>
+                    {t.key === 'dark' ? (
+                      <>
+                        <span className="absolute left-2 top-2 h-1.5 w-1.5 rounded-full bg-[var(--primary)] shadow-[0_0_8px_var(--primary)]" />
+                        <span className="absolute bottom-1.5 left-2 text-[7px] font-semibold text-white/95">Aa</span>
+                      </>
+                    ) : null}
+                  </div>
+                  <span className="text-xs text-[var(--text-secondary)]">{t.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <h3 className="mb-1 text-base font-semibold text-[var(--text)]">Размер текста</h3>
+            <p className="mb-3 text-sm text-[var(--text-secondary)]">Влияет на весь текст в приложении</p>
+            <div className="flex items-center gap-3 rounded-2xl bg-[var(--surface)] p-1">
+              {([
+                { key: 'small', label: 'А', textClass: 'text-xs' },
+                { key: 'normal', label: 'А', textClass: 'text-sm' },
+                { key: 'large', label: 'А', textClass: 'text-base' },
+                { key: 'xlarge', label: 'А', textClass: 'text-lg' },
+              ] as const).map((f) => (
+                <button
+                  key={f.key}
+                  onClick={() => setFontSize(f.key)}
+                  className={`flex-1 rounded-xl py-2 font-semibold transition-all ${f.textClass} ${
+                    fontSize === f.key
+                      ? 'bg-[var(--primary)] text-[var(--text-on-primary)] shadow-sm'
+                      : 'text-[var(--text-secondary)]'
+                  }`}
+                >
+                  {f.label}
+                </button>
+              ))}
+            </div>
+            <p className="mt-3 rounded-xl bg-[var(--surface)] p-3 text-sm text-[var(--text-secondary)]">
+              Пример текста молитвы при данном размере шрифта. Текст адаптируется по всему приложению.
+            </p>
           </div>
         </div>
       </section>

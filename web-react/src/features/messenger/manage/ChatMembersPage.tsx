@@ -10,6 +10,7 @@ import { SkeletonBox } from '@/components/ui/SkeletonBox';
 import { getAvatarColor } from '../avatarUtils';
 import { formatMessengerLastSeen } from '../lastSeenUtils';
 import { canAddParticipantsToGroup, canManageGroupMessenger, isAppAdministratorRole } from './messengerManageAccess';
+import { ManageDialogShell } from './ManageDialogShell';
 
 /** Единый ключ для сравнения id участника (API может отдать number | string). */
 function normalizeMemberId(raw: unknown): string | null {
@@ -125,12 +126,12 @@ export function ChatMembersPage() {
     >
       <ManageSettingsGroup className="mt-4">
         <div className="flex items-center gap-3 px-3 py-2.5">
-          <LuSearch className="h-5 w-5 shrink-0 text-gray-400" aria-hidden />
+          <LuSearch className="h-5 w-5 shrink-0 text-[var(--text-muted)]" aria-hidden />
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder="Поиск участника…"
-            className="min-h-[40px] w-full bg-transparent text-[16px] text-gray-900 outline-none placeholder:text-gray-400"
+            className="min-h-[40px] w-full bg-transparent text-base text-[var(--text)] outline-none placeholder:text-[var(--text-muted)]"
           />
         </div>
       </ManageSettingsGroup>
@@ -147,31 +148,35 @@ export function ChatMembersPage() {
         ) : err ? (
           <p className="mt-2 text-sm font-medium text-red-600">{err}</p>
         ) : filtered.length === 0 ? (
-          <p className="mt-8 text-center text-sm text-gray-500">Никого не нашли</p>
+          <p className="mt-8 text-center text-sm text-[var(--text-secondary)]">Никого не нашли</p>
         ) : (
           <ManageSettingsGroup>
             <button
               type="button"
               onClick={() => setShowAdd(true)}
-              className="flex w-full items-center gap-3 border-b border-gray-200/70 px-4 py-3 text-left"
+              className="flex w-full items-center gap-3 border-b border-stone-200/70 px-4 py-3 text-left dark:border-[var(--border)]"
             >
               <span className="grid h-9 w-9 place-items-center rounded-full bg-primary/10 text-primary">
                 <LuPlus size={18} />
               </span>
-              <span className="text-[15px] font-semibold text-primary">Добавить участника</span>
+              <span className="text-base font-semibold text-primary">Добавить участника</span>
             </button>
             {recentMembers.length > 0 ? (
-              <div className="flex items-center gap-2 border-b border-gray-200/70 px-4 py-3">
-                <span className="text-[12px] font-semibold text-gray-500">Недавно добавлены:</span>
+              <div className="flex items-center gap-2 border-b border-stone-200/70 px-4 py-3 dark:border-[var(--border)]">
+                <span className="text-xs font-semibold text-[var(--text-secondary)]">Недавно добавлены:</span>
                 <div className="flex items-center">
                   {recentMembers.map((m) => {
                     const displayName = (m.first_name ? `${m.first_name} ${m.last_name ?? ''}`.trim() : m.name) || `Участник ${m.member_id}`;
                     return (
-                      <span key={m.member_id} className="-ml-1 first:ml-0 inline-block h-7 w-7 overflow-hidden rounded-full ring-2 ring-white" title={displayName}>
+                      <span
+                        key={m.member_id}
+                        className="-ml-1 first:ml-0 inline-block h-7 w-7 overflow-hidden rounded-full ring-2 ring-white dark:ring-[var(--bg-elevated)]"
+                        title={displayName}
+                      >
                         <AppAvatar
                           src={m.avatar_url ?? null}
                           fallback={displayName[0]?.toUpperCase() ?? 'U'}
-                          className="grid h-full w-full place-items-center bg-primary/10 text-[11px] font-semibold text-primary"
+                          className="grid h-full w-full place-items-center bg-primary/10 text-xs font-semibold text-primary"
                           imgClassName="h-full w-full object-cover"
                         />
                       </span>
@@ -293,9 +298,23 @@ function MemberRow({
   const displayName = (m.first_name ? `${m.first_name} ${m.last_name ?? ''}`.trim() : m.name) || `Участник ${m.member_id}`;
   const memberPresence = m.is_online ? 'в сети' : formatMessengerLastSeen(m.last_seen_at ?? null);
   const badge =
-    m.role === 'owner' ? { text: 'Владелец', Icon: LuCrown, cls: 'bg-amber-50 text-amber-700 ring-amber-200/70' } :
-    m.role === 'admin' ? { text: 'Админ', Icon: LuShield, cls: 'bg-indigo-50 text-indigo-700 ring-indigo-200/70' } :
-    { text: 'Участник', Icon: LuUser, cls: 'bg-stone-50 text-stone-600 ring-stone-200/70' };
+    m.role === 'owner'
+      ? {
+          text: 'Владелец',
+          Icon: LuCrown,
+          cls: 'bg-amber-50 text-amber-700 ring-amber-200/70 dark:bg-primary/15 dark:text-[var(--text)] dark:ring-[var(--border-hover)]',
+        }
+      : m.role === 'admin'
+        ? {
+            text: 'Админ',
+            Icon: LuShield,
+            cls: 'bg-indigo-50 text-indigo-700 ring-indigo-200/70 dark:bg-primary/10 dark:text-primary dark:ring-primary/30',
+          }
+        : {
+            text: 'Участник',
+            Icon: LuUser,
+            cls: 'bg-stone-50 text-stone-600 ring-stone-200/70 dark:bg-[var(--bg-interactive)] dark:text-[var(--text-secondary)] dark:ring-[var(--border)]',
+          };
 
   return (
     <div
@@ -310,8 +329,8 @@ function MemberRow({
       }}
       className={[
         'flex cursor-pointer items-start gap-3 px-4 py-3 sm:gap-4',
-        'transition-colors hover:bg-stone-50/80 active:bg-stone-100/70',
-        !isLast ? 'border-b border-gray-200/70' : '',
+        'transition-colors hover:bg-stone-50/80 active:bg-stone-100/70 dark:hover:bg-[var(--bg-hover)] dark:active:bg-[var(--bg-interactive)]',
+        !isLast ? 'border-b border-stone-200/70 dark:border-[var(--border)]' : '',
       ]
         .filter(Boolean)
         .join(' ')}
@@ -325,8 +344,8 @@ function MemberRow({
         />
       </div>
       <div className="min-w-0 flex-1">
-        <p className="truncate text-[15px] font-medium text-gray-900">{displayName}</p>
-        <p className="mt-0.5 text-xs text-gray-500">{memberPresence}</p>
+        <p className="truncate text-base font-medium text-[var(--text)]">{displayName}</p>
+        <p className="mt-0.5 text-xs text-[var(--text-secondary)]">{memberPresence}</p>
       </div>
       <div className="flex shrink-0 flex-col items-end gap-2">
         <button
@@ -335,7 +354,7 @@ function MemberRow({
             e.stopPropagation();
             onOpenActions();
           }}
-          className="grid h-7 w-7 place-items-center rounded-full text-gray-500 hover:bg-gray-100"
+          className="grid h-7 w-7 place-items-center rounded-full text-[var(--text-secondary)] hover:bg-[var(--surface)]"
           aria-label="Действия"
         >
           <LuEllipsisVertical size={15} />
@@ -347,13 +366,13 @@ function MemberRow({
               e.stopPropagation();
               onEditPermissions();
             }}
-            className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2.5 py-1 text-[11px] font-semibold text-gray-700"
+            className="inline-flex items-center gap-1 rounded-full bg-[var(--surface)] px-2.5 py-1 text-xs font-semibold text-[var(--text-secondary)]"
           >
             <LuSettings2 size={14} />
             Права
           </button>
         ) : null}
-        <div className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-semibold ring-1 ${badge.cls}`}>
+        <div className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold ring-1 ${badge.cls}`}>
           <badge.Icon size={14} />
           {badge.text}
         </div>
@@ -381,30 +400,30 @@ function MemberActionsMenu({
     (member.first_name ? `${member.first_name} ${member.last_name ?? ''}`.trim() : member.name) ||
     `Участник ${member.member_id}`;
   return (
-    <div className="fixed inset-0 z-[4200] bg-black/30" onClick={onClose}>
-      <div
-        className="absolute bottom-0 left-0 right-0 rounded-t-3xl bg-white p-4 shadow-2xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <p className="mb-2 text-center text-sm font-semibold text-gray-500">{displayName}</p>
-        <button type="button" onClick={() => { void onDirectMessage(); onClose(); }} className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left hover:bg-gray-50">
+    <ManageDialogShell
+      onClose={onClose}
+      zIndexClassName="z-[4200]"
+      backdropClassName="bg-black/30 dark:bg-black/45"
+      contentClassName="rounded-t-3xl p-4 dark:border-t"
+    >
+        <p className="mb-2 text-center text-sm font-semibold text-[var(--text-secondary)]">{displayName}</p>
+        <button type="button" onClick={() => { void onDirectMessage(); onClose(); }} className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left hover:bg-[var(--surface)]">
           <LuMessageSquare size={18} />
-          <span className="text-[15px]">Написать личное сообщение</span>
+          <span className="text-base">Написать личное сообщение</span>
         </button>
         {canManageMembers ? (
-          <button type="button" onClick={() => { void onPromoteAdmin(); onClose(); }} className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left hover:bg-gray-50">
+          <button type="button" onClick={() => { void onPromoteAdmin(); onClose(); }} className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left hover:bg-[var(--surface)]">
             <LuShield size={18} />
-            <span className="text-[15px]">Назначить администратором</span>
+            <span className="text-base">Назначить администратором</span>
           </button>
         ) : null}
         {canManageMembers ? (
-          <button type="button" onClick={() => { void onRemove(); onClose(); }} className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-red-600 hover:bg-red-50">
+          <button type="button" onClick={() => { void onRemove(); onClose(); }} className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-red-600 hover:bg-red-50 dark:text-rose-300 dark:hover:bg-rose-500/10">
             <LuTrash2 size={18} />
-            <span className="text-[15px]">Удалить из группы</span>
+            <span className="text-base">Удалить из группы</span>
           </button>
         ) : null}
-      </div>
-    </div>
+    </ManageDialogShell>
   );
 }
 
@@ -453,8 +472,8 @@ function MemberPermissionsDialog({
     label: string;
     k: keyof typeof p;
   }) => (
-    <label className="flex items-center justify-between gap-3 rounded-2xl bg-stone-50 px-4 py-3 ring-1 ring-stone-200/70">
-      <span className="text-sm font-bold text-stone-800">{label}</span>
+    <label className="flex items-center justify-between gap-3 rounded-2xl bg-[var(--surface)] px-4 py-3 ring-1 ring-stone-200/70 dark:ring-[var(--border)]">
+      <span className="text-sm font-bold text-[var(--text)]">{label}</span>
       <input
         type="checkbox"
         className="h-5 w-5 rounded border-stone-300 text-primary"
@@ -465,15 +484,19 @@ function MemberPermissionsDialog({
   );
 
   return (
-    <div className="fixed inset-0 z-[4000] flex items-end justify-center bg-black/40 p-3 sm:items-center">
-      <div className="max-h-[85vh] w-full max-w-md overflow-y-auto rounded-3xl bg-white p-5 shadow-2xl ring-1 ring-black/5">
+    <ManageDialogShell
+      onClose={onClose}
+      zIndexClassName="z-[4000]"
+      align="center"
+      contentClassName="max-h-[85vh] max-w-md overflow-y-auto p-5"
+    >
         <div className="flex items-center justify-between gap-2">
-          <p className="text-lg font-extrabold text-stone-900">Права участника</p>
-          <button type="button" onClick={onClose} className="grid h-10 w-10 place-items-center rounded-full hover:bg-stone-100" aria-label="Закрыть">
+          <p className="text-lg font-extrabold text-[var(--text)]">Права участника</p>
+          <button type="button" onClick={onClose} className="grid h-10 w-10 place-items-center rounded-full hover:bg-[var(--surface)]" aria-label="Закрыть">
             <LuX />
           </button>
         </div>
-        <p className="mt-1 text-sm font-semibold text-stone-500">
+        <p className="mt-1 text-sm font-semibold text-[var(--text-secondary)]">
           Личные ограничения поверх настроек чата. Владелец и админы по роли сохраняют полные возможности.
         </p>
         <div className="mt-4 space-y-2">
@@ -487,7 +510,7 @@ function MemberPermissionsDialog({
           <button
             type="button"
             onClick={onClose}
-            className="min-h-[48px] flex-1 rounded-2xl bg-stone-100 py-3 text-sm font-extrabold text-stone-800"
+            className="min-h-[48px] flex-1 rounded-2xl bg-[var(--surface)] py-3 text-sm font-extrabold text-[var(--text)]"
           >
             Отмена
           </button>
@@ -500,8 +523,7 @@ function MemberPermissionsDialog({
             {saving ? 'Сохранение…' : 'Сохранить'}
           </button>
         </div>
-      </div>
-    </div>
+    </ManageDialogShell>
   );
 }
 
@@ -613,14 +635,18 @@ function AddMemberDialog({
   const title = 'Добавить участника';
 
   return (
-    <div className="fixed inset-0 z-[3000] flex items-end justify-center bg-black/30 p-3">
-      <div className="w-full max-w-xl overflow-hidden rounded-3xl bg-white shadow-2xl ring-1 ring-black/5">
-        <div className="flex items-center justify-between gap-3 border-b px-4 py-3">
-          <p className="text-sm font-extrabold text-stone-900">{title}</p>
+    <ManageDialogShell
+      onClose={onClose}
+      zIndexClassName="z-[3000]"
+      contentClassName="max-w-xl"
+      backdropClassName="bg-black/30"
+    >
+        <div className="flex items-center justify-between gap-3 border-b border-stone-200/70 px-4 py-3 dark:border-[var(--border)]">
+          <p className="text-sm font-extrabold text-[var(--text)]">{title}</p>
           <button
             type="button"
             onClick={onClose}
-            className="inline-flex h-10 w-10 items-center justify-center rounded-full text-stone-600 hover:bg-stone-100"
+            className="inline-flex h-10 w-10 items-center justify-center rounded-full text-[var(--text-secondary)] hover:bg-[var(--surface)]"
             aria-label="Закрыть"
           >
             <LuX />
@@ -628,17 +654,17 @@ function AddMemberDialog({
         </div>
 
         <div className="px-4 py-3">
-          <div className="flex items-center gap-3 rounded-2xl bg-stone-100 px-4 py-3">
-            <LuSearch className="text-stone-400" />
+          <div className="flex items-center gap-3 rounded-2xl bg-[var(--surface)] px-4 py-3">
+            <LuSearch className="text-[var(--text-muted)]" />
             <input
               value={q}
               onChange={(e) => setQ(e.target.value)}
               placeholder="Введите имя…"
-              className="w-full bg-transparent text-[15px] font-semibold text-stone-800 outline-none placeholder:text-stone-400"
+              className="w-full bg-transparent text-base font-semibold text-[var(--text)] outline-none placeholder:text-[var(--text-muted)]"
               autoFocus
             />
           </div>
-          <p className="mt-2 text-[11px] font-semibold leading-snug text-stone-400">
+          <p className="mt-2 text-xs font-semibold leading-snug text-[var(--text-muted)]">
             В списке только пользователи с одобренной регистрацией. Уже в этом чате отображаются серым и не добавляются повторно.
           </p>
 
@@ -652,7 +678,7 @@ function AddMemberDialog({
                 <SkeletonBox width="100%" height="56px" radius="16px" />
               </div>
             ) : orderedResults.length === 0 ? (
-              <p className="py-6 text-center text-sm font-semibold text-stone-500">
+              <p className="py-6 text-center text-sm font-semibold text-[var(--text-secondary)]">
                 {q.trim() ? 'Никого не нашли' : 'Нет пользователей с активной регистрацией или начните вводить имя'}
               </p>
             ) : (
@@ -671,7 +697,7 @@ function AddMemberDialog({
                         key={idKey ?? m.id}
                         role="listitem"
                         aria-label={`${displayName}, уже в чате`}
-                        className="pointer-events-none flex w-full items-center justify-between gap-3 rounded-2xl bg-stone-100/90 px-4 py-3 text-left ring-1 ring-stone-200/60"
+                        className="pointer-events-none flex w-full items-center justify-between gap-3 rounded-2xl bg-[var(--surface)] px-4 py-3 text-left ring-1 ring-stone-200/60 dark:ring-[var(--border)]"
                       >
                         <div className="flex min-w-0 flex-1 items-center gap-3">
                           <div
@@ -686,11 +712,11 @@ function AddMemberDialog({
                             />
                           </div>
                           <div className="min-w-0">
-                            <p className="truncate text-sm font-semibold text-stone-400">{displayName}</p>
-                            <p className="mt-0.5 text-xs font-semibold text-stone-400">Уже в чате</p>
+                            <p className="truncate text-sm font-semibold text-[var(--text-muted)]">{displayName}</p>
+                            <p className="mt-0.5 text-xs font-semibold text-[var(--text-muted)]">Уже в чате</p>
                           </div>
                         </div>
-                        <span className="inline-flex shrink-0 rounded-full bg-stone-200/90 px-3 py-1 text-xs font-extrabold text-stone-500">
+                        <span className="inline-flex shrink-0 rounded-full bg-stone-200/90 px-3 py-1 text-xs font-extrabold text-[var(--text-secondary)]">
                           В чате
                         </span>
                       </div>
@@ -717,7 +743,7 @@ function AddMemberDialog({
                           setBusyKey(null);
                         }
                       }}
-                      className="flex w-full items-center justify-between gap-3 rounded-2xl bg-white px-4 py-3 text-left shadow-sm ring-1 ring-stone-200/70 hover:bg-stone-50 disabled:opacity-60"
+                      className="flex w-full items-center justify-between gap-3 rounded-2xl bg-[var(--surface-elevated)] px-4 py-3 text-left shadow-sm ring-1 ring-stone-200/70 hover:bg-[var(--surface)] disabled:opacity-60 dark:ring-[var(--border)] dark:hover:bg-[var(--bg-hover)]"
                     >
                       <div className="flex min-w-0 flex-1 items-center gap-3">
                         <div
@@ -732,8 +758,8 @@ function AddMemberDialog({
                           />
                         </div>
                         <div className="min-w-0">
-                          <p className="truncate text-sm font-extrabold text-stone-900">{displayName}</p>
-                          <p className="mt-0.5 text-xs font-semibold text-stone-500">ID: {m.id}</p>
+                          <p className="truncate text-sm font-extrabold text-[var(--text)]">{displayName}</p>
+                          <p className="mt-0.5 text-xs font-semibold text-[var(--text-secondary)]">ID: {m.id}</p>
                         </div>
                       </div>
                       <span className="inline-flex shrink-0 items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-xs font-extrabold text-primary">
@@ -747,8 +773,7 @@ function AddMemberDialog({
             )}
           </div>
         </div>
-      </div>
-    </div>
+    </ManageDialogShell>
   );
 }
 

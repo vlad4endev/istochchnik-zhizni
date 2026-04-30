@@ -769,7 +769,7 @@ export function ChatWindow({
   return (
     <div className="tg-chat-window box-border flex w-full max-w-full min-w-0 min-h-0 flex-1 flex-col overflow-hidden overflow-x-hidden">
       {/* Safe-area только на корне (.tg-chat-window) в messenger.css для iOS — не дублировать здесь */}
-      <header className="chat-header sticky top-0 z-[100] w-full min-w-0 shrink-0 border-b border-gray-200/60 bg-white">
+      <header className="chat-header sticky top-0 z-[100] w-full min-w-0 shrink-0 border-b border-gray-200/60 bg-[var(--surface-elevated)]">
         <div className="mx-auto flex min-h-[52px] w-full min-w-0 max-w-full items-center gap-1 px-1 py-1.5 sm:gap-2 sm:px-2 sm:py-2">
           {/* Слева: «Назад» — только мобилка; на ПК список чатов всегда слева. */}
           <div className="flex shrink-0 items-center md:hidden">
@@ -777,7 +777,7 @@ export function ChatWindow({
               type="button"
               onClick={onBack}
               aria-label="Назад к списку чатов"
-              className="chat-back-btn flex max-w-[min(7rem,28vw)] items-center gap-0.5 rounded-lg py-1.5 pl-1 pr-1 text-[17px] leading-none text-blue-500 transition-colors active:bg-gray-100 sm:max-w-[7.5rem] sm:pl-1.5 sm:pr-2"
+              className="chat-back-btn flex max-w-[min(7rem,28vw)] items-center gap-0.5 rounded-lg py-1.5 pl-1 pr-1 text-lg leading-none text-blue-500 transition-colors active:bg-[var(--surface)] sm:max-w-[7.5rem] sm:pl-1.5 sm:pr-2"
             >
               <LuArrowLeft className="h-[22px] w-[22px] shrink-0" strokeWidth={2.2} aria-hidden />
               <span className="truncate font-normal">Назад</span>
@@ -797,7 +797,7 @@ export function ChatWindow({
             }}
             aria-label={headerInfoAriaLabel}
             title={interlocutorProfilePath != null ? 'Открыть страницу пользователя' : undefined}
-            className="flex min-w-0 flex-1 cursor-pointer items-center gap-2.5 rounded-lg py-0.5 pl-0.5 pr-1 text-left transition-colors active:bg-gray-100/80 sm:gap-3 sm:pr-2"
+            className="flex min-w-0 flex-1 cursor-pointer items-center gap-2.5 rounded-lg py-0.5 pl-0.5 pr-1 text-left transition-colors active:bg-[var(--surface)] sm:gap-3 sm:pr-2"
           >
             {showHeaderSkeleton ? (
               <>
@@ -810,7 +810,7 @@ export function ChatWindow({
             ) : (
               <>
                 <div
-                  className="grid h-9 w-9 shrink-0 place-items-center overflow-hidden rounded-full text-[13px] font-semibold text-white sm:h-10 sm:w-10"
+                  className="grid h-9 w-9 shrink-0 place-items-center overflow-hidden rounded-full text-sm font-semibold text-white sm:h-10 sm:w-10"
                   style={{ backgroundColor: headerAvatarColor }}
                 >
                   <AppAvatar
@@ -822,10 +822,10 @@ export function ChatWindow({
                   />
                 </div>
                 <div className="min-w-0 flex-1 overflow-hidden">
-                  <div className="truncate text-[16px] font-semibold leading-[1.2] text-gray-900 sm:text-[17px]">{displayName}</div>
+                  <div className="truncate text-base font-semibold leading-[1.2] text-[var(--text)] sm:text-lg">{displayName}</div>
                   {typingUsers.length > 0 ? (
                     <div
-                      className={['truncate text-xs leading-tight sm:text-[13px]', headerStatusClass].join(' ')}
+                      className={['truncate text-xs leading-tight sm:text-sm', headerStatusClass].join(' ')}
                       aria-label={`${typingFirstNames.join(', ')} печатает`}
                     >
                       <span>{typingFirstNames.join(', ')} печатает</span>
@@ -836,7 +836,7 @@ export function ChatWindow({
                       </span>
                     </div>
                   ) : headerSubtitle ? (
-                    <div className={['last-seen user-status truncate text-xs leading-tight sm:text-[13px]', headerStatusClass].join(' ')}>
+                    <div className={['last-seen user-status truncate text-xs leading-tight sm:text-sm', headerStatusClass].join(' ')}>
                       {headerSubtitle}
                     </div>
                   ) : null}
@@ -861,7 +861,7 @@ export function ChatWindow({
                     onClick={() => firstUnreadMessageId && jumpToMessage(firstUnreadMessageId)}
                     aria-label="К первому непрочитанному"
                     title="К непрочитанным"
-                    className="inline-flex h-10 min-w-[2rem] items-center justify-center rounded-full px-1.5 text-[13px] font-extrabold text-primary transition-colors hover:bg-primary/10 active:bg-primary/15"
+                    className="inline-flex h-10 min-w-[2rem] items-center justify-center rounded-full px-1.5 text-sm font-extrabold text-primary transition-colors hover:bg-primary/10 active:bg-primary/15"
                   >
                     ↓
                   </button>
@@ -872,7 +872,7 @@ export function ChatWindow({
                     onClick={() => setShowMediaGallery(true)}
                     aria-label="Медиа в этом чате"
                     title="Медиа"
-                    className="inline-flex h-10 w-10 items-center justify-center rounded-full text-gray-600 transition-colors active:bg-gray-100"
+                    className="inline-flex h-10 w-10 items-center justify-center rounded-full text-[var(--text-secondary)] transition-colors active:bg-[var(--surface)]"
                   >
                     <LuLayers size={20} strokeWidth={2.25} />
                   </button>
@@ -882,7 +882,7 @@ export function ChatWindow({
                   onClick={() => navigate(`/messenger/chat/${conversationId}/manage`)}
                   aria-label="Управление чатом"
                   title="Управление"
-                  className="inline-flex h-10 w-10 items-center justify-center rounded-full text-gray-600 transition-colors active:bg-gray-100"
+                  className="inline-flex h-10 w-10 items-center justify-center rounded-full text-[var(--text-secondary)] transition-colors active:bg-[var(--surface)]"
                 >
                   <span className="text-lg font-black leading-none" aria-hidden>
                     ⋮
@@ -892,7 +892,7 @@ export function ChatWindow({
                   type="button"
                   onClick={() => setShowSearch(true)}
                   aria-label="Поиск по сообщениям"
-                  className="inline-flex h-10 w-10 items-center justify-center rounded-full text-gray-600 transition-colors active:bg-gray-100"
+                  className="inline-flex h-10 w-10 items-center justify-center rounded-full text-[var(--text-secondary)] transition-colors active:bg-[var(--surface)]"
                 >
                   <LuSearch size={20} strokeWidth={2.25} />
                 </button>
@@ -905,14 +905,14 @@ export function ChatWindow({
       <div className="tg-chat-window__body flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         {!isDraft && pinnedMessages.length > 0 ? (
           <div className="shrink-0 border-b border-amber-200/80 bg-amber-50/90 px-3 py-2">
-            <p className="text-[10px] font-extrabold uppercase tracking-wider text-amber-900/80">Закреплено</p>
+            <p className="text-xs font-extrabold uppercase tracking-wider text-amber-900/80">Закреплено</p>
             <div className="mt-1 space-y-1">
               {pinnedMessages.map((pm) => (
                 <button
                   key={pm.id}
                   type="button"
                   onClick={() => jumpToMessage(String(pm.id))}
-                  className="block w-full truncate rounded-lg px-2 py-1 text-left text-[13px] font-semibold text-stone-800 transition hover:bg-amber-100/80"
+                  className="block w-full truncate rounded-lg px-2 py-1 text-left text-sm font-semibold text-[var(--text)] transition hover:bg-amber-100/80"
                 >
                   {String(pm.content || '').trim().slice(0, 100) || 'Сообщение'}
                 </button>
@@ -958,7 +958,7 @@ export function ChatWindow({
         ) : null}
         {hasMore ? (
           <div className="flex justify-center">
-            <div className="rounded-full bg-white/90 px-3 py-1 text-[11px] font-semibold text-stone-600 shadow-sm ring-1 ring-stone-200/50">
+            <div className="rounded-full bg-[var(--surface-elevated)] px-3 py-1 text-xs font-semibold text-[var(--text-secondary)] shadow-sm ring-1 ring-stone-200/50">
               {loading ? 'Загрузка истории…' : '↑ Ранние сообщения'}
             </div>
           </div>
@@ -966,8 +966,8 @@ export function ChatWindow({
 
         {messages.length === 0 && !loading ? (
           <div className="flex flex-1 flex-col items-center justify-center py-12 text-center">
-            <p className="text-base font-semibold text-stone-900">Пока тихо</p>
-            <p className="mt-1 max-w-xs text-sm text-stone-500">
+            <p className="text-base font-semibold text-[var(--text)]">Пока тихо</p>
+            <p className="mt-1 max-w-xs text-sm text-[var(--text-secondary)]">
               {conv && conv.type !== 'private'
                 ? 'Напишите первое сообщение в этой беседе — его увидят все участники.'
                 : 'Напишите первое сообщение — оно появится здесь.'}
@@ -1000,7 +1000,7 @@ export function ChatWindow({
                   <div className="flex flex-col gap-3">
                     {msg.showDate ? (
                       <div className="flex justify-center">
-                        <span className="rounded-full bg-white/90 px-3 py-1 text-[11px] font-semibold text-stone-600 shadow-sm ring-1 ring-stone-200/50">
+                        <span className="rounded-full bg-[var(--surface-elevated)] px-3 py-1 text-xs font-semibold text-[var(--text-secondary)] shadow-sm ring-1 ring-stone-200/50">
                           {msg.dateLabel}
                         </span>
                       </div>
@@ -1047,7 +1047,7 @@ export function ChatWindow({
         </div>
       </div>
 
-      <div className="tg-chat-window__composer message-input-bar sticky bottom-0 z-20 w-full min-w-0 max-w-full shrink-0 border-t bg-white p-3">
+      <div className="tg-chat-window__composer message-input-bar sticky bottom-0 z-20 w-full min-w-0 max-w-full shrink-0 border-t bg-[var(--surface-elevated)] p-3">
         <ChatInput
           conversationId={conversationId}
           sendTypingStart={sendTypingStart}

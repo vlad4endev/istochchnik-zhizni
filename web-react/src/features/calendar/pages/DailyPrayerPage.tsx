@@ -108,12 +108,12 @@ function SectionHeader({
             id={id}
             className={
               titleClassName ??
-              'text-[16px] font-extrabold tracking-tight text-stone-900'
+              'text-base font-extrabold tracking-tight text-[var(--text)]'
             }
           >
             {title}
           </h2>
-          {subtitle ? <p className="mt-0.5 text-[13px] leading-snug text-stone-500">{subtitle}</p> : null}
+          {subtitle ? <p className="mt-0.5 text-sm leading-snug text-[var(--text-secondary)]">{subtitle}</p> : null}
         </div>
       </div>
     </div>
@@ -149,12 +149,12 @@ function PrayerCard(props: {
           >
             <Icon className="h-5 w-5" aria-hidden />
           </div>
-          <h3 className="min-w-0 flex-1 pb-1 text-[17px] font-bold leading-snug tracking-tight text-stone-900 shell:text-[18px]">
+          <h3 className="min-w-0 flex-1 pb-1 text-lg font-bold leading-snug tracking-tight text-[var(--text)]">
             {title}
           </h3>
         </div>
       </div>
-      <div className="px-4 py-4 text-[15px] leading-relaxed text-stone-600 shell:px-5 shell:pb-5 [&_p]:whitespace-pre-wrap">
+      <div className="px-4 py-4 text-base leading-relaxed text-[var(--text-secondary)] shell:px-5 shell:pb-5 [&_p]:whitespace-pre-wrap">
         {children}
       </div>
     </article>
@@ -215,7 +215,7 @@ function MemberCard({
       {isMe ? (
         <div className="space-y-3">
           <label className="block">
-            <span className="text-[11px] font-extrabold uppercase tracking-[0.1em] text-stone-500">
+            <span className="text-xs font-extrabold uppercase tracking-[0.1em] text-[var(--text-secondary)]">
               Ваша молитвенная нужда
             </span>
             <textarea
@@ -223,7 +223,7 @@ function MemberCard({
               onChange={(e) => setEditText(e.target.value)}
               rows={5}
               maxLength={8000}
-              className="mt-2 w-full rounded-xl border border-stone-200 bg-white px-3 py-2.5 text-[15px] text-stone-800 outline-none transition-shadow duration-200 ring-primary/15 focus:border-primary focus:ring-2 focus:ring-primary/25"
+              className="mt-2 w-full rounded-xl border border-stone-200 bg-[var(--surface)] px-3 py-2.5 text-base text-[var(--text)] outline-none transition-shadow duration-200 ring-primary/15 focus:border-primary focus:ring-2 focus:ring-primary/25"
               placeholder="О чём просим молиться…"
             />
           </label>
@@ -238,9 +238,9 @@ function MemberCard({
           </button>
         </div>
       ) : hasRequest ? (
-        <p className="text-[16px] text-stone-600">{member.prayer_request}</p>
+        <p className="text-base text-[var(--text-secondary)]">{member.prayer_request}</p>
       ) : (
-        <p className="italic text-stone-400">Нет указанных нужд</p>
+        <p className="italic text-[var(--text-muted)]">Нет указанных нужд</p>
       )}
     </PrayerCard>
   );
@@ -256,12 +256,12 @@ function GlobalThemeCard({ theme, cardIndex = 0 }: { theme: GlobalTheme; cardInd
         <div className="mb-3 rounded-xl border border-[color-mix(in_srgb,var(--theme)_18%,transparent)] bg-[color-mix(in_srgb,var(--theme)_8%,transparent)] px-3.5 py-3.5">
           <div className="flex gap-2.5">
             <LuBookMarked className="mt-0.5 h-[18px] w-[18px] shrink-0 text-[var(--theme)]" aria-hidden />
-            <p className="text-[15px] italic leading-relaxed text-stone-600 whitespace-pre-wrap">{theme.bible_verse}</p>
+            <p className="text-base italic leading-relaxed text-[var(--text-secondary)] whitespace-pre-wrap">{theme.bible_verse}</p>
           </div>
         </div>
       ) : null}
-      {hasPoints ? <p className="text-[16px] leading-relaxed text-stone-600 whitespace-pre-wrap">{theme.prayer_points}</p> : null}
-      {hasNothing ? <p className="italic text-stone-400">Нет дополнительной информации</p> : null}
+      {hasPoints ? <p className="text-base leading-relaxed text-[var(--text-secondary)] whitespace-pre-wrap">{theme.prayer_points}</p> : null}
+      {hasNothing ? <p className="italic text-[var(--text-muted)]">Нет дополнительной информации</p> : null}
     </PrayerCard>
   );
 }
@@ -271,9 +271,9 @@ function MinistryCard({ ministry, cardIndex = 0 }: { ministry: Ministry; cardInd
   return (
     <PrayerCard Icon={LuHammer} title={ministry.title} accentVar="var(--ministry)" cardIndex={cardIndex}>
       {hasPoints ? (
-        <p className="text-[16px] leading-relaxed text-stone-600 whitespace-pre-wrap">{ministry.prayer_points}</p>
+        <p className="text-base leading-relaxed text-[var(--text-secondary)] whitespace-pre-wrap">{ministry.prayer_points}</p>
       ) : (
-        <p className="italic text-stone-400">Нет указанных пунктов молитвы</p>
+        <p className="italic text-[var(--text-muted)]">Нет указанных пунктов молитвы</p>
       )}
     </PrayerCard>
   );
@@ -282,7 +282,7 @@ function MinistryCard({ ministry, cardIndex = 0 }: { ministry: Ministry; cardInd
 function BacksliderCard({ b, cardIndex = 0 }: { b: Backslider; cardIndex?: number }) {
   return (
     <PrayerCard Icon={LuUserX} title={b.name} accentVar="var(--backslider)" cardIndex={cardIndex}>
-      <p className="italic text-stone-500">Отпавший — нуждается в молитве о возвращении</p>
+      <p className="italic text-[var(--text-secondary)]">Отпавший — нуждается в молитве о возвращении</p>
     </PrayerCard>
   );
 }
@@ -307,12 +307,12 @@ function ErrorBlock(props: { err: unknown; onRetry: () => void }) {
       <div className="mx-auto mb-6 flex h-24 w-24 items-center justify-center rounded-full bg-primary/[0.08] text-primary">
         <LuCloudOff className="h-10 w-10" strokeWidth={1.75} aria-hidden />
       </div>
-      <h2 className="text-xl font-bold tracking-tight text-stone-900">Не удалось загрузить данные</h2>
-      <p className="mt-2 text-[15px] leading-relaxed text-stone-500">
+      <h2 className="text-xl font-bold tracking-tight text-[var(--text)]">Не удалось загрузить данные</h2>
+      <p className="mt-2 text-base leading-relaxed text-[var(--text-secondary)]">
         Проверьте подключение к интернету и что бэкенд доступен по HTTPS.
       </p>
-      {detail ? <p className="mt-4 text-[13px] leading-relaxed text-stone-600">{detail}</p> : null}
-      <p className="mt-2 text-xs leading-relaxed text-stone-400">
+      {detail ? <p className="mt-4 text-sm leading-relaxed text-[var(--text-secondary)]">{detail}</p> : null}
+      <p className="mt-2 text-xs leading-relaxed text-[var(--text-muted)]">
         VITE_API_BASE_URL: {envHint}
         <br />
         Запрос: {apiLine}
@@ -340,8 +340,8 @@ function EmptyBlock() {
       <div className="mb-6 flex h-28 w-28 items-center justify-center rounded-full bg-gradient-to-br from-primary/12 to-primary/6 text-primary shadow-[0_8px_32px_rgba(125,54,64,0.12)] ring-1 ring-primary/10">
         <LuHeartHandshake className="h-14 w-14" strokeWidth={1.75} aria-hidden />
       </div>
-      <h2 className="text-xl font-bold tracking-tight text-stone-900">Нет данных на эту дату</h2>
-      <p className="mt-2 text-[15px] leading-relaxed text-stone-500">
+      <h2 className="text-xl font-bold tracking-tight text-[var(--text)]">Нет данных на эту дату</h2>
+      <p className="mt-2 text-base leading-relaxed text-[var(--text-secondary)]">
         Выберите другую дату в календаре выше — появятся темы и нужды.
       </p>
     </div>
@@ -395,7 +395,7 @@ function WeekStripPicker(props: {
         >
           <LuChevronLeft className="h-6 w-6" strokeWidth={2} />
         </button>
-        <p className="min-w-0 flex-1 text-center text-[15px] font-semibold capitalize text-stone-900 shell:text-[17px]">
+        <p className="min-w-0 flex-1 text-center text-base font-semibold capitalize text-[var(--text)]">
           {format(weekStart, 'LLLL yyyy', { locale: ru })}
         </p>
         <button
@@ -408,7 +408,7 @@ function WeekStripPicker(props: {
           <LuChevronRight className="h-6 w-6" strokeWidth={2} />
         </button>
       </div>
-      <div className="mb-1.5 grid grid-cols-7 gap-0.5 text-center text-[11px] font-semibold text-stone-500 shell:text-xs">
+      <div className="mb-1.5 grid grid-cols-7 gap-0.5 text-center text-xs font-semibold text-[var(--text-secondary)]">
         {WEEKDAY_LABELS_SHORT.map((d) => (
           <div key={d}>{d}</div>
         ))}
@@ -426,13 +426,13 @@ function WeekStripPicker(props: {
               disabled={outOfRange}
               onClick={() => onSelect(d)}
               className={[
-                'flex min-h-[44px] w-full items-center justify-center rounded-full text-[13px] font-medium transition-colors duration-200 sm:text-sm shell:h-11 shell:text-[15px]',
+                'flex min-h-[44px] w-full items-center justify-center rounded-full text-sm font-medium transition-colors duration-200 sm:text-sm shell:h-11',
                 outOfRange ? 'cursor-not-allowed opacity-30' : '',
                 isSel
                   ? 'bg-primary font-semibold text-white shadow-sm shadow-primary/25 hover:bg-primary'
                   : isTodayCell
                     ? 'font-bold text-primary hover:bg-stone-100'
-                    : 'text-stone-800 hover:bg-stone-100',
+                    : 'text-[var(--text)] hover:bg-[var(--surface)]',
               ].join(' ')}
             >
               {format(d, 'd')}
@@ -529,7 +529,7 @@ export function DailyPrayerPage() {
             <h2 className="text-[11px] font-extrabold uppercase tracking-[0.14em] text-rose-800">
               Срочная молитвенная нужда
             </h2>
-            <p className="mt-2 whitespace-pre-wrap text-[15px] font-semibold leading-relaxed text-stone-800">
+            <p className="mt-2 whitespace-pre-wrap text-base font-semibold leading-relaxed text-[var(--text)]">
               {urgentPrayerText}
             </p>
           </div>
@@ -578,7 +578,7 @@ export function DailyPrayerPage() {
   return (
     <div className="prayer-page-bg min-h-full pb-6 shell:pb-8">
       <div className={sectionHeroStickyClass}>
-      <header className={sectionHeroHeaderClass}>
+      <header className={`${sectionHeroHeaderClass} prayer-hero`}>
         <div
           className="pointer-events-none absolute -right-4 -top-20 h-48 w-48 rounded-full bg-white/[0.13] blur-3xl animate-prayer-header-breathe motion-reduce:animate-none"
           aria-hidden
@@ -605,7 +605,7 @@ export function DailyPrayerPage() {
           <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary transition-all duration-200 group-hover:scale-105 group-hover:bg-primary/[0.14] group-hover:text-primary-dark motion-reduce:group-hover:scale-100">
             <LuCalendarDays className="h-5 w-5" strokeWidth={2} aria-hidden />
           </span>
-          <span className="min-w-0 flex-1 truncate text-[15px] font-bold text-stone-900 shell:text-base">{chipLabel}</span>
+          <span className="min-w-0 flex-1 truncate text-base font-bold text-[var(--text)] shell:text-base">{chipLabel}</span>
           {isToday ? (
             <span className="shrink-0 rounded-full bg-[color-mix(in_srgb,var(--accent)_14%,transparent)] px-2.5 py-1 text-[10px] font-extrabold tracking-wider text-[var(--accent)]">
               СЕГОДНЯ
@@ -659,13 +659,13 @@ export function DailyPrayerPage() {
                 className="mx-auto [--rdp-accent-color:var(--primary)] [--rdp-background-color:var(--surface-elevated)]"
                 classNames={{
                   root: 'rdp-root relative gap-3',
-                  month_caption: 'flex justify-center px-1 pb-2 text-[16px] font-semibold text-stone-900',
+                  month_caption: 'flex justify-center px-1 pb-2 text-base font-semibold text-[var(--text)]',
                   nav: 'absolute right-0 top-0 flex gap-1',
                   month_grid: 'w-full border-collapse',
-                  weekdays: 'text-[11px] font-semibold text-stone-500 shell:text-xs',
+                  weekdays: 'text-xs font-semibold text-[var(--text-secondary)] shell:text-xs',
                   day: 'p-0.5 text-center',
                   day_button:
-                    'flex h-11 min-h-[44px] w-11 min-w-[44px] items-center justify-center rounded-full text-[13px] font-medium text-stone-800 hover:bg-stone-100 sm:h-10 sm:min-h-[44px] sm:w-10 sm:min-w-[44px] shell:text-[15px]',
+                    'flex h-11 min-h-[44px] w-11 min-w-[44px] items-center justify-center rounded-full text-sm font-medium text-[var(--text)] hover:bg-[var(--surface)] sm:h-10 sm:min-h-[44px] sm:w-10 sm:min-w-[44px]',
                   selected: 'bg-primary font-semibold text-white hover:bg-primary hover:text-white',
                   today: 'font-bold text-primary',
                 }}
@@ -802,11 +802,11 @@ export function DailyPrayerPage() {
               <LuEye className="h-4 w-4" strokeWidth={2.25} />
             </span>
             {prayerSectionViewersQ.isPending ? (
-              <span className="text-[12px] font-semibold text-stone-400 sm:text-[13px]">Считаем посещения…</span>
+              <span className="text-sm font-semibold text-[var(--text-muted)]">Считаем посещения…</span>
             ) : (
-              <p className="text-[12px] font-semibold leading-snug text-stone-600 sm:text-[13px]">
+              <p className="text-sm font-semibold leading-snug text-[var(--text-secondary)]">
                 Сегодня раздел открыли{' '}
-                <span className="tabular-nums font-extrabold text-stone-900">
+                <span className="tabular-nums font-extrabold text-[var(--text)]">
                   {prayerSectionViewersQ.data?.unique_viewers_today ?? 0}
                 </span>{' '}
                 {ruUniqueVisitorsWord(prayerSectionViewersQ.data?.unique_viewers_today ?? 0)}

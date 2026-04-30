@@ -15,13 +15,13 @@ export function ManageScreenShell({ children, trailing }: ManageScreenShellProps
   const navigate = useNavigate();
 
   return (
-    <div className="w-full bg-[#F2F2F7] pb-4">
+    <div className="w-full bg-[#F2F2F7] pb-4 text-[var(--text)] dark:bg-[var(--bg-base)]">
       <div className="mx-auto w-full max-w-xl px-4 pb-24 pt-3 md:max-w-2xl md:px-6 lg:max-w-3xl">
         <div className="flex items-center justify-between gap-2">
           <button
             type="button"
             onClick={() => navigate(-1)}
-            className="flex min-h-[44px] max-w-[50%] items-center gap-0.5 rounded-lg py-2 pl-1 pr-2 text-[17px] leading-none text-blue-500 transition-colors active:bg-black/[0.04]"
+            className="flex min-h-[44px] max-w-[50%] items-center gap-0.5 rounded-lg py-2 pl-1 pr-2 text-lg leading-none text-blue-500 transition-colors active:bg-black/[0.04] dark:text-[var(--text-secondary)] dark:hover:bg-[var(--bg-hover)] dark:active:bg-[var(--bg-interactive)]"
           >
             <LuChevronRight className="h-[22px] w-[22px] shrink-0 rotate-180" strokeWidth={2.2} aria-hidden />
             <span className="truncate font-normal">Назад</span>
@@ -31,7 +31,7 @@ export function ManageScreenShell({ children, trailing }: ManageScreenShellProps
             <button
               type="button"
               onClick={() => navigate('/messenger')}
-              className="inline-flex min-h-[44px] items-center gap-1 rounded-lg px-2 py-2 text-sm font-medium text-gray-600 transition-colors active:bg-black/[0.04]"
+              className="inline-flex min-h-[44px] items-center gap-1 rounded-lg px-2 py-2 text-sm font-medium text-gray-600 transition-colors active:bg-black/[0.04] dark:text-[var(--text-secondary)] dark:hover:bg-[var(--bg-hover)] dark:active:bg-[var(--bg-interactive)]"
               aria-label="Закрыть мессенджер"
             >
               <LuX className="h-5 w-5 shrink-0" strokeWidth={2.2} aria-hidden />
@@ -50,7 +50,7 @@ export function ManageSettingsGroup({ children, className = '' }: { children: Re
   return (
     <div
       className={[
-        'overflow-hidden rounded-xl bg-white shadow-sm ring-1 ring-black/[0.06]',
+        'overflow-hidden rounded-xl bg-white shadow-sm ring-1 ring-black/[0.06] dark:bg-[var(--bg-card)] dark:shadow-[var(--shadow-card)] dark:ring-[var(--border)]',
         className,
       ]
         .filter(Boolean)

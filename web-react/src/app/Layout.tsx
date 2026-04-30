@@ -87,6 +87,7 @@ function navIconClass(isActive: boolean, compact: boolean) {
   return [
     compact ? 'h-5 w-5' : 'h-5 w-5',
     'shrink-0 transition-colors duration-200',
+    isActive && compact ? 'bottom-nav-active-icon' : '',
     isActive && compact ? 'text-primary' : isActive ? 'text-white' : 'text-gray-400 group-hover:text-primary',
   ].join(' ');
 }
@@ -285,8 +286,8 @@ function navClassName(isActive: boolean, compact = false): string {
     : '';
   const active = isActive
     ? compact
-      ? 'bg-primary/10 text-primary'
-      : 'bg-primary text-white shadow-md shadow-primary/25'
+      ? 'bg-primary/10 text-primary nav-active-glow'
+      : 'bg-primary text-white shadow-md shadow-primary/25 nav-active-glow'
     : compact
       ? 'text-gray-400 hover:bg-gray-50 hover:text-gray-700'
       : 'text-stone-600 hover:bg-stone-100 shell:hover:bg-stone-50';
@@ -790,7 +791,9 @@ export function Layout() {
                     navCollapsed
                       ? [
                           'group flex min-h-[52px] w-full items-center justify-center rounded-2xl transition-colors',
-                          isActive ? 'bg-primary text-white shadow-md shadow-primary/25' : 'text-stone-600 hover:bg-stone-100',
+                          isActive
+                            ? 'bg-primary text-white shadow-md shadow-primary/25 nav-active-glow'
+                            : 'text-stone-600 hover:bg-stone-100',
                         ].join(' ')
                       : navClassName(isActive)
                   }
@@ -834,7 +837,9 @@ export function Layout() {
                   [
                     'mb-2 flex min-h-[44px] w-full items-center rounded-xl py-3 text-left text-sm font-semibold transition-colors',
                     navCollapsed ? 'justify-center px-0' : 'px-4',
-                    isActive ? 'bg-primary text-white shadow-md shadow-primary/25' : 'text-stone-600 hover:bg-stone-100',
+                    isActive
+                      ? 'bg-primary text-white shadow-md shadow-primary/25 nav-active-glow'
+                      : 'text-stone-600 hover:bg-stone-100',
                   ].join(' ')
                 }
                 title={navCollapsed ? 'Моя страница' : undefined}
@@ -879,7 +884,9 @@ export function Layout() {
                   [
                     'mb-2 flex min-h-[44px] w-full items-center rounded-xl py-3 text-left text-sm font-semibold transition-colors',
                     navCollapsed ? 'justify-center px-0' : 'px-4',
-                    isActive ? 'bg-primary text-white shadow-md shadow-primary/25' : 'text-stone-600 hover:bg-stone-100',
+                    isActive
+                      ? 'bg-primary text-white shadow-md shadow-primary/25 nav-active-glow'
+                      : 'text-stone-600 hover:bg-stone-100',
                   ].join(' ')
                 }
                 title={navCollapsed ? 'Настройки' : undefined}

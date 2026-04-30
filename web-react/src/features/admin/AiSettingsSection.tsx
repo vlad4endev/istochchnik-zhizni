@@ -18,8 +18,8 @@ const MANUAL_MODEL = '__manual__';
 
 function fieldClass() {
   return (
-    'w-full rounded-xl border border-stone-200/90 bg-white px-3 py-2.5 text-sm text-stone-900 outline-none ' +
-    'focus:border-primary focus:ring-2 focus:ring-primary/20 placeholder:text-stone-400'
+    'w-full rounded-xl border border-stone-200/90 bg-[var(--surface-elevated)] px-3 py-2.5 text-sm text-[var(--text)] outline-none ' +
+    'focus:border-primary focus:ring-2 focus:ring-primary/20 placeholder:text-[var(--text-muted)]'
   );
 }
 
@@ -28,7 +28,7 @@ function btnPrimary(c = '') {
 }
 
 function btnSecondary(c = '') {
-  return `rounded-xl border border-stone-200 bg-white px-3 py-2 text-sm font-semibold text-stone-700 transition hover:bg-stone-50 ${c}`;
+  return `rounded-xl border border-stone-200 bg-[var(--surface-elevated)] px-3 py-2 text-sm font-semibold text-[var(--text-secondary)] transition hover:bg-[var(--surface)] ${c}`;
 }
 
 function optionalApiKeyFromUi(value: string): string | undefined {
@@ -177,7 +177,7 @@ export function AiSettingsSection() {
   }
 
   if (isLoading) {
-    return <div className="h-44 animate-pulse rounded-2xl bg-stone-200/50" />;
+    return <div className="h-44 animate-pulse rounded-2xl bg-[var(--surface)]" />;
   }
 
   if (error) {
@@ -212,23 +212,23 @@ export function AiSettingsSection() {
         </div>
       ) : null}
 
-      <section className="rounded-xl border border-[#F0E9EA] bg-white p-5 shadow-[var(--shadow)] sm:p-6">
-        <h3 className="flex items-center gap-2 text-base font-extrabold text-stone-900">
+      <section className="rounded-xl border border-[#F0E9EA] bg-[var(--surface-elevated)] p-5 shadow-[var(--shadow)] sm:p-6">
+        <h3 className="flex items-center gap-2 text-base font-extrabold text-[var(--text)]">
           <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary">
             <LuBot className="h-5 w-5" />
           </span>
           Подключение к модели
         </h3>
-        <p className="mt-2 text-sm leading-relaxed text-stone-600">
+        <p className="mt-2 text-sm leading-relaxed text-[var(--text-secondary)]">
           Выберите сервис — подставятся адрес API и модель по умолчанию. Дальше вставьте ключ и сохраните.
         </p>
 
         <div className="mt-4 flex flex-wrap items-center gap-2 text-xs">
           <span className="rounded-full bg-[#F3EEF0] px-3 py-1.5 font-semibold text-[#7B2D3F]">1 · Сервис</span>
-          <span className="text-stone-300">→</span>
-          <span className="rounded-full bg-stone-100 px-3 py-1.5 text-stone-500">2 · Ключ API</span>
-          <span className="text-stone-300">→</span>
-          <span className="rounded-full bg-stone-100 px-3 py-1.5 text-stone-500">3 · Сохранить</span>
+          <span className="text-[var(--text-muted)]">→</span>
+          <span className="rounded-full bg-[var(--surface)] px-3 py-1.5 text-[var(--text-secondary)]">2 · Ключ API</span>
+          <span className="text-[var(--text-muted)]">→</span>
+          <span className="rounded-full bg-[var(--surface)] px-3 py-1.5 text-[var(--text-secondary)]">3 · Сохранить</span>
         </div>
 
         <div className="mt-5 grid gap-2.5 sm:grid-cols-2 lg:grid-cols-4">
@@ -242,7 +242,7 @@ export function AiSettingsSection() {
                 className={
                   active
                     ? 'relative flex min-h-[110px] flex-col rounded-xl border-2 border-[#7B2D3F] bg-[#FFF8F8] p-3.5 text-left transition'
-                    : 'flex min-h-[110px] flex-col rounded-xl border-2 border-stone-200 bg-white p-3.5 text-left transition hover:border-[#D4B8BE]'
+                    : 'flex min-h-[110px] flex-col rounded-xl border-2 border-stone-200 bg-[var(--surface-elevated)] p-3.5 text-left transition hover:border-[#D4B8BE]'
                 }
               >
                 {active ? (
@@ -250,8 +250,8 @@ export function AiSettingsSection() {
                     <LuCheck className="h-4 w-4" strokeWidth={2.5} />
                   </span>
                 ) : null}
-                <span className="pr-8 text-[13px] font-semibold text-stone-900">{entry.label}</span>
-                <span className="mt-1 text-[11px] leading-snug text-stone-500">{entry.description}</span>
+                <span className="pr-8 text-sm font-semibold text-[var(--text)]">{entry.label}</span>
+                <span className="mt-1 text-xs leading-snug text-[var(--text-secondary)]">{entry.description}</span>
               </button>
             );
           })}
@@ -261,7 +261,7 @@ export function AiSettingsSection() {
             className={
               form.connection_preset === 'custom'
                 ? 'relative flex min-h-[110px] flex-col rounded-xl border-2 border-[#7B2D3F] bg-[#FFF8F8] p-3.5 text-left transition'
-                : 'flex min-h-[110px] flex-col rounded-xl border-2 border-stone-200 bg-white p-3.5 text-left transition hover:border-[#D4B8BE]'
+                : 'flex min-h-[110px] flex-col rounded-xl border-2 border-stone-200 bg-[var(--surface-elevated)] p-3.5 text-left transition hover:border-[#D4B8BE]'
             }
           >
             {form.connection_preset === 'custom' ? (
@@ -269,26 +269,26 @@ export function AiSettingsSection() {
                 <LuCheck className="h-4 w-4" strokeWidth={2.5} />
               </span>
             ) : null}
-            <span className="flex items-center gap-2 pr-8 text-[13px] font-semibold text-stone-900">
-              <LuServer className="h-4 w-4 text-stone-500" />
+            <span className="flex items-center gap-2 pr-8 text-sm font-semibold text-[var(--text)]">
+              <LuServer className="h-4 w-4 text-[var(--text-secondary)]" />
               Свой URL
             </span>
-            <span className="mt-1 text-[11px] leading-snug text-stone-500">
+            <span className="mt-1 text-xs leading-snug text-[var(--text-secondary)]">
               Любой OpenAI-совместимый endpoint (локально, Azure, прокси).
             </span>
           </button>
         </div>
 
         {form.connection_preset !== 'custom' && activeCatalogEntry ? (
-          <div className="mt-5 rounded-xl border border-stone-200/90 bg-stone-50/70 px-4 py-3 text-xs text-stone-600">
-            <span className="font-semibold text-stone-700">Ключ: </span>
+          <div className="mt-5 rounded-xl border border-stone-200/90 bg-[var(--surface)] px-4 py-3 text-xs text-[var(--text-secondary)]">
+            <span className="font-semibold text-[var(--text)]">Ключ: </span>
             {activeCatalogEntry.key_hint}
           </div>
         ) : null}
 
         <div className="mt-5 space-y-4">
           <div>
-            <label className="mb-1 flex items-center gap-2 text-xs font-semibold text-stone-600">
+            <label className="mb-1 flex items-center gap-2 text-xs font-semibold text-[var(--text-secondary)]">
               <LuKeyRound className="h-3.5 w-3.5" />
               API Key
             </label>
@@ -304,10 +304,10 @@ export function AiSettingsSection() {
               }
               autoComplete="new-password"
             />
-            <p className="mt-1 text-[11px] text-stone-500">
+            <p className="mt-1 text-xs text-[var(--text-secondary)]">
               Оставьте пустым при сохранении, если ключ не меняется. Для сервера можно задать{' '}
-              <code className="rounded bg-stone-100 px-1">AI_API_KEY</code> или{' '}
-              <code className="rounded bg-stone-100 px-1">OPENAI_API_KEY</code>.
+              <code className="rounded bg-[var(--surface)] px-1">AI_API_KEY</code> или{' '}
+              <code className="rounded bg-[var(--surface)] px-1">OPENAI_API_KEY</code>.
             </p>
             {settings.has_api_key ? (
               <button
@@ -386,7 +386,7 @@ export function AiSettingsSection() {
                   ) : null}
                 </div>
               </div>
-              <div className="sm:col-span-2 rounded-lg border border-stone-100 bg-stone-50/90 px-3 py-2 font-mono text-[11px] text-stone-600">
+              <div className="sm:col-span-2 rounded-lg border border-stone-100 bg-stone-50/90 px-3 py-2 font-mono text-xs text-stone-600">
                 <span className="font-sans font-semibold text-stone-500">Endpoint: </span>
                 {form.base_url}
               </div>
@@ -467,7 +467,7 @@ export function AiSettingsSection() {
             <p className="text-sm font-extrabold text-stone-900">Промпты по разделам приложения</p>
             <p className="mt-1 text-xs text-stone-600">
               Опционально: отдельный текст для{' '}
-              <code className="rounded bg-white px-1 font-mono text-[11px]">chatCompletion(..., &#123; section: &apos;…&apos; &#125;)</code>
+              <code className="rounded bg-white px-1 font-mono text-xs">chatCompletion(..., &#123; section: &apos;…&apos; &#125;)</code>
               .
             </p>
             <div className="mt-4 space-y-4">
@@ -493,7 +493,7 @@ export function AiSettingsSection() {
             </div>
           </div>
 
-          <p className="text-[11px] text-stone-500">
+          <p className="text-xs text-stone-500">
             Переопределение через ENV: <code className="rounded bg-stone-100 px-1">AI_BASE_URL</code>,{' '}
             <code className="rounded bg-stone-100 px-1">AI_MODEL</code> — имеет приоритет над полями формы.
           </p>

@@ -12,10 +12,12 @@ import { TopLoader } from './components/ui/TopLoader';
 import { AccessibilityProvider } from './lib/accessibility/AccessibilityProvider';
 import { getAppVariant } from './lib/appVariant';
 import { usePwaStore, type BeforeInstallPromptEvent } from './stores/pwaStore';
+import { initAppearance } from './stores/useAppearanceStore';
 import './index.css';
 
 applyNativeShellViewportLock();
 window.addEventListener('load', () => applyNativeShellViewportLock());
+initAppearance();
 
 function RootRouter() {
   const v = getAppVariant();

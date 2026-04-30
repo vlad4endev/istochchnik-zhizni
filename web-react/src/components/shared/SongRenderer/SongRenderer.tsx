@@ -95,6 +95,7 @@ export function SongRenderer({
   transposeChordSymbol = identityTranspose,
 }: SongRendererProps) {
   const normalizedFontSize = Math.max(12, Math.min(32, fontSizePx));
+  const normalizedFontSizeRem = normalizedFontSize / 16;
   const lineHeight = Math.max(1.45, Math.min(1.75, 1.62 + (normalizedFontSize - 16) * 0.012));
 
   const preparedText = useMemo(() => {
@@ -184,7 +185,7 @@ export function SongRenderer({
   }, [parsedRows, transposedLines]);
 
   return (
-    <div className={className} style={{ fontSize: `${normalizedFontSize}px`, lineHeight }}>
+    <div className={className} style={{ fontSize: `${normalizedFontSizeRem}rem`, lineHeight }}>
       {(() => {
         let currentSectionType: ReturnType<typeof sectionTypeClass> = 'other';
         return transposedRows.map((row) => {

@@ -825,21 +825,21 @@ export function ChatInput({
 
       {/* Swipe-to-reply preview */}
       {replyingTo ? (
-        <div className="mb-2 overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
+        <div className="mb-2 overflow-hidden rounded-2xl border border-gray-100 bg-[var(--surface-elevated)] shadow-sm">
           <div className="flex items-start gap-3 p-3">
             <div className="w-1 self-stretch rounded-full bg-blue-500" aria-hidden />
             <div className="min-w-0 flex-1">
-              <p className="truncate text-xs font-semibold text-gray-900">
+              <p className="truncate text-xs font-semibold text-[var(--text)]">
                 {replyingTo.sender_name || 'Сообщение'}
               </p>
-              <p className="mt-0.5 truncate text-sm text-gray-500">
+              <p className="mt-0.5 truncate text-sm text-[var(--text-secondary)]">
                 {String(replyingTo.content || '').trim() || '—'}
               </p>
             </div>
             <button
               type="button"
               onClick={() => setReplyingTo(null)}
-              className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-gray-500 transition-colors duration-200 hover:bg-gray-100"
+              className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[var(--text-secondary)] transition-colors duration-200 hover:bg-[var(--surface)]"
               aria-label="Отменить ответ"
               title="Отменить"
             >
@@ -850,7 +850,7 @@ export function ChatInput({
       ) : null}
 
       {pendingImages.length > 0 ? (
-        <div className="mb-2 overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
+        <div className="mb-2 overflow-hidden rounded-2xl border border-gray-100 bg-[var(--surface-elevated)] shadow-sm">
           <div className="flex items-start gap-3 p-3">
             <div className="grid min-w-0 flex-1 grid-cols-3 gap-2">
               {pendingImages.slice(0, 6).map((item, idx) => (
@@ -858,7 +858,7 @@ export function ChatInput({
                   key={`${item.file.name}-${idx}`}
                   type="button"
                   onClick={() => item.previewUrl && setPreviewSrc(item.previewUrl)}
-                  className="aspect-square overflow-hidden rounded-xl bg-gray-100 ring-1 ring-gray-200/70"
+                  className="aspect-square overflow-hidden rounded-xl bg-[var(--surface)] ring-1 ring-gray-200/70"
                   aria-label={`Открыть фото ${idx + 1}`}
                 >
                   {item.previewUrl ? (
@@ -877,22 +877,22 @@ export function ChatInput({
                 setPreviewSrc(null);
                 if (fileInputRef.current) fileInputRef.current.value = '';
               }}
-              className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-gray-500 transition-colors duration-200 hover:bg-gray-100"
+              className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[var(--text-secondary)] transition-colors duration-200 hover:bg-[var(--surface)]"
               aria-label="Убрать фотографии"
               title="Убрать фотографии"
             >
               <LuX />
             </button>
           </div>
-          <div className="px-3 pb-3 text-[11px] text-gray-500">
+          <div className="px-3 pb-3 text-xs text-[var(--text-secondary)]">
             Выбрано фото: {pendingImages.length}. Можно добавить подпись и отправить одним сообщением.
           </div>
         </div>
       ) : pending ? (
-        <div className="mb-2 overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
+        <div className="mb-2 overflow-hidden rounded-2xl border border-gray-100 bg-[var(--surface-elevated)] shadow-sm">
           <div className="flex items-start gap-3 p-3">
             {pending.isImage && pending.previewUrl ? (
-              <div className="h-14 w-14 overflow-hidden rounded-xl bg-gray-100 ring-1 ring-gray-200/70">
+              <div className="h-14 w-14 overflow-hidden rounded-xl bg-[var(--surface)] ring-1 ring-gray-200/70">
                 <button
                   type="button"
                   onClick={() => setPreviewSrc(pending.previewUrl)}
@@ -903,17 +903,17 @@ export function ChatInput({
                 </button>
               </div>
             ) : (
-              <div className="grid h-14 w-14 place-items-center rounded-xl bg-gray-100 text-gray-600 ring-1 ring-gray-200/70">
+              <div className="grid h-14 w-14 place-items-center rounded-xl bg-[var(--surface)] text-[var(--text-secondary)] ring-1 ring-gray-200/70">
                 <LuPaperclip />
               </div>
             )}
 
             <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-semibold text-gray-900">{pending.file.name}</p>
-              <p className="mt-0.5 text-xs text-gray-500">
+              <p className="truncate text-sm font-semibold text-[var(--text)]">{pending.file.name}</p>
+              <p className="mt-0.5 text-xs text-[var(--text-secondary)]">
                 {pending.isImage ? 'Фото' : 'Файл'} · {formatBytes(pending.file.size)}
               </p>
-              <p className="mt-1 text-[11px] text-gray-400">
+              <p className="mt-1 text-xs text-[var(--text-muted)]">
                 Можно добавить подпись и нажать «Отправить»
               </p>
             </div>
@@ -926,7 +926,7 @@ export function ChatInput({
                 setPreviewSrc(null);
                 if (fileInputRef.current) fileInputRef.current.value = '';
               }}
-              className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-gray-500 transition-colors duration-200 hover:bg-gray-100"
+              className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[var(--text-secondary)] transition-colors duration-200 hover:bg-[var(--surface)]"
               aria-label="Убрать вложение"
               title="Убрать вложение"
             >
@@ -967,13 +967,13 @@ export function ChatInput({
       ) : null}
 
       {uploading ? (
-        <div className="mb-2 flex items-center justify-between gap-3 rounded-2xl border border-gray-100 bg-white px-4 py-3 shadow-sm">
+        <div className="mb-2 flex items-center justify-between gap-3 rounded-2xl border border-gray-100 bg-[var(--surface-elevated)] px-4 py-3 shadow-sm">
           <div className="min-w-0">
-            <p className="truncate text-sm font-semibold text-gray-900">Загрузка файла…</p>
-            <p className="mt-0.5 truncate text-xs text-gray-500">
+            <p className="truncate text-sm font-semibold text-[var(--text)]">Загрузка файла…</p>
+            <p className="mt-0.5 truncate text-xs text-[var(--text-secondary)]">
               {uploading.name}{uploadPct ? ` · ${uploadPct}%` : ''}
             </p>
-            <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-gray-200">
+            <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-[var(--surface)]">
               <div
                 className="h-full rounded-full bg-primary transition-[width] duration-200"
                 style={{ width: `${Math.max(2, uploadPct)}%` }}
@@ -988,7 +988,7 @@ export function ChatInput({
               setUploadPct(0);
               if (fileInputRef.current) fileInputRef.current.value = '';
             }}
-            className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-gray-500 transition-colors duration-200 hover:bg-gray-100"
+            className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[var(--text-secondary)] transition-colors duration-200 hover:bg-[var(--surface)]"
             aria-label="Отменить"
             title="Отменить"
           >
@@ -1024,7 +1024,7 @@ export function ChatInput({
       >
         {mentionOpen && mentionFiltered.length > 0 ? (
           <div
-            className="mb-1 max-h-40 w-full overflow-y-auto rounded-2xl border border-gray-200 bg-white py-1 shadow-md"
+            className="mb-1 max-h-40 w-full overflow-y-auto rounded-2xl border border-gray-200 bg-[var(--surface-elevated)] py-1 shadow-md"
             role="listbox"
             aria-label="Упоминание участника"
           >
@@ -1038,7 +1038,7 @@ export function ChatInput({
                 onClick={() => pickMention(p.id)}
                 className={[
                   'flex w-full px-3 py-2 text-left text-sm font-semibold',
-                  idx === mentionHighlight ? 'bg-primary/10 text-primary' : 'text-gray-900 hover:bg-gray-50',
+                  idx === mentionHighlight ? 'bg-primary/10 text-primary' : 'text-[var(--text)] hover:bg-[var(--surface)]',
                 ].join(' ')}
               >
                 @{p.label}
@@ -1046,7 +1046,7 @@ export function ChatInput({
             ))}
           </div>
         ) : null}
-        <div className="tg-input-container relative min-w-0 rounded-3xl border border-gray-200 bg-white shadow-sm">
+        <div className="tg-input-container relative min-w-0 rounded-3xl border border-gray-200 bg-[var(--surface-elevated)] shadow-sm">
           <input
             ref={fileInputRef}
             type="file"
@@ -1103,7 +1103,7 @@ export function ChatInput({
           ) : null}
           <textarea
             ref={textareaRef}
-            className="tg-input-textarea text-gray-900 placeholder:text-gray-400"
+            className="tg-input-textarea text-[var(--text)] placeholder:text-[var(--text-muted)]"
             placeholder={
               mentionParticipants.length > 0 ? 'Сообщение… (наберите @ — позвать человека)' : 'Сообщение…'
             }
@@ -1205,7 +1205,7 @@ export function ChatInput({
                 zIndex: 100000,
               }}
               className={[
-                'tg-popover w-56 overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-md',
+                'tg-popover w-56 overflow-hidden rounded-2xl border border-gray-100 bg-[var(--surface-elevated)] shadow-md',
                 attachMenuExiting ? 'tg-popover--out' : '',
               ].join(' ')}
             >
@@ -1213,7 +1213,7 @@ export function ChatInput({
                 type="button"
                 role="menuitem"
                 onClick={() => pickFile('image')}
-                className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm font-semibold text-gray-900 transition-colors duration-200 hover:bg-gray-50 active:bg-gray-100"
+                className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm font-semibold text-[var(--text)] transition-colors duration-200 hover:bg-[var(--surface)] active:bg-stone-100"
               >
                 <span className="grid h-9 w-9 place-items-center rounded-xl bg-blue-50 text-blue-600 ring-1 ring-blue-100">
                   <LuImage size={18} />
@@ -1228,7 +1228,7 @@ export function ChatInput({
                   setAttachMenuOpen(false);
                   setPollModalOpen(true);
                 }}
-                className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm font-semibold text-gray-900 transition-colors duration-200 hover:bg-gray-50 active:bg-gray-100"
+                className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm font-semibold text-[var(--text)] transition-colors duration-200 hover:bg-[var(--surface)] active:bg-stone-100"
               >
                 <span className="grid h-9 w-9 place-items-center rounded-xl bg-violet-50 text-violet-600 ring-1 ring-violet-100">
                   <LuChartColumn size={18} />
@@ -1239,7 +1239,7 @@ export function ChatInput({
                 type="button"
                 role="menuitem"
                 onClick={() => pickFile('file')}
-                className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm font-semibold text-gray-900 transition-colors duration-200 hover:bg-gray-50 active:bg-gray-100"
+                className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm font-semibold text-[var(--text)] transition-colors duration-200 hover:bg-[var(--surface)] active:bg-stone-100"
               >
                 <span className="grid h-9 w-9 place-items-center rounded-xl bg-stone-50 text-stone-700 ring-1 ring-stone-200/70">
                   <LuFileText size={18} />
@@ -1256,7 +1256,7 @@ export function ChatInput({
             <div
               ref={emojiPopoverRef}
               className={[
-                'tg-popover tg-emoji-picker-popover overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-md',
+                'tg-popover tg-emoji-picker-popover overflow-hidden rounded-2xl border border-gray-100 bg-[var(--surface-elevated)] shadow-md',
                 emojiExiting ? 'tg-popover--out' : '',
               ].join(' ')}
               role="dialog"

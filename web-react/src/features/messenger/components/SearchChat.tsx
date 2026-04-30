@@ -122,7 +122,7 @@ export function SearchChat({ conversationId, onClose, onJumpToMessage }: SearchC
             <button
               key={msg.id}
               type="button"
-              className="tg-search-result-item tg-search-result-item--clickable block w-full cursor-pointer rounded-lg border-0 bg-transparent p-0 text-left transition-colors hover:bg-stone-100/80"
+              className="tg-search-result-item tg-search-result-item--clickable block w-full cursor-pointer rounded-lg border-0 bg-transparent p-0 text-left transition-colors hover:bg-[var(--surface)]"
               onClick={() => handlePickResult(msg.id)}
             >
               <MessageBubble message={msg} isGroupedPrev={false} isGroupedNext={false} />

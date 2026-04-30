@@ -94,7 +94,7 @@ export function PollCreateModal({ open, onClose, conversationId }: PollCreateMod
         <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
           <label className="block text-xs font-semibold uppercase tracking-wide text-gray-500">Вопрос</label>
           <textarea
-            className="mt-1.5 w-full resize-none rounded-2xl border border-gray-200 bg-gray-50/80 px-3 py-2.5 text-[15px] text-gray-900 placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+            className="mt-1.5 w-full resize-none rounded-2xl border border-gray-200 bg-gray-50/80 px-3 py-2.5 text-base text-gray-900 placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
             rows={3}
             maxLength={500}
             placeholder="Задайте вопрос…"
@@ -121,7 +121,7 @@ export function PollCreateModal({ open, onClose, conversationId }: PollCreateMod
               <li key={i} className="flex items-center gap-2">
                 <input
                   type="text"
-                  className="min-w-0 flex-1 rounded-xl border border-gray-200 bg-white px-3 py-2 text-[15px] text-gray-900 placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                  className="min-w-0 flex-1 rounded-xl border border-gray-200 bg-white px-3 py-2 text-base text-gray-900 placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
                   maxLength={200}
                   placeholder={`Вариант ${i + 1}`}
                   value={opt}
@@ -156,7 +156,7 @@ export function PollCreateModal({ open, onClose, conversationId }: PollCreateMod
         <div className="border-t border-gray-100 p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
           <button
             type="button"
-            className="w-full rounded-2xl bg-primary py-3 text-[15px] font-bold text-white shadow-sm transition-opacity disabled:opacity-45"
+            className="w-full rounded-2xl bg-primary py-3 text-base font-bold text-white shadow-sm transition-opacity disabled:opacity-45"
             disabled={!canSend}
             onClick={() => void submit()}
           >

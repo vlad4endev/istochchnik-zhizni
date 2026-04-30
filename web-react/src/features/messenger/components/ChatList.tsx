@@ -26,9 +26,9 @@ export function ChatList({ onSelect, activeId }: ChatListProps) {
 
   if (conversationsLoading && !conversationsLoaded) {
     return (
-      <div className="tg-chatlist-root flex min-h-0 flex-1 flex-col bg-white">
-        <div className="shrink-0 border-b border-gray-200/60 px-3 pb-2 pt-2 md:px-4">
-          <div className="flex items-center gap-1 rounded-2xl border border-gray-100 bg-white p-1 shadow-sm">
+      <div className="tg-chatlist-root flex min-h-0 flex-1 flex-col bg-[var(--surface-elevated)]">
+        <div className="shrink-0 border-b border-stone-200/60 px-3 pb-2 pt-2 md:px-4">
+          <div className="flex items-center gap-1 rounded-2xl border border-stone-200/70 bg-[var(--surface-elevated)] p-1 shadow-sm">
             <SkeletonBox height="32px" radius="10px" />
           </div>
         </div>
@@ -50,14 +50,14 @@ export function ChatList({ onSelect, activeId }: ChatListProps) {
   if (conversations.length === 0) {
     return (
       <div className="flex h-full w-full flex-col items-center justify-center p-8 text-center">
-        <p className="text-sm font-semibold text-stone-600">Нет чатов. Нажмите +, чтобы начать.</p>
+        <p className="text-sm font-semibold text-[var(--text-secondary)]">Нет чатов. Нажмите +, чтобы начать.</p>
       </div>
     );
   }
 
   return (
-    <div className="tg-chatlist-root flex min-h-0 flex-1 flex-col bg-white">
-      <div className="shrink-0 border-b border-gray-200/60 px-3 pt-2 pb-2 md:px-4">
+    <div className="tg-chatlist-root flex min-h-0 flex-1 flex-col bg-[var(--surface-elevated)]">
+      <div className="shrink-0 border-b border-stone-200/60 px-3 pb-2 pt-2 md:px-4">
         <SmartTabs
           activeTab={activeTab}
           onChange={setActiveTab}
@@ -68,8 +68,8 @@ export function ChatList({ onSelect, activeId }: ChatListProps) {
         />
       </div>
 
-      <div className="tg-chatlist-scroll chats-scroll-area min-h-0 flex-1 overflow-y-auto bg-white [scrollbar-gutter:stable]">
-        <ul className="min-h-full list-none bg-white" role="list">
+      <div className="tg-chatlist-scroll chats-scroll-area min-h-0 flex-1 overflow-y-auto bg-[var(--surface-elevated)] [scrollbar-gutter:stable]">
+        <ul className="min-h-full list-none bg-[var(--surface-elevated)]" role="list">
           {filtered.map((conv: ConversationListItem, index: number) => (
             <li key={conv.id}>
               <ChatListItem
@@ -84,7 +84,7 @@ export function ChatList({ onSelect, activeId }: ChatListProps) {
         </ul>
         {filtered.length === 0 ? (
           <div className="px-4 py-10 text-center">
-            <p className="text-sm font-semibold text-gray-500">Здесь пока пусто</p>
+            <p className="text-sm font-semibold text-[var(--text-secondary)]">Здесь пока пусто</p>
           </div>
         ) : null}
       </div>
@@ -115,7 +115,7 @@ function SmartTabs({
   ];
 
   return (
-    <div className="flex items-center gap-1 rounded-2xl border border-gray-100 bg-white p-1 shadow-sm">
+    <div className="flex items-center gap-1 rounded-2xl border border-stone-200/70 bg-[var(--surface-elevated)] p-1 shadow-sm">
       {tabs.map((t) => {
         const isActive = t.id === activeTab;
         return (
@@ -124,17 +124,17 @@ function SmartTabs({
             type="button"
             onClick={() => onChange(t.id)}
             className={[
-              'relative inline-flex min-h-[32px] flex-1 items-center justify-center gap-1.5 rounded-xl px-2 py-1.5 text-[11px] font-semibold transition-colors duration-200',
+              'relative inline-flex min-h-[32px] flex-1 items-center justify-center gap-1.5 rounded-xl px-2 py-1.5 text-xs font-semibold transition-colors duration-200',
               isActive
-                ? 'bg-gray-900 text-white shadow-sm'
-                : 'text-gray-500 hover:bg-gray-50 hover:text-gray-700',
+                ? 'bg-[var(--text)] text-[var(--surface-elevated)] shadow-sm'
+                : 'text-[var(--text-secondary)] hover:bg-[var(--surface)] hover:text-[var(--text)]',
             ].join(' ')}
           >
             <span className="truncate">{t.label}</span>
             {t.unread > 0 ? (
               <span
                 className={[
-                  'inline-flex min-w-[18px] items-center justify-center rounded-full px-1 py-px text-[10px] font-bold',
+                  'inline-flex min-w-[18px] items-center justify-center rounded-full px-1 py-px text-xs font-bold',
                   isActive ? 'bg-white/20 text-white' : 'bg-primary/10 text-primary',
                 ].join(' ')}
               >
@@ -318,8 +318,8 @@ function ChatListItem({
         role="listitem"
         className={[
           'tg-chat-row flex w-full touch-manipulation text-left transition-colors duration-150',
-          'active:bg-gray-100',
-          isActive ? 'bg-primary/[0.07]' : 'bg-white hover:bg-gray-50/90',
+          'active:bg-[var(--bg-hover,var(--surface))]',
+          isActive ? 'bg-primary/[0.07]' : 'bg-[var(--surface-elevated)] hover:bg-[var(--surface)]',
         ].join(' ')}
         onClick={handleRowClick}
         onPointerDown={onPointerDown}
@@ -332,7 +332,7 @@ function ChatListItem({
         <div className="flex shrink-0 items-center py-2 pl-3 pr-2">
           <div className="relative h-12 w-12 shrink-0">
             <div
-              className="grid h-12 w-12 place-items-center overflow-hidden rounded-full text-[15px] font-bold text-white"
+              className="grid h-12 w-12 place-items-center overflow-hidden rounded-full text-base font-bold text-white"
               style={{ background: avatarColor }}
             >
               <AppAvatar
@@ -346,7 +346,7 @@ function ChatListItem({
             {conv.type === 'private' ? (
               <span
                 className={[
-                  'pointer-events-none absolute bottom-0 right-0 z-10 h-3 w-3 rounded-full border-[2px] border-white',
+                  'pointer-events-none absolute bottom-0 right-0 z-10 h-3 w-3 rounded-full border-[2px] border-[var(--surface-elevated)]',
                   isOnline ? 'bg-emerald-500' : 'bg-gray-300',
                 ].join(' ')}
                 aria-hidden
@@ -359,7 +359,7 @@ function ChatListItem({
         <div
           className={[
             'flex min-w-0 flex-1 flex-col justify-center py-2 pr-3',
-            !isLast ? 'border-b border-gray-200/60' : '',
+            !isLast ? 'border-b border-stone-200/60' : '',
           ].join(' ')}
         >
           <div className="flex min-w-0 items-baseline justify-between gap-2">
@@ -370,11 +370,11 @@ function ChatListItem({
               {isMuted ? (
                 <LuVolumeX className="h-3.5 w-3.5 shrink-0 text-gray-400" aria-hidden />
               ) : null}
-              <span className="truncate font-semibold text-gray-900">{displayName}</span>
+              <span className="truncate font-semibold text-[var(--text)]">{displayName}</span>
             </div>
             {lastMsg ? (
               <time
-                className="shrink-0 whitespace-nowrap text-xs text-gray-500 tabular-nums"
+                className="shrink-0 whitespace-nowrap text-xs text-[var(--text-secondary)] tabular-nums"
                 dateTime={lastMsg.created_at}
               >
                 {formatTime(lastMsg.created_at)}
@@ -386,7 +386,7 @@ function ChatListItem({
             <p
               className={[
                 'min-w-0 flex-1 truncate text-sm leading-snug',
-                isTyping ? 'font-medium text-primary' : 'text-gray-500',
+                isTyping ? 'font-medium text-primary' : 'text-[var(--text-secondary)]',
               ].join(' ')}
             >
               {previewLine}
@@ -449,14 +449,14 @@ function ChatRowContextMenu({
       <div
         role="menu"
         aria-label="Действия с чатом"
-        className="absolute z-[6001] w-[min(240px,calc(100vw-16px))] overflow-hidden rounded-2xl border border-gray-200 bg-white py-1 shadow-xl"
+        className="absolute z-[6001] w-[min(240px,calc(100vw-16px))] overflow-hidden rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] py-1 shadow-xl"
         style={{ left: x, top: y }}
         onClick={(e) => e.stopPropagation()}
       >
         <button
           type="button"
           role="menuitem"
-          className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-sm font-semibold text-gray-900 hover:bg-gray-50"
+          className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-sm font-semibold text-[var(--text)] hover:bg-[var(--surface)]"
           onClick={() =>
             run(() => patchChatMyUi(conv.id, { uiPinned: !isPinned }))
           }
@@ -467,7 +467,7 @@ function ChatRowContextMenu({
         <button
           type="button"
           role="menuitem"
-          className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-sm font-semibold text-gray-900 hover:bg-gray-50"
+          className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-sm font-semibold text-[var(--text)] hover:bg-[var(--surface)]"
           onClick={() => run(() => patchChatMyUi(conv.id, { muted: !isMuted }))}
         >
           {isMuted ? (
@@ -477,17 +477,17 @@ function ChatRowContextMenu({
             </>
           ) : (
             <>
-              <LuVolumeX className="h-4 w-4 shrink-0 text-gray-600" />
+              <LuVolumeX className="h-4 w-4 shrink-0 text-[var(--text-secondary)]" />
               Убрать звук
             </>
           )}
         </button>
-        <div className="my-1 border-t border-gray-100" />
-        <div className="px-3 py-1 text-[10px] font-extrabold uppercase tracking-wide text-gray-400">Папка</div>
+        <div className="my-1 border-t border-stone-200/70" />
+        <div className="px-3 py-1 text-xs font-extrabold uppercase tracking-wide text-[var(--text-muted)]">Папка</div>
         <button
           type="button"
           role="menuitem"
-          className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm font-semibold text-gray-900 hover:bg-gray-50"
+          className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm font-semibold text-[var(--text)] hover:bg-[var(--surface)]"
           onClick={() => run(() => patchChatMyUi(conv.id, { uiFolder: 'personal' }))}
         >
           <LuFolderOpen className="h-4 w-4 shrink-0 text-sky-600" />
@@ -496,7 +496,7 @@ function ChatRowContextMenu({
         <button
           type="button"
           role="menuitem"
-          className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm font-semibold text-gray-900 hover:bg-gray-50"
+          className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm font-semibold text-[var(--text)] hover:bg-[var(--surface)]"
           onClick={() => run(() => patchChatMyUi(conv.id, { uiFolder: 'ministry' }))}
         >
           <LuFolderOpen className="h-4 w-4 shrink-0 text-violet-600" />
@@ -505,12 +505,12 @@ function ChatRowContextMenu({
         <button
           type="button"
           role="menuitem"
-          className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm font-medium text-gray-600 hover:bg-gray-50"
+          className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm font-medium text-[var(--text-secondary)] hover:bg-[var(--surface)]"
           onClick={() => run(() => patchChatMyUi(conv.id, { uiFolder: null }))}
         >
           Авто (по типу чата)
         </button>
-        <div className="my-1 border-t border-gray-100" />
+        <div className="my-1 border-t border-stone-200/70" />
         <button
           type="button"
           role="menuitem"

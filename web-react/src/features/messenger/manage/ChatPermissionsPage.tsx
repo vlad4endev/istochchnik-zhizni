@@ -87,18 +87,18 @@ export function ChatPermissionsPage() {
 
   return (
     <ManageScreenShell>
-      <ManageSettingsGroup className="mt-4 divide-y divide-gray-200/70">
+      <ManageSettingsGroup className="mt-4 divide-y divide-stone-200/70 dark:divide-[var(--border)]">
         <div className="flex items-start gap-3 p-4">
           <div className="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-primary/10 text-primary">
             <LuLock size={18} />
           </div>
           <div className="min-w-0 flex-1">
-            <p className="text-[17px] font-semibold text-gray-900">Разрешения</p>
-            <p className="mt-1 text-[13px] leading-snug text-gray-500">
+            <p className="text-lg font-semibold text-[var(--text)]">Разрешения</p>
+            <p className="mt-1 text-sm leading-snug text-[var(--text-secondary)]">
               По умолчанию для участников (кроме владельца и админов).
             </p>
             {!canEdit && meta ? (
-              <p className="mt-2 rounded-xl bg-amber-50/95 p-3 text-[12px] font-medium leading-snug text-amber-950 ring-1 ring-amber-200/80">
+              <p className="mt-2 rounded-xl bg-amber-50/95 p-3 text-sm font-medium leading-snug text-amber-950 ring-1 ring-amber-200/80 dark:bg-primary/10 dark:text-[var(--text)] dark:ring-[var(--border-hover)]">
                 Изменять разрешения могут только администраторы приложения или участники с правом «Управление чатом».
               </p>
             ) : null}
@@ -146,14 +146,14 @@ export function ChatPermissionsPage() {
         />
       </ManageSettingsGroup>
 
-      {err ? <p className="mt-3 text-sm font-medium text-red-600">{err}</p> : null}
+      {err ? <p className="mt-3 text-sm font-medium text-red-600 dark:text-rose-300">{err}</p> : null}
 
       <div className="mt-5 px-0.5">
         <button
           type="button"
           disabled={!meta || saving || !canEdit}
           onClick={() => void save()}
-          className="w-full min-h-[48px] rounded-xl bg-primary px-5 py-3 text-[16px] font-semibold text-white shadow-sm transition active:opacity-90 disabled:opacity-50"
+          className="w-full min-h-[48px] rounded-xl bg-primary px-5 py-3 text-base font-semibold text-white shadow-sm transition active:opacity-90 disabled:opacity-50"
         >
           {saving ? 'Сохраняем…' : 'Сохранить'}
         </button>
@@ -186,12 +186,12 @@ function ToggleRow({
         .filter(Boolean)
         .join(' ')}
     >
-      <div className="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-gray-100 text-gray-600">
+      <div className="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-[var(--surface)] text-[var(--text-secondary)]">
         <Icon size={18} />
       </div>
       <div className="min-w-0 flex-1">
-        <p className="text-[15px] font-normal text-gray-900">{title}</p>
-        <p className="mt-0.5 text-[13px] text-gray-500">{description}</p>
+        <p className="text-base font-normal text-[var(--text)]">{title}</p>
+        <p className="mt-0.5 text-sm text-[var(--text-secondary)]">{description}</p>
       </div>
       <button
         type="button"
@@ -203,7 +203,7 @@ function ToggleRow({
         }}
         className={[
           'relative h-8 w-14 rounded-full p-1 transition',
-          value ? 'bg-primary' : 'bg-stone-300',
+          value ? 'bg-primary shadow-[0_0_20px_var(--primary-glow)]' : 'bg-stone-300 dark:bg-[var(--bg-interactive)]',
           disabled ? 'cursor-not-allowed' : '',
         ].join(' ')}
       >

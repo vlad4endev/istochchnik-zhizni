@@ -23,6 +23,7 @@ import { formatMessengerLastSeen } from '../lastSeenUtils';
 import { resolvePublicUrl } from '../../../lib/resolvePublicUrl';
 import { emitAppToast } from '../../../lib/uiFeedback';
 import { ManageScreenShell, ManageSettingsGroup } from './ManageScreenShell';
+import { ManageDialogShell } from './ManageDialogShell';
 import { AppAvatar } from '../../../components/AppAvatar';
 import { SkeletonBox } from '@/components/ui/SkeletonBox';
 import { getAvatarInitial } from '../avatarUtils';
@@ -171,8 +172,8 @@ export function ManageChatHomePage() {
                 fallback={<div className="grid h-full w-full place-items-center text-2xl font-semibold text-primary">{getAvatarInitial(fullName, 'U')}</div>}
               />
             </div>
-            <p className="mt-3 text-center text-[17px] font-semibold text-gray-900">{fullName}</p>
-            <p className="mt-1 text-[13px] text-blue-500">{statusText}</p>
+            <p className="mt-3 text-center text-lg font-semibold text-[var(--text)]">{fullName}</p>
+            <p className="mt-1 text-sm text-blue-500">{statusText}</p>
           </div>
         </ManageSettingsGroup>
         <ManageSettingsGroup className="mt-3">
@@ -215,24 +216,24 @@ export function ManageChatHomePage() {
               imgClassName="h-full w-full object-cover"
               fallback={<div className="grid h-full w-full place-items-center text-primary"><LuUsers size={34} /></div>}
             />
-            <span className="absolute inset-x-0 bottom-0 bg-black/45 py-1 text-[11px] font-semibold text-white opacity-0 transition group-hover:opacity-100">Изменить</span>
+            <span className="absolute inset-x-0 bottom-0 bg-black/45 py-1 text-xs font-semibold text-white opacity-0 transition group-hover:opacity-100">Изменить</span>
           </button>
           <button
             type="button"
             onClick={() => setShowTitleEditor(true)}
-            className="mt-3 inline-flex max-w-full items-center gap-1 text-[21px] font-bold text-gray-900"
+            className="mt-3 inline-flex max-w-full items-center gap-1 text-2xl font-bold text-[var(--text)]"
           >
             <span className="truncate">{title}</span>
-            <LuPencil size={14} className="shrink-0 text-gray-400" />
+            <LuPencil size={14} className="shrink-0 text-[var(--text-muted)]" />
           </button>
           <button
             type="button"
             onClick={() => setShowDescriptionEditor(true)}
-            className="mt-1 block w-full text-[14px] text-gray-500"
+            className="mt-1 block w-full text-sm text-[var(--text-secondary)]"
           >
             {descriptionDraft || 'Добавить описание'}
           </button>
-          <p className="mt-2 text-[12px] font-medium text-gray-500">{loading ? '...' : subtitleFromMeta(meta)}</p>
+          <p className="mt-2 text-xs font-medium text-[var(--text-secondary)]">{loading ? '...' : subtitleFromMeta(meta)}</p>
         </div>
       </ManageSettingsGroup>
 
@@ -241,10 +242,10 @@ export function ManageChatHomePage() {
         <div className="flex items-center gap-3 px-4 py-3">
           <div className="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-primary/10 text-primary"><LuLink2 size={18} /></div>
           <div className="min-w-0 flex-1">
-            <p className="text-[15px] font-medium text-gray-900">Ссылка-приглашение</p>
-            <p className="truncate text-[13px] text-gray-500">{inviteLink}</p>
+            <p className="text-base font-medium text-[var(--text)]">Ссылка-приглашение</p>
+            <p className="truncate text-sm text-[var(--text-secondary)]">{inviteLink}</p>
           </div>
-          <button type="button" onClick={() => { void navigator.clipboard.writeText(inviteLink); emitAppToast('Ссылка скопирована', 'success'); }} className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-gray-100 text-gray-600">
+          <button type="button" onClick={() => { void navigator.clipboard.writeText(inviteLink); emitAppToast('Ссылка скопирована', 'success'); }} className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-[var(--surface)] text-[var(--text-secondary)]">
             <LuCopy size={16} />
           </button>
         </div>
@@ -258,7 +259,7 @@ export function ManageChatHomePage() {
           className="flex w-full items-center gap-3 border-t border-gray-200/70 px-4 py-3 text-left text-red-600"
         >
           <LuRefreshCw size={18} />
-          <span className="text-[15px] font-medium">Сбросить ссылку</span>
+          <span className="text-base font-medium">Сбросить ссылку</span>
         </button>
       </ManageSettingsGroup>
 
@@ -274,7 +275,7 @@ export function ManageChatHomePage() {
       <ManageSettingsGroup className="mt-3">
         <div className="flex items-center gap-3 px-4 py-3">
           <div className="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-primary/10 text-primary"><LuBell size={18} /></div>
-          <span className="min-w-0 flex-1 text-[15px] font-medium text-gray-900">Уведомления</span>
+          <span className="min-w-0 flex-1 text-base font-medium text-[var(--text)]">Уведомления</span>
           <button
             type="button"
             role="switch"
@@ -300,7 +301,7 @@ export function ManageChatHomePage() {
                     if (!chatId) return;
                     void patchChatMyUi(chatId, { muted: true });
                   }}
-                  className={['rounded-full px-3 py-1.5 text-xs font-semibold', muteDuration === dur ? 'bg-primary text-white' : 'bg-stone-100 text-stone-700'].join(' ')}
+                  className={['rounded-full px-3 py-1.5 text-xs font-semibold', muteDuration === dur ? 'bg-primary text-white' : 'bg-[var(--surface)] text-[var(--text-secondary)]'].join(' ')}
                 >
                   {dur === '1h' ? '1 час' : dur === '8h' ? '8 часов' : dur === '1d' ? '1 день' : 'навсегда'}
                 </button>
@@ -322,7 +323,7 @@ export function ManageChatHomePage() {
           className="flex w-full items-center gap-3 px-4 py-3 text-left text-red-600"
         >
           <LuDoorOpen size={18} />
-          <span className="text-[15px] font-medium">Покинуть группу</span>
+          <span className="text-base font-medium">Покинуть группу</span>
         </button>
       </ManageSettingsGroup>
 
@@ -392,18 +393,18 @@ function InfoRow({
     <div
       className={[
         'flex min-h-[48px] items-center gap-3 px-4 py-2.5',
-        !isFirst ? 'border-t border-gray-200/70' : '',
+        !isFirst ? 'border-t border-stone-200/70' : '',
       ].filter(Boolean).join(' ')}
     >
       {Icon ? (
-        <span className="grid h-7 w-7 shrink-0 place-items-center rounded-md bg-gray-100 text-gray-600">
+        <span className="grid h-7 w-7 shrink-0 place-items-center rounded-md bg-[var(--surface)] text-[var(--text-secondary)]">
           <Icon size={16} />
         </span>
       ) : (
         <span className="w-7 shrink-0" aria-hidden />
       )}
-      <span className="min-w-0 flex-1 text-[15px] text-gray-900">{label}</span>
-      <span className="max-w-[55%] shrink-0 text-right text-[15px] text-gray-500">{value}</span>
+      <span className="min-w-0 flex-1 text-base text-[var(--text)]">{label}</span>
+      <span className="max-w-[55%] shrink-0 text-right text-base text-[var(--text-secondary)]">{value}</span>
     </div>
   );
 }
@@ -425,18 +426,18 @@ function SectionCard({
     <Link
       to={to}
       className={[
-        'group flex min-h-[54px] items-center gap-3 px-4 py-3 transition-colors active:bg-gray-50',
-        !isLast ? 'border-b border-gray-200/70' : '',
+        'group flex min-h-[54px] items-center gap-3 px-4 py-3 transition-colors active:bg-[var(--surface)]',
+        !isLast ? 'border-b border-stone-200/70' : '',
       ].filter(Boolean).join(' ')}
     >
       <div className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">
         <Icon size={18} />
       </div>
       <div className="min-w-0 flex-1">
-        <p className="text-[16px] font-medium text-gray-900">{title}</p>
-        <p className="mt-0.5 text-[12px] text-gray-500">{description}</p>
+        <p className="text-base font-medium text-[var(--text)]">{title}</p>
+        <p className="mt-0.5 text-xs text-[var(--text-secondary)]">{description}</p>
       </div>
-      <LuChevronRight className="h-[18px] w-[18px] shrink-0 text-gray-300" aria-hidden />
+      <LuChevronRight className="h-[18px] w-[18px] shrink-0 text-[var(--text-muted)]" aria-hidden />
     </Link>
   );
 }
@@ -444,7 +445,7 @@ function SectionCard({
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
     <div className="sticky top-[56px] z-[5] mt-4 px-1">
-      <p className="rounded-full bg-[#F2F2F7]/95 px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-gray-500 backdrop-blur">
+      <p className="rounded-full bg-[var(--surface)] px-2 py-1 text-xs font-semibold uppercase tracking-wide text-[var(--text-secondary)] backdrop-blur">
         {children}
       </p>
     </div>
@@ -469,11 +470,15 @@ function InlineEditorModal({
   onSave: () => void;
 }) {
   return (
-    <div className="fixed inset-0 z-[4300] bg-black/35" onClick={onClose}>
-      <div className="absolute bottom-0 left-0 right-0 rounded-t-3xl bg-white p-4 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+    <ManageDialogShell
+      onClose={onClose}
+      zIndexClassName="z-[4300]"
+      backdropClassName="bg-black/35"
+      contentClassName="rounded-t-3xl p-4"
+    >
         <div className="mb-3 flex items-center justify-between">
-          <p className="text-[16px] font-semibold text-gray-900">{title}</p>
-          <button type="button" onClick={onClose} className="grid h-9 w-9 place-items-center rounded-full bg-gray-100 text-gray-600">
+          <p className="text-base font-semibold text-[var(--text)]">{title}</p>
+          <button type="button" onClick={onClose} className="grid h-9 w-9 place-items-center rounded-full bg-[var(--surface)] text-[var(--text-secondary)]">
             <LuX size={16} />
           </button>
         </div>
@@ -482,25 +487,24 @@ function InlineEditorModal({
             value={value}
             onChange={(e) => onChange(e.target.value.slice(0, maxLength))}
             maxLength={maxLength}
-            className="min-h-[120px] w-full rounded-xl border border-stone-200 bg-white px-3 py-2 text-[14px] text-stone-800 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+            className="min-h-[120px] w-full rounded-xl border border-stone-200 bg-[var(--surface-elevated)] px-3 py-2 text-sm text-[var(--text)] outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
           />
         ) : (
           <input
             value={value}
             onChange={(e) => onChange(e.target.value.slice(0, maxLength))}
             maxLength={maxLength}
-            className="min-h-[44px] w-full rounded-xl border border-stone-200 bg-white px-3 py-2 text-[15px] font-semibold text-stone-900 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+            className="min-h-[44px] w-full rounded-xl border border-stone-200 bg-[var(--surface-elevated)] px-3 py-2 text-base font-semibold text-[var(--text)] outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
           />
         )}
-        <p className="mt-1 text-right text-[11px] text-gray-400">{value.length}/{maxLength}</p>
+        <p className="mt-1 text-right text-xs text-[var(--text-muted)]">{value.length}/{maxLength}</p>
         <button
           type="button"
           onClick={onSave}
-          className="mt-3 w-full min-h-[46px] rounded-xl bg-primary px-4 py-2 text-[15px] font-semibold text-white"
+          className="mt-3 w-full min-h-[46px] rounded-xl bg-primary px-4 py-2 text-base font-semibold text-white"
         >
           Сохранить
         </button>
-      </div>
-    </div>
+    </ManageDialogShell>
   );
 }

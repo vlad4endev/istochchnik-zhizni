@@ -87,13 +87,13 @@ type FullReportPayload = {
 function severityClass(severity: AuditIssue['severity']): string {
   if (severity === 'CRITICAL' || severity === 'HIGH') return 'bg-red-50';
   if (severity === 'MEDIUM') return 'bg-amber-50';
-  return 'bg-stone-50';
+  return 'bg-[var(--surface)]';
 }
 
 function severityBadgeClass(severity: AuditIssue['severity']): string {
   if (severity === 'CRITICAL' || severity === 'HIGH') return 'bg-red-100 text-red-700';
   if (severity === 'MEDIUM') return 'bg-amber-100 text-amber-800';
-  return 'bg-stone-200 text-stone-700';
+  return 'bg-stone-200 text-[var(--text-secondary)]';
 }
 
 function scoreClass(score: number): string {
@@ -129,7 +129,7 @@ export function DiagnosticsDashboardSection() {
             ⚡
           </div>
           <div className="min-w-0 flex-1">
-            <h3 className="text-[17px] font-semibold">Диагностика проекта</h3>
+            <h3 className="text-lg font-semibold">Диагностика проекта</h3>
             <p className="mt-1 text-sm text-white/80">
               Собирает health, метрики сервера, сканирование структуры и AI-аудит в одном месте.
             </p>
@@ -160,55 +160,55 @@ export function DiagnosticsDashboardSection() {
 
       <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <article className="rounded-[10px] border border-[#F0E9EA] bg-white p-4">
-          <p className="mb-2 text-[11px] font-medium uppercase tracking-[0.5px] text-stone-400">Здоровье сервера</p>
+          <p className="mb-2 text-xs font-medium uppercase tracking-[0.5px] text-stone-400">Здоровье сервера</p>
           <p
             className={[
-              'text-[26px] font-bold leading-none',
+              'text-3xl font-bold leading-none',
               report?.readiness?.overall === 'healthy'
                 ? 'text-emerald-700'
                 : report?.readiness?.overall === 'critical'
                   ? 'text-red-600'
-                  : 'text-stone-900',
+                : 'text-[var(--text)]',
             ].join(' ')}
           >
             {report?.readiness?.overall ?? '—'}
           </p>
-          <p className="mt-1 text-xs text-stone-400">{report?.generatedAt ?? 'Нет данных'}</p>
+          <p className="mt-1 text-xs text-[var(--text-muted)]">{report?.generatedAt ?? 'Нет данных'}</p>
         </article>
         <article className="rounded-[10px] border border-[#F0E9EA] bg-white p-4">
-          <p className="mb-2 text-[11px] font-medium uppercase tracking-[0.5px] text-stone-400">CPU / RAM / DISK</p>
-          <p className="text-[26px] font-bold leading-none text-stone-900">
+          <p className="mb-2 text-xs font-medium uppercase tracking-[0.5px] text-stone-400">CPU / RAM / DISK</p>
+          <p className="text-3xl font-bold leading-none text-[var(--text)]">
             {Number(report?.server?.cpu?.usagePercent ?? 0).toFixed(1)}% / {Number(report?.server?.memory?.usagePercent ?? 0).toFixed(1)}% / {Number(report?.server?.disk?.usagePercent ?? 0).toFixed(1)}%
           </p>
-          <p className="mt-1 text-xs text-stone-400">PID: {report?.server?.runtime?.pid ?? '—'}</p>
+          <p className="mt-1 text-xs text-[var(--text-muted)]">PID: {report?.server?.runtime?.pid ?? '—'}</p>
         </article>
         <article className="rounded-[10px] border border-[#F0E9EA] bg-white p-4">
-          <p className="mb-2 text-[11px] font-medium uppercase tracking-[0.5px] text-stone-400">Здоровье проекта</p>
-          <p className="text-[26px] font-bold leading-none text-stone-900">
+          <p className="mb-2 text-xs font-medium uppercase tracking-[0.5px] text-stone-400">Здоровье проекта</p>
+          <p className="text-3xl font-bold leading-none text-[var(--text)]">
             {report?.project?.filesScanned ?? 0} / {report?.project?.linesOfCode ?? 0}
           </p>
-          <p className="mt-1 text-xs text-stone-400">Папок: {report?.project?.directoriesScanned ?? 0}</p>
+          <p className="mt-1 text-xs text-[var(--text-muted)]">Папок: {report?.project?.directoriesScanned ?? 0}</p>
         </article>
         <article className="rounded-[10px] border border-[#F0E9EA] bg-white p-4">
-          <p className="mb-2 text-[11px] font-medium uppercase tracking-[0.5px] text-stone-400">Итоговый score</p>
-          <p className={`text-[26px] font-bold leading-none ${scoreClass(Number(report?.audit?.overallScore ?? 0))}`}>
+          <p className="mb-2 text-xs font-medium uppercase tracking-[0.5px] text-stone-400">Итоговый score</p>
+          <p className={`text-3xl font-bold leading-none ${scoreClass(Number(report?.audit?.overallScore ?? 0))}`}>
             {Math.round(Number(report?.audit?.overallScore ?? 0))}
           </p>
-          <p className="mt-1 text-xs text-stone-400">0-100 (AI audit)</p>
+          <p className="mt-1 text-xs text-[var(--text-muted)]">0-100 (AI audit)</p>
         </article>
       </section>
 
       {!report ? (
-        <section className="flex min-h-[180px] flex-col items-center justify-center rounded-xl border border-stone-200 bg-white text-center">
+        <section className="flex min-h-[180px] flex-col items-center justify-center rounded-xl border border-stone-200 bg-[var(--surface-elevated)] text-center">
           <div className="text-3xl" aria-hidden>
             📊
           </div>
-          <p className="mt-3 text-sm text-stone-600">Нажмите «Проверить и собрать отчёт» чтобы получить полный анализ</p>
+          <p className="mt-3 text-sm text-[var(--text-secondary)]">Нажмите «Проверить и собрать отчёт» чтобы получить полный анализ</p>
         </section>
       ) : (
         <>
-          <section className="rounded-xl border border-stone-200 bg-white p-5">
-            <h4 className="text-sm font-extrabold text-stone-900">Валидация релиза (gate)</h4>
+          <section className="rounded-xl border border-stone-200 bg-[var(--surface-elevated)] p-5">
+            <h4 className="text-sm font-extrabold text-[var(--text)]">Валидация релиза (gate)</h4>
             <div className="mt-3 flex items-center gap-2">
               <span
                 className={
@@ -219,7 +219,7 @@ export function DiagnosticsDashboardSection() {
               >
                 {report.releaseValidation.pass ? '✓ Прошло' : '✕ Не прошло'}
               </span>
-              <span className="text-sm text-stone-600">
+              <span className="text-sm text-[var(--text-secondary)]">
                 {report.releaseValidation.pass ? 'Релиз можно пропускать' : 'Есть блокирующие проблемы'}
               </span>
             </div>
@@ -230,31 +230,31 @@ export function DiagnosticsDashboardSection() {
             ) : null}
           </section>
 
-          <section className="rounded-xl border border-stone-200 bg-white p-5">
-            <h4 className="text-sm font-extrabold text-stone-900">Сводка аудита</h4>
-            <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-stone-700">{report.audit.summary}</p>
+          <section className="rounded-xl border border-stone-200 bg-[var(--surface-elevated)] p-5">
+            <h4 className="text-sm font-extrabold text-[var(--text)]">Сводка аудита</h4>
+            <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-[var(--text-secondary)]">{report.audit.summary}</p>
             {report.truthfulnessNote ? (
-              <p className="mt-3 rounded-lg border border-stone-200 bg-stone-50 px-3 py-2 text-xs text-stone-600">
+              <p className="mt-3 rounded-lg border border-stone-200 bg-[var(--surface)] px-3 py-2 text-xs text-[var(--text-secondary)]">
                 {report.truthfulnessNote}
               </p>
             ) : null}
           </section>
 
-          <section className="rounded-xl border border-stone-200 bg-white p-5">
-            <h4 className="text-sm font-extrabold text-stone-900">Проблемы и рекомендации</h4>
+          <section className="rounded-xl border border-stone-200 bg-[var(--surface-elevated)] p-5">
+            <h4 className="text-sm font-extrabold text-[var(--text)]">Проблемы и рекомендации</h4>
             <div className="mt-3 space-y-1.5">
               {(report.audit.issues ?? []).length === 0 ? (
-                <p className="text-sm text-stone-500">Проблем не обнаружено.</p>
+                <p className="text-sm text-[var(--text-secondary)]">Проблем не обнаружено.</p>
               ) : (
                 report.audit.issues.map((issue) => (
                   <article key={issue.id} className={`flex gap-2.5 rounded-lg px-3 py-2.5 ${severityClass(issue.severity)}`}>
-                    <span className={`h-fit shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold ${severityBadgeClass(issue.severity)}`}>
+                    <span className={`h-fit shrink-0 rounded px-1.5 py-0.5 text-xs font-bold ${severityBadgeClass(issue.severity)}`}>
                       {issue.severity}
                     </span>
                     <div className="min-w-0">
-                      <p className="text-sm font-semibold text-stone-900">{issue.title}</p>
-                      <p className="mt-1 text-sm text-stone-700">{issue.description}</p>
-                      <p className="mt-1 text-xs text-stone-600">Рекомендация: {issue.suggestion}</p>
+                      <p className="text-sm font-semibold text-[var(--text)]">{issue.title}</p>
+                      <p className="mt-1 text-sm text-[var(--text-secondary)]">{issue.description}</p>
+                      <p className="mt-1 text-xs text-[var(--text-secondary)]">Рекомендация: {issue.suggestion}</p>
                     </div>
                   </article>
                 ))
@@ -267,25 +267,25 @@ export function DiagnosticsDashboardSection() {
       <>
       <section className="grid gap-4 xl:grid-cols-2">
         <article className="rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] p-5 shadow-[var(--shadow)]">
-          <h4 className="text-sm font-extrabold text-stone-900">Топ файлов по размеру</h4>
+          <h4 className="text-sm font-extrabold text-[var(--text)]">Топ файлов по размеру</h4>
           <div className="mt-3 space-y-2">
             {(report?.project?.topLargestFiles ?? []).slice(0, 10).map((file) => (
-              <div key={file.path} className="rounded-xl border border-stone-200 bg-white px-3 py-2 text-xs text-stone-700">
-                <div className="truncate font-semibold text-stone-900">{file.path}</div>
+              <div key={file.path} className="rounded-xl border border-stone-200 bg-[var(--surface-elevated)] px-3 py-2 text-xs text-[var(--text-secondary)]">
+                <div className="truncate font-semibold text-[var(--text)]">{file.path}</div>
                 <div className="mt-1">
                   {(file.sizeBytes / 1024).toFixed(1)} KB · {file.lines} lines
                 </div>
               </div>
             ))}
             {(report?.project?.topLargestFiles ?? []).length === 0 ? (
-              <p className="text-sm text-stone-500">Нет данных.</p>
+              <p className="text-sm text-[var(--text-secondary)]">Нет данных.</p>
             ) : null}
           </div>
         </article>
 
         <article className="rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] p-5 shadow-[var(--shadow)]">
-          <h4 className="text-sm font-extrabold text-stone-900">Технологический срез</h4>
-          <div className="mt-3 rounded-xl border border-stone-200 bg-white p-3 text-sm text-stone-700">
+          <h4 className="text-sm font-extrabold text-[var(--text)]">Технологический срез</h4>
+          <div className="mt-3 rounded-xl border border-stone-200 bg-[var(--surface-elevated)] p-3 text-sm text-[var(--text-secondary)]">
             <p>
               Зависимости: <strong>{report?.project?.packageDependenciesCount ?? 0}</strong> · DevDependencies:{' '}
               <strong>{report?.project?.packageDevDependenciesCount ?? 0}</strong>
@@ -301,7 +301,7 @@ export function DiagnosticsDashboardSection() {
               .map(([ext, count]) => (
                 <span
                   key={ext}
-                  className="rounded-full border border-stone-200 bg-white px-2.5 py-1 text-xs font-semibold text-stone-700"
+                  className="rounded-full border border-stone-200 bg-[var(--surface-elevated)] px-2.5 py-1 text-xs font-semibold text-[var(--text-secondary)]"
                 >
                   {ext}: {count}
                 </span>
@@ -312,8 +312,8 @@ export function DiagnosticsDashboardSection() {
 
       <section className="grid gap-4 xl:grid-cols-2">
         <article className="rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] p-5 shadow-[var(--shadow)]">
-          <h4 className="text-sm font-extrabold text-stone-900">Скорость проверки</h4>
-          <div className="mt-3 rounded-xl border border-stone-200 bg-white p-3 text-sm text-stone-700">
+          <h4 className="text-sm font-extrabold text-[var(--text)]">Скорость проверки</h4>
+          <div className="mt-3 rounded-xl border border-stone-200 bg-[var(--surface-elevated)] p-3 text-sm text-[var(--text-secondary)]">
             <p>DB health check: {report?.performance?.healthCheckMs ?? 0} ms</p>
             <p>Server metrics: {report?.performance?.serverCheckMs ?? 0} ms</p>
             <p>Project scan: {report?.performance?.scanCheckMs ?? 0} ms</p>
@@ -322,8 +322,8 @@ export function DiagnosticsDashboardSection() {
           </div>
         </article>
         <article className="rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] p-5 shadow-[var(--shadow)]">
-          <h4 className="text-sm font-extrabold text-stone-900">Анализ журнала</h4>
-          <div className="mt-3 rounded-xl border border-stone-200 bg-white p-3 text-sm text-stone-700">
+          <h4 className="text-sm font-extrabold text-[var(--text)]">Анализ журнала</h4>
+          <div className="mt-3 rounded-xl border border-stone-200 bg-[var(--surface-elevated)] p-3 text-sm text-[var(--text-secondary)]">
             <p>Всего логов: {report?.journal?.total ?? 0}</p>
             <p>
               info/warn/error: {report?.journal?.byLevel?.info ?? 0}/{report?.journal?.byLevel?.warn ?? 0}/
@@ -332,7 +332,7 @@ export function DiagnosticsDashboardSection() {
           </div>
           <div className="mt-3 space-y-1">
             {(report?.journal?.topEvents ?? []).slice(0, 6).map((ev) => (
-              <div key={ev.event} className="rounded-lg border border-stone-200 bg-white px-2.5 py-1.5 text-xs text-stone-700">
+              <div key={ev.event} className="rounded-lg border border-stone-200 bg-[var(--surface-elevated)] px-2.5 py-1.5 text-xs text-[var(--text-secondary)]">
                 {ev.event}: {ev.count}
               </div>
             ))}
@@ -349,40 +349,40 @@ export function DiagnosticsDashboardSection() {
 
       <section className="grid gap-4 xl:grid-cols-3">
         <article className="rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] p-5 shadow-[var(--shadow)]">
-          <h4 className="text-sm font-extrabold text-stone-900">Smoke API</h4>
-          <p className="mt-1 text-xs text-stone-500">{report?.smoke?.baseUrl ?? '—'}</p>
+          <h4 className="text-sm font-extrabold text-[var(--text)]">Smoke API</h4>
+          <p className="mt-1 text-xs text-[var(--text-secondary)]">{report?.smoke?.baseUrl ?? '—'}</p>
           <div className="mt-3 space-y-1.5">
             {(report?.smoke?.endpoints ?? []).map((item) => (
-              <div key={item.path} className="rounded-lg border border-stone-200 bg-white px-2.5 py-1.5 text-xs text-stone-800">
+              <div key={item.path} className="rounded-lg border border-stone-200 bg-[var(--surface-elevated)] px-2.5 py-1.5 text-xs text-[var(--text)]">
                 {item.path}: {item.status || 'ERR'} · {item.durationMs} ms · {item.ok ? 'OK' : 'FAIL'}
-                {item.note ? <div className="text-[10px] text-stone-500">{item.note}</div> : null}
+                {item.note ? <div className="text-xs text-[var(--text-secondary)]">{item.note}</div> : null}
               </div>
             ))}
           </div>
         </article>
         <article className="rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] p-5 shadow-[var(--shadow)]">
-          <h4 className="text-sm font-extrabold text-stone-900">Интеграции</h4>
+          <h4 className="text-sm font-extrabold text-[var(--text)]">Интеграции</h4>
           <div className="mt-3 space-y-2 text-sm">
-            <div className="rounded-xl border border-stone-200 bg-white p-3">
-              <p className="font-semibold text-stone-900">Redis</p>
-              <p className="text-stone-700">
+            <div className="rounded-xl border border-stone-200 bg-[var(--surface-elevated)] p-3">
+              <p className="font-semibold text-[var(--text)]">Redis</p>
+              <p className="text-[var(--text-secondary)]">
                 configured: {String(report?.integrations?.redis?.configured ?? false)} · reachable:{' '}
                 {String(report?.integrations?.redis?.reachable ?? false)}
               </p>
-              <p className="text-xs text-stone-600">{report?.integrations?.redis?.details ?? '—'}</p>
+              <p className="text-xs text-[var(--text-secondary)]">{report?.integrations?.redis?.details ?? '—'}</p>
             </div>
-            <div className="rounded-xl border border-stone-200 bg-white p-3">
-              <p className="font-semibold text-stone-900">Supabase</p>
-              <p className="text-stone-700">
+            <div className="rounded-xl border border-stone-200 bg-[var(--surface-elevated)] p-3">
+              <p className="font-semibold text-[var(--text)]">Supabase</p>
+              <p className="text-[var(--text-secondary)]">
                 configured: {String(report?.integrations?.supabase?.configured ?? false)} · reachable:{' '}
                 {String(report?.integrations?.supabase?.reachable ?? false)}
               </p>
-              <p className="text-xs text-stone-600">{report?.integrations?.supabase?.details ?? '—'}</p>
+              <p className="text-xs text-[var(--text-secondary)]">{report?.integrations?.supabase?.details ?? '—'}</p>
             </div>
           </div>
         </article>
         <article className="rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] p-5 shadow-[var(--shadow)]">
-          <h4 className="text-sm font-extrabold text-stone-900">Критичные ENV</h4>
+          <h4 className="text-sm font-extrabold text-[var(--text)]">Критичные ENV</h4>
           <div className="mt-3 flex flex-wrap gap-2">
             {(report?.environment?.criticalEnv ?? []).map((item) => (
               <span
@@ -406,9 +406,9 @@ export function DiagnosticsDashboardSection() {
       </section>
 
       <section className="rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] p-5 shadow-[var(--shadow)]">
-        <h4 className="text-sm font-extrabold text-stone-900">Регрессии относительно прошлого запуска</h4>
+        <h4 className="text-sm font-extrabold text-[var(--text)]">Регрессии относительно прошлого запуска</h4>
         {!report ? (
-          <p className="mt-2 text-sm text-stone-500">Нет данных.</p>
+          <p className="mt-2 text-sm text-[var(--text-secondary)]">Нет данных.</p>
         ) : report.regression.hasRegression ? (
           <div className="mt-2">
             <p className="text-sm font-semibold text-red-700">Обнаружены регрессии</p>
@@ -420,11 +420,11 @@ export function DiagnosticsDashboardSection() {
           <p className="mt-2 text-sm font-semibold text-emerald-700">Регрессий не найдено</p>
         )}
         {report?.regression?.previous ? (
-          <p className="mt-2 text-xs text-stone-600">
+          <p className="mt-2 text-xs text-[var(--text-secondary)]">
             Бейзлайн: {report.regression.previous.generatedAt}, p95 {report.regression.previous.httpDurationP95Ms} ms, error rate {(report.regression.previous.errorRate * 100).toFixed(1)}%
           </p>
         ) : (
-          <p className="mt-2 text-xs text-stone-500">Это первый запуск — бейзлайн только что создан.</p>
+          <p className="mt-2 text-xs text-[var(--text-secondary)]">Это первый запуск — бейзлайн только что создан.</p>
         )}
       </section>
       </>
