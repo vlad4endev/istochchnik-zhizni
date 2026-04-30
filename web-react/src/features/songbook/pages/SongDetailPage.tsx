@@ -307,7 +307,14 @@ export function SongDetailPage() {
         </div>
       </div>
 
-      <div className="fixed right-4 z-[60]" style={{ bottom: 'calc(env(safe-area-inset-bottom, 0px) + 1rem)' }}>
+      <div
+        className="fixed right-4 z-[60]"
+        style={{
+          bottom: fullscreen
+            ? 'calc(env(safe-area-inset-bottom, 0px) + 1rem)'
+            : 'calc(env(safe-area-inset-bottom, 0px) + 5.75rem)',
+        }}
+      >
         <SongReaderSettings
           open={settingsOpen}
           onOpenChange={setSettingsOpen}

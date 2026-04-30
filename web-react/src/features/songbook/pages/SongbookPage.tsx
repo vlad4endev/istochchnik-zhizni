@@ -57,7 +57,7 @@ export function SongbookPage() {
 
   return (
     <div className="mx-auto max-w-3xl space-y-3 pb-24 text-[var(--text)]">
-      <header className="sticky top-0 z-20 -mx-3 min-h-[126px] border-b border-stone-200/80 bg-[var(--surface)]/95 px-3 py-2 backdrop-blur md:mx-0 md:px-0">
+      <header className="section-hero-sticky top-0 z-20 -mx-3 min-h-[126px] border-b border-stone-200/80 bg-[var(--surface)]/95 px-3 py-2 backdrop-blur md:mx-0 md:px-0">
         <p className="mb-2 text-sm font-medium uppercase tracking-[0.08em] text-[var(--text-secondary)]">Песенник</p>
         <label className="mb-2 block">
           <span className="sr-only">Поиск по номеру или названию</span>

@@ -963,7 +963,7 @@ export function EditableServicePlanPage() {
                         </ul>
                       </div>
                     ) : null}
-                    <div className="mt-1 flex w-full min-w-0 sm:col-span-2 sm:mt-0 sm:justify-end">
+                    <div className="save-bar mt-1 flex w-full min-w-0 sm:col-span-2 sm:mt-0 sm:justify-end">
                       <button
                         type="button"
                         onClick={() => void saveBlockMut.mutateAsync(editingBlock)}

@@ -233,6 +233,12 @@ dd {
   padding-right: env(safe-area-inset-right, 0px);
 }
 
+/* Cross-browser sticky for section hero headers in PWA/iOS. */
+.section-hero-sticky {
+  position: -webkit-sticky;
+  position: sticky;
+}
+
 /* Единая колонка: дочерний layout с flex-1 + min-h-0 получает ограниченную высоту
    и может скроллиться внутри <main>, иначе при h-[100dvh] контент «режется» без скролла. */
 #root {
@@ -353,7 +359,7 @@ button {
 .page-enter {
   min-height: 100%;
   animation: pageEnter 0.18s ease forwards;
-  will-change: transform, opacity;
+  will-change: opacity;
   /* Sticky headers внутри страниц (PWA) ломаются при layout/paint containment. */
   contain: none;
 }
@@ -361,11 +367,9 @@ button {
 @keyframes pageEnter {
   from {
     opacity: 0;
-    transform: translateY(8px);
   }
   to {
     opacity: 1;
-    transform: translateY(0);
   }
 }
 

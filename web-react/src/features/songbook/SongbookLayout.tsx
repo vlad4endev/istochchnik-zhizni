@@ -38,7 +38,7 @@ function SongbookShell() {
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-auto px-3 py-4 md:px-6">
+      <div className="min-h-0 flex-1 overflow-visible px-3 py-4 md:px-6">
         <Outlet />
       </div>
     </div>
