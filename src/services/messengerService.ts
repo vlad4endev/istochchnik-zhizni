@@ -16,6 +16,9 @@ import { getPrayerCycleSnapshotForDate } from './prayerCycleService';
 import { sendPushNotification } from './pushService';
 import { rewriteStorageUrlsInRecord, rewriteSupabaseStorageUrlForClient } from '../lib/supabaseStorage';
 
+const MARK_READ_DEDUP_WINDOW_MS = 5_000;
+const recentMarkReadCalls = new Map<string, number>();
+
 // ─── Helpers ──────────────────────────────────────────────────
 
 function bigint(v: unknown): string {
@@ -1967,6 +1970,15 @@ export async function markRead(
   if (!hasMessageId && !hasReadAt) {
     throw new Error('Invalid read marker');
   }
+  if (hasMessageId) {
+    const dedupKey = `${memberId}:${normalizedMessageId}`;
+    const now = Date.now();
+    const prev = recentMarkReadCalls.get(dedupKey);
+    if (typeof prev === 'number' && now - prev < MARK_READ_DEDUP_WINDOW_MS) {
+      return false;
+    }
+    recentMarkReadCalls.set(dedupKey, now);
+  }
 
   const result = await dbQuery(
     `WITH target_message AS (
@@ -1997,7 +2009,7 @@ export async function markRead(
   );
 
   if (result.rows.length === 0) {
-    console.warn('[messenger] markRead skipped (no matching message or not a participant)', {
+    console.debug('[messenger] markRead skipped (no matching message or not a participant)', {
       conversationId,
       memberId,
       messageId: hasMessageId ? normalizedMessageId : null,

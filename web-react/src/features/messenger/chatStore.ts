@@ -37,7 +37,7 @@ function debouncedMarkReadUpTo(
   convId: string,
   msgId: string,
   fn: (c: string, m: string) => void,
-  delayMs = 1000,
+  delayMs = 2000,
 ): void {
   const existing = markReadDebounceByConv.get(convId);
   if (existing) clearTimeout(existing);
@@ -1254,6 +1254,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
       return null;
     })();
     if (!latestNumericMessageId) return;
+    const myReadCursor = String(get().myReadCursorByConv[conversationId] ?? '').trim();
+    if (/^\d+$/.test(myReadCursor) && BigInt(myReadCursor) >= BigInt(latestNumericMessageId)) {
+      // После reconnect не дублируем markRead, если курсор уже зафиксирован ранее.
+      return;
+    }
 
     // Always clear local counter immediately on open.
     set((s) => ({

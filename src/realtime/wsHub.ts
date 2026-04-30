@@ -154,6 +154,9 @@ const AUTH_SPAM_WINDOW_MS = 60_000;
 const AUTH_SPAM_BLOCK_MS = 60_000;
 const AUTH_SPAM_LIMIT = 5;
 const authFailMap = new Map<string, AuthFailRecord>();
+const UNSTABLE_CLOSE_WINDOW_MS = 60_000;
+const UNSTABLE_CLOSE_THRESHOLD = 5;
+const abnormalCloseByMember = new Map<number, number[]>();
 
 function getClientIp(req: IncomingMessage): string {
   const xff = req.headers['x-forwarded-for'];
@@ -192,6 +195,23 @@ function recordAuthFail(ip: string): void {
 
 function clearAuthFail(ip: string): void {
   authFailMap.delete(ip);
+}
+
+function recordAbnormalClose(memberId: number): void {
+  const now = Date.now();
+  const windowStart = now - UNSTABLE_CLOSE_WINDOW_MS;
+  const prev = abnormalCloseByMember.get(memberId) ?? [];
+  const next = prev.filter((ts) => ts >= windowStart);
+  next.push(now);
+  abnormalCloseByMember.set(memberId, next);
+  if (next.length > UNSTABLE_CLOSE_THRESHOLD) {
+    console.warn('[realtime] unstable connection', {
+      memberId,
+      disconnects: next.length,
+      windowMs: UNSTABLE_CLOSE_WINDOW_MS,
+      code: 1006,
+    });
+  }
 }
 
 const authFailCleanupTimer = setInterval(() => {
@@ -422,11 +442,17 @@ async function handleNewSocket(ws: WebSocket, ip: string, request: IncomingMessa
       ws.on('close', (code, reason) => {
         if (code !== 1000 && code !== 1001) {
           const reasonStr = Buffer.isBuffer(reason) ? reason.toString('utf8') : String(reason);
-          console.info('[realtime] client close', {
+          const payload = {
             memberId: client.memberId,
             code,
             reason: reasonStr.slice(0, 120),
-          });
+          };
+          if (code === 1006) {
+            console.warn('[realtime] client close (abnormal)', payload);
+            recordAbnormalClose(client.memberId);
+          } else {
+            console.info('[realtime] client close', payload);
+          }
         }
         removeClient(ws);
       });

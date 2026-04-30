@@ -22,6 +22,7 @@ let authToken: string | null = null;
 let stopped = false;
 let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
 let reconnectAttempt = 0;
+let stableOpenTimer: ReturnType<typeof setTimeout> | undefined;
 
 /**
  * Таймеры heartbeat привязаны к конкретному экземпляру `WebSocket`, а не к модулю:
@@ -135,8 +136,16 @@ function clearReconnectTimer(): void {
   }
 }
 
+function clearStableOpenTimer(): void {
+  if (stableOpenTimer !== undefined) {
+    clearTimeout(stableOpenTimer);
+    stableOpenTimer = undefined;
+  }
+}
+
 function clearTimers(): void {
   clearReconnectTimer();
+  clearStableOpenTimer();
   clearAllSocketTimers();
 }
 
@@ -239,7 +248,6 @@ function openSocket(): void {
 
   socket.onopen = () => {
     const wasReconnected = reconnectAttempt > 0;
-    reconnectAttempt = 0;
     logInfo('open', { wasReconnected });
     try {
       socket.send(JSON.stringify({ type: 'auth', token: authToken }));
@@ -273,6 +281,16 @@ function openSocket(): void {
         }
       }, 35_000);
     }, 20_000);
+
+    // Сбрасываем backoff только после устойчивого соединения >10 секунд.
+    clearStableOpenTimer();
+    stableOpenTimer = setTimeout(() => {
+      if (ws === socket && socket.readyState === WebSocket.OPEN) {
+        reconnectAttempt = 0;
+        logInfo('connection stable: reconnect backoff reset');
+      }
+      stableOpenTimer = undefined;
+    }, 10_000);
 
     dispatchOpen({ wasReconnected });
   };
