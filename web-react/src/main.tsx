@@ -13,7 +13,6 @@ import { AccessibilityProvider } from './lib/accessibility/AccessibilityProvider
 import { getAppVariant } from './lib/appVariant';
 import { usePwaStore, type BeforeInstallPromptEvent } from './stores/pwaStore';
 import './index.css';
-import './styles/mobile.css';
 
 applyNativeShellViewportLock();
 window.addEventListener('load', () => applyNativeShellViewportLock());
