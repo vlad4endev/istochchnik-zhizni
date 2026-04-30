@@ -2074,7 +2074,7 @@ export function ServicePlannerPage() {
           </button>
         </div>
       ) : null}
-      <section className="mx-auto flex w-full max-w-4xl flex-col gap-3 px-3 py-4 pb-[calc(104px+env(safe-area-inset-bottom))] sm:px-4 md:px-6 md:pb-6">
+      <section className="mx-auto flex w-full max-w-4xl flex-col gap-3 px-3 py-4 pb-[calc(var(--app-bottom-nav-total-height)+3rem)] sm:px-4 md:px-6 md:pb-6">
       <header className="rounded-2xl border border-stone-200 bg-white p-4 shadow-sm">
         <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-2">
           <div className="flex min-w-0 items-center gap-2">
@@ -2853,7 +2853,7 @@ export function ServicePlannerPage() {
         </div>
       )}
 
-      <div className="fixed inset-x-0 bottom-[calc(56px+env(safe-area-inset-bottom))] z-[60] border-t border-stone-200 bg-white/95 px-3 py-2 backdrop-blur md:hidden">
+      <div className="fixed inset-x-0 bottom-[var(--app-bottom-nav-total-height)] z-[60] border-t border-stone-200 bg-white/95 px-3 py-2 backdrop-blur md:hidden [padding-bottom:max(0.5rem,var(--app-safe-bottom))]">
         <button
           type="button"
           onClick={() => void saveProgramMut.mutateAsync()}

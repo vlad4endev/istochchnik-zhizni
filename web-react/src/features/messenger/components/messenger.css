@@ -31,7 +31,7 @@
 
   /* Height of the global bottom tab bar (Layout.tsx).
      Needed because messenger uses absolute layers on mobile. */
-  --app-bottom-nav-h: max(7rem, calc(5rem + env(safe-area-inset-bottom, 0px)));
+  --app-bottom-nav-h: var(--app-bottom-nav-total-height, calc(56px + env(safe-area-inset-bottom, 0px)));
 }
 
 /**
@@ -1942,6 +1942,10 @@
   }
 
   html[data-chat-open="1"] {
+    --app-bottom-nav-h: 0px;
+  }
+
+  html.app-keyboard-open[data-chat-open="1"] {
     --app-bottom-nav-h: 0px;
   }
 }

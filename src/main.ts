@@ -74,7 +74,7 @@ type SeoMeta = {
   robots?: string;
 };
 
-const DEFAULT_SPA_TITLE = 'Моя церковь - цифровая плаформа';
+const DEFAULT_SPA_TITLE = 'Моя церковь - цифровая платформа';
 const DEFAULT_SPA_DESCRIPTION = 'Планирование служений, расписание и командная работа в одном приложении.';
 
 function escapeHtml(input: string): string {

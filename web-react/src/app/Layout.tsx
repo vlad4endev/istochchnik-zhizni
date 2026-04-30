@@ -701,7 +701,7 @@ export function Layout() {
 
   return (
     <MessengerWsProvider>
-    <div className="flex min-h-0 w-full max-w-[100vw] flex-1 flex-col overflow-x-clip bg-[var(--surface)] text-[var(--text)] [padding-left:env(safe-area-inset-left,0px)] [padding-right:env(safe-area-inset-right,0px)]">
+    <div className="flex min-h-0 w-full max-w-full flex-1 flex-col overflow-x-clip bg-[var(--surface)] text-[var(--text)]">
       <ScrollRestoration />
       <a
         href="#main-content"
@@ -922,7 +922,7 @@ export function Layout() {
           'app-main-content flex min-h-0 min-w-0 w-full max-w-full flex-1 flex-col overflow-y-auto overflow-x-clip lg:pb-0 outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--a11y-focus-ring,var(--primary))] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)]',
           'page-content',
           mainChromeVisible
-            ? 'pb-[max(7.5rem,calc(5.25rem+env(safe-area-inset-bottom,16px)))]'
+            ? 'pb-[max(1rem,var(--app-bottom-nav-total-height))]'
             : 'pb-[max(1rem,env(safe-area-inset-bottom,16px))]',
         ].join(' ')}
       >
@@ -936,13 +936,13 @@ export function Layout() {
       {/* Телефон: нижняя навигация (иконка + подпись, как в нативных приложениях) */}
       <nav
         className={[
-          'app-bottom-nav bottom-nav fixed bottom-0 left-0 right-0 z-50 border-t border-gray-100 bg-white/95 pb-[env(safe-area-inset-bottom,8px)] shadow-sm backdrop-blur-xl supports-[backdrop-filter]:bg-white/90 lg:hidden transition-transform duration-200',
-          mainChromeVisible ? 'translate-y-0' : 'pointer-events-none translate-y-full opacity-0',
+          'app-bottom-nav bottom-nav fixed bottom-0 left-0 right-0 z-50 border-t border-gray-100 bg-white/95 pb-[var(--app-safe-bottom)] shadow-sm backdrop-blur-xl supports-[backdrop-filter]:bg-white/90 lg:hidden transition-opacity duration-150 min-h-[var(--app-bottom-nav-total-height)]',
+          mainChromeVisible ? 'opacity-100' : 'pointer-events-none opacity-0',
         ].join(' ')}
         aria-label="Основная навигация"
         aria-hidden={!mainChromeVisible}
       >
-        <div className="mx-auto flex min-h-[56px] max-w-md items-stretch justify-center gap-0.5 px-1 pb-1 pt-1 sm:px-2">
+        <div className="mx-auto flex min-h-[var(--app-bottom-nav-bar-height)] max-w-md items-stretch justify-center gap-0.5 px-1 pb-1 pt-1 sm:px-2">
           {mobilePrimaryItems.map((item) => {
             const Icon = item.Icon;
             return (

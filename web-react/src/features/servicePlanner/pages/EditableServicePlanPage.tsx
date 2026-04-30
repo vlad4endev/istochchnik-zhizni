@@ -518,7 +518,7 @@ export function EditableServicePlanPage() {
 
   return (
     <div className="min-h-[100dvh] bg-[var(--surface)]">
-      <div className="mx-auto max-w-3xl space-y-4 px-3 py-5 pb-[calc(96px+env(safe-area-inset-bottom))] sm:space-y-6 sm:px-4 sm:py-8 sm:pb-24">
+      <div className="mx-auto max-w-3xl space-y-4 px-3 py-5 pb-[calc(var(--app-bottom-nav-total-height)+2.5rem)] sm:space-y-6 sm:px-4 sm:py-8 sm:pb-24">
         <header className="rounded-2xl border border-stone-200 bg-white p-3 shadow-sm sm:p-4">
           <h1 className="text-xl font-extrabold text-stone-900 sm:text-2xl">План собрания на {dateText}</h1>
           <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-stone-600 sm:text-sm">
@@ -563,7 +563,7 @@ export function EditableServicePlanPage() {
                     : editingBlockId === b.id
                       ? 'border-primary/60'
                       : 'border-stone-200'
-                } p-2.5 sm:p-4 ${editingBlockId === b.id ? 'max-sm:pb-[env(safe-area-inset-bottom)]' : ''}`}
+                } p-2.5 sm:p-4 ${editingBlockId === b.id ? 'max-sm:pb-[var(--app-safe-bottom)]' : ''}`}
               >
                 <div className="flex min-w-0 items-start gap-2 sm:gap-3">
                   <div className="w-11 shrink-0 rounded-md bg-stone-100 px-1.5 py-1 text-center text-[11px] font-bold text-stone-700 sm:w-12 sm:bg-transparent sm:px-0 sm:py-0 sm:text-xs">

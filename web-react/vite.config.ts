@@ -69,7 +69,7 @@ export default defineConfig(({ mode }) => {
         injectRegister: 'auto',
         manifest: {
           id: pwaManifestId,
-          name: 'Моя церковь - цифровая плаформа',
+          name: 'Моя церковь - цифровая платформа',
           short_name: 'Моя церковь',
           description:
             'Цифровая платформа: дневные темы, служения, молитва за членов и профиль.',
