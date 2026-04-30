@@ -64,8 +64,8 @@ export function ChatAdminsPage() {
     <ManageScreenShell>
       <ManageSettingsGroup className="mt-4 divide-y divide-gray-200/70">
         <div className="p-4">
-          <p className="text-[17px] font-semibold text-gray-900">Администраторы</p>
-          <p className="mt-1 text-[13px] leading-snug text-gray-500">
+          <p className="text-lg font-semibold text-gray-900">Администраторы</p>
+          <p className="mt-1 text-sm leading-snug text-gray-500">
             Владелец с полным доступом. Для админов — персональные права в списке участников.
           </p>
         </div>
@@ -133,10 +133,10 @@ function RoleRow({
         {displayName[0]?.toUpperCase() ?? 'U'}
       </div>
       <div className="min-w-0 flex-1">
-        <p className="truncate text-[15px] font-medium text-gray-900">{displayName}</p>
+        <p className="truncate text-base font-medium text-gray-900">{displayName}</p>
         <p className="mt-0.5 text-xs text-gray-500">{memberPresence}</p>
       </div>
-      <div className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-semibold ring-1 ${badge.cls}`}>
+      <div className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold ring-1 ${badge.cls}`}>
         <badge.Icon size={14} />
         {badge.text}
       </div>

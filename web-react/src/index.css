@@ -354,7 +354,8 @@ button {
   min-height: 100%;
   animation: pageEnter 0.18s ease forwards;
   will-change: transform, opacity;
-  contain: layout paint;
+  /* Sticky headers внутри страниц (PWA) ломаются при layout/paint containment. */
+  contain: none;
 }
 
 @keyframes pageEnter {

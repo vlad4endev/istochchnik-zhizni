@@ -178,7 +178,7 @@ function TabButton({
       type="button"
       onClick={onClick}
       className={[
-        'inline-flex min-h-[40px] flex-1 items-center justify-center gap-1 rounded-xl px-2 text-[12px] font-semibold',
+        'inline-flex min-h-[40px] flex-1 items-center justify-center gap-1 rounded-xl px-2 text-xs font-semibold',
         active ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-700',
       ].join(' ')}
     >

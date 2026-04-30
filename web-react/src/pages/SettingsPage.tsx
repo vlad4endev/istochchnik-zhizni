@@ -60,7 +60,7 @@ export function SettingsPage() {
                     <LuSun className="h-4 w-4" aria-hidden />
                   )}
                 </span>
-                <span className="ml-[10px] flex w-full items-center justify-between px-0.5 text-[10px] font-extrabold uppercase tracking-[0.08em] text-[var(--text-muted)]">
+                <span className="ml-[10px] flex w-full items-center justify-between px-0.5 text-xs font-extrabold uppercase tracking-[0.08em] text-[var(--text-muted)]">
                   <LuSun className="h-3.5 w-3.5" aria-hidden />
                   <LuMoon className="h-3.5 w-3.5" aria-hidden />
                 </span>
@@ -89,7 +89,7 @@ export function SettingsPage() {
                     {t.key === 'dark' ? (
                       <>
                         <span className="absolute left-2 top-2 h-1.5 w-1.5 rounded-full bg-[var(--primary)] shadow-[0_0_8px_var(--primary)]" />
-                        <span className="absolute bottom-1.5 left-2 text-[7px] font-semibold text-white/95">Aa</span>
+                        <span className="absolute bottom-1.5 left-2 text-[0.5rem] font-semibold text-white/95">Aa</span>
                       </>
                     ) : null}
                   </div>

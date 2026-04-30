@@ -318,14 +318,14 @@ function ErrorBlock(props: { err: unknown; onRetry: () => void }) {
         Запрос: {apiLine}
       </p>
       {wrong ? (
-        <p className="mt-3 text-[13px] font-semibold leading-relaxed text-primary">
+        <p className="mt-3 text-sm font-semibold leading-relaxed text-primary">
           Похоже, в сборке указан localhost вместо публичного API. Задайте VITE_API_BASE_URL и пересоберите.
         </p>
       ) : null}
       <button
         type="button"
         onClick={props.onRetry}
-        className="mt-6 inline-flex min-h-[52px] items-center justify-center gap-2 rounded-xl bg-primary px-7 text-[15px] font-bold text-white shadow-md shadow-primary/25 transition hover:bg-primary-dark"
+        className="mt-6 inline-flex min-h-[52px] items-center justify-center gap-2 rounded-xl bg-primary px-7 text-base font-bold text-white shadow-md shadow-primary/25 transition hover:bg-primary-dark"
       >
         <LuRefreshCw className="h-5 w-5 shrink-0" strokeWidth={2} aria-hidden />
         Повторить
@@ -526,7 +526,7 @@ export function DailyPrayerPage() {
             <LuFlame className="h-5 w-5" strokeWidth={2} />
           </span>
           <div className="min-w-0 flex-1">
-            <h2 className="text-[11px] font-extrabold uppercase tracking-[0.14em] text-rose-800">
+            <h2 className="text-xs font-extrabold uppercase tracking-[0.14em] text-rose-800">
               Срочная молитвенная нужда
             </h2>
             <p className="mt-2 whitespace-pre-wrap text-base font-semibold leading-relaxed text-[var(--text)]">
@@ -588,7 +588,7 @@ export function DailyPrayerPage() {
           aria-hidden
         />
         <div className="relative flex items-center justify-between gap-3">
-          <h1 className="min-w-0 flex-1 text-xl font-extrabold leading-tight tracking-tight sm:text-2xl md:text-3xl lg:text-[1.65rem] xl:text-[26px] animate-prayer-fade-up motion-reduce:animate-none">
+          <h1 className="min-w-0 flex-1 text-xl font-extrabold leading-tight tracking-tight sm:text-2xl md:text-3xl lg:text-[1.65rem] xl:text-3xl animate-prayer-fade-up motion-reduce:animate-none">
             Молитва
           </h1>
           <SectionHeroToolbarEnd />
@@ -607,7 +607,7 @@ export function DailyPrayerPage() {
           </span>
           <span className="min-w-0 flex-1 truncate text-base font-bold text-[var(--text)] shell:text-base">{chipLabel}</span>
           {isToday ? (
-            <span className="shrink-0 rounded-full bg-[color-mix(in_srgb,var(--accent)_14%,transparent)] px-2.5 py-1 text-[10px] font-extrabold tracking-wider text-[var(--accent)]">
+            <span className="shrink-0 rounded-full bg-[color-mix(in_srgb,var(--accent)_14%,transparent)] px-2.5 py-1 text-xs font-extrabold tracking-wider text-[var(--accent)]">
               СЕГОДНЯ
             </span>
           ) : null}
@@ -618,7 +618,7 @@ export function DailyPrayerPage() {
           />
         </button>
         {!isPending && isFetching ? (
-          <p className="mt-2 flex items-center justify-center gap-2 text-center text-[12px] font-semibold text-primary">
+          <p className="mt-2 flex items-center justify-center gap-2 text-center text-xs font-semibold text-primary">
             <LuRefreshCw className="h-3.5 w-3.5 shrink-0 animate-spin" strokeWidth={2} aria-hidden />
             Обновляем данные…
           </p>
@@ -674,7 +674,7 @@ export function DailyPrayerPage() {
             <div className="mt-3 flex items-stretch gap-2 border-t border-stone-100 pt-3">
               <button
                 type="button"
-                className="flex min-h-[48px] flex-1 items-center justify-center gap-2 rounded-xl px-4 py-3 text-[14px] font-bold text-primary hover:bg-primary/[0.06]"
+                className="flex min-h-[48px] flex-1 items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-bold text-primary hover:bg-primary/[0.06]"
                 onClick={() => setCalendarView((v) => (v === 'month' ? 'week' : 'month'))}
               >
                 {calendarView === 'month' ? (
