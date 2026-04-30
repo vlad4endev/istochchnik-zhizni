@@ -58,7 +58,7 @@
   min-height: 0;
   height: 100%;
   max-height: 100%;
-  background: var(--tg-bg);
+  background: var(--tg-surface);
   overflow: hidden;
   position: relative;
   font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
@@ -1982,6 +1982,7 @@
     min-height: 0;
     width: 100%;
     overflow: hidden;
+    background: var(--tg-surface);
   }
 
   .tg-main {
