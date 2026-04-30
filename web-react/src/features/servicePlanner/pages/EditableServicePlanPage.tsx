@@ -26,6 +26,7 @@ import {
 } from 'react-icons/lu';
 import type { IconType } from 'react-icons';
 import { Navigate, useParams } from 'react-router-dom';
+import { emitAppToast } from '@/lib/uiFeedback';
 
 import { meaningfulNoteLinesFromRaw } from '../plannerNoteText';
 import {
@@ -462,15 +463,30 @@ export function EditableServicePlanPage() {
         song_id: normalizedBlock.song_id,
         content_json: normalizedBlock.content_json,
       });
+      return normalizedBlock;
     },
-    onSuccess: async () => {
+  });
+
+  async function handleSaveBlock(block: EditableBlock): Promise<void> {
+    try {
+      const savedBlock = await saveBlockMut.mutateAsync(block);
+      if (savedBlock) {
+        setDraftBlocks((prev) => prev.map((x) => (x.id === savedBlock.id ? savedBlock : x)));
+      }
+      emitAppToast({ kind: 'success', message: 'Изменения сохранены' });
       setEditingBlockId(null);
       await Promise.all([
         qc.invalidateQueries({ queryKey: ['editable-service-plan', token] }),
         qc.invalidateQueries({ queryKey: ['editable-service-plan-meta', token] }),
+        qc.invalidateQueries({ queryKey: ['public', 'service-plan', token] }),
       ]);
-    },
-  });
+    } catch {
+      emitAppToast({
+        kind: 'error',
+        message: 'Не удалось сохранить изменения. Проверьте подключение и попробуйте снова.',
+      });
+    }
+  }
 
   if (!token) {
     return <p className="p-6 text-red-600">Некорректная ссылка</p>;
@@ -659,7 +675,9 @@ export function EditableServicePlanPage() {
                         </button>
                         <button
                           type="button"
-                          onClick={() => setEditingBlockId((prev) => (prev === b.id ? null : b.id))}
+                          onClick={() => {
+                            setEditingBlockId((prev) => (prev === b.id ? null : b.id));
+                          }}
                           aria-label={editingBlockId === b.id ? 'Скрыть редактирование' : 'Редактировать блок'}
                           title={editingBlockId === b.id ? 'Скрыть' : 'Редактировать'}
                           className="inline-flex h-9 w-9 shrink-0 touch-manipulation items-center justify-center gap-1 rounded-lg border border-stone-300 text-stone-700 hover:border-primary hover:text-primary sm:h-auto sm:w-auto sm:px-2.5 sm:py-1 sm:text-xs sm:font-semibold"
@@ -966,7 +984,7 @@ export function EditableServicePlanPage() {
                     <div className="save-bar mt-1 flex w-full min-w-0 sm:col-span-2 sm:mt-0 sm:justify-end">
                       <button
                         type="button"
-                        onClick={() => void saveBlockMut.mutateAsync(editingBlock)}
+                        onClick={() => void handleSaveBlock(editingBlock)}
                         disabled={saveBlockMut.isPending}
                         className="inline-flex w-full max-w-full min-h-12 items-center justify-center gap-2 rounded-lg bg-primary px-3 text-base font-semibold text-white touch-manipulation hover:bg-primary-dark disabled:cursor-not-allowed disabled:opacity-70 sm:w-auto sm:min-h-0 sm:px-3 sm:py-1.5 sm:text-sm"
                       >
