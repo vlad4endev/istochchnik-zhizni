@@ -85,10 +85,15 @@ type FullReportPayload = {
 };
 
 function severityClass(severity: AuditIssue['severity']): string {
-  if (severity === 'CRITICAL') return 'border-red-300 bg-red-50 text-red-900';
-  if (severity === 'HIGH') return 'border-orange-300 bg-orange-50 text-orange-900';
-  if (severity === 'MEDIUM') return 'border-amber-300 bg-amber-50 text-amber-900';
-  return 'border-emerald-300 bg-emerald-50 text-emerald-900';
+  if (severity === 'CRITICAL' || severity === 'HIGH') return 'bg-red-50';
+  if (severity === 'MEDIUM') return 'bg-amber-50';
+  return 'bg-stone-50';
+}
+
+function severityBadgeClass(severity: AuditIssue['severity']): string {
+  if (severity === 'CRITICAL' || severity === 'HIGH') return 'bg-red-100 text-red-700';
+  if (severity === 'MEDIUM') return 'bg-amber-100 text-amber-800';
+  return 'bg-stone-200 text-stone-700';
 }
 
 function scoreClass(score: number): string {
@@ -118,151 +123,148 @@ export function DiagnosticsDashboardSection() {
 
   return (
     <div className="space-y-5">
-      <section className="rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] p-5 shadow-[var(--shadow)]">
-        <h3 className="text-base font-extrabold text-stone-900">Полная диагностика проекта</h3>
-        <p className="mt-2 text-sm text-stone-600">
-          Нажмите кнопку ниже: система соберет health, server metrics, project scan и AI-аудит, затем
-          покажет сводное состояние проекта в одном дашборде.
-        </p>
-        <div className="mt-3 grid gap-3 md:grid-cols-[1fr_auto]">
+      <section className="rounded-xl bg-gradient-to-br from-[#2D1B1E] to-[#7B2D3F] p-5 text-white shadow-[var(--shadow)]">
+        <div className="flex flex-wrap items-center gap-5">
+          <div className="text-3xl" aria-hidden>
+            ⚡
+          </div>
+          <div className="min-w-0 flex-1">
+            <h3 className="text-[17px] font-semibold">Диагностика проекта</h3>
+            <p className="mt-1 text-sm text-white/80">
+              Собирает health, метрики сервера, сканирование структуры и AI-аудит в одном месте.
+            </p>
+          </div>
+          <button
+            type="button"
+            className="whitespace-nowrap rounded-lg border border-white/30 bg-white/15 px-5 py-2.5 text-sm font-semibold text-white backdrop-blur transition hover:bg-white/25 disabled:opacity-60"
+            onClick={() => void runFullAnalysis()}
+            disabled={isLoading}
+          >
+            {isLoading ? 'Собираем отчёт…' : 'Проверить и собрать отчёт'}
+          </button>
+        </div>
+        <div className="mt-3">
           <input
-            className="w-full rounded-xl border border-stone-200 bg-white px-3 py-2.5 text-sm text-stone-900 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+            className="w-full rounded-lg border border-white/20 bg-white/10 px-3 py-2 text-sm text-white placeholder:text-white/60 outline-none focus:border-white/40 focus:ring-2 focus:ring-white/20"
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             placeholder="Фокус аудита"
           />
-          <button
-            type="button"
-            className="rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-white shadow-md shadow-primary/20 transition hover:opacity-95 disabled:opacity-60"
-            onClick={() => void runFullAnalysis()}
-            disabled={isLoading}
-          >
-            {isLoading ? 'Проверяем и анализируем…' : 'Проверить проект и собрать честный отчет'}
-          </button>
         </div>
         {errorText ? (
-          <p className="mt-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
+          <p className="mt-3 rounded-lg border border-red-200/60 bg-red-50/90 px-3 py-2 text-sm text-red-800">
             {errorText}
           </p>
         ) : null}
       </section>
 
       <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <article className="rounded-2xl border border-stone-200/80 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-stone-500">Здоровье сервера</p>
-          <p className="mt-2 text-lg font-extrabold text-stone-900">{report?.readiness?.overall ?? '—'}</p>
-          <p className="mt-1 text-xs text-stone-500">{report?.generatedAt ?? '—'}</p>
+        <article className="rounded-[10px] border border-[#F0E9EA] bg-white p-4">
+          <p className="mb-2 text-[11px] font-medium uppercase tracking-[0.5px] text-stone-400">Здоровье сервера</p>
+          <p
+            className={[
+              'text-[26px] font-bold leading-none',
+              report?.readiness?.overall === 'healthy'
+                ? 'text-emerald-700'
+                : report?.readiness?.overall === 'critical'
+                  ? 'text-red-600'
+                  : 'text-stone-900',
+            ].join(' ')}
+          >
+            {report?.readiness?.overall ?? '—'}
+          </p>
+          <p className="mt-1 text-xs text-stone-400">{report?.generatedAt ?? 'Нет данных'}</p>
         </article>
-        <article className="rounded-2xl border border-stone-200/80 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-stone-500">CPU / RAM / Disk</p>
-          <p className="mt-2 text-lg font-extrabold text-stone-900">
+        <article className="rounded-[10px] border border-[#F0E9EA] bg-white p-4">
+          <p className="mb-2 text-[11px] font-medium uppercase tracking-[0.5px] text-stone-400">CPU / RAM / DISK</p>
+          <p className="text-[26px] font-bold leading-none text-stone-900">
             {Number(report?.server?.cpu?.usagePercent ?? 0).toFixed(1)}% / {Number(report?.server?.memory?.usagePercent ?? 0).toFixed(1)}% / {Number(report?.server?.disk?.usagePercent ?? 0).toFixed(1)}%
           </p>
-          <p className="mt-1 text-xs text-stone-500">PID: {report?.server?.runtime?.pid ?? '—'}</p>
+          <p className="mt-1 text-xs text-stone-400">PID: {report?.server?.runtime?.pid ?? '—'}</p>
         </article>
-        <article className="rounded-2xl border border-stone-200/80 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-stone-500">Здоровье проекта</p>
-          <p className="mt-2 text-lg font-extrabold text-stone-900">
+        <article className="rounded-[10px] border border-[#F0E9EA] bg-white p-4">
+          <p className="mb-2 text-[11px] font-medium uppercase tracking-[0.5px] text-stone-400">Здоровье проекта</p>
+          <p className="text-[26px] font-bold leading-none text-stone-900">
             {report?.project?.filesScanned ?? 0} / {report?.project?.linesOfCode ?? 0}
           </p>
-          <p className="mt-1 text-xs text-stone-500">Папок: {report?.project?.directoriesScanned ?? 0}</p>
+          <p className="mt-1 text-xs text-stone-400">Папок: {report?.project?.directoriesScanned ?? 0}</p>
         </article>
-        <article className="rounded-2xl border border-stone-200/80 bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-stone-500">Итоговый score</p>
-          <p className={`mt-2 text-2xl font-extrabold ${scoreClass(Number(report?.audit?.overallScore ?? 0))}`}>
+        <article className="rounded-[10px] border border-[#F0E9EA] bg-white p-4">
+          <p className="mb-2 text-[11px] font-medium uppercase tracking-[0.5px] text-stone-400">Итоговый score</p>
+          <p className={`text-[26px] font-bold leading-none ${scoreClass(Number(report?.audit?.overallScore ?? 0))}`}>
             {Math.round(Number(report?.audit?.overallScore ?? 0))}
           </p>
-          <p className="mt-1 text-xs text-stone-500">0-100 (AI audit)</p>
+          <p className="mt-1 text-xs text-stone-400">0-100 (AI audit)</p>
         </article>
       </section>
 
-      <section className="rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] p-5 shadow-[var(--shadow)]">
-        <h4 className="text-sm font-extrabold text-stone-900">Валидация релиза (gate)</h4>
-        <p
-          className={
-            report?.releaseValidation?.pass
-              ? 'mt-2 text-sm font-bold text-emerald-700'
-              : 'mt-2 text-sm font-bold text-red-700'
-          }
-        >
-          {report ? (report.releaseValidation.pass ? 'PASS: релиз можно пропускать' : 'FAIL: релиз блокирован') : '—'}
-        </p>
-        {(report?.releaseValidation?.blockers ?? []).length > 0 ? (
-          <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-red-800">
-            {report?.releaseValidation?.blockers.map((item) => <li key={item}>{item}</li>)}
-          </ul>
-        ) : null}
-      </section>
+      {!report ? (
+        <section className="flex min-h-[180px] flex-col items-center justify-center rounded-xl border border-stone-200 bg-white text-center">
+          <div className="text-3xl" aria-hidden>
+            📊
+          </div>
+          <p className="mt-3 text-sm text-stone-600">Нажмите «Проверить и собрать отчёт» чтобы получить полный анализ</p>
+        </section>
+      ) : (
+        <>
+          <section className="rounded-xl border border-stone-200 bg-white p-5">
+            <h4 className="text-sm font-extrabold text-stone-900">Валидация релиза (gate)</h4>
+            <div className="mt-3 flex items-center gap-2">
+              <span
+                className={
+                  report.releaseValidation.pass
+                    ? 'rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-bold text-emerald-700'
+                    : 'rounded-full bg-red-100 px-2 py-0.5 text-xs font-bold text-red-700'
+                }
+              >
+                {report.releaseValidation.pass ? '✓ Прошло' : '✕ Не прошло'}
+              </span>
+              <span className="text-sm text-stone-600">
+                {report.releaseValidation.pass ? 'Релиз можно пропускать' : 'Есть блокирующие проблемы'}
+              </span>
+            </div>
+            {(report.releaseValidation.blockers ?? []).length > 0 ? (
+              <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-red-700">
+                {report.releaseValidation.blockers.map((item) => <li key={item}>{item}</li>)}
+              </ul>
+            ) : null}
+          </section>
 
-      <section className="rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] p-5 shadow-[var(--shadow)]">
-        <h4 className="text-sm font-extrabold text-stone-900">Проверки перед анализом (факты)</h4>
-        <div className="mt-3 space-y-2">
-          {(report?.readiness?.checks ?? []).length === 0 ? (
-            <p className="text-sm text-stone-500">Пока нет проверок.</p>
-          ) : (
-            report?.readiness?.checks.map((check) => (
-              <div key={check.name} className="rounded-xl border border-stone-200 bg-white p-3">
-                <div className="flex items-center justify-between gap-2">
-                  <strong className="text-sm text-stone-900">{check.name}</strong>
-                  <span
-                    className={
-                      check.status === 'passed'
-                        ? 'rounded-full border border-emerald-300 bg-emerald-50 px-2 py-0.5 text-[11px] font-bold text-emerald-900'
-                        : check.status === 'warning'
-                          ? 'rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-[11px] font-bold text-amber-900'
-                          : 'rounded-full border border-red-300 bg-red-50 px-2 py-0.5 text-[11px] font-bold text-red-900'
-                    }
-                  >
-                    {check.status}
-                  </span>
-                </div>
-                <p className="mt-1 text-sm text-stone-700">{check.details}</p>
-                <p className="mt-1 text-xs text-stone-500">Время: {check.durationMs} ms</p>
-              </div>
-            ))
-          )}
-        </div>
-      </section>
+          <section className="rounded-xl border border-stone-200 bg-white p-5">
+            <h4 className="text-sm font-extrabold text-stone-900">Сводка аудита</h4>
+            <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-stone-700">{report.audit.summary}</p>
+            {report.truthfulnessNote ? (
+              <p className="mt-3 rounded-lg border border-stone-200 bg-stone-50 px-3 py-2 text-xs text-stone-600">
+                {report.truthfulnessNote}
+              </p>
+            ) : null}
+          </section>
 
-      <section className="rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] p-5 shadow-[var(--shadow)]">
-        <h4 className="text-sm font-extrabold text-stone-900">Сводка аудита</h4>
-        <p className="mt-2 whitespace-pre-wrap text-sm text-stone-700">{report?.audit?.summary ?? 'Запустите анализ, чтобы получить сводку.'}</p>
-        {report?.truthfulnessNote ? (
-          <p className="mt-3 rounded-xl border border-stone-200 bg-white px-3 py-2 text-xs text-stone-600">
-            {report.truthfulnessNote}
-          </p>
-        ) : null}
-      </section>
-
-      <section className="rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] p-5 shadow-[var(--shadow)]">
-        <h4 className="text-sm font-extrabold text-stone-900">Проблемы и рекомендации</h4>
-        <div className="mt-3 space-y-2">
-          {(report?.audit?.issues ?? []).length === 0 ? (
-            <p className="text-sm text-stone-500">После анализа здесь появится список проблем.</p>
-          ) : (
-            (report?.audit?.issues ?? []).map((issue) => (
-              <article key={issue.id} className="rounded-xl border border-stone-200 bg-white p-3">
-                <div className="flex flex-wrap items-center gap-2">
-                  <strong className="text-sm text-stone-900">{issue.title}</strong>
-                  <span className={`rounded-full border px-2 py-0.5 text-[11px] font-bold ${severityClass(issue.severity)}`}>
-                    {issue.severity}
-                  </span>
-                </div>
-                <p className="mt-2 text-sm text-stone-700">{issue.description}</p>
-                <p className="mt-1 text-xs text-stone-600">Рекомендация: {issue.suggestion}</p>
-              </article>
-            ))
-          )}
-        </div>
-        {(report?.audit?.recommendations ?? []).length > 0 ? (
-          <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-stone-700">
-            {report?.audit?.recommendations.map((item) => (
-              <li key={item}>{item}</li>
-            ))}
-          </ul>
-        ) : null}
-      </section>
-
+          <section className="rounded-xl border border-stone-200 bg-white p-5">
+            <h4 className="text-sm font-extrabold text-stone-900">Проблемы и рекомендации</h4>
+            <div className="mt-3 space-y-1.5">
+              {(report.audit.issues ?? []).length === 0 ? (
+                <p className="text-sm text-stone-500">Проблем не обнаружено.</p>
+              ) : (
+                report.audit.issues.map((issue) => (
+                  <article key={issue.id} className={`flex gap-2.5 rounded-lg px-3 py-2.5 ${severityClass(issue.severity)}`}>
+                    <span className={`h-fit shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold ${severityBadgeClass(issue.severity)}`}>
+                      {issue.severity}
+                    </span>
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-stone-900">{issue.title}</p>
+                      <p className="mt-1 text-sm text-stone-700">{issue.description}</p>
+                      <p className="mt-1 text-xs text-stone-600">Рекомендация: {issue.suggestion}</p>
+                    </div>
+                  </article>
+                ))
+              )}
+            </div>
+          </section>
+        </>
+      )}
+      {report ? (
+      <>
       <section className="grid gap-4 xl:grid-cols-2">
         <article className="rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] p-5 shadow-[var(--shadow)]">
           <h4 className="text-sm font-extrabold text-stone-900">Топ файлов по размеру</h4>
@@ -425,6 +427,8 @@ export function DiagnosticsDashboardSection() {
           <p className="mt-2 text-xs text-stone-500">Это первый запуск — бейзлайн только что создан.</p>
         )}
       </section>
+      </>
+      ) : null}
     </div>
   );
 }

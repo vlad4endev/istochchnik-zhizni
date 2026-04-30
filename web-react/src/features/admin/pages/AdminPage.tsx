@@ -16,7 +16,6 @@ import {
   LuHistory,
   LuImage,
   LuMessageSquare,
-  LuPenLine,
   LuSend,
   LuTable2,
   LuX,
@@ -66,6 +65,7 @@ import {
   fetchRoleTemplates,
   fetchTelegramSettings,
   fetchSmsSettings,
+  fetchAccessRequests,
   mergeDuplicateMembers,
   resetAdminMemberPassword,
   swapAllMembersFirstLastNames,
@@ -145,6 +145,7 @@ const Q_EVENTS = ['admin', 'events'] as const;
 const Q_EVENT_CATEGORY_OPTIONS = ['admin', 'church-event-category-options'] as const;
 const Q_TG = ['admin', 'telegram', 'settings'] as const;
 const Q_SMS = ['admin', 'sms', 'settings'] as const;
+const Q_ACCESS = ['admin', 'access-requests'] as const;
 
 type BulkMemberRow = {
   key: string;
@@ -287,6 +288,19 @@ function memberInitials(u: AppUser): string {
   return initials || '??';
 }
 
+function memberAvatarColors(name: string): { bg: string; fg: string } {
+  const PALETTES = [
+    { bg: '#F3EEF0', fg: '#7B2D3F' },
+    { bg: '#EEF5F1', fg: '#1F6B42' },
+    { bg: '#EEF2FA', fg: '#2D4E8F' },
+    { bg: '#FBF3E8', fg: '#8A5B1C' },
+    { bg: '#F2EEF5', fg: '#5E2D8F' },
+    { bg: '#EEF6F6', fg: '#1C6B6B' },
+  ] as const;
+  const code = (name || '').trim().toUpperCase().charCodeAt(0) || 0;
+  return PALETTES[code % PALETTES.length]!;
+}
+
 function fieldClass() {
   return (
     'w-full rounded-xl border border-stone-200/90 bg-white px-3 py-2.5 text-sm text-stone-900 outline-none ' +
@@ -306,100 +320,154 @@ function btnDangerOutline(className = '') {
   return `rounded-xl border border-red-200 bg-white px-3 py-2 text-sm font-semibold text-red-700 transition hover:bg-red-50 ${className}`;
 }
 
+const SIDEBAR_GROUPS = [
+  {
+    label: 'ЛЮДИ',
+    items: [
+      { id: 'members' as AdminTabId, hasBadge: true, badgeRed: false },
+      { id: 'requests' as AdminTabId, hasBadge: true, badgeRed: true },
+    ],
+  },
+  {
+    label: 'КОНТЕНТ',
+    items: [
+      { id: 'calendar' as AdminTabId },
+      { id: 'events' as AdminTabId },
+      { id: 'templates' as AdminTabId },
+      { id: 'project' as AdminTabId },
+    ],
+  },
+  {
+    label: 'СИСТЕМА',
+    items: [
+      { id: 'sections' as AdminTabId },
+      { id: 'journal' as AdminTabId },
+      { id: 'notifications' as AdminTabId },
+      { id: 'telegram' as AdminTabId },
+      { id: 'diagnostics' as AdminTabId },
+      { id: 'integrations' as AdminTabId },
+    ],
+  },
+] as const;
+
 export function AdminPage() {
   const [tab, setTab] = useState<AdminTabId>('members');
+  const [showAddUser, setShowAddUser] = useState(false);
+
+  // Badge queries — deduplicated with per-section queries via React Query cache
+  const { data: allMembersData } = useQuery({
+    queryKey: Q_MEMBERS,
+    queryFn: fetchAdminMembers,
+    staleTime: 30_000,
+  });
+  const { data: accessRequestsData } = useQuery({
+    queryKey: Q_ACCESS,
+    queryFn: () => fetchAccessRequests('pending'),
+    staleTime: 30_000,
+  });
+
+  const totalUsers = (allMembersData ?? []).length;
+  const pendingCount = (accessRequestsData ?? []).filter((r) => r.status === 'pending').length;
+
   const meta = ADMIN_TABS.find((t) => t.id === tab)!;
-  const MetaIcon = meta.Icon;
+
+  const badgeFor = (id: AdminTabId): number | null => {
+    if (id === 'members') return totalUsers || null;
+    if (id === 'requests') return pendingCount || null;
+    return null;
+  };
 
   return (
     <div className="mx-auto w-full min-w-0 max-w-6xl px-3 py-3 sm:px-4 sm:py-4 shell:px-6 shell:py-6">
-      <header className="mb-4 overflow-hidden rounded-3xl border border-stone-200/80 bg-gradient-to-br from-primary/[0.07] via-[var(--surface-elevated)] to-stone-50/90 p-5 shadow-[var(--shadow)] sm:mb-5">
-        <p className="text-[10px] font-extrabold uppercase tracking-[0.2em] text-primary/85">Настройки</p>
-        <h1 className="mt-2 text-[22px] font-extrabold tracking-tight text-stone-900 shell:text-2xl">
-          Админ-панель
-        </h1>
-        <p className="mt-2 text-sm leading-relaxed text-stone-600">{meta.description}</p>
-      </header>
+      <div className="flex items-start gap-5">
+        {/* ── Left sidebar ── */}
+        <aside className="hidden w-[196px] shrink-0 md:block">
+          <nav
+            className="sticky top-4 rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] p-3 shadow-[var(--shadow)]"
+            aria-label="Разделы панели"
+          >
+            {SIDEBAR_GROUPS.map((group) => (
+              <div key={group.label} className="mb-4 last:mb-0">
+                <p className="mb-1.5 px-2 text-[10px] font-extrabold uppercase tracking-[0.14em] text-stone-400">
+                  {group.label}
+                </p>
+                <div className="space-y-0.5">
+                  {group.items.map((item) => {
+                    const tabCfg = ADMIN_TABS.find((t) => t.id === item.id)!;
+                    const ItemIcon = tabCfg.Icon;
+                    const active = tab === item.id;
+                    const badge = 'hasBadge' in item ? badgeFor(item.id) : null;
+                    const isRedBadge = 'badgeRed' in item ? item.badgeRed : false;
+                    return (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => setTab(item.id)}
+                        className={`flex w-full items-center gap-2 rounded-lg px-2 py-[7px] text-left text-[13px] transition ${
+                          active
+                            ? 'bg-[#F3EEF0] font-medium text-[#7B2D3F]'
+                            : 'font-normal text-stone-700 hover:bg-stone-100'
+                        }`}
+                      >
+                        <ItemIcon
+                          className={`h-4 w-4 shrink-0 transition-opacity ${active ? 'opacity-100' : 'opacity-50'}`}
+                        />
+                        <span className="min-w-0 flex-1 truncate">{tabCfg.label}</span>
+                        {badge != null && (
+                          <span
+                            className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-bold leading-none ${
+                              isRedBadge && badge > 0
+                                ? 'bg-red-500 text-white'
+                                : 'bg-stone-200 text-stone-600'
+                            }`}
+                          >
+                            {badge}
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </nav>
+        </aside>
 
-      {/* Разделы — горизонтальная полоса: на узком экране прокрутка, на шире — перенос строк */}
-      <nav
-        className="sticky top-0 z-20 -mx-3 mb-5 rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] px-2 py-2.5 shadow-[var(--shadow)] backdrop-blur-sm supports-[backdrop-filter]:bg-[var(--surface-elevated)]/95 sm:-mx-4 sm:mb-6 sm:px-3 md:mx-0"
-        aria-label="Разделы панели"
-      >
-        <p className="px-1.5 pb-2 text-[10px] font-extrabold uppercase tracking-[0.14em] text-stone-400">
-          Разделы панели
-        </p>
-        <div className="flex max-md:snap-x max-md:snap-mandatory max-md:flex-nowrap max-md:gap-2 max-md:overflow-x-auto max-md:pb-1 max-md:[-ms-overflow-style:none] max-md:[scrollbar-width:none] max-md:[&::-webkit-scrollbar]:hidden md:flex-wrap md:gap-2">
-          {ADMIN_TABS.map((t) => {
-            const active = tab === t.id;
-            const TabIcon = t.Icon;
-            return (
+        {/* ── Content area ── */}
+        <div className="min-w-0 flex-1">
+          {/* Section header */}
+          <div className="mb-4 flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <h2 className="text-base font-medium tracking-tight text-stone-900">{meta.label}</h2>
+              <p className="mt-0.5 truncate text-xs text-stone-500">{meta.description}</p>
+            </div>
+            {tab === 'members' && (
               <button
-                key={t.id}
                 type="button"
-                onClick={() => setTab(t.id)}
-                className={
-                  active
-                    ? 'touch-manipulation group flex min-h-[44px] min-w-[min(100%,11rem)] shrink-0 snap-start items-center gap-2 rounded-xl bg-primary px-3 py-2 text-left text-sm font-bold text-white shadow-md shadow-primary/20 max-md:max-w-[85vw] active:scale-[0.99] md:min-w-0 md:flex-1 md:basis-[calc(50%-0.25rem)] lg:flex-none lg:basis-auto'
-                    : 'touch-manipulation group flex min-h-[44px] min-w-[min(100%,11rem)] shrink-0 snap-start items-center gap-2 rounded-xl border border-stone-200/90 bg-white/80 px-3 py-2 text-left text-sm font-semibold text-stone-800 transition hover:border-stone-300 hover:bg-stone-50 max-md:max-w-[85vw] active:scale-[0.99] md:min-w-0 md:flex-1 md:basis-[calc(50%-0.25rem)] lg:flex-none lg:basis-auto'
-                }
+                className={btnPrimary('shrink-0 text-xs')}
+                onClick={() => setShowAddUser(true)}
               >
-                <span
-                  className={
-                    active
-                      ? 'flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white/20'
-                      : 'flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-stone-100 group-hover:bg-stone-200/80'
-                  }
-                  aria-hidden
-                >
-                  <TabIcon
-                    className={`h-5 w-5 transition-colors ${active ? 'text-white' : 'text-stone-600 group-hover:text-primary'}`}
-                  />
-                </span>
-                <span className="min-w-0 leading-tight">
-                  <span className="block sm:hidden">{t.short}</span>
-                  <span className="hidden sm:block">{t.label}</span>
-                  <span
-                    className={
-                      active
-                        ? 'mt-0.5 hidden text-[10px] font-medium text-white/85 sm:block'
-                        : 'mt-0.5 hidden text-[10px] font-medium text-stone-500 sm:block'
-                    }
-                  >
-                    {t.short}
-                  </span>
-                </span>
+                + Добавить пользователя
               </button>
-            );
-          })}
-        </div>
-      </nav>
+            )}
+          </div>
 
-      <div className="mb-3 flex items-center gap-3 sm:mb-4">
-        <span
-          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary shadow-sm"
-          aria-hidden
-        >
-          <MetaIcon className="h-5 w-5" strokeWidth={2} />
-        </span>
-        <div className="min-w-0">
-          <h2 className="text-lg font-extrabold tracking-tight text-stone-900">{meta.label}</h2>
-          <p className="text-xs font-medium text-stone-500">{meta.short}</p>
+          {tab === 'members' && (
+            <MembersSection showAddUser={showAddUser} onAddUserClose={() => setShowAddUser(false)} />
+          )}
+          {tab === 'requests' && <AccessRequestsSection />}
+          {tab === 'calendar' && <CalendarSection />}
+          {tab === 'events' && <EventsSection />}
+          {tab === 'templates' && <TemplatesSection />}
+          {tab === 'project' && <ProjectSection />}
+          {tab === 'sections' && <AppSectionsAccessSection />}
+          {tab === 'journal' && <ProjectJournalSection />}
+          {tab === 'notifications' && <NotificationsSettingsSection />}
+          {tab === 'telegram' && <TelegramSection />}
+          {tab === 'diagnostics' && <DiagnosticsDashboardSection />}
+          {tab === 'integrations' && <IntegrationsSection />}
         </div>
       </div>
-
-      {tab === 'members' && <MembersSection />}
-      {tab === 'requests' && <AccessRequestsSection />}
-      {tab === 'calendar' && <CalendarSection />}
-      {tab === 'events' && <EventsSection />}
-      {tab === 'templates' && <TemplatesSection />}
-      {tab === 'project' && <ProjectSection />}
-      {tab === 'sections' && <AppSectionsAccessSection />}
-      {tab === 'journal' && <ProjectJournalSection />}
-      {tab === 'notifications' && <NotificationsSettingsSection />}
-      {tab === 'telegram' && <TelegramSection />}
-      {tab === 'diagnostics' && <DiagnosticsDashboardSection />}
-      {tab === 'integrations' && <IntegrationsSection />}
     </div>
   );
 }
@@ -408,29 +476,33 @@ function IntegrationsSection() {
   const [subTab, setSubTab] = useState<'sms' | 'ai'>('sms');
   return (
     <div className="space-y-6">
-      <section className="rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] p-3 shadow-[var(--shadow)]">
-        <div className="grid grid-cols-2 gap-2">
+      <section className="rounded-[10px] bg-stone-100 p-1">
+        <div className="grid grid-cols-2 gap-1">
           <button
             type="button"
             className={
               subTab === 'sms'
-                ? 'rounded-xl bg-primary px-3 py-2 text-sm font-bold text-white shadow-md shadow-primary/20'
-                : 'rounded-xl border border-stone-200 bg-white px-3 py-2 text-sm font-semibold text-stone-700 hover:bg-stone-50'
+                ? 'flex items-center justify-center gap-2 rounded-lg bg-white px-3 py-2.5 text-sm font-medium text-stone-900 shadow'
+                : 'flex items-center justify-center gap-2 rounded-lg bg-transparent px-3 py-2.5 text-sm font-medium text-stone-500'
             }
             onClick={() => setSubTab('sms')}
           >
+            <span aria-hidden>💬</span>
             SMS.ru
+            <span className="rounded-lg bg-red-100 px-1.5 py-0.5 text-[11px] text-red-600">Не настроено</span>
           </button>
           <button
             type="button"
             className={
               subTab === 'ai'
-                ? 'rounded-xl bg-primary px-3 py-2 text-sm font-bold text-white shadow-md shadow-primary/20'
-                : 'rounded-xl border border-stone-200 bg-white px-3 py-2 text-sm font-semibold text-stone-700 hover:bg-stone-50'
+                ? 'flex items-center justify-center gap-2 rounded-lg bg-white px-3 py-2.5 text-sm font-medium text-stone-900 shadow'
+                : 'flex items-center justify-center gap-2 rounded-lg bg-transparent px-3 py-2.5 text-sm font-medium text-stone-500'
             }
             onClick={() => setSubTab('ai')}
           >
+            <span aria-hidden>🤖</span>
             ИИ интеграции
+            <span className="rounded-lg bg-emerald-100 px-1.5 py-0.5 text-[11px] text-emerald-700">Подключено</span>
           </button>
         </div>
       </section>
@@ -440,7 +512,13 @@ function IntegrationsSection() {
   );
 }
 
-function MembersSection() {
+function MembersSection({
+  showAddUser,
+  onAddUserClose,
+}: {
+  showAddUser: boolean;
+  onAddUserClose: () => void;
+}) {
   const qc = useQueryClient();
   const { data, isLoading, error, isFetching } = useQuery({
     queryKey: Q_MEMBERS,
@@ -449,6 +527,8 @@ function MembersSection() {
   const dirsQ = useQuery({ queryKey: Q_DIRS, queryFn: fetchDirectionTemplates, staleTime: 30_000 });
 
   const [search, setSearch] = useState('');
+  const [roleFilter, setRoleFilter] = useState('');
+  const [showActionsMenu, setShowActionsMenu] = useState(false);
   const [form, setForm] = useState({
     first_name: '',
     last_name: '',
@@ -457,7 +537,6 @@ function MembersSection() {
     ministry_role: '',
     ministry_direction: '',
   });
-  const [showCreate, setShowCreate] = useState(true);
   const [editing, setEditing] = useState<AppUser | null>(null);
   const [editForm, setEditForm] = useState({
     first_name: '',
@@ -504,15 +583,16 @@ function MembersSection() {
   const filtered = useMemo(() => {
     const list = data ?? [];
     const q = search.trim().toLowerCase();
+    const roleFiltered = !roleFilter ? list : list.filter((u) => u.app_role === roleFilter);
     const matched = !q
-      ? list
-      : list.filter((u) => {
+      ? roleFiltered
+      : roleFiltered.filter((u) => {
           const blob =
             `${memberRosterName(u)} ${displayName(u)} ${u.phone_number ?? ''} ${u.email ?? ''}`.toLowerCase();
           return blob.includes(q);
         });
     return [...matched].sort(compareMembersByPrayerCycleOrder);
-  }, [data, search]);
+  }, [data, search, roleFilter]);
 
   const dirs = (dirsQ.data ?? []) as MinistryDirectionTemplate[];
   const rolesForDirection = (directionTitlesRaw: string) => {
@@ -566,6 +646,7 @@ function MembersSection() {
         ministry_direction: '',
       });
       invalidate();
+      onAddUserClose();
     },
     onError: (e) => {
       const msg = apiErrorMessage(e, 'Не удалось создать.');
@@ -880,111 +961,131 @@ function MembersSection() {
         </div>
       )}
 
-      <div className="rounded-2xl border border-sky-200/50 bg-gradient-to-br from-sky-50/95 via-white to-indigo-50/40 px-4 py-3.5 shadow-[var(--shadow)]">
-        <p className="text-xs font-extrabold uppercase tracking-wide text-sky-900/80">Вход в приложение</p>
-        <p className="mt-1.5 text-sm leading-relaxed text-stone-600">
-          Не все в списке уже заходят в приложение: плашка{' '}
-          <span className="whitespace-nowrap font-semibold text-emerald-800">«В приложении»</span> — пароль
-          задан; <span className="whitespace-nowrap font-semibold text-amber-900">«Нет входа»</span> — карточка
-          есть, регистрация ещё не пройдена.
-        </p>
-      </div>
-
-      <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] px-4 py-3 shadow-[var(--shadow)]">
-        <div className="flex flex-wrap gap-4 text-sm">
-          <span>
-            <span className="font-extrabold text-stone-900">{stats.total}</span>
-            <span className="text-stone-500"> всего</span>
-          </span>
-          <span>
-            <span className="font-extrabold text-emerald-700">{stats.active}</span>
-            <span className="text-stone-500"> активных</span>
-          </span>
-          <span>
-            <span className="font-extrabold text-teal-700">{stats.registered}</span>
-            <span className="text-stone-500"> в приложении</span>
-          </span>
-          <span>
-            <span className="font-extrabold text-amber-800">{stats.withoutApp}</span>
-            <span className="text-stone-500"> без входа</span>
-          </span>
-          <span>
-            <span className="font-extrabold text-primary">{stats.admins}</span>
-            <span className="text-stone-500"> админов</span>
-          </span>
+      {/* Metric cards */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div className="rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] px-4 py-3 shadow-[var(--shadow)]">
+          <p className="text-xs text-stone-500">Всего участников</p>
+          <p className="mt-1 text-2xl font-extrabold text-stone-900">{stats.total}</p>
+          {isFetching && !isLoading ? (
+            <p className="mt-0.5 text-[10px] text-stone-400">Обновление…</p>
+          ) : null}
         </div>
-        {isFetching && !isLoading ? (
-          <span className="text-xs text-stone-400">Обновление…</span>
-        ) : null}
-        <button
-          type="button"
-          className={btnSecondary('shrink-0 text-xs')}
-          disabled={mergeDupesMut.isPending || swapAllNamesMut.isPending}
-          title="Слить в одну карточку записи с одинаковым именем и фамилией (безопаснее, если создавались дубликаты)"
-          onClick={() => {
-            if (
-              !window.confirm(
-                'Объединить дубликаты пользователей? Останется одна карточка с меньшим номером (старая запись), пароль и данные перенесутся.',
-              )
-            ) {
-              return;
-            }
-            setBanner(null);
-            mergeDupesMut.mutate();
-          }}
-        >
-          {mergeDupesMut.isPending ? 'Объединение…' : 'Объединить дубликаты'}
-        </button>
-        <button
-          type="button"
-          className={btnSecondary('shrink-0 border-amber-200 text-xs text-amber-950 hover:bg-amber-50/80')}
-          disabled={mergeDupesMut.isPending || swapAllNamesMut.isPending}
-          title="Одно действие для всех: поменять местами колонки имени и фамилии. Повторное нажатие отменит эффект."
-          onClick={() => {
-            if (
-              !window.confirm(
-                'Поменять местами поля «имя» и «фамилия» у ВСЕХ пользователей сразу? Используйте только если данные были занесены в перепутанные колонки. Повторный запуск снова меняет местами всё (откат).',
-              )
-            ) {
-              return;
-            }
-            setBanner(null);
-            swapAllNamesMut.mutate();
-          }}
-        >
-          {swapAllNamesMut.isPending ? 'Обновление…' : 'Поменять имя/фамилию у всех'}
-        </button>
+        <div className="rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] px-4 py-3 shadow-[var(--shadow)]">
+          <p className="text-xs text-stone-500">В приложении</p>
+          <p className="mt-1 text-2xl font-extrabold text-emerald-700">{stats.registered}</p>
+        </div>
+        <div className="rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] px-4 py-3 shadow-[var(--shadow)]">
+          <p className="text-xs text-stone-500">Без входа</p>
+          <p className="mt-1 text-2xl font-extrabold text-red-600">{stats.withoutApp}</p>
+        </div>
+        <div className="rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] px-4 py-3 shadow-[var(--shadow)]">
+          <p className="text-xs text-stone-500">Администраторов</p>
+          <p className="mt-1 text-2xl font-extrabold text-primary">{stats.admins}</p>
+        </div>
       </div>
 
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      {/* Toolbar */}
+      <div className="flex flex-wrap items-center gap-2">
         <input
           type="search"
-          className={`${fieldClass()} sm:max-w-xs`}
+          className={`${fieldClass()} min-w-[160px] flex-1`}
           placeholder="Поиск по имени или телефону…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           aria-label="Поиск пользователей"
         />
-        <div className="flex flex-wrap gap-2 self-start sm:self-auto">
+        <select
+          className="rounded-xl border border-stone-200/90 bg-white px-3 py-2.5 text-sm text-stone-900 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+          value={roleFilter}
+          onChange={(e) => setRoleFilter(e.target.value)}
+          aria-label="Фильтр по роли"
+        >
+          <option value="">Все роли</option>
+          <option value="member">Член церкви</option>
+          <option value="minister">Служитель</option>
+          <option value="pastor">Пастор</option>
+          <option value="musician">Музыкант</option>
+          <option value="editor">Редактор</option>
+          <option value="admin">Администратор</option>
+        </select>
+        <button
+          type="button"
+          className={btnSecondary('')}
+          onClick={() => {
+            setSearch('');
+            setRoleFilter('');
+          }}
+          title="Сбросить фильтры"
+        >
+          Сброс
+        </button>
+        <button
+          type="button"
+          className={
+            showBulkCreate
+              ? `${btnPrimary('')} inline-flex items-center gap-1.5`
+              : `${btnSecondary('')} inline-flex items-center gap-1.5`
+          }
+          onClick={() => setShowBulkCreate((v) => !v)}
+        >
+          <LuTable2 className="h-4 w-4 shrink-0" aria-hidden />
+          Массово из таблицы
+        </button>
+        <div className="relative">
           <button
             type="button"
             className={btnSecondary('')}
-            onClick={() => setShowCreate((v) => !v)}
+            onClick={() => setShowActionsMenu((v) => !v)}
           >
-            {showCreate ? 'Скрыть форму добавления' : 'Добавить пользователя'}
+            ⋯ Действия
           </button>
-          <button
-            type="button"
-            className={
-              showBulkCreate
-                ? `${btnPrimary('')} inline-flex items-center gap-2`
-                : `${btnSecondary('')} inline-flex items-center gap-2`
-            }
-            onClick={() => setShowBulkCreate((v) => !v)}
-          >
-            <LuTable2 className="h-4 w-4 shrink-0" aria-hidden />
-            Массово из таблицы
-          </button>
+          {showActionsMenu && (
+            <>
+              <div
+                className="fixed inset-0 z-20"
+                onClick={() => setShowActionsMenu(false)}
+                aria-hidden
+              />
+              <div className="absolute right-0 top-full z-30 mt-1 min-w-[230px] rounded-xl border border-stone-200 bg-white py-1 shadow-lg">
+                <button
+                  type="button"
+                  className="w-full px-4 py-2 text-left text-sm font-semibold text-stone-700 hover:bg-stone-50 disabled:opacity-50"
+                  disabled={mergeDupesMut.isPending || swapAllNamesMut.isPending}
+                  onClick={() => {
+                    setShowActionsMenu(false);
+                    if (
+                      !window.confirm(
+                        'Объединить дубликаты пользователей? Останется одна карточка с меньшим номером, пароль и данные перенесутся.',
+                      )
+                    )
+                      return;
+                    setBanner(null);
+                    mergeDupesMut.mutate();
+                  }}
+                >
+                  {mergeDupesMut.isPending ? 'Объединение…' : 'Объединить дубликаты'}
+                </button>
+                <button
+                  type="button"
+                  className="w-full px-4 py-2 text-left text-sm font-semibold text-amber-900 hover:bg-stone-50 disabled:opacity-50"
+                  disabled={mergeDupesMut.isPending || swapAllNamesMut.isPending}
+                  onClick={() => {
+                    setShowActionsMenu(false);
+                    if (
+                      !window.confirm(
+                        'Поменять местами поля «имя» и «фамилия» у ВСЕХ пользователей? Повторный запуск снова меняет местами (откат).',
+                      )
+                    )
+                      return;
+                    setBanner(null);
+                    swapAllNamesMut.mutate();
+                  }}
+                >
+                  {swapAllNamesMut.isPending ? 'Обновление…' : 'Поменять имя/фамилию у всех'}
+                </button>
+              </div>
+            </>
+          )}
         </div>
       </div>
 
@@ -1205,104 +1306,132 @@ function MembersSection() {
         </section>
       ) : null}
 
-      {showCreate ? (
-        <section className="rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] p-4 shadow-[var(--shadow)] shell:p-5">
-          <h3 className="text-sm font-extrabold text-stone-900">Новый пользователь</h3>
-          <p className="mt-1 text-xs text-stone-500">
-            Обязательны имя, фамилия, телефон и дата рождения. Служение можно указать позже в карточке.
-          </p>
-          <form onSubmit={onCreate} className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            <div>
-              <label className="mb-1 block text-xs font-semibold text-stone-600">Фамилия</label>
-              <input
-                className={fieldClass()}
-                value={form.last_name}
-                onChange={(e) => setForm((s) => ({ ...s, last_name: e.target.value }))}
-                required
-              />
+      {/* Add user modal */}
+      {showAddUser && (
+        <div
+          className="fixed inset-0 z-[120] flex items-center justify-center bg-black/45 p-4"
+          role="presentation"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) onAddUserClose();
+          }}
+        >
+          <div
+            className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-white shadow-2xl"
+            role="dialog"
+            aria-modal="true"
+          >
+            <div className="sticky top-0 z-10 border-b border-stone-100 bg-white px-5 py-4">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <h3 className="text-[18px] font-medium tracking-tight text-stone-900">Новый пользователь</h3>
+                  <p className="mt-0.5 text-xs text-stone-500">
+                    Обязательны имя, фамилия, телефон и дата рождения.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={onAddUserClose}
+                  className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-stone-200 text-stone-500 transition hover:bg-stone-100 hover:text-stone-800"
+                  aria-label="Закрыть"
+                >
+                  <LuX className="h-4 w-4" strokeWidth={2} aria-hidden />
+                </button>
+              </div>
             </div>
-            <div>
-              <label className="mb-1 block text-xs font-semibold text-stone-600">Имя</label>
-              <input
-                className={fieldClass()}
-                value={form.first_name}
-                onChange={(e) => setForm((s) => ({ ...s, first_name: e.target.value }))}
-                required
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-xs font-semibold text-stone-600">Телефон</label>
-              <input
-                className={fieldClass()}
-                inputMode="tel"
-                value={form.phone_number}
-                onChange={(e) => setForm((s) => ({ ...s, phone_number: e.target.value }))}
-                required
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-xs font-semibold text-stone-600">Дата рождения</label>
-              <input
-                className={fieldClass()}
-                type="date"
-                value={form.birth_date}
-                onChange={(e) => setForm((s) => ({ ...s, birth_date: e.target.value }))}
-                required
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-xs font-semibold text-stone-600">Направление</label>
-              <select
-                className={fieldClass()}
-                value={form.ministry_direction}
-                onChange={(e) => {
-                  const nextDir = e.target.value;
-                  setForm((s) => {
-                    return { ...s, ministry_direction: nextDir };
-                  });
-                }}
-              >
-                <option value="">—</option>
-                {dirs.map((d) => (
-                  <option key={d.id} value={d.title}>
-                    {d.title}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="mb-1 block text-xs font-semibold text-stone-600">Роль служения</label>
-              <select
-                multiple
-                size={Math.min(7, Math.max(3, roleOptionsForDirection(form.ministry_direction).length))}
-                className={fieldClass()}
-                value={roleArray(form.ministry_role)}
-                onChange={(e) => {
-                  const selected = Array.from(e.currentTarget.selectedOptions).map((opt) => opt.value);
-                  setForm((s) => ({ ...s, ministry_role: normalizeMinistryRoles(selected.join(', ')) }));
-                }}
-              >
-                {roleOptionsForDirection(form.ministry_direction).map((t) => (
-                  <option key={t} value={t}>
-                    {t}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="sm:col-span-2 lg:col-span-3">
-              <button
-                type="submit"
-                disabled={createMut.isPending || mergeOnCreateMut.isPending}
-                className={btnPrimary()}
-              >
-                {createMut.isPending || mergeOnCreateMut.isPending
-                  ? 'Сохранение…'
-                  : 'Создать пользователя'}
-              </button>
-            </div>
-          </form>
-        </section>
-      ) : null}
+            <form onSubmit={onCreate} className="space-y-3 p-5">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div>
+                  <label className="mb-1 block text-xs font-semibold text-stone-600">Фамилия</label>
+                  <input
+                    className={fieldClass()}
+                    value={form.last_name}
+                    onChange={(e) => setForm((s) => ({ ...s, last_name: e.target.value }))}
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-semibold text-stone-600">Имя</label>
+                  <input
+                    className={fieldClass()}
+                    value={form.first_name}
+                    onChange={(e) => setForm((s) => ({ ...s, first_name: e.target.value }))}
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-semibold text-stone-600">Телефон</label>
+                  <input
+                    className={fieldClass()}
+                    inputMode="tel"
+                    value={form.phone_number}
+                    onChange={(e) => setForm((s) => ({ ...s, phone_number: e.target.value }))}
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-semibold text-stone-600">Дата рождения</label>
+                  <input
+                    className={fieldClass()}
+                    type="date"
+                    value={form.birth_date}
+                    onChange={(e) => setForm((s) => ({ ...s, birth_date: e.target.value }))}
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-semibold text-stone-600">Направление</label>
+                  <select
+                    className={fieldClass()}
+                    value={form.ministry_direction}
+                    onChange={(e) => {
+                      const nextDir = e.target.value;
+                      setForm((s) => ({ ...s, ministry_direction: nextDir }));
+                    }}
+                  >
+                    <option value="">—</option>
+                    {dirs.map((d) => (
+                      <option key={d.id} value={d.title}>
+                        {d.title}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-semibold text-stone-600">Роль служения</label>
+                  <select
+                    multiple
+                    size={Math.min(7, Math.max(3, roleOptionsForDirection(form.ministry_direction).length))}
+                    className={fieldClass()}
+                    value={roleArray(form.ministry_role)}
+                    onChange={(e) => {
+                      const selected = Array.from(e.currentTarget.selectedOptions).map((opt) => opt.value);
+                      setForm((s) => ({ ...s, ministry_role: normalizeMinistryRoles(selected.join(', ')) }));
+                    }}
+                  >
+                    {roleOptionsForDirection(form.ministry_direction).map((t) => (
+                      <option key={t} value={t}>
+                        {t}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <div className="flex justify-end gap-2 border-t border-stone-100 pt-3">
+                <button type="button" className={btnSecondary()} onClick={onAddUserClose}>
+                  Отмена
+                </button>
+                <button
+                  type="submit"
+                  disabled={createMut.isPending || mergeOnCreateMut.isPending}
+                  className={btnPrimary()}
+                >
+                  {createMut.isPending || mergeOnCreateMut.isPending ? 'Сохранение…' : 'Создать'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Карточки — мобильные */}
       <div className="space-y-3 shell:hidden">
@@ -1366,65 +1495,73 @@ function MembersSection() {
         )}
       </div>
 
-      {/* Таблица — shell+; горизонтальный скролл без обрезки выпадающих меню по вертикали */}
+      {/* Table — shown at shell+ breakpoint */}
       <div className="hidden rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] shadow-[var(--shadow)] shell:block">
         <div className="overflow-x-auto overscroll-x-contain [-webkit-overflow-scrolling:touch] scroll-smooth">
-          <table className="min-w-[720px] w-full border-collapse text-left text-sm">
+          <table className="w-full min-w-[640px] border-collapse text-left text-sm">
             <thead>
               <tr className="border-b border-stone-200 bg-stone-50/90 text-xs font-extrabold uppercase tracking-wider text-stone-500">
-                <th className="px-4 py-3">Пользователь</th>
-                <th className="px-4 py-3 whitespace-nowrap">Вход</th>
-                <th className="px-4 py-3">Телефон</th>
-                <th className="px-4 py-3">Роль в приложении</th>
+                <th className="px-4 py-3">Участник</th>
+                <th className="whitespace-nowrap px-4 py-3">Телефон</th>
+                <th className="px-4 py-3">Роль</th>
                 <th className="px-4 py-3">Статус</th>
+                <th className="px-4 py-3" />
               </tr>
             </thead>
             <tbody>
               {filtered.length === 0 ? (
                 <tr>
                   <td colSpan={5} className="px-4 py-10 text-center text-stone-500">
-                    {search.trim() ? 'Никого не найдено.' : 'Список пуст.'}
+                    {search.trim() || roleFilter ? 'Никого не найдено.' : 'Список пуст.'}
                   </td>
                 </tr>
               ) : (
-                filtered.map((u) => (
-                  <tr
-                    key={u.id}
-                    className="cursor-pointer border-b border-stone-100/90 transition hover:bg-primary/[0.04] last:border-0"
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => openEdit(u)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' || e.key === ' ') {
-                        e.preventDefault();
-                        openEdit(u);
-                      }
-                    }}
-                  >
-                    <td className="px-4 py-3 font-semibold text-stone-900">{memberRosterName(u)}</td>
-                    <td className="px-4 py-3 align-middle">
-                      <MemberRegistrationBadge u={u} />
-                    </td>
-                    <td className="px-4 py-3 text-stone-600">{u.phone_number ?? '—'}</td>
-                    <td className="px-4 py-3">
-                      <span className={appRoleBadgeClass(u.app_role)}>{appRoleLabel(u.app_role)}</span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex flex-col gap-1">
-                        {u.is_active ? (
-                          <span className="text-emerald-700">Активен</span>
-                        ) : (
-                          <span className="text-stone-500">Неактивен</span>
-                        )}
-                        {u.in_prayer_cycle ? (
-                          <span className="text-xs font-semibold text-sky-800">В молитвенном цикле</span>
-                        ) : (
-                          <span className="text-xs font-semibold text-stone-400">Вне цикла</span>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))
+                filtered.map((u) => {
+                  const name = memberRosterName(u);
+                  const { bg, fg } = memberAvatarColors(name);
+                  return (
+                    <tr
+                      key={u.id}
+                      className="border-b border-stone-100/90 transition last:border-0 hover:bg-primary/[0.03]"
+                    >
+                      <td className="px-4 py-2.5">
+                        <div className="flex items-center gap-2.5">
+                          <div
+                            className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-full text-[11px] font-semibold"
+                            style={{ backgroundColor: bg, color: fg }}
+                            aria-hidden
+                          >
+                            {memberInitials(u)}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="truncate font-medium text-stone-900">{name}</p>
+                            {u.ministry_role ? (
+                              <p className="truncate text-xs text-stone-500">{u.ministry_role}</p>
+                            ) : null}
+                          </div>
+                        </div>
+                      </td>
+                      <td className="whitespace-nowrap px-4 py-2.5 text-stone-600">
+                        {u.phone_number ?? '—'}
+                      </td>
+                      <td className="px-4 py-2.5">
+                        <span className={appRoleBadgeClass(u.app_role)}>{appRoleLabel(u.app_role)}</span>
+                      </td>
+                      <td className="px-4 py-2.5">
+                        <MemberRegistrationBadge u={u} />
+                      </td>
+                      <td className="px-4 py-2.5 text-right">
+                        <button
+                          type="button"
+                          className="rounded-lg border border-stone-200 bg-white px-2.5 py-1 text-xs font-medium text-stone-700 transition hover:border-primary/40 hover:text-primary"
+                          onClick={() => openEdit(u)}
+                        >
+                          Открыть
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
@@ -2744,90 +2881,90 @@ function CalendarSection() {
     onError: (e) => setMsg({ type: 'err', text: apiErrorMessage(e, 'Не удалось запустить цикл.') }),
   });
 
-  const navClass =
-    'rounded-lg border border-stone-200/90 bg-white/80 px-2.5 py-1 text-stone-700 transition hover:border-primary/30 hover:bg-primary/[0.04] hover:text-stone-900';
-
   return (
     <div className="space-y-6">
-      <section
-        className="rounded-2xl border border-primary/20 bg-gradient-to-br from-primary/[0.07] via-[var(--surface-elevated)] to-stone-50/90 p-5 shadow-[var(--shadow)]"
-        aria-labelledby="calendar-intro-heading"
-      >
-        <h2 id="calendar-intro-heading" className="text-lg font-extrabold tracking-tight text-stone-900">
-          Молитвенный календарь
-        </h2>
-        <p className="mt-2 text-sm leading-relaxed text-stone-600">
-          Настройка экрана «Молитва»: с какой даты считать цикл, состав очереди членов церкви, план сбора нужд и
-          дополнительные блоки (темы, служения, отступники).
-        </p>
-        <nav
-          className="mt-4 flex flex-wrap gap-2 border-t border-stone-200/60 pt-4 text-sm"
-          aria-label="Подразделы молитвенного календаря"
-        >
-          <a className={navClass} href="#cal-anchor">
-            1. Дата старта
-          </a>
-          <a className={navClass} href="#cal-roster">
-            2. Очередь членов церкви
-          </a>
-          <a className={navClass} href="#cal-collection">
-            3. Сбор нужд
-          </a>
-          <a className={navClass} href="#cal-content">
-            4. Контент «Молитва»
-          </a>
-        </nav>
+      <section className="rounded-2xl border border-stone-200/80 bg-white p-5 shadow-[var(--shadow)]">
+        <h2 className="text-lg font-semibold text-stone-900">Молитвенный календарь</h2>
+        <div className="mt-5 flex items-start">
+          <div className="flex flex-1 items-center">
+            {[
+              { id: 'cal-anchor', label: 'Дата старта' },
+              { id: 'cal-roster', label: 'Очередь' },
+              { id: 'cal-collection', label: 'Нужды' },
+              { id: 'cal-content', label: 'Контент' },
+            ].map((step, i, arr) => (
+              <div key={step.id} className="flex flex-1 items-start">
+                <a href={`#${step.id}`} className="group flex flex-col items-center gap-1 text-center">
+                  <span
+                    className={[
+                      'flex h-8 w-8 items-center justify-center rounded-full border-2 text-[13px] font-semibold transition',
+                      i === 0
+                        ? 'border-[#7B2D3F] bg-[#7B2D3F] text-white'
+                        : i === 1
+                          ? 'border-[#7B2D3F] bg-white text-[#7B2D3F]'
+                          : 'border-stone-200 bg-white text-stone-400 group-hover:border-stone-300',
+                    ].join(' ')}
+                  >
+                    {i + 1}
+                  </span>
+                  <span
+                    className={[
+                      'whitespace-nowrap text-[11px]',
+                      i === 1 ? 'font-medium text-[#7B2D3F]' : 'text-stone-400',
+                    ].join(' ')}
+                  >
+                    {step.label}
+                  </span>
+                </a>
+                {i < arr.length - 1 ? (
+                  <div className="mx-2 mt-4 h-[2px] flex-1 bg-stone-200" aria-hidden />
+                ) : null}
+              </div>
+            ))}
+          </div>
+        </div>
       </section>
 
       <section
         id="cal-anchor"
         className="scroll-mt-6 rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] p-5 shadow-[var(--shadow)]"
       >
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="flex min-w-0 items-start gap-3">
-            <span
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-sm font-extrabold text-primary"
-              aria-hidden
-            >
-              1
-            </span>
-            <div className="min-w-0">
-              <h3 className="font-extrabold text-stone-900">Дата начала отсчёта цикла</h3>
-              <p className="mt-1 text-sm text-stone-600">
-                Глобальная «нулевая» дата: от неё считается, кто попадает на какой календарный день в ротации. Чтобы{' '}
-                <strong>сегодня</strong> первым шёл конкретный человек без смены этой даты, нажмите «Первым сегодня» в
-                блоке{' '}
-                <a href="#cal-roster" className="font-semibold text-primary underline-offset-2 hover:underline">
-                  очереди членов церкви
-                </a>
-                .
-              </p>
+        <div className="grid gap-5 lg:grid-cols-[1.2fr_auto] lg:items-end">
+          <div>
+            <h3 className="text-base font-semibold text-stone-900">Дата старта</h3>
+            <div className="mt-3 flex gap-2 rounded-lg border-l-[3px] border-indigo-500 bg-indigo-50 px-4 py-3 text-[13px] text-stone-700">
+              <span className="font-semibold text-indigo-700" aria-hidden>
+                i
+              </span>
+              <span>Цикл молитвы начинается с выбранной даты и идет по списку членов церкви по кругу.</span>
             </div>
+            <label className="mt-4 block text-sm font-medium text-stone-700">Дата начала отсчета цикла</label>
+            <input
+              type="date"
+              className="mt-1 h-[42px] w-[220px] rounded-lg border border-stone-200 bg-white px-3.5 text-[15px] text-stone-900 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+            />
           </div>
-        </div>
-        <div className="mt-5 max-w-md rounded-xl border border-stone-200/80 bg-stone-50/60 p-4">
-          <label className="block text-xs font-semibold text-stone-600">Дата старта</label>
-          <input
-            type="date"
-            className={`${fieldClass()} mt-1 w-full max-w-xs`}
-            value={date}
-            onChange={(e) => setDate(e.target.value)}
-          />
-          <button
-            type="button"
-            className={`${btnPrimary('mt-4 w-full max-w-xs')}`}
-            disabled={mut.isPending}
-            onClick={() => {
-              setMsg(null);
-              mut.mutate();
-            }}
-          >
-            {mut.isPending ? 'Сохранение…' : 'Сохранить дату старта'}
-          </button>
+          <div className="flex justify-end">
+            <button
+              type="button"
+              className={btnPrimary('h-fit self-end whitespace-nowrap bg-[#7B2D3F]')}
+              disabled={mut.isPending}
+              onClick={() => {
+                setMsg(null);
+                mut.mutate();
+              }}
+            >
+              {mut.isPending ? 'Сохранение…' : 'Сохранить дату'}
+            </button>
+          </div>
           {msg ? (
             <p
               className={
-                msg.type === 'ok' ? 'mt-3 text-sm font-medium text-emerald-700' : 'mt-3 text-sm text-red-600'
+                msg.type === 'ok'
+                  ? 'lg:col-span-2 text-sm font-medium text-emerald-700'
+                  : 'lg:col-span-2 text-sm text-red-600'
               }
             >
               {msg.text}
@@ -2840,45 +2977,42 @@ function CalendarSection() {
         id="cal-roster"
         className="scroll-mt-6 rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] p-5 shadow-[var(--shadow)]"
       >
-        <div className="flex items-start gap-3">
-          <span
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-sm font-extrabold text-primary"
-            aria-hidden
-          >
-            2
-          </span>
-          <div className="min-w-0 flex-1">
-            <h3 className="font-extrabold text-stone-900">Очередь членов церкви</h3>
-            <p className="mt-1 text-sm text-stone-600">
-              Состав цикла и добавление людей. Здесь же — сдвиг очереди на сегодня («Первым сегодня»).
-            </p>
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <h3 className="text-base font-semibold text-stone-900">Очередь членов</h3>
+            <p className="mt-1 text-sm text-stone-600">Перетаскивайте строки для порядка и фиксируйте «первым сегодня».</p>
           </div>
+          <button
+            type="button"
+            className="rounded-md border border-stone-200 bg-transparent px-3 py-1.5 text-xs font-medium text-stone-500 transition hover:bg-stone-50"
+            onClick={() => void qc.invalidateQueries({ queryKey: ['admin', 'prayer-cycle-roster'] })}
+          >
+            Сбросить порядок
+          </button>
         </div>
-        <div className="mt-5">
-          <CalendarPrayerCycleRoster />
-        </div>
+        <CalendarPrayerCycleRoster />
       </section>
 
       <section
         id="cal-collection"
         className="scroll-mt-6 rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] p-5 shadow-[var(--shadow)]"
       >
-        <div className="flex items-start gap-3">
-          <span
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary"
-            aria-hidden
-          >
-            <LuClipboardList className="h-5 w-5" strokeWidth={2} />
-          </span>
+        <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
-            <h3 className="font-extrabold text-stone-900">Сбор нужд: эта и следующая неделя</h3>
+            <h3 className="text-base font-semibold text-stone-900">Сбор нужд</h3>
             <p className="mt-1 text-sm text-stone-600">
-              Как на экране «Молитва»: дни цикла, кто отвечает за сбор, прошлые нужды — для администратора и
-              координаторов.
+              Список нужд участников и план сбора по неделям для приложения.
             </p>
           </div>
+          <button
+            type="button"
+            className="rounded-md bg-[#7B2D3F] px-3.5 py-2 text-xs font-medium text-white transition hover:opacity-95"
+            title="Отправка выполняется в разделе Telegram"
+          >
+            Отправить нужды в Telegram
+          </button>
         </div>
-        <div className="mt-4 max-w-2xl">
+        <div className="rounded-xl border border-stone-200/80 bg-white p-4">
           <NextWeekPrayerPlanSection
             canView
             currentUserId={meQ.data?.id ?? null}
@@ -2892,21 +3026,27 @@ function CalendarSection() {
         id="cal-content"
         className="scroll-mt-6 rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] p-5 shadow-[var(--shadow)]"
       >
-        <div className="mb-4 flex items-start gap-3">
-          <span
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-sm font-extrabold text-primary"
-            aria-hidden
-          >
-            4
-          </span>
+        <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
-            <h3 className="font-extrabold text-stone-900">Контент на экране «Молитва»</h3>
+            <h3 className="text-base font-semibold text-stone-900">Контент «Молитва»</h3>
             <p className="mt-1 text-sm text-stone-600">
-              Темы, служения и отступники — три колонки под календарём в приложении.
+              Тема, стих и молитвенные блоки для карточек и Telegram-превью.
             </p>
           </div>
+          <button
+            type="button"
+            className="rounded-md bg-[#7B2D3F] px-3.5 py-2 text-xs font-medium text-white transition hover:opacity-95"
+            title="Сохранение выполняется в блоках ниже"
+          >
+            Сохранить шаблон
+          </button>
         </div>
-        <GlobalNeedsSection />
+        <div className="rounded-xl border border-stone-200/80 bg-white p-4">
+          <div className="mb-3 rounded-lg border border-stone-200 bg-stone-50/70 px-3 py-2 text-xs text-stone-600">
+            Предпросмотр отправки формируется из полей ниже.
+          </div>
+          <GlobalNeedsSection />
+        </div>
       </section>
     </div>
   );
@@ -2956,10 +3096,8 @@ function EventsSection() {
     };
   }, [posterPreviewUrl]);
   const [editing, setEditing] = useState<ChurchEventItem | null>(null);
-  const [openId, setOpenId] = useState<number | null>(null);
-  const [addPanelOpen, setAddPanelOpen] = useState(false);
-  const [listPanelOpen, setListPanelOpen] = useState(false);
-  const [createExtrasOpen, setCreateExtrasOpen] = useState(false);
+  const [eventPlace, setEventPlace] = useState('');
+  const [eventModalMode, setEventModalMode] = useState<'create' | 'edit' | null>(null);
 
   const invalidate = () => void qc.invalidateQueries({ queryKey: Q_EVENTS });
   const eventCount = (eventsQ.data ?? []).length;
@@ -2983,11 +3121,6 @@ function EventsSection() {
     const ids = new Set(opts.map((o) => o.id));
     setForm((s) => (ids.has(s.category) ? s : { ...s, category: opts[0].id }));
   }, [categoryOptions]);
-
-  useEffect(() => {
-    if (!editing) return;
-    setOpenId(editing.id);
-  }, [editing]);
 
   const createMut = useMutation({
     mutationFn: () =>
@@ -3083,556 +3216,274 @@ function EventsSection() {
         </div>
       ) : null}
 
-      <section
-        className="rounded-2xl border border-stone-200/80 bg-gradient-to-br from-amber-50/40 via-[var(--surface-elevated)] to-stone-50/60 p-4 shadow-[var(--shadow)] sm:p-5"
-        aria-labelledby="admin-events-heading"
-      >
-        <div className="flex items-start gap-3">
-          <div
-            className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-amber-100/90 text-amber-800"
-            aria-hidden
+      <section className="rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] p-4 shadow-[var(--shadow)] sm:p-5">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h2 className="text-base font-semibold text-stone-900">События</h2>
+            <p className="mt-1 text-sm text-stone-600">Анонсы и расписание мероприятий</p>
+          </div>
+          <button
+            type="button"
+            className={btnPrimary('bg-[#7B2D3F] text-xs')}
+            id="add-event-btn"
+            onClick={() => {
+              setForm({
+                title: '',
+                description: '',
+                event_date: new Date().toISOString().slice(0, 10),
+                event_time: '11:00',
+                recurrence_type: 'once',
+                weekly_day: 0,
+                is_active: true,
+                category: categoryOptions[0]?.id ?? 'service',
+                poster_url: null,
+              });
+              setPosterFile(null);
+              setEventPlace('');
+              setEditing(null);
+              setEventModalMode('create');
+            }}
           >
-            <LuCalendarDays className="h-5 w-5" strokeWidth={2} />
-          </div>
-          <div className="min-w-0 flex-1">
-            <h3 id="admin-events-heading" className="text-base font-extrabold text-stone-900">
-              События
-            </h3>
-            <p className="mt-1 text-sm leading-relaxed text-stone-600">
-              Расписание для дашборда: дата и время, повтор, категория. Описание и постер — по желанию.
-            </p>
-          </div>
-          <div className="shrink-0 text-right">
-            <p className="text-[10px] font-extrabold uppercase tracking-wider text-stone-400">В базе</p>
-            <p className="text-xl font-extrabold tabular-nums text-stone-900">{eventCount}</p>
-          </div>
+            + Добавить событие
+          </button>
         </div>
       </section>
 
-      <section className="overflow-hidden rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] shadow-[var(--shadow)]">
-        <button
-          type="button"
-          className="flex w-full items-center gap-3 px-4 py-3.5 text-left transition-colors hover:bg-stone-50/80 sm:px-5"
-          onClick={() => setAddPanelOpen((v) => !v)}
-          aria-expanded={addPanelOpen}
-        >
-          <span className="text-sm font-extrabold text-stone-900">Добавить событие</span>
-          <span className="hidden text-xs text-stone-500 sm:inline">Название, расписание, категория</span>
-          <LuChevronDown
-            className={`ml-auto h-4 w-4 shrink-0 text-stone-400 transition-transform duration-200 ${addPanelOpen ? 'rotate-180' : ''}`}
-            strokeWidth={2}
-            aria-hidden
-          />
-        </button>
-        <div
-          className={`grid transition-[grid-template-rows] duration-300 ease-in-out motion-reduce:transition-none ${addPanelOpen ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}
-        >
-          <div className="overflow-hidden">
-            <div className="border-t border-stone-100 px-4 pb-4 pt-1 sm:px-5">
-              <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                <div className="sm:col-span-2">
-                  <label className="mb-1 block text-xs font-semibold text-stone-600">Название</label>
-                  <input
-                    className={fieldClass()}
-                    value={form.title}
-                    onChange={(e) => setForm((s) => ({ ...s, title: e.target.value }))}
-                    placeholder="Например: Воскресное служение"
-                  />
+      {eventsQ.isLoading ? (
+        <div className="h-40 animate-pulse rounded-2xl bg-stone-100" />
+      ) : eventsQ.isError ? (
+        <p className="text-sm text-red-600">{apiErrorMessage(eventsQ.error, 'Не удалось загрузить список событий.')}</p>
+      ) : (eventsQ.data ?? []).length === 0 ? (
+        <div className="flex min-h-[220px] flex-col items-center justify-center rounded-2xl border border-dashed border-stone-200 bg-white text-center">
+          <LuCalendarDays className="h-10 w-10 text-[#7B2D3F]" aria-hidden />
+          <p className="mt-3 text-base font-medium text-stone-900">Нет предстоящих событий</p>
+          <button
+            type="button"
+            className="mt-4 rounded-md bg-[#7B2D3F] px-3.5 py-2 text-xs font-medium text-white"
+            onClick={() => setEventModalMode('create')}
+          >
+            + Добавить первое
+          </button>
+        </div>
+      ) : (
+        <div className="space-y-2.5">
+          {(eventsQ.data ?? []).map((ev) => {
+            const d = new Date(ev.event_date);
+            const day = Number.isNaN(d.getTime()) ? ev.event_date.slice(8, 10) : String(d.getDate());
+            const month =
+              Number.isNaN(d.getTime())
+                ? ev.event_date.slice(5, 7)
+                : d.toLocaleString('ru-RU', { month: 'short' }).replace('.', '').toUpperCase();
+            const catLabel = ev.category ? categoryLabelById.get(ev.category) ?? ev.category : '';
+            return (
+              <article
+                key={ev.id}
+                className="flex items-start gap-4 rounded-[10px] border border-[#F0E9EA] bg-white p-4"
+              >
+                <div className="w-12 shrink-0 rounded-lg bg-[#F3EEF0] py-2 text-center">
+                  <div className="text-[22px] font-bold leading-none text-[#7B2D3F]">{day}</div>
+                  <div className="mt-1 text-[10px] font-semibold tracking-[0.5px] text-[#9B5466]">{month}</div>
                 </div>
-                <div>
-                  <label className="mb-1 block text-xs font-semibold text-stone-600">Повтор</label>
-                  <select
-                    className={fieldClass()}
-                    value={form.recurrence_type}
-                    onChange={(e) =>
-                      setForm((s) => ({ ...s, recurrence_type: e.target.value as 'once' | 'weekly' }))
-                    }
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-[15px] font-semibold text-stone-900">{ev.title}</div>
+                  <div className="mt-1 flex flex-wrap gap-3 text-xs text-stone-500">
+                    <span>🕑 {ev.event_time}</span>
+                    <span>📍 {catLabel || 'Главный зал'}</span>
+                  </div>
+                  <p className="mt-1.5 line-clamp-2 text-[13px] leading-relaxed text-stone-600">
+                    {ev.description || 'Описание не указано.'}
+                  </p>
+                </div>
+                <div className="flex gap-1.5">
+                  <button
+                    type="button"
+                    className="flex h-8 w-8 items-center justify-center rounded-md border border-stone-200 bg-transparent text-sm text-stone-600"
+                    onClick={() => {
+                      const raw = ev.category ?? '';
+                      const category = categoryOptions.some((o) => o.id === raw)
+                        ? raw
+                        : categoryOptions[0]?.id ?? 'service';
+                      setEditing({ ...ev, event_date: dateInputValueFromApi(ev.event_date), category });
+                      setEventPlace(categoryLabelById.get(category) ?? '');
+                      setEventModalMode('edit');
+                    }}
+                    aria-label="Редактировать событие"
                   >
-                    <option value="once">Один раз</option>
-                    <option value="weekly">Каждую неделю</option>
-                  </select>
+                    ✏
+                  </button>
+                  <button
+                    type="button"
+                    className="flex h-8 w-8 items-center justify-center rounded-md border border-red-100 bg-transparent text-sm text-red-500"
+                    onClick={() => {
+                      if (!window.confirm(`Удалить событие «${ev.title}»?`)) return;
+                      setNote(null);
+                      deleteMut.mutate(ev.id);
+                    }}
+                    aria-label="Удалить событие"
+                  >
+                    🗑
+                  </button>
+                </div>
+              </article>
+            );
+          })}
+        </div>
+      )}
+
+      {eventModalMode && (
+        <div
+          className="fixed inset-0 z-[130] flex items-center justify-center bg-black/45 p-4"
+          role="presentation"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) {
+              setEventModalMode(null);
+              setEditing(null);
+            }
+          }}
+        >
+          <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white shadow-2xl">
+            <div className="border-b border-stone-100 px-5 py-4">
+              <h3 className="text-base font-semibold text-stone-900">
+                {eventModalMode === 'create' ? 'Добавить событие' : 'Редактировать событие'}
+              </h3>
+            </div>
+            <div className="space-y-3 p-5">
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-stone-600">Название</label>
+                <input
+                  className={fieldClass()}
+                  value={eventModalMode === 'edit' ? (editing?.title ?? '') : form.title}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    if (eventModalMode === 'edit') setEditing((s) => (s ? { ...s, title: v } : s));
+                    else setForm((s) => ({ ...s, title: v }));
+                  }}
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-stone-600">Описание</label>
+                <textarea
+                  rows={4}
+                  className={`${fieldClass()} resize-y`}
+                  value={eventModalMode === 'edit' ? (editing?.description ?? '') : form.description}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    if (eventModalMode === 'edit') setEditing((s) => (s ? { ...s, description: v } : s));
+                    else setForm((s) => ({ ...s, description: v }));
+                  }}
+                />
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div>
+                  <label className="mb-1 block text-xs font-semibold text-stone-600">Дата</label>
+                  <input
+                    type="date"
+                    className={fieldClass()}
+                    value={eventModalMode === 'edit' ? (editing?.event_date ?? '') : form.event_date}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      if (eventModalMode === 'edit') setEditing((s) => (s ? { ...s, event_date: v } : s));
+                      else setForm((s) => ({ ...s, event_date: v }));
+                    }}
+                  />
                 </div>
                 <div>
                   <label className="mb-1 block text-xs font-semibold text-stone-600">Время</label>
                   <input
-                    className={fieldClass()}
                     type="time"
-                    value={form.event_time}
-                    onChange={(e) => setForm((s) => ({ ...s, event_time: e.target.value }))}
+                    className={fieldClass()}
+                    value={eventModalMode === 'edit' ? (editing?.event_time ?? '') : form.event_time}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      if (eventModalMode === 'edit') setEditing((s) => (s ? { ...s, event_time: v } : s));
+                      else setForm((s) => ({ ...s, event_time: v }));
+                    }}
                   />
                 </div>
-                <div>
-                  <label className="mb-1 block text-xs font-semibold text-stone-600">
-                    {form.recurrence_type === 'weekly' ? 'Дата (ориентир)' : 'Дата'}
-                  </label>
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-stone-600">Место</label>
+                <input
+                  className={fieldClass()}
+                  value={eventPlace}
+                  onChange={(e) => setEventPlace(e.target.value)}
+                  placeholder="Например: Главный зал"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-stone-600">Изображение</label>
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
                   <input
+                    type="file"
+                    accept="image/*"
                     className={fieldClass()}
-                    type="date"
-                    value={form.event_date}
-                    onChange={(e) => setForm((s) => ({ ...s, event_date: e.target.value }))}
+                    onChange={(e) => {
+                      const f = e.target.files?.[0] ?? null;
+                      setPosterFile(f);
+                      if (eventModalMode === 'create') setForm((s) => ({ ...s, poster_url: null }));
+                    }}
                   />
-                  {form.recurrence_type === 'weekly' ? (
-                    <p className="mt-1 text-xs text-stone-500">Подстраивается под выбранный день недели.</p>
-                  ) : null}
-                </div>
-                <div>
-                  <label className="mb-1 block text-xs font-semibold text-stone-600">День недели</label>
-                  <select
-                    className={fieldClass()}
-                    value={String(form.weekly_day)}
-                    disabled={form.recurrence_type !== 'weekly'}
-                    onChange={(e) => setForm((s) => ({ ...s, weekly_day: Number(e.target.value) }))}
+                  <button
+                    type="button"
+                    className={btnSecondary('text-xs')}
+                    disabled={!posterFile || uploadPosterMut.isPending}
+                    onClick={() => {
+                      setNote(null);
+                      uploadPosterMut.mutate();
+                    }}
                   >
-                    {weekDays.map((d) => (
-                      <option key={d.value} value={d.value}>
-                        {d.label}
-                      </option>
-                    ))}
-                  </select>
+                    {uploadPosterMut.isPending ? 'Загрузка…' : 'Загрузить'}
+                  </button>
                 </div>
-                <div>
-                  <label className="mb-1 block text-xs font-semibold text-stone-600">Категория</label>
-                  <select
-                    className={fieldClass()}
-                    value={
-                      categoryOptions.some((o) => o.id === form.category) ? form.category : categoryOptions[0].id
-                    }
-                    onChange={(e) => setForm((s) => ({ ...s, category: e.target.value }))}
-                  >
-                    {categoryOptions.map((o) => (
-                      <option key={o.id} value={o.id}>
-                        {o.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="flex flex-col justify-end pb-0.5">
-                  <label className="flex cursor-pointer items-center gap-2 text-sm font-semibold text-stone-700">
-                    <input
-                      type="checkbox"
-                      className="h-4 w-4 rounded border-stone-300 text-primary"
-                      checked={form.is_active}
-                      onChange={(e) => setForm((s) => ({ ...s, is_active: e.target.checked }))}
-                    />
-                    Показывать в дашборде
-                  </label>
-                </div>
-              </div>
-
-              <div className="mt-4 overflow-hidden rounded-xl border border-stone-200/80 bg-stone-50/60">
-                <button
-                  type="button"
-                  className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm font-bold text-stone-700 transition-colors hover:bg-stone-100/60"
-                  onClick={() => setCreateExtrasOpen((v) => !v)}
-                  aria-expanded={createExtrasOpen}
-                >
-                  <LuImage className="h-4 w-4 shrink-0 text-primary/80" strokeWidth={2} aria-hidden />
-                  <span className="flex-1">Описание и постер</span>
-                  <span className="text-xs font-normal text-stone-500">необязательно</span>
-                  <LuChevronDown
-                    className={`h-4 w-4 shrink-0 text-stone-400 transition-transform duration-200 ${createExtrasOpen ? 'rotate-180' : ''}`}
-                    strokeWidth={2}
-                    aria-hidden
+                {posterPreviewUrl || uploadedPosterSrc ? (
+                  <img
+                    src={posterPreviewUrl ?? uploadedPosterSrc ?? ''}
+                    alt=""
+                    className="mt-2 h-20 w-20 rounded-lg border border-stone-200 object-cover"
+                    loading="lazy"
                   />
-                </button>
-                <div
-                  className={`grid transition-[grid-template-rows] duration-300 ease-in-out motion-reduce:transition-none ${createExtrasOpen ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}
-                >
-                  <div className="overflow-hidden">
-                    <div className="space-y-3 border-t border-stone-200/60 px-3 pb-3 pt-3">
-                      <div>
-                        <label className="mb-1 block text-xs font-semibold text-stone-600">Описание</label>
-                        <textarea
-                          className={`${fieldClass()} min-h-[88px] resize-y`}
-                          value={form.description}
-                          onChange={(e) => setForm((s) => ({ ...s, description: e.target.value }))}
-                          placeholder="Текст в карточке и в окне на дашборде"
-                        />
-                      </div>
-                      <div>
-                        <label className="mb-1 block text-xs font-semibold text-stone-600">Постер</label>
-                        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-                          <input
-                            type="file"
-                            accept="image/*"
-                            className={fieldClass()}
-                            onChange={(e) => {
-                              const f = e.target.files?.[0] ?? null;
-                              setPosterFile(f);
-                              setForm((s) => ({ ...s, poster_url: null }));
-                            }}
-                          />
-                          <button
-                            type="button"
-                            className={btnSecondary()}
-                            disabled={!posterFile || uploadPosterMut.isPending}
-                            onClick={() => {
-                              setNote(null);
-                              uploadPosterMut.mutate();
-                            }}
-                          >
-                            {uploadPosterMut.isPending ? 'Загрузка…' : form.poster_url ? 'Перезагрузить' : 'Загрузить'}
-                          </button>
-                          {form.poster_url ? (
-                            <span className="text-xs font-semibold text-emerald-700">Загружено</span>
-                          ) : null}
-                        </div>
-                        {posterPreviewUrl || uploadedPosterSrc ? (
-                          <div className="mt-3 overflow-hidden rounded-2xl border border-stone-200/70 bg-white">
-                            <img
-                              src={posterPreviewUrl ?? uploadedPosterSrc ?? ''}
-                              alt=""
-                              className="h-[120px] w-full object-cover sm:h-[160px]"
-                              loading="lazy"
-                            />
-                          </div>
-                        ) : null}
-                        <p className="mt-1 text-xs text-stone-500">Картинка в модалке события на дашборде.</p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
+                ) : null}
               </div>
-
+            </div>
+            <div className="flex justify-end gap-2 border-t border-stone-100 px-5 py-3">
               <button
                 type="button"
-                className={`${btnPrimary('mt-4 w-full sm:w-auto')}`}
-                disabled={
-                  !form.title.trim() ||
-                  !form.event_time ||
-                  (form.recurrence_type === 'once' && !form.event_date) ||
-                  createMut.isPending
-                }
+                className={btnSecondary()}
                 onClick={() => {
-                  setNote(null);
-                  createMut.mutate();
+                  setEventModalMode(null);
+                  setEditing(null);
                 }}
               >
-                {createMut.isPending ? 'Сохранение…' : 'Сохранить событие'}
+                Отмена
+              </button>
+              <button
+                type="button"
+                className={btnPrimary('bg-[#7B2D3F]')}
+                disabled={eventModalMode === 'edit' ? updateMut.isPending : createMut.isPending}
+                onClick={() => {
+                  setNote(null);
+                  if (eventModalMode === 'edit') {
+                    if (!editing) return;
+                    updateMut.mutate(editing);
+                  } else {
+                    createMut.mutate();
+                  }
+                  setEventModalMode(null);
+                  setEditing(null);
+                }}
+              >
+                {eventModalMode === 'edit'
+                  ? updateMut.isPending
+                    ? 'Сохранение…'
+                    : 'Сохранить'
+                  : createMut.isPending
+                    ? 'Сохранение…'
+                    : 'Сохранить'}
               </button>
             </div>
           </div>
         </div>
-      </section>
-
-      <section className="overflow-hidden rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] shadow-[var(--shadow)]">
-        <button
-          type="button"
-          className="flex w-full items-center gap-3 px-4 py-3.5 text-left transition-colors hover:bg-stone-50/80 sm:px-5"
-          onClick={() => setListPanelOpen((v) => !v)}
-          aria-expanded={listPanelOpen}
-        >
-          <span className="text-sm font-extrabold text-stone-900">Все события</span>
-          <span className="text-xs tabular-nums text-stone-500">
-            {eventsQ.isLoading ? '…' : `${eventCount} шт.`}
-          </span>
-          <LuChevronDown
-            className={`ml-auto h-4 w-4 shrink-0 text-stone-400 transition-transform duration-200 ${listPanelOpen ? 'rotate-180' : ''}`}
-            strokeWidth={2}
-            aria-hidden
-          />
-        </button>
-        <div
-          className={`grid transition-[grid-template-rows] duration-300 ease-in-out motion-reduce:transition-none ${listPanelOpen ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}
-        >
-          <div className="overflow-hidden">
-            <div className="border-t border-stone-100 px-4 pb-4 pt-3 sm:px-5">
-              <div className="flex flex-wrap items-center justify-end gap-2">
-                <button
-                  type="button"
-                  className={btnDangerOutline()}
-                  disabled={deleteAllMut.isPending || deleteMut.isPending || updateMut.isPending}
-                  onClick={() => {
-                    if (eventCount === 0) {
-                      setNote({ type: 'err', text: 'Список уже пуст.' });
-                      return;
-                    }
-                    if (!window.confirm(`Удалить все события (${eventCount})? Действие нельзя отменить.`)) return;
-                    setNote(null);
-                    deleteAllMut.mutate();
-                  }}
-                >
-                  {deleteAllMut.isPending ? 'Удаление…' : 'Удалить все'}
-                </button>
-              </div>
-              {eventsQ.isLoading ? (
-                <div className="mt-3 h-40 animate-pulse rounded-2xl bg-stone-100" />
-              ) : eventsQ.isError ? (
-                <p className="mt-3 text-sm text-red-600">
-                  {apiErrorMessage(eventsQ.error, 'Не удалось загрузить список событий.')}
-                </p>
-              ) : (eventsQ.data ?? []).length === 0 ? (
-                <p className="mt-3 text-sm text-stone-500">Событий пока нет.</p>
-              ) : (
-                <div className="mt-3 space-y-3">
-            {(eventsQ.data ?? []).map((ev) => {
-              const isEdit = editing?.id === ev.id;
-              const row = isEdit ? editing : ev;
-              const isOpen = isEdit || openId === ev.id;
-              const catId = typeof row.category === 'string' ? row.category : '';
-              const catLabel = catId ? categoryLabelById.get(catId) ?? catId : '';
-              return (
-                <article key={ev.id} className="overflow-hidden rounded-2xl border border-stone-200/80 bg-white">
-                  <button
-                    type="button"
-                    className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-stone-50"
-                    onClick={() => {
-                      if (isEdit) return;
-                      setOpenId((cur) => (cur === ev.id ? null : ev.id));
-                    }}
-                  >
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                        <span className="truncate text-[13px] font-extrabold text-stone-900">
-                          {row.title || '—'}
-                        </span>
-                        <span className="text-[11px] font-semibold text-stone-500">
-                          {row.event_date} · {row.event_time}
-                        </span>
-                        {row.recurrence_type === 'weekly' ? (
-                          <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wide text-indigo-700">
-                            weekly
-                          </span>
-                        ) : (
-                          <span className="rounded-full bg-stone-100 px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wide text-stone-600">
-                            once
-                          </span>
-                        )}
-                        {catLabel ? (
-                          <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-extrabold text-primary">
-                            {catLabel}
-                          </span>
-                        ) : null}
-                        {!row.is_active ? (
-                          <span className="rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-extrabold text-red-700">
-                            off
-                          </span>
-                        ) : null}
-                      </div>
-                      {row.description ? (
-                        <p className="mt-1 line-clamp-1 text-[12px] text-stone-500">{row.description}</p>
-                      ) : null}
-                    </div>
-                    <span
-                      className={`shrink-0 text-stone-400 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}
-                      aria-hidden
-                    >
-                      ▾
-                    </span>
-                  </button>
-
-                  <div
-                    className={`grid transition-[grid-template-rows] duration-300 ease-in-out motion-reduce:transition-none ${isOpen ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}
-                  >
-                    <div className="overflow-hidden">
-                      <div className="border-t border-stone-100 px-4 py-4">
-                        <div className="grid gap-3 sm:grid-cols-2">
-                          <div className="sm:col-span-2">
-                            <label className="mb-1 block text-xs font-semibold text-stone-600">Название</label>
-                            <input
-                              className={fieldClass()}
-                              value={row.title}
-                              disabled={!isEdit}
-                              onChange={(e) =>
-                                setEditing((s) => (s ? { ...s, title: e.target.value } : s))
-                              }
-                            />
-                          </div>
-                          <div>
-                            <label className="mb-1 block text-xs font-semibold text-stone-600">Повтор</label>
-                            <select
-                              className={fieldClass()}
-                              value={row.recurrence_type}
-                              disabled={!isEdit}
-                              onChange={(e) =>
-                                setEditing((s) => {
-                                  if (!s) return s;
-                                  const rt = e.target.value as 'once' | 'weekly';
-                                  if (rt === 'weekly') {
-                                    const wd = s.weekly_day ?? 0;
-                                    return {
-                                      ...s,
-                                      recurrence_type: rt,
-                                      weekly_day: wd,
-                                      event_date: nextOccurrenceLocalYmd(wd),
-                                    };
-                                  }
-                                  return { ...s, recurrence_type: rt, weekly_day: null };
-                                })
-                              }
-                            >
-                              <option value="once">Один раз</option>
-                              <option value="weekly">Каждую неделю</option>
-                            </select>
-                          </div>
-                          <div>
-                            <label className="mb-1 block text-xs font-semibold text-stone-600">
-                              {row.recurrence_type === 'weekly' ? 'Дата-ориентир' : 'Дата'}
-                            </label>
-                            <input
-                              type="date"
-                              className={fieldClass()}
-                              value={row.event_date}
-                              disabled={!isEdit}
-                              onChange={(e) =>
-                                setEditing((s) => (s ? { ...s, event_date: e.target.value } : s))
-                              }
-                            />
-                          </div>
-                          <div>
-                            <label className="mb-1 block text-xs font-semibold text-stone-600">День недели</label>
-                            <select
-                              className={fieldClass()}
-                              value={String(row.weekly_day ?? 0)}
-                              disabled={!isEdit || row.recurrence_type !== 'weekly'}
-                              onChange={(e) =>
-                                setEditing((s) => {
-                                  if (!s) return s;
-                                  const wd = Number(e.target.value);
-                                  return {
-                                    ...s,
-                                    weekly_day: wd,
-                                    event_date:
-                                      s.recurrence_type === 'weekly'
-                                        ? nextOccurrenceLocalYmd(wd)
-                                        : s.event_date,
-                                  };
-                                })
-                              }
-                            >
-                              {weekDays.map((d) => (
-                                <option key={d.value} value={d.value}>
-                                  {d.label}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-                          <div>
-                            <label className="mb-1 block text-xs font-semibold text-stone-600">Время</label>
-                            <input
-                              type="time"
-                              className={fieldClass()}
-                              value={row.event_time}
-                              disabled={!isEdit}
-                              onChange={(e) =>
-                                setEditing((s) => (s ? { ...s, event_time: e.target.value } : s))
-                              }
-                            />
-                          </div>
-                          <div>
-                            <label className="mb-1 block text-xs font-semibold text-stone-600">Категория</label>
-                            <select
-                              className={fieldClass()}
-                              disabled={!isEdit}
-                              value={
-                                categoryOptions.some((o) => o.id === (row.category ?? ''))
-                                  ? (row.category ?? categoryOptions[0].id)
-                                  : categoryOptions[0].id
-                              }
-                              onChange={(e) =>
-                                setEditing((s) => (s ? { ...s, category: e.target.value } : s))
-                              }
-                            >
-                              {categoryOptions.map((o) => (
-                                <option key={o.id} value={o.id}>
-                                  {o.label}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-                          <div className="sm:col-span-2">
-                            <label className="mb-1 block text-xs font-semibold text-stone-600">Описание</label>
-                            <textarea
-                              className={`${fieldClass()} min-h-[84px] resize-y`}
-                              value={row.description ?? ''}
-                              disabled={!isEdit}
-                              onChange={(e) =>
-                                setEditing((s) => (s ? { ...s, description: e.target.value } : s))
-                              }
-                            />
-                          </div>
-                          <label className="sm:col-span-2 flex items-center gap-2 text-sm font-semibold text-stone-700">
-                            <input
-                              type="checkbox"
-                              className="h-4 w-4 rounded border-stone-300 text-primary"
-                              checked={row.is_active}
-                              disabled={!isEdit}
-                              onChange={(e) =>
-                                setEditing((s) => (s ? { ...s, is_active: e.target.checked } : s))
-                              }
-                            />
-                            Активно
-                          </label>
-                        </div>
-
-                        <div className="mt-3 flex flex-wrap gap-2">
-                          {!isEdit ? (
-                            <button
-                              type="button"
-                              className={btnSecondary()}
-                              onClick={() => {
-                                const raw = ev.category ?? '';
-                                const category = categoryOptions.some((o) => o.id === raw)
-                                  ? raw
-                                  : categoryOptions[0].id;
-                                setEditing({
-                                  ...ev,
-                                  event_date: dateInputValueFromApi(ev.event_date),
-                                  category,
-                                });
-                              }}
-                            >
-                              Изменить
-                            </button>
-                          ) : (
-                            <>
-                              <button
-                                type="button"
-                                className={btnPrimary()}
-                                disabled={updateMut.isPending || !row.title.trim()}
-                                onClick={() => {
-                                  setNote(null);
-                                  updateMut.mutate(row);
-                                }}
-                              >
-                                {updateMut.isPending ? 'Сохранение…' : 'Сохранить'}
-                              </button>
-                              <button
-                                type="button"
-                                className={btnSecondary()}
-                                disabled={updateMut.isPending}
-                                onClick={() => setEditing(null)}
-                              >
-                                Отмена
-                              </button>
-                            </>
-                          )}
-                          <button
-                            type="button"
-                            className={btnDangerOutline()}
-                            disabled={deleteMut.isPending}
-                            onClick={() => {
-                              if (!window.confirm(`Удалить событие «${ev.title}»?`)) return;
-                              setNote(null);
-                              if (isEdit) setEditing(null);
-                              deleteMut.mutate(ev.id);
-                            }}
-                          >
-                            Удалить
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </article>
-              );
-                })}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      </section>
+      )}
     </div>
   );
 }
@@ -4220,111 +4071,132 @@ function TemplatesSection() {
         </div>
       )}
       {loading ? (
-        <div className="grid gap-6 lg:grid-cols-2">
-          <div className="h-56 animate-pulse rounded-2xl bg-stone-200/50" />
-          <div className="h-56 animate-pulse rounded-2xl bg-stone-200/50" />
+        <div className="grid gap-5 lg:grid-cols-2">
+          <div className="h-56 animate-pulse rounded-xl bg-stone-200/50" />
+          <div className="h-56 animate-pulse rounded-xl bg-stone-200/50" />
         </div>
       ) : (
-        <div className="grid gap-6 lg:grid-cols-2">
-          <section className="rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] p-5 shadow-[var(--shadow)]">
-            <h3 className="font-extrabold text-stone-900">Роли служений</h3>
-            <div className="mt-3 flex gap-2">
+        <div className="grid gap-5 lg:grid-cols-2">
+          <section className="rounded-xl border border-[#F0E9EA] bg-white p-5">
+            <div className="mb-4 flex items-start justify-between gap-3">
+              <div>
+                <h3 className="text-[15px] font-semibold text-stone-900">Роли служений</h3>
+                <p className="mt-0.5 text-xs text-stone-400">Должности для участников служения</p>
+              </div>
+              <span className="shrink-0 rounded-[10px] bg-[#F3EEF0] px-2 py-0.5 text-xs font-semibold text-[#7B2D3F]">
+                {(roles.data ?? []).length}
+              </span>
+            </div>
+            <div className="mb-3 max-h-[300px] overflow-y-auto">
+              {(roles.data ?? []).map((t) => (
+                <div
+                  key={t.id}
+                  className="group mb-0.5 flex items-center gap-2 rounded-md px-2.5 py-2 transition hover:bg-stone-50"
+                >
+                  <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-stone-300" aria-hidden />
+                  <span className="flex-1 text-sm text-stone-800">{t.title}</span>
+                  <button
+                    type="button"
+                    className="flex h-5 w-5 items-center justify-center rounded text-base text-stone-400 opacity-0 transition group-hover:opacity-100 hover:text-red-500"
+                    onClick={() => {
+                      setNote(null);
+                      delRole.mutate(t.id);
+                    }}
+                    aria-label="Удалить роль"
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+            </div>
+            <div className="flex gap-2 border-t border-stone-100 pt-3">
               <input
-                className={fieldClass()}
-                placeholder="Новая роль"
+                className="h-9 flex-1 rounded-lg border border-stone-200 px-3 text-sm outline-none focus:border-[#7B2D3F]"
+                placeholder="Добавить роль..."
                 value={roleTitle}
                 onChange={(e) => setRoleTitle(e.target.value)}
               />
               <button
                 type="button"
-                className={`${btnPrimary('shrink-0')}`}
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#7B2D3F] text-xl leading-none text-white"
                 disabled={!roleTitle.trim() || addRole.isPending}
                 onClick={() => {
                   setNote(null);
                   addRole.mutate();
                 }}
+                aria-label="Добавить роль"
               >
-                Добавить
+                +
               </button>
             </div>
-            <ul className="mt-4 max-h-72 space-y-1.5 overflow-y-auto">
-              {(roles.data ?? []).map((t) => (
-                <li
-                  key={t.id}
-                  className="flex items-center justify-between gap-2 rounded-xl border border-stone-100 bg-white px-3 py-2.5 text-sm"
-                >
-                  <span>{t.title}</span>
-                  <button
-                    type="button"
-                    className="text-xs font-semibold text-red-600 hover:underline"
-                    onClick={() => {
-                      setNote(null);
-                      delRole.mutate(t.id);
-                    }}
-                  >
-                    Удалить
-                  </button>
-                </li>
-              ))}
-            </ul>
           </section>
-          <section className="rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] p-5 shadow-[var(--shadow)]">
-            <h3 className="font-extrabold text-stone-900">Направления</h3>
-            <div className="mt-3 flex gap-2">
-              <input
-                className={fieldClass()}
-                placeholder="Новое направление"
-                value={dirTitle}
-                onChange={(e) => setDirTitle(e.target.value)}
-              />
-              <button
-                type="button"
-                className={`${btnPrimary('shrink-0')}`}
-                disabled={!dirTitle.trim() || addDir.isPending}
-                onClick={() => {
-                  setNote(null);
-                  addDir.mutate();
-                }}
-              >
-                Добавить
-              </button>
+
+          <section className="rounded-xl border border-[#F0E9EA] bg-white p-5">
+            <div className="mb-4 flex items-start justify-between gap-3">
+              <div>
+                <h3 className="text-[15px] font-semibold text-stone-900">Направления</h3>
+                <p className="mt-0.5 text-xs text-stone-400">Группы служений и связанные роли</p>
+              </div>
+              <span className="shrink-0 rounded-[10px] bg-[#F3EEF0] px-2 py-0.5 text-xs font-semibold text-[#7B2D3F]">
+                {allDirs.length}
+              </span>
             </div>
-            <ul className="mt-4 max-h-72 space-y-1.5 overflow-y-auto">
+            <div className="mb-3 max-h-[300px] overflow-y-auto">
               {allDirs.map((t) => (
-                <li
+                <div
                   key={t.id}
-                  className="flex items-center justify-between gap-2 rounded-xl border border-stone-100 bg-white px-3 py-2.5 text-sm"
+                  className="group mb-0.5 flex items-center gap-2 rounded-md px-2.5 py-2 transition hover:bg-stone-50"
                 >
-                  <div className="min-w-0">
-                    <div className="truncate font-medium text-stone-900">{t.title}</div>
-                    <div className="mt-0.5 truncate text-[11px] text-stone-500">
-                      Ролей: {(t.roles ?? []).length}
-                    </div>
+                  <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-stone-300" aria-hidden />
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-sm text-stone-800">{t.title}</div>
+                    <div className="truncate text-[11px] text-stone-400">Ролей: {(t.roles ?? []).length}</div>
                   </div>
                   <button
                     type="button"
-                    className="text-xs font-semibold text-stone-700 hover:underline"
+                    className="rounded px-1.5 py-0.5 text-[11px] font-semibold text-stone-600 hover:bg-stone-100"
                     onClick={() => {
                       setNote(null);
                       setEditingDirId(t.id);
                       setEditingRoleIds((t.roles ?? []).map((r) => r.id));
                     }}
                   >
-                    Роли…
+                    Роли
                   </button>
                   <button
                     type="button"
-                    className="text-xs font-semibold text-red-600 hover:underline"
+                    className="flex h-5 w-5 items-center justify-center rounded text-base text-stone-400 opacity-0 transition group-hover:opacity-100 hover:text-red-500"
                     onClick={() => {
                       setNote(null);
                       delDir.mutate(t.id);
                     }}
+                    aria-label="Удалить направление"
                   >
-                    Удалить
+                    ×
                   </button>
-                </li>
+                </div>
               ))}
-            </ul>
+            </div>
+            <div className="flex gap-2 border-t border-stone-100 pt-3">
+              <input
+                className="h-9 flex-1 rounded-lg border border-stone-200 px-3 text-sm outline-none focus:border-[#7B2D3F]"
+                placeholder="Добавить направление..."
+                value={dirTitle}
+                onChange={(e) => setDirTitle(e.target.value)}
+              />
+              <button
+                type="button"
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#7B2D3F] text-xl leading-none text-white"
+                disabled={!dirTitle.trim() || addDir.isPending}
+                onClick={() => {
+                  setNote(null);
+                  addDir.mutate();
+                }}
+                aria-label="Добавить направление"
+              >
+                +
+              </button>
+            </div>
           </section>
         </div>
       )}
@@ -4438,6 +4310,7 @@ function TelegramSection() {
   const [customText, setCustomText] = useState('');
   const [customChatId, setCustomChatId] = useState('');
   const [note, setNote] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
+  const [showToken, setShowToken] = useState(false);
 
   useEffect(() => {
     if (!data) return;
@@ -4522,41 +4395,52 @@ function TelegramSection() {
         </div>
       ) : null}
 
-      <section className="rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] p-5 shadow-[var(--shadow)]">
-        <h3 className="flex items-center gap-2 text-base font-extrabold text-stone-900">
-          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary">
+      <section className="rounded-xl border border-[#F0E9EA] bg-white p-5">
+        <div className="mb-5 flex items-center gap-3">
+          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary" aria-hidden>
             <LuSend className="h-5 w-5" />
           </span>
-          Telegram интеграция
-        </h3>
-        <p className="mt-2 text-sm text-stone-600">
-          Раздел доступен только администраторам. Отправка идёт через Telegram Bot API в указанные chat_id.
-        </p>
-
-        <label className="mt-4 flex items-center gap-2 text-sm font-semibold text-stone-700">
-          <input
-            type="checkbox"
-            className="h-4 w-4 rounded border-stone-300 text-primary"
-            checked={form.enabled}
-            onChange={(e) => setForm((s) => ({ ...s, enabled: e.target.checked }))}
-          />
-          Включить Telegram-модуль
-        </label>
-
-        <div className="mt-4 grid gap-3 sm:grid-cols-2">
-          <div className="sm:col-span-2">
-            <label className="mb-1 block text-xs font-semibold text-stone-600">Bot Token</label>
+          <div className="min-w-0 flex-1">
+            <h3 className="text-[15px] font-semibold text-stone-900">Подключение Telegram-бота</h3>
+            <p className="mt-0.5 text-xs text-stone-400">Администраторы только</p>
+          </div>
+          <label className="relative inline-block h-5 w-9 shrink-0">
             <input
+              type="checkbox"
+              className="peer sr-only"
+              checked={form.enabled}
+              onChange={(e) => setForm((s) => ({ ...s, enabled: e.target.checked }))}
+            />
+            <span className="absolute inset-0 cursor-pointer rounded-[10px] bg-stone-200 transition-colors peer-checked:bg-[#7B2D3F]" />
+            <span className="absolute left-[3px] top-[3px] h-[14px] w-[14px] rounded-full bg-white transition-transform peer-checked:translate-x-4" />
+          </label>
+        </div>
+
+        <div>
+          <label className="mb-1 block text-xs font-semibold text-stone-600">Bot Token</label>
+          <div className="flex gap-2">
+            <input
+              type={showToken ? 'text' : 'password'}
               className={fieldClass()}
               value={form.bot_token}
               onChange={(e) => setForm((s) => ({ ...s, bot_token: e.target.value }))}
-              placeholder={settings.bot_token_masked ? `Текущий: ${settings.bot_token_masked}` : '123456:ABC...'}
+              placeholder={settings.bot_token_masked ? `Текущий токен: ${settings.bot_token_masked}` : 'Текущий токен скрыт'}
             />
-            <p className="mt-1 text-xs text-stone-500">
-              Оставьте пустым, чтобы не менять токен. Токен можно также хранить в `TELEGRAM_BOT_TOKEN`.
-            </p>
+            <button
+              type="button"
+              className="rounded-lg border border-stone-200 px-3 text-sm text-stone-700 transition hover:bg-stone-50"
+              onClick={() => setShowToken((v) => !v)}
+              aria-label="Показать или скрыть токен"
+            >
+              👁
+            </button>
           </div>
+          <p className="mt-1 text-xs text-stone-500">
+            Хранить также в переменной окружения <code>TELEGRAM_BOT_TOKEN</code>
+          </p>
+        </div>
 
+        <div className="mt-4 grid gap-3 md:grid-cols-3">
           <div>
             <label className="mb-1 block text-xs font-semibold text-stone-600">chat_id для молитв</label>
             <input
@@ -4584,27 +4468,41 @@ function TelegramSection() {
               placeholder="-1001234567890"
             />
           </div>
-          <div className="sm:col-span-2">
-            <label className="mb-1 block text-xs font-semibold text-stone-600">
-              Шаблон «Молитва на сегодня»
-            </label>
-            <textarea
-              className={`${fieldClass()} min-h-[170px]`}
-              value={form.prayer_template}
-              onChange={(e) => setForm((s) => ({ ...s, prayer_template: e.target.value }))}
-              placeholder={'Молитва на {{date}}\n\nЧлен церкви: {{member_name}}\nНужда: {{member_prayer_request}}'}
-            />
-            <p className="mt-1 text-xs text-stone-500">
-              Переменные: {'{{date}}'}, {'{{member_name}}'}, {'{{member_prayer_request}}'}, {'{{theme_title}}'},{' '}
-              {'{{theme_bible_verse}}'}, {'{{theme_prayer_points}}'}, {'{{ministry_title}}'}, {'{{ministry_prayer_points}}'},
-              {' {{backslider_name}}'}.
-            </p>
-          </div>
         </div>
+      </section>
 
+      <section className="rounded-xl border border-[#F0E9EA] bg-white p-5">
+        <h3 className="text-[15px] font-semibold text-stone-900">Шаблон «Молитва на сегодня»</h3>
+        <p className="mt-1 text-sm text-stone-600">Отправляется каждый день участнику молитвенного цикла</p>
+        <textarea
+          className="mt-3 min-h-[160px] w-full resize-y rounded-lg border border-stone-200 px-3 py-3 font-mono text-[13px] leading-relaxed text-stone-700 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+          value={form.prayer_template}
+          onChange={(e) => setForm((s) => ({ ...s, prayer_template: e.target.value }))}
+          placeholder={'Молитва на {{date}}\n\nЧлен церкви: {{member_name}}\nНужда: {{member_prayer_request}}'}
+        />
+        <p className="mt-2 text-xs text-stone-400">
+          Переменные:{' '}
+          {[
+            '{{date}}',
+            '{{member_name}}',
+            '{{member_prayer_request}}',
+            '{{theme_title}}',
+            '{{theme_bible_verse}}',
+            '{{theme_prayer_points}}',
+            '{{ministry_title}}',
+            '{{backslider_name}}',
+          ].map((v) => (
+            <code key={v} className="mx-0.5 inline-block rounded bg-stone-100 px-1.5 py-0.5 text-[11px] text-stone-700">
+              {v}
+            </code>
+          ))}
+        </p>
+      </section>
+
+      <div className="flex justify-end">
         <button
           type="button"
-          className={`${btnPrimary('mt-4')}`}
+          className={btnPrimary()}
           disabled={saveMut.isPending}
           onClick={() => {
             setNote(null);
@@ -4613,7 +4511,7 @@ function TelegramSection() {
         >
           {saveMut.isPending ? 'Сохранение…' : 'Сохранить настройки'}
         </button>
-      </section>
+      </div>
 
       <section className="rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] p-5 shadow-[var(--shadow)]">
         <h3 className="text-base font-extrabold text-stone-900">Быстрые отправки</h3>
@@ -4762,29 +4660,30 @@ function SmsSection() {
         </div>
       ) : null}
 
-      <section className="rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] p-5 shadow-[var(--shadow)]">
-        <h3 className="flex items-center gap-2 text-base font-extrabold text-stone-900">
-          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary">
-            <LuMessageSquare className="h-5 w-5" />
-          </span>
-          SMS.ru интеграция
-        </h3>
-        <p className="mt-2 text-sm text-stone-600">
-          Используется для восстановления пароля по SMS-коду. Настройки доступны только администраторам.
-        </p>
-
-        <label className="mt-4 flex items-center gap-2 text-sm font-semibold text-stone-700">
-          <input
-            type="checkbox"
-            className="h-4 w-4 rounded border-stone-300 text-primary"
-            checked={form.enabled}
-            onChange={(e) => setForm((s) => ({ ...s, enabled: e.target.checked }))}
+      <section className="rounded-xl border border-[#F0E9EA] bg-white p-5">
+        <div className="mb-5 flex items-center gap-3">
+          <span
+            className={`h-2.5 w-2.5 rounded-full ${form.enabled ? 'bg-emerald-500' : 'bg-stone-400'}`}
+            aria-hidden
           />
-          Включить восстановление пароля через SMS.ru
-        </label>
+          <div className="min-w-0">
+            <h3 className="text-[15px] font-semibold text-stone-900">SMS.ru</h3>
+            <p className="mt-0.5 text-xs text-stone-500">Восстановление пароля по SMS-коду</p>
+          </div>
+          <label className="relative ml-auto inline-block h-5 w-9 shrink-0">
+            <input
+              type="checkbox"
+              className="peer sr-only"
+              checked={form.enabled}
+              onChange={(e) => setForm((s) => ({ ...s, enabled: e.target.checked }))}
+            />
+            <span className="absolute inset-0 cursor-pointer rounded-[10px] bg-stone-200 transition-colors peer-checked:bg-[#7B2D3F]" />
+            <span className="absolute left-[3px] top-[3px] h-[14px] w-[14px] rounded-full bg-white transition-transform peer-checked:translate-x-4" />
+          </label>
+        </div>
 
-        <div className="mt-4 grid gap-3 sm:grid-cols-2">
-          <div className="sm:col-span-2">
+        <div className="grid gap-3">
+          <div>
             <label className="mb-1 block text-xs font-semibold text-stone-600">SMS.ru API ID</label>
             <input
               className={fieldClass()}
@@ -4797,6 +4696,7 @@ function SmsSection() {
             </p>
           </div>
 
+          <div className="grid gap-3 md:grid-cols-2">
           <div>
             <label className="mb-1 block text-xs font-semibold text-stone-600">Имя отправителя (опционально)</label>
             <input
@@ -4819,11 +4719,15 @@ function SmsSection() {
               Используется для хеширования SMS-кодов и токенов восстановления.
             </p>
           </div>
+          </div>
         </div>
 
-        <div className="mt-4 rounded-xl border border-stone-200/80 bg-white p-3 text-xs text-stone-600">
-          <div>API ID: {settings.has_api_id ? 'задан' : 'не задан'}</div>
-          <div>Reset secret: {settings.has_reset_secret ? 'задан' : 'не задан'}</div>
+        <div className="mt-3 flex flex-wrap items-center gap-1.5 text-xs text-stone-600">
+          <span className={`h-1.5 w-1.5 rounded-full ${settings.has_api_id ? 'bg-emerald-500' : 'bg-red-500'}`} aria-hidden />
+          API ID: {settings.has_api_id ? 'задан' : 'не задан'}
+          <span className="mx-1 text-stone-300">·</span>
+          <span className={`h-1.5 w-1.5 rounded-full ${settings.has_reset_secret ? 'bg-emerald-500' : 'bg-red-500'}`} aria-hidden />
+          Reset secret: {settings.has_reset_secret ? 'задан' : 'не задан'}
         </div>
 
         <button
@@ -4873,35 +4777,47 @@ function ProjectSection() {
   return (
     <div className="max-w-lg space-y-6">
       <section className="rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] p-5 shadow-[var(--shadow)]">
-        <h3 className="flex items-center gap-2 font-extrabold text-stone-900">
-          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary" aria-hidden>
-            <LuPenLine className="h-5 w-5" strokeWidth={2} />
-          </span>
-          Тексты в шапке
-        </h3>
-        <p className="mt-2 text-xs leading-relaxed text-stone-600">
-          Хранятся только на этом устройстве в браузере, без отправки на сервер. Тот же набор полей, что в
-          мобильном приложении — при необходимости можно перенести оформление между устройствами.
-        </p>
-        <div className="mt-4 space-y-3">
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-3.5 py-2.5 text-[13px] text-amber-800">
+          ⚠ Настройки хранятся в браузере (localStorage) и не синхронизируются между устройствами.
+        </div>
+
+        <div className="mt-5 rounded-[10px] bg-[#F3EEF0] px-5 py-4 text-center">
+          <div className="mb-2 text-[11px] font-medium uppercase tracking-[0.5px] text-[#9B5466]">
+            Предпросмотр шапки
+          </div>
+          <div className="text-[20px] font-bold text-[#7B2D3F]">{localName.trim() || appName}</div>
+          <div className="mt-0.5 text-[13px] text-[#9B5466]">{localDesc.trim() || description}</div>
+        </div>
+
+        <div className="mt-5 space-y-4">
           <div>
-            <label className="mb-1 block text-xs font-semibold text-stone-600">Название</label>
+            <label className="mb-1.5 block text-[13px] font-medium text-stone-700">Название церкви</label>
             <input
-              className={fieldClass()}
+              className="h-[42px] w-full rounded-lg border border-stone-200 px-3.5 text-[15px] outline-none focus:border-[#7B2D3F]"
               value={localName}
               onChange={(e) => setLocalName(e.target.value)}
-              onBlur={() => updateBranding({ appName: localName.trim() || appName })}
             />
           </div>
           <div>
-            <label className="mb-1 block text-xs font-semibold text-stone-600">Подзаголовок</label>
+            <label className="mb-1.5 block text-[13px] font-medium text-stone-700">Подзаголовок</label>
             <input
-              className={fieldClass()}
+              className="h-[42px] w-full rounded-lg border border-stone-200 px-3.5 text-[15px] outline-none focus:border-[#7B2D3F]"
               value={localDesc}
               onChange={(e) => setLocalDesc(e.target.value)}
-              onBlur={() => updateBranding({ description: localDesc.trim() || description })}
             />
           </div>
+          <button
+            type="button"
+            className={btnPrimary('bg-[#7B2D3F]')}
+            onClick={() =>
+              updateBranding({
+                appName: localName.trim() || appName,
+                description: localDesc.trim() || description,
+              })
+            }
+          >
+            Сохранить оформление
+          </button>
         </div>
       </section>
       <section className="rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] p-5 shadow-[var(--shadow)]">

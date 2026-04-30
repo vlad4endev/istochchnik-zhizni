@@ -1,6 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
-import { LuBell } from 'react-icons/lu';
 
 import {
   fetchAdminNotificationSettings,
@@ -123,30 +122,27 @@ export function NotificationsSettingsSection() {
         </div>
       ) : null}
 
-      <section className="rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] p-5 shadow-[var(--shadow)]">
-        <h3 className="flex items-center gap-2 text-base font-extrabold text-stone-900">
-          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary">
-            <LuBell className="h-5 w-5" />
-          </span>
-          Уведомления церкви
-        </h3>
-        <p className="mt-2 text-sm leading-relaxed text-stone-600">
-          Здесь задаётся расписание серверных push-уведомлений (Web Push и FCM для тех, кто подписан) и тех же
-          напоминаний в браузере, пока открыта вкладка. Время считается в выбранной часовой зоне.
-        </p>
-
-        <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end">
-          <div className="min-w-0 flex-1">
-            <label className="mb-1 block text-xs font-semibold text-stone-600">Часовой пояс (IANA)</label>
-            <input
+      <section className="rounded-[10px] border border-[#F0E9EA] bg-white p-4">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div className="min-w-[240px]">
+            <label className="mb-1 block text-xs font-semibold text-stone-600">Часовой пояс</label>
+            <select
               className={fieldClass()}
               value={timezone}
               onChange={(e) => setTimezone(e.target.value)}
-              placeholder="Europe/Moscow"
-            />
+            >
+              <option value="Europe/Moscow">Europe/Moscow</option>
+              <option value="Europe/Kyiv">Europe/Kyiv</option>
+              <option value="Europe/Minsk">Europe/Minsk</option>
+              <option value="Asia/Yerevan">Asia/Yerevan</option>
+            </select>
           </div>
-          <button type="button" className={btnSecondary('shrink-0')} onClick={() => void requestBrowserPermission()}>
-            Разрешить уведомления в браузере
+          <button
+            type="button"
+            className="rounded-lg border border-[#D4B8BE] bg-[#F3EEF0] px-4 py-2.5 text-sm font-medium text-[#7B2D3F]"
+            onClick={() => void requestBrowserPermission()}
+          >
+            🔔 Разрешить уведомления в браузере
           </button>
         </div>
         {permNote ? <p className="mt-2 text-xs text-stone-600">{permNote}</p> : null}
@@ -159,79 +155,89 @@ export function NotificationsSettingsSection() {
         {rules.map((rule) => (
           <article
             key={rule.id}
-            className="rounded-2xl border border-stone-200/80 bg-white p-4 shadow-sm sm:p-5"
+            className={[
+              'rounded-xl border border-[#F0E9EA] bg-white p-4 transition-opacity sm:p-5',
+              rule.enabled ? '' : 'opacity-50',
+            ].join(' ')}
           >
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-              <label className="flex cursor-pointer items-start gap-3">
+            <div className="mb-4 flex items-center gap-3">
+              <label className="relative inline-block h-5 w-9 shrink-0">
                 <input
                   type="checkbox"
-                  className="mt-1 h-4 w-4 rounded border-stone-300 text-primary"
+                  className="peer sr-only"
                   checked={rule.enabled}
                   onChange={(e) => updateRule(rule.id, { enabled: e.target.checked })}
                 />
-                <span>
-                  <span className="block text-sm font-extrabold text-stone-900">{rule.title}</span>
-                  <span className="mt-0.5 block font-mono text-[11px] text-stone-400">{rule.id}</span>
-                </span>
+                <span className="absolute inset-0 cursor-pointer rounded-[10px] bg-stone-200 transition-colors peer-checked:bg-[#7B2D3F]" />
+                <span className="absolute left-[3px] top-[3px] h-[14px] w-[14px] rounded-full bg-white transition-transform peer-checked:translate-x-4" />
               </label>
+              <div className="min-w-0">
+                <div className="text-sm font-semibold text-stone-900">{rule.title}</div>
+                <code className="text-[11px] text-stone-400">{rule.id}</code>
+              </div>
             </div>
 
-            <label className="mt-3 block text-xs font-semibold text-stone-600">Заголовок в списке</label>
-            <input
-              className={`${fieldClass()} mt-1`}
-              value={rule.title}
-              onChange={(e) => updateRule(rule.id, { title: e.target.value })}
-            />
-
-            <label className="mt-3 block text-xs font-semibold text-stone-600">
-              Кастомный текст push (необязательно)
-            </label>
-            <textarea
-              className={`${fieldClass()} mt-1 min-h-[84px] resize-y`}
-              value={rule.customBody ?? ''}
-              onChange={(e) => updateRule(rule.id, { customBody: e.target.value })}
-              placeholder="Если оставить пустым — отправится стандартный текст правила."
-            />
-            {customBodyHint(rule.id) ? (
-              <p className="mt-1 text-[11px] text-stone-500">{customBodyHint(rule.id)}</p>
-            ) : null}
-
-            <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="space-y-3">
               <div>
-                <label className="mb-1 block text-xs font-semibold text-stone-600">Время</label>
+                <label className="mb-1 block text-xs font-semibold text-stone-600">Заголовок</label>
                 <input
-                  type="time"
                   className={fieldClass()}
-                  value={rule.time.length === 5 ? rule.time : '09:00'}
-                  onChange={(e) => updateRule(rule.id, { time: e.target.value })}
+                  value={rule.title}
+                  onChange={(e) => updateRule(rule.id, { title: e.target.value })}
                 />
               </div>
+
               <div>
-                <label className="mb-1 block text-xs font-semibold text-stone-600">Важность</label>
-                <select
-                  className={fieldClass()}
-                  value={rule.importance}
-                  onChange={(e) =>
-                    updateRule(rule.id, { importance: e.target.value as NotificationImportance })
-                  }
-                >
-                  <option value="low">Низкая</option>
-                  <option value="normal">Обычная</option>
-                  <option value="high">Высокая</option>
-                </select>
+                <label className="mb-1 block text-xs font-semibold text-stone-600">
+                  Текст уведомления <span className="font-normal text-stone-400">необязательно</span>
+                </label>
+                <textarea
+                  rows={3}
+                  className={`${fieldClass()} min-h-[84px] resize-y`}
+                  value={rule.customBody ?? ''}
+                  onChange={(e) => updateRule(rule.id, { customBody: e.target.value })}
+                  placeholder="Если пусто — отправится стандартный текст правила."
+                />
+                <p className="mt-1 text-[11px] text-stone-400">{customBodyHint(rule.id) ?? 'Можно использовать {date}'}</p>
               </div>
-              <div>
-                <label className="mb-1 block text-xs font-semibold text-stone-600">Повтор</label>
-                <select
-                  className={fieldClass()}
-                  value={rule.repeat}
-                  onChange={(e) => updateRule(rule.id, { repeat: e.target.value as NotificationRepeat })}
-                >
-                  <option value="day">Каждый день</option>
-                  <option value="week">Раз в неделю</option>
-                  <option value="month">Раз в месяц</option>
-                  <option value="year">Раз в год</option>
-                </select>
+
+              <div className="grid gap-3 sm:grid-cols-[120px_1fr_1fr]">
+                <div>
+                  <label className="mb-1 block text-xs font-semibold text-stone-600">Время</label>
+                  <input
+                    type="time"
+                    className={fieldClass()}
+                    value={rule.time.length === 5 ? rule.time : '09:00'}
+                    onChange={(e) => updateRule(rule.id, { time: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-semibold text-stone-600">Важность</label>
+                  <select
+                    className={fieldClass()}
+                    value={rule.importance}
+                    onChange={(e) =>
+                      updateRule(rule.id, { importance: e.target.value as NotificationImportance })
+                    }
+                  >
+                    <option value="high">Высокая</option>
+                    <option value="normal">Нормальная</option>
+                    <option value="low">Низкая</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-semibold text-stone-600">Повтор</label>
+                  <select
+                    className={fieldClass()}
+                    value={rule.repeat}
+                    onChange={(e) => updateRule(rule.id, { repeat: e.target.value as NotificationRepeat })}
+                  >
+                    <option value="day">Каждый день</option>
+                    <option value="week">По неделям</option>
+                    <option value="month">Ежемесячно</option>
+                    <option value="year">Единоразово (годовой)</option>
+                  </select>
+                </div>
               </div>
             </div>
 
@@ -303,18 +309,20 @@ export function NotificationsSettingsSection() {
         ))}
       </div>
 
-      <div className="flex flex-wrap gap-2">
-        <button
-          type="button"
-          className={btnPrimary()}
-          disabled={saveMut.isPending || rules.length === 0}
-          onClick={() => {
-            setNote(null);
-            saveMut.mutate();
-          }}
-        >
-          {saveMut.isPending ? 'Сохранение…' : 'Сохранить все правила'}
-        </button>
+      <div className="sticky bottom-3 z-20">
+        <div className="flex items-center justify-end rounded-[10px] border border-[#F0E9EA] bg-white/95 px-4 py-3 backdrop-blur">
+          <button
+            type="button"
+            className={btnPrimary('bg-[#7B2D3F]')}
+            disabled={saveMut.isPending || rules.length === 0}
+            onClick={() => {
+              setNote(null);
+              saveMut.mutate();
+            }}
+          >
+            {saveMut.isPending ? 'Сохранение…' : 'Сохранить расписание'}
+          </button>
+        </div>
       </div>
     </div>
   );

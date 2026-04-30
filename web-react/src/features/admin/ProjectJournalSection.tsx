@@ -8,12 +8,6 @@ import { fetchAppLogsAdmin, type AppLogItem } from './api';
 const Q_JOURNAL = ['admin', 'journal', 'logs'] as const;
 const SLOW_MS = 1200;
 
-function badgeClass(level: AppLogItem['level']): string {
-  if (level === 'error') return 'bg-red-100 text-red-700 border-red-200';
-  if (level === 'warn') return 'bg-amber-100 text-amber-800 border-amber-200';
-  return 'bg-emerald-100 text-emerald-700 border-emerald-200';
-}
-
 function prettyDate(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
@@ -176,6 +170,7 @@ export function ProjectJournalSection() {
   const [level, setLevel] = useState<'all' | 'info' | 'warn' | 'error'>('all');
   const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
+  const [expandedId, setExpandedId] = useState<number | null>(null);
 
   const q = useQuery({
     queryKey: [...Q_JOURNAL, level, search],
@@ -199,33 +194,28 @@ export function ProjectJournalSection() {
   return (
     <section className="space-y-4">
       <div className="rounded-2xl border border-stone-200 bg-white p-4 shadow-sm">
-        <h3 className="text-base font-bold text-stone-900">Журнал проекта</h3>
-        <p className="mt-1 text-sm text-stone-600">
-          Здесь отображаются серверные процессы, запросы и ошибки. Обновляется автоматически.
-        </p>
-
-        <div className="mt-3 flex flex-wrap items-center gap-2 text-xs font-semibold">
-          <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-emerald-700">
-            Норма: {stats.info}
-          </span>
-          <span className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-amber-800">
-            Предупреждения: {stats.warn}
-          </span>
-          <span className="rounded-full border border-red-200 bg-red-50 px-2.5 py-1 text-red-700">
-            Ошибки: {stats.error}
-          </span>
-        </div>
-
-        <div className="mt-4 flex flex-wrap gap-2">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-wrap gap-2">
+            <span className="rounded-[14px] bg-emerald-100 px-3 py-1 text-xs font-medium text-emerald-700">
+              ✓ Норма: {stats.info}
+            </span>
+            <span className="rounded-[14px] bg-yellow-100 px-3 py-1 text-xs font-medium text-amber-700">
+              ⚠ Предупреждения: {stats.warn}
+            </span>
+            <span className="rounded-[14px] bg-red-100 px-3 py-1 text-xs font-medium text-red-600">
+              ✕ Ошибки: {stats.error}
+            </span>
+          </div>
+          <div className="flex flex-1 flex-wrap items-center gap-2 sm:flex-none">
           <select
             value={level}
             onChange={(e) => setLevel(e.target.value as typeof level)}
-            className="rounded-xl border border-stone-200 bg-white px-3 py-2 text-sm text-stone-800"
+            className="rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm text-stone-800"
           >
             <option value="all">Все уровни</option>
-            <option value="info">Только норма</option>
-            <option value="warn">Только предупреждения</option>
-            <option value="error">Только ошибки</option>
+            <option value="info">Норма</option>
+            <option value="warn">Предупреждение</option>
+            <option value="error">Ошибка</option>
           </select>
           <input
             value={searchInput}
@@ -233,65 +223,64 @@ export function ProjectJournalSection() {
             onKeyDown={(e) => {
               if (e.key === 'Enter') setSearch(searchInput.trim());
             }}
-            placeholder="Поиск: раздел, действие, текст ошибки..."
-            className="min-w-[220px] flex-1 rounded-xl border border-stone-200 bg-white px-3 py-2 text-sm text-stone-800"
+            placeholder="Поиск по разделу, действию, тексту..."
+            className="min-w-[260px] flex-1 rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm text-stone-800"
           />
           <button
             type="button"
             onClick={() => setSearch(searchInput.trim())}
-            className="rounded-xl border border-stone-200 bg-white px-3 py-2 text-sm font-semibold text-stone-700 hover:bg-stone-50"
+            className="rounded-lg bg-stone-100 px-4 py-2 text-sm font-medium text-stone-700 hover:bg-stone-200"
           >
             Применить
           </button>
           <button
             type="button"
             onClick={() => q.refetch()}
-            className="rounded-xl bg-primary px-3 py-2 text-sm font-semibold text-white hover:opacity-95"
+            className="rounded-lg bg-[#7B2D3F] px-4 py-2 text-sm font-medium text-white hover:opacity-95"
           >
-            Обновить
+            ↺ Обновить
           </button>
         </div>
       </div>
+      </div>
 
       {items.length > 0 && (
-        <div className="rounded-2xl border border-stone-200 bg-white p-4 shadow-sm">
-          <h4 className="text-sm font-bold text-stone-900">Умный анализ сервиса</h4>
-          <p className="mt-1 text-sm text-stone-600">
-            Автоматическая оценка показывает, как сейчас работает система и где есть риски.
-          </p>
+        <details className="rounded-[10px] border border-stone-200 bg-stone-50 p-4">
+          <summary className="cursor-pointer list-none text-sm font-medium text-stone-700">
+            Умный анализ сервиса — Здоровье: {analysis.healthScore}/100 ✓
+          </summary>
           <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-            <div className="rounded-xl border border-stone-200 bg-stone-50 p-3">
+            <div className="rounded-xl border border-stone-200 bg-white p-3">
               <p className="text-xs font-semibold text-stone-500">Здоровье сервиса</p>
               <p className="mt-1 text-lg font-extrabold text-stone-900">{analysis.healthScore}/100</p>
               <p className="text-xs text-stone-600">{analysis.healthText}</p>
             </div>
-            <div className="rounded-xl border border-stone-200 bg-stone-50 p-3">
+            <div className="rounded-xl border border-stone-200 bg-white p-3">
               <p className="text-xs font-semibold text-stone-500">Ошибки 5xx</p>
               <p className="mt-1 text-lg font-extrabold text-stone-900">{pct(analysis.errorRate)}</p>
               <p className="text-xs text-stone-600">от API-запросов</p>
             </div>
-            <div className="rounded-xl border border-stone-200 bg-stone-50 p-3">
+            <div className="rounded-xl border border-stone-200 bg-white p-3">
               <p className="text-xs font-semibold text-stone-500">Средний ответ API</p>
               <p className="mt-1 text-lg font-extrabold text-stone-900">
                 {analysis.avgDuration == null ? '—' : `${Math.round(analysis.avgDuration)} мс`}
               </p>
               <p className="text-xs text-stone-600">медленные: {analysis.slowCount}</p>
             </div>
-            <div className="rounded-xl border border-stone-200 bg-stone-50 p-3">
+            <div className="rounded-xl border border-stone-200 bg-white p-3">
               <p className="text-xs font-semibold text-stone-500">Записей в анализе</p>
               <p className="mt-1 text-lg font-extrabold text-stone-900">{analysis.total}</p>
               <p className="text-xs text-stone-600">API-запросов: {analysis.totalHttp}</p>
             </div>
           </div>
-
           <div className="mt-3 space-y-2">
             {analysis.insights.map((line) => (
-              <p key={line} className="rounded-xl border border-stone-200 bg-stone-50 px-3 py-2 text-sm text-stone-700">
+              <p key={line} className="rounded-xl border border-stone-200 bg-white px-3 py-2 text-sm text-stone-700">
                 {line}
               </p>
             ))}
           </div>
-        </div>
+        </details>
       )}
 
       <div className="overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-sm">
@@ -304,43 +293,51 @@ export function ProjectJournalSection() {
         ) : (
           <ul className="divide-y divide-stone-100">
             {items.map((it) => (
-              <li key={it.id} className="space-y-2 p-4">
-                {(() => {
-                  const hint = actionHint(it);
-                  return (
-                    <>
-                <div className="flex flex-wrap items-center gap-2 text-xs">
-                  <span className={`rounded-full border px-2 py-0.5 font-bold uppercase ${badgeClass(it.level)}`}>
-                    {levelLabel(it.level)}
+              <li key={it.id}>
+                <button
+                  type="button"
+                  onClick={() => setExpandedId((prev) => (prev === it.id ? null : it.id))}
+                  className={[
+                    'grid w-full grid-cols-[80px_180px_1fr_140px] items-center gap-3 border-l-[3px] px-3.5 py-2.5 text-left hover:bg-stone-50',
+                    it.level === 'error'
+                      ? 'border-l-red-500 bg-red-50/50'
+                      : it.level === 'warn'
+                        ? 'border-l-amber-500 bg-amber-50/50'
+                        : 'border-l-emerald-500',
+                  ].join(' ')}
+                >
+                  <span
+                    className={[
+                      'rounded px-1.5 py-0.5 text-center text-[10px] font-bold tracking-[0.5px]',
+                      it.level === 'error'
+                        ? 'bg-red-100 text-red-600'
+                        : it.level === 'warn'
+                          ? 'bg-yellow-100 text-amber-700'
+                          : 'bg-emerald-100 text-emerald-700',
+                    ].join(' ')}
+                  >
+                    {levelLabel(it.level).toUpperCase()}
                   </span>
-                  <span className="rounded-md bg-stone-100 px-2 py-0.5 font-semibold text-stone-600">
-                    {scopeLabel(it.scope)}
+                  <span className="text-xs text-stone-500">
+                    {scopeLabel(it.scope)} · {it.event}
                   </span>
-                  <span className="rounded-md bg-stone-100 px-2 py-0.5 font-semibold text-stone-600">
-                    {it.event}
-                  </span>
-                  <span className="text-stone-500">{prettyDate(it.created_at)}</span>
+                  <span className="truncate text-sm font-medium text-stone-900">{it.message}</span>
+                  <span className="text-right text-[11px] text-stone-400">{prettyDate(it.created_at)}</span>
+                </button>
+                <div className={expandedId === it.id ? 'block border-b border-stone-100 px-7 pb-2.5 text-xs text-stone-500' : 'hidden'}>
+                  <div className="flex flex-wrap gap-x-3 gap-y-1">
+                    {it.request_method && it.request_path && (
+                      <span>
+                        {it.request_method} {it.request_path}
+                      </span>
+                    )}
+                    {typeof it.status_code === 'number' && <span>Код ответа: {it.status_code}</span>}
+                    {typeof it.duration_ms === 'number' && <span>Время: {it.duration_ms} мс</span>}
+                    {it.ip && <span>IP: {it.ip}</span>}
+                    {typeof it.user_id === 'number' && <span>Пользователь: #{it.user_id}</span>}
+                    {actionHint(it) ? <span>· Что проверить: {actionHint(it)}</span> : null}
+                  </div>
                 </div>
-                <p className="text-sm font-semibold text-stone-900">{it.message}</p>
-                <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-stone-600">
-                  {it.request_method && it.request_path && (
-                    <span>
-                      {it.request_method} {it.request_path}
-                    </span>
-                  )}
-                  {typeof it.status_code === 'number' && <span>Код ответа: {it.status_code}</span>}
-                  {typeof it.duration_ms === 'number' && <span>Время ответа: {it.duration_ms} мс</span>}
-                  {typeof it.user_id === 'number' && <span>Пользователь: #{it.user_id}</span>}
-                  {it.ip && <span>IP: {it.ip}</span>}
-                </div>
-                {hint && (
-                  <p className="rounded-xl border border-sky-200 bg-sky-50 px-3 py-2 text-xs font-medium text-sky-900">
-                    Что проверить: {hint}
-                  </p>
-                )}
-                    </>
-                  );
-                })()}
               </li>
             ))}
           </ul>

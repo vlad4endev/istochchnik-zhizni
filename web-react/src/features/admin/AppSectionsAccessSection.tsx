@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { LuLoaderCircle, LuShieldCheck, LuToggleLeft, LuToggleRight } from 'react-icons/lu';
+import { LuLoaderCircle, LuShieldCheck } from 'react-icons/lu';
 import {
   APP_ROLE_IDS,
   APP_SECTION_IDS,
@@ -86,63 +86,71 @@ export function AppSectionsAccessSection() {
         </div>
       ) : null}
 
-      <div className="grid gap-3">
+      <div className="grid gap-2">
         {APP_SECTION_IDS.map((sectionId) => {
           const rule = data.sections[sectionId];
           return (
             <article
               key={sectionId}
-              className="rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] p-4 shadow-[var(--shadow)]"
+              className={[
+                'flex flex-wrap items-center gap-4 rounded-[10px] border border-[#F0E9EA] bg-white px-4 py-3.5 transition-opacity',
+                rule.enabled ? '' : 'opacity-45',
+              ].join(' ')}
             >
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <h4 className="text-sm font-extrabold text-stone-900">{appSectionLabel(sectionId)}</h4>
-                  <p className="text-xs text-stone-500">
-                    {rule.enabled ? 'Раздел виден пользователям' : 'Раздел скрыт для всех обычных ролей'}
-                  </p>
+              <div className="flex min-w-[220px] items-center gap-3.5">
+                <label className="relative inline-block h-5 w-9 shrink-0">
+                  <input
+                    type="checkbox"
+                    className="peer sr-only"
+                    checked={rule.enabled}
+                    disabled={isBusy}
+                    onChange={() => void toggleSection(sectionId, !rule.enabled)}
+                  />
+                  <span className="absolute inset-0 cursor-pointer rounded-[10px] bg-stone-200 transition-colors peer-checked:bg-[#7B2D3F]" />
+                  <span className="absolute left-[3px] top-[3px] h-[14px] w-[14px] rounded-full bg-white transition-transform peer-checked:translate-x-4" />
+                </label>
+                <div className="min-w-0">
+                  <div className="text-sm font-medium text-stone-900">{appSectionLabel(sectionId)}</div>
+                  <div className="text-[11px] text-stone-400">Раздел «{appSectionLabel(sectionId)}»</div>
                 </div>
-                <button
-                  type="button"
-                  disabled={isBusy}
-                  onClick={() => void toggleSection(sectionId, !rule.enabled)}
-                  className={[
-                    'inline-flex min-h-[42px] items-center gap-2 rounded-xl border px-3 py-2 text-sm font-semibold transition',
-                    rule.enabled
-                      ? 'border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100'
-                      : 'border-stone-300 bg-stone-100 text-stone-700 hover:bg-stone-200',
-                  ].join(' ')}
-                >
-                  {rule.enabled ? <LuToggleRight className="h-4 w-4" /> : <LuToggleLeft className="h-4 w-4" />}
-                  {rule.enabled ? 'Включено' : 'Отключено'}
-                </button>
               </div>
 
-              <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="flex flex-1 flex-wrap gap-1.5">
                 {APP_ROLE_IDS.map((roleId) => {
                   const checked = rule.roles.includes(roleId);
                   return (
-                    <label
+                    <button
                       key={roleId}
+                      type="button"
+                      disabled={isBusy}
+                      onClick={() => void toggleRole(sectionId, roleId, !checked)}
                       className={[
-                        'flex min-h-[42px] items-center gap-2 rounded-xl border px-3 py-2 text-sm',
-                        checked ? 'border-primary/35 bg-primary/5 text-stone-900' : 'border-stone-200 text-stone-700',
+                        'rounded-[14px] border px-2.5 py-1 text-xs font-medium transition',
+                        checked
+                          ? 'border-[#D4B8BE] bg-[#F3EEF0] text-[#7B2D3F]'
+                          : 'border-stone-200 bg-transparent text-stone-500 hover:bg-stone-50',
                       ].join(' ')}
                     >
-                      <input
-                        type="checkbox"
-                        className="h-4 w-4 accent-primary"
-                        checked={checked}
-                        disabled={isBusy}
-                        onChange={(e) => void toggleRole(sectionId, roleId, e.target.checked)}
-                      />
-                      <span>{appRoleLabel(roleId)}</span>
-                    </label>
+                      {appRoleLabel(roleId)}
+                    </button>
                   );
                 })}
               </div>
             </article>
           );
         })}
+      </div>
+
+      <div className="mt-4 flex items-center justify-between rounded-[10px] border border-[#F0E9EA] bg-white px-4 py-3">
+        <span className="text-sm text-stone-400">Изменения сохраняются автоматически</span>
+        <button
+          type="button"
+          className="rounded-lg bg-[#7B2D3F] px-3.5 py-2 text-sm font-semibold text-white transition hover:opacity-95 disabled:opacity-50"
+          disabled={isBusy}
+          onClick={() => void qc.invalidateQueries({ queryKey: Q_SECTION_VISIBILITY })}
+        >
+          Сохранить доступы
+        </button>
       </div>
     </section>
   );

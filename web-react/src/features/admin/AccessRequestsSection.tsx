@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
-import { LuInbox } from 'react-icons/lu';
+import { LuMail } from 'react-icons/lu';
 
 import {
   apiErrorMessage,
@@ -29,6 +29,7 @@ function formatWhen(iso: string): string {
 export function AccessRequestsSection() {
   const qc = useQueryClient();
   const [noteById, setNoteById] = useState<Record<number, string>>({});
+  const [filter, setFilter] = useState<'all' | 'registration' | 'password_reset'>('all');
 
   const { data, isLoading, error, isFetching } = useQuery({
     queryKey: Q_ACCESS,
@@ -46,15 +47,34 @@ export function AccessRequestsSection() {
   });
 
   const pending = (data ?? []).filter((r) => r.status === 'pending');
+  const registrationCount = pending.filter((r) => r.request_type !== 'password_reset').length;
+  const passwordResetCount = pending.filter((r) => r.request_type === 'password_reset').length;
+  const filteredPending =
+    filter === 'all'
+      ? pending
+      : pending.filter((r) => (filter === 'password_reset' ? r.request_type === 'password_reset' : r.request_type !== 'password_reset'));
 
   return (
     <div className="space-y-6">
-      <div className="rounded-2xl border border-amber-200/80 bg-amber-50/90 px-4 py-3 text-sm text-amber-950">
-        <p className="font-semibold">Заявки на регистрацию и сброс пароля</p>
-        <p className="mt-1 text-amber-900/90">
-          Здесь появляются две категории заявок: новая регистрация и «Забыл пароль». После одобрения регистрации
-          пользователь получит доступ в приложение, а после одобрения сброса начнёт действовать новый пароль.
-        </p>
+      <div className="mb-4 flex flex-wrap gap-2">
+        <FilterTab
+          active={filter === 'all'}
+          label="Все"
+          count={pending.length}
+          onClick={() => setFilter('all')}
+        />
+        <FilterTab
+          active={filter === 'registration'}
+          label="Регистрация"
+          count={registrationCount}
+          onClick={() => setFilter('registration')}
+        />
+        <FilterTab
+          active={filter === 'password_reset'}
+          label="Сброс пароля"
+          count={passwordResetCount}
+          onClick={() => setFilter('password_reset')}
+        />
       </div>
 
       {isLoading ? (
@@ -62,19 +82,23 @@ export function AccessRequestsSection() {
       ) : error ? (
         <p className="text-sm text-red-600">{apiErrorMessage(error, 'Не удалось загрузить заявки')}</p>
       ) : pending.length === 0 ? (
-        <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-stone-200 bg-stone-50/80 px-6 py-14 text-center">
-          <LuInbox className="h-12 w-12 text-stone-300" strokeWidth={1.5} aria-hidden />
-          <p className="mt-4 text-sm font-semibold text-stone-700">Нет ожидающих заявок</p>
-          <p className="mt-1 text-xs text-stone-500">
-            Новые заявки появятся здесь после регистрации или запроса на сброс пароля.
-          </p>
+        <div className="flex min-h-[220px] items-center justify-center rounded-2xl border border-[#F0E9EA] bg-white px-6 py-14 text-center">
+          <div className="flex flex-col items-center">
+            <LuMail className="h-10 w-10 text-[#7B2D3F]" aria-hidden />
+            <p className="mt-4 text-[18px] font-medium text-stone-900">Нет заявок</p>
+            <p className="mt-1 text-sm text-stone-500">Здесь появятся заявки на регистрацию и сброс пароля</p>
+          </div>
+        </div>
+      ) : filteredPending.length === 0 ? (
+        <div className="flex min-h-[160px] items-center justify-center rounded-2xl border border-stone-200 bg-stone-50/40 px-6 py-10 text-center">
+          <p className="text-sm text-stone-500">По выбранному фильтру заявок нет</p>
         </div>
       ) : (
-        <ul className="space-y-4">
+        <ul className="space-y-2">
           {isFetching && !isLoading ? (
             <p className="text-xs text-stone-400">Обновление…</p>
           ) : null}
-          {pending.map((r) => (
+          {filteredPending.map((r) => (
             <AccessRequestRow
               key={r.id}
               item={r}
@@ -110,48 +134,86 @@ function AccessRequestRow(props: {
   onReject: () => void;
 }) {
   const { item, note, onNoteChange, busy, onApprove, onReject } = props;
+  const initials = `${item.first_name?.trim().charAt(0) ?? ''}${item.last_name?.trim().charAt(0) ?? ''}`.toUpperCase() || '??';
+
   return (
-    <li className="rounded-2xl border border-stone-200/90 bg-[var(--surface-elevated)] p-5 shadow-sm">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <p className="text-lg font-extrabold text-stone-900">
-            {item.first_name} {item.last_name}
-          </p>
-          <p className="mt-1 text-sm font-medium text-stone-600">{item.phone_number}</p>
-          <p className="mt-2 text-xs text-stone-400">{formatWhen(item.created_at)}</p>
+    <li className="rounded-[10px] border border-[#F0E9EA] bg-white px-4 py-3.5">
+      <div className="flex flex-wrap items-center gap-4">
+        <div className="flex min-w-0 flex-1 items-center gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#F3EEF0] text-sm font-semibold text-[#7B2D3F]">
+            {initials}
+          </div>
+          <div className="min-w-0">
+            <p className="truncate text-sm font-medium text-stone-900">
+              {item.first_name} {item.last_name}
+            </p>
+            <p className="mt-0.5 truncate text-xs text-stone-500">{item.phone_number}</p>
+          </div>
         </div>
-        <span className="shrink-0 rounded-full bg-amber-100 px-3 py-1 text-[10px] font-extrabold uppercase tracking-wider text-amber-900">
-          {item.request_type === 'password_reset' ? 'Сброс пароля' : 'Регистрация'}
-        </span>
+        <div className="min-w-[140px]">
+          <span
+            className={
+              item.request_type === 'password_reset'
+                ? 'inline-flex rounded-[10px] bg-orange-50 px-2 py-0.5 text-[11px] font-medium text-orange-700'
+                : 'inline-flex rounded-[10px] bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-700'
+            }
+          >
+            {item.request_type === 'password_reset' ? 'Сброс пароля' : 'Регистрация'}
+          </span>
+          <p className="mt-1 text-xs text-stone-400">{formatWhen(item.created_at)}</p>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            disabled={busy}
+            onClick={onApprove}
+            className="rounded-md bg-[#7B2D3F] px-3.5 py-1.5 text-[13px] font-medium text-white transition hover:opacity-95 disabled:opacity-50"
+          >
+            Принять
+          </button>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={onReject}
+            className="rounded-md border border-stone-200 bg-transparent px-3.5 py-1.5 text-[13px] font-medium text-stone-500 transition hover:bg-stone-50 disabled:opacity-50"
+          >
+            Отклонить
+          </button>
+        </div>
       </div>
-      <label className="mt-4 block">
-        <span className="text-xs font-semibold text-stone-500">Комментарий для пользователя (необязательно)</span>
+      <label className="sr-only">
+        Комментарий для пользователя
         <textarea
           value={note}
           onChange={(e) => onNoteChange(e.target.value)}
-          rows={2}
-          className="mt-1.5 w-full rounded-xl border border-stone-200 bg-white px-3 py-2 text-sm text-stone-900 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
-          placeholder="Например, причина отказа или приветствие при одобрении"
+          rows={1}
+          className="sr-only"
         />
       </label>
-      <div className="mt-4 flex flex-wrap gap-2">
-        <button
-          type="button"
-          disabled={busy}
-          onClick={onApprove}
-          className="rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-white shadow-md shadow-primary/20 disabled:opacity-50"
-        >
-          {item.request_type === 'password_reset' ? 'Подтвердить сброс' : 'Одобрить'}
-        </button>
-        <button
-          type="button"
-          disabled={busy}
-          onClick={onReject}
-          className="rounded-xl border border-red-200 bg-white px-4 py-2.5 text-sm font-bold text-red-700 hover:bg-red-50 disabled:opacity-50"
-        >
-          Отклонить
-        </button>
-      </div>
     </li>
+  );
+}
+
+function FilterTab(props: { active: boolean; label: string; count: number; onClick: () => void }) {
+  const { active, label, count, onClick } = props;
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`inline-flex cursor-pointer items-center rounded-[20px] border px-[14px] py-1.5 text-[13px] transition ${
+        active
+          ? 'border-[#7B2D3F] bg-[#7B2D3F] text-white'
+          : 'border-stone-200 bg-transparent text-stone-500 hover:bg-stone-50'
+      }`}
+    >
+      {label}
+      <span
+        className={`ml-1 inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-[9px] px-1 text-[11px] font-semibold ${
+          active ? 'bg-white/25 text-white' : 'bg-stone-100 text-stone-700'
+        }`}
+      >
+        {count}
+      </span>
+    </button>
   );
 }
