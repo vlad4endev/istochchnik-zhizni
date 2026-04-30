@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 
+import { SongListSkeleton } from '@/components/skeletons/SongListSkeleton';
 import { createDraft, deleteDraft, fetchDrafts, updateDraft } from '../api';
 
 export function DraftsPage() {
@@ -23,7 +24,7 @@ export function DraftsPage() {
     onSuccess: () => void qc.invalidateQueries({ queryKey: ['studio', 'drafts'] }),
   });
 
-  if (q.isLoading) return <p className="text-sm text-zinc-500">Загрузка…</p>;
+  if (q.isLoading) return <SongListSkeleton />;
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">

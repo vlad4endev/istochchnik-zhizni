@@ -20,6 +20,7 @@ import {
 import { useAuthStore } from '../../auth/authStore';
 import { canDeleteSongFromCatalog, canModerateSongCatalog } from '../../auth/studioAccess';
 import { emitAppToast } from '../../../lib/uiFeedback';
+import { SkeletonBox } from '@/components/ui/SkeletonBox';
 import { deleteSong, fetchSong, updateSong } from '../api';
 import { convertToChordPro } from '../addSong/chordProConversion';
 import { SmartImportModal, type SmartImportSourceTab } from '../addSong/SmartImportModal';
@@ -834,7 +835,16 @@ export function StudioEditor() {
   if (!Number.isInteger(id) || id <= 0) {
     return <p className="text-red-600">Некорректный id песни</p>;
   }
-  if (songQ.isLoading) return <p className={shell.muted}>Загрузка…</p>;
+  if (songQ.isLoading) {
+    return (
+      <div className="mx-auto w-full max-w-5xl space-y-3 px-3 py-4">
+        <SkeletonBox width="34%" height="16px" />
+        <SkeletonBox width="100%" height="46px" radius="12px" />
+        <SkeletonBox width="100%" height="46px" radius="12px" />
+        <SkeletonBox width="100%" height="220px" radius="14px" />
+      </div>
+    );
+  }
   if (songQ.isError || !songQ.data) {
     return <p className="text-red-600">Песня не найдена</p>;
   }

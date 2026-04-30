@@ -1,4 +1,4 @@
-import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { IconType } from 'react-icons';
@@ -31,7 +31,10 @@ import { useRealtimeWsConnection } from '../lib/realtimeWsClient';
 import { useSyncServerRole } from '../hooks/useSyncServerRole';
 import { IOSInstallBanner } from '../components/IOSInstallBanner';
 import { AndroidInstallBanner } from '../components/AndroidInstallBanner';
+import { AnimatedOutlet } from '../components/AnimatedOutlet';
 import { UpdateNotification, useServiceWorkerUpdate, NotificationPrompt } from '../features/pwa';
+import { PrefetchNavLink } from '../components/PrefetchNavLink';
+import { ScrollRestoration } from '../components/ScrollRestoration';
 import type { AppToastAction, AppToastKind } from '../lib/uiFeedback';
 import { useChatStore } from '../features/messenger/chatStore';
 import { MessengerWsProvider } from '../features/messenger/MessengerWsContext';
@@ -42,14 +45,16 @@ import { LAYOUT_MAIN_CHROME_EVENT } from './layoutChrome';
 import { AppAvatar } from '../components/AppAvatar';
 import { CoordinatorDashboardNoteFab } from '../features/dashboard/components/CoordinatorDashboardNoteFab';
 import { apiClient } from '../lib/apiClient';
-import { TopProgressBar } from '@/components/ui/TopProgressBar';
-import { usePrefetch } from '@/hooks/usePrefetch';
+import { fetchActiveBroadcast } from '@/api/broadcast';
+import { getActiveEvents, getCalendarDay, formatCalendarDayKey } from '@/features/calendar/api';
+import { fetchSongs } from '@/features/songbook/api';
+import { keys } from '@/lib/queryKeys';
+import { useMe } from '@/hooks/useMe';
 import {
   canRoleAccessSection,
   fetchSectionVisibilitySettingsPublic,
   type AppSectionId,
 } from '../features/settings/sectionVisibilityApi';
-import { fetchMe } from '../features/profile/api';
 
 type NavItem = {
   to: string;
@@ -436,6 +441,19 @@ function MobileNavOverflow({
 }
 
 const UNREAD_DELIVERIES_QK = ['notifications', 'unread-deliveries-count'] as const;
+const NAV_PREFETCH_BY_PATH: Record<
+  string,
+  { queryKey: readonly unknown[]; queryFn: () => Promise<unknown>; staleTime?: number }
+> = {
+  '/songbook': { queryKey: keys.songs, queryFn: () => fetchSongs(), staleTime: 5 * 60_000 },
+  '/dashboard': { queryKey: keys.broadcast, queryFn: fetchActiveBroadcast, staleTime: 5_000 },
+  '/prayer': {
+    queryKey: [...keys.prayer, 'today'],
+    queryFn: () => getCalendarDay(formatCalendarDayKey(new Date())),
+    staleTime: 60_000,
+  },
+  '/events': { queryKey: keys.events, queryFn: getActiveEvents, staleTime: 2 * 60_000 },
+};
 export function Layout() {
   useSyncServerRole();
   useFCM();
@@ -446,7 +464,6 @@ export function Layout() {
   useRealtimeWsConnection();
   useBrowserNotificationScheduler();
   const navigate = useNavigate();
-  const { prefetch } = usePrefetch();
   const location = useLocation();
   const setActiveConversation = useChatStore((s) => s.setActiveConversation);
   const loadConversations = useChatStore((s) => s.loadConversations);
@@ -468,7 +485,7 @@ export function Layout() {
   const role = useAuthStore((s) => s.role);
   const roles = useAuthStore((s) => s.roles ?? [s.role]);
   const sectionVisibilityQ = useQuery({
-    queryKey: ['settings', 'sections', 'visibility'],
+    queryKey: keys.sectionVisibility,
     queryFn: fetchSectionVisibilitySettingsPublic,
     staleTime: 30_000,
     enabled: Boolean(token),
@@ -487,12 +504,7 @@ export function Layout() {
   const sidebarLogoScalePercent = Math.min(100, logoScalePercent);
 
   const isAdmin = (role ?? 'member').toLowerCase() === 'admin';
-  const meQ = useQuery({
-    queryKey: ['auth', 'me'],
-    queryFn: fetchMe,
-    enabled: Boolean(token),
-    staleTime: 60_000,
-  });
+  const meQ = useMe(Boolean(token));
   const canSeeBroadcastNav = isAdmin || normalizeMinistryDirection(meQ.data?.ministry_direction) === 'медиа служения';
   const registrationStatus = useAuthStore((s) => s.registrationStatus ?? 'active');
   const profileUsername = useAuthStore((s) => s.username ?? '');
@@ -687,7 +699,7 @@ export function Layout() {
   return (
     <MessengerWsProvider>
     <div className="flex min-h-0 w-full max-w-[100vw] flex-1 flex-col overflow-x-clip bg-[var(--surface)] text-[var(--text)] [padding-left:env(safe-area-inset-left,0px)] [padding-right:env(safe-area-inset-right,0px)]">
-      <TopProgressBar />
+      <ScrollRestoration />
       <a
         href="#main-content"
         className="skip-link"
@@ -766,11 +778,12 @@ export function Layout() {
             {sidebarItems.map((item) => {
               const Icon = item.Icon;
               return (
-                <NavLink
+                <PrefetchNavLink
                   key={item.to}
                   to={item.to}
-                  onMouseEnter={() => prefetch(item.to)}
-                  onTouchStart={() => prefetch(item.to)}
+                  queryKey={NAV_PREFETCH_BY_PATH[item.to]?.queryKey}
+                  queryFn={NAV_PREFETCH_BY_PATH[item.to]?.queryFn}
+                  staleTime={NAV_PREFETCH_BY_PATH[item.to]?.staleTime}
                   className={({ isActive }) =>
                     navCollapsed
                       ? [
@@ -804,7 +817,7 @@ export function Layout() {
                       ) : null}
                     </>
                   )}
-                </NavLink>
+                </PrefetchNavLink>
               );
             })}
           </nav>
@@ -904,8 +917,8 @@ export function Layout() {
             : 'pb-[max(1rem,env(safe-area-inset-bottom,16px))]',
         ].join(' ')}
       >
-        <div className="min-h-0 flex-1 animate-prayer-fade-in motion-reduce:animate-none">
-          <Outlet />
+        <div className="min-h-0 flex-1">
+          <AnimatedOutlet />
         </div>
       </main>
 
@@ -924,11 +937,12 @@ export function Layout() {
           {mobilePrimaryItems.map((item) => {
             const Icon = item.Icon;
             return (
-              <NavLink
+              <PrefetchNavLink
                 key={item.to}
                 to={item.to}
-                onMouseEnter={() => prefetch(item.to)}
-                onTouchStart={() => prefetch(item.to)}
+                queryKey={NAV_PREFETCH_BY_PATH[item.to]?.queryKey}
+                queryFn={NAV_PREFETCH_BY_PATH[item.to]?.queryFn}
+                staleTime={NAV_PREFETCH_BY_PATH[item.to]?.staleTime}
                 className={({ isActive }) => navClassName(isActive, true)}
                 aria-label={
                   item.to === '/messenger' && activityBadgeTotal > 0
@@ -951,7 +965,7 @@ export function Layout() {
                     </span>
                   </>
                 )}
-              </NavLink>
+              </PrefetchNavLink>
             );
           })}
           {mobileOverflowItems.length > 0 ? (

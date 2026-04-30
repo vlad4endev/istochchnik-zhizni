@@ -42,7 +42,9 @@ import { SectionHeroToolbarEnd } from '@/components/SectionHeroToolbarEnd';
 import { sectionHeroHeaderClass, sectionHeroStickyClass } from '../../../lib/sectionHeroChrome';
 import { memberRosterName } from '../../../lib/memberRosterName';
 import type { Backslider, DayPrayerData, GlobalTheme, Member, Ministry } from '../../../types';
-import { fetchMe, patchProfile } from '../../profile/api';
+import { patchProfile } from '../../profile/api';
+import { useMe } from '@/hooks/useMe';
+import { keys } from '@/lib/queryKeys';
 import { useCoordinatorNoteEditorRequestStore } from '../../dashboard/coordinatorNoteEditorRequestStore';
 import {
   NextWeekPrayerPlanSection,
@@ -478,11 +480,7 @@ export function DailyPrayerPage() {
   const [calendarExpanded, setCalendarExpanded] = useState(false);
   const [calendarView, setCalendarView] = useState<'week' | 'month'>('week');
 
-  const { data: me, isSuccess: meQuerySuccess } = useQuery({
-    queryKey: ['auth', 'me'],
-    queryFn: fetchMe,
-    staleTime: 60_000,
-  });
+  const { data: me, isSuccess: meQuerySuccess } = useMe();
 
   const sectionMemberId = useId();
   const sectionBacksliderId = useId();
@@ -501,12 +499,12 @@ export function DailyPrayerPage() {
     error: queryError,
     refetch,
   } = useQuery({
-    queryKey: ['calendar', 'day', dateKey],
+    queryKey: keys.calendarDay(dateKey),
     queryFn: () => getCalendarDay(dateKey),
   });
 
   const coordinatorNotesQ = useQuery({
-    queryKey: ['calendar', 'dashboard-coordinator-notes', dateKey],
+    queryKey: keys.dashboardNotes(dateKey),
     queryFn: () => fetchDashboardCoordinatorNotes(dateKey),
     staleTime: 0,
   });

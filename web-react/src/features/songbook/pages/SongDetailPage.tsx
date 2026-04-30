@@ -5,7 +5,7 @@ import { LuArrowLeft, LuPlus, LuMinus, LuSettings2 } from 'react-icons/lu';
 
 import { dispatchLayoutMainChrome } from '../../../app/layoutChrome';
 import { SongListSkeleton } from '@/components/skeletons/SongListSkeleton';
-import { useApiData } from '@/hooks/useApiData';
+import { keys } from '@/lib/queryKeys';
 import { useAuthStore } from '../../auth/authStore';
 import { canAccessStudioRole } from '../../auth/studioAccess';
 import { useWakeLock } from '../../../hooks/useWakeLock';
@@ -39,10 +39,11 @@ export function SongDetailPage() {
   const resumeAutoscrollWantedRef = useRef(false);
   const topBarRef = useRef<HTMLDivElement | null>(null);
 
-  const q = useApiData(`songs:detail:${songId}`, () => fetchSong(songId), {
-    ttl: 300_000,
-    immediate: Number.isInteger(songId) && songId > 0,
-    queryKey: ['song', songId],
+  const q = useQuery({
+    queryKey: keys.song(songId),
+    queryFn: () => fetchSong(songId),
+    enabled: Number.isInteger(songId) && songId > 0,
+    staleTime: 5 * 60_000,
   });
   const versionQ = useQuery({
     queryKey: ['studio', 'version', songId],
@@ -201,8 +202,8 @@ export function SongDetailPage() {
   if (!Number.isInteger(songId) || songId <= 0) {
     return <p className="text-red-600">Некорректная ссылка</p>;
   }
-  if (q.loading && !q.data) return <SongListSkeleton />;
-  if (q.error || !q.data) return <p className="text-red-600">Песня не найдена</p>;
+  if (q.isLoading) return <SongListSkeleton />;
+  if (q.isError || !q.data) return <p className="text-red-600">Песня не найдена</p>;
 
   const s = q.data;
   const version = (versionQ.data as { custom_content?: string | null; custom_key?: string | null } | null) ?? null;

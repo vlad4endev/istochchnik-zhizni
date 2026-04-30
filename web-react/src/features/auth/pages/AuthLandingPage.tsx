@@ -4,6 +4,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuthSessionReady } from '../../../hooks/useAuthSessionReady';
 import { defaultPostLoginPath } from '../../../lib/appVariant';
 import { useAuthStore } from '../authStore';
+import { SkeletonBox } from '@/components/ui/SkeletonBox';
 
 const DEFAULT_APP_NAME = 'МОЯ ЦЕРКОВЬ';
 const DEFAULT_DESCRIPTION = 'Цифровая платформа';
@@ -35,7 +36,10 @@ export function AuthLandingPage() {
   if (!sessionReady) {
     return (
       <div className="flex min-h-[100dvh] min-h-screen w-full max-w-[100vw] items-center justify-center bg-primary text-white">
-        <p className="text-sm font-medium opacity-90">Загрузка…</p>
+        <div className="w-full max-w-xs space-y-3 px-5">
+          <SkeletonBox width="70%" height="16px" />
+          <SkeletonBox width="100%" height="12px" />
+        </div>
       </div>
     );
   }

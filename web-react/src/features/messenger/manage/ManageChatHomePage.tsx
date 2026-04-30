@@ -24,6 +24,7 @@ import { resolvePublicUrl } from '../../../lib/resolvePublicUrl';
 import { emitAppToast } from '../../../lib/uiFeedback';
 import { ManageScreenShell, ManageSettingsGroup } from './ManageScreenShell';
 import { AppAvatar } from '../../../components/AppAvatar';
+import { SkeletonBox } from '@/components/ui/SkeletonBox';
 import { getAvatarInitial } from '../avatarUtils';
 
 export function ManageChatHomePage() {
@@ -181,6 +182,23 @@ export function ManageChatHomePage() {
           <InfoRow label="Направление" value={privateProfile?.ministry_direction ?? '—'} />
           <InfoRow Icon={LuCake} label="Дата рождения" value={privateProfile?.birth_date ?? '—'} />
         </ManageSettingsGroup>
+      </ManageScreenShell>
+    );
+  }
+
+  if (loading) {
+    return (
+      <ManageScreenShell>
+        <ManageSettingsGroup className="mt-4 p-4">
+          <div className="flex flex-col items-center gap-3">
+            <SkeletonBox width="104px" height="104px" radius="999px" />
+            <SkeletonBox width="58%" height="18px" />
+            <SkeletonBox width="36%" height="12px" />
+          </div>
+        </ManageSettingsGroup>
+        <ManageCardSkeleton rows={2} />
+        <ManageCardSkeleton rows={4} />
+        <ManageCardSkeleton rows={2} />
       </ManageScreenShell>
     );
   }
@@ -345,6 +363,18 @@ function subtitleFromMeta(meta: api.ConversationMeta | null): string {
 
 function randomInviteToken(): string {
   return Math.random().toString(36).slice(2, 12);
+}
+
+function ManageCardSkeleton({ rows = 3 }: { rows?: number }) {
+  return (
+    <ManageSettingsGroup className="mt-3 p-4">
+      <div className="space-y-2">
+        {Array.from({ length: rows }).map((_, idx) => (
+          <SkeletonBox key={idx} width="100%" height="46px" radius="12px" />
+        ))}
+      </div>
+    </ManageSettingsGroup>
+  );
 }
 
 function InfoRow({

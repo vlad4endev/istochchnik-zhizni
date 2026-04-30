@@ -28,7 +28,7 @@ import {
   type ChurchEventItem,
 } from '../../calendar/api';
 import { NextWeekPrayerPlanSection, userCanViewNextWeekPrayerPlan } from '../../calendar/components/NextWeekPrayerPlanSection';
-import { fetchMe } from '../../profile/api';
+import { useMe } from '@/hooks/useMe';
 import { fetchProfileByUsername } from '../../profile/publicProfileApi';
 import { SectionHeroToolbarEnd } from '@/components/SectionHeroToolbarEnd';
 import { sectionHeroHeaderClass, sectionHeroStickyClassNested } from '../../../lib/sectionHeroChrome';
@@ -42,6 +42,7 @@ import { useProfileDraftStore } from '../../profile/profileDraftStore';
 import { useCoordinatorNoteEditorRequestStore } from '../coordinatorNoteEditorRequestStore';
 import { LimitedRegistrationDashboard } from '../components/LimitedRegistrationDashboard';
 import { DashboardSkeleton } from '@/components/skeletons/DashboardSkeleton';
+import { keys } from '@/lib/queryKeys';
 
 type DashboardEvent = {
   id: string;
@@ -373,11 +374,7 @@ function DashboardMain() {
     }
   });
 
-  const meQ = useQuery({
-    queryKey: ['auth', 'me'],
-    queryFn: fetchMe,
-    staleTime: 60_000,
-  });
+  const meQ = useMe();
 
   const profileUsername = useAuthStore((s) => s.username ?? '');
   const profileMemberId = useAuthStore((s) => s.memberId);
@@ -392,13 +389,13 @@ function DashboardMain() {
   });
 
   const prayerQ = useQuery({
-    queryKey: ['calendar', 'day', todayDateKey],
+    queryKey: keys.calendarDay(todayDateKey),
     queryFn: () => getCalendarDay(todayDateKey),
     staleTime: 60_000,
   });
 
   const broadcastQ = useQuery({
-    queryKey: ['broadcast', 'active'],
+    queryKey: keys.broadcast,
     queryFn: fetchActiveBroadcast,
     staleTime: 60_000,
   });
@@ -410,7 +407,7 @@ function DashboardMain() {
   });
 
   const eventsQ = useQuery({
-    queryKey: ['calendar', 'events', 'dashboard'],
+    queryKey: keys.events,
     queryFn: getActiveEvents,
     staleTime: 60_000,
   });
@@ -451,7 +448,7 @@ function DashboardMain() {
   });
 
   const dashboardNotesQ = useQuery({
-    queryKey: ['calendar', 'dashboard-coordinator-notes', todayDateKey],
+    queryKey: keys.dashboardNotes(todayDateKey),
     queryFn: () => fetchDashboardCoordinatorNotes(todayDateKey),
     /** Срочные нужды и объявления: сразу подтягивать после WS `coordinator-notes` и при заходе на главную. */
     staleTime: 0,

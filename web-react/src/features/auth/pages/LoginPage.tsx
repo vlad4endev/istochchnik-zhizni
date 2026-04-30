@@ -10,6 +10,7 @@ import { defaultPostLoginPath, pendingRegistrationLandingPath } from '../../../l
 import { humanizeServerError, mapAxiosAuthError } from '../authErrors';
 import { normalizeRegistrationStatus, useAuthStore } from '../authStore';
 import { formatRuPhoneInput, phoneInputAllowedKeys } from '../utils/formatRuPhone';
+import { SkeletonBox } from '@/components/ui/SkeletonBox';
 
 type LocationState = { mode?: 'signIn' | 'signUp'; from?: string };
 
@@ -103,7 +104,11 @@ export function LoginPage() {
   if (!sessionReady) {
     return (
       <div className="flex min-h-[100dvh] min-h-screen items-center justify-center bg-[var(--surface)] text-stone-500">
-        <p className="text-sm font-medium">Загрузка…</p>
+        <div className="w-full max-w-sm space-y-3 px-5">
+          <SkeletonBox width="42%" height="16px" />
+          <SkeletonBox width="100%" height="48px" radius="12px" />
+          <SkeletonBox width="100%" height="48px" radius="12px" />
+        </div>
       </div>
     );
   }

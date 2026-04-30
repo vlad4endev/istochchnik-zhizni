@@ -1,8 +1,8 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { LuShieldCheck } from 'react-icons/lu';
 import { UserListSkeleton } from '@/components/skeletons/UserListSkeleton';
-import { useApiData } from '@/hooks/useApiData';
-import { useCacheStore } from '@/stores/cacheStore';
+import { useQuery } from '@tanstack/react-query';
+import { keys } from '@/lib/queryKeys';
 import {
   APP_ROLE_IDS,
   APP_SECTION_IDS,
@@ -15,21 +15,19 @@ import {
 } from '../settings/sectionVisibilityApi';
 import { apiErrorMessage } from './api';
 
-const Q_SECTION_VISIBILITY = ['admin', 'section-visibility'] as const;
-
 export function AppSectionsAccessSection() {
   const qc = useQueryClient();
-  const cache = useCacheStore();
-  const settingsQ = useApiData('admin:sections', fetchSectionVisibilitySettingsAdmin, {
-    ttl: 60_000,
-    queryKey: Q_SECTION_VISIBILITY,
+  const settingsQ = useQuery({
+    queryKey: keys.sections,
+    queryFn: fetchSectionVisibilitySettingsAdmin,
+    staleTime: 60_000,
   });
   const saveMut = useMutation({
     mutationFn: patchSectionVisibilitySettings,
     onSuccess: async () => {
       await Promise.all([
-        qc.invalidateQueries({ queryKey: Q_SECTION_VISIBILITY }),
-        qc.invalidateQueries({ queryKey: ['settings', 'sections', 'visibility'] }),
+        qc.invalidateQueries({ queryKey: keys.sections }),
+        qc.invalidateQueries({ queryKey: keys.sectionVisibility }),
       ]);
     },
   });
@@ -38,15 +36,6 @@ export function AppSectionsAccessSection() {
   const isBusy = saveMut.isPending;
 
   async function toggleSection(sectionId: AppSectionId, enabled: boolean) {
-    if (data) {
-      cache.set('admin:sections', {
-        ...data,
-        sections: {
-          ...data.sections,
-          [sectionId]: { ...data.sections[sectionId], enabled },
-        },
-      });
-    }
     await saveMut.mutateAsync({ sections: { [sectionId]: { enabled } } });
   }
 
@@ -55,17 +44,10 @@ export function AppSectionsAccessSection() {
     const current = data.sections[sectionId].roles;
     const next = checked ? Array.from(new Set([...current, role])) : current.filter((r) => r !== role);
     if (next.length === 0) return;
-    cache.set('admin:sections', {
-      ...data,
-      sections: {
-        ...data.sections,
-        [sectionId]: { ...data.sections[sectionId], roles: next },
-      },
-    });
     await saveMut.mutateAsync({ sections: { [sectionId]: { roles: next } } });
   }
 
-  if (settingsQ.loading && !data) {
+  if (settingsQ.isLoading) {
     return (
       <section className="rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] p-4 shadow-[var(--shadow)]">
         <UserListSkeleton />
@@ -164,7 +146,7 @@ export function AppSectionsAccessSection() {
           type="button"
           className="rounded-lg bg-[#7B2D3F] px-3.5 py-2 text-sm font-semibold text-white transition hover:opacity-95 disabled:opacity-50"
           disabled={isBusy}
-          onClick={() => void qc.invalidateQueries({ queryKey: Q_SECTION_VISIBILITY })}
+          onClick={() => void qc.invalidateQueries({ queryKey: keys.sections })}
         >
           Сохранить доступы
         </button>

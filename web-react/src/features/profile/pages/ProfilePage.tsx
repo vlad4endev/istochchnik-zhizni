@@ -32,6 +32,7 @@ import {
 import { fetchDirectionTemplates, type MinistryDirectionTemplate } from '../../admin/api';
 import { fetchProfileByMemberId, patchPublicProfileSettings } from '../publicProfileApi';
 import { ProfileAccessibilitySection } from '../components/ProfileAccessibilitySection';
+import { SkeletonBox } from '@/components/ui/SkeletonBox';
 
 import profileShell from '../profileShell.module.css';
 import pfStyles from './ProfilePage.module.css';
@@ -562,7 +563,11 @@ export function ProfilePage() {
             . Фото меняется кнопкой на аватаре выше.
           </p>
           {publicLoading ? (
-            <p className="mt-4 text-sm text-[color:var(--profile-text-muted)]">Загрузка…</p>
+            <div className="mt-4 space-y-2">
+              <SkeletonBox width="55%" height="14px" />
+              <SkeletonBox width="100%" height="42px" radius="12px" />
+              <SkeletonBox width="100%" height="96px" radius="12px" />
+            </div>
           ) : (
             <div className="mt-4 grid gap-4">
               <div>

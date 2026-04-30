@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 
 import { emitAppToast } from '../../../lib/uiFeedback';
+import { SongListSkeleton } from '@/components/skeletons/SongListSkeleton';
 import { createSetlist, deleteSetlist, fetchSetlists } from '../api';
 import { studioSetlistDetailPath, studioSetlistPerformPath, useStudioModuleSurface } from '../studioPaths';
 
@@ -31,7 +32,7 @@ export function SetlistsPage() {
     onSuccess: () => void qc.invalidateQueries({ queryKey: ['studio', 'setlists'] }),
   });
 
-  if (q.isLoading) return <p className="text-sm text-stone-500">Загрузка…</p>;
+  if (q.isLoading) return <SongListSkeleton />;
 
   const pageCard =
     surface === 'songbook'

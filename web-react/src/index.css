@@ -94,6 +94,7 @@ html[data-color-theme='blue'] {
 html {
   width: 100%;
   min-height: 100%;
+  scrollbar-gutter: stable;
   /* Не даём WebKit самовольно раздувать текст поверх нашего масштаба из панели доступности */
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
@@ -244,6 +245,29 @@ body {
   border: none;
 }
 
+.route-transition {
+  min-height: 100%;
+  animation: route-enter 0.15s ease forwards;
+  will-change: transform, opacity;
+  contain: layout paint;
+}
+
+.route-transition.route-transition-exit {
+  opacity: 0.68;
+  transform: translateY(4px);
+}
+
+@keyframes route-enter {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 @layer utilities {
   .tap-highlight-transparent {
     -webkit-tap-highlight-color: transparent;
@@ -321,7 +345,8 @@ body {
   @media (prefers-reduced-motion: reduce) {
     .dashboard-backdrop,
     .dashboard-sheet,
-    .studio-block-enter {
+    .studio-block-enter,
+    .route-transition {
       animation: none !important;
     }
   }

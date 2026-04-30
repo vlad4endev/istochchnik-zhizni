@@ -4,6 +4,7 @@ import { LuCrown, LuShield } from 'react-icons/lu';
 import * as api from '../api/messengerApi';
 import { formatMessengerLastSeen } from '../lastSeenUtils';
 import { ManageScreenShell, ManageSettingsGroup } from './ManageScreenShell';
+import { SkeletonBox } from '@/components/ui/SkeletonBox';
 
 export function ChatAdminsPage() {
   const { chatId } = useParams<{ chatId: string }>();
@@ -70,8 +71,10 @@ export function ChatAdminsPage() {
         </div>
         {loading ? (
           <div className="space-y-0 p-4">
-            <div className="h-12 animate-pulse rounded-lg bg-gray-100" />
-            <div className="mt-2 h-12 animate-pulse rounded-lg bg-gray-100" />
+            <SkeletonBox width="100%" height="48px" radius="10px" />
+            <div className="mt-2">
+              <SkeletonBox width="100%" height="48px" radius="10px" />
+            </div>
           </div>
         ) : err ? (
           <div className="p-4">

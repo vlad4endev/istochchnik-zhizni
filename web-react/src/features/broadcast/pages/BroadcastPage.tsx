@@ -2,12 +2,14 @@ import { useEffect, useMemo, useState } from 'react';
 import { LuBell, LuExpand, LuPlay, LuTv } from 'react-icons/lu';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { createBroadcast, fetchActiveBroadcast, fetchFinishedBroadcasts, patchBroadcast, type BroadcastData } from '../../../api/broadcast';
-import { fetchMe } from '../../profile/api';
 import { SectionHeroToolbarEnd } from '@/components/SectionHeroToolbarEnd';
 import { sectionHeroHeaderClass, sectionHeroStickyClass } from '../../../lib/sectionHeroChrome';
 import { useAuthStore } from '../../auth/authStore';
 import { detectPlatform, getEmbedUrl, parseBroadcastInputToEmbed } from '../../../utils/broadcast';
 import { emitAppToast } from '../../../lib/uiFeedback';
+import { useMe } from '@/hooks/useMe';
+import { keys } from '@/lib/queryKeys';
+import { SkeletonBox } from '@/components/ui/SkeletonBox';
 
 function btnPrimary(c = '') { return `flex h-10 items-center justify-center rounded-xl bg-primary px-4 text-sm font-bold text-white shadow hover:border-transparent hover:!bg-[#e34254] disabled:pointer-events-none disabled:opacity-50 transition-colors ${c}`; }
 function btnSecondary(c = '') { return `flex h-10 items-center justify-center rounded-xl border border-stone-200 bg-white px-4 text-sm font-bold text-stone-700 hover:bg-stone-50 disabled:pointer-events-none disabled:opacity-50 transition-colors ${c}`; }
@@ -52,15 +54,11 @@ function platformLabel(platform: string): string {
 export function BroadcastPage() {
   const qc = useQueryClient();
   const role = useAuthStore((s) => s.role);
-  const meQ = useQuery({
-    queryKey: ['auth', 'me', 'broadcast-page'],
-    queryFn: fetchMe,
-    staleTime: 60_000,
-  });
+  const meQ = useMe();
   const ministryDirection = String(meQ.data?.ministry_direction ?? '').trim().toLowerCase().replace(/ё/g, 'е');
   const isAdmin = role === 'admin' || role === 'minister' || ministryDirection.includes('медиа');
   const { data, isLoading: broadcastLoading, error } = useQuery({
-    queryKey: ['broadcast', 'active'],
+    queryKey: keys.broadcast,
     queryFn: fetchActiveBroadcast,
   });
   const activeBroadcast = data?.broadcast ?? null;
@@ -87,7 +85,7 @@ export function BroadcastPage() {
   });
 
   const { data: archiveData } = useQuery({
-    queryKey: ['broadcast', 'archive', 10],
+    queryKey: keys.broadcastArchive(10),
     queryFn: () => fetchFinishedBroadcasts(10),
     enabled: isAdmin,
   });
@@ -131,7 +129,7 @@ export function BroadcastPage() {
       });
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['broadcast'] });
+      qc.invalidateQueries({ queryKey: keys.broadcast });
       emitAppToast({ kind: 'success', message: 'Настройки трансляции сохранены' });
     },
     onError: () => emitAppToast({ kind: 'error', message: 'Не удалось сохранить настройки трансляции' }),
@@ -229,9 +227,12 @@ export function BroadcastPage() {
 
             <div className="player-ratio-box">
               {broadcastLoading ? (
-                <div className="absolute inset-0 flex flex-col items-center justify-center text-stone-400 p-6 text-center bg-stone-950/50">
-                  <div className="h-10 w-10 animate-spin rounded-full border-2 border-primary border-t-transparent mb-4" />
-                  <p className="text-sm font-medium">Загрузка эфира...</p>
+                <div className="absolute inset-0 bg-stone-950/50 p-6">
+                  <div className="mx-auto flex h-full w-full max-w-xl flex-col justify-center gap-3">
+                    <SkeletonBox height="18px" width="42%" />
+                    <SkeletonBox height="12px" width="86%" />
+                    <SkeletonBox height="12px" width="58%" />
+                  </div>
                 </div>
               ) : error ? (
                 <div className="absolute inset-0 flex flex-col items-center justify-center text-red-400 p-6 text-center bg-stone-950/50">

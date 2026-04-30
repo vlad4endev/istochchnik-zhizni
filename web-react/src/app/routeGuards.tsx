@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 
 import { useAuthStore } from '../features/auth/authStore';
 import { canAccessStudioRole, canModerateSongCatalog } from '../features/auth/studioAccess';
+import { SkeletonBox } from '@/components/ui/SkeletonBox';
 import {
   canRoleAccessSection,
   fetchSectionVisibilitySettingsPublic,
@@ -47,7 +48,11 @@ export function getStudioRoleDeniedPath(): string {
 export function RouteFallback(): ReactNode {
   return (
     <div className="flex min-h-[50dvh] w-full flex-1 items-center justify-center bg-[var(--surface)] text-stone-500">
-      <p className="text-sm font-medium">Загрузка…</p>
+      <div className="w-full max-w-md space-y-2.5 px-4">
+        <SkeletonBox width="34%" height="14px" />
+        <SkeletonBox width="100%" height="44px" radius="12px" />
+        <SkeletonBox width="82%" height="14px" />
+      </div>
     </div>
   );
 }
@@ -55,7 +60,10 @@ export function RouteFallback(): ReactNode {
 export function HydrateSplash(): ReactNode {
   return (
     <div className="flex min-h-screen items-center justify-center bg-[var(--surface)] text-stone-500">
-      <p className="text-sm font-medium">Загрузка…</p>
+      <div className="w-full max-w-sm space-y-2.5 px-4">
+        <SkeletonBox width="36%" height="14px" />
+        <SkeletonBox width="100%" height="44px" radius="12px" />
+      </div>
     </div>
   );
 }

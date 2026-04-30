@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { LuPenLine, LuTrash2 } from 'react-icons/lu';
 
+import { SongListSkeleton } from '@/components/skeletons/SongListSkeleton';
 import {
   createDraft,
   deleteDraft,
@@ -123,7 +124,7 @@ export function MySongsPage() {
   }, [tab, recentQ.data, recentQ.isLoading]);
 
   if (q.isLoading) {
-    return <p className="text-sm text-stone-500">Загрузка…</p>;
+    return <SongListSkeleton />;
   }
   if (q.isError) {
     return <p className="text-sm text-red-600">Не удалось загрузить список.</p>;
@@ -236,7 +237,7 @@ export function MySongsPage() {
               Открывайте карточку в песеннике или сразу переходите в редактор своей версии.
             </p>
             {recentQ.isLoading ? (
-              <p className="text-sm text-stone-500">Загрузка…</p>
+              <SongListSkeleton />
             ) : (
               <ul className="flex flex-col gap-2">
                 {recent.map((s) => (

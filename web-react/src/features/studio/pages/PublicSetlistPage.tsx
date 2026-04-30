@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link, useParams } from 'react-router-dom';
 
+import { SongListSkeleton } from '@/components/skeletons/SongListSkeleton';
 import { LyricsWithChords } from '../../songbook/components/LyricsWithChords';
 import { fetchPublicSetlist } from '../api';
 
@@ -17,8 +18,8 @@ export function PublicSetlistPage() {
   }
   if (q.isLoading) {
     return (
-      <div className="flex min-h-[40dvh] items-center justify-center text-stone-500">
-        Загрузка…
+      <div className="mx-auto max-w-3xl px-4 py-8">
+        <SongListSkeleton />
       </div>
     );
   }

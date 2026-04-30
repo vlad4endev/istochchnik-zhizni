@@ -1,0 +1,21 @@
+export const keys = {
+  me: ['auth', 'me'] as const,
+  dashboard: ['dashboard'] as const,
+  broadcast: ['broadcast', 'active'] as const,
+  songs: ['songs', 'list'] as const,
+  song: (id: string | number) => ['songs', 'detail', String(id)] as const,
+  prayer: ['prayer', 'cycle'] as const,
+  prayerMembers: ['prayer', 'members'] as const,
+  events: ['events', 'list'] as const,
+  schedule: ['schedule'] as const,
+  adminUsers: ['admin', 'users'] as const,
+  adminUser: (id: string | number) => ['admin', 'users', String(id)] as const,
+  logs: ['admin', 'logs'] as const,
+  sections: ['admin', 'sections'] as const,
+  notifications: ['notifications', 'settings'] as const,
+  sectionVisibility: ['settings', 'sections', 'visibility'] as const,
+  calendarDay: (dateKey: string) => ['calendar', 'day', dateKey] as const,
+  dashboardNotes: (dateKey: string) => ['calendar', 'dashboard-coordinator-notes', dateKey] as const,
+  broadcastArchive: (limit: number) => ['broadcast', 'archive', limit] as const,
+} as const;
+

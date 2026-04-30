@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 
 import { fetchInstrumentSettings, patchInstrumentSettings } from '../api';
+import { SkeletonBox } from '@/components/ui/SkeletonBox';
 
 export function InstrumentsPage() {
   const qc = useQueryClient();
@@ -22,7 +23,15 @@ export function InstrumentsPage() {
     onSuccess: () => void qc.invalidateQueries({ queryKey: ['studio', 'instruments'] }),
   });
 
-  if (q.isLoading) return <p className="text-sm text-stone-500">Загрузка…</p>;
+  if (q.isLoading) {
+    return (
+      <div className="mx-auto max-w-xl space-y-4">
+        <SkeletonBox width="22%" height="22px" />
+        <SkeletonBox width="100%" height="220px" radius="12px" />
+        <SkeletonBox width="120px" height="40px" radius="10px" />
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto max-w-xl space-y-5">

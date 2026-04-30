@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import axios from 'axios';
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { LuCross, LuHandshake, LuMegaphone, LuPlus } from 'react-icons/lu';
@@ -13,7 +13,7 @@ import {
   type DashboardCoordinatorNoteKind,
 } from '../../calendar/api';
 import { inferCoordinatorNoteDuration } from '../../calendar/inferCoordinatorNoteDuration';
-import { fetchMe } from '../../profile/api';
+import { useMe } from '@/hooks/useMe';
 import { useCoordinatorNoteEditorRequestStore } from '../coordinatorNoteEditorRequestStore';
 
 type ModalKind = DashboardCoordinatorNoteKind | null;
@@ -30,7 +30,7 @@ function kindTitle(kind: DashboardCoordinatorNoteKind): string {
 
 export function CoordinatorDashboardNoteFab() {
   const qc = useQueryClient();
-  const meQ = useQuery({ queryKey: ['auth', 'me'], queryFn: fetchMe, staleTime: 60_000 });
+  const meQ = useMe();
   const me = meQ.data ?? null;
   const isAdmin = me?.app_role?.trim().toLowerCase() === 'admin';
   const can = meQ.isSuccess && (isAdmin || apiBoolean(me?.is_collection_coordinator));

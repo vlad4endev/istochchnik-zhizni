@@ -5,6 +5,7 @@ import { useMessengerWsContext } from '../MessengerWsContext';
 import { useSwipeGesture } from '../hooks/useSwipeGesture';
 import { ChatList } from './ChatList';
 import { LuPlus, LuMessageSquare, LuSlidersHorizontal } from 'react-icons/lu';
+import { SkeletonBox } from '@/components/ui/SkeletonBox';
 import './messenger.css';
 
 const ChatWindow = lazy(async () => {
@@ -16,6 +17,19 @@ const NewChatDialog = lazy(async () => {
   const m = await import('./NewChatDialog');
   return { default: m.NewChatDialog };
 });
+
+function MessengerFallback({ title }: { title: string }) {
+  return (
+    <div className="p-4">
+      <div className="mx-auto w-full max-w-xl space-y-2.5">
+        <SkeletonBox width="38%" height="14px" />
+        <SkeletonBox width="100%" height="52px" radius="10px" />
+        <SkeletonBox width="100%" height="52px" radius="10px" />
+      </div>
+      <p className="mt-3 text-xs font-medium text-stone-500">{title}</p>
+    </div>
+  );
+}
 function blurActiveElement() {
   try {
     const el = document.activeElement as HTMLElement | null;
@@ -152,7 +166,7 @@ export function MessengerPage() {
       {/* Main chat area */}
       <main className={`tg-main chat-window-panel ${mobileView === 'chat' ? 'tg-main--visible' : ''}`}>
         {activeId ? (
-          <Suspense fallback={<div className="tg-empty-sub">Загрузка чата…</div>}>
+          <Suspense fallback={<MessengerFallback title="Загрузка чата…" />}>
             <ChatWindow
               conversationId={activeId}
               onBack={handleBack}
@@ -172,7 +186,7 @@ export function MessengerPage() {
       </main>
 
       {showNewChat && (
-        <Suspense fallback={<div className="tg-empty-sub">Загрузка…</div>}>
+        <Suspense fallback={<MessengerFallback title="Загрузка…" />}>
           <NewChatDialog
             onClose={() => setShowNewChat(false)}
             onCreated={(id) => {

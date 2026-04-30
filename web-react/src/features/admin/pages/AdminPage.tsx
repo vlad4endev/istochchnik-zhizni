@@ -85,6 +85,7 @@ import {
 } from '../api';
 import { NextWeekPrayerPlanSection } from '../../calendar/components/NextWeekPrayerPlanSection';
 import { CHURCH_EVENT_CATEGORY_OPTIONS_FALLBACK } from '../churchEventCategoryOptions';
+import { UserListSkeleton } from '../../../components/skeletons/UserListSkeleton';
 import { dateInputValueFromApi } from '../../../lib/dateInputValueFromApi';
 import { resolvePublicUrl } from '../../../lib/resolvePublicUrl';
 import { nextOccurrenceLocalYmd } from '../../../lib/weekdayAnchor';
@@ -94,7 +95,8 @@ import {
   splitMemberNameParts,
 } from '../../../lib/memberRosterName';
 import type { AppUser } from '../types';
-import { fetchMe, fetchPrayerRequestHistory, type PrayerHistoryItem } from '../../profile/api';
+import { fetchPrayerRequestHistory, type PrayerHistoryItem } from '../../profile/api';
+import { useMe } from '@/hooks/useMe';
 
 function appRoleLabel(role: string): string {
   switch (role) {
@@ -2429,7 +2431,7 @@ function CalendarPrayerCycleRoster() {
   };
 
   if (isLoading && !data) {
-    return <p className="text-sm text-stone-600">Загрузка членов церкви…</p>;
+    return <UserListSkeleton />;
   }
   if (error) {
     return (
@@ -2860,11 +2862,7 @@ function CalendarPrayerCycleRoster() {
 
 function CalendarSection() {
   const qc = useQueryClient();
-  const meQ = useQuery({
-    queryKey: ['auth', 'me'],
-    queryFn: fetchMe,
-    staleTime: 60_000,
-  });
+  const meQ = useMe();
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [msg, setMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
   const mut = useMutation({

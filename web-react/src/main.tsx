@@ -8,6 +8,7 @@ import { applyNativeShellViewportLock } from './lib/nativeShellViewport';
 import { AppRouter } from './app/Router';
 import { AppRouterMain } from './app/RouterMain';
 import { AppRouterStudio } from './app/RouterStudio';
+import { TopLoader } from './components/ui/TopLoader';
 import { AccessibilityProvider } from './lib/accessibility/AccessibilityProvider';
 import { getAppVariant } from './lib/appVariant';
 import { usePwaStore, type BeforeInstallPromptEvent } from './stores/pwaStore';
@@ -27,12 +28,12 @@ function RootRouter() {
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      /** Несколько пользователей и вкладок: подтягиваем свежие данные при возврате на вкладку. */
-      refetchOnWindowFocus: true,
+      refetchOnWindowFocus: false,
       refetchOnReconnect: true,
-      retry: 2,
+      retry: 1,
       retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 10_000),
-      staleTime: 30_000,
+      staleTime: 60_000,
+      gcTime: 300_000,
     },
   },
 });
@@ -97,6 +98,7 @@ createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <div className="flex min-h-0 w-full max-w-full flex-1 flex-col overflow-x-clip">
       <QueryClientProvider client={queryClient}>
+        <TopLoader />
         <BrowserRouter>
           <AccessibilityProvider>
             <RootRouter />

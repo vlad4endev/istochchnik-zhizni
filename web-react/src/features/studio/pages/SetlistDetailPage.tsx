@@ -6,6 +6,7 @@ import { useMemo, useState } from 'react';
 import { emitAppToast } from '../../../lib/uiFeedback';
 import { studioSetlistPerformPath, studioSetlistsIndexPath, useStudioModuleSurface } from '../studioPaths';
 import { LuArrowDown, LuArrowUp, LuCopy, LuFileDown, LuChevronLeft, LuMic, LuSearch } from 'react-icons/lu';
+import { SkeletonBox } from '@/components/ui/SkeletonBox';
 
 import { exportSetlistPdf } from '../../songbook/pdfExport';
 import { fetchSongs } from '../../songbook/api';
@@ -228,7 +229,12 @@ export function SetlistDetailPage() {
               className="w-full rounded-lg border border-stone-200 bg-stone-50 py-2.5 pl-10 pr-3 text-sm text-stone-900 outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
             />
           </div>
-          {songsQ.isLoading && <p className="text-sm text-stone-500">Загрузка каталога песен…</p>}
+          {songsQ.isLoading && (
+            <div className="space-y-2">
+              <SkeletonBox width="42%" height="13px" />
+              <SkeletonBox width="100%" height="44px" radius="10px" />
+            </div>
+          )}
           {songsQ.isError && (
             <p className="text-sm text-amber-700">
               Не удалось загрузить песни. Обновите страницу или проверьте подключение.
@@ -250,7 +256,7 @@ export function SetlistDetailPage() {
               onChange={(e) => setPickSong(e.target.value)}
               disabled={songsQ.isLoading || songsQ.isError || songs.length === 0}
             >
-              <option value="">{songsQ.isLoading ? 'Загрузка…' : 'Выберите песню'}</option>
+              <option value="">Выберите песню</option>
               {filteredSongs.map((s) => (
                 <option key={s.id} value={s.id}>
                   {s.title}
@@ -288,7 +294,13 @@ export function SetlistDetailPage() {
           публичной ссылке.
         </p>
         <ol className="list-decimal space-y-2 pl-5 text-stone-800">
-          {itemsQ.isLoading && <li className="text-sm text-stone-500">Загрузка позиций…</li>}
+          {itemsQ.isLoading && (
+            <li className="-ml-1 list-none space-y-2">
+              <SkeletonBox width="52%" height="13px" />
+              <SkeletonBox width="100%" height="60px" radius="10px" />
+              <SkeletonBox width="100%" height="60px" radius="10px" />
+            </li>
+          )}
           {!itemsQ.isLoading && (itemsQ.data ?? []).length === 0 && (
             <li className="-ml-1 list-none rounded-xl border border-dashed border-stone-300 py-8 pl-4 text-sm text-stone-600">
               Пока пусто — выберите песню выше и нажмите «Добавить».

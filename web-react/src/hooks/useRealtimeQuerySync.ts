@@ -2,6 +2,7 @@ import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { useEffect, useRef } from 'react';
 
 import { useAuthStore } from '../features/auth/authStore';
+import { keys } from '../lib/queryKeys';
 import { subscribeRealtimeMessages } from '../lib/realtimeWsClient';
 
 type InvalidateMessage = {
@@ -26,13 +27,13 @@ function applyScopes(scopes: string[], invalidate: QueryClient['invalidateQuerie
     } else if (s === 'templates') {
       void invalidate({ queryKey: ['admin', 'templates'] });
     } else if (s === 'me') {
-      void invalidate({ queryKey: ['auth', 'me'] });
+      void invalidate({ queryKey: keys.me });
     } else if (s === 'broadcast') {
-      void invalidate({ queryKey: ['broadcast'] });
+      void invalidate({ queryKey: keys.broadcast });
     } else if (s === 'resources') {
       void invalidate({ queryKey: ['resources'] });
     } else if (s === 'notification-settings') {
-      void invalidate({ queryKey: ['notification-settings'] });
+      void invalidate({ queryKey: keys.notifications });
     } else if (s === 'admin') {
       void invalidate({ queryKey: ['admin'] });
     } else if (s === 'service-planner') {

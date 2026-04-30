@@ -16,6 +16,7 @@ import { LyricsWithMusicianNotes } from '../components/LyricsWithMusicianNotes';
 import { fetchPerformance } from '../api';
 import { notesFromItem } from '../performNotes';
 import { studioSetlistDetailPath, useStudioModuleSurface } from '../studioPaths';
+import { SkeletonBox } from '@/components/ui/SkeletonBox';
 
 export function PerformPage() {
   const { id } = useParams<{ id: string }>();
@@ -99,8 +100,13 @@ export function PerformPage() {
 
   if (q.isLoading) {
     return (
-      <div className="flex min-h-[100dvh] items-center justify-center bg-stone-100 text-stone-500">
-        Загрузка…
+      <div className="flex min-h-[100dvh] items-center justify-center bg-stone-100 px-4">
+        <div className="w-full max-w-3xl space-y-3">
+          <SkeletonBox width="32%" height="20px" />
+          <SkeletonBox width="100%" height="14px" />
+          <SkeletonBox width="88%" height="14px" />
+          <SkeletonBox width="74%" height="14px" />
+        </div>
       </div>
     );
   }

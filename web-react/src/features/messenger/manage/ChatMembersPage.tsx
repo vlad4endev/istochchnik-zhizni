@@ -6,6 +6,7 @@ import * as api from '../api/messengerApi';
 import { useAuthStore } from '../../auth/authStore';
 import { ManageScreenShell, ManageSettingsGroup } from './ManageScreenShell';
 import { AppAvatar } from '../../../components/AppAvatar';
+import { SkeletonBox } from '@/components/ui/SkeletonBox';
 import { getAvatarColor } from '../avatarUtils';
 import { formatMessengerLastSeen } from '../lastSeenUtils';
 import { canAddParticipantsToGroup, canManageGroupMessenger, isAppAdministratorRole } from './messengerManageAccess';
@@ -138,9 +139,9 @@ export function ChatMembersPage() {
         {loading ? (
           <ManageSettingsGroup className="p-4">
             <div className="space-y-2">
-              <div className="h-12 animate-pulse rounded-lg bg-gray-100" />
-              <div className="h-12 animate-pulse rounded-lg bg-gray-100" />
-              <div className="h-12 animate-pulse rounded-lg bg-gray-100" />
+              <SkeletonBox width="100%" height="48px" radius="10px" />
+              <SkeletonBox width="100%" height="48px" radius="10px" />
+              <SkeletonBox width="100%" height="48px" radius="10px" />
             </div>
           </ManageSettingsGroup>
         ) : err ? (
@@ -646,9 +647,9 @@ function AddMemberDialog({
           <div className="mt-3 max-h-[60vh] overflow-y-auto">
             {loading ? (
               <div className="space-y-2">
-                <div className="h-14 animate-pulse rounded-2xl bg-stone-100" />
-                <div className="h-14 animate-pulse rounded-2xl bg-stone-100" />
-                <div className="h-14 animate-pulse rounded-2xl bg-stone-100" />
+                <SkeletonBox width="100%" height="56px" radius="16px" />
+                <SkeletonBox width="100%" height="56px" radius="16px" />
+                <SkeletonBox width="100%" height="56px" radius="16px" />
               </div>
             ) : orderedResults.length === 0 ? (
               <p className="py-6 text-center text-sm font-semibold text-stone-500">

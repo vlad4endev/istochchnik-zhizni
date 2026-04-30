@@ -4,6 +4,7 @@ import { LuFile, LuImage, LuLink2 } from 'react-icons/lu';
 import * as api from '../api/messengerApi';
 import { resolvePublicUrl } from '../../../lib/resolvePublicUrl';
 import { ManageScreenShell, ManageSettingsGroup } from './ManageScreenShell';
+import { SkeletonBox } from '@/components/ui/SkeletonBox';
 
 type MediaTab = 'media' | 'files' | 'links';
 
@@ -108,7 +109,13 @@ export function ChatMediaPage() {
       </ManageSettingsGroup>
 
       <ManageSettingsGroup className="mt-3 p-3">
-        {loading ? <p className="text-sm text-gray-500">Загрузка…</p> : null}
+        {loading ? (
+          <div className="space-y-2">
+            <SkeletonBox width="42%" height="13px" />
+            <SkeletonBox width="100%" height="54px" radius="10px" />
+            <SkeletonBox width="100%" height="54px" radius="10px" />
+          </div>
+        ) : null}
         {err ? <p className="text-sm font-medium text-red-600">{err}</p> : null}
         {!loading && !err && tab === 'media' ? (
           mediaItems.length ? (

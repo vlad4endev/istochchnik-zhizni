@@ -9,6 +9,7 @@ import { getActiveEvents, type ChurchEventItem } from '../../calendar/api';
 import { normalizeRegistrationStatus, useAuthStore, type RegistrationStatus } from '../../auth/authStore';
 import { fetchMe } from '../../profile/api';
 import { resolveMessengerWebOrigin } from '../../../lib/config';
+import { keys } from '@/lib/queryKeys';
 
 function parseOnceEventDateTime(item: ChurchEventItem): Date | null {
   const ts = `${item.event_date}T${item.event_time}:00`;
@@ -58,7 +59,7 @@ export function LimitedRegistrationDashboard({ registrationStatus, firstName }: 
   }
 
   useQuery({
-    queryKey: ['auth', 'me', 'limited-dashboard'],
+    queryKey: keys.me,
     queryFn: async () => {
       const me = await fetchMe();
       applyServerProfile({

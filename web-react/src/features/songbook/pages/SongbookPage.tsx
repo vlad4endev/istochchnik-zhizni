@@ -1,11 +1,11 @@
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { LuHeart, LuSearch, LuX } from 'react-icons/lu';
 
 import { emitAppToast } from '../../../lib/uiFeedback';
 import { SongListSkeleton } from '@/components/skeletons/SongListSkeleton';
-import { useApiData } from '@/hooks/useApiData';
+import { keys } from '@/lib/queryKeys';
 import { useAuthStore } from '../../auth/authStore';
 import { canModerateSongCatalog } from '../../auth/studioAccess';
 import { deleteFavorite, fetchSongs, postFavorite } from '../api';
@@ -17,9 +17,10 @@ export function SongbookPage() {
   const [tab, setTab] = useState<'catalog' | 'favorites'>('catalog');
   const [search, setSearch] = useState('');
 
-  const query = useApiData('songs:list', () => fetchSongs(), {
-    ttl: 300_000,
-    queryKey: ['songs', 'catalog'],
+  const query = useQuery({
+    queryKey: keys.songs,
+    queryFn: () => fetchSongs(),
+    staleTime: 5 * 60_000,
   });
 
   const favoriteMut = useMutation({
@@ -28,7 +29,7 @@ export function SongbookPage() {
       else await deleteFavorite(id);
     },
     onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ['songs', 'catalog'] });
+      void qc.invalidateQueries({ queryKey: keys.songs });
       void qc.invalidateQueries({ queryKey: ['songs', 'catalog-all'] });
       emitAppToast({ kind: 'success', message: 'Избранное обновлено' });
     },
@@ -47,16 +48,16 @@ export function SongbookPage() {
     });
   }, [query.data, tab, search]);
 
-  if (query.loading && !query.data) {
+  if (query.isLoading) {
     return <SongListSkeleton />;
   }
-  if (query.error) {
+  if (query.isError) {
     return <p className="text-sm text-red-600">Не удалось загрузить каталог.</p>;
   }
 
   return (
     <div className="mx-auto max-w-3xl space-y-3 pb-24 text-stone-900">
-      <header className="sticky top-0 z-20 -mx-3 border-b border-stone-200 bg-[var(--surface)]/95 px-3 py-2 backdrop-blur md:mx-0 md:px-0">
+      <header className="sticky top-0 z-20 -mx-3 min-h-[126px] border-b border-stone-200 bg-[var(--surface)]/95 px-3 py-2 backdrop-blur md:mx-0 md:px-0">
         <p className="mb-2 text-[13px] font-medium uppercase tracking-[0.08em] text-stone-500">Песенник</p>
         <label className="mb-2 block">
           <span className="sr-only">Поиск по номеру или названию</span>
@@ -107,16 +108,16 @@ export function SongbookPage() {
             Избранное
           </button>
         </div>
-        {canAddSong ? (
-          <div className="mt-2 flex justify-end">
+        <div className="mt-2 flex min-h-[34px] justify-end">
+          {canAddSong ? (
             <Link
               to="/songbook/add"
               className="inline-flex min-h-[34px] items-center justify-center rounded-lg border border-stone-300 bg-white px-3 text-xs font-semibold text-stone-700 hover:bg-stone-50"
             >
               Новая песня
             </Link>
-          </div>
-        ) : null}
+          ) : null}
+        </div>
       </header>
 
       <ul className="overflow-hidden rounded-xl border border-stone-200 bg-white">

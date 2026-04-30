@@ -16,6 +16,7 @@ import {
 } from 'react-icons/fa6';
 import { LuCalendarDays, LuClock3, LuLink, LuPencil, LuUsers } from 'react-icons/lu';
 import type { IconType } from 'react-icons';
+import { SongListSkeleton } from '@/components/skeletons/SongListSkeleton';
 
 import {
   fetchPublicServicePlan,
@@ -277,8 +278,8 @@ export function PublicServicePlanPage() {
   }
   if (q.isLoading) {
     return (
-      <div className="flex min-h-[40dvh] items-center justify-center text-stone-500">
-        Загрузка программы...
+      <div className="mx-auto max-w-3xl px-3 py-5 sm:px-4 sm:py-8">
+        <SongListSkeleton />
       </div>
     );
   }
