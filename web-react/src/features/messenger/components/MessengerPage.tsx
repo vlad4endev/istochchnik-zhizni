@@ -121,9 +121,9 @@ export function MessengerPage() {
   }, [activeId, setActive]);
 
   return (
-    <div className="tg-messenger-page messenger-layout flex min-h-0 flex-1 flex-col">
+    <div className="tg-messenger-page messenger-layout flex h-full min-h-0 flex-1 flex-col bg-white">
       <div
-        className={`tg-messenger min-h-0 flex-1 tg-density--${density} ${isTransitioning ? 'transitioning' : ''}`}
+        className={`tg-messenger min-h-0 flex-1 bg-white tg-density--${density} ${isTransitioning ? 'transitioning' : ''}`}
         ref={messengerRef}
       >
       {/* Sidebar */}

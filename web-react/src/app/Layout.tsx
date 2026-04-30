@@ -912,14 +912,14 @@ export function Layout() {
         id="main-content"
         tabIndex={-1}
         className={[
-          'app-main-content flex min-h-0 min-w-0 w-full max-w-full flex-1 flex-col overflow-x-clip lg:pb-0 outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--a11y-focus-ring,var(--primary))] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)]',
+          'app-main-content flex min-h-0 min-w-0 w-full max-w-full flex-1 flex-col overflow-hidden overflow-x-clip lg:pb-0 outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--a11y-focus-ring,var(--primary))] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)]',
           'page-content',
           mainChromeVisible
             ? 'pb-[max(7.5rem,calc(5.25rem+env(safe-area-inset-bottom,16px)))]'
             : 'pb-[max(1rem,env(safe-area-inset-bottom,16px))]',
         ].join(' ')}
       >
-        <div key={location.pathname} className="page-enter min-h-0 flex-1">
+        <div key={location.pathname} className="page-enter h-full min-h-0 flex-1">
           <Outlet />
         </div>
       </main>
