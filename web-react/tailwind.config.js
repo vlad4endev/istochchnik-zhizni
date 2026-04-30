@@ -3,6 +3,9 @@ export default {
   content: ['./index.html', './src/**/*.{js,ts,jsx,tsx}'],
   theme: {
     extend: {
+      height: {
+        dvh: '100dvh',
+      },
       screens: {
         /** Совпадает с Flutter Responsive: phone &lt; 600 */
         shell: '600px',

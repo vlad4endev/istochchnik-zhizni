@@ -926,7 +926,7 @@ export function Layout() {
             : 'pb-[max(1rem,env(safe-area-inset-bottom,16px))]',
         ].join(' ')}
       >
-        <div key={location.pathname} className="page-enter h-full min-h-0 flex-1">
+        <div key={location.pathname} className="page-enter h-full min-h-0 flex flex-col flex-1">
           <Outlet />
         </div>
       </main>
