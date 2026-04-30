@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { useChatStore, EMPTY_ARRAY, type ChatTab } from '../chatStore';
 import type { ConversationListItem, PatchMyConversationUiBody } from '../api/messengerApi';
 import { AppAvatar } from '../../../components/AppAvatar';
+import { SkeletonBox } from '@/components/ui/SkeletonBox';
 import { getAvatarColor, getAvatarInitial } from '../avatarUtils';
 import { LuPin, LuVolume2, LuVolumeX, LuFolderOpen, LuEraser, LuTrash2 } from 'react-icons/lu';
 import { IoCheckmarkDone } from 'react-icons/io5';
@@ -25,8 +26,23 @@ export function ChatList({ onSelect, activeId }: ChatListProps) {
 
   if (conversationsLoading && !conversationsLoaded) {
     return (
-      <div className="flex h-full w-full items-center justify-center p-6">
-        <div className="h-10 w-10 animate-spin rounded-full border-4 border-stone-200 border-t-primary" />
+      <div className="tg-chatlist-root flex min-h-0 flex-1 flex-col bg-white">
+        <div className="shrink-0 border-b border-gray-200/60 px-3 pb-2 pt-2 md:px-4">
+          <div className="flex items-center gap-1 rounded-2xl border border-gray-100 bg-white p-1 shadow-sm">
+            <SkeletonBox height="32px" radius="10px" />
+          </div>
+        </div>
+        <div className="min-h-0 flex-1 space-y-1 overflow-y-auto px-2 py-2 md:px-3" aria-busy="true" aria-label="Загрузка чатов">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className="flex items-center gap-3 rounded-xl px-2 py-2">
+              <SkeletonBox width="44px" height="44px" radius="9999px" />
+              <div className="min-w-0 flex-1">
+                <SkeletonBox height="13px" width={i % 2 === 0 ? '62%' : '48%'} />
+                <SkeletonBox className="mt-2" height="11px" width={i % 2 === 0 ? '84%' : '76%'} />
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
     );
   }

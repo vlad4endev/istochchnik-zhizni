@@ -39,6 +39,7 @@ import {
   resolveAxiosBaseURL,
 } from '../../../lib/config';
 import { SectionHeroToolbarEnd } from '@/components/SectionHeroToolbarEnd';
+import { PrayerSkeleton } from '@/components/skeletons/PrayerSkeleton';
 import { sectionHeroHeaderClass, sectionHeroStickyClass } from '../../../lib/sectionHeroChrome';
 import { memberRosterName } from '../../../lib/memberRosterName';
 import type { Backslider, DayPrayerData, GlobalTheme, Member, Ministry } from '../../../types';
@@ -283,36 +284,6 @@ function BacksliderCard({ b, cardIndex = 0 }: { b: Backslider; cardIndex?: numbe
     <PrayerCard Icon={LuUserX} title={b.name} accentVar="var(--backslider)" cardIndex={cardIndex}>
       <p className="italic text-stone-500">Отпавший — нуждается в молитве о возвращении</p>
     </PrayerCard>
-  );
-}
-
-function CalendarPrayerSkeleton() {
-  return (
-    <div
-      className="space-y-4 py-2"
-      aria-busy="true"
-      aria-live="polite"
-      aria-label="Загрузка данных молитв"
-    >
-      <div className="h-4 w-36 animate-pulse rounded-lg bg-stone-200/90" />
-      {[0, 1, 2].map((i) => (
-        <div
-          key={i}
-          className="overflow-hidden rounded-2xl border border-stone-100 bg-[var(--surface-elevated)] p-4 shadow-[var(--shadow)] animate-prayer-fade-in motion-reduce:animate-none"
-          style={{ animationDelay: `${i * 80}ms` }}
-        >
-          <div className="flex gap-3">
-            <div className="h-11 w-11 shrink-0 animate-pulse rounded-xl bg-stone-200/90" />
-            <div className="min-w-0 flex-1 space-y-3">
-              <div className="h-5 max-w-[85%] animate-pulse rounded-md bg-stone-200/90" />
-              <div className="h-3 w-full animate-pulse rounded bg-stone-100" />
-              <div className="h-3 w-[92%] animate-pulse rounded bg-stone-100" />
-              <div className="h-3 w-[70%] animate-pulse rounded bg-stone-100" />
-            </div>
-          </div>
-        </div>
-      ))}
-    </div>
   );
 }
 
@@ -745,7 +716,7 @@ export function DailyPrayerPage() {
           <div className="mb-4">{urgentPrayerStack}</div>
         ) : null}
         {isPending ? (
-          <CalendarPrayerSkeleton />
+          <PrayerSkeleton />
         ) : isError ? (
           <ErrorBlock err={queryError} onRetry={() => void refetch()} />
         ) : hasPrayerContent(data) ? (

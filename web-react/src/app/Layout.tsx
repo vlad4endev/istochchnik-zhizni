@@ -1,4 +1,4 @@
-import { NavLink, useLocation, useNavigate } from 'react-router-dom';
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { IconType } from 'react-icons';
@@ -31,7 +31,6 @@ import { useRealtimeWsConnection } from '../lib/realtimeWsClient';
 import { useSyncServerRole } from '../hooks/useSyncServerRole';
 import { IOSInstallBanner } from '../components/IOSInstallBanner';
 import { AndroidInstallBanner } from '../components/AndroidInstallBanner';
-import { AnimatedOutlet } from '../components/AnimatedOutlet';
 import { UpdateNotification, useServiceWorkerUpdate, NotificationPrompt } from '../features/pwa';
 import { PrefetchNavLink } from '../components/PrefetchNavLink';
 import { ScrollRestoration } from '../components/ScrollRestoration';
@@ -404,10 +403,13 @@ function MobileNavOverflow({
               {items.map((item) => {
                 const Icon = item.Icon;
                 return (
-                  <NavLink
+                  <PrefetchNavLink
                     key={item.to}
                     role="menuitem"
                     to={item.to}
+                    queryKey={NAV_PREFETCH_BY_PATH[item.to]?.queryKey}
+                    queryFn={NAV_PREFETCH_BY_PATH[item.to]?.queryFn}
+                    staleTime={NAV_PREFETCH_BY_PATH[item.to]?.staleTime}
                     onClick={() => setOpen(false)}
                     className={({ isActive }) =>
                       [
@@ -429,7 +431,7 @@ function MobileNavOverflow({
                         <span className="line-clamp-2">{item.label}</span>
                       </>
                     )}
-                  </NavLink>
+                  </PrefetchNavLink>
                 );
               })}
             </div>
@@ -917,8 +919,8 @@ export function Layout() {
             : 'pb-[max(1rem,env(safe-area-inset-bottom,16px))]',
         ].join(' ')}
       >
-        <div className="min-h-0 flex-1">
-          <AnimatedOutlet />
+        <div key={location.pathname} className="page-enter min-h-0 flex-1">
+          <Outlet />
         </div>
       </main>
 

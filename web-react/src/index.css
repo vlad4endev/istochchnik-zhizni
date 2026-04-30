@@ -245,22 +245,17 @@ body {
   border: none;
 }
 
-.route-transition {
+.page-enter {
   min-height: 100%;
-  animation: route-enter 0.15s ease forwards;
+  animation: pageEnter 0.18s ease forwards;
   will-change: transform, opacity;
   contain: layout paint;
 }
 
-.route-transition.route-transition-exit {
-  opacity: 0.68;
-  transform: translateY(4px);
-}
-
-@keyframes route-enter {
+@keyframes pageEnter {
   from {
     opacity: 0;
-    transform: translateY(6px);
+    transform: translateY(8px);
   }
   to {
     opacity: 1;
@@ -346,7 +341,7 @@ body {
     .dashboard-backdrop,
     .dashboard-sheet,
     .studio-block-enter,
-    .route-transition {
+    .page-enter {
       animation: none !important;
     }
   }
