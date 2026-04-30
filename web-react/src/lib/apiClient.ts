@@ -1,6 +1,7 @@
 import axios, { type AxiosError, type InternalAxiosRequestConfig, isCancel } from 'axios';
 
 import { useAuthStore } from '../features/auth/authStore';
+import { useLoadingStore } from '../stores/loadingStore';
 
 import { isCookieOnlySessionToken } from './authSessionConstants';
 import { resolveAxiosBaseURL } from './config';
@@ -58,6 +59,7 @@ function applyBaseURL(config: InternalAxiosRequestConfig): InternalAxiosRequestC
 }
 
 apiClient.interceptors.request.use((config) => {
+  useLoadingStore.getState().start();
   const next = applyBaseURL(config);
   next.withCredentials = true;
   const token = getTokenForRequest();
@@ -72,10 +74,12 @@ apiClient.interceptors.request.use((config) => {
 
 apiClient.interceptors.response.use(
   (response) => {
+    useLoadingStore.getState().done();
     emitApiClearWarning();
     return response;
   },
   (error: AxiosError) => {
+    useLoadingStore.getState().done();
     if (isCancel(error)) {
       return Promise.reject(error);
     }

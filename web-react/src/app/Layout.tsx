@@ -1,6 +1,7 @@
-import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { NavLink, useLocation, useNavigate, useOutlet } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
+import type { ReactElement } from 'react';
 import type { IconType } from 'react-icons';
 import {
   LuChevronLeft,
@@ -42,6 +43,9 @@ import { LAYOUT_MAIN_CHROME_EVENT } from './layoutChrome';
 import { AppAvatar } from '../components/AppAvatar';
 import { CoordinatorDashboardNoteFab } from '../features/dashboard/components/CoordinatorDashboardNoteFab';
 import { apiClient } from '../lib/apiClient';
+import { TopProgressBar } from '@/components/ui/TopProgressBar';
+import { usePrefetch } from '@/hooks/usePrefetch';
+import { useAppStore } from '@/stores/appStore';
 import {
   canRoleAccessSection,
   fetchSectionVisibilitySettingsPublic,
@@ -434,17 +438,65 @@ function MobileNavOverflow({
 }
 
 const UNREAD_DELIVERIES_QK = ['notifications', 'unread-deliveries-count'] as const;
+const KEEP_ALIVE_PREFIXES = ['/dashboard', '/prayer', '/songbook', '/service-planner', '/admin'];
+const KEEP_ALIVE_MAX = 10;
+
+function shouldKeepAlive(pathname: string): boolean {
+  return KEEP_ALIVE_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
+}
+
+function KeepAliveOutlet({ pathname, resetKey }: { pathname: string; resetKey: string }) {
+  const outlet = useOutlet();
+  const [cache, setCache] = useState<Array<{ pathname: string; element: ReactElement }>>([]);
+
+  useEffect(() => {
+    setCache([]);
+  }, [resetKey]);
+
+  useEffect(() => {
+    if (!outlet || !shouldKeepAlive(pathname)) return;
+    setCache((prev) => {
+      const next = prev.filter((entry) => entry.pathname !== pathname);
+      next.push({ pathname, element: outlet });
+      if (next.length <= KEEP_ALIVE_MAX) return next;
+      return next.slice(next.length - KEEP_ALIVE_MAX);
+    });
+  }, [outlet, pathname]);
+
+  if (!outlet) return null;
+
+  if (!shouldKeepAlive(pathname)) {
+    return <div className="min-h-0 flex-1 animate-prayer-fade-in motion-reduce:animate-none">{outlet}</div>;
+  }
+
+  return (
+    <>
+      {cache.map((entry) => (
+        <div
+          key={entry.pathname}
+          className={entry.pathname === pathname ? 'min-h-0 flex-1 animate-prayer-fade-in motion-reduce:animate-none' : 'hidden'}
+          aria-hidden={entry.pathname === pathname ? undefined : true}
+        >
+          {entry.element}
+        </div>
+      ))}
+    </>
+  );
+}
 
 export function Layout() {
   useSyncServerRole();
   useFCM();
   useWebPushSync();
   const token = useAuthStore((s) => s.token);
+  const initializeApp = useAppStore((s) => s.initialize);
+  const startBroadcastPolling = useAppStore((s) => s.startBroadcastPolling);
   const queryClient = useQueryClient();
   useRealtimeQuerySync();
   useRealtimeWsConnection();
   useBrowserNotificationScheduler();
   const navigate = useNavigate();
+  const { prefetch } = usePrefetch();
   const location = useLocation();
   const setActiveConversation = useChatStore((s) => s.setActiveConversation);
   const loadConversations = useChatStore((s) => s.loadConversations);
@@ -464,6 +516,7 @@ export function Layout() {
   const pendingDeliveries = pendingDeliveriesQ.data ?? 0;
   const activityBadgeTotal = Math.min(99, unreadMessages + pendingDeliveries);
   const role = useAuthStore((s) => s.role);
+  const authMemberId = useAuthStore((s) => s.memberId);
   const roles = useAuthStore((s) => s.roles ?? [s.role]);
   const sectionVisibilityQ = useQuery({
     queryKey: ['settings', 'sections', 'visibility'],
@@ -524,6 +577,7 @@ export function Layout() {
   );
   const isDashboardRoute =
     location.pathname === '/dashboard' || location.pathname === '/dashboard/';
+  const keepAliveResetKey = `${token ? 'auth' : 'guest'}:${String(role ?? 'member')}:${String(authMemberId ?? 'anon')}`;
 
   const markAllDeliveriesOpened = useCallback(async () => {
     if (!token) return;
@@ -580,6 +634,12 @@ export function Layout() {
       return next;
     });
   }
+
+  useEffect(() => {
+    if (!token) return;
+    void initializeApp();
+    startBroadcastPolling();
+  }, [initializeApp, startBroadcastPolling, token]);
 
   useEffect(() => {
     const onOpenConversation = (e: Event) => {
@@ -685,6 +745,7 @@ export function Layout() {
   return (
     <MessengerWsProvider>
     <div className="flex min-h-0 w-full max-w-[100vw] flex-1 flex-col overflow-x-clip bg-[var(--surface)] text-[var(--text)] [padding-left:env(safe-area-inset-left,0px)] [padding-right:env(safe-area-inset-right,0px)]">
+      <TopProgressBar />
       <a
         href="#main-content"
         className="skip-link"
@@ -766,6 +827,8 @@ export function Layout() {
                 <NavLink
                   key={item.to}
                   to={item.to}
+                  onMouseEnter={() => prefetch(item.to)}
+                  onTouchStart={() => prefetch(item.to)}
                   className={({ isActive }) =>
                     navCollapsed
                       ? [
@@ -899,7 +962,7 @@ export function Layout() {
             : 'pb-[max(1rem,env(safe-area-inset-bottom,16px))]',
         ].join(' ')}
       >
-        <Outlet />
+        <KeepAliveOutlet pathname={location.pathname} resetKey={keepAliveResetKey} />
       </main>
 
       {isDashboardRoute ? <CoordinatorDashboardNoteFab /> : null}
@@ -920,6 +983,8 @@ export function Layout() {
               <NavLink
                 key={item.to}
                 to={item.to}
+                onMouseEnter={() => prefetch(item.to)}
+                onTouchStart={() => prefetch(item.to)}
                 className={({ isActive }) => navClassName(isActive, true)}
                 aria-label={
                   item.to === '/messenger' && activityBadgeTotal > 0

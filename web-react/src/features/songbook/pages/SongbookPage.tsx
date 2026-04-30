@@ -1,9 +1,11 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { LuHeart, LuSearch, LuX } from 'react-icons/lu';
 
 import { emitAppToast } from '../../../lib/uiFeedback';
+import { SongListSkeleton } from '@/components/skeletons/SongListSkeleton';
+import { useApiData } from '@/hooks/useApiData';
 import { useAuthStore } from '../../auth/authStore';
 import { canModerateSongCatalog } from '../../auth/studioAccess';
 import { deleteFavorite, fetchSongs, postFavorite } from '../api';
@@ -15,9 +17,9 @@ export function SongbookPage() {
   const [tab, setTab] = useState<'catalog' | 'favorites'>('catalog');
   const [search, setSearch] = useState('');
 
-  const query = useQuery({
+  const query = useApiData('songs:list', () => fetchSongs(), {
+    ttl: 300_000,
     queryKey: ['songs', 'catalog'],
-    queryFn: () => fetchSongs(),
   });
 
   const favoriteMut = useMutation({
@@ -45,10 +47,10 @@ export function SongbookPage() {
     });
   }, [query.data, tab, search]);
 
-  if (query.isLoading) {
-    return <p className="text-sm text-stone-500">Загрузка песенника…</p>;
+  if (query.loading && !query.data) {
+    return <SongListSkeleton />;
   }
-  if (query.isError) {
+  if (query.error) {
     return <p className="text-sm text-red-600">Не удалось загрузить каталог.</p>;
   }
 

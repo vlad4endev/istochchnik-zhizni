@@ -506,3 +506,18 @@ button {
   white-space: nowrap !important;
   border: 0 !important;
 }
+
+.skeleton-box {
+  background: linear-gradient(90deg, #f0e9ea 0%, #faf5f6 50%, #f0e9ea 100%);
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.4s ease-in-out infinite;
+}
+
+@keyframes skeleton-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}

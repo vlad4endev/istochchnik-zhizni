@@ -41,6 +41,7 @@ import { useAuthStore } from '../../auth/authStore';
 import { useProfileDraftStore } from '../../profile/profileDraftStore';
 import { useCoordinatorNoteEditorRequestStore } from '../coordinatorNoteEditorRequestStore';
 import { LimitedRegistrationDashboard } from '../components/LimitedRegistrationDashboard';
+import { DashboardSkeleton } from '@/components/skeletons/DashboardSkeleton';
 
 type DashboardEvent = {
   id: string;
@@ -653,6 +654,14 @@ function DashboardMain() {
     userCanViewNextWeekPrayerPlan(meQ.data) &&
     (isAdmin || isPastor || isCollectionCoordinator);
 
+  const showInitialSkeleton =
+    meQ.isPending &&
+    prayerQ.isPending &&
+    eventsQ.isPending &&
+    !meQ.data &&
+    !prayerQ.data &&
+    !eventsQ.data;
+
   function onToggleFavorite(id: string) {
     setFavorites((prev) => {
       const next = { ...prev };
@@ -680,6 +689,10 @@ function DashboardMain() {
     } catch {
       /* ignore autoplay errors */
     }
+  }
+
+  if (showInitialSkeleton) {
+    return <DashboardSkeleton />;
   }
 
   return (
