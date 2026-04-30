@@ -9,13 +9,13 @@ function SongbookShell() {
     <div
       data-songbook-module
       className={[
-        'flex min-h-0 min-w-0 flex-1 flex-col',
+        'flex h-full min-h-0 min-w-0 flex-1 flex-col',
         stageMode ? 'songbook-stage bg-[#030303] text-zinc-100' : 'bg-[var(--surface)] text-[var(--text)]',
       ].join(' ')}
     >
       <div
         className={[
-          'sticky top-0 z-20 border-b backdrop-blur-md',
+          'flex-shrink-0 border-b backdrop-blur-md',
           stageMode ? 'border-zinc-800 bg-[#030303]/90' : 'border-stone-200/80 bg-[var(--surface)]/95',
         ].join(' ')}
       >
@@ -38,7 +38,7 @@ function SongbookShell() {
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-visible px-3 py-4 md:px-6">
+      <div className="min-h-0 flex-1 overflow-hidden px-3 py-4 md:px-6">
         <Outlet />
       </div>
     </div>

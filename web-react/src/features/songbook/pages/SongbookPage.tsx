@@ -56,8 +56,8 @@ export function SongbookPage() {
   }
 
   return (
-    <div className="mx-auto max-w-3xl space-y-3 pb-24 text-[var(--text)]">
-      <header className="section-hero-sticky top-0 z-20 -mx-3 min-h-[126px] border-b border-stone-200/80 bg-[var(--surface)]/95 px-3 py-2 backdrop-blur md:mx-0 md:px-0">
+    <div className="mx-auto flex h-full min-h-0 max-w-3xl flex-col pb-24 text-[var(--text)]">
+      <header className="flex-shrink-0 -mx-3 min-h-[126px] border-b border-stone-200/80 bg-[var(--surface)]/95 px-3 py-2 backdrop-blur md:mx-0 md:px-0">
         <p className="mb-2 text-sm font-medium uppercase tracking-[0.08em] text-[var(--text-secondary)]">Песенник</p>
         <label className="mb-2 block">
           <span className="sr-only">Поиск по номеру или названию</span>
@@ -120,6 +120,7 @@ export function SongbookPage() {
         </div>
       </header>
 
+      <div className="min-h-0 flex-1 overflow-y-auto [webkit-overflow-scrolling:touch] pt-3">
       <ul className="overflow-hidden rounded-xl border border-stone-200/80 bg-[var(--surface-elevated)]">
         {rows.map((s, idx) => (
           <li key={s.id} className="border-b border-stone-200/70 last:border-b-0">
@@ -167,6 +168,7 @@ export function SongbookPage() {
           {tab === 'favorites' ? 'В избранном пока нет песен.' : 'В каталоге пока нет песен.'}
         </p>
       ) : null}
+      </div>
     </div>
   );
 }

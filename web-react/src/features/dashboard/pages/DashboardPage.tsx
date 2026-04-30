@@ -693,8 +693,8 @@ function DashboardMain() {
   }
 
   return (
-    <div className="min-h-full bg-[var(--surface)] px-3 pb-[max(2rem,env(safe-area-inset-bottom,0px))] sm:px-4 shell:px-6 md:px-8 xl:px-10">
-      <div className="mx-auto w-full max-w-7xl 2xl:max-w-[1480px]">
+    <div className="flex h-full min-h-0 flex-col bg-[var(--surface)]">
+      <div className="mx-auto flex h-full min-h-0 w-full max-w-7xl flex-1 flex-col px-3 sm:px-4 shell:px-6 md:px-8 xl:px-10 2xl:max-w-[1480px]">
         <div className={sectionHeroStickyClassNested}>
           <header
             className={[
@@ -755,6 +755,7 @@ function DashboardMain() {
           </header>
         </div>
 
+        <div className="min-h-0 flex-1 overflow-y-auto [webkit-overflow-scrolling:touch] pb-[max(2rem,env(safe-area-inset-bottom,0px))]">
         <div className="hidden lg:block">
           <div className="grid grid-cols-3 gap-[14px] px-0 py-4">
             <button
@@ -1430,6 +1431,7 @@ function DashboardMain() {
               )}
             </section>
           ) : null}
+        </div>
         </div>
       </div>
 

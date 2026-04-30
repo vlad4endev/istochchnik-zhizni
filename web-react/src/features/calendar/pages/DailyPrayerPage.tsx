@@ -576,7 +576,7 @@ export function DailyPrayerPage() {
     );
 
   return (
-    <div className="prayer-page-bg min-h-full pb-6 shell:pb-8">
+    <div className="prayer-page-bg flex h-full min-h-0 flex-col pb-6 shell:pb-8">
       <div className={sectionHeroStickyClass}>
       <header className={`${sectionHeroHeaderClass} prayer-hero`}>
         <div
@@ -703,6 +703,7 @@ export function DailyPrayerPage() {
       </div>
       </div>
 
+      <div className="min-h-0 flex-1 overflow-y-auto [webkit-overflow-scrolling:touch]">
       <div className="px-3 pt-4 sm:px-4 shell:px-6 md:px-6 lg:px-8 xl:px-10">
         {userCanViewNextWeekPrayerPlan(me) ? (
           <NextWeekPrayerPlanSection
@@ -815,6 +816,7 @@ export function DailyPrayerPage() {
           </div>
         </div>
       ) : null}
+      </div>
     </div>
   );
 }
