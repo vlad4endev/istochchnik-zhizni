@@ -11,11 +11,9 @@ import {
 import {
   LuCalendarDays,
   LuChevronDown,
-  LuClipboardList,
   LuGripVertical,
   LuHistory,
   LuImage,
-  LuMessageSquare,
   LuSend,
   LuTable2,
   LuX,
@@ -47,7 +45,6 @@ import {
   deleteAdminMember,
   deleteBacksliderApi,
   deleteAdminEvent,
-  deleteAllAdminEvents,
   deleteDirectionTemplate,
   deleteGlobalThemeApi,
   deleteMinistryApi,
@@ -3064,15 +3061,6 @@ function EventsSection() {
     categoryOptsQ.data && categoryOptsQ.data.length > 0
       ? categoryOptsQ.data
       : CHURCH_EVENT_CATEGORY_OPTIONS_FALLBACK;
-  const weekDays = [
-    { value: 0, label: 'Воскресенье' },
-    { value: 1, label: 'Понедельник' },
-    { value: 2, label: 'Вторник' },
-    { value: 3, label: 'Среда' },
-    { value: 4, label: 'Четверг' },
-    { value: 5, label: 'Пятница' },
-    { value: 6, label: 'Суббота' },
-  ] as const;
   const [note, setNote] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
   const [form, setForm] = useState({
     title: '',
@@ -3100,7 +3088,6 @@ function EventsSection() {
   const [eventModalMode, setEventModalMode] = useState<'create' | 'edit' | null>(null);
 
   const invalidate = () => void qc.invalidateQueries({ queryKey: Q_EVENTS });
-  const eventCount = (eventsQ.data ?? []).length;
   const uploadedPosterSrc = resolvePublicUrl(form.poster_url);
 
   const categoryLabelById = useMemo(() => {
@@ -3137,9 +3124,7 @@ function EventsSection() {
       }),
     onSuccess: () => {
       setPosterFile(null);
-      setCreateExtrasOpen(false);
-      setAddPanelOpen(false);
-      setListPanelOpen(true);
+      setEventModalMode(null);
       setForm((s) => ({ ...s, title: '', description: '', poster_url: null }));
       setNote({ type: 'ok', text: 'Событие добавлено.' });
       invalidate();
@@ -3186,17 +3171,6 @@ function EventsSection() {
       invalidate();
     },
     onError: (e) => setNote({ type: 'err', text: apiErrorMessage(e, 'Не удалось удалить событие.') }),
-  });
-
-  const deleteAllMut = useMutation({
-    mutationFn: () => deleteAllAdminEvents(),
-    onSuccess: (res) => {
-      setEditing(null);
-      setNote({ type: 'ok', text: `Удалено событий: ${res.deleted}` });
-      invalidate();
-    },
-    onError: (e) =>
-      setNote({ type: 'err', text: apiErrorMessage(e, 'Не удалось удалить все события.') }),
   });
 
   return (

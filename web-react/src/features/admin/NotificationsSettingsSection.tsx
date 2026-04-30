@@ -41,10 +41,6 @@ function btnPrimary(c = '') {
   return `rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-white shadow-md shadow-primary/20 transition hover:opacity-95 disabled:opacity-50 ${c}`;
 }
 
-function btnSecondary(c = '') {
-  return `rounded-xl border border-stone-200 bg-white px-3 py-2 text-sm font-semibold text-stone-700 transition hover:bg-stone-50 ${c}`;
-}
-
 export function NotificationsSettingsSection() {
   const qc = useQueryClient();
   const { data, isLoading, error, isFetching } = useQuery({
