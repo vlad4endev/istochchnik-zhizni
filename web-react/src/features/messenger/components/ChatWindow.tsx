@@ -1055,7 +1055,7 @@ export function ChatWindow({
         </div>
       </div>
 
-      <div className="tg-chat-window__composer message-input-bar sticky bottom-0 z-20 w-full min-w-0 max-w-full shrink-0 border-t bg-[var(--surface-elevated)] p-3">
+      <div className="tg-chat-window__composer message-input-bar sticky bottom-0 z-20 w-full min-w-0 max-w-full shrink-0 border-t border-stone-200/70 bg-[var(--tg-bg)] px-3 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom,0px))]">
         <ChatInput
           conversationId={conversationId}
           sendTypingStart={sendTypingStart}

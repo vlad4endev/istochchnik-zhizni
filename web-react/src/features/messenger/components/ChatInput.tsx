@@ -57,12 +57,30 @@ interface ChatInputProps {
   participantLabelById?: Record<number, string>;
 }
 
+/** Одна визуальная строка без учёта переноса placeholder (иначе на iPhone поле раздувается на весь scrollHeight). */
+function singleLineTextareaHeightPx(el: HTMLTextAreaElement): number {
+  const cs = getComputedStyle(el);
+  const fontSize = parseFloat(cs.fontSize) || 16;
+  const lhRaw = cs.lineHeight;
+  const line =
+    lhRaw === 'normal' ? Math.round(fontSize * 1.5) : parseFloat(lhRaw) || Math.round(fontSize * 1.5);
+  const padY = (parseFloat(cs.paddingTop) || 0) + (parseFloat(cs.paddingBottom) || 0);
+  return Math.ceil(line + padY);
+}
+
 /** Высоту textarea считаем в следующем кадре после `height: auto`, чтобы реже ловить forced reflow. */
 function scheduleTextareaAutosize(el: HTMLTextAreaElement | null) {
   if (!el) return;
   el.style.height = 'auto';
   requestAnimationFrame(() => {
-    el.style.height = `${el.scrollHeight}px`;
+    const valueEmpty = !String(el.value ?? '').trim();
+    if (valueEmpty) {
+      el.style.height = `${singleLineTextareaHeightPx(el)}px`;
+      return;
+    }
+    const maxParsed = parseFloat(getComputedStyle(el).maxHeight);
+    const cap = Number.isFinite(maxParsed) && maxParsed > 0 ? maxParsed : 144;
+    el.style.height = `${Math.min(el.scrollHeight, cap)}px`;
   });
 }
 
@@ -353,6 +371,17 @@ export function ChatInput({
       vv?.removeEventListener('scroll', onResize);
     };
   }, [attachMenuOpen, emojiOpen, repositionPopovers]);
+
+  useEffect(() => {
+    const onResize = () => scheduleTextareaAutosize(textareaRef.current);
+    window.addEventListener('resize', onResize);
+    const vv = window.visualViewport;
+    vv?.addEventListener('resize', onResize);
+    return () => {
+      window.removeEventListener('resize', onResize);
+      vv?.removeEventListener('resize', onResize);
+    };
+  }, []);
 
   const haptic = (ms = 12) => {
     try {
@@ -1151,8 +1180,11 @@ export function ChatInput({
           <textarea
             ref={textareaRef}
             className="tg-input-textarea text-[var(--text)] placeholder:text-[var(--text-muted)]"
-            placeholder={
-              mentionParticipants.length > 0 ? 'Сообщение… (наберите @ — позвать человека)' : 'Сообщение…'
+            placeholder="Сообщение…"
+            title={
+              mentionParticipants.length > 0
+                ? 'Наберите @, чтобы упомянуть участника'
+                : undefined
             }
             aria-label="Текст сообщения"
             aria-describedby={

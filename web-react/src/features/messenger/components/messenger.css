@@ -2052,10 +2052,11 @@
 
   .tg-chat-window__composer .tg-input-container,
   .tg-chat-window .tg-input-container {
-    flex: 1 1 auto !important;
+    flex: 1 1 0% !important;
+    min-width: 0 !important;
     min-height: 0 !important;
-    max-height: min(42vh, 220px) !important;
-    align-self: stretch !important;
+    max-height: none !important;
+    width: auto !important;
   }
 
   .tg-sidebar {
@@ -2146,11 +2147,11 @@
     }
 
     html[data-chat-open="1"] .tg-main--visible .tg-chat-window > .tg-chat-window__composer {
-      /* Safe-area слева/справа только на корне чата; здесь оставляем как у Tailwind `p-3` */
+      /* Safe-area; фон как у чата — серая только «таблетка» .tg-input-container */
       padding-left: 0.75rem;
       padding-right: 0.75rem;
       padding-bottom: max(16px, env(safe-area-inset-bottom, 16px));
-      background: #fff;
+      background: var(--tg-bg);
       display: flex !important;
       flex-direction: column !important;
       flex: 0 0 auto !important;
@@ -2160,7 +2161,7 @@
     }
 
     html[data-chat-open="1"] .tg-main--visible .tg-chat-window .tg-input-container {
-      max-height: min(42vh, 220px) !important;
+      max-height: none !important;
       min-height: 0 !important;
     }
 
@@ -2254,7 +2255,7 @@
       padding-left: 0.75rem;
       padding-right: 0.75rem;
       padding-bottom: max(16px, env(safe-area-inset-bottom, 16px));
-      background: #fff;
+      background: var(--tg-bg);
       display: flex !important;
       flex-direction: column !important;
       flex: 0 0 auto !important;
@@ -2265,7 +2266,7 @@
 
     html[data-chat-open="1"] .tg-main--visible .tg-chat-window .tg-input-container,
     html[data-chat-open="1"] .tg-chat-window .tg-input-container {
-      max-height: min(42vh, 220px) !important;
+      max-height: none !important;
       min-height: 0 !important;
     }
 
