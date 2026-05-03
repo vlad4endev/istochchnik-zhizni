@@ -68,19 +68,84 @@ function singleLineTextareaHeightPx(el: HTMLTextAreaElement): number {
   return Math.ceil(line + padY);
 }
 
-/** Высоту textarea считаем в следующем кадре после `height: auto`, чтобы реже ловить forced reflow. */
-function scheduleTextareaAutosize(el: HTMLTextAreaElement | null) {
+const COMPOSER_ROW_GAP_PX = 8;
+const TEXTAREA_MIN_WIDTH_PX = 56;
+const TEXTAREA_WIDTH_PAD_PX = 8;
+
+/** Сколько места остаётся под сам textarea: строка минус кнопка отправки и «хром» пузыря (иконки, отступы). */
+function measureComposerTextareaMaxWidth(
+  row: HTMLElement,
+  sendCol: HTMLElement,
+  bubble: HTMLElement,
+  ta: HTMLTextAreaElement,
+): number {
+  const prevW = ta.style.width;
+  ta.style.width = `${TEXTAREA_MIN_WIDTH_PX}px`;
+  void ta.offsetHeight;
+  const chromeW = Math.max(0, bubble.getBoundingClientRect().width - ta.getBoundingClientRect().width);
+  ta.style.width = prevW;
+  const rowW = row.getBoundingClientRect().width;
+  const sendW = sendCol.getBoundingClientRect().width;
+  return Math.max(TEXTAREA_MIN_WIDTH_PX, Math.floor(rowW - sendW - COMPOSER_ROW_GAP_PX - chromeW - 1));
+}
+
+/**
+ * Высота + узкая ширина в пустоту / одну строку, плавное расширение по scrollWidth; при переносах — на всю доступную ширину.
+ */
+function scheduleTextareaAutosize(
+  el: HTMLTextAreaElement | null,
+  rowEl: HTMLElement | null | undefined,
+  sendEl: HTMLElement | null | undefined,
+) {
   if (!el) return;
+  const bubble = el.parentElement;
+  const row = rowEl ?? null;
+  const sendCol = sendEl ?? null;
+  const canMeasureWidth = Boolean(row && sendCol && bubble instanceof HTMLElement);
+
   el.style.height = 'auto';
   requestAnimationFrame(() => {
-    const valueEmpty = !String(el.value ?? '').trim();
-    if (valueEmpty) {
-      el.style.height = `${singleLineTextareaHeightPx(el)}px`;
-      return;
+    const raw = String(el.value ?? '');
+    const valueEmpty = !raw.trim();
+    const oneLineH = singleLineTextareaHeightPx(el);
+    let maxTa = 560;
+    if (canMeasureWidth && row && sendCol && bubble instanceof HTMLElement) {
+      maxTa = measureComposerTextareaMaxWidth(row, sendCol, bubble, el);
+      el.style.maxWidth = `${maxTa}px`;
     }
+
+    if (canMeasureWidth) {
+      el.style.width = `${maxTa}px`;
+      void el.offsetHeight;
+    }
+
     const maxParsed = parseFloat(getComputedStyle(el).maxHeight);
     const cap = Number.isFinite(maxParsed) && maxParsed > 0 ? maxParsed : 240;
-    el.style.height = `${Math.min(el.scrollHeight, cap)}px`;
+    const scrollHAuto = el.scrollHeight;
+    const multiline = raw.includes('\n') || scrollHAuto > oneLineH + 6;
+    let nextH: number;
+    if (valueEmpty) {
+      nextH = oneLineH;
+    } else {
+      nextH = Math.min(scrollHAuto, cap);
+    }
+    el.style.height = `${nextH}px`;
+
+    if (!canMeasureWidth) {
+      el.style.width = '';
+      el.style.maxWidth = '';
+      return;
+    }
+    if (multiline) {
+      el.style.width = `${maxTa}px`;
+      return;
+    }
+
+    el.style.width = '1px';
+    void el.offsetHeight;
+    const intrinsic = el.scrollWidth;
+    const w = Math.max(TEXTAREA_MIN_WIDTH_PX, Math.min(intrinsic + TEXTAREA_WIDTH_PAD_PX, maxTa));
+    el.style.width = `${w}px`;
   });
 }
 
@@ -152,6 +217,8 @@ export function ChatInput({
   const [emojiExiting, setEmojiExiting] = useState(false);
   const [pollModalOpen, setPollModalOpen] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const composerRowRef = useRef<HTMLDivElement>(null);
+  const composerSendRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const attachMenuRef = useRef<HTMLDivElement>(null);
   const emojiRef = useRef<HTMLDivElement>(null);
@@ -186,7 +253,9 @@ export function ChatInput({
   // Подставляем черновик при смене чата или когда с сервера/другой вкладки обновился именно этот ключ.
   useEffect(() => {
     setContent(draftForConversation);
-    requestAnimationFrame(() => scheduleTextareaAutosize(textareaRef.current));
+    requestAnimationFrame(() =>
+      scheduleTextareaAutosize(textareaRef.current, composerRowRef.current, composerSendRef.current),
+    );
   }, [conversationId, draftForConversation]);
 
   useEffect(() => {
@@ -396,7 +465,8 @@ export function ChatInput({
   }, [attachMenuOpen, emojiOpen, repositionPopovers]);
 
   useEffect(() => {
-    const onResize = () => scheduleTextareaAutosize(textareaRef.current);
+    const onResize = () =>
+      scheduleTextareaAutosize(textareaRef.current, composerRowRef.current, composerSendRef.current);
     window.addEventListener('resize', onResize);
     const vv = window.visualViewport;
     vv?.addEventListener('resize', onResize);
@@ -431,7 +501,7 @@ export function ChatInput({
         el.focus();
         const caret = start + native.length;
         el.setSelectionRange(caret, caret);
-        scheduleTextareaAutosize(el);
+        scheduleTextareaAutosize(el, composerRowRef.current, composerSendRef.current);
       } catch {
         /* ignore */
       }
@@ -609,7 +679,7 @@ export function ChatInput({
     if (editing) {
       const msgId = editing.id;
       const ok = await editMessage(msgId, text);
-      scheduleTextareaAutosize(textareaRef.current);
+      scheduleTextareaAutosize(textareaRef.current, composerRowRef.current, composerSendRef.current);
       if (!isDraftPrivateConversationId(conversationId)) {
         sendTypingStop(conversationId);
       }
@@ -622,7 +692,7 @@ export function ChatInput({
     }
 
     const ok = await sendMessage(conversationId, text, numericReplyId);
-    scheduleTextareaAutosize(textareaRef.current);
+    scheduleTextareaAutosize(textareaRef.current, composerRowRef.current, composerSendRef.current);
     if (!isDraftPrivateConversationId(conversationId)) {
       sendTypingStop(conversationId);
     }
@@ -773,7 +843,7 @@ export function ChatInput({
       try {
         el.focus();
         el.setSelectionRange(pos, pos);
-        scheduleTextareaAutosize(el);
+        scheduleTextareaAutosize(el, composerRowRef.current, composerSendRef.current);
       } catch {
         /* ignore */
       }
@@ -789,7 +859,7 @@ export function ChatInput({
     const value = e.target.value;
     setContent(value);
 
-    scheduleTextareaAutosize(e.target);
+    scheduleTextareaAutosize(e.target, composerRowRef.current, composerSendRef.current);
 
     if (mentionParticipants.length > 0) {
       const caret = e.target.selectionStart ?? value.length;
@@ -1158,6 +1228,7 @@ export function ChatInput({
 
       <div className="relative w-full min-w-0">
         <div
+          ref={composerRowRef}
           className="tg-input-area w-full min-w-0 gap-2 py-2"
           onDragOver={(e) => {
             if (!uploadsHealthy || !canSendAttachments) return;
@@ -1199,7 +1270,7 @@ export function ChatInput({
 
           <div
             className={[
-              'tg-input-container relative min-h-0 min-w-0 flex-1 !gap-1 overflow-hidden !rounded-3xl !border !border-gray-200 !bg-[var(--surface-elevated)] !p-0 !shadow-sm',
+              'tg-input-container relative min-h-0 w-fit min-w-0 max-w-full flex-none !gap-1 overflow-hidden !rounded-3xl !border !border-gray-200 !bg-[var(--surface-elevated)] !p-0 !shadow-sm',
               'transition-[box-shadow,border-color] focus-within:!border-[color:var(--tg-primary)]/45',
               'focus-within:shadow-[0_0_0_1px_rgba(125,54,64,0.14)]',
             ].join(' ')}
@@ -1254,9 +1325,9 @@ export function ChatInput({
             <textarea
               ref={textareaRef}
               className={[
-                'tg-input-textarea min-h-0 min-w-0 flex-1 !max-h-[140px] resize-none !bg-transparent',
+                'tg-input-textarea min-h-0 !max-h-[140px] min-w-0 !flex-none resize-none !bg-transparent',
                 '!px-1 !py-[10px] text-[16px] !leading-5 text-[var(--text)] placeholder:text-[var(--text-muted)]',
-                'outline-none',
+                'overflow-x-hidden outline-none transition-[width,height] duration-150 ease-out',
               ].join(' ')}
               placeholder="Сообщение"
               enterKeyHint="send"
@@ -1318,7 +1389,9 @@ export function ChatInput({
             </div>
           </div>
 
-          <div className="mb-0.5 shrink-0 self-end">
+          <div className="min-w-0 flex-1" aria-hidden />
+
+          <div ref={composerSendRef} className="mb-0.5 shrink-0 self-end">
             <button
               type="button"
               className="tg-send-btn transition-colors duration-200"
