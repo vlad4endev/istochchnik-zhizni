@@ -1156,204 +1156,214 @@ export function ChatInput({
         </p>
       ) : null}
 
-      <div
-        className="tg-input-area min-w-0 items-end"
-        onDragOver={(e) => {
-          if (!uploadsHealthy || !canSendAttachments) return;
-          e.preventDefault();
-          e.dataTransfer.dropEffect = 'copy';
-        }}
-        onDrop={(e) => {
-          if (!uploadsHealthy || !canSendAttachments) return;
-          e.preventDefault();
-          const fl = e.dataTransfer?.files;
-          if (!fl?.length) return;
-          ingestExternalFiles(Array.from(fl));
-        }}
-      >
-        {mentionOpen && mentionFiltered.length > 0 ? (
+      <div className="relative w-full min-w-0">
+        <div
+          className="tg-input-area w-full min-w-0 gap-2 py-2"
+          onDragOver={(e) => {
+            if (!uploadsHealthy || !canSendAttachments) return;
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'copy';
+          }}
+          onDrop={(e) => {
+            if (!uploadsHealthy || !canSendAttachments) return;
+            e.preventDefault();
+            const fl = e.dataTransfer?.files;
+            if (!fl?.length) return;
+            ingestExternalFiles(Array.from(fl));
+          }}
+        >
+          {mentionOpen && mentionFiltered.length > 0 ? (
+            <div
+              className="absolute bottom-full left-0 right-0 z-[60] mb-2 max-h-40 overflow-y-auto rounded-2xl border border-gray-200 bg-[var(--surface-elevated)] py-1 shadow-md"
+              role="listbox"
+              aria-label="Упоминание участника"
+            >
+              {mentionFiltered.map((p, idx) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  role="option"
+                  aria-selected={idx === mentionHighlight}
+                  onMouseDown={(ev) => ev.preventDefault()}
+                  onClick={() => pickMention(p.id)}
+                  className={[
+                    'flex w-full px-4 py-2 text-left text-sm font-semibold',
+                    idx === mentionHighlight ? 'bg-primary/10 text-primary' : 'text-[var(--text)] hover:bg-[var(--surface)]',
+                  ].join(' ')}
+                >
+                  @{p.label}
+                </button>
+              ))}
+            </div>
+          ) : null}
+
           <div
-            className="mb-1 max-h-40 w-full overflow-y-auto rounded-2xl border border-gray-200 bg-[var(--surface-elevated)] py-1 shadow-md"
-            role="listbox"
-            aria-label="Упоминание участника"
+            className={[
+              'tg-input-container relative min-h-0 min-w-0 flex-1 !gap-1 overflow-hidden !rounded-3xl !border !border-gray-200 !bg-[var(--surface-elevated)] !p-0 !shadow-sm',
+              'transition-[box-shadow,border-color] focus-within:!border-[color:var(--tg-primary)]/45',
+              'focus-within:shadow-[0_0_0_1px_rgba(125,54,64,0.14)]',
+            ].join(' ')}
           >
-            {mentionFiltered.map((p, idx) => (
+            <input
+              ref={fileInputRef}
+              type="file"
+              className="hidden"
+              accept="image/*"
+              onChange={(e) => void handleFileSelected(e.target.files)}
+            />
+            {/*
+             * A11y: см. aria-describedby у textarea ниже.
+             */}
+            {mentionParticipants.length > 0 ? (
+              <span id="chat-input-mention-hint" className="sr-only">
+                Наберите символ собака, чтобы упомянуть участника
+              </span>
+            ) : null}
+            {pending || pendingImages.length > 0 ? (
+              <span id="chat-input-attachment-hint" className="sr-only">
+                {pendingImages.length > 0
+                  ? `К сообщению прикреплено фотографий: ${pendingImages.length}. Будут отправлены одним сообщением.`
+                  : `К сообщению прикреплено вложение: ${pending?.file.name}. Будет отправлено вместе с текстом.`}
+              </span>
+            ) : null}
+            {uploading ? (
+              <span id="chat-input-uploading-hint" className="sr-only" aria-live="polite">
+                Загружается файл {uploading.name}. Подождите завершения загрузки.
+              </span>
+            ) : null}
+
+            <div ref={attachMenuRef} className="relative z-[5000] shrink-0 self-end">
               <button
-                key={p.id}
+                ref={attachBtnRef}
                 type="button"
-                role="option"
-                aria-selected={idx === mentionHighlight}
-                onMouseDown={(ev) => ev.preventDefault()}
-                onClick={() => pickMention(p.id)}
-                className={[
-                  'flex w-full px-3 py-2 text-left text-sm font-semibold',
-                  idx === mentionHighlight ? 'bg-primary/10 text-primary' : 'text-[var(--text)] hover:bg-[var(--surface)]',
-                ].join(' ')}
+                className="tg-input-icon-btn transition-colors duration-200"
+                disabled={!uploadsHealthy || !canSendAttachments}
+                onClick={() => {
+                  haptic(8);
+                  setAttachMenuOpen((v) => !v);
+                }}
+                aria-label="Вложения"
+                aria-expanded={attachMenuOpen}
+                aria-haspopup="menu"
+                title="Вложения"
               >
-                @{p.label}
+                <LuPaperclip size={19} />
               </button>
-            ))}
-          </div>
-        ) : null}
-        <div className="tg-input-container relative min-w-0 rounded-3xl border border-gray-200 bg-[var(--surface-elevated)] shadow-sm">
-          <input
-            ref={fileInputRef}
-            type="file"
-            className="hidden"
-            accept="image/*"
-            onChange={(e) => void handleFileSelected(e.target.files)}
-          />
-          <div ref={attachMenuRef} className="relative z-[5000]">
-            <button
-              ref={attachBtnRef}
-              type="button"
-              className="tg-input-icon-btn transition-colors duration-200"
-              disabled={!uploadsHealthy || !canSendAttachments}
-              onClick={() => {
-                haptic(8);
-                setAttachMenuOpen((v) => !v);
-              }}
-              aria-label="Вложения"
-              aria-expanded={attachMenuOpen}
-              aria-haspopup="menu"
-              title="Вложения"
-            >
-              <LuPaperclip size={19} />
-            </button>
-          </div>
-          {/*
-           * A11y (WCAG 2.1, SC 1.3.1 / 4.1.2): у textarea несколько состояний, которые
-           * SR по умолчанию не озвучивает:
-           *   - `placeholder` читается только при пустом значении и не во всех браузерах;
-           *   - наличие активного вложения в составе сообщения (pending attachment) для SR
-           *     невидимо — визуальный preview живёт отдельным блоком выше;
-           *   - подсказка про @-упоминания доступна только зрячему (через serif-меню).
-           *
-           * Решение: явный `aria-label="Текст сообщения"` + динамический `aria-describedby`,
-           * который собирает все активные описания в одну строку ("mention и attachment"),
-           * и подключается только тогда, когда соответствующая подсказка действительно актуальна.
-           */}
-          {mentionParticipants.length > 0 ? (
-            <span id="chat-input-mention-hint" className="sr-only">
-              Наберите символ собака, чтобы упомянуть участника
-            </span>
-          ) : null}
-          {pending || pendingImages.length > 0 ? (
-            <span id="chat-input-attachment-hint" className="sr-only">
-              {pendingImages.length > 0
-                ? `К сообщению прикреплено фотографий: ${pendingImages.length}. Будут отправлены одним сообщением.`
-                : `К сообщению прикреплено вложение: ${pending?.file.name}. Будет отправлено вместе с текстом.`}
-            </span>
-          ) : null}
-          {uploading ? (
-            <span id="chat-input-uploading-hint" className="sr-only" aria-live="polite">
-              Загружается файл {uploading.name}. Подождите завершения загрузки.
-            </span>
-          ) : null}
-          <textarea
-            ref={textareaRef}
-            className="tg-input-textarea text-[var(--text)] placeholder:text-[var(--text-muted)]"
-            placeholder="Сообщение"
-            enterKeyHint="send"
-            inputMode="text"
-            autoComplete="off"
-            autoCorrect="off"
-            autoCapitalize="sentences"
-            spellCheck="true"
-            title={
-              mentionParticipants.length > 0
-                ? 'Enter — отправить · Shift+Enter — новая строка · @ — упоминание'
-                : 'Enter — отправить · Shift+Enter — новая строка'
-            }
-            aria-label="Текст сообщения"
-            aria-describedby={
-              [
-                mentionParticipants.length > 0 ? 'chat-input-mention-hint' : null,
-                pending || pendingImages.length > 0 ? 'chat-input-attachment-hint' : null,
-                uploading ? 'chat-input-uploading-hint' : null,
-              ]
-                .filter((id): id is string => Boolean(id))
-                .join(' ') || undefined
-            }
-            aria-multiline="true"
-            rows={1}
-            value={content}
-            onChange={handleChange}
-            onKeyDown={handleKeyDown}
-            onCompositionStart={() => {
-              composingRef.current = true;
-            }}
-            onCompositionEnd={() => {
-              composingRef.current = false;
-            }}
-            onPaste={(e) => {
-              const fl = e.clipboardData?.files;
-              if (!fl || fl.length === 0) return;
-              e.preventDefault();
-              ingestExternalFiles(Array.from(fl));
-            }}
-          />
-          <div ref={emojiRef} className="relative z-[5000]">
-            <button
-              ref={emojiBtnRef}
-              type="button"
-              className="tg-input-icon-btn tg-emoji-btn transition-colors duration-200"
-              onClick={() => {
-                haptic(8);
-                setEmojiOpen((v) => !v);
-              }}
-              aria-label="Эмодзи"
-              aria-expanded={emojiOpen}
-              aria-haspopup="dialog"
-              title="Эмодзи"
-            >
-              <LuSmile size={22} />
-            </button>
-          </div>
-          <button
-            type="button"
-            className="tg-send-btn transition-colors duration-200"
-            onClick={() => {
-              if (hasSendAction) {
-                void handleSend();
-              } else {
-                handleMic();
+            </div>
+
+            <textarea
+              ref={textareaRef}
+              className={[
+                'tg-input-textarea min-h-0 min-w-0 flex-1 !max-h-[140px] resize-none !bg-transparent',
+                '!px-1 !py-[10px] text-[16px] !leading-5 text-[var(--text)] placeholder:text-[var(--text-muted)]',
+                'outline-none',
+              ].join(' ')}
+              placeholder="Сообщение"
+              enterKeyHint="send"
+              inputMode="text"
+              autoComplete="off"
+              autoCorrect="off"
+              autoCapitalize="sentences"
+              spellCheck="true"
+              title={
+                mentionParticipants.length > 0
+                  ? 'Enter — отправить · Shift+Enter — новая строка · @ — упоминание'
+                  : 'Enter — отправить · Shift+Enter — новая строка'
               }
-            }}
-            disabled={uploading != null}
-            aria-label={hasSendAction ? 'Отправить' : 'Голосовые сообщения пока недоступны'}
-            title={hasSendAction ? 'Отправить' : 'Голосовые сообщения скоро'}
-            style={{
-              background: hasSendAction ? 'var(--tg-primary)' : 'transparent',
-              color: hasSendAction ? '#fff' : '#888',
-              boxShadow: hasSendAction ? '0 2px 8px rgba(125,54,64,0.35)' : 'none',
-            }}
-          >
-            <span
+              aria-label="Текст сообщения"
+              aria-describedby={
+                [
+                  mentionParticipants.length > 0 ? 'chat-input-mention-hint' : null,
+                  pending || pendingImages.length > 0 ? 'chat-input-attachment-hint' : null,
+                  uploading ? 'chat-input-uploading-hint' : null,
+                ]
+                  .filter((id): id is string => Boolean(id))
+                  .join(' ') || undefined
+              }
+              aria-multiline="true"
+              rows={1}
+              value={content}
+              onChange={handleChange}
+              onKeyDown={handleKeyDown}
+              onCompositionStart={() => {
+                composingRef.current = true;
+              }}
+              onCompositionEnd={() => {
+                composingRef.current = false;
+              }}
+              onPaste={(e) => {
+                const fl = e.clipboardData?.files;
+                if (!fl || fl.length === 0) return;
+                e.preventDefault();
+                ingestExternalFiles(Array.from(fl));
+              }}
+            />
+
+            <div ref={emojiRef} className="relative z-[5000] shrink-0 self-end">
+              <button
+                ref={emojiBtnRef}
+                type="button"
+                className="tg-input-icon-btn tg-emoji-btn transition-colors duration-200"
+                onClick={() => {
+                  haptic(8);
+                  setEmojiOpen((v) => !v);
+                }}
+                aria-label="Эмодзи"
+                aria-expanded={emojiOpen}
+                aria-haspopup="dialog"
+                title="Эмодзи"
+              >
+                <LuSmile size={22} />
+              </button>
+            </div>
+          </div>
+
+          <div className="mb-0.5 shrink-0 self-end">
+            <button
+              type="button"
+              className="tg-send-btn transition-colors duration-200"
+              onClick={() => {
+                if (hasSendAction) {
+                  void handleSend();
+                } else {
+                  handleMic();
+                }
+              }}
+              disabled={uploading != null}
+              aria-label={hasSendAction ? 'Отправить' : 'Голосовые сообщения пока недоступны'}
+              title={hasSendAction ? 'Отправить' : 'Голосовые сообщения скоро'}
               style={{
-                display: 'grid',
-                placeItems: 'center',
-                position: 'absolute',
-                transition: 'transform 0.2s ease, opacity 0.2s ease',
-                transform: hasSendAction ? 'scale(1) rotate(0deg)' : 'scale(0.7) rotate(-30deg)',
-                opacity: hasSendAction ? 1 : 0,
+                background: hasSendAction ? 'var(--tg-primary)' : 'transparent',
+                color: hasSendAction ? '#fff' : '#888',
+                boxShadow: hasSendAction ? '0 2px 8px rgba(125,54,64,0.35)' : 'none',
               }}
             >
-              <LuSend size={20} />
-            </span>
-            <span
-              style={{
-                display: 'grid',
-                placeItems: 'center',
-                position: 'absolute',
-                transition: 'transform 0.2s ease, opacity 0.2s ease',
-                transform: hasSendAction ? 'scale(0.7) rotate(30deg)' : 'scale(1) rotate(0deg)',
-                opacity: hasSendAction ? 0 : 1,
-              }}
-            >
-              <LuMic size={20} />
-            </span>
-          </button>
+              <span
+                style={{
+                  display: 'grid',
+                  placeItems: 'center',
+                  position: 'absolute',
+                  transition: 'transform 0.2s ease, opacity 0.2s ease',
+                  transform: hasSendAction ? 'scale(1) rotate(0deg)' : 'scale(0.7) rotate(-30deg)',
+                  opacity: hasSendAction ? 1 : 0,
+                }}
+              >
+                <LuSend size={20} />
+              </span>
+              <span
+                style={{
+                  display: 'grid',
+                  placeItems: 'center',
+                  position: 'absolute',
+                  transition: 'transform 0.2s ease, opacity 0.2s ease',
+                  transform: hasSendAction ? 'scale(0.7) rotate(30deg)' : 'scale(1) rotate(0deg)',
+                  opacity: hasSendAction ? 0 : 1,
+                }}
+              >
+                <LuMic size={20} />
+              </span>
+            </button>
+          </div>
         </div>
       </div>
 

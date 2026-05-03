@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from 'react-router-dom';
 import { format, isBefore, parse, startOfDay, startOfWeek } from 'date-fns';
@@ -1438,43 +1439,46 @@ function DashboardMain() {
         </div>
       </div>
 
-      {eventOpen ? (
-        <div
-          className="dashboard-backdrop fixed inset-0 z-[80] flex items-end justify-center bg-black/45 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom,0px))] [padding-left:max(0.75rem,env(safe-area-inset-left,0px))] [padding-right:max(0.75rem,env(safe-area-inset-right,0px))] sm:items-center sm:p-4"
-          onClick={() => setEventOpen(false)}
-          role="dialog"
-          aria-modal="true"
-        >
-          <div
-            className="dashboard-sheet w-full max-w-lg max-h-[min(82vh,700px)] overflow-y-auto rounded-2xl border border-stone-200/80 bg-white p-4 shadow-[0_24px_70px_rgba(0,0,0,0.2)] [webkit-overflow-scrolling:touch] sm:max-h-[88vh] sm:p-5"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <p className="text-[11px] font-semibold tracking-[0.02em] text-[#0F6636]">Описание события</p>
-            <h2 className="mt-2 text-xl font-extrabold tracking-tight text-stone-900">{event.title}</h2>
-            <p className="mt-1 text-sm font-semibold text-primary">{event.whenLabel}</p>
-            {event.posterUrl ? (
-              <div className="mt-4 overflow-hidden rounded-2xl border border-stone-200/70 bg-stone-50">
-                <img
-                  src={event.posterUrl}
-                  alt=""
-                  className="h-[200px] w-full object-cover sm:h-[260px]"
-                  loading="lazy"
-                />
-              </div>
-            ) : null}
-            <p className="mt-3 text-sm font-medium leading-relaxed text-stone-700">{event.description}</p>
-            <div className="mt-5 flex items-center justify-end">
-              <button
-                type="button"
-                onClick={() => setEventOpen(false)}
-                className="tap-highlight-transparent touch-manipulation inline-flex min-h-[44px] items-center justify-center rounded-[12px] border border-stone-200 bg-white px-4 text-sm font-extrabold text-stone-700 hover:bg-stone-50"
+      {eventOpen && typeof document !== 'undefined'
+        ? createPortal(
+            <div
+              className="dashboard-backdrop fixed inset-0 z-[150] flex min-h-[100dvh] items-end justify-center bg-black/45 pt-3 pb-0 [padding-left:max(0.75rem,env(safe-area-inset-left,0px))] [padding-right:max(0.75rem,env(safe-area-inset-right,0px))] sm:min-h-0 sm:items-center sm:p-4"
+              onClick={() => setEventOpen(false)}
+              role="dialog"
+              aria-modal="true"
+            >
+              <div
+                className="dashboard-sheet w-full max-w-lg max-h-[min(82vh,700px)] overflow-y-auto rounded-2xl border border-stone-200/80 bg-white px-4 pt-4 pb-[max(1rem,env(safe-area-inset-bottom,0px))] shadow-[0_24px_70px_rgba(0,0,0,0.2)] [webkit-overflow-scrolling:touch] sm:max-h-[88vh] sm:p-5"
+                onClick={(e) => e.stopPropagation()}
               >
-                Закрыть
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
+                <p className="text-[11px] font-semibold tracking-[0.02em] text-[#0F6636]">Описание события</p>
+                <h2 className="mt-2 text-xl font-extrabold tracking-tight text-stone-900">{event.title}</h2>
+                <p className="mt-1 text-sm font-semibold text-primary">{event.whenLabel}</p>
+                {event.posterUrl ? (
+                  <div className="mt-4 overflow-hidden rounded-2xl border border-stone-200/70 bg-stone-50">
+                    <img
+                      src={event.posterUrl}
+                      alt=""
+                      className="h-[200px] w-full object-cover sm:h-[260px]"
+                      loading="lazy"
+                    />
+                  </div>
+                ) : null}
+                <p className="mt-3 text-sm font-medium leading-relaxed text-stone-700">{event.description}</p>
+                <div className="mt-5 flex items-center justify-end">
+                  <button
+                    type="button"
+                    onClick={() => setEventOpen(false)}
+                    className="tap-highlight-transparent touch-manipulation inline-flex min-h-[44px] items-center justify-center rounded-[12px] border border-stone-200 bg-white px-4 text-sm font-extrabold text-stone-700 hover:bg-stone-50"
+                  >
+                    Закрыть
+                  </button>
+                </div>
+              </div>
+            </div>,
+            document.body,
+          )
+        : null}
     </div>
   );
 }
