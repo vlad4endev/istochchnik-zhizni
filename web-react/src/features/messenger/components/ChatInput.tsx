@@ -77,7 +77,7 @@ function scheduleTextareaAutosize(el: HTMLTextAreaElement | null) {
   requestAnimationFrame(() => {
     const valueEmpty = !String(el.value ?? '').trim();
     if (valueEmpty) {
-      el.style.height = `${singleLineTextareaHeightPx(el)}px`;
+      el.style.height = `${Math.max(44, singleLineTextareaHeightPx(el))}px`;
       return;
     }
     const maxParsed = parseFloat(getComputedStyle(el).maxHeight);
@@ -1234,9 +1234,10 @@ export function ChatInput({
 
           <div
             className={[
-              'tg-input-container tg-composer-pill-layout relative flex min-h-[44px] min-w-0 flex-1 overflow-hidden !gap-0 !rounded-full !border !p-0 !shadow-sm',
+              'tg-input-container tg-composer-pill-layout tg-composer-pill-bubble relative flex min-h-[44px] min-w-0 flex-1 overflow-hidden !gap-0 !rounded-[22px] !border !p-0 !shadow-sm sm:!rounded-3xl',
               'border-white/45 bg-white/40 backdrop-blur-xl',
-              'transition-[box-shadow,border-color] focus-within:border-[color:var(--tg-primary)]/50',
+              'transition-[box-shadow,border-color,min-height] duration-200 ease-out',
+              'focus-within:border-[color:var(--tg-primary)]/50',
               'focus-within:shadow-[0_0_0_1px_rgba(125,54,64,0.18)]',
               'dark:border-white/12 dark:bg-black/25',
             ].join(' ')}
@@ -1265,9 +1266,9 @@ export function ChatInput({
             <textarea
               ref={textareaRef}
               className={[
-                'tg-input-textarea !min-h-0 min-w-0 flex-1 !max-h-[140px] resize-none !self-center !bg-transparent',
-                'py-2.5 pl-3 pr-12 text-[16px] !leading-5 text-[var(--text)] placeholder:text-stone-400/90',
-                'outline-none transition-[height] duration-150 ease-out dark:placeholder:text-stone-500',
+                'tg-input-textarea tg-composer-textarea !min-h-[44px] min-w-0 flex-1 resize-none !self-stretch !bg-transparent',
+                '!max-h-[min(40vh,200px)] py-2.5 pl-3 text-[16px] !leading-[1.45] text-[var(--text)] placeholder:text-stone-400/90',
+                '!pb-2.5 outline-none transition-[height] duration-200 ease-out dark:placeholder:text-stone-500',
               ].join(' ')}
               placeholder="Сообщение"
               enterKeyHint="send"
@@ -1312,13 +1313,13 @@ export function ChatInput({
 
             <div
               ref={emojiRef}
-              className="pointer-events-none absolute right-1 top-1/2 z-[5000] -translate-y-1/2"
+              className="pointer-events-none absolute bottom-1.5 right-2 z-[5000] flex items-end"
             >
               <button
                 ref={emojiBtnRef}
                 type="button"
                 className={[
-                  'pointer-events-auto flex h-9 w-9 items-center justify-center rounded-full border transition-colors',
+                  'pointer-events-auto flex h-9 w-9 shrink-0 items-center justify-center rounded-full border transition-colors',
                   'border-transparent text-stone-500 hover:border-white/35 hover:bg-white/35 hover:text-stone-800',
                   'dark:text-stone-300 dark:hover:bg-white/10 dark:hover:text-white',
                 ].join(' ')}

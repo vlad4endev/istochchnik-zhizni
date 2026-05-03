@@ -2553,3 +2553,19 @@ html[data-chat-open='1'] .tg-main--visible .tg-chat-window .tg-input-container.t
   align-items: center !important;
   flex-direction: row !important;
 }
+
+/* Капсула: textarea на всю высоту, эмодзи внизу — не «сжимать» овал по центру. */
+.tg-input-container.tg-composer-pill-bubble,
+.tg-chat-window .tg-input-container.tg-composer-pill-bubble,
+.tg-chat-window__composer .tg-input-container.tg-composer-pill-bubble,
+html[data-chat-open='1'] .tg-chat-window .tg-input-container.tg-composer-pill-bubble,
+html[data-chat-open='1'] .tg-main--visible .tg-chat-window .tg-input-container.tg-composer-pill-bubble {
+  align-items: stretch !important;
+}
+
+/* Запас справа под кнопку эмодзи (перебить padding из .tg-input-textarea). */
+.tg-input-textarea.tg-composer-textarea {
+  box-sizing: border-box !important;
+  padding-right: 3.5rem !important;
+  align-self: stretch !important;
+}
