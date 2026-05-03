@@ -1,6 +1,6 @@
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { IconType } from 'react-icons';
 import {
   LuChevronLeft,
@@ -302,52 +302,16 @@ function mobileBottomRouteActive(pathname: string, to: string): boolean {
   return pathname === to || pathname.startsWith(`${to}/`);
 }
 
-/** Порядок пунктов для нижней панели (слева направо), затем перенос «не влезших» в «Ещё» по ширине. */
-function buildOrderedMobileNavItems(visible: NavItem[]): NavItem[] {
-  const ordered: NavItem[] = [];
-  const push = (item: NavItem | undefined) => {
-    if (item && !ordered.some((x) => x.to === item.to)) ordered.push(item);
-  };
-  const byTo = (path: string) => visible.find((i) => i.to === path);
-  push(byTo('/dashboard'));
-  push(byTo('/prayer'));
-  push(byTo('/messenger'));
-  const planner = byTo('/service-planner');
-  const songbook = byTo('/songbook');
-  if (planner) push(planner);
-  else if (songbook) push(songbook);
-  for (const def of NAV_ITEMS) {
-    push(visible.find((v) => v.to === def.to));
-  }
-  return ordered;
-}
+/** Нижняя панель (мобильная / PWA): фиксированно Главная → Молитва → Чаты, всё остальное — в «Ещё». */
+const MOBILE_BOTTOM_PINNED: readonly string[] = ['/dashboard', '/prayer', '/messenger'];
 
-/** Мин. ширина «ячейки» таба (иконка + подпись в одну строку); при нехватке места лишнее уходит в «Ещё». */
-const MOBILE_TAB_MIN_WIDTH_PX = 54;
-const MOBILE_MORE_BTN_WIDTH_PX = 54;
-
-function splitMobileNavByWidth(
-  containerWidth: number,
-  ordered: NavItem[],
-): { primary: NavItem[]; overflow: NavItem[] } {
-  const n = ordered.length;
-  if (n === 0) return { primary: [], overflow: [] };
-
-  const w =
-    !Number.isFinite(containerWidth) || containerWidth < 8 ? 280 : containerWidth;
-
-  if (w < MOBILE_TAB_MIN_WIDTH_PX) {
-    return { primary: ordered.slice(0, 1), overflow: ordered.slice(1) };
-  }
-  if (n * MOBILE_TAB_MIN_WIDTH_PX <= w) {
-    return { primary: [...ordered], overflow: [] };
-  }
-  for (let k = n - 1; k >= 1; k -= 1) {
-    if (k * MOBILE_TAB_MIN_WIDTH_PX + MOBILE_MORE_BTN_WIDTH_PX <= w) {
-      return { primary: ordered.slice(0, k), overflow: ordered.slice(k) };
-    }
-  }
-  return { primary: [ordered[0]], overflow: ordered.slice(1) };
+function splitMobileNavFourTabs(visible: NavItem[]): { primary: NavItem[]; overflow: NavItem[] } {
+  if (visible.length === 0) return { primary: [], overflow: [] };
+  const byTo = (to: string) => visible.find((i) => i.to === to);
+  const primary = MOBILE_BOTTOM_PINNED.map((to) => byTo(to)).filter((x): x is NavItem => Boolean(x));
+  const pinned = new Set(MOBILE_BOTTOM_PINNED);
+  const overflow = visible.filter((i) => !pinned.has(i.to));
+  return { primary, overflow };
 }
 
 function MobileNavOverflow({
@@ -570,38 +534,7 @@ export function Layout() {
     canSeeBroadcastNav,
   ]);
   const sidebarItems = items;
-  const orderedMobileNavItems = useMemo(() => buildOrderedMobileNavItems(items), [items]);
-  const navTabRowRef = useRef<HTMLDivElement>(null);
-  const [mobileNavSplit, setMobileNavSplit] = useState<{ primary: NavItem[]; overflow: NavItem[] }>(() =>
-    splitMobileNavByWidth(280, orderedMobileNavItems),
-  );
-
-  useLayoutEffect(() => {
-    const el = navTabRowRef.current;
-    const apply = (width: number) => {
-      const next = splitMobileNavByWidth(width, orderedMobileNavItems);
-      setMobileNavSplit((prev) => {
-        if (
-          prev.primary.length === next.primary.length &&
-          prev.overflow.length === next.overflow.length &&
-          prev.primary.every((p, i) => p.to === next.primary[i]?.to) &&
-          prev.overflow.every((p, i) => p.to === next.overflow[i]?.to)
-        ) {
-          return prev;
-        }
-        return next;
-      });
-    };
-    if (!el) {
-      apply(280);
-      return;
-    }
-    const run = () => apply(el.getBoundingClientRect().width || 280);
-    run();
-    const ro = new ResizeObserver(run);
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, [orderedMobileNavItems]);
+  const mobileNavSplit = useMemo(() => splitMobileNavFourTabs(items), [items]);
   const isDashboardRoute =
     location.pathname === '/dashboard' || location.pathname === '/dashboard/';
 
@@ -1005,10 +938,7 @@ export function Layout() {
         aria-label="Основная навигация"
         aria-hidden={!mainChromeVisible}
       >
-        <div
-          ref={navTabRowRef}
-          className="flex w-full min-h-[var(--app-bottom-nav-bar-height)] min-w-0 items-stretch justify-evenly gap-0 px-1 pb-0 pt-1"
-        >
+        <div className="flex w-full min-h-[var(--app-bottom-nav-bar-height)] min-w-0 items-stretch justify-evenly gap-0 px-1 pb-0 pt-1">
           {mobileNavSplit.primary.map((item) => {
             const Icon = item.Icon;
             return (
