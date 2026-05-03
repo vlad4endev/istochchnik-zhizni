@@ -11,6 +11,7 @@ import {
   PieChart,
   ResponsiveContainer,
   Tooltip,
+  type TooltipValueType,
   XAxis,
   YAxis,
 } from 'recharts';
@@ -291,14 +292,21 @@ export function AnalyticsPage() {
                       <XAxis
                         dataKey="day"
                         stroke="var(--color-text-muted)"
-                        tickFormatter={(val) => {
-                          const d = new Date(val as string);
+                        tickFormatter={(val: string | number) => {
+                          const d = new Date(String(val));
                           if (Number.isNaN(d.getTime())) return String(val);
                           return d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' });
                         }}
                       />
                       <YAxis stroke="var(--color-text-muted)" />
-                      <Tooltip contentStyle={TOOLTIP_STYLE} formatter={(value) => formatNumber(Number(value ?? 0))} />
+                      <Tooltip
+                        contentStyle={TOOLTIP_STYLE}
+                        formatter={(value: TooltipValueType | undefined) =>
+                          formatNumber(
+                            Number(value === undefined ? 0 : Array.isArray(value) ? value[0] : value),
+                          )
+                        }
+                      />
                       <Line type="monotone" dataKey="views" name="Просмотры" stroke="#7a1f2e" strokeWidth={2.5} dot={false} />
                     </LineChart>
                   </ResponsiveContainer>
@@ -323,8 +331,10 @@ export function AnalyticsPage() {
                         ))}
                       </Pie>
                       <Tooltip
-                        formatter={(value) => {
-                          const normalized = Number(value ?? 0);
+                        formatter={(value: TooltipValueType | undefined) => {
+                          const normalized = Number(
+                            value === undefined ? 0 : Array.isArray(value) ? value[0] : value,
+                          );
                           return `${formatNumber(normalized)} (${Math.round((normalized / Math.max(totalDeviceViews, 1)) * 100)}%)`;
                         }}
                         contentStyle={TOOLTIP_STYLE}
@@ -455,7 +465,12 @@ export function AnalyticsPage() {
                     <CartesianGrid stroke="rgba(180,94,110,0.18)" strokeDasharray="3 3" />
                     <XAxis type="number" stroke="var(--color-text-muted)" unit="%" />
                     <YAxis type="category" dataKey="period" stroke="var(--color-text-muted)" width={45} />
-                    <Tooltip formatter={(value) => `${Number(value ?? 0).toFixed(1)}%`} contentStyle={TOOLTIP_STYLE} />
+                    <Tooltip
+                      formatter={(value: TooltipValueType | undefined) =>
+                        `${Number(value === undefined ? 0 : Array.isArray(value) ? value[0] : value).toFixed(1)}%`
+                      }
+                      contentStyle={TOOLTIP_STYLE}
+                    />
                     <Bar dataKey="returned_percent" radius={[0, 8, 8, 0]}>
                       {retentionData.map((item: { period: string }, index: number) => (
                         <Cell key={`${item.period}-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />

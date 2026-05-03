@@ -9,7 +9,7 @@
     "dev:all": "concurrently -k -n api,web -c blue,magenta \"npm run dev\" \"npm run web:dev\"",
     "db:up": "docker compose -f docker-compose.yml -f docker-compose.local.yml up -d db",
     "web:dev": "npm --prefix web-react run dev",
-    "web:build": "npm --prefix web-react run build",
+    "web:build": "npm --prefix web-react install && npm --prefix web-react run build",
     "pwa:icons": "npm --prefix web-react run pwa:icons",
     "pwa:splash": "npm --prefix web-react run pwa:splash",
     "cap:sync": "npm --prefix web-react run cap:sync",

@@ -59,7 +59,7 @@ export function guessKeyFromChords(chords: string[]): KeyGuess | null {
 
   for (const tonic of ROOTS) {
     const major = Key.majorKey(tonic);
-    const triadsMaj = major.triads.map((t) => Chord.get(t).symbol);
+    const triadsMaj = major.triads.map((t: string) => Chord.get(t).symbol);
     if (triadsMaj.includes(first.symbol) && triadsMaj.includes(last.symbol)) {
       return {
         label: `${tonic} major`,
@@ -71,7 +71,7 @@ export function guessKeyFromChords(chords: string[]): KeyGuess | null {
 
   for (const tonic of ROOTS) {
     const minor = Key.minorKey(tonic).natural;
-    const triadsMin = minor.triads.map((t) => Chord.get(t).symbol);
+    const triadsMin = minor.triads.map((t: string) => Chord.get(t).symbol);
     if (triadsMin.includes(first.symbol) && triadsMin.includes(last.symbol)) {
       return {
         label: `${tonic} minor`,
