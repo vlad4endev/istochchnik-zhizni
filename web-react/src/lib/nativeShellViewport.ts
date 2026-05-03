@@ -11,7 +11,8 @@ function syncViewportState() {
   const layoutHeight = window.innerHeight || 0;
   const visualHeight = vv?.height ?? layoutHeight;
   const offsetTop = vv?.offsetTop ?? 0;
-  const viewportHeight = Math.max(0, Math.round(visualHeight));
+  /** Высота оболочки = layout viewport (`innerHeight`), как у `position:fixed;bottom:0` — иначе на iOS под панелью остаётся полоска фона. */
+  const viewportHeight = Math.max(0, Math.round(layoutHeight));
   const keyboardInset = Math.max(0, Math.round(layoutHeight - (visualHeight + offsetTop)));
   const keyboardOpen = keyboardInset >= 110;
 
@@ -29,6 +30,7 @@ function attachViewportWatchers() {
   vv?.addEventListener('scroll', syncViewportState);
   window.addEventListener('resize', syncViewportState);
   window.addEventListener('orientationchange', syncViewportState);
+  window.addEventListener('load', syncViewportState);
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') syncViewportState();
   });

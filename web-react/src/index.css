@@ -242,11 +242,12 @@ dd {
 }
 
 /* Скролл окна отключаем: sticky работает относительно .app-main-content (overflow-y-auto), а не window.
-   Предки с overflow-x-clip между sticky и скролл-контейнером ломают position:sticky в Safari/PWA. */
+   Высота НЕ 100dvh: на iOS `dvh` и layout viewport (`innerHeight`), к которому привязан `fixed bottom:0`,
+   часто расходятся — под нижней панелью остаётся полоска фона. Синхронизация: `nativeShellViewport.ts` → `--app-viewport-height`. */
 html,
 body {
-  height: 100dvh;
-  max-height: 100dvh;
+  height: var(--app-viewport-height, 100dvh);
+  max-height: var(--app-viewport-height, 100dvh);
   overflow: hidden;
   margin: 0;
 }
@@ -255,12 +256,23 @@ body {
    и может скроллиться внутри <main>. */
 #root {
   width: 100%;
-  height: 100dvh;
-  max-height: 100dvh;
+  height: var(--app-viewport-height, 100dvh);
+  max-height: var(--app-viewport-height, 100dvh);
   min-height: 0;
   overflow: hidden;
   display: flex;
   flex-direction: column;
+}
+
+/* Нижняя навигация: край совпадает с физическим низом; safe-area только padding внутри полосы. */
+@media (max-width: 1023px) {
+  nav.app-bottom-nav.bottom-nav {
+    bottom: 0;
+    left: 0;
+    right: 0;
+    width: 100%;
+    box-sizing: border-box;
+  }
 }
 
 .app-main-content {
