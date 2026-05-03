@@ -293,7 +293,7 @@ export function AnalyticsPage() {
                         dataKey="day"
                         stroke="var(--color-text-muted)"
                         tickFormatter={(val: string | number) => {
-                          const d = new Date(String(val));
+                          const d = new Date(val);
                           if (Number.isNaN(d.getTime())) return String(val);
                           return d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' });
                         }}

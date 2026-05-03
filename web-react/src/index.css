@@ -29,11 +29,12 @@
   --sidebar-width: 88px;
   --app-safe-bottom: env(safe-area-inset-bottom, 0px);
   --app-safe-top: env(safe-area-inset-top, 0px);
-  /* Реальная высота нижней панели: pt-1(4px) + items min-h-52px + pb-1(4px) = 60px.
-     Значение 56px не учитывало pb-1 на внутреннем div → панель мессенджера и main pb
-     расчищали на 4px меньше реальной высоты nav. */
+  /* Реальная высота нижней панели (Layout.tsx): внутренний div — pt-1 + min-h ряда + pb-1 + pb nav под safe-area. */
   --app-bottom-nav-bar-height: 60px;
-  --app-bottom-nav-total-height: calc(var(--app-bottom-nav-bar-height) + var(--app-safe-bottom));
+  --app-bottom-nav-row-pad-y: 0.5rem; /* pt-1 + pb-1 на обёртке ряда табов */
+  --app-bottom-nav-total-height: calc(
+    var(--app-bottom-nav-bar-height) + var(--app-bottom-nav-row-pad-y) + var(--app-safe-bottom)
+  );
   --app-viewport-height: 100dvh;
   --app-keyboard-inset: 0px;
 }
@@ -273,6 +274,11 @@ dd {
   flex-direction: column;
   touch-action: pan-x pan-y;
   -webkit-overflow-scrolling: touch;
+}
+
+/* PWA / нативная оболочка: как у body — не даём #root расти по 100dvh выше layout viewport (полоска снизу на iOS). */
+html.app-native-shell #root {
+  max-height: var(--app-viewport-height, 100dvh);
 }
 
 .app-main-content {
