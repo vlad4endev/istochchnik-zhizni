@@ -265,6 +265,10 @@ dd {
 .app-main-content {
   padding-left: 0;
   padding-right: 0;
+  /* Явный вертикальный pan: html/body в app-native-shell с touch-action: manipulation —
+     без этого часть WebKit не отдаёт жест скролла внутреннему overflow-контейнеру. */
+  touch-action: pan-y;
+  -webkit-overflow-scrolling: touch;
 }
 
 /* iOS + Android: когда открыта клавиатура, fixed bottom-nav скрываем,

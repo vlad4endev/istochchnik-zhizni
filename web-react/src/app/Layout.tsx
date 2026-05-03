@@ -1,6 +1,6 @@
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { IconType } from 'react-icons';
 import {
   LuChevronLeft,
@@ -71,7 +71,7 @@ const NAV_ITEMS: NavItem[] = [
   { to: '/dashboard', label: 'Главная', Icon: LuLayoutDashboard, sectionId: 'dashboard' },
   { to: '/prayer', label: 'Молитва', Icon: LuChurch, sectionId: 'prayer' },
   { to: '/songbook', label: 'Песенник', Icon: LuMusic2, sectionId: 'songbook' },
-  { to: '/service-planner', label: 'Служение', Icon: LuCalendarDays, sectionId: 'service_planner' },
+  { to: '/service-planner', label: 'Планировщик', Icon: LuCalendarDays, sectionId: 'service_planner' },
   { to: '/studio', label: 'Студия', Icon: LuDisc3, studioOnly: true, sectionId: 'studio' },
   { to: '/sermons', label: 'Проповеди', Icon: LuMic, sectionId: 'sermons' },
   { to: '/messenger', label: 'Чаты', Icon: LuMessageCircle, sectionId: 'messenger' },
@@ -303,27 +303,52 @@ function mobileBottomRouteActive(pathname: string, to: string): boolean {
   return pathname === to || pathname.startsWith(`${to}/`);
 }
 
-/**
- * Мобильный таббар: Главная, Молитва, Чаты, затем планировщик (если доступен) иначе песенник;
- * остальные разделы — в «Ещё».
- */
-function splitMobileBottomNavItems(visible: NavItem[]): { primary: NavItem[]; overflow: NavItem[] } {
-  const byTo = (path: string) => visible.find((i) => i.to === path);
-  const primary: NavItem[] = [];
-  const take = (path: string) => {
-    const it = byTo(path);
-    if (it) primary.push(it);
+/** Порядок пунктов для нижней панели (слева направо), затем перенос «не влезших» в «Ещё» по ширине. */
+function buildOrderedMobileNavItems(visible: NavItem[]): NavItem[] {
+  const ordered: NavItem[] = [];
+  const push = (item: NavItem | undefined) => {
+    if (item && !ordered.some((x) => x.to === item.to)) ordered.push(item);
   };
-  take('/dashboard');
-  take('/prayer');
-  take('/messenger');
+  const byTo = (path: string) => visible.find((i) => i.to === path);
+  push(byTo('/dashboard'));
+  push(byTo('/prayer'));
+  push(byTo('/messenger'));
   const planner = byTo('/service-planner');
   const songbook = byTo('/songbook');
-  if (planner) primary.push(planner);
-  else if (songbook) primary.push(songbook);
-  const primaryTos = new Set(primary.map((p) => p.to));
-  const overflow = visible.filter((i) => !primaryTos.has(i.to));
-  return { primary, overflow };
+  if (planner) push(planner);
+  else if (songbook) push(songbook);
+  for (const def of NAV_ITEMS) {
+    push(visible.find((v) => v.to === def.to));
+  }
+  return ordered;
+}
+
+/** Мин. ширина «ячейки» таба (иконка + подпись в одну строку); при нехватке места лишнее уходит в «Ещё». */
+const MOBILE_TAB_MIN_WIDTH_PX = 62;
+const MOBILE_MORE_BTN_WIDTH_PX = 54;
+
+function splitMobileNavByWidth(
+  containerWidth: number,
+  ordered: NavItem[],
+): { primary: NavItem[]; overflow: NavItem[] } {
+  const n = ordered.length;
+  if (n === 0) return { primary: [], overflow: [] };
+
+  const w =
+    !Number.isFinite(containerWidth) || containerWidth < 8 ? 280 : containerWidth;
+
+  if (w < MOBILE_TAB_MIN_WIDTH_PX) {
+    return { primary: ordered.slice(0, 1), overflow: ordered.slice(1) };
+  }
+  if (n * MOBILE_TAB_MIN_WIDTH_PX <= w) {
+    return { primary: [...ordered], overflow: [] };
+  }
+  for (let k = n - 1; k >= 1; k -= 1) {
+    if (k * MOBILE_TAB_MIN_WIDTH_PX + MOBILE_MORE_BTN_WIDTH_PX <= w) {
+      return { primary: ordered.slice(0, k), overflow: ordered.slice(k) };
+    }
+  }
+  return { primary: [ordered[0]], overflow: ordered.slice(1) };
 }
 
 function MobileNavOverflow({
@@ -370,7 +395,7 @@ function MobileNavOverflow({
         aria-controls={menuId}
       >
         <LuEllipsis className={navIconClass(isMoreTabActive, true)} strokeWidth={2} aria-hidden />
-        <span className="mt-0.5 max-w-full break-words px-0 text-center text-[10px] font-medium leading-tight tracking-tight line-clamp-2">
+        <span className="mt-0.5 w-full min-w-0 truncate px-0.5 text-center text-[10px] font-medium leading-none tracking-tight">
           Ещё
         </span>
       </button>
@@ -538,10 +563,27 @@ export function Layout() {
         canRoleAccessSection(sectionVisibilityQ.data, item.sectionId, role, roles)),
   );
   const sidebarItems = items;
-  const { primary: mobilePrimaryItems, overflow: mobileOverflowItems } = useMemo(
-    () => splitMobileBottomNavItems(items),
-    [items],
+  const orderedMobileNavItems = useMemo(() => buildOrderedMobileNavItems(items), [items]);
+  const navTabRowRef = useRef<HTMLDivElement>(null);
+  const [mobileNavSplit, setMobileNavSplit] = useState<{ primary: NavItem[]; overflow: NavItem[] }>(() =>
+    splitMobileNavByWidth(280, orderedMobileNavItems),
   );
+
+  useLayoutEffect(() => {
+    const el = navTabRowRef.current;
+    const apply = (width: number) => {
+      setMobileNavSplit(splitMobileNavByWidth(width, orderedMobileNavItems));
+    };
+    if (!el) {
+      apply(280);
+      return;
+    }
+    const run = () => apply(el.getBoundingClientRect().width || 280);
+    run();
+    const ro = new ResizeObserver(run);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [orderedMobileNavItems]);
   const isDashboardRoute =
     location.pathname === '/dashboard' || location.pathname === '/dashboard/';
   const showCoordinatorDashboardFab =
@@ -709,7 +751,7 @@ export function Layout() {
 
   return (
     <MessengerWsProvider>
-    <div className="flex h-full min-h-0 w-full max-w-full flex-1 flex-col bg-[var(--surface)] text-[var(--text)]">
+    <div className="flex h-full min-h-0 w-full max-w-full flex-1 flex-col overflow-hidden bg-[var(--surface)] text-[var(--text)]">
       <ScrollRestoration />
       <a
         href="#main-content"
@@ -729,13 +771,13 @@ export function Layout() {
       </a>
       <div
         className={[
-          'flex min-h-0 min-w-0 w-full max-w-full flex-1 flex-col box-border',
+          'flex min-h-0 min-w-0 w-full max-w-full flex-1 flex-col overflow-hidden box-border',
         ].join(' ')}
       >
       <div className="shrink-0">
         <ConnectivityBanner />
       </div>
-      <div className="relative flex min-h-0 w-full min-w-0 flex-1 flex-col">
+      <div className="relative flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden">
       {/* Планшет/десктоп: фиксированный сайдбар (не в потоке, не растягивается по ширине main). На узких — нижняя навигация. */}
       <aside
         className={[
@@ -951,12 +993,13 @@ export function Layout() {
         aria-hidden={!mainChromeVisible}
       >
         <div
+          ref={navTabRowRef}
           className={[
-            'flex w-full min-h-[var(--app-bottom-nav-bar-height)] items-stretch justify-evenly gap-0 px-0.5 pb-1 pt-1 sm:px-1',
+            'flex w-full min-h-[var(--app-bottom-nav-bar-height)] min-w-0 items-stretch justify-evenly gap-0 px-0.5 pb-1 pt-1 sm:px-1',
             showCoordinatorDashboardFab ? 'max-lg:pr-[4.25rem]' : '',
           ].join(' ')}
         >
-          {mobilePrimaryItems.map((item) => {
+          {mobileNavSplit.primary.map((item) => {
             const Icon = item.Icon;
             return (
               <PrefetchNavLink
@@ -982,7 +1025,7 @@ export function Layout() {
                         </span>
                       ) : null}
                     </span>
-                    <span className="mt-0.5 max-w-full break-words px-0 text-center text-[10px] font-medium leading-tight tracking-tight line-clamp-2">
+                    <span className="mt-0.5 w-full min-w-0 truncate px-0.5 text-center text-[10px] font-medium leading-none tracking-tight">
                       {item.label}
                     </span>
                   </>
@@ -990,9 +1033,9 @@ export function Layout() {
               </PrefetchNavLink>
             );
           })}
-          {mobileOverflowItems.length > 0 ? (
+          {mobileNavSplit.overflow.length > 0 ? (
             <MobileNavOverflow
-              items={mobileOverflowItems}
+              items={mobileNavSplit.overflow}
               activityBadgeTotal={activityBadgeTotal}
               pathname={location.pathname}
             />
