@@ -267,8 +267,9 @@ dd {
   position: sticky;
 }
 
-/* Скролл на #root: один контейнер — стабильнее WebKit/PWA, чем overflow на <main> под flex:1 1 auto у предков.
-   flex-basis 0% — иначе basis:auto раздувает flex-элемент по контенту и ломает высоту скролла. */
+/* Скролл: в основном приложении ведёт `<main>` (Layout); #root с overflow-y:auto оставлен для редких веток без
+   ограниченной высоты (логин и т.п.). Двойной зазор у таб-бара на чатах убран в messenger.css (не дублировать
+   padding-bottom main и inset слоёв). */
 #root {
   flex: 1 1 0%;
   width: 100%;
@@ -350,16 +351,22 @@ html.dark .dashboard-sheet {
   border: 1px solid var(--glass-border);
 }
 
-html.dark .bottom-nav {
+/* Легаси `.bottom-nav` без основного таб-бара; `.app-bottom-nav` задаёт фон в Layout. */
+html.dark .bottom-nav:not(.app-bottom-nav) {
   background: rgba(10, 10, 11, 0.92);
   backdrop-filter: blur(20px) saturate(160%);
   -webkit-backdrop-filter: blur(20px) saturate(160%);
   border-top: 1px solid var(--border);
 }
 
-html.dark .bottom-nav .bottom-nav-active-icon {
+html.dark .bottom-nav:not(.app-bottom-nav) .bottom-nav-active-icon {
   color: var(--primary);
   filter: drop-shadow(0 0 6px var(--primary));
+}
+
+html.dark .app-bottom-nav .bottom-nav-active-icon {
+  color: var(--primary);
+  filter: drop-shadow(0 0 6px var(--primary-glow));
 }
 
 #root,

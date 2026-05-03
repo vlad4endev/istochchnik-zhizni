@@ -279,17 +279,15 @@ function formatNavBadgeCount(n: number): string {
 
 function navClassName(isActive: boolean, compact = false): string {
   const base = compact
-    ? 'group relative flex min-w-0 flex-1 flex-col items-center justify-center overflow-visible rounded-2xl px-0.5 py-1 transition-colors duration-150 tap-highlight-transparent touch-manipulation outline-none motion-reduce:transition-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-2 focus-visible:ring-offset-transparent'
+    ? 'group relative flex min-w-0 flex-1 flex-col items-center justify-center overflow-visible rounded-[14px] px-0.5 py-1.5 transition-[transform,background-color,color] duration-200 ease-out tap-highlight-transparent touch-manipulation outline-none motion-reduce:transition-none motion-reduce:active:scale-100 focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-2 focus-visible:ring-offset-transparent active:scale-[0.96]'
     : 'group flex w-full items-center justify-start gap-3 rounded-2xl px-4 py-3 text-left text-sm font-semibold transition-colors duration-200 tap-highlight-transparent';
-  const size = compact
-    ? 'min-h-[52px]'
-    : '';
+  const size = compact ? 'min-h-[50px]' : '';
   const active = isActive
     ? compact
-      ? 'bg-primary/10 text-primary nav-active-glow active:bg-primary/[0.14]'
+      ? 'bg-primary/[0.11] text-primary shadow-[inset_0_0_0_1px_rgba(125,54,64,0.14)] nav-active-glow active:bg-primary/[0.15]'
       : 'bg-primary text-white shadow-md shadow-primary/25 nav-active-glow'
     : compact
-      ? 'text-gray-400 hover:bg-gray-50 hover:text-gray-700 active:bg-gray-100 active:text-gray-600'
+      ? 'text-stone-500 hover:bg-black/[0.04] hover:text-stone-700 active:bg-black/[0.06] dark:text-stone-400 dark:hover:bg-white/[0.06] dark:hover:text-stone-200 dark:active:bg-white/[0.08]'
       : 'text-stone-600 hover:bg-stone-100 shell:hover:bg-stone-50';
   return `${base} ${size} ${active}`.replace(/\s+/g, ' ').trim();
 }
@@ -354,11 +352,11 @@ function MobileNavOverflow({
         onClick={() => setOpen((v) => !v)}
         className={navClassName(isMoreTabActive, true)}
         aria-expanded={open}
-        aria-haspopup="menu"
+        aria-haspopup="dialog"
         aria-controls={menuId}
       >
         <LuEllipsis className={navIconClass(isMoreTabActive, true)} strokeWidth={2} aria-hidden />
-        <span className="mt-1 w-full min-w-0 px-0.5 text-center text-[10px] font-medium leading-tight tracking-tight line-clamp-1">
+        <span className="mt-0.5 w-full min-w-0 px-0.5 text-center text-[11px] font-semibold leading-[1.15] tracking-tight text-inherit line-clamp-1">
           Ещё
         </span>
       </button>
@@ -367,14 +365,14 @@ function MobileNavOverflow({
           <button
             type="button"
             aria-label="Закрыть дополнительные разделы"
-            className="absolute inset-0 bg-black/40"
+            className="absolute inset-0 bg-black/45 backdrop-blur-[2px] transition-opacity dark:bg-black/60"
             onClick={() => setOpen(false)}
           />
           <div
             id={menuId}
-            role="menu"
-            aria-label="Другие разделы"
-            className="absolute bottom-0 left-0 right-0 w-full max-w-none max-h-[75vh] overflow-y-auto rounded-t-3xl border-t border-stone-200/90 bg-white pb-[max(0.75rem,env(safe-area-inset-bottom,8px))] pt-2 shadow-2xl"
+            role="region"
+            aria-label="Дополнительные разделы"
+            className="app-mobile-nav-more-sheet absolute bottom-0 left-0 right-0 mx-auto w-full max-h-[min(78dvh,640px)] max-w-lg overflow-hidden rounded-t-[1.35rem] border border-stone-200/90 border-b-0 bg-[color-mix(in_srgb,var(--surface-elevated)_96%,transparent)] shadow-[0_-12px_48px_rgba(28,25,23,0.14)] backdrop-blur-xl dark:border-stone-700/80 dark:bg-[color-mix(in_srgb,var(--surface-elevated)_94%,transparent)] dark:shadow-[0_-12px_48px_rgba(0,0,0,0.45)]"
             onTouchStart={(e) => {
               touchStartYRef.current = e.touches[0]?.clientY ?? null;
             }}
@@ -387,45 +385,64 @@ function MobileNavOverflow({
               }
             }}
           >
-            <div className="mx-auto mb-2 h-1.5 w-12 rounded-full bg-stone-300" aria-hidden />
-            <div className="px-4 pb-2">
-              <p className="text-sm font-bold text-stone-800">Разделы</p>
-            </div>
-            <div className="grid w-full max-w-full grid-cols-3 gap-2 px-3 sm:px-4 [grid-template-columns:repeat(3,minmax(0,1fr))]">
-              {items.map((item) => {
-                const Icon = item.Icon;
-                return (
-                  <PrefetchNavLink
-                    key={item.to}
-                    role="menuitem"
-                    to={item.to}
-                    queryKey={NAV_PREFETCH_BY_PATH[item.to]?.queryKey}
-                    queryFn={NAV_PREFETCH_BY_PATH[item.to]?.queryFn}
-                    staleTime={NAV_PREFETCH_BY_PATH[item.to]?.staleTime}
+            <div className="flex max-h-[min(78dvh,640px)] flex-col">
+              <div className="shrink-0 pt-2">
+                <div className="mx-auto mb-2 h-1 w-10 rounded-full bg-stone-300/90 dark:bg-stone-600" aria-hidden />
+                <div className="flex items-center justify-between gap-3 px-4 pb-2 pt-0.5">
+                  <p className="text-[15px] font-semibold tracking-tight text-stone-900 dark:text-stone-100">
+                    Все разделы
+                  </p>
+                  <button
+                    type="button"
+                    className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-stone-500 transition-colors hover:bg-black/[0.06] hover:text-stone-800 active:scale-95 dark:text-stone-400 dark:hover:bg-white/10 dark:hover:text-stone-100"
+                    aria-label="Закрыть"
                     onClick={() => setOpen(false)}
-                    className={({ isActive }) =>
-                      [
-                        'relative flex min-h-[84px] flex-col items-center justify-center gap-1 rounded-2xl px-2 py-2 text-center text-xs font-semibold transition-colors tap-highlight-transparent',
-                        isActive ? 'bg-primary/10 text-primary' : 'text-stone-700 hover:bg-stone-50',
-                      ].join(' ')
-                    }
                   >
-                    {({ isActive }) => (
-                      <>
-                        <span className="relative inline-flex">
-                          <Icon className={navIconClass(isActive, true)} strokeWidth={2} aria-hidden />
-                          {item.to === '/messenger' && activityBadgeTotal > 0 ? (
-                            <span className="absolute -right-2.5 top-0 z-[5] inline-flex min-h-[18px] min-w-[18px] items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-extrabold leading-none text-white shadow-sm ring-2 ring-white">
-                              {formatNavBadgeCount(activityBadgeTotal)}
+                    <LuX className="h-5 w-5" strokeWidth={2} aria-hidden />
+                  </button>
+                </div>
+              </div>
+              <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 pb-[max(0.75rem,env(safe-area-inset-bottom,12px))] pt-1 sm:px-4 [webkit-overflow-scrolling:touch]">
+                <div className="mx-auto grid w-full max-w-full grid-cols-2 gap-2.5 min-[360px]:grid-cols-3 min-[440px]:grid-cols-4 sm:gap-3">
+                  {items.map((item) => {
+                    const Icon = item.Icon;
+                    return (
+                      <PrefetchNavLink
+                        key={item.to}
+                        to={item.to}
+                        queryKey={NAV_PREFETCH_BY_PATH[item.to]?.queryKey}
+                        queryFn={NAV_PREFETCH_BY_PATH[item.to]?.queryFn}
+                        staleTime={NAV_PREFETCH_BY_PATH[item.to]?.staleTime}
+                        onClick={() => setOpen(false)}
+                        className={({ isActive }) =>
+                          [
+                            'relative flex min-h-[76px] flex-col items-center justify-center gap-1 rounded-2xl border px-1.5 py-2.5 text-center transition-[transform,background-color,border-color,color] duration-150 tap-highlight-transparent motion-reduce:transition-none motion-reduce:active:scale-100 active:scale-[0.97]',
+                            isActive
+                              ? 'border-primary/25 bg-primary/12 text-primary shadow-sm dark:border-primary/35 dark:bg-primary/20'
+                              : 'border-stone-200/70 bg-stone-50/90 text-stone-800 hover:border-stone-300/90 hover:bg-white dark:border-stone-700/80 dark:bg-stone-800/55 dark:text-stone-100 dark:hover:border-stone-600 dark:hover:bg-stone-800/90',
+                          ].join(' ')
+                        }
+                      >
+                        {({ isActive }) => (
+                          <>
+                            <span className="relative inline-flex shrink-0">
+                              <Icon className={navIconClass(isActive, true)} strokeWidth={2} aria-hidden />
+                              {item.to === '/messenger' && activityBadgeTotal > 0 ? (
+                                <span className="absolute -right-2.5 top-0 z-[5] inline-flex min-h-[18px] min-w-[18px] items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-extrabold leading-none text-white shadow-sm ring-2 ring-white dark:ring-stone-900">
+                                  {formatNavBadgeCount(activityBadgeTotal)}
+                                </span>
+                              ) : null}
                             </span>
-                          ) : null}
-                        </span>
-                        <span className="line-clamp-2">{item.label}</span>
-                      </>
-                    )}
-                  </PrefetchNavLink>
-                );
-              })}
+                            <span className="line-clamp-2 w-full max-w-[5.5rem] text-[11px] font-semibold leading-snug sm:max-w-none sm:text-xs">
+                              {item.label}
+                            </span>
+                          </>
+                        )}
+                      </PrefetchNavLink>
+                    );
+                  })}
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -932,13 +949,13 @@ export function Layout() {
       {/* Телефон: нижняя навигация (иконка + подпись, как в нативных приложениях) */}
       <nav
         className={[
-          'app-bottom-nav bottom-nav fixed bottom-0 left-0 right-0 z-[100] isolate flex flex-col border-t border-black/[0.06] bg-white/[0.94] pb-[var(--app-safe-bottom)] shadow-[0_-1px_0_rgba(0,0,0,0.04),0_-8px_24px_rgba(28,25,23,0.06)] backdrop-blur-xl backdrop-saturate-150 supports-[backdrop-filter]:bg-white/88 lg:hidden transition-opacity duration-150 ease-out [padding-left:max(0.5rem,env(safe-area-inset-left,0px))] [padding-right:max(0.5rem,env(safe-area-inset-right,0px))]',
+          'app-bottom-nav bottom-nav fixed bottom-0 left-0 right-0 z-[100] isolate flex flex-col border-t border-black/[0.07] bg-[color-mix(in_srgb,var(--surface-elevated)_94%,transparent)] pb-[var(--app-safe-bottom)] shadow-[0_-1px_0_rgba(0,0,0,0.05),0_-10px_40px_rgba(28,25,23,0.08)] backdrop-blur-xl backdrop-saturate-150 supports-[backdrop-filter]:bg-[color-mix(in_srgb,var(--surface-elevated)_88%,transparent)] lg:hidden transition-opacity duration-150 ease-out dark:border-white/[0.08] dark:shadow-[0_-1px_0_rgba(255,255,255,0.06),0_-12px_40px_rgba(0,0,0,0.35)] [padding-left:max(0.5rem,env(safe-area-inset-left,0px))] [padding-right:max(0.5rem,env(safe-area-inset-right,0px))]',
           mainChromeVisible ? 'opacity-100' : 'pointer-events-none opacity-0',
         ].join(' ')}
         aria-label="Основная навигация"
         aria-hidden={!mainChromeVisible}
       >
-        <div className="flex w-full min-h-[var(--app-bottom-nav-bar-height)] min-w-0 items-stretch justify-evenly gap-0 px-1 pb-0 pt-1">
+        <div className="flex w-full min-h-[var(--app-bottom-nav-bar-height)] min-w-0 items-stretch justify-between gap-1 px-2 pb-0 pt-1.5 sm:px-3">
           {mobileNavSplit.primary.map((item) => {
             const Icon = item.Icon;
             return (
@@ -965,7 +982,7 @@ export function Layout() {
                         </span>
                       ) : null}
                     </span>
-                    <span className="mt-1 w-full min-w-0 px-0.5 text-center text-[10px] font-medium leading-tight tracking-tight line-clamp-1">
+                    <span className="mt-0.5 w-full min-w-0 px-0.5 text-center text-[11px] font-semibold leading-[1.15] tracking-tight text-inherit line-clamp-1">
                       {item.label}
                     </span>
                   </>

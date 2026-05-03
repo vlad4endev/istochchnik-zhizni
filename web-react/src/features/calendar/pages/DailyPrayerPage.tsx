@@ -576,7 +576,7 @@ export function DailyPrayerPage() {
     );
 
   return (
-    <div className="prayer-page-bg flex min-h-0 flex-1 flex-col pb-6 shell:pb-8">
+    <div className="prayer-page-bg flex min-h-0 flex-1 flex-col max-lg:pb-0 lg:pb-8">
       <div className={sectionHeroStickyClass}>
       <header className={`${sectionHeroHeaderClass} prayer-hero`}>
         <div

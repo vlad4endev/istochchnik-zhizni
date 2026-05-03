@@ -185,7 +185,7 @@ export function PodcastsPage() {
   }
 
   return (
-    <div className="min-h-full bg-[var(--surface)] pb-6 shell:pb-8">
+    <div className="min-h-full bg-[var(--surface)] max-lg:pb-0 lg:pb-8">
       <div className={sectionHeroStickyClass}>
         <header className={sectionHeroHeaderClass}>
           <div

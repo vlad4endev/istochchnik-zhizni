@@ -38,8 +38,9 @@
 }
 
 /**
- * Родитель в Layout уже даёт flex-1 и отступ снизу под таб-бар.
- * Фиксированный 100dvh ломал мобильную вёрстку (поле ввода под навигацией).
+ * Родитель в Layout: flex-1 + `padding-bottom` под таб-бар у `<main>`.
+ * Абсолютные слои `.tg-main` / `.tg-sidebar` (≤768px) тянутся `inset:0` внутри `.tg-messenger` — без второго inset.
+ * `--app-bottom-nav-h` остаётся для iOS `position:fixed` у сайдбара и нулевого значения в режиме открытого чата.
  */
 .tg-messenger-page {
   display: flex;
@@ -2008,7 +2009,8 @@
     width: 100%;
   }
 
-  /* Заполняем область main с учётом нижней навигации — без 100dvh, иначе слой «выше» контента и кажется оверлеем */
+  /* Заполняем область main: отступ под таб-бар уже даёт `main.app-main-content` (padding-bottom).
+     Не дублируем `--app-bottom-nav-h` здесь — иначе двойной зазор над нижней навигацией. */
   .tg-messenger-page {
     overflow: hidden;
   }
@@ -2026,9 +2028,9 @@
     position: absolute;
     left: 0;
     top: 0;
-    bottom: var(--app-bottom-nav-h);
+    bottom: 0;
     width: 100%;
-    height: calc(100% - var(--app-bottom-nav-h));
+    height: auto;
     opacity: 0;
     pointer-events: none;
     transition: opacity 0.22s ease;
@@ -2082,9 +2084,9 @@
     position: absolute;
     left: 0;
     top: 0;
-    bottom: var(--app-bottom-nav-h);
+    bottom: 0;
     width: 100%;
-    height: calc(100% - var(--app-bottom-nav-h));
+    height: auto;
     z-index: 130;
     transform: translateX(-100%);
     transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);

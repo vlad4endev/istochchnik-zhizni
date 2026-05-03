@@ -85,7 +85,7 @@ const LABEL = 'text-[11px] font-extrabold uppercase tracking-[0.14em] text-[colo
 const INPUT =
   'mt-1.5 min-h-[48px] w-full rounded-2xl border border-[color:var(--profile-card-ring)] bg-white px-4 py-3 text-[15px] font-semibold text-[color:var(--profile-text-heading)] outline-none transition placeholder:text-[color:var(--profile-text-faint)] focus:border-[color:var(--profile-primary)] focus:ring-2 focus:ring-[color:color-mix(in_srgb,var(--profile-primary)_20%,transparent)]';
 
-const profilePageRoot = `${profileShell.profileRoot} min-h-full pb-24`;
+const profilePageRoot = `${profileShell.profileRoot} min-h-full max-lg:pb-8 lg:pb-24`;
 
 /* ═══════════════════════════════════════════════════════════
    ProfilePage

@@ -194,7 +194,7 @@ export function BroadcastPage() {
   };
 
   return (
-    <div className="min-h-full bg-[var(--surface)] pb-6 shell:pb-8">
+    <div className="min-h-full bg-[var(--surface)] max-lg:pb-0 lg:pb-8">
       <div className={sectionHeroStickyClass}>
         <header className={sectionHeroHeaderClass}>
           <div className="pointer-events-none absolute -right-4 -top-20 h-48 w-48 rounded-full bg-white/[0.13] blur-3xl animate-prayer-header-breathe motion-reduce:animate-none" aria-hidden />
