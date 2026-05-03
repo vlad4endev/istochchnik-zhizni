@@ -83,18 +83,36 @@ function rewritePrivateSupabaseStorageUrl(v: string): string {
 }
 
 /**
- * Если backend/Supabase вернул приватный HTTP host (`172.17.x.x`) для `/storage/v1/*`,
- * а страница открыта по HTTPS — браузер заблокирует mixed content.
- * В таком случае пробуем использовать HTTPS origin текущего приложения
- * (обычно nginx проксирует `/storage/v1/*` на Supabase/Kong).
+ * Только если nginx (или другой edge) реально проксирует `/storage/v1/*` на тот же хост, что и SPA.
+ * Без прокси подмена на `window.location.origin` даёт 404 (файл не на origin приложения).
+ * @see VITE_SUPABASE_STORAGE_PROXY_VIA_APP в `.env.example`
  */
 function rewritePrivateSupabaseStorageUrlToAppOrigin(v: string): string {
+  if (import.meta.env.VITE_SUPABASE_STORAGE_PROXY_VIA_APP !== 'true') return v;
   if (typeof window === 'undefined' || window.location.protocol !== 'https:') return v;
   try {
     const u = new URL(v);
     if (!u.pathname.includes('/storage/v1/')) return v;
     if (!isNonPublicHttpHost(u.hostname)) return v;
     return `${window.location.origin}${u.pathname}${u.search}${u.hash}`;
+  } catch {
+    return v;
+  }
+}
+
+/**
+ * Восстановление: в JSON попал `https://<тот же хост что и SPA>/storage/v1/...` без прокси на Storage —
+ * переносим на публичный origin Supabase из env (тот же, что `SUPABASE_STORAGE_PUBLIC_URL` на API).
+ */
+function rewriteSameOriginSupabaseStorageViaPublicEnv(v: string): string {
+  const raw = String(import.meta.env.VITE_SUPABASE_STORAGE_PUBLIC_URL ?? '').trim();
+  if (!raw || typeof window === 'undefined') return v;
+  try {
+    const u = new URL(v);
+    if (!u.pathname.includes('/storage/v1/')) return v;
+    if (u.origin !== window.location.origin) return v;
+    const pub = new URL(raw.includes('://') ? raw : `https://${raw}`);
+    return `${pub.origin}${u.pathname}${u.search}${u.hash}`;
   } catch {
     return v;
   }
@@ -158,6 +176,7 @@ export function resolvePublicUrl(raw: string | null | undefined): string | null 
   if (/^https?:\/\//i.test(v)) {
     v = rewritePrivateSupabaseStorageUrl(v);
     v = rewritePrivateSupabaseStorageUrlToAppOrigin(v);
+    v = rewriteSameOriginSupabaseStorageViaPublicEnv(v);
     if (
       typeof window !== 'undefined' &&
       window.location.protocol === 'https:' &&
