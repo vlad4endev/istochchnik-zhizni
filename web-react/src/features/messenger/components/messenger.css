@@ -79,7 +79,7 @@
   flex: 1;
 }
 
-@media (min-width: 769px) {
+@media (min-width: 768px) {
   .messenger-layout {
     display: flex;
     height: 100dvh;
@@ -462,8 +462,8 @@
   font-weight: 700;
 }
 
-/* ─── ПК (≥769px): стабильный split-view, без мобильных absolute-слоёв ─── */
-@media (min-width: 769px) {
+/* ─── ПК (≥768px): стабильный split-view, без мобильных absolute-слоёв ─── */
+@media (min-width: 768px) {
   :root {
     --tg-sidebar-width: clamp(300px, 32vw, 420px);
   }
@@ -637,7 +637,7 @@
   }
 }
 
-@media (min-width: 769px) {
+@media (min-width: 768px) {
   .tg-messenger.tg-density--compact .tg-chat-window .tg-chat-window__body > div[role='log'] {
     padding-left: 0.75rem !important;
     padding-right: 0.75rem !important;
@@ -707,7 +707,7 @@
   margin-right: -4px;
 }
 
-@media (min-width: 769px) {
+@media (min-width: 768px) {
   .tg-header-back {
     display: none;
   }
@@ -1964,6 +1964,14 @@
 
 /* Mobile Adjustments */
 @media (max-width: 767px) {
+  /* Родители max-lg:flex-none давали height:auto → 100% у .tg-messenger схлопывались в 0 (чат невидим). См. Layout.tsx flex-1 + max-lg:overflow-y-auto на <main>. */
+  .messenger-layout {
+    flex: 1 1 auto;
+    min-height: 0;
+    max-height: 100%;
+    overflow: hidden;
+  }
+
   .tg-messenger {
     display: block;
   }

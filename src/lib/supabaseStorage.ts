@@ -168,18 +168,24 @@ export async function uploadBufferToPublicBucket(opts: {
   contentType?: string;
   cacheControl?: string;
   metadata?: Record<string, string>;
+  /** По умолчанию false — для мессенджера передавайте true, чтобы перезапись по тому же пути не давала «тихий» облом. */
+  upsert?: boolean;
 }): Promise<{ publicUrl: string }> {
   const client = getClient();
   if (!client) {
     throw new Error('Supabase Storage is not configured (SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY)');
   }
+  const contentType =
+    typeof opts.contentType === 'string' && opts.contentType.trim().length > 0
+      ? opts.contentType.trim()
+      : 'application/octet-stream';
   const { error } = await client.storage
     .from(opts.bucket)
     .upload(opts.objectPath, opts.file, {
-      contentType: opts.contentType,
+      contentType,
       cacheControl: opts.cacheControl,
       metadata: opts.metadata,
-      upsert: false,
+      upsert: opts.upsert === true,
     });
   if (error) {
     throw new Error(`Storage upload failed: ${error.message}`);
@@ -212,11 +218,27 @@ export async function createSignedUrlForBucketObject(opts: {
   return { signedUrl: rewriteSupabaseStorageUrlForClient(data.signedUrl) };
 }
 
-export function buildMessengerObjectPath(memberId: number, extension: string): string {
+function messengerUploadExtension(extension: string): string {
   const ext = String(extension || '').trim();
   const safeExt = ext && ext.length <= 12 ? ext.toLowerCase() : '';
+  return safeExt.startsWith('.') ? safeExt : safeExt ? `.${safeExt}` : '';
+}
+
+/** Легаси-путь: префикс memberId (до введения путей по чату). */
+export function buildMessengerObjectPath(memberId: number, extension: string): string {
+  const safeExt = messengerUploadExtension(extension);
   const id = randomUUID();
   return `${memberId}/${id}${safeExt}`;
+}
+
+/**
+ * Путь вложения в чат: `{conversationId}/{uuid}.{ext}` — совпадает с ожидаемым публичным URL в Storage.
+ */
+export function buildMessengerChatObjectPath(conversationId: string, extension: string): string {
+  const raw = String(conversationId || '').trim();
+  const safeFolder = raw.replace(/[^a-zA-Z0-9_-]/g, '') || 'unknown';
+  const safeExt = messengerUploadExtension(extension);
+  return `${safeFolder}/${randomUUID()}${safeExt}`;
 }
 
 /** Бакет `user-media`: аватары участников. */

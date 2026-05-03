@@ -498,6 +498,9 @@ function MessageBubbleInner({
     message.payload,
     message.payload_type,
     (message as MessageWithSender & { payloadType?: string }).payloadType,
+    (message as MessageWithSender & { type?: string }).type,
+    message.image_url,
+    message.imageUrl,
   ]);
   const payload = (message.payload ?? {}) as Record<string, unknown>;
   const albumImages = Array.isArray(payload.images)
@@ -506,20 +509,24 @@ function MessageBubbleInner({
         .filter((x): x is Record<string, unknown> => Boolean(x))
     : [];
   const firstAlbumImage = albumImages[0] ?? null;
+  const topLevelImageUrl = String(message.image_url ?? message.imageUrl ?? '').trim();
   const attachmentRawUrl = (() => {
     const direct = getPrimaryAttachmentUrl(payload);
     if (direct) return direct;
+    if (topLevelImageUrl) return topLevelImageUrl;
     if (firstAlbumImage) return getAlbumImageUrl(firstAlbumImage);
     return '';
   })();
   const attachmentObjectPath = String(payload.object_path ?? payload.objectPath ?? '').trim();
   const [resolvedAttachmentUrl, setResolvedAttachmentUrl] = useState<string | null>(null);
   const [imgFailed, setImgFailed] = useState(false);
+  const [albumSlotFailed, setAlbumSlotFailed] = useState<Record<number, boolean>>({});
   const fetchedRef = useRef(false);
 
   useEffect(() => {
     fetchedRef.current = false;
     setImgFailed(false);
+    setAlbumSlotFailed({});
   }, [message.id]);
 
   useEffect(() => {
@@ -666,6 +673,20 @@ function MessageBubbleInner({
                     </a>
                   );
                 }
+                if (albumSlotFailed[idx]) {
+                  return (
+                    <div
+                      key={`${src}-${idx}-failed`}
+                      className={[
+                        'flex min-h-[84px] items-center gap-2 rounded-xl px-2 py-2 text-xs font-semibold',
+                        isMine ? 'bg-white/10 text-white/75' : 'bg-[var(--surface)] text-[var(--text-secondary)]',
+                      ].join(' ')}
+                    >
+                      <LuFileText size={16} aria-hidden />
+                      <span>Фото недоступно</span>
+                    </div>
+                  );
+                }
                 return (
                   <button
                     key={`${src}-${idx}`}
@@ -681,6 +702,7 @@ function MessageBubbleInner({
                       loading="lazy"
                       decoding="async"
                       referrerPolicy="no-referrer"
+                      onError={() => setAlbumSlotFailed((prev) => ({ ...prev, [idx]: true }))}
                     />
                   </button>
                 );

@@ -10,6 +10,7 @@ import * as svc from '../services/messengerService';
 import { sendToRoomAll, sendToRoom, sendToMember, ensureMemberInRoom } from '../realtime/wsHub';
 import { sendPushNotification } from '../services/pushService';
 import {
+  buildMessengerChatObjectPath,
   buildMessengerObjectPath,
   createSignedUrlForBucketObject,
   getSupabaseStorageMissingEnv,
@@ -105,11 +106,6 @@ function resolveUploadMetadata(file: Express.Multer.File): { mimeType: string; e
   const mimeType = sniffed || byMime || EXT_TO_MIME[byName] || 'application/octet-stream';
   const extension = normalizeExtension(byName || MIME_TO_EXT[mimeType] || MIME_TO_EXT[sniffed] || '');
   return { mimeType, extension };
-}
-
-function isStorageAlreadyExistsError(err: unknown): boolean {
-  const msg = err instanceof Error ? err.message : String(err ?? '');
-  return /already exists|resource already exists|duplicate/i.test(msg);
 }
 
 function attachmentSignedUrlTtlSec(): number {
@@ -239,35 +235,42 @@ router.post('/upload', messengerUploadMiddleware, async (req: Request, res: Resp
     }
     const memberId = (req as AuthReq).authUserId!;
     const { mimeType, extension } = resolveUploadMetadata(file);
+    const contentType =
+      String(mimeType || '').trim() || String(file.mimetype || '').trim() || 'image/jpeg';
     const bucket = messengerBucket();
-    let objectPath = '';
-    let url: string | null = null;
-    const maxAttempts = 3;
-    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-      objectPath = buildMessengerObjectPath(memberId, extension);
-      try {
-        const { publicUrl } = await uploadBufferToPublicBucket({
-          bucket,
-          objectPath,
-          file: file.buffer,
-          contentType: mimeType,
-          cacheControl: 'public, max-age=31536000, immutable',
-          metadata: {
-            originalName: String(file.originalname || '').slice(0, 255),
-            uploadedBy: String(memberId),
-          },
-        });
-        url = publicUrl;
-        break;
-      } catch (e) {
-        if (attempt < maxAttempts && isStorageAlreadyExistsError(e)) {
-          continue;
-        }
-        const msg = e instanceof Error ? e.message : String(e);
-        console.error('[messenger] Supabase upload failed:', msg);
-        res.status(502).json({ error: 'Storage upload failed', code: 'supabase_upload' });
+    const rawConvId = String((req.body as { conversationId?: unknown })?.conversationId ?? '').trim();
+    const isDraftConv = rawConvId.toLowerCase().startsWith('draft:');
+    let objectPath: string;
+    if (rawConvId && !isDraftConv) {
+      const allowed = await svc.isMemberInConversation(rawConvId, memberId);
+      if (!allowed) {
+        res.status(403).json({ error: 'Нет доступа к этому чату для загрузки файла' });
         return;
       }
+      objectPath = buildMessengerChatObjectPath(rawConvId, extension);
+    } else {
+      objectPath = buildMessengerObjectPath(memberId, extension);
+    }
+    let url: string | null = null;
+    try {
+      const { publicUrl } = await uploadBufferToPublicBucket({
+        bucket,
+        objectPath,
+        file: file.buffer,
+        contentType,
+        cacheControl: 'public, max-age=31536000, immutable',
+        upsert: true,
+        metadata: {
+          originalName: String(file.originalname || '').slice(0, 255),
+          uploadedBy: String(memberId),
+        },
+      });
+      url = publicUrl;
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error('[messenger] Supabase upload failed:', msg);
+      res.status(502).json({ error: 'Storage upload failed', code: 'supabase_upload' });
+      return;
     }
     if (!url) {
       res.status(502).json({ error: 'Storage upload failed', code: 'supabase_upload' });

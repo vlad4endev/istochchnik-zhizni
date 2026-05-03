@@ -423,6 +423,7 @@ export function ChatInput({
             uploaded = await api.uploadFile(fileToUpload, {
               onProgress: (pct) => setUploadPct(pct),
               signal: ctrl.signal,
+              conversationId,
             });
             const up = uploaded;
             setPendingImages((prev) =>
@@ -498,6 +499,7 @@ export function ChatInput({
           uploaded = await api.uploadFile(fileToUpload, {
             onProgress: (pct) => setUploadPct(pct),
             signal: ctrl.signal,
+            conversationId,
           });
           setPending((prev) => (prev ? { ...prev, uploaded } : prev));
         }

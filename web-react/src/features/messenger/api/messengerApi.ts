@@ -129,6 +129,11 @@ export interface MessageWithSender {
   is_read?: boolean;
   client_msg_id?: string | null;
   content: string;
+  /** Редкий вариант API: тип сообщения на верхнем уровне (вместо payload_type). */
+  type?: MessagePayloadType | string;
+  /** Прямая ссылка на изображение (альтернатива payload.url). */
+  image_url?: string | null;
+  imageUrl?: string | null;
   payload_type?: MessagePayloadType;
   payload?: MessagePayload;
   /** Серверный счётчик взаимодействий (напр. «Я молюсь»). */
@@ -232,10 +237,12 @@ export async function sendMessage(
 
 export async function uploadFile(
   file: File,
-  opts?: { onProgress?: (pct: number) => void; signal?: AbortSignal },
+  opts?: { onProgress?: (pct: number) => void; signal?: AbortSignal; conversationId?: string | null },
 ): Promise<UploadedFile> {
   const form = new FormData();
   form.append('file', file);
+  const conv = typeof opts?.conversationId === 'string' ? opts.conversationId.trim() : '';
+  if (conv) form.append('conversationId', conv);
   const maxAttempts = 3;
   let lastError: unknown = null;
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {

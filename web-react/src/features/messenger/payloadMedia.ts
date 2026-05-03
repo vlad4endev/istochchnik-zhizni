@@ -29,12 +29,22 @@ export function getAlbumImageUrl(img: Record<string, unknown>): string {
  * Определяет тип сообщения так же, как раньше в MessageBubble, плюс payloadType в camelCase и альтернативные URL.
  */
 export function inferMessengerPayloadType(
-  message: Pick<MessageWithSender, 'payload' | 'payload_type'> & { payloadType?: string },
+  message: Pick<MessageWithSender, 'payload' | 'payload_type'> & {
+    payloadType?: string;
+    type?: string;
+    image_url?: string | null;
+    imageUrl?: string | null;
+  },
 ): MessagePayloadType {
+  const topType = String(message.type ?? '').trim().toLowerCase();
+  if (topType === 'image') return 'image';
+  if (topType === 'file') return 'file';
   if (message.payload_type) return message.payload_type;
   if (typeof message.payloadType === 'string' && message.payloadType.trim()) {
     return message.payloadType.trim() as MessagePayloadType;
   }
+  const topImg = String(message.image_url ?? message.imageUrl ?? '').trim();
+  if (topImg) return 'image';
   const p = (message.payload ?? {}) as Record<string, unknown>;
   const rawUrl = String(p.url ?? '').trim();
   const mime = String(p.mimeType ?? p.mimetype ?? '').trim().toLowerCase();

@@ -135,7 +135,7 @@ export function ManageChatHomePage() {
     if (!file || !chatId || !file.type.startsWith('image/')) return;
     try {
       const toSend = await compressImageForMessengerUpload(file);
-      const up = await api.uploadFile(toSend);
+      const up = await api.uploadFile(toSend, { conversationId: chatId });
       await api.updateConversation(chatId, { avatar_url: up.url });
       await useChatStore.getState().loadConversations({ force: true });
       const next = await api.fetchConversationMeta(chatId, { bypassCache: true });
