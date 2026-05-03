@@ -171,10 +171,14 @@ html[data-a11y-large-cursor='true'] body summary {
 /* PWA: без pinch-zoom; pan-x pan-y оставляет нативный вертикальный скролл (manipulation ломает вложенный overflow во многих WebKit). */
 html.app-native-shell {
   touch-action: pan-x pan-y;
+  /* iOS: убираем лишний «зазор» справа от scrollbar-gutter и стабилизируем высоту под вырез/home indicator */
+  scrollbar-gutter: auto;
+  min-height: -webkit-fill-available;
 }
 
 html.app-native-shell body {
   touch-action: pan-x pan-y;
+  min-height: -webkit-fill-available;
 }
 
 /* PWA с экрана «Домой» iOS/Android — тот же фон, что у splash и manifest */

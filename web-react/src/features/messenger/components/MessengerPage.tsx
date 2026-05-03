@@ -110,7 +110,7 @@ export function MessengerPage() {
     blurActiveElement();
     setIsTransitioning(true);
     const narrow =
-      typeof window !== 'undefined' && window.matchMedia('(max-width: 768px)').matches;
+      typeof window !== 'undefined' && window.matchMedia('(max-width: 1023px)').matches;
     // На мобилке «назад» = выход из экрана чата: иначе activeId остаётся, ChatWindow в фоне
     // всё ещё дергает markAsRead / WS auto-read — счётчик непрочитанных обнуляется в списке.
     if (activeId && (narrow || isDraftPrivateConversationId(activeId))) {

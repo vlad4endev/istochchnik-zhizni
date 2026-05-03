@@ -5,13 +5,10 @@
  */
 
 @media (max-width: 1023px) {
-  aside,
-  [class*='sidebar'],
-  nav.desktop-nav {
-    display: none !important;
-  }
+  /* Не скрываем все aside — ломает мессенджер (.tg-sidebar). Сайдбар приложения скрыт в Layout через hidden + lg:flex. */
 
-  main,
+  /* Не трогаем main.tg-main — иначе чаты «сужаются» и ломается вёрстка поверх таб-бара. */
+  main:not(.tg-main),
   [class*='main-content'],
   .page-wrapper,
   .app-main-content,
@@ -24,6 +21,13 @@
     width: 100% !important;
     max-width: 100% !important;
     min-width: 0 !important;
+  }
+
+  /* Мессенджер: полная ширина, без двойных боковых полей от #main-content. */
+  html[data-messenger-open='1'] #main-content.app-main-content,
+  html[data-messenger-open='1'] .app-main-content.page-content {
+    padding-left: 0 !important;
+    padding-right: 0 !important;
   }
 
   /* Легаси-блок без app-bottom-nav (если останется где-то отдельно). */

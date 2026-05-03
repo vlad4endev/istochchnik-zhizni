@@ -512,17 +512,27 @@ function MessageBubbleInner({
     if (firstAlbumImage) return getAlbumImageUrl(firstAlbumImage);
     return '';
   })();
+  const attachmentObjectPath = String(payload.object_path ?? payload.objectPath ?? '').trim();
   const [resolvedAttachmentUrl, setResolvedAttachmentUrl] = useState<string | null>(null);
+  const [imgFailed, setImgFailed] = useState(false);
+  const fetchedRef = useRef(false);
 
   useEffect(() => {
-    const fallback = attachmentRawUrl ? (resolvePublicUrl(attachmentRawUrl) ?? attachmentRawUrl) : null;
-    setResolvedAttachmentUrl(fallback);
+    fetchedRef.current = false;
+    setImgFailed(false);
+  }, [message.id]);
 
+  useEffect(() => {
     if (payloadType !== 'image' && payloadType !== 'file') return undefined;
     if (payloadType === 'image' && albumImages.length > 0) return undefined;
     if (!/^\d+$/.test(String(message.id))) return undefined;
+    if (fetchedRef.current) return undefined;
+
+    const fallback = attachmentRawUrl ? (resolvePublicUrl(attachmentRawUrl) ?? attachmentRawUrl) : null;
+    setResolvedAttachmentUrl(fallback);
 
     let cancelled = false;
+    fetchedRef.current = true;
     const maxAttempts = 3;
 
     async function tryFetchSignedUrl(): Promise<void> {
@@ -544,8 +554,9 @@ function MessageBubbleInner({
     void tryFetchSignedUrl();
     return () => {
       cancelled = true;
+      fetchedRef.current = false;
     };
-  }, [attachmentRawUrl, message.id, payloadType, albumImages.length]);
+  }, [message.id, attachmentObjectPath, attachmentRawUrl, payloadType, albumImages.length]);
 
   /** Время и галочки в одной строке с текстом (как в Telegram), если нет цитаты и не «особый» контент. */
   const useInlineTextMeta =
@@ -727,24 +738,37 @@ function MessageBubbleInner({
       }
       return src ? (
         <div className="w-full max-w-[min(78vw,22rem)] overflow-hidden rounded-2xl">
-          <button
-            type="button"
-            onClick={() => setLightboxSrc(src)}
-            className={[
-              'block w-full overflow-hidden',
-              isMine ? 'bg-white/10' : 'bg-black/[0.04]',
-            ].join(' ')}
-            aria-label="Открыть изображение"
-          >
-            <img
-              src={src}
-              alt=""
-              className="max-h-[420px] w-full object-cover"
-              loading="lazy"
-              decoding="async"
-              referrerPolicy="no-referrer"
-            />
-          </button>
+          {imgFailed ? (
+            <div
+              className={[
+                'flex items-center gap-2 rounded-xl p-2 text-sm',
+                isMine ? 'bg-white/10 text-white/75' : 'bg-[var(--surface)] text-[var(--text-secondary)]',
+              ].join(' ')}
+            >
+              <LuFileText size={16} aria-hidden />
+              <span>Файл недоступен</span>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setLightboxSrc(src)}
+              className={[
+                'block w-full overflow-hidden',
+                isMine ? 'bg-white/10' : 'bg-black/[0.04]',
+              ].join(' ')}
+              aria-label="Открыть изображение"
+            >
+              <img
+                src={src}
+                alt=""
+                className="max-h-[420px] w-full object-cover"
+                loading="lazy"
+                decoding="async"
+                referrerPolicy="no-referrer"
+                onError={() => setImgFailed(true)}
+              />
+            </button>
+          )}
           {caption ? (
             <div className={['px-3 py-2 text-sm leading-relaxed', isMine ? 'text-white/95' : 'text-[var(--text)]'].join(' ')}>
               <MentionRichText text={caption} namesById={participantLabelById} isMine={isMine} />

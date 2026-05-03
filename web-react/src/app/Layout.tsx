@@ -323,7 +323,7 @@ function buildOrderedMobileNavItems(visible: NavItem[]): NavItem[] {
 }
 
 /** Мин. ширина «ячейки» таба (иконка + подпись в одну строку); при нехватке места лишнее уходит в «Ещё». */
-const MOBILE_TAB_MIN_WIDTH_PX = 62;
+const MOBILE_TAB_MIN_WIDTH_PX = 54;
 const MOBILE_MORE_BTN_WIDTH_PX = 54;
 
 function splitMobileNavByWidth(
@@ -410,7 +410,7 @@ function MobileNavOverflow({
             id={menuId}
             role="menu"
             aria-label="Другие разделы"
-            className="absolute bottom-0 left-0 right-0 max-h-[75vh] overflow-y-auto rounded-t-3xl border-t border-stone-200/90 bg-white pb-[max(0.75rem,env(safe-area-inset-bottom,8px))] pt-2 shadow-2xl"
+            className="absolute bottom-0 left-0 right-0 w-full max-w-none max-h-[75vh] overflow-y-auto rounded-t-3xl border-t border-stone-200/90 bg-white pb-[max(0.75rem,env(safe-area-inset-bottom,8px))] pt-2 shadow-2xl"
             onTouchStart={(e) => {
               touchStartYRef.current = e.touches[0]?.clientY ?? null;
             }}
@@ -427,7 +427,7 @@ function MobileNavOverflow({
             <div className="px-4 pb-2">
               <p className="text-sm font-bold text-stone-800">Разделы</p>
             </div>
-            <div className="grid grid-cols-3 gap-2 px-3">
+            <div className="grid w-full max-w-full grid-cols-3 gap-2 px-3 sm:px-4 [grid-template-columns:repeat(3,minmax(0,1fr))]">
               {items.map((item) => {
                 const Icon = item.Icon;
                 return (
@@ -1000,7 +1000,7 @@ export function Layout() {
       {/* Телефон: нижняя навигация (иконка + подпись, как в нативных приложениях) */}
       <nav
         className={[
-          'app-bottom-nav bottom-nav fixed bottom-0 left-0 right-0 z-[100] isolate border-t border-black/[0.06] bg-white/[0.94] pb-[var(--app-safe-bottom)] shadow-[0_-1px_0_rgba(0,0,0,0.04),0_-8px_24px_rgba(28,25,23,0.06)] backdrop-blur-xl backdrop-saturate-150 supports-[backdrop-filter]:bg-white/88 lg:hidden transition-opacity duration-150 ease-out min-h-[var(--app-bottom-nav-total-height)] [padding-left:max(0.5rem,env(safe-area-inset-left,0px))] [padding-right:max(0.5rem,env(safe-area-inset-right,0px))]',
+          'app-bottom-nav bottom-nav fixed bottom-0 left-0 right-0 z-[100] isolate flex flex-col justify-end border-t border-black/[0.06] bg-white/[0.94] pb-[var(--app-safe-bottom)] shadow-[0_-1px_0_rgba(0,0,0,0.04),0_-8px_24px_rgba(28,25,23,0.06)] backdrop-blur-xl backdrop-saturate-150 supports-[backdrop-filter]:bg-white/88 lg:hidden transition-opacity duration-150 ease-out min-h-[var(--app-bottom-nav-total-height)] [padding-left:max(0.5rem,env(safe-area-inset-left,0px))] [padding-right:max(0.5rem,env(safe-area-inset-right,0px))]',
           mainChromeVisible ? 'opacity-100' : 'pointer-events-none opacity-0',
         ].join(' ')}
         aria-label="Основная навигация"
