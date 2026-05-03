@@ -44,6 +44,7 @@ import { LAYOUT_MAIN_CHROME_EVENT } from './layoutChrome';
 import { AppAvatar } from '../components/AppAvatar';
 import { CoordinatorDashboardNoteFab } from '../features/dashboard/components/CoordinatorDashboardNoteFab';
 import { apiClient } from '../lib/apiClient';
+import { apiBoolean } from '../lib/apiBoolean';
 import { fetchActiveBroadcast } from '@/api/broadcast';
 import { getActiveEvents, getCalendarDay, formatCalendarDayKey } from '@/features/calendar/api';
 import { fetchSongs } from '@/features/songbook/api';
@@ -70,7 +71,7 @@ const NAV_ITEMS: NavItem[] = [
   { to: '/dashboard', label: 'Главная', Icon: LuLayoutDashboard, sectionId: 'dashboard' },
   { to: '/prayer', label: 'Молитва', Icon: LuChurch, sectionId: 'prayer' },
   { to: '/songbook', label: 'Песенник', Icon: LuMusic2, sectionId: 'songbook' },
-  { to: '/service-planner', label: 'Планировщик', Icon: LuCalendarDays, sectionId: 'service_planner' },
+  { to: '/service-planner', label: 'Служение', Icon: LuCalendarDays, sectionId: 'service_planner' },
   { to: '/studio', label: 'Студия', Icon: LuDisc3, studioOnly: true, sectionId: 'studio' },
   { to: '/sermons', label: 'Проповеди', Icon: LuMic, sectionId: 'sermons' },
   { to: '/messenger', label: 'Чаты', Icon: LuMessageCircle, sectionId: 'messenger' },
@@ -279,7 +280,7 @@ function formatNavBadgeCount(n: number): string {
 
 function navClassName(isActive: boolean, compact = false): string {
   const base = compact
-    ? 'group relative flex min-w-0 flex-1 flex-col items-center justify-center overflow-visible rounded-2xl px-1.5 py-1.5 transition-colors duration-200 tap-highlight-transparent touch-manipulation active:scale-[0.96]'
+    ? 'group relative flex min-w-0 flex-1 flex-col items-center justify-center overflow-visible rounded-2xl px-0.5 py-1 transition-colors duration-200 tap-highlight-transparent touch-manipulation active:scale-[0.96]'
     : 'group flex w-full items-center justify-start gap-3 rounded-2xl px-4 py-3 text-left text-sm font-semibold transition-colors duration-200 tap-highlight-transparent';
   const size = compact
     ? 'min-h-[52px]'
@@ -369,7 +370,9 @@ function MobileNavOverflow({
         aria-controls={menuId}
       >
         <LuEllipsis className={navIconClass(isMoreTabActive, true)} strokeWidth={2} aria-hidden />
-        <span className="mt-1 truncate px-0.5 text-center text-[11px] font-medium tracking-tight">Ещё</span>
+        <span className="mt-0.5 max-w-full break-words px-0 text-center text-[10px] font-medium leading-tight tracking-tight line-clamp-2">
+          Ещё
+        </span>
       </button>
       {open ? (
         <div className="fixed inset-0 z-[60]" aria-hidden={false}>
@@ -541,6 +544,11 @@ export function Layout() {
   );
   const isDashboardRoute =
     location.pathname === '/dashboard' || location.pathname === '/dashboard/';
+  const showCoordinatorDashboardFab =
+    isDashboardRoute &&
+    meQ.isSuccess &&
+    ((meQ.data?.app_role?.trim().toLowerCase() === 'admin') ||
+      apiBoolean(meQ.data?.is_collection_coordinator));
 
   const markAllDeliveriesOpened = useCallback(async () => {
     if (!token) return;
@@ -942,7 +950,12 @@ export function Layout() {
         aria-label="Основная навигация"
         aria-hidden={!mainChromeVisible}
       >
-        <div className="mx-auto flex min-h-[var(--app-bottom-nav-bar-height)] max-w-md items-stretch justify-center gap-0.5 px-1 pb-1 pt-1 sm:px-2">
+        <div
+          className={[
+            'flex w-full min-h-[var(--app-bottom-nav-bar-height)] items-stretch justify-evenly gap-0 px-0.5 pb-1 pt-1 sm:px-1',
+            showCoordinatorDashboardFab ? 'max-lg:pr-[4.25rem]' : '',
+          ].join(' ')}
+        >
           {mobilePrimaryItems.map((item) => {
             const Icon = item.Icon;
             return (
@@ -969,7 +982,7 @@ export function Layout() {
                         </span>
                       ) : null}
                     </span>
-                    <span className="mt-1 truncate px-0.5 text-center text-[11px] font-medium tracking-tight">
+                    <span className="mt-0.5 max-w-full break-words px-0 text-center text-[10px] font-medium leading-tight tracking-tight line-clamp-2">
                       {item.label}
                     </span>
                   </>

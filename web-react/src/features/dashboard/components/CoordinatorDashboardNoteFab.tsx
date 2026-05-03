@@ -141,7 +141,10 @@ export function CoordinatorDashboardNoteFab() {
 
   return (
     <>
-      <div ref={fabRef} className="pointer-events-none fixed bottom-[calc(5.25rem+env(safe-area-inset-bottom,0px))] right-[max(0.75rem,env(safe-area-inset-right,0px))] z-[45] md:bottom-[calc(1.25rem+env(safe-area-inset-bottom,0px))]">
+      <div
+        ref={fabRef}
+        className="pointer-events-none fixed bottom-[calc(var(--app-bottom-nav-total-height)+0.75rem)] right-[max(0.75rem,env(safe-area-inset-right,0px))] z-[45] md:bottom-[calc(1.25rem+env(safe-area-inset-bottom,0px))]"
+      >
         <div className="pointer-events-auto relative flex flex-col items-end gap-2">
           {menuOpen ? (
             <div
