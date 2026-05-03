@@ -30,7 +30,6 @@ function attachViewportWatchers() {
   vv?.addEventListener('scroll', syncViewportState);
   window.addEventListener('resize', syncViewportState);
   window.addEventListener('orientationchange', syncViewportState);
-  window.addEventListener('load', syncViewportState);
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') syncViewportState();
   });

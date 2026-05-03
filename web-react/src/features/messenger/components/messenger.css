@@ -1932,8 +1932,7 @@
   html[data-chat-open="1"],
   html[data-chat-open="1"] body,
   html[data-chat-open="1"] #root {
-    height: var(--app-viewport-height, 100dvh) !important;
-    max-height: var(--app-viewport-height, 100dvh) !important;
+    min-height: 100dvh !important;
     overflow: hidden !important;
     overscroll-behavior: none;
   }
@@ -1944,8 +1943,8 @@
 
   html[data-chat-open="1"] .app-main-content {
     padding-bottom: 0 !important;
-    height: var(--app-viewport-height, 100dvh) !important;
-    max-height: var(--app-viewport-height, 100dvh) !important;
+    min-height: 0 !important;
+    flex: 1 1 auto !important;
     overflow: hidden !important;
   }
 
