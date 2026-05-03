@@ -5,6 +5,7 @@ import * as api from '../api/messengerApi';
 import { formatMessengerLastSeen } from '../lastSeenUtils';
 import { ManageScreenShell, ManageSettingsGroup } from './ManageScreenShell';
 import { SkeletonBox } from '@/components/ui/SkeletonBox';
+import { getAppScrollTop, setAppScrollTop } from '@/lib/appScroll';
 
 export function ChatAdminsPage() {
   const { chatId } = useParams<{ chatId: string }>();
@@ -19,12 +20,12 @@ export function ChatAdminsPage() {
     if (!saved) return;
     const y = Number(saved);
     if (!Number.isFinite(y) || y < 0) return;
-    requestAnimationFrame(() => window.scrollTo({ top: y, behavior: 'auto' }));
+    requestAnimationFrame(() => setAppScrollTop(y, 'auto'));
   }, [scrollKey]);
 
   useEffect(() => {
     return () => {
-      sessionStorage.setItem(scrollKey, String(window.scrollY || 0));
+      sessionStorage.setItem(scrollKey, String(getAppScrollTop() || 0));
     };
   }, [scrollKey]);
 
@@ -89,7 +90,7 @@ export function ChatAdminsPage() {
               m={row.m}
               kind={row.kind}
               onOpenProfile={() => {
-                sessionStorage.setItem(scrollKey, String(window.scrollY || 0));
+                sessionStorage.setItem(scrollKey, String(getAppScrollTop() || 0));
                 navigate(`/profile/member-${row.m.member_id}`);
               }}
             />

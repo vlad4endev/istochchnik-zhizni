@@ -8,7 +8,7 @@ function routeKey(pathname: string, search: string) {
 }
 
 function getAppScrollEl(): HTMLElement | null {
-  return document.querySelector('main.app-main-content');
+  return document.getElementById('root');
 }
 
 export function ScrollRestoration() {

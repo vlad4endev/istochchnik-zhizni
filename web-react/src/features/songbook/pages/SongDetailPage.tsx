@@ -4,6 +4,12 @@ import { Link, useParams } from 'react-router-dom';
 import { LuArrowLeft, LuPlus, LuMinus, LuSettings2 } from 'react-icons/lu';
 
 import { dispatchLayoutMainChrome } from '../../../app/layoutChrome';
+import {
+  getAppScrollMetrics,
+  getAppScrollRoot,
+  getAppScrollTop,
+  scrollAppBy,
+} from '@/lib/appScroll';
 import { SongListSkeleton } from '@/components/skeletons/SongListSkeleton';
 import { keys } from '@/lib/queryKeys';
 import { useAuthStore } from '../../auth/authStore';
@@ -109,14 +115,15 @@ export function SongDetailPage() {
     }
 
     const onScroll = () => {
-      const y = window.scrollY || document.documentElement.scrollTop;
+      const y = getAppScrollTop();
       const visible = y < 56;
       dispatchLayoutMainChrome(visible);
     };
-    window.addEventListener('scroll', onScroll, { passive: true });
+    const scrollEl = getAppScrollRoot() ?? window;
+    scrollEl.addEventListener('scroll', onScroll, { passive: true });
     onScroll();
     return () => {
-      window.removeEventListener('scroll', onScroll);
+      scrollEl.removeEventListener('scroll', onScroll);
       dispatchLayoutMainChrome(true);
     };
   }, [fullscreen]);
@@ -129,7 +136,7 @@ export function SongDetailPage() {
       const dt = Math.min((now - last) / 1000, 0.05);
       last = now;
       const bpmFactor = q.data?.tempo ? Math.max(0.65, Math.min(2.4, Number(q.data.tempo) / 80)) : 1;
-      window.scrollBy(0, scrollSpeedPxPerSec * bpmFactor * dt);
+      scrollAppBy(0, scrollSpeedPxPerSec * bpmFactor * dt);
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
@@ -138,15 +145,15 @@ export function SongDetailPage() {
 
   useEffect(() => {
     const updateProgress = () => {
-      const maxScroll = Math.max(1, document.documentElement.scrollHeight - window.innerHeight);
-      const current = Math.max(0, Math.min(maxScroll, window.scrollY || document.documentElement.scrollTop));
-      setScrollProgress(current / maxScroll);
+      const { scrollTop, maxScroll } = getAppScrollMetrics();
+      setScrollProgress(scrollTop / maxScroll);
     };
     updateProgress();
-    window.addEventListener('scroll', updateProgress, { passive: true });
+    const scrollEl = getAppScrollRoot() ?? window;
+    scrollEl.addEventListener('scroll', updateProgress, { passive: true });
     window.addEventListener('resize', updateProgress);
     return () => {
-      window.removeEventListener('scroll', updateProgress);
+      scrollEl.removeEventListener('scroll', updateProgress);
       window.removeEventListener('resize', updateProgress);
     };
   }, []);

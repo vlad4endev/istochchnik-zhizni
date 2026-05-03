@@ -133,6 +133,7 @@ html[data-color-theme='blue'] {
 
 html {
   width: 100%;
+  height: 100%;
   min-height: 100%;
   min-height: 100dvh;
   overflow: hidden;
@@ -167,13 +168,13 @@ html[data-a11y-large-cursor='true'] body summary {
     auto;
 }
 
-/* PWA standalone / Capacitor: без pinch-zoom и без «вебового» double-tap zoom */
+/* PWA: без pinch-zoom; pan-x pan-y оставляет нативный вертикальный скролл (manipulation ломает вложенный overflow во многих WebKit). */
 html.app-native-shell {
-  touch-action: manipulation;
+  touch-action: pan-x pan-y;
 }
 
 html.app-native-shell body {
-  touch-action: manipulation;
+  touch-action: pan-x pan-y;
 }
 
 /* PWA с экрана «Домой» iOS/Android — тот же фон, что у splash и manifest */
@@ -186,6 +187,7 @@ html.app-native-shell body {
 body {
   margin: 0;
   width: 100%;
+  height: 100%;
   min-height: 100%;
   min-height: 100dvh;
   display: flex;
@@ -250,25 +252,25 @@ dd {
   position: sticky;
 }
 
-/* Скролл документа отключён; лента — в <main class="app-main-content">.
-   Body — flex-колонка с padding-top под notch; #root flex:1 заполняет оставшуюся высоту без рассинхрона
-   с `fixed bottom:0` у нижней панели (не используем одновременно height в px и height:100% у детей). */
+/* Скролл на #root: один контейнер — стабильнее WebKit/PWA, чем overflow на <main> под flex:1 1 auto у предков.
+   flex-basis 0% — иначе basis:auto раздувает flex-элемент по контенту и ломает высоту скролла. */
 #root {
-  flex: 1 1 auto;
+  flex: 1 1 0%;
   width: 100%;
   min-height: 0;
-  overflow: hidden;
+  height: 100%;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
   display: flex;
   flex-direction: column;
+  touch-action: pan-x pan-y;
+  -webkit-overflow-scrolling: touch;
 }
 
 .app-main-content {
   padding-left: 0;
   padding-right: 0;
-  /* Явный вертикальный pan: html/body в app-native-shell с touch-action: manipulation —
-     без этого часть WebKit не отдаёт жест скролла внутреннему overflow-контейнеру. */
-  touch-action: pan-y;
-  -webkit-overflow-scrolling: touch;
 }
 
 /* iOS + Android: когда открыта клавиатура, fixed bottom-nav скрываем,

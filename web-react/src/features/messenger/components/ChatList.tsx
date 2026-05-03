@@ -204,10 +204,13 @@ function ChatListItem({
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') closeMenu();
     };
+    const root = document.getElementById('root');
     window.addEventListener('scroll', onScroll, true);
+    root?.addEventListener('scroll', onScroll, { passive: true });
     window.addEventListener('keydown', onKey);
     return () => {
       window.removeEventListener('scroll', onScroll, true);
+      root?.removeEventListener('scroll', onScroll);
       window.removeEventListener('keydown', onKey);
     };
   }, [menuPos, closeMenu]);

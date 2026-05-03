@@ -38,6 +38,8 @@ import {
 import type { IconType } from 'react-icons';
 import { useLocation } from 'react-router-dom';
 
+import { getAppScrollRoot, getAppScrollTop } from '@/lib/appScroll';
+
 import { fetchSongs, type SongListItem } from '../../songbook/api';
 import type { AppUser } from '../../admin/types';
 import { useAuthStore } from '../../auth/authStore';
@@ -315,11 +317,12 @@ export function ServicePlannerPage() {
         setPlanStickyBackVisible(false);
         return;
       }
-      setPlanStickyBackVisible(window.scrollY > 56);
+      setPlanStickyBackVisible(getAppScrollTop() > 56);
     };
     onScroll();
-    window.addEventListener('scroll', onScroll, { passive: true });
-    return () => window.removeEventListener('scroll', onScroll);
+    const scrollEl = getAppScrollRoot() ?? window;
+    scrollEl.addEventListener('scroll', onScroll, { passive: true });
+    return () => scrollEl.removeEventListener('scroll', onScroll);
   }, [screen, draft]);
 
   const coEditingPeers = useServicePlanEditorsPresence(

@@ -97,7 +97,7 @@ if (typeof window !== 'undefined') {
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <div className="flex h-full min-h-0 w-full max-w-full flex-1 flex-col">
+    <div className="flex min-h-0 w-full max-w-full flex-1 flex-col">
       <QueryClientProvider client={queryClient}>
         <TopLoader />
         <BrowserRouter>

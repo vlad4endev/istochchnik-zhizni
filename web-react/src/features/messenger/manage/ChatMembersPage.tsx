@@ -11,6 +11,7 @@ import { getAvatarColor } from '../avatarUtils';
 import { formatMessengerLastSeen } from '../lastSeenUtils';
 import { canAddParticipantsToGroup, canManageGroupMessenger, isAppAdministratorRole } from './messengerManageAccess';
 import { ManageDialogShell } from './ManageDialogShell';
+import { getAppScrollTop, setAppScrollTop } from '@/lib/appScroll';
 
 /** Единый ключ для сравнения id участника (API может отдать number | string). */
 function normalizeMemberId(raw: unknown): string | null {
@@ -54,12 +55,12 @@ export function ChatMembersPage() {
     if (!saved) return;
     const y = Number(saved);
     if (!Number.isFinite(y) || y < 0) return;
-    requestAnimationFrame(() => window.scrollTo({ top: y, behavior: 'auto' }));
+    requestAnimationFrame(() => setAppScrollTop(y, 'auto'));
   }, [scrollKey]);
 
   useEffect(() => {
     return () => {
-      sessionStorage.setItem(scrollKey, String(window.scrollY || 0));
+      sessionStorage.setItem(scrollKey, String(getAppScrollTop() || 0));
     };
   }, [scrollKey]);
 
@@ -194,7 +195,7 @@ export function ChatMembersPage() {
                 onEditPermissions={() => setPermTarget(m)}
                 onOpenActions={() => setMemberMenu(m)}
                 onOpenProfile={() => {
-                  sessionStorage.setItem(scrollKey, String(window.scrollY || 0));
+                  sessionStorage.setItem(scrollKey, String(getAppScrollTop() || 0));
                   navigate(`/profile/member-${m.member_id}`);
                 }}
               />

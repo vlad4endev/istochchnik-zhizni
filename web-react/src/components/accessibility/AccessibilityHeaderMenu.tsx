@@ -70,11 +70,14 @@ export function AccessibilityHeaderMenu({ tone = 'on-gradient', triggerClassName
     };
 
     update();
+    const root = document.getElementById('root');
     window.addEventListener('resize', update);
     window.addEventListener('scroll', update, true);
+    root?.addEventListener('scroll', update, { passive: true });
     return () => {
       window.removeEventListener('resize', update);
       window.removeEventListener('scroll', update, true);
+      root?.removeEventListener('scroll', update);
     };
   }, [open]);
 
