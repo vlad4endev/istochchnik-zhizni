@@ -330,9 +330,10 @@ const webDist = path.join(process.cwd(), 'web-react', 'dist');
 const spaIndexPath = path.join(webDist, 'index.html');
 const hasSpaIndex = fs.existsSync(spaIndexPath);
 if (!hasSpaIndex) {
-  // В docker-compose статика обычно отдается отдельным nginx-контейнером (`web`),
-  // поэтому отсутствие dist внутри API-контейнера — ожидаемая конфигурация.
-  console.debug(`[web] SPA bundle is missing, static serving disabled: ${spaIndexPath}`);
+  // В docker-compose статика обычно отдаётся контейнером `web` (nginx), образ API без dist — норма.
+  console.info(
+    `[web] В образе API нет SPA (${spaIndexPath}) — маршруты приложения с этого процесса не раздаются. Открывайте сайт через контейнер web (порт WEB_PORT) или встройте dist в образ API.`,
+  );
 }
 
 app.get('/service-plan/share/:token', async (req, res, next) => {
