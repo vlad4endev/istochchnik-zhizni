@@ -1,5 +1,5 @@
 -- App uploads: Supabase Storage buckets + публичное чтение (загрузка только с API через service role).
--- Имена бакетов совпадают с дефолтами в src/lib/supabaseStorage.ts
+-- Имена бакетов совпадают с дефолтами в src/lib/supabaseStorage.ts (messengerBucket → chat, userMediaBucket → user-media).
 
 insert into storage.buckets (id, name, public, file_size_limit)
 values

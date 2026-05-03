@@ -43,6 +43,7 @@ import { ensureAccessRequestsMessengerChannel } from './services/messengerServic
 import { writeAppLog } from './services/appLogService';
 import { getEditablePlanByToken, getPublicPlanByToken } from './services/servicePlannerService';
 import { startAnalyticsMaintenance } from './services/analyticsService';
+import { shouldWarnMissingSupabaseStoragePublicUrl } from './lib/supabaseStorage';
 
 dotenv.config();
 
@@ -418,9 +419,9 @@ async function start(): Promise<void> {
       '[WARN] Supabase Storage не настроен (SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY) — загрузка файлов в мессенджере не будет работать.',
     );
   }
-  if (!process.env.SUPABASE_STORAGE_PUBLIC_URL?.trim()) {
+  if (shouldWarnMissingSupabaseStoragePublicUrl()) {
     console.warn(
-      '[WARN] SUPABASE_STORAGE_PUBLIC_URL не задан — в браузере возможен mixed content (HTTP URL файла на HTTPS сайте).',
+      '[WARN] SUPABASE_STORAGE_PUBLIC_URL не задан, а SUPABASE_URL по HTTP — в браузере возможен mixed content. Задайте публичный HTTPS-ориджин Storage (обычно https://<ref>.supabase.co), см. .env.example.',
     );
   }
 

@@ -115,6 +115,27 @@ export function isSupabaseStorageConfigured(): boolean {
   return getSupabaseStorageMissingEnv().length === 0;
 }
 
+/**
+ * Лог на старте API: `SUPABASE_STORAGE_PUBLIC_URL` нужен, если клиент Storage по HTTP
+ * (Docker / LAN), иначе в JSON уйдут http://… ссылки на HTTPS-фронт (mixed content).
+ * При `SUPABASE_URL` уже с `https:` (облако Supabase) предупреждение не нужно.
+ */
+export function shouldWarnMissingSupabaseStoragePublicUrl(): boolean {
+  if (!isSupabaseStorageConfigured()) return false;
+  if (getSupabaseStoragePublicOrigin()) return false;
+  const raw = getUrl();
+  if (!raw) return false;
+  try {
+    const u = new URL(raw.includes('://') ? raw : `https://${raw}`);
+    if (u.protocol !== 'http:') return false;
+    const h = u.hostname.toLowerCase();
+    if (h === 'localhost' || h === '127.0.0.1' || h === '0.0.0.0' || h === '::1') return false;
+    return true;
+  } catch {
+    return true;
+  }
+}
+
 function getClient(): SupabaseClient {
   if (cached !== undefined) return cached as SupabaseClient;
   const url = getUrl();
@@ -129,8 +150,9 @@ function getClient(): SupabaseClient {
   return cached;
 }
 
+/** Имя бакета для вложений чата; дефолт `chat` совпадает с `supabase/migrations/*storage_buckets_app_uploads.sql`. */
 export function messengerBucket(): string {
-  return process.env.SUPABASE_STORAGE_BUCKET_MESSENGER?.trim() || 'messenger';
+  return process.env.SUPABASE_STORAGE_BUCKET_MESSENGER?.trim() || 'chat';
 }
 
 export function userMediaBucket(): string {
