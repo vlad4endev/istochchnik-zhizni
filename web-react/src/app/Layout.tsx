@@ -547,21 +547,30 @@ export function Layout() {
     ? `/profile/${encodeURIComponent(publicProfileSlug)}`
     : '/dashboard';
 
-  const navBase =
-    registrationStatus === 'pending_review'
-      ? NAV_ITEMS.filter((item) => item.to === '/dashboard')
-      : registrationStatus === 'rejected'
-        ? NAV_ITEMS.filter((item) => item.to === '/dashboard' || item.to === '/messenger')
-        : NAV_ITEMS;
-  const items = navBase.filter(
-    (item) =>
-      (!item.adminOnly || isAdmin) &&
-      (!item.studioOnly || canAccessStudioRole(role)) &&
-      (!item.adminOrMediaMinistryOnly || canSeeBroadcastNav) &&
-      (!item.sectionId ||
-        isAdmin ||
-        canRoleAccessSection(sectionVisibilityQ.data, item.sectionId, role, roles)),
-  );
+  const items = useMemo(() => {
+    const navBase =
+      registrationStatus === 'pending_review'
+        ? NAV_ITEMS.filter((item) => item.to === '/dashboard')
+        : registrationStatus === 'rejected'
+          ? NAV_ITEMS.filter((item) => item.to === '/dashboard' || item.to === '/messenger')
+          : NAV_ITEMS;
+    return navBase.filter(
+      (item) =>
+        (!item.adminOnly || isAdmin) &&
+        (!item.studioOnly || canAccessStudioRole(role)) &&
+        (!item.adminOrMediaMinistryOnly || canSeeBroadcastNav) &&
+        (!item.sectionId ||
+          isAdmin ||
+          canRoleAccessSection(sectionVisibilityQ.data, item.sectionId, role, roles)),
+    );
+  }, [
+    registrationStatus,
+    isAdmin,
+    role,
+    roles,
+    sectionVisibilityQ.data,
+    canSeeBroadcastNav,
+  ]);
   const sidebarItems = items;
   const orderedMobileNavItems = useMemo(() => buildOrderedMobileNavItems(items), [items]);
   const navTabRowRef = useRef<HTMLDivElement>(null);
@@ -572,7 +581,18 @@ export function Layout() {
   useLayoutEffect(() => {
     const el = navTabRowRef.current;
     const apply = (width: number) => {
-      setMobileNavSplit(splitMobileNavByWidth(width, orderedMobileNavItems));
+      const next = splitMobileNavByWidth(width, orderedMobileNavItems);
+      setMobileNavSplit((prev) => {
+        if (
+          prev.primary.length === next.primary.length &&
+          prev.overflow.length === next.overflow.length &&
+          prev.primary.every((p, i) => p.to === next.primary[i]?.to) &&
+          prev.overflow.every((p, i) => p.to === next.overflow[i]?.to)
+        ) {
+          return prev;
+        }
+        return next;
+      });
     };
     if (!el) {
       apply(280);
