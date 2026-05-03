@@ -195,9 +195,9 @@ body {
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
   overscroll-behavior-y: contain;
-  /* Safe-area компенсируем только по вертикали; по бокам layout задаёт свои отступы по месту. */
+  /* Верх: вырез/notch. Низ: не дублируем safe-area — нижняя панель `.app-bottom-nav` сама даёт `padding-bottom` и фон до края экрана. */
   padding-top: env(safe-area-inset-top, 0px);
-  padding-bottom: env(safe-area-inset-bottom, 0px);
+  padding-bottom: 0;
 }
 
 html.dark body {
@@ -214,7 +214,7 @@ dd {
 
 @supports (padding: max(0px)) {
   body {
-    padding-bottom: max(0px, env(safe-area-inset-bottom, 0px));
+    padding-bottom: 0;
     padding-top: max(0px, env(safe-area-inset-top, 0px));
   }
 }
@@ -499,11 +499,6 @@ nav[aria-label='Основная навигация'] svg {
 
   .announcement-expand-btn {
     display: inline-flex;
-  }
-
-  .bottom-nav {
-    padding-bottom: env(safe-area-inset-bottom, 8px);
-    min-height: 56px;
   }
 
   * {

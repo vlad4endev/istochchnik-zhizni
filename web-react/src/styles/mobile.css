@@ -28,8 +28,27 @@
     min-width: 0 !important;
   }
 
-  .bottom-nav,
+  /* Основная нижняя навигация из Layout.tsx: высота и safe-area задаются Tailwind/CSS variables — не фиксировать 64px. */
   .app-bottom-nav {
+    display: flex !important;
+    flex-direction: column;
+    justify-content: flex-end;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 100;
+    height: auto !important;
+    min-height: unset !important;
+    padding-left: 8px;
+    padding-right: 8px;
+    padding-top: 0;
+    background: rgba(255, 255, 255, 0.95);
+    border-top: 1px solid #f0e9ea;
+  }
+
+  /* Легаси-блок без app-bottom-nav (если останется где-то отдельно). */
+  .bottom-nav:not(.app-bottom-nav) {
     display: flex !important;
     position: fixed;
     bottom: 0;

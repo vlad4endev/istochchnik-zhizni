@@ -804,6 +804,14 @@ router.post(
         : {};
     const replyId = normalizeOptionalBigintId(replyToMessageId);
     try {
+      if (
+        (pt === 'image' || pt === 'file') &&
+        req.chatAuth &&
+        !req.chatAuth.effective.can_send_media
+      ) {
+        res.status(403).json({ error: 'Отправка медиа и файлов отключена в этом чате' });
+        return;
+      }
       const safeClientMsgId =
         typeof clientMsgId === 'string' && clientMsgId.trim()
           ? clientMsgId.trim().slice(0, 160)

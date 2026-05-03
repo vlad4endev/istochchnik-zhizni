@@ -278,15 +278,19 @@ export function PublicServicePlanPage() {
   }
   if (q.isLoading) {
     return (
-      <div className="mx-auto max-w-3xl px-3 py-5 sm:px-4 sm:py-8">
-        <SongListSkeleton />
+      <div className="h-[100dvh] overflow-y-auto overflow-x-hidden overscroll-y-contain bg-[var(--surface)]">
+        <div className="mx-auto max-w-3xl px-3 py-5 sm:px-4 sm:py-8">
+          <SongListSkeleton />
+        </div>
       </div>
     );
   }
   if (q.isError || !q.data) {
     return (
-      <div className="mx-auto max-w-2xl p-6">
-        <p className="text-red-600">Программа не найдена или ссылка недействительна.</p>
+      <div className="h-[100dvh] overflow-y-auto overflow-x-hidden overscroll-y-contain bg-[var(--surface)]">
+        <div className="mx-auto max-w-2xl p-6">
+          <p className="text-red-600">Программа не найдена или ссылка недействительна.</p>
+        </div>
       </div>
     );
   }
@@ -302,7 +306,7 @@ export function PublicServicePlanPage() {
   }).format(new Date(`${plan.service_date}T12:00:00`));
 
   return (
-    <div className="min-h-[100dvh] bg-[var(--surface)]">
+    <div className="h-[100dvh] overflow-y-auto overflow-x-hidden overscroll-y-contain bg-[var(--surface)]">
       <div className="mx-auto max-w-3xl space-y-4 px-3 py-5 pb-[calc(var(--app-bottom-nav-total-height)+2rem)] sm:space-y-6 sm:px-4 sm:py-8 sm:pb-24">
         <p className="text-sm">
           <Link to="/login" className="text-sky-600 hover:underline">

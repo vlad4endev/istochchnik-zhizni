@@ -27,6 +27,8 @@ interface ChatInputProps {
   sendTypingStart: (convId: string) => void;
   sendTypingStop: (convId: string) => void;
   canSend: boolean;
+  /** Медиа/файлы (отдельное право в группах/каналах). По умолчанию совпадает с возможностью писать текст. */
+  canSendAttachments?: boolean;
   /** Участники для @-упоминаний (группы/каналы). */
   mentionParticipants?: { id: number; label: string }[];
   /** Имена по id — чтобы при редактировании показывать @Имя, а не @[цифры]. */
@@ -76,6 +78,7 @@ export function ChatInput({
   sendTypingStart,
   sendTypingStop,
   canSend,
+  canSendAttachments = true,
   mentionParticipants = [],
   participantLabelById = {},
 }: ChatInputProps) {
@@ -375,6 +378,10 @@ export function ChatInput({
     }
     const text = content.trim();
     if (pendingImages.length > 0) {
+      if (!canSendAttachments) {
+        setUploadErr('В этом чате для вас отключена отправка фото и файлов.');
+        return;
+      }
       if (!uploadsHealthy) {
         setUploadErr('Хранилище файлов сейчас недоступно. Повторите отправку позже.');
         return;
@@ -446,6 +453,10 @@ export function ChatInput({
     }
 
     if (pending) {
+      if (!canSendAttachments) {
+        setUploadErr('В этом чате для вас отключена отправка фото и файлов.');
+        return;
+      }
       if (!uploadsHealthy) {
         setUploadErr('Хранилище файлов сейчас недоступно. Повторите отправку позже.');
         return;
@@ -523,6 +534,10 @@ export function ChatInput({
   };
 
   const pickFile = (kind: 'image' | 'file') => {
+    if (!canSendAttachments) {
+      setUploadErr('В этом чате для вас отключена отправка фото и файлов.');
+      return;
+    }
     if (!uploadsHealthy) {
       setUploadErr('Хранилище файлов недоступно. Вложения временно отключены.');
       return;
@@ -622,7 +637,7 @@ export function ChatInput({
 
   /** Вставка из буфера / drag-and-drop — та же ветка, что и выбор файла из меню. */
   const ingestExternalFiles = (files: File[]) => {
-    if (!uploadsHealthy || files.length === 0) return;
+    if (!canSendAttachments || !uploadsHealthy || files.length === 0) return;
     const allImage = files.every(
       (f) =>
         (f.type || '').startsWith('image/') ||
@@ -1006,16 +1021,21 @@ export function ChatInput({
           {uploadsHealthChecking ? ' Проверяем восстановление…' : ''}
         </p>
       ) : null}
+      {canSend && !canSendAttachments ? (
+        <p className="mb-2 text-sm font-semibold text-amber-800">
+          В этом чате для вас отключены фото и файлы (настройки группы).
+        </p>
+      ) : null}
 
       <div
         className="tg-input-area min-w-0 items-center"
         onDragOver={(e) => {
-          if (!uploadsHealthy) return;
+          if (!uploadsHealthy || !canSendAttachments) return;
           e.preventDefault();
           e.dataTransfer.dropEffect = 'copy';
         }}
         onDrop={(e) => {
-          if (!uploadsHealthy) return;
+          if (!uploadsHealthy || !canSendAttachments) return;
           e.preventDefault();
           const fl = e.dataTransfer?.files;
           if (!fl?.length) return;
@@ -1059,7 +1079,7 @@ export function ChatInput({
               ref={attachBtnRef}
               type="button"
               className="tg-input-icon-btn transition-colors duration-200"
-              disabled={!uploadsHealthy}
+              disabled={!uploadsHealthy || !canSendAttachments}
               onClick={() => {
                 haptic(8);
                 setAttachMenuOpen((v) => !v);

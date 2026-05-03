@@ -251,6 +251,12 @@ export function ChatWindow({
   }, [onlineMembers, conv]);
 
   const canPostMessages = isDraft || chatMeta?.my_effective_permissions?.can_send_messages !== false;
+  /** В группах/каналах медио может быть отключено отдельно от текста. */
+  const canSendAttachments =
+    canPostMessages &&
+    (isDraft ||
+      chatMeta == null ||
+      chatMeta.my_effective_permissions?.can_send_media !== false);
   const canPinMessages = chatMeta?.my_effective_permissions?.can_pin_messages === true;
 
   const handlePinToggle = useCallback(
@@ -1055,6 +1061,7 @@ export function ChatWindow({
           sendTypingStart={sendTypingStart}
           sendTypingStop={sendTypingStop}
           canSend={canPostMessages}
+          canSendAttachments={canSendAttachments}
           mentionParticipants={conv && conv.type !== 'private' ? mentionList : []}
           participantLabelById={participantLabelById}
         />
