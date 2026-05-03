@@ -238,7 +238,7 @@ async function syncBroadcastFromPublishedPlan(planId: number): Promise<void> {
   await query(
     `insert into broadcasts (title, description, starts_at, status, source_service_plan_id, notify_members)
      values ($1, $2, $3::timestamp, 'scheduled', $4, true)
-     on conflict (source_service_plan_id)
+     on conflict (source_service_plan_id) where source_service_plan_id is not null
      do update set
        title = excluded.title,
        description = excluded.description,
