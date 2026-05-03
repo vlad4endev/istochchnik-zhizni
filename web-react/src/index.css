@@ -29,7 +29,10 @@
   --sidebar-width: 88px;
   --app-safe-bottom: env(safe-area-inset-bottom, 0px);
   --app-safe-top: env(safe-area-inset-top, 0px);
-  --app-bottom-nav-bar-height: 56px;
+  /* Реальная высота нижней панели: pt-1(4px) + items min-h-52px + pb-1(4px) = 60px.
+     Значение 56px не учитывало pb-1 на внутреннем div → панель мессенджера и main pb
+     расчищали на 4px меньше реальной высоты nav. */
+  --app-bottom-nav-bar-height: 60px;
   --app-bottom-nav-total-height: calc(var(--app-bottom-nav-bar-height) + var(--app-safe-bottom));
   --app-viewport-height: 100dvh;
   --app-keyboard-inset: 0px;
