@@ -1055,7 +1055,7 @@ export function ChatInput({
       ) : null}
 
       <div
-        className="tg-input-area min-w-0 items-center"
+        className="tg-input-area min-w-0 items-end"
         onDragOver={(e) => {
           if (!uploadsHealthy || !canSendAttachments) return;
           e.preventDefault();

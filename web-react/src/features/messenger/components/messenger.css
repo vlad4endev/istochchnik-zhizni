@@ -1966,7 +1966,7 @@
 @media (max-width: 767px) {
   /* Родители max-lg:flex-none давали height:auto → 100% у .tg-messenger схлопывались в 0 (чат невидим). См. Layout.tsx flex-1 + max-lg:overflow-y-auto на <main>. */
   .messenger-layout {
-    flex: 1 1 auto;
+    flex: 1 1 0%;
     min-height: 0;
     max-height: 100%;
     overflow: hidden;
@@ -2020,11 +2020,32 @@
     pointer-events: none;
     transition: opacity 0.22s ease;
     overflow: hidden;
+    /* Как .chat-window-panel на десктопе: колонка flex, иначе дочерний .tg-chat-window с flex-1 не получает корректную высоту и композер «растягивается». */
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
   }
 
   .tg-main--visible {
     opacity: 1;
     pointer-events: auto;
+  }
+
+  /* Композер — только по содержимому, без flex-grow (иначе огромная серая зона ввода). */
+  .tg-chat-window__composer.message-input-bar,
+  .tg-chat-window__composer {
+    flex: 0 0 auto !important;
+    flex-grow: 0 !important;
+    flex-shrink: 0 !important;
+    height: auto !important;
+    max-height: none !important;
+    display: block;
+    width: 100%;
+  }
+
+  .tg-chat-window__composer .tg-input-area,
+  .tg-chat-window .tg-input-area {
+    align-items: flex-end !important;
   }
 
   .tg-sidebar {
