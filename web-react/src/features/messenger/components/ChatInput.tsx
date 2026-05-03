@@ -1160,7 +1160,7 @@ export function ChatInput({
 
       <div className="relative w-full min-w-0">
         <div
-          className="tg-input-area w-full min-w-0 items-end gap-2 py-2"
+          className="tg-input-area tg-composer-pill-layout flex w-full min-w-0 gap-2 py-2"
           onDragOver={(e) => {
             if (!uploadsHealthy || !canSendAttachments) return;
             e.preventDefault();
@@ -1199,20 +1199,48 @@ export function ChatInput({
             </div>
           ) : null}
 
+          <input
+            ref={fileInputRef}
+            type="file"
+            className="hidden"
+            accept="image/*"
+            onChange={(e) => void handleFileSelected(e.target.files)}
+          />
+
+          <div ref={attachMenuRef} className="relative z-[5000] shrink-0">
+            <button
+              ref={attachBtnRef}
+              type="button"
+              disabled={!uploadsHealthy || !canSendAttachments}
+              onClick={() => {
+                haptic(8);
+                setAttachMenuOpen((v) => !v);
+              }}
+              aria-label="Вложения"
+              aria-expanded={attachMenuOpen}
+              aria-haspopup="menu"
+              title="Вложения"
+              className={[
+                'flex h-11 w-11 shrink-0 items-center justify-center rounded-full border transition-colors',
+                'border-white/45 bg-white/35 text-stone-600 shadow-sm backdrop-blur-md',
+                'hover:bg-white/50 hover:text-stone-800 active:scale-[0.98]',
+                'disabled:pointer-events-none disabled:opacity-45',
+                'dark:border-white/15 dark:bg-white/10 dark:text-stone-200 dark:hover:bg-white/15',
+              ].join(' ')}
+            >
+              <LuPaperclip size={20} strokeWidth={2} aria-hidden />
+            </button>
+          </div>
+
           <div
             className={[
-              'tg-input-container relative min-h-0 min-w-0 flex-1 !gap-1 overflow-hidden !rounded-3xl !border !border-gray-200 !bg-[var(--surface-elevated)] !p-0 !shadow-sm',
-              'transition-[box-shadow,border-color] focus-within:!border-[color:var(--tg-primary)]/45',
-              'focus-within:shadow-[0_0_0_1px_rgba(125,54,64,0.14)]',
+              'tg-input-container tg-composer-pill-layout relative flex min-h-[44px] min-w-0 flex-1 overflow-hidden !gap-0 !rounded-full !border !p-0 !shadow-sm',
+              'border-white/45 bg-white/40 backdrop-blur-xl',
+              'transition-[box-shadow,border-color] focus-within:border-[color:var(--tg-primary)]/50',
+              'focus-within:shadow-[0_0_0_1px_rgba(125,54,64,0.18)]',
+              'dark:border-white/12 dark:bg-black/25',
             ].join(' ')}
           >
-            <input
-              ref={fileInputRef}
-              type="file"
-              className="hidden"
-              accept="image/*"
-              onChange={(e) => void handleFileSelected(e.target.files)}
-            />
             {/*
              * A11y: см. aria-describedby у textarea ниже.
              */}
@@ -1234,31 +1262,12 @@ export function ChatInput({
               </span>
             ) : null}
 
-            <div ref={attachMenuRef} className="relative z-[5000] shrink-0 self-end">
-              <button
-                ref={attachBtnRef}
-                type="button"
-                className="tg-input-icon-btn transition-colors duration-200"
-                disabled={!uploadsHealthy || !canSendAttachments}
-                onClick={() => {
-                  haptic(8);
-                  setAttachMenuOpen((v) => !v);
-                }}
-                aria-label="Вложения"
-                aria-expanded={attachMenuOpen}
-                aria-haspopup="menu"
-                title="Вложения"
-              >
-                <LuPaperclip size={19} />
-              </button>
-            </div>
-
             <textarea
               ref={textareaRef}
               className={[
-                'tg-input-textarea min-h-0 min-w-0 flex-1 !max-h-[140px] resize-none !bg-transparent',
-                '!px-1 !py-[10px] text-[16px] !leading-5 text-[var(--text)] placeholder:text-[var(--text-muted)]',
-                'self-end outline-none transition-[height] duration-150 ease-out',
+                'tg-input-textarea !min-h-0 min-w-0 flex-1 !max-h-[140px] resize-none !self-center !bg-transparent',
+                'py-2.5 pl-3 pr-12 text-[16px] !leading-5 text-[var(--text)] placeholder:text-stone-400/90',
+                'outline-none transition-[height] duration-150 ease-out dark:placeholder:text-stone-500',
               ].join(' ')}
               placeholder="Сообщение"
               enterKeyHint="send"
@@ -1301,11 +1310,18 @@ export function ChatInput({
               }}
             />
 
-            <div ref={emojiRef} className="relative z-[5000] shrink-0 self-end">
+            <div
+              ref={emojiRef}
+              className="pointer-events-none absolute right-1 top-1/2 z-[5000] -translate-y-1/2"
+            >
               <button
                 ref={emojiBtnRef}
                 type="button"
-                className="tg-input-icon-btn tg-emoji-btn transition-colors duration-200"
+                className={[
+                  'pointer-events-auto flex h-9 w-9 items-center justify-center rounded-full border transition-colors',
+                  'border-transparent text-stone-500 hover:border-white/35 hover:bg-white/35 hover:text-stone-800',
+                  'dark:text-stone-300 dark:hover:bg-white/10 dark:hover:text-white',
+                ].join(' ')}
                 onClick={() => {
                   haptic(8);
                   setEmojiOpen((v) => !v);
@@ -1315,15 +1331,23 @@ export function ChatInput({
                 aria-haspopup="dialog"
                 title="Эмодзи"
               >
-                <LuSmile size={22} />
+                <LuSmile size={21} strokeWidth={2} aria-hidden />
               </button>
             </div>
           </div>
 
-          <div className="shrink-0 self-end">
+          <div className="shrink-0">
             <button
               type="button"
-              className="tg-send-btn transition-colors duration-200"
+              className={[
+                'tg-send-btn relative !flex !h-11 !w-11 !min-h-[44px] !min-w-[44px] shrink-0 items-center justify-center !rounded-full border transition-colors duration-200',
+                hasSendAction
+                  ? '!border-transparent !shadow-md'
+                  : [
+                      '!border-white/45 !bg-white/35 !text-stone-600 !shadow-sm backdrop-blur-md hover:!bg-white/50',
+                      'dark:!border-white/15 dark:!bg-white/10 dark:!text-stone-200 dark:hover:!bg-white/15',
+                    ].join(' '),
+              ].join(' ')}
               onClick={() => {
                 if (hasSendAction) {
                   void handleSend();
@@ -1334,11 +1358,16 @@ export function ChatInput({
               disabled={uploading != null}
               aria-label={hasSendAction ? 'Отправить' : 'Голосовые сообщения пока недоступны'}
               title={hasSendAction ? 'Отправить' : 'Голосовые сообщения скоро'}
-              style={{
-                background: hasSendAction ? 'var(--tg-primary)' : 'transparent',
-                color: hasSendAction ? '#fff' : '#888',
-                boxShadow: hasSendAction ? '0 2px 8px rgba(125,54,64,0.35)' : 'none',
-              }}
+              style={
+                hasSendAction
+                  ? {
+                      background: 'var(--tg-primary)',
+                      color: '#fff',
+                      boxShadow: '0 2px 8px rgba(125,54,64,0.35)',
+                      borderColor: 'transparent',
+                    }
+                  : undefined
+              }
             >
               <span
                 style={{

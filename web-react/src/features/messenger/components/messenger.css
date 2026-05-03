@@ -2535,3 +2535,21 @@
     transition: none;
   }
 }
+
+/* ChatInput: круги снаружи капсулы — перебиваем мобильные `align-items: flex-end !important`. */
+.tg-input-area.tg-composer-pill-layout,
+.tg-chat-window .tg-input-area.tg-composer-pill-layout,
+.tg-chat-window__composer .tg-input-area.tg-composer-pill-layout,
+html[data-chat-open='1'] .tg-chat-window .tg-input-area.tg-composer-pill-layout,
+html[data-chat-open='1'] .tg-main--visible .tg-chat-window .tg-input-area.tg-composer-pill-layout {
+  align-items: center !important;
+}
+
+.tg-input-container.tg-composer-pill-layout,
+.tg-chat-window .tg-input-container.tg-composer-pill-layout,
+.tg-chat-window__composer .tg-input-container.tg-composer-pill-layout,
+html[data-chat-open='1'] .tg-chat-window .tg-input-container.tg-composer-pill-layout,
+html[data-chat-open='1'] .tg-main--visible .tg-chat-window .tg-input-container.tg-composer-pill-layout {
+  align-items: center !important;
+  flex-direction: row !important;
+}
