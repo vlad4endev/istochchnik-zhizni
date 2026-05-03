@@ -771,7 +771,7 @@ export function Layout() {
 
   return (
     <MessengerWsProvider>
-    <div className="flex min-h-0 w-full max-w-full flex-1 flex-col bg-[var(--surface)] text-[var(--text)]">
+    <div className="flex max-lg:flex-none lg:flex-1 min-h-0 w-full max-w-full flex-col bg-[var(--surface)] text-[var(--text)]">
       <ScrollRestoration />
       <a
         href="#main-content"
@@ -791,13 +791,13 @@ export function Layout() {
       </a>
       <div
         className={[
-          'flex min-h-0 min-w-0 w-full max-w-full flex-1 flex-col box-border',
+          'flex max-lg:flex-none lg:flex-1 min-h-0 min-w-0 w-full max-w-full flex-col box-border',
         ].join(' ')}
       >
       <div className="shrink-0">
         <ConnectivityBanner />
       </div>
-      <div className="relative flex min-h-0 w-full min-w-0 flex-1 flex-col">
+      <div className="relative flex max-lg:flex-none lg:flex-1 min-h-0 w-full min-w-0 flex-col">
       {/* Планшет/десктоп: фиксированный сайдбар (не в потоке, не растягивается по ширине main). На узких — нижняя навигация. */}
       <aside
         className={[
@@ -989,14 +989,14 @@ export function Layout() {
         id="main-content"
         tabIndex={-1}
         className={[
-          'app-main-content flex min-h-0 min-w-0 w-full max-w-full flex-1 flex-col overflow-x-clip overflow-y-visible lg:pb-0 outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--a11y-focus-ring,var(--primary))] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)]',
+          'app-main-content flex max-lg:flex-none lg:flex-1 min-h-0 min-w-0 w-full max-w-full flex-col overflow-x-clip overflow-y-visible lg:pb-0 outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--a11y-focus-ring,var(--primary))] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)]',
           'page-content',
           mainChromeVisible
             ? 'pb-[max(1rem,var(--app-bottom-nav-total-height))]'
             : 'pb-[max(1rem,env(safe-area-inset-bottom,16px))]',
         ].join(' ')}
       >
-        <div key={location.pathname} className="page-enter min-h-0 flex flex-col flex-1">
+        <div key={location.pathname} className="page-enter flex min-h-0 w-full max-w-full flex-col">
           <Outlet />
         </div>
       </main>

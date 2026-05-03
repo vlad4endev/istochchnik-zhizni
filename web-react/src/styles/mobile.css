@@ -22,7 +22,8 @@
     margin-left: 0 !important;
     padding-left: 16px !important;
     padding-right: 16px !important;
-    padding-bottom: 72px !important;
+    /* Одна строка с Layout.tsx + --app-bottom-nav-total-height (без лишнего «зазора» под таббаром). */
+    padding-bottom: max(1rem, var(--app-bottom-nav-total-height)) !important;
     width: 100% !important;
     max-width: 100% !important;
     min-width: 0 !important;
