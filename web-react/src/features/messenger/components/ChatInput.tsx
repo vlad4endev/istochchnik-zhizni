@@ -1341,12 +1341,16 @@ export function ChatInput({
             <button
               type="button"
               className={[
-                'tg-send-btn relative !flex !h-11 !w-11 !min-h-[44px] !min-w-[44px] shrink-0 items-center justify-center !rounded-full border transition-colors duration-200',
+                'tg-send-btn relative !flex !h-11 !w-11 !min-h-[44px] !min-w-[44px] shrink-0 items-center justify-center !rounded-full border-2 transition-colors duration-200',
                 hasSendAction
-                  ? '!border-transparent !shadow-md'
+                  ? [
+                      '!border-[color:var(--tg-primary)] !bg-[var(--tg-primary)] !text-white',
+                      '!shadow-[0_4px_14px_rgba(125,54,64,0.55)] hover:!brightness-110 active:!brightness-95',
+                    ].join(' ')
                   : [
-                      '!border-white/45 !bg-white/35 !text-stone-600 !shadow-sm backdrop-blur-md hover:!bg-white/50',
-                      'dark:!border-white/15 dark:!bg-white/10 dark:!text-stone-200 dark:hover:!bg-white/15',
+                      '!border-stone-400/70 !bg-white/75 !text-stone-800 !shadow-md',
+                      'hover:!border-stone-500 hover:!bg-white hover:!text-stone-900',
+                      'dark:!border-stone-500/80 dark:!bg-stone-800/90 dark:!text-stone-100 dark:hover:!bg-stone-700',
                     ].join(' '),
               ].join(' ')}
               onClick={() => {
@@ -1359,18 +1363,9 @@ export function ChatInput({
               disabled={uploading != null}
               aria-label={hasSendAction ? 'Отправить' : 'Голосовые сообщения пока недоступны'}
               title={hasSendAction ? 'Отправить' : 'Голосовые сообщения скоро'}
-              style={
-                hasSendAction
-                  ? {
-                      background: 'var(--tg-primary)',
-                      color: '#fff',
-                      boxShadow: '0 2px 8px rgba(125,54,64,0.35)',
-                      borderColor: 'transparent',
-                    }
-                  : undefined
-              }
             >
               <span
+                className={hasSendAction ? 'text-white drop-shadow-[0_1px_1px_rgba(0,0,0,0.35)]' : 'text-stone-800 dark:text-stone-100'}
                 style={{
                   display: 'grid',
                   placeItems: 'center',
@@ -1380,9 +1375,10 @@ export function ChatInput({
                   opacity: hasSendAction ? 1 : 0,
                 }}
               >
-                <LuSend size={20} />
+                <LuSend size={22} strokeWidth={2.25} aria-hidden />
               </span>
               <span
+                className={!hasSendAction ? 'text-stone-800 dark:text-stone-100' : undefined}
                 style={{
                   display: 'grid',
                   placeItems: 'center',
@@ -1392,7 +1388,7 @@ export function ChatInput({
                   opacity: hasSendAction ? 0 : 1,
                 }}
               >
-                <LuMic size={20} />
+                <LuMic size={22} strokeWidth={2.25} aria-hidden />
               </span>
             </button>
           </div>

@@ -985,8 +985,8 @@ export function Layout() {
           'app-main-content flex min-h-0 min-w-0 w-full max-w-full flex-1 flex-col overflow-x-clip max-lg:overflow-y-auto lg:overflow-y-visible outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--a11y-focus-ring,var(--primary))] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)]',
           'page-content',
           mainChromeVisible
-            ? 'max-lg:pb-[max(1rem,var(--app-bottom-nav-total-height))] lg:pb-0'
-            : 'max-lg:pb-[max(1rem,env(safe-area-inset-bottom,16px))] lg:pb-0',
+            ? 'max-lg:pb-[var(--app-bottom-nav-total-height)] lg:pb-0'
+            : 'max-lg:pb-[max(0.75rem,env(safe-area-inset-bottom,0px))] lg:pb-0',
         ].join(' ')}
       >
         <div key={location.pathname} className="page-enter flex min-h-0 w-full max-w-full flex-1 flex-col">

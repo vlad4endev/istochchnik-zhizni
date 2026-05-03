@@ -759,7 +759,7 @@ function DashboardMain() {
           </header>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto [webkit-overflow-scrolling:touch] pb-6 lg:pb-[max(2rem,env(safe-area-inset-bottom,0px))]">
+        <div className="min-h-0 flex-1 overflow-y-auto [webkit-overflow-scrolling:touch] max-lg:pb-0 lg:pb-[max(2rem,env(safe-area-inset-bottom,0px))]">
         <div className="hidden lg:block">
           <div className="grid grid-cols-3 gap-[14px] px-0 py-4">
             <button
