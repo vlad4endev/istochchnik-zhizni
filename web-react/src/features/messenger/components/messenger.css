@@ -79,7 +79,7 @@
   flex: 1;
 }
 
-@media (min-width: 768px) {
+@media (min-width: 769px) {
   .messenger-layout {
     display: flex;
     height: 100dvh;
@@ -462,8 +462,8 @@
   font-weight: 700;
 }
 
-/* ─── ПК (≥768px): стабильный split-view, без мобильных absolute-слоёв ─── */
-@media (min-width: 768px) {
+/* ─── ПК (≥769px): split-view; мобильные правила — max-width 768px, без пересечения на ровно 768. ─── */
+@media (min-width: 769px) {
   :root {
     --tg-sidebar-width: clamp(300px, 32vw, 420px);
   }
@@ -637,7 +637,7 @@
   }
 }
 
-@media (min-width: 768px) {
+@media (min-width: 769px) {
   .tg-messenger.tg-density--compact .tg-chat-window .tg-chat-window__body > div[role='log'] {
     padding-left: 0.75rem !important;
     padding-right: 0.75rem !important;
@@ -707,7 +707,7 @@
   margin-right: -4px;
 }
 
-@media (min-width: 768px) {
+@media (min-width: 769px) {
   .tg-header-back {
     display: none;
   }
@@ -1962,8 +1962,8 @@
   }
 }
 
-/* Mobile Adjustments */
-@media (max-width: 767px) {
+/* Mobile Adjustments — max-width 768px, чтобы совпадало с html[data-chat-open] (grid) и не было «дыры» на 768px. */
+@media (max-width: 768px) {
   /* Родители max-lg:flex-none давали height:auto → 100% у .tg-messenger схлопывались в 0 (чат невидим). См. Layout.tsx flex-1 + max-lg:overflow-y-auto на <main>. */
   .messenger-layout {
     flex: 1 1 0%;
@@ -1987,12 +1987,6 @@
   .tg-sidebar--visible {
     display: flex;
     width: 100%;
-  }
-
-  .tg-main--visible {
-    display: flex;
-    width: 100%;
-    height: 100%;
   }
 
   /* Заполняем область main с учётом нижней навигации — без 100dvh, иначе слой «выше» контента и кажется оверлеем */
@@ -2031,7 +2025,7 @@
     pointer-events: auto;
   }
 
-  /* Композер — только по содержимому, без flex-grow (иначе огромная серая зона ввода). */
+  /* Композер: колонка + без роста по высоте (иначе серая «простыня» вокруг поля). display:flex, не block — внутри несколько блоков. */
   .tg-chat-window__composer.message-input-bar,
   .tg-chat-window__composer {
     flex: 0 0 auto !important;
@@ -2039,13 +2033,29 @@
     flex-shrink: 0 !important;
     height: auto !important;
     max-height: none !important;
-    display: block;
+    min-height: 0 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: stretch !important;
     width: 100%;
+    gap: 0;
   }
 
   .tg-chat-window__composer .tg-input-area,
   .tg-chat-window .tg-input-area {
     align-items: flex-end !important;
+    flex: 0 0 auto !important;
+    min-height: 0 !important;
+    height: auto !important;
+    max-height: none !important;
+  }
+
+  .tg-chat-window__composer .tg-input-container,
+  .tg-chat-window .tg-input-container {
+    flex: 1 1 auto !important;
+    min-height: 0 !important;
+    max-height: min(42vh, 220px) !important;
+    align-self: stretch !important;
   }
 
   .tg-sidebar {
@@ -2141,6 +2151,17 @@
       padding-right: 0.75rem;
       padding-bottom: max(16px, env(safe-area-inset-bottom, 16px));
       background: #fff;
+      display: flex !important;
+      flex-direction: column !important;
+      flex: 0 0 auto !important;
+      height: auto !important;
+      min-height: 0 !important;
+      max-height: none !important;
+    }
+
+    html[data-chat-open="1"] .tg-main--visible .tg-chat-window .tg-input-container {
+      max-height: min(42vh, 220px) !important;
+      min-height: 0 !important;
     }
 
     html[data-chat-open="1"] .tg-main--visible .tg-chat-window .tg-messages,
@@ -2234,6 +2255,18 @@
       padding-right: 0.75rem;
       padding-bottom: max(16px, env(safe-area-inset-bottom, 16px));
       background: #fff;
+      display: flex !important;
+      flex-direction: column !important;
+      flex: 0 0 auto !important;
+      height: auto !important;
+      min-height: 0 !important;
+      max-height: none !important;
+    }
+
+    html[data-chat-open="1"] .tg-main--visible .tg-chat-window .tg-input-container,
+    html[data-chat-open="1"] .tg-chat-window .tg-input-container {
+      max-height: min(42vh, 220px) !important;
+      min-height: 0 !important;
     }
 
     /* Keep composer actions inside viewport on iOS (keyboard/safe-area edge cases). */
