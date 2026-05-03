@@ -20,10 +20,29 @@ function applyTheme(theme: Theme): void {
   else if (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches) {
     root.classList.add('dark');
   }
+  syncThemeColorMeta();
 }
 
 function applyFontSize(size: FontSize): void {
   document.documentElement.style.setProperty('--a11y-font-scale', String(fontScaleMap[size]));
+}
+
+/** Статус-бар / оформление Chrome: последний `theme-color` в head перекрывает статичные meta с media. */
+function syncThemeColorMeta(): void {
+  if (typeof document === 'undefined') return;
+  const root = document.documentElement;
+  let content = '#7d3640';
+  if (root.classList.contains('theme-sepia')) content = '#5c4330';
+  else if (root.classList.contains('dark')) content = '#0a0a0b';
+
+  let meta = document.querySelector('meta[name="theme-color"][data-app-managed="true"]');
+  if (!meta) {
+    meta = document.createElement('meta');
+    meta.setAttribute('name', 'theme-color');
+    meta.setAttribute('data-app-managed', 'true');
+    document.head.appendChild(meta);
+  }
+  meta.setAttribute('content', content);
 }
 
 interface AppearanceState {

@@ -1616,7 +1616,7 @@ export function StudioEditor() {
 
       {chordAutoUndo && undoSecondsLeft > 0 ? (
         <div
-          className={`fixed bottom-[5.5rem] left-1/2 z-[120] w-[min(92vw,520px)] -translate-x-1/2 rounded-xl border px-3 py-2 shadow-xl md:bottom-6 ${
+          className={`fixed bottom-[calc(var(--app-bottom-nav-total-height)+0.5rem)] left-1/2 z-[120] w-[min(92vw,520px)] -translate-x-1/2 rounded-xl border px-3 py-2 shadow-xl md:bottom-6 ${
             darkUi ? 'border-amber-600/60 bg-slate-900 text-slate-100' : 'border-amber-200 bg-white text-stone-900'
           }`}
         >

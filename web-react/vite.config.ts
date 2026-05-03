@@ -76,7 +76,8 @@ export default defineConfig(({ mode }) => {
           theme_color: '#7d3640',
           background_color: '#f4f1ed',
           display: 'standalone',
-          orientation: 'portrait',
+          /* Планшеты и ландшафт — не блокируем ориентацию (раньше portrait ломал iPad). */
+          orientation: 'any',
           /* Не задаём display_override: на iOS WebKit это часто игнорируется или ведёт себя иначе, чем один display. */
           prefer_related_applications: false,
           start_url: pwaStartUrl,

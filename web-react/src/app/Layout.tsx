@@ -215,7 +215,7 @@ function AppToastHost() {
   if (toasts.length === 0) return null;
 
   return (
-    <div className="pointer-events-none fixed inset-x-4 bottom-[calc(5.5rem+env(safe-area-inset-bottom))] z-[70] flex flex-col items-end gap-2 md:bottom-6 md:left-auto md:right-6 md:max-w-sm">
+    <div className="pointer-events-none fixed inset-x-4 bottom-[calc(var(--app-bottom-nav-total-height)+0.75rem)] z-[70] flex flex-col items-end gap-2 md:bottom-6 md:left-auto md:right-6 md:max-w-sm">
       {toasts.map((toast) => (
         <button
           key={toast.id}
@@ -999,7 +999,7 @@ export function Layout() {
       {/* Телефон: нижняя навигация (иконка + подпись, как в нативных приложениях) */}
       <nav
         className={[
-          'app-bottom-nav bottom-nav fixed bottom-0 left-0 right-0 z-[100] isolate flex flex-col justify-end border-t border-black/[0.06] bg-white/[0.94] pb-[var(--app-safe-bottom)] shadow-[0_-1px_0_rgba(0,0,0,0.04),0_-8px_24px_rgba(28,25,23,0.06)] backdrop-blur-xl backdrop-saturate-150 supports-[backdrop-filter]:bg-white/88 lg:hidden transition-opacity duration-150 ease-out min-h-[var(--app-bottom-nav-total-height)] [padding-left:max(0.5rem,env(safe-area-inset-left,0px))] [padding-right:max(0.5rem,env(safe-area-inset-right,0px))]',
+          'app-bottom-nav bottom-nav fixed bottom-0 left-0 right-0 z-[100] isolate flex flex-col border-t border-black/[0.06] bg-white/[0.94] pb-[var(--app-safe-bottom)] shadow-[0_-1px_0_rgba(0,0,0,0.04),0_-8px_24px_rgba(28,25,23,0.06)] backdrop-blur-xl backdrop-saturate-150 supports-[backdrop-filter]:bg-white/88 lg:hidden transition-opacity duration-150 ease-out [padding-left:max(0.5rem,env(safe-area-inset-left,0px))] [padding-right:max(0.5rem,env(safe-area-inset-right,0px))]',
           mainChromeVisible ? 'opacity-100' : 'pointer-events-none opacity-0',
         ].join(' ')}
         aria-label="Основная навигация"
@@ -1007,7 +1007,7 @@ export function Layout() {
       >
         <div
           ref={navTabRowRef}
-          className="flex w-full min-h-[var(--app-bottom-nav-bar-height)] min-w-0 items-stretch justify-evenly gap-0 px-1 pb-1 pt-1"
+          className="flex w-full min-h-[var(--app-bottom-nav-bar-height)] min-w-0 items-stretch justify-evenly gap-0 px-1 pb-0 pt-1"
         >
           {mobileNavSplit.primary.map((item) => {
             const Icon = item.Icon;

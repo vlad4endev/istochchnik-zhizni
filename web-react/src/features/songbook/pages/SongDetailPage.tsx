@@ -319,7 +319,7 @@ export function SongDetailPage() {
         style={{
           bottom: fullscreen
             ? 'calc(env(safe-area-inset-bottom, 0px) + 1rem)'
-            : 'calc(env(safe-area-inset-bottom, 0px) + 5.75rem)',
+            : 'calc(var(--app-bottom-nav-total-height) + 1rem)',
         }}
       >
         <SongReaderSettings

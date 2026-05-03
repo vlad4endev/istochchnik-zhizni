@@ -64,7 +64,7 @@ export function IOSInstallBanner() {
         role="dialog"
         aria-label="Установить приложение"
         aria-modal="false"
-        className="motion-reduce:animate-none pointer-events-none fixed bottom-[calc(env(safe-area-inset-bottom,0px)+5.5rem)] left-1/2 z-[9999] w-[calc(100%-2rem)] max-w-md animate-pwa-ios-install-in"
+        className="motion-reduce:animate-none pointer-events-none fixed bottom-[calc(var(--app-bottom-nav-total-height)+0.75rem)] left-1/2 z-[9999] w-[calc(100%-2rem)] max-w-md animate-pwa-ios-install-in"
       >
         <div className="pointer-events-auto relative">
           <div

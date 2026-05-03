@@ -21,3 +21,39 @@ export function isAppleMobileWeb(): boolean {
   if (/iPad|iPhone|iPod/i.test(navigator.userAgent)) return true;
   return navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1;
 }
+
+/**
+ * На iOS с `navigator.standalone` `matchMedia('(display-mode: standalone)')` иногда не срабатывает
+ * до следующего кадра — помечаем `<html data-pwa-standalone>` для CSS (фон, safe hints).
+ */
+export function syncPwaStandaloneHtmlDataset(): void {
+  if (typeof document === 'undefined') return;
+  document.documentElement.dataset.pwaStandalone = isInstalledPwa() ? '1' : '0';
+}
+
+const DISPLAY_MODE_QUERIES = [
+  '(display-mode: standalone)',
+  '(display-mode: fullscreen)',
+  '(display-mode: minimal-ui)',
+] as const;
+
+/** Подписка на смену режима отображения (установка PWA, ориентация). */
+export function initPwaStandaloneHtmlHint(): void {
+  if (typeof window === 'undefined' || typeof document === 'undefined') return;
+  syncPwaStandaloneHtmlDataset();
+  for (const q of DISPLAY_MODE_QUERIES) {
+    try {
+      const mql = window.matchMedia(q);
+      if (typeof mql.addEventListener === 'function') {
+        mql.addEventListener('change', syncPwaStandaloneHtmlDataset);
+      } else {
+        mql.addListener(syncPwaStandaloneHtmlDataset);
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+  window.addEventListener('orientationchange', () => {
+    window.setTimeout(syncPwaStandaloneHtmlDataset, 0);
+  });
+}

@@ -7,6 +7,18 @@
 @media (max-width: 1023px) {
   /* Не скрываем все aside — ломает мессенджер (.tg-sidebar). Сайдбар приложения скрыт в Layout через hidden + lg:flex. */
 
+  /* PWA / iOS: кегль полей <16px вызывает авто-zoom при фокусе — ломает фиксированные панели и клавиатуру */
+  html[data-pwa-standalone='1']
+    :where(
+      input:not([type='checkbox']):not([type='radio']):not([type='button']):not([type='submit']):not([type='reset']):not(
+          [type='range']
+        ):not([type='color']):not([type='file']),
+      textarea,
+      select
+    ) {
+    font-size: max(16px, 1rem);
+  }
+
   /* Не трогаем main.tg-main — иначе чаты «сужаются» и ломается вёрстка поверх таб-бара. */
   main:not(.tg-main),
   [class*='main-content'],

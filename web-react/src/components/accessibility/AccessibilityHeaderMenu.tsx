@@ -127,7 +127,7 @@ export function AccessibilityHeaderMenu({ tone = 'on-gradient', triggerClassName
       aria-labelledby={`${menuId}-title`}
       className={
         layout === 'sheet'
-          ? `${panelBaseClass} fixed inset-x-3 top-[max(0.5rem,env(safe-area-inset-top,0px))] mx-auto w-auto max-w-lg max-h-[min(88dvh,calc(100dvh-env(safe-area-inset-top,0px)-env(safe-area-inset-bottom,0px)-5.5rem))]`
+          ? `${panelBaseClass} fixed inset-x-3 top-[max(0.5rem,env(safe-area-inset-top,0px))] mx-auto w-auto max-w-lg max-h-[min(88dvh,calc(100dvh-env(safe-area-inset-top,0px)-env(safe-area-inset-bottom,0px)-var(--app-bottom-nav-total-height)))]`
           : `${panelBaseClass} fixed max-h-[min(85dvh,560px)]`
       }
       style={

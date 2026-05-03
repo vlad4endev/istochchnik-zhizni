@@ -5,6 +5,7 @@ import { BrowserRouter } from 'react-router-dom';
 import { registerSW } from 'virtual:pwa-register';
 
 import { applyNativeShellViewportLock } from './lib/nativeShellViewport';
+import { initPwaStandaloneHtmlHint } from './features/pwa/utils/pwaEnvironment';
 import { AppRouter } from './app/Router';
 import { AppRouterMain } from './app/RouterMain';
 import { AppRouterStudio } from './app/RouterStudio';
@@ -12,13 +13,30 @@ import { TopLoader } from './components/ui/TopLoader';
 import { AccessibilityProvider } from './lib/accessibility/AccessibilityProvider';
 import { getAppVariant } from './lib/appVariant';
 import { usePwaStore, type BeforeInstallPromptEvent } from './stores/pwaStore';
-import { initAppearance } from './stores/useAppearanceStore';
+import { initAppearance, useAppearanceStore } from './stores/useAppearanceStore';
 import './index.css';
 import './styles/mobile.css';
 
 applyNativeShellViewportLock();
 window.addEventListener('load', () => applyNativeShellViewportLock());
+initPwaStandaloneHtmlHint();
 initAppearance();
+
+try {
+  const osThemeMql = window.matchMedia('(prefers-color-scheme: dark)');
+  const onOsThemeChange = () => {
+    if (useAppearanceStore.getState().theme === 'system') {
+      useAppearanceStore.getState().setTheme('system');
+    }
+  };
+  if (typeof osThemeMql.addEventListener === 'function') {
+    osThemeMql.addEventListener('change', onOsThemeChange);
+  } else {
+    osThemeMql.addListener(onOsThemeChange);
+  }
+} catch {
+  /* ignore */
+}
 
 function RootRouter() {
   const v = getAppVariant();

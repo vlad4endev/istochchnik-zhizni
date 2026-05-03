@@ -1,5 +1,5 @@
 const LOCKED_VIEWPORT =
-  'width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=1, viewport-fit=cover, user-scalable=no';
+  'width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=1, viewport-fit=cover, user-scalable=no, interactive-widget=resizes-content';
 
 let viewportWatchAttached = false;
 

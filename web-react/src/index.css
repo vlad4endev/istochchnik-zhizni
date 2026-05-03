@@ -29,9 +29,9 @@
   --sidebar-width: 88px;
   --app-safe-bottom: env(safe-area-inset-bottom, 0px);
   --app-safe-top: env(safe-area-inset-top, 0px);
-  /* Реальная высота нижней панели (Layout.tsx): внутренний div — pt-1 + min-h ряда + pb-1 + pb nav под safe-area. */
+  /* Высота нижней панели (Layout.tsx): pt-1 + min-h ряда + padding nav под home indicator (один раз, без min-h на nav). */
   --app-bottom-nav-bar-height: 60px;
-  --app-bottom-nav-row-pad-y: 0.5rem; /* pt-1 + pb-1 на обёртке ряда табов */
+  --app-bottom-nav-row-pad-y: 0.25rem; /* только pt-1 на обёртке ряда табов */
   --app-bottom-nav-total-height: calc(
     var(--app-bottom-nav-bar-height) + var(--app-bottom-nav-row-pad-y) + var(--app-safe-bottom)
   );
@@ -177,9 +177,17 @@ html.app-native-shell {
   min-height: var(--app-viewport-height);
 }
 
-/* PWA с экрана «Домой» iOS/Android — тот же фон, что у splash и manifest */
+/* PWA с экрана «Домой» / iOS navigator.standalone — фон до края, без скачка кегля при повороте */
+html[data-pwa-standalone='1'] {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  background-color: var(--surface);
+}
+
 @media (display-mode: standalone) {
   html {
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
     background-color: var(--surface);
   }
 }
@@ -206,7 +214,7 @@ body {
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
   overscroll-behavior-y: contain;
-  /* Верх: вырез/notch. Низ: не дублируем safe-area — нижняя панель `.app-bottom-nav` сама даёт `padding-bottom` и фон до края экрана. */
+  /* Верх: вырез/notch. Низ: отступ под таб-бар — у самой панели `padding-bottom` под safe-area. */
   padding-top: env(safe-area-inset-top, 0px);
   padding-bottom: 0;
 }
