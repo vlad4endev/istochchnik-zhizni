@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { LuFile, LuImage, LuLink2 } from 'react-icons/lu';
 import * as api from '../api/messengerApi';
+import { getAlbumImageUrl, getPrimaryAttachmentUrl, inferMessengerPayloadType } from '../payloadMedia';
 import { resolvePublicUrl } from '../../../lib/resolvePublicUrl';
 import { ManageScreenShell, ManageSettingsGroup } from './ManageScreenShell';
 import { SkeletonBox } from '@/components/ui/SkeletonBox';
@@ -53,17 +54,18 @@ export function ChatMediaPage() {
   const mediaItems = useMemo(() => {
     const out: Array<{ id: string; src: string }> = [];
     for (const m of messages) {
-      if (m.is_deleted || m.payload_type !== 'image') continue;
-      const p = (m.payload ?? {}) as { url?: string; images?: Array<{ url?: string }> };
+      if (m.is_deleted || inferMessengerPayloadType(m) !== 'image') continue;
+      const p = (m.payload ?? {}) as Record<string, unknown>;
       const album = Array.isArray(p.images) ? p.images : [];
       if (album.length) {
         for (const img of album) {
-          const raw = String(img?.url ?? '').trim();
+          const row = typeof img === 'object' && img !== null ? (img as Record<string, unknown>) : {};
+          const raw = getAlbumImageUrl(row);
           const src = resolvePublicUrl(raw) ?? raw;
           if (src) out.push({ id: String(m.id), src });
         }
       } else {
-        const raw = String(p.url ?? '').trim();
+        const raw = getPrimaryAttachmentUrl(p);
         const src = resolvePublicUrl(raw) ?? raw;
         if (src) out.push({ id: String(m.id), src });
       }
@@ -73,10 +75,10 @@ export function ChatMediaPage() {
 
   const fileItems = useMemo(() => {
     return messages
-      .filter((m) => !m.is_deleted && m.payload_type === 'file')
+      .filter((m) => !m.is_deleted && inferMessengerPayloadType(m) === 'file')
       .map((m) => {
         const p = (m.payload ?? {}) as { url?: string; name?: string; filename?: string };
-        const raw = String(p.url ?? '').trim();
+        const raw = getPrimaryAttachmentUrl(p as Record<string, unknown>);
         const href = resolvePublicUrl(raw) ?? raw;
         return {
           id: String(m.id),

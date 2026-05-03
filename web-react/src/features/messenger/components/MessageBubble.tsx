@@ -2,6 +2,11 @@ import { memo, useState, useRef, useMemo, useEffect, useCallback } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useChatStore } from '../chatStore';
 import { fetchMessageAttachmentUrl, type MessageWithSender } from '../api/messengerApi';
+import {
+  getAlbumImageUrl,
+  getPrimaryAttachmentUrl,
+  inferMessengerPayloadType,
+} from '../payloadMedia';
 import { apiErrorMessage, approveAccessRequest, rejectAccessRequest } from '../../admin/api';
 import { IoCheckmark, IoCheckmarkDone } from 'react-icons/io5';
 import { LuDownload, LuFileText, LuLoader, LuRefreshCw, LuX } from 'react-icons/lu';
@@ -489,17 +494,11 @@ function MessageBubbleInner({
     return d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
   }, [message.created_at]);
 
-  const payloadType = useMemo(() => {
-    if (message.payload_type) return message.payload_type;
-    const p = (message.payload ?? {}) as Record<string, unknown>;
-    const rawUrl = String(p.url ?? '').trim();
-    const mime = String(p.mimeType ?? p.mimetype ?? '').trim().toLowerCase();
-    const images = Array.isArray(p.images) ? p.images : [];
-    if (images.length > 0) return 'image';
-    if (mime.startsWith('image/') || /\.(jpe?g|png|webp|gif|heic|heif)$/i.test(rawUrl)) return 'image';
-    if (rawUrl) return 'file';
-    return 'text';
-  }, [message.payload, message.payload_type]);
+  const payloadType = useMemo(() => inferMessengerPayloadType(message), [
+    message.payload,
+    message.payload_type,
+    (message as MessageWithSender & { payloadType?: string }).payloadType,
+  ]);
   const payload = (message.payload ?? {}) as Record<string, unknown>;
   const albumImages = Array.isArray(payload.images)
     ? payload.images
@@ -507,7 +506,12 @@ function MessageBubbleInner({
         .filter((x): x is Record<string, unknown> => Boolean(x))
     : [];
   const firstAlbumImage = albumImages[0] ?? null;
-  const attachmentRawUrl = String(payload.url ?? firstAlbumImage?.url ?? '').trim();
+  const attachmentRawUrl = (() => {
+    const direct = getPrimaryAttachmentUrl(payload);
+    if (direct) return direct;
+    if (firstAlbumImage) return getAlbumImageUrl(firstAlbumImage);
+    return '';
+  })();
   const attachmentObjectPath = String(
     payload.objectPath ?? payload.object_path ?? firstAlbumImage?.objectPath ?? firstAlbumImage?.object_path ?? '',
   ).trim();
@@ -618,7 +622,7 @@ function MessageBubbleInner({
           <div className="w-full max-w-[min(78vw,22rem)] overflow-hidden rounded-2xl">
             <div className={['grid gap-1.5', colsClass].join(' ')}>
               {albumImages.map((img, idx) => {
-                const rawUrl = String(img.url ?? '').trim();
+                const rawUrl = getAlbumImageUrl(img);
                 const src = resolvePublicUrl(rawUrl) ?? rawUrl;
                 const mime = String(img.mimeType ?? img.mimetype ?? '').trim().toLowerCase();
                 const name = String(img.name ?? img.filename ?? '').trim().toLowerCase();

@@ -14,6 +14,7 @@ import { resolvePublicUrl } from '../../../lib/resolvePublicUrl';
 import { ChatMediaGallery } from './ChatMediaGallery';
 import { formatMessengerLastSeen } from '../lastSeenUtils';
 import { groupMessages } from '../groupMessages';
+import { getAlbumImageUrl, getPrimaryAttachmentUrl, inferMessengerPayloadType } from '../payloadMedia';
 import { getAvatarColor, getAvatarInitial } from '../avatarUtils';
 import './messenger.css';
 
@@ -495,18 +496,19 @@ export function ChatWindow({
   const mediaItems = useMemo(() => {
     const out: { messageId: string; src: string }[] = [];
     for (const m of messages) {
-      if (m.is_deleted || m.payload_type !== 'image') continue;
-      const payload = (m.payload ?? {}) as { url?: string; images?: Array<{ url?: string }> };
+      if (m.is_deleted || inferMessengerPayloadType(m) !== 'image') continue;
+      const payload = (m.payload ?? {}) as Record<string, unknown>;
       const album = Array.isArray(payload.images) ? payload.images : [];
       if (album.length > 0) {
         for (const img of album) {
-          const raw = String(img?.url ?? '').trim();
+          const row = typeof img === 'object' && img !== null ? (img as Record<string, unknown>) : {};
+          const raw = getAlbumImageUrl(row);
           const src = resolvePublicUrl(raw) ?? raw;
           if (src) out.push({ messageId: String(m.id), src });
         }
         continue;
       }
-      const raw = String(payload.url ?? '').trim();
+      const raw = getPrimaryAttachmentUrl(payload);
       const src = resolvePublicUrl(raw) ?? raw;
       if (src) out.push({ messageId: String(m.id), src });
     }

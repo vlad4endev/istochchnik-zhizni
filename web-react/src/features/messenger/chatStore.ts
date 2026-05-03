@@ -8,6 +8,12 @@ import { extractMentionMemberIdsFromText, normalizeMentionsToCanonical } from '.
 import { getAvatarInitial } from './avatarUtils';
 import { sendRealtimeJson } from '../../lib/realtimeWsClient';
 import { isMessengerChatReadSurfaceOpen } from './messengerReadSurface';
+import { inferMessengerPayloadType } from './payloadMedia';
+
+function normalizeIncomingMessengerMessage(msg: MessageWithSender): MessageWithSender {
+  if (msg.payload_type) return msg;
+  return { ...msg, payload_type: inferMessengerPayloadType(msg) };
+}
 
 /** Личный чат до первого сообщения: нет строки в БД, пока пользователь не отправит сообщение. */
 export const DRAFT_PRIVATE_PREFIX = 'draft:';
@@ -1391,7 +1397,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   // ─── WS event handlers ───────────────────────────────────
 
-  handleNewMessage: (convId, msg) => {
+  handleNewMessage: (convId, incoming) => {
+    const msg = normalizeIncomingMessengerMessage(incoming);
     const idKey = String(convId);
     const serverMsgId = String(msg.id);
     const state = get();

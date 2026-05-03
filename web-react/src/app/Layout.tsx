@@ -701,7 +701,7 @@ export function Layout() {
 
   return (
     <MessengerWsProvider>
-    <div className="flex min-h-0 w-full max-w-full flex-1 flex-col overflow-x-clip bg-[var(--surface)] text-[var(--text)]">
+    <div className="flex h-full min-h-0 w-full max-w-full flex-1 flex-col bg-[var(--surface)] text-[var(--text)]">
       <ScrollRestoration />
       <a
         href="#main-content"

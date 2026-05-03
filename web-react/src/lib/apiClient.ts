@@ -67,6 +67,10 @@ apiClient.interceptors.request.use((config) => {
     // Prevent stale bearer token after logout/session clear.
     delete (next.headers as Record<string, unknown>).Authorization;
   }
+  // FormData: не удалять boundary — убираем только случайный явный Content-Type (multipart без boundary ломает загрузку).
+  if (typeof FormData !== 'undefined' && next.data instanceof FormData && next.headers) {
+    delete (next.headers as Record<string, unknown>)['Content-Type'];
+  }
   return next;
 });
 
