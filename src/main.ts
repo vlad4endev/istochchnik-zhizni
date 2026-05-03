@@ -412,6 +412,18 @@ async function start(): Promise<void> {
       );
     }
   }
+
+  if (!process.env.SUPABASE_URL?.trim() || !process.env.SUPABASE_SERVICE_ROLE_KEY?.trim()) {
+    console.warn(
+      '[WARN] Supabase Storage не настроен (SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY) — загрузка файлов в мессенджере не будет работать.',
+    );
+  }
+  if (!process.env.SUPABASE_STORAGE_PUBLIC_URL?.trim()) {
+    console.warn(
+      '[WARN] SUPABASE_STORAGE_PUBLIC_URL не задан — в браузере возможен mixed content (HTTP URL файла на HTTPS сайте).',
+    );
+  }
+
   const server = http.createServer(app);
   await initMessengerFanoutPublisherOnly();
   await initRealtimeRedis();

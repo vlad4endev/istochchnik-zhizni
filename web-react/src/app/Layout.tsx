@@ -44,7 +44,6 @@ import { LAYOUT_MAIN_CHROME_EVENT } from './layoutChrome';
 import { AppAvatar } from '../components/AppAvatar';
 import { CoordinatorDashboardNoteFab } from '../features/dashboard/components/CoordinatorDashboardNoteFab';
 import { apiClient } from '../lib/apiClient';
-import { apiBoolean } from '../lib/apiBoolean';
 import { fetchActiveBroadcast } from '@/api/broadcast';
 import { getActiveEvents, getCalendarDay, formatCalendarDayKey } from '@/features/calendar/api';
 import { fetchSongs } from '@/features/songbook/api';
@@ -280,17 +279,17 @@ function formatNavBadgeCount(n: number): string {
 
 function navClassName(isActive: boolean, compact = false): string {
   const base = compact
-    ? 'group relative flex min-w-0 flex-1 flex-col items-center justify-center overflow-visible rounded-2xl px-0.5 py-1 transition-colors duration-200 tap-highlight-transparent touch-manipulation active:scale-[0.96]'
+    ? 'group relative flex min-w-0 flex-1 flex-col items-center justify-center overflow-visible rounded-2xl px-0.5 py-1 transition-colors duration-150 tap-highlight-transparent touch-manipulation outline-none motion-reduce:transition-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-2 focus-visible:ring-offset-transparent'
     : 'group flex w-full items-center justify-start gap-3 rounded-2xl px-4 py-3 text-left text-sm font-semibold transition-colors duration-200 tap-highlight-transparent';
   const size = compact
     ? 'min-h-[52px]'
     : '';
   const active = isActive
     ? compact
-      ? 'bg-primary/10 text-primary nav-active-glow'
+      ? 'bg-primary/10 text-primary nav-active-glow active:bg-primary/[0.14]'
       : 'bg-primary text-white shadow-md shadow-primary/25 nav-active-glow'
     : compact
-      ? 'text-gray-400 hover:bg-gray-50 hover:text-gray-700'
+      ? 'text-gray-400 hover:bg-gray-50 hover:text-gray-700 active:bg-gray-100 active:text-gray-600'
       : 'text-stone-600 hover:bg-stone-100 shell:hover:bg-stone-50';
   return `${base} ${size} ${active}`.replace(/\s+/g, ' ').trim();
 }
@@ -606,11 +605,6 @@ export function Layout() {
   }, [orderedMobileNavItems]);
   const isDashboardRoute =
     location.pathname === '/dashboard' || location.pathname === '/dashboard/';
-  const showCoordinatorDashboardFab =
-    isDashboardRoute &&
-    meQ.isSuccess &&
-    ((meQ.data?.app_role?.trim().toLowerCase() === 'admin') ||
-      apiBoolean(meQ.data?.is_collection_coordinator));
 
   const markAllDeliveriesOpened = useCallback(async () => {
     if (!token) return;
@@ -1006,7 +1000,7 @@ export function Layout() {
       {/* Телефон: нижняя навигация (иконка + подпись, как в нативных приложениях) */}
       <nav
         className={[
-          'app-bottom-nav bottom-nav fixed bottom-0 left-0 right-0 z-50 border-t border-gray-100 bg-white/95 pb-[var(--app-safe-bottom)] shadow-sm backdrop-blur-xl supports-[backdrop-filter]:bg-white/90 lg:hidden transition-opacity duration-150 min-h-[var(--app-bottom-nav-total-height)]',
+          'app-bottom-nav bottom-nav fixed bottom-0 left-0 right-0 z-[100] isolate border-t border-black/[0.06] bg-white/[0.94] pb-[var(--app-safe-bottom)] shadow-[0_-1px_0_rgba(0,0,0,0.04),0_-8px_24px_rgba(28,25,23,0.06)] backdrop-blur-xl backdrop-saturate-150 supports-[backdrop-filter]:bg-white/88 lg:hidden transition-opacity duration-150 ease-out min-h-[var(--app-bottom-nav-total-height)] [padding-left:max(0.5rem,env(safe-area-inset-left,0px))] [padding-right:max(0.5rem,env(safe-area-inset-right,0px))]',
           mainChromeVisible ? 'opacity-100' : 'pointer-events-none opacity-0',
         ].join(' ')}
         aria-label="Основная навигация"
@@ -1014,10 +1008,7 @@ export function Layout() {
       >
         <div
           ref={navTabRowRef}
-          className={[
-            'flex w-full min-h-[var(--app-bottom-nav-bar-height)] min-w-0 items-stretch justify-evenly gap-0 px-0.5 pb-1 pt-1 sm:px-1',
-            showCoordinatorDashboardFab ? 'max-lg:pr-[4.25rem]' : '',
-          ].join(' ')}
+          className="flex w-full min-h-[var(--app-bottom-nav-bar-height)] min-w-0 items-stretch gap-0 px-0 pb-1 pt-1 sm:px-0.5"
         >
           {mobileNavSplit.primary.map((item) => {
             const Icon = item.Icon;

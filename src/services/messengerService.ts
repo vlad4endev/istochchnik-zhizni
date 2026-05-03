@@ -25,6 +25,14 @@ function bigint(v: unknown): string {
   return String(v);
 }
 
+/** Публичный URL для аватаров/обложек чатов в ответах API (HTTPS, без LAN-mixed-content). */
+function rewriteMessengerPublicUrl(raw: string | null | undefined): string | null {
+  if (raw == null) return null;
+  const t = String(raw).trim();
+  if (!t) return null;
+  return rewriteSupabaseStorageUrlForClient(t);
+}
+
 function pgErrorCode(e: unknown): string | undefined {
   const c =
     e && typeof e === 'object' && 'code' in e ? (e as { code: unknown }).code : undefined;
@@ -218,8 +226,9 @@ export async function listConversations(memberId: number): Promise<ConversationL
     id: bigint(r.id),
     type: r.type as ConversationType,
     title: r.title,
-    avatar_url:
+    avatar_url: rewriteMessengerPublicUrl(
       r.avatar_url != null && String(r.avatar_url).trim() !== '' ? String(r.avatar_url).trim() : null,
+    ),
     updated_at: r.updated_at,
     last_message: r.lm_id
       ? {
@@ -238,7 +247,7 @@ export async function listConversations(memberId: number): Promise<ConversationL
           name: r.om_name,
           first_name: r.om_first_name,
           last_name: r.om_last_name,
-          avatar_url: r.om_avatar_url ?? null,
+          avatar_url: rewriteMessengerPublicUrl(r.om_avatar_url ?? null),
           last_seen_at:
             r.om_last_seen_at != null
               ? new Date(r.om_last_seen_at as string | Date).toISOString()
@@ -279,7 +288,7 @@ export async function getConversationMeta(
       id: bigint(r.id),
       type: r.type as ConversationType,
       title: r.title as string | null,
-      avatar_url: r.avatar_url as string | null,
+      avatar_url: rewriteMessengerPublicUrl(r.avatar_url as string | null),
       updated_at: r.updated_at as string,
       default_permissions,
       settings,
@@ -665,7 +674,7 @@ export async function getConversationListItem(
     id: bigint(r.id),
     type: r.type as ConversationType,
     title: r.title,
-    avatar_url: r.avatar_url,
+    avatar_url: rewriteMessengerPublicUrl(r.avatar_url != null ? String(r.avatar_url).trim() : null),
     updated_at: r.updated_at,
     last_message: r.lm_id
       ? {
@@ -684,7 +693,7 @@ export async function getConversationListItem(
           name: r.om_name,
           first_name: r.om_first_name,
           last_name: r.om_last_name,
-          avatar_url: r.om_avatar_url ?? null,
+          avatar_url: rewriteMessengerPublicUrl(r.om_avatar_url ?? null),
           last_seen_at:
             r.om_last_seen_at != null
               ? new Date(r.om_last_seen_at as string | Date).toISOString()

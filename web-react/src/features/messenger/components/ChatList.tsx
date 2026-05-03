@@ -334,13 +334,19 @@ function ChatListItem({
         {/* Колонка аватара: без нижней линии (как в Telegram). */}
         <div className="flex shrink-0 items-center py-2 pl-3 pr-2">
           <div className="relative h-12 w-12 shrink-0">
-            <div
-              className="grid h-12 w-12 place-items-center overflow-hidden rounded-full text-base font-bold text-white"
-              style={{ background: avatarColor }}
-            >
+            <div className="grid h-12 w-12 place-items-center overflow-hidden rounded-full">
               <AppAvatar
                 src={avatarUrl}
-                fallback={<span>{avatarLetter}</span>}
+                initialsFallbackText={displayName}
+                initialsColorSeed={conv.id}
+                fallback={
+                  <span
+                    className="grid h-full w-full place-items-center text-base font-bold text-white"
+                    style={{ background: avatarColor }}
+                  >
+                    {avatarLetter}
+                  </span>
+                }
                 priority={avatarPriority}
                 className="grid h-full w-full place-items-center"
                 imgClassName="h-full w-full object-cover"

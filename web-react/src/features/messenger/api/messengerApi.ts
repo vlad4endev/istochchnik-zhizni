@@ -1,3 +1,5 @@
+import axios from 'axios';
+
 import { apiClient } from '../../../lib/apiClient';
 
 const BASE = '/api/messenger';
@@ -84,10 +86,20 @@ export interface ConversationListItem {
 
 type ConversationListRow = ConversationListItem & { avatarUrl?: string | null };
 
+/** Сброс кэша браузера для аватара при смене `updated_at` чата / участника. */
+function withAvatarCacheBust(url: string | null, versionIso: string | null | undefined): string | null {
+  if (!url) return null;
+  const t = versionIso ? Date.parse(String(versionIso)) : NaN;
+  if (!Number.isFinite(t)) return url;
+  const sep = url.includes('?') ? '&' : '?';
+  return `${url}${sep}v=${t}`;
+}
+
 function normalizeConversationListItem(c: ConversationListRow): ConversationListItem {
   const rawAvatar = c.avatar_url ?? c.avatarUrl ?? null;
-  const avatar_url =
+  const avatarBase =
     typeof rawAvatar === 'string' && rawAvatar.trim().length > 0 ? rawAvatar.trim() : null;
+  const avatar_url = withAvatarCacheBust(avatarBase, c.updated_at ?? null);
   const omIn = c.other_member as (NonNullable<ConversationListItem['other_member']> & {
     avatarUrl?: string | null;
   }) | null;
@@ -96,7 +108,8 @@ function normalizeConversationListItem(c: ConversationListRow): ConversationList
         ...omIn,
         avatar_url: (() => {
           const raw = omIn.avatar_url ?? omIn.avatarUrl ?? null;
-          return typeof raw === 'string' && raw.trim().length > 0 ? raw.trim() : null;
+          const trimmed = typeof raw === 'string' && raw.trim().length > 0 ? raw.trim() : null;
+          return withAvatarCacheBust(trimmed, c.updated_at ?? null);
         })(),
       }
     : null;
@@ -245,7 +258,14 @@ export async function uploadFile(
       await new Promise((resolve) => setTimeout(resolve, 300 * attempt));
     }
   }
-  throw lastError;
+  if (axios.isAxiosError(lastError)) {
+    const data = lastError.response?.data as { error?: string; code?: string } | undefined;
+    const msg = typeof data?.error === 'string' && data.error.trim() ? data.error.trim() : lastError.message;
+    const err = new Error(msg) as Error & { code?: string };
+    if (typeof data?.code === 'string') err.code = data.code;
+    throw err;
+  }
+  throw lastError instanceof Error ? lastError : new Error(String(lastError));
 }
 
 const attachmentUrlCache = new Map<string, { url: string; expiresAtMs: number }>();

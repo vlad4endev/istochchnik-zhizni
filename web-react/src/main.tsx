@@ -14,6 +14,7 @@ import { getAppVariant } from './lib/appVariant';
 import { usePwaStore, type BeforeInstallPromptEvent } from './stores/pwaStore';
 import { initAppearance } from './stores/useAppearanceStore';
 import './index.css';
+import './styles/mobile.css';
 
 applyNativeShellViewportLock();
 window.addEventListener('load', () => applyNativeShellViewportLock());

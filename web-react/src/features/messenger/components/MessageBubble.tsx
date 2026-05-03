@@ -512,36 +512,40 @@ function MessageBubbleInner({
     if (firstAlbumImage) return getAlbumImageUrl(firstAlbumImage);
     return '';
   })();
-  const attachmentObjectPath = String(
-    payload.objectPath ?? payload.object_path ?? firstAlbumImage?.objectPath ?? firstAlbumImage?.object_path ?? '',
-  ).trim();
   const [resolvedAttachmentUrl, setResolvedAttachmentUrl] = useState<string | null>(null);
 
   useEffect(() => {
     const fallback = attachmentRawUrl ? (resolvePublicUrl(attachmentRawUrl) ?? attachmentRawUrl) : null;
     setResolvedAttachmentUrl(fallback);
-    if (
-      (payloadType !== 'image' && payloadType !== 'file') ||
-      (payloadType === 'image' && albumImages.length > 0) ||
-      !attachmentObjectPath ||
-      !/^\d+$/.test(String(message.id))
-    ) {
-      return;
-    }
+
+    if (payloadType !== 'image' && payloadType !== 'file') return undefined;
+    if (payloadType === 'image' && albumImages.length > 0) return undefined;
+    if (!/^\d+$/.test(String(message.id))) return undefined;
+
     let cancelled = false;
-    void fetchMessageAttachmentUrl(String(message.id))
-      .then(({ url }) => {
-        if (cancelled || !url) return;
-        const resolved = resolvePublicUrl(url) ?? url;
-        if (resolved) setResolvedAttachmentUrl(resolved);
-      })
-      .catch(() => {
-        // keep fallback URL to avoid breaking current rendering flow
-      });
+    const maxAttempts = 3;
+
+    async function tryFetchSignedUrl(): Promise<void> {
+      for (let attempt = 1; attempt <= maxAttempts && !cancelled; attempt += 1) {
+        try {
+          const { url } = await fetchMessageAttachmentUrl(String(message.id));
+          if (cancelled || !url) return;
+          const resolved = resolvePublicUrl(url) ?? url;
+          if (resolved) setResolvedAttachmentUrl(resolved);
+          return;
+        } catch {
+          if (attempt < maxAttempts && !cancelled) {
+            await new Promise((r) => setTimeout(r, 1000 * attempt));
+          }
+        }
+      }
+    }
+
+    void tryFetchSignedUrl();
     return () => {
       cancelled = true;
     };
-  }, [attachmentRawUrl, attachmentObjectPath, message.id, payloadType, albumImages.length]);
+  }, [attachmentRawUrl, message.id, payloadType, albumImages.length]);
 
   /** Время и галочки в одной строке с текстом (как в Telegram), если нет цитаты и не «особый» контент. */
   const useInlineTextMeta =

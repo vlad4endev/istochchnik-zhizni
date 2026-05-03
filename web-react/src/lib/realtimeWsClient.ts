@@ -21,8 +21,28 @@ let ws: WebSocket | null = null;
 let authToken: string | null = null;
 let stopped = false;
 let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
-let reconnectAttempt = 0;
+/** После обрыва: номер «волны» переподключения (для wasReconnected). */
+let reconnectGeneration = 0;
+const MIN_RECONNECT_MS = 1000;
+const MAX_RECONNECT_MS = 30_000;
+let reconnectBackoffMs = MIN_RECONNECT_MS;
 let stableOpenTimer: ReturnType<typeof setTimeout> | undefined;
+
+/** Активный чат — повторный `join` сразу после auth (вкладка / восстановление WS). */
+let activeMessengerConversationId: string | null = null;
+
+/**
+ * Сообщить, какой чат сейчас открыт (без импорта chatStore — избегаем цикла модулей).
+ * Черновики `draft:…` игнорируются.
+ */
+export function notifyActiveMessengerConversationId(conversationId: string | null): void {
+  const raw = typeof conversationId === 'string' ? conversationId.trim() : '';
+  if (!raw || raw.startsWith('draft:')) {
+    activeMessengerConversationId = null;
+    return;
+  }
+  activeMessengerConversationId = raw;
+}
 
 /**
  * Таймеры heartbeat привязаны к конкретному экземпляру `WebSocket`, а не к модулю:
@@ -50,8 +70,9 @@ function attachGlobalNetworkListeners(): void {
   window.addEventListener('online', () => {
     if (stopped || !authToken) return;
     if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) return;
+    reconnectBackoffMs = MIN_RECONNECT_MS;
     clearTimers();
-    reconnectAttempt = 0;
+    reconnectGeneration = 0;
     openSocket();
   });
 
@@ -71,8 +92,9 @@ function attachGlobalNetworkListeners(): void {
     if (stopped || !authToken) return;
     if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) return;
     if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
+    reconnectBackoffMs = MIN_RECONNECT_MS;
     clearTimers();
-    reconnectAttempt = 0;
+    reconnectGeneration = 0;
     openSocket();
   });
 }
@@ -171,16 +193,20 @@ function dispatchOpen(detail: OpenDetail): void {
 
 function scheduleReconnect(): void {
   if (stopped || !authToken) return;
-  clearTimers();
+  clearReconnectTimer();
+  clearStableOpenTimer();
+  clearAllSocketTimers();
   if (typeof navigator !== 'undefined' && navigator.onLine === false) {
     logInfo('reconnect: ждём online (offline)');
     return;
   }
-  const delay = Math.min(1000 * 2 ** reconnectAttempt, 30_000);
-  reconnectAttempt += 1;
-  logInfo(`reconnect: попытка ${reconnectAttempt} через ${delay}ms`);
+  const jitter = Math.random() * 500;
+  const delay = Math.min(reconnectBackoffMs + jitter, MAX_RECONNECT_MS + 500);
+  logInfo(`reconnect: через ${Math.round(delay)}ms (база backoff ${reconnectBackoffMs}ms)`);
+  reconnectBackoffMs = Math.min(reconnectBackoffMs * 2, MAX_RECONNECT_MS);
   reconnectTimer = setTimeout(() => {
     reconnectTimer = undefined;
+    reconnectGeneration += 1;
     openSocket();
   }, delay);
 }
@@ -247,12 +273,22 @@ function openSocket(): void {
   socketTimers.set(socket, timers);
 
   socket.onopen = () => {
-    const wasReconnected = reconnectAttempt > 0;
+    const wasReconnected = reconnectGeneration > 0;
     logInfo('open', { wasReconnected });
     try {
       socket.send(JSON.stringify({ type: 'auth', token: authToken }));
     } catch (e) {
       logWarn('auth send failed', { error: String(e) });
+    }
+
+    if (activeMessengerConversationId) {
+      try {
+        socket.send(
+          JSON.stringify({ type: 'join', conversationId: activeMessengerConversationId }),
+        );
+      } catch (e) {
+        logWarn('join active conversation failed', { error: String(e) });
+      }
     }
 
     // Heartbeat: JSON ping (сервер отвечает { type: 'pong' }) + нативный ping от сервера (ws).
@@ -286,7 +322,8 @@ function openSocket(): void {
     clearStableOpenTimer();
     stableOpenTimer = setTimeout(() => {
       if (ws === socket && socket.readyState === WebSocket.OPEN) {
-        reconnectAttempt = 0;
+        reconnectBackoffMs = MIN_RECONNECT_MS;
+        reconnectGeneration = 0;
         logInfo('connection stable: reconnect backoff reset');
       }
       stableOpenTimer = undefined;
@@ -351,6 +388,8 @@ export function closeRealtimeWs(): void {
   stopped = true;
   authToken = null;
   lastReadyPayload = null;
+  reconnectBackoffMs = MIN_RECONNECT_MS;
+  reconnectGeneration = 0;
   clearTimers();
   try {
     ws?.close();
@@ -382,7 +421,8 @@ export function openRealtimeWs(token: string): void {
     /* ignore */
   }
   ws = null;
-  reconnectAttempt = 0;
+  reconnectBackoffMs = MIN_RECONNECT_MS;
+  reconnectGeneration = 0;
   openSocket();
 }
 

@@ -60,6 +60,10 @@ function internalStorageUrlPrefixes(): string[] {
 /**
  * Подмена ориджина в URL Storage API (`/storage/v1/...`) для клиентов за HTTPS.
  * Без `SUPABASE_STORAGE_PUBLIC_URL` возвращает строку как есть.
+ *
+ * 1) Сначала заменяем известные внутренние префиксы (SUPABASE_URL, LEGACY_ORIGINS).
+ * 2) Затем любой URL с путём `/storage/v1/` переносим на публичный origin+protocol
+ *    из `SUPABASE_STORAGE_PUBLIC_URL` — лечит mixed content (http LAN → https сайт).
  */
 export function rewriteSupabaseStorageUrlForClient(url: string): string {
   if (!url || typeof url !== 'string') return url;
@@ -71,6 +75,17 @@ export function rewriteSupabaseStorageUrlForClient(url: string): string {
     if (trimmed === prefix || trimmed.startsWith(`${prefix}/`) || trimmed.startsWith(`${prefix}?`)) {
       return publicOrigin + trimmed.slice(prefix.length);
     }
+  }
+  try {
+    const parsed = new URL(trimmed);
+    if (parsed.pathname.includes('/storage/v1/')) {
+      const pub = new URL(publicOrigin.includes('://') ? publicOrigin : `https://${publicOrigin}`);
+      parsed.protocol = pub.protocol;
+      parsed.host = pub.host;
+      return parsed.toString();
+    }
+  } catch {
+    /* ignore */
   }
   return url;
 }

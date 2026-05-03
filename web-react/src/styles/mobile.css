@@ -1,13 +1,10 @@
-:root {
-  --safe-area-bottom: env(safe-area-inset-bottom, 0px);
-}
+/**
+ * Мобильная и планшетная вёрстка (до `lg` / 1024px).
+ * Подключается в main.tsx после index.css.
+ * Нижний таб-бар `.app-bottom-nav` верстается в Layout.tsx (blur, safe-area) — здесь не переопределяем.
+ */
 
-/* Desktop default: keep mobile nav hidden unless media-query enables it */
-.bottom-nav {
-  display: none;
-}
-
-@media (max-width: 768px) {
+@media (max-width: 1023px) {
   aside,
   [class*='sidebar'],
   nav.desktop-nav {
@@ -27,25 +24,6 @@
     width: 100% !important;
     max-width: 100% !important;
     min-width: 0 !important;
-  }
-
-  /* Основная нижняя навигация из Layout.tsx: высота и safe-area задаются Tailwind/CSS variables — не фиксировать 64px. */
-  .app-bottom-nav {
-    display: flex !important;
-    flex-direction: column;
-    justify-content: flex-end;
-    position: fixed;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    z-index: 100;
-    height: auto !important;
-    min-height: unset !important;
-    padding-left: 8px;
-    padding-right: 8px;
-    padding-top: 0;
-    background: rgba(255, 255, 255, 0.95);
-    border-top: 1px solid #f0e9ea;
   }
 
   /* Легаси-блок без app-bottom-nav (если останется где-то отдельно). */
@@ -315,7 +293,7 @@
   }
   .song-controls-bar {
     position: fixed !important;
-    bottom: 64px !important;
+    bottom: var(--app-bottom-nav-total-height) !important;
     left: 0;
     right: 0;
     background: #fff;
@@ -461,7 +439,7 @@
   }
   .save-bar {
     position: sticky !important;
-    bottom: 64px !important;
+    bottom: var(--app-bottom-nav-total-height) !important;
     margin: 0 -16px !important;
     border-radius: 0 !important;
     border-left: none !important;

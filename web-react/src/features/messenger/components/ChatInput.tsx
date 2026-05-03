@@ -8,6 +8,28 @@ import emojiData from '@emoji-mart/data';
 import { PollCreateModal } from './PollCreateModal';
 import { buildMentionToken, denormalizeMentionsForEditor } from '../mentionUtils';
 import { compressImageForMessengerUpload } from '../compressImageForUpload';
+import axios from 'axios';
+import { emitAppToast } from '../../../lib/uiFeedback';
+
+function toastMessengerUploadError(e: unknown): void {
+  const err = e as Error & { code?: string };
+  if (axios.isAxiosError(e)) {
+    const data = e.response?.data as { error?: string; code?: string } | undefined;
+    if (data?.code === 'supabase_not_configured') {
+      emitAppToast('Загрузка файлов временно недоступна', 'error');
+      return;
+    }
+    if (typeof data?.error === 'string' && data.error.trim()) {
+      emitAppToast(data.error.trim(), 'error');
+      return;
+    }
+  }
+  if (typeof err?.code === 'string' && err.code === 'supabase_not_configured') {
+    emitAppToast('Загрузка файлов временно недоступна', 'error');
+    return;
+  }
+  emitAppToast('Не удалось загрузить файл', 'error');
+}
 
 type PendingAttachment = {
   file: File;
@@ -442,6 +464,7 @@ export function ChatInput({
           setUploadErr('Загрузка отменена');
         } else {
           setUploadErr('Не удалось загрузить или отправить фотографии');
+          toastMessengerUploadError(e);
         }
       } finally {
         setUploading(null);
@@ -500,8 +523,10 @@ export function ChatInput({
           setUploadErr('Загрузка отменена');
         } else if (pending.uploaded) {
           setUploadErr('Файл загружен, но сообщение не отправилось. Нажмите отправить снова.');
+          emitAppToast('Сообщение не отправилось. Нажмите отправить снова.', 'error');
         } else {
           setUploadErr('Не удалось загрузить или отправить файл');
+          toastMessengerUploadError(e);
         }
       } finally {
         setUploading(null);

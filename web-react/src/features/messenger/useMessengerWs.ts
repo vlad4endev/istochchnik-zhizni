@@ -1,6 +1,6 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { useAuthStore } from '../auth/authStore';
-import { sendRealtimeJson, subscribeRealtimeMessages, subscribeRealtimeOpen } from '../../lib/realtimeWsClient';
+import { sendRealtimeJson, subscribeRealtimeMessages, subscribeRealtimeOpen, notifyActiveMessengerConversationId } from '../../lib/realtimeWsClient';
 import { useChatStore, isDraftPrivateConversationId } from './chatStore';
 
 function emitMessengerMetric(name: string, value: number, context?: Record<string, unknown>): void {
@@ -47,6 +47,22 @@ export function useMessengerWs(): {
     }
     sendRealtimeJson({ type: 'typing:stop', conversationId });
   }, []);
+
+  useEffect(() => {
+    if (!token) {
+      notifyActiveMessengerConversationId(null);
+      return;
+    }
+    let lastSynced: string | null | undefined;
+    const syncActiveConv = () => {
+      const id = useChatStore.getState().activeConversationId;
+      if (id === lastSynced) return;
+      lastSynced = id;
+      notifyActiveMessengerConversationId(id);
+    };
+    syncActiveConv();
+    return useChatStore.subscribe(syncActiveConv);
+  }, [token]);
 
   useEffect(() => {
     if (!token) return;
@@ -96,6 +112,9 @@ export function useMessengerWs(): {
   return { sendTypingStart, sendTypingStop };
 }
 
+/** Throttle: `ready` replay при каждом subscribeRealtimeMessages не должен ддосить API. */
+let lastMessengerReadySyncAt = 0;
+
 function handleWsMessage(msg: any): void {
   const store = useChatStore.getState();
   const isDev = typeof import.meta !== 'undefined' && Boolean(import.meta.env?.DEV);
@@ -129,6 +148,14 @@ function handleWsMessage(msg: any): void {
       if (Array.isArray(msg.onlineMembers)) {
         store.setOnlineMembers(msg.onlineMembers);
       }
+      {
+        const now = Date.now();
+        if (now - lastMessengerReadySyncAt >= 2500) {
+          lastMessengerReadySyncAt = now;
+          void store.loadConversations({ force: true });
+        }
+      }
+      void store.refreshUnread();
       break;
 
     case 'msg:new': {

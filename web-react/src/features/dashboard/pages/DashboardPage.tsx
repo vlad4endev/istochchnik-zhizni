@@ -710,7 +710,7 @@ function DashboardMain() {
               className="pointer-events-none absolute -bottom-8 left-6 h-[90px] w-[90px] rounded-full bg-white/[0.04] lg:-bottom-[50px] lg:-right-[30px] lg:left-auto lg:h-[130px] lg:w-[130px]"
               aria-hidden
             />
-            <div className="relative flex items-center justify-between gap-3">
+            <div className="relative flex min-w-0 items-center gap-3">
               <div className="min-w-0 flex-1 animate-prayer-fade-up motion-reduce:animate-none">
                 <p className="text-[13px] font-medium text-white/65">Добро пожаловать</p>
                 <h1 className="mt-0.5 truncate text-[22px] font-semibold leading-tight tracking-tight text-white lg:text-[24px]">
@@ -755,7 +755,7 @@ function DashboardMain() {
           </header>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto [webkit-overflow-scrolling:touch] pb-[max(2rem,env(safe-area-inset-bottom,0px))]">
+        <div className="min-h-0 flex-1 overflow-y-auto [webkit-overflow-scrolling:touch] pb-6 lg:pb-[max(2rem,env(safe-area-inset-bottom,0px))]">
         <div className="hidden lg:block">
           <div className="grid grid-cols-3 gap-[14px] px-0 py-4">
             <button
