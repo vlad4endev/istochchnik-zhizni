@@ -8,7 +8,6 @@ function isIosSafari(): boolean {
   if (typeof navigator === 'undefined') return false;
   const ua = navigator.userAgent;
   const isIos = /iphone|ipad|ipod/i.test(ua);
-  // Safari на iOS: нет Chrome, нет Firefox, нет CriOS, нет FxiOS
   const isSafari =
     /safari/i.test(ua) &&
     !/chrome|crios|fxios|android/i.test(ua);
@@ -16,12 +15,20 @@ function isIosSafari(): boolean {
 }
 
 function isStandalone(): boolean {
-  // iOS PWA запущен с экрана «Домой»
-  return (
-    ('standalone' in navigator &&
-      (navigator as Navigator & { standalone?: boolean }).standalone === true) ||
-    window.matchMedia('(display-mode: standalone)').matches
-  );
+  try {
+    if (
+      'standalone' in navigator &&
+      (navigator as Navigator & { standalone?: boolean }).standalone === true
+    ) {
+      return true;
+    }
+    if (window.matchMedia('(display-mode: standalone)').matches) return true;
+    if (window.matchMedia('(display-mode: fullscreen)').matches) return true;
+    if (window.matchMedia('(display-mode: minimal-ui)').matches) return true;
+  } catch {
+    /* ignore */
+  }
+  return false;
 }
 
 export function IOSInstallBanner() {
@@ -30,12 +37,10 @@ export function IOSInstallBanner() {
   const customLogoDataUrl = useBrandingStore((s) => s.customLogoDataUrl);
 
   useEffect(() => {
-    // Показываем только на iOS Safari, не в standalone и если не закрывали раньше
     if (!isIosSafari()) return;
     if (isStandalone()) return;
     if (sessionStorage.getItem(STORAGE_KEY) === '1') return;
 
-    // Небольшая задержка для лучшего UX
     const t = setTimeout(() => setVisible(true), 1800);
     return () => clearTimeout(t);
   }, []);
@@ -48,207 +53,127 @@ export function IOSInstallBanner() {
   if (!visible) return null;
 
   return (
-    <div
-      role="dialog"
-      aria-label="Установить приложение"
-      aria-modal="false"
-      style={{
-        position: 'fixed',
-        bottom: 'calc(env(safe-area-inset-bottom, 0px) + 5.5rem)',
-        left: '50%',
-        transform: 'translateX(-50%)',
-        zIndex: 9999,
-        width: 'calc(100% - 2rem)',
-        maxWidth: '28rem',
-        animation: 'ios-banner-in 0.35s cubic-bezier(0.34,1.56,0.64,1) both',
-      }}
-    >
-      <div
-        style={{
-          background: 'rgba(255,255,255,0.97)',
-          backdropFilter: 'blur(20px)',
-          WebkitBackdropFilter: 'blur(20px)',
-          borderRadius: '20px',
-          boxShadow:
-            '0 8px 40px rgba(0,0,0,0.14), 0 2px 8px rgba(0,0,0,0.08), inset 0 0 0 1px rgba(0,0,0,0.07)',
-          padding: '1rem 1rem 1.1rem',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '0.75rem',
-        }}
-      >
-        {/* Заголовок */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-          {/* Иконка приложения */}
-          <div
-            style={{
-              width: '3rem',
-              height: '3rem',
-              borderRadius: '14px',
-              background: 'var(--primary)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              flexShrink: 0,
-              overflow: 'hidden',
-              boxShadow: '0 2px 8px rgba(125,54,64,0.30)',
-            }}
-          >
-            {customLogoDataUrl ? (
-              <img
-                src={customLogoDataUrl}
-                alt=""
-                style={{ width: '100%', height: '100%', objectFit: 'contain', padding: '6px' }}
-              />
-            ) : (
-              <img
-                src="/assets/logo.svg"
-                alt=""
-                style={{ width: '100%', height: '100%', objectFit: 'contain', padding: '6px' }}
-              />
-            )}
-          </div>
-
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <p
-              style={{
-                margin: 0,
-                fontSize: '0.9375rem',
-                fontWeight: 800,
-                color: '#1c1917',
-                lineHeight: 1.25,
-              }}
-            >
-              Установить {appName}
-            </p>
-            <p
-              style={{
-                margin: '0.15rem 0 0',
-                fontSize: '0.75rem',
-                color: '#78716c',
-                lineHeight: 1.3,
-              }}
-            >
-              Добавьте приложение на экран&nbsp;«Домой»
-            </p>
-          </div>
-
-          <button
-            type="button"
-            onClick={dismiss}
-            aria-label="Закрыть"
-            style={{
-              flexShrink: 0,
-              width: '2rem',
-              height: '2rem',
-              border: 'none',
-              background: 'rgba(0,0,0,0.06)',
-              borderRadius: '50%',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              cursor: 'pointer',
-              color: '#78716c',
-              padding: 0,
-            }}
-          >
-            <LuX style={{ width: '1rem', height: '1rem' }} strokeWidth={2.5} />
-          </button>
-        </div>
-
-        {/* Инструкция */}
-        <div
-          style={{
-            background: 'rgba(125,54,64,0.05)',
-            borderRadius: '12px',
-            padding: '0.65rem 0.85rem',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '0.5rem',
-          }}
-        >
-          <Step
-            num={1}
-            text={
-              <>
-                Нажмите{' '}
-                <LuShare
-                  aria-hidden
-                  style={{
-                    display: 'inline-block',
-                    verticalAlign: '-0.2em',
-                    width: '1em',
-                    height: '1em',
-                    color: 'var(--primary)',
-                  }}
-                  strokeWidth={2}
-                />{' '}
-                <strong>«Поделиться»</strong> в панели Safari
-              </>
-            }
-          />
-          <Step
-            num={2}
-            text={
-              <>
-                Выберите{' '}
-                <strong>«На экран «Домой»»</strong>
-              </>
-            }
-          />
-          <Step num={3} text={<>Нажмите <strong>«Добавить»</strong></>} />
-        </div>
-      </div>
-
-      {/* Стрелка вниз, указывает на панель Safari */}
+    <>
+      {/* Лёгкий градиент снизу — визуальная опора, не перехватывает клики */}
       <div
         aria-hidden
-        style={{
-          position: 'absolute',
-          bottom: '-9px',
-          left: '50%',
-          transform: 'translateX(-50%)',
-          width: 0,
-          height: 0,
-          borderLeft: '10px solid transparent',
-          borderRight: '10px solid transparent',
-          borderTop: '10px solid rgba(255,255,255,0.97)',
-          filter: 'drop-shadow(0 2px 2px rgba(0,0,0,0.08))',
-        }}
+        className="pointer-events-none fixed inset-0 z-[9998] bg-gradient-to-t from-black/[0.14] via-transparent to-transparent dark:from-black/55"
       />
 
-      <style>{`
-        @keyframes ios-banner-in {
-          from { opacity: 0; transform: translateX(-50%) translateY(16px) scale(0.96); }
-          to   { opacity: 1; transform: translateX(-50%) translateY(0)    scale(1);    }
-        }
-      `}</style>
-    </div>
+      <div
+        role="dialog"
+        aria-label="Установить приложение"
+        aria-modal="false"
+        className="motion-reduce:animate-none pointer-events-none fixed bottom-[calc(env(safe-area-inset-bottom,0px)+5.5rem)] left-1/2 z-[9999] w-[calc(100%-2rem)] max-w-md animate-pwa-ios-install-in"
+      >
+        <div className="pointer-events-auto relative">
+          <div
+            className={[
+              'flex flex-col gap-3 rounded-[1.25rem] border border-stone-200/80 p-4 pb-[1.05rem]',
+              'bg-[var(--surface-elevated)] shadow-[var(--shadow-card)] backdrop-blur-md',
+              'dark:border-[var(--glass-border)] dark:shadow-[0_12px_48px_rgba(0,0,0,0.5)]',
+            ].join(' ')}
+          >
+            <div className="flex items-center gap-3">
+              <div
+                className={[
+                  'flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-2xl',
+                  'bg-[var(--primary)] shadow-md shadow-[var(--primary)]/35',
+                ].join(' ')}
+              >
+                {customLogoDataUrl ? (
+                  <img
+                    src={customLogoDataUrl}
+                    alt=""
+                    className="h-full w-full object-contain p-1.5"
+                  />
+                ) : (
+                  <img src="/assets/logo.svg" alt="" className="h-full w-full object-contain p-1.5" />
+                )}
+              </div>
+
+              <div className="min-w-0 flex-1">
+                <p className="m-0 text-[0.9375rem] font-extrabold leading-tight text-[var(--text)]">
+                  Установить {appName}
+                </p>
+                <p className="mt-0.5 text-[0.75rem] font-medium leading-snug text-[var(--text-muted)]">
+                  Добавьте приложение на экран&nbsp;«Домой»
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={dismiss}
+                aria-label="Закрыть"
+                className={[
+                  'flex h-11 w-11 shrink-0 items-center justify-center rounded-full',
+                  'bg-stone-500/10 text-[var(--text-secondary)] transition-colors',
+                  'hover:bg-stone-500/15 active:scale-[0.97]',
+                  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--a11y-focus-ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface-elevated)]',
+                  'dark:bg-white/10 dark:hover:bg-white/[0.14]',
+                ].join(' ')}
+              >
+                <LuX className="h-4 w-4" strokeWidth={2.5} aria-hidden />
+              </button>
+            </div>
+
+            <div className="flex flex-col gap-2 rounded-xl bg-primary/[0.07] px-3.5 py-2.5 dark:bg-primary/15">
+              <Step
+                num={1}
+                text={
+                  <>
+                    Нажмите{' '}
+                    <LuShare
+                      aria-hidden
+                      className="inline-block h-[1em] w-[1em] align-[-0.2em] text-[var(--primary)]"
+                      strokeWidth={2}
+                    />{' '}
+                    <strong className="font-extrabold text-[var(--text)]">«Поделиться»</strong> в панели Safari
+                  </>
+                }
+              />
+              <Step
+                num={2}
+                text={
+                  <>
+                    Выберите{' '}
+                    <strong className="font-extrabold text-[var(--text)]">«На экран «Домой»»</strong>
+                  </>
+                }
+              />
+              <Step
+                num={3}
+                text={
+                  <>
+                    Нажмите <strong className="font-extrabold text-[var(--text)]">«Добавить»</strong>
+                  </>
+                }
+              />
+            </div>
+          </div>
+
+          <div
+            aria-hidden
+            className="pointer-events-none absolute -bottom-2 left-1/2 h-0 w-0 -translate-x-1/2 border-x-[10px] border-t-[10px] border-x-transparent border-t-[color:var(--surface-elevated)] opacity-[0.94] drop-shadow-[0_2px_2px_rgba(0,0,0,0.08)] dark:opacity-90"
+          />
+        </div>
+      </div>
+    </>
   );
 }
 
 function Step({ num, text }: { num: number; text: React.ReactNode }) {
   return (
-    <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.5rem' }}>
+    <div className="flex items-baseline gap-2">
       <span
-        style={{
-          flexShrink: 0,
-          width: '1.25rem',
-          height: '1.25rem',
-          borderRadius: '50%',
-          background: 'var(--primary)',
-          color: '#fff',
-          fontSize: '0.6875rem',
-          fontWeight: 800,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          lineHeight: 1,
-        }}
+        className={[
+          'flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[0.6875rem] font-extrabold leading-none',
+          'bg-[var(--primary)] text-[var(--text-on-primary)]',
+        ].join(' ')}
       >
         {num}
       </span>
-      <span style={{ fontSize: '0.8125rem', color: '#44403c', lineHeight: 1.4 }}>{text}</span>
+      <span className="text-[0.8125rem] font-medium leading-snug text-[var(--text-secondary)]">{text}</span>
     </div>
   );
 }

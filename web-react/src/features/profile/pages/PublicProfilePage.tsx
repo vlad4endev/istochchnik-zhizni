@@ -30,6 +30,7 @@ import { resolvePublicUrl } from '../../../lib/resolvePublicUrl';
 import { pluralizeRu } from '../../../lib/pluralizeRu';
 import { ProfileComposeModal } from '../components/ProfileComposeModal';
 import { EditPostModal } from '../components/EditPostModal';
+import { memberNameFirstLast } from '../memberDisplayName';
 
 import profileShell from '../profileShell.module.css';
 import styles from './PublicProfilePage.module.css';
@@ -63,12 +64,6 @@ function formatPostDate(iso: string): string {
   }
 }
 
-function formatMeName(me: MeResponse): string {
-  const a = `${me.first_name ?? ''} ${me.last_name ?? ''}`.trim();
-  if (a) return a;
-  return me.name?.trim() || '';
-}
-
 function ProfilePostMediaBlock({ post }: { post: Pick<ProfileFeedPost, 'media'> }) {
   const items = sortMedia(post);
   if (items.length === 0) return null;
@@ -93,6 +88,7 @@ function EmbeddedPostCard({ embed }: { embed: ProfileFeedPostEmbedded }) {
   const uname = (embed.author.username ?? '').trim();
   const isPlaceholderUsername = /^member-\d+$/i.test(uname);
   const name =
+    memberNameFirstLast(embed.author) ||
     embed.author.display_name?.trim() ||
     (!isPlaceholderUsername && uname ? `@${uname}` : `Участник #${embed.member_id}`);
   return (
@@ -181,12 +177,14 @@ export function PublicProfilePage() {
 
   const displayName = useMemo(() => {
     if (!data) return decoded;
-    const fromProfile = data.profile.display_name?.trim();
-    if (fromProfile) return fromProfile;
+    const fromMember = memberNameFirstLast(data.profile);
+    if (fromMember) return fromMember;
     if (isOwner && me) {
-      const n = formatMeName(me);
+      const n = memberNameFirstLast(me);
       if (n) return n;
     }
+    const fromProfile = data.profile.display_name?.trim();
+    if (fromProfile) return fromProfile;
     return data.profile.username || decoded;
   }, [data, decoded, isOwner, me]);
 

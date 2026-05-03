@@ -30,6 +30,7 @@ import {
 import { NextWeekPrayerPlanSection, userCanViewNextWeekPrayerPlan } from '../../calendar/components/NextWeekPrayerPlanSection';
 import { useMe } from '@/hooks/useMe';
 import { fetchProfileByUsername } from '../../profile/publicProfileApi';
+import { memberNameFirstLast } from '../../profile/memberDisplayName';
 import { SectionHeroToolbarEnd } from '@/components/SectionHeroToolbarEnd';
 import { sectionHeroHeaderClass, sectionHeroStickyClassNested } from '../../../lib/sectionHeroChrome';
 import { apiBoolean } from '../../../lib/apiBoolean';
@@ -460,6 +461,8 @@ function DashboardMain() {
 
   const profileDisplayTitle = useMemo(() => {
     if (!pf) return fullName;
+    const fromMember = memberNameFirstLast(pf.profile);
+    if (fromMember) return fromMember;
     const fromProfile = pf.profile.display_name?.trim();
     if (fromProfile) return fromProfile;
     return fullName || pf.profile.username || 'Профиль';

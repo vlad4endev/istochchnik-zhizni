@@ -7,6 +7,8 @@ export type MediaType = 'image' | 'video';
 export type ProfilePostAuthor = {
   member_id: number;
   username: string;
+  first_name: string | null;
+  last_name: string | null;
   display_name: string | null;
   avatar_url: string | null;
 };
@@ -28,6 +30,8 @@ export type ProfileView = {
   profile: {
     member_id: number;
     username: string;
+    first_name: string | null;
+    last_name: string | null;
     display_name: string | null;
     bio: string | null;
     avatar_url: string | null;
@@ -167,6 +171,8 @@ async function loadAuthorsForMemberIds(memberIds: number[]): Promise<Map<number,
     `SELECT
       up.member_id,
       up.username,
+      m.first_name,
+      m.last_name,
       COALESCE(
         NULLIF(TRIM(up.display_name), ''),
         NULLIF(TRIM(CONCAT(COALESCE(m.first_name, ''), ' ', COALESCE(m.last_name, ''))), ''),
@@ -181,12 +187,16 @@ async function loadAuthorsForMemberIds(memberIds: number[]): Promise<Map<number,
   for (const row of res.rows as Array<{
     member_id: number;
     username: string;
+    first_name: string | null;
+    last_name: string | null;
     display_name: string | null;
     avatar_url: string | null;
   }>) {
     map.set(row.member_id, {
       member_id: row.member_id,
       username: row.username,
+      first_name: row.first_name,
+      last_name: row.last_name,
       display_name: row.display_name,
       avatar_url: row.avatar_url,
     });
@@ -249,6 +259,8 @@ export async function getProfileWithFeed(memberId: number, viewerMemberId?: numb
     `SELECT
       up.member_id,
       up.username,
+      m.first_name,
+      m.last_name,
       COALESCE(
         NULLIF(TRIM(up.display_name), ''),
         NULLIF(TRIM(CONCAT(COALESCE(m.first_name, ''), ' ', COALESCE(m.last_name, ''))), ''),

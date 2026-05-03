@@ -6,6 +6,7 @@ import { useSwipeGesture } from '../hooks/useSwipeGesture';
 import { ChatList } from './ChatList';
 import { LuPlus, LuMessageSquare, LuSlidersHorizontal } from 'react-icons/lu';
 import { SkeletonBox } from '@/components/ui/SkeletonBox';
+import { dispatchLayoutMainChrome } from '../../../app/layoutChrome';
 import './messenger.css';
 
 const ChatWindow = lazy(async () => {
@@ -69,6 +70,24 @@ export function MessengerPage() {
     return () => { delete document.documentElement.dataset.chatOpen; };
   }, [mobileView]);
 
+  /**
+   * PWA / узкий экран: в режиме «только чат» скрываем нижний таббар через Layout (как SongDetail),
+   * чтобы не дублировать отступы `main` и не ловить «прыжки» при появлении клавиатуры.
+   */
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const stackLayout = window.matchMedia('(max-width: 768px)').matches;
+    if (!stackLayout) return;
+    if (mobileView === 'chat') {
+      dispatchLayoutMainChrome(false);
+    } else {
+      dispatchLayoutMainChrome(true);
+    }
+    return () => {
+      dispatchLayoutMainChrome(true);
+    };
+  }, [mobileView]);
+
   useSwipeGesture(messengerRef, {
     onSwipeRight: () => {
       if (mobileView === 'chat' && !isTransitioning) {
@@ -109,11 +128,12 @@ export function MessengerPage() {
   const handleBack = useCallback(() => {
     blurActiveElement();
     setIsTransitioning(true);
-    const narrow =
-      typeof window !== 'undefined' && window.matchMedia('(max-width: 1023px)').matches;
-    // На мобилке «назад» = выход из экрана чата: иначе activeId остаётся, ChatWindow в фоне
-    // всё ещё дергает markAsRead / WS auto-read — счётчик непрочитанных обнуляется в списке.
-    if (activeId && (narrow || isDraftPrivateConversationId(activeId))) {
+    // Совпадает с messenger.css (split ≥769px) и messengerReadSurface (≤768px «только чат»).
+    const stackLayout =
+      typeof window !== 'undefined' && window.matchMedia('(max-width: 768px)').matches;
+    // В одноколоночном режиме «назад» снимает выбор: иначе ChatWindow остаётся смонтированным
+    // и продолжает markAsRead / WS auto-read, пока виден только список.
+    if (activeId && (stackLayout || isDraftPrivateConversationId(activeId))) {
       setActive(null);
     }
     setMobileView('list');

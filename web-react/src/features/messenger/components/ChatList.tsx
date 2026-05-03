@@ -289,7 +289,11 @@ function ChatListItem({
     currentMemberId != null &&
     Number(lastMsg.sender_id) === Number(currentMemberId);
   const previewLine = isTyping
-    ? `${typingUsers.map((u) => u.memberName.split(' ')[0]).join(', ')} печатает…`
+    ? (() => {
+        const names = typingUsers.map((u) => u.memberName.split(' ')[0]).filter(Boolean);
+        const verb = names.length > 1 ? 'печатают' : 'печатает';
+        return `${names.join(', ')} ${verb}…`;
+      })()
     : lastMsg
       ? lastMsg.is_deleted
         ? 'Сообщение удалено'
@@ -318,7 +322,6 @@ function ChatListItem({
     <>
       <button
         type="button"
-        role="listitem"
         className={[
           'tg-chat-row flex w-full touch-manipulation text-left transition-colors duration-150',
           'active:bg-[var(--bg-hover,var(--surface))]',

@@ -33,19 +33,12 @@ import { fetchDirectionTemplates, type MinistryDirectionTemplate } from '../../a
 import { fetchProfileByMemberId, patchPublicProfileSettings } from '../publicProfileApi';
 import { ProfileAccessibilitySection } from '../components/ProfileAccessibilitySection';
 import { SkeletonBox } from '@/components/ui/SkeletonBox';
+import { memberNameFirstLast } from '../memberDisplayName';
 
 import profileShell from '../profileShell.module.css';
 import pfStyles from './ProfilePage.module.css';
 
 /* ── Helpers ─────────────────────────────────────────────── */
-
-function displayName(user: MeResponse): string {
-  const fn = (user.first_name ?? '').trim();
-  const ln = (user.last_name ?? '').trim();
-  const combined = `${fn} ${ln}`.trim();
-  if (combined) return combined;
-  return (user.name ?? '').trim() || 'Профиль';
-}
 
 function roleLabel(role: string): string {
   const r = (role ?? '').trim().toLowerCase();
@@ -355,7 +348,7 @@ export function ProfilePage() {
 
   /* ── Derived values ── */
 
-  const name = user ? displayName(user) : 'Профиль';
+  const name = user ? memberNameFirstLast(user) || 'Профиль' : 'Профиль';
   const avatarUrl = resolvePublicUrl(user?.avatar_url ?? null);
 
   const joinedLabel = useMemo(() => {
@@ -581,6 +574,9 @@ export function ProfilePage() {
                   value={publicDraft.display_name}
                   onChange={(e) => setPublicDraft((d) => ({ ...d, display_name: e.target.value }))}
                 />
+                <p className="mt-1.5 text-xs font-medium leading-snug text-[color:var(--profile-text-muted)]">
+                  Оставьте пустым — в ленте будет показано имя и фамилия из блока «Профиль» ниже (сначала имя, затем фамилия).
+                </p>
               </div>
               <div>
                 <label className={LABEL} htmlFor="pub-bio">
@@ -663,7 +659,7 @@ export function ProfilePage() {
 
           {!editing ? (
             <div className="mt-4 grid gap-3">
-              <InfoRow label="Имя" value={`${user?.first_name ?? ''} ${user?.last_name ?? ''}`.trim() || user?.name || '—'} />
+              <InfoRow label="Имя" value={user ? memberNameFirstLast(user) || user.name || '—' : '—'} />
               <div className="grid gap-3 sm:grid-cols-2">
                 <InfoRow label="Телефон" value={user?.phone_number || '—'} />
                 <InfoRow label="Email" value={user?.email || '—'} />

@@ -397,12 +397,14 @@ export function AdminPage() {
                     const active = tab === item.id;
                     const badge = 'hasBadge' in item ? badgeFor(item.id) : null;
                     const isRedBadge = 'badgeRed' in item ? item.badgeRed : false;
+                    const navText = tabCfg.navLabel ?? tabCfg.label;
                     return (
                       <button
                         key={item.id}
                         type="button"
+                        title={tabCfg.label}
                         onClick={() => setTab(item.id)}
-                        className={`flex w-full items-center gap-2 rounded-lg px-2 py-[7px] text-left text-[13px] transition ${
+                        className={`flex w-full min-w-0 items-center gap-2 rounded-lg px-2 py-[7px] text-left text-[13px] transition ${
                           active
                             ? 'bg-[#F3EEF0] font-medium text-[#7B2D3F]'
                             : 'font-normal text-stone-700 hover:bg-stone-100'
@@ -411,7 +413,7 @@ export function AdminPage() {
                         <ItemIcon
                           className={`h-4 w-4 shrink-0 transition-opacity ${active ? 'opacity-100' : 'opacity-50'}`}
                         />
-                        <span className="min-w-0 flex-1 truncate">{tabCfg.label}</span>
+                        <span className="min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap">{navText}</span>
                         {badge != null && (
                           <span
                             className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-bold leading-none ${

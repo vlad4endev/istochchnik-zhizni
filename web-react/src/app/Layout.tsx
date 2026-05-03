@@ -31,7 +31,7 @@ import { useRealtimeWsConnection } from '../lib/realtimeWsClient';
 import { useSyncServerRole } from '../hooks/useSyncServerRole';
 import { IOSInstallBanner } from '../components/IOSInstallBanner';
 import { AndroidInstallBanner } from '../components/AndroidInstallBanner';
-import { UpdateNotification, useServiceWorkerUpdate, NotificationPrompt } from '../features/pwa';
+import { NotificationPrompt } from '../features/pwa';
 import { PrefetchNavLink } from '../components/PrefetchNavLink';
 import { ScrollRestoration } from '../components/ScrollRestoration';
 import type { AppToastAction, AppToastKind } from '../lib/uiFeedback';
@@ -70,7 +70,7 @@ const NAV_ITEMS: NavItem[] = [
   { to: '/dashboard', label: 'Главная', Icon: LuLayoutDashboard, sectionId: 'dashboard' },
   { to: '/prayer', label: 'Молитва', Icon: LuChurch, sectionId: 'prayer' },
   { to: '/songbook', label: 'Песенник', Icon: LuMusic2, sectionId: 'songbook' },
-  { to: '/service-planner', label: 'Планировщик', Icon: LuCalendarDays, sectionId: 'service_planner' },
+  { to: '/service-planner', label: 'Служение', Icon: LuCalendarDays, sectionId: 'service_planner' },
   { to: '/studio', label: 'Студия', Icon: LuDisc3, studioOnly: true, sectionId: 'studio' },
   { to: '/sermons', label: 'Проповеди', Icon: LuMic, sectionId: 'sermons' },
   { to: '/messenger', label: 'Чаты', Icon: LuMessageCircle, sectionId: 'messenger' },
@@ -394,7 +394,7 @@ function MobileNavOverflow({
         aria-controls={menuId}
       >
         <LuEllipsis className={navIconClass(isMoreTabActive, true)} strokeWidth={2} aria-hidden />
-        <span className="mt-0.5 w-full min-w-0 truncate px-0.5 text-center text-[10px] font-medium leading-none tracking-tight">
+        <span className="mt-1 w-full min-w-0 px-0.5 text-center text-[10px] font-medium leading-tight tracking-tight line-clamp-1">
           Ещё
         </span>
       </button>
@@ -521,7 +521,6 @@ export function Layout() {
     enabled: Boolean(token),
   });
   const logout = useAuthStore((s) => s.logout);
-  const updatePrompt = useServiceWorkerUpdate({ showPrompt: true });
   const [navCollapsed, setNavCollapsed] = useState(false);
   /** Скрытие сайдбара и нижнего таббара (режим чтения песен и т.п.). */
   const [mainChromeVisible, setMainChromeVisible] = useState(true);
@@ -1008,7 +1007,7 @@ export function Layout() {
       >
         <div
           ref={navTabRowRef}
-          className="flex w-full min-h-[var(--app-bottom-nav-bar-height)] min-w-0 items-stretch gap-0 px-0 pb-1 pt-1 sm:px-0.5"
+          className="flex w-full min-h-[var(--app-bottom-nav-bar-height)] min-w-0 items-stretch justify-evenly gap-0 px-1 pb-1 pt-1"
         >
           {mobileNavSplit.primary.map((item) => {
             const Icon = item.Icon;
@@ -1036,7 +1035,7 @@ export function Layout() {
                         </span>
                       ) : null}
                     </span>
-                    <span className="mt-0.5 w-full min-w-0 truncate px-0.5 text-center text-[10px] font-medium leading-none tracking-tight">
+                    <span className="mt-1 w-full min-w-0 px-0.5 text-center text-[10px] font-medium leading-tight tracking-tight line-clamp-1">
                       {item.label}
                     </span>
                   </>
@@ -1058,9 +1057,6 @@ export function Layout() {
       <IOSInstallBanner />
       <AndroidInstallBanner />
       <AppToastHost />
-      {updatePrompt.show ? (
-        <UpdateNotification onUpdate={updatePrompt.onUpdate} onDismiss={() => updatePrompt.onDismiss?.()} />
-      ) : null}
       <NotificationPrompt />
     </div>
     </MessengerWsProvider>

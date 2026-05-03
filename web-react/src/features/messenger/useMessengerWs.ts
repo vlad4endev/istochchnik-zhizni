@@ -324,10 +324,10 @@ function handleWsMessage(msg: any): void {
           if (typeof m.updated_at === 'string') patch.updated_at = m.updated_at;
           store.handleConvUpdated(cid, patch);
         } else {
-          void store.loadConversations();
+          void store.loadConversations({ force: true });
         }
       } else {
-        void store.loadConversations();
+        void store.loadConversations({ force: true });
       }
       break;
     }
@@ -335,7 +335,7 @@ function handleWsMessage(msg: any): void {
     case 'conv:history_cleared':
       if (typeof msg.conversationId === 'string' && msg.conversationId) {
         store.handleConvHistoryCleared(msg.conversationId);
-        void store.loadConversations();
+        void store.loadConversations({ force: true });
       }
       break;
 

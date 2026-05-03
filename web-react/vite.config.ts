@@ -78,6 +78,7 @@ export default defineConfig(({ mode }) => {
           display: 'standalone',
           orientation: 'portrait',
           /* Не задаём display_override: на iOS WebKit это часто игнорируется или ведёт себя иначе, чем один display. */
+          prefer_related_applications: false,
           start_url: pwaStartUrl,
           scope: pwaScope,
           lang: 'ru',
@@ -190,13 +191,6 @@ export default defineConfig(({ mode }) => {
            */
           importScripts: ['custom-sw.js'],
           runtimeCaching: [
-            {
-              urlPattern: ({ request }) => request.mode === 'navigate',
-              handler: 'StaleWhileRevalidate',
-              options: {
-                cacheName: 'navigation-cache',
-              },
-            },
             {
               urlPattern: /\/api\//,
               handler: 'NetworkFirst',

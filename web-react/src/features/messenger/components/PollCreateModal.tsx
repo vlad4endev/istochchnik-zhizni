@@ -55,11 +55,11 @@ export function PollCreateModal({ open, onClose, conversationId }: PollCreateMod
     if (!canSend) return;
     setSending(true);
     try {
-      await sendMessage(conversationId, question.trim(), null, 'poll', {
+      const ok = await sendMessage(conversationId, question.trim(), null, 'poll', {
         options: trimmedOpts,
         allows_multiple: allowsMultiple,
       });
-      onClose();
+      if (ok) onClose();
     } finally {
       setSending(false);
     }

@@ -22,14 +22,7 @@
     <!-- Иконки и favicon (public/assets; см. npm run pwa:icons) -->
     <link rel="icon" href="/assets/favicon.ico" sizes="any" />
     <link rel="icon" href="/assets/logo.svg" type="image/svg+xml" />
-    <link rel="apple-touch-icon" href="/assets/apple-touch-icon-180x180.png" sizes="57x57" />
-    <link rel="apple-touch-icon" href="/assets/apple-touch-icon-180x180.png" sizes="60x60" />
-    <link rel="apple-touch-icon" href="/assets/apple-touch-icon-180x180.png" sizes="72x72" />
-    <link rel="apple-touch-icon" href="/assets/apple-touch-icon-180x180.png" sizes="76x76" />
-    <link rel="apple-touch-icon" href="/assets/apple-touch-icon-180x180.png" sizes="114x114" />
-    <link rel="apple-touch-icon" href="/assets/apple-touch-icon-180x180.png" sizes="120x120" />
-    <link rel="apple-touch-icon" href="/assets/apple-touch-icon-180x180.png" sizes="144x144" />
-    <link rel="apple-touch-icon" href="/assets/apple-touch-icon-180x180.png" sizes="152x152" />
+    <!-- Одна иконка 180×180: Apple сам масштабирует; дубли с «левыми» sizes давали лишний шум и путаницу для WebKit. -->
     <link rel="apple-touch-icon" href="/assets/apple-touch-icon-180x180.png" sizes="180x180" />
     <!-- Сплэш при запуске с экрана Домой (public/pwa; см. npm run pwa:splash) -->
     <link rel="apple-touch-startup-image" href="/pwa/apple-splash-2048-2732.png" media="(device-width: 1024px) and (device-height: 1366px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" />

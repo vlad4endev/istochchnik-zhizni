@@ -23,8 +23,9 @@ self.addEventListener('push', function (event) {
   // Extract new properties or fallback to defaults
   const options = {
     body: data.body || '',
-    icon: data.icon || '/assets/logo_minimal.svg',
-    badge: data.badge || '/assets/logo_minimal.svg',
+    /** PNG: Android уведомления часто не рисуют SVG для icon/badge. */
+    icon: data.icon || '/assets/pwa-192x192.png',
+    badge: data.badge || '/assets/pwa-192x192.png',
     tag: data.tag || undefined,
     renotify: parseJsonStr(data.renotify, false),
     actions: parseJsonStr(data.actions, []),
@@ -67,17 +68,11 @@ self.addEventListener('push', function (event) {
   );
 });
 
-self.addEventListener('fetch', function (event) {
-  if (event.request.mode !== 'navigate') return;
-
-  event.respondWith(
-    fetch(event.request).catch(async function () {
-      const cachedOffline = await caches.match('/offline.html');
-      if (cachedOffline) return cachedOffline;
-      return Response.redirect('/offline.html', 302);
-    }),
-  );
-});
+/**
+ * Навигацию не перехватываем здесь: иначе этот listener регистрируется раньше Workbox
+ * и `respondWith` блокирует precache + navigateFallback (офлайн остаётся SPA из кэша).
+ * `offline.html` по-прежнему в precache — при необходимости на неё можно вести из приложения.
+ */
 
 function markDeliveryOpenedById(deliveryIdRaw) {
   const deliveryId =
@@ -144,21 +139,17 @@ self.addEventListener('notificationclose', function (event) {
 });
 
 // Handle browser rotating VAPID/subscription keys silently
-self.addEventListener('pushsubscriptionchange', function(event) {
+self.addEventListener('pushsubscriptionchange', function (event) {
   event.waitUntil(
-    self.registration.pushManager.subscribe(event.oldSubscription.options)
-      .then(function(newSubscription) {
-        // Send new subscription to backend
-        return fetch('/api/notifications/subscribe', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            // Can't reliably read localStorage here for auth tokens,
-            // so we rely on cookies/session if available, 
-            // or the client app syncing it on the next load.
-          },
-          body: JSON.stringify(newSubscription)
-        });
-      })
+    (async function () {
+      const old = event.oldSubscription;
+      if (!old || typeof old.options !== 'object') return;
+      const newSubscription = await self.registration.pushManager.subscribe(old.options);
+      await fetch('/api/notifications/subscribe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newSubscription),
+      });
+    })(),
   );
 });

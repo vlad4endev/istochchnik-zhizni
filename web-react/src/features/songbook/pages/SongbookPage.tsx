@@ -4,14 +4,17 @@ import { Link } from 'react-router-dom';
 import { LuHeart, LuSearch, LuX } from 'react-icons/lu';
 
 import { emitAppToast } from '../../../lib/uiFeedback';
+import { SectionHeroChrome } from '@/components/SectionHeroChrome';
 import { SongListSkeleton } from '@/components/skeletons/SongListSkeleton';
 import { keys } from '@/lib/queryKeys';
 import { useAuthStore } from '../../auth/authStore';
 import { canModerateSongCatalog } from '../../auth/studioAccess';
 import { deleteFavorite, fetchSongs, postFavorite } from '../api';
+import { useSongbookChrome } from '../SongbookChromeContext';
 
 export function SongbookPage() {
   const qc = useQueryClient();
+  const { stageMode, toggleStageMode } = useSongbookChrome();
   const role = useAuthStore((s) => s.role);
   const canAddSong = canModerateSongCatalog(role) && (role ?? '').toLowerCase() === 'admin';
   const [tab, setTab] = useState<'catalog' | 'favorites'>('catalog');
@@ -48,17 +51,54 @@ export function SongbookPage() {
     });
   }, [query.data, tab, search]);
 
+  const stageModeButton = (
+    <button
+      type="button"
+      onClick={toggleStageMode}
+      className={[
+        'inline-flex min-h-[36px] items-center rounded-full border px-3 text-xs font-semibold transition-colors',
+        stageMode
+          ? 'border-white/35 bg-white/10 text-white hover:bg-white/15'
+          : 'border-white/50 bg-white/10 text-white hover:bg-white/20',
+      ].join(' ')}
+    >
+      {stageMode ? 'Светлая тема' : 'Режим сцены'}
+    </button>
+  );
+
   if (query.isLoading) {
-    return <SongListSkeleton />;
+    return (
+      <div className="mx-auto flex h-full min-h-0 max-w-3xl flex-col pb-24 text-[var(--text)]">
+        <SectionHeroChrome
+          title="Песенник"
+          subtitle="Тексты и аккорды для богослужения"
+          actions={stageModeButton}
+        />
+        <SongListSkeleton />
+      </div>
+    );
   }
   if (query.isError) {
-    return <p className="text-sm text-red-600">Не удалось загрузить каталог.</p>;
+    return (
+      <div className="mx-auto flex h-full min-h-0 max-w-3xl flex-col gap-3 pb-24 text-[var(--text)]">
+        <SectionHeroChrome
+          title="Песенник"
+          subtitle="Тексты и аккорды для богослужения"
+          actions={stageModeButton}
+        />
+        <p className="text-sm text-red-600">Не удалось загрузить каталог.</p>
+      </div>
+    );
   }
 
   return (
     <div className="mx-auto flex h-full min-h-0 max-w-3xl flex-col pb-24 text-[var(--text)]">
+      <SectionHeroChrome
+        title="Песенник"
+        subtitle="Тексты и аккорды для богослужения"
+        actions={stageModeButton}
+      />
       <header className="flex-shrink-0 -mx-3 min-h-[126px] border-b border-stone-200/80 bg-[var(--surface)]/95 px-3 py-2 backdrop-blur md:mx-0 md:px-0">
-        <p className="mb-2 text-sm font-medium uppercase tracking-[0.08em] text-[var(--text-secondary)]">Песенник</p>
         <label className="mb-2 block">
           <span className="sr-only">Поиск по номеру или названию</span>
           <div className="relative">

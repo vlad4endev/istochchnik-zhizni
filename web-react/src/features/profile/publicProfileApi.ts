@@ -7,6 +7,8 @@ export type ProfileFeedMediaType = 'image' | 'video';
 export interface ProfileFeedProfile {
   member_id: number;
   username: string;
+  first_name: string | null;
+  last_name: string | null;
   display_name: string | null;
   bio: string | null;
   avatar_url: string | null;
@@ -22,6 +24,8 @@ export interface ProfileFeedProfile {
 export interface ProfileFeedPostAuthor {
   member_id: number;
   username: string;
+  first_name: string | null;
+  last_name: string | null;
   display_name: string | null;
   avatar_url: string | null;
 }

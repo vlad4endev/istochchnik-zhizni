@@ -64,6 +64,15 @@ function MentionRichText({
   );
 }
 
+function formatVoteCountRU(n: number): string {
+  const mod10 = n % 10;
+  const mod100 = n % 100;
+  if (mod100 >= 11 && mod100 <= 14) return `${n} голосов`;
+  if (mod10 === 1) return `${n} голос`;
+  if (mod10 >= 2 && mod10 <= 4) return `${n} голоса`;
+  return `${n} голосов`;
+}
+
 function MessengerPollCard({
   message,
   isMine,
@@ -227,7 +236,7 @@ function MessengerPollCard({
                     style={{ width: `${pct}%`, opacity: picked ? 1 : 0.85 }}
                   />
                 </div>
-                <div className={['mt-0.5 text-xs font-bold', muted].join(' ')}>{count} голосов</div>
+                <div className={['mt-0.5 text-xs font-bold', muted].join(' ')}>{formatVoteCountRU(count)}</div>
               </button>
             </li>
           );

@@ -15,12 +15,15 @@ export function KpiCard({
   value,
   delta,
   suffix,
+  displayValue,
   isOnline,
 }: {
   title: string;
   value: number;
   delta: number;
   suffix?: string;
+  /** When set, shown instead of formatNumber(value) + suffix (e.g. human-readable duration). */
+  displayValue?: string;
   isOnline?: boolean;
 }) {
   const isPositive = delta >= 0;
@@ -31,8 +34,12 @@ export function KpiCard({
         {isOnline ? <PulseDot /> : null}
       </div>
       <div className="text-[28px] font-semibold leading-none">
-        {formatNumber(value)}
-        {suffix ?? ''}
+        {displayValue ?? (
+          <>
+            {formatNumber(value)}
+            {suffix ?? ''}
+          </>
+        )}
       </div>
       <div className={`mt-2 text-xs ${isPositive ? 'text-emerald-500' : 'text-rose-500'}`}>
         {isPositive ? '▲' : '▼'} {Math.abs(delta).toFixed(1)}%

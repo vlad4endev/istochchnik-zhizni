@@ -224,7 +224,8 @@ export function ChatWindow({
       .map((u: { memberName: string }) => u.memberName.split(' ')[0])
       .filter(Boolean);
     if (names.length === 0) return '';
-    return `${names.join(', ')} печатает`;
+    const verb = names.length > 1 ? 'печатают' : 'печатает';
+    return `${names.join(', ')} ${verb}`;
   }, [typingUsers]);
 
   /**
@@ -741,6 +742,8 @@ export function ChatWindow({
     [typingUsers],
   );
 
+  const typingPresentVerb = typingFirstNames.length > 1 ? 'печатают' : 'печатает';
+
   const headerStatusClass =
     typingUsers.length > 0
       ? 'font-medium text-primary'
@@ -834,9 +837,9 @@ export function ChatWindow({
                   {typingUsers.length > 0 ? (
                     <div
                       className={['truncate text-xs leading-tight sm:text-sm', headerStatusClass].join(' ')}
-                      aria-label={`${typingFirstNames.join(', ')} печатает`}
+                      aria-label={`${typingFirstNames.join(', ')} ${typingPresentVerb}`}
                     >
-                      <span>{typingFirstNames.join(', ')} печатает</span>
+                      <span>{typingFirstNames.join(', ')} {typingPresentVerb}</span>
                       <span className="tg-typing-dots" aria-hidden>
                         <span className="tg-typing-dots__dot" />
                         <span className="tg-typing-dots__dot" />

@@ -72,7 +72,6 @@ if (import.meta.env.PROD) {
     });
 
     navigator.serviceWorker?.addEventListener?.('controllerchange', () => {
-      // Ensure the new SW takes effect immediately.
       window.location.reload();
     });
   } catch {

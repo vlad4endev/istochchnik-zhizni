@@ -38,6 +38,7 @@ import {
 import type { IconType } from 'react-icons';
 import { useLocation } from 'react-router-dom';
 
+import { SectionHeroChrome } from '@/components/SectionHeroChrome';
 import { getAppScrollRoot, getAppScrollTop } from '@/lib/appScroll';
 
 import { fetchSongs, type SongListItem } from '../../songbook/api';
@@ -78,8 +79,9 @@ function planEditorInitials(name: string): string {
   return '?';
 }
 
+/** Сегодня в локальном календаре (YYYY-MM-DD), без сдвига UTC как у toISOString(). */
 function todayIso(): string {
-  return new Date().toISOString().slice(0, 10);
+  return format(new Date(), 'yyyy-MM-dd');
 }
 
 function isIsoDate(value: string): boolean {
@@ -1255,10 +1257,10 @@ export function ServicePlannerPage() {
   if (screen === 'home') {
     return (
       <section className="mx-auto flex w-full max-w-5xl flex-col gap-4 px-4 py-6">
-        <header className="rounded-2xl border border-stone-200 bg-white p-4 shadow-sm">
-          <h1 className="text-2xl font-extrabold text-stone-900">Планировщик служений</h1>
-          <p className="mt-1 text-sm text-stone-600">Все программы, ведущие и быстрый запуск нового плана.</p>
-        </header>
+        <SectionHeroChrome
+          title="Планировщик служений"
+          subtitle="Все программы, ведущие и быстрый запуск нового плана."
+        />
 
         <section className="grid gap-3 md:grid-cols-2">
           <div className="rounded-2xl border border-primary/30 bg-primary/5 p-4 shadow-sm">

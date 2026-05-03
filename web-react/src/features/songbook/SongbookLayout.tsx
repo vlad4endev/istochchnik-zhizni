@@ -1,8 +1,10 @@
-import { Outlet } from 'react-router-dom';
+import { Link, Outlet, useLocation } from 'react-router-dom';
 
 import { SongbookChromeProvider, useSongbookChrome } from './SongbookChromeContext';
 
 function SongbookShell() {
+  const { pathname } = useLocation();
+  const isSongbookCatalog = pathname === '/songbook';
   const { stageMode, toggleStageMode } = useSongbookChrome();
 
   return (
@@ -19,22 +21,30 @@ function SongbookShell() {
           stageMode ? 'border-zinc-800 bg-[#030303]/90' : 'border-stone-200/80 bg-[var(--surface)]/95',
         ].join(' ')}
       >
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-3 py-2 md:px-4">
-          <p className={`text-xs font-semibold uppercase tracking-wide ${stageMode ? 'text-zinc-500' : 'text-stone-500'}`}>
-            Песенник
-          </p>
-          <button
-            type="button"
-            onClick={toggleStageMode}
+        <div className="mx-auto flex max-w-6xl items-center gap-3 px-3 py-2 md:px-4">
+          <Link
+            to="/songbook"
             className={[
-              'inline-flex min-h-[36px] items-center rounded-full border px-3 text-xs font-semibold transition-colors',
-              stageMode
-                ? 'border-zinc-600 text-zinc-200 hover:bg-zinc-900'
-                : 'border-stone-200 text-stone-700 hover:bg-stone-50',
+              'min-w-0 shrink text-sm font-semibold tracking-tight transition-colors',
+              stageMode ? 'text-zinc-300 hover:text-white' : 'text-stone-700 hover:text-stone-900',
             ].join(' ')}
           >
-            {stageMode ? 'Светлая тема' : 'Режим сцены'}
-          </button>
+            Песенник
+          </Link>
+          {!isSongbookCatalog ? (
+            <button
+              type="button"
+              onClick={toggleStageMode}
+              className={[
+                'ml-auto inline-flex min-h-[36px] shrink-0 items-center rounded-full border px-3 text-xs font-semibold transition-colors',
+                stageMode
+                  ? 'border-zinc-600 text-zinc-200 hover:bg-zinc-900'
+                  : 'border-stone-200 text-stone-700 hover:bg-stone-50',
+              ].join(' ')}
+            >
+              {stageMode ? 'Светлая тема' : 'Режим сцены'}
+            </button>
+          ) : null}
         </div>
       </div>
 

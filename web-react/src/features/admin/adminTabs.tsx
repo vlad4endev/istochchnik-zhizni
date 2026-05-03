@@ -28,7 +28,10 @@ export interface AdminTabConfig {
     | 'telegram'
     | 'integrations'
     | 'diagnostics';
+  /** Заголовок раздела в контенте и полная подпись для подсказки в сайдбаре */
   label: string;
+  /** Короткая подпись в левом меню (если не задано — показывается `label`) */
+  navLabel?: string;
   Icon: IconType;
   short: string;
   description: string;
@@ -53,6 +56,7 @@ export const ADMIN_TABS: readonly AdminTabConfig[] = [
   {
     id: 'calendar',
     label: 'Молитвенный календарь',
+    navLabel: 'Молитв. календарь',
     Icon: LuCalendarDays,
     short: 'Молитва',
     description:
@@ -83,6 +87,7 @@ export const ADMIN_TABS: readonly AdminTabConfig[] = [
   {
     id: 'sections',
     label: 'Разделы приложения',
+    navLabel: 'Разделы',
     Icon: LuPanelsTopLeft,
     short: 'Доступ',
     description: 'Управление видимостью разделов приложения для ролей пользователей.',
@@ -112,6 +117,7 @@ export const ADMIN_TABS: readonly AdminTabConfig[] = [
   {
     id: 'diagnostics',
     label: 'Диагностика проекта',
+    navLabel: 'Диагностика',
     Icon: LuChartColumnBig,
     short: 'Диагностика',
     description:

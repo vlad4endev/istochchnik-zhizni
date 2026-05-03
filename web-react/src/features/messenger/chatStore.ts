@@ -172,9 +172,9 @@ interface ChatState {
     replyToId?: string | null,
     payloadType?: api.MessagePayloadType,
     payload?: api.MessagePayload,
-  ) => Promise<void>;
+  ) => Promise<boolean>;
   retrySendMessage: (conversationId: string, tempId: string) => Promise<void>;
-  editMessage: (messageId: string, content: string) => Promise<void>;
+  editMessage: (messageId: string, content: string) => Promise<boolean>;
   deleteMessage: (messageId: string) => Promise<void>;
   markRead: (conversationId: string) => Promise<void>;
   markReadUpTo: (conversationId: string, messageId: string) => Promise<void>;
@@ -929,7 +929,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         };
       });
       if (!created.conversation) {
-        await get().loadConversations();
+        await get().loadConversations({ force: true });
       }
       return realId;
     } catch (e) {
@@ -947,7 +947,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   sendMessage: async (conversationId, content, replyToId, payloadType = 'text', payload = {}) => {
     const convId = await get().promoteDraftToRealConversation(conversationId);
-    if (convId == null) return;
+    if (convId == null) return false;
     const textForSend = normalizeMentionsToCanonical(String(content ?? '').trim());
     playAudio('send');
     const tempId = `temp-${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -1012,7 +1012,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
         ...s.messagesByConv,
         [convId]: [...(s.messagesByConv[convId] || []), optimistic],
       },
-      replyToMessage: null,
     }));
 
     scheduleServerAckTimer(get, convId, tempId, clientMsgId);
@@ -1036,8 +1035,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
             }),
           ),
         },
+        replyToMessage: null,
       }));
       saveSnapshot(get());
+      return true;
     } catch (e) {
       if (axios.isAxiosError(e)) {
         console.error('[chatStore] sendMessage error:', {
@@ -1073,6 +1074,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       };
       enqueueOutbox(get, outboxItem);
       ensureOutboxPump(get);
+      return false;
     }
   },
 
@@ -1142,7 +1144,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const mid = String(messageId);
     const convId =
       findConversationIdContainingMessage(state.messagesByConv, mid) ?? state.activeConversationId;
-    if (!convId) return;
+    if (!convId) return false;
 
     // Save original for rollback before any mutations
     const originalMsg = (state.messagesByConv[convId] || [])
@@ -1150,20 +1152,28 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
     const canonical = normalizeMentionsToCanonical(String(content ?? '').trim());
 
-    // Optimistic edit
+    // Optimistic edit (режим редактирования в инпуте сохраняем до успешного ответа API)
     set((s) => {
       const nextMsgs = (s.messagesByConv[convId] || []).map((m) =>
         String(m.id) === mid ? { ...m, content: canonical, is_edited: true } : m,
       );
+      const em =
+        s.editingMessage && String(s.editingMessage.id) === mid
+          ? { ...s.editingMessage, content: canonical, is_edited: true }
+          : s.editingMessage;
       return {
         messagesByConv: { ...s.messagesByConv, [convId]: nextMsgs },
         conversations: syncConversationLastMessageOnEdit(s.conversations, convId, mid, canonical),
-        editingMessage: null,
+        editingMessage: em,
       };
     });
 
     try {
       await api.editMessage(messageId, canonical);
+      set((s) =>
+        s.editingMessage && String(s.editingMessage.id) === mid ? { editingMessage: null } : {},
+      );
+      return true;
     } catch (e) {
       console.error('[chatStore] editMessage error:', e);
       // Granular rollback — restore only the affected message, no full reload
@@ -1178,9 +1188,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
           conversations: syncConversationLastMessageOnEdit(
             s.conversations, convId, mid, originalMsg.content ?? '',
           ),
+          editingMessage:
+            s.editingMessage && String(s.editingMessage.id) === mid ? originalMsg : s.editingMessage,
         }));
       }
       emitAppToast('Не удалось отредактировать сообщение', 'error');
+      return false;
     }
   },
 
@@ -1948,7 +1961,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   patchChatMyUi: async (conversationId, body) => {
     try {
       await api.patchMyConversationUi(conversationId, body);
-      await get().loadConversations();
+      await get().loadConversations({ force: true });
     } catch {
       emitAppToast('Не удалось сохранить настройки чата', 'error');
     }
@@ -1958,7 +1971,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     try {
       await api.clearConversationHistory(conversationId);
       get().handleConvHistoryCleared(conversationId);
-      await get().loadConversations();
+      await get().loadConversations({ force: true });
     } catch {
       emitAppToast('Не удалось очистить переписку', 'error');
     }
@@ -2031,7 +2044,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   clearGlobalSearch: () => {
-    set({ globalSearchResults: [], searchQuery: '' });
+    // Не трогаем `searchQuery` — он общий с поиском по текущему чату (`searchMessages`).
+    set({ globalSearchResults: [], globalSearchLoading: false });
   },
 
   // ─── Drafts ───────────────────────────────────────────────

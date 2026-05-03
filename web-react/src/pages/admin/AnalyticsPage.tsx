@@ -15,6 +15,7 @@ import {
   YAxis,
 } from 'recharts';
 
+import { SectionHeroChrome } from '@/components/SectionHeroChrome';
 import { fetchAnalyticsOverview, fetchAnalyticsPageDetail, fetchAnalyticsPages, fetchAnalyticsRealtime } from '../../api/analyticsApi';
 import {
   AvatarInitials,
@@ -42,6 +43,15 @@ type RealtimeUser = {
   last_seen_minutes?: number | null;
 };
 
+type OverviewKpi = {
+  title: string;
+  value: number;
+  delta: number;
+  suffix?: string;
+  displayValue?: string;
+  isOnline?: boolean;
+};
+
 const PERIOD_OPTIONS: Array<{ label: string; value: Period }> = [
   { label: 'Сегодня', value: 'today' },
   { label: '7д', value: '7d' },
@@ -52,6 +62,13 @@ const PERIOD_OPTIONS: Array<{ label: string; value: Period }> = [
 
 const CHART_COLORS = ['#7a1f2e', '#b45e6e', '#dba8b3', '#8f2e40', '#6a1423'];
 const TOP_SECTION_ICONS = ['📖', '🕊️', '🙏', '⭐', '📌', '📊'];
+
+function formatDuration(secs: number): string {
+  const sTotal = Math.max(0, Math.round(Number(secs) || 0));
+  const m = Math.floor(sTotal / 60);
+  const s = sTotal % 60;
+  return m > 0 ? `${m} мин ${s} сек` : `${s} сек`;
+}
 
 export function AnalyticsPage() {
   const [period, setPeriod] = useState<Period>('7d');
@@ -99,6 +116,12 @@ export function AnalyticsPage() {
       return [];
     }
   }, [overview.data]);
+
+  useEffect(() => {
+    if (import.meta.env.DEV) {
+      console.log('[Analytics] LineChart data (overviewByDay)', overviewByDay);
+    }
+  }, [overviewByDay]);
 
   const retentionData = useMemo(() => {
     try {
@@ -180,7 +203,7 @@ export function AnalyticsPage() {
 
   const hasApi500 = [overview.error, pages.error, pageDetail.error, realtime.error].some((error) => is500Error(error));
 
-  const kpis = [
+  const kpis: OverviewKpi[] = [
     {
       title: 'Просмотры',
       value: Number(overview.data?.total_views ?? 0),
@@ -200,7 +223,7 @@ export function AnalyticsPage() {
       title: 'Ср.время',
       value: Number(Math.round(overview.data?.avg_session_duration ?? 0)),
       delta: Number(overview.data?.duration_trend ?? 0),
-      suffix: ' сек',
+      displayValue: formatDuration(Number(overview.data?.avg_session_duration ?? 0)),
     },
     {
       title: 'Онлайн',
@@ -211,13 +234,13 @@ export function AnalyticsPage() {
   ];
 
   return (
-    <div className="mx-auto max-w-[1500px] space-y-5 p-3 md:p-6" style={{ color: 'var(--color-text-primary)' }}>
-      <div className={`flex flex-col gap-3 rounded-xl p-4 md:flex-row md:items-center md:justify-between ${SURFACE_CLASS}`}>
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Аналитика</h1>
-          <p className="text-sm text-[var(--color-text-muted)]">Пользователи, трафик, устройства и retention по периодам.</p>
-        </div>
-        <div className="flex flex-wrap items-center justify-start gap-2 md:justify-end">
+    <div className="space-y-5 pb-6" style={{ color: 'var(--color-text-primary)' }}>
+      <SectionHeroChrome
+        title="Аналитика"
+        subtitle="Пользователи, трафик, устройства и retention по периодам."
+      />
+      <div className="mx-auto max-w-[1500px] space-y-5 px-3 md:px-6">
+        <div className={`flex flex-wrap items-center justify-end gap-2 rounded-xl p-4 ${SURFACE_CLASS}`}>
           {PERIOD_OPTIONS.map((item) => {
             const active = period === item.value;
             return (
@@ -237,7 +260,6 @@ export function AnalyticsPage() {
             );
           })}
         </div>
-      </div>
 
       {hasApi500 && <InlineApiError onRetry={retryAll} />}
 
@@ -251,6 +273,7 @@ export function AnalyticsPage() {
                 value={kpi.value}
                 delta={kpi.delta}
                 suffix={kpi.suffix}
+                displayValue={kpi.displayValue}
                 isOnline={kpi.isOnline}
               />
             ))}
@@ -265,7 +288,15 @@ export function AnalyticsPage() {
                   <ResponsiveContainer width="100%" height="100%">
                     <LineChart data={overviewByDay}>
                       <CartesianGrid stroke="rgba(180,94,110,0.2)" strokeDasharray="3 3" />
-                      <XAxis dataKey="day" stroke="var(--color-text-muted)" />
+                      <XAxis
+                        dataKey="day"
+                        stroke="var(--color-text-muted)"
+                        tickFormatter={(val) => {
+                          const d = new Date(val as string);
+                          if (Number.isNaN(d.getTime())) return String(val);
+                          return d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' });
+                        }}
+                      />
                       <YAxis stroke="var(--color-text-muted)" />
                       <Tooltip contentStyle={TOOLTIP_STYLE} formatter={(value) => formatNumber(Number(value ?? 0))} />
                       <Line type="monotone" dataKey="views" name="Просмотры" stroke="#7a1f2e" strokeWidth={2.5} dot={false} />
@@ -439,6 +470,7 @@ export function AnalyticsPage() {
           </SafeChart>
         </ChartSkeleton>
       </Panel>
+      </div>
     </div>
   );
 }

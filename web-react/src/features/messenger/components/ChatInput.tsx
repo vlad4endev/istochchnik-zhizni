@@ -79,7 +79,7 @@ function scheduleTextareaAutosize(el: HTMLTextAreaElement | null) {
       return;
     }
     const maxParsed = parseFloat(getComputedStyle(el).maxHeight);
-    const cap = Number.isFinite(maxParsed) && maxParsed > 0 ? maxParsed : 144;
+    const cap = Number.isFinite(maxParsed) && maxParsed > 0 ? maxParsed : 240;
     el.style.height = `${Math.min(el.scrollHeight, cap)}px`;
   });
 }
@@ -131,8 +131,9 @@ export function ChatInput({
   const replyingTo = useChatStore((s) => s.replyingTo);
   const setReplyingTo = useChatStore((s) => s.setReplyingTo);
   const saveDraft = useChatStore((s) => s.saveDraft);
-  const drafts = useChatStore((s) => s.drafts);
   const clearDraft = useChatStore((s) => s.clearDraft);
+  /** Только черновик текущего чата — не перезагружаем поле при сохранении черновиков других диалогов. */
+  const draftForConversation = useChatStore((s) => s.drafts[conversationId] ?? '');
 
   const [content, setContent] = useState('');
   const [pending, setPending] = useState<PendingAttachment | null>(null);
@@ -171,13 +172,22 @@ export function ChatInput({
   const [mentionHighlight, setMentionHighlight] = useState(0);
   const lastOpenedEditIdRef = useRef<string | null>(null);
   const uploadsHealthTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  /** IME (иероглифы и т.п.): не отправлять по Enter в середине композиции — как в Telegram. */
+  const composingRef = useRef(false);
+  /** Защита от двойного Enter / двойного тапа «Отправить». */
+  const sendInFlightRef = useRef(false);
 
-  // Load draft on conversation change
+  const focusComposer = useCallback(() => {
+    requestAnimationFrame(() => {
+      textareaRef.current?.focus();
+    });
+  }, []);
+
+  // Подставляем черновик при смене чата или когда с сервера/другой вкладки обновился именно этот ключ.
   useEffect(() => {
-    const draft = drafts[conversationId] || '';
-    setContent(draft);
+    setContent(draftForConversation);
     requestAnimationFrame(() => scheduleTextareaAutosize(textareaRef.current));
-  }, [conversationId, drafts]);
+  }, [conversationId, draftForConversation]);
 
   useEffect(() => {
     return () => {
@@ -260,6 +270,19 @@ export function ChatInput({
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [previewSrc]);
+
+  /** Escape закрывает вложения/эмодзи, даже если фокус ушёл в портал (emoji-mart). */
+  useEffect(() => {
+    if (!emojiOpen && !attachMenuOpen) return;
+    const onKey = (ev: KeyboardEvent) => {
+      if (ev.key !== 'Escape') return;
+      ev.preventDefault();
+      setEmojiOpen(false);
+      setAttachMenuOpen(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [emojiOpen, attachMenuOpen]);
 
   useEffect(() => {
     if (!attachMenuOpen) return;
@@ -422,12 +445,21 @@ export function ChatInput({
   };
 
   const handleSend = async () => {
+    if (uploading != null || sendInFlightRef.current) return;
+    sendInFlightRef.current = true;
+    try {
     haptic(10);
     if (draftSaveTimerRef.current) {
       clearTimeout(draftSaveTimerRef.current);
       draftSaveTimerRef.current = null;
     }
     const text = content.trim();
+    const replyTarget = replyingTo ?? replyTo;
+    const numericReplyId =
+      replyTarget?.id != null && /^\d+$/.test(String(replyTarget.id).trim())
+        ? String(replyTarget.id).trim()
+        : null;
+
     if (pendingImages.length > 0) {
       if (!canSendAttachments) {
         setUploadErr('В этом чате для вас отключена отправка фото и файлов.');
@@ -463,7 +495,7 @@ export function ChatInput({
           setUploadPct(0);
         }
         const first = uploadedImages[0];
-        await sendMessage(conversationId, text, replyingTo?.id || null, 'image', {
+        const sent = await sendMessage(conversationId, text, numericReplyId, 'image', {
           // Backward compatibility with old single-image rendering fields.
           url: first?.url ?? '',
           name: first?.name ?? '',
@@ -479,6 +511,7 @@ export function ChatInput({
             size: u.size,
           })),
         });
+        if (!sent) return;
         setReplyingTo(null);
         setReplyTo(null);
         setContent('');
@@ -488,6 +521,7 @@ export function ChatInput({
         }
         setPendingImages([]);
         setPreviewSrc(null);
+        focusComposer();
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
         if (msg.toLowerCase().includes('canceled') || msg.toLowerCase().includes('abort')) {
@@ -540,7 +574,8 @@ export function ChatInput({
           mimeType: uploaded.mimeType || pending.file.type || '',
           size: uploaded.size || pending.file.size || 0,
         };
-        await sendMessage(conversationId, text, replyingTo?.id || null, payloadType, payload);
+        const sent = await sendMessage(conversationId, text, numericReplyId, payloadType, payload);
+        if (!sent) return;
         setReplyingTo(null);
         setReplyTo(null);
         setContent('');
@@ -548,6 +583,7 @@ export function ChatInput({
         if (pending.previewUrl) URL.revokeObjectURL(pending.previewUrl);
         setPending(null);
         setPreviewSrc(null);
+        focusComposer();
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
         if (msg.toLowerCase().includes('canceled') || msg.toLowerCase().includes('abort')) {
@@ -569,23 +605,36 @@ export function ChatInput({
     }
 
     if (!text) return;
-    setContent('');
-    clearDraft(conversationId);
 
     if (editing) {
       const msgId = editing.id;
-      setEditing(null);
-      await editMessage(msgId, text);
-    } else {
-      const replyId = replyingTo?.id || null;
-      setReplyingTo(null);
-      setReplyTo(null);
-      await sendMessage(conversationId, text, replyId);
+      const ok = await editMessage(msgId, text);
+      scheduleTextareaAutosize(textareaRef.current);
+      if (!isDraftPrivateConversationId(conversationId)) {
+        sendTypingStop(conversationId);
+      }
+      if (ok) {
+        setContent('');
+        clearDraft(conversationId);
+        focusComposer();
+      }
+      return;
     }
 
+    const ok = await sendMessage(conversationId, text, numericReplyId);
     scheduleTextareaAutosize(textareaRef.current);
     if (!isDraftPrivateConversationId(conversationId)) {
       sendTypingStop(conversationId);
+    }
+    if (ok) {
+      setContent('');
+      clearDraft(conversationId);
+      setReplyingTo(null);
+      setReplyTo(null);
+      focusComposer();
+    }
+    } finally {
+      sendInFlightRef.current = false;
     }
   };
 
@@ -846,11 +895,35 @@ export function ChatInput({
       }
     }
     if (e.key === 'Enter' && !e.shiftKey) {
+      const ne = e.nativeEvent as KeyboardEvent;
+      if (composingRef.current || ne.isComposing || ne.keyCode === 229) {
+        return;
+      }
       e.preventDefault();
       void handleSend();
     }
     if (e.key === 'Escape') {
-      if (mentionOpen) setMentionOpen(false);
+      e.preventDefault();
+      if (emojiOpen) {
+        setEmojiOpen(false);
+        return;
+      }
+      if (attachMenuOpen) {
+        setAttachMenuOpen(false);
+        return;
+      }
+      if (previewSrc) {
+        setPreviewSrc(null);
+        return;
+      }
+      if (mentionOpen) {
+        setMentionOpen(false);
+        return;
+      }
+      if (replyingTo) {
+        setReplyingTo(null);
+        return;
+      }
       if (editing) setEditing(null);
       if (replyTo) setReplyTo(null);
     }
@@ -1180,11 +1253,17 @@ export function ChatInput({
           <textarea
             ref={textareaRef}
             className="tg-input-textarea text-[var(--text)] placeholder:text-[var(--text-muted)]"
-            placeholder="Сообщение…"
+            placeholder="Сообщение"
+            enterKeyHint="send"
+            inputMode="text"
+            autoComplete="off"
+            autoCorrect="off"
+            autoCapitalize="sentences"
+            spellCheck="true"
             title={
               mentionParticipants.length > 0
-                ? 'Наберите @, чтобы упомянуть участника'
-                : undefined
+                ? 'Enter — отправить · Shift+Enter — новая строка · @ — упоминание'
+                : 'Enter — отправить · Shift+Enter — новая строка'
             }
             aria-label="Текст сообщения"
             aria-describedby={
@@ -1201,6 +1280,12 @@ export function ChatInput({
             value={content}
             onChange={handleChange}
             onKeyDown={handleKeyDown}
+            onCompositionStart={() => {
+              composingRef.current = true;
+            }}
+            onCompositionEnd={() => {
+              composingRef.current = false;
+            }}
             onPaste={(e) => {
               const fl = e.clipboardData?.files;
               if (!fl || fl.length === 0) return;
@@ -1236,7 +1321,8 @@ export function ChatInput({
               }
             }}
             disabled={uploading != null}
-            aria-label={hasSendAction ? 'Отправить' : 'Голосовое сообщение'}
+            aria-label={hasSendAction ? 'Отправить' : 'Голосовые сообщения пока недоступны'}
+            title={hasSendAction ? 'Отправить' : 'Голосовые сообщения скоро'}
             style={{
               background: hasSendAction ? 'var(--tg-primary)' : 'transparent',
               color: hasSendAction ? '#fff' : '#888',
