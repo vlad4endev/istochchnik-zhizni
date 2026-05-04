@@ -1,10 +1,11 @@
 -- =============================================================================
 -- Создание бакетов Storage для мессенджера и медиа профиля (ручной запуск).
 -- Выполните в Supabase: Dashboard → SQL → New query → Run.
--- Либо: supabase db push (миграции в supabase/migrations/ дублируют этот смысл).
+-- Либо: supabase db push (миграция supabase/migrations/20260415120000_storage_buckets_app_uploads.sql).
 --
--- После выполнения в API по умолчанию используется бакет id = `chat`
--- (переменная SUPABASE_STORAGE_BUCKET_MESSENGER, см. .env.example).
+-- Бакет для вложений чата имеет id = `chat` (не `messenger`). В API дефолт тот же (см. messengerBucket()).
+-- Если в .env задано SUPABASE_STORAGE_BUCKET_MESSENGER=messenger при отсутствии такого бакета — либо
+-- удалите переменную (будет `chat`), либо создайте бакет с нужным id вручную в Storage.
 -- =============================================================================
 
 -- Бакеты: публичное чтение (загрузка с вашего API через service role).
