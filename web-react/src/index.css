@@ -28,8 +28,8 @@
   --a11y-focus-ring: var(--primary);
   --sidebar-width: 88px;
   --app-safe-bottom: env(safe-area-inset-bottom, 0px);
-  /* В ряде iOS/PWA safe-area-inset-bottom получается визуально слишком большим для таб-бара. */
-  --app-bottom-nav-safe-pad: clamp(0px, var(--app-safe-bottom), 2px);
+  /* Пользовательский режим: нижний safe-area у таб-бара отключён, чтобы убрать видимую полоску у края экрана. */
+  --app-bottom-nav-safe-pad: 0px;
   --app-safe-top: env(safe-area-inset-top, 0px);
   /* Высота нижней панели (Layout.tsx): pt-1 + min-h ряда + padding nav под home indicator (один раз, без min-h на nav). */
   --app-bottom-nav-bar-height: 60px;
