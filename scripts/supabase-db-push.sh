@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Применяет все SQL-миграции из supabase/migrations/ к удалённой базе Supabase.
+# Только Storage без полного push: scripts/ensure-supabase-storage-buckets.sql в Dashboard → SQL.
 # Требуется: в .env задан корректный DATABASE_URL с паролем БД (не publishable key).
 # Установка CLI не нужна: используется npx supabase.
 set -euo pipefail

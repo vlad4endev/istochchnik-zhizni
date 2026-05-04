@@ -15,6 +15,29 @@ function trimTrailingSlashes(s: string): string {
   return s.replace(/\/+$/, '');
 }
 
+/** Хост похож на LAN/Docker — переписываем Storage-URL на SUPABASE_STORAGE_PUBLIC_URL. */
+function isLikelyInternalStorageHost(hostname: string): boolean {
+  const h = hostname.toLowerCase().replace(/^\[|\]$/g, '');
+  if (h === 'localhost' || h.endsWith('.localhost')) return true;
+  if (h === 'kong' || h === 'supabase_kong' || h.endsWith('.internal')) return true;
+  const m = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(h);
+  if (m) {
+    const a = Number(m[1]);
+    const b = Number(m[2]);
+    const c = Number(m[3]);
+    const d = Number(m[4]);
+    if ([a, b, c, d].some((n) => n > 255)) return false;
+    if (a === 10) return true;
+    if (a === 172 && b >= 16 && b <= 31) return true;
+    if (a === 192 && b === 168) return true;
+    if (a === 127) return true;
+    if (a === 169 && b === 254) return true;
+    if (a === 100 && b >= 64 && b <= 127) return true;
+    return false;
+  }
+  return false;
+}
+
 /**
  * Публичный HTTPS-ориджин Storage для браузера (обычно `https://<ref>.supabase.co`).
  * Задайте, если `SUPABASE_URL` у API — внутренний (Docker/LAN), иначе в ответах попадут http://IP:port
@@ -78,12 +101,16 @@ export function rewriteSupabaseStorageUrlForClient(url: string): string {
   }
   try {
     const parsed = new URL(trimmed);
-    if (parsed.pathname.includes('/storage/v1/')) {
-      const pub = new URL(publicOrigin.includes('://') ? publicOrigin : `https://${publicOrigin}`);
-      parsed.protocol = pub.protocol;
-      parsed.host = pub.host;
-      return parsed.toString();
-    }
+    if (!parsed.pathname.includes('/storage/v1/')) return url;
+    const pub = new URL(publicOrigin.includes('://') ? publicOrigin : `https://${publicOrigin}`);
+    if (parsed.origin === pub.origin) return trimmed;
+    const host = parsed.hostname;
+    const shouldRewriteHost =
+      parsed.protocol === 'http:' || isLikelyInternalStorageHost(host);
+    if (!shouldRewriteHost) return trimmed;
+    parsed.protocol = pub.protocol;
+    parsed.host = pub.host;
+    return parsed.toString();
   } catch {
     /* ignore */
   }
@@ -132,7 +159,16 @@ export function isSupabaseStorageConfigured(): boolean {
  */
 export async function verifyStorageBucketPresent(bucket: string): Promise<
   | { ok: true }
-  | { ok: false; reason: 'not_configured' | 'list_buckets_failed' | 'bucket_not_found'; message?: string; existingBucketIds?: string[] }
+  | {
+      ok: false;
+      reason:
+        | 'not_configured'
+        | 'list_buckets_failed'
+        | 'list_buckets_empty'
+        | 'bucket_not_found';
+      message?: string;
+      existingBucketIds?: string[];
+    }
 > {
   const client = getClient();
   if (!client) return { ok: false, reason: 'not_configured' };
@@ -140,14 +176,28 @@ export async function verifyStorageBucketPresent(bucket: string): Promise<
   if (error) {
     return { ok: false, reason: 'list_buckets_failed', message: error.message };
   }
+  const rows = data ?? [];
+  if (rows.length === 0) {
+    return { ok: false, reason: 'list_buckets_empty', message: 'empty_bucket_list' };
+  }
   const ids = new Set<string>();
-  for (const b of data ?? []) {
+  for (const b of rows) {
     const row = b as { id?: string; name?: string };
     if (typeof row.id === 'string' && row.id) ids.add(row.id);
     if (typeof row.name === 'string' && row.name) ids.add(row.name);
   }
+  if (ids.size === 0 && rows.length > 0) {
+    return { ok: false, reason: 'list_buckets_empty', message: 'no_bucket_ids_in_response' };
+  }
   if (ids.has(bucket)) return { ok: true };
   return { ok: false, reason: 'bucket_not_found', existingBucketIds: [...ids].sort() };
+}
+
+type StorageBucketVerifyFailure = Exclude<Awaited<ReturnType<typeof verifyStorageBucketPresent>>, { ok: true }>;
+
+/** Проверка бакета недоступна (self-hosted / ограничения API) — не считаем Storage мёртвым. */
+export function isStorageBucketHealthCheckInconclusive(v: StorageBucketVerifyFailure): boolean {
+  return v.reason === 'list_buckets_failed' || v.reason === 'list_buckets_empty';
 }
 
 /**

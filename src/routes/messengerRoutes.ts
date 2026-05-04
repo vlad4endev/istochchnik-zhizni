@@ -14,6 +14,7 @@ import {
   buildMessengerObjectPath,
   createSignedUrlForBucketObject,
   getSupabaseStorageMissingEnv,
+  isStorageBucketHealthCheckInconclusive,
   isSupabaseStorageConfigured,
   messengerBucket,
   verifyStorageBucketPresent,
@@ -214,6 +215,16 @@ router.get('/uploads/health', async (_req: Request, res: Response) => {
   }
   const bucket = messengerBucket();
   const v = await verifyStorageBucketPresent(bucket);
+  if (!v.ok && isStorageBucketHealthCheckInconclusive(v)) {
+    console.warn('[messenger] uploads/health: проверка бакета по listBuckets недоступна (часто self-hosted):', v.reason, v.message ?? '');
+    res.json({
+      ok: true,
+      storage: 'supabase',
+      bucket,
+      bucketCheck: { inconclusive: true, reason: v.reason, message: v.message },
+    });
+    return;
+  }
   if (!v.ok) {
     const base = {
       ok: false,
@@ -226,7 +237,7 @@ router.get('/uploads/health', async (_req: Request, res: Response) => {
         ...base,
         reason: 'storage_bucket_not_found',
         hint:
-          'В Supabase нет бакета с таким id. Выполните SQL из репозитория: supabase/migrations/20260415120000_storage_buckets_app_uploads.sql (Dashboard → SQL), либо создайте публичный бакет вручную в Storage. Имя задаётся переменной SUPABASE_STORAGE_BUCKET_MESSENGER (по умолчанию chat).',
+          'В Supabase нет бакета с таким id. Выполните SQL: scripts/ensure-supabase-storage-buckets.sql (Dashboard → SQL), либо supabase db push. Либо создайте бакет в Storage вручную. Имя задаётся SUPABASE_STORAGE_BUCKET_MESSENGER (по умолчанию chat).',
       });
       return;
     }
@@ -331,7 +342,7 @@ router.post('/upload', messengerUploadMiddleware, async (req: Request, res: Resp
       if (/bucket not found/i.test(msg)) {
         res.status(503).json({
           error:
-            `В Supabase нет бакета «${bucket}». Создайте его (миграция supabase/migrations/20260415120000_storage_buckets_app_uploads.sql) или выставьте SUPABASE_STORAGE_BUCKET_MESSENGER на существующий бакет.`,
+            `В Supabase нет бакета «${bucket}». Выполните scripts/ensure-supabase-storage-buckets.sql в Dashboard → SQL (или supabase db push), либо задайте SUPABASE_STORAGE_BUCKET_MESSENGER на id уже существующего бакета.`,
           code: 'storage_bucket_not_found',
           bucket,
         });
