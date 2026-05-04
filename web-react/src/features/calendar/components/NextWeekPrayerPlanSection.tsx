@@ -773,33 +773,44 @@ export function NextWeekPrayerPlanSection({
 
   if (!canView) return null;
 
+  const weekQueueButton = (
+    <button
+      type="button"
+      onClick={() => setOpen(true)}
+      className="touch-manipulation flex min-h-[48px] min-w-0 flex-1 items-center gap-2.5 px-3 py-2.5 text-left transition hover:bg-primary/[0.05] active:bg-primary/[0.08]"
+    >
+      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary text-white shadow-sm shadow-primary/15">
+        <LuClipboardList className="h-4 w-4" strokeWidth={2} aria-hidden />
+      </span>
+      <span className="min-w-0 flex-1 text-[15px] font-extrabold leading-tight text-stone-900">
+        Сбор нужд · очередь недели
+      </span>
+    </button>
+  );
+
   return (
     <div className="mb-4 flex flex-col gap-3">
-      <div className="flex items-stretch gap-2">
-        <button
-          type="button"
-          onClick={() => setOpen(true)}
-          className="touch-manipulation flex min-h-[48px] min-w-0 flex-1 items-center gap-2.5 rounded-xl border border-primary/30 bg-[var(--surface-elevated)] px-3 py-2.5 text-left shadow-sm transition hover:border-primary/45 hover:shadow-md"
-        >
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary text-white">
-            <LuClipboardList className="h-4 w-4" strokeWidth={2} aria-hidden />
-          </span>
-          <span className="min-w-0 flex-1 text-[15px] font-extrabold leading-tight text-stone-900">
-            Сбор нужд · очередь недели
-          </span>
-        </button>
-        {onTelegramPrayerDispatch ? (
+      {onTelegramPrayerDispatch ? (
+        <div className="flex min-h-[48px] items-stretch overflow-hidden rounded-xl border border-primary/30 bg-[var(--surface-elevated)] shadow-sm ring-1 ring-black/[0.03] transition hover:border-primary/45 hover:shadow-md">
+          {weekQueueButton}
+          <div className="w-px shrink-0 self-stretch bg-gradient-to-b from-transparent via-primary/25 to-transparent" aria-hidden />
           <button
             type="button"
             onClick={onTelegramPrayerDispatch}
-            className="tap-highlight-transparent flex min-h-[48px] min-w-[48px] shrink-0 items-center justify-center rounded-xl border border-primary/30 bg-[var(--surface-elevated)] text-primary shadow-sm transition hover:border-primary/50 hover:bg-primary/[0.06] hover:shadow-md"
+            className="tap-highlight-transparent flex w-[52px] shrink-0 items-center justify-center self-stretch transition hover:bg-primary/[0.06] active:bg-primary/[0.09] sm:w-14"
             aria-label="Рассылка молитвы в Telegram"
             title="Рассылка молитвы в Telegram"
           >
-            <LuSend className="h-5 w-5" strokeWidth={2.25} aria-hidden />
+            <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-white shadow-sm shadow-primary/15">
+              <LuSend className="h-4 w-4" strokeWidth={2} aria-hidden />
+            </span>
           </button>
-        ) : null}
-      </div>
+        </div>
+      ) : (
+        <div className="overflow-hidden rounded-xl border border-primary/30 bg-[var(--surface-elevated)] shadow-sm ring-1 ring-black/[0.03] transition hover:border-primary/45 hover:shadow-md">
+          {weekQueueButton}
+        </div>
+      )}
 
       {afterWeekQueueButton}
 

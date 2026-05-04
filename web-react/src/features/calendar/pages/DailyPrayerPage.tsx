@@ -29,6 +29,7 @@ import {
   LuHeartHandshake,
   LuRefreshCw,
   LuUserX,
+  LuX,
 } from 'react-icons/lu';
 import { type ReactNode, useEffect, useId, useState } from 'react';
 import { DayPicker } from 'react-day-picker';
@@ -455,173 +456,215 @@ function TelegramPrayerDispatchModal(props: {
 
   return (
     <div
-      className="fixed inset-0 z-[140] flex items-center justify-center bg-black/50 p-4"
+      className="fixed inset-0 z-[140] flex flex-col justify-end bg-black/55 p-0 backdrop-blur-[2px] sm:items-center sm:justify-center sm:p-4 sm:backdrop-blur-none"
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
       role="presentation"
     >
-      <div className="max-h-[88vh] w-full max-w-3xl overflow-y-auto rounded-2xl bg-white p-5 shadow-2xl" role="dialog" aria-modal="true" aria-label="Настройка рассылки молитвы в Telegram">
-        <div className="mb-4 flex items-start justify-between gap-3">
-          <div>
-            <h3 className="text-lg font-bold text-stone-900">Рассылка молитвы в Telegram</h3>
-            <p className="mt-1 text-sm text-stone-600">
-              Расписание в часовом поясе сервера ({form.server_timezone}). Получатели: один, несколько или все с Telegram ID.
+      <div
+        className="flex max-h-[min(92dvh,920px)] w-full max-w-3xl flex-col overflow-hidden rounded-t-2xl border border-stone-200/90 bg-white pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-[0_-8px_40px_rgba(0,0,0,0.12)] sm:max-h-[min(88vh,900px)] sm:rounded-2xl sm:border-stone-200 sm:pb-0 sm:shadow-2xl"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Настройка рассылки молитвы в Telegram"
+      >
+        <div className="flex shrink-0 items-start gap-2 border-b border-stone-100 bg-white px-4 pb-3 pt-[max(0.75rem,env(safe-area-inset-top))] sm:gap-3 sm:px-5 sm:py-4">
+          <div className="min-w-0 flex-1">
+            <h3 className="text-[1.05rem] font-extrabold leading-snug tracking-tight text-stone-900 sm:text-lg">
+              Рассылка молитвы в Telegram
+            </h3>
+            <p className="mt-1.5 text-[13px] leading-relaxed text-stone-600 sm:text-sm">
+              Часовой пояс сервера:{' '}
+              <span className="font-mono text-[12px] text-stone-800 sm:text-[13px]">{form.server_timezone}</span>.
+              Получатели — все или выбранные с Telegram ID.
             </p>
           </div>
-          <button type="button" className="rounded-lg border border-stone-200 px-3 py-1.5 text-sm text-stone-700 hover:bg-stone-50" onClick={onClose}>
-            Закрыть
+          <button
+            type="button"
+            onClick={onClose}
+            className="tap-highlight-transparent -mr-1 flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-transparent text-stone-500 transition hover:border-stone-200 hover:bg-stone-50 hover:text-stone-800"
+            aria-label="Закрыть"
+          >
+            <LuX className="h-5 w-5" strokeWidth={2.25} aria-hidden />
           </button>
         </div>
-        {loading ? (
-          <div className="h-40 animate-pulse rounded-xl bg-stone-100" />
-        ) : (
-          <div className="space-y-4">
-            {!botEnabled ? (
-              <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-                Telegram-бот сейчас выключен в настройках админки. Включите его, чтобы рассылка работала.
-              </div>
-            ) : null}
-            {note ? (
-              <div className="rounded-xl border border-stone-200 bg-stone-50 px-3 py-2 text-sm text-stone-800">{note}</div>
-            ) : null}
-            {previewQ.isError ? (
-              <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-900">
-                {humanizeTelegramError(previewQ.error, 'Не удалось загрузить предпросмотр текста.')}
-              </div>
-            ) : previewQ.data ? (
-              <div className="rounded-xl border border-stone-200 bg-stone-50/80 p-3">
-                <p className="text-xs font-semibold text-stone-600">
-                  Текст «Молитва на сегодня» для даты {previewQ.data.date} (как на странице)
-                </p>
-                <textarea
-                  readOnly
-                  className="mt-2 max-h-48 min-h-[120px] w-full resize-y rounded-lg border border-stone-200 bg-white px-3 py-2 font-mono text-[13px] leading-relaxed text-stone-800"
-                  value={previewQ.data.text}
-                  aria-label="Предпросмотр текста рассылки молитвы"
-                />
-              </div>
-            ) : null}
-            <div className="grid gap-3 md:grid-cols-2">
-              <label className="flex items-center justify-between rounded-xl border border-stone-200 px-3 py-2.5">
-                <span className="text-sm text-stone-800">Включить авторассылку</span>
-                <input
-                  type="checkbox"
-                  checked={form.enabled}
-                  onChange={(e) => setForm((s) => ({ ...s, enabled: e.target.checked }))}
-                />
-              </label>
-              <div>
-                <label className="mb-1 block text-xs font-semibold text-stone-600">Режим</label>
-                <select
-                  className="w-full rounded-xl border border-stone-200 px-3 py-2.5 text-sm"
-                  value={form.kind}
-                  onChange={(e) => setForm((s) => ({ ...s, kind: e.target.value as 'daily' | 'once' }))}
-                >
-                  <option value="daily">Ежедневно</option>
-                  <option value="once">Разово</option>
-                </select>
-              </div>
-              {form.kind === 'daily' ? (
-                <div>
-                  <label className="mb-1 block text-xs font-semibold text-stone-600">Время (сервер)</label>
-                  <input
-                    type="time"
-                    className="w-full rounded-xl border border-stone-200 px-3 py-2.5 text-sm"
-                    value={form.time_hhmm ?? '09:00'}
-                    onChange={(e) => setForm((s) => ({ ...s, time_hhmm: e.target.value }))}
+
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain px-4 py-4 sm:px-5 sm:py-5">
+          {loading ? (
+            <div className="h-44 animate-pulse rounded-xl bg-stone-100 sm:h-40" />
+          ) : (
+            <div className="space-y-4 sm:space-y-5">
+              {!botEnabled ? (
+                <div className="rounded-xl border border-amber-200/90 bg-amber-50 px-3 py-3 text-[13px] leading-relaxed text-amber-950 sm:text-sm">
+                  Telegram-бот сейчас выключен в настройках админки. Включите его, чтобы рассылка работала.
+                </div>
+              ) : null}
+              {note ? (
+                <div className="rounded-xl border border-stone-200 bg-stone-50 px-3 py-3 text-[13px] leading-relaxed text-stone-800 sm:text-sm">
+                  {note}
+                </div>
+              ) : null}
+              {previewQ.isError ? (
+                <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-3 text-[13px] leading-relaxed text-rose-950 sm:text-sm">
+                  {humanizeTelegramError(previewQ.error, 'Не удалось загрузить предпросмотр текста.')}
+                </div>
+              ) : previewQ.data ? (
+                <div className="rounded-xl border border-stone-200 bg-gradient-to-b from-stone-50/90 to-white p-3 sm:p-4">
+                  <p className="text-[11px] font-bold uppercase tracking-wide text-stone-500 sm:text-xs">
+                    Предпросмотр · дата {previewQ.data.date}
+                  </p>
+                  <p className="mt-1 text-[12px] text-stone-600 sm:text-[13px]">Как на странице «Молитва» для выбранного дня.</p>
+                  <textarea
+                    readOnly
+                    className="tap-highlight-transparent mt-2 max-h-[min(38vh,220px)] min-h-[100px] w-full resize-y rounded-xl border border-stone-200 bg-white px-3 py-2.5 font-mono text-[12px] leading-relaxed text-stone-800 shadow-inner sm:max-h-64 sm:min-h-[128px] sm:text-[13px]"
+                    value={previewQ.data.text}
+                    aria-label="Предпросмотр текста рассылки молитвы"
                   />
                 </div>
-              ) : (
-                <div className="md:col-span-2 grid gap-2 sm:grid-cols-2">
-                  <div>
-                    <label className="mb-1 block text-xs font-semibold text-stone-600">Дата</label>
-                    <input
-                      type="date"
-                      className="w-full rounded-xl border border-stone-200 px-3 py-2.5 text-sm"
-                      value={form.once_at_local?.split('T')[0] ?? ''}
-                      onChange={(e) => {
-                        const d = e.target.value;
-                        setForm((s) => {
-                          const t = s.once_at_local?.split('T')[1]?.slice(0, 5) ?? '09:00';
-                          return { ...s, once_at_local: d ? `${d}T${t}` : null };
-                        });
-                      }}
-                    />
-                  </div>
-                  <div>
-                    <label className="mb-1 block text-xs font-semibold text-stone-600">Время</label>
+              ) : null}
+              <div className="grid gap-3 sm:grid-cols-2 sm:gap-4">
+                <label className="flex min-h-[48px] cursor-pointer items-center justify-between gap-3 rounded-xl border border-stone-200 bg-[var(--surface-elevated)] px-3 py-3 sm:min-h-0 sm:py-2.5">
+                  <span className="text-[14px] font-semibold text-stone-800 sm:text-sm">Включить авторассылку</span>
+                  <input
+                    type="checkbox"
+                    className="h-5 w-5 accent-primary"
+                    checked={form.enabled}
+                    onChange={(e) => setForm((s) => ({ ...s, enabled: e.target.checked }))}
+                  />
+                </label>
+                <div>
+                  <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wide text-stone-500 sm:text-xs sm:font-semibold sm:normal-case sm:tracking-normal sm:text-stone-600">
+                    Режим
+                  </label>
+                  <select
+                    className="min-h-[48px] w-full rounded-xl border border-stone-200 bg-white px-3 py-2.5 text-[15px] font-medium text-stone-900 sm:min-h-0 sm:text-sm"
+                    value={form.kind}
+                    onChange={(e) => setForm((s) => ({ ...s, kind: e.target.value as 'daily' | 'once' }))}
+                  >
+                    <option value="daily">Ежедневно</option>
+                    <option value="once">Разово</option>
+                  </select>
+                </div>
+                {form.kind === 'daily' ? (
+                  <div className="sm:col-span-1">
+                    <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wide text-stone-500 sm:text-xs sm:font-semibold sm:normal-case sm:tracking-normal sm:text-stone-600">
+                      Время (сервер)
+                    </label>
                     <input
                       type="time"
-                      className="w-full rounded-xl border border-stone-200 px-3 py-2.5 text-sm"
-                      value={form.once_at_local?.split('T')[1]?.slice(0, 5) ?? ''}
-                      onChange={(e) => {
-                        const tim = e.target.value;
-                        setForm((s) => {
-                          const d = s.once_at_local?.split('T')[0];
-                          if (!d || !tim) return s;
-                          return { ...s, once_at_local: `${d}T${tim}` };
-                        });
-                      }}
+                      className="min-h-[48px] w-full rounded-xl border border-stone-200 bg-white px-3 py-2.5 text-[15px] sm:min-h-0 sm:text-sm"
+                      value={form.time_hhmm ?? '09:00'}
+                      onChange={(e) => setForm((s) => ({ ...s, time_hhmm: e.target.value }))}
                     />
                   </div>
-                </div>
-              )}
-              <div>
-                <label className="mb-1 block text-xs font-semibold text-stone-600">Кому отправлять</label>
-                <select
-                  className="w-full rounded-xl border border-stone-200 px-3 py-2.5 text-sm"
-                  value={form.target}
-                  onChange={(e) => setForm((s) => ({ ...s, target: e.target.value as 'all' | 'selected' }))}
-                >
-                  <option value="all">Всем с Telegram ID</option>
-                  <option value="selected">Выбранным пользователям</option>
-                </select>
-              </div>
-            </div>
-            {form.target === 'selected' ? (
-              <div className="rounded-xl border border-stone-200 p-3">
-                <p className="mb-2 text-xs font-semibold text-stone-600">Выбор пользователей</p>
-                <div className="max-h-56 space-y-1 overflow-y-auto">
-                  {recipients.map((u: TelegramDispatchRecipient) => {
-                    const checked = form.member_ids.includes(u.id);
-                    return (
-                      <label key={u.id} className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-stone-50">
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          onChange={(e) =>
-                            setForm((s) => ({
-                              ...s,
-                              member_ids: e.target.checked
-                                ? Array.from(new Set([...s.member_ids, u.id]))
-                                : s.member_ids.filter((id) => id !== u.id),
-                            }))
-                          }
-                        />
-                        <span className="text-sm text-stone-700">{u.name}</span>
-                        <span className="text-xs text-stone-400">({u.telegram_chat_id})</span>
+                ) : (
+                  <div className="grid grid-cols-1 gap-3 sm:col-span-2 sm:grid-cols-2 sm:gap-4">
+                    <div>
+                      <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wide text-stone-500 sm:text-xs sm:font-semibold sm:normal-case sm:tracking-normal sm:text-stone-600">
+                        Дата
                       </label>
-                    );
-                  })}
+                      <input
+                        type="date"
+                        className="min-h-[48px] w-full rounded-xl border border-stone-200 bg-white px-3 py-2.5 text-[15px] sm:min-h-0 sm:text-sm"
+                        value={form.once_at_local?.split('T')[0] ?? ''}
+                        onChange={(e) => {
+                          const d = e.target.value;
+                          setForm((s) => {
+                            const t = s.once_at_local?.split('T')[1]?.slice(0, 5) ?? '09:00';
+                            return { ...s, once_at_local: d ? `${d}T${t}` : null };
+                          });
+                        }}
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wide text-stone-500 sm:text-xs sm:font-semibold sm:normal-case sm:tracking-normal sm:text-stone-600">
+                        Время
+                      </label>
+                      <input
+                        type="time"
+                        className="min-h-[48px] w-full rounded-xl border border-stone-200 bg-white px-3 py-2.5 text-[15px] sm:min-h-0 sm:text-sm"
+                        value={form.once_at_local?.split('T')[1]?.slice(0, 5) ?? ''}
+                        onChange={(e) => {
+                          const tim = e.target.value;
+                          setForm((s) => {
+                            const d = s.once_at_local?.split('T')[0];
+                            if (!d || !tim) return s;
+                            return { ...s, once_at_local: `${d}T${tim}` };
+                          });
+                        }}
+                      />
+                    </div>
+                  </div>
+                )}
+                <div className={form.kind === 'daily' ? 'sm:col-span-1' : 'sm:col-span-2'}>
+                  <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wide text-stone-500 sm:text-xs sm:font-semibold sm:normal-case sm:tracking-normal sm:text-stone-600">
+                    Кому отправлять
+                  </label>
+                  <select
+                    className="min-h-[48px] w-full rounded-xl border border-stone-200 bg-white px-3 py-2.5 text-[15px] font-medium text-stone-900 sm:min-h-0 sm:text-sm"
+                    value={form.target}
+                    onChange={(e) => setForm((s) => ({ ...s, target: e.target.value as 'all' | 'selected' }))}
+                  >
+                    <option value="all">Всем с Telegram ID</option>
+                    <option value="selected">Выбранным пользователям</option>
+                  </select>
                 </div>
               </div>
-            ) : null}
-            <div className="flex flex-wrap gap-2">
+              {form.target === 'selected' ? (
+                <div className="rounded-xl border border-stone-200 bg-stone-50/50 p-3 sm:p-4">
+                  <p className="mb-2 text-[11px] font-bold uppercase tracking-wide text-stone-500 sm:text-xs sm:font-semibold sm:normal-case sm:tracking-normal sm:text-stone-600">
+                    Выбор пользователей
+                  </p>
+                  <div className="max-h-[min(42vh,280px)] space-y-0.5 overflow-y-auto overscroll-y-contain sm:max-h-56">
+                    {recipients.map((u: TelegramDispatchRecipient) => {
+                      const checked = form.member_ids.includes(u.id);
+                      return (
+                        <label
+                          key={u.id}
+                          className="flex min-h-[44px] cursor-pointer items-center gap-3 rounded-lg px-2 py-2 active:bg-stone-100 sm:min-h-0 sm:py-1.5 sm:hover:bg-stone-50"
+                        >
+                          <input
+                            type="checkbox"
+                            className="h-5 w-5 shrink-0 accent-primary"
+                            checked={checked}
+                            onChange={(e) =>
+                              setForm((s) => ({
+                                ...s,
+                                member_ids: e.target.checked
+                                  ? Array.from(new Set([...s.member_ids, u.id]))
+                                  : s.member_ids.filter((id) => id !== u.id),
+                              }))
+                            }
+                          />
+                          <span className="min-w-0 flex-1 text-[14px] font-medium text-stone-800 sm:text-sm">{u.name}</span>
+                          <span className="shrink-0 font-mono text-[11px] text-stone-400 sm:text-xs">({u.telegram_chat_id})</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          )}
+        </div>
+
+        {!loading ? (
+          <div className="shrink-0 border-t border-stone-100 bg-[var(--surface-elevated)] px-4 py-3 sm:bg-white sm:px-5 sm:pb-5 sm:pt-0 sm:shadow-none">
+            <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:justify-end sm:gap-2">
               <button
                 type="button"
-                className="rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-white hover:opacity-95 disabled:opacity-60"
-                disabled={saveMut.isPending}
+                className="tap-highlight-transparent order-3 flex min-h-[48px] w-full items-center justify-center rounded-xl border border-stone-200 bg-white px-4 text-[15px] font-semibold text-stone-800 shadow-sm hover:bg-stone-50 disabled:opacity-60 sm:order-none sm:min-h-[44px] sm:w-auto sm:px-4 sm:py-2.5 sm:text-sm"
+                disabled={testMut.isPending}
                 onClick={() => {
                   setNote(null);
-                  saveMut.mutate();
+                  testMut.mutate();
                 }}
               >
-                {saveMut.isPending ? 'Сохранение…' : 'Сохранить'}
+                {testMut.isPending ? 'Проверка…' : 'Проверить бота'}
               </button>
               <button
                 type="button"
-                className="rounded-xl border border-stone-200 bg-white px-4 py-2.5 text-sm font-semibold text-stone-700 hover:bg-stone-50 disabled:opacity-60"
+                className="tap-highlight-transparent order-2 flex min-h-[48px] w-full items-center justify-center rounded-xl border-2 border-primary/25 bg-white px-4 text-[15px] font-bold text-primary hover:bg-primary/[0.04] disabled:opacity-60 sm:order-none sm:min-h-[44px] sm:w-auto sm:border sm:border-stone-200 sm:px-4 sm:py-2.5 sm:font-semibold sm:text-stone-700 sm:hover:bg-stone-50"
                 disabled={runMut.isPending}
                 onClick={() => {
                   setNote(null);
@@ -632,18 +675,18 @@ function TelegramPrayerDispatchModal(props: {
               </button>
               <button
                 type="button"
-                className="rounded-xl border border-stone-200 bg-white px-4 py-2.5 text-sm font-semibold text-stone-700 hover:bg-stone-50 disabled:opacity-60"
-                disabled={testMut.isPending}
+                className="tap-highlight-transparent order-1 flex min-h-[48px] w-full items-center justify-center rounded-xl bg-primary px-4 text-[15px] font-bold text-white shadow-md shadow-primary/20 hover:opacity-95 disabled:opacity-60 sm:order-none sm:min-h-[44px] sm:w-auto sm:px-4 sm:py-2.5 sm:text-sm"
+                disabled={saveMut.isPending}
                 onClick={() => {
                   setNote(null);
-                  testMut.mutate();
+                  saveMut.mutate();
                 }}
               >
-                {testMut.isPending ? 'Проверка…' : 'Проверить бота'}
+                {saveMut.isPending ? 'Сохранение…' : 'Сохранить'}
               </button>
             </div>
           </div>
-        )}
+        ) : null}
       </div>
     </div>
   );
