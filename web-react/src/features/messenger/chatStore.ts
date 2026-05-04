@@ -1,7 +1,13 @@
 import { create } from 'zustand';
 import axios from 'axios';
-import type { ConversationListItem, MessageWithSender, SearchMember } from './api/messengerApi';
 import * as api from './api/messengerApi';
+import {
+  normalizeConversationListItem,
+  type ConversationListItem,
+  type ConversationListRow,
+  type MessageWithSender,
+  type SearchMember,
+} from './api/messengerApi';
 import { emitAppToast } from '../../lib/uiFeedback';
 import { playAudio } from '../../utils/audio';
 import { extractMentionMemberIdsFromText, normalizeMentionsToCanonical } from './mentionUtils';
@@ -443,9 +449,13 @@ function hydrateFromCacheIntoStore(set: (partial: Partial<ChatState>) => void, g
   const snap = readSnapshot(s.currentMemberId);
   if (!snap) return;
   inMemoryOutbox = Array.isArray(snap.outbox) ? snap.outbox : [];
+  const rawConversations = snap.conversations || [];
+  const conversations = rawConversations.map((c) =>
+    normalizeConversationListItem(c as ConversationListRow),
+  );
   set({
-    conversations: snap.conversations || [],
-    conversationsLoaded: (snap.conversations || []).length > 0,
+    conversations,
+    conversationsLoaded: conversations.length > 0,
     messagesByConv: snap.messagesByConv || {},
     hasMore: snap.hasMore || {},
     totalUnread: Number(snap.totalUnread || 0),
@@ -1863,7 +1873,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   handleConvCreated: (conv) => {
-    const normalized = { ...conv, id: String(conv.id) };
+    const normalized = normalizeConversationListItem({ ...conv, id: String(conv.id) } as ConversationListRow);
     set((s) => {
       // Upsert: update if exists, add to front if new
       const exists = s.conversations.some((c) => String(c.id) === normalized.id);
@@ -1891,9 +1901,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
         normalizedPatch.avatar_url = normalizedPatch.avatarUrl ?? null;
         delete normalizedPatch.avatarUrl;
       }
-      const conversations = s.conversations.map((c) =>
-        String(c.id) === idKey ? { ...c, ...normalizedPatch } : c,
-      );
+      const conversations = s.conversations.map((c) => {
+        if (String(c.id) !== idKey) return c;
+        const merged = { ...c, ...normalizedPatch } as ConversationListRow;
+        return normalizeConversationListItem(merged);
+      });
       return { conversations };
     });
   },

@@ -33,6 +33,31 @@ function rewriteMessengerPublicUrl(raw: string | null | undefined): string | nul
   return rewriteSupabaseStorageUrlForClient(t);
 }
 
+/**
+ * Логотип группы/канала: основная колонка `conversations.avatar_url` или легаси в JSON
+ * (`metadata` / `settings`), чтобы список чатов и meta не теряли картинку.
+ */
+function pickConversationAvatarFromParts(args: {
+  avatar_url?: unknown;
+  metadata?: Record<string, unknown> | undefined;
+  settings?: Record<string, unknown> | undefined;
+}): string | null {
+  const col = args.avatar_url;
+  if (col != null && String(col).trim() !== '') return String(col).trim();
+
+  const keys = ['avatar_url', 'avatarUrl', 'photo_url', 'photoUrl', 'logo_url', 'logoUrl'] as const;
+  const scan = (bag: Record<string, unknown> | undefined): string | null => {
+    if (!bag || typeof bag !== 'object' || Array.isArray(bag)) return null;
+    for (const k of keys) {
+      const v = bag[k];
+      if (typeof v === 'string' && v.trim().length > 0) return v.trim();
+    }
+    return null;
+  };
+
+  return scan(args.metadata) ?? scan(args.settings) ?? null;
+}
+
 function pgErrorCode(e: unknown): string | undefined {
   const c =
     e && typeof e === 'object' && 'code' in e ? (e as { code: unknown }).code : undefined;
@@ -160,6 +185,9 @@ export async function listConversations(memberId: number): Promise<ConversationL
       c.title,
       c.avatar_url,
       c.updated_at,
+      c.default_permissions,
+      c.settings,
+      c.metadata,
       cp.muted_until,
       cp.ui_pinned,
       cp.ui_pinned_at,
@@ -222,45 +250,66 @@ export async function listConversations(memberId: number): Promise<ConversationL
     [memberId],
   );
 
-  return result.rows.map((r: any) => ({
-    id: bigint(r.id),
-    type: r.type as ConversationType,
-    title: r.title,
-    avatar_url: rewriteMessengerPublicUrl(
-      r.avatar_url != null && String(r.avatar_url).trim() !== '' ? String(r.avatar_url).trim() : null,
-    ),
-    updated_at: r.updated_at,
-    last_message: r.lm_id
-      ? {
-          id: bigint(r.lm_id),
-          content: r.lm_content,
-          sender_id: r.lm_sender_id,
-          sender_name: r.lm_sender_name?.trim() || null,
-          created_at: r.lm_created_at,
-          is_deleted: r.lm_is_deleted,
-        }
-      : null,
-    unread_count: Number(r.unread_count),
-    other_member: r.om_id
-      ? {
-          id: r.om_id,
-          name: r.om_name,
-          first_name: r.om_first_name,
-          last_name: r.om_last_name,
-          avatar_url: rewriteMessengerPublicUrl(r.om_avatar_url ?? null),
-          last_seen_at:
-            r.om_last_seen_at != null
-              ? new Date(r.om_last_seen_at as string | Date).toISOString()
-              : null,
-        }
-      : null,
-    ...mapParticipantUiExtras({
-      muted_until: r.muted_until,
-      ui_pinned: r.ui_pinned,
-      ui_pinned_at: r.ui_pinned_at,
-      ui_folder: r.ui_folder,
-    }),
-  }));
+  return result.rows.map((r: any) => {
+    const metaRaw = r.metadata;
+    const metadata =
+      metaRaw && typeof metaRaw === 'object' && !Array.isArray(metaRaw)
+        ? (metaRaw as Record<string, unknown>)
+        : undefined;
+    const st = r.settings;
+    const settings =
+      st && typeof st === 'object' && !Array.isArray(st) ? (st as Record<string, unknown>) : undefined;
+    const dp = r.default_permissions;
+    const default_permissions =
+      dp && typeof dp === 'object' && !Array.isArray(dp) ? (dp as PermissionsJson) : undefined;
+
+    const avatarPick = pickConversationAvatarFromParts({
+      avatar_url: r.avatar_url,
+      metadata,
+      settings,
+    });
+
+    return {
+      id: bigint(r.id),
+      type: r.type as ConversationType,
+      title: r.title,
+      avatar_url: rewriteMessengerPublicUrl(avatarPick),
+      updated_at: r.updated_at,
+      default_permissions,
+      settings,
+      metadata,
+      last_message: r.lm_id
+        ? {
+            id: bigint(r.lm_id),
+            content: r.lm_content,
+            sender_id: r.lm_sender_id,
+            sender_name: r.lm_sender_name?.trim() || null,
+            created_at: r.lm_created_at,
+            is_deleted: r.lm_is_deleted,
+          }
+        : null,
+      unread_count: Number(r.unread_count),
+      other_member: r.om_id
+        ? {
+            id: r.om_id,
+            name: r.om_name,
+            first_name: r.om_first_name,
+            last_name: r.om_last_name,
+            avatar_url: rewriteMessengerPublicUrl(r.om_avatar_url ?? null),
+            last_seen_at:
+              r.om_last_seen_at != null
+                ? new Date(r.om_last_seen_at as string | Date).toISOString()
+                : null,
+          }
+        : null,
+      ...mapParticipantUiExtras({
+        muted_until: r.muted_until,
+        ui_pinned: r.ui_pinned,
+        ui_pinned_at: r.ui_pinned_at,
+        ui_folder: r.ui_folder,
+      }),
+    };
+  });
 }
 
 export async function getConversationMeta(
@@ -284,11 +333,17 @@ export async function getConversationMeta(
     const st = r.settings;
     const settings =
       st && typeof st === 'object' && !Array.isArray(st) ? (st as Record<string, unknown>) : undefined;
+    const avatarPick = pickConversationAvatarFromParts({
+      avatar_url: r.avatar_url,
+      metadata,
+      settings,
+    });
+
     return {
       id: bigint(r.id),
       type: r.type as ConversationType,
       title: r.title as string | null,
-      avatar_url: rewriteMessengerPublicUrl(r.avatar_url as string | null),
+      avatar_url: rewriteMessengerPublicUrl(avatarPick),
       updated_at: r.updated_at as string,
       default_permissions,
       settings,
@@ -609,6 +664,9 @@ export async function getConversationListItem(
       c.title,
       c.avatar_url,
       c.updated_at,
+      c.default_permissions,
+      c.settings,
+      c.metadata,
       cp.muted_until,
       cp.ui_pinned,
       cp.ui_pinned_at,
@@ -670,12 +728,33 @@ export async function getConversationListItem(
   const r = result.rows[0];
   if (!r) return null;
 
+  const metaRaw = r.metadata;
+  const metadata =
+    metaRaw && typeof metaRaw === 'object' && !Array.isArray(metaRaw)
+      ? (metaRaw as Record<string, unknown>)
+      : undefined;
+  const st = r.settings;
+  const settings =
+    st && typeof st === 'object' && !Array.isArray(st) ? (st as Record<string, unknown>) : undefined;
+  const dp = r.default_permissions;
+  const default_permissions =
+    dp && typeof dp === 'object' && !Array.isArray(dp) ? (dp as PermissionsJson) : undefined;
+
+  const avatarPick = pickConversationAvatarFromParts({
+    avatar_url: r.avatar_url,
+    metadata,
+    settings,
+  });
+
   return {
     id: bigint(r.id),
     type: r.type as ConversationType,
     title: r.title,
-    avatar_url: rewriteMessengerPublicUrl(r.avatar_url != null ? String(r.avatar_url).trim() : null),
+    avatar_url: rewriteMessengerPublicUrl(avatarPick),
     updated_at: r.updated_at,
+    default_permissions,
+    settings,
+    metadata,
     last_message: r.lm_id
       ? {
           id: bigint(r.lm_id),

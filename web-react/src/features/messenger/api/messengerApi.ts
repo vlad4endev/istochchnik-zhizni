@@ -84,7 +84,7 @@ export interface ConversationListItem {
   my_ui_folder?: 'personal' | 'ministry' | null;
 }
 
-type ConversationListRow = ConversationListItem & { avatarUrl?: string | null };
+export type ConversationListRow = ConversationListItem & { avatarUrl?: string | null };
 
 /** Сброс кэша браузера для аватара при смене `updated_at` чата / участника. */
 function withAvatarCacheBust(url: string | null, versionIso: string | null | undefined): string | null {
@@ -95,9 +95,16 @@ function withAvatarCacheBust(url: string | null, versionIso: string | null | und
   return `${url}${sep}v=${t}`;
 }
 
+function firstNonEmptyString(...vals: unknown[]): string | null {
+  for (const v of vals) {
+    if (typeof v === 'string' && v.trim().length > 0) return v.trim();
+  }
+  return null;
+}
+
 function pickConversationAvatarCandidate(c: ConversationListRow): string | null {
-  const direct = c.avatar_url ?? c.avatarUrl ?? null;
-  if (typeof direct === 'string' && direct.trim().length > 0) return direct.trim();
+  const direct = firstNonEmptyString(c.avatar_url, c.avatarUrl);
+  if (direct) return direct;
 
   const metadata = c.metadata && typeof c.metadata === 'object' && !Array.isArray(c.metadata)
     ? (c.metadata as Record<string, unknown>)
@@ -111,10 +118,14 @@ function pickConversationAvatarCandidate(c: ConversationListRow): string | null 
     metadata?.avatarUrl,
     metadata?.photo_url,
     metadata?.photoUrl,
+    metadata?.logo_url,
+    metadata?.logoUrl,
     settings?.avatar_url,
     settings?.avatarUrl,
     settings?.photo_url,
     settings?.photoUrl,
+    settings?.logo_url,
+    settings?.logoUrl,
   ];
   for (const value of nestedCandidates) {
     if (typeof value === 'string' && value.trim().length > 0) {
@@ -124,7 +135,7 @@ function pickConversationAvatarCandidate(c: ConversationListRow): string | null 
   return null;
 }
 
-function normalizeConversationListItem(c: ConversationListRow): ConversationListItem {
+export function normalizeConversationListItem(c: ConversationListRow): ConversationListItem {
   const avatarBase = pickConversationAvatarCandidate(c);
   const avatar_url = withAvatarCacheBust(avatarBase, c.updated_at ?? null);
   const omIn = c.other_member as (NonNullable<ConversationListItem['other_member']> & {
