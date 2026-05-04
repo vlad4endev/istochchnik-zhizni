@@ -73,7 +73,7 @@ export async function bulkCreateAdminMembers(body: {
     first_name: string;
     last_name: string;
     phone_number: string;
-    telegram_chat_id: string;
+    telegram_chat_id?: string;
     birth_date: string;
     ministry_role?: string;
     ministry_direction?: string;
