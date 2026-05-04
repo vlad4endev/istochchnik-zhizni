@@ -1535,13 +1535,12 @@ function MembersSection({
                 <th className="whitespace-nowrap px-4 py-3">Телефон</th>
                 <th className="px-4 py-3">Роль</th>
                 <th className="px-4 py-3">Статус</th>
-                <th className="px-4 py-3" />
               </tr>
             </thead>
             <tbody>
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-4 py-10 text-center text-stone-500">
+                  <td colSpan={4} className="px-4 py-10 text-center text-stone-500">
                     {search.trim() || roleFilter ? 'Никого не найдено.' : 'Список пуст.'}
                   </td>
                 </tr>
@@ -1552,7 +1551,16 @@ function MembersSection({
                   return (
                     <tr
                       key={u.id}
-                      className="border-b border-stone-100/90 transition last:border-0 hover:bg-primary/[0.03]"
+                      tabIndex={0}
+                      title="Открыть карточку"
+                      className="cursor-pointer border-b border-stone-100/90 transition last:border-0 hover:bg-primary/[0.06]"
+                      onClick={() => openEdit(u)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          openEdit(u);
+                        }
+                      }}
                     >
                       <td className="px-4 py-2.5">
                         <div className="flex items-center gap-2.5">
@@ -1579,15 +1587,6 @@ function MembersSection({
                       </td>
                       <td className="px-4 py-2.5">
                         <MemberRegistrationBadge u={u} />
-                      </td>
-                      <td className="px-4 py-2.5 text-right">
-                        <button
-                          type="button"
-                          className="rounded-lg border border-stone-200 bg-white px-2.5 py-1 text-xs font-medium text-stone-700 transition hover:border-primary/40 hover:text-primary"
-                          onClick={() => openEdit(u)}
-                        >
-                          Открыть
-                        </button>
                       </td>
                     </tr>
                   );
