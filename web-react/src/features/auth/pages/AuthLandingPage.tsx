@@ -35,7 +35,7 @@ export function AuthLandingPage() {
 
   if (!sessionReady) {
     return (
-      <div className="flex min-h-[100dvh] min-h-screen w-full max-w-[100vw] items-center justify-center bg-primary text-white">
+      <div className="flex h-full min-h-0 w-full max-w-[100vw] flex-1 items-center justify-center bg-primary text-white [min-height:var(--app-viewport-height,100dvh)] [max-height:var(--app-viewport-height,100dvh)]">
         <div className="w-full max-w-xs space-y-3 px-5">
           <SkeletonBox width="70%" height="16px" />
           <SkeletonBox width="100%" height="12px" />
@@ -45,8 +45,8 @@ export function AuthLandingPage() {
   }
 
   return (
-    <div className="min-h-[100dvh] min-h-screen w-full max-w-[100vw] bg-gradient-to-b from-primary via-primary to-[#5c2830] text-white">
-      <div className="mx-auto flex min-h-[100dvh] min-h-screen w-full max-w-lg flex-col py-6 [padding-left:max(1.25rem,env(safe-area-inset-left,0px))] [padding-right:max(1.25rem,env(safe-area-inset-right,0px))] sm:py-6">
+    <div className="flex h-full min-h-0 w-full max-w-[100vw] flex-1 flex-col overscroll-y-none bg-[#5c2830] bg-gradient-to-b from-primary via-primary to-[#5c2830] text-white [min-height:var(--app-viewport-height,100dvh)] [max-height:var(--app-viewport-height,100dvh)]">
+      <div className="mx-auto flex h-full min-h-0 w-full max-w-lg flex-1 flex-col pt-6 [padding-left:max(1.25rem,env(safe-area-inset-left,0px))] [padding-right:max(1.25rem,env(safe-area-inset-right,0px))] pb-[max(1.5rem,env(safe-area-inset-bottom,0px))] sm:py-6">
         <div className="flex-[2] min-h-[2rem]" />
 
         <div className="flex flex-col items-center">

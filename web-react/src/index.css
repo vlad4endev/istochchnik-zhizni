@@ -2,6 +2,13 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Удерживаем минимум 16px у полей ввода — меньше триггерит авто-зум iOS при фокусе (без user-scalable=no). */
+input,
+select,
+textarea {
+  font-size: max(16px, 1em);
+}
+
 :root {
   --primary: #7d3640;
   --primary-dark: #5c2830;

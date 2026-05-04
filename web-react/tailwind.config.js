@@ -7,6 +7,10 @@ export default {
       height: {
         dvh: '100dvh',
       },
+      /** Для `min-h-dvh` / корректной высоты PWA на iOS/Android (100dvh ≠ height.dvh в Tailwind по умолчанию). */
+      minHeight: {
+        dvh: '100dvh',
+      },
       screens: {
         /** Совпадает с Flutter Responsive: phone &lt; 600 */
         shell: '600px',

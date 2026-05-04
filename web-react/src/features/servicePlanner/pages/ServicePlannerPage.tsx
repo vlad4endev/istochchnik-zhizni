@@ -69,6 +69,7 @@ import {
 import { meaningfulNoteLinesFromRaw } from '../plannerNoteText';
 import { useServicePlanEditorsPresence } from '../useServicePlanEditorsPresence';
 import { emitAppToast } from '@/lib/uiFeedback';
+import { useScrollInputIntoView } from '@/hooks/useScrollInputIntoView';
 
 function planEditorInitials(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);
@@ -271,6 +272,7 @@ const BLOCK_MARK_ICON_BY_KEY = Object.fromEntries(
 ) as Record<string, (typeof BLOCK_MARK_ICON_OPTIONS)[number]>;
 
 export function ServicePlannerPage() {
+  useScrollInputIntoView();
   const qc = useQueryClient();
   const location = useLocation();
   const role = useAuthStore((s) => s.role);
@@ -1978,8 +1980,8 @@ export function ServicePlannerPage() {
 
         {editingTemplateBlock ? (
           <div className="fixed inset-0 z-[130] flex items-end justify-center overscroll-y-contain bg-black/35 p-2 sm:items-center sm:p-3">
-            <div className="flex w-full max-w-xl flex-col overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-2xl max-h-[calc(100dvh-0.75rem)] sm:max-h-[calc(100dvh-2rem)]">
-              <div className="flex items-center justify-between gap-2 border-b border-stone-100 px-3 py-3 sm:px-4">
+            <div className="flex max-h-[85dvh] min-h-0 w-full max-w-xl flex-col overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-2xl sm:max-h-[90dvh]">
+              <div className="flex flex-shrink-0 items-center justify-between gap-2 border-b border-stone-100 px-3 py-3 sm:px-4">
                 <h3 className="text-base font-extrabold text-stone-900">Редактирование блока шаблона</h3>
                 <button
                   type="button"
@@ -2110,7 +2112,7 @@ export function ServicePlannerPage() {
                 </div>
               </div>
 
-              <div className="flex justify-end gap-2 border-t border-stone-100 bg-white px-3 py-3 sm:px-4 [padding-bottom:max(0.75rem,env(safe-area-inset-bottom,0px))]">
+              <div className="flex flex-shrink-0 flex-wrap justify-end gap-2 border-t border-stone-100 bg-white px-3 py-3 sm:px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
                 <button
                   type="button"
                   onClick={() => setEditingTemplateBlockId(null)}
@@ -3043,14 +3045,14 @@ export function ServicePlannerPage() {
           onClick={() => setEditingBlockId(null)}
         >
           <div
-            className="flex w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-2xl max-h-[90dvh] sm:max-h-[calc(100dvh-2rem)]"
+            className="flex max-h-[85dvh] min-h-0 w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-2xl sm:max-h-[90dvh]"
             role="dialog"
             aria-modal="true"
             aria-labelledby={`${blockEditFieldsUid}-modal-title`}
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="mx-auto mb-2 h-1 w-10 shrink-0 rounded-full bg-stone-300 sm:hidden" aria-hidden />
-            <div className="flex items-center justify-between gap-2 border-b border-stone-100 px-3 py-3 sm:px-4">
+            <div className="mx-auto mb-2 h-1 w-10 flex-shrink-0 rounded-full bg-stone-300 sm:hidden" aria-hidden />
+            <div className="flex flex-shrink-0 items-center justify-between gap-2 border-b border-stone-100 px-3 py-3 sm:px-4">
               <h3 id={`${blockEditFieldsUid}-modal-title`} className="text-base font-extrabold text-stone-900">
                 Редактирование блока
               </h3>
@@ -3073,7 +3075,7 @@ export function ServicePlannerPage() {
                 </button>
               </div>
             </div>
-            <div className="max-h-[90dvh] min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-3 touch-pan-y [-webkit-overflow-scrolling:touch] sm:max-h-none sm:px-4">
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-3 touch-pan-y [-webkit-overflow-scrolling:touch] sm:px-4">
             <div className="grid min-w-0 gap-2 rounded-xl bg-stone-50 p-3 sm:grid-cols-2 [&_input]:w-full [&_input]:bg-white [&_input]:text-stone-900 [&_input]:placeholder:text-stone-400 [&_select]:w-full [&_select]:bg-white [&_select]:text-stone-900 [&_textarea]:w-full [&_textarea]:bg-white [&_textarea]:text-stone-900 [&_textarea]:placeholder:text-stone-400">
               <label className="flex flex-col gap-1 text-xs font-semibold text-stone-700 sm:col-span-2">
                 {isSeparatorBlock(editingBlock) ? 'Текст разделителя' : 'Название блока'}
@@ -3375,7 +3377,7 @@ export function ServicePlannerPage() {
               )}
             </div>
             </div>
-            <div className="flex flex-wrap justify-end gap-2 border-t border-stone-100 bg-white px-3 py-3 sm:px-4 [padding-bottom:max(0.75rem,env(safe-area-inset-bottom,0px))]">
+            <div className="flex flex-shrink-0 flex-wrap justify-end gap-2 border-t border-stone-100 bg-white px-3 py-3 sm:px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
               <button
                 type="button"
                 onClick={() => setEditingBlockId(null)}

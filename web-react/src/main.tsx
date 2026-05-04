@@ -12,6 +12,7 @@ import { AppRouterStudio } from './app/RouterStudio';
 import { TopLoader } from './components/ui/TopLoader';
 import { AccessibilityProvider } from './lib/accessibility/AccessibilityProvider';
 import { getAppVariant } from './lib/appVariant';
+import { useAppUpdate } from './hooks/useAppUpdate';
 import { usePwaStore, type BeforeInstallPromptEvent } from './stores/pwaStore';
 import { initAppearance, useAppearanceStore } from './stores/useAppearanceStore';
 import './index.css';
@@ -43,6 +44,11 @@ function RootRouter() {
   if (v === 'main') return <AppRouterMain />;
   if (v === 'studio') return <AppRouterStudio />;
   return <AppRouter />;
+}
+
+function PwaUpdateListener() {
+  useAppUpdate();
+  return null;
 }
 
 const queryClient = new QueryClient({
@@ -80,17 +86,11 @@ if (import.meta.env.PROD) {
       },
       onRegisteredSW: (_swUrl, reg) => {
         if (!reg) return;
-        // Periodically re-check updates (iOS sometimes delays update checks).
-        window.setInterval(() => safeUpdateRegistration(reg), 60_000);
-        // Also re-check when returning to the app.
+        // Re-check when returning to the app (useAppUpdate polls on an interval).
         document.addEventListener('visibilitychange', () => {
           if (document.visibilityState === 'visible') safeUpdateRegistration(reg);
         });
       },
-    });
-
-    navigator.serviceWorker?.addEventListener?.('controllerchange', () => {
-      window.location.reload();
     });
   } catch {
     /* ignore */
@@ -117,6 +117,7 @@ createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <div className="flex min-h-0 w-full max-w-full flex-1 flex-col">
       <QueryClientProvider client={queryClient}>
+        <PwaUpdateListener />
         <TopLoader />
         <BrowserRouter>
           <AccessibilityProvider>

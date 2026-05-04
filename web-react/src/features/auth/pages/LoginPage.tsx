@@ -4,6 +4,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { LuArrowRight, LuEye, LuEyeOff, LuPenLine, LuTriangleAlert } from 'react-icons/lu';
 
 import { useAuthSessionReady } from '../../../hooks/useAuthSessionReady';
+import { useScrollInputIntoView } from '../../../hooks/useScrollInputIntoView';
 import { apiClient } from '../../../lib/apiClient';
 import { isApiUrlProbablyWrongForWeb } from '../../../lib/config';
 import { defaultPostLoginPath, pendingRegistrationLandingPath } from '../../../lib/appVariant';
@@ -55,6 +56,7 @@ type PasswordResetSmsVerifyResponse = {
 };
 
 export function LoginPage() {
+  useScrollInputIntoView();
   const navigate = useNavigate();
   const location = useLocation();
   const state = (location.state ?? {}) as LocationState;
@@ -103,7 +105,7 @@ export function LoginPage() {
 
   if (!sessionReady) {
     return (
-      <div className="flex min-h-[100dvh] min-h-screen items-center justify-center bg-[var(--surface)] text-stone-500">
+      <div className="flex min-h-dvh items-center justify-center bg-[var(--surface)] text-stone-500">
         <div className="w-full max-w-sm space-y-3 px-5">
           <SkeletonBox width="42%" height="16px" />
           <SkeletonBox width="100%" height="48px" radius="12px" />
@@ -472,8 +474,8 @@ export function LoginPage() {
     'min-h-[48px] w-full rounded-xl border border-stone-200 bg-[var(--surface-elevated)] px-3.5 py-3 text-base text-stone-900 outline-none ring-primary/30 placeholder:text-stone-400 focus:border-primary focus:ring-2 sm:min-h-0 sm:py-2.5 sm:text-[15px]';
 
   return (
-    <div className="min-h-[100dvh] min-h-screen w-full max-w-[100vw] bg-[var(--surface)]">
-      <div className="flex min-h-[100dvh] min-h-screen flex-col py-5 [padding-left:max(1rem,env(safe-area-inset-left,0px))] [padding-right:max(1rem,env(safe-area-inset-right,0px))] sm:py-6">
+    <div className="min-h-dvh w-full max-w-[100vw] overflow-y-auto bg-[var(--surface)] [padding-bottom:max(0.75rem,env(safe-area-inset-bottom,0px))]">
+      <div className="flex min-h-dvh flex-col py-5 [padding-left:max(1rem,env(safe-area-inset-left,0px))] [padding-right:max(1rem,env(safe-area-inset-right,0px))] sm:py-6">
         <Link
           to="/login"
           className="mb-3 inline-flex min-h-[44px] items-center gap-1.5 text-sm font-semibold text-stone-500 transition active:text-primary hover:text-primary"
@@ -481,7 +483,7 @@ export function LoginPage() {
           <span aria-hidden>←</span> Назад
         </Link>
 
-        <div className="flex flex-1 flex-col justify-center pb-4">
+        <div className="flex flex-1 flex-col justify-start pb-4 sm:justify-center">
           <div className="mx-auto w-full max-w-[min(100%,480px)] rounded-[1.25rem] bg-[var(--surface-elevated)] p-5 shadow-[var(--shadow-card)] ring-1 ring-stone-900/[0.06] sm:rounded-2xl sm:p-6 md:shadow-[var(--shadow)]">
             <div className="flex justify-center">
               <div className="flex h-[72px] w-[72px] items-center justify-center rounded-[1rem] bg-stone-50 p-3 shadow-inner ring-1 ring-stone-900/5">

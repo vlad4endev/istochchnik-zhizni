@@ -170,6 +170,7 @@ export default defineConfig(({ mode }) => {
             : {}),
         },
         workbox: {
+          cleanupOutdatedCaches: true,
           globPatterns: ['**/*.{js,css,html,ico,png,svg,webp,woff2,woff,ttf,otf,eot}'],
           /**
            * Иконки из `manifest.icons` плагин уже кладёт в precache с `__WB_REVISION__`.
