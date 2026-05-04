@@ -4420,6 +4420,16 @@ function TelegramSection() {
       setNote({ type: 'err', text: humanizeTelegramError(e, 'Не удалось проверить подключение к Telegram.') }),
   });
 
+  const lastDispatchLabel = useMemo(() => {
+    const iso = dispatchForm.last_sent_at_iso;
+    if (!iso) return null;
+    try {
+      return format(new Date(iso), "d MMMM yyyy 'в' HH:mm", { locale: ru });
+    } catch {
+      return null;
+    }
+  }, [dispatchForm.last_sent_at_iso]);
+
   if (isLoading || dispatchQ.isLoading || recipientsQ.isLoading) {
     return <div className="h-44 animate-pulse rounded-2xl bg-stone-200/50" />;
   }
@@ -4458,15 +4468,6 @@ function TelegramSection() {
 
   const recipientsCount = recipientsQ.data?.length ?? 0;
   const tokenReady = settings.has_bot_token || form.bot_token.trim().length > 0;
-  const lastDispatchLabel = useMemo(() => {
-    const iso = dispatchForm.last_sent_at_iso;
-    if (!iso) return null;
-    try {
-      return format(new Date(iso), "d MMMM yyyy 'в' HH:mm", { locale: ru });
-    } catch {
-      return null;
-    }
-  }, [dispatchForm.last_sent_at_iso]);
 
   const tgStepHead = (n: number, title: string, subtitle: string) => (
     <div className="flex gap-3 border-b border-stone-100 px-5 py-4">
