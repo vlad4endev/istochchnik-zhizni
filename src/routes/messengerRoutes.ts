@@ -22,6 +22,17 @@ import {
 
 type AuthReq = Request & { authUserId?: number };
 
+/** Вложения грузятся в публичный объект Storage — постоянный URL уже достаточен, подпись не нужна и даёт лишние ошибки, если объект в БД и в бакете разошлись. */
+function isMessengerPublicObjectUrl(url: string, bucket: string): boolean {
+  try {
+    const u = new URL(url.trim());
+    if (u.protocol !== 'https:' && u.protocol !== 'http:') return false;
+    return u.pathname.includes(`/storage/v1/object/public/${bucket}/`);
+  } catch {
+    return false;
+  }
+}
+
 const EXT_TO_MIME: Record<string, string> = {
   '.jpg': 'image/jpeg',
   '.jpeg': 'image/jpeg',
@@ -1052,11 +1063,19 @@ router.get('/messages/:id/attachment-url', async (req: Request, res: Response) =
       res.status(404).json({ error: 'Attachment not found' });
       return;
     }
+    const bucket = messengerBucket();
+    if (item.url && isMessengerPublicObjectUrl(item.url, bucket)) {
+      res.json({
+        url: rewriteSupabaseStorageUrlForClient(item.url),
+        source: 'stored',
+      });
+      return;
+    }
     if (item.objectPath && isSupabaseStorageConfigured()) {
       try {
         const ttl = attachmentSignedUrlTtlSec();
         const { signedUrl } = await createSignedUrlForBucketObject({
-          bucket: messengerBucket(),
+          bucket,
           objectPath: item.objectPath,
           expiresInSec: ttl,
         });
@@ -1067,7 +1086,11 @@ router.get('/messages/:id/attachment-url', async (req: Request, res: Response) =
         });
         return;
       } catch (e) {
-        console.warn('[messenger] attachment signed URL failed, fallback to stored url:', e);
+        const detail = e instanceof Error ? e.message : String(e);
+        const slotLabel = slot != null ? String(slot) : '';
+        console.warn(
+          `[messenger] attachment signed URL failed msg=${msgId} slot=${slotLabel} path=${item.objectPath}: ${detail}`,
+        );
       }
     }
     if (!item.url) {

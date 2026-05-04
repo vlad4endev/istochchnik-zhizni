@@ -596,6 +596,9 @@ export function humanizeTelegramError(err: unknown, fallback: string): string {
   if (msg.includes('Не найдено пользователей с заполненным Telegram ID')) {
     return 'Нет получателей: заполните Telegram ID у пользователей.';
   }
+  if (msg.includes('лимита Telegram') || msg.includes('4096 символов')) {
+    return msg;
+  }
   if (msg.includes('Telegram API вернул ошибку при отправке')) {
     return 'Telegram API отклонил отправку. Проверьте Bot Token и chat_id.';
   }

@@ -28,8 +28,6 @@ import {
   LuHandHeart,
   LuHeartHandshake,
   LuRefreshCw,
-  LuSend,
-  LuSettings2,
   LuUserX,
 } from 'react-icons/lu';
 import { type ReactNode, useEffect, useId, useState } from 'react';
@@ -893,17 +891,6 @@ export function DailyPrayerPage() {
           <h1 className="min-w-0 flex-1 text-xl font-extrabold leading-tight tracking-tight sm:text-2xl md:text-3xl lg:text-[1.65rem] xl:text-3xl animate-prayer-fade-up motion-reduce:animate-none">
             Молитва
           </h1>
-          {isAdmin ? (
-            <button
-              type="button"
-              onClick={() => setTelegramDispatchModalOpen(true)}
-              className="inline-flex min-h-[42px] items-center gap-2 rounded-xl border border-white/35 bg-white/15 px-3 py-2 text-xs font-extrabold uppercase tracking-[0.08em] text-white hover:bg-white/25"
-            >
-              <LuSettings2 className="h-4 w-4" />
-              <LuSend className="h-4 w-4" />
-              Рассылка Telegram
-            </button>
-          ) : null}
           <SectionHeroToolbarEnd />
         </div>
       </header>
@@ -1025,6 +1012,7 @@ export function DailyPrayerPage() {
             currentUserRole={me?.app_role ?? null}
             isAdmin={me?.app_role?.trim().toLowerCase() === 'admin'}
             afterWeekQueueButton={urgentPrayerStack}
+            onTelegramPrayerDispatch={isAdmin ? () => setTelegramDispatchModalOpen(true) : undefined}
           />
         ) : urgentPrayerStack ? (
           <div className="mb-4">{urgentPrayerStack}</div>

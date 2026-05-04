@@ -1,12 +1,7 @@
 import { fetch as undiciFetch, ProxyAgent } from 'undici';
 
 import { query } from '../config/db';
-import {
-  getAllPrayerPlanSections,
-  getMemberAssignmentsForWeek,
-  getPrayerDataByDate,
-  type PrayerPlanSections,
-} from './calendarService';
+import { getMemberAssignmentsForWeek, getPrayerDataByDate, type PrayerPlanSections } from './calendarService';
 
 export interface TelegramSettings {
   enabled: boolean;
@@ -511,6 +506,62 @@ function resolveChatId(
   return cfg.defaultChatId;
 }
 
+/** Лимит Telegram Bot API для поля `text` в sendMessage (символы UTF-16, как в String.length). */
+const TELEGRAM_BOT_MESSAGE_MAX_LENGTH = 4096;
+
+function truncateUtf16Safe(s: string, maxLen: number): string {
+  if (s.length <= maxLen) return s;
+  let t = s.slice(0, maxLen);
+  const last = t.charCodeAt(t.length - 1);
+  if (last >= 0xd800 && last <= 0xdbff) {
+    t = t.slice(0, -1);
+  }
+  return t;
+}
+
+/**
+ * Разбивает текст на части не длиннее maxLen — для рассылки «молитва на сегодня» и длинных шаблонов.
+ * Рвём по абзацам/строкам/пробелам, чтобы читабельность сохранялась.
+ */
+export function splitTextForTelegramDispatch(text: string, maxLen = TELEGRAM_BOT_MESSAGE_MAX_LENGTH): string[] {
+  const normalized = String(text ?? '').replace(/\r\n/g, '\n');
+  if (normalized.length === 0) return [];
+  const chunks: string[] = [];
+  let cursor = 0;
+  const minBreak = Math.max(120, Math.floor(maxLen * 0.35));
+  while (cursor < normalized.length) {
+    const hardEnd = Math.min(cursor + maxLen, normalized.length);
+    if (hardEnd >= normalized.length) {
+      const tail = truncateUtf16Safe(normalized.slice(cursor), maxLen);
+      if (tail.length > 0) chunks.push(tail);
+      break;
+    }
+    const slice = normalized.slice(cursor, hardEnd);
+    const relNN = slice.lastIndexOf('\n\n');
+    const relN = slice.lastIndexOf('\n');
+    const relS = slice.lastIndexOf(' ');
+    let end = hardEnd;
+    if (relNN >= minBreak) {
+      end = cursor + relNN + 2;
+    } else if (relN >= minBreak) {
+      end = cursor + relN + 1;
+    } else if (relS >= minBreak) {
+      end = cursor + relS + 1;
+    }
+    if (end <= cursor) {
+      end = hardEnd;
+    }
+    let piece = normalized.slice(cursor, end);
+    piece = truncateUtf16Safe(piece, maxLen);
+    if (piece.length > 0) chunks.push(piece);
+    cursor = end;
+    while (cursor < normalized.length && (normalized[cursor] === '\n' || normalized[cursor] === ' ')) {
+      cursor += 1;
+    }
+  }
+  return chunks;
+}
+
 async function sendTelegramMessageRaw(botToken: string, chatId: string, text: string): Promise<{
   ok: boolean;
   status: number;
@@ -519,6 +570,9 @@ async function sendTelegramMessageRaw(botToken: string, chatId: string, text: st
   const chat = normalizeOptionalString(chatId);
   if (!chat) {
     throw new Error('telegram_missing_chat');
+  }
+  if (text.length > TELEGRAM_BOT_MESSAGE_MAX_LENGTH) {
+    throw new Error('telegram_message_text_too_long_internal');
   }
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 15_000);
@@ -560,6 +614,32 @@ async function sendTelegramMessageRaw(botToken: string, chatId: string, text: st
   } finally {
     clearTimeout(timeout);
   }
+}
+
+async function sendTelegramMessageRawSequence(botToken: string, chatId: string, text: string): Promise<{
+  ok: boolean;
+  status: number;
+  body: { description?: unknown; ok?: unknown } | null;
+}> {
+  const parts = splitTextForTelegramDispatch(text.trim());
+  if (parts.length === 0) {
+    throw new Error('telegram_empty_text');
+  }
+  let last: Awaited<ReturnType<typeof sendTelegramMessageRaw>> = {
+    ok: false,
+    status: 0,
+    body: null,
+  };
+  for (const part of parts) {
+    if (part.length > TELEGRAM_BOT_MESSAGE_MAX_LENGTH) {
+      throw new Error('telegram_message_text_too_long_internal');
+    }
+    last = await sendTelegramMessageRaw(botToken, chatId, part);
+    if (!last.ok) {
+      return last;
+    }
+  }
+  return last;
 }
 
 export interface TelegramGetMeResult {
@@ -808,11 +888,7 @@ function joinBlocks(blocks: string[], emptyFallback: string): string {
 
 export async function buildTodayPrayerTelegramText(prayerDateYmd?: string | null): Promise<string> {
   const today = resolvePrayerDispatchCalendarYmd(prayerDateYmd);
-  const [data, sections, settings] = await Promise.all([
-    getPrayerDataByDate(today),
-    getAllPrayerPlanSections(),
-    readSettingsRow(),
-  ]);
+  const [data, settings] = await Promise.all([getPrayerDataByDate(today), readSettingsRow()]);
   const member = data.members[0];
   const theme = data.global_themes[0];
   const ministry = data.ministries[0];
@@ -820,16 +896,16 @@ export async function buildTodayPrayerTelegramText(prayerDateYmd?: string | null
   const template =
     normalizeOptionalString(settings.telegram_prayer_template) ?? DEFAULT_TODAY_PRAYER_TEMPLATE;
   const allThemesBlock = joinBlocks(
-    sections.global_themes.map((item) => formatThemeBlock(item)),
+    data.global_themes.map((item) => formatThemeBlock(item)),
     '- ТЕМЫ МОЛИТВЫ НЕ УКАЗАНЫ',
   );
   const allMinistriesBlock = joinBlocks(
-    sections.ministries.map((item) => formatMinistryBlock(item)),
+    data.ministries.map((item) => formatMinistryBlock(item)),
     '🛠️ Молимся за служения: - не указаны',
   );
   const allBackslidersInline =
-    sections.backsliders.length > 0
-      ? sections.backsliders
+    data.backsliders.length > 0
+      ? data.backsliders
           .map((item) => safeTemplateValue(item.name, '').trim())
           .filter((name) => name.length > 0)
           .join(', ')
@@ -913,7 +989,7 @@ export async function sendTelegramByPurpose(args: {
   if (!text) {
     throw new Error('telegram_empty_text');
   }
-  const sent = await sendTelegramMessageRaw(cfg.botToken, chatId, text);
+  const sent = await sendTelegramMessageRawSequence(cfg.botToken, chatId, text);
   if (!sent.ok) {
     const description =
       typeof sent.body?.description === 'string' ? sent.body.description.trim() : '';
@@ -945,7 +1021,7 @@ export async function sendTodayPrayerTelegramToAllMembers(
 
   let sent = 0;
   for (const chatId of chatIds) {
-    const result = await sendTelegramMessageRaw(cfg.botToken, chatId, text);
+    const result = await sendTelegramMessageRawSequence(cfg.botToken, chatId, text);
     if (!result.ok) {
       const description =
         typeof result.body?.description === 'string' ? result.body.description.trim() : '';
@@ -975,7 +1051,7 @@ export async function sendTodayPrayerTelegramToSelectedMembers(
   const text = await buildTodayPrayerTelegramText(prayerDateYmd);
   let sent = 0;
   for (const chatId of chatIds) {
-    const result = await sendTelegramMessageRaw(cfg.botToken, chatId, text);
+    const result = await sendTelegramMessageRawSequence(cfg.botToken, chatId, text);
     if (!result.ok) {
       const description =
         typeof result.body?.description === 'string' ? result.body.description.trim() : '';

@@ -71,7 +71,7 @@ export interface PrayerDataByDate {
   prayer_cycle: PrayerCyclePublic | null;
 }
 
-/** Все глобальные темы, служения и отпавшие (для Telegram и полного текста молитвы). */
+/** Все глобальные темы, служения и отпавшие (справочник; день цикла — через `getPrayerDataByDate`). */
 export interface PrayerPlanSections {
   global_themes: GlobalTheme[];
   ministries: Ministry[];

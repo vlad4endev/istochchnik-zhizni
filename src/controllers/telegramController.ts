@@ -46,6 +46,13 @@ function errorToStatus(error: unknown): { status: number; message: string } {
     return { status: 400, message: 'Не найдено пользователей с заполненным Telegram ID' };
   }
   if (msg === 'telegram_empty_text') return { status: 400, message: 'Текст сообщения пуст' };
+  if (msg === 'telegram_message_text_too_long_internal') {
+    return {
+      status: 500,
+      message:
+        'Не удалось разбить текст на части для Telegram (внутренняя ошибка длины). Сообщите разработчикам.',
+    };
+  }
   if (msg === 'telegram_prayer_date_invalid') {
     return { status: 400, message: 'Некорректная дата. Ожидается YYYY-MM-DD.' };
   }
@@ -59,6 +66,18 @@ function errorToStatus(error: unknown): { status: number; message: string } {
     const parts = msg.split(':');
     const status = parts[1] ?? '';
     const detail = parts.slice(2).join(':').trim();
+    const detailLower = detail.toLowerCase();
+    if (
+      detailLower.includes('text is too long') ||
+      detailLower.includes('message is too long') ||
+      detailLower.includes('caption is too long')
+    ) {
+      return {
+        status: 413,
+        message:
+          'Текст длиннее лимита Telegram (4096 символов на одно сообщение). Сократите блок молитвы или шаблон в админке. Если ошибка повторяется после обновления сервера, увеличьте таймаут прокси: рассылка отправляет несколько сообщений подряд каждому получателю.',
+      };
+    }
     if (status === '0') {
       return {
         status: 502,

@@ -10,6 +10,7 @@ import {
   LuClipboardList,
   LuLoader,
   LuSearch,
+  LuSend,
   LuX,
   LuCircleAlert,
   LuCircleCheck,
@@ -663,6 +664,8 @@ type Props = {
   isAdmin?: boolean;
   /** Контент сразу под кнопкой «Сбор нужд · очередь недели» (например, срочная молитвенная нужда). */
   afterWeekQueueButton?: ReactNode;
+  /** Админ: открыть рассылку молитвы в Telegram (иконка рядом с кнопкой сбора нужд). */
+  onTelegramPrayerDispatch?: () => void;
 };
 
 /** Кнопка и модалка: очередь цикла и отметки сбора нужд; под «своими» участниками — предыдущие нужды. */
@@ -672,6 +675,7 @@ export function NextWeekPrayerPlanSection({
   currentUserRole = null,
   isAdmin = false,
   afterWeekQueueButton,
+  onTelegramPrayerDispatch,
 }: Props) {
   const canAssignCurators = useMemo(() => {
     const role = (currentUserRole ?? '').trim().toLowerCase();
@@ -771,18 +775,31 @@ export function NextWeekPrayerPlanSection({
 
   return (
     <div className="mb-4 flex flex-col gap-3">
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        className="touch-manipulation flex w-full min-h-[48px] items-center gap-2.5 rounded-xl border border-primary/30 bg-[var(--surface-elevated)] px-3 py-2.5 text-left shadow-sm transition hover:border-primary/45 hover:shadow-md"
-      >
-        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary text-white">
-          <LuClipboardList className="h-4 w-4" strokeWidth={2} aria-hidden />
-        </span>
-        <span className="min-w-0 flex-1 text-[15px] font-extrabold leading-tight text-stone-900">
-          Сбор нужд · очередь недели
-        </span>
-      </button>
+      <div className="flex items-stretch gap-2">
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className="touch-manipulation flex min-h-[48px] min-w-0 flex-1 items-center gap-2.5 rounded-xl border border-primary/30 bg-[var(--surface-elevated)] px-3 py-2.5 text-left shadow-sm transition hover:border-primary/45 hover:shadow-md"
+        >
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary text-white">
+            <LuClipboardList className="h-4 w-4" strokeWidth={2} aria-hidden />
+          </span>
+          <span className="min-w-0 flex-1 text-[15px] font-extrabold leading-tight text-stone-900">
+            Сбор нужд · очередь недели
+          </span>
+        </button>
+        {onTelegramPrayerDispatch ? (
+          <button
+            type="button"
+            onClick={onTelegramPrayerDispatch}
+            className="tap-highlight-transparent flex min-h-[48px] min-w-[48px] shrink-0 items-center justify-center rounded-xl border border-primary/30 bg-[var(--surface-elevated)] text-primary shadow-sm transition hover:border-primary/50 hover:bg-primary/[0.06] hover:shadow-md"
+            aria-label="Рассылка молитвы в Telegram"
+            title="Рассылка молитвы в Telegram"
+          >
+            <LuSend className="h-5 w-5" strokeWidth={2.25} aria-hidden />
+          </button>
+        ) : null}
+      </div>
 
       {afterWeekQueueButton}
 
