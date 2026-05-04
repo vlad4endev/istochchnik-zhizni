@@ -2180,7 +2180,7 @@ export function ServicePlannerPage() {
           </button>
         </div>
       ) : null}
-      <section className="mx-auto flex w-full max-w-4xl flex-col gap-3 px-3 py-4 sm:px-4 md:px-6">
+      <section className="mx-auto flex w-full max-w-4xl flex-col gap-3 px-3 py-4 max-md:pb-[calc(var(--app-bottom-nav-total-height)+6.5rem)] sm:px-4 md:px-6">
       <header className="rounded-2xl border border-stone-200 bg-white p-4 shadow-sm">
         <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-2">
           <div className="flex min-w-0 items-center gap-2">
