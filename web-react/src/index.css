@@ -184,6 +184,13 @@ html[data-pwa-standalone='1'] {
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
   background-color: var(--surface);
+  /* iPhone PWA: убираем остаточный нижний inset/зазор под контентом. */
+  --app-safe-bottom: 0px;
+  --app-bottom-nav-safe-pad: 0px;
+}
+
+html[data-pwa-standalone='1'] .app-bottom-nav {
+  padding-bottom: 0 !important;
 }
 
 @media (display-mode: standalone) {
