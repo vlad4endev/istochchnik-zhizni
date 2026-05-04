@@ -2,6 +2,7 @@
 # Без этого GET https://<origin>/uploads/<id> идёт в статику nginx → 404/502, а не в Node.
 # То же для /api/uploads/*: если в конфиге есть location ~* \.(jpg|png|…)$ для SPA, он перехватит
 # /api/uploads/.../file.jpg раньше общего proxy /api — нужен отдельный ^~ /api/uploads/.
+# Для Supabase Storage на том же origin см. deploy/nginx-supabase-storage-proxy.snippet (^~ /storage/v1/).
 # upstream должен совпадать с тем, куда проксируется /api (тот же порт API, например 40978).
 
 # map $http_upgrade $connection_upgrade { … } — как в docker/nginx-web.unified.conf
