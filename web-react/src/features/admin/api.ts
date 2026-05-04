@@ -559,6 +559,38 @@ export async function runTelegramDispatchNow(): Promise<{ ok: boolean; sent_coun
   return data;
 }
 
+export interface TelegramTestConnectionResponse {
+  ok: true;
+  id: number;
+  is_bot: boolean;
+  username: string | null;
+  first_name: string | null;
+}
+
+export async function testTelegramConnection(body?: { bot_token?: string }): Promise<TelegramTestConnectionResponse> {
+  const { data } = await apiClient.post<TelegramTestConnectionResponse>('/api/telegram/test-connection', body ?? {});
+  return data;
+}
+
+export function humanizeTelegramError(err: unknown, fallback: string): string {
+  const msg = apiErrorMessage(err, fallback);
+  if (msg.includes('Telegram модуль выключен')) return 'Telegram модуль выключен. Включите его в настройках.';
+  if (msg.includes('Не задан Telegram Bot Token')) return 'Не задан Bot Token. Добавьте токен бота.';
+  if (msg.includes('Не найдено пользователей с заполненным Telegram ID')) {
+    return 'Нет получателей: заполните Telegram ID у пользователей.';
+  }
+  if (msg.includes('Telegram API вернул ошибку при отправке')) {
+    return 'Telegram API отклонил отправку. Проверьте Bot Token и chat_id.';
+  }
+  if (msg.includes('Telegram getMe')) {
+    return 'Проверка токена не прошла. Убедитесь, что Bot Token верный и не отозван.';
+  }
+  if (msg.includes('Таймаут при обращении к Telegram API')) {
+    return 'Таймаут при обращении к Telegram. Повторите попытку или проверьте сеть.';
+  }
+  return msg;
+}
+
 export async function fetchSmsSettings(): Promise<SmsSettingsResponse> {
   const { data } = await apiClient.get<SmsSettingsResponse>('/api/sms/settings');
   return data;

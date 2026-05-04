@@ -67,8 +67,10 @@ import {
   fetchTelegramDispatchRecipients,
   fetchTelegramDispatchSettings,
   fetchTelegramSettings,
+  humanizeTelegramError,
   patchTelegramDispatchSettings,
   runTelegramDispatchNow,
+  testTelegramConnection,
   type TelegramDispatchRecipient,
   type TelegramDispatchSettingsResponse,
 } from '../../admin/api';
@@ -402,7 +404,7 @@ function TelegramPrayerDispatchModal(props: { open: boolean; onClose: () => void
       setNote('Настройки рассылки сохранены.');
       void qc.invalidateQueries({ queryKey: ['prayer', 'telegram', 'dispatch', 'settings'] });
     },
-    onError: (e) => setNote(loadErrorDescription(e) ?? 'Не удалось сохранить настройки.'),
+    onError: (e) => setNote(humanizeTelegramError(e, 'Не удалось сохранить настройки.')),
   });
 
   const runMut = useMutation({
@@ -411,7 +413,16 @@ function TelegramPrayerDispatchModal(props: { open: boolean; onClose: () => void
       setNote(`Рассылка отправлена: ${r.sent_count}.`);
       void qc.invalidateQueries({ queryKey: ['prayer', 'telegram', 'dispatch', 'settings'] });
     },
-    onError: (e) => setNote(loadErrorDescription(e) ?? 'Не удалось запустить рассылку.'),
+    onError: (e) => setNote(humanizeTelegramError(e, 'Не удалось запустить рассылку.')),
+  });
+
+  const testMut = useMutation({
+    mutationFn: () => testTelegramConnection(),
+    onSuccess: (r) => {
+      const handle = r.username ? `@${r.username}` : `id ${r.id}`;
+      setNote(`Проверка бота: OK (${handle}).`);
+    },
+    onError: (e) => setNote(humanizeTelegramError(e, 'Не удалось проверить Telegram.')),
   });
 
   if (!open) return null;
@@ -554,6 +565,17 @@ function TelegramPrayerDispatchModal(props: { open: boolean; onClose: () => void
                 }}
               >
                 {runMut.isPending ? 'Отправка…' : 'Отправить сейчас'}
+              </button>
+              <button
+                type="button"
+                className="rounded-xl border border-stone-200 bg-white px-4 py-2.5 text-sm font-semibold text-stone-700 hover:bg-stone-50 disabled:opacity-60"
+                disabled={testMut.isPending}
+                onClick={() => {
+                  setNote(null);
+                  testMut.mutate();
+                }}
+              >
+                {testMut.isPending ? 'Проверка…' : 'Проверить бота'}
               </button>
             </div>
           </div>

@@ -8,6 +8,7 @@ import {
   runTelegramDispatchNow,
   sendTodayPrayerTelegramToAllMembers,
   sendTelegramByPurpose,
+  testTelegramBotConnection,
   updateTelegramDispatchSettings,
   updateTelegramSettings,
 } from '../services/telegramService';
@@ -38,7 +39,29 @@ function errorToStatus(error: unknown): { status: number; message: string } {
   }
   if (msg === 'telegram_empty_text') return { status: 400, message: 'Текст сообщения пуст' };
   if (msg.startsWith('telegram_send_failed:')) {
-    return { status: 502, message: 'Telegram API вернул ошибку при отправке' };
+    const parts = msg.split(':');
+    const status = parts[1] ?? '';
+    const detail = parts.slice(2).join(':').trim();
+    return {
+      status: 502,
+      message: detail
+        ? `Telegram API вернул ошибку (${status}): ${detail}`
+        : 'Telegram API вернул ошибку при отправке',
+    };
+  }
+  if (msg === 'telegram_connection_timeout') {
+    return { status: 504, message: 'Таймаут при обращении к Telegram API' };
+  }
+  if (msg.startsWith('telegram_getme_failed:')) {
+    const parts = msg.split(':');
+    const status = parts[1] ?? '';
+    const detail = parts.slice(2).join(':').trim();
+    return {
+      status: 502,
+      message: detail
+        ? `Telegram getMe (${status}): ${detail}`
+        : `Telegram getMe вернул ошибку (${status})`,
+    };
   }
   return { status: 500, message: 'Внутренняя ошибка Telegram модуля' };
 }
@@ -247,6 +270,23 @@ export async function postTelegramDispatchRunNowHandler(req: Request, res: Respo
   try {
     const sent = await runTelegramDispatchNow();
     res.json({ ok: true, sent_count: sent.sent_count, mode: sent.mode });
+  } catch (error) {
+    const mapped = errorToStatus(error);
+    res.status(mapped.status).json({ error: mapped.message });
+  }
+}
+
+export async function postTelegramTestConnectionHandler(req: Request, res: Response): Promise<void> {
+  if (!ensureAdmin(req, res)) return;
+  const raw = (req.body as { bot_token?: unknown } | undefined)?.bot_token;
+  if (raw !== undefined && raw !== null && typeof raw !== 'string') {
+    res.status(400).json({ error: 'Поле "bot_token" должно быть строкой или null' });
+    return;
+  }
+  const trimmed = typeof raw === 'string' ? raw.trim() : '';
+  try {
+    const info = await testTelegramBotConnection(trimmed.length > 0 ? trimmed : undefined);
+    res.json({ ok: true, ...info });
   } catch (error) {
     const mapped = errorToStatus(error);
     res.status(mapped.status).json({ error: mapped.message });

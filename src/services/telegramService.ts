@@ -84,6 +84,10 @@ async function ensureSettingsColumns(): Promise<void> {
   await query('ALTER TABLE global_settings ADD COLUMN IF NOT EXISTS telegram_dispatch_last_sent_at TIMESTAMPTZ');
 }
 
+async function ensureMembersTelegramColumn(): Promise<void> {
+  await query('ALTER TABLE members ADD COLUMN IF NOT EXISTS telegram_chat_id VARCHAR(64)');
+}
+
 async function readSettingsRow(): Promise<{
   telegram_enabled: boolean;
   telegram_bot_token: string | null;
@@ -317,28 +321,108 @@ function resolveChatId(
 async function sendTelegramMessageRaw(botToken: string, chatId: string, text: string): Promise<{
   ok: boolean;
   status: number;
-  body: unknown;
+  body: { description?: unknown } | null;
 }> {
   const endpoint = `https://api.telegram.org/bot${encodeURIComponent(botToken)}/sendMessage`;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15_000);
   const response = await fetch(endpoint, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
+    signal: controller.signal,
     body: JSON.stringify({
       chat_id: chatId,
       text,
       disable_web_page_preview: true,
     }),
   });
+  clearTimeout(timeout);
   let body: unknown = null;
   try {
     body = (await response.json()) as unknown;
   } catch {
     body = null;
   }
-  return { ok: response.ok, status: response.status, body };
+  return {
+    ok: response.ok,
+    status: response.status,
+    body: (body && typeof body === 'object' ? (body as { description?: unknown }) : null),
+  };
+}
+
+export interface TelegramGetMeResult {
+  id: number;
+  is_bot: boolean;
+  username: string | null;
+  first_name: string | null;
+}
+
+async function fetchTelegramGetMeRaw(botToken: string): Promise<{
+  ok: boolean;
+  status: number;
+  body: { ok?: unknown; result?: unknown; description?: unknown } | null;
+}> {
+  const endpoint = `https://api.telegram.org/bot${encodeURIComponent(botToken)}/getMe`;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15_000);
+  try {
+    const response = await fetch(endpoint, { method: 'GET', signal: controller.signal });
+    let body: unknown = null;
+    try {
+      body = (await response.json()) as unknown;
+    } catch {
+      body = null;
+    }
+    return {
+      ok: response.ok,
+      status: response.status,
+      body: (body && typeof body === 'object' ? (body as { ok?: unknown; result?: unknown; description?: unknown }) : null),
+    };
+  } catch (e) {
+    if (e instanceof Error && e.name === 'AbortError') {
+      throw new Error('telegram_connection_timeout');
+    }
+    throw e;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+/** Проверка токена через Telegram getMe. Опционально передать токен из формы до сохранения в БД. */
+export async function testTelegramBotConnection(botTokenFromRequest?: string): Promise<TelegramGetMeResult> {
+  const row = await readSettingsRow();
+  const override = normalizeOptionalString(botTokenFromRequest);
+  const token = override ?? row.telegram_bot_token ?? normalizeOptionalString(process.env.TELEGRAM_BOT_TOKEN);
+  if (!token) {
+    throw new Error('telegram_missing_token');
+  }
+  const raw = await fetchTelegramGetMeRaw(token);
+  if (!raw.ok || raw.body?.ok !== true) {
+    const description =
+      typeof raw.body?.description === 'string' ? raw.body.description.trim() : '';
+    throw new Error(
+      description ? `telegram_getme_failed:${raw.status}:${description}` : `telegram_getme_failed:${raw.status}`,
+    );
+  }
+  const result = raw.body.result;
+  if (!result || typeof result !== 'object') {
+    throw new Error('telegram_getme_failed:0:invalid_response');
+  }
+  const r = result as Record<string, unknown>;
+  const id = Number(r.id);
+  if (!Number.isInteger(id)) {
+    throw new Error('telegram_getme_failed:0:invalid_response');
+  }
+  return {
+    id,
+    is_bot: Boolean(r.is_bot),
+    username: typeof r.username === 'string' ? r.username : null,
+    first_name: typeof r.first_name === 'string' ? r.first_name : null,
+  };
 }
 
 async function listMemberTelegramChatIds(): Promise<string[]> {
+  await ensureMembersTelegramColumn();
   const result = await query(
     `SELECT DISTINCT telegram_chat_id
      FROM members
@@ -351,6 +435,7 @@ async function listMemberTelegramChatIds(): Promise<string[]> {
 }
 
 export async function listTelegramDispatchRecipients(): Promise<TelegramDispatchRecipient[]> {
+  await ensureMembersTelegramColumn();
   const result = await query(
     `SELECT
        id,
@@ -566,7 +651,11 @@ export async function sendTelegramByPurpose(args: {
   }
   const sent = await sendTelegramMessageRaw(cfg.botToken, chatId, text);
   if (!sent.ok) {
-    throw new Error(`telegram_send_failed:${sent.status}`);
+    const description =
+      typeof sent.body?.description === 'string' ? sent.body.description.trim() : '';
+    throw new Error(
+      description ? `telegram_send_failed:${sent.status}:${description}` : `telegram_send_failed:${sent.status}`,
+    );
   }
   return { chat_id: chatId, status: sent.status };
 }
@@ -589,7 +678,13 @@ export async function sendTodayPrayerTelegramToAllMembers(): Promise<{ sent_coun
   for (const chatId of chatIds) {
     const result = await sendTelegramMessageRaw(cfg.botToken, chatId, text);
     if (!result.ok) {
-      throw new Error(`telegram_send_failed:${result.status}`);
+      const description =
+        typeof result.body?.description === 'string' ? result.body.description.trim() : '';
+      throw new Error(
+        description
+          ? `telegram_send_failed:${result.status}:${description}`
+          : `telegram_send_failed:${result.status}`,
+      );
     }
     sent += 1;
   }
@@ -609,7 +704,15 @@ export async function sendTodayPrayerTelegramToSelectedMembers(memberIds: number
   let sent = 0;
   for (const chatId of chatIds) {
     const result = await sendTelegramMessageRaw(cfg.botToken, chatId, text);
-    if (!result.ok) throw new Error(`telegram_send_failed:${result.status}`);
+    if (!result.ok) {
+      const description =
+        typeof result.body?.description === 'string' ? result.body.description.trim() : '';
+      throw new Error(
+        description
+          ? `telegram_send_failed:${result.status}:${description}`
+          : `telegram_send_failed:${result.status}`,
+      );
+    }
     sent += 1;
   }
   return { sent_count: sent, total: chatIds.length };

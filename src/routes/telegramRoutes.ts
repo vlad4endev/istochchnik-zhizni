@@ -7,6 +7,7 @@ import {
   patchTelegramSettingsHandler,
   postTelegramDispatchRunNowHandler,
   postTelegramSendHandler,
+  postTelegramTestConnectionHandler,
 } from '../controllers/telegramController';
 
 const router = Router();
@@ -17,6 +18,7 @@ router.get('/dispatch/settings', getTelegramDispatchSettingsHandler);
 router.patch('/dispatch/settings', patchTelegramDispatchSettingsHandler);
 router.get('/dispatch/recipients', getTelegramDispatchRecipientsHandler);
 router.post('/dispatch/run-now', postTelegramDispatchRunNowHandler);
+router.post('/test-connection', postTelegramTestConnectionHandler);
 router.post('/send', postTelegramSendHandler);
 
 export default router;
