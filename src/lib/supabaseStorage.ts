@@ -127,6 +127,30 @@ export function isSupabaseStorageConfigured(): boolean {
 }
 
 /**
+ * Проверка, что бакет существует в проекте (listBuckets + service role).
+ * Нужна для /api/messenger/uploads/health и диагностики «Bucket not found» при upload.
+ */
+export async function verifyStorageBucketPresent(bucket: string): Promise<
+  | { ok: true }
+  | { ok: false; reason: 'not_configured' | 'list_buckets_failed' | 'bucket_not_found'; message?: string; existingBucketIds?: string[] }
+> {
+  const client = getClient();
+  if (!client) return { ok: false, reason: 'not_configured' };
+  const { data, error } = await client.storage.listBuckets();
+  if (error) {
+    return { ok: false, reason: 'list_buckets_failed', message: error.message };
+  }
+  const ids = new Set<string>();
+  for (const b of data ?? []) {
+    const row = b as { id?: string; name?: string };
+    if (typeof row.id === 'string' && row.id) ids.add(row.id);
+    if (typeof row.name === 'string' && row.name) ids.add(row.name);
+  }
+  if (ids.has(bucket)) return { ok: true };
+  return { ok: false, reason: 'bucket_not_found', existingBucketIds: [...ids].sort() };
+}
+
+/**
  * Лог на старте API: `SUPABASE_STORAGE_PUBLIC_URL` нужен, если клиент Storage по HTTP
  * (Docker / LAN), иначе в JSON уйдут http://… ссылки на HTTPS-фронт (mixed content).
  * При `SUPABASE_URL` уже с `https:` (облако Supabase) предупреждение не нужно.
@@ -199,7 +223,7 @@ export async function uploadBufferToPublicBucket(opts: {
       upsert: opts.upsert === true,
     });
   if (error) {
-    throw new Error(`Storage upload failed: ${error.message}`);
+    throw new Error(`Storage upload failed [bucket=${opts.bucket}]: ${error.message}`);
   }
   const { data } = client.storage.from(opts.bucket).getPublicUrl(opts.objectPath);
   if (!data?.publicUrl) {

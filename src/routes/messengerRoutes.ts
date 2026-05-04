@@ -16,6 +16,7 @@ import {
   getSupabaseStorageMissingEnv,
   isSupabaseStorageConfigured,
   messengerBucket,
+  verifyStorageBucketPresent,
   rewriteSupabaseStorageUrlForClient,
   uploadBufferToPublicBucket,
 } from '../lib/supabaseStorage';
@@ -211,7 +212,33 @@ router.get('/uploads/health', async (_req: Request, res: Response) => {
     });
     return;
   }
-  res.json({ ok: true, storage: 'supabase', bucket: messengerBucket() });
+  const bucket = messengerBucket();
+  const v = await verifyStorageBucketPresent(bucket);
+  if (!v.ok) {
+    const base = {
+      ok: false,
+      storage: 'unavailable',
+      bucket,
+      existingBuckets: v.existingBucketIds,
+    };
+    if (v.reason === 'bucket_not_found') {
+      res.status(503).json({
+        ...base,
+        reason: 'storage_bucket_not_found',
+        hint:
+          'В Supabase нет бакета с таким id. Выполните SQL из репозитория: supabase/migrations/20260415120000_storage_buckets_app_uploads.sql (Dashboard → SQL), либо создайте публичный бакет вручную в Storage. Имя задаётся переменной SUPABASE_STORAGE_BUCKET_MESSENGER (по умолчанию chat).',
+      });
+      return;
+    }
+    res.status(503).json({
+      ...base,
+      reason: v.reason,
+      message: v.message,
+      missingEnv: v.reason === 'not_configured' ? getSupabaseStorageMissingEnv() : undefined,
+    });
+    return;
+  }
+  res.json({ ok: true, storage: 'supabase', bucket });
 });
 
 // All messenger routes require authentication
@@ -301,7 +328,16 @@ router.post('/upload', messengerUploadMiddleware, async (req: Request, res: Resp
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       console.error('[messenger] Supabase upload failed:', msg);
-      res.status(502).json({ error: 'Storage upload failed', code: 'supabase_upload' });
+      if (/bucket not found/i.test(msg)) {
+        res.status(503).json({
+          error:
+            `В Supabase нет бакета «${bucket}». Создайте его (миграция supabase/migrations/20260415120000_storage_buckets_app_uploads.sql) или выставьте SUPABASE_STORAGE_BUCKET_MESSENGER на существующий бакет.`,
+          code: 'storage_bucket_not_found',
+          bucket,
+        });
+        return;
+      }
+      res.status(502).json({ error: 'Storage upload failed', code: 'supabase_upload', details: msg });
       return;
     }
     if (!url) {
