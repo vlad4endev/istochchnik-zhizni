@@ -62,8 +62,19 @@ create policy "storage_authenticated_insert_chat"
   with check (bucket_id = 'chat');
 
 -- -----------------------------------------------------------------------------
--- Проверка (раскомментируйте при необходимости):
--- select id, name, public, file_size_limit from storage.buckets where id in ('chat', 'user-media');
--- select polname, polcmd, polroles::regrole[] from pg_policy p join pg_class c on c.oid = p.polrelid
---   where c.relname = 'objects' and c.relnamespace = (select oid from pg_namespace where nspname = 'storage');
+-- 5. Итог в UI: после INSERT/CREATE в редакторе часто «Успех», но сетка пустая — это норма.
+--     Ниже SELECT вернёт 2 строки (chat, user-media), если всё применилось к этому проекту.
+-- -----------------------------------------------------------------------------
+select id, name, public, file_size_limit
+from storage.buckets
+where id in ('chat', 'user-media')
+order by id;
+
+-- Дополнительно (политики на storage.objects; имена могут отличаться в кастомных проектах):
+-- select pol.polname, pol.polcmd, pol.polpermissive
+-- from pg_policy pol
+-- join pg_class cls on cls.oid = pol.polrelid
+-- join pg_namespace nsp on nsp.oid = cls.relnamespace
+-- where nsp.nspname = 'storage' and cls.relname = 'objects'
+-- order by pol.polname;
 -- =============================================================================
