@@ -295,6 +295,7 @@ export function ServicePlannerPage() {
   const [mobileTemplateBlockMenuId, setMobileTemplateBlockMenuId] = useState<number | null>(null);
   const [mobileTemplateOrderOpenId, setMobileTemplateOrderOpenId] = useState<number | null>(null);
   const autoArchivingPlanIdsRef = useRef<Set<number>>(new Set());
+  const plannerModalOpen = editingTemplateBlockId != null || editingBlockId != null;
   /** Совпадает с Tailwind `md:` — на мобильной весь блок — ручка перетаскивания */
   const [isNarrowViewport, setIsNarrowViewport] = useState(
     () => typeof window !== 'undefined' && window.matchMedia('(max-width: 767px)').matches,
@@ -307,6 +308,24 @@ export function ServicePlannerPage() {
     mq.addEventListener('change', sync);
     return () => mq.removeEventListener('change', sync);
   }, []);
+
+  useEffect(() => {
+    if (!plannerModalOpen || typeof document === 'undefined') return;
+    const prevBodyOverflow = document.body.style.overflow;
+    const prevHtmlOverflow = document.documentElement.style.overflow;
+    const prevBodyOverscroll = document.body.style.overscrollBehavior;
+    const prevHtmlOverscroll = document.documentElement.style.overscrollBehavior;
+    document.body.style.overflow = 'hidden';
+    document.documentElement.style.overflow = 'hidden';
+    document.body.style.overscrollBehavior = 'none';
+    document.documentElement.style.overscrollBehavior = 'none';
+    return () => {
+      document.body.style.overflow = prevBodyOverflow;
+      document.documentElement.style.overflow = prevHtmlOverflow;
+      document.body.style.overscrollBehavior = prevBodyOverscroll;
+      document.documentElement.style.overscrollBehavior = prevHtmlOverscroll;
+    };
+  }, [plannerModalOpen]);
 
   const [planStickyBackVisible, setPlanStickyBackVisible] = useState(false);
   useEffect(() => {
@@ -1256,7 +1275,7 @@ export function ServicePlannerPage() {
 
   if (screen === 'home') {
     return (
-      <section className="mx-auto flex w-full max-w-5xl flex-col gap-4 px-4 py-6">
+      <section className="mx-auto flex w-full max-w-5xl flex-col gap-4 px-3 py-4 pb-6 sm:px-4 sm:py-5 md:px-6">
         <SectionHeroChrome
           title="Планировщик служений"
           subtitle="Все программы, ведущие и быстрый запуск нового плана."
@@ -1269,7 +1288,7 @@ export function ServicePlannerPage() {
               <select
                 value={activeTemplateId ?? ''}
                 onChange={(e) => setActiveTemplateId(e.target.value ? Number(e.target.value) : null)}
-                className="rounded-xl border border-stone-300 bg-white px-3 py-2 text-sm"
+                className="min-h-[46px] rounded-xl border border-stone-300 bg-white px-3 py-2 text-base sm:text-sm"
               >
                 {templates.map((tpl) => (
                   <option key={tpl.id} value={tpl.id}>
@@ -1284,7 +1303,7 @@ export function ServicePlannerPage() {
                   const next = e.target.value;
                   if (isIsoDate(next)) setCreatePlanDate(next);
                 }}
-                className="rounded-xl border border-stone-300 bg-white px-3 py-2 text-sm"
+                className="min-h-[46px] rounded-xl border border-stone-300 bg-white px-3 py-2 text-base sm:text-sm"
               />
             </div>
             <p className="mt-2 text-xs text-stone-600">
@@ -1324,16 +1343,17 @@ export function ServicePlannerPage() {
         </section>
 
         <section className="rounded-2xl border border-stone-200 bg-white p-3 shadow-sm">
-          <div className="mb-2 flex items-center justify-between gap-2">
+          <div className="mb-2 flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:justify-between">
             <h2 className="text-sm font-extrabold text-stone-900">
               {showArchivedPlans ? 'Архив программ' : 'Созданные программы'}
             </h2>
-            <div className="flex items-center gap-2">
+            <div className="flex w-full items-center justify-between gap-2 sm:w-auto sm:justify-end">
+              <div className="flex items-center gap-2">
               <button
                 type="button"
                 onClick={() => setShowArchivedPlans(false)}
                 className={[
-                  'rounded-lg border px-2 py-1 text-xs font-semibold',
+                  'min-h-[34px] rounded-lg border px-3 py-1 text-xs font-semibold',
                   !showArchivedPlans
                     ? 'border-primary bg-primary/10 text-primary'
                     : 'border-stone-300 text-stone-600 hover:border-primary hover:text-primary',
@@ -1345,7 +1365,7 @@ export function ServicePlannerPage() {
                 type="button"
                 onClick={() => setShowArchivedPlans(true)}
                 className={[
-                  'rounded-lg border px-2 py-1 text-xs font-semibold',
+                  'min-h-[34px] rounded-lg border px-3 py-1 text-xs font-semibold',
                   showArchivedPlans
                     ? 'border-primary bg-primary/10 text-primary'
                     : 'border-stone-300 text-stone-600 hover:border-primary hover:text-primary',
@@ -1353,6 +1373,7 @@ export function ServicePlannerPage() {
               >
                 Архив
               </button>
+              </div>
               <span className="text-xs text-stone-500">{visiblePlans.length} шт.</span>
             </div>
           </div>
@@ -1878,9 +1899,9 @@ export function ServicePlannerPage() {
         )}
 
         {editingTemplateBlock ? (
-          <div className="fixed inset-0 z-[70] flex items-end justify-center bg-black/35 p-3 sm:items-center">
-            <div className="w-full max-w-xl rounded-2xl border border-stone-200 bg-white p-4 shadow-2xl">
-              <div className="mb-3 flex items-center justify-between gap-2">
+          <div className="fixed inset-0 z-[70] flex items-end justify-center overscroll-y-contain bg-black/35 p-2 sm:items-center sm:p-3">
+            <div className="flex w-full max-w-xl flex-col overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-2xl max-h-[calc(100dvh-0.75rem)] sm:max-h-[calc(100dvh-2rem)]">
+              <div className="flex items-center justify-between gap-2 border-b border-stone-100 px-3 py-3 sm:px-4">
                 <h3 className="text-base font-extrabold text-stone-900">Редактирование блока шаблона</h3>
                 <button
                   type="button"
@@ -1891,7 +1912,8 @@ export function ServicePlannerPage() {
                 </button>
               </div>
 
-              <div className="grid gap-2 sm:grid-cols-2">
+              <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-3 touch-pan-y [-webkit-overflow-scrolling:touch] sm:px-4">
+                <div className="grid gap-2 rounded-xl bg-stone-50 p-3 sm:grid-cols-2">
                 <input
                   value={isTemplateSeparatorBlock(editingTemplateBlock) ? templateSeparatorLabel(editingTemplateBlock) : editingTemplateBlock.title}
                   onChange={(e) => {
@@ -2007,9 +2029,10 @@ export function ServicePlannerPage() {
                     Разделитель делит программу на части в сгенерированном плане.
                   </p>
                 )}
+                </div>
               </div>
 
-              <div className="mt-3 flex justify-end gap-2">
+              <div className="flex justify-end gap-2 border-t border-stone-100 bg-white px-3 py-3 sm:px-4 [padding-bottom:max(0.75rem,env(safe-area-inset-bottom,0px))]">
                 <button
                   type="button"
                   onClick={() => setEditingTemplateBlockId(null)}
@@ -2870,7 +2893,7 @@ export function ServicePlannerPage() {
       </div>
 
       {editingBlock ? (
-        <div className="fixed inset-0 z-[70] flex items-end justify-center bg-black/35 p-2 sm:p-3 sm:items-center">
+        <div className="fixed inset-0 z-[70] flex items-end justify-center overscroll-y-contain bg-black/35 p-2 sm:items-center sm:p-3">
           <div className="flex w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-2xl max-h-[calc(100dvh-0.75rem)] sm:max-h-[calc(100dvh-2rem)]">
             <div className="flex items-center justify-between gap-2 border-b border-stone-100 px-3 py-3 sm:px-4">
               <h3 className="text-base font-extrabold text-stone-900">Редактирование блока</h3>
@@ -2893,7 +2916,7 @@ export function ServicePlannerPage() {
                 </button>
               </div>
             </div>
-            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-3 sm:px-4">
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-3 touch-pan-y [-webkit-overflow-scrolling:touch] sm:px-4">
             <div className="grid min-w-0 gap-2 rounded-xl bg-stone-50 p-3 sm:grid-cols-2 [&_input]:w-full [&_input]:bg-white [&_input]:text-stone-900 [&_input]:placeholder:text-stone-400 [&_select]:w-full [&_select]:bg-white [&_select]:text-stone-900 [&_textarea]:w-full [&_textarea]:bg-white [&_textarea]:text-stone-900 [&_textarea]:placeholder:text-stone-400">
               <input
                 value={isSeparatorBlock(editingBlock) ? separatorLabel(editingBlock) : editingBlock.title}
@@ -3166,7 +3189,7 @@ export function ServicePlannerPage() {
               )}
             </div>
             </div>
-            <div className="flex flex-wrap justify-end gap-2 border-t border-stone-100 bg-white px-3 py-3 sm:px-4">
+            <div className="flex flex-wrap justify-end gap-2 border-t border-stone-100 bg-white px-3 py-3 sm:px-4 [padding-bottom:max(0.75rem,env(safe-area-inset-bottom,0px))]">
               <button
                 type="button"
                 onClick={() => setEditingBlockId(null)}
