@@ -95,10 +95,37 @@ function withAvatarCacheBust(url: string | null, versionIso: string | null | und
   return `${url}${sep}v=${t}`;
 }
 
+function pickConversationAvatarCandidate(c: ConversationListRow): string | null {
+  const direct = c.avatar_url ?? c.avatarUrl ?? null;
+  if (typeof direct === 'string' && direct.trim().length > 0) return direct.trim();
+
+  const metadata = c.metadata && typeof c.metadata === 'object' && !Array.isArray(c.metadata)
+    ? (c.metadata as Record<string, unknown>)
+    : null;
+  const settings = c.settings && typeof c.settings === 'object' && !Array.isArray(c.settings)
+    ? (c.settings as Record<string, unknown>)
+    : null;
+
+  const nestedCandidates = [
+    metadata?.avatar_url,
+    metadata?.avatarUrl,
+    metadata?.photo_url,
+    metadata?.photoUrl,
+    settings?.avatar_url,
+    settings?.avatarUrl,
+    settings?.photo_url,
+    settings?.photoUrl,
+  ];
+  for (const value of nestedCandidates) {
+    if (typeof value === 'string' && value.trim().length > 0) {
+      return value.trim();
+    }
+  }
+  return null;
+}
+
 function normalizeConversationListItem(c: ConversationListRow): ConversationListItem {
-  const rawAvatar = c.avatar_url ?? c.avatarUrl ?? null;
-  const avatarBase =
-    typeof rawAvatar === 'string' && rawAvatar.trim().length > 0 ? rawAvatar.trim() : null;
+  const avatarBase = pickConversationAvatarCandidate(c);
   const avatar_url = withAvatarCacheBust(avatarBase, c.updated_at ?? null);
   const omIn = c.other_member as (NonNullable<ConversationListItem['other_member']> & {
     avatarUrl?: string | null;

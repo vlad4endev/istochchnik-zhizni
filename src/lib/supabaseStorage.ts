@@ -93,14 +93,25 @@ export function rewriteSupabaseStorageUrlForClient(url: string): string {
 /** Поля вложений мессенджера / медиа, где может лежать абсолютный URL Storage. */
 export function rewriteStorageUrlsInRecord(pl: Record<string, unknown>): Record<string, unknown> {
   if (!pl || typeof pl !== 'object' || Array.isArray(pl)) return pl;
-  const out: Record<string, unknown> = { ...pl };
-  for (const key of ['url', 'signedUrl', 'signed_url', 'thumbnail_url', 'preview_url'] as const) {
-    const v = out[key];
-    if (typeof v === 'string' && v.length > 0) {
-      out[key] = rewriteSupabaseStorageUrlForClient(v);
+  const urlKeys = new Set(['url', 'signedUrl', 'signed_url', 'thumbnail_url', 'preview_url']);
+  const walk = (value: unknown): unknown => {
+    if (Array.isArray(value)) {
+      return value.map((item) => walk(item));
     }
-  }
-  return out;
+    if (!value || typeof value !== 'object') return value;
+
+    const src = value as Record<string, unknown>;
+    const out: Record<string, unknown> = {};
+    for (const [key, raw] of Object.entries(src)) {
+      if (typeof raw === 'string' && raw.length > 0 && urlKeys.has(key)) {
+        out[key] = rewriteSupabaseStorageUrlForClient(raw);
+        continue;
+      }
+      out[key] = walk(raw);
+    }
+    return out;
+  };
+  return walk(pl) as Record<string, unknown>;
 }
 
 export function getSupabaseStorageMissingEnv(): string[] {

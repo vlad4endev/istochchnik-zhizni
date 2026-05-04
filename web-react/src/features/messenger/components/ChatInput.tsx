@@ -467,10 +467,6 @@ export function ChatInput({
         setUploadErr('В этом чате для вас отключена отправка фото и файлов.');
         return;
       }
-      if (!uploadsHealthy) {
-        setUploadErr('Хранилище файлов сейчас недоступно. Повторите отправку позже.');
-        return;
-      }
       setUploadErr(null);
       setUploadPct(0);
       try {
@@ -544,10 +540,6 @@ export function ChatInput({
     if (pending) {
       if (!canSendAttachments) {
         setUploadErr('В этом чате для вас отключена отправка фото и файлов.');
-        return;
-      }
-      if (!uploadsHealthy) {
-        setUploadErr('Хранилище файлов сейчас недоступно. Повторите отправку позже.');
         return;
       }
       setUploadErr(null);
@@ -645,10 +637,6 @@ export function ChatInput({
       setUploadErr('В этом чате для вас отключена отправка фото и файлов.');
       return;
     }
-    if (!uploadsHealthy) {
-      setUploadErr('Хранилище файлов недоступно. Вложения временно отключены.');
-      return;
-    }
     setUploadErr(null);
     setAttachMenuOpen(false);
     haptic(12);
@@ -744,7 +732,7 @@ export function ChatInput({
 
   /** Вставка из буфера / drag-and-drop — та же ветка, что и выбор файла из меню. */
   const ingestExternalFiles = (files: File[]) => {
-    if (!canSendAttachments || !uploadsHealthy || files.length === 0) return;
+    if (!canSendAttachments || files.length === 0) return;
     const allImage = files.every(
       (f) =>
         (f.type || '').startsWith('image/') ||
@@ -1162,12 +1150,12 @@ export function ChatInput({
         <div
           className="tg-input-area tg-composer-pill-layout flex w-full min-w-0 gap-2 py-2"
           onDragOver={(e) => {
-            if (!uploadsHealthy || !canSendAttachments) return;
+            if (!canSendAttachments) return;
             e.preventDefault();
             e.dataTransfer.dropEffect = 'copy';
           }}
           onDrop={(e) => {
-            if (!uploadsHealthy || !canSendAttachments) return;
+            if (!canSendAttachments) return;
             e.preventDefault();
             const fl = e.dataTransfer?.files;
             if (!fl?.length) return;
@@ -1211,7 +1199,7 @@ export function ChatInput({
             <button
               ref={attachBtnRef}
               type="button"
-              disabled={!uploadsHealthy || !canSendAttachments}
+              disabled={!canSendAttachments}
               onClick={() => {
                 haptic(8);
                 setAttachMenuOpen((v) => !v);
