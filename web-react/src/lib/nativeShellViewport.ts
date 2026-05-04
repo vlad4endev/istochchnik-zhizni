@@ -1,5 +1,6 @@
+/** Совпадает с web-react/index.html: без запрета масштаба; resizes-visual — клавиатура уменьшает visual viewport, layout не перетекаает. */
 const LOCKED_VIEWPORT =
-  'width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=1, viewport-fit=cover, user-scalable=no, interactive-widget=resizes-content';
+  'width=device-width, initial-scale=1, minimum-scale=1, viewport-fit=cover, interactive-widget=resizes-visual';
 
 let viewportWatchAttached = false;
 
@@ -19,6 +20,19 @@ function syncViewportState() {
   root.style.setProperty('--app-viewport-height', `${viewportHeight}px`);
   root.style.setProperty('--app-keyboard-inset', `${keyboardInset}px`);
   root.classList.toggle('app-keyboard-open', keyboardOpen);
+
+  /** iOS safe-area: env() в отдельном элементе → числовое значение для --app-safe-bottom (fix полоски/отступов в PWA). */
+  try {
+    const probe = document.createElement('div');
+    probe.style.cssText =
+      'position:fixed;left:-9999px;top:0;visibility:hidden;padding-bottom:env(safe-area-inset-bottom,0px)';
+    document.documentElement.appendChild(probe);
+    const pb = getComputedStyle(probe).paddingBottom || '0px';
+    document.documentElement.removeChild(probe);
+    root.style.setProperty('--app-safe-bottom', pb);
+  } catch {
+    /* ignore */
+  }
 }
 
 function attachViewportWatchers() {
@@ -37,9 +51,7 @@ function attachViewportWatchers() {
 }
 
 /**
- * Фиксирует viewport: без pinch / double-tap zoom в мобильном браузере и в PWA.
- * Масштаб текста в приложении — через панель доступности (--a11y-font-scale), без умножения на «системный» коэффициент.
- * Дополнительно синхронизирует visual viewport (iOS/Android) для стабильной fixed-вёрстки.
+ * Применяет viewport-meta как в index.html (масштаб не блокируется) и синхронизирует visual viewport / safe-area.
  */
 export function applyNativeShellViewportLock(): boolean {
   if (typeof document === 'undefined') return false;

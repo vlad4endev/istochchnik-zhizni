@@ -171,7 +171,7 @@ html[data-a11y-large-cursor='true'] body summary {
     auto;
 }
 
-/* PWA: без pinch-zoom; pan-x pan-y оставляет нативный вертикальный скролл (manipulation ломает вложенный overflow во многих WebKit). */
+/* PWA: вертикальный скролл; pinch-zoom может быть включён через viewport-meta (см. nativeShellViewport). */
 html.app-native-shell {
   touch-action: pan-x pan-y;
   /* iOS: убираем лишний «зазор» справа от scrollbar-gutter. Высота — из nativeShellViewport (innerHeight), как у fixed bottom:0. */
@@ -184,8 +184,7 @@ html[data-pwa-standalone='1'] {
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
   background-color: var(--surface);
-  /* iPhone PWA: убираем остаточный нижний inset/зазор под контентом. */
-  --app-safe-bottom: 0px;
+  /* Нижний inset задаёт nativeShellViewport (проба env(safe-area-inset-bottom)); таббар без двойного паддинга */
   --app-bottom-nav-safe-pad: 0px;
 }
 
@@ -395,7 +394,7 @@ nav.app-bottom-nav {
   transition: opacity 0.15s ease-out;
 }
 
-@media (max-width: 1023px) {
+@media (max-width: 767px) {
   nav.app-bottom-nav {
     touch-action: manipulation;
     -webkit-backdrop-filter: blur(20px) saturate(180%);
@@ -415,7 +414,7 @@ nav.app-bottom-nav {
   transition: none;
 }
 
-@media (min-width: 1024px) {
+@media (min-width: 768px) {
   .app-main-content {
     margin-left: var(--sidebar-width, 88px);
     width: calc(100% - var(--sidebar-width, 88px));

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { DragDropContext, Draggable, Droppable, type DropResult } from '@hello-pangea/dnd';
 import { addMinutes, format, parse, parseISO } from 'date-fns';
@@ -68,6 +68,7 @@ import {
 } from '../api';
 import { meaningfulNoteLinesFromRaw } from '../plannerNoteText';
 import { useServicePlanEditorsPresence } from '../useServicePlanEditorsPresence';
+import { emitAppToast } from '@/lib/uiFeedback';
 
 function planEditorInitials(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);
@@ -295,7 +296,12 @@ export function ServicePlannerPage() {
   const [mobilePlanTimeOpenId, setMobilePlanTimeOpenId] = useState<number | null>(null);
   const [mobileTemplateBlockMenuId, setMobileTemplateBlockMenuId] = useState<number | null>(null);
   const [mobileTemplateOrderOpenId, setMobileTemplateOrderOpenId] = useState<number | null>(null);
+  /** Шапка плана: «⋯» с действиями шаблонов на узком экране */
+  const [planHeaderMoreOpen, setPlanHeaderMoreOpen] = useState(false);
   const autoArchivingPlanIdsRef = useRef<Set<number>>(new Set());
+  /** Отложенное удаление блока программы: таймер API + снимок для отмены из toast */
+  const pendingPlanBlockDeleteTimersRef = useRef<Map<number, number>>(new Map());
+  const pendingPlanBlockDeleteSnapshotsRef = useRef<Map<number, ServicePlanBlock>>(new Map());
   const plannerModalOpen = editingTemplateBlockId != null || editingBlockId != null;
   /** Совпадает с Tailwind `md:` — на мобильной весь блок — ручка перетаскивания */
   const [isNarrowViewport, setIsNarrowViewport] = useState(
@@ -346,6 +352,10 @@ export function ServicePlannerPage() {
     scrollEl.addEventListener('scroll', onScroll, { passive: true });
     return () => scrollEl.removeEventListener('scroll', onScroll);
   }, [screen, draft]);
+
+  useEffect(() => {
+    setPlanHeaderMoreOpen(false);
+  }, [draft?.id]);
 
   const coEditingPeers = useServicePlanEditorsPresence(
     screen === 'plan' && draft ? draft.id : null,
@@ -577,6 +587,65 @@ export function ServicePlannerPage() {
     mutationFn: (id: number) => deleteServiceBlock(id),
   });
 
+  function flushPendingPlanBlockDelete(blockId: number): void {
+    const t = pendingPlanBlockDeleteTimersRef.current.get(blockId);
+    if (t != null) window.clearTimeout(t);
+    pendingPlanBlockDeleteTimersRef.current.delete(blockId);
+    pendingPlanBlockDeleteSnapshotsRef.current.delete(blockId);
+  }
+
+  /** UX #8: удаление через 5 с с toast «Отменить», без немедленного API */
+  function scheduleDeletePlanBlock(block: ServicePlanBlock, planId: number): void {
+    flushPendingPlanBlockDelete(block.id);
+    pendingPlanBlockDeleteSnapshotsRef.current.set(block.id, { ...block });
+
+    setDraft((prev) => {
+      if (!prev || prev.id !== planId) return prev;
+      return {
+        ...prev,
+        blocks: prev.blocks.filter((b) => b.id !== block.id),
+      };
+    });
+    setMobilePlanBlockMenuId(null);
+    setEditingBlockId((cur) => (cur === block.id ? null : cur));
+
+    const timer = window.setTimeout(() => {
+      flushPendingPlanBlockDelete(block.id);
+      void deleteBlockMut.mutateAsync(block.id);
+    }, 5000);
+    pendingPlanBlockDeleteTimersRef.current.set(block.id, timer);
+
+    emitAppToast({
+      message: 'Блок удалён · нажмите для отмены',
+      kind: 'info',
+      durationMs: 5200,
+      action: {
+        event: 'service-planner:undo-block-delete',
+        detail: { planId, blockId: block.id },
+      },
+    });
+  }
+
+  useEffect(() => {
+    const onUndo = (e: Event) => {
+      const ce = e as CustomEvent<{ planId?: number; blockId?: number }>;
+      const planId = ce.detail?.planId;
+      const blockId = ce.detail?.blockId;
+      if (planId == null || blockId == null) return;
+      const snapshot = pendingPlanBlockDeleteSnapshotsRef.current.get(blockId);
+      if (!snapshot) return;
+      flushPendingPlanBlockDelete(blockId);
+      setDraft((prev) => {
+        if (!prev || prev.id !== planId) return prev;
+        if (prev.blocks.some((b) => b.id === blockId)) return prev;
+        const blocks = [...prev.blocks, snapshot].sort((a, b) => a.order_index - b.order_index);
+        return { ...prev, blocks };
+      });
+    };
+    window.addEventListener('service-planner:undo-block-delete', onUndo as EventListener);
+    return () => window.removeEventListener('service-planner:undo-block-delete', onUndo as EventListener);
+  }, []);
+
   const saveProgramMut = useMutation({
     mutationFn: async () => {
       if (!draft) return;
@@ -702,6 +771,9 @@ export function ServicePlannerPage() {
     () => templateDraft?.blocks.find((b) => b.id === editingTemplateBlockId) ?? null,
     [templateDraft, editingTemplateBlockId],
   );
+
+  /** Уникальные id полей модалки «Редактирование блока» для связки с <label> (a11y). */
+  const blockEditFieldsUid = useId();
 
   function getBlockTypeMeta(block: ServicePlanBlock) {
     return blockTypes.find((t) => t.id === block.block_type_id) ?? null;
@@ -996,6 +1068,7 @@ export function ServicePlannerPage() {
           ],
         };
       });
+      setEditingBlockId(created.id);
     })();
   }
 
@@ -1633,7 +1706,7 @@ export function ServicePlannerPage() {
                                     <button
                                       type="button"
                                       onClick={() => setEditingTemplateBlockId(b.id)}
-                                      className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-stone-200 text-stone-700 hover:bg-stone-50"
+                                      className="inline-flex h-9 w-9 touch-manipulation items-center justify-center rounded-lg border border-stone-200 text-stone-700 hover:bg-stone-50 sm:h-7 sm:w-7"
                                       aria-label="Редактировать блок шаблона"
                                     >
                                       <LuPencil className="h-4 w-4" />
@@ -1648,7 +1721,7 @@ export function ServicePlannerPage() {
                                             .map((x, i) => ({ ...x, order_index: i })),
                                         })
                                       }
-                                      className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-rose-200 text-rose-700 hover:bg-rose-50"
+                                      className="inline-flex h-9 w-9 touch-manipulation items-center justify-center rounded-lg border border-rose-200 text-rose-700 hover:bg-rose-50 sm:h-7 sm:w-7"
                                       aria-label="Удалить блок шаблона"
                                     >
                                       <LuTrash2 className="h-4 w-4" />
@@ -1656,7 +1729,7 @@ export function ServicePlannerPage() {
                                     <button
                                       type="button"
                                       {...(!isNarrowViewport ? dragProvided.dragHandleProps : {})}
-                                      className="inline-flex h-7 w-7 cursor-grab items-center justify-center rounded-lg border border-stone-200 text-stone-500 hover:bg-stone-50 active:cursor-grabbing"
+                                      className="inline-flex h-9 w-9 touch-manipulation cursor-grab items-center justify-center rounded-lg border border-stone-200 text-stone-500 hover:bg-stone-50 active:cursor-grabbing sm:h-7 sm:w-7"
                                       aria-label="Перетащить блок шаблона"
                                     >
                                       <LuGripVertical className="h-4 w-4" />
@@ -1669,7 +1742,7 @@ export function ServicePlannerPage() {
                                   >
                                     <button
                                       type="button"
-                                      className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-stone-200 text-stone-600 hover:bg-stone-50"
+                                      className="inline-flex h-9 w-9 touch-manipulation items-center justify-center rounded-md border border-stone-200 text-stone-600 hover:bg-stone-50 sm:h-7 sm:w-7"
                                       aria-label="Меню блока шаблона"
                                       aria-expanded={mobileTemplateBlockMenuId === b.id}
                                       onClick={(e) => {
@@ -1733,7 +1806,7 @@ export function ServicePlannerPage() {
                                   <button
                                     type="button"
                                     {...(!isNarrowViewport ? dragProvided.dragHandleProps : {})}
-                                    className="hidden h-7 w-7 items-center justify-center rounded-lg border border-stone-200 text-stone-500 md:inline-flex"
+                                    className="hidden h-9 w-9 touch-manipulation cursor-grab items-center justify-center rounded-lg border border-stone-200 text-stone-500 md:inline-flex md:h-7 md:w-7"
                                     aria-label="Перетащить блок шаблона"
                                   >
                                     <LuGripVertical className="h-4 w-4" />
@@ -1843,7 +1916,7 @@ export function ServicePlannerPage() {
                                     <button
                                       type="button"
                                       onClick={() => setEditingTemplateBlockId(b.id)}
-                                      className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-stone-200 text-stone-700 hover:bg-stone-50"
+                                      className="inline-flex h-9 w-9 touch-manipulation items-center justify-center rounded-lg border border-stone-200 text-stone-700 hover:bg-stone-50 sm:h-7 sm:w-7"
                                       aria-label="Редактировать блок шаблона"
                                     >
                                       <LuPencil className="h-4 w-4" />
@@ -1858,7 +1931,7 @@ export function ServicePlannerPage() {
                                             .map((x, i) => ({ ...x, order_index: i })),
                                         })
                                       }
-                                      className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-rose-200 text-rose-700 hover:bg-rose-50"
+                                      className="inline-flex h-9 w-9 touch-manipulation items-center justify-center rounded-lg border border-rose-200 text-rose-700 hover:bg-rose-50 sm:h-7 sm:w-7"
                                       aria-label="Удалить блок шаблона"
                                     >
                                       <LuTrash2 className="h-4 w-4" />
@@ -2147,44 +2220,110 @@ export function ServicePlannerPage() {
               </div>
             ) : null}
           </div>
-          <div className="flex w-full flex-wrap items-center gap-1 overflow-x-auto pb-0.5 sm:w-auto sm:justify-end sm:overflow-visible sm:pb-0">
-            {canManageTemplates ? (
-              <>
-                {canCreateTemplateFromPlan ? (
+          <div className="flex w-full flex-col items-stretch gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
+            <div className="hidden w-full flex-wrap items-center justify-end gap-1 overflow-x-auto pb-0.5 sm:flex sm:w-auto sm:overflow-visible sm:pb-0">
+              {canManageTemplates ? (
+                <>
+                  {canCreateTemplateFromPlan ? (
+                    <button
+                      type="button"
+                      onClick={() => void createTemplateFromCurrentPlan()}
+                      className="shrink-0 whitespace-nowrap rounded-lg border border-stone-300 px-2.5 py-1 text-[11px] font-semibold text-stone-700 hover:border-primary hover:text-primary sm:px-3 sm:py-1.5 sm:text-xs"
+                    >
+                      Сделать шаблон из программы
+                    </button>
+                  ) : null}
                   <button
                     type="button"
-                    onClick={() => void createTemplateFromCurrentPlan()}
+                    onClick={() => {
+                      setIsTemplateDraftNew(false);
+                      setScreen('template');
+                    }}
                     className="shrink-0 whitespace-nowrap rounded-lg border border-stone-300 px-2.5 py-1 text-[11px] font-semibold text-stone-700 hover:border-primary hover:text-primary sm:px-3 sm:py-1.5 sm:text-xs"
                   >
-                    Сделать шаблон из программы
+                    Конструктор шаблона
                   </button>
-                ) : null}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsTemplateDraftNew(false);
-                    setScreen('template');
-                  }}
-                  className="shrink-0 whitespace-nowrap rounded-lg border border-stone-300 px-2.5 py-1 text-[11px] font-semibold text-stone-700 hover:border-primary hover:text-primary sm:px-3 sm:py-1.5 sm:text-xs"
-                >
-                  Конструктор шаблона
-                </button>
-              </>
-            ) : null}
-            <button
-              type="button"
-              onClick={() => void toggleArchiveCurrentPlan()}
-              className="shrink-0 whitespace-nowrap rounded-lg border border-amber-300 px-2.5 py-1 text-[11px] font-semibold text-amber-800 hover:bg-amber-50 sm:px-3 sm:py-1.5 sm:text-xs"
-            >
-              {draft.is_archived ? 'Вернуть из архива' : 'В архив'}
-            </button>
-            <button
-              type="button"
-              onClick={() => void deleteCurrentPlan()}
-              className="shrink-0 whitespace-nowrap rounded-lg border border-rose-300 px-2.5 py-1 text-[11px] font-semibold text-rose-700 hover:bg-rose-50 sm:px-3 sm:py-1.5 sm:text-xs"
-            >
-              Удалить программу
-            </button>
+                </>
+              ) : null}
+              <button
+                type="button"
+                onClick={() => void toggleArchiveCurrentPlan()}
+                className="shrink-0 whitespace-nowrap rounded-lg border border-amber-300 px-2.5 py-1 text-[11px] font-semibold text-amber-800 hover:bg-amber-50 sm:px-3 sm:py-1.5 sm:text-xs"
+              >
+                {draft.is_archived ? 'Вернуть из архива' : 'В архив'}
+              </button>
+              <button
+                type="button"
+                onClick={() => void deleteCurrentPlan()}
+                className="shrink-0 whitespace-nowrap rounded-lg border border-rose-300 px-2.5 py-1 text-[11px] font-semibold text-rose-700 hover:bg-rose-50 sm:px-3 sm:py-1.5 sm:text-xs"
+              >
+                Удалить программу
+              </button>
+            </div>
+
+            <div className="flex w-full flex-wrap items-center justify-end gap-1 sm:hidden">
+              {/* UX #6: шаблоны — в «⋯», архив/удаление остаются на виду */}
+              {canManageTemplates ? (
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setPlanHeaderMoreOpen((v) => !v)}
+                    aria-expanded={planHeaderMoreOpen}
+                    aria-haspopup="menu"
+                    className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-stone-300 text-stone-700 hover:bg-stone-50"
+                    aria-label="Другие действия с программой"
+                  >
+                    <LuEllipsis className="h-5 w-5" strokeWidth={2.25} aria-hidden />
+                  </button>
+                  {planHeaderMoreOpen ? (
+                    <div
+                      role="menu"
+                      className="absolute right-0 top-full z-[55] mt-1 min-w-[min(18rem,calc(100vw-2rem))] overflow-hidden rounded-lg border border-stone-200 bg-white py-1 shadow-lg"
+                    >
+                      {canCreateTemplateFromPlan ? (
+                        <button
+                          type="button"
+                          role="menuitem"
+                          className="flex w-full px-3 py-2 text-left text-xs font-semibold text-stone-800 hover:bg-stone-50"
+                          onClick={() => {
+                            setPlanHeaderMoreOpen(false);
+                            void createTemplateFromCurrentPlan();
+                          }}
+                        >
+                          Сделать шаблон из программы
+                        </button>
+                      ) : null}
+                      <button
+                        type="button"
+                        role="menuitem"
+                        className="flex w-full px-3 py-2 text-left text-xs font-semibold text-stone-800 hover:bg-stone-50"
+                        onClick={() => {
+                          setPlanHeaderMoreOpen(false);
+                          setIsTemplateDraftNew(false);
+                          setScreen('template');
+                        }}
+                      >
+                        Конструктор шаблона
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+              <button
+                type="button"
+                onClick={() => void toggleArchiveCurrentPlan()}
+                className="min-h-[36px] shrink-0 whitespace-nowrap rounded-lg border border-amber-300 px-2.5 py-1 text-[11px] font-semibold text-amber-800 hover:bg-amber-50"
+              >
+                {draft.is_archived ? 'Вернуть из архива' : 'В архив'}
+              </button>
+              <button
+                type="button"
+                onClick={() => void deleteCurrentPlan()}
+                className="min-h-[36px] shrink-0 whitespace-nowrap rounded-lg border border-rose-300 px-2.5 py-1 text-[11px] font-semibold text-rose-700 hover:bg-rose-50"
+              >
+                Удалить программу
+              </button>
+            </div>
           </div>
         </div>
         <div className="mt-1 flex flex-wrap items-center gap-3 text-sm text-stone-600">
@@ -2223,24 +2362,6 @@ export function ServicePlannerPage() {
                 Показать
               </>
             )}
-          </button>
-          <button
-            type="button"
-            onClick={() =>
-              void updatePlanMut.mutateAsync({
-                id: draft.id,
-                body: {
-                  service_date: draft.service_date,
-                  start_time: draft.start_time,
-                  leader_member_id: draft.leader_member_id,
-                  preacher_member_id: draft.preacher_member_id,
-                },
-              })
-            }
-            className="hidden min-h-[36px] items-center justify-center gap-1 rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-white hover:bg-primary-dark md:inline-flex md:min-h-0"
-          >
-            <LuSave className="h-3.5 w-3.5" />
-            Сохранить настройки
           </button>
         </div>
         <div className={isPlanSettingsOpenMobile ? 'block md:block' : 'hidden md:block'}>
@@ -2323,9 +2444,9 @@ export function ServicePlannerPage() {
               },
             })
           }
-          className="mt-2 inline-flex min-h-[36px] items-center justify-center gap-1 rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-white hover:bg-primary-dark md:hidden"
+          className="mt-3 inline-flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl bg-primary px-3 py-2 text-sm font-semibold text-white hover:bg-primary-dark"
         >
-          <LuSave className="h-3.5 w-3.5" />
+          <LuSave className="h-4 w-4" />
           Сохранить настройки
         </button>
         </div>
@@ -2333,7 +2454,9 @@ export function ServicePlannerPage() {
 
       <section className="rounded-2xl border border-stone-200 bg-white p-3 shadow-sm">
         <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-stone-500">Составление программы</p>
-        <div className="flex gap-2 overflow-x-auto pb-1 md:grid md:grid-cols-4 md:overflow-visible md:pb-0">
+        <div className="relative">
+          {/* UX #5: маска справа намекает на горизонтальный скролл кнопок на узком экране */}
+          <div className="flex gap-2 overflow-x-auto pb-1 [mask-image:linear-gradient(to_right,black_85%,transparent_100%)] md:grid md:grid-cols-4 md:overflow-visible md:pb-0 md:[mask-image:none]">
           <button
             type="button"
             onClick={addPlanBlock}
@@ -2350,17 +2473,17 @@ export function ServicePlannerPage() {
             <LuPlus className="h-4 w-4" />
             Разделитель
           </button>
-          <div
+          <span
             className={[
-              'inline-flex min-h-[40px] shrink-0 items-center justify-center gap-2 rounded-xl border px-3 py-2 text-sm font-semibold md:min-h-[44px] md:min-w-0',
+              'inline-flex min-h-[40px] shrink-0 cursor-default items-center justify-center gap-1.5 rounded-full px-3 py-1 text-sm font-medium md:min-h-[44px] md:min-w-0 md:self-center',
               draft.status === 'published'
-                ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
-                : 'border-amber-200 bg-amber-50 text-amber-800',
+                ? 'border border-emerald-200 bg-emerald-50 text-emerald-800'
+                : 'border border-amber-200 bg-amber-50 text-amber-800',
             ].join(' ')}
             aria-live="polite"
           >
-            Статус: {draft.status === 'published' ? 'Опубликован' : 'Черновик'}
-          </div>
+            {draft.status === 'published' ? 'Опубликован' : 'Черновик'}
+          </span>
           <button
             type="button"
             onClick={() => {
@@ -2377,15 +2500,16 @@ export function ServicePlannerPage() {
           >
             {draft.status === 'draft' ? 'Опубликовать' : 'Вернуть в черновик'}
           </button>
-          <button
-            type="button"
-            onClick={() => void saveProgramMut.mutateAsync()}
-            className="hidden min-h-[40px] shrink-0 items-center justify-center gap-2 rounded-xl bg-primary px-3 py-2 text-sm font-semibold text-white hover:bg-primary-dark md:inline-flex md:min-h-[44px] md:min-w-0"
-          >
-            <LuSave className="h-4 w-4" />
-            Сохранить программу
-          </button>
+          </div>
         </div>
+        <button
+          type="button"
+          onClick={() => void saveProgramMut.mutateAsync()}
+          className="mt-2 hidden min-h-[44px] w-full items-center justify-center gap-2 rounded-xl bg-primary px-3 py-2 text-sm font-semibold text-white hover:bg-primary-dark md:inline-flex"
+        >
+          <LuSave className="h-4 w-4" />
+          Сохранить программу
+        </button>
       </section>
 
       <section className="rounded-2xl border border-stone-200 bg-white p-3 shadow-sm">
@@ -2436,7 +2560,7 @@ export function ServicePlannerPage() {
                                 <button
                                   type="button"
                                   onClick={() => toggleBlockPublicVisibility(block.id)}
-                                  className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-stone-200 text-stone-600 hover:bg-stone-50 sm:rounded-lg"
+                                  className="inline-flex h-9 w-9 touch-manipulation items-center justify-center rounded-md border border-stone-200 text-stone-600 hover:bg-stone-50 sm:h-7 sm:w-7 sm:rounded-lg"
                                   aria-label={hiddenFromPublic ? 'Показать в публикации' : 'Скрыть из публикации'}
                                   title={hiddenFromPublic ? 'Показать в публикации' : 'Скрыть из публикации'}
                                 >
@@ -2445,7 +2569,7 @@ export function ServicePlannerPage() {
                                 <button
                                   type="button"
                                   onClick={() => setEditingBlockId(block.id)}
-                                  className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-stone-200 text-stone-600 hover:bg-stone-50 sm:rounded-lg"
+                                  className="inline-flex h-9 w-9 touch-manipulation items-center justify-center rounded-md border border-stone-200 text-stone-600 hover:bg-stone-50 sm:h-7 sm:w-7 sm:rounded-lg"
                                   aria-label="Редактировать блок"
                                 >
                                   <LuPencil className="h-3.5 w-3.5" />
@@ -2453,13 +2577,9 @@ export function ServicePlannerPage() {
                                 <button
                                   type="button"
                                   onClick={() => {
-                                    setDraft({
-                                      ...draft,
-                                      blocks: draft.blocks.filter((b) => b.id !== block.id),
-                                    });
-                                    void deleteBlockMut.mutateAsync(block.id);
+                                    scheduleDeletePlanBlock(block, draft.id);
                                   }}
-                                  className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-rose-200 text-rose-600 hover:bg-rose-50 sm:rounded-lg"
+                                  className="inline-flex h-9 w-9 touch-manipulation items-center justify-center rounded-md border border-rose-200 text-rose-600 hover:bg-rose-50 sm:h-7 sm:w-7 sm:rounded-lg"
                                   aria-label="Удалить блок"
                                 >
                                   <LuTrash2 className="h-3.5 w-3.5" />
@@ -2467,7 +2587,7 @@ export function ServicePlannerPage() {
                                 <button
                                   type="button"
                                   {...(!isNarrowViewport ? dragProvided.dragHandleProps : {})}
-                                  className="inline-flex h-7 w-7 cursor-grab items-center justify-center rounded-md border border-stone-200 text-stone-400 hover:text-stone-600 active:cursor-grabbing sm:rounded-lg"
+                                  className="inline-flex h-9 w-9 touch-manipulation cursor-grab items-center justify-center rounded-md border border-stone-200 text-stone-400 hover:text-stone-600 active:cursor-grabbing sm:h-7 sm:w-7 sm:rounded-lg"
                                   aria-label="Перетащить блок"
                                 >
                                   <LuGripVertical className="h-3.5 w-3.5" />
@@ -2480,7 +2600,7 @@ export function ServicePlannerPage() {
                               >
                                 <button
                                   type="button"
-                                  className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-stone-200 text-stone-600 hover:bg-stone-50"
+                                  className="inline-flex h-9 w-9 touch-manipulation items-center justify-center rounded-md border border-stone-200 text-stone-600 hover:bg-stone-50 sm:h-7 sm:w-7"
                                   aria-label="Меню блока"
                                   aria-expanded={mobilePlanBlockMenuId === block.id}
                                   onClick={(e) => {
@@ -2528,12 +2648,7 @@ export function ServicePlannerPage() {
                                       type="button"
                                       className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-rose-700 hover:bg-rose-50"
                                       onClick={() => {
-                                        setMobilePlanBlockMenuId(null);
-                                        setDraft({
-                                          ...draft,
-                                          blocks: draft.blocks.filter((b) => b.id !== block.id),
-                                        });
-                                        void deleteBlockMut.mutateAsync(block.id);
+                                        scheduleDeletePlanBlock(block, draft.id);
                                       }}
                                     >
                                       <LuTrash2 className="h-4 w-4 shrink-0" />
@@ -2565,7 +2680,7 @@ export function ServicePlannerPage() {
                             >
                               <button
                                 type="button"
-                                className="mt-0.5 inline-flex h-7 w-7 items-center justify-center rounded-md border border-stone-200 text-stone-600 hover:bg-stone-50"
+                                className="mt-0.5 inline-flex h-9 w-9 touch-manipulation items-center justify-center rounded-md border border-stone-200 text-stone-600 hover:bg-stone-50 sm:h-7 sm:w-7"
                                 aria-label={`Время начала: ${block.startsAt}`}
                                 aria-expanded={mobilePlanTimeOpenId === block.id}
                                 onClick={(e) => {
@@ -2633,8 +2748,24 @@ export function ServicePlannerPage() {
 
                             <div className="min-w-0 flex-1 space-y-0.5">
                               <div className="flex flex-wrap items-center gap-1.5">
-                                <p className="text-sm font-semibold leading-snug normal-case text-stone-900">
-                                  {blockTitle}
+                                <p
+                                  className={[
+                                    'text-sm font-semibold leading-snug normal-case',
+                                    blockTitle === 'Новый блок' && !isSeparatorBlock(block)
+                                      ? 'text-stone-500 italic'
+                                      : 'text-stone-900',
+                                  ].join(' ')}
+                                >
+                                  {blockTitle === 'Новый блок' && !isSeparatorBlock(block) ? (
+                                    <>
+                                      Новый блок
+                                      <span className="ml-1 font-normal not-italic text-stone-400">
+                                        (нажмите, чтобы назвать)
+                                      </span>
+                                    </>
+                                  ) : (
+                                    blockTitle
+                                  )}
                                 </p>
                                 {blockKey ? (
                                   <span className="inline-flex items-center rounded-full bg-stone-100 px-1.5 py-0.5 text-[10px] font-semibold text-stone-700 sm:px-2 sm:text-[11px]">
@@ -2712,7 +2843,7 @@ export function ServicePlannerPage() {
                               >
                                 <button
                                   type="button"
-                                  className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-stone-200 text-stone-600 hover:bg-stone-50"
+                                  className="inline-flex h-9 w-9 touch-manipulation items-center justify-center rounded-md border border-stone-200 text-stone-600 hover:bg-stone-50 sm:h-7 sm:w-7"
                                   aria-label="Меню блока"
                                   aria-expanded={mobilePlanBlockMenuId === block.id}
                                   onClick={(e) => {
@@ -2760,12 +2891,7 @@ export function ServicePlannerPage() {
                                       type="button"
                                       className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-rose-700 hover:bg-rose-50"
                                       onClick={() => {
-                                        setMobilePlanBlockMenuId(null);
-                                        setDraft({
-                                          ...draft,
-                                          blocks: draft.blocks.filter((b) => b.id !== block.id),
-                                        });
-                                        void deleteBlockMut.mutateAsync(block.id);
+                                        scheduleDeletePlanBlock(block, draft.id);
                                       }}
                                     >
                                       <LuTrash2 className="h-4 w-4 shrink-0" />
@@ -2788,7 +2914,7 @@ export function ServicePlannerPage() {
                                 <button
                                   type="button"
                                   onClick={() => toggleBlockPublicVisibility(block.id)}
-                                  className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-stone-200 text-stone-600 hover:bg-stone-50 sm:rounded-lg"
+                                  className="inline-flex h-9 w-9 touch-manipulation items-center justify-center rounded-md border border-stone-200 text-stone-600 hover:bg-stone-50 sm:h-7 sm:w-7 sm:rounded-lg"
                                   aria-label={hiddenFromPublic ? 'Показать в публикации' : 'Скрыть из публикации'}
                                   title={hiddenFromPublic ? 'Показать в публикации' : 'Скрыть из публикации'}
                                 >
@@ -2797,7 +2923,7 @@ export function ServicePlannerPage() {
                                 <button
                                   type="button"
                                   onClick={() => setEditingBlockId(block.id)}
-                                  className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-stone-200 text-stone-600 hover:bg-stone-50 sm:rounded-lg"
+                                  className="inline-flex h-9 w-9 touch-manipulation items-center justify-center rounded-md border border-stone-200 text-stone-600 hover:bg-stone-50 sm:h-7 sm:w-7 sm:rounded-lg"
                                   aria-label="Редактировать блок"
                                 >
                                   <LuPencil className="h-3.5 w-3.5" />
@@ -2805,13 +2931,9 @@ export function ServicePlannerPage() {
                                 <button
                                   type="button"
                                   onClick={() => {
-                                    setDraft({
-                                      ...draft,
-                                      blocks: draft.blocks.filter((b) => b.id !== block.id),
-                                    });
-                                    void deleteBlockMut.mutateAsync(block.id);
+                                    scheduleDeletePlanBlock(block, draft.id);
                                   }}
-                                  className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-rose-200 text-rose-600 hover:bg-rose-50 sm:rounded-lg"
+                                  className="inline-flex h-9 w-9 touch-manipulation items-center justify-center rounded-md border border-rose-200 text-rose-600 hover:bg-rose-50 sm:h-7 sm:w-7 sm:rounded-lg"
                                   aria-label="Удалить блок"
                                 >
                                   <LuTrash2 className="h-3.5 w-3.5" />
@@ -2819,7 +2941,7 @@ export function ServicePlannerPage() {
                                 <button
                                   type="button"
                                   {...(!isNarrowViewport ? dragProvided.dragHandleProps : {})}
-                                  className="inline-flex h-7 w-7 cursor-grab items-center justify-center rounded-md border border-stone-200 text-stone-400 hover:text-stone-600 active:cursor-grabbing sm:rounded-lg"
+                                  className="inline-flex h-9 w-9 touch-manipulation cursor-grab items-center justify-center rounded-md border border-stone-200 text-stone-400 hover:text-stone-600 active:cursor-grabbing sm:h-7 sm:w-7 sm:rounded-lg"
                                   aria-label="Перетащить блок"
                                 >
                                   <LuGripVertical className="h-3.5 w-3.5" />
@@ -2841,8 +2963,25 @@ export function ServicePlannerPage() {
       </section>
 
       <section className="rounded-2xl border border-stone-200 bg-white p-3 shadow-sm">
+        <div className="mb-2 flex flex-wrap items-center gap-2 text-[11px] font-semibold text-stone-500">
+          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-emerald-800 ring-1 ring-emerald-200/80">
+            1 Настройки ✓
+          </span>
+          <span aria-hidden className="text-stone-400">
+            →
+          </span>
+          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-emerald-800 ring-1 ring-emerald-200/80">
+            2 Программа ✓
+          </span>
+          <span aria-hidden className="text-stone-400">
+            →
+          </span>
+          <span className="inline-flex items-center gap-1 rounded-full bg-stone-100 px-2 py-0.5 text-stone-800 ring-1 ring-stone-200/90">
+            3 Ссылка
+          </span>
+        </div>
         <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-stone-500">
-          Шаг 3: поделитесь ссылкой
+          Поделитесь ссылкой
         </p>
         <div className="flex flex-wrap items-center gap-2">
           <div className="min-w-0 flex-1 rounded-lg bg-stone-50 px-2 py-1.5 text-xs text-stone-700">
@@ -2898,10 +3037,23 @@ export function ServicePlannerPage() {
       </div>
 
       {editingBlock ? (
-        <div className="fixed inset-0 z-[130] flex items-end justify-center overscroll-y-contain bg-black/35 p-2 sm:items-center sm:p-3">
-          <div className="flex w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-2xl max-h-[calc(100dvh-0.75rem)] sm:max-h-[calc(100dvh-2rem)]">
+        <div
+          className="fixed inset-0 z-[130] flex items-end justify-center overscroll-y-contain bg-black/35 p-2 sm:items-center sm:p-3"
+          role="presentation"
+          onClick={() => setEditingBlockId(null)}
+        >
+          <div
+            className="flex w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-2xl max-h-[90dvh] sm:max-h-[calc(100dvh-2rem)]"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={`${blockEditFieldsUid}-modal-title`}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mx-auto mb-2 h-1 w-10 shrink-0 rounded-full bg-stone-300 sm:hidden" aria-hidden />
             <div className="flex items-center justify-between gap-2 border-b border-stone-100 px-3 py-3 sm:px-4">
-              <h3 className="text-base font-extrabold text-stone-900">Редактирование блока</h3>
+              <h3 id={`${blockEditFieldsUid}-modal-title`} className="text-base font-extrabold text-stone-900">
+                Редактирование блока
+              </h3>
               <div className="flex items-center gap-2">
                 <button
                   type="button"
@@ -2921,46 +3073,59 @@ export function ServicePlannerPage() {
                 </button>
               </div>
             </div>
-            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-3 touch-pan-y [-webkit-overflow-scrolling:touch] sm:px-4">
+            <div className="max-h-[90dvh] min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-3 touch-pan-y [-webkit-overflow-scrolling:touch] sm:max-h-none sm:px-4">
             <div className="grid min-w-0 gap-2 rounded-xl bg-stone-50 p-3 sm:grid-cols-2 [&_input]:w-full [&_input]:bg-white [&_input]:text-stone-900 [&_input]:placeholder:text-stone-400 [&_select]:w-full [&_select]:bg-white [&_select]:text-stone-900 [&_textarea]:w-full [&_textarea]:bg-white [&_textarea]:text-stone-900 [&_textarea]:placeholder:text-stone-400">
-              <input
-                value={isSeparatorBlock(editingBlock) ? separatorLabel(editingBlock) : editingBlock.title}
-                onChange={(e) => {
-                  if (isSeparatorBlock(editingBlock)) {
+              <label className="flex flex-col gap-1 text-xs font-semibold text-stone-700 sm:col-span-2">
+                {isSeparatorBlock(editingBlock) ? 'Текст разделителя' : 'Название блока'}
+                <input
+                  id={`${blockEditFieldsUid}-title`}
+                  value={isSeparatorBlock(editingBlock) ? separatorLabel(editingBlock) : editingBlock.title}
+                  onChange={(e) => {
+                    if (isSeparatorBlock(editingBlock)) {
+                      updateDraftBlock(editingBlock.id, {
+                        title: e.target.value,
+                        content_json: { ...editingBlock.content_json, separator_text: e.target.value },
+                      });
+                      return;
+                    }
+                    updateDraftBlock(editingBlock.id, { title: e.target.value });
+                  }}
+                  className="rounded-lg border border-stone-300 px-2 py-1.5 text-sm font-normal"
+                  placeholder={isSeparatorBlock(editingBlock) ? 'Текст разделителя' : 'Название блока'}
+                />
+              </label>
+              <label className="flex flex-col gap-1 text-xs font-semibold text-stone-700">
+                Текстовый маркер
+                <input
+                  id={`${blockEditFieldsUid}-mark`}
+                  value={String((editingBlock.content_json?.block_mark as string | undefined) ?? '')}
+                  onChange={(e) =>
                     updateDraftBlock(editingBlock.id, {
-                      title: e.target.value,
-                      content_json: { ...editingBlock.content_json, separator_text: e.target.value },
-                    });
-                    return;
+                      content_json: { ...editingBlock.content_json, block_mark: e.target.value },
+                    })
                   }
-                  updateDraftBlock(editingBlock.id, { title: e.target.value });
-                }}
-                className="rounded-lg border border-stone-300 px-2 py-1.5 text-sm sm:col-span-2"
-                placeholder={isSeparatorBlock(editingBlock) ? 'Текст разделителя' : 'Название блока'}
-              />
-              <input
-                value={String((editingBlock.content_json?.block_mark as string | undefined) ?? '')}
-                onChange={(e) =>
-                  updateDraftBlock(editingBlock.id, {
-                    content_json: { ...editingBlock.content_json, block_mark: e.target.value },
-                  })
-                }
-                className="rounded-lg border border-stone-300 px-2 py-1.5 text-sm"
-                placeholder="Текстовый маркер (опционально)"
-              />
-              <input
-                value={String((editingBlock.content_json?.block_logo_url as string | undefined) ?? '')}
-                onChange={(e) =>
-                  updateDraftBlock(editingBlock.id, {
-                    content_json: { ...editingBlock.content_json, block_logo_url: e.target.value },
-                  })
-                }
-                className="rounded-lg border border-stone-300 px-2 py-1.5 text-sm"
-                placeholder="URL лого (опционально)"
-              />
+                  className="rounded-lg border border-stone-300 px-2 py-1.5 text-sm font-normal"
+                  placeholder="Маркер"
+                />
+              </label>
+              <label className="flex flex-col gap-1 text-xs font-semibold text-stone-700">
+                URL лого
+                <input
+                  id={`${blockEditFieldsUid}-logo`}
+                  value={String((editingBlock.content_json?.block_logo_url as string | undefined) ?? '')}
+                  onChange={(e) =>
+                    updateDraftBlock(editingBlock.id, {
+                      content_json: { ...editingBlock.content_json, block_logo_url: e.target.value },
+                    })
+                  }
+                  className="rounded-lg border border-stone-300 px-2 py-1.5 text-sm font-normal"
+                  placeholder="https://…"
+                />
+                <p className="mt-0.5 text-xs text-stone-500">Ссылка на изображение иконки (png/jpg)</p>
+              </label>
               <div className="sm:col-span-2">
                 <p className="mb-1 text-xs font-semibold text-stone-600">Иконка блока (React)</p>
-                <div className="flex max-h-28 flex-wrap gap-1 overflow-y-auto pr-1">
+                <div className="flex max-h-44 flex-wrap gap-1 overflow-y-auto pr-1">
                 {BLOCK_MARK_ICON_OPTIONS.map((markIcon) => (
                   <button
                     key={markIcon.key}
@@ -3002,72 +3167,83 @@ export function ServicePlannerPage() {
               </div>
               {!isSeparatorBlock(editingBlock) ? (
                 <>
-                  <select
-                    value={editingBlock.block_type_id}
-                    onChange={(e) => {
-                      const nextTypeId = Number(e.target.value) || editingBlock.block_type_id;
-                      const typeMeta = blockTypes.find((t) => t.id === nextTypeId);
-                      const nextPatch: Partial<ServicePlanBlock> = {
-                        block_type_id: nextTypeId,
-                      };
-                      if ((typeMeta?.code ?? '').toLowerCase() === 'birthdays') {
-                        nextPatch.title = 'Дни рождения недели';
+                  <label className="flex flex-col gap-1 text-xs font-semibold text-stone-700">
+                    Тип блока
+                    <select
+                      id={`${blockEditFieldsUid}-type`}
+                      value={editingBlock.block_type_id}
+                      onChange={(e) => {
+                        const nextTypeId = Number(e.target.value) || editingBlock.block_type_id;
+                        const typeMeta = blockTypes.find((t) => t.id === nextTypeId);
+                        const nextPatch: Partial<ServicePlanBlock> = {
+                          block_type_id: nextTypeId,
+                        };
+                        if ((typeMeta?.code ?? '').toLowerCase() === 'birthdays') {
+                          nextPatch.title = 'Дни рождения недели';
+                        }
+                        if ((typeMeta?.code ?? '').toLowerCase() === 'sermon') {
+                          const preacher =
+                            draft?.preacher_member_id != null
+                              ? usersById.get(draft.preacher_member_id) ?? null
+                              : null;
+                          nextPatch.assigned_member_id = draft?.preacher_member_id ?? null;
+                          const topicRaw = editingBlock.content_json?.sermon_topic;
+                          const topic = typeof topicRaw === 'string' ? topicRaw.trim() : '';
+                          const preacherName = preacher ? userLabel(preacher) : 'Проповедник';
+                          nextPatch.title = topic ? `${preacherName} - ${topic}` : preacherName;
+                        }
+                        updateDraftBlock(editingBlock.id, nextPatch);
+                      }}
+                      className="rounded-lg border border-stone-300 px-2 py-1.5 text-sm font-normal"
+                    >
+                      {blockTypes.map((t) => (
+                        <option key={t.id} value={t.id}>
+                          {t.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="flex flex-col gap-1 text-xs font-semibold text-stone-700">
+                    Длительность, мин
+                    <input
+                      id={`${blockEditFieldsUid}-duration`}
+                      type="number"
+                      min={1}
+                      max={180}
+                      value={editingBlock.duration_minutes}
+                      onChange={(e) =>
+                        updateDraftBlock(editingBlock.id, {
+                          duration_minutes: Math.max(1, Number(e.target.value) || 1),
+                        })
                       }
-                      if ((typeMeta?.code ?? '').toLowerCase() === 'sermon') {
-                        const preacher =
-                          draft?.preacher_member_id != null
-                            ? usersById.get(draft.preacher_member_id) ?? null
-                            : null;
-                        nextPatch.assigned_member_id = draft?.preacher_member_id ?? null;
-                        const topicRaw = editingBlock.content_json?.sermon_topic;
-                        const topic = typeof topicRaw === 'string' ? topicRaw.trim() : '';
-                        const preacherName = preacher ? userLabel(preacher) : 'Проповедник';
-                        nextPatch.title = topic ? `${preacherName} - ${topic}` : preacherName;
-                      }
-                      updateDraftBlock(editingBlock.id, nextPatch);
-                    }}
-                    className="rounded-lg border border-stone-300 px-2 py-1.5 text-sm"
-                  >
-                    {blockTypes.map((t) => (
-                      <option key={t.id} value={t.id}>
-                        {t.name}
-                      </option>
-                    ))}
-                  </select>
-                  <input
-                    type="number"
-                    min={1}
-                    max={180}
-                    value={editingBlock.duration_minutes}
-                    onChange={(e) =>
-                      updateDraftBlock(editingBlock.id, {
-                        duration_minutes: Math.max(1, Number(e.target.value) || 1),
-                      })
-                    }
-                    className="rounded-lg border border-stone-300 px-2 py-1.5 text-sm"
-                  />
-                  <select
-                    value={isSermonBlock(editingBlock) ? (draft?.preacher_member_id ?? '') : (editingBlock.assigned_member_id ?? '')}
-                    onChange={(e) => {
-                      if (isSermonBlock(editingBlock)) return;
-                      const memberId = e.target.value ? Number(e.target.value) : null;
-                      const nextPatch: Partial<ServicePlanBlock> = { assigned_member_id: memberId };
-                      if (isPoemBlock(editingBlock)) {
-                        const reader = memberId ? users.find((u) => u.id === memberId) : null;
-                        nextPatch.title = reader ? `СТИХ - ${userLabel(reader)}` : 'СТИХ - Чтец';
-                      }
-                      if (isSermonBlock(editingBlock)) {
-                        const preacher = memberId ? users.find((u) => u.id === memberId) : null;
-                        const topicRaw = editingBlock.content_json?.sermon_topic;
-                        const topic = typeof topicRaw === 'string' ? topicRaw.trim() : '';
-                        const preacherName = preacher ? userLabel(preacher) : 'Проповедник';
-                        nextPatch.title = topic ? `${preacherName} - ${topic}` : preacherName;
-                      }
-                      updateDraftBlock(editingBlock.id, nextPatch);
-                    }}
-                    className="rounded-lg border border-stone-300 px-2 py-1.5 text-sm sm:col-span-2"
-                    disabled={isSermonBlock(editingBlock)}
-                  >
+                      className="rounded-lg border border-stone-300 px-2 py-1.5 text-sm font-normal"
+                    />
+                  </label>
+                  <label className="flex flex-col gap-1 text-xs font-semibold text-stone-700 sm:col-span-2">
+                    Ответственный
+                    <select
+                      id={`${blockEditFieldsUid}-responsible`}
+                      value={isSermonBlock(editingBlock) ? (draft?.preacher_member_id ?? '') : (editingBlock.assigned_member_id ?? '')}
+                      onChange={(e) => {
+                        if (isSermonBlock(editingBlock)) return;
+                        const memberId = e.target.value ? Number(e.target.value) : null;
+                        const nextPatch: Partial<ServicePlanBlock> = { assigned_member_id: memberId };
+                        if (isPoemBlock(editingBlock)) {
+                          const reader = memberId ? users.find((u) => u.id === memberId) : null;
+                          nextPatch.title = reader ? `СТИХ - ${userLabel(reader)}` : 'СТИХ - Чтец';
+                        }
+                        if (isSermonBlock(editingBlock)) {
+                          const preacher = memberId ? users.find((u) => u.id === memberId) : null;
+                          const topicRaw = editingBlock.content_json?.sermon_topic;
+                          const topic = typeof topicRaw === 'string' ? topicRaw.trim() : '';
+                          const preacherName = preacher ? userLabel(preacher) : 'Проповедник';
+                          nextPatch.title = topic ? `${preacherName} - ${topic}` : preacherName;
+                        }
+                        updateDraftBlock(editingBlock.id, nextPatch);
+                      }}
+                      className="rounded-lg border border-stone-300 px-2 py-1.5 text-sm font-normal sm:col-span-2"
+                      disabled={isSermonBlock(editingBlock)}
+                    >
                     {isSermonBlock(editingBlock) ? (
                       <option value={draft?.preacher_member_id ?? ''}>
                         {draft?.preacher_member_id
@@ -3093,6 +3269,7 @@ export function ServicePlannerPage() {
                       </>
                     )}
                   </select>
+                  </label>
                   {isPoemBlock(editingBlock) ? (
                     <>
                       <input
@@ -3176,16 +3353,20 @@ export function ServicePlannerPage() {
                       Этот блок автоматически показывает участников, у которых день рождения на неделе даты служения.
                     </p>
                   ) : null}
-                  <textarea
-                    value={String((editingBlock.content_json?.text as string | undefined) ?? '')}
-                    onChange={(e) =>
-                      updateDraftBlock(editingBlock.id, {
-                        content_json: { ...editingBlock.content_json, text: e.target.value },
-                      })
-                    }
-                    className="min-h-[84px] rounded-lg border border-stone-300 px-2 py-1.5 text-sm sm:col-span-2"
-                    placeholder="Данные блока (текст/заметки)"
-                  />
+                  <label className="flex flex-col gap-1 text-xs font-semibold text-stone-700 sm:col-span-2">
+                    Заметки
+                    <textarea
+                      id={`${blockEditFieldsUid}-notes`}
+                      value={String((editingBlock.content_json?.text as string | undefined) ?? '')}
+                      onChange={(e) =>
+                        updateDraftBlock(editingBlock.id, {
+                          content_json: { ...editingBlock.content_json, text: e.target.value },
+                        })
+                      }
+                      className="min-h-[84px] rounded-lg border border-stone-300 px-2 py-1.5 text-sm font-normal sm:col-span-2"
+                      placeholder="Текст заметок"
+                    />
+                  </label>
                 </>
               ) : (
                 <p className="rounded-lg border border-dashed border-stone-300 bg-stone-50 px-2 py-2 text-xs text-stone-600 sm:col-span-2">
