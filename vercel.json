@@ -27,6 +27,14 @@
       "headers": [{ "key": "Cache-Control", "value": "no-cache, no-store" }]
     },
     {
+      "source": "/manifest.webmanifest",
+      "headers": [{ "key": "Cache-Control", "value": "no-cache, no-store" }]
+    },
+    {
+      "source": "/workbox-*.js",
+      "headers": [{ "key": "Cache-Control", "value": "no-cache, no-store" }]
+    },
+    {
       "source": "/(.*)",
       "headers": [
         {

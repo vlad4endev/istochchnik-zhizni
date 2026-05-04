@@ -13,7 +13,8 @@ export function useAppUpdate() {
       const reg = await navigator.serviceWorker.getRegistration();
       void reg?.update();
     };
-    const interval = setInterval(checkUpdate, 5 * 60 * 1000);
+    void checkUpdate();
+    const interval = setInterval(checkUpdate, 2 * 60 * 1000);
     return () => {
       clearInterval(interval);
       navigator.serviceWorker.removeEventListener('controllerchange', onControllerChange);

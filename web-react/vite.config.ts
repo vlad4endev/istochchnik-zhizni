@@ -21,6 +21,23 @@ export default defineConfig(({ mode }) => {
   const enablePwaDev = String(env.VITE_PWA_DEV ?? '').trim() === 'true';
   /** Видно внизу админки — чтобы отличить свежий деплой от старой «Заглушки». */
   const buildStamp = new Date().toISOString().replace('T', ' ').slice(0, 16);
+  /**
+   * Суффикс имён runtime Cache Storage: новый деплой → новые `*-cache-<tag>` → пустые кэши,
+   * браузер не подмешивает ассеты/картинки от прошлой версии после активации SW.
+   * На Vercel доступен VERCEL_GIT_COMMIT_SHA; локально — уникальный тег на сборку.
+   */
+  const deployCacheTag = (
+    process.env.VERCEL_GIT_COMMIT_SHA ||
+    process.env.VERCEL_DEPLOYMENT_ID ||
+    process.env.CF_PAGES_COMMIT_SHA ||
+    process.env.GITHUB_SHA ||
+    process.env.CI_COMMIT_SHA ||
+    ''
+  )
+    .toString()
+    .trim()
+    .slice(0, 12);
+  const runtimeCacheSuffix = deployCacheTag || `local-${Date.now().toString(36)}`;
 
   const apiProxy = {
     '/api': {
@@ -197,7 +214,7 @@ export default defineConfig(({ mode }) => {
               urlPattern: /\/api\//,
               handler: 'NetworkFirst',
               options: {
-                cacheName: 'api-cache',
+                cacheName: `api-cache-${runtimeCacheSuffix}`,
                 networkTimeoutSeconds: 3,
                 expiration: {
                   maxEntries: 100,
@@ -208,9 +225,9 @@ export default defineConfig(({ mode }) => {
             },
             {
               urlPattern: /\.(?:png|jpg|jpeg|svg|gif|webp|ico)$/,
-              handler: 'CacheFirst',
+              handler: 'StaleWhileRevalidate',
               options: {
-                cacheName: 'images-cache',
+                cacheName: `images-cache-${runtimeCacheSuffix}`,
                 expiration: {
                   maxEntries: 100,
                   maxAgeSeconds: 30 * 24 * 60 * 60,
@@ -220,9 +237,9 @@ export default defineConfig(({ mode }) => {
             },
             {
               urlPattern: /\.(?:woff|woff2|ttf|otf|eot)$/,
-              handler: 'CacheFirst',
+              handler: 'StaleWhileRevalidate',
               options: {
-                cacheName: 'fonts-cache',
+                cacheName: `fonts-cache-${runtimeCacheSuffix}`,
                 expiration: {
                   maxEntries: 20,
                   maxAgeSeconds: 30 * 24 * 60 * 60,
@@ -232,11 +249,12 @@ export default defineConfig(({ mode }) => {
             },
             {
               urlPattern: /\.(?:js|css)$/,
-              handler: 'CacheFirst',
+              handler: 'NetworkFirst',
               options: {
-                cacheName: 'static-cache',
+                cacheName: `static-cache-${runtimeCacheSuffix}`,
+                networkTimeoutSeconds: 3,
                 expiration: {
-                  maxEntries: 60,
+                  maxEntries: 80,
                   maxAgeSeconds: 7 * 24 * 60 * 60,
                 },
                 cacheableResponse: { statuses: [0, 200] },
