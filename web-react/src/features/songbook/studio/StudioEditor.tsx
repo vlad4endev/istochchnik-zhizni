@@ -852,9 +852,7 @@ export function StudioEditor() {
   const s = songQ.data;
 
   return (
-    <div
-      className={`mx-auto flex w-full max-w-[1520px] flex-col gap-4 px-2 pb-[calc(13.5rem+env(safe-area-inset-bottom))] sm:px-3 md:px-4 md:pb-10 ${shell.page}`}
-    >
+    <div className={`mx-auto flex w-full max-w-[1520px] flex-col gap-4 px-2 sm:px-3 md:px-4 ${shell.page}`}>
       <SmartImportModal
         open={importOpen}
         onClose={() => {

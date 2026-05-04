@@ -68,7 +68,7 @@ export function SongbookPage() {
 
   if (query.isLoading) {
     return (
-      <div className="mx-auto flex h-full min-h-0 max-w-3xl flex-col pb-24 text-[var(--text)]">
+      <div className="mx-auto flex h-full min-h-0 max-w-3xl flex-col text-[var(--text)]">
         <SectionHeroChrome
           title="Песенник"
           subtitle="Тексты и аккорды для богослужения"
@@ -80,7 +80,7 @@ export function SongbookPage() {
   }
   if (query.isError) {
     return (
-      <div className="mx-auto flex h-full min-h-0 max-w-3xl flex-col gap-3 pb-24 text-[var(--text)]">
+      <div className="mx-auto flex h-full min-h-0 max-w-3xl flex-col gap-3 text-[var(--text)]">
         <SectionHeroChrome
           title="Песенник"
           subtitle="Тексты и аккорды для богослужения"
@@ -92,7 +92,7 @@ export function SongbookPage() {
   }
 
   return (
-    <div className="mx-auto flex h-full min-h-0 max-w-3xl flex-col pb-24 text-[var(--text)]">
+    <div className="mx-auto flex h-full min-h-0 max-w-3xl flex-col text-[var(--text)]">
       <SectionHeroChrome
         title="Песенник"
         subtitle="Тексты и аккорды для богослужения"

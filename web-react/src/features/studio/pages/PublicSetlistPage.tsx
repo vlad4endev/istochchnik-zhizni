@@ -35,7 +35,7 @@ export function PublicSetlistPage() {
 
   return (
     <div className="h-[100dvh] overflow-y-auto overflow-x-hidden overscroll-y-contain bg-[var(--surface)]">
-      <div className="mx-auto max-w-3xl space-y-8 px-4 py-8 pb-24">
+      <div className="mx-auto max-w-3xl space-y-8 px-4 py-8">
         <p className="text-sm">
           <Link to="/login" className="text-sky-600 hover:underline">
             Войти
@@ -53,7 +53,7 @@ export function PublicSetlistPage() {
 
       <ol className="space-y-10">
         {items.map((it, idx) => (
-          <li key={it.id} className="scroll-mt-4 border-b border-stone-200 pb-10 last:border-0">
+          <li key={it.id} className="scroll-mt-4 border-b border-stone-200 pb-10 last:border-0 last:pb-0">
             <h2 className="text-lg font-semibold text-stone-900">
               {idx + 1}. {it.song.title}
             </h2>

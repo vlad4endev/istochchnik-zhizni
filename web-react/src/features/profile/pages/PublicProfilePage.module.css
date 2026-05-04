@@ -4,7 +4,7 @@
 
 .igPage {
   min-height: 100%;
-  padding-bottom: calc(var(--app-bottom-nav-total-height) + 1rem);
+  padding-bottom: 0;
   background: var(--profile-surface);
   color: var(--profile-text-body);
 }

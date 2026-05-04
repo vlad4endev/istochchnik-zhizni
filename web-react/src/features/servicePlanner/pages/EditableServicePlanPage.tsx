@@ -534,7 +534,7 @@ export function EditableServicePlanPage() {
 
   return (
     <div className="h-[100dvh] overflow-y-auto overflow-x-hidden overscroll-y-contain bg-[var(--surface)]">
-      <div className="mx-auto max-w-3xl space-y-4 px-3 py-5 pb-[calc(var(--app-bottom-nav-total-height)+2.5rem)] sm:space-y-6 sm:px-4 sm:py-8 sm:pb-24">
+      <div className="mx-auto max-w-3xl space-y-4 px-3 py-5 sm:space-y-6 sm:px-4 sm:py-8">
         <header className="rounded-2xl border border-stone-200 bg-white p-3 shadow-sm sm:p-4">
           <h1 className="text-xl font-extrabold text-stone-900 sm:text-2xl">План собрания на {dateText}</h1>
           <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-stone-600 sm:text-sm">

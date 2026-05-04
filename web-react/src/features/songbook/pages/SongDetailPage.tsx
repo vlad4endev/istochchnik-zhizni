@@ -238,7 +238,7 @@ export function SongDetailPage() {
   };
 
   return (
-    <div className={`relative mx-auto max-w-3xl pb-24 ${shell.page}`}>
+    <div className={`relative mx-auto max-w-3xl ${shell.page}`}>
       <div className="fixed inset-x-0 top-0 z-[55] h-1 bg-stone-200/70">
         <div className="h-full bg-primary transition-[width] duration-150" style={{ width: `${scrollProgress * 100}%` }} />
       </div>

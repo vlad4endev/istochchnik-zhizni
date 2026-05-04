@@ -99,7 +99,7 @@ export function LimitedRegistrationDashboard({ registrationStatus, firstName }: 
   const isRejected = registrationStatus === 'rejected';
 
   return (
-    <div className="min-h-full bg-[var(--surface)] px-3 pb-[max(2rem,env(safe-area-inset-bottom,0px))] pt-2 sm:px-4 sm:pt-3 shell:px-6 md:px-8">
+    <div className="min-h-full bg-[var(--surface)] px-3 pt-2 sm:px-4 sm:pt-3 shell:px-6 md:px-8">
       <div className="mx-auto w-full max-w-2xl space-y-5">
         {/* Статус — первая полоса */}
         <section

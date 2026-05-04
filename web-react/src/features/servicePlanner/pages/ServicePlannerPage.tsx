@@ -1308,8 +1308,11 @@ export function ServicePlannerPage() {
                 className="min-h-[46px] rounded-xl border border-stone-300 bg-white px-3 py-2 text-base sm:text-sm"
               />
             </div>
-            <p className="mt-2 break-words text-xs leading-snug text-stone-600">
-              Дата служения: <span className="font-semibold text-stone-800">{formatRuDateLong(createPlanDate)}</span>
+            <p className="mt-2 text-xs leading-snug text-stone-600">
+              <span className="block sm:inline">Дата служения:</span>{' '}
+              <span className="block break-words font-semibold text-stone-800 sm:inline">
+                {formatRuDateLong(createPlanDate)}
+              </span>
             </p>
             <button
               type="button"
@@ -2104,7 +2107,7 @@ export function ServicePlannerPage() {
           </button>
         </div>
       ) : null}
-      <section className="mx-auto flex w-full max-w-4xl flex-col gap-3 px-3 py-4 pb-[calc(var(--app-bottom-nav-total-height)+3rem)] sm:px-4 md:px-6 md:pb-6">
+      <section className="mx-auto flex w-full max-w-4xl flex-col gap-3 px-3 py-4 sm:px-4 md:px-6">
       <header className="rounded-2xl border border-stone-200 bg-white p-4 shadow-sm">
         <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-2">
           <div className="flex min-w-0 items-center gap-2">

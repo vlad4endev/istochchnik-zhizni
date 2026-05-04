@@ -307,7 +307,7 @@ export function PublicServicePlanPage() {
 
   return (
     <div className="h-[100dvh] overflow-y-auto overflow-x-hidden overscroll-y-contain bg-[var(--surface)]">
-      <div className="mx-auto max-w-3xl space-y-4 px-3 py-5 pb-[calc(var(--app-bottom-nav-total-height)+2rem)] sm:space-y-6 sm:px-4 sm:py-8 sm:pb-24">
+      <div className="mx-auto max-w-3xl space-y-4 px-3 py-5 sm:space-y-6 sm:px-4 sm:py-8">
         <p className="text-sm">
           <Link to="/login" className="text-sky-600 hover:underline">
             Войти

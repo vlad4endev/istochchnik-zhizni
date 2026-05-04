@@ -2,7 +2,7 @@ import { SkeletonBox } from '@/components/ui/SkeletonBox';
 
 export function DashboardSkeleton() {
   return (
-    <div className="min-h-full bg-[var(--surface)] px-3 pb-[max(2rem,env(safe-area-inset-bottom,0px))] sm:px-4 shell:px-6 md:px-8 xl:px-10">
+    <div className="min-h-full bg-[var(--surface)] px-3 sm:px-4 shell:px-6 md:px-8 xl:px-10">
       <div className="mx-auto w-full max-w-7xl 2xl:max-w-[1480px] space-y-4" aria-busy="true" aria-label="Загрузка главной страницы">
         <div className="rounded-[22px] bg-[#6B2D3E] px-4 pb-6 pt-5 lg:px-7 lg:py-[22px]">
           <SkeletonBox width="120px" height="13px" className="opacity-70" />

@@ -306,7 +306,7 @@ html.app-keyboard-open .app-bottom-nav {
 
 /* Таббар скрыт — не оставляем «полосу» под ним (иначе огромный пустой низ на дашборде и в модалках). */
 html.app-keyboard-open main.app-main-content.page-content {
-  padding-bottom: max(0.75rem, env(safe-area-inset-bottom, 0px));
+  padding-bottom: 0;
 }
 
 html.dark .rounded-2xl,

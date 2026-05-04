@@ -277,7 +277,7 @@ export function AddSongPage() {
   };
 
   return (
-    <div className={`mx-auto max-w-6xl space-y-6 pb-36 md:pb-24 ${theme.page}`}>
+    <div className={`mx-auto max-w-6xl space-y-6 ${theme.page}`}>
       <SmartImportModal
         open={importOpen}
         onClose={() => {
