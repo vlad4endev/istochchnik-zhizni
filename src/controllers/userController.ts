@@ -314,6 +314,11 @@ export async function createUserHandler(req: Request, res: Response): Promise<vo
   }
 
   if (!isValidOptionalShortString(req.body.ministry_direction)) {
+  if (!isValidOptionalShortString(req.body.telegram_chat_id, 64)) {
+    res.status(400).json({ error: 'Field "telegram_chat_id" must be a short string' });
+    return;
+  }
+
     res.status(400).json({ error: 'Field "ministry_direction" must be a short string' });
     return;
   }
@@ -336,6 +341,8 @@ export async function createUserHandler(req: Request, res: Response): Promise<vo
       last_name: (last_name as string).trim(),
       phone_number: (phone_number as string).trim(),
       birth_date: birthYmd,
+      telegram_chat_id:
+        typeof req.body.telegram_chat_id === 'string' ? req.body.telegram_chat_id.trim() : undefined,
     });
     notifyRealtime(['members', 'calendar']);
     res.status(201).json(user);
@@ -572,6 +579,11 @@ export async function updateUserHandler(req: Request, res: Response): Promise<vo
 
   if (!isValidOptionalShortString(req.body.ministry_direction)) {
     res.status(400).json({ error: 'Field "ministry_direction" must be a short string' });
+    return;
+  }
+
+  if (!isValidOptionalShortString(req.body.telegram_chat_id, 64)) {
+    res.status(400).json({ error: 'Field "telegram_chat_id" must be a short string' });
     return;
   }
 

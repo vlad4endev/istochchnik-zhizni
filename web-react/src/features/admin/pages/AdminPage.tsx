@@ -60,14 +60,18 @@ import {
   fetchGlobalMinistries,
   fetchGlobalThemes,
   fetchRoleTemplates,
+  fetchTelegramDispatchRecipients,
+  fetchTelegramDispatchSettings,
   fetchTelegramSettings,
   fetchSmsSettings,
   fetchAccessRequests,
   mergeDuplicateMembers,
   resetAdminMemberPassword,
   swapAllMembersFirstLastNames,
+  patchTelegramDispatchSettings,
   patchTelegramSettings,
   patchSmsSettings,
+  runTelegramDispatchNow,
   sendTelegramMessage,
   setDirectionTemplateRoles,
   setMemberAppRoles,
@@ -81,6 +85,8 @@ import {
   type MinistryDirectionTemplate,
   type ChurchEventItem,
   type TelegramSettingsResponse,
+  type TelegramDispatchRecipient,
+  type TelegramDispatchSettingsResponse,
   type SmsSettingsResponse,
 } from '../api';
 import { NextWeekPrayerPlanSection } from '../../calendar/components/NextWeekPrayerPlanSection';
@@ -143,6 +149,8 @@ const Q_GB = ['admin', 'global', 'backsliders'] as const;
 const Q_EVENTS = ['admin', 'events'] as const;
 const Q_EVENT_CATEGORY_OPTIONS = ['admin', 'church-event-category-options'] as const;
 const Q_TG = ['admin', 'telegram', 'settings'] as const;
+const Q_TG_DISPATCH = ['admin', 'telegram', 'dispatch-settings'] as const;
+const Q_TG_RECIPIENTS = ['admin', 'telegram', 'recipients'] as const;
 const Q_SMS = ['admin', 'sms', 'settings'] as const;
 const Q_ACCESS = ['admin', 'access-requests'] as const;
 
@@ -534,6 +542,7 @@ function MembersSection({
     first_name: '',
     last_name: '',
     phone_number: '',
+    telegram_chat_id: '',
     birth_date: '',
     ministry_role: '',
     ministry_direction: '',
@@ -543,6 +552,7 @@ function MembersSection({
     first_name: '',
     last_name: '',
     phone_number: '',
+    telegram_chat_id: '',
     birth_date: '',
     ministry_role: '',
     ministry_direction: '',
@@ -629,6 +639,7 @@ function MembersSection({
     first_name: form.first_name.trim(),
     last_name: form.last_name.trim(),
     phone_number: form.phone_number.trim(),
+    ...(form.telegram_chat_id.trim() ? { telegram_chat_id: form.telegram_chat_id.trim() } : {}),
     birth_date: dateInputValueFromApi(form.birth_date.trim()),
     ...(normalizeMinistryRoles(form.ministry_role) ? { ministry_role: normalizeMinistryRoles(form.ministry_role) } : {}),
     ...(form.ministry_direction.trim() ? { ministry_direction: form.ministry_direction.trim() } : {}),
@@ -642,6 +653,7 @@ function MembersSection({
         first_name: '',
         last_name: '',
         phone_number: '',
+        telegram_chat_id: '',
         birth_date: '',
         ministry_role: '',
         ministry_direction: '',
@@ -678,6 +690,7 @@ function MembersSection({
         first_name: '',
         last_name: '',
         phone_number: '',
+        telegram_chat_id: '',
         birth_date: '',
         ministry_role: '',
         ministry_direction: '',
@@ -759,6 +772,7 @@ function MembersSection({
         first_name: editForm.first_name.trim(),
         last_name: editForm.last_name.trim(),
         phone_number: editForm.phone_number.trim(),
+        telegram_chat_id: editForm.telegram_chat_id.trim(),
         birth_date: dateInputValueFromApi(editForm.birth_date.trim()),
         ministry_role: normalizeMinistryRoles(editForm.ministry_role),
         ministry_direction: editForm.ministry_direction.trim(),
@@ -902,6 +916,7 @@ function MembersSection({
       first_name: ef,
       last_name: el,
       phone_number: (u.phone_number ?? '').trim(),
+      telegram_chat_id: (u.telegram_chat_id ?? '').trim(),
       birth_date: dateInputValueFromApi(u.birth_date),
       ministry_role: normalizeMinistryRoles((u.ministry_role ?? '').trim()),
       ministry_direction: (u.ministry_direction ?? '').trim(),
@@ -1370,6 +1385,15 @@ function MembersSection({
                   />
                 </div>
                 <div>
+                  <label className="mb-1 block text-xs font-semibold text-stone-600">Telegram ID</label>
+                  <input
+                    className={fieldClass()}
+                    value={form.telegram_chat_id}
+                    onChange={(e) => setForm((s) => ({ ...s, telegram_chat_id: e.target.value }))}
+                    placeholder="например: 123456789"
+                  />
+                </div>
+                <div>
                   <label className="mb-1 block text-xs font-semibold text-stone-600">Дата рождения</label>
                   <input
                     className={fieldClass()}
@@ -1715,6 +1739,15 @@ function MembersSection({
                       inputMode="tel"
                       value={editForm.phone_number}
                       onChange={(e) => setEditForm((s) => ({ ...s, phone_number: e.target.value }))}
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold text-stone-600">Telegram ID</label>
+                    <input
+                      className={fieldClass()}
+                      value={editForm.telegram_chat_id}
+                      onChange={(e) => setEditForm((s) => ({ ...s, telegram_chat_id: e.target.value }))}
+                      placeholder="например: 123456789"
                     />
                   </div>
                   <div>
@@ -4273,6 +4306,14 @@ function TelegramSection() {
     queryKey: Q_TG,
     queryFn: fetchTelegramSettings,
   });
+  const dispatchQ = useQuery({
+    queryKey: Q_TG_DISPATCH,
+    queryFn: fetchTelegramDispatchSettings,
+  });
+  const recipientsQ = useQuery({
+    queryKey: Q_TG_RECIPIENTS,
+    queryFn: fetchTelegramDispatchRecipients,
+  });
   const [form, setForm] = useState({
     enabled: false,
     bot_token: '',
@@ -4283,6 +4324,15 @@ function TelegramSection() {
   });
   const [customText, setCustomText] = useState('');
   const [customChatId, setCustomChatId] = useState('');
+  const [dispatchForm, setDispatchForm] = useState<TelegramDispatchSettingsResponse>({
+    enabled: false,
+    kind: 'daily',
+    time_hhmm: '09:00',
+    once_at_iso: null,
+    target: 'all',
+    member_ids: [],
+    last_sent_at_iso: null,
+  });
   const [note, setNote] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
   const [showToken, setShowToken] = useState(false);
 
@@ -4297,6 +4347,11 @@ function TelegramSection() {
       prayer_template: data.prayer_template ?? '',
     });
   }, [data]);
+
+  useEffect(() => {
+    if (!dispatchQ.data) return;
+    setDispatchForm(dispatchQ.data);
+  }, [dispatchQ.data]);
 
   const saveMut = useMutation({
     mutationFn: () =>
@@ -4317,27 +4372,56 @@ function TelegramSection() {
   });
 
   const sendMut = useMutation({
-    mutationFn: (payload: { kind: 'prayer_today' | 'next_week' | 'custom'; text?: string; chat_id?: string }) =>
+    mutationFn: (payload: { kind: 'prayer_today' | 'next_week' | 'custom' | 'prayer_today_all_members'; text?: string; chat_id?: string }) =>
       sendTelegramMessage(payload),
     onSuccess: (r) => {
+      if (r.kind === 'prayer_today_all_members') {
+        setNote({ type: 'ok', text: `Рассылка выполнена. Отправлено пользователям: ${r.sent_count ?? 0}.` });
+        return;
+      }
       setNote({ type: 'ok', text: `Сообщение отправлено в чат ${r.chat_id}.` });
     },
     onError: (e) => setNote({ type: 'err', text: apiErrorMessage(e, 'Ошибка отправки в Telegram.') }),
   });
 
-  if (isLoading) {
+  const saveDispatchMut = useMutation({
+    mutationFn: () => patchTelegramDispatchSettings(dispatchForm),
+    onSuccess: (next) => {
+      setDispatchForm(next);
+      qc.setQueryData(Q_TG_DISPATCH, next);
+      setNote({ type: 'ok', text: 'Настройки рассылки сохранены.' });
+    },
+    onError: (e) => setNote({ type: 'err', text: apiErrorMessage(e, 'Не удалось сохранить рассылку.') }),
+  });
+
+  const runDispatchNowMut = useMutation({
+    mutationFn: () => runTelegramDispatchNow(),
+    onSuccess: (r) => {
+      setNote({ type: 'ok', text: `Рассылка отправлена (${r.mode === 'all' ? 'всем' : 'выбранным'}): ${r.sent_count}.` });
+      void qc.invalidateQueries({ queryKey: Q_TG_DISPATCH });
+    },
+    onError: (e) => setNote({ type: 'err', text: apiErrorMessage(e, 'Не удалось запустить рассылку.') }),
+  });
+
+  if (isLoading || dispatchQ.isLoading || recipientsQ.isLoading) {
     return <div className="h-44 animate-pulse rounded-2xl bg-stone-200/50" />;
   }
 
-  if (error) {
+  if (error || dispatchQ.error || recipientsQ.error) {
     return (
       <div className="rounded-2xl border border-red-200 bg-red-50/80 p-6 text-center">
         <p className="font-semibold text-red-900">Не удалось загрузить Telegram настройки</p>
-        <p className="mt-2 text-sm text-red-800">{apiErrorMessage(error, 'Ошибка сети или сервера.')}</p>
+        <p className="mt-2 text-sm text-red-800">
+          {apiErrorMessage(error ?? dispatchQ.error ?? recipientsQ.error, 'Ошибка сети или сервера.')}
+        </p>
         <button
           type="button"
           className={`${btnPrimary('mt-4')}`}
-          onClick={() => void qc.invalidateQueries({ queryKey: Q_TG })}
+          onClick={() => {
+            void qc.invalidateQueries({ queryKey: Q_TG });
+            void qc.invalidateQueries({ queryKey: Q_TG_DISPATCH });
+            void qc.invalidateQueries({ queryKey: Q_TG_RECIPIENTS });
+          }}
         >
           Обновить
         </button>
@@ -4375,8 +4459,8 @@ function TelegramSection() {
             <LuSend className="h-5 w-5" />
           </span>
           <div className="min-w-0 flex-1">
-            <h3 className="text-[15px] font-semibold text-stone-900">Подключение Telegram-бота</h3>
-            <p className="mt-0.5 text-xs text-stone-400">Администраторы только</p>
+            <h3 className="text-[15px] font-semibold text-stone-900">Настройки Telegram-бота</h3>
+            <p className="mt-0.5 text-xs text-stone-400">Включите бота и укажите chat_id для автосообщений</p>
           </div>
           <label className="relative inline-block h-5 w-9 shrink-0">
             <input
@@ -4410,13 +4494,13 @@ function TelegramSection() {
             </button>
           </div>
           <p className="mt-1 text-xs text-stone-500">
-            Хранить также в переменной окружения <code>TELEGRAM_BOT_TOKEN</code>
+            Токен можно хранить в БД или в переменной окружения <code>TELEGRAM_BOT_TOKEN</code>
           </p>
         </div>
 
         <div className="mt-4 grid gap-3 md:grid-cols-3">
           <div>
-            <label className="mb-1 block text-xs font-semibold text-stone-600">chat_id для молитв</label>
+            <label className="mb-1 block text-xs font-semibold text-stone-600">chat_id молитвенного канала</label>
             <input
               className={fieldClass()}
               value={form.prayer_chat_id}
@@ -4425,7 +4509,7 @@ function TelegramSection() {
             />
           </div>
           <div>
-            <label className="mb-1 block text-xs font-semibold text-stone-600">chat_id для координаторов</label>
+            <label className="mb-1 block text-xs font-semibold text-stone-600">chat_id канала координаторов</label>
             <input
               className={fieldClass()}
               value={form.coordinator_chat_id}
@@ -4434,7 +4518,7 @@ function TelegramSection() {
             />
           </div>
           <div>
-            <label className="mb-1 block text-xs font-semibold text-stone-600">chat_id по умолчанию</label>
+            <label className="mb-1 block text-xs font-semibold text-stone-600">chat_id по умолчанию (fallback)</label>
             <input
               className={fieldClass()}
               value={form.default_chat_id}
@@ -4447,12 +4531,16 @@ function TelegramSection() {
 
       <section className="rounded-xl border border-[#F0E9EA] bg-white p-5">
         <h3 className="text-[15px] font-semibold text-stone-900">Шаблон «Молитва на сегодня»</h3>
-        <p className="mt-1 text-sm text-stone-600">Отправляется каждый день участнику молитвенного цикла</p>
+        <p className="mt-1 text-sm text-stone-600">
+          Отправляется ботом и включает участника дня + все темы, служения и список отпавших.
+        </p>
         <textarea
           className="mt-3 min-h-[160px] w-full resize-y rounded-lg border border-stone-200 px-3 py-3 font-mono text-[13px] leading-relaxed text-stone-700 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
           value={form.prayer_template}
           onChange={(e) => setForm((s) => ({ ...s, prayer_template: e.target.value }))}
-          placeholder={'Молитва на {{date}}\n\nЧлен церкви: {{member_name}}\nНужда: {{member_prayer_request}}'}
+          placeholder={
+            'Сегодня {{date}} мы молимся за члена церкви:\n\n📌 {{member_name}}\nпросит молиться:\n{{member_prayer_request_bullets}}\n\n{{all_themes_block}}\n\n{{all_ministries_block}}\n\n📍Молитва за отпавших: {{all_backsliders_inline}}'
+          }
         />
         <p className="mt-2 text-xs text-stone-400">
           Переменные:{' '}
@@ -4460,17 +4548,149 @@ function TelegramSection() {
             '{{date}}',
             '{{member_name}}',
             '{{member_prayer_request}}',
+            '{{member_prayer_request_bullets}}',
             '{{theme_title}}',
             '{{theme_bible_verse}}',
             '{{theme_prayer_points}}',
             '{{ministry_title}}',
+            '{{ministry_prayer_points}}',
             '{{backslider_name}}',
+            '{{all_themes_block}}',
+            '{{all_ministries_block}}',
+            '{{all_backsliders_inline}}',
           ].map((v) => (
             <code key={v} className="mx-0.5 inline-block rounded bg-stone-100 px-1.5 py-0.5 text-[11px] text-stone-700">
               {v}
             </code>
           ))}
         </p>
+      </section>
+
+      <section className="rounded-xl border border-[#F0E9EA] bg-white p-5">
+        <h3 className="text-[15px] font-semibold text-stone-900">Планировщик рассылки</h3>
+        <p className="mt-1 text-sm text-stone-600">
+          Гибкая отправка молитвенного календаря: ежедневно или разово, одному/нескольким или всем.
+        </p>
+        <div className="mt-4 grid gap-3 md:grid-cols-2">
+          <label className="flex cursor-pointer items-center justify-between rounded-xl border border-stone-200 px-3 py-2.5">
+            <span className="text-sm text-stone-800">Включить авторассылку</span>
+            <span className="relative inline-flex h-6 w-11 items-center">
+              <input
+                type="checkbox"
+                className="peer sr-only"
+                checked={dispatchForm.enabled}
+                onChange={(e) => setDispatchForm((s) => ({ ...s, enabled: e.target.checked }))}
+              />
+              <span className="h-6 w-11 rounded-full bg-stone-300 transition-colors peer-checked:bg-primary" />
+              <span className="absolute left-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform peer-checked:translate-x-5" />
+            </span>
+          </label>
+          <div>
+            <label className="mb-1 block text-xs font-semibold text-stone-600">Режим</label>
+            <select
+              className={fieldClass()}
+              value={dispatchForm.kind}
+              onChange={(e) =>
+                setDispatchForm((s) => ({
+                  ...s,
+                  kind: e.target.value as 'daily' | 'once',
+                }))
+              }
+            >
+              <option value="daily">Ежедневно</option>
+              <option value="once">Разово</option>
+            </select>
+          </div>
+          {dispatchForm.kind === 'daily' ? (
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-stone-600">Время (чч:мм)</label>
+              <input
+                type="time"
+                className={fieldClass()}
+                value={dispatchForm.time_hhmm ?? '09:00'}
+                onChange={(e) => setDispatchForm((s) => ({ ...s, time_hhmm: e.target.value }))}
+              />
+            </div>
+          ) : (
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-stone-600">Дата и время отправки</label>
+              <input
+                type="datetime-local"
+                className={fieldClass()}
+                value={dispatchForm.once_at_iso ? dispatchForm.once_at_iso.slice(0, 16) : ''}
+                onChange={(e) =>
+                  setDispatchForm((s) => ({
+                    ...s,
+                    once_at_iso: e.target.value ? new Date(e.target.value).toISOString() : null,
+                  }))
+                }
+              />
+            </div>
+          )}
+          <div>
+            <label className="mb-1 block text-xs font-semibold text-stone-600">Кому отправлять</label>
+            <select
+              className={fieldClass()}
+              value={dispatchForm.target}
+              onChange={(e) => setDispatchForm((s) => ({ ...s, target: e.target.value as 'all' | 'selected' }))}
+            >
+              <option value="all">Всем с Telegram ID</option>
+              <option value="selected">Выбранным пользователям</option>
+            </select>
+          </div>
+        </div>
+        {dispatchForm.target === 'selected' ? (
+          <div className="mt-4 rounded-xl border border-stone-200 p-3">
+            <label className="mb-2 block text-xs font-semibold text-stone-600">Выбор пользователей (можно одного или нескольких)</label>
+            <div className="max-h-52 space-y-1 overflow-y-auto">
+              {(recipientsQ.data ?? []).map((u: TelegramDispatchRecipient) => {
+                const checked = dispatchForm.member_ids.includes(u.id);
+                return (
+                  <label key={u.id} className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-stone-50">
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={(e) =>
+                        setDispatchForm((s) => ({
+                          ...s,
+                          member_ids: e.target.checked
+                            ? Array.from(new Set([...s.member_ids, u.id]))
+                            : s.member_ids.filter((id) => id !== u.id),
+                        }))
+                      }
+                    />
+                    <span className="text-sm text-stone-700">{u.name}</span>
+                    <span className="text-xs text-stone-400">({u.telegram_chat_id})</span>
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+        ) : null}
+        <div className="mt-4 flex flex-wrap gap-2">
+          <button
+            type="button"
+            className={btnPrimary()}
+            disabled={saveDispatchMut.isPending}
+            onClick={() => {
+              setNote(null);
+              saveDispatchMut.mutate();
+            }}
+          >
+            {saveDispatchMut.isPending ? 'Сохранение…' : 'Сохранить планировщик'}
+          </button>
+          <button
+            type="button"
+            className={btnSecondary()}
+            disabled={runDispatchNowMut.isPending}
+            onClick={() => {
+              setNote(null);
+              runDispatchNowMut.mutate();
+            }}
+          >
+            {runDispatchNowMut.isPending ? 'Отправка…' : 'Запустить рассылку сейчас'}
+          </button>
+        </div>
       </section>
 
       <div className="flex justify-end">
@@ -4490,7 +4710,7 @@ function TelegramSection() {
       <section className="rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] p-5 shadow-[var(--shadow)]">
         <h3 className="text-base font-extrabold text-stone-900">Быстрые отправки</h3>
         <p className="mt-1 text-sm text-stone-600">
-          Можно отправить сегодняшнюю молитву, план на следующую неделю или произвольное уведомление.
+          Можно отправить сегодняшнюю молитву, план на следующую неделю, рассылку всем с Telegram ID или произвольное уведомление.
         </p>
         <div className="mt-4 flex flex-wrap gap-2">
           <button
@@ -4514,6 +4734,17 @@ function TelegramSection() {
             }}
           >
             Список на следующую неделю
+          </button>
+          <button
+            type="button"
+            className={btnSecondary()}
+            disabled={sendMut.isPending}
+            onClick={() => {
+              setNote(null);
+              sendMut.mutate({ kind: 'prayer_today_all_members' });
+            }}
+          >
+            Рассылка всем с Telegram ID
           </button>
         </div>
 

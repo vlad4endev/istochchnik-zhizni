@@ -1,5 +1,10 @@
 import { query } from '../config/db';
-import { getMemberAssignmentsForWeek, getPrayerDataByDate } from './calendarService';
+import {
+  getAllPrayerPlanSections,
+  getMemberAssignmentsForWeek,
+  getPrayerDataByDate,
+  type PrayerPlanSections,
+} from './calendarService';
 
 export interface TelegramSettings {
   enabled: boolean;
@@ -9,6 +14,31 @@ export interface TelegramSettings {
   default_chat_id: string | null;
   prayer_template: string | null;
   has_bot_token: boolean;
+}
+
+export interface TelegramDispatchRecipient {
+  id: number;
+  name: string;
+  telegram_chat_id: string;
+}
+
+export interface TelegramDispatchSettings {
+  enabled: boolean;
+  kind: 'daily' | 'once';
+  time_hhmm: string | null;
+  once_at_iso: string | null;
+  target: 'all' | 'selected';
+  member_ids: number[];
+  last_sent_at_iso: string | null;
+}
+
+export interface TelegramDispatchSettingsUpdate {
+  enabled?: boolean;
+  kind?: 'daily' | 'once';
+  time_hhmm?: string | null;
+  once_at_iso?: string | null;
+  target?: 'all' | 'selected';
+  member_ids?: number[];
 }
 
 export interface TelegramSettingsUpdate {
@@ -45,6 +75,13 @@ async function ensureSettingsColumns(): Promise<void> {
     'ALTER TABLE global_settings ADD COLUMN IF NOT EXISTS telegram_enabled BOOLEAN NOT NULL DEFAULT FALSE',
   );
   await query('ALTER TABLE global_settings ADD COLUMN IF NOT EXISTS telegram_prayer_template TEXT');
+  await query('ALTER TABLE global_settings ADD COLUMN IF NOT EXISTS telegram_dispatch_enabled BOOLEAN NOT NULL DEFAULT FALSE');
+  await query("ALTER TABLE global_settings ADD COLUMN IF NOT EXISTS telegram_dispatch_kind VARCHAR(16) NOT NULL DEFAULT 'daily'");
+  await query('ALTER TABLE global_settings ADD COLUMN IF NOT EXISTS telegram_dispatch_time VARCHAR(5)');
+  await query('ALTER TABLE global_settings ADD COLUMN IF NOT EXISTS telegram_dispatch_once_at TIMESTAMPTZ');
+  await query("ALTER TABLE global_settings ADD COLUMN IF NOT EXISTS telegram_dispatch_target VARCHAR(16) NOT NULL DEFAULT 'all'");
+  await query('ALTER TABLE global_settings ADD COLUMN IF NOT EXISTS telegram_dispatch_member_ids INTEGER[] NOT NULL DEFAULT ARRAY[]::INTEGER[]');
+  await query('ALTER TABLE global_settings ADD COLUMN IF NOT EXISTS telegram_dispatch_last_sent_at TIMESTAMPTZ');
 }
 
 async function readSettingsRow(): Promise<{
@@ -54,6 +91,13 @@ async function readSettingsRow(): Promise<{
   telegram_coordinator_chat_id: string | null;
   telegram_default_chat_id: string | null;
   telegram_prayer_template: string | null;
+  telegram_dispatch_enabled: boolean;
+  telegram_dispatch_kind: 'daily' | 'once';
+  telegram_dispatch_time: string | null;
+  telegram_dispatch_once_at: string | null;
+  telegram_dispatch_target: 'all' | 'selected';
+  telegram_dispatch_member_ids: number[];
+  telegram_dispatch_last_sent_at: string | null;
 }> {
   await ensureSettingsColumns();
   await query(
@@ -68,7 +112,14 @@ async function readSettingsRow(): Promise<{
        telegram_prayer_chat_id,
        telegram_coordinator_chat_id,
        telegram_default_chat_id,
-       telegram_prayer_template
+       telegram_prayer_template,
+       telegram_dispatch_enabled,
+       telegram_dispatch_kind,
+       telegram_dispatch_time,
+       telegram_dispatch_once_at::text,
+       telegram_dispatch_target,
+       telegram_dispatch_member_ids,
+       telegram_dispatch_last_sent_at::text
      FROM global_settings
      WHERE id = 1`,
   );
@@ -80,6 +131,13 @@ async function readSettingsRow(): Promise<{
         telegram_coordinator_chat_id?: string | null;
         telegram_default_chat_id?: string | null;
         telegram_prayer_template?: string | null;
+        telegram_dispatch_enabled?: boolean;
+        telegram_dispatch_kind?: unknown;
+        telegram_dispatch_time?: string | null;
+        telegram_dispatch_once_at?: string | null;
+        telegram_dispatch_target?: unknown;
+        telegram_dispatch_member_ids?: unknown;
+        telegram_dispatch_last_sent_at?: string | null;
       }
     | undefined;
   return {
@@ -89,6 +147,17 @@ async function readSettingsRow(): Promise<{
     telegram_coordinator_chat_id: normalizeOptionalString(row?.telegram_coordinator_chat_id),
     telegram_default_chat_id: normalizeOptionalString(row?.telegram_default_chat_id),
     telegram_prayer_template: normalizeOptionalString(row?.telegram_prayer_template),
+    telegram_dispatch_enabled: Boolean(row?.telegram_dispatch_enabled),
+    telegram_dispatch_kind: row?.telegram_dispatch_kind === 'once' ? 'once' : 'daily',
+    telegram_dispatch_time: normalizeOptionalString(row?.telegram_dispatch_time),
+    telegram_dispatch_once_at: normalizeOptionalString(row?.telegram_dispatch_once_at),
+    telegram_dispatch_target: row?.telegram_dispatch_target === 'selected' ? 'selected' : 'all',
+    telegram_dispatch_member_ids: Array.isArray(row?.telegram_dispatch_member_ids)
+      ? row.telegram_dispatch_member_ids
+          .map((x) => Number(x))
+          .filter((x) => Number.isInteger(x) && x > 0)
+      : [],
+    telegram_dispatch_last_sent_at: normalizeOptionalString(row?.telegram_dispatch_last_sent_at),
   };
 }
 
@@ -164,6 +233,57 @@ export async function updateTelegramSettings(input: TelegramSettingsUpdate): Pro
   return getTelegramSettings();
 }
 
+export async function getTelegramDispatchSettings(): Promise<TelegramDispatchSettings> {
+  const row = await readSettingsRow();
+  return {
+    enabled: row.telegram_dispatch_enabled,
+    kind: row.telegram_dispatch_kind,
+    time_hhmm: row.telegram_dispatch_time,
+    once_at_iso: row.telegram_dispatch_once_at,
+    target: row.telegram_dispatch_target,
+    member_ids: row.telegram_dispatch_member_ids,
+    last_sent_at_iso: row.telegram_dispatch_last_sent_at,
+  };
+}
+
+export async function updateTelegramDispatchSettings(input: TelegramDispatchSettingsUpdate): Promise<TelegramDispatchSettings> {
+  await ensureSettingsColumns();
+  const current = await readSettingsRow();
+  const nextKind = input.kind ?? current.telegram_dispatch_kind;
+  const nextTarget = input.target ?? current.telegram_dispatch_target;
+  const nextMemberIds =
+    input.member_ids !== undefined
+      ? Array.from(new Set(input.member_ids.map((x) => Number(x)).filter((x) => Number.isInteger(x) && x > 0)))
+      : current.telegram_dispatch_member_ids;
+  const nextTime = input.time_hhmm !== undefined ? normalizeOptionalString(input.time_hhmm) : current.telegram_dispatch_time;
+  const nextOnceAt = input.once_at_iso !== undefined ? normalizeOptionalString(input.once_at_iso) : current.telegram_dispatch_once_at;
+
+  await query(
+    `INSERT INTO global_settings (
+       id, start_date, telegram_dispatch_enabled, telegram_dispatch_kind, telegram_dispatch_time,
+       telegram_dispatch_once_at, telegram_dispatch_target, telegram_dispatch_member_ids
+     )
+     VALUES (1, CURRENT_DATE, $1, $2, $3, $4::timestamptz, $5, $6::int[])
+     ON CONFLICT (id) DO UPDATE
+     SET
+       telegram_dispatch_enabled = EXCLUDED.telegram_dispatch_enabled,
+       telegram_dispatch_kind = EXCLUDED.telegram_dispatch_kind,
+       telegram_dispatch_time = EXCLUDED.telegram_dispatch_time,
+       telegram_dispatch_once_at = EXCLUDED.telegram_dispatch_once_at,
+       telegram_dispatch_target = EXCLUDED.telegram_dispatch_target,
+       telegram_dispatch_member_ids = EXCLUDED.telegram_dispatch_member_ids`,
+    [
+      typeof input.enabled === 'boolean' ? input.enabled : current.telegram_dispatch_enabled,
+      nextKind,
+      nextKind === 'daily' ? nextTime : null,
+      nextKind === 'once' ? nextOnceAt : null,
+      nextTarget,
+      nextTarget === 'selected' ? nextMemberIds : [],
+    ],
+  );
+  return getTelegramDispatchSettings();
+}
+
 async function resolveTelegramConfig(): Promise<{
   enabled: boolean;
   botToken: string | null;
@@ -218,30 +338,63 @@ async function sendTelegramMessageRaw(botToken: string, chatId: string, text: st
   return { ok: response.ok, status: response.status, body };
 }
 
+async function listMemberTelegramChatIds(): Promise<string[]> {
+  const result = await query(
+    `SELECT DISTINCT telegram_chat_id
+     FROM members
+     WHERE is_active = TRUE
+       AND NULLIF(TRIM(COALESCE(telegram_chat_id, '')), '') IS NOT NULL`,
+  );
+  return result.rows
+    .map((row) => normalizeOptionalString((row as { telegram_chat_id?: unknown }).telegram_chat_id))
+    .filter((id): id is string => Boolean(id));
+}
+
+export async function listTelegramDispatchRecipients(): Promise<TelegramDispatchRecipient[]> {
+  const result = await query(
+    `SELECT
+       id,
+       COALESCE(
+         NULLIF(trim(CONCAT(COALESCE(first_name, ''), ' ', COALESCE(last_name, ''))), ''),
+         NULLIF(trim(name), ''),
+         CONCAT('#', id::text)
+       ) AS display_name,
+       trim(telegram_chat_id) AS telegram_chat_id
+     FROM members
+     WHERE is_active = TRUE
+       AND NULLIF(trim(COALESCE(telegram_chat_id, '')), '') IS NOT NULL
+     ORDER BY display_name ASC`,
+  );
+  return result.rows.map((r) => ({
+    id: Number((r as { id: unknown }).id),
+    name: String((r as { display_name: unknown }).display_name),
+    telegram_chat_id: String((r as { telegram_chat_id: unknown }).telegram_chat_id),
+  }));
+}
+
 function formatDateRuYmd(dateYmd: string): string {
   const d = new Date(`${dateYmd}T00:00:00.000Z`);
-  return new Intl.DateTimeFormat('ru-RU', {
+  const formatted = new Intl.DateTimeFormat('ru-RU', {
     weekday: 'long',
     day: 'numeric',
     month: 'long',
     timeZone: 'UTC',
   }).format(d);
+  return formatted.charAt(0).toUpperCase() + formatted.slice(1);
 }
 
 const DEFAULT_TODAY_PRAYER_TEMPLATE = [
-  'Молитва на {{date}}',
+  'Сегодня {{date}} мы молимся за члена церкви:',
   '',
-  'Участник: {{member_name}}',
-  'Нужда: {{member_prayer_request}}',
+  '📌 {{member_name}}',
+  'просит молиться:',
+  '{{member_prayer_request_bullets}}',
   '',
-  'Тема: {{theme_title}}',
-  'Стих: {{theme_bible_verse}}',
-  'Акценты: {{theme_prayer_points}}',
+  '{{all_themes_block}}',
   '',
-  'Служение: {{ministry_title}}',
-  'Запрос служения: {{ministry_prayer_points}}',
+  '{{all_ministries_block}}',
   '',
-  'Молитва за отпавших: {{backslider_name}}',
+  '📍Молитва за отпавших: {{all_backsliders_inline}}',
 ].join('\n');
 
 function safeTemplateValue(value: string | null | undefined, fallback: string): string {
@@ -253,27 +406,103 @@ function renderTemplate(template: string, vars: Record<string, string>): string 
   return template.replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_full, key: string) => vars[key] ?? '');
 }
 
+function splitMeaningfulLines(raw: string | null | undefined): string[] {
+  const src = safeTemplateValue(raw, '');
+  if (!src) return [];
+  return src
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
+}
+
+function normalizePrayerPointText(point: string, isLast: boolean): string {
+  const base = point.replace(/^-+\s*/, '').trim().replace(/[;,.!?]+$/g, '').trim();
+  if (!base) return isLast ? 'Не указано.' : 'Не указано;';
+  return `${base}${isLast ? '.' : ';'}`;
+}
+
+function ensureBulletedLines(lines: string[], fallback: string): string {
+  if (lines.length === 0) {
+    return `- ${normalizePrayerPointText(fallback, true)}`;
+  }
+  return lines.map((line, index) => `- ${normalizePrayerPointText(line, index === lines.length - 1)}`).join('\n');
+}
+
+function formatThemeBlock(theme: PrayerPlanSections['global_themes'][number]): string {
+  const title = safeTemplateValue(theme.title, 'ТЕМА НЕ УКАЗАНА').toUpperCase();
+  const verse = safeTemplateValue(theme.bible_verse, 'Стих не указан');
+  const points = ensureBulletedLines(splitMeaningfulLines(theme.prayer_points), 'Пункты молитвы не указаны');
+  return [`- ${title}`, `📖 ${verse}`, '🙏', points].join('\n');
+}
+
+function formatMinistryBlock(ministry: PrayerPlanSections['ministries'][number]): string {
+  const title = safeTemplateValue(ministry.title, 'Служение');
+  const points = splitMeaningfulLines(ministry.prayer_points);
+  if (points.length === 0) {
+    return `🛠️ Молимся за ${title}: - ${normalizePrayerPointText('Нужды служения не указаны', true)}`;
+  }
+  if (points.length === 1) {
+    return `🛠️ Молимся за ${title}: - ${normalizePrayerPointText(points[0], true)}`;
+  }
+  return [
+    `🛠️ Молимся за ${title}:`,
+    ...points.map((point, index) => `- ${normalizePrayerPointText(point, index === points.length - 1)}`),
+  ].join('\n');
+}
+
+function joinBlocks(blocks: string[], emptyFallback: string): string {
+  if (blocks.length === 0) return emptyFallback;
+  return blocks.join('\n\n');
+}
+
 export async function buildTodayPrayerTelegramText(): Promise<string> {
   const now = new Date();
   const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()))
     .toISOString()
     .slice(0, 10);
-  const [data, settings] = await Promise.all([getPrayerDataByDate(today), readSettingsRow()]);
+  const [data, sections, settings] = await Promise.all([
+    getPrayerDataByDate(today),
+    getAllPrayerPlanSections(),
+    readSettingsRow(),
+  ]);
   const member = data.members[0];
   const theme = data.global_themes[0];
   const ministry = data.ministries[0];
   const backslider = data.backsliders[0];
   const template = settings.telegram_prayer_template ?? DEFAULT_TODAY_PRAYER_TEMPLATE;
+  const allThemesBlock = joinBlocks(
+    sections.global_themes.map((item) => formatThemeBlock(item)),
+    '- ТЕМЫ МОЛИТВЫ НЕ УКАЗАНЫ',
+  );
+  const allMinistriesBlock = joinBlocks(
+    sections.ministries.map((item) => formatMinistryBlock(item)),
+    '🛠️ Молимся за служения: - не указаны',
+  );
+  const allBackslidersInline =
+    sections.backsliders.length > 0
+      ? sections.backsliders
+          .map((item) => safeTemplateValue(item.name, '').trim())
+          .filter((name) => name.length > 0)
+          .join(', ')
+      : 'не указаны';
+  const memberPrayerBullets = ensureBulletedLines(
+    splitMeaningfulLines(member?.prayer_request),
+    'Нужда не указана',
+  );
   return renderTemplate(template, {
     date: formatDateRuYmd(today),
     member_name: safeTemplateValue(member?.name, 'Не назначен'),
     member_prayer_request: safeTemplateValue(member?.prayer_request, 'Не указана'),
+    member_prayer_request_bullets: memberPrayerBullets,
     theme_title: safeTemplateValue(theme?.title, 'Не указана'),
     theme_bible_verse: safeTemplateValue(theme?.bible_verse, 'Не указан'),
     theme_prayer_points: safeTemplateValue(theme?.prayer_points, 'Не указаны'),
     ministry_title: safeTemplateValue(ministry?.title, 'Не указано'),
     ministry_prayer_points: safeTemplateValue(ministry?.prayer_points, 'Не указан'),
     backslider_name: safeTemplateValue(backslider?.name, 'Не указан'),
+    all_themes_block: allThemesBlock,
+    all_ministries_block: allMinistriesBlock,
+    all_backsliders_inline: allBackslidersInline,
   }).trim();
 }
 
@@ -340,4 +569,93 @@ export async function sendTelegramByPurpose(args: {
     throw new Error(`telegram_send_failed:${sent.status}`);
   }
   return { chat_id: chatId, status: sent.status };
+}
+
+export async function sendTodayPrayerTelegramToAllMembers(): Promise<{ sent_count: number; total: number }> {
+  const cfg = await resolveTelegramConfig();
+  if (!cfg.enabled) {
+    throw new Error('telegram_disabled');
+  }
+  if (!cfg.botToken) {
+    throw new Error('telegram_missing_token');
+  }
+
+  const [text, chatIds] = await Promise.all([buildTodayPrayerTelegramText(), listMemberTelegramChatIds()]);
+  if (chatIds.length === 0) {
+    throw new Error('telegram_missing_member_chats');
+  }
+
+  let sent = 0;
+  for (const chatId of chatIds) {
+    const result = await sendTelegramMessageRaw(cfg.botToken, chatId, text);
+    if (!result.ok) {
+      throw new Error(`telegram_send_failed:${result.status}`);
+    }
+    sent += 1;
+  }
+  return { sent_count: sent, total: chatIds.length };
+}
+
+export async function sendTodayPrayerTelegramToSelectedMembers(memberIds: number[]): Promise<{ sent_count: number; total: number }> {
+  const cfg = await resolveTelegramConfig();
+  if (!cfg.enabled) throw new Error('telegram_disabled');
+  if (!cfg.botToken) throw new Error('telegram_missing_token');
+  const ids = Array.from(new Set(memberIds.map((x) => Number(x)).filter((x) => Number.isInteger(x) && x > 0)));
+  if (ids.length === 0) throw new Error('telegram_missing_member_chats');
+  const recipients = await listTelegramDispatchRecipients();
+  const chatIds = recipients.filter((r) => ids.includes(r.id)).map((r) => r.telegram_chat_id);
+  if (chatIds.length === 0) throw new Error('telegram_missing_member_chats');
+  const text = await buildTodayPrayerTelegramText();
+  let sent = 0;
+  for (const chatId of chatIds) {
+    const result = await sendTelegramMessageRaw(cfg.botToken, chatId, text);
+    if (!result.ok) throw new Error(`telegram_send_failed:${result.status}`);
+    sent += 1;
+  }
+  return { sent_count: sent, total: chatIds.length };
+}
+
+export async function runTelegramDispatchNow(): Promise<{ sent_count: number; mode: 'all' | 'selected' }> {
+  const s = await getTelegramDispatchSettings();
+  if (s.target === 'selected') {
+    const r = await sendTodayPrayerTelegramToSelectedMembers(s.member_ids);
+    return { sent_count: r.sent_count, mode: 'selected' };
+  }
+  const r = await sendTodayPrayerTelegramToAllMembers();
+  return { sent_count: r.sent_count, mode: 'all' };
+}
+
+export async function processTelegramDispatchDue(now = new Date()): Promise<{ triggered: boolean; sent_count?: number }> {
+  const s = await getTelegramDispatchSettings();
+  if (!s.enabled) return { triggered: false };
+
+  const nowIso = now.toISOString();
+  const markSent = async () => {
+    await query('UPDATE global_settings SET telegram_dispatch_last_sent_at = NOW() WHERE id = 1');
+  };
+
+  const last = s.last_sent_at_iso ? new Date(s.last_sent_at_iso) : null;
+  if (s.kind === 'daily') {
+    const hhmm = s.time_hhmm ?? '09:00';
+    const cur = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+    const alreadyToday =
+      last != null &&
+      last.getFullYear() === now.getFullYear() &&
+      last.getMonth() === now.getMonth() &&
+      last.getDate() === now.getDate();
+    if (cur !== hhmm || alreadyToday) return { triggered: false };
+    const run = await runTelegramDispatchNow();
+    await markSent();
+    return { triggered: true, sent_count: run.sent_count };
+  }
+
+  const onceAt = s.once_at_iso ? new Date(s.once_at_iso) : null;
+  if (!onceAt || Number.isNaN(onceAt.getTime())) return { triggered: false };
+  const alreadyDone = last != null && last.toISOString() >= onceAt.toISOString();
+  if (alreadyDone || nowIso < onceAt.toISOString()) return { triggered: false };
+  const run = await runTelegramDispatchNow();
+  await query(
+    'UPDATE global_settings SET telegram_dispatch_last_sent_at = NOW(), telegram_dispatch_enabled = FALSE WHERE id = 1',
+  );
+  return { triggered: true, sent_count: run.sent_count };
 }

@@ -91,6 +91,9 @@ if (import.meta.env.PROD) {
           if (document.visibilityState === 'visible') safeUpdateRegistration(reg);
         });
       },
+      onRegisterError: (error) => {
+        console.warn('SW registration failed:', error);
+      },
     });
   } catch {
     /* ignore */

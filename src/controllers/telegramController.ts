@@ -2,8 +2,13 @@ import type { Request, Response } from 'express';
 import {
   buildNextWeekPlanTelegramText,
   buildTodayPrayerTelegramText,
+  getTelegramDispatchSettings,
   getTelegramSettings,
+  listTelegramDispatchRecipients,
+  runTelegramDispatchNow,
+  sendTodayPrayerTelegramToAllMembers,
   sendTelegramByPurpose,
+  updateTelegramDispatchSettings,
   updateTelegramSettings,
 } from '../services/telegramService';
 import { notifyRealtime } from '../realtime/notify';
@@ -28,6 +33,9 @@ function errorToStatus(error: unknown): { status: number; message: string } {
   if (msg === 'telegram_disabled') return { status: 409, message: 'Telegram модуль выключен в настройках' };
   if (msg === 'telegram_missing_token') return { status: 400, message: 'Не задан Telegram Bot Token' };
   if (msg === 'telegram_missing_chat') return { status: 400, message: 'Не задан Telegram chat_id' };
+  if (msg === 'telegram_missing_member_chats') {
+    return { status: 400, message: 'Не найдено пользователей с заполненным Telegram ID' };
+  }
   if (msg === 'telegram_empty_text') return { status: 400, message: 'Текст сообщения пуст' };
   if (msg.startsWith('telegram_send_failed:')) {
     return { status: 502, message: 'Telegram API вернул ошибку при отправке' };
@@ -123,8 +131,8 @@ export async function postTelegramSendHandler(req: Request, res: Response): Prom
   const kind = typeof body?.kind === 'string' ? body.kind.trim() : '';
   const chatIdOverride = typeof body?.chat_id === 'string' ? body.chat_id.trim() : null;
 
-  if (kind !== 'prayer_today' && kind !== 'next_week' && kind !== 'custom') {
-    res.status(400).json({ error: 'Поле "kind" должно быть: prayer_today | next_week | custom' });
+  if (kind !== 'prayer_today' && kind !== 'next_week' && kind !== 'custom' && kind !== 'prayer_today_all_members') {
+    res.status(400).json({ error: 'Поле "kind" должно быть: prayer_today | next_week | custom | prayer_today_all_members' });
     return;
   }
   if (kind === 'custom' && typeof body?.text !== 'string') {
@@ -133,6 +141,17 @@ export async function postTelegramSendHandler(req: Request, res: Response): Prom
   }
 
   try {
+    if (kind === 'prayer_today_all_members') {
+      const sent = await sendTodayPrayerTelegramToAllMembers();
+      res.json({
+        ok: true,
+        kind,
+        chat_id: 'broadcast',
+        sent_count: sent.sent_count,
+      });
+      return;
+    }
+
     const text =
       kind === 'prayer_today'
         ? await buildTodayPrayerTelegramText()
@@ -152,6 +171,82 @@ export async function postTelegramSendHandler(req: Request, res: Response): Prom
       kind,
       chat_id: sent.chat_id,
     });
+  } catch (error) {
+    const mapped = errorToStatus(error);
+    res.status(mapped.status).json({ error: mapped.message });
+  }
+}
+
+export async function getTelegramDispatchSettingsHandler(req: Request, res: Response): Promise<void> {
+  if (!ensureAdmin(req, res)) return;
+  try {
+    res.json(await getTelegramDispatchSettings());
+  } catch (error) {
+    console.error('[telegram] get dispatch settings failed:', error);
+    res.status(500).json({ error: 'Не удалось загрузить настройки рассылки' });
+  }
+}
+
+export async function patchTelegramDispatchSettingsHandler(req: Request, res: Response): Promise<void> {
+  if (!ensureAdmin(req, res)) return;
+  const b = req.body as {
+    enabled?: unknown;
+    kind?: unknown;
+    time_hhmm?: unknown;
+    once_at_iso?: unknown;
+    target?: unknown;
+    member_ids?: unknown;
+  };
+  if (b.enabled !== undefined && typeof b.enabled !== 'boolean') {
+    res.status(400).json({ error: 'Поле "enabled" должно быть boolean' });
+    return;
+  }
+  if (b.kind !== undefined && b.kind !== 'daily' && b.kind !== 'once') {
+    res.status(400).json({ error: 'Поле "kind" должно быть daily | once' });
+    return;
+  }
+  if (b.target !== undefined && b.target !== 'all' && b.target !== 'selected') {
+    res.status(400).json({ error: 'Поле "target" должно быть all | selected' });
+    return;
+  }
+  if (
+    b.member_ids !== undefined &&
+    (!Array.isArray(b.member_ids) || b.member_ids.some((x) => !Number.isInteger(Number(x)) || Number(x) <= 0))
+  ) {
+    res.status(400).json({ error: 'Поле "member_ids" должно быть массивом положительных чисел' });
+    return;
+  }
+  try {
+    const next = await updateTelegramDispatchSettings({
+      enabled: b.enabled as boolean | undefined,
+      kind: b.kind as 'daily' | 'once' | undefined,
+      time_hhmm: b.time_hhmm as string | null | undefined,
+      once_at_iso: b.once_at_iso as string | null | undefined,
+      target: b.target as 'all' | 'selected' | undefined,
+      member_ids: b.member_ids as number[] | undefined,
+    });
+    res.json(next);
+  } catch (error) {
+    console.error('[telegram] patch dispatch settings failed:', error);
+    res.status(500).json({ error: 'Не удалось сохранить настройки рассылки' });
+  }
+}
+
+export async function getTelegramDispatchRecipientsHandler(req: Request, res: Response): Promise<void> {
+  if (!ensureAdmin(req, res)) return;
+  try {
+    res.json(await listTelegramDispatchRecipients());
+  } catch (error) {
+    console.error('[telegram] recipients failed:', error);
+    res.status(500).json({ error: 'Не удалось загрузить получателей' });
+  }
+}
+
+export async function postTelegramDispatchRunNowHandler(req: Request, res: Response): Promise<void> {
+  if (!ensureAdmin(req, res)) return;
+  try {
+    const sent = await runTelegramDispatchNow();
+    res.json({ ok: true, sent_count: sent.sent_count, mode: sent.mode });
   } catch (error) {
     const mapped = errorToStatus(error);
     res.status(mapped.status).json({ error: mapped.message });

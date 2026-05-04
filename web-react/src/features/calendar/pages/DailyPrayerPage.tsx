@@ -1,4 +1,4 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   addDays,
   addWeeks,
@@ -28,6 +28,8 @@ import {
   LuHandHeart,
   LuHeartHandshake,
   LuRefreshCw,
+  LuSend,
+  LuSettings2,
   LuUserX,
 } from 'react-icons/lu';
 import { type ReactNode, useEffect, useId, useState } from 'react';
@@ -61,6 +63,15 @@ import {
   postPrayerSectionVisit,
 } from '../api';
 import { loadErrorDescription } from '../prayerPageUtils';
+import {
+  fetchTelegramDispatchRecipients,
+  fetchTelegramDispatchSettings,
+  fetchTelegramSettings,
+  patchTelegramDispatchSettings,
+  runTelegramDispatchNow,
+  type TelegramDispatchRecipient,
+  type TelegramDispatchSettingsResponse,
+} from '../../admin/api';
 
 import 'react-day-picker/style.css';
 
@@ -351,6 +362,207 @@ function EmptyBlock() {
 const CAL_START = new Date(2020, 0, 1);
 const CAL_END = new Date(2030, 11, 31);
 
+function TelegramPrayerDispatchModal(props: { open: boolean; onClose: () => void }) {
+  const { open, onClose } = props;
+  const qc = useQueryClient();
+  const settingsQ = useQuery({
+    queryKey: ['prayer', 'telegram', 'dispatch', 'settings'],
+    queryFn: fetchTelegramDispatchSettings,
+    enabled: open,
+  });
+  const recipientsQ = useQuery({
+    queryKey: ['prayer', 'telegram', 'dispatch', 'recipients'],
+    queryFn: fetchTelegramDispatchRecipients,
+    enabled: open,
+  });
+  const telegramQ = useQuery({
+    queryKey: ['prayer', 'telegram', 'base', 'settings'],
+    queryFn: fetchTelegramSettings,
+    enabled: open,
+  });
+  const [note, setNote] = useState<string | null>(null);
+  const [form, setForm] = useState<TelegramDispatchSettingsResponse>({
+    enabled: false,
+    kind: 'daily',
+    time_hhmm: '09:00',
+    once_at_iso: null,
+    target: 'all',
+    member_ids: [],
+    last_sent_at_iso: null,
+  });
+
+  useEffect(() => {
+    if (settingsQ.data) setForm(settingsQ.data);
+  }, [settingsQ.data]);
+
+  const saveMut = useMutation({
+    mutationFn: () => patchTelegramDispatchSettings(form),
+    onSuccess: (next) => {
+      setForm(next);
+      setNote('Настройки рассылки сохранены.');
+      void qc.invalidateQueries({ queryKey: ['prayer', 'telegram', 'dispatch', 'settings'] });
+    },
+    onError: (e) => setNote(loadErrorDescription(e) ?? 'Не удалось сохранить настройки.'),
+  });
+
+  const runMut = useMutation({
+    mutationFn: () => runTelegramDispatchNow(),
+    onSuccess: (r) => {
+      setNote(`Рассылка отправлена: ${r.sent_count}.`);
+      void qc.invalidateQueries({ queryKey: ['prayer', 'telegram', 'dispatch', 'settings'] });
+    },
+    onError: (e) => setNote(loadErrorDescription(e) ?? 'Не удалось запустить рассылку.'),
+  });
+
+  if (!open) return null;
+  const loading = settingsQ.isPending || recipientsQ.isPending || telegramQ.isPending;
+  const recipients = recipientsQ.data ?? [];
+  const botEnabled = telegramQ.data?.enabled === true;
+
+  return (
+    <div
+      className="fixed inset-0 z-[140] flex items-center justify-center bg-black/50 p-4"
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+      role="presentation"
+    >
+      <div className="max-h-[88vh] w-full max-w-3xl overflow-y-auto rounded-2xl bg-white p-5 shadow-2xl" role="dialog" aria-modal="true" aria-label="Настройка рассылки молитвы в Telegram">
+        <div className="mb-4 flex items-start justify-between gap-3">
+          <div>
+            <h3 className="text-lg font-bold text-stone-900">Рассылка молитвы в Telegram</h3>
+            <p className="mt-1 text-sm text-stone-600">Настройка расписания и выбор получателей (один, несколько или все).</p>
+          </div>
+          <button type="button" className="rounded-lg border border-stone-200 px-3 py-1.5 text-sm text-stone-700 hover:bg-stone-50" onClick={onClose}>
+            Закрыть
+          </button>
+        </div>
+        {loading ? (
+          <div className="h-40 animate-pulse rounded-xl bg-stone-100" />
+        ) : (
+          <div className="space-y-4">
+            {!botEnabled ? (
+              <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                Telegram-бот сейчас выключен в настройках админки. Включите его, чтобы рассылка работала.
+              </div>
+            ) : null}
+            {note ? (
+              <div className="rounded-xl border border-stone-200 bg-stone-50 px-3 py-2 text-sm text-stone-800">{note}</div>
+            ) : null}
+            <div className="grid gap-3 md:grid-cols-2">
+              <label className="flex items-center justify-between rounded-xl border border-stone-200 px-3 py-2.5">
+                <span className="text-sm text-stone-800">Включить авторассылку</span>
+                <input
+                  type="checkbox"
+                  checked={form.enabled}
+                  onChange={(e) => setForm((s) => ({ ...s, enabled: e.target.checked }))}
+                />
+              </label>
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-stone-600">Режим</label>
+                <select
+                  className="w-full rounded-xl border border-stone-200 px-3 py-2.5 text-sm"
+                  value={form.kind}
+                  onChange={(e) => setForm((s) => ({ ...s, kind: e.target.value as 'daily' | 'once' }))}
+                >
+                  <option value="daily">Ежедневно</option>
+                  <option value="once">Разово</option>
+                </select>
+              </div>
+              {form.kind === 'daily' ? (
+                <div>
+                  <label className="mb-1 block text-xs font-semibold text-stone-600">Время</label>
+                  <input
+                    type="time"
+                    className="w-full rounded-xl border border-stone-200 px-3 py-2.5 text-sm"
+                    value={form.time_hhmm ?? '09:00'}
+                    onChange={(e) => setForm((s) => ({ ...s, time_hhmm: e.target.value }))}
+                  />
+                </div>
+              ) : (
+                <div>
+                  <label className="mb-1 block text-xs font-semibold text-stone-600">Дата и время отправки</label>
+                  <input
+                    type="datetime-local"
+                    className="w-full rounded-xl border border-stone-200 px-3 py-2.5 text-sm"
+                    value={form.once_at_iso ? form.once_at_iso.slice(0, 16) : ''}
+                    onChange={(e) =>
+                      setForm((s) => ({ ...s, once_at_iso: e.target.value ? new Date(e.target.value).toISOString() : null }))
+                    }
+                  />
+                </div>
+              )}
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-stone-600">Кому отправлять</label>
+                <select
+                  className="w-full rounded-xl border border-stone-200 px-3 py-2.5 text-sm"
+                  value={form.target}
+                  onChange={(e) => setForm((s) => ({ ...s, target: e.target.value as 'all' | 'selected' }))}
+                >
+                  <option value="all">Всем с Telegram ID</option>
+                  <option value="selected">Выбранным пользователям</option>
+                </select>
+              </div>
+            </div>
+            {form.target === 'selected' ? (
+              <div className="rounded-xl border border-stone-200 p-3">
+                <p className="mb-2 text-xs font-semibold text-stone-600">Выбор пользователей</p>
+                <div className="max-h-56 space-y-1 overflow-y-auto">
+                  {recipients.map((u: TelegramDispatchRecipient) => {
+                    const checked = form.member_ids.includes(u.id);
+                    return (
+                      <label key={u.id} className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-stone-50">
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={(e) =>
+                            setForm((s) => ({
+                              ...s,
+                              member_ids: e.target.checked
+                                ? Array.from(new Set([...s.member_ids, u.id]))
+                                : s.member_ids.filter((id) => id !== u.id),
+                            }))
+                          }
+                        />
+                        <span className="text-sm text-stone-700">{u.name}</span>
+                        <span className="text-xs text-stone-400">({u.telegram_chat_id})</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : null}
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                className="rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-white hover:opacity-95 disabled:opacity-60"
+                disabled={saveMut.isPending}
+                onClick={() => {
+                  setNote(null);
+                  saveMut.mutate();
+                }}
+              >
+                {saveMut.isPending ? 'Сохранение…' : 'Сохранить'}
+              </button>
+              <button
+                type="button"
+                className="rounded-xl border border-stone-200 bg-white px-4 py-2.5 text-sm font-semibold text-stone-700 hover:bg-stone-50 disabled:opacity-60"
+                disabled={runMut.isPending}
+                onClick={() => {
+                  setNote(null);
+                  runMut.mutate();
+                }}
+              >
+                {runMut.isPending ? 'Отправка…' : 'Отправить сейчас'}
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 const WEEKDAY_LABELS_SHORT = ['пн', 'вт', 'ср', 'чт', 'пт', 'сб', 'вс'] as const;
 
 function WeekStripPicker(props: {
@@ -450,6 +662,7 @@ export function DailyPrayerPage() {
   const [selected, setSelected] = useState<Date>(() => new Date());
   const [calendarExpanded, setCalendarExpanded] = useState(false);
   const [calendarView, setCalendarView] = useState<'week' | 'month'>('week');
+  const [telegramDispatchModalOpen, setTelegramDispatchModalOpen] = useState(false);
 
   const { data: me, isSuccess: meQuerySuccess } = useMe();
 
@@ -459,6 +672,7 @@ export function DailyPrayerPage() {
   const normalizedAppRole = me?.app_role?.trim().toLowerCase() ?? '';
   const canViewPrayerSectionViewersStats =
     normalizedAppRole === 'pastor' || normalizedAppRole === 'admin';
+  const isAdmin = normalizedAppRole === 'admin';
 
   const dateKey = formatCalendarDayKey(selected);
 
@@ -591,6 +805,17 @@ export function DailyPrayerPage() {
           <h1 className="min-w-0 flex-1 text-xl font-extrabold leading-tight tracking-tight sm:text-2xl md:text-3xl lg:text-[1.65rem] xl:text-3xl animate-prayer-fade-up motion-reduce:animate-none">
             Молитва
           </h1>
+          {isAdmin ? (
+            <button
+              type="button"
+              onClick={() => setTelegramDispatchModalOpen(true)}
+              className="inline-flex min-h-[42px] items-center gap-2 rounded-xl border border-white/35 bg-white/15 px-3 py-2 text-xs font-extrabold uppercase tracking-[0.08em] text-white hover:bg-white/25"
+            >
+              <LuSettings2 className="h-4 w-4" />
+              <LuSend className="h-4 w-4" />
+              Рассылка Telegram
+            </button>
+          ) : null}
           <SectionHeroToolbarEnd />
         </div>
       </header>
@@ -817,6 +1042,10 @@ export function DailyPrayerPage() {
         </div>
       ) : null}
       </div>
+      <TelegramPrayerDispatchModal
+        open={telegramDispatchModalOpen}
+        onClose={() => setTelegramDispatchModalOpen(false)}
+      />
     </div>
   );
 }

@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { isAxiosError } from 'axios';
 import { addMinutes, format, parse } from 'date-fns';
 import {
   FaBookBible,
@@ -341,7 +342,9 @@ function BlockExtraInfoPanel({ rows, variant }: { rows: ExtraDisplayRow[]; varia
             <dd
               className={
                 r.label === 'Заметка'
-                  ? 'min-w-0 whitespace-pre-wrap text-sm leading-relaxed text-stone-800 sm:text-[15px]'
+                  ? variant === 'card'
+                    ? 'min-w-0 line-clamp-1 text-sm leading-relaxed text-stone-800 sm:line-clamp-none sm:whitespace-pre-wrap sm:text-[15px]'
+                    : 'min-w-0 whitespace-pre-wrap text-sm leading-relaxed text-stone-800 sm:text-[15px]'
                   : 'min-w-0 whitespace-pre-wrap text-xs leading-snug text-stone-800 sm:text-sm'
               }
             >
@@ -376,11 +379,22 @@ function PoemInlineDetails({ contentJson }: { contentJson: Record<string, unknow
   );
 }
 
+function autosizeTextarea(el: HTMLTextAreaElement | null): void {
+  if (!el) return;
+  el.style.height = 'auto';
+  el.style.height = `${el.scrollHeight}px`;
+}
+
+function isRateLimitError(error: unknown): boolean {
+  return isAxiosError(error) && error.response?.status === 429;
+}
+
 export function EditableServicePlanPage() {
   const { token } = useParams<{ token: string }>();
   const qc = useQueryClient();
   const [draftBlocks, setDraftBlocks] = useState<EditableBlock[]>([]);
   const [editingBlockId, setEditingBlockId] = useState<number | null>(null);
+  const noteTextareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   const planQ = useQuery({
     queryKey: ['editable-service-plan', token],
@@ -388,13 +402,15 @@ export function EditableServicePlanPage() {
     enabled: Boolean(token && token.length > 20),
     refetchInterval: editingBlockId == null ? 2500 : false,
     refetchIntervalInBackground: true,
-    retry: false,
+    retry: (failureCount, error) => isRateLimitError(error) && failureCount < 3,
+    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** (attemptIndex - 1), 4000),
   });
   const metaQ = useQuery({
     queryKey: ['editable-service-plan-meta', token],
     queryFn: () => fetchEditableServicePlanMeta(token ?? ''),
     enabled: Boolean(token && token.length > 20),
-    retry: false,
+    retry: (failureCount, error) => isRateLimitError(error) && failureCount < 3,
+    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** (attemptIndex - 1), 4000),
   });
   const planPreacherId = planQ.data?.plan.preacher_member_id ?? null;
   const planPreacherName = planQ.data?.plan.preacher_name ?? null;
@@ -441,6 +457,11 @@ export function EditableServicePlanPage() {
     () => draftBlocks.find((b) => b.id === editingBlockId) ?? null,
     [draftBlocks, editingBlockId],
   );
+  const editingBlockNote = editingBlock ? blockNote(editingBlock.content_json) : '';
+
+  useEffect(() => {
+    autosizeTextarea(noteTextareaRef.current);
+  }, [editingBlockId, editingBlockNote]);
 
   const saveBlockMut = useMutation({
     mutationFn: async (block: EditableBlock) => {
@@ -496,6 +517,27 @@ export function EditableServicePlanPage() {
       <div className="flex min-h-[40dvh] items-center justify-center gap-2 text-stone-500">
         <LuLoaderCircle className="h-4 w-4 animate-spin" />
         Загружаю программу...
+      </div>
+    );
+  }
+  const planRateLimited = isRateLimitError(planQ.error);
+  const metaRateLimited = isRateLimitError(metaQ.error);
+  if ((planRateLimited || metaRateLimited) && (!planQ.data || !metaQ.data)) {
+    return (
+      <div className="mx-auto flex min-h-[40dvh] max-w-xl flex-col items-center justify-center gap-3 px-4 text-center">
+        <p className="text-base font-semibold text-stone-800">
+          Слишком много запросов, попробуйте через несколько секунд.
+        </p>
+        <button
+          type="button"
+          onClick={() => {
+            void planQ.refetch();
+            void metaQ.refetch();
+          }}
+          className="inline-flex min-h-11 items-center justify-center rounded-lg border border-stone-300 bg-white px-4 py-2 text-sm font-semibold text-stone-800 hover:border-primary hover:text-primary"
+        >
+          Обновить
+        </button>
       </div>
     );
   }
@@ -694,8 +736,13 @@ export function EditableServicePlanPage() {
                 {editingBlockId === b.id && editingBlock ? (
                   <div className="mt-3 grid w-full min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-2">
                     <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_7rem] items-end gap-2 sm:col-span-2">
-                      <div className="rounded-lg border border-stone-200 bg-stone-50 px-2.5 py-2 text-sm font-medium text-stone-700 sm:py-1.5">
-                        {editingBlock.block_type_name ?? 'Блок'}
+                      <div>
+                        <div className="rounded-lg border border-stone-200 bg-stone-50 px-2.5 py-2 text-sm font-medium text-stone-700 sm:py-1.5">
+                          {editingBlock.block_type_name ?? 'Блок'}
+                        </div>
+                        <p className="mt-1 text-[11px] leading-tight text-stone-500">
+                          Для смены типа удалите блок и создайте новый.
+                        </p>
                       </div>
                       <div className="min-w-0">
                       <label className="mb-1 block text-xs font-medium text-stone-600" htmlFor={`block-duration-${editingBlock.id}`}>
@@ -742,57 +789,67 @@ export function EditableServicePlanPage() {
                       <label className="mb-1 block text-xs font-medium text-stone-600" htmlFor={`block-responsible-${editingBlock.id}`}>
                         {isEditingSermonBlock ? 'Проповедник' : isEditingPrayerBlock ? 'Молитва' : 'Ответственный'}
                       </label>
-                      <select
-                        id={`block-responsible-${editingBlock.id}`}
-                            value={isEditingSermonBlock ? (planPreacherId ?? '') : (editingBlock.assigned_member_id ?? '')}
-                        onChange={(e) => {
-                              if (isEditingSermonBlock) return;
-                          const memberId = e.target.value ? Number(e.target.value) : null;
-                          const member = memberId ? members.find((u) => u.id === memberId) : null;
-                          setDraftBlocks((prev) =>
-                            prev.map((x) =>
-                              x.id === editingBlock.id
-                                ? {
-                                    ...x,
-                                    title: isEditingPoemBlock
-                                      ? member
-                                        ? `СТИХ - ${userLabel(member)}`
-                                        : 'СТИХ - Чтец'
-                                      : isEditingSermonBlock
-                                        ? (() => {
-                                            const topicRaw = x.content_json?.sermon_topic;
-                                            const topic = typeof topicRaw === 'string' ? topicRaw.trim() : '';
-                                            const preacherName = member ? userLabel(member) : 'Проповедник';
-                                            return topic ? `${preacherName} - ${topic}` : preacherName;
-                                          })()
-                                        : x.title,
-                                    assigned_member_id: memberId,
-                                    assigned_member_name: member ? userLabel(member) : null,
-                                  }
-                                : x,
-                            ),
-                          );
-                        }}
-                        className="min-h-11 w-full min-w-0 max-w-full rounded-lg border border-stone-300 bg-white px-2 py-2 text-base text-stone-900 touch-manipulation sm:min-h-0 sm:py-1.5 sm:text-sm"
-                            disabled={isEditingSermonBlock}
-                      >
-                            {isEditingSermonBlock ? (
-                              <option value={planPreacherId ?? ''}>
-                                {planPreacherId ? (planPreacherName ?? 'Проповедник') : 'В настройках программы не выбран проповедник'}
+                      <div className="flex min-w-0 items-center gap-2 sm:block">
+                        <select
+                          id={`block-responsible-${editingBlock.id}`}
+                          value={isEditingSermonBlock ? (planPreacherId ?? '') : (editingBlock.assigned_member_id ?? '')}
+                          onChange={(e) => {
+                            if (isEditingSermonBlock) return;
+                            const memberId = e.target.value ? Number(e.target.value) : null;
+                            const member = memberId ? members.find((u) => u.id === memberId) : null;
+                            setDraftBlocks((prev) =>
+                              prev.map((x) =>
+                                x.id === editingBlock.id
+                                  ? {
+                                      ...x,
+                                      title: isEditingPoemBlock
+                                        ? member
+                                          ? `СТИХ - ${userLabel(member)}`
+                                          : 'СТИХ - Чтец'
+                                        : isEditingSermonBlock
+                                          ? (() => {
+                                              const topicRaw = x.content_json?.sermon_topic;
+                                              const topic = typeof topicRaw === 'string' ? topicRaw.trim() : '';
+                                              const preacherName = member ? userLabel(member) : 'Проповедник';
+                                              return topic ? `${preacherName} - ${topic}` : preacherName;
+                                            })()
+                                          : x.title,
+                                      assigned_member_id: memberId,
+                                      assigned_member_name: member ? userLabel(member) : null,
+                                    }
+                                  : x,
+                              ),
+                            );
+                          }}
+                          className="min-h-11 w-full min-w-0 max-w-full flex-1 rounded-lg border border-stone-300 bg-white px-2 py-2 text-base text-stone-900 touch-manipulation sm:min-h-0 sm:w-full sm:py-1.5 sm:text-sm"
+                          disabled={isEditingSermonBlock}
+                        >
+                          {isEditingSermonBlock ? (
+                            <option value={planPreacherId ?? ''}>
+                              {planPreacherId ? (planPreacherName ?? 'Проповедник') : 'В настройках программы не выбран проповедник'}
+                            </option>
+                          ) : (
+                            <>
+                              <option value="">
+                                {isEditingPrayerBlock ? 'Служитель молитвы не назначен' : 'Ответственный не назначен'}
                               </option>
-                            ) : (
-                              <>
-                                <option value="">
-                                  {isEditingPrayerBlock ? 'Служитель молитвы не назначен' : 'Ответственный не назначен'}
+                              {responsibleCandidates.map((u) => (
+                                <option key={u.id} value={u.id}>
+                                  {userLabel(u)} ({roleLabel(u)})
                                 </option>
-                                {responsibleCandidates.map((u) => (
-                                  <option key={u.id} value={u.id}>
-                                    {userLabel(u)} ({roleLabel(u)})
-                                  </option>
-                                ))}
-                              </>
-                            )}
-                      </select>
+                              ))}
+                            </>
+                          )}
+                        </select>
+                        {!isEditingSongBlock ? (
+                          <p
+                            className="max-w-[40%] shrink-0 text-[11px] leading-tight text-stone-500 sm:hidden"
+                            title="Для этого типа блока выбор песни не используется."
+                          >
+                            Песня не&nbsp;выбирается
+                          </p>
+                        ) : null}
+                      </div>
                     </div>
                     {isEditingSongBlock ? (
                       <div className="min-w-0">
@@ -830,7 +887,7 @@ export function EditableServicePlanPage() {
                         </select>
                       </div>
                     ) : (
-                      <div className="rounded-lg border border-dashed border-stone-300 bg-stone-50 px-2.5 py-2 text-xs leading-snug text-stone-500 sm:col-span-2 sm:py-1.5">
+                      <div className="hidden rounded-lg border border-dashed border-stone-300 bg-stone-50 px-2.5 py-2 text-xs leading-snug text-stone-500 sm:col-span-2 sm:block sm:py-1.5">
                         Для этого типа блока выбор песни не используется.
                       </div>
                     )}
@@ -943,8 +1000,13 @@ export function EditableServicePlanPage() {
                       </label>
                       <textarea
                         id={`block-note-${editingBlock.id}`}
-                        value={blockNote(editingBlock.content_json)}
-                        onChange={(e) =>
+                        ref={(el) => {
+                          noteTextareaRef.current = el;
+                          autosizeTextarea(el);
+                        }}
+                        value={editingBlockNote}
+                        onChange={(e) => {
+                          autosizeTextarea(e.currentTarget);
                           setDraftBlocks((prev) =>
                             prev.map((x) => {
                               if (x.id !== editingBlock.id) return x;
@@ -954,9 +1016,9 @@ export function EditableServicePlanPage() {
                               if (hasText) return { ...x, content_json: { ...x.content_json, text: e.target.value } };
                               return { ...x, content_json: { ...x.content_json, notes: e.target.value } };
                             }),
-                          )
-                        }
-                        className="min-h-[100px] w-full min-w-0 max-w-full rounded-lg border border-stone-300 bg-white px-3 py-2.5 text-base text-stone-900 placeholder:text-stone-500 touch-manipulation sm:min-h-[84px] sm:px-2 sm:py-1.5 sm:text-sm"
+                          );
+                        }}
+                        className="min-h-[60px] w-full min-w-0 max-w-full resize-none rounded-lg border border-stone-300 bg-white px-3 py-2.5 text-base text-stone-900 placeholder:text-stone-500 touch-manipulation sm:min-h-[100px] sm:px-2 sm:py-1.5 sm:text-sm"
                         placeholder="Заметка блока"
                         rows={4}
                       />

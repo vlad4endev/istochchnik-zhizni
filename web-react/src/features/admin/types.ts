@@ -7,6 +7,7 @@ export interface AppUser {
   last_name: string | null;
   name: string;
   phone_number: string | null;
+  telegram_chat_id: string | null;
   ministry_role: string | null;
   ministry_direction: string | null;
   prayer_request: string | null;

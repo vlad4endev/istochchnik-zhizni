@@ -24,6 +24,7 @@ export interface AppUser {
   last_name: string | null;
   name: string;
   phone_number: string | null;
+  telegram_chat_id: string | null;
   ministry_role: string | null;
   ministry_direction: string | null;
   prayer_request: string | null;
@@ -50,6 +51,7 @@ export interface CreateUserInput {
   first_name: string;
   last_name: string;
   phone_number: string;
+  telegram_chat_id?: string;
   ministry_role?: string;
   ministry_direction?: string;
   prayer_request?: string;
@@ -68,6 +70,7 @@ export interface UpdateUserInput {
   first_name?: string;
   last_name?: string;
   phone_number?: string;
+  telegram_chat_id?: string;
   ministry_role?: string;
   ministry_direction?: string;
   prayer_request?: string;
@@ -270,6 +273,7 @@ export async function listUsers(): Promise<AppUser[]> {
       m.last_name,
       m.name,
       m.phone_number,
+      m.telegram_chat_id,
       m.ministry_role,
       m.ministry_direction,
       COALESCE(mpc.prayer_request, m.prayer_request) AS prayer_request,
@@ -304,6 +308,7 @@ export async function getUserById(id: number): Promise<AppUser | null> {
       m.last_name,
       m.name,
       m.phone_number,
+      m.telegram_chat_id,
       m.ministry_role,
       m.ministry_direction,
       COALESCE(mpc.prayer_request, m.prayer_request) AS prayer_request,
@@ -445,6 +450,7 @@ export async function createUser(input: CreateUserInput): Promise<AppUser> {
       const mergedLastName = pickNonEmpty(existing.last_name, input.last_name);
       const mergedPhone = pickNonEmpty(existing.phone_number, input.phone_number);
       const mergedBirthDate = pickNonEmpty(existing.birth_date, input.birth_date);
+      const mergedTelegramChatId = pickNonEmpty(existing.telegram_chat_id, input.telegram_chat_id);
       const mergedMinistryRole = pickNonEmpty(existing.ministry_role, input.ministry_role);
       const mergedMinistryDirection = pickNonEmpty(existing.ministry_direction, input.ministry_direction);
       const mergedPrayerRequest = pickNonEmpty(existing.prayer_request, input.prayer_request);
@@ -456,6 +462,7 @@ export async function createUser(input: CreateUserInput): Promise<AppUser> {
         first_name: mergedFirstName,
         last_name: mergedLastName,
         phone_number: mergedPhone,
+        ...(mergedTelegramChatId ? { telegram_chat_id: mergedTelegramChatId } : {}),
         birth_date: mergedBirthDate,
         ...(mergedMinistryRole ? { ministry_role: mergedMinistryRole } : {}),
         ...(mergedMinistryDirection ? { ministry_direction: mergedMinistryDirection } : {}),
@@ -484,8 +491,8 @@ export async function createUser(input: CreateUserInput): Promise<AppUser> {
   const primaryRole = pickPrimaryAppRole(appRoles);
   const result = await query(
     `INSERT INTO members
-      (first_name, last_name, name, phone_number, ministry_role, ministry_direction, prayer_request, birth_date, email, account_provider, account_id, is_active, app_role, app_roles, is_collection_coordinator, in_prayer_cycle, updated_at)
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, COALESCE($12, TRUE), COALESCE($13, 'member'), $14::text[], COALESCE($15, FALSE), FALSE, NOW())
+      (first_name, last_name, name, phone_number, telegram_chat_id, ministry_role, ministry_direction, prayer_request, birth_date, email, account_provider, account_id, is_active, app_role, app_roles, is_collection_coordinator, in_prayer_cycle, updated_at)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, COALESCE($13, TRUE), COALESCE($14, 'member'), $15::text[], COALESCE($16, FALSE), FALSE, NOW())
     RETURNING
       id,
       user_id,
@@ -493,6 +500,7 @@ export async function createUser(input: CreateUserInput): Promise<AppUser> {
       last_name,
       name,
       phone_number,
+      telegram_chat_id,
       ministry_role,
       ministry_direction,
       prayer_request,
@@ -514,6 +522,7 @@ export async function createUser(input: CreateUserInput): Promise<AppUser> {
       input.last_name.trim(),
       `${input.first_name.trim()} ${input.last_name.trim()}`.trim(),
       normalizeOptionalString(input.phone_number),
+      normalizeOptionalString(input.telegram_chat_id),
       normalizeOptionalString(input.ministry_role),
       normalizeOptionalString(input.ministry_direction),
       normalizeOptionalString(input.prayer_request),
@@ -629,6 +638,11 @@ export async function updateUser(id: number, input: UpdateUserInput): Promise<Ap
     values.push(normalizeOptionalString(input.phone_number));
   }
 
+  if (typeof input.telegram_chat_id === 'string') {
+    updates.push(`telegram_chat_id = $${values.length + 1}`);
+    values.push(normalizeOptionalString(input.telegram_chat_id));
+  }
+
   if (typeof input.ministry_role === 'string') {
     updates.push(`ministry_role = $${values.length + 1}`);
     values.push(normalizeOptionalString(input.ministry_role));
@@ -720,6 +734,7 @@ export async function updateUser(id: number, input: UpdateUserInput): Promise<Ap
       last_name,
       name,
       phone_number,
+      telegram_chat_id,
       ministry_role,
       ministry_direction,
       prayer_request,
@@ -776,6 +791,7 @@ export async function linkUserAccount(id: number, input: LinkAccountInput): Prom
       last_name,
       name,
       phone_number,
+      telegram_chat_id,
       ministry_role,
       ministry_direction,
       prayer_request,
@@ -834,6 +850,7 @@ export async function setUserAppRoles(id: number, appRolesInput: AppRole[]): Pro
       last_name,
       name,
       phone_number,
+      telegram_chat_id,
       ministry_role,
       ministry_direction,
       prayer_request,

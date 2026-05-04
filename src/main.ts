@@ -38,6 +38,7 @@ import {
   initRealtimeRedis,
 } from './realtime/wsHub';
 import { initPushCronJobs } from './cron/pushJobs';
+import { initTelegramDispatchJob } from './cron/telegramDispatchJob';
 import { ensureUploadsDirs, getUploadsRoot } from './config/uploadsRoot';
 import { ensureAccessRequestsMessengerChannel } from './services/messengerService';
 import { writeAppLog } from './services/appLogService';
@@ -432,6 +433,7 @@ async function start(): Promise<void> {
   attachRealtimeWebSocket(server);
   
   initPushCronJobs();
+  initTelegramDispatchJob();
   startAnalyticsMaintenance();
   
   server.listen(Number(PORT), () => {

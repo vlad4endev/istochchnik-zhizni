@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS members (
   login VARCHAR(64),
   password_hash TEXT,
   phone_number VARCHAR(32),
+  telegram_chat_id VARCHAR(64),
   ministry_role VARCHAR(120),
   ministry_direction VARCHAR(120),
   prayer_request TEXT,
@@ -109,7 +110,14 @@ CREATE TABLE IF NOT EXISTS global_settings (
   telegram_coordinator_chat_id TEXT,
   telegram_default_chat_id TEXT,
   telegram_prayer_template TEXT,
-  telegram_enabled BOOLEAN NOT NULL DEFAULT FALSE
+  telegram_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+  telegram_dispatch_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+  telegram_dispatch_kind VARCHAR(16) NOT NULL DEFAULT 'daily',
+  telegram_dispatch_time VARCHAR(5),
+  telegram_dispatch_once_at TIMESTAMPTZ,
+  telegram_dispatch_target VARCHAR(16) NOT NULL DEFAULT 'all',
+  telegram_dispatch_member_ids INTEGER[] NOT NULL DEFAULT ARRAY[]::INTEGER[],
+  telegram_dispatch_last_sent_at TIMESTAMPTZ
 );
 
 CREATE TABLE IF NOT EXISTS broadcasts (
@@ -235,6 +243,7 @@ ALTER TABLE members ADD COLUMN IF NOT EXISTS last_name VARCHAR(120);
 ALTER TABLE members ADD COLUMN IF NOT EXISTS login VARCHAR(64);
 ALTER TABLE members ADD COLUMN IF NOT EXISTS password_hash TEXT;
 ALTER TABLE members ADD COLUMN IF NOT EXISTS phone_number VARCHAR(32);
+ALTER TABLE members ADD COLUMN IF NOT EXISTS telegram_chat_id VARCHAR(64);
 ALTER TABLE members ADD COLUMN IF NOT EXISTS ministry_role VARCHAR(120);
 ALTER TABLE members ADD COLUMN IF NOT EXISTS ministry_direction VARCHAR(120);
 ALTER TABLE members ADD COLUMN IF NOT EXISTS app_role VARCHAR(16) NOT NULL DEFAULT 'member';
@@ -323,6 +332,13 @@ ALTER TABLE global_settings ADD COLUMN IF NOT EXISTS telegram_coordinator_chat_i
 ALTER TABLE global_settings ADD COLUMN IF NOT EXISTS telegram_default_chat_id TEXT;
 ALTER TABLE global_settings ADD COLUMN IF NOT EXISTS telegram_prayer_template TEXT;
 ALTER TABLE global_settings ADD COLUMN IF NOT EXISTS telegram_enabled BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE global_settings ADD COLUMN IF NOT EXISTS telegram_dispatch_enabled BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE global_settings ADD COLUMN IF NOT EXISTS telegram_dispatch_kind VARCHAR(16) NOT NULL DEFAULT 'daily';
+ALTER TABLE global_settings ADD COLUMN IF NOT EXISTS telegram_dispatch_time VARCHAR(5);
+ALTER TABLE global_settings ADD COLUMN IF NOT EXISTS telegram_dispatch_once_at TIMESTAMPTZ;
+ALTER TABLE global_settings ADD COLUMN IF NOT EXISTS telegram_dispatch_target VARCHAR(16) NOT NULL DEFAULT 'all';
+ALTER TABLE global_settings ADD COLUMN IF NOT EXISTS telegram_dispatch_member_ids INTEGER[] NOT NULL DEFAULT ARRAY[]::INTEGER[];
+ALTER TABLE global_settings ADD COLUMN IF NOT EXISTS telegram_dispatch_last_sent_at TIMESTAMPTZ;
 ALTER TABLE global_settings ADD COLUMN IF NOT EXISTS notification_settings_json TEXT;
 ALTER TABLE broadcasts ADD COLUMN IF NOT EXISTS title VARCHAR(255);
 ALTER TABLE broadcasts ADD COLUMN IF NOT EXISTS description TEXT;

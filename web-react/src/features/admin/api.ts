@@ -59,6 +59,7 @@ export async function createAdminMember(body: {
   last_name: string;
   phone_number: string;
   birth_date: string;
+  telegram_chat_id?: string;
   ministry_role?: string;
   ministry_direction?: string;
   merge_if_duplicate?: boolean;
@@ -72,6 +73,7 @@ export async function bulkCreateAdminMembers(body: {
     first_name: string;
     last_name: string;
     phone_number: string;
+    telegram_chat_id: string;
     birth_date: string;
     ministry_role?: string;
     ministry_direction?: string;
@@ -102,6 +104,7 @@ export async function updateAdminMember(
     ministry_role: string;
     ministry_direction: string;
     prayer_request: string;
+    telegram_chat_id: string;
     is_active: boolean;
     is_collection_coordinator: boolean;
     in_prayer_cycle: boolean;
@@ -464,6 +467,22 @@ export interface TelegramSettingsResponse {
   has_bot_token: boolean;
 }
 
+export interface TelegramDispatchSettingsResponse {
+  enabled: boolean;
+  kind: 'daily' | 'once';
+  time_hhmm: string | null;
+  once_at_iso: string | null;
+  target: 'all' | 'selected';
+  member_ids: number[];
+  last_sent_at_iso: string | null;
+}
+
+export interface TelegramDispatchRecipient {
+  id: number;
+  name: string;
+  telegram_chat_id: string;
+}
+
 export interface SmsSettingsResponse {
   enabled: boolean;
   api_id_masked: string | null;
@@ -507,13 +526,35 @@ export async function patchTelegramSettings(body: {
 }
 
 export async function sendTelegramMessage(body: {
-  kind: 'prayer_today' | 'next_week' | 'custom';
+  kind: 'prayer_today' | 'next_week' | 'custom' | 'prayer_today_all_members';
   chat_id?: string;
   text?: string;
-}): Promise<{ ok: boolean; kind: string; chat_id: string }> {
-  const { data } = await apiClient.post<{ ok: boolean; kind: string; chat_id: string }>(
+}): Promise<{ ok: boolean; kind: string; chat_id: string; sent_count?: number }> {
+  const { data } = await apiClient.post<{ ok: boolean; kind: string; chat_id: string; sent_count?: number }>(
     '/api/telegram/send',
     body,
+  );
+  return data;
+}
+
+export async function fetchTelegramDispatchSettings(): Promise<TelegramDispatchSettingsResponse> {
+  const { data } = await apiClient.get<TelegramDispatchSettingsResponse>('/api/telegram/dispatch/settings');
+  return data;
+}
+
+export async function patchTelegramDispatchSettings(body: Partial<TelegramDispatchSettingsResponse>): Promise<TelegramDispatchSettingsResponse> {
+  const { data } = await apiClient.patch<TelegramDispatchSettingsResponse>('/api/telegram/dispatch/settings', body);
+  return data;
+}
+
+export async function fetchTelegramDispatchRecipients(): Promise<TelegramDispatchRecipient[]> {
+  const { data } = await apiClient.get<TelegramDispatchRecipient[]>('/api/telegram/dispatch/recipients');
+  return data;
+}
+
+export async function runTelegramDispatchNow(): Promise<{ ok: boolean; sent_count: number; mode: 'all' | 'selected' }> {
+  const { data } = await apiClient.post<{ ok: boolean; sent_count: number; mode: 'all' | 'selected' }>(
+    '/api/telegram/dispatch/run-now',
   );
   return data;
 }

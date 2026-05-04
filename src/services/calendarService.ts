@@ -71,6 +71,38 @@ export interface PrayerDataByDate {
   prayer_cycle: PrayerCyclePublic | null;
 }
 
+/** Все глобальные темы, служения и отпавшие (для Telegram и полного текста молитвы). */
+export interface PrayerPlanSections {
+  global_themes: GlobalTheme[];
+  ministries: Ministry[];
+  backsliders: Backslider[];
+}
+
+export async function getAllPrayerPlanSections(): Promise<PrayerPlanSections> {
+  const [themesRes, ministriesRes, backslidersRes] = await Promise.all([
+    query(
+      `SELECT id, title, bible_verse, prayer_points
+       FROM global_themes
+       ORDER BY id ASC`,
+    ),
+    query(
+      `SELECT id, title, prayer_points
+       FROM ministries
+       ORDER BY id ASC`,
+    ),
+    query(
+      `SELECT id, name
+       FROM backsliders
+       ORDER BY id ASC`,
+    ),
+  ]);
+  return {
+    global_themes: themesRes.rows as GlobalTheme[],
+    ministries: ministriesRes.rows as Ministry[],
+    backsliders: backslidersRes.rows as Backslider[],
+  };
+}
+
 export interface NextWeekMemberAssignment {
   date: string;
   member: Member | null;
