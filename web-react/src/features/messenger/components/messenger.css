@@ -1088,7 +1088,7 @@
 /* Input Area */
 .tg-input-area-wrap {
   padding: 8px 12px;
-  padding-bottom: max(10px, env(safe-area-inset-bottom, 10px));
+  padding-bottom: max(4px, var(--app-bottom-nav-safe-pad, 2px));
   background: #fff;
   border-top: 1px solid rgba(0, 0, 0, 0.08);
   display: flex;
@@ -2171,7 +2171,7 @@
       /* Safe-area; фон как у чата — серая только «таблетка» .tg-input-container */
       padding-left: 0.75rem;
       padding-right: 0.75rem;
-      padding-bottom: max(16px, env(safe-area-inset-bottom, 16px));
+      padding-bottom: max(6px, var(--app-bottom-nav-safe-pad, 2px));
       background: var(--tg-bg);
       display: flex !important;
       flex-direction: column !important;
@@ -2275,7 +2275,7 @@
       z-index: 40;
       padding-left: 0.75rem;
       padding-right: 0.75rem;
-      padding-bottom: max(16px, env(safe-area-inset-bottom, 16px));
+      padding-bottom: max(6px, var(--app-bottom-nav-safe-pad, 2px));
       background: var(--tg-bg);
       display: flex !important;
       flex-direction: column !important;
@@ -2381,7 +2381,7 @@
 
   .tg-input-area-wrap {
     padding: 8px 10px;
-    padding-bottom: max(10px, env(safe-area-inset-bottom, 10px));
+    padding-bottom: max(4px, var(--app-bottom-nav-safe-pad, 2px));
   }
 
   .tg-input-container {
@@ -2495,7 +2495,7 @@
   }
 
   .tg-input-area-wrap {
-    padding-bottom: max(10px, env(safe-area-inset-bottom));
+    padding-bottom: max(4px, var(--app-bottom-nav-safe-pad, 2px));
   }
 }
 
@@ -2507,7 +2507,7 @@
 
   html.app-native-shell.app-keyboard-open[data-chat-open='1'] .tg-main--visible .tg-chat-window > .tg-chat-window__composer,
   html.app-native-shell.app-keyboard-open[data-chat-open='1'] .tg-chat-window > .tg-chat-window__composer {
-    padding-bottom: max(10px, env(safe-area-inset-bottom, 0px)) !important;
+    padding-bottom: max(4px, var(--app-bottom-nav-safe-pad, 2px)) !important;
   }
 }
 
