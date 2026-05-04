@@ -32,6 +32,7 @@ import {
   LuX,
 } from 'react-icons/lu';
 import { type ReactNode, useEffect, useId, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { DayPicker } from 'react-day-picker';
 
 import {
@@ -454,16 +455,16 @@ function TelegramPrayerDispatchModal(props: {
   const recipients = recipientsQ.data ?? [];
   const botEnabled = telegramQ.data?.enabled === true;
 
-  return (
+  const modal = (
     <div
-      className="fixed inset-0 z-[140] flex flex-col justify-end bg-black/55 p-0 backdrop-blur-[2px] sm:items-center sm:justify-center sm:p-4 sm:backdrop-blur-none"
+      className="fixed inset-0 z-[200] flex min-h-0 flex-col justify-end bg-black/55 p-0 backdrop-blur-[2px] sm:items-center sm:justify-center sm:p-4 sm:backdrop-blur-none"
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
       role="presentation"
     >
       <div
-        className="flex max-h-[min(92dvh,920px)] w-full max-w-3xl flex-col overflow-hidden rounded-t-2xl border border-stone-200/90 bg-white pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-[0_-8px_40px_rgba(0,0,0,0.12)] sm:max-h-[min(88vh,900px)] sm:rounded-2xl sm:border-stone-200 sm:pb-0 sm:shadow-2xl"
+        className="mx-auto flex w-full max-w-3xl min-w-0 max-h-[min(92dvh,920px)] flex-col overflow-hidden rounded-t-2xl border border-stone-200/90 bg-white pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-[0_-8px_40px_rgba(0,0,0,0.12)] sm:max-h-[min(88vh,900px)] sm:rounded-2xl sm:border-stone-200 sm:pb-0 sm:shadow-2xl"
         role="dialog"
         aria-modal="true"
         aria-label="Настройка рассылки молитвы в Telegram"
@@ -690,6 +691,8 @@ function TelegramPrayerDispatchModal(props: {
       </div>
     </div>
   );
+
+  return typeof document !== 'undefined' ? createPortal(modal, document.body) : null;
 }
 
 const WEEKDAY_LABELS_SHORT = ['пн', 'вт', 'ср', 'чт', 'пт', 'сб', 'вс'] as const;
