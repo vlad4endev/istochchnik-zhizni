@@ -173,6 +173,20 @@ export function resolvePublicUrl(raw: string | null | undefined): string | null 
     v = canonicalUploadPath(v);
   }
 
+  // Путь вида `storage/v1/...` или `/storage/v1/...` без хоста — иначе new URL(..., app origin) даёт 404 на фронте.
+  const storageLead = v.startsWith('/') ? v : `/${v}`;
+  if (storageLead.toLowerCase().startsWith('/storage/v1/')) {
+    const pubRaw = String(import.meta.env.VITE_SUPABASE_STORAGE_PUBLIC_URL ?? '').trim();
+    if (pubRaw) {
+      try {
+        const pub = new URL(pubRaw.includes('://') ? pubRaw : `https://${pubRaw}`);
+        return new URL(storageLead, pub.origin).toString();
+      } catch {
+        /* fall through */
+      }
+    }
+  }
+
   if (/^https?:\/\//i.test(v)) {
     v = rewritePrivateSupabaseStorageUrl(v);
     v = rewritePrivateSupabaseStorageUrlToAppOrigin(v);

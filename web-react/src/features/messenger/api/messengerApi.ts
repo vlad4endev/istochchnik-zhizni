@@ -344,11 +344,20 @@ export async function fetchMessageAttachmentUrl(
   return { url: data.url };
 }
 
-export async function fetchUploadsHealth(): Promise<{ ok: boolean; storage: 'healthy' | 'unavailable'; reason?: string }> {
-  const { data } = await apiClient.get<{ ok: boolean; storage: 'healthy' | 'unavailable'; reason?: string }>(
-    `${BASE}/uploads/health`,
-  );
-  return data;
+export type MessengerUploadsHealth = {
+  ok: boolean;
+  storage: 'supabase' | 'unavailable' | 'healthy';
+  reason?: string;
+  bucket?: string;
+  hint?: string;
+  missingEnv?: string[];
+  existingBuckets?: string[];
+  bucketCheck?: { inconclusive?: boolean; reason?: string; message?: string };
+};
+
+export async function fetchUploadsHealth(): Promise<MessengerUploadsHealth> {
+  const { data } = await apiClient.get<MessengerUploadsHealth>(`${BASE}/uploads/health`);
+  return data ?? { ok: false, storage: 'unavailable', reason: 'empty_response' };
 }
 
 export type EffectivePermissions = Record<string, boolean>;

@@ -1644,62 +1644,65 @@ function MembersSection({
 
       {editing && (
         <div
-          className="fixed inset-0 z-[120] flex items-center justify-center bg-black/45 p-4"
+          className="fixed inset-0 z-[120] flex items-center justify-center bg-black/45 p-4 max-lg:p-0"
           role="presentation"
           onMouseDown={(e) => {
             if (e.target === e.currentTarget) setEditing(null);
           }}
         >
           <div
-            className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl bg-white shadow-2xl"
+            className="user-modal max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl bg-white shadow-2xl max-lg:max-h-[100dvh] lg:max-h-[90vh]"
             role="dialog"
             aria-modal="true"
             aria-labelledby={memberEditTitleId}
           >
             {/* Header */}
-            <div className="sticky top-0 z-10 border-b border-stone-100 bg-white px-5 py-4 backdrop-blur-sm">
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex min-w-0 flex-1 items-center gap-3">
-                  <div
-                    className="flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-full text-base font-semibold"
-                    style={{ backgroundColor: '#F3EEF0', color: '#7B2D3F' }}
+            <div className="sticky top-0 z-10 flex shrink-0 items-start justify-between gap-3 border-b border-stone-100 bg-white px-4 py-3 backdrop-blur-sm max-lg:px-3 max-lg:py-2.5 sm:px-5 sm:py-4">
+              <div className="flex min-w-0 flex-1 items-center gap-2.5 sm:gap-3">
+                <div
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-semibold sm:h-[52px] sm:w-[52px] sm:text-base"
+                  style={{ backgroundColor: '#F3EEF0', color: '#7B2D3F' }}
+                >
+                  {memberInitials(editing)}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <h3
+                    id={memberEditTitleId}
+                    className="text-base font-medium tracking-tight text-stone-900 sm:text-[18px]"
                   >
-                    {memberInitials(editing)}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <h3 id={memberEditTitleId} className="text-[18px] font-medium tracking-tight text-stone-900">
-                      {memberRosterName(editing)}
-                    </h3>
-                    <div className="mt-1.5 flex flex-wrap items-center gap-2">
-                      <span className="rounded-full bg-emerald-100 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-800">
-                        В приложении
-                      </span>
-                      <span className="rounded-full border border-stone-300 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-stone-600">
-                        {appRoleLabel(editing.app_role)}
-                      </span>
-                      <span className="rounded-full bg-teal-100 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-teal-800">
-                        Активен
-                      </span>
-                    </div>
+                    {memberRosterName(editing)}
+                  </h3>
+                  <div className="mt-1 flex flex-wrap items-center gap-1.5 sm:mt-1.5 sm:gap-2">
+                    <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-emerald-800 sm:px-2.5 sm:text-[10px]">
+                      В приложении
+                    </span>
+                    <span className="rounded-full border border-stone-300 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-stone-600 sm:px-2.5 sm:text-[10px]">
+                      {appRoleLabel(editing.app_role)}
+                    </span>
+                    <span className="rounded-full bg-teal-100 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-teal-800 sm:px-2.5 sm:text-[10px]">
+                      Активен
+                    </span>
                   </div>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setEditing(null)}
-                  className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-stone-200 text-stone-500 transition hover:bg-stone-100 hover:text-stone-800"
-                  aria-label="Закрыть карточку"
-                  title="Закрыть"
-                >
-                  <LuX className="h-4.5 w-4.5" strokeWidth={2} aria-hidden />
-                </button>
               </div>
+              <button
+                type="button"
+                onClick={() => setEditing(null)}
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-stone-200 text-stone-500 transition hover:bg-stone-100 hover:text-stone-800 max-lg:h-10 max-lg:w-10 max-lg:min-h-[44px] max-lg:min-w-[44px] lg:h-7 lg:w-7"
+                aria-label="Закрыть карточку"
+                title="Закрыть"
+              >
+                <LuX className="h-4.5 w-4.5" strokeWidth={2} aria-hidden />
+              </button>
             </div>
 
-            <div className="space-y-5 p-5">
+            <div className="user-form space-y-4 p-4 max-lg:space-y-3 sm:space-y-5 sm:p-5">
               {/* Personal info */}
               <section>
-                <p className="mb-3 text-[10px] font-extrabold uppercase tracking-[0.15em] text-stone-400">Личные данные</p>
-                <div className="grid gap-3 sm:grid-cols-2">
+                <p className="mb-2 text-[10px] font-extrabold uppercase tracking-[0.15em] text-stone-400 sm:mb-3">
+                  Личные данные
+                </p>
+                <div className="user-card-grid grid gap-2.5 sm:grid-cols-2 sm:gap-3">
                   <div>
                     <label className="mb-1 block text-xs font-semibold text-stone-600">Фамилия</label>
                     <input
@@ -1768,8 +1771,10 @@ function MembersSection({
 
               {/* Ministry */}
               <section>
-                <p className="mb-3 text-[10px] font-extrabold uppercase tracking-[0.15em] text-stone-400">Служение</p>
-                <div className="grid gap-3 sm:grid-cols-2">
+                <p className="mb-2 text-[10px] font-extrabold uppercase tracking-[0.15em] text-stone-400 sm:mb-3">
+                  Служение
+                </p>
+                <div className="user-card-grid grid gap-2.5 sm:grid-cols-2 sm:gap-3">
                   <div>
                     <label className="mb-1 block text-xs font-semibold text-stone-600">Направление</label>
                     <details className="group relative">
@@ -1908,8 +1913,10 @@ function MembersSection({
 
               {/* Access and role */}
               <section>
-                <p className="mb-3 text-[10px] font-extrabold uppercase tracking-[0.15em] text-stone-400">Доступ и роль</p>
-                <div className="space-y-3">
+                <p className="mb-2 text-[10px] font-extrabold uppercase tracking-[0.15em] text-stone-400 sm:mb-3">
+                  Доступ и роль
+                </p>
+                <div className="space-y-2.5 sm:space-y-3">
                   <div>
                     <label className="mb-1 block text-xs font-semibold text-stone-600">Роль приложения</label>
                     <span
@@ -1942,8 +1949,10 @@ function MembersSection({
                       <option value="admin">Администратор</option>
                     </select>
                   </div>
-                  <label className="flex cursor-pointer items-center justify-between rounded-xl border border-stone-200 px-3 py-2.5">
-                    <span className="text-sm text-stone-800">Активен (может войти в приложение)</span>
+                  <label className="flex cursor-pointer items-center justify-between gap-2 rounded-xl border border-stone-200 px-2.5 py-2 sm:px-3 sm:py-2.5">
+                    <span className="min-w-0 flex-1 text-xs leading-snug text-stone-800 sm:text-sm">
+                      Активен (может войти в приложение)
+                    </span>
                     <span className="relative inline-flex h-6 w-11 items-center">
                       <input
                         type="checkbox"
@@ -1955,8 +1964,8 @@ function MembersSection({
                       <span className="absolute left-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform peer-checked:translate-x-5" />
                     </span>
                   </label>
-                  <label className="flex cursor-pointer items-center justify-between rounded-xl border border-stone-200 px-3 py-2.5">
-                    <span className="text-sm text-stone-800">В молитвенном цикле</span>
+                  <label className="flex cursor-pointer items-center justify-between gap-2 rounded-xl border border-stone-200 px-2.5 py-2 sm:px-3 sm:py-2.5">
+                    <span className="min-w-0 flex-1 text-xs leading-snug text-stone-800 sm:text-sm">В молитвенном цикле</span>
                     <span className="relative inline-flex h-6 w-11 items-center">
                       <input
                         type="checkbox"
@@ -1968,12 +1977,12 @@ function MembersSection({
                       <span className="absolute left-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform peer-checked:translate-x-5" />
                     </span>
                   </label>
-                  <div className="rounded-xl bg-stone-100 px-3 py-2.5 text-sm text-stone-700">
-                    <div className="flex items-center gap-2 border-b border-stone-200 pb-2">
+                  <div className="rounded-xl bg-stone-100 px-2.5 py-2 text-xs leading-snug text-stone-700 sm:px-3 sm:py-2.5 sm:text-sm sm:leading-normal">
+                    <div className="flex items-start gap-2 border-b border-stone-200 pb-2 sm:items-center">
                       <span
-                        className={`inline-block h-2.5 w-2.5 rounded-full ${editing.password_reset_required ? 'bg-amber-500' : 'bg-emerald-500'}`}
+                        className={`mt-0.5 inline-block h-2.5 w-2.5 shrink-0 rounded-full sm:mt-0 ${editing.password_reset_required ? 'bg-amber-500' : 'bg-emerald-500'}`}
                       />
-                      <span>
+                      <span className="min-w-0">
                         Статус входа:{' '}
                         <strong>
                           {editing.password_reset_required
@@ -1984,15 +1993,15 @@ function MembersSection({
                         </strong>
                       </span>
                     </div>
-                    <div className="mt-2 flex items-center gap-2">
-                      <span className="inline-block h-2.5 w-2.5 rounded-full bg-stone-400" />
-                      <span>Логин: {editForm.phone_number.trim() || '—'}</span>
+                    <div className="mt-2 flex items-start gap-2 sm:items-center">
+                      <span className="mt-0.5 inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-stone-400 sm:mt-0" />
+                      <span className="min-w-0 break-all">Логин: {editForm.phone_number.trim() || '—'}</span>
                     </div>
                   </div>
-                  <div className="flex justify-end">
+                  <div className="flex justify-stretch sm:justify-end">
                     <button
                       type="button"
-                      className={btnSecondary('text-xs')}
+                      className={`${btnSecondary('text-xs')} w-full sm:w-auto`}
                       disabled={resetPasswordMut.isPending}
                       onClick={() => {
                         if (!window.confirm('Сбросить пароль пользователя? При следующем входе он задаст новый пароль.')) {
@@ -2010,10 +2019,12 @@ function MembersSection({
 
               {/* Prayer request */}
               <section>
-                <p className="mb-3 text-[10px] font-extrabold uppercase tracking-[0.15em] text-stone-400">Молитвенная нужда</p>
+                <p className="mb-2 text-[10px] font-extrabold uppercase tracking-[0.15em] text-stone-400 sm:mb-3">
+                  Молитвенная нужда
+                </p>
                 {isPrayerRequestEditing ? (
                   <textarea
-                    className={`${fieldClass()} min-h-[100px] resize-y`}
+                    className={`${fieldClass()} min-h-[88px] resize-y sm:min-h-[100px]`}
                     value={editForm.prayer_request}
                     onChange={(e) => setEditForm((s) => ({ ...s, prayer_request: e.target.value }))}
                     placeholder="Текст молитвенной нужды…"
@@ -2052,12 +2063,14 @@ function MembersSection({
               </section>
 
               {/* Danger zone */}
-              <section className="rounded-2xl border border-red-200 bg-red-50/40 p-4">
-                <p className="mb-3 text-[10px] font-extrabold uppercase tracking-[0.15em] text-red-700">Опасная зона</p>
-                <div className="grid gap-2 sm:grid-cols-3">
+              <section className="rounded-xl border border-red-200 bg-red-50/40 p-3 sm:rounded-2xl sm:p-4">
+                <p className="mb-2 text-[10px] font-extrabold uppercase tracking-[0.15em] text-red-700 sm:mb-3">
+                  Опасная зона
+                </p>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
                   <button
                     type="button"
-                    className={btnSecondary()}
+                    className={`${btnSecondary()} w-full justify-center sm:w-auto`}
                     onClick={() => {
                       setOneTimeId(editing.id);
                       setOneTimeDate('');
@@ -2068,7 +2081,7 @@ function MembersSection({
                   </button>
                   <button
                     type="button"
-                    className={btnSecondary()}
+                    className={`${btnSecondary()} w-full justify-center sm:w-auto`}
                     onClick={() => {
                       setBanner(null);
                       void updateAdminMember(editing.id, {
@@ -2087,7 +2100,7 @@ function MembersSection({
                   </button>
                   <button
                     type="button"
-                    className="rounded-xl border border-red-300 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700 transition hover:bg-red-100"
+                    className="w-full justify-center rounded-xl border border-red-300 bg-red-50 px-3 py-2.5 text-sm font-semibold text-red-700 transition hover:bg-red-100 sm:w-auto sm:py-2"
                     disabled={deleteMut.isPending}
                     onClick={() => {
                       if (!window.confirm(`Удалить ${memberRosterName(editing)}?`)) return;
@@ -2101,13 +2114,17 @@ function MembersSection({
               </section>
 
               {/* Actions */}
-              <div className="flex justify-end gap-2 border-t border-stone-100 pt-4">
-                <button type="button" className={btnSecondary()} onClick={() => setEditing(null)}>
+              <div className="flex flex-col-reverse gap-2 border-t border-stone-100 bg-white pt-3 max-lg:sticky max-lg:bottom-0 max-lg:z-10 max-lg:pb-[calc(12px+env(safe-area-inset-bottom,0px))] sm:flex-row sm:justify-end sm:gap-2 sm:pt-4 sm:pb-0">
+                <button
+                  type="button"
+                  className={`${btnSecondary()} w-full justify-center sm:w-auto`}
+                  onClick={() => setEditing(null)}
+                >
                   Отмена
                 </button>
                 <button
                   type="button"
-                  className={btnPrimary()}
+                  className={`${btnPrimary()} w-full justify-center sm:w-auto`}
                   disabled={saveEditMut.isPending}
                   onClick={() => {
                     setBanner(null);

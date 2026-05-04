@@ -202,10 +202,10 @@ async function getMemberDisplayName(memberId: number): Promise<string> {
   }
 }
 
-/** GET /api/messenger/uploads/health */
+/** GET /api/messenger/uploads/health — всегда HTTP 200, чтобы axios/fetch не падали; смотрите поле `ok`. */
 router.get('/uploads/health', async (_req: Request, res: Response) => {
   if (!isSupabaseStorageConfigured()) {
-    res.status(503).json({
+    res.status(200).json({
       ok: false,
       storage: 'unavailable',
       reason: 'supabase_not_configured',
@@ -217,7 +217,7 @@ router.get('/uploads/health', async (_req: Request, res: Response) => {
   const v = await verifyStorageBucketPresent(bucket);
   if (!v.ok && isStorageBucketHealthCheckInconclusive(v)) {
     console.warn('[messenger] uploads/health: проверка бакета по listBuckets недоступна (часто self-hosted):', v.reason, v.message ?? '');
-    res.json({
+    res.status(200).json({
       ok: true,
       storage: 'supabase',
       bucket,
@@ -228,12 +228,12 @@ router.get('/uploads/health', async (_req: Request, res: Response) => {
   if (!v.ok) {
     const base = {
       ok: false,
-      storage: 'unavailable',
+      storage: 'unavailable' as const,
       bucket,
       existingBuckets: v.existingBucketIds,
     };
     if (v.reason === 'bucket_not_found') {
-      res.status(503).json({
+      res.status(200).json({
         ...base,
         reason: 'storage_bucket_not_found',
         hint:
@@ -241,7 +241,7 @@ router.get('/uploads/health', async (_req: Request, res: Response) => {
       });
       return;
     }
-    res.status(503).json({
+    res.status(200).json({
       ...base,
       reason: v.reason,
       message: v.message,
@@ -249,7 +249,7 @@ router.get('/uploads/health', async (_req: Request, res: Response) => {
     });
     return;
   }
-  res.json({ ok: true, storage: 'supabase', bucket });
+  res.status(200).json({ ok: true, storage: 'supabase', bucket });
 });
 
 // All messenger routes require authentication
