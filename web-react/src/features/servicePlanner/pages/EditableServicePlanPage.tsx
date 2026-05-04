@@ -981,12 +981,12 @@ export function EditableServicePlanPage() {
                         </ul>
                       </div>
                     ) : null}
-                    <div className="save-bar mt-1 flex w-full min-w-0 sm:col-span-2 sm:mt-0 sm:justify-end">
+                    <div className="save-bar mt-1 flex w-full min-w-0 justify-center sm:col-span-2 sm:mt-0 sm:justify-end">
                       <button
                         type="button"
                         onClick={() => void handleSaveBlock(editingBlock)}
                         disabled={saveBlockMut.isPending}
-                        className="inline-flex w-full max-w-full min-h-12 items-center justify-center gap-2 rounded-lg bg-primary px-3 text-base font-semibold text-white touch-manipulation hover:bg-primary-dark disabled:cursor-not-allowed disabled:opacity-70 sm:w-auto sm:min-h-0 sm:px-3 sm:py-1.5 sm:text-sm"
+                        className="flex w-full max-w-md min-h-12 items-center justify-center gap-2 self-center rounded-lg bg-primary px-4 text-base font-semibold text-white touch-manipulation hover:bg-primary-dark disabled:cursor-not-allowed disabled:opacity-70 max-sm:mx-auto sm:inline-flex sm:max-w-none sm:self-auto sm:px-3 sm:py-1.5 sm:text-sm"
                       >
                         {saveBlockMut.isPending ? (
                           <LuLoaderCircle className="h-5 w-5 shrink-0 animate-spin sm:h-4 sm:w-4" />
