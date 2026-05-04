@@ -3,8 +3,8 @@
   <head>
     <meta charset="UTF-8" />
     <!-- Без ручного pinch/double-tap zoom: размер — из ОС и панели доступности (CSS), не из зума страницы. -->
-    <!-- Zoom разрешён; interactive-widget=resizes-visual — визуальный viewport при клавиатуре без переразметки layout (синхронизируйте с nativeShellViewport.ts). -->
-    <meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1, viewport-fit=cover, interactive-widget=resizes-visual" />
+    <!-- Zoom разрешён; interactive-widget=resizes-content — при клавиатуре сжимается layout viewport, иначе iOS оставляет «высоту экрана» и появляется пустота над клавиатурой (синхронизируйте с nativeShellViewport.ts). -->
+    <meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1, viewport-fit=cover, interactive-widget=resizes-content" />
     <meta name="color-scheme" content="light dark" />
     <meta name="application-name" content="Моя церковь" />
     <meta name="theme-color" content="#7d3640" media="(prefers-color-scheme: light)" />

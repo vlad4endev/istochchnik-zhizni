@@ -59,8 +59,8 @@ function errorToStatus(error: unknown): { status: number; message: string } {
       return {
         status: 502,
         message: detail
-          ? `Запрос к Telegram не выполнен (сеть или TLS): ${detail}`
-          : 'Запрос к Telegram не выполнен (сеть или TLS)',
+          ? `Запрос к Telegram не выполнен (сеть или TLS): ${detail}. Исходящий HTTPS 443 до api.telegram.org; curl -I https://api.telegram.org`
+          : 'Запрос к Telegram не выполнен (сеть или TLS). Проверьте HTTPS 443 и DNS.',
       };
     }
     return {
@@ -88,7 +88,9 @@ function errorToStatus(error: unknown): { status: number; message: string } {
     const detail = msg.slice('telegram_getme_network:'.length).trim();
     return {
       status: 502,
-      message: detail ? `Нет связи с Telegram API: ${detail}` : 'Нет связи с Telegram API',
+      message: detail
+        ? `Нет связи с Telegram API: ${detail}. Исходящий HTTPS 443 до api.telegram.org; на сервере: curl -I https://api.telegram.org`
+        : 'Нет связи с Telegram API. Проверьте исходящий HTTPS 443 и DNS (curl -I https://api.telegram.org).',
     };
   }
   if (msg === 'telegram_settings_read') {

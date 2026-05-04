@@ -1,26 +1,40 @@
 import { useEffect } from 'react';
 
+function isFormField(el: HTMLElement): boolean {
+  const tag = el.tagName;
+  return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
+}
+
 /** Scrolls the focused control into view when the visual viewport changes (e.g. mobile keyboard). */
 export function useScrollInputIntoView(): void {
   useEffect(() => {
-    const handler = (): void => {
-      const focused = document.activeElement;
-      if (
-        !focused ||
-        !(focused instanceof HTMLElement) ||
-        (focused.tagName !== 'INPUT' && focused.tagName !== 'TEXTAREA' && focused.tagName !== 'SELECT')
-      ) {
-        return;
-      }
+    const scrollField = (el: HTMLElement, delayMs: number): void => {
+      if (!isFormField(el)) return;
       setTimeout(() => {
-        focused.scrollIntoView({
+        el.scrollIntoView({
           behavior: 'smooth',
           block: 'center',
+          inline: 'nearest',
         });
-      }, 100);
+      }, delayMs);
     };
 
-    window.visualViewport?.addEventListener('resize', handler);
-    return () => window.visualViewport?.removeEventListener('resize', handler);
+    const handleVisualResize = (): void => {
+      const focused = document.activeElement;
+      if (!focused || !(focused instanceof HTMLElement)) return;
+      scrollField(focused, 100);
+    };
+
+    const handleFocusIn = (e: Event): void => {
+      if (!(e.target instanceof HTMLElement)) return;
+      scrollField(e.target, 350);
+    };
+
+    window.visualViewport?.addEventListener('resize', handleVisualResize);
+    document.addEventListener('focusin', handleFocusIn);
+    return () => {
+      window.visualViewport?.removeEventListener('resize', handleVisualResize);
+      document.removeEventListener('focusin', handleFocusIn);
+    };
   }, []);
 }

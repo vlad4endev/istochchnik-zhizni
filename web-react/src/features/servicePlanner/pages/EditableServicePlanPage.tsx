@@ -28,6 +28,7 @@ import {
 import type { IconType } from 'react-icons';
 import { Navigate, useParams } from 'react-router-dom';
 import { emitAppToast } from '@/lib/uiFeedback';
+import { useScrollInputIntoView } from '@/hooks/useScrollInputIntoView';
 
 import { meaningfulNoteLinesFromRaw } from '../plannerNoteText';
 import {
@@ -390,6 +391,7 @@ function isRateLimitError(error: unknown): boolean {
 }
 
 export function EditableServicePlanPage() {
+  useScrollInputIntoView();
   const { token } = useParams<{ token: string }>();
   const qc = useQueryClient();
   const [draftBlocks, setDraftBlocks] = useState<EditableBlock[]>([]);

@@ -590,7 +590,10 @@ export function humanizeTelegramError(err: unknown, fallback: string): string {
     return 'Telegram API отклонил отправку. Проверьте Bot Token и chat_id.';
   }
   if (msg.includes('Запрос к Telegram не выполнен')) {
-    return 'Сервер не смог выполнить запрос к Telegram (сеть, TLS, DNS). Проверьте окружение сервера.';
+    return [
+      'При отправке сообщения не удалось выполнить HTTPS к api.telegram.org (то же, что и при проверке токена).',
+      'Проверьте исходящий 443, DNS и сеть контейнера; на сервере: curl -I https://api.telegram.org',
+    ].join(' ');
   }
   if (msg.includes('Telegram getMe')) {
     return 'Проверка токена не прошла. Убедитесь, что Bot Token верный и не отозван.';
@@ -599,7 +602,19 @@ export function humanizeTelegramError(err: unknown, fallback: string): string {
     return 'Таймаут при обращении к Telegram. Повторите попытку или проверьте сеть.';
   }
   if (msg.includes('Нет связи с Telegram API')) {
-    return 'Сервер не смог достучаться до api.telegram.org. Проверьте сеть, файрвол и DNS на сервере.';
+    const afterColon = msg.includes('Нет связи с Telegram API:')
+      ? msg.slice(msg.indexOf('Нет связи с Telegram API:') + 'Нет связи с Telegram API:'.length).trim()
+      : '';
+    const tech = afterColon.replace(/\s*Исходящий HTTPS.*$/i, '').trim();
+    return [
+      'Backend не может установить HTTPS-соединение с api.telegram.org (порт 443).',
+      'Если curl показывает «Connection reset by peer» — часто режут TLS или IP Telegram; попробуйте другой хостинг/VPN на уровне сервера или исходящий HTTP-прокси.',
+      'Для API за прокси задайте на сервере TELEGRAM_HTTPS_PROXY (или HTTPS_PROXY), например http://user:pass@proxy.example.com:8080, и перезапустите backend.',
+      'На сервере: curl -4 -I https://api.telegram.org (ключ -4 — через IPv4, иногда помогает).',
+      tech ? `Ответ Node: ${tech.slice(0, 240)}` : '',
+    ]
+      .filter(Boolean)
+      .join(' ');
   }
   if (msg.includes('Не удалось прочитать настройки из базы данных')) {
     return 'Ошибка базы при чтении настроек. Проверьте подключение к БД.';

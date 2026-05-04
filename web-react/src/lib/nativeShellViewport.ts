@@ -1,6 +1,6 @@
-/** Совпадает с web-react/index.html: без запрета масштаба; resizes-visual — клавиатура уменьшает visual viewport, layout не перетекаает. */
+/** Совпадает с web-react/index.html: без запрета масштаба; resizes-content — клавиатура уменьшает layout viewport (без «дыры» между формой и клавиатурой на iOS). */
 const LOCKED_VIEWPORT =
-  'width=device-width, initial-scale=1, minimum-scale=1, viewport-fit=cover, interactive-widget=resizes-visual';
+  'width=device-width, initial-scale=1, minimum-scale=1, viewport-fit=cover, interactive-widget=resizes-content';
 
 let viewportWatchAttached = false;
 
@@ -12,12 +12,20 @@ function syncViewportState() {
   const layoutHeight = window.innerHeight || 0;
   const visualHeight = vv?.height ?? layoutHeight;
   const offsetTop = vv?.offsetTop ?? 0;
-  /** Высота оболочки = layout viewport (`innerHeight`), как у `position:fixed;bottom:0` — иначе на iOS под панелью остаётся полоска фона. */
-  const viewportHeight = Math.max(0, Math.round(layoutHeight));
-  const keyboardInset = Math.max(0, Math.round(layoutHeight - (visualHeight + offsetTop)));
+  const visibleBottom = Math.round(visualHeight + Math.max(0, offsetTop));
+  const keyboardInset = Math.max(0, Math.round(layoutHeight - visibleBottom));
   const keyboardOpen = keyboardInset >= 110;
+  /**
+   * Обычно — layout (`innerHeight`). При открытой клавиатуре и старом/битом `interactive-widget=resizes-visual`
+   * layout остаётся полноэкранным, а visual viewport сжат — берём min, чтобы оболочка не была выше видимой области.
+   */
+  const viewportHeight = keyboardOpen
+    ? Math.max(0, Math.min(layoutHeight, visibleBottom))
+    : Math.max(0, Math.round(layoutHeight));
 
   root.style.setProperty('--app-viewport-height', `${viewportHeight}px`);
+  root.style.setProperty('--visual-viewport-height', `${Math.max(0, Math.round(visualHeight))}px`);
+  root.style.setProperty('--visual-viewport-offset', `${Math.round(offsetTop)}px`);
   root.style.setProperty('--app-keyboard-inset', `${keyboardInset}px`);
   root.classList.toggle('app-keyboard-open', keyboardOpen);
 

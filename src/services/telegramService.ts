@@ -1,3 +1,5 @@
+import { fetch as undiciFetch, ProxyAgent } from 'undici';
+
 import { query } from '../config/db';
 import {
   getAllPrayerPlanSections,
@@ -82,6 +84,73 @@ function sanitizeBotTokenForHttp(botToken: string): string {
 function isLikelyAbortError(e: unknown): boolean {
   if (!e || typeof e !== 'object') return false;
   return (e as { name?: unknown }).name === 'AbortError';
+}
+
+const TELEGRAM_HTTP_RETRIES = 3;
+const TELEGRAM_RETRY_DELAYS_MS = [400, 1000] as const;
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
+/** Кратковременные сбои TCP/DNS/TLS — имеет смысл повторить запрос */
+function isTransientTelegramFetchFailure(e: unknown): boolean {
+  if (isLikelyAbortError(e) || (e instanceof Error && e.name === 'AbortError')) return false;
+  const msg = (e instanceof Error ? e.message : String(e)).toLowerCase();
+  return (
+    msg.includes('fetch failed') ||
+    msg.includes('econnreset') ||
+    msg.includes('econnrefused') ||
+    msg.includes('etimedout') ||
+    msg.includes('enotfound') ||
+    msg.includes('getaddrinfo') ||
+    msg.includes('ecanceled') ||
+    msg.includes('epipe') ||
+    msg.includes('eai_again') ||
+    msg.includes('socket hang up') ||
+    msg.includes('networkerror') ||
+    msg.includes('connection reset') ||
+    msg.includes('reset by peer')
+  );
+}
+
+/** Только для Telegram API: TELEGRAM_HTTPS_PROXY приоритетнее HTTPS_PROXY/HTTP_PROXY */
+let telegramProxyAgent: ProxyAgent | null | undefined;
+
+function getTelegramProxyAgent(): ProxyAgent | undefined {
+  if (telegramProxyAgent !== undefined) return telegramProxyAgent ?? undefined;
+  const u =
+    normalizeOptionalString(process.env.TELEGRAM_HTTPS_PROXY) ??
+    normalizeOptionalString(process.env.HTTPS_PROXY) ??
+    normalizeOptionalString(process.env.HTTP_PROXY);
+  telegramProxyAgent = u ? new ProxyAgent(u) : null;
+  if (telegramProxyAgent) {
+    console.info('[telegram] using outbound HTTPS proxy for api.telegram.org');
+  }
+  return telegramProxyAgent ?? undefined;
+}
+
+async function fetchTelegramHttp(url: string, init: RequestInit): Promise<Response> {
+  const dispatcher = getTelegramProxyAgent();
+  const initWithProxy = dispatcher ? { ...init, dispatcher } : init;
+  let last: unknown;
+  for (let attempt = 0; attempt < TELEGRAM_HTTP_RETRIES; attempt++) {
+    try {
+      return (await undiciFetch(url, initWithProxy as Parameters<typeof undiciFetch>[1])) as unknown as Response;
+    } catch (e) {
+      last = e;
+      const canRetry = attempt < TELEGRAM_HTTP_RETRIES - 1 && isTransientTelegramFetchFailure(e);
+      if (canRetry) {
+        console.warn(`[telegram] HTTP fetch retry ${attempt + 2}/${TELEGRAM_HTTP_RETRIES}`, e);
+        await delay(TELEGRAM_RETRY_DELAYS_MS[attempt] ?? 1200);
+        continue;
+      }
+      throw e;
+    }
+  }
+  throw last;
 }
 
 /** Base URL `https://api.telegram.org/bot<token>` without trailing slash; never throws URIError */
@@ -455,7 +524,7 @@ async function sendTelegramMessageRaw(botToken: string, chatId: string, text: st
   const timeout = setTimeout(() => controller.abort(), 15_000);
   try {
     const endpoint = `${telegramApiBaseForBot(botToken)}/sendMessage`;
-    const response = await fetch(endpoint, {
+    const response = await fetchTelegramHttp(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       signal: controller.signal,
@@ -509,7 +578,7 @@ async function fetchTelegramGetMeRaw(botToken: string): Promise<{
   const timeout = setTimeout(() => controller.abort(), 15_000);
   try {
     const endpoint = `${telegramApiBaseForBot(botToken)}/getMe`;
-    const response = await fetch(endpoint, { method: 'GET', signal: controller.signal });
+    const response = await fetchTelegramHttp(endpoint, { method: 'GET', signal: controller.signal });
     let body: unknown = null;
     try {
       body = (await response.json()) as unknown;
