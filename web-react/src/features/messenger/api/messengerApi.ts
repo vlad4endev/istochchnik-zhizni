@@ -304,15 +304,24 @@ export async function uploadFile(
 
 const attachmentUrlCache = new Map<string, { url: string; expiresAtMs: number }>();
 
-export async function fetchMessageAttachmentUrl(messageId: string): Promise<{ url: string }> {
-  const key = String(messageId);
+function attachmentUrlCacheKey(messageId: string, slot?: number): string {
+  if (slot == null || !Number.isFinite(slot)) return String(messageId);
+  return `${messageId}:slot:${Math.floor(slot)}`;
+}
+
+export async function fetchMessageAttachmentUrl(
+  messageId: string,
+  slot?: number,
+): Promise<{ url: string }> {
+  const key = attachmentUrlCacheKey(messageId, slot);
   const now = Date.now();
   const cached = attachmentUrlCache.get(key);
   if (cached && cached.expiresAtMs > now + 5000) {
     return { url: cached.url };
   }
+  const qs = slot != null && Number.isFinite(slot) ? `?slot=${encodeURIComponent(String(Math.floor(slot)))}` : '';
   const { data } = await apiClient.get<{ url: string; source: 'signed' | 'stored'; expiresAt?: string }>(
-    `${BASE}/messages/${encodeURIComponent(messageId)}/attachment-url`,
+    `${BASE}/messages/${encodeURIComponent(messageId)}/attachment-url${qs}`,
   );
   const expiresAtMs = data.expiresAt ? Date.parse(data.expiresAt) : now + 5 * 60 * 1000;
   if (data.url) {

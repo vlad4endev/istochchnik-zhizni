@@ -1041,7 +1041,13 @@ router.get('/messages/:id/attachment-url', async (req: Request, res: Response) =
     return;
   }
   try {
-    const item = await svc.getMessageAttachmentForMember(msgId, userId);
+    const slotRaw = req.query.slot;
+    let slot: number | undefined;
+    if (slotRaw != null && String(slotRaw).trim() !== '') {
+      const n = Number(slotRaw);
+      if (Number.isFinite(n) && n >= 0 && n <= 32) slot = Math.floor(n);
+    }
+    const item = await svc.getMessageAttachmentForMember(msgId, userId, slot);
     if (!item) {
       res.status(404).json({ error: 'Attachment not found' });
       return;

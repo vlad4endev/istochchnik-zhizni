@@ -577,7 +577,7 @@ export function EditableServicePlanPage() {
         : members;
 
   return (
-    <div className="share-plan-scroll-root w-full overflow-y-auto overflow-x-hidden overscroll-y-contain bg-[var(--surface)] [max-height:var(--app-viewport-height,100dvh)] [min-height:var(--app-viewport-height,100dvh)] max-md:[scroll-padding-bottom:calc(var(--app-bottom-nav-total-height)+5.5rem)]">
+    <div className="share-plan-scroll-root w-full overflow-y-auto overflow-x-hidden overscroll-y-contain bg-[var(--surface)] [max-height:var(--app-viewport-height,100dvh)] max-md:[scroll-padding-bottom:calc(var(--app-bottom-nav-total-height)+5.5rem)]">
       <div className="mx-auto max-w-3xl space-y-4 px-3 py-5 sm:space-y-6 sm:px-4 sm:py-8">
         <header className="rounded-2xl border border-stone-200 bg-white p-3 shadow-sm sm:p-4">
           <h1 className="text-xl font-extrabold text-stone-900 sm:text-2xl">План собрания на {dateText}</h1>

@@ -9,7 +9,7 @@ import {
 } from '../payloadMedia';
 import { apiErrorMessage, approveAccessRequest, rejectAccessRequest } from '../../admin/api';
 import { IoCheckmark, IoCheckmarkDone } from 'react-icons/io5';
-import { LuDownload, LuFileText, LuLoader, LuRefreshCw, LuX } from 'react-icons/lu';
+import { LuDownload, LuExternalLink, LuFileText, LuLoader, LuRefreshCw, LuX } from 'react-icons/lu';
 import { resolvePublicUrl } from '../../../lib/resolvePublicUrl';
 import { emitAppToast } from '../../../lib/uiFeedback';
 import { motion, useMotionValue, useTransform, animate } from 'framer-motion';
@@ -401,6 +401,42 @@ function AccessRequestMessengerCard({
 /** Первый ряд — как в Telegram: быстрый выбор при long-press. */
 const QUICK_REACTION_STRIP = ['❤️', '👍', '😂', '😮', '😢', '🙏', '🔥'];
 
+function openUrlInNewTab(url: string): void {
+  try {
+    window.open(url, '_blank', 'noopener,noreferrer');
+  } catch {
+    /* ignore */
+  }
+}
+
+/** Сохранение на устройство: сначала blob (как в Telegram), иначе fallback через ссылку. */
+async function saveUrlToDevice(url: string, filename: string): Promise<void> {
+  const safeName = filename.trim() || 'file';
+  try {
+    const res = await fetch(url, { mode: 'cors', credentials: 'omit', cache: 'no-store' });
+    if (!res.ok) throw new Error('bad status');
+    const blob = await res.blob();
+    const objectUrl = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = objectUrl;
+    a.download = safeName;
+    a.rel = 'noopener';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
+  } catch {
+    const a = document.createElement('a');
+    a.href = url;
+    a.target = '_blank';
+    a.rel = 'noopener noreferrer';
+    a.download = safeName;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  }
+}
+
 const QUICK_REACTIONS = [
   '❤️',
   '👍',
@@ -450,6 +486,8 @@ function MessageBubbleInner({
   /** Плашка реакций над пузырьком (long-press), как в Telegram */
   const [showReactionBar, setShowReactionBar] = useState(false);
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
+  /** Имя файла для «Сохранить» в полноэкранном просмотре фото */
+  const [lightboxDownloadName, setLightboxDownloadName] = useState<string | null>(null);
   const longPressTimer = useRef<number | null>(null);
   const longPressOrigin = useRef<{ x: number; y: number } | null>(null);
   const lastTapUpRef = useRef<{ t: number; x: number; y: number } | null>(null);
@@ -457,7 +495,10 @@ function MessageBubbleInner({
   useEffect(() => {
     if (!lightboxSrc) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setLightboxSrc(null);
+      if (e.key === 'Escape') {
+        setLightboxSrc(null);
+        setLightboxDownloadName(null);
+      }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -528,14 +569,19 @@ function MessageBubbleInner({
   })();
   const attachmentObjectPath = String(payload.object_path ?? payload.objectPath ?? '').trim();
   const [resolvedAttachmentUrl, setResolvedAttachmentUrl] = useState<string | null>(null);
+  /** Подписанные URL по кадру альбома (раньше альбом не ходил в attachment-url — фото «протухали»). */
+  const [resolvedAlbumUrls, setResolvedAlbumUrls] = useState<Record<number, string>>({});
   const [imgFailed, setImgFailed] = useState(false);
   const [albumSlotFailed, setAlbumSlotFailed] = useState<Record<number, boolean>>({});
   const fetchedRef = useRef(false);
+
+  const albumFetchSig = useMemo(() => JSON.stringify(payload.images ?? []), [payload.images]);
 
   useEffect(() => {
     fetchedRef.current = false;
     setImgFailed(false);
     setAlbumSlotFailed({});
+    setResolvedAlbumUrls({});
   }, [message.id]);
 
   useEffect(() => {
@@ -573,6 +619,40 @@ function MessageBubbleInner({
       fetchedRef.current = false;
     };
   }, [message.id, attachmentObjectPath, attachmentRawUrl, payloadType, albumImages.length]);
+
+  useEffect(() => {
+    if (payloadType !== 'image' || albumImages.length === 0) return undefined;
+    if (!/^\d+$/.test(String(message.id))) return undefined;
+
+    let cancelled = false;
+    void (async () => {
+      for (let idx = 0; idx < albumImages.length; idx += 1) {
+        if (cancelled) return;
+        const rawUrl = getAlbumImageUrl(albumImages[idx]);
+        const fallback = rawUrl ? (resolvePublicUrl(rawUrl) ?? rawUrl) : '';
+        if (fallback) {
+          setResolvedAlbumUrls((prev) => ({ ...prev, [idx]: fallback }));
+        }
+        for (let attempt = 1; attempt <= 3 && !cancelled; attempt += 1) {
+          try {
+            const { url } = await fetchMessageAttachmentUrl(String(message.id), idx);
+            if (cancelled || !url) break;
+            const resolved = resolvePublicUrl(url) ?? url;
+            if (resolved) setResolvedAlbumUrls((prev) => ({ ...prev, [idx]: resolved }));
+            break;
+          } catch {
+            if (attempt < 3 && !cancelled) {
+              await new Promise((r) => setTimeout(r, 1000 * attempt));
+            }
+          }
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [message.id, payloadType, albumFetchSig, albumImages.length]);
 
   /** Время и галочки в одной строке с текстом (как в Telegram), если нет цитаты и не «особый» контент. */
   const useInlineTextMeta =
@@ -654,7 +734,7 @@ function MessageBubbleInner({
             <div className={['grid gap-1.5', colsClass].join(' ')}>
               {albumImages.map((img, idx) => {
                 const rawUrl = getAlbumImageUrl(img);
-                const src = resolvePublicUrl(rawUrl) ?? rawUrl;
+                const slideSrc = resolvedAlbumUrls[idx] ?? (resolvePublicUrl(rawUrl) ?? rawUrl);
                 const mime = String(img.mimeType ?? img.mimetype ?? '').trim().toLowerCase();
                 const name = String(img.name ?? img.filename ?? '').trim().toLowerCase();
                 const urlPath = rawUrl.split('?')[0].toLowerCase();
@@ -665,27 +745,60 @@ function MessageBubbleInner({
                   urlPath.endsWith('.heif') ||
                   name.endsWith('.heic') ||
                   name.endsWith('.heif');
-                if (!src) return null;
+                if (!slideSrc) return null;
                 if (isHeicLike) {
+                  const dlName =
+                    String(img.name ?? img.filename ?? '').trim() || `photo-${idx + 1}.heic`;
                   return (
-                    <a
-                      key={`${src}-${idx}`}
-                      href={src}
-                      target="_blank"
-                      rel="noreferrer"
+                    <div
+                      key={`${slideSrc}-${idx}-heic`}
                       className={[
-                        'grid min-h-[84px] place-items-center rounded-xl text-xs font-semibold',
+                        'flex min-h-[84px] flex-col items-stretch justify-center gap-2 rounded-xl px-2 py-2 text-xs font-semibold',
                         isMine ? 'bg-white/10 text-white/90' : 'bg-[var(--surface)] text-[var(--text-secondary)]',
                       ].join(' ')}
                     >
-                      HEIC
-                    </a>
+                      <span className="text-center">HEIC</span>
+                      <div className="flex justify-center gap-2">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            openUrlInNewTab(slideSrc);
+                          }}
+                          className={[
+                            'inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-extrabold',
+                            isMine ? 'bg-white/15 text-white' : 'bg-primary/10 text-primary',
+                          ].join(' ')}
+                        >
+                          <LuExternalLink size={14} />
+                          Открыть
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            void saveUrlToDevice(slideSrc, dlName).catch(() =>
+                              emitAppToast({ kind: 'error', message: 'Не удалось сохранить файл' }),
+                            );
+                          }}
+                          className={[
+                            'inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-extrabold',
+                            isMine ? 'bg-white/15 text-white' : 'bg-primary/10 text-primary',
+                          ].join(' ')}
+                        >
+                          <LuDownload size={14} />
+                          Сохранить
+                        </button>
+                      </div>
+                    </div>
                   );
                 }
                 if (albumSlotFailed[idx]) {
                   return (
                     <div
-                      key={`${src}-${idx}-failed`}
+                      key={`${slideSrc}-${idx}-failed`}
                       className={[
                         'flex min-h-[84px] items-center gap-2 rounded-xl px-2 py-2 text-xs font-semibold',
                         isMine ? 'bg-white/10 text-white/75' : 'bg-[var(--surface)] text-[var(--text-secondary)]',
@@ -698,14 +811,19 @@ function MessageBubbleInner({
                 }
                 return (
                   <button
-                    key={`${src}-${idx}`}
+                    key={`${slideSrc}-${idx}`}
                     type="button"
-                    onClick={() => setLightboxSrc(src)}
+                    onClick={() => {
+                      setLightboxSrc(slideSrc);
+                      setLightboxDownloadName(
+                        String(img.name ?? img.filename ?? '').trim() || `photo-${idx + 1}.jpg`,
+                      );
+                    }}
                     className={['overflow-hidden rounded-xl', isMine ? 'bg-white/10' : 'bg-black/[0.04]'].join(' ')}
                     aria-label={`Открыть изображение ${idx + 1}`}
                   >
                     <img
-                      src={src}
+                      src={slideSrc}
                       alt=""
                       className="max-h-[220px] w-full object-cover"
                       loading="lazy"
@@ -740,31 +858,61 @@ function MessageBubbleInner({
         attachmentName.endsWith('.heic') ||
         attachmentName.endsWith('.heif');
       if (isHeicLike) {
+        const heicName =
+          String(payload.name ?? payload.filename ?? '').trim() || 'image.heic';
         return (
-          <a
-            href={src || undefined}
-            target="_blank"
-            rel="noreferrer"
+          <div
             className={[
-              'flex max-w-[20rem] items-center justify-between gap-3 rounded-2xl px-3 py-2 ring-1 transition-colors duration-200',
-              isMine
-                ? 'bg-white/10 ring-white/10 hover:bg-white/15'
-                : 'bg-[var(--surface)] ring-gray-100 hover:bg-stone-100',
+              'flex max-w-[20rem] flex-col gap-2 rounded-2xl px-3 py-2 ring-1 transition-colors duration-200',
+              isMine ? 'bg-white/10 ring-white/10' : 'bg-[var(--surface)] ring-gray-100',
             ].join(' ')}
           >
-            <span className="min-w-0">
+            <div className="min-w-0">
               <span className={['block truncate text-sm font-semibold', isMine ? 'text-white/95' : 'text-[var(--text)]'].join(' ')}>
                 HEIC/HEIF изображение
               </span>
               <span className={['mt-0.5 block text-xs font-semibold', isMine ? 'text-white/70' : 'text-[var(--text-secondary)]'].join(' ')}>
-                Просмотр в браузере ограничен, откройте или скачайте файл
+                Откройте во внешнем приложении или сохраните на устройство
               </span>
-            </span>
-            <span className={['inline-flex shrink-0 items-center gap-1 rounded-full px-3 py-1 text-xs font-extrabold', isMine ? 'bg-white/12 text-white/90' : 'bg-primary/10 text-primary'].join(' ')}>
-              <LuDownload size={14} />
-              Открыть
-            </span>
-          </a>
+            </div>
+            <div className="flex flex-wrap justify-end gap-2">
+              <button
+                type="button"
+                disabled={!src}
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  if (src) openUrlInNewTab(src);
+                }}
+                className={[
+                  'inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-xs font-extrabold disabled:opacity-40',
+                  isMine ? 'bg-white/15 text-white' : 'bg-primary/10 text-primary',
+                ].join(' ')}
+              >
+                <LuExternalLink size={14} />
+                Открыть
+              </button>
+              <button
+                type="button"
+                disabled={!src}
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  if (!src) return;
+                  void saveUrlToDevice(src, heicName).catch(() =>
+                    emitAppToast({ kind: 'error', message: 'Не удалось сохранить файл' }),
+                  );
+                }}
+                className={[
+                  'inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-xs font-extrabold disabled:opacity-40',
+                  isMine ? 'bg-white/15 text-white' : 'bg-primary/10 text-primary',
+                ].join(' ')}
+              >
+                <LuDownload size={14} />
+                Сохранить
+              </button>
+            </div>
+          </div>
         );
       }
       return src ? (
@@ -782,7 +930,12 @@ function MessageBubbleInner({
           ) : (
             <button
               type="button"
-              onClick={() => setLightboxSrc(src)}
+              onClick={() => {
+                setLightboxSrc(src);
+                setLightboxDownloadName(
+                  String(payload.name ?? payload.filename ?? '').trim() || 'image.jpg',
+                );
+              }}
               className={[
                 'block w-full overflow-hidden',
                 isMine ? 'bg-white/10' : 'bg-black/[0.04]',
@@ -818,33 +971,61 @@ function MessageBubbleInner({
       const sizeRaw = Number(payload.size ?? 0);
       const sizeLabel = Number.isFinite(sizeRaw) && sizeRaw > 0 ? formatBytes(sizeRaw) : null;
       return (
-        <a
-          href={href || undefined}
-          target="_blank"
-          rel="noreferrer"
+        <div
           className={[
-            'flex max-w-[20rem] items-center justify-between gap-3 rounded-2xl px-3 py-2 ring-1 transition-colors duration-200',
-            isMine
-              ? 'bg-white/10 ring-white/10 hover:bg-white/15'
-              : 'bg-[var(--surface)] ring-gray-100 hover:bg-stone-100',
+            'flex max-w-[20rem] flex-col gap-2 rounded-2xl px-3 py-2 ring-1 transition-colors duration-200',
+            isMine ? 'bg-white/10 ring-white/10' : 'bg-[var(--surface)] ring-gray-100',
           ].join(' ')}
         >
-          <span className="flex min-w-0 items-center gap-3">
-            <span className={['grid h-10 w-10 place-items-center rounded-xl', isMine ? 'bg-white/12 text-white' : 'bg-[var(--surface-elevated)] text-[var(--text-secondary)] ring-1 ring-gray-100'].join(' ')}>
+          <div className="flex min-w-0 items-center gap-3">
+            <span className={['grid h-10 w-10 shrink-0 place-items-center rounded-xl', isMine ? 'bg-white/12 text-white' : 'bg-[var(--surface-elevated)] text-[var(--text-secondary)] ring-1 ring-gray-100'].join(' ')}>
               <LuFileText size={18} />
             </span>
-            <span className="min-w-0">
+            <span className="min-w-0 flex-1">
               <span className={['block truncate text-sm font-semibold', isMine ? 'text-white/95' : 'text-[var(--text)]'].join(' ')}>{name}</span>
               <span className={['mt-0.5 block text-xs font-semibold', isMine ? 'text-white/70' : 'text-[var(--text-secondary)]'].join(' ')}>
                 {sizeLabel ?? 'Файл'}
               </span>
             </span>
-          </span>
-          <span className={['inline-flex shrink-0 items-center gap-1 rounded-full px-3 py-1 text-xs font-extrabold', isMine ? 'bg-white/12 text-white/90' : 'bg-primary/10 text-primary'].join(' ')}>
-            <LuDownload size={14} />
-            Скачать
-          </span>
-        </a>
+          </div>
+          <div className="flex flex-wrap justify-end gap-2">
+            <button
+              type="button"
+              disabled={!href}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                if (href) openUrlInNewTab(href);
+              }}
+              className={[
+                'inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-xs font-extrabold disabled:opacity-40',
+                isMine ? 'bg-white/15 text-white' : 'bg-primary/10 text-primary',
+              ].join(' ')}
+            >
+              <LuExternalLink size={14} />
+              Открыть
+            </button>
+            <button
+              type="button"
+              disabled={!href}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                if (!href) return;
+                void saveUrlToDevice(href, name).catch(() =>
+                  emitAppToast({ kind: 'error', message: 'Не удалось сохранить файл' }),
+                );
+              }}
+              className={[
+                'inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-xs font-extrabold disabled:opacity-40',
+                isMine ? 'bg-white/15 text-white' : 'bg-primary/10 text-primary',
+              ].join(' ')}
+            >
+              <LuDownload size={14} />
+              Сохранить
+            </button>
+          </div>
+        </div>
       );
     }
 
@@ -1321,7 +1502,10 @@ function MessageBubbleInner({
     {lightboxSrc ? (
       <div
         className="fixed inset-0 z-[5000] bg-black/80 p-4"
-        onClick={() => setLightboxSrc(null)}
+        onClick={() => {
+          setLightboxSrc(null);
+          setLightboxDownloadName(null);
+        }}
         role="dialog"
         aria-modal="true"
         aria-label="Просмотр изображения"
@@ -1330,7 +1514,22 @@ function MessageBubbleInner({
           type="button"
           onClick={(e) => {
             e.stopPropagation();
+            const n = (lightboxDownloadName ?? 'image.jpg').trim() || 'image.jpg';
+            void saveUrlToDevice(lightboxSrc, n).catch(() =>
+              emitAppToast({ kind: 'error', message: 'Не удалось сохранить фото' }),
+            );
+          }}
+          className="absolute left-4 top-4 z-[5001] inline-flex h-11 min-w-[11rem] items-center justify-center gap-2 rounded-full bg-white/10 px-4 text-sm font-bold text-white backdrop-blur-sm transition hover:bg-white/20"
+        >
+          <LuDownload className="h-5 w-5 shrink-0" strokeWidth={2} aria-hidden />
+          Сохранить
+        </button>
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
             setLightboxSrc(null);
+            setLightboxDownloadName(null);
           }}
           className="absolute right-4 top-4 z-[5001] flex h-11 w-11 items-center justify-center rounded-full bg-white/10 text-white backdrop-blur-sm transition hover:bg-white/20"
           aria-label="Закрыть"

@@ -702,6 +702,38 @@ function formatDateRuYmd(dateYmd: string): string {
   return formatted.charAt(0).toUpperCase() + formatted.slice(1);
 }
 
+/** Календарный день в локальном времени процесса Node (как «сегодня» в cron рассылки). */
+function formatYmdServerLocal(now: Date = new Date()): string {
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, '0');
+  const d = String(now.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+function isValidCalendarYmd(value: string): boolean {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) return false;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return (
+    date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day
+  );
+}
+
+/** Дата для текста «Молитва на сегодня»: явный YYYY-MM-DD или локальный «сегодня» сервера. */
+export function resolvePrayerDispatchCalendarYmd(prayerDateYmd?: string | null): string {
+  const trimmed = typeof prayerDateYmd === 'string' ? prayerDateYmd.trim() : '';
+  if (!trimmed) {
+    return formatYmdServerLocal(new Date());
+  }
+  if (!isValidCalendarYmd(trimmed)) {
+    throw new Error('telegram_prayer_date_invalid');
+  }
+  return trimmed;
+}
+
 const DEFAULT_TODAY_PRAYER_TEMPLATE = [
   'Сегодня {{date}} мы молимся за члена церкви:',
   '',
@@ -774,11 +806,8 @@ function joinBlocks(blocks: string[], emptyFallback: string): string {
   return blocks.join('\n\n');
 }
 
-export async function buildTodayPrayerTelegramText(): Promise<string> {
-  const now = new Date();
-  const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()))
-    .toISOString()
-    .slice(0, 10);
+export async function buildTodayPrayerTelegramText(prayerDateYmd?: string | null): Promise<string> {
+  const today = resolvePrayerDispatchCalendarYmd(prayerDateYmd);
   const [data, sections, settings] = await Promise.all([
     getPrayerDataByDate(today),
     getAllPrayerPlanSections(),
@@ -788,7 +817,8 @@ export async function buildTodayPrayerTelegramText(): Promise<string> {
   const theme = data.global_themes[0];
   const ministry = data.ministries[0];
   const backslider = data.backsliders[0];
-  const template = settings.telegram_prayer_template ?? DEFAULT_TODAY_PRAYER_TEMPLATE;
+  const template =
+    normalizeOptionalString(settings.telegram_prayer_template) ?? DEFAULT_TODAY_PRAYER_TEMPLATE;
   const allThemesBlock = joinBlocks(
     sections.global_themes.map((item) => formatThemeBlock(item)),
     '- ТЕМЫ МОЛИТВЫ НЕ УКАЗАНЫ',
@@ -894,7 +924,9 @@ export async function sendTelegramByPurpose(args: {
   return { chat_id: chatId, status: sent.status };
 }
 
-export async function sendTodayPrayerTelegramToAllMembers(): Promise<{ sent_count: number; total: number }> {
+export async function sendTodayPrayerTelegramToAllMembers(
+  prayerDateYmd?: string | null,
+): Promise<{ sent_count: number; total: number }> {
   const cfg = await resolveTelegramConfig();
   if (!cfg.enabled) {
     throw new Error('telegram_disabled');
@@ -903,7 +935,10 @@ export async function sendTodayPrayerTelegramToAllMembers(): Promise<{ sent_coun
     throw new Error('telegram_missing_token');
   }
 
-  const [text, chatIds] = await Promise.all([buildTodayPrayerTelegramText(), listMemberTelegramChatIds()]);
+  const [text, chatIds] = await Promise.all([
+    buildTodayPrayerTelegramText(prayerDateYmd),
+    listMemberTelegramChatIds(),
+  ]);
   if (chatIds.length === 0) {
     throw new Error('telegram_missing_member_chats');
   }
@@ -925,7 +960,10 @@ export async function sendTodayPrayerTelegramToAllMembers(): Promise<{ sent_coun
   return { sent_count: sent, total: chatIds.length };
 }
 
-export async function sendTodayPrayerTelegramToSelectedMembers(memberIds: number[]): Promise<{ sent_count: number; total: number }> {
+export async function sendTodayPrayerTelegramToSelectedMembers(
+  memberIds: number[],
+  prayerDateYmd?: string | null,
+): Promise<{ sent_count: number; total: number }> {
   const cfg = await resolveTelegramConfig();
   if (!cfg.enabled) throw new Error('telegram_disabled');
   if (!cfg.botToken) throw new Error('telegram_missing_token');
@@ -934,7 +972,7 @@ export async function sendTodayPrayerTelegramToSelectedMembers(memberIds: number
   const recipients = await listTelegramDispatchRecipients();
   const chatIds = recipients.filter((r) => ids.includes(r.id)).map((r) => r.telegram_chat_id);
   if (chatIds.length === 0) throw new Error('telegram_missing_member_chats');
-  const text = await buildTodayPrayerTelegramText();
+  const text = await buildTodayPrayerTelegramText(prayerDateYmd);
   let sent = 0;
   for (const chatId of chatIds) {
     const result = await sendTelegramMessageRaw(cfg.botToken, chatId, text);
@@ -952,13 +990,15 @@ export async function sendTodayPrayerTelegramToSelectedMembers(memberIds: number
   return { sent_count: sent, total: chatIds.length };
 }
 
-export async function runTelegramDispatchNow(): Promise<{ sent_count: number; mode: 'all' | 'selected' }> {
+export async function runTelegramDispatchNow(
+  prayerDateYmd?: string | null,
+): Promise<{ sent_count: number; mode: 'all' | 'selected' }> {
   const s = await getTelegramDispatchSettings();
   if (s.target === 'selected') {
-    const r = await sendTodayPrayerTelegramToSelectedMembers(s.member_ids);
+    const r = await sendTodayPrayerTelegramToSelectedMembers(s.member_ids, prayerDateYmd);
     return { sent_count: r.sent_count, mode: 'selected' };
   }
-  const r = await sendTodayPrayerTelegramToAllMembers();
+  const r = await sendTodayPrayerTelegramToAllMembers(prayerDateYmd);
   return { sent_count: r.sent_count, mode: 'all' };
 }
 

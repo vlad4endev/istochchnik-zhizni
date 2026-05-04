@@ -203,7 +203,12 @@ export default defineConfig(({ mode }) => {
           skipWaiting: true,
           clientsClaim: true,
           navigateFallback: '/index.html',
-          navigateFallbackDenylist: [/^\/api/, /^\/uploads/, /^\/health/],
+          /**
+           * `/storage/v1/...` — частый прокси к Supabase Storage с того же origin, что и SPA.
+           * Без denylist Workbox отдаёт `index.html` на навигацию по ссылке на файл → React Router
+           * ловит «неизвестный» путь и уводит на `/dashboard`.
+           */
+          navigateFallbackDenylist: [/^\/api/, /^\/uploads/, /^\/health/, /^\/storage\//],
           /**
            * `public/custom-sw.js` — обработчики Web Push (`push`, `notificationclick`, бейдж).
            * Без importScripts файл только прекэшируется и не выполняется в контексте SW.

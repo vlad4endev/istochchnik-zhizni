@@ -121,9 +121,7 @@ export async function getPrayerBotMessage(req: Request, res: Response): Promise<
 
 export async function getTodayPrayerBotMessage(req: Request, res: Response): Promise<void> {
   const now = new Date();
-  const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()))
-    .toISOString()
-    .slice(0, 10);
+  const today = formatYmdLocal(now);
 
   try {
     const data = await getPrayerDataByDate(today);

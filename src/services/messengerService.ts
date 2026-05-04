@@ -2111,6 +2111,7 @@ export async function getMessageConversationId(messageId: string): Promise<strin
 export async function getMessageAttachmentForMember(
   messageId: string,
   memberId: number,
+  slot?: number,
 ): Promise<{
   conversationId: string;
   url: string | null;
@@ -2135,11 +2136,30 @@ export async function getMessageAttachmentForMember(
   const payloadType = String(row.payload_type);
   if (payloadType !== 'image' && payloadType !== 'file') return null;
   const payload = normalizePayload(row.payload);
-  const urlRaw = String(payload.url ?? '').trim();
+
+  let urlRaw = String(payload.url ?? '').trim();
+  let objectPathRaw: unknown = payload.objectPath ?? payload.object_path;
+
+  const slotIdx =
+    typeof slot === 'number' && Number.isFinite(slot) && slot >= 0 && slot <= 32 ? Math.floor(slot) : null;
+  if (slotIdx != null && payloadType === 'image') {
+    const images = Array.isArray(payload.images) ? payload.images : [];
+    const imgRow = images[slotIdx];
+    if (imgRow && typeof imgRow === 'object' && !Array.isArray(imgRow)) {
+      const im = imgRow as Record<string, unknown>;
+      const slotUrl = String(im.url ?? '').trim();
+      const slotOp = im.objectPath ?? im.object_path;
+      if (slotUrl || slotOp) {
+        urlRaw = slotUrl;
+        objectPathRaw = slotOp;
+      }
+    }
+  }
+
   const url = urlRaw
     ? rewriteSupabaseStorageUrlForClient(normalizeAttachmentUrl(urlRaw))
     : null;
-  const objectPath = normalizeStorageObjectPath(payload.objectPath ?? payload.object_path);
+  const objectPath = normalizeStorageObjectPath(objectPathRaw);
   if (!url && !objectPath) return null;
   return { conversationId, url, objectPath };
 }

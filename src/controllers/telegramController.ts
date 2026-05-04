@@ -5,6 +5,7 @@ import {
   getTelegramDispatchSettings,
   getTelegramSettings,
   listTelegramDispatchRecipients,
+  resolvePrayerDispatchCalendarYmd,
   runTelegramDispatchNow,
   sendTodayPrayerTelegramToAllMembers,
   sendTelegramByPurpose,
@@ -45,6 +46,9 @@ function errorToStatus(error: unknown): { status: number; message: string } {
     return { status: 400, message: 'Не найдено пользователей с заполненным Telegram ID' };
   }
   if (msg === 'telegram_empty_text') return { status: 400, message: 'Текст сообщения пуст' };
+  if (msg === 'telegram_prayer_date_invalid') {
+    return { status: 400, message: 'Некорректная дата. Ожидается YYYY-MM-DD.' };
+  }
   if (msg === 'telegram_once_at_invalid') {
     return {
       status: 400,
@@ -309,14 +313,54 @@ export async function getTelegramDispatchRecipientsHandler(req: Request, res: Re
   }
 }
 
+function parseOptionalDispatchDateFromBody(body: unknown): string | undefined {
+  if (body == null || typeof body !== 'object') return undefined;
+  const raw = (body as { date?: unknown }).date;
+  if (raw === undefined || raw === null) return undefined;
+  if (typeof raw !== 'string') {
+    throw new Error('telegram_dispatch_date_bad_type');
+  }
+  const trimmed = raw.trim();
+  if (!trimmed) return undefined;
+  return trimmed;
+}
+
 export async function postTelegramDispatchRunNowHandler(req: Request, res: Response): Promise<void> {
   if (!ensureAdmin(req, res)) return;
   try {
-    const sent = await runTelegramDispatchNow();
+    let prayerDate: string | undefined;
+    try {
+      prayerDate = parseOptionalDispatchDateFromBody(req.body);
+    } catch {
+      res.status(400).json({ error: 'Поле "date" должно быть строкой YYYY-MM-DD или отсутствовать' });
+      return;
+    }
+    const sent = await runTelegramDispatchNow(prayerDate);
     res.json({ ok: true, sent_count: sent.sent_count, mode: sent.mode });
   } catch (error) {
     const mapped = errorToStatus(error);
     res.status(mapped.status).json({ error: mapped.message });
+  }
+}
+
+export async function getTelegramDispatchPreviewPrayerHandler(req: Request, res: Response): Promise<void> {
+  if (!ensureAdmin(req, res)) return;
+  const q = req.query.date;
+  const raw = typeof q === 'string' ? q.trim() : '';
+  try {
+    const text = await buildTodayPrayerTelegramText(raw.length > 0 ? raw : null);
+    res.json({
+      text,
+      date: resolvePrayerDispatchCalendarYmd(raw.length > 0 ? raw : null),
+    });
+  } catch (error) {
+    const mapped = errorToStatus(error);
+    if (mapped.status !== 500) {
+      res.status(mapped.status).json({ error: mapped.message });
+      return;
+    }
+    console.error('[telegram] preview prayer failed:', error);
+    res.status(500).json({ error: 'Не удалось собрать текст молитвы' });
   }
 }
 

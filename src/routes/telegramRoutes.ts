@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import {
+  getTelegramDispatchPreviewPrayerHandler,
   getTelegramDispatchRecipientsHandler,
   getTelegramDispatchSettingsHandler,
   getTelegramSettingsHandler,
@@ -17,6 +18,7 @@ router.patch('/settings', patchTelegramSettingsHandler);
 router.get('/dispatch/settings', getTelegramDispatchSettingsHandler);
 router.patch('/dispatch/settings', patchTelegramDispatchSettingsHandler);
 router.get('/dispatch/recipients', getTelegramDispatchRecipientsHandler);
+router.get('/dispatch/preview-prayer', getTelegramDispatchPreviewPrayerHandler);
 router.post('/dispatch/run-now', postTelegramDispatchRunNowHandler);
 router.post('/test-connection', postTelegramTestConnectionHandler);
 router.post('/send', postTelegramSendHandler);

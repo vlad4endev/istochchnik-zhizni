@@ -64,6 +64,7 @@ import {
 } from '../api';
 import { loadErrorDescription } from '../prayerPageUtils';
 import {
+  fetchTelegramDispatchPreviewPrayer,
   fetchTelegramDispatchRecipients,
   fetchTelegramDispatchSettings,
   fetchTelegramSettings,
@@ -364,9 +365,19 @@ function EmptyBlock() {
 const CAL_START = new Date(2020, 0, 1);
 const CAL_END = new Date(2030, 11, 31);
 
-function TelegramPrayerDispatchModal(props: { open: boolean; onClose: () => void }) {
-  const { open, onClose } = props;
+function TelegramPrayerDispatchModal(props: {
+  open: boolean;
+  onClose: () => void;
+  /** Календарный день страницы «Молитва» (как в URL /api/calendar/:date) — в рассылку уходит этот день. */
+  prayerCalendarDateYmd: string;
+}) {
+  const { open, onClose, prayerCalendarDateYmd } = props;
   const qc = useQueryClient();
+  const previewQ = useQuery({
+    queryKey: ['prayer', 'telegram', 'dispatch', 'preview-prayer', prayerCalendarDateYmd],
+    queryFn: () => fetchTelegramDispatchPreviewPrayer(prayerCalendarDateYmd),
+    enabled: open,
+  });
   const settingsQ = useQuery({
     queryKey: ['prayer', 'telegram', 'dispatch', 'settings'],
     queryFn: fetchTelegramDispatchSettings,
@@ -419,10 +430,13 @@ function TelegramPrayerDispatchModal(props: { open: boolean; onClose: () => void
   });
 
   const runMut = useMutation({
-    mutationFn: () => runTelegramDispatchNow(),
+    mutationFn: () => runTelegramDispatchNow({ date: prayerCalendarDateYmd }),
     onSuccess: (r) => {
       setNote(`Рассылка отправлена: ${r.sent_count}.`);
       void qc.invalidateQueries({ queryKey: ['prayer', 'telegram', 'dispatch', 'settings'] });
+      void qc.invalidateQueries({
+        queryKey: ['prayer', 'telegram', 'dispatch', 'preview-prayer', prayerCalendarDateYmd],
+      });
     },
     onError: (e) => setNote(humanizeTelegramError(e, 'Не удалось запустить рассылку.')),
   });
@@ -437,7 +451,7 @@ function TelegramPrayerDispatchModal(props: { open: boolean; onClose: () => void
   });
 
   if (!open) return null;
-  const loading = settingsQ.isPending || recipientsQ.isPending || telegramQ.isPending;
+  const loading = settingsQ.isPending || recipientsQ.isPending || telegramQ.isPending || previewQ.isPending;
   const recipients = recipientsQ.data ?? [];
   const botEnabled = telegramQ.data?.enabled === true;
 
@@ -472,6 +486,23 @@ function TelegramPrayerDispatchModal(props: { open: boolean; onClose: () => void
             ) : null}
             {note ? (
               <div className="rounded-xl border border-stone-200 bg-stone-50 px-3 py-2 text-sm text-stone-800">{note}</div>
+            ) : null}
+            {previewQ.isError ? (
+              <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-900">
+                {humanizeTelegramError(previewQ.error, 'Не удалось загрузить предпросмотр текста.')}
+              </div>
+            ) : previewQ.data ? (
+              <div className="rounded-xl border border-stone-200 bg-stone-50/80 p-3">
+                <p className="text-xs font-semibold text-stone-600">
+                  Текст «Молитва на сегодня» для даты {previewQ.data.date} (как на странице)
+                </p>
+                <textarea
+                  readOnly
+                  className="mt-2 max-h-48 min-h-[120px] w-full resize-y rounded-lg border border-stone-200 bg-white px-3 py-2 font-mono text-[13px] leading-relaxed text-stone-800"
+                  value={previewQ.data.text}
+                  aria-label="Предпросмотр текста рассылки молитвы"
+                />
+              </div>
             ) : null}
             <div className="grid gap-3 md:grid-cols-2">
               <label className="flex items-center justify-between rounded-xl border border-stone-200 px-3 py-2.5">
@@ -1102,6 +1133,7 @@ export function DailyPrayerPage() {
       <TelegramPrayerDispatchModal
         open={telegramDispatchModalOpen}
         onClose={() => setTelegramDispatchModalOpen(false)}
+        prayerCalendarDateYmd={dateKey}
       />
     </div>
   );

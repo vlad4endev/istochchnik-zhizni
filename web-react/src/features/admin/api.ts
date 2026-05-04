@@ -556,10 +556,20 @@ export async function fetchTelegramDispatchRecipients(): Promise<TelegramDispatc
   return data;
 }
 
-export async function runTelegramDispatchNow(): Promise<{ ok: boolean; sent_count: number; mode: 'all' | 'selected' }> {
+export async function runTelegramDispatchNow(body?: {
+  date?: string;
+}): Promise<{ ok: boolean; sent_count: number; mode: 'all' | 'selected' }> {
   const { data } = await apiClient.post<{ ok: boolean; sent_count: number; mode: 'all' | 'selected' }>(
     '/api/telegram/dispatch/run-now',
+    body?.date ? { date: body.date } : {},
   );
+  return data;
+}
+
+export async function fetchTelegramDispatchPreviewPrayer(dateYmd?: string): Promise<{ text: string; date: string }> {
+  const { data } = await apiClient.get<{ text: string; date: string }>('/api/telegram/dispatch/preview-prayer', {
+    params: dateYmd ? { date: dateYmd } : {},
+  });
   return data;
 }
 
