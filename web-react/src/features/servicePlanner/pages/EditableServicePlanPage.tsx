@@ -579,7 +579,7 @@ export function EditableServicePlanPage() {
                     : editingBlockId === b.id
                       ? 'border-primary/60'
                       : 'border-stone-200'
-                } p-2.5 sm:p-4 ${editingBlockId === b.id ? 'max-sm:pb-[var(--app-safe-bottom)]' : ''}`}
+                } p-2.5 sm:p-4`}
               >
                 <div className="flex min-w-0 items-start gap-2 sm:gap-3">
                   <div className="w-11 shrink-0 rounded-md bg-stone-100 px-1.5 py-1 text-center text-[11px] font-bold text-stone-700 sm:w-12 sm:bg-transparent sm:px-0 sm:py-0 sm:text-xs">

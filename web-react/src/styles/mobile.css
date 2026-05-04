@@ -510,9 +510,18 @@
     box-sizing: border-box !important;
   }
 
-  /* Редактирование по ссылке без нижнего таб-бара: не резервируем высоту под nav — иначе полоска «пустоты» снизу. */
+  /*
+   * Редактирование по ссылке (share): без нижнего таб-бара.
+   * Sticky + белый фон + z-index перекрывали textarea «Заметка» при вводе — визуально «пустота на весь блок».
+   * Держим панель в потоке под полями (как при app-keyboard-open для обычного .save-bar).
+   */
   .save-bar.save-bar--standalone {
-    bottom: max(0.75rem, env(safe-area-inset-bottom, 0px)) !important;
+    position: relative !important;
+    bottom: auto !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+    box-shadow: none !important;
+    z-index: auto !important;
   }
 
   /* Клавиатура: sticky перекрывает фокус — уводим панель в поток, без «плавания» над полем. */
