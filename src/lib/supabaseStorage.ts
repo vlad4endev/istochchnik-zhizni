@@ -235,9 +235,23 @@ function getClient(): SupabaseClient {
   return cached;
 }
 
+/** Легаси из старого .env: бакет `messenger` в проекте не создаётся, в Storage используется id `chat`. */
+let warnedMessengerBucketAlias = false;
+
 /** Имя бакета для вложений чата; дефолт `chat` совпадает с `supabase/migrations/*storage_buckets_app_uploads.sql`. */
 export function messengerBucket(): string {
-  return process.env.SUPABASE_STORAGE_BUCKET_MESSENGER?.trim() || 'chat';
+  const raw = process.env.SUPABASE_STORAGE_BUCKET_MESSENGER?.trim();
+  if (!raw) return 'chat';
+  if (raw.toLowerCase() === 'messenger') {
+    if (!warnedMessengerBucketAlias) {
+      warnedMessengerBucketAlias = true;
+      console.warn(
+        '[storage] SUPABASE_STORAGE_BUCKET_MESSENGER=messenger: в Storage по умолчанию бакет id `chat` (см. scripts/ensure-supabase-storage-buckets.sql). Подмена на `chat`. Удалите переменную или задайте SUPABASE_STORAGE_BUCKET_MESSENGER=chat.',
+      );
+    }
+    return 'chat';
+  }
+  return raw;
 }
 
 export function userMediaBucket(): string {
