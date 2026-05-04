@@ -472,9 +472,13 @@ export interface TelegramDispatchSettingsResponse {
   kind: 'daily' | 'once';
   time_hhmm: string | null;
   once_at_iso: string | null;
+  /** ГГГГ-ММ-ДДTчч:мм в часовом поясе сервера */
+  once_at_local: string | null;
   target: 'all' | 'selected';
   member_ids: number[];
   last_sent_at_iso: string | null;
+  server_timezone: string;
+  last_sent_label: string | null;
 }
 
 export interface TelegramDispatchRecipient {
@@ -576,17 +580,32 @@ export function humanizeTelegramError(err: unknown, fallback: string): string {
   const msg = apiErrorMessage(err, fallback);
   if (msg.includes('Telegram модуль выключен')) return 'Telegram модуль выключен. Включите его в настройках.';
   if (msg.includes('Не задан Telegram Bot Token')) return 'Не задан Bot Token. Добавьте токен бота.';
+  if (msg.includes('Токен содержит недопустимые символы')) {
+    return 'Токен повреждён при вставке (лишние символы). Скопируйте из @BotFather ещё раз.';
+  }
   if (msg.includes('Не найдено пользователей с заполненным Telegram ID')) {
     return 'Нет получателей: заполните Telegram ID у пользователей.';
   }
   if (msg.includes('Telegram API вернул ошибку при отправке')) {
     return 'Telegram API отклонил отправку. Проверьте Bot Token и chat_id.';
   }
+  if (msg.includes('Запрос к Telegram не выполнен')) {
+    return 'Сервер не смог выполнить запрос к Telegram (сеть, TLS, DNS). Проверьте окружение сервера.';
+  }
   if (msg.includes('Telegram getMe')) {
     return 'Проверка токена не прошла. Убедитесь, что Bot Token верный и не отозван.';
   }
   if (msg.includes('Таймаут при обращении к Telegram API')) {
     return 'Таймаут при обращении к Telegram. Повторите попытку или проверьте сеть.';
+  }
+  if (msg.includes('Нет связи с Telegram API')) {
+    return 'Сервер не смог достучаться до api.telegram.org. Проверьте сеть, файрвол и DNS на сервере.';
+  }
+  if (msg.includes('Не удалось прочитать настройки из базы данных')) {
+    return 'Ошибка базы при чтении настроек. Проверьте подключение к БД.';
+  }
+  if (msg.includes('Укажите в формате ГГГГ-ММ-ДДTчч:мм')) {
+    return 'Дата и время для «разово» указаны неверно. Заполните дату и время в часовом поясе сервера.';
   }
   return msg;
 }

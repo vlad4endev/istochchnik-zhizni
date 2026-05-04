@@ -33,15 +33,36 @@ function errorToStatus(error: unknown): { status: number; message: string } {
   const msg = error instanceof Error ? error.message : String(error);
   if (msg === 'telegram_disabled') return { status: 409, message: 'Telegram модуль выключен в настройках' };
   if (msg === 'telegram_missing_token') return { status: 400, message: 'Не задан Telegram Bot Token' };
+  if (msg === 'telegram_bot_token_invalid_chars') {
+    return {
+      status: 400,
+      message:
+        'Токен содержит недопустимые символы. Скопируйте его из @BotFather заново (без пробелов и «умных» кавычек).',
+    };
+  }
   if (msg === 'telegram_missing_chat') return { status: 400, message: 'Не задан Telegram chat_id' };
   if (msg === 'telegram_missing_member_chats') {
     return { status: 400, message: 'Не найдено пользователей с заполненным Telegram ID' };
   }
   if (msg === 'telegram_empty_text') return { status: 400, message: 'Текст сообщения пуст' };
+  if (msg === 'telegram_once_at_invalid') {
+    return {
+      status: 400,
+      message: 'Неверная дата и время. Укажите в формате ГГГГ-ММ-ДДTчч:мм в часовом поясе сервера.',
+    };
+  }
   if (msg.startsWith('telegram_send_failed:')) {
     const parts = msg.split(':');
     const status = parts[1] ?? '';
     const detail = parts.slice(2).join(':').trim();
+    if (status === '0') {
+      return {
+        status: 502,
+        message: detail
+          ? `Запрос к Telegram не выполнен (сеть или TLS): ${detail}`
+          : 'Запрос к Telegram не выполнен (сеть или TLS)',
+      };
+    }
     return {
       status: 502,
       message: detail
@@ -62,6 +83,16 @@ function errorToStatus(error: unknown): { status: number; message: string } {
         ? `Telegram getMe (${status}): ${detail}`
         : `Telegram getMe вернул ошибку (${status})`,
     };
+  }
+  if (msg.startsWith('telegram_getme_network:')) {
+    const detail = msg.slice('telegram_getme_network:'.length).trim();
+    return {
+      status: 502,
+      message: detail ? `Нет связи с Telegram API: ${detail}` : 'Нет связи с Telegram API',
+    };
+  }
+  if (msg === 'telegram_settings_read') {
+    return { status: 503, message: 'Не удалось прочитать настройки из базы данных' };
   }
   return { status: 500, message: 'Внутренняя ошибка Telegram модуля' };
 }
@@ -217,6 +248,7 @@ export async function patchTelegramDispatchSettingsHandler(req: Request, res: Re
     kind?: unknown;
     time_hhmm?: unknown;
     once_at_iso?: unknown;
+    once_at_local?: unknown;
     target?: unknown;
     member_ids?: unknown;
   };
@@ -239,18 +271,28 @@ export async function patchTelegramDispatchSettingsHandler(req: Request, res: Re
     res.status(400).json({ error: 'Поле "member_ids" должно быть массивом положительных чисел' });
     return;
   }
+  if (b.once_at_local !== undefined && b.once_at_local !== null && typeof b.once_at_local !== 'string') {
+    res.status(400).json({ error: 'Поле "once_at_local" должно быть строкой или null' });
+    return;
+  }
   try {
     const next = await updateTelegramDispatchSettings({
       enabled: b.enabled as boolean | undefined,
       kind: b.kind as 'daily' | 'once' | undefined,
       time_hhmm: b.time_hhmm as string | null | undefined,
       once_at_iso: b.once_at_iso as string | null | undefined,
+      once_at_local: b.once_at_local as string | null | undefined,
       target: b.target as 'all' | 'selected' | undefined,
       member_ids: b.member_ids as number[] | undefined,
     });
     res.json(next);
   } catch (error) {
     console.error('[telegram] patch dispatch settings failed:', error);
+    const mapped = errorToStatus(error);
+    if (mapped.status !== 500) {
+      res.status(mapped.status).json({ error: mapped.message });
+      return;
+    }
     res.status(500).json({ error: 'Не удалось сохранить настройки рассылки' });
   }
 }
@@ -288,7 +330,11 @@ export async function postTelegramTestConnectionHandler(req: Request, res: Respo
     const info = await testTelegramBotConnection(trimmed.length > 0 ? trimmed : undefined);
     res.json({ ok: true, ...info });
   } catch (error) {
-    const mapped = errorToStatus(error);
+    console.error('[telegram] test-connection failed:', error);
+    let mapped = errorToStatus(error);
+    if (mapped.status === 500 && error instanceof Error && error.message && !error.message.startsWith('telegram_')) {
+      mapped = { status: 502, message: `Проверка Telegram: ${error.message}` };
+    }
     res.status(mapped.status).json({ error: mapped.message });
   }
 }

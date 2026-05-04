@@ -388,9 +388,12 @@ function TelegramPrayerDispatchModal(props: { open: boolean; onClose: () => void
     kind: 'daily',
     time_hhmm: '09:00',
     once_at_iso: null,
+    once_at_local: null,
     target: 'all',
     member_ids: [],
     last_sent_at_iso: null,
+    server_timezone: typeof Intl !== 'undefined' ? Intl.DateTimeFormat().resolvedOptions().timeZone ?? 'UTC' : 'UTC',
+    last_sent_label: null,
   });
 
   useEffect(() => {
@@ -398,7 +401,15 @@ function TelegramPrayerDispatchModal(props: { open: boolean; onClose: () => void
   }, [settingsQ.data]);
 
   const saveMut = useMutation({
-    mutationFn: () => patchTelegramDispatchSettings(form),
+    mutationFn: () =>
+      patchTelegramDispatchSettings({
+        enabled: form.enabled,
+        kind: form.kind,
+        time_hhmm: form.time_hhmm,
+        target: form.target,
+        member_ids: form.member_ids,
+        once_at_local: form.kind === 'once' ? form.once_at_local : null,
+      }),
     onSuccess: (next) => {
       setForm(next);
       setNote('Настройки рассылки сохранены.');
@@ -442,7 +453,9 @@ function TelegramPrayerDispatchModal(props: { open: boolean; onClose: () => void
         <div className="mb-4 flex items-start justify-between gap-3">
           <div>
             <h3 className="text-lg font-bold text-stone-900">Рассылка молитвы в Telegram</h3>
-            <p className="mt-1 text-sm text-stone-600">Настройка расписания и выбор получателей (один, несколько или все).</p>
+            <p className="mt-1 text-sm text-stone-600">
+              Расписание в часовом поясе сервера ({form.server_timezone}). Получатели: один, несколько или все с Telegram ID.
+            </p>
           </div>
           <button type="button" className="rounded-lg border border-stone-200 px-3 py-1.5 text-sm text-stone-700 hover:bg-stone-50" onClick={onClose}>
             Закрыть
@@ -482,7 +495,7 @@ function TelegramPrayerDispatchModal(props: { open: boolean; onClose: () => void
               </div>
               {form.kind === 'daily' ? (
                 <div>
-                  <label className="mb-1 block text-xs font-semibold text-stone-600">Время</label>
+                  <label className="mb-1 block text-xs font-semibold text-stone-600">Время (сервер)</label>
                   <input
                     type="time"
                     className="w-full rounded-xl border border-stone-200 px-3 py-2.5 text-sm"
@@ -491,16 +504,38 @@ function TelegramPrayerDispatchModal(props: { open: boolean; onClose: () => void
                   />
                 </div>
               ) : (
-                <div>
-                  <label className="mb-1 block text-xs font-semibold text-stone-600">Дата и время отправки</label>
-                  <input
-                    type="datetime-local"
-                    className="w-full rounded-xl border border-stone-200 px-3 py-2.5 text-sm"
-                    value={form.once_at_iso ? form.once_at_iso.slice(0, 16) : ''}
-                    onChange={(e) =>
-                      setForm((s) => ({ ...s, once_at_iso: e.target.value ? new Date(e.target.value).toISOString() : null }))
-                    }
-                  />
+                <div className="md:col-span-2 grid gap-2 sm:grid-cols-2">
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold text-stone-600">Дата</label>
+                    <input
+                      type="date"
+                      className="w-full rounded-xl border border-stone-200 px-3 py-2.5 text-sm"
+                      value={form.once_at_local?.split('T')[0] ?? ''}
+                      onChange={(e) => {
+                        const d = e.target.value;
+                        setForm((s) => {
+                          const t = s.once_at_local?.split('T')[1]?.slice(0, 5) ?? '09:00';
+                          return { ...s, once_at_local: d ? `${d}T${t}` : null };
+                        });
+                      }}
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold text-stone-600">Время</label>
+                    <input
+                      type="time"
+                      className="w-full rounded-xl border border-stone-200 px-3 py-2.5 text-sm"
+                      value={form.once_at_local?.split('T')[1]?.slice(0, 5) ?? ''}
+                      onChange={(e) => {
+                        const tim = e.target.value;
+                        setForm((s) => {
+                          const d = s.once_at_local?.split('T')[0];
+                          if (!d || !tim) return s;
+                          return { ...s, once_at_local: `${d}T${tim}` };
+                        });
+                      }}
+                    />
+                  </div>
                 </div>
               )}
               <div>

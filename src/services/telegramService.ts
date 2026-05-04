@@ -27,9 +27,15 @@ export interface TelegramDispatchSettings {
   kind: 'daily' | 'once';
   time_hhmm: string | null;
   once_at_iso: string | null;
+  /** Дата/время «разово» в часовом поясе сервера, формат ГГГГ-ММ-ДДTчч:мм (без смещения) */
+  once_at_local: string | null;
   target: 'all' | 'selected';
   member_ids: number[];
   last_sent_at_iso: string | null;
+  /** IANA-имя часового пояса процесса Node (как у сервера) */
+  server_timezone: string;
+  /** Человекочитаемая метка последней отправки в server_timezone */
+  last_sent_label: string | null;
 }
 
 export interface TelegramDispatchSettingsUpdate {
@@ -37,6 +43,8 @@ export interface TelegramDispatchSettingsUpdate {
   kind?: 'daily' | 'once';
   time_hhmm?: string | null;
   once_at_iso?: string | null;
+  /** Если задано, трактуется как локальное время сервера (ГГГГ-ММ-ДДTчч:мм), приоритет над once_at_iso */
+  once_at_local?: string | null;
   target?: 'all' | 'selected';
   member_ids?: number[];
 }
@@ -64,6 +72,96 @@ function maskBotToken(raw: string | null): string | null {
   if (!raw) return null;
   if (raw.length <= 10) return '********';
   return `${raw.slice(0, 6)}...${raw.slice(-4)}`;
+}
+
+/** Bot tokens are ASCII; remove accidental spaces/newlines from paste */
+function sanitizeBotTokenForHttp(botToken: string): string {
+  return botToken.replace(/\s+/g, '').trim();
+}
+
+function isLikelyAbortError(e: unknown): boolean {
+  if (!e || typeof e !== 'object') return false;
+  return (e as { name?: unknown }).name === 'AbortError';
+}
+
+/** Base URL `https://api.telegram.org/bot<token>` without trailing slash; never throws URIError */
+function telegramApiBaseForBot(botToken: string): string {
+  const t = sanitizeBotTokenForHttp(botToken);
+  let encoded: string;
+  try {
+    encoded = encodeURIComponent(t);
+  } catch {
+    const ascii = [...t]
+      .filter((ch) => {
+        const cp = ch.codePointAt(0) ?? 0;
+        return cp >= 0x21 && cp <= 0x7e;
+      })
+      .join('');
+    if (!ascii) {
+      throw new Error('telegram_bot_token_invalid_chars');
+    }
+    encoded = encodeURIComponent(ascii);
+  }
+  return `https://api.telegram.org/bot${encoded}`;
+}
+
+function getServerIANATimezone(): string {
+  try {
+    const z = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    if (typeof z === 'string' && z.trim().length > 0) return z.trim();
+  } catch {
+    /* ignore */
+  }
+  const tz = normalizeOptionalString(process.env.TZ);
+  return tz ?? 'UTC';
+}
+
+/** UTC instant → локальные компоненты сервера в виде ГГГГ-ММ-ДДTчч:мм */
+function isoInstantToServerLocalDateTime(iso: string | null): string | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  const y = d.getFullYear();
+  const mo = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  const h = String(d.getHours()).padStart(2, '0');
+  const mi = String(d.getMinutes()).padStart(2, '0');
+  return `${y}-${mo}-${day}T${h}:${mi}`;
+}
+
+/** Локальное время сервера (стена часов) → ISO UTC для TIMESTAMPTZ */
+function parseServerLocalDateTimeToIso(ymdhm: string): string | null {
+  const t = ymdhm.trim();
+  const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(t);
+  if (!m) return null;
+  const y = Number(m[1]);
+  const mo = Number(m[2]);
+  const d = Number(m[3]);
+  const h = Number(m[4]);
+  const mi = Number(m[5]);
+  if (![y, mo, d, h, mi].every((x) => Number.isInteger(x))) return null;
+  if (mo < 1 || mo > 12 || d < 1 || d > 31 || h > 23 || mi > 59) return null;
+  const dt = new Date(y, mo - 1, d, h, mi, 0, 0);
+  if (dt.getFullYear() !== y || dt.getMonth() !== mo - 1 || dt.getDate() !== d) return null;
+  return dt.toISOString();
+}
+
+function formatInstantInServerTimezone(iso: string | null, tz: string): string | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  try {
+    return new Intl.DateTimeFormat('ru-RU', {
+      timeZone: tz,
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    }).format(d);
+  } catch {
+    return isoInstantToServerLocalDateTime(iso);
+  }
 }
 
 async function ensureSettingsColumns(): Promise<void> {
@@ -186,7 +284,11 @@ export async function updateTelegramSettings(input: TelegramSettingsUpdate): Pro
   const next = {
     telegram_enabled: typeof input.enabled === 'boolean' ? input.enabled : current.telegram_enabled,
     telegram_bot_token:
-      input.bot_token !== undefined ? normalizeOptionalString(input.bot_token) : current.telegram_bot_token,
+      input.bot_token !== undefined
+        ? input.bot_token === null
+          ? null
+          : normalizeOptionalString(sanitizeBotTokenForHttp(String(input.bot_token)))
+        : current.telegram_bot_token,
     telegram_prayer_chat_id:
       input.prayer_chat_id !== undefined
         ? normalizeOptionalString(input.prayer_chat_id)
@@ -239,14 +341,19 @@ export async function updateTelegramSettings(input: TelegramSettingsUpdate): Pro
 
 export async function getTelegramDispatchSettings(): Promise<TelegramDispatchSettings> {
   const row = await readSettingsRow();
+  const tz = getServerIANATimezone();
+  const onceIso = row.telegram_dispatch_once_at;
   return {
     enabled: row.telegram_dispatch_enabled,
     kind: row.telegram_dispatch_kind,
     time_hhmm: row.telegram_dispatch_time,
-    once_at_iso: row.telegram_dispatch_once_at,
+    once_at_iso: onceIso,
+    once_at_local: isoInstantToServerLocalDateTime(onceIso),
     target: row.telegram_dispatch_target,
     member_ids: row.telegram_dispatch_member_ids,
     last_sent_at_iso: row.telegram_dispatch_last_sent_at,
+    server_timezone: tz,
+    last_sent_label: formatInstantInServerTimezone(row.telegram_dispatch_last_sent_at, tz),
   };
 }
 
@@ -260,7 +367,22 @@ export async function updateTelegramDispatchSettings(input: TelegramDispatchSett
       ? Array.from(new Set(input.member_ids.map((x) => Number(x)).filter((x) => Number.isInteger(x) && x > 0)))
       : current.telegram_dispatch_member_ids;
   const nextTime = input.time_hhmm !== undefined ? normalizeOptionalString(input.time_hhmm) : current.telegram_dispatch_time;
-  const nextOnceAt = input.once_at_iso !== undefined ? normalizeOptionalString(input.once_at_iso) : current.telegram_dispatch_once_at;
+
+  let nextOnceAt = current.telegram_dispatch_once_at;
+  if (input.once_at_local !== undefined) {
+    const raw = normalizeOptionalString(input.once_at_local);
+    if (raw === null) {
+      nextOnceAt = null;
+    } else {
+      const parsed = parseServerLocalDateTimeToIso(raw);
+      if (!parsed) {
+        throw new Error('telegram_once_at_invalid');
+      }
+      nextOnceAt = parsed;
+    }
+  } else if (input.once_at_iso !== undefined) {
+    nextOnceAt = normalizeOptionalString(input.once_at_iso);
+  }
 
   await query(
     `INSERT INTO global_settings (
@@ -296,9 +418,11 @@ async function resolveTelegramConfig(): Promise<{
   defaultChatId: string | null;
 }> {
   const row = await readSettingsRow();
+  const rawToken = row.telegram_bot_token ?? normalizeOptionalString(process.env.TELEGRAM_BOT_TOKEN);
+  const botToken = rawToken ? sanitizeBotTokenForHttp(rawToken) : null;
   return {
     enabled: row.telegram_enabled,
-    botToken: row.telegram_bot_token ?? normalizeOptionalString(process.env.TELEGRAM_BOT_TOKEN),
+    botToken: botToken && botToken.length > 0 ? botToken : null,
     prayerChatId: row.telegram_prayer_chat_id,
     coordinatorChatId: row.telegram_coordinator_chat_id,
     defaultChatId: row.telegram_default_chat_id,
@@ -321,33 +445,52 @@ function resolveChatId(
 async function sendTelegramMessageRaw(botToken: string, chatId: string, text: string): Promise<{
   ok: boolean;
   status: number;
-  body: { description?: unknown } | null;
+  body: { description?: unknown; ok?: unknown } | null;
 }> {
-  const endpoint = `https://api.telegram.org/bot${encodeURIComponent(botToken)}/sendMessage`;
+  const chat = normalizeOptionalString(chatId);
+  if (!chat) {
+    throw new Error('telegram_missing_chat');
+  }
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 15_000);
-  const response = await fetch(endpoint, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    signal: controller.signal,
-    body: JSON.stringify({
-      chat_id: chatId,
-      text,
-      disable_web_page_preview: true,
-    }),
-  });
-  clearTimeout(timeout);
-  let body: unknown = null;
   try {
-    body = (await response.json()) as unknown;
-  } catch {
-    body = null;
+    const endpoint = `${telegramApiBaseForBot(botToken)}/sendMessage`;
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      signal: controller.signal,
+      body: JSON.stringify({
+        chat_id: chat,
+        text,
+        disable_web_page_preview: true,
+      }),
+    });
+    let body: unknown = null;
+    try {
+      body = (await response.json()) as unknown;
+    } catch {
+      body = null;
+    }
+    const bodyObj =
+      body && typeof body === 'object' ? (body as { description?: unknown; ok?: unknown }) : null;
+    const telegramAccepted = bodyObj?.ok === true;
+    return {
+      ok: response.ok && telegramAccepted,
+      status: response.status,
+      body: bodyObj,
+    };
+  } catch (e) {
+    if (e instanceof Error && e.message === 'telegram_missing_chat') throw e;
+    if (e instanceof Error && e.message === 'telegram_bot_token_invalid_chars') throw e;
+    if (isLikelyAbortError(e) || (e instanceof Error && e.name === 'AbortError')) {
+      throw new Error('telegram_connection_timeout');
+    }
+    const detail = e instanceof Error ? e.message : String(e);
+    const safe = detail.length > 400 ? `${detail.slice(0, 400)}…` : detail;
+    throw new Error(`telegram_send_failed:0:${safe}`);
+  } finally {
+    clearTimeout(timeout);
   }
-  return {
-    ok: response.ok,
-    status: response.status,
-    body: (body && typeof body === 'object' ? (body as { description?: unknown }) : null),
-  };
 }
 
 export interface TelegramGetMeResult {
@@ -362,10 +505,10 @@ async function fetchTelegramGetMeRaw(botToken: string): Promise<{
   status: number;
   body: { ok?: unknown; result?: unknown; description?: unknown } | null;
 }> {
-  const endpoint = `https://api.telegram.org/bot${encodeURIComponent(botToken)}/getMe`;
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 15_000);
   try {
+    const endpoint = `${telegramApiBaseForBot(botToken)}/getMe`;
     const response = await fetch(endpoint, { method: 'GET', signal: controller.signal });
     let body: unknown = null;
     try {
@@ -379,10 +522,22 @@ async function fetchTelegramGetMeRaw(botToken: string): Promise<{
       body: (body && typeof body === 'object' ? (body as { ok?: unknown; result?: unknown; description?: unknown }) : null),
     };
   } catch (e) {
-    if (e instanceof Error && e.name === 'AbortError') {
+    if (e instanceof Error && e.message === 'telegram_bot_token_invalid_chars') {
+      throw e;
+    }
+    if (isLikelyAbortError(e) || (e instanceof Error && e.name === 'AbortError')) {
       throw new Error('telegram_connection_timeout');
     }
-    throw e;
+    let detail = e instanceof Error ? e.message : String(e);
+    const errWithCause = e instanceof Error ? (e as Error & { cause?: unknown }) : null;
+    const c = errWithCause?.cause;
+    if (c instanceof Error) {
+      detail = `${detail} (${c.message})`;
+    } else if (c !== undefined && c !== null) {
+      detail = `${detail} (${String(c)})`;
+    }
+    const safe = detail.length > 400 ? `${detail.slice(0, 400)}…` : detail;
+    throw new Error(`telegram_getme_network:${safe}`);
   } finally {
     clearTimeout(timeout);
   }
@@ -390,9 +545,19 @@ async function fetchTelegramGetMeRaw(botToken: string): Promise<{
 
 /** Проверка токена через Telegram getMe. Опционально передать токен из формы до сохранения в БД. */
 export async function testTelegramBotConnection(botTokenFromRequest?: string): Promise<TelegramGetMeResult> {
-  const row = await readSettingsRow();
+  let row: Awaited<ReturnType<typeof readSettingsRow>>;
+  try {
+    row = await readSettingsRow();
+  } catch (e) {
+    console.error('[telegram] testTelegramBotConnection: readSettingsRow failed', e);
+    throw new Error('telegram_settings_read');
+  }
   const override = normalizeOptionalString(botTokenFromRequest);
-  const token = override ?? row.telegram_bot_token ?? normalizeOptionalString(process.env.TELEGRAM_BOT_TOKEN);
+  const rawToken = override ?? row.telegram_bot_token ?? normalizeOptionalString(process.env.TELEGRAM_BOT_TOKEN);
+  if (!rawToken) {
+    throw new Error('telegram_missing_token');
+  }
+  const token = sanitizeBotTokenForHttp(rawToken);
   if (!token) {
     throw new Error('telegram_missing_token');
   }
@@ -732,6 +897,11 @@ export async function processTelegramDispatchDue(now = new Date()): Promise<{ tr
   const s = await getTelegramDispatchSettings();
   if (!s.enabled) return { triggered: false };
 
+  const cfg = await resolveTelegramConfig();
+  if (!cfg.enabled || !cfg.botToken) {
+    return { triggered: false };
+  }
+
   const nowIso = now.toISOString();
   const markSent = async () => {
     await query('UPDATE global_settings SET telegram_dispatch_last_sent_at = NOW() WHERE id = 1');
@@ -740,6 +910,7 @@ export async function processTelegramDispatchDue(now = new Date()): Promise<{ tr
   const last = s.last_sent_at_iso ? new Date(s.last_sent_at_iso) : null;
   if (s.kind === 'daily') {
     const hhmm = s.time_hhmm ?? '09:00';
+    // Сравнение с локальным временем процесса Node (часовой пояс сервера / контейнера)
     const cur = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
     const alreadyToday =
       last != null &&

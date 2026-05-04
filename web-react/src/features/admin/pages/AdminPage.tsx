@@ -4334,9 +4334,12 @@ function TelegramSection() {
     kind: 'daily',
     time_hhmm: '09:00',
     once_at_iso: null,
+    once_at_local: null,
     target: 'all',
     member_ids: [],
     last_sent_at_iso: null,
+    server_timezone: typeof Intl !== 'undefined' ? Intl.DateTimeFormat().resolvedOptions().timeZone ?? 'UTC' : 'UTC',
+    last_sent_label: null,
   });
   const [note, setNote] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
   const [showToken, setShowToken] = useState(false);
@@ -4390,7 +4393,15 @@ function TelegramSection() {
   });
 
   const saveDispatchMut = useMutation({
-    mutationFn: () => patchTelegramDispatchSettings(dispatchForm),
+    mutationFn: () =>
+      patchTelegramDispatchSettings({
+        enabled: dispatchForm.enabled,
+        kind: dispatchForm.kind,
+        time_hhmm: dispatchForm.time_hhmm,
+        target: dispatchForm.target,
+        member_ids: dispatchForm.member_ids,
+        once_at_local: dispatchForm.kind === 'once' ? dispatchForm.once_at_local : null,
+      }),
     onSuccess: (next) => {
       setDispatchForm(next);
       qc.setQueryData(Q_TG_DISPATCH, next);
@@ -4421,6 +4432,7 @@ function TelegramSection() {
   });
 
   const lastDispatchLabel = useMemo(() => {
+    if (dispatchForm.last_sent_label) return dispatchForm.last_sent_label;
     const iso = dispatchForm.last_sent_at_iso;
     if (!iso) return null;
     try {
@@ -4428,7 +4440,7 @@ function TelegramSection() {
     } catch {
       return null;
     }
-  }, [dispatchForm.last_sent_at_iso]);
+  }, [dispatchForm.last_sent_label, dispatchForm.last_sent_at_iso]);
 
   if (isLoading || dispatchQ.isLoading || recipientsQ.isLoading) {
     return <div className="h-44 animate-pulse rounded-2xl bg-stone-200/50" />;
@@ -4565,9 +4577,20 @@ function TelegramSection() {
           </label>
 
           <div>
-            <label className="mb-1 block text-xs font-semibold text-stone-600">Bot Token</label>
-            <div className="flex flex-col gap-2 sm:flex-row">
+            <label className="mb-1 block text-xs font-semibold text-stone-600" htmlFor="admin-telegram-bot-token">
+              Bot Token
+            </label>
+            <form
+              className="flex flex-col gap-2 sm:flex-row"
+              autoComplete="off"
+              noValidate
+              onSubmit={(e) => {
+                e.preventDefault();
+              }}
+            >
               <input
+                id="admin-telegram-bot-token"
+                name="telegram_bot_token"
                 type={showToken ? 'text' : 'password'}
                 className={fieldClass()}
                 value={form.bot_token}
@@ -4577,7 +4600,10 @@ function TelegramSection() {
                     ? `Оставьте пустым или вставьте новый. Сейчас: ${settings.bot_token_masked}`
                     : 'Вставьте токен от @BotFather'
                 }
-                autoComplete="off"
+                autoComplete={showToken ? 'off' : 'new-password'}
+                data-1p-ignore
+                data-lpignore="true"
+                data-form-type="other"
               />
               <button
                 type="button"
@@ -4586,7 +4612,7 @@ function TelegramSection() {
               >
                 {showToken ? 'Скрыть' : 'Показать'}
               </button>
-            </div>
+            </form>
             <p className="mt-1.5 text-xs leading-relaxed text-stone-500">
               Можно хранить только в БД (здесь) или только в переменной окружения <code className="rounded bg-stone-100 px-1">TELEGRAM_BOT_TOKEN</code> на
               сервере — приоритет у значения из БД, если оно задано.
@@ -4718,7 +4744,7 @@ function TelegramSection() {
         {tgStepHead(
           4,
           'Авторассылка «молитва на сегодня»',
-          'Отправка людям с заполненным Telegram ID в карточке (не в канал). Сервер проверяет расписание примерно каждые 30 секунд.',
+          `Отправка людям с Telegram ID в карточке. Расписание по часам сервера (${dispatchForm.server_timezone}); проверка каждые ~30 с.`,
         )}
         <div className="space-y-4 p-5 pt-0">
           {lastDispatchLabel ? (
@@ -4765,28 +4791,56 @@ function TelegramSection() {
             </div>
             {dispatchForm.kind === 'daily' ? (
               <div>
-                <label className="mb-1 block text-xs font-semibold text-stone-600">Время (локально для сервера / БД)</label>
+                <label className="mb-1 block text-xs font-semibold text-stone-600">Время по часам сервера</label>
                 <input
                   type="time"
                   className={fieldClass()}
                   value={dispatchForm.time_hhmm ?? '09:00'}
                   onChange={(e) => setDispatchForm((s) => ({ ...s, time_hhmm: e.target.value }))}
                 />
+                <p className="mt-1 text-xs text-stone-500">
+                  Часовой пояс:{' '}
+                  <code className="rounded bg-stone-100 px-1 text-[11px]">{dispatchForm.server_timezone}</code>
+                </p>
               </div>
             ) : (
-              <div>
-                <label className="mb-1 block text-xs font-semibold text-stone-600">Дата и время</label>
-                <input
-                  type="datetime-local"
-                  className={fieldClass()}
-                  value={dispatchForm.once_at_iso ? dispatchForm.once_at_iso.slice(0, 16) : ''}
-                  onChange={(e) =>
-                    setDispatchForm((s) => ({
-                      ...s,
-                      once_at_iso: e.target.value ? new Date(e.target.value).toISOString() : null,
-                    }))
-                  }
-                />
+              <div className="md:col-span-2 grid gap-3 sm:grid-cols-2">
+                <div>
+                  <label className="mb-1 block text-xs font-semibold text-stone-600">Дата (часы сервера)</label>
+                  <input
+                    type="date"
+                    className={fieldClass()}
+                    value={dispatchForm.once_at_local?.split('T')[0] ?? ''}
+                    onChange={(e) => {
+                      const d = e.target.value;
+                      setDispatchForm((s) => {
+                        const t = s.once_at_local?.split('T')[1]?.slice(0, 5) ?? '09:00';
+                        return { ...s, once_at_local: d ? `${d}T${t}` : null };
+                      });
+                    }}
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-semibold text-stone-600">Время</label>
+                  <input
+                    type="time"
+                    className={fieldClass()}
+                    value={dispatchForm.once_at_local?.split('T')[1]?.slice(0, 5) ?? ''}
+                    onChange={(e) => {
+                      const tim = e.target.value;
+                      setDispatchForm((s) => {
+                        const d = s.once_at_local?.split('T')[0];
+                        if (!d || !tim) return s;
+                        return { ...s, once_at_local: `${d}T${tim}` };
+                      });
+                    }}
+                  />
+                </div>
+                <p className="sm:col-span-2 text-xs leading-relaxed text-stone-500">
+                  Укажите момент так, как показывают часы на сервере (
+                  <code className="rounded bg-stone-100 px-1 text-[11px]">{dispatchForm.server_timezone}</code>
+                  ), а не в вашем браузере.
+                </p>
               </div>
             )}
             <div>
