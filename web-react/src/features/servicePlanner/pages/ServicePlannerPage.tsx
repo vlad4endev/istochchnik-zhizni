@@ -40,6 +40,7 @@ import { useLocation } from 'react-router-dom';
 
 import { SectionHeroChrome } from '@/components/SectionHeroChrome';
 import { getAppScrollRoot, getAppScrollTop } from '@/lib/appScroll';
+import { sectionHeroStickyClassNested } from '@/lib/sectionHeroChrome';
 
 import { fetchSongs, type SongListItem } from '../../songbook/api';
 import type { AppUser } from '../../admin/types';
@@ -1279,6 +1280,7 @@ export function ServicePlannerPage() {
         <SectionHeroChrome
           title="Планировщик служений"
           subtitle="Все программы, ведущие и быстрый запуск нового плана."
+          stickyClassName={sectionHeroStickyClassNested}
         />
 
         <section className="grid gap-3 md:grid-cols-2">
@@ -1306,7 +1308,7 @@ export function ServicePlannerPage() {
                 className="min-h-[46px] rounded-xl border border-stone-300 bg-white px-3 py-2 text-base sm:text-sm"
               />
             </div>
-            <p className="mt-2 text-xs text-stone-600">
+            <p className="mt-2 break-words text-xs leading-snug text-stone-600">
               Дата служения: <span className="font-semibold text-stone-800">{formatRuDateLong(createPlanDate)}</span>
             </p>
             <button
@@ -1679,7 +1681,7 @@ export function ServicePlannerPage() {
                                     </button>
                                     {mobileTemplateBlockMenuId === b.id ? (
                                       <div
-                                        className="absolute right-0 top-full z-30 mt-1 w-44 overflow-hidden rounded-lg border border-stone-200 bg-white py-1 shadow-lg"
+                                        className="absolute right-0 top-full z-[130] mt-1 w-44 overflow-hidden rounded-lg border border-stone-200 bg-white py-1 shadow-lg max-md:bottom-full max-md:top-auto max-md:mb-1"
                                         onPointerDown={(e) => e.stopPropagation()}
                                       >
                                         <button
@@ -1754,7 +1756,7 @@ export function ServicePlannerPage() {
                                       <LuListOrdered className="h-4 w-4" />
                                     </button>
                                     {mobileTemplateOrderOpenId === b.id ? (
-                                      <div className="absolute left-0 top-full z-30 mt-0.5 whitespace-nowrap rounded-md border border-stone-200 bg-white px-2 py-1 text-xs font-bold text-stone-900 shadow-md">
+                                      <div className="absolute left-0 top-full z-[130] mt-0.5 whitespace-nowrap rounded-md border border-stone-200 bg-white px-2 py-1 text-xs font-bold text-stone-900 shadow-md max-md:bottom-full max-md:top-auto max-md:mb-0.5">
                                         № {idx + 1}
                                       </div>
                                     ) : null}
@@ -1791,7 +1793,7 @@ export function ServicePlannerPage() {
                                     </button>
                                     {mobileTemplateBlockMenuId === b.id ? (
                                       <div
-                                        className="absolute right-0 top-full z-30 mt-1 w-44 overflow-hidden rounded-lg border border-stone-200 bg-white py-1 shadow-lg"
+                                        className="absolute right-0 top-full z-[130] mt-1 w-44 overflow-hidden rounded-lg border border-stone-200 bg-white py-1 shadow-lg max-md:bottom-full max-md:top-auto max-md:mb-1"
                                         onPointerDown={(e) => e.stopPropagation()}
                                       >
                                         <button
@@ -1899,7 +1901,7 @@ export function ServicePlannerPage() {
         )}
 
         {editingTemplateBlock ? (
-          <div className="fixed inset-0 z-[70] flex items-end justify-center overscroll-y-contain bg-black/35 p-2 sm:items-center sm:p-3">
+          <div className="fixed inset-0 z-[130] flex items-end justify-center overscroll-y-contain bg-black/35 p-2 sm:items-center sm:p-3">
             <div className="flex w-full max-w-xl flex-col overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-2xl max-h-[calc(100dvh-0.75rem)] sm:max-h-[calc(100dvh-2rem)]">
               <div className="flex items-center justify-between gap-2 border-b border-stone-100 px-3 py-3 sm:px-4">
                 <h3 className="text-base font-extrabold text-stone-900">Редактирование блока шаблона</h3>
@@ -2490,7 +2492,7 @@ export function ServicePlannerPage() {
                                 </button>
                                 {mobilePlanBlockMenuId === block.id ? (
                                   <div
-                                    className="absolute right-0 top-full z-30 mt-1 w-44 overflow-hidden rounded-lg border border-stone-200 bg-white py-1 shadow-lg"
+                                    className="absolute right-0 top-full z-[130] mt-1 w-44 overflow-hidden rounded-lg border border-stone-200 bg-white py-1 shadow-lg max-md:bottom-full max-md:top-auto max-md:mb-1"
                                     onPointerDown={(e) => e.stopPropagation()}
                                   >
                                     <button
@@ -2574,7 +2576,7 @@ export function ServicePlannerPage() {
                                 <LuClock3 className="h-4 w-4" />
                               </button>
                               {mobilePlanTimeOpenId === block.id ? (
-                                <div className="absolute left-0 top-full z-30 mt-0.5 whitespace-nowrap rounded-md border border-stone-200 bg-white px-2 py-1 text-center text-[11px] font-extrabold text-stone-900 shadow-md">
+                                <div className="absolute left-0 top-full z-[130] mt-0.5 whitespace-nowrap rounded-md border border-stone-200 bg-white px-2 py-1 text-center text-[11px] font-extrabold text-stone-900 shadow-md max-md:bottom-full max-md:top-auto max-md:mb-0.5">
                                   {block.startsAt}
                                 </div>
                               ) : null}
@@ -2722,7 +2724,7 @@ export function ServicePlannerPage() {
                                 </button>
                                 {mobilePlanBlockMenuId === block.id ? (
                                   <div
-                                    className="absolute right-0 top-full z-30 mt-1 w-44 overflow-hidden rounded-lg border border-stone-200 bg-white py-1 shadow-lg"
+                                    className="absolute right-0 top-full z-[130] mt-1 w-44 overflow-hidden rounded-lg border border-stone-200 bg-white py-1 shadow-lg max-md:bottom-full max-md:top-auto max-md:mb-1"
                                     onPointerDown={(e) => e.stopPropagation()}
                                   >
                                     <button
@@ -2893,7 +2895,7 @@ export function ServicePlannerPage() {
       </div>
 
       {editingBlock ? (
-        <div className="fixed inset-0 z-[70] flex items-end justify-center overscroll-y-contain bg-black/35 p-2 sm:items-center sm:p-3">
+        <div className="fixed inset-0 z-[130] flex items-end justify-center overscroll-y-contain bg-black/35 p-2 sm:items-center sm:p-3">
           <div className="flex w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-2xl max-h-[calc(100dvh-0.75rem)] sm:max-h-[calc(100dvh-2rem)]">
             <div className="flex items-center justify-between gap-2 border-b border-stone-100 px-3 py-3 sm:px-4">
               <h3 className="text-base font-extrabold text-stone-900">Редактирование блока</h3>
