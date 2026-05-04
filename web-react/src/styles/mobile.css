@@ -127,6 +127,24 @@
     gap: 12px !important;
   }
 
+  /* Нижний лист «Все разделы»: возвращаем многоколоночную сетку поверх общего grid-cols-* fallback. */
+  .app-mobile-sections-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 10px !important;
+  }
+
+  @media (min-width: 360px) {
+    .app-mobile-sections-grid {
+      grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    }
+  }
+
+  @media (min-width: 440px) {
+    .app-mobile-sections-grid {
+      grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+    }
+  }
+
   .profile-widget {
     display: flex;
     align-items: center;
