@@ -468,17 +468,54 @@ function hydrateFromCacheIntoStore(set: (partial: Partial<ChatState>) => void, g
   }
 }
 
+function isProvisionalMessageId(mid: string): boolean {
+  return mid.startsWith('temp-') || mid.startsWith('pending-');
+}
+
+/**
+ * Дедуп по id и по client_msg_id. При совпадении client_msg_id оставляем «лучшую» копию:
+ * сообщение с реальным numeric id важнее temp/pending (иначе при порядке [temp, real] из WS
+ * отбрасывалось реальное и оставался temp до таймаута ACK / повторов).
+ */
 function dedupeMessages(messages: MessageWithSender[]): MessageWithSender[] {
+  const canonicalByClient = new Map<string, MessageWithSender>();
+  for (const msg of messages) {
+    const ckRaw = msg.client_msg_id != null ? String(msg.client_msg_id).trim() : '';
+    if (!ckRaw) continue;
+    const prev = canonicalByClient.get(ckRaw);
+    if (!prev) {
+      canonicalByClient.set(ckRaw, msg);
+      continue;
+    }
+    const pId = String(prev.id);
+    const cId = String(msg.id);
+    const pPr = isProvisionalMessageId(pId);
+    const cPr = isProvisionalMessageId(cId);
+    let chosen = prev;
+    if (pPr && !cPr) chosen = msg;
+    else if (!pPr && cPr) chosen = prev;
+    else if (pPr && cPr) chosen = msg;
+    else {
+      try {
+        if (/^\d+$/.test(pId) && /^\d+$/.test(cId) && BigInt(cId) > BigInt(pId)) chosen = msg;
+      } catch {
+        chosen = msg;
+      }
+    }
+    canonicalByClient.set(ckRaw, chosen);
+  }
+
   const byId = new Set<string>();
-  const byClientMsgId = new Set<string>();
   const out: MessageWithSender[] = [];
   for (const msg of messages) {
     const idKey = String(msg.id);
+    const ckRaw = msg.client_msg_id != null ? String(msg.client_msg_id).trim() : '';
+    if (ckRaw) {
+      const canonical = canonicalByClient.get(ckRaw);
+      if (canonical && msg !== canonical) continue;
+    }
     if (byId.has(idKey)) continue;
-    const clientKey = msg.client_msg_id ? String(msg.client_msg_id) : null;
-    if (clientKey && byClientMsgId.has(clientKey)) continue;
     byId.add(idKey);
-    if (clientKey) byClientMsgId.add(clientKey);
     out.push(msg);
   }
   return out;

@@ -20,6 +20,7 @@ import {
 import { useAuthStore } from '../../auth/authStore';
 import { canDeleteSongFromCatalog, canModerateSongCatalog } from '../../auth/studioAccess';
 import { emitAppToast } from '../../../lib/uiFeedback';
+import { useScrollInputIntoView } from '@/hooks/useScrollInputIntoView';
 import { SkeletonBox } from '@/components/ui/SkeletonBox';
 import { deleteSong, fetchSong, updateSong } from '../api';
 import { convertToChordPro } from '../addSong/chordProConversion';
@@ -150,6 +151,7 @@ function studioTypeTone(type: SongBlockType, darkUi: boolean, active = false): s
  * Редактор студийной версии: основной экран — текст; тональность и справка по BPM — в шторке.
  */
 export function StudioEditor() {
+  useScrollInputIntoView();
   const { songId } = useParams<{ songId: string }>();
   const id = Number(songId);
   const qc = useQueryClient();
@@ -852,7 +854,9 @@ export function StudioEditor() {
   const s = songQ.data;
 
   return (
-    <div className={`mx-auto flex w-full max-w-[1520px] flex-col gap-4 px-2 sm:px-3 md:px-4 ${shell.page}`}>
+    <div
+      className={`mx-auto flex w-full max-w-[1520px] flex-col gap-4 px-2 sm:px-3 md:px-4 max-md:pb-[calc(5.75rem+env(safe-area-inset-bottom,0px))] ${shell.page}`}
+    >
       <SmartImportModal
         open={importOpen}
         onClose={() => {
@@ -877,7 +881,7 @@ export function StudioEditor() {
             onClick={() => setToolsOpen(false)}
           />
           <div
-            className={`fixed inset-x-0 bottom-0 z-[101] max-h-[88vh] overflow-y-auto rounded-t-3xl p-5 md:inset-auto md:right-6 md:top-20 md:w-[min(400px,calc(100vw-3rem))] md:rounded-2xl ${shell.drawer}`}
+            className={`fixed inset-x-0 bottom-0 z-[101] max-h-[85dvh] overflow-y-auto overscroll-contain rounded-t-3xl p-5 sm:max-h-[90dvh] md:inset-auto md:right-6 md:top-20 md:max-h-[min(90dvh,calc(100dvh-5rem))] md:w-[min(400px,calc(100vw-3rem))] md:rounded-2xl ${shell.drawer}`}
             role="dialog"
             aria-labelledby="studio-tools-title"
           >
@@ -1074,7 +1078,7 @@ export function StudioEditor() {
             onClick={() => setAutoChordModalOpen(false)}
           />
           <div
-            className={`fixed inset-x-0 bottom-0 z-[105] max-h-[90vh] overflow-y-auto rounded-t-3xl p-5 md:inset-auto md:right-6 md:top-16 md:w-[min(720px,calc(100vw-3rem))] md:rounded-2xl ${shell.drawer}`}
+            className={`fixed inset-x-0 bottom-0 z-[105] max-h-[85dvh] overflow-y-auto overscroll-contain rounded-t-3xl p-5 sm:max-h-[90dvh] md:inset-auto md:right-6 md:top-16 md:max-h-[min(90dvh,calc(100dvh-4rem))] md:w-[min(720px,calc(100vw-3rem))] md:rounded-2xl ${shell.drawer}`}
             role="dialog"
             aria-labelledby="auto-chords-title"
           >
@@ -1639,7 +1643,7 @@ export function StudioEditor() {
 
       <div
         className={[
-          'fixed inset-x-0 bottom-0 z-50 border-t md:hidden',
+          'studio-editor-mobile-dock fixed inset-x-0 bottom-0 z-50 border-t pb-[max(0.5rem,env(safe-area-inset-bottom,0px))] md:hidden',
           darkUi ? 'border-slate-800 bg-slate-950/95' : 'border-slate-200 bg-white/95',
         ].join(' ')}
       >
@@ -1681,9 +1685,9 @@ export function StudioEditor() {
       </div>
 
       {showPreviewPane ? (
-        <div className="fixed inset-0 z-[70] bg-black/45 px-3 pb-24 pt-20 md:hidden">
+        <div className="fixed inset-0 z-[70] flex min-h-0 flex-col bg-black/45 px-3 pb-24 pt-20 md:hidden">
           <div
-            className={`h-full overflow-y-auto rounded-2xl border p-4 ${
+            className={`min-h-0 max-h-full flex-1 overflow-y-auto overscroll-contain rounded-2xl border p-4 ${
               darkUi ? 'border-slate-700 bg-slate-950 text-slate-100' : 'border-stone-200 bg-white text-stone-900'
             }`}
           >

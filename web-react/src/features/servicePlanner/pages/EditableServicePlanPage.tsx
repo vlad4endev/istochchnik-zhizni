@@ -533,7 +533,7 @@ export function EditableServicePlanPage() {
         : members;
 
   return (
-    <div className="h-[100dvh] overflow-y-auto overflow-x-hidden overscroll-y-contain bg-[var(--surface)]">
+    <div className="share-plan-scroll-root w-full overflow-y-auto overflow-x-hidden overscroll-y-contain bg-[var(--surface)] [max-height:var(--app-viewport-height,100dvh)] [min-height:var(--app-viewport-height,100dvh)] max-md:[scroll-padding-bottom:calc(var(--app-bottom-nav-total-height)+5.5rem)]">
       <div className="mx-auto max-w-3xl space-y-4 px-3 py-5 sm:space-y-6 sm:px-4 sm:py-8">
         <header className="rounded-2xl border border-stone-200 bg-white p-3 shadow-sm sm:p-4">
           <h1 className="text-xl font-extrabold text-stone-900 sm:text-2xl">План собрания на {dateText}</h1>
@@ -981,7 +981,7 @@ export function EditableServicePlanPage() {
                         </ul>
                       </div>
                     ) : null}
-                    <div className="save-bar mt-1 flex w-full min-w-0 justify-center sm:col-span-2 sm:mt-0 sm:justify-end">
+                    <div className="save-bar save-bar--standalone mt-1 flex w-full min-w-0 justify-center sm:col-span-2 sm:mt-0 sm:justify-end">
                       <button
                         type="button"
                         onClick={() => void handleSaveBlock(editingBlock)}

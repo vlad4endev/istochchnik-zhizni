@@ -100,7 +100,7 @@ export function PerformPage() {
 
   if (q.isLoading) {
     return (
-      <div className="flex min-h-[100dvh] items-center justify-center bg-stone-100 px-4">
+      <div className="flex min-h-[var(--app-viewport-height,100dvh)] items-center justify-center bg-stone-100 px-4">
         <div className="w-full max-w-3xl space-y-3">
           <SkeletonBox width="32%" height="20px" />
           <SkeletonBox width="100%" height="14px" />
@@ -112,7 +112,7 @@ export function PerformPage() {
   }
   if (!q.data || items.length === 0) {
     return (
-      <div className="flex min-h-[100dvh] flex-col items-center justify-center gap-4 bg-stone-100 px-4 text-center text-stone-600">
+      <div className="flex min-h-[var(--app-viewport-height,100dvh)] flex-col items-center justify-center gap-4 bg-stone-100 px-4 text-center text-stone-600">
         <p>В сетлисте нет песен. Добавьте их в редакторе сетлиста.</p>
         <button
           type="button"
@@ -129,7 +129,7 @@ export function PerformPage() {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex flex-col bg-stone-100 text-stone-900"
+      className="fixed inset-0 z-50 flex max-h-[var(--app-viewport-height,100dvh)] min-h-0 flex-col bg-stone-100 text-stone-900"
       onTouchStart={(e) => {
         touchStartX.current = e.touches[0]?.clientX ?? null;
       }}

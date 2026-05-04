@@ -187,10 +187,15 @@ export function resolvePublicUrl(raw: string | null | undefined): string | null 
     }
     return normalizeAbsoluteUploadUrl(v);
   }
-  const base = resolveAxiosBaseURL().trim();
-  if (!base) return v;
+  // Относительные `/uploads/...` и т.п. должны открываться с origin страницы, а не с VITE_API_BASE_URL
+  // (в Docker часто http://api:3000 или IP контейнера — ссылки «Скачать» уезжают во внутреннюю сеть).
+  const baseForRelative =
+    typeof window !== 'undefined' && window.location?.origin
+      ? window.location.origin
+      : resolveAxiosBaseURL().trim();
+  if (!baseForRelative) return v;
   try {
-    return new URL(v, base).toString();
+    return new URL(v, baseForRelative).toString();
   } catch {
     return v;
   }

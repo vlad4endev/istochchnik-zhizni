@@ -317,6 +317,12 @@ html.app-keyboard-open .app-bottom-nav {
   pointer-events: none !important;
 }
 
+/* Редактор текста песни (студия): нижняя fixed-панель при клавиатуре даёт «белую пустоту» / перекрывает textarea — убираем, сохранение остаётся в шапке. */
+html.app-keyboard-open .studio-editor-mobile-dock {
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
 /* Таббар скрыт — не оставляем «полосу» под ним (иначе огромный пустой низ на дашборде и в модалках). */
 html.app-keyboard-open main.app-main-content.page-content {
   padding-bottom: 0;

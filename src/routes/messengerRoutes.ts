@@ -16,6 +16,7 @@ import {
   getSupabaseStorageMissingEnv,
   isSupabaseStorageConfigured,
   messengerBucket,
+  rewriteSupabaseStorageUrlForClient,
   uploadBufferToPublicBucket,
 } from '../lib/supabaseStorage';
 
@@ -97,8 +98,27 @@ function normalizeExtension(input: string): string {
   return cleaned.startsWith('.') ? cleaned : `.${cleaned}`;
 }
 
+/**
+ * Multer/busboy нередко отдают имя файла в UTF-8 как последовательность байт в latin1.
+ * Проверка round-trip: только тогда подменяем, чтобы не портить уже корректные Unicode-строки.
+ */
+function decodeMultipartFilename(raw: unknown): string {
+  const s = String(raw ?? '').trim();
+  if (!s) return '';
+  try {
+    const decoded = Buffer.from(s, 'latin1').toString('utf8');
+    if (!decoded || decoded === s) return s;
+    if (decoded.includes('\u0000')) return s;
+    const back = Buffer.from(decoded, 'utf8').toString('latin1');
+    if (back === s) return decoded;
+  } catch {
+    /* ignore */
+  }
+  return s;
+}
+
 function resolveUploadMetadata(file: Express.Multer.File): { mimeType: string; extension: string } {
-  const filename = String(file.originalname || '').trim();
+  const filename = decodeMultipartFilename(file.originalname);
   const extMatch = filename.match(/(\.[a-z0-9]{1,12})$/i);
   const byName = normalizeExtension(extMatch?.[1] || '');
   const byMime = String(file.mimetype || '').trim().toLowerCase();
@@ -234,6 +254,7 @@ router.post('/upload', messengerUploadMiddleware, async (req: Request, res: Resp
       return;
     }
     const memberId = (req as AuthReq).authUserId!;
+    const displayName = decodeMultipartFilename(file.originalname).slice(0, 255) || 'file';
     const { mimeType, extension } = resolveUploadMetadata(file);
     const contentType =
       String(mimeType || '').trim() || String(file.mimetype || '').trim() || 'image/jpeg';
@@ -261,7 +282,7 @@ router.post('/upload', messengerUploadMiddleware, async (req: Request, res: Resp
         cacheControl: 'public, max-age=31536000, immutable',
         upsert: true,
         metadata: {
-          originalName: String(file.originalname || '').slice(0, 255),
+          originalName: displayName,
           uploadedBy: String(memberId),
         },
       });
@@ -286,7 +307,7 @@ router.post('/upload', messengerUploadMiddleware, async (req: Request, res: Resp
 
     res.json({
       url,
-      name: file.originalname || (objectPath.split('/').pop() ?? 'file'),
+      name: displayName || (objectPath.split('/').pop() ?? 'file'),
       objectPath,
       mimeType,
       size: file.size,
@@ -1047,7 +1068,7 @@ router.get('/messages/:id/attachment-url', async (req: Request, res: Response) =
       res.status(404).json({ error: 'Attachment URL not found' });
       return;
     }
-    res.json({ url: item.url, source: 'stored' });
+    res.json({ url: rewriteSupabaseStorageUrlForClient(item.url), source: 'stored' });
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
     if (message === 'Forbidden') {

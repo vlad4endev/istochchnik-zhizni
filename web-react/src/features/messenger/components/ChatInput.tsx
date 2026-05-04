@@ -134,8 +134,6 @@ export function ChatInput({
   const setReplyingTo = useChatStore((s) => s.setReplyingTo);
   const saveDraft = useChatStore((s) => s.saveDraft);
   const clearDraft = useChatStore((s) => s.clearDraft);
-  /** Только черновик текущего чата — не перезагружаем поле при сохранении черновиков других диалогов. */
-  const draftForConversation = useChatStore((s) => s.drafts[conversationId] ?? '');
 
   const [content, setContent] = useState('');
   const [pending, setPending] = useState<PendingAttachment | null>(null);
@@ -185,11 +183,13 @@ export function ChatInput({
     });
   }, []);
 
-  // Подставляем черновик при смене чата или когда с сервера/другой вкладки обновился именно этот ключ.
+  // Подставляем черновик только при смене диалога. Синк на каждый debounced saveDraft в store
+  // давал лишние перерисовки и мерцание textarea (autosize + controlled value).
   useEffect(() => {
-    setContent(draftForConversation);
+    const fromStore = useChatStore.getState().drafts[conversationId] ?? '';
+    setContent(fromStore);
     requestAnimationFrame(() => scheduleTextareaAutosize(textareaRef.current));
-  }, [conversationId, draftForConversation]);
+  }, [conversationId]);
 
   useEffect(() => {
     return () => {

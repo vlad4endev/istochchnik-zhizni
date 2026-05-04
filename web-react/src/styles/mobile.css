@@ -480,19 +480,60 @@
     font-size: 11px !important;
     padding: 3px 8px !important;
   }
+  /* Публичное редактирование плана (EditableServicePlanPage): кнопка по центру; sticky с учётом клавиатуры. */
   .save-bar {
     position: sticky !important;
-    bottom: var(--app-bottom-nav-total-height) !important;
+    bottom: calc(var(--app-bottom-nav-total-height) + var(--app-keyboard-inset, 0px)) !important;
     margin: 0 -12px !important;
     border-radius: 0 !important;
     border-left: none !important;
     border-right: none !important;
     padding: 12px 16px !important;
+    display: flex !important;
+    flex-direction: row !important;
+    justify-content: center !important;
+    align-items: center !important;
+    z-index: 5;
+    /* Карточка блока на странице — `bg-white`; фон панели совпадает, без «просвечивания» скролла. */
+    background-color: #ffffff;
+    box-shadow: 0 -8px 24px rgba(28, 25, 23, 0.06);
+  }
+
+  .save-bar button {
+    width: min(100%, 22rem) !important;
+    max-width: 100% !important;
+    margin-left: auto !important;
+    margin-right: auto !important;
+    display: flex !important;
+    justify-content: center !important;
+    align-items: center !important;
+    box-sizing: border-box !important;
+  }
+
+  /* Редактирование по ссылке без нижнего таб-бара: не резервируем высоту под nav — иначе полоска «пустоты» снизу. */
+  .save-bar.save-bar--standalone {
+    bottom: max(0.75rem, env(safe-area-inset-bottom, 0px)) !important;
+  }
+
+  /* Клавиатура: sticky перекрывает фокус — уводим панель в поток, без «плавания» над полем. */
+  html.app-keyboard-open .save-bar {
+    position: relative !important;
+    bottom: auto !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+    box-shadow: none;
   }
 
   @media (min-width: 640px) {
     .save-bar {
       margin: 0 -16px !important;
+      justify-content: flex-end !important;
+    }
+    .save-bar button {
+      width: auto !important;
+      max-width: none !important;
+      margin-left: 0 !important;
+      margin-right: 0 !important;
     }
   }
 
