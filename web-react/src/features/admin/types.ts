@@ -8,6 +8,9 @@ export interface AppUser {
   name: string;
   phone_number: string | null;
   telegram_chat_id: string | null;
+  telegram_delivery_blocked: boolean;
+  telegram_delivery_block_reason: string | null;
+  telegram_delivery_blocked_at: string | null;
   ministry_role: string | null;
   ministry_direction: string | null;
   prayer_request: string | null;

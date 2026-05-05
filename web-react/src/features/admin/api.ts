@@ -485,6 +485,9 @@ export interface TelegramDispatchRecipient {
   id: number;
   name: string;
   telegram_chat_id: string;
+  telegram_delivery_blocked: boolean;
+  telegram_delivery_block_reason: string | null;
+  telegram_delivery_blocked_at: string | null;
 }
 
 export interface SmsSettingsResponse {

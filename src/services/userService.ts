@@ -25,6 +25,9 @@ export interface AppUser {
   name: string;
   phone_number: string | null;
   telegram_chat_id: string | null;
+  telegram_delivery_blocked: boolean;
+  telegram_delivery_block_reason: string | null;
+  telegram_delivery_blocked_at: string | null;
   ministry_role: string | null;
   ministry_direction: string | null;
   prayer_request: string | null;
@@ -274,6 +277,9 @@ export async function listUsers(): Promise<AppUser[]> {
       m.name,
       m.phone_number,
       m.telegram_chat_id,
+      m.telegram_delivery_blocked,
+      m.telegram_delivery_block_reason,
+      m.telegram_delivery_blocked_at,
       m.ministry_role,
       m.ministry_direction,
       COALESCE(mpc.prayer_request, m.prayer_request) AS prayer_request,
@@ -309,6 +315,9 @@ export async function getUserById(id: number): Promise<AppUser | null> {
       m.name,
       m.phone_number,
       m.telegram_chat_id,
+      m.telegram_delivery_blocked,
+      m.telegram_delivery_block_reason,
+      m.telegram_delivery_blocked_at,
       m.ministry_role,
       m.ministry_direction,
       COALESCE(mpc.prayer_request, m.prayer_request) AS prayer_request,
@@ -501,6 +510,9 @@ export async function createUser(input: CreateUserInput): Promise<AppUser> {
       name,
       phone_number,
       telegram_chat_id,
+      telegram_delivery_blocked,
+      telegram_delivery_block_reason,
+      telegram_delivery_blocked_at,
       ministry_role,
       ministry_direction,
       prayer_request,
@@ -641,6 +653,9 @@ export async function updateUser(id: number, input: UpdateUserInput): Promise<Ap
   if (typeof input.telegram_chat_id === 'string') {
     updates.push(`telegram_chat_id = $${values.length + 1}`);
     values.push(normalizeOptionalString(input.telegram_chat_id));
+    updates.push(`telegram_delivery_blocked = FALSE`);
+    updates.push(`telegram_delivery_block_reason = NULL`);
+    updates.push(`telegram_delivery_blocked_at = NULL`);
   }
 
   if (typeof input.ministry_role === 'string') {
@@ -735,6 +750,9 @@ export async function updateUser(id: number, input: UpdateUserInput): Promise<Ap
       name,
       phone_number,
       telegram_chat_id,
+      telegram_delivery_blocked,
+      telegram_delivery_block_reason,
+      telegram_delivery_blocked_at,
       ministry_role,
       ministry_direction,
       prayer_request,
@@ -792,6 +810,9 @@ export async function linkUserAccount(id: number, input: LinkAccountInput): Prom
       name,
       phone_number,
       telegram_chat_id,
+      telegram_delivery_blocked,
+      telegram_delivery_block_reason,
+      telegram_delivery_blocked_at,
       ministry_role,
       ministry_direction,
       prayer_request,
@@ -851,6 +872,9 @@ export async function setUserAppRoles(id: number, appRolesInput: AppRole[]): Pro
       name,
       phone_number,
       telegram_chat_id,
+      telegram_delivery_blocked,
+      telegram_delivery_block_reason,
+      telegram_delivery_blocked_at,
       ministry_role,
       ministry_direction,
       prayer_request,

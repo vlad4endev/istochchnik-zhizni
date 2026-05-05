@@ -17,6 +17,9 @@ export interface TelegramDispatchRecipient {
   id: number;
   name: string;
   telegram_chat_id: string;
+  telegram_delivery_blocked: boolean;
+  telegram_delivery_block_reason: string | null;
+  telegram_delivery_blocked_at: string | null;
 }
 
 export interface TelegramDispatchSettings {
@@ -248,6 +251,9 @@ async function ensureSettingsColumns(): Promise<void> {
 
 async function ensureMembersTelegramColumn(): Promise<void> {
   await query('ALTER TABLE members ADD COLUMN IF NOT EXISTS telegram_chat_id VARCHAR(64)');
+  await query('ALTER TABLE members ADD COLUMN IF NOT EXISTS telegram_delivery_blocked BOOLEAN NOT NULL DEFAULT FALSE');
+  await query('ALTER TABLE members ADD COLUMN IF NOT EXISTS telegram_delivery_block_reason TEXT');
+  await query('ALTER TABLE members ADD COLUMN IF NOT EXISTS telegram_delivery_blocked_at TIMESTAMPTZ');
 }
 
 async function readSettingsRow(): Promise<{
@@ -741,6 +747,7 @@ async function listMemberTelegramChatIds(): Promise<string[]> {
     `SELECT DISTINCT telegram_chat_id
      FROM members
      WHERE is_active = TRUE
+       AND COALESCE(telegram_delivery_blocked, FALSE) = FALSE
        AND NULLIF(TRIM(COALESCE(telegram_chat_id, '')), '') IS NOT NULL`,
   );
   return result.rows
@@ -758,9 +765,13 @@ export async function listTelegramDispatchRecipients(): Promise<TelegramDispatch
          NULLIF(trim(name), ''),
          CONCAT('#', id::text)
        ) AS display_name,
-       trim(telegram_chat_id) AS telegram_chat_id
+       trim(telegram_chat_id) AS telegram_chat_id,
+       COALESCE(telegram_delivery_blocked, FALSE) AS telegram_delivery_blocked,
+       telegram_delivery_block_reason,
+       telegram_delivery_blocked_at::text AS telegram_delivery_blocked_at
      FROM members
      WHERE is_active = TRUE
+       AND COALESCE(telegram_delivery_blocked, FALSE) = FALSE
        AND NULLIF(trim(COALESCE(telegram_chat_id, '')), '') IS NOT NULL
      ORDER BY display_name ASC`,
   );
@@ -768,7 +779,45 @@ export async function listTelegramDispatchRecipients(): Promise<TelegramDispatch
     id: Number((r as { id: unknown }).id),
     name: String((r as { display_name: unknown }).display_name),
     telegram_chat_id: String((r as { telegram_chat_id: unknown }).telegram_chat_id),
+    telegram_delivery_blocked: Boolean((r as { telegram_delivery_blocked?: unknown }).telegram_delivery_blocked),
+    telegram_delivery_block_reason:
+      typeof (r as { telegram_delivery_block_reason?: unknown }).telegram_delivery_block_reason === 'string'
+        ? String((r as { telegram_delivery_block_reason: string }).telegram_delivery_block_reason)
+        : null,
+    telegram_delivery_blocked_at:
+      typeof (r as { telegram_delivery_blocked_at?: unknown }).telegram_delivery_blocked_at === 'string'
+        ? String((r as { telegram_delivery_blocked_at: string }).telegram_delivery_blocked_at)
+        : null,
   }));
+}
+
+function extractTelegramFailureDescription(
+  result: Awaited<ReturnType<typeof sendTelegramMessageRawSequence>>,
+): string {
+  return typeof result.body?.description === 'string' ? result.body.description.trim() : '';
+}
+
+function isTelegramUserDeactivatedFailure(
+  result: Awaited<ReturnType<typeof sendTelegramMessageRawSequence>>,
+): boolean {
+  if (result.status !== 403) return false;
+  const d = extractTelegramFailureDescription(result).toLowerCase();
+  return d.includes('user is deactivated');
+}
+
+async function markMemberTelegramDeliveryBlocked(chatId: string, reason: string): Promise<void> {
+  const trimmed = normalizeOptionalString(chatId);
+  if (!trimmed) return;
+  await ensureMembersTelegramColumn();
+  await query(
+    `UPDATE members
+     SET telegram_delivery_blocked = TRUE,
+         telegram_delivery_block_reason = $2,
+         telegram_delivery_blocked_at = NOW(),
+         updated_at = NOW()
+     WHERE NULLIF(TRIM(COALESCE(telegram_chat_id, '')), '') = $1`,
+    [trimmed, reason.slice(0, 500)],
+  );
 }
 
 function formatDateRuYmd(dateYmd: string): string {
@@ -1023,8 +1072,12 @@ export async function sendTodayPrayerTelegramToAllMembers(
   for (const chatId of chatIds) {
     const result = await sendTelegramMessageRawSequence(cfg.botToken, chatId, text);
     if (!result.ok) {
-      const description =
-        typeof result.body?.description === 'string' ? result.body.description.trim() : '';
+      const description = extractTelegramFailureDescription(result);
+      if (isTelegramUserDeactivatedFailure(result)) {
+        await markMemberTelegramDeliveryBlocked(chatId, description || 'Forbidden: user is deactivated');
+        console.warn('[telegram] member delivery blocked (user deactivated):', { chatId });
+        continue;
+      }
       throw new Error(
         description
           ? `telegram_send_failed:${result.status}:${description}`
@@ -1053,8 +1106,12 @@ export async function sendTodayPrayerTelegramToSelectedMembers(
   for (const chatId of chatIds) {
     const result = await sendTelegramMessageRawSequence(cfg.botToken, chatId, text);
     if (!result.ok) {
-      const description =
-        typeof result.body?.description === 'string' ? result.body.description.trim() : '';
+      const description = extractTelegramFailureDescription(result);
+      if (isTelegramUserDeactivatedFailure(result)) {
+        await markMemberTelegramDeliveryBlocked(chatId, description || 'Forbidden: user is deactivated');
+        console.warn('[telegram] member delivery blocked (user deactivated):', { chatId });
+        continue;
+      }
       throw new Error(
         description
           ? `telegram_send_failed:${result.status}:${description}`

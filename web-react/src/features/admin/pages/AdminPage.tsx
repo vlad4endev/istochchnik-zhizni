@@ -1756,6 +1756,12 @@ function MembersSection({
                       onChange={(e) => setEditForm((s) => ({ ...s, telegram_chat_id: e.target.value }))}
                       placeholder="например: 123456789"
                     />
+                    {editing?.telegram_delivery_blocked ? (
+                      <p className="mt-1.5 text-xs font-semibold text-red-700">
+                        ● Telegram недоступен для рассылок
+                        {editing.telegram_delivery_block_reason ? `: ${editing.telegram_delivery_block_reason}` : ''}
+                      </p>
+                    ) : null}
                   </div>
                   <div>
                     <label className="mb-1 block text-xs font-semibold text-stone-600">Дата рождения</label>
