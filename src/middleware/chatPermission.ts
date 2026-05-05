@@ -125,6 +125,13 @@ export function checkChatPermission(action: Action) {
         return deny(res, 404, 'Conversation not found');
       }
 
+      if (
+        (action === 'send_message' || action === 'send_media') &&
+        svc.isMessengerAccessRequestsChannelMetadata(meta.metadata)
+      ) {
+        return deny(res, 403, 'Канал только для уведомлений. Отправка сообщений недоступна.');
+      }
+
       step = 'getParticipantChatAuthRow';
       // Load member override fields (permissions/mute) — устойчиво к старым схемам БД
       const { permissions: memberPermissions, muted_until: mutedUntil } =

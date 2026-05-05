@@ -1,21 +1,26 @@
-import { memo, useState, useRef, useMemo, useEffect, useCallback } from 'react';
+import { memo, useState, useRef, useMemo, useEffect, useCallback, type ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useChatStore } from '../chatStore';
-import { fetchMessageAttachmentUrl, type MessageWithSender } from '../api/messengerApi';
+import {
+  buildMessengerAttachmentFileUrl,
+  fetchMessageAttachmentUrl,
+  type MessageWithSender,
+} from '../api/messengerApi';
 import {
   getAlbumImageUrl,
   getPrimaryAttachmentUrl,
   inferMessengerPayloadType,
+  isMessengerVideoAttachment,
 } from '../payloadMedia';
 import { apiErrorMessage, approveAccessRequest, rejectAccessRequest } from '../../admin/api';
 import { IoCheckmark, IoCheckmarkDone } from 'react-icons/io5';
-import { LuDownload, LuExternalLink, LuFileText, LuLoader, LuRefreshCw, LuX } from 'react-icons/lu';
+import { LuBot, LuDownload, LuExternalLink, LuFileText, LuLoader, LuRefreshCw, LuReply, LuX } from 'react-icons/lu';
 import { VoiceMessageAttachment } from './VoiceMessageAttachment';
+import { PollVotersSheet } from './PollVotersSheet';
 import { resolvePublicUrl } from '../../../lib/resolvePublicUrl';
 import { emitAppToast } from '../../../lib/uiFeedback';
 import { motion, useMotionValue, useTransform, animate } from 'framer-motion';
 import type { PanInfo } from 'framer-motion';
-import { LuReply } from 'react-icons/lu';
 
 function MentionRichText({
   text,
@@ -74,6 +79,7 @@ function formatVoteCountRU(n: number): string {
   return `${n} голосов`;
 }
 
+/** Telegram-style poll option list shell (inside message bubble). */
 function MessengerPollCard({
   message,
   isMine,
@@ -87,6 +93,7 @@ function MessengerPollCard({
   const payload = (message.payload ?? {}) as Record<string, unknown>;
   const options = Array.isArray(payload.options) ? payload.options.map((x) => String(x ?? '')) : [];
   const allowsMultiple = Boolean(payload.allows_multiple);
+  const isAnonymous = Boolean(payload.anonymous);
   const tallies =
     message.poll_tallies?.length === options.length ? message.poll_tallies! : options.map(() => 0);
   const myVotes = message.poll_my_options ?? [];
@@ -95,6 +102,7 @@ function MessengerPollCard({
   const hasMyVote = mySet.size > 0;
   const [multiEdit, setMultiEdit] = useState(false);
   const [multiPick, setMultiPick] = useState<Set<number>>(() => new Set());
+  const [pollVotersFor, setPollVotersFor] = useState<{ optionIndex: number; label: string } | null>(null);
 
   const toggleMulti = (i: number) => {
     setMultiPick((prev) => {
@@ -115,10 +123,15 @@ function MessengerPollCard({
     setMultiEdit(false);
   };
 
-  const muted = isMine ? 'text-white/80' : 'text-[var(--text-secondary)]';
+  const muted = isMine ? 'text-white/70' : 'text-[var(--text-secondary)]';
   const qCls = isMine ? 'text-white' : 'text-[var(--text)]';
-  const barBg = isMine ? 'bg-white/20' : 'bg-[var(--surface)]';
-  const barFill = isMine ? 'bg-white' : 'bg-primary';
+  const listShell = isMine
+    ? 'rounded-[12px] border border-white/18 bg-white/[0.08] shadow-[inset_0_1px_0_rgba(255,255,255,0.12)]'
+    : 'rounded-[12px] border border-black/[0.06] bg-black/[0.03] shadow-[0_0.5px_0_rgba(0,0,0,0.04)]';
+  const rowDivider = isMine ? 'border-white/12' : 'border-black/[0.06]';
+  const pctCls = isMine ? 'text-white/90 tabular-nums' : 'text-primary tabular-nums';
+  const barTint = isMine ? 'bg-white/[0.22]' : 'bg-primary/[0.14]';
+  const barTintPicked = isMine ? 'bg-white/[0.38]' : 'bg-primary/[0.26]';
 
   if (!options.length) {
     return <span className={qCls}>Опрос недоступен</span>;
@@ -126,16 +139,22 @@ function MessengerPollCard({
 
   if (isOptimistic) {
     return (
-      <div className="w-full max-w-[20rem] space-y-2">
-        <div className={['text-xs font-extrabold tracking-wide', muted].join(' ')}>Опрос</div>
-        <p className={['text-base font-semibold leading-snug', qCls].join(' ')}>{message.content || '—'}</p>
-        <ul className="space-y-1.5">
+      <div className="w-full max-w-[18.5rem] space-y-2.5">
+        <p
+          className={['text-[15px] font-semibold leading-snug tracking-[-0.01em] [font-variant-emoji:emoji]', qCls].join(
+            ' ',
+          )}
+        >
+          {message.content || '—'}
+        </p>
+        <ul className={['overflow-hidden', listShell].join(' ')}>
           {options.map((label, i) => (
             <li
               key={i}
               className={[
-                'rounded-xl px-3 py-2 text-sm font-medium',
-                isMine ? 'bg-white/10 text-white/95' : 'bg-[var(--surface)] text-[var(--text-secondary)]',
+                'border-b px-3 py-2.5 text-[15px] font-normal leading-snug [font-variant-emoji:emoji] last:border-b-0',
+                rowDivider,
+                isMine ? 'text-white/95' : 'text-[var(--text-secondary)]',
               ].join(' ')}
             >
               {label || `Вариант ${i + 1}`}
@@ -148,13 +167,19 @@ function MessengerPollCard({
 
   const showMultiPicker = allowsMultiple && (!hasMyVote || multiEdit);
   const showSinglePicker = !allowsMultiple && !hasMyVote;
+  const showPollResults = !showSinglePicker && !(allowsMultiple && showMultiPicker);
 
   return (
-    <div className="w-full max-w-[20rem] space-y-2">
-      <div className={['text-xs font-extrabold tracking-wide', muted].join(' ')}>Опрос</div>
-      <p className={['text-base font-semibold leading-snug', qCls].join(' ')}>{message.content || '—'}</p>
+    <div className="w-full max-w-[18.5rem] space-y-2">
+      <p
+        className={['text-[15px] font-semibold leading-snug tracking-[-0.01em] [font-variant-emoji:emoji]', qCls].join(
+          ' ',
+        )}
+      >
+        {message.content || '—'}
+      </p>
 
-      <ul className="space-y-2">
+      <ul className={['overflow-hidden', listShell].join(' ')}>
         {options.map((label, i) => {
           const count = tallies[i] ?? 0;
           const pct = total > 0 ? Math.round((count / total) * 100) : 0;
@@ -162,18 +187,29 @@ function MessengerPollCard({
 
           if (showSinglePicker) {
             return (
-              <li key={i}>
+              <li key={i} className={['border-b last:border-b-0', rowDivider].join(' ')}>
                 <button
                   type="button"
                   onClick={() => void votePoll(message.id, [i])}
                   className={[
-                    'w-full rounded-xl px-3 py-2.5 text-left text-sm font-semibold transition-colors active:scale-[0.99]',
-                    isMine
-                      ? 'bg-white/12 text-white hover:bg-white/18'
-                      : 'bg-[var(--surface)] text-[var(--text)] hover:bg-stone-200/90',
+                    'flex w-full items-start gap-2.5 px-3 py-2.5 text-left transition-colors active:opacity-90',
+                    isMine ? 'hover:bg-white/[0.07]' : 'hover:bg-black/[0.03]',
                   ].join(' ')}
                 >
-                  {label}
+                  <span
+                    className={[
+                      'mt-0.5 h-[18px] w-[18px] shrink-0 rounded-full border-2',
+                      isMine ? 'border-white/50' : 'border-stone-300',
+                    ].join(' ')}
+                    aria-hidden
+                  />
+                  <span
+                    className={['min-w-0 flex-1 text-[15px] font-normal leading-snug [font-variant-emoji:emoji]', qCls].join(
+                      ' ',
+                    )}
+                  >
+                    {label}
+                  </span>
                 </button>
               </li>
             );
@@ -182,77 +218,144 @@ function MessengerPollCard({
           if (allowsMultiple && showMultiPicker) {
             const checked = multiPick.has(i);
             return (
-              <li key={i}>
+              <li key={i} className={['border-b last:border-b-0', rowDivider].join(' ')}>
                 <button
                   type="button"
                   onClick={() => toggleMulti(i)}
                   className={[
-                    'flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold transition-colors',
-                    isMine
-                      ? checked
-                        ? 'bg-white/20 text-white ring-1 ring-white/35'
-                        : 'bg-white/10 text-white/95 hover:bg-white/14'
-                      : checked
-                        ? 'bg-primary/12 text-primary ring-1 ring-primary/25'
-                        : 'bg-[var(--surface)] text-[var(--text)] hover:bg-stone-200/90',
+                    'flex w-full items-start gap-2.5 px-3 py-2.5 text-left transition-colors active:opacity-90',
+                    isMine ? 'hover:bg-white/[0.07]' : 'hover:bg-black/[0.03]',
                   ].join(' ')}
                 >
                   <span
                     className={[
-                      'grid h-5 w-5 shrink-0 place-items-center rounded border-2 text-xs',
-                      isMine ? 'border-white/50' : 'border-stone-300',
-                      checked ? (isMine ? 'bg-white text-primary' : 'bg-primary text-white') : '',
+                      'mt-0.5 grid h-[18px] w-[18px] shrink-0 place-items-center rounded-[5px] border-2 text-[11px] font-bold',
+                      isMine
+                        ? checked
+                          ? 'border-white bg-white text-primary'
+                          : 'border-white/50'
+                        : checked
+                          ? 'border-primary bg-primary text-white'
+                          : 'border-stone-300',
                     ].join(' ')}
                     aria-hidden
                   >
-                    {checked ? '✓' : ''}
+                    {checked ? <IoCheckmark className="h-3.5 w-3.5" /> : null}
                   </span>
-                  <span className="min-w-0 flex-1">{label}</span>
+                  <span
+                    className={['min-w-0 flex-1 text-[15px] font-normal leading-snug [font-variant-emoji:emoji]', qCls].join(
+                      ' ',
+                    )}
+                  >
+                    {label}
+                  </span>
                 </button>
               </li>
             );
           }
 
           return (
-            <li key={i}>
-              <button
-                type="button"
-                disabled={allowsMultiple}
-                onClick={() => {
-                  if (!allowsMultiple) void votePoll(message.id, [i]);
-                }}
-                className={[
-                  'w-full rounded-xl px-3 py-2 text-left',
-                  allowsMultiple ? 'cursor-default' : 'transition-colors active:scale-[0.99]',
-                  isMine ? 'bg-white/10 hover:bg-white/14' : 'bg-[var(--surface)] hover:bg-stone-100',
-                ].join(' ')}
-              >
-                <div className="flex items-center justify-between gap-2 text-sm font-semibold">
-                  <span className={['min-w-0 flex-1', qCls].join(' ')}>{label}</span>
-                  <span className={muted}>{pct}%</span>
-                </div>
-                <div className={['mt-1.5 h-2 overflow-hidden rounded-full', barBg].join(' ')}>
-                  <div
-                    className={['h-full rounded-full transition-[width] duration-300', barFill].join(' ')}
-                    style={{ width: `${pct}%`, opacity: picked ? 1 : 0.85 }}
-                  />
-                </div>
-                <div className={['mt-0.5 text-xs font-bold', muted].join(' ')}>{formatVoteCountRU(count)}</div>
-              </button>
+            <li key={i} className={['relative overflow-hidden border-b last:border-b-0', rowDivider].join(' ')}>
+              <div
+                className={['pointer-events-none absolute inset-y-0 left-0 transition-[width] duration-500 ease-out', picked ? barTintPicked : barTint].join(
+                  ' ',
+                )}
+                style={{ width: `${pct}%` }}
+                aria-hidden
+              />
+              <div className="relative z-10 flex items-stretch">
+                <button
+                  type="button"
+                  disabled={allowsMultiple}
+                  onClick={() => {
+                    if (!allowsMultiple) void votePoll(message.id, [i]);
+                  }}
+                  className={[
+                    'flex min-w-0 flex-1 items-start gap-2.5 px-3 py-2.5 text-left',
+                    allowsMultiple ? 'cursor-default' : 'transition-opacity active:opacity-90',
+                    isMine ? (allowsMultiple ? '' : 'hover:bg-white/[0.05]') : allowsMultiple ? '' : 'hover:bg-black/[0.02]',
+                  ].join(' ')}
+                >
+                  <span className="mt-0.5 flex h-[18px] w-[18px] shrink-0 items-center justify-center" aria-hidden>
+                    {allowsMultiple ? (
+                      picked ? (
+                        <span
+                          className={[
+                            'flex h-[18px] w-[18px] items-center justify-center rounded-[5px] border-2 text-white',
+                            isMine ? 'border-white bg-white/30' : 'border-primary bg-primary',
+                          ].join(' ')}
+                        >
+                          <IoCheckmark className="h-3.5 w-3.5" />
+                        </span>
+                      ) : (
+                        <span
+                          className={[
+                            'block h-[18px] w-[18px] rounded-[5px] border-2',
+                            isMine ? 'border-white/35' : 'border-stone-300/90',
+                          ].join(' ')}
+                        />
+                      )
+                    ) : picked ? (
+                      <span
+                        className={[
+                          'flex h-[18px] w-[18px] items-center justify-center rounded-full border-2',
+                          isMine ? 'border-white bg-white/25' : 'border-primary bg-primary',
+                        ].join(' ')}
+                      >
+                        <span className="h-2 w-2 rounded-full bg-white" />
+                      </span>
+                    ) : (
+                      <span
+                        className={[
+                          'block h-[18px] w-[18px] rounded-full border-2',
+                          isMine ? 'border-white/35' : 'border-stone-300/90',
+                        ].join(' ')}
+                      />
+                    )}
+                  </span>
+                  <span
+                    className={['min-w-0 flex-1 text-[15px] font-normal leading-snug [font-variant-emoji:emoji]', qCls].join(
+                      ' ',
+                    )}
+                  >
+                    {label}
+                  </span>
+                </button>
+                {isAnonymous ? (
+                  <span className={['shrink-0 px-3 py-2.5 text-[15px] font-medium', pctCls].join(' ')}>{pct}%</span>
+                ) : (
+                  <button
+                    type="button"
+                    className={[
+                      'shrink-0 px-3 py-2.5 text-[15px] font-medium transition-colors',
+                      pctCls,
+                      isMine ? 'hover:bg-white/12 active:bg-white/16' : 'hover:bg-black/[0.04] active:bg-black/[0.06]',
+                    ].join(' ')}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setPollVotersFor({ optionIndex: i, label });
+                    }}
+                    aria-label={`Кто проголосовал: ${label}. ${formatVoteCountRU(count)}`}
+                  >
+                    {pct}%
+                  </button>
+                )}
+              </div>
             </li>
           );
         })}
       </ul>
 
       {allowsMultiple && showMultiPicker ? (
-        <div className="flex flex-wrap gap-2 pt-1">
+        <div className="flex flex-wrap items-center gap-2 pt-0.5">
           {hasMyVote && multiEdit ? (
             <button
               type="button"
               onClick={() => setMultiEdit(false)}
               className={[
-                'rounded-full px-3 py-1.5 text-xs font-bold',
-                isMine ? 'bg-white/15 text-white' : 'bg-[var(--surface)] text-[var(--text-secondary)]',
+                'rounded-full px-3 py-1.5 text-[13px] font-medium',
+                isMine ? 'bg-white/14 text-white' : 'bg-[var(--surface)] text-[var(--text-secondary)]',
               ].join(' ')}
             >
               Отмена
@@ -263,7 +366,7 @@ function MessengerPollCard({
             onClick={() => void submitMulti()}
             disabled={multiPick.size === 0}
             className={[
-              'rounded-full px-4 py-2 text-xs font-extrabold disabled:opacity-40',
+              'rounded-full px-4 py-2 text-[13px] font-semibold disabled:opacity-40',
               isMine ? 'bg-white text-primary' : 'bg-primary text-white',
             ].join(' ')}
           >
@@ -272,19 +375,55 @@ function MessengerPollCard({
         </div>
       ) : null}
 
+      <div className={['flex flex-wrap items-center gap-x-1.5 text-[13px] font-normal', muted].join(' ')}>
+        <span>{formatVoteCountRU(total)}</span>
+        {allowsMultiple ? (
+          <>
+            <span aria-hidden>·</span>
+            <span>Несколько ответов</span>
+          </>
+        ) : null}
+        {isAnonymous ? (
+          <>
+            <span aria-hidden>·</span>
+            <span>Анонимный опрос</span>
+          </>
+        ) : null}
+      </div>
+
+      {showPollResults && total > 0 && !isAnonymous ? (
+        <p className={['text-[11px] font-normal leading-snug', muted].join(' ')}>
+          Нажмите на процент справа от варианта, чтобы увидеть список проголосовавших.
+        </p>
+      ) : null}
+
       {allowsMultiple && hasMyVote && !multiEdit ? (
         <button
           type="button"
           onClick={startMultiEdit}
-          className={['text-xs font-bold underline-offset-2 hover:underline', muted].join(' ')}
+          className={[
+            'text-[13px] font-medium underline-offset-2 hover:underline',
+            isMine ? 'text-white/90' : 'text-primary',
+          ].join(' ')}
         >
           Изменить голос
         </button>
       ) : null}
 
       {!allowsMultiple && hasMyVote ? (
-        <p className={['text-xs font-semibold', muted].join(' ')}>Нажмите другой вариант, чтобы изменить голос</p>
+        <p className={['text-[12px] font-normal leading-snug', muted].join(' ')}>
+          Нажмите другой вариант, чтобы изменить голос
+        </p>
       ) : null}
+
+      <PollVotersSheet
+        key={pollVotersFor ? `${message.id}-${pollVotersFor.optionIndex}` : `${message.id}-poll-voters`}
+        open={pollVotersFor != null}
+        onClose={() => setPollVotersFor(null)}
+        messageId={message.id}
+        optionIndex={pollVotersFor?.optionIndex ?? 0}
+        optionLabel={pollVotersFor?.label ?? ''}
+      />
     </div>
   );
 }
@@ -414,7 +553,20 @@ function openUrlInNewTab(url: string): void {
 async function saveUrlToDevice(url: string, filename: string): Promise<void> {
   const safeName = filename.trim() || 'file';
   try {
-    const res = await fetch(url, { mode: 'cors', credentials: 'omit', cache: 'no-store' });
+    const sameOrigin =
+      typeof window !== 'undefined' &&
+      (() => {
+        try {
+          return new URL(url, window.location.href).origin === window.location.origin;
+        } catch {
+          return false;
+        }
+      })();
+    const res = await fetch(url, {
+      mode: 'cors',
+      credentials: sameOrigin ? 'include' : 'omit',
+      cache: 'no-store',
+    });
     if (!res.ok) throw new Error('bad status');
     const blob = await res.blob();
     const objectUrl = URL.createObjectURL(blob);
@@ -435,6 +587,118 @@ async function saveUrlToDevice(url: string, filename: string): Promise<void> {
     document.body.appendChild(a);
     a.click();
     a.remove();
+  }
+}
+
+type MessengerDocTone = 'pdf' | 'word' | 'sheet' | 'slides' | 'text' | 'archive' | 'generic';
+
+function messengerFileExtension(name: string): string {
+  const base = name.trim().split(/[/\\]/).pop() ?? '';
+  const i = base.lastIndexOf('.');
+  if (i <= 0 || i === base.length - 1) return '';
+  return base.slice(i + 1).toLowerCase();
+}
+
+function messengerDocumentPresentation(
+  name: string,
+  mimeRaw: string,
+): { tone: MessengerDocTone; typeLabel: string; extBadge: string } {
+  const ext = messengerFileExtension(name);
+  const mime = mimeRaw.split(';')[0].trim().toLowerCase();
+  const extUpper = ext ? ext.toUpperCase().slice(0, 10) : '';
+
+  if (ext === 'pdf' || mime === 'application/pdf') {
+    return { tone: 'pdf', typeLabel: 'PDF', extBadge: extUpper || 'PDF' };
+  }
+  if (ext === 'doc' || ext === 'docx' || mime.includes('word') || mime === 'application/msword') {
+    return { tone: 'word', typeLabel: 'Документ Word', extBadge: extUpper || 'DOC' };
+  }
+  if (
+    ext === 'xls' ||
+    ext === 'xlsx' ||
+    ext === 'csv' ||
+    ext === 'ods' ||
+    mime.includes('spreadsheet') ||
+    mime.includes('excel') ||
+    mime === 'text/csv'
+  ) {
+    return { tone: 'sheet', typeLabel: 'Таблица', extBadge: extUpper || 'XLS' };
+  }
+  if (ext === 'ppt' || ext === 'pptx' || mime.includes('presentation') || mime.includes('powerpoint')) {
+    return { tone: 'slides', typeLabel: 'Презентация', extBadge: extUpper || 'PPT' };
+  }
+  if (ext === 'txt' || ext === 'md' || ext === 'rtf' || mime === 'text/plain' || mime === 'text/markdown') {
+    return { tone: 'text', typeLabel: 'Текст', extBadge: extUpper || 'TXT' };
+  }
+  if (['zip', 'rar', '7z', 'gz', 'tar'].includes(ext) || mime.includes('zip') || mime.includes('compressed')) {
+    return { tone: 'archive', typeLabel: 'Архив', extBadge: extUpper || 'ZIP' };
+  }
+  if (extUpper) {
+    return { tone: 'generic', typeLabel: extUpper, extBadge: extUpper };
+  }
+  if (mime && mime !== 'application/octet-stream') {
+    const short = mime.split('/').pop() ?? mime;
+    return { tone: 'generic', typeLabel: short.toUpperCase().slice(0, 12), extBadge: short.toUpperCase().slice(0, 8) };
+  }
+  return { tone: 'generic', typeLabel: 'Файл', extBadge: 'FILE' };
+}
+
+/** Эмодзи-логотип формата файла (декоративный: тип дублируется текстом под именем). */
+const MESSENGER_FILE_FORMAT_EMOJI: Record<MessengerDocTone, string> = {
+  pdf: '📕',
+  word: '📘',
+  sheet: '📊',
+  slides: '📽️',
+  text: '📄',
+  archive: '📦',
+  generic: '📁',
+};
+
+function MessengerFileFormatEmoji({ tone }: { tone: MessengerDocTone }): ReactNode {
+  return (
+    <span
+      aria-hidden
+      className="pointer-events-none select-none text-[1.7rem] leading-none [font-variant-emoji:emoji]"
+    >
+      {MESSENGER_FILE_FORMAT_EMOJI[tone]}
+    </span>
+  );
+}
+
+function messengerDocTileClasses(tone: MessengerDocTone, isMine: boolean): string {
+  if (isMine) {
+    switch (tone) {
+      case 'pdf':
+        return 'bg-rose-500/28 text-rose-50 ring-1 ring-white/15';
+      case 'word':
+        return 'bg-sky-500/25 text-sky-50 ring-1 ring-white/15';
+      case 'sheet':
+        return 'bg-emerald-500/25 text-emerald-50 ring-1 ring-white/15';
+      case 'slides':
+        return 'bg-amber-500/28 text-amber-50 ring-1 ring-white/15';
+      case 'text':
+        return 'bg-stone-200/20 text-white ring-1 ring-white/15';
+      case 'archive':
+        return 'bg-violet-500/25 text-violet-50 ring-1 ring-white/15';
+      default:
+        return 'bg-white/16 text-white ring-1 ring-white/15';
+    }
+  }
+  switch (tone) {
+    case 'pdf':
+      return 'bg-rose-50 text-rose-600 ring-1 ring-rose-100/90';
+    case 'word':
+      return 'bg-sky-50 text-sky-600 ring-1 ring-sky-100/90';
+    case 'sheet':
+      return 'bg-emerald-50 text-emerald-600 ring-1 ring-emerald-100/90';
+    case 'slides':
+      return 'bg-amber-50 text-amber-700 ring-1 ring-amber-100/90';
+    case 'text':
+      return 'bg-stone-100 text-stone-600 ring-1 ring-stone-200/90';
+    case 'archive':
+      return 'bg-violet-50 text-violet-600 ring-1 ring-violet-100/90';
+    default:
+      return 'bg-[var(--surface-elevated)] text-[var(--text-secondary)] ring-1 ring-gray-100';
   }
 }
 
@@ -463,6 +727,8 @@ interface MessageBubbleProps {
   participantLabelById?: Record<number, string>;
   canPinMessages?: boolean;
   onPinToggle?: (messageId: string, nextPinned: boolean) => void | Promise<void>;
+  /** Канал «Заявки»: оформление как системный бот, без ответа свайпом. */
+  accessRequestsSystemChannel?: boolean;
 }
 
 function MessageBubbleInner({
@@ -473,6 +739,7 @@ function MessageBubbleInner({
   participantLabelById,
   canPinMessages = false,
   onPinToggle,
+  accessRequestsSystemChannel = false,
 }: MessageBubbleProps) {
   const currentMemberId = useChatStore((s) => s.currentMemberId);
   const convIdKey = String(message.conversation_id);
@@ -491,6 +758,7 @@ function MessageBubbleInner({
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
   /** Имя файла для «Сохранить» в полноэкранном просмотре фото */
   const [lightboxDownloadName, setLightboxDownloadName] = useState<string | null>(null);
+  const [lightboxIsVideo, setLightboxIsVideo] = useState(false);
   const [mainImageLoaded, setMainImageLoaded] = useState(false);
   const [albumSlotLoaded, setAlbumSlotLoaded] = useState<Record<number, boolean>>({});
   const longPressTimer = useRef<number | null>(null);
@@ -503,6 +771,7 @@ function MessageBubbleInner({
       if (e.key === 'Escape') {
         setLightboxSrc(null);
         setLightboxDownloadName(null);
+        setLightboxIsVideo(false);
       }
     };
     window.addEventListener('keydown', onKey);
@@ -555,6 +824,11 @@ function MessageBubbleInner({
     message.image_url,
     message.imageUrl,
   ]);
+  const systemBotAccessMessage =
+    accessRequestsSystemChannel &&
+    payloadType === 'access_request' &&
+    message.sender_id == null &&
+    !isDeleted;
   const payload = (message.payload ?? {}) as Record<string, unknown>;
   const albumImages = Array.isArray(payload.images)
     ? payload.images
@@ -605,6 +879,7 @@ function MessageBubbleInner({
     const maxAttempts = 3;
 
     async function tryFetchSignedUrl(): Promise<void> {
+      if (payloadType === 'file') return;
       for (let attempt = 1; attempt <= maxAttempts && !cancelled; attempt += 1) {
         try {
           const { url } = await fetchMessageAttachmentUrl(String(message.id));
@@ -802,6 +1077,45 @@ function MessageBubbleInner({
                     </div>
                   );
                 }
+                if (isMessengerVideoAttachment(img as Record<string, unknown>, rawUrl)) {
+                  const vName = String(img.name ?? img.filename ?? '').trim() || `video-${idx + 1}.mp4`;
+                  return (
+                    <button
+                      key={`${slideSrc}-${idx}-video`}
+                      type="button"
+                      onClick={() => {
+                        setLightboxSrc(slideSrc);
+                        setLightboxIsVideo(true);
+                        setLightboxDownloadName(vName);
+                      }}
+                      className={['relative overflow-hidden rounded-xl', isMine ? 'bg-white/10' : 'bg-black/[0.04]'].join(' ')}
+                      style={{ aspectRatio: '4 / 3' }}
+                      aria-label={`Открыть видео ${idx + 1}`}
+                    >
+                      {!albumSlotLoaded[idx] ? (
+                        <span
+                          className={[
+                            'absolute inset-0 animate-pulse',
+                            isMine ? 'bg-white/10' : 'bg-[var(--surface)]',
+                          ].join(' ')}
+                          aria-hidden
+                        />
+                      ) : null}
+                      <video
+                        src={slideSrc}
+                        muted
+                        playsInline
+                        preload="metadata"
+                        className={[
+                          'h-full w-full object-cover transition-opacity duration-200',
+                          albumSlotLoaded[idx] ? 'opacity-100' : 'opacity-0',
+                        ].join(' ')}
+                        onLoadedData={() => setAlbumSlotLoaded((prev) => ({ ...prev, [idx]: true }))}
+                        onError={() => setAlbumSlotFailed((prev) => ({ ...prev, [idx]: true }))}
+                      />
+                    </button>
+                  );
+                }
                 if (albumSlotFailed[idx]) {
                   return (
                     <div
@@ -822,6 +1136,7 @@ function MessageBubbleInner({
                     type="button"
                     onClick={() => {
                       setLightboxSrc(slideSrc);
+                      setLightboxIsVideo(false);
                       setLightboxDownloadName(
                         String(img.name ?? img.filename ?? '').trim() || `photo-${idx + 1}.jpg`,
                       );
@@ -936,6 +1251,7 @@ function MessageBubbleInner({
           </div>
         );
       }
+      const isSingleVideo = isMessengerVideoAttachment(payload as Record<string, unknown>, rawUrl);
       return src ? (
         <div className="relative w-full max-w-[min(78vw,22rem)] overflow-hidden rounded-2xl" style={{ aspectRatio: '4 / 3' }}>
           {imgFailed ? (
@@ -963,29 +1279,46 @@ function MessageBubbleInner({
               type="button"
               onClick={() => {
                 setLightboxSrc(src);
+                setLightboxIsVideo(isSingleVideo);
                 setLightboxDownloadName(
-                  String(payload.name ?? payload.filename ?? '').trim() || 'image.jpg',
+                  String(payload.name ?? payload.filename ?? '').trim() ||
+                    (isSingleVideo ? 'video.mp4' : 'image.jpg'),
                 );
               }}
               className={[
                 'block w-full overflow-hidden',
                 isMine ? 'bg-white/10' : 'bg-black/[0.04]',
               ].join(' ')}
-              aria-label="Открыть изображение"
+              aria-label={isSingleVideo ? 'Открыть видео' : 'Открыть изображение'}
             >
-              <img
-                src={src}
-                alt=""
-                className={[
-                  'h-full w-full object-cover transition-opacity duration-200',
-                  mainImageLoaded ? 'opacity-100' : 'opacity-0',
-                ].join(' ')}
-                loading="lazy"
-                decoding="async"
-                referrerPolicy="no-referrer"
-                onLoad={() => setMainImageLoaded(true)}
-                onError={() => setImgFailed(true)}
-              />
+              {isSingleVideo ? (
+                <video
+                  src={src}
+                  muted
+                  playsInline
+                  preload="metadata"
+                  className={[
+                    'h-full w-full object-cover transition-opacity duration-200',
+                    mainImageLoaded ? 'opacity-100' : 'opacity-0',
+                  ].join(' ')}
+                  onLoadedData={() => setMainImageLoaded(true)}
+                  onError={() => setImgFailed(true)}
+                />
+              ) : (
+                <img
+                  src={src}
+                  alt=""
+                  className={[
+                    'h-full w-full object-cover transition-opacity duration-200',
+                    mainImageLoaded ? 'opacity-100' : 'opacity-0',
+                  ].join(' ')}
+                  loading="lazy"
+                  decoding="async"
+                  referrerPolicy="no-referrer"
+                  onLoad={() => setMainImageLoaded(true)}
+                  onError={() => setImgFailed(true)}
+                />
+              )}
             </button>
             </>
           )}
@@ -1024,39 +1357,88 @@ function MessageBubbleInner({
 
     if (payloadType === 'file') {
       const rawUrl = attachmentRawUrl;
-      const href = resolvedAttachmentUrl ?? (resolvePublicUrl(rawUrl) ?? rawUrl);
+      const fallbackHref = resolvedAttachmentUrl ?? (resolvePublicUrl(rawUrl) ?? rawUrl);
+      const persistedNumericId = /^\d+$/.test(String(message.id));
+      const openHref = persistedNumericId
+        ? buildMessengerAttachmentFileUrl(String(message.id))
+        : fallbackHref;
+      const saveHref = persistedNumericId
+        ? buildMessengerAttachmentFileUrl(String(message.id), { download: true })
+        : fallbackHref;
       const name = String(payload.name ?? payload.filename ?? message.content ?? 'Файл').trim() || 'Файл';
       const sizeRaw = Number(payload.size ?? 0);
       const sizeLabel = Number.isFinite(sizeRaw) && sizeRaw > 0 ? formatBytes(sizeRaw) : null;
+      const mimeHint = String(payload.mimeType ?? payload.mimetype ?? '').trim();
+      const docMeta = messengerDocumentPresentation(name, mimeHint);
+      const subtitleParts = [docMeta.typeLabel];
+      if (sizeLabel) subtitleParts.push(sizeLabel);
+      const subtitle = subtitleParts.join(' · ');
+      const caption = String(message.content ?? '').trim();
+      const showCaption = caption.length > 0 && caption !== name;
       return (
         <div
           className={[
-            'flex max-w-[20rem] flex-col gap-2 rounded-2xl px-3 py-2 ring-1 transition-colors duration-200',
-            isMine ? 'bg-white/10 ring-white/10' : 'bg-[var(--surface)] ring-gray-100',
+            'flex w-full max-w-[min(92vw,20.5rem)] flex-col overflow-hidden rounded-2xl shadow-sm ring-1 transition-colors duration-200',
+            isMine ? 'bg-white/10 ring-white/12' : 'bg-[var(--surface)] ring-gray-100/95',
           ].join(' ')}
         >
-          <div className="flex min-w-0 items-center gap-3">
-            <span className={['grid h-10 w-10 shrink-0 place-items-center rounded-xl', isMine ? 'bg-white/12 text-white' : 'bg-[var(--surface-elevated)] text-[var(--text-secondary)] ring-1 ring-gray-100'].join(' ')}>
-              <LuFileText size={18} />
+          <button
+            type="button"
+            disabled={!openHref}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              if (openHref) openUrlInNewTab(openHref);
+            }}
+            className={[
+              'flex w-full min-w-0 items-start gap-3 p-3 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-45',
+              isMine ? 'hover:bg-white/6 active:bg-white/10' : 'hover:bg-stone-100/80 active:bg-stone-100',
+            ].join(' ')}
+            aria-label={`Открыть документ ${name}`}
+          >
+            <span
+              className={[
+                'grid h-[3.25rem] w-[3.25rem] shrink-0 place-items-center rounded-xl',
+                messengerDocTileClasses(docMeta.tone, isMine),
+              ].join(' ')}
+            >
+              <MessengerFileFormatEmoji tone={docMeta.tone} />
             </span>
-            <span className="min-w-0 flex-1">
-              <span className={['block truncate text-sm font-semibold', isMine ? 'text-white/95' : 'text-[var(--text)]'].join(' ')}>{name}</span>
-              <span className={['mt-0.5 block text-xs font-semibold', isMine ? 'text-white/70' : 'text-[var(--text-secondary)]'].join(' ')}>
-                {sizeLabel ?? 'Файл'}
+            <span className="min-w-0 flex-1 pt-0.5">
+              <span
+                className={[
+                  'line-clamp-2 text-[0.9375rem] font-semibold leading-snug tracking-tight',
+                  isMine ? 'text-white' : 'text-[var(--text)]',
+                ].join(' ')}
+              >
+                {name}
+              </span>
+              <span
+                className={[
+                  'mt-1.5 block text-[0.6875rem] font-bold uppercase tracking-wide',
+                  isMine ? 'text-white/65' : 'text-[var(--text-secondary)]',
+                ].join(' ')}
+              >
+                {subtitle}
               </span>
             </span>
-          </div>
-          <div className="flex flex-wrap justify-end gap-2">
+          </button>
+          <div
+            className={[
+              'flex flex-wrap items-center justify-end gap-2 border-t px-2.5 py-2',
+              isMine ? 'border-white/10 bg-black/5' : 'border-stone-100/90 bg-stone-50/50',
+            ].join(' ')}
+          >
             <button
               type="button"
-              disabled={!href}
+              disabled={!openHref}
               onClick={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
-                if (href) openUrlInNewTab(href);
+                if (openHref) openUrlInNewTab(openHref);
               }}
               className={[
-                'inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-xs font-extrabold disabled:opacity-40',
+                'inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-extrabold disabled:opacity-40',
                 isMine ? 'bg-white/15 text-white' : 'bg-primary/10 text-primary',
               ].join(' ')}
             >
@@ -1065,17 +1447,17 @@ function MessageBubbleInner({
             </button>
             <button
               type="button"
-              disabled={!href}
+              disabled={!saveHref}
               onClick={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
-                if (!href) return;
-                void saveUrlToDevice(href, name).catch(() =>
+                if (!saveHref) return;
+                void saveUrlToDevice(saveHref, name).catch(() =>
                   emitAppToast({ kind: 'error', message: 'Не удалось сохранить файл' }),
                 );
               }}
               className={[
-                'inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-xs font-extrabold disabled:opacity-40',
+                'inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-extrabold disabled:opacity-40',
                 isMine ? 'bg-white/15 text-white' : 'bg-primary/10 text-primary',
               ].join(' ')}
             >
@@ -1083,6 +1465,16 @@ function MessageBubbleInner({
               Сохранить
             </button>
           </div>
+          {showCaption ? (
+            <div
+              className={[
+                'border-t px-3 py-2 text-sm leading-relaxed',
+                isMine ? 'border-white/10 text-white/95' : 'border-stone-100 text-[var(--text)]',
+              ].join(' ')}
+            >
+              <MentionRichText text={caption} namesById={participantLabelById} isMine={isMine} />
+            </div>
+          ) : null}
         </div>
       );
     }
@@ -1219,14 +1611,20 @@ function MessageBubbleInner({
     );
   }
 
-  const bubbleShapeClass = isMine
-    ? 'rounded-tl-[18px] rounded-tr-[4px] rounded-br-[18px] rounded-bl-[18px]'
-    : 'rounded-tl-[4px] rounded-tr-[18px] rounded-br-[18px] rounded-bl-[18px]';
+  const bubbleShapeClass = systemBotAccessMessage
+    ? 'rounded-2xl'
+    : isMine
+      ? 'rounded-tl-[18px] rounded-tr-[4px] rounded-br-[18px] rounded-bl-[18px]'
+      : 'rounded-tl-[4px] rounded-tr-[18px] rounded-br-[18px] rounded-bl-[18px]';
 
   const bubbleClasses = [
     'relative px-3 py-2 sm:px-3.5 sm:py-2',
     bubbleShapeClass,
-    isMine ? 'bg-primary text-white' : 'bg-[var(--surface-elevated)] text-[var(--text)] shadow-[0_1px_0.5px_rgba(0,0,0,0.06)]',
+    systemBotAccessMessage
+      ? 'bg-[var(--surface-elevated)] text-[var(--text)] shadow-[0_1px_0.5px_rgba(0,0,0,0.06)] ring-1 ring-stone-200/55'
+      : isMine
+        ? 'bg-primary text-white'
+        : 'bg-[var(--surface-elevated)] text-[var(--text)] shadow-[0_1px_0.5px_rgba(0,0,0,0.06)]',
   ]
     .filter(Boolean)
     .join(' ');
@@ -1320,15 +1718,19 @@ function MessageBubbleInner({
     </div>
   );
 
+  const shellClassName = [
+    'msg-bubble-shell message-bubble relative flex flex-col',
+    systemBotAccessMessage
+      ? 'mx-auto w-full max-w-[min(100%,26rem)] min-w-0 items-center'
+      : ['w-fit min-w-[80px] max-w-[75%]', isMine ? 'ml-auto items-end' : 'mr-auto items-start'].join(' '),
+    !isGroupedPrev ? 'group-start' : '',
+    isMine ? 'outgoing' : 'incoming',
+  ].join(' ');
+
   return (
     <>
     <div
-      className={[
-        'msg-bubble-shell message-bubble relative flex w-fit min-w-[80px] max-w-[75%] flex-col',
-        !isGroupedPrev ? 'group-start' : '',
-        isMine ? 'outgoing' : 'incoming',
-        isMine ? 'ml-auto items-end' : 'mr-auto items-start',
-      ].join(' ')}
+      className={shellClassName}
       onContextMenu={handleContextMenu}
       onPointerDownCapture={handlePointerDownCapture}
       onPointerMoveCapture={handlePointerMoveCapture}
@@ -1389,13 +1791,14 @@ function MessageBubbleInner({
 
         <motion.div
           className={bubbleClasses}
-          drag="x"
-          dragConstraints={{ left: 0, right: 0 }}
-          dragElastic={0.2}
+          drag={systemBotAccessMessage ? false : 'x'}
+          dragConstraints={systemBotAccessMessage ? undefined : { left: 0, right: 0 }}
+          dragElastic={systemBotAccessMessage ? undefined : 0.2}
           style={{ x }}
           onPointerUp={handleBubblePointerUp}
           onDragStart={() => clearLongPressTimer()}
           onDragEnd={(_e: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
+            if (systemBotAccessMessage) return;
             const dx = info.offset.x;
             const towardCenter = isMine ? dx < -52 : dx > 52;
             if (towardCenter) {
@@ -1408,10 +1811,23 @@ function MessageBubbleInner({
             animate(x, 0, { type: 'spring', stiffness: 420, damping: 32 });
           }}
         >
-        {/* Sender name (only if first message in group and not mine) */}
-        {!isMine && !isGroupedPrev && message.sender_name && (
+        {/* Канал «Заявки»: шапка как системный бот */}
+        {systemBotAccessMessage && !isGroupedPrev ? (
+          <div className="sender-name mb-3 flex w-full items-center gap-2.5 px-0.5">
+            <span
+              className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-primary/12 text-primary ring-1 ring-primary/15"
+              aria-hidden
+            >
+              <LuBot className="h-5 w-5" strokeWidth={2} />
+            </span>
+            <div className="min-w-0 text-left">
+              <div className="text-sm font-bold leading-tight text-[var(--text)]">Заявки</div>
+              <div className="text-[11px] font-medium leading-tight text-[var(--text-secondary)]">Системные уведомления</div>
+            </div>
+          </div>
+        ) : !isMine && !isGroupedPrev && message.sender_name ? (
           <div className="sender-name mb-1.5 px-1 text-xs font-semibold text-[var(--text-secondary)]">{message.sender_name}</div>
-        )}
+        ) : null}
 
         {/* Reply preview (tap to jump) */}
         {message.reply_preview && (
@@ -1488,9 +1904,11 @@ function MessageBubbleInner({
             }}
           />
           <div className={`msg-actions ${isMine ? 'msg-actions--mine' : ''}`}>
-            <button type="button" onClick={() => { setReplyTo(message); setShowActions(false); }}>
-              <span>↩️</span> Ответить
-            </button>
+            {!systemBotAccessMessage ? (
+              <button type="button" onClick={() => { setReplyTo(message); setShowActions(false); }}>
+                <span>↩️</span> Ответить
+              </button>
+            ) : null}
             {payloadType === 'text' && String(message.content ?? '').trim() ? (
               <button
                 type="button"
@@ -1563,10 +1981,11 @@ function MessageBubbleInner({
         onClick={() => {
           setLightboxSrc(null);
           setLightboxDownloadName(null);
+          setLightboxIsVideo(false);
         }}
         role="dialog"
         aria-modal="true"
-        aria-label="Просмотр изображения"
+        aria-label={lightboxIsVideo ? 'Просмотр видео' : 'Просмотр изображения'}
       >
         <button
           type="button"
@@ -1574,7 +1993,10 @@ function MessageBubbleInner({
             e.stopPropagation();
             const n = (lightboxDownloadName ?? 'image.jpg').trim() || 'image.jpg';
             void saveUrlToDevice(lightboxSrc, n).catch(() =>
-              emitAppToast({ kind: 'error', message: 'Не удалось сохранить фото' }),
+              emitAppToast({
+              kind: 'error',
+              message: lightboxIsVideo ? 'Не удалось сохранить видео' : 'Не удалось сохранить фото',
+            }),
             );
           }}
           className="absolute left-4 top-4 z-[5001] inline-flex h-11 min-w-[11rem] items-center justify-center gap-2 rounded-full bg-white/10 px-4 text-sm font-bold text-white backdrop-blur-sm transition hover:bg-white/20"
@@ -1588,6 +2010,7 @@ function MessageBubbleInner({
             e.stopPropagation();
             setLightboxSrc(null);
             setLightboxDownloadName(null);
+            setLightboxIsVideo(false);
           }}
           className="absolute right-4 top-4 z-[5001] flex h-11 w-11 items-center justify-center rounded-full bg-white/10 text-white backdrop-blur-sm transition hover:bg-white/20"
           aria-label="Закрыть"
@@ -1595,13 +2018,23 @@ function MessageBubbleInner({
           <LuX className="h-6 w-6" strokeWidth={2} aria-hidden />
         </button>
         <div className="mx-auto flex h-full max-w-2xl items-center justify-center">
-          <img
-            src={lightboxSrc}
-            alt=""
-            className="max-h-full max-w-full rounded-2xl object-contain shadow-2xl"
-            referrerPolicy="no-referrer"
-            onClick={(e) => e.stopPropagation()}
-          />
+          {lightboxIsVideo ? (
+            <video
+              src={lightboxSrc}
+              controls
+              playsInline
+              className="max-h-full max-w-full rounded-2xl shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            />
+          ) : (
+            <img
+              src={lightboxSrc}
+              alt=""
+              className="max-h-full max-w-full rounded-2xl object-contain shadow-2xl"
+              referrerPolicy="no-referrer"
+              onClick={(e) => e.stopPropagation()}
+            />
+          )}
         </div>
       </div>
     ) : null}

@@ -15,6 +15,13 @@ import {
 } from 'react-icons/lu';
 
 import { fetchActiveBroadcast, type BroadcastData } from '../../../api/broadcast';
+import {
+  BROADCAST_SLOT_MS,
+  formatBroadcastMainTimer,
+  getBroadcastUiMode,
+  shouldShowBroadcastWidget,
+  type BroadcastUiMode,
+} from '../../../utils/broadcastDisplay';
 import { fetchPodcastFeed, type PodcastEpisode } from '../../../api/resources';
 import {
   deleteDashboardCoordinatorNote,
@@ -184,20 +191,6 @@ function memberFirstLastLine(m: Member): string {
   return s || m.name.trim() || '—';
 }
 
-function formatBroadcastTimer(nowMs: number, broadcast: BroadcastData | null): string {
-  if (!broadcast?.starts_at) return '—';
-  if (broadcast.status === 'finished') return '—';
-  const startsAtMs = new Date(broadcast.starts_at).getTime();
-  if (!Number.isFinite(startsAtMs)) return '—';
-  const diff = broadcast.status === 'live'
-    ? Math.max(0, nowMs - startsAtMs)
-    : Math.max(0, startsAtMs - nowMs);
-  const hours = Math.floor(diff / 3_600_000);
-  const minutes = Math.floor((diff % 3_600_000) / 60_000);
-  const seconds = Math.floor((diff % 60_000) / 1_000);
-  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
-}
-
 function formatBroadcastDateTime(value: string | null): string {
   if (!value) return '—';
   const d = new Date(value);
@@ -213,45 +206,33 @@ function mapPlatformLabel(platform: string | null | undefined): string {
   return 'Платформа';
 }
 
-function shouldShowBroadcastWidget(nowMs: number, broadcast: BroadcastData | null): boolean {
-  if (!broadcast) return false;
-  if (broadcast.status === 'live') return true;
-  if (broadcast.status !== 'scheduled' || !broadcast.starts_at) return false;
-  const startsAtMs = new Date(broadcast.starts_at).getTime();
-  if (!Number.isFinite(startsAtMs)) return false;
-  const twoHoursMs = 2 * 60 * 60 * 1000;
-  return nowMs >= startsAtMs - twoHoursMs;
-}
-
 function BroadcastCompactCard({
   broadcast,
   timerText,
+  uiMode,
+  endsAtFormatted,
   onOpen,
 }: {
   broadcast: BroadcastData | null;
   timerText: string;
+  uiMode: BroadcastUiMode;
+  endsAtFormatted: string | null;
   onOpen: () => void;
 }) {
-  const status = broadcast?.status ?? 'none';
+  const isOnAir = uiMode === 'onair';
   const title = broadcast?.title?.trim() || 'Трансляция';
   const platform = mapPlatformLabel(broadcast?.platform);
-  const timerLabel = status === 'live'
-    ? 'Идёт трансляция'
-    : status === 'scheduled'
-      ? 'До начала'
-      : 'Завершена';
-  const dateLabel = status === 'live' ? 'Началась' : 'Начало';
+  const timerLabel = isOnAir ? 'Идёт трансляция' : 'До начала';
+  const dateLabel = isOnAir ? 'Началась' : 'Начало';
   const description = (broadcast?.description ?? '').trim() || '—';
-  const statusBadge = status === 'live'
+  const statusBadge = isOnAir
     ? (
       <span className="inline-flex items-center gap-1 rounded-full bg-[#D64035] px-2 py-0.5 text-[10px] font-bold text-white">
         <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-white" aria-hidden />
-        LIVE
+        В эфире
       </span>
     )
-    : status === 'scheduled'
-      ? <span className="inline-flex rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-700">Скоро</span>
-      : <span className="inline-flex rounded-full bg-stone-200 px-2 py-0.5 text-[10px] font-bold text-stone-600">Нет трансляций</span>;
+    : <span className="inline-flex rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-700">Скоро</span>;
 
   return (
     <section className="overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-[var(--shadow-card)]">
@@ -272,8 +253,8 @@ function BroadcastCompactCard({
 
       <div className="flex items-center justify-between gap-2 px-3 py-2.5">
         <div className="min-w-0">
-          <p className={`text-[11px] font-semibold ${status === 'live' ? 'text-[#D64035]' : 'text-stone-500'}`}>{timerLabel}</p>
-          <p className={`text-xl font-extrabold tabular-nums ${status === 'live' ? 'text-[#D64035]' : 'text-stone-900'}`}>{timerText}</p>
+          <p className={`text-[11px] font-semibold ${isOnAir ? 'text-[#D64035]' : 'text-stone-500'}`}>{timerLabel}</p>
+          <p className={`text-xl font-extrabold tabular-nums ${isOnAir ? 'text-[#D64035]' : 'text-stone-900'}`}>{timerText}</p>
         </div>
         <button
           type="button"
@@ -290,6 +271,12 @@ function BroadcastCompactCard({
         <span className="font-semibold text-stone-500">{dateLabel}</span>
         <span className="font-semibold text-stone-800">{formatBroadcastDateTime(broadcast?.starts_at ?? null)}</span>
       </div>
+      {endsAtFormatted ? (
+        <div className="flex items-center justify-between gap-3 px-3 pb-1 text-xs">
+          <span className="font-semibold text-stone-500">Окончание</span>
+          <span className="font-semibold text-stone-800">{endsAtFormatted}</span>
+        </div>
+      ) : null}
       <div className="flex items-center justify-between gap-3 px-3 pb-3 text-xs">
         <span className="font-semibold text-stone-500">Описание</span>
         <span className="max-w-[70%] truncate font-medium text-stone-700">{description}</span>
@@ -496,8 +483,16 @@ function DashboardMain() {
   const todayLabel = formatTodayLabel(now);
 
   const activeBroadcast = broadcastQ.data?.broadcast ?? null;
-  const broadcastTimerText = formatBroadcastTimer(broadcastNowMs, activeBroadcast);
+  const broadcastUiMode = getBroadcastUiMode(broadcastNowMs, activeBroadcast);
+  const broadcastTimerText = formatBroadcastMainTimer(broadcastNowMs, activeBroadcast);
   const showBroadcastWidget = shouldShowBroadcastWidget(broadcastNowMs, activeBroadcast);
+  const broadcastEndsLabel = useMemo(() => {
+    if (!activeBroadcast?.starts_at) return null;
+    if (broadcastUiMode !== 'pre' && broadcastUiMode !== 'onair') return null;
+    const t = new Date(activeBroadcast.starts_at).getTime();
+    if (!Number.isFinite(t)) return null;
+    return format(new Date(t + BROADCAST_SLOT_MS), 'dd.MM.yyyy HH:mm');
+  }, [activeBroadcast?.starts_at, broadcastUiMode]);
 
   const latestEpisode = pickLatestEpisode(sermonsQ.data?.episodes ?? []);
   const event = pickUpcomingEvent(now, eventsQ.data ?? []);
@@ -925,7 +920,13 @@ function DashboardMain() {
             </section>
 
             {showBroadcastWidget ? (
-              <BroadcastCompactCard broadcast={activeBroadcast} timerText={broadcastTimerText} onOpen={() => navigate('/broadcast')} />
+              <BroadcastCompactCard
+                broadcast={activeBroadcast}
+                timerText={broadcastTimerText}
+                uiMode={broadcastUiMode}
+                endsAtFormatted={broadcastEndsLabel}
+                onOpen={() => navigate('/broadcast')}
+              />
             ) : (
               <div />
             )}
@@ -1155,7 +1156,13 @@ function DashboardMain() {
 
           {showBroadcastWidget ? (
             <div className="sm:col-span-2 xl:col-span-6">
-              <BroadcastCompactCard broadcast={activeBroadcast} timerText={broadcastTimerText} onOpen={() => navigate('/broadcast')} />
+              <BroadcastCompactCard
+                broadcast={activeBroadcast}
+                timerText={broadcastTimerText}
+                uiMode={broadcastUiMode}
+                endsAtFormatted={broadcastEndsLabel}
+                onOpen={() => navigate('/broadcast')}
+              />
             </div>
           ) : null}
 

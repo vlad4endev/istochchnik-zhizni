@@ -1,4 +1,5 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import { createReadStream } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 
 let cached: SupabaseClient | null | undefined;
@@ -294,6 +295,64 @@ export async function uploadBufferToPublicBucket(opts: {
     throw new Error('Storage getPublicUrl returned empty URL');
   }
   return { publicUrl: rewriteSupabaseStorageUrlForClient(data.publicUrl) };
+}
+
+/**
+ * Загрузка больших файлов с диска без чтения всего буфера в память (видео в мессенджере).
+ * Требует Node stream + fetch с duplex (Supabase Storage API).
+ */
+export async function uploadStreamToPublicBucket(opts: {
+  bucket: string;
+  objectPath: string;
+  filePath: string;
+  contentType?: string;
+  cacheControl?: string;
+  metadata?: Record<string, string>;
+  upsert?: boolean;
+}): Promise<{ publicUrl: string }> {
+  const client = getClient();
+  if (!client) {
+    throw new Error('Supabase Storage is not configured (SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY)');
+  }
+  const contentType =
+    typeof opts.contentType === 'string' && opts.contentType.trim().length > 0
+      ? opts.contentType.trim()
+      : 'application/octet-stream';
+  const stream = createReadStream(opts.filePath);
+  const { error } = await client.storage.from(opts.bucket).upload(opts.objectPath, stream as never, {
+    contentType,
+    cacheControl: opts.cacheControl,
+    metadata: opts.metadata,
+    upsert: opts.upsert === true,
+    duplex: 'half',
+  } as never);
+  if (error) {
+    throw new Error(`Storage upload failed [bucket=${opts.bucket}]: ${error.message}`);
+  }
+  const { data } = client.storage.from(opts.bucket).getPublicUrl(opts.objectPath);
+  if (!data?.publicUrl) {
+    throw new Error('Storage getPublicUrl returned empty URL');
+  }
+  return { publicUrl: rewriteSupabaseStorageUrlForClient(data.publicUrl) };
+}
+
+/** Скачивание объекта с сервера (service role) — для прокси вложений без CORS в браузере. */
+export async function downloadBucketObject(opts: {
+  bucket: string;
+  objectPath: string;
+}): Promise<{ buffer: Buffer; contentType: string | null }> {
+  const client = getClient();
+  const { data, error } = await client.storage.from(opts.bucket).download(opts.objectPath);
+  if (error) {
+    throw new Error(`Storage download failed [bucket=${opts.bucket}]: ${error.message}`);
+  }
+  if (!data) {
+    throw new Error('Storage download returned empty body');
+  }
+  const ab = await data.arrayBuffer();
+  const buffer = Buffer.from(ab);
+  const ct = typeof Blob !== 'undefined' && data instanceof Blob && data.type ? String(data.type).trim() : '';
+  return { buffer, contentType: ct || null };
 }
 
 export async function createSignedUrlForBucketObject(opts: {

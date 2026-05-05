@@ -1,6 +1,17 @@
 import type { MessagePayloadType, MessageWithSender } from './api/messengerApi';
 
 const IMAGE_EXT_RE = /\.(jpe?g|png|webp|gif|heic|heif)$/i;
+const VIDEO_EXT_RE = /\.(mp4|m4v|mov|webm|mkv|avi|mpeg|mpg|3gp|ogv)$/i;
+
+/** Превью/плитка альбома: видео как в Telegram (не карточка «файл»). */
+export function isMessengerVideoAttachment(row: Record<string, unknown>, rawUrl: string): boolean {
+  const mime = String(row.mimeType ?? row.mimetype ?? '').trim().toLowerCase();
+  const mimeMain = mime.split(';')[0].trim();
+  if (mimeMain.startsWith('video/')) return true;
+  const pathOnly = rawUrl.split('?')[0].toLowerCase();
+  const n = String(row.name ?? row.filename ?? '').trim().toLowerCase();
+  return VIDEO_EXT_RE.test(pathOnly) || VIDEO_EXT_RE.test(n);
+}
 
 /** URL вложения из вложенных структур (варианты API / групповых ответов). */
 export function pickUrlFromNestedPayload(p: Record<string, unknown>): string {
@@ -52,6 +63,7 @@ export function inferMessengerPayloadType(
   const images = Array.isArray(p.images) ? p.images : [];
   if (images.length > 0) return 'image';
   if (mimeMain.startsWith('audio/')) return 'audio';
+  if (mimeMain.startsWith('video/') || VIDEO_EXT_RE.test(rawUrl.split('?')[0])) return 'image';
   if (mime.startsWith('image/') || IMAGE_EXT_RE.test(rawUrl)) return 'image';
   if (rawUrl) return 'file';
   const alt = pickUrlFromNestedPayload(p);

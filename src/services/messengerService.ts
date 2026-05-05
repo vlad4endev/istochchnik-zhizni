@@ -1303,6 +1303,7 @@ function normalizePollPayloadForSend(question: string, plRaw: MessagePayload): M
   return {
     options,
     allows_multiple: Boolean(plRaw.allows_multiple),
+    anonymous: Boolean(plRaw.anonymous),
   };
 }
 
@@ -2034,6 +2035,116 @@ export async function votePollMessage(
   return { conversationId: convId, tallies, my_options: uniq };
 }
 
+export type PollVoterDto = {
+  member_id: number;
+  display_name: string;
+  avatar_url: string | null;
+};
+
+function pollVoterDisplayName(row: {
+  first_name: string | null;
+  last_name: string | null;
+  name: string | null;
+}): string {
+  const fl = `${row.first_name ?? ''} ${row.last_name ?? ''}`.trim();
+  if (fl.length > 0) return fl;
+  const n = String(row.name ?? '').trim();
+  if (n.length > 0) return n;
+  return 'Участник';
+}
+
+/**
+ * List voters per option. For `anonymous` polls, voter identities are not returned.
+ */
+export async function getPollVotersForMember(
+  messageId: string,
+  memberId: number,
+): Promise<{
+  conversationId: string;
+  anonymous: boolean;
+  options: Array<{ index: number; voters: PollVoterDto[] }>;
+}> {
+  const mid = String(messageId || '').trim();
+  if (!/^\d+$/.test(mid)) {
+    throw new Error('Invalid message id');
+  }
+
+  const rows = await dbQuery(
+    `SELECT id, conversation_id, payload_type, payload, is_deleted FROM messages WHERE id = $1 LIMIT 1`,
+    [mid],
+  );
+  const row = rows.rows[0];
+  if (!row || row.is_deleted) {
+    throw new Error('Message not found');
+  }
+  if (String(row.payload_type) !== 'poll') {
+    throw new Error('Not a poll message');
+  }
+
+  const payload = normalizePayload(row.payload);
+  const optList = Array.isArray(payload.options) ? payload.options : [];
+  const n = optList.length;
+  if (n < 2) {
+    throw new Error('Invalid poll');
+  }
+
+  const convId = String(row.conversation_id);
+  const ok = await isMemberInConversation(convId, memberId);
+  if (!ok) {
+    throw new Error('Forbidden');
+  }
+
+  if (payload.anonymous) {
+    return {
+      conversationId: convId,
+      anonymous: true,
+      options: Array.from({ length: n }, (_, index) => ({ index, voters: [] as PollVoterDto[] })),
+    };
+  }
+
+  const voteRows = await dbQuery(
+    `SELECT v.option_index::int AS option_index,
+            v.member_id::int AS member_id,
+            mb.first_name,
+            mb.last_name,
+            mb.name,
+            mb.avatar_url
+     FROM message_poll_votes v
+     INNER JOIN members mb ON mb.id = v.member_id
+     WHERE v.message_id = $1
+     ORDER BY v.option_index ASC,
+              LOWER(TRIM(COALESCE(mb.first_name, '') || ' ' || COALESCE(mb.last_name, ''))) ASC,
+              LOWER(TRIM(COALESCE(mb.name, ''))) ASC,
+              v.member_id ASC`,
+    [mid],
+  );
+
+  const buckets: PollVoterDto[][] = Array.from({ length: n }, () => []);
+  for (const vr of voteRows.rows as Array<{
+    option_index: number;
+    member_id: number;
+    first_name: string | null;
+    last_name: string | null;
+    name: string | null;
+    avatar_url: string | null;
+  }>) {
+    const idx = Number(vr.option_index);
+    if (!Number.isInteger(idx) || idx < 0 || idx >= n) continue;
+    const avatarRaw = vr.avatar_url != null ? String(vr.avatar_url).trim() : '';
+    buckets[idx].push({
+      member_id: vr.member_id,
+      display_name: pollVoterDisplayName(vr),
+      avatar_url: avatarRaw.length > 0 ? avatarRaw : null,
+    });
+  }
+
+  return {
+    conversationId: convId,
+    anonymous: false,
+    options: buckets.map((voters, index) => ({ index, voters })),
+  };
+}
+
 /**
  * Soft-delete a message (only by sender).
  */
@@ -2208,6 +2319,8 @@ export async function getMessageAttachmentForMember(
   conversationId: string;
   url: string | null;
   objectPath?: string;
+  fileName: string;
+  mimeType: string | null;
 } | null> {
   const result = await dbQuery(
     `SELECT conversation_id, payload_type::text AS payload_type, payload
@@ -2231,6 +2344,9 @@ export async function getMessageAttachmentForMember(
 
   let urlRaw = String(payload.url ?? '').trim();
   let objectPathRaw: unknown = payload.objectPath ?? payload.object_path;
+  let fileName = String(payload.name ?? payload.filename ?? '').trim() || 'file';
+  let mimeType =
+    String(payload.mimeType ?? (payload as { mimetype?: unknown }).mimetype ?? '').trim() || null;
 
   const slotIdx =
     typeof slot === 'number' && Number.isFinite(slot) && slot >= 0 && slot <= 32 ? Math.floor(slot) : null;
@@ -2245,6 +2361,10 @@ export async function getMessageAttachmentForMember(
         urlRaw = slotUrl;
         objectPathRaw = slotOp;
       }
+      const slotName = String(im.name ?? im.filename ?? '').trim();
+      if (slotName) fileName = slotName;
+      const slotMime = String(im.mimeType ?? im.mimetype ?? '').trim();
+      if (slotMime) mimeType = slotMime;
     }
   }
 
@@ -2253,7 +2373,7 @@ export async function getMessageAttachmentForMember(
     : null;
   const objectPath = normalizeStorageObjectPath(objectPathRaw);
   if (!url && !objectPath) return null;
-  return { conversationId, url, objectPath };
+  return { conversationId, url, objectPath, fileName, mimeType };
 }
 
 export async function interactWithMessage(
@@ -2343,6 +2463,16 @@ export async function listRegisteredMembers(
 
 const ACCESS_REQUESTS_CHANNEL_KIND = 'access_requests';
 const ACCESS_REQUESTS_CHANNEL_TITLE = 'Заявки';
+
+/** Канал уведомлений админам о заявках на доступ (только системные сообщения). */
+export function isMessengerAccessRequestsChannelMetadata(metadata: unknown): boolean {
+  return (
+    metadata != null &&
+    typeof metadata === 'object' &&
+    !Array.isArray(metadata) &&
+    String((metadata as Record<string, unknown>).kind ?? '') === ACCESS_REQUESTS_CHANNEL_KIND
+  );
+}
 /** Для SELECT как у истории чата; для access_request блоки опроса пустые. */
 const FANOUT_VIEWER_MEMBER_ID = 0;
 

@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
+import { format } from 'date-fns';
+import { ru } from 'date-fns/locale';
 import { LuBell, LuExpand, LuPlay, LuTv } from 'react-icons/lu';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { createBroadcast, fetchActiveBroadcast, fetchFinishedBroadcasts, patchBroadcast, type BroadcastData } from '../../../api/broadcast';
@@ -6,6 +8,12 @@ import { SectionHeroToolbarEnd } from '@/components/SectionHeroToolbarEnd';
 import { sectionHeroHeaderClass, sectionHeroStickyClass } from '../../../lib/sectionHeroChrome';
 import { useAuthStore } from '../../auth/authStore';
 import { detectPlatform, getEmbedUrl, parseBroadcastInputToEmbed } from '../../../utils/broadcast';
+import {
+  BROADCAST_SLOT_MS,
+  formatBroadcastCountdownPhrase,
+  formatBroadcastMainTimer,
+  getBroadcastUiMode,
+} from '../../../utils/broadcastDisplay';
 import { emitAppToast } from '../../../lib/uiFeedback';
 import { useMe } from '@/hooks/useMe';
 import { keys } from '@/lib/queryKeys';
@@ -14,16 +22,6 @@ import { SkeletonBox } from '@/components/ui/SkeletonBox';
 function btnPrimary(c = '') { return `flex h-10 items-center justify-center rounded-xl bg-primary px-4 text-sm font-bold text-white shadow hover:border-transparent hover:!bg-[#e34254] disabled:pointer-events-none disabled:opacity-50 transition-colors ${c}`; }
 function btnSecondary(c = '') { return `flex h-10 items-center justify-center rounded-xl border border-stone-200 bg-white px-4 text-sm font-bold text-stone-700 hover:bg-stone-50 disabled:pointer-events-none disabled:opacity-50 transition-colors ${c}`; }
 function fieldClass() { return 'w-full rounded-xl border border-stone-200 bg-stone-50 px-3 py-2 text-sm text-stone-900 outline-none focus:border-primary focus:bg-white transition-colors'; }
-
-function formatCountdownText(startsAt: string | null): string | null {
-  if (!startsAt) return null;
-  const diffMs = new Date(startsAt).getTime() - Date.now();
-  if (!Number.isFinite(diffMs) || diffMs <= 0) return null;
-  const totalMinutes = Math.floor(diffMs / 60000);
-  const hours = Math.floor(totalMinutes / 60);
-  const minutes = totalMinutes % 60;
-  return `До начала: ${hours} ч ${minutes} мин`;
-}
 
 function splitStartDateTime(startsAt: string | null): { date: string; time: string } {
   if (!startsAt) return { date: '', time: '' };
@@ -63,7 +61,7 @@ export function BroadcastPage() {
   });
   const activeBroadcast = data?.broadcast ?? null;
   const [playerUrl, setPlayerUrl] = useState<string | null>(null);
-  const [countdown, setCountdown] = useState<string | null>(null);
+  const [broadcastTickMs, setBroadcastTickMs] = useState(() => Date.now());
   const [datePart, setDatePart] = useState('');
   const [timePart, setTimePart] = useState('');
   const [smartInput, setSmartInput] = useState('');
@@ -106,17 +104,20 @@ export function BroadcastPage() {
   }, [activeBroadcast?.description, activeBroadcast?.id, activeBroadcast?.is_public, activeBroadcast?.notify_members, activeBroadcast?.platform, activeBroadcast?.starts_at, activeBroadcast?.stream_url, activeBroadcast?.title]);
 
   useEffect(() => {
-    const tick = () => {
-      if (activeBroadcast?.status === 'live') {
-        setCountdown(null);
-        return;
-      }
-      setCountdown(formatCountdownText(activeBroadcast?.starts_at ?? null));
-    };
-    tick();
-    const id = window.setInterval(tick, 60_000);
+    const id = window.setInterval(() => setBroadcastTickMs(Date.now()), 1000);
     return () => window.clearInterval(id);
-  }, [activeBroadcast?.starts_at, activeBroadcast?.status]);
+  }, []);
+
+  const broadcastUiMode = getBroadcastUiMode(broadcastTickMs, activeBroadcast);
+  const broadcastMainTimer = formatBroadcastMainTimer(broadcastTickMs, activeBroadcast);
+  const countdownPhrase = formatBroadcastCountdownPhrase(broadcastTickMs, activeBroadcast?.starts_at ?? null);
+  const broadcastEndsLabel = useMemo(() => {
+    if (!activeBroadcast?.starts_at) return null;
+    if (broadcastUiMode !== 'pre' && broadcastUiMode !== 'onair') return null;
+    const t = new Date(activeBroadcast.starts_at).getTime();
+    if (!Number.isFinite(t)) return null;
+    return format(new Date(t + BROADCAST_SLOT_MS), 'dd.MM.yyyy HH:mm', { locale: ru });
+  }, [activeBroadcast?.starts_at, broadcastUiMode]);
 
   const saveMutation = useMutation({
     mutationFn: async (payload: Partial<BroadcastData>) => {
@@ -248,12 +249,30 @@ export function BroadcastPage() {
               )}
             </div>
 
-            <div className="mt-4">
-              {activeBroadcast?.status === 'live' ? (
-                <span className="inline-flex items-center rounded-full bg-red-600 px-3 py-1 text-xs font-extrabold uppercase tracking-wide text-white">● LIVE</span>
+            <div className="mt-4 space-y-1">
+              {broadcastUiMode === 'post' ? (
+                <p className="text-sm font-semibold text-stone-600">Запланированный эфир завершён (прошло 2 ч с указанного начала).</p>
+              ) : broadcastUiMode === 'onair' ? (
+                <>
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-red-600 px-3 py-1 text-xs font-extrabold text-white">
+                    <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-white" aria-hidden />
+                    В эфире
+                  </span>
+                  <p className="text-sm font-semibold text-stone-800 tabular-nums">Идёт: {broadcastMainTimer}</p>
+                </>
               ) : (
-                <p className="text-sm font-semibold text-stone-700">{countdown ?? 'До начала: время уточняется'}</p>
+                <p className="text-sm font-semibold text-stone-700">
+                  {countdownPhrase
+                    ?? (activeBroadcast?.starts_at
+                      && Number.isFinite(new Date(activeBroadcast.starts_at).getTime())
+                      && broadcastTickMs >= new Date(activeBroadcast.starts_at).getTime()
+                      ? 'Время начала наступило — вставьте ссылку на трансляцию в настройках.'
+                      : 'До начала: время уточняется')}
+                </p>
               )}
+              {broadcastEndsLabel ? (
+                <p className="text-xs font-medium text-stone-500">Окончание эфира: {broadcastEndsLabel}</p>
+              ) : null}
             </div>
 
             <div className="mt-4 flex flex-wrap gap-3">

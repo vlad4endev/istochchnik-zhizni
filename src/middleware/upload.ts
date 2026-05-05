@@ -1,5 +1,7 @@
 import multer from 'multer';
 import path from 'node:path';
+import os from 'node:os';
+import { randomUUID } from 'node:crypto';
 
 const ALLOWED_MIME_TYPES = new Set([
   'image/jpeg',
@@ -90,11 +92,43 @@ function isAllowedUpload(file: Express.Multer.File): boolean {
   return false;
 }
 
-export const upload = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: 20 * 1024 * 1024 }, // 20MB
+/** Расширения видео для пункта «фото или видео» в мессенджере (до 1GB на файл). */
+const MESSENGER_VIDEO_EXTENSIONS = new Set([
+  '.mp4',
+  '.m4v',
+  '.mov',
+  '.webm',
+  '.mkv',
+  '.avi',
+  '.mpeg',
+  '.mpg',
+  '.3gp',
+  '.ogv',
+]);
+
+export function isMessengerMediaUploadAllowed(file: Express.Multer.File): boolean {
+  if (isAllowedUpload(file)) return true;
+  const ext = path.extname(file.originalname || '').toLowerCase();
+  const mime = String(file.mimetype || '').toLowerCase();
+  const mimeMain = mime.split(';')[0].trim();
+  if (mimeMain.startsWith('video/')) return true;
+  if (MESSENGER_VIDEO_EXTENSIONS.has(ext)) return true;
+  if (!ext && mimeMain.startsWith('video/')) return true;
+  return false;
+}
+
+/** Загрузки в чат: диск + лимит 1GB (видео); дальше в хендлере для не-видео действует 20MB. */
+export const messengerUpload = multer({
+  storage: multer.diskStorage({
+    destination: (_req, _file, cb) => cb(null, os.tmpdir()),
+    filename: (_req, file, cb) => {
+      const base = path.basename(file.originalname || 'file').replace(/[^\w.-]+/g, '_').slice(0, 120);
+      cb(null, `${randomUUID()}-${base || 'upload'}`);
+    },
+  }),
+  limits: { fileSize: 1024 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
-    if (isAllowedUpload(file as Express.Multer.File)) {
+    if (isMessengerMediaUploadAllowed(file as Express.Multer.File)) {
       cb(null, true);
       return;
     }

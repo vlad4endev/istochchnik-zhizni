@@ -1,11 +1,14 @@
 import { Router, type Request, type Response, type NextFunction } from 'express';
 import multer from 'multer';
 import { randomUUID } from 'node:crypto';
+import fsp from 'node:fs/promises';
+import path from 'node:path';
 import { resolveMessengerConversationDeepLink } from '../config/messengerPublic';
+import { getUploadsRoot } from '../config/uploadsRoot';
 import { requireAuthSession } from '../middleware/authSession';
 import { checkChatPermission } from '../middleware/chatPermission';
 import { ensureValidRequest, validateSendMessage } from '../middleware/messengerValidation';
-import { upload } from '../middleware/upload';
+import { messengerUpload } from '../middleware/upload';
 import * as svc from '../services/messengerService';
 import { sendToRoomAll, sendToRoom, sendToMember, ensureMemberInRoom } from '../realtime/wsHub';
 import { sendPushNotification } from '../services/pushService';
@@ -13,6 +16,7 @@ import {
   buildMessengerChatObjectPath,
   buildMessengerObjectPath,
   createSignedUrlForBucketObject,
+  downloadBucketObject,
   getSupabaseStorageMissingEnv,
   isStorageBucketHealthCheckInconclusive,
   isSupabaseStorageConfigured,
@@ -20,9 +24,86 @@ import {
   verifyStorageBucketPresent,
   rewriteSupabaseStorageUrlForClient,
   uploadBufferToPublicBucket,
+  uploadStreamToPublicBucket,
 } from '../lib/supabaseStorage';
 
 type AuthReq = Request & { authUserId?: number };
+
+const MESSENGER_ATTACHMENT_PROXY_MAX_BYTES = 25 * 1024 * 1024;
+
+function messengerAttachmentContentDisposition(download: boolean, rawName: string): string {
+  const kind = download ? 'attachment' : 'inline';
+  const base = (rawName.trim() || 'file').slice(0, 220);
+  const ascii = base.replace(/[^\x20-\x7E]/g, '_').replace(/["\\\r\n]/g, '_').slice(0, 160);
+  const star = encodeURIComponent(base);
+  return `${kind}; filename="${ascii}"; filename*=UTF-8''${star}`;
+}
+
+async function loadMessengerAttachmentBytesForProxy(
+  item: NonNullable<Awaited<ReturnType<typeof svc.getMessageAttachmentForMember>>>,
+): Promise<{ buffer: Buffer; contentType: string }> {
+  const bucket = messengerBucket();
+  if (item.objectPath && isSupabaseStorageConfigured()) {
+    const { buffer, contentType } = await downloadBucketObject({
+      bucket,
+      objectPath: item.objectPath,
+    });
+    if (buffer.length > MESSENGER_ATTACHMENT_PROXY_MAX_BYTES) {
+      throw new Error('Attachment too large');
+    }
+    return {
+      buffer,
+      contentType: (contentType && contentType.trim()) || item.mimeType || 'application/octet-stream',
+    };
+  }
+  if (item.url) {
+    const u = item.url.trim();
+    if (u.startsWith('/uploads/') || u.startsWith('/api/uploads/')) {
+      const rel = u.replace(/^\/api\/uploads\//, '/uploads/');
+      const stripped = rel.replace(/^\/uploads\//, '').replace(/\\/g, '/');
+      if (!stripped || stripped.includes('..')) {
+        throw new Error('Invalid attachment path');
+      }
+      const root = path.resolve(getUploadsRoot());
+      const full = path.resolve(path.join(root, stripped));
+      if (!full.startsWith(root)) {
+        throw new Error('Invalid attachment path');
+      }
+      const buffer = await fsp.readFile(full);
+      if (buffer.length > MESSENGER_ATTACHMENT_PROXY_MAX_BYTES) {
+        throw new Error('Attachment too large');
+      }
+      return {
+        buffer,
+        contentType: item.mimeType || 'application/octet-stream',
+      };
+    }
+    const ac = new AbortController();
+    const to = setTimeout(() => ac.abort(), 25_000);
+    try {
+      const res = await fetch(u, { redirect: 'follow', signal: ac.signal });
+      if (!res.ok) {
+        throw new Error(`Remote attachment HTTP ${res.status}`);
+      }
+      const len = res.headers.get('content-length');
+      if (len && Number(len) > MESSENGER_ATTACHMENT_PROXY_MAX_BYTES) {
+        throw new Error('Attachment too large');
+      }
+      const buffer = Buffer.from(await res.arrayBuffer());
+      if (buffer.length > MESSENGER_ATTACHMENT_PROXY_MAX_BYTES) {
+        throw new Error('Attachment too large');
+      }
+      const ct = res.headers.get('content-type')?.split(';')[0]?.trim();
+      return {
+        buffer,
+        contentType: ct || item.mimeType || 'application/octet-stream',
+      };
+    } finally {
+      clearTimeout(to);
+    }
+  }
+  throw new Error('Attachment source missing');
+}
 
 /** Вложения грузятся в публичный объект Storage — постоянный URL уже достаточен, подпись не нужна и даёт лишние ошибки, если объект в БД и в бакете разошлись. */
 function isMessengerPublicObjectUrl(url: string, bucket: string): boolean {
@@ -51,6 +132,15 @@ const EXT_TO_MIME: Record<string, string> = {
   '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   '.ppt': 'application/vnd.ms-powerpoint',
   '.pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  '.mp4': 'video/mp4',
+  '.m4v': 'video/x-m4v',
+  '.mov': 'video/quicktime',
+  '.mkv': 'video/x-matroska',
+  '.avi': 'video/x-msvideo',
+  '.mpeg': 'video/mpeg',
+  '.mpg': 'video/mpeg',
+  '.3gp': 'video/3gpp',
+  '.ogv': 'video/ogg',
   '.webm': 'audio/webm',
   '.ogg': 'audio/ogg',
   '.oga': 'audio/ogg',
@@ -61,13 +151,16 @@ const EXT_TO_MIME: Record<string, string> = {
   '.wav': 'audio/wav',
   '.caf': 'audio/x-caf',
 };
-const MIME_TO_EXT: Record<string, string> = Object.entries(EXT_TO_MIME).reduce<Record<string, string>>(
-  (acc, [ext, mime]) => {
+const MIME_TO_EXT: Record<string, string> = {
+  ...Object.entries(EXT_TO_MIME).reduce<Record<string, string>>((acc, [ext, mime]) => {
     if (!acc[mime]) acc[mime] = ext;
     return acc;
-  },
-  {},
-);
+  }, {}),
+  'video/webm': '.webm',
+};
+
+const MESSENGER_MAX_VIDEO_BYTES = 1024 * 1024 * 1024;
+const MESSENGER_MAX_NON_VIDEO_BYTES = 20 * 1024 * 1024;
 
 function inferMimeFromHeader(buf: Buffer): string | null {
   if (buf.length >= 3 && buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) return 'image/jpeg';
@@ -95,11 +188,35 @@ function inferMimeFromHeader(buf: Buffer): string | null {
   ) {
     return 'image/webp';
   }
+  if (buf.length >= 4 && buf[0] === 0x1a && buf[1] === 0x45 && buf[2] === 0xdf && buf[3] === 0xa3) {
+    return 'video/webm';
+  }
   if (buf.length >= 12 && buf.subarray(4, 8).toString('ascii') === 'ftyp') {
-    const brand = buf.subarray(8, 12).toString('ascii').toLowerCase();
+    const brand = buf
+      .subarray(8, 12)
+      .toString('ascii')
+      .replace(/\0/g, '')
+      .trim()
+      .toLowerCase();
     if (brand.startsWith('heic')) return 'image/heic';
     if (brand.startsWith('heif')) return 'image/heif';
     if (brand === 'mif1' || brand === 'msf1') return 'image/heif';
+    if (brand === 'avif') return 'image/avif';
+    if (
+      brand === 'isom' ||
+      brand === 'iso2' ||
+      brand.startsWith('mp4') ||
+      brand === 'dash' ||
+      brand === 'msnv' ||
+      brand === 'avc1' ||
+      brand === '3gp4' ||
+      brand === '3gp5' ||
+      brand === '3g2a'
+    ) {
+      return 'video/mp4';
+    }
+    if (brand === 'qt' || brand.startsWith('qt')) return 'video/quicktime';
+    if (brand.includes('m4v')) return 'video/x-m4v';
   }
   if (
     buf.length >= 5 &&
@@ -139,12 +256,24 @@ function decodeMultipartFilename(raw: unknown): string {
   return s;
 }
 
-function resolveUploadMetadata(file: Express.Multer.File): { mimeType: string; extension: string } {
+async function resolveMessengerUploadMetadata(file: Express.Multer.File): Promise<{ mimeType: string; extension: string }> {
   const filename = decodeMultipartFilename(file.originalname);
   const extMatch = filename.match(/(\.[a-z0-9]{1,12})$/i);
   const byName = normalizeExtension(extMatch?.[1] || '');
   const byMime = String(file.mimetype || '').trim().toLowerCase();
-  const sniffed = inferMimeFromHeader(file.buffer ?? Buffer.alloc(0)) ?? '';
+  let sniffed = '';
+  if (file.path) {
+    const fh = await fsp.open(file.path, 'r');
+    try {
+      const buf = Buffer.alloc(16384);
+      const { bytesRead } = await fh.read(buf, 0, 16384, 0);
+      sniffed = inferMimeFromHeader(buf.subarray(0, bytesRead)) ?? '';
+    } finally {
+      await fh.close();
+    }
+  } else if (file.buffer && file.buffer.length > 0) {
+    sniffed = inferMimeFromHeader(file.buffer) ?? '';
+  }
   const mimeType = sniffed || byMime || EXT_TO_MIME[byName] || 'application/octet-stream';
   const extension = normalizeExtension(byName || MIME_TO_EXT[mimeType] || MIME_TO_EXT[sniffed] || '');
   return { mimeType, extension };
@@ -169,14 +298,14 @@ const router = Router();
 
 /** Multer без обёртки отдаёт 500 при LIMIT_* / fileFilter — отвечаем JSON 400 как в authRoutes. */
 function messengerUploadMiddleware(req: Request, res: Response, next: NextFunction): void {
-  upload.single('file')(req, res, (err: unknown) => {
+  messengerUpload.single('file')(req, res, (err: unknown) => {
     if (!err) {
       next();
       return;
     }
     if (err instanceof multer.MulterError) {
       if (err.code === 'LIMIT_FILE_SIZE') {
-        res.status(400).json({ error: 'File too large', maxBytes: 20 * 1024 * 1024 });
+        res.status(400).json({ error: 'File too large', maxBytes: MESSENGER_MAX_VIDEO_BYTES });
         return;
       }
       if (err.code === 'LIMIT_UNEXPECTED_FILE') {
@@ -287,18 +416,15 @@ router.post('/studio/song-chat', async (req: Request, res: Response) => {
 
 /** POST /api/messenger/upload (form-data: file) -> { url, name, size } */
 router.post('/upload', messengerUploadMiddleware, async (req: Request, res: Response) => {
+  const file = (req as Request & { file?: Express.Multer.File }).file;
+  const tempPath = file?.path;
   try {
-    const file = (req as Request & { file?: Express.Multer.File }).file;
     if (!file) {
       res.status(400).json({ error: 'File is required' });
       return;
     }
-    if (!file.buffer || !file.buffer.length) {
+    if (!tempPath || !file.size) {
       res.status(400).json({ error: 'File is empty' });
-      return;
-    }
-    if (file.size > 20 * 1024 * 1024) {
-      res.status(413).json({ error: 'File too large', maxBytes: 20 * 1024 * 1024 });
       return;
     }
     if (!isSupabaseStorageConfigured()) {
@@ -313,9 +439,18 @@ router.post('/upload', messengerUploadMiddleware, async (req: Request, res: Resp
     }
     const memberId = (req as AuthReq).authUserId!;
     const displayName = decodeMultipartFilename(file.originalname).slice(0, 255) || 'file';
-    const { mimeType, extension } = resolveUploadMetadata(file);
+    const { mimeType, extension } = await resolveMessengerUploadMetadata(file);
     const contentType =
-      String(mimeType || '').trim() || String(file.mimetype || '').trim() || 'image/jpeg';
+      String(mimeType || '').trim() || String(file.mimetype || '').trim() || 'application/octet-stream';
+    const isVideo = contentType.startsWith('video/');
+    const maxAllowed = isVideo ? MESSENGER_MAX_VIDEO_BYTES : MESSENGER_MAX_NON_VIDEO_BYTES;
+    if (file.size > maxAllowed) {
+      res.status(413).json({
+        error: isVideo ? 'Видео не больше 1GB' : 'Файл слишком большой (максимум 20MB)',
+        maxBytes: maxAllowed,
+      });
+      return;
+    }
     const bucket = messengerBucket();
     const rawConvId = String((req.body as { conversationId?: unknown })?.conversationId ?? '').trim();
     const isDraftConv = rawConvId.toLowerCase().startsWith('draft:');
@@ -326,25 +461,47 @@ router.post('/upload', messengerUploadMiddleware, async (req: Request, res: Resp
         res.status(403).json({ error: 'Нет доступа к этому чату для загрузки файла' });
         return;
       }
+      const uploadMeta = await svc.getConversationMeta(rawConvId);
+      if (uploadMeta && svc.isMessengerAccessRequestsChannelMetadata(uploadMeta.metadata)) {
+        res.status(403).json({ error: 'В этом канале нельзя прикреплять файлы' });
+        return;
+      }
       objectPath = buildMessengerChatObjectPath(rawConvId, extension);
     } else {
       objectPath = buildMessengerObjectPath(memberId, extension);
     }
     let url: string | null = null;
     try {
-      const { publicUrl } = await uploadBufferToPublicBucket({
-        bucket,
-        objectPath,
-        file: file.buffer,
-        contentType,
-        cacheControl: 'public, max-age=31536000, immutable',
-        upsert: true,
-        metadata: {
-          originalName: displayName,
-          uploadedBy: String(memberId),
-        },
-      });
-      url = publicUrl;
+      if (isVideo) {
+        const { publicUrl } = await uploadStreamToPublicBucket({
+          bucket,
+          objectPath,
+          filePath: tempPath,
+          contentType,
+          cacheControl: 'public, max-age=31536000, immutable',
+          upsert: true,
+          metadata: {
+            originalName: displayName,
+            uploadedBy: String(memberId),
+          },
+        });
+        url = publicUrl;
+      } else {
+        const buf = await fsp.readFile(tempPath);
+        const { publicUrl } = await uploadBufferToPublicBucket({
+          bucket,
+          objectPath,
+          file: buf,
+          contentType,
+          cacheControl: 'public, max-age=31536000, immutable',
+          upsert: true,
+          metadata: {
+            originalName: displayName,
+            uploadedBy: String(memberId),
+          },
+        });
+        url = publicUrl;
+      }
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       console.error('[messenger] Supabase upload failed:', msg);
@@ -383,6 +540,10 @@ router.post('/upload', messengerUploadMiddleware, async (req: Request, res: Resp
     console.error('[messenger] upload handler error:', e);
     if (!res.headersSent) {
       res.status(500).json({ error: 'Upload failed', code: 'upload_handler' });
+    }
+  } finally {
+    if (tempPath) {
+      await fsp.unlink(tempPath).catch(() => {});
     }
   }
 });
@@ -1107,6 +1268,36 @@ router.post(
   },
 );
 
+/** GET /api/messenger/messages/:id/poll-voters — who voted for each option (chat members only). */
+router.get('/messages/:id/poll-voters', async (req: Request, res: Response) => {
+  const userId = (req as AuthReq).authUserId!;
+  const msgId = String(req.params.id || '').trim();
+  if (!/^\d+$/.test(msgId)) {
+    res.status(400).json({ error: 'Invalid message id' });
+    return;
+  }
+  try {
+    const result = await svc.getPollVotersForMember(msgId, userId);
+    res.json(result);
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+    if (message === 'Forbidden') {
+      res.status(403).json({ error: 'Forbidden' });
+      return;
+    }
+    if (message === 'Message not found' || message === 'Not a poll message' || message === 'Invalid message id') {
+      res.status(404).json({ error: message });
+      return;
+    }
+    if (message === 'Invalid poll') {
+      res.status(400).json({ error: message });
+      return;
+    }
+    console.error('[messenger] poll-voters error:', e);
+    res.status(500).json({ error: 'Failed to load poll voters' });
+  }
+});
+
 /** PATCH /api/messenger/messages/:id { content } */
 router.get('/messages/:id/attachment-url', async (req: Request, res: Response) => {
   const userId = (req as AuthReq).authUserId!;
@@ -1170,6 +1361,56 @@ router.get('/messages/:id/attachment-url', async (req: Request, res: Response) =
     }
     console.error('[messenger] get attachment URL error:', e);
     res.status(500).json({ error: 'Failed to load attachment URL' });
+  }
+});
+
+/**
+ * GET /api/messenger/messages/:id/attachment-file
+ * Прокси вложения через API (тот же origin + cookie) — открытие и скачивание документов без CORS Storage.
+ * Query: slot (альбом), download=1 — Content-Disposition: attachment.
+ */
+router.get('/messages/:id/attachment-file', async (req: Request, res: Response) => {
+  const userId = (req as AuthReq).authUserId!;
+  const msgId = String(req.params.id || '').trim();
+  if (!/^\d+$/.test(msgId)) {
+    res.status(400).json({ error: 'Invalid message id' });
+    return;
+  }
+  const dlRaw = String(req.query.download ?? '').trim().toLowerCase();
+  const forceDownload = dlRaw === '1' || dlRaw === 'true' || dlRaw === 'yes';
+  try {
+    const slotRaw = req.query.slot;
+    let slot: number | undefined;
+    if (slotRaw != null && String(slotRaw).trim() !== '') {
+      const n = Number(slotRaw);
+      if (Number.isFinite(n) && n >= 0 && n <= 32) slot = Math.floor(n);
+    }
+    const item = await svc.getMessageAttachmentForMember(msgId, userId, slot);
+    if (!item) {
+      res.status(404).json({ error: 'Attachment not found' });
+      return;
+    }
+    const { buffer, contentType } = await loadMessengerAttachmentBytesForProxy(item);
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Content-Length', String(buffer.length));
+    res.setHeader(
+      'Content-Disposition',
+      messengerAttachmentContentDisposition(forceDownload, item.fileName),
+    );
+    res.setHeader('Cache-Control', 'private, no-store');
+    res.send(buffer);
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+    if (message === 'Forbidden') {
+      res.status(403).json({ error: 'Forbidden' });
+      return;
+    }
+    if (message === 'Attachment too large') {
+      res.status(413).json({ error: 'Attachment too large' });
+      return;
+    }
+    console.error('[messenger] attachment-file proxy error:', e);
+    res.status(500).json({ error: 'Failed to load attachment' });
   }
 });
 

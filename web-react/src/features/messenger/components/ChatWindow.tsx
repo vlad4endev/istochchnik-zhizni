@@ -16,6 +16,7 @@ import { formatMessengerLastSeen } from '../lastSeenUtils';
 import { groupMessages } from '../groupMessages';
 import { getAlbumImageUrl, getPrimaryAttachmentUrl, inferMessengerPayloadType } from '../payloadMedia';
 import { getAvatarColor, getAvatarInitial } from '../avatarUtils';
+import { isAccessRequestsMessengerChannel } from '../messengerChannelKinds';
 import './messenger.css';
 
 /** Склонение «N участников» по-русски (как в интерфейсах мессенджеров). */
@@ -105,6 +106,11 @@ export function ChatWindow({
   const prevIsOnlineRef = useRef<boolean | null>(null);
 
   const conv = useMemo(() => conversations.find((c) => c.id === conversationId), [conversations, conversationId]);
+
+  const isAccessRequestsChannel = useMemo(
+    () => isAccessRequestsMessengerChannel(chatMeta?.metadata ?? conv?.metadata),
+    [chatMeta?.metadata, conv?.metadata],
+  );
 
   useEffect(() => {
     if (isDraft) {
@@ -251,7 +257,8 @@ export function ChatWindow({
     setPresenceAnnouncement(next ? `${name} в сети` : `${name} оффлайн`);
   }, [onlineMembers, conv]);
 
-  const canPostMessages = isDraft || chatMeta?.my_effective_permissions?.can_send_messages !== false;
+  const canPostMessages =
+    !isAccessRequestsChannel && (isDraft || chatMeta?.my_effective_permissions?.can_send_messages !== false);
   /** В группах/каналах медио может быть отключено отдельно от текста. */
   const canSendAttachments =
     canPostMessages &&
@@ -1047,6 +1054,7 @@ export function ChatWindow({
                         participantLabelById={participantLabelById}
                         canPinMessages={canPinMessages}
                         onPinToggle={handlePinToggle}
+                        accessRequestsSystemChannel={isAccessRequestsChannel}
                       />
                     </div>
                   </div>
@@ -1059,15 +1067,24 @@ export function ChatWindow({
       </div>
 
       <div className="tg-chat-window__composer message-input-bar sticky bottom-0 z-20 w-full min-w-0 max-w-full shrink-0 border-t border-stone-200/70 bg-[var(--tg-bg)] px-3 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom,0px))]">
-        <ChatInput
-          conversationId={conversationId}
-          sendTypingStart={sendTypingStart}
-          sendTypingStop={sendTypingStop}
-          canSend={canPostMessages}
-          canSendAttachments={canSendAttachments}
-          mentionParticipants={conv && conv.type !== 'private' ? mentionList : []}
-          participantLabelById={participantLabelById}
-        />
+        {isAccessRequestsChannel ? (
+          <div className="pb-1 pt-0.5 text-center">
+            <p className="mx-auto max-w-md px-2 text-[13px] leading-snug text-[var(--text-secondary)]">
+              Канал уведомлений: сообщения приходят только от бота «Заявки». Набор текста недоступен — решение по
+              заявке принимается в карточке ниже.
+            </p>
+          </div>
+        ) : (
+          <ChatInput
+            conversationId={conversationId}
+            sendTypingStart={sendTypingStart}
+            sendTypingStop={sendTypingStop}
+            canSend={canPostMessages}
+            canSendAttachments={canSendAttachments}
+            mentionParticipants={conv && conv.type !== 'private' ? mentionList : []}
+            participantLabelById={participantLabelById}
+          />
+        )}
       </div>
 
       {showSearch && typeof document !== 'undefined'

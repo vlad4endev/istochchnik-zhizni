@@ -2,7 +2,12 @@ import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { LuFile, LuImage, LuLink2 } from 'react-icons/lu';
 import * as api from '../api/messengerApi';
-import { getAlbumImageUrl, getPrimaryAttachmentUrl, inferMessengerPayloadType } from '../payloadMedia';
+import {
+  getAlbumImageUrl,
+  getPrimaryAttachmentUrl,
+  inferMessengerPayloadType,
+  isMessengerVideoAttachment,
+} from '../payloadMedia';
 import { resolvePublicUrl } from '../../../lib/resolvePublicUrl';
 import { ManageScreenShell, ManageSettingsGroup } from './ManageScreenShell';
 import { SkeletonBox } from '@/components/ui/SkeletonBox';
@@ -61,11 +66,13 @@ export function ChatMediaPage() {
         for (const img of album) {
           const row = typeof img === 'object' && img !== null ? (img as Record<string, unknown>) : {};
           const raw = getAlbumImageUrl(row);
+          if (isMessengerVideoAttachment(row, raw)) continue;
           const src = resolvePublicUrl(raw) ?? raw;
           if (src) out.push({ id: String(m.id), src });
         }
       } else {
         const raw = getPrimaryAttachmentUrl(p);
+        if (isMessengerVideoAttachment(p as Record<string, unknown>, raw)) continue;
         const src = resolvePublicUrl(raw) ?? raw;
         if (src) out.push({ id: String(m.id), src });
       }
@@ -79,9 +86,12 @@ export function ChatMediaPage() {
       .map((m) => {
         const p = (m.payload ?? {}) as { url?: string; name?: string; filename?: string };
         const raw = getPrimaryAttachmentUrl(p as Record<string, unknown>);
-        const href = resolvePublicUrl(raw) ?? raw;
+        const id = String(m.id);
+        const href = /^\d+$/.test(id)
+          ? api.buildMessengerAttachmentFileUrl(id)
+          : resolvePublicUrl(raw) ?? raw;
         return {
-          id: String(m.id),
+          id,
           href,
           name: String(p.name ?? p.filename ?? 'Файл').trim() || 'Файл',
         };

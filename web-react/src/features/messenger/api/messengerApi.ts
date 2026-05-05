@@ -287,6 +287,7 @@ export async function uploadFile(
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     try {
       const { data } = await apiClient.post<UploadedFile>(`/api/messenger/upload`, form, {
+        timeout: 3_600_000,
         signal: opts?.signal,
         onUploadProgress: (e) => {
           const total = e.total ?? 0;
@@ -343,6 +344,23 @@ export async function fetchMessageAttachmentUrl(
     });
   }
   return { url: data.url };
+}
+
+/**
+ * Same-origin URL для открытия/скачивания вложения (сессия в cookie).
+ * Обходит CORS Supabase при сохранении файла и даёт стабильное «Открыть» в новой вкладке.
+ */
+export function buildMessengerAttachmentFileUrl(
+  messageId: string,
+  opts?: { download?: boolean; slot?: number },
+): string {
+  const qs = new URLSearchParams();
+  if (opts?.download) qs.set('download', '1');
+  if (opts?.slot != null && Number.isFinite(opts.slot)) {
+    qs.set('slot', String(Math.floor(opts.slot)));
+  }
+  const suffix = qs.toString() ? `?${qs.toString()}` : '';
+  return `${BASE}/messages/${encodeURIComponent(messageId)}/attachment-file${suffix}`;
 }
 
 export type MessengerUploadsHealth = {
@@ -526,6 +544,25 @@ export async function votePoll(
   const { data } = await apiClient.post<{ tallies: number[]; my_options: number[] }>(
     `${BASE}/messages/${encodeURIComponent(messageId)}/poll-vote`,
     { optionIndexes },
+  );
+  return data;
+}
+
+export type PollVoter = {
+  member_id: number;
+  display_name: string;
+  avatar_url: string | null;
+};
+
+export type PollVotersResponse = {
+  conversationId: string;
+  anonymous?: boolean;
+  options: Array<{ index: number; voters: PollVoter[] }>;
+};
+
+export async function fetchPollVoters(messageId: string): Promise<PollVotersResponse> {
+  const { data } = await apiClient.get<PollVotersResponse>(
+    `${BASE}/messages/${encodeURIComponent(messageId)}/poll-voters`,
   );
   return data;
 }

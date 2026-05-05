@@ -1,7 +1,17 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { useChatStore, isDraftPrivateConversationId } from '../chatStore';
-import { LuPaperclip, LuSmile, LuSend, LuX, LuImage, LuFileText, LuChartColumn, LuMic } from 'react-icons/lu';
+import {
+  LuPaperclip,
+  LuSmile,
+  LuSend,
+  LuX,
+  LuImage,
+  LuVideo,
+  LuFileText,
+  LuChartColumn,
+  LuMic,
+} from 'react-icons/lu';
 import * as api from '../api/messengerApi';
 import Picker from '@emoji-mart/react';
 import emojiData from '@emoji-mart/data';
@@ -40,6 +50,19 @@ type PendingAttachment = {
 };
 
 const IMAGE_NAME_EXT_RE = /\.(jpe?g|png|webp|gif|heic|heif)$/i;
+const VIDEO_NAME_EXT_RE = /\.(mp4|m4v|mov|webm|mkv|avi|mpeg|mpg|3gp|ogv)$/i;
+const MAX_CHAT_IMAGE_BYTES = 20 * 1024 * 1024;
+const MAX_CHAT_VIDEO_BYTES = 1024 * 1024 * 1024;
+
+function isChatVideoFile(f: File): boolean {
+  return (f.type || '').startsWith('video/') || VIDEO_NAME_EXT_RE.test(String(f.name || '').trim());
+}
+function isChatImageFile(f: File): boolean {
+  return (f.type || '').startsWith('image/') || IMAGE_NAME_EXT_RE.test(String(f.name || '').trim());
+}
+function isChatPhotoOrVideoFile(f: File): boolean {
+  return isChatImageFile(f) || isChatVideoFile(f);
+}
 
 type PopoverPos =
   | { bottomPx: number; leftPx?: number; rightPx?: number }
@@ -145,6 +168,7 @@ export function ChatInput({
   const [uploadsHealthy, setUploadsHealthy] = useState(true);
   const [uploadsHealthChecking, setUploadsHealthChecking] = useState(false);
   const [previewSrc, setPreviewSrc] = useState<string | null>(null);
+  const [previewMediaKind, setPreviewMediaKind] = useState<'image' | 'video'>('image');
   const [attachMenuOpen, setAttachMenuOpen] = useState(false);
   const [emojiOpen, setEmojiOpen] = useState(false);
   const [attachMenuPresent, setAttachMenuPresent] = useState(false);
@@ -307,7 +331,10 @@ export function ChatInput({
   useEffect(() => {
     if (!previewSrc) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setPreviewSrc(null);
+      if (e.key === 'Escape') {
+        setPreviewSrc(null);
+        setPreviewMediaKind('image');
+      }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -518,7 +545,9 @@ export function ChatInput({
             setUploading({ name: item.file.name, size: item.file.size });
             const ctrl = new AbortController();
             uploadAbortRef.current = ctrl;
-            const fileToUpload = await compressImageForMessengerUpload(item.file, ctrl.signal);
+            const fileToUpload = item.isImage
+              ? await compressImageForMessengerUpload(item.file, ctrl.signal)
+              : item.file;
             uploaded = await api.uploadFile(fileToUpload, {
               onProgress: (pct) => setUploadPct(pct),
               signal: ctrl.signal,
@@ -559,13 +588,14 @@ export function ChatInput({
         }
         setPendingImages([]);
         setPreviewSrc(null);
+        setPreviewMediaKind('image');
         focusComposer();
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
         if (msg.toLowerCase().includes('canceled') || msg.toLowerCase().includes('abort')) {
           setUploadErr('Загрузка отменена');
         } else {
-          setUploadErr('Не удалось загрузить или отправить фотографии');
+          setUploadErr('Не удалось загрузить или отправить медиа');
           toastMessengerUploadError(e);
         }
       } finally {
@@ -617,6 +647,7 @@ export function ChatInput({
         if (pending.previewUrl) URL.revokeObjectURL(pending.previewUrl);
         setPending(null);
         setPreviewSrc(null);
+        setPreviewMediaKind('image');
         focusComposer();
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
@@ -686,7 +717,7 @@ export function ChatInput({
     input.multiple = kind === 'image';
     input.accept =
       kind === 'image'
-        ? 'image/*'
+        ? 'image/*,video/*'
         : 'application/pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt';
     input.click();
   };
@@ -696,22 +727,26 @@ export function ChatInput({
     setUploadErr(null);
     const selected = Array.from(files);
     const pickerMode = filePickerModeRef.current;
-    if (pickerMode === 'image' && selected.length > 1) {
-      const maxBytes = 20 * 1024 * 1024;
-      const tooBig = selected.find((f) => f.size > maxBytes);
-      if (tooBig) {
-        setUploadErr('Одна из фотографий больше 20MB');
+
+    if (pickerMode === 'image') {
+      const badType = selected.find((f) => !isChatPhotoOrVideoFile(f));
+      if (badType) {
+        setUploadErr('Выберите только фото или видео');
         if (fileInputRef.current) fileInputRef.current.value = '';
         return;
       }
-      const bad = selected.find((f) => {
-        const isImage =
-          (f.type || '').startsWith('image/') ||
-          IMAGE_NAME_EXT_RE.test(String(f.name || '').trim());
-        return !isImage;
+      const tooBig = selected.find((f) => {
+        if (isChatVideoFile(f)) return f.size > MAX_CHAT_VIDEO_BYTES;
+        return f.size > MAX_CHAT_IMAGE_BYTES;
       });
-      if (bad) {
-        setUploadErr('Можно выбрать несколько файлов только в режиме фото');
+      if (tooBig) {
+        setUploadErr(
+          selected.length > 1
+            ? 'Каждое фото не больше 20MB, каждое видео не больше 1GB'
+            : isChatVideoFile(tooBig)
+              ? 'Видео не больше 1GB'
+              : 'Фото не больше 20MB',
+        );
         if (fileInputRef.current) fileInputRef.current.value = '';
         return;
       }
@@ -723,12 +758,13 @@ export function ChatInput({
       setPendingImages(
         selected.map((file) => ({
           file,
-          isImage: true,
+          isImage: isChatImageFile(file),
           previewUrl: URL.createObjectURL(file),
           uploaded: null,
         })),
       );
       textareaRef.current?.focus();
+      if (fileInputRef.current) fileInputRef.current.value = '';
       return;
     }
 
@@ -773,12 +809,8 @@ export function ChatInput({
   /** Вставка из буфера / drag-and-drop — та же ветка, что и выбор файла из меню. */
   const ingestExternalFiles = (files: File[]) => {
     if (!canSendAttachments || files.length === 0) return;
-    const allImage = files.every(
-      (f) =>
-        (f.type || '').startsWith('image/') ||
-        IMAGE_NAME_EXT_RE.test(String(f.name || '').trim()),
-    );
-    filePickerModeRef.current = allImage ? 'image' : 'file';
+    const allMedia = files.every((f) => isChatPhotoOrVideoFile(f));
+    filePickerModeRef.current = allMedia ? 'image' : 'file';
     const dt = new DataTransfer();
     for (const f of files) {
       dt.items.add(f);
@@ -944,6 +976,7 @@ export function ChatInput({
       }
       if (previewSrc) {
         setPreviewSrc(null);
+        setPreviewMediaKind('image');
         return;
       }
       if (mentionOpen) {
@@ -1261,12 +1294,26 @@ export function ChatInput({
                 <button
                   key={`${item.file.name}-${idx}`}
                   type="button"
-                  onClick={() => item.previewUrl && setPreviewSrc(item.previewUrl)}
+                  onClick={() => {
+                    if (!item.previewUrl) return;
+                    setPreviewSrc(item.previewUrl);
+                    setPreviewMediaKind(item.isImage ? 'image' : 'video');
+                  }}
                   className="aspect-square overflow-hidden rounded-xl bg-[var(--surface)] ring-1 ring-gray-200/70"
-                  aria-label={`Открыть фото ${idx + 1}`}
+                  aria-label={item.isImage ? `Открыть фото ${idx + 1}` : `Открыть видео ${idx + 1}`}
                 >
                   {item.previewUrl ? (
-                    <img src={item.previewUrl} alt="" className="h-full w-full object-cover" />
+                    item.isImage ? (
+                      <img src={item.previewUrl} alt="" className="h-full w-full object-cover" />
+                    ) : (
+                      <video
+                        src={item.previewUrl}
+                        muted
+                        playsInline
+                        preload="metadata"
+                        className="h-full w-full object-cover"
+                      />
+                    )
                   ) : null}
                 </button>
               ))}
@@ -1279,17 +1326,19 @@ export function ChatInput({
                 }
                 setPendingImages([]);
                 setPreviewSrc(null);
+                setPreviewMediaKind('image');
                 if (fileInputRef.current) fileInputRef.current.value = '';
               }}
               className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[var(--text-secondary)] transition-colors duration-200 hover:bg-[var(--surface)]"
-              aria-label="Убрать фотографии"
-              title="Убрать фотографии"
+              aria-label="Убрать вложения"
+              title="Убрать вложения"
             >
               <LuX />
             </button>
           </div>
           <div className="px-3 pb-3 text-xs text-[var(--text-secondary)]">
-            Выбрано фото: {pendingImages.length}. Можно добавить подпись и отправить одним сообщением.
+            Выбрано медиа: {pendingImages.length} (фото до 20MB, видео до 1GB). Можно добавить подпись и отправить одним
+            сообщением.
           </div>
         </div>
       ) : pending ? (
@@ -1299,7 +1348,10 @@ export function ChatInput({
               <div className="h-14 w-14 overflow-hidden rounded-xl bg-[var(--surface)] ring-1 ring-gray-200/70">
                 <button
                   type="button"
-                  onClick={() => setPreviewSrc(pending.previewUrl)}
+                  onClick={() => {
+                    setPreviewSrc(pending.previewUrl);
+                    setPreviewMediaKind('image');
+                  }}
                   className="h-full w-full"
                   aria-label="Открыть превью"
                 >
@@ -1328,6 +1380,7 @@ export function ChatInput({
                 if (pending.previewUrl) URL.revokeObjectURL(pending.previewUrl);
                 setPending(null);
                 setPreviewSrc(null);
+                setPreviewMediaKind('image');
                 if (fileInputRef.current) fileInputRef.current.value = '';
               }}
               className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[var(--text-secondary)] transition-colors duration-200 hover:bg-[var(--surface)]"
@@ -1343,7 +1396,10 @@ export function ChatInput({
       {previewSrc ? (
         <div
           className="fixed inset-0 z-[4000] bg-black/70 p-4"
-          onClick={() => setPreviewSrc(null)}
+          onClick={() => {
+            setPreviewSrc(null);
+            setPreviewMediaKind('image');
+          }}
           role="dialog"
           aria-modal="true"
           aria-label="Превью перед отправкой"
@@ -1353,6 +1409,7 @@ export function ChatInput({
             onClick={(e) => {
               e.stopPropagation();
               setPreviewSrc(null);
+              setPreviewMediaKind('image');
             }}
             className="absolute right-4 top-4 z-[4001] flex h-11 w-11 items-center justify-center rounded-full bg-white/15 text-white backdrop-blur-sm transition hover:bg-white/25"
             aria-label="Закрыть превью"
@@ -1360,12 +1417,22 @@ export function ChatInput({
             <LuX className="h-6 w-6" strokeWidth={2} aria-hidden />
           </button>
           <div className="mx-auto flex h-full max-w-xl items-center justify-center">
-            <img
-              src={previewSrc}
-              alt=""
-              className="max-h-full max-w-full rounded-2xl object-contain shadow-2xl"
-              onClick={(e) => e.stopPropagation()}
-            />
+            {previewMediaKind === 'video' ? (
+              <video
+                src={previewSrc}
+                controls
+                playsInline
+                className="max-h-full max-w-full rounded-2xl shadow-2xl"
+                onClick={(e) => e.stopPropagation()}
+              />
+            ) : (
+              <img
+                src={previewSrc}
+                alt=""
+                className="max-h-full max-w-full rounded-2xl object-contain shadow-2xl"
+                onClick={(e) => e.stopPropagation()}
+              />
+            )}
           </div>
         </div>
       ) : null}
@@ -1479,7 +1546,7 @@ export function ChatInput({
             ref={fileInputRef}
             type="file"
             className="hidden"
-            accept="image/*"
+            accept="image/*,video/*"
             onChange={(e) => void handleFileSelected(e.target.files)}
           />
 
@@ -1734,10 +1801,11 @@ export function ChatInput({
                 onClick={() => pickFile('image')}
                 className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm font-semibold text-[var(--text)] transition-colors duration-200 hover:bg-[var(--surface)] active:bg-stone-100"
               >
-                <span className="grid h-9 w-9 place-items-center rounded-xl bg-blue-50 text-blue-600 ring-1 ring-blue-100">
-                  <LuImage size={18} />
+                <span className="relative grid h-9 w-9 place-items-center rounded-xl bg-blue-50 text-blue-600 ring-1 ring-blue-100">
+                  <LuImage className="absolute left-1.5 top-1.5" size={14} aria-hidden />
+                  <LuVideo className="absolute bottom-1 right-1" size={14} aria-hidden />
                 </span>
-                <span className="min-w-0 flex-1">Изображение</span>
+                <span className="min-w-0 flex-1">Фото или видео</span>
               </button>
               <button
                 type="button"

@@ -75,6 +75,12 @@ export const validateSendMessage = [
         if (!s) throw new Error('Poll options must be non-empty strings');
         if (s.length > 200) throw new Error('Each poll option must be at most 200 characters');
       }
+      if (v.allows_multiple != null && typeof v.allows_multiple !== 'boolean') {
+        throw new Error('Poll allows_multiple must be a boolean when set');
+      }
+      if (v.anonymous != null && typeof v.anonymous !== 'boolean') {
+        throw new Error('Poll anonymous must be a boolean when set');
+      }
     }
     return true;
   }),
