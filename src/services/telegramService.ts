@@ -805,6 +805,23 @@ function isTelegramUserDeactivatedFailure(
   return d.includes('user is deactivated');
 }
 
+function isTelegramPermanentRecipientFailure(
+  result: Awaited<ReturnType<typeof sendTelegramMessageRawSequence>>,
+): boolean {
+  const d = extractTelegramFailureDescription(result).toLowerCase();
+  if (result.status === 403) {
+    return (
+      d.includes('user is deactivated') ||
+      d.includes('bot was blocked by the user') ||
+      d.includes('user is blocked')
+    );
+  }
+  if (result.status === 400) {
+    return d.includes('chat not found') || d.includes('chat_id is empty');
+  }
+  return false;
+}
+
 async function markMemberTelegramDeliveryBlocked(chatId: string, reason: string): Promise<void> {
   const trimmed = normalizeOptionalString(chatId);
   if (!trimmed) return;
@@ -1073,9 +1090,13 @@ export async function sendTodayPrayerTelegramToAllMembers(
     const result = await sendTelegramMessageRawSequence(cfg.botToken, chatId, text);
     if (!result.ok) {
       const description = extractTelegramFailureDescription(result);
-      if (isTelegramUserDeactivatedFailure(result)) {
-        await markMemberTelegramDeliveryBlocked(chatId, description || 'Forbidden: user is deactivated');
-        console.warn('[telegram] member delivery blocked (user deactivated):', { chatId });
+      if (isTelegramPermanentRecipientFailure(result)) {
+        await markMemberTelegramDeliveryBlocked(chatId, description || `Telegram ${result.status}: recipient unavailable`);
+        console.warn('[telegram] member delivery blocked (permanent recipient failure):', {
+          chatId,
+          status: result.status,
+          description,
+        });
         continue;
       }
       throw new Error(
@@ -1107,9 +1128,13 @@ export async function sendTodayPrayerTelegramToSelectedMembers(
     const result = await sendTelegramMessageRawSequence(cfg.botToken, chatId, text);
     if (!result.ok) {
       const description = extractTelegramFailureDescription(result);
-      if (isTelegramUserDeactivatedFailure(result)) {
-        await markMemberTelegramDeliveryBlocked(chatId, description || 'Forbidden: user is deactivated');
-        console.warn('[telegram] member delivery blocked (user deactivated):', { chatId });
+      if (isTelegramPermanentRecipientFailure(result)) {
+        await markMemberTelegramDeliveryBlocked(chatId, description || `Telegram ${result.status}: recipient unavailable`);
+        console.warn('[telegram] member delivery blocked (permanent recipient failure):', {
+          chatId,
+          status: result.status,
+          description,
+        });
         continue;
       }
       throw new Error(
