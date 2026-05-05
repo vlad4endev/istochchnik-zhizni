@@ -90,12 +90,38 @@ function resolveAuthUserId(req: Request): number | null {
 }
 
 function resolveConversationId(req: Request): string {
+  /** Явный `conversationId` (например, подставлен из `messages.id` → чат) важнее `id`: в маршрутах вида `/messages/:id/...` параметр `id` — это сообщение, а не беседа. */
   const raw =
-    req.params.id ??
     req.params.conversationId ??
+    req.params.id ??
     (req.body as { conversationId?: string | number } | undefined)?.conversationId ??
     '';
   return String(raw).trim();
+}
+
+/** Для `checkChatPermission` на маршрутах `/messages/:id/...`, где `:id` — id сообщения. */
+export async function attachConversationFromMessageIdParam(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  const msgId = String(req.params.id ?? '').trim();
+  if (!/^\d+$/.test(msgId)) {
+    deny(res, 400, 'Invalid message id');
+    return;
+  }
+  try {
+    const convId = await svc.getMessageConversationId(msgId);
+    if (!convId) {
+      deny(res, 404, 'Message not found');
+      return;
+    }
+    (req.params as Record<string, string>).conversationId = String(convId);
+    next();
+  } catch (e) {
+    console.error('[chatPermission] attachConversationFromMessageIdParam:', e);
+    deny(res, 500, 'Failed to resolve message');
+  }
 }
 
 export function checkChatPermission(action: Action) {

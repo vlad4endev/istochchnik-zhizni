@@ -6,7 +6,7 @@ import path from 'node:path';
 import { resolveMessengerConversationDeepLink } from '../config/messengerPublic';
 import { getUploadsRoot } from '../config/uploadsRoot';
 import { requireAuthSession } from '../middleware/authSession';
-import { checkChatPermission } from '../middleware/chatPermission';
+import { attachConversationFromMessageIdParam, checkChatPermission } from '../middleware/chatPermission';
 import { ensureValidRequest, validateSendMessage } from '../middleware/messengerValidation';
 import { messengerUpload } from '../middleware/upload';
 import * as svc from '../services/messengerService';
@@ -1224,6 +1224,7 @@ router.post(
 /** POST /api/messenger/messages/:id/poll-vote { optionIndexes: number[] } */
 router.post(
   '/messages/:id/poll-vote',
+  attachConversationFromMessageIdParam,
   checkChatPermission('send_message'),
   async (req: Request, res: Response) => {
     const userId = (req as AuthReq).authUserId!;

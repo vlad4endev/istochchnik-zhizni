@@ -65,8 +65,48 @@ function isChatPhotoOrVideoFile(f: File): boolean {
 }
 
 type PopoverPos =
-  | { bottomPx: number; leftPx?: number; rightPx?: number }
+  | {
+      bottomPx: number;
+      leftPx?: number;
+      rightPx?: number;
+      /** Панель на всю ширину (как Telegram на телефоне). */
+      layout?: 'anchored' | 'sheet';
+      maxHeightPx?: number;
+    }
   | null;
+
+function useMatchMedia(query: string): boolean {
+  const [matches, setMatches] = useState(() =>
+    typeof window !== 'undefined' ? window.matchMedia(query).matches : false,
+  );
+  useEffect(() => {
+    const mq = window.matchMedia(query);
+    const onChange = () => setMatches(mq.matches);
+    onChange();
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, [query]);
+  return matches;
+}
+
+/** Только `NNpx` из :root (PWA: nativeShellViewport перезаписывает --app-viewport-height). `100dvh` не парсим. */
+function readRootViewportHeightPx(): number | null {
+  if (typeof document === 'undefined') return null;
+  const raw = getComputedStyle(document.documentElement).getPropertyValue('--app-viewport-height').trim();
+  const m = /^([\d.]+)px$/i.exec(raw);
+  if (!m) return null;
+  const n = Number(m[1]);
+  return Number.isFinite(n) && n >= 120 ? n : null;
+}
+
+/** Высота окна для fixed-поповера: совпадает с оболочкой PWA, иначе visualViewport / innerHeight. */
+function messengerLayoutViewportHeight(): number {
+  const fromShell = readRootViewportHeightPx();
+  if (fromShell != null) return Math.round(fromShell);
+  const vv = typeof window !== 'undefined' ? window.visualViewport : undefined;
+  if (vv && vv.height >= 120) return Math.round(vv.height);
+  return Math.round(typeof window !== 'undefined' ? window.innerHeight : 0);
+}
 
 interface ChatInputProps {
   conversationId: string;
@@ -126,17 +166,26 @@ function computeAttachPopoverPos(rect: DOMRect): PopoverPos {
   return { bottomPx, leftPx };
 }
 
-/** Правый край у кнопки, вся панель в пределах экрана (не уезжает влево). */
-function computeEmojiPopoverPos(rect: DOMRect): PopoverPos {
+/** Правый край у кнопки на десктопе; на телефоне — шит на всю ширину над полем ввода. */
+function computeEmojiPopoverPos(rect: DOMRect, useSheetLayout: boolean): PopoverPos {
   const pad = 12;
   const vw = window.innerWidth;
-  const vh = window.innerHeight;
+  const layoutH = messengerLayoutViewportHeight();
+  const bottomPx = Math.max(pad, Math.round(layoutH - rect.top + 8));
+
+  if (useSheetLayout) {
+    const maxHeightPx = Math.max(
+      220,
+      Math.min(Math.round(layoutH * 0.55), Math.max(pad * 2, Math.round(rect.top - pad))),
+    );
+    return { bottomPx, layout: 'sheet', leftPx: 0, rightPx: 0, maxHeightPx };
+  }
+
   const w = Math.min(EMOJI_PICKER_MAX_WIDTH_PX, vw - 2 * pad);
-  const bottomPx = Math.max(pad, Math.round(vh - rect.top + 8));
   const anchorRight = Math.min(rect.right, vw - pad);
   let leftPx = Math.round(anchorRight - w);
   leftPx = Math.max(pad, Math.min(leftPx, vw - pad - w));
-  return { bottomPx, leftPx };
+  return { bottomPx, leftPx, layout: 'anchored' };
 }
 
 export function ChatInput({
@@ -186,6 +235,8 @@ export function ChatInput({
   const emojiPopoverRef = useRef<HTMLDivElement>(null);
   const [attachPos, setAttachPos] = useState<PopoverPos>(null);
   const [emojiPos, setEmojiPos] = useState<PopoverPos>(null);
+  /** ≤768px: панель эмодзи на всю ширину, крупные ячейки (как Telegram на телефоне). */
+  const narrowEmojiSheet = useMatchMedia('(max-width: 768px)');
   const uploadAbortRef = useRef<AbortController | null>(null);
   const filePickerModeRef = useRef<'image' | 'file'>('image');
   const typingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -426,9 +477,9 @@ export function ChatInput({
       setAttachPos(computeAttachPopoverPos(attachBtnRef.current.getBoundingClientRect()));
     }
     if (emojiOpen && emojiBtnRef.current) {
-      setEmojiPos(computeEmojiPopoverPos(emojiBtnRef.current.getBoundingClientRect()));
+      setEmojiPos(computeEmojiPopoverPos(emojiBtnRef.current.getBoundingClientRect(), narrowEmojiSheet));
     }
-  }, [attachMenuOpen, emojiOpen]);
+  }, [attachMenuOpen, emojiOpen, narrowEmojiSheet]);
 
   useEffect(() => {
     if (!attachMenuOpen) return;
@@ -444,11 +495,12 @@ export function ChatInput({
     if (!emojiOpen) return;
     const btn = emojiBtnRef.current;
     if (!btn) return;
-    const apply = () => setEmojiPos(computeEmojiPopoverPos(btn.getBoundingClientRect()));
+    const apply = () =>
+      setEmojiPos(computeEmojiPopoverPos(btn.getBoundingClientRect(), narrowEmojiSheet));
     apply();
     const id = requestAnimationFrame(apply);
     return () => cancelAnimationFrame(id);
-  }, [emojiOpen]);
+  }, [emojiOpen, narrowEmojiSheet]);
 
   useEffect(() => {
     if (!attachMenuOpen && !emojiOpen) return;
@@ -1843,7 +1895,8 @@ export function ChatInput({
             <div
               ref={emojiPopoverRef}
               className={[
-                'tg-popover tg-emoji-picker-popover overflow-hidden rounded-2xl border border-gray-100 bg-[var(--surface-elevated)] shadow-md',
+                'tg-popover tg-emoji-picker-popover overflow-hidden border border-gray-100 bg-[var(--surface-elevated)] shadow-md',
+                emojiPos.layout === 'sheet' ? 'tg-emoji-picker-popover--sheet' : 'rounded-2xl',
                 emojiExiting ? 'tg-popover--out' : '',
               ].join(' ')}
               role="dialog"
@@ -1851,22 +1904,38 @@ export function ChatInput({
               style={{
                 position: 'fixed',
                 bottom: `${emojiPos.bottomPx}px`,
-                left: emojiPos.leftPx != null ? `${emojiPos.leftPx}px` : undefined,
-                right: emojiPos.rightPx != null ? `${emojiPos.rightPx}px` : undefined,
+                left:
+                  emojiPos.layout === 'sheet'
+                    ? 0
+                    : emojiPos.leftPx != null
+                      ? `${emojiPos.leftPx}px`
+                      : undefined,
+                right: emojiPos.layout === 'sheet' ? 0 : emojiPos.rightPx != null ? `${emojiPos.rightPx}px` : undefined,
+                width: emojiPos.layout === 'sheet' ? '100%' : undefined,
+                maxWidth: emojiPos.layout === 'sheet' ? '100%' : undefined,
+                maxHeight: emojiPos.maxHeightPx != null ? `${emojiPos.maxHeightPx}px` : undefined,
                 zIndex: 100000,
+                boxSizing: 'border-box',
               }}
             >
               <Picker
+                key={narrowEmojiSheet ? 'emoji-sheet' : 'emoji-floating'}
                 data={emojiData as any}
                 onEmojiSelect={(e: any) => insertEmoji(String(e?.native ?? ''))}
-                theme="light"
+                theme="auto"
+                locale="ru"
+                set="native"
                 searchPosition="sticky"
                 previewPosition="none"
+                skinTonePosition="search"
                 navPosition="bottom"
                 dynamicWidth={true}
-                perLine={8}
-                maxFrequentRows={2}
-                locale="ru"
+                autoFocus={false}
+                emojiButtonSize={narrowEmojiSheet ? 46 : 38}
+                emojiSize={narrowEmojiSheet ? 32 : 25}
+                emojiButtonRadius={narrowEmojiSheet ? '14px' : '100%'}
+                perLine={narrowEmojiSheet ? 7 : 8}
+                maxFrequentRows={narrowEmojiSheet ? 3 : 2}
               />
             </div>,
             document.body,
