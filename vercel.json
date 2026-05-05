@@ -31,10 +31,6 @@
       "headers": [{ "key": "Cache-Control", "value": "no-cache, no-store" }]
     },
     {
-      "source": "/workbox-[a-f0-9]+\\.js",
-      "headers": [{ "key": "Cache-Control", "value": "no-cache, no-store" }]
-    },
-    {
       "source": "/(.*)",
       "headers": [
         {
