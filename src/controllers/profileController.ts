@@ -165,10 +165,11 @@ export async function postCreatePost(req: Request, res: Response): Promise<void>
     }
     const media = Array.isArray(mediaRaw)
       ? mediaRaw
-          .map((m: any, idx: number) => {
-            const url = typeof m?.url === 'string' ? m.url.trim() : '';
-            const type = m?.type === 'video' ? 'video' : m?.type === 'image' ? 'image' : null;
-            const order = parsePositiveInt(m?.order) ?? idx;
+          .map((m: unknown, idx: number) => {
+            const item = m && typeof m === 'object' ? (m as Record<string, unknown>) : {};
+            const url = typeof item.url === 'string' ? item.url.trim() : '';
+            const type = item.type === 'video' ? 'video' : item.type === 'image' ? 'image' : null;
+            const order = parsePositiveInt(item.order) ?? idx;
             if (!url || !type) return null;
             return { url, type, order };
           })
@@ -213,10 +214,19 @@ export async function patchProfileSettings(req: Request, res: Response): Promise
       show_activity_status:
         typeof body.show_activity_status === 'boolean' ? body.show_activity_status : undefined,
       theme_mode: body.theme_mode === 'system' || body.theme_mode === 'light' || body.theme_mode === 'dark' ? body.theme_mode : undefined,
-      theme_accent_color: body.theme_accent_color === undefined ? undefined : (body.theme_accent_color as any),
-      display_name: body.display_name === undefined ? undefined : (body.display_name as any),
-      bio: body.bio === undefined ? undefined : (body.bio as any),
-      avatar_url: body.avatar_url === undefined ? undefined : (body.avatar_url as any),
+      theme_accent_color:
+        typeof body.theme_accent_color === 'string' || body.theme_accent_color === null
+          ? body.theme_accent_color
+          : undefined,
+      display_name:
+        typeof body.display_name === 'string' || body.display_name === null
+          ? body.display_name
+          : undefined,
+      bio: typeof body.bio === 'string' || body.bio === null ? body.bio : undefined,
+      avatar_url:
+        typeof body.avatar_url === 'string' || body.avatar_url === null
+          ? body.avatar_url
+          : undefined,
     });
     res.json({ ok: true });
   } catch (e) {

@@ -415,9 +415,10 @@ router.post('/conversations/personal', async (req: Request, res: Response) => {
       sendToMember(otherMemberId, { type: 'conv:created', conversation: convForOther });
     }
     res.json({ conversationId: convKey, conversation: convForMe ?? null });
-  } catch (e: any) {
+  } catch (e: unknown) {
     console.error('[messenger] createPersonalConversation error:', e);
-    res.status(400).json({ error: e.message || 'Failed to create conversation' });
+    const msg = e instanceof Error ? e.message : 'Failed to create conversation';
+    res.status(400).json({ error: msg });
   }
 });
 
@@ -430,7 +431,9 @@ router.post('/conversations/group', async (req: Request, res: Response) => {
     return;
   }
   const convType = type === 'channel' ? 'channel' : 'group';
-  const ids: number[] = Array.isArray(memberIds) ? memberIds.filter((id: any) => typeof id === 'number') : [];
+  const ids: number[] = Array.isArray(memberIds)
+    ? memberIds.filter((id: unknown): id is number => typeof id === 'number')
+    : [];
   try {
     const convId = await svc.createGroupConversation(userId, title, convType, ids);
     const convKey = String(convId);
@@ -958,16 +961,19 @@ router.post(
         try {
         const memberIds = await svc.getConversationMemberIds(convKey);
         const recipients = memberIds.filter((id) => Number(id) !== Number(userId));
-        const senderName = (message as any)?.sender_name ?? 'Новое сообщение';
-        const ptype = String((message as any)?.payload_type ?? 'text');
+        const senderName = message.sender_name ?? 'Новое сообщение';
+        const ptype = String(message.payload_type ?? 'text');
         const bodyText =
-          String((message as any)?.content ?? '').trim() ||
+          String(message.content ?? '').trim() ||
           (ptype === 'poll'
             ? '📊 Опрос'
             : ptype !== 'text'
               ? 'Вложение'
               : 'Новое сообщение');
-        const mpl = (message as any)?.payload as Record<string, unknown> | undefined;
+        const mpl =
+          message.payload && typeof message.payload === 'object' && !Array.isArray(message.payload)
+            ? (message.payload as Record<string, unknown>)
+            : undefined;
         const mentionIds = Array.isArray(mpl?.mention_member_ids)
           ? (mpl.mention_member_ids as unknown[])
               .map((x) => Number(x))
@@ -997,7 +1003,7 @@ router.post(
             title: mentioned ? `Вас упомянули в «${chatLabel}»` : senderName,
             body: mentioned ? `${senderName}: ${previewShort || 'Сообщение'}` : bodyText,
             conversationId: convKey,
-            messageId: String((message as any)?.id ?? ''),
+            messageId: String(message.id ?? ''),
             url: resolveMessengerConversationDeepLink(convKey),
             tag: `chat-${convKey}`,
             renotify: true,

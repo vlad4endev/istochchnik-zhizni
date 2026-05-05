@@ -250,7 +250,7 @@ export async function listConversations(memberId: number): Promise<ConversationL
     [memberId],
   );
 
-  return result.rows.map((r: any) => {
+  return result.rows.map((r) => {
     const metaRaw = r.metadata;
     const metadata =
       metaRaw && typeof metaRaw === 'object' && !Array.isArray(metaRaw)
@@ -446,8 +446,8 @@ export async function updateConversationPermissionsAndSettings(
       const msg =
         'DB schema is outdated for messenger conversations. ' +
         'Run DB init/migrations (initDb) to add columns default_permissions/settings/metadata.';
-      const err = new Error(msg);
-      (err as any).cause = e;
+      const err = new Error(msg) as Error & { cause?: unknown };
+      err.cause = e;
       throw err;
     }
     throw e;
@@ -526,7 +526,7 @@ export async function listConversationMembers(conversationId: string): Promise<C
   for (const sql of attempts) {
     try {
       const result = await dbQuery(sql, [conversationId]);
-      const baseMembersRaw = result.rows.map((r: any) => ({
+      const baseMembersRaw = result.rows.map((r) => ({
         member_id: Number(r.member_id),
         role: r.role as ParticipantRole,
         joined_at: r.joined_at ?? new Date().toISOString(),
@@ -583,7 +583,7 @@ export async function listConversationMembers(conversationId: string): Promise<C
           number,
           Array<{ cycle_index: number; prayer_request: string; updated_at: string | null }>
         >();
-        for (const row of historyResult.rows as any[]) {
+        for (const row of historyResult.rows as Array<Record<string, unknown>>) {
           const memberId = Number(row.member_id);
           const current = historyByMember.get(memberId) ?? [];
           current.push({
@@ -1079,7 +1079,7 @@ export async function getConversationMemberIds(conversationId: string): Promise<
      WHERE conversation_id = $1 AND left_at IS NULL`,
     [conversationId],
   );
-  return result.rows.map((r: any) => Number(r.member_id));
+  return result.rows.map((r) => Number(r.member_id));
 }
 
 /**
@@ -1581,7 +1581,7 @@ export async function persistPreparedMessage(prep: PreparedMessageSend): Promise
 
   const row = result.rows[0];
   const isNew = row?.is_new === true;
-  return { message: mapMessageWithSender(row, senderId), isNew };
+  return { message: mapMessageWithSender(row), isNew };
 }
 
 /** Send a message. Returns the full message with sender info. */
@@ -1689,7 +1689,7 @@ export async function loadMessages(
     [...params, memberId],
   );
 
-  return result.rows.map((r: any) => mapMessageWithSender(r, memberId)).reverse();
+  return result.rows.map((r) => mapMessageWithSender(r)).reverse();
 }
 
 /**
@@ -1761,7 +1761,7 @@ export async function loadMessagesAfter(
     [...params, memberId],
   );
 
-  return result.rows.map((r: any) => mapMessageWithSender(r, memberId));
+  return result.rows.map((r) => mapMessageWithSender(r));
 }
 
 /**
@@ -1832,7 +1832,7 @@ export async function listPinnedMessages(
     [conversationId, memberId, lim],
   );
 
-  return result.rows.map((r: any) => mapMessageWithSender(r, memberId));
+  return result.rows.map((r) => mapMessageWithSender(r));
 }
 
 export async function pinMessageInConversation(
@@ -2391,7 +2391,7 @@ async function fetchMessageByIdForFanout(messageId: string): Promise<MessageWith
     [messageId, FANOUT_VIEWER_MEMBER_ID],
   );
   const row = result.rows[0];
-  return row ? mapMessageWithSender(row, FANOUT_VIEWER_MEMBER_ID) : null;
+  return row ? mapMessageWithSender(row) : null;
 }
 
 async function syncAdminParticipantsToAccessRequestsChannel(conversationId: string): Promise<void> {
@@ -2554,7 +2554,16 @@ export async function markAccessRequestMessengerResolved(
 
 // ─── Map helper ───────────────────────────────────────────────
 
-function mapMessageWithSender(r: any, currentMemberId: number): MessageWithSender {
+function mapMessageWithSender(r: Record<string, unknown>): MessageWithSender {
+  const asString = (v: unknown): string => (v == null ? '' : String(v));
+  const asNullableString = (v: unknown): string | null => (v == null ? null : String(v));
+  const asBoolean = (v: unknown, fallback = false): boolean => (typeof v === 'boolean' ? v : fallback);
+  const asNumberOrNull = (v: unknown): number | null => {
+    if (typeof v === 'number' && Number.isFinite(v)) return v;
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+  };
+
   let reactions: MessageWithSender['reactions'] = [];
   if (r.reactions_json) {
     try {
@@ -2575,28 +2584,28 @@ function mapMessageWithSender(r: any, currentMemberId: number): MessageWithSende
   const base: MessageWithSender = {
     id: bigint(r.id),
     conversation_id: bigint(r.conversation_id),
-    sender_id: r.sender_id,
-    client_msg_id: r.client_msg_id ?? null,
-    content: r.content,
+    sender_id: asNumberOrNull(r.sender_id),
+    client_msg_id: asNullableString(r.client_msg_id),
+    content: asString(r.content),
     payload_type: pt,
     payload: payloadNorm,
     interaction_count: Number(r.interaction_count ?? 0),
     reply_to_message_id: r.reply_to_message_id ? bigint(r.reply_to_message_id) : null,
-    forwarded_from: r.forwarded_from ?? null,
-    is_edited: r.is_edited,
-    is_deleted: r.is_deleted,
-    is_pinned: r.is_pinned ?? false,
-    created_at: r.created_at,
-    updated_at: r.updated_at,
-    sender_name: r.sender_name?.trim() || (pt === 'access_request' ? 'Заявки' : null),
-    sender_first_name: r.sender_first_name || null,
-    sender_last_name: r.sender_last_name || null,
+    forwarded_from: asNullableString(r.forwarded_from),
+    is_edited: asBoolean(r.is_edited),
+    is_deleted: asBoolean(r.is_deleted),
+    is_pinned: asBoolean(r.is_pinned),
+    created_at: asString(r.created_at),
+    updated_at: asString(r.updated_at),
+    sender_name: asNullableString(r.sender_name)?.trim() || (pt === 'access_request' ? 'Заявки' : null),
+    sender_first_name: asNullableString(r.sender_first_name),
+    sender_last_name: asNullableString(r.sender_last_name),
     reply_preview: r.rp_id
       ? {
           id: bigint(r.rp_id),
-          content: r.rp_content,
-          sender_name: r.rp_sender_name?.trim() || null,
-          is_deleted: r.rp_is_deleted,
+          content: asString(r.rp_content),
+          sender_name: asNullableString(r.rp_sender_name)?.trim() || null,
+          is_deleted: asBoolean(r.rp_is_deleted),
         }
       : null,
     reactions,
@@ -2687,7 +2696,7 @@ export async function searchMessages(
     [conversationId, searchTerm, memberId, limit],
   );
 
-  return result.rows.map((r: any) => mapMessageWithSender(r, memberId));
+  return result.rows.map((r) => mapMessageWithSender(r));
 }
 
 /**
@@ -2748,8 +2757,8 @@ export async function searchAllMessages(
     [searchTerm, memberId, limit],
   );
 
-  return result.rows.map((r: any) => ({
-    ...mapMessageWithSender(r, memberId),
+  return result.rows.map((r) => ({
+    ...mapMessageWithSender(r),
     conversationTitle: r.conv_title || 'Чат',
   }));
 }

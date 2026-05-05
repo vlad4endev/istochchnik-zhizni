@@ -472,7 +472,16 @@ async function handleNewSocket(ws: WebSocket, ip: string, request: IncomingMessa
 
 // ─── Client message handling ──────────────────────────────────
 
-async function handleClientMessage(client: AuthenticatedClient, msg: any): Promise<void> {
+type ClientInboundMessage = {
+  type?: unknown;
+  conversationId?: unknown;
+  planId?: unknown;
+  messageId?: unknown;
+  clientMsgId?: unknown;
+  senderId?: unknown;
+};
+
+async function handleClientMessage(client: AuthenticatedClient, msg: ClientInboundMessage): Promise<void> {
   switch (msg.type) {
     case 'join': {
       // Join a conversation room: { type: 'join', conversationId }

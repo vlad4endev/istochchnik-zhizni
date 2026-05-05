@@ -1112,7 +1112,7 @@ export async function loginUser(phoneInput: string, password: string): Promise<L
     return null;
   }
 
-  if (Boolean(row.password_reset_required)) {
+  if (row.password_reset_required) {
     return {
       status: 'password_reset_required',
       phone_number: row.phone_number ?? phoneInput.trim(),

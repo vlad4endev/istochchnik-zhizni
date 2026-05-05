@@ -8,7 +8,6 @@ import {
   getPrayerCycleSnapshotForDate,
   PRAYER_CYCLE_MEMBERS_WHERE,
   PRAYER_CYCLE_MEMBERS_WHERE_M,
-  PRAYER_CYCLE_ROSTER_ORDER_SQL,
   toPublicCycleInfo,
   type PrayerCyclePublic,
 } from './prayerCycleService';

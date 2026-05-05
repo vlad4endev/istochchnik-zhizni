@@ -1422,7 +1422,7 @@ export async function createPlan(input: {
            tb.order_index,
            tb.duration_minutes,
            case
-             when coalesce(tb.default_content_json->>'default_assigned_member_id', '') ~ '^\d+$'
+            when coalesce(tb.default_content_json->>'default_assigned_member_id', '') ~ '^[0-9]+$'
                then (tb.default_content_json->>'default_assigned_member_id')::integer
              else null
            end,

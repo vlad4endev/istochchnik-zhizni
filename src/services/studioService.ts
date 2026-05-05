@@ -669,6 +669,9 @@ export async function getPublicSetlistByToken(
     updated_at: String(row.updated_at),
   };
   const itemsFull = await fetchSetlistItemRows(setlistId);
-  const items: PublicSetlistItemRow[] = itemsFull.map(({ musician_notes: _m, ...rest }) => rest);
+  const items: PublicSetlistItemRow[] = itemsFull.map(({ musician_notes, ...rest }) => {
+    void musician_notes;
+    return rest;
+  });
   return { setlist, items };
 }
