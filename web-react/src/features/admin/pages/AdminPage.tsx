@@ -604,7 +604,7 @@ function MembersSection({
       ? roleFiltered
       : roleFiltered.filter((u) => {
           const blob =
-            `${memberRosterName(u)} ${displayName(u)} ${u.phone_number ?? ''} ${u.email ?? ''}`.toLowerCase();
+            `${memberRosterName(u)} ${displayName(u)} ${u.phone_number ?? ''} ${u.email ?? ''} ${u.telegram_chat_id ?? ''}`.toLowerCase();
           return blob.includes(q);
         });
     return [...matched].sort(compareMembersByPrayerCycleOrder);
@@ -2416,7 +2416,7 @@ function CalendarPrayerCycleRoster() {
     if (q) {
       rows = rows.filter((u) => {
         const blob =
-          `${memberRosterName(u)} ${displayName(u)} ${u.phone_number ?? ''} ${u.email ?? ''}`.toLowerCase();
+          `${memberRosterName(u)} ${displayName(u)} ${u.phone_number ?? ''} ${u.email ?? ''} ${u.telegram_chat_id ?? ''}`.toLowerCase();
         return blob.includes(q);
       });
     }
@@ -2438,7 +2438,7 @@ function CalendarPrayerCycleRoster() {
     if (q) {
       rows = rows.filter((u) => {
         const blob =
-          `${memberRosterName(u)} ${displayName(u)} ${u.phone_number ?? ''} ${u.email ?? ''}`.toLowerCase();
+          `${memberRosterName(u)} ${displayName(u)} ${u.phone_number ?? ''} ${u.email ?? ''} ${u.telegram_chat_id ?? ''}`.toLowerCase();
         return blob.includes(q);
       });
     }
@@ -2460,7 +2460,7 @@ function CalendarPrayerCycleRoster() {
     if (q) {
       rows = rows.filter((u) => {
         const blob =
-          `${memberRosterName(u)} ${displayName(u)} ${u.phone_number ?? ''} ${u.email ?? ''}`.toLowerCase();
+          `${memberRosterName(u)} ${displayName(u)} ${u.phone_number ?? ''} ${u.email ?? ''} ${u.telegram_chat_id ?? ''}`.toLowerCase();
         return blob.includes(q);
       });
     }
