@@ -148,9 +148,17 @@ export function checkChatPermission(action: Action) {
         return deny(res, 403, 'Muted');
       }
 
+      const permissionDeniedMessage: Partial<Record<PermissionKey, string>> = {
+        can_send_messages: 'В этом чате для вас отключена отправка сообщений',
+        can_send_media: 'В этом чате для вас отключена отправка медиа и файлов',
+        can_add_users: 'У вас нет права добавлять участников',
+        can_pin_messages: 'У вас нет права закреплять сообщения',
+        can_manage_chat: 'У вас нет права управлять этим чатом',
+      };
+
       const require = (key: PermissionKey) => {
         if (!effective[key]) {
-          deny(res, 403, 'Forbidden');
+          deny(res, 403, permissionDeniedMessage[key] ?? 'Forbidden');
           return false;
         }
         return true;
@@ -161,7 +169,7 @@ export function checkChatPermission(action: Action) {
         // membership-only; no additional checks
       } else if (action === 'send_message') {
         if (meta.type === 'channel' && role !== 'owner' && role !== 'admin') {
-          return deny(res, 403, 'Only admins can post in channels');
+          return deny(res, 403, 'В канале сообщения могут отправлять только администраторы');
         }
         if (!require('can_send_messages')) return;
       } else if (action === 'send_media') {

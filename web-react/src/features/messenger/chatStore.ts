@@ -75,6 +75,17 @@ function reactionRequestKey(messageId: string, emoji: string): string {
   return `${String(messageId)}::${String(emoji)}`;
 }
 
+/** Текст `error` из ответа API мессенджера (если есть). */
+function messengerApiErrorText(e: unknown): string | null {
+  if (!axios.isAxiosError(e)) return null;
+  const data = e.response?.data as { error?: string } | undefined;
+  const m = typeof data?.error === 'string' && data.error.trim() ? data.error.trim() : null;
+  return m;
+}
+
+/** Чтобы фоновый outbox не спамил тостами при каждом 403. */
+const retrySendForbiddenToastOnce = new Set<string>();
+
 // ─── Types ────────────────────────────────────────────────────
 
 interface TypingUser {
@@ -589,9 +600,17 @@ function findConversationIdContainingMessage(
 }
 
 function listPreviewFromMessage(tail: MessageWithSender): NonNullable<ConversationListItem['last_message']> {
+  const pt = tail.payload_type ?? inferMessengerPayloadType(tail);
+  let preview = String(tail.content ?? '').trim();
+  if (!preview) {
+    if (pt === 'audio') preview = '🎤 Голосовое сообщение';
+    else if (pt === 'image') preview = '📷 Фото';
+    else if (pt === 'file') preview = '📎 Файл';
+    else if (pt === 'poll') preview = '📊 Опрос';
+  }
   return {
     id: String(tail.id),
-    content: tail.content,
+    content: preview,
     sender_id: tail.sender_id,
     sender_name: tail.sender_name,
     created_at: tail.created_at,
@@ -1097,6 +1116,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
       } else {
         console.error('[chatStore] sendMessage error:', e);
       }
+      const apiErr = messengerApiErrorText(e);
+      emitAppToast(apiErr ?? 'Не удалось отправить сообщение', 'error');
       clearServerAckTimer(convId, clientMsgId);
       // Mark failed optimistic message
       set((s) => ({
@@ -1171,8 +1192,16 @@ export const useChatStore = create<ChatState>((set, get) => ({
         dequeueOutbox(get, q.queueId);
       }
       saveSnapshot(get());
+      retrySendForbiddenToastOnce.delete(`${conversationId}\0${tempId}`);
     } catch (e) {
       console.error('[chatStore] retrySendMessage error:', e);
+      if (axios.isAxiosError(e) && e.response?.status === 403) {
+        const dedupeKey = `${conversationId}\0${tempId}`;
+        if (!retrySendForbiddenToastOnce.has(dedupeKey)) {
+          retrySendForbiddenToastOnce.add(dedupeKey);
+          emitAppToast(messengerApiErrorText(e) ?? 'Нет доступа к отправке в этот чат', 'error');
+        }
+      }
       clearServerAckTimer(conversationId, clientMsgId);
       set((s) => ({
         messagesByConv: {

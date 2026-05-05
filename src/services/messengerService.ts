@@ -172,6 +172,17 @@ function mapParticipantUiExtras(r: {
   };
 }
 
+function lastMessageListPreviewContent(rawContent: unknown, payloadType: unknown): string {
+  const s = typeof rawContent === 'string' ? rawContent.trim() : '';
+  if (s) return rawContent as string;
+  const pt = String(payloadType ?? '').trim();
+  if (pt === 'audio') return '🎤 Голосовое сообщение';
+  if (pt === 'image') return '📷 Фото';
+  if (pt === 'file') return '📎 Файл';
+  if (pt === 'poll') return '📊 Опрос';
+  return typeof rawContent === 'string' ? rawContent : '';
+}
+
 /**
  * List conversations the member participates in, sorted by last activity.
  * Includes last message preview and unread count.
@@ -193,11 +204,12 @@ export async function listConversations(memberId: number): Promise<ConversationL
       cp.ui_pinned_at,
       cp.ui_folder,
       -- last message
-      lm.id          AS lm_id,
-      lm.content     AS lm_content,
-      lm.sender_id   AS lm_sender_id,
-      lm.created_at  AS lm_created_at,
-      lm.is_deleted  AS lm_is_deleted,
+      lm.id            AS lm_id,
+      lm.content       AS lm_content,
+      lm.sender_id     AS lm_sender_id,
+      lm.created_at    AS lm_created_at,
+      lm.is_deleted    AS lm_is_deleted,
+      lm.payload_type  AS lm_payload_type,
       COALESCE(
         NULLIF(TRIM(COALESCE(lm_sender.first_name, '') || ' ' || COALESCE(lm_sender.last_name, '')), ''),
         CASE WHEN lm.payload_type::text = 'access_request' THEN 'Заявки' ELSE NULL END
@@ -281,7 +293,7 @@ export async function listConversations(memberId: number): Promise<ConversationL
       last_message: r.lm_id
         ? {
             id: bigint(r.lm_id),
-            content: r.lm_content,
+            content: lastMessageListPreviewContent(r.lm_content, r.lm_payload_type),
             sender_id: r.lm_sender_id,
             sender_name: r.lm_sender_name?.trim() || null,
             created_at: r.lm_created_at,
@@ -672,11 +684,12 @@ export async function getConversationListItem(
       cp.ui_pinned_at,
       cp.ui_folder,
       -- last message
-      lm.id          AS lm_id,
-      lm.content     AS lm_content,
-      lm.sender_id   AS lm_sender_id,
-      lm.created_at  AS lm_created_at,
-      lm.is_deleted  AS lm_is_deleted,
+      lm.id            AS lm_id,
+      lm.content       AS lm_content,
+      lm.sender_id     AS lm_sender_id,
+      lm.created_at    AS lm_created_at,
+      lm.is_deleted    AS lm_is_deleted,
+      lm.payload_type  AS lm_payload_type,
       COALESCE(
         NULLIF(TRIM(COALESCE(lm_sender.first_name, '') || ' ' || COALESCE(lm_sender.last_name, '')), ''),
         CASE WHEN lm.payload_type::text = 'access_request' THEN 'Заявки' ELSE NULL END
@@ -758,7 +771,7 @@ export async function getConversationListItem(
     last_message: r.lm_id
       ? {
           id: bigint(r.lm_id),
-          content: r.lm_content,
+          content: lastMessageListPreviewContent(r.lm_content, r.lm_payload_type),
           sender_id: r.lm_sender_id,
           sender_name: r.lm_sender_name?.trim() || null,
           created_at: r.lm_created_at,
@@ -1428,7 +1441,7 @@ export async function prepareMessageForSend(
   let pl: MessagePayload;
   if (pt === 'poll') {
     pl = normalizePollPayloadForSend(contentStored, plRaw);
-  } else if (pt === 'image' || pt === 'file') {
+  } else if (pt === 'image' || pt === 'file' || pt === 'audio') {
     pl = normalizeAttachmentPayloadForSend(plRaw);
   } else if (pt === 'text' && Object.keys(plRaw).length === 0) {
     pl = { text: contentStored };
@@ -2213,7 +2226,7 @@ export async function getMessageAttachmentForMember(
     throw new Error('Forbidden');
   }
   const payloadType = String(row.payload_type);
-  if (payloadType !== 'image' && payloadType !== 'file') return null;
+  if (payloadType !== 'image' && payloadType !== 'file' && payloadType !== 'audio') return null;
   const payload = normalizePayload(row.payload);
 
   let urlRaw = String(payload.url ?? '').trim();

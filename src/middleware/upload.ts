@@ -16,6 +16,14 @@ const ALLOWED_MIME_TYPES = new Set([
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   'application/vnd.ms-powerpoint',
   'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  'audio/webm',
+  'audio/ogg',
+  'audio/mp4',
+  'audio/mpeg',
+  'audio/aac',
+  'audio/wav',
+  'audio/x-m4a',
+  'audio/x-caf',
 ]);
 
 const ALLOWED_EXTENSIONS = new Set([
@@ -34,20 +42,30 @@ const ALLOWED_EXTENSIONS = new Set([
   '.xlsx',
   '.ppt',
   '.pptx',
+  '.webm',
+  '.ogg',
+  '.oga',
+  '.opus',
+  '.m4a',
+  '.mp3',
+  '.aac',
+  '.wav',
+  '.caf',
 ]);
 
 const IMAGE_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.webp', '.gif', '.heic', '.heif']);
 function isAllowedUpload(file: Express.Multer.File): boolean {
   const ext = path.extname(file.originalname || '').toLowerCase();
   const mime = String(file.mimetype || '').toLowerCase();
+  const mimeMain = mime.split(';')[0].trim();
 
-  if (ALLOWED_EXTENSIONS.has(ext) && ALLOWED_MIME_TYPES.has(mime)) {
+  if (ALLOWED_EXTENSIONS.has(ext) && ALLOWED_MIME_TYPES.has(mimeMain)) {
     return true;
   }
 
   // Android/WebView часто шлют image/* как application/octet-stream; сжатие в браузере может обнулить MIME.
   if (IMAGE_EXTENSIONS.has(ext)) {
-    if (!mime || mime === 'application/octet-stream' || mime.startsWith('image/')) {
+    if (!mime || mime === 'application/octet-stream' || mimeMain.startsWith('image/')) {
       return true;
     }
   }
@@ -57,7 +75,15 @@ function isAllowedUpload(file: Express.Multer.File): boolean {
   }
 
   // После client-side compression имя иногда `blob` или пустое — остаётся только MIME.
-  if (!ext && mime.startsWith('image/')) {
+  if (!ext && mimeMain.startsWith('image/')) {
+    return true;
+  }
+
+  if (ALLOWED_EXTENSIONS.has(ext) && mimeMain.startsWith('audio/')) {
+    return true;
+  }
+
+  if (!ext && mimeMain.startsWith('audio/')) {
     return true;
   }
 

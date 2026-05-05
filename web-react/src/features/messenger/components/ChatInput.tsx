@@ -6,10 +6,11 @@ import * as api from '../api/messengerApi';
 import Picker from '@emoji-mart/react';
 import emojiData from '@emoji-mart/data';
 import { PollCreateModal } from './PollCreateModal';
-import { buildMentionToken, denormalizeMentionsForEditor } from '../mentionUtils';
+import { buildMentionToken, denormalizeMentionsForEditor, normalizeMentionsToCanonical } from '../mentionUtils';
 import { compressImageForMessengerUpload } from '../compressImageForUpload';
 import axios from 'axios';
 import { emitAppToast } from '../../../lib/uiFeedback';
+import { voiceBlobFileName, voiceRecorderOptions } from '../voiceRecording';
 
 function toastMessengerUploadError(e: unknown): void {
   const err = e as Error & { code?: string };
@@ -177,6 +178,25 @@ export function ChatInput({
   /** Защита от двойного Enter / двойного тапа «Отправить». */
   const sendInFlightRef = useRef(false);
 
+  const VOICE_MAX_MS = 10 * 60 * 1000;
+  const VOICE_MIN_MS = 450;
+  /** После появления текста кнопка — «Отправить»; удержание ~420ms запускает запись с подписью. */
+  const VOICE_ARM_MS = 420;
+  const [voiceRecording, setVoiceRecording] = useState<{ startedAt: number } | null>(null);
+  const voiceRecorderRef = useRef<MediaRecorder | null>(null);
+  const voiceStreamRef = useRef<MediaStream | null>(null);
+  const voiceChunksRef = useRef<BlobPart[]>([]);
+  const voiceMimeRef = useRef('');
+  const voiceStartedAtRef = useRef(0);
+  const voicePointerDownRef = useRef(false);
+  const voiceSessionGenRef = useRef(0);
+  const voiceMaxTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const voiceArmTimerRef = useRef<number | null>(null);
+  const voiceHoldPointerIdRef = useRef(-1);
+  const contentForVoiceRef = useRef('');
+  const sendOrMicBtnRef = useRef<HTMLButtonElement | null>(null);
+  const suppressVoiceSendClickRef = useRef(false);
+
   const focusComposer = useCallback(() => {
     requestAnimationFrame(() => {
       textareaRef.current?.focus();
@@ -192,6 +212,10 @@ export function ChatInput({
   }, [conversationId]);
 
   useEffect(() => {
+    contentForVoiceRef.current = content;
+  }, [content]);
+
+  useEffect(() => {
     return () => {
       if (typingStartDebounceRef.current) {
         clearTimeout(typingStartDebounceRef.current);
@@ -201,6 +225,22 @@ export function ChatInput({
         clearTimeout(typingTimerRef.current);
         typingTimerRef.current = null;
       }
+      if (voiceMaxTimerRef.current) {
+        clearTimeout(voiceMaxTimerRef.current);
+        voiceMaxTimerRef.current = null;
+      }
+      if (voiceArmTimerRef.current) {
+        clearTimeout(voiceArmTimerRef.current);
+        voiceArmTimerRef.current = null;
+      }
+      voiceStreamRef.current?.getTracks().forEach((t) => t.stop());
+      voiceStreamRef.current = null;
+      try {
+        voiceRecorderRef.current?.stop();
+      } catch {
+        /* ignore */
+      }
+      voiceRecorderRef.current = null;
       if (!isDraftPrivateConversationId(conversationId)) {
         sendTypingStop(conversationId);
       }
@@ -919,10 +959,240 @@ export function ChatInput({
     }
   };
 
-  const handleMic = () => {
-    haptic(8);
-    textareaRef.current?.focus();
+  const clearVoiceArmTimer = () => {
+    if (voiceArmTimerRef.current) {
+      clearTimeout(voiceArmTimerRef.current);
+      voiceArmTimerRef.current = null;
+    }
   };
+
+  const processVoiceBlob = async (blob: Blob, durationMs: number, captionRaw?: string) => {
+    if (!canSendAttachments) {
+      setUploadErr('В этом чате для вас отключена отправка фото и файлов.');
+      return;
+    }
+    if (blob.size < 32) {
+      emitAppToast('Запись слишком короткая', 'error');
+      return;
+    }
+    const mimeMain = (voiceMimeRef.current || blob.type || 'audio/webm').split(';')[0].trim();
+    const file = new File([blob], voiceBlobFileName(mimeMain), { type: mimeMain });
+    const caption = normalizeMentionsToCanonical(String(captionRaw ?? '').trim());
+
+    setUploadErr(null);
+    setUploadPct(0);
+    try {
+      setUploading({ name: file.name, size: file.size });
+      const ctrl = new AbortController();
+      uploadAbortRef.current = ctrl;
+      const uploaded = await api.uploadFile(file, {
+        onProgress: (pct) => setUploadPct(pct),
+        signal: ctrl.signal,
+        conversationId,
+      });
+      const durationSec = Math.max(1, Math.round(durationMs / 1000));
+      const sent = await sendMessage(conversationId, caption, null, 'audio', {
+        url: uploaded.url,
+        name: uploaded.name || file.name,
+        objectPath: uploaded.objectPath,
+        mimeType: uploaded.mimeType || mimeMain,
+        size: uploaded.size || file.size || 0,
+        durationSec,
+      });
+      if (sent) {
+        setReplyingTo(null);
+        setReplyTo(null);
+        setContent('');
+        clearDraft(conversationId);
+        focusComposer();
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (msg.toLowerCase().includes('canceled') || msg.toLowerCase().includes('abort')) {
+        setUploadErr('Загрузка отменена');
+      } else {
+        setUploadErr('Не удалось отправить голосовое сообщение');
+        toastMessengerUploadError(e);
+      }
+    } finally {
+      setUploading(null);
+      setUploadPct(0);
+      uploadAbortRef.current = null;
+    }
+  };
+
+  const startVoiceMediaSession = (myGen: number) => {
+    voicePointerDownRef.current = true;
+    void navigator.mediaDevices
+      .getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } })
+      .then((stream) => {
+        if (myGen !== voiceSessionGenRef.current) {
+          stream.getTracks().forEach((t) => t.stop());
+          return;
+        }
+        voiceStreamRef.current = stream;
+        const opts = voiceRecorderOptions();
+        const rec = new MediaRecorder(stream, opts);
+        voiceChunksRef.current = [];
+        voiceMimeRef.current = (opts?.mimeType || rec.mimeType || 'audio/webm').split(';')[0].trim();
+        rec.ondataavailable = (ev) => {
+          if (ev.data.size > 0) voiceChunksRef.current.push(ev.data);
+        };
+        rec.start(200);
+        voiceRecorderRef.current = rec;
+        const t0 = Date.now();
+        voiceStartedAtRef.current = t0;
+        setVoiceRecording({ startedAt: t0 });
+        if (voiceMaxTimerRef.current) clearTimeout(voiceMaxTimerRef.current);
+        voiceMaxTimerRef.current = setTimeout(() => {
+          try {
+            voiceRecorderRef.current?.stop();
+          } catch {
+            /* ignore */
+          }
+        }, VOICE_MAX_MS);
+      })
+      .catch(() => {
+        if (myGen !== voiceSessionGenRef.current) return;
+        voicePointerDownRef.current = false;
+        setVoiceRecording(null);
+        emitAppToast('Не удалось получить доступ к микрофону', 'error');
+      });
+  };
+
+  const onSendOrMicPointerDown = (e: React.PointerEvent<HTMLButtonElement>) => {
+    if (e.button !== 0) return;
+    if (typeof MediaRecorder === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
+      emitAppToast('Запись голоса не поддерживается в этом браузере', 'error');
+      return;
+    }
+
+    const hasAttachmentDraft = Boolean(pending || pendingImages.length > 0);
+    const hasReply = Boolean(replyTo || replyingTo);
+    const canVoice =
+      !editing &&
+      !hasReply &&
+      !hasAttachmentDraft &&
+      canSendAttachments &&
+      uploadsHealthy &&
+      uploading == null &&
+      !sendInFlightRef.current;
+
+    if (!canVoice) {
+      if (hasReply && !hasAttachmentDraft && !content.trim()) {
+        emitAppToast('Чтобы записать голосовое, отмените ответ', 'info');
+      }
+      return;
+    }
+
+    e.preventDefault();
+    const onlyText = Boolean(content.trim());
+    const emptyComposer = !content.trim();
+
+    if (onlyText) {
+      voiceHoldPointerIdRef.current = e.pointerId;
+      clearVoiceArmTimer();
+      voiceArmTimerRef.current = window.setTimeout(() => {
+        voiceArmTimerRef.current = null;
+        const btn = sendOrMicBtnRef.current;
+        if (!btn) return;
+        haptic(12);
+        const myGen = (voiceSessionGenRef.current += 1);
+        try {
+          void btn.setPointerCapture(voiceHoldPointerIdRef.current);
+        } catch {
+          /* ignore */
+        }
+        startVoiceMediaSession(myGen);
+      }, VOICE_ARM_MS) as unknown as number;
+      return;
+    }
+
+    if (emptyComposer) {
+      haptic(12);
+      const myGen = (voiceSessionGenRef.current += 1);
+      void e.currentTarget.setPointerCapture(e.pointerId);
+      startVoiceMediaSession(myGen);
+    }
+  };
+
+  const onSendOrMicPointerEnd = (e: React.PointerEvent<HTMLButtonElement>, shouldSend: boolean) => {
+    if (editing) return;
+    if (pending || pendingImages.length > 0) return;
+
+    clearVoiceArmTimer();
+
+    if (!voiceRecorderRef.current && !voicePointerDownRef.current) {
+      return;
+    }
+
+    suppressVoiceSendClickRef.current = true;
+    window.setTimeout(() => {
+      suppressVoiceSendClickRef.current = false;
+    }, 420);
+
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    } catch {
+      /* ignore */
+    }
+
+    voicePointerDownRef.current = false;
+    voiceSessionGenRef.current += 1;
+
+    if (voiceMaxTimerRef.current) {
+      clearTimeout(voiceMaxTimerRef.current);
+      voiceMaxTimerRef.current = null;
+    }
+
+    const rec = voiceRecorderRef.current;
+    const startedAt = voiceStartedAtRef.current;
+
+    if (!rec || rec.state === 'inactive') {
+      voiceStreamRef.current?.getTracks().forEach((t) => t.stop());
+      voiceStreamRef.current = null;
+      voiceRecorderRef.current = null;
+      setVoiceRecording(null);
+      return;
+    }
+
+    void new Promise<void>((resolve) => {
+      rec.onstop = () => resolve();
+      try {
+        rec.stop();
+      } catch {
+        resolve();
+      }
+    }).then(async () => {
+      voiceStreamRef.current?.getTracks().forEach((t) => t.stop());
+      voiceStreamRef.current = null;
+      voiceRecorderRef.current = null;
+      setVoiceRecording(null);
+      const durationMs = Date.now() - startedAt;
+      const chunks = voiceChunksRef.current;
+      voiceChunksRef.current = [];
+
+      if (!shouldSend) {
+        return;
+      }
+      if (durationMs < VOICE_MIN_MS) {
+        emitAppToast('Удерживайте кнопку, чтобы записать', 'error');
+        return;
+      }
+      const mime = voiceMimeRef.current || 'audio/webm';
+      const blob = new Blob(chunks, { type: mime });
+      const captionSnap = normalizeMentionsToCanonical(contentForVoiceRef.current.trim());
+      await processVoiceBlob(blob, durationMs, captionSnap);
+    });
+  };
+
+  const [voiceTick, setVoiceTick] = useState(0);
+  useEffect(() => {
+    if (!voiceRecording) return;
+    const id = window.setInterval(() => setVoiceTick((n) => n + 1), 250);
+    return () => clearInterval(id);
+  }, [voiceRecording]);
+
   const hasSendAction = Boolean(content.trim() || pending || pendingImages.length > 0);
 
   if (!canSend) {
@@ -1142,8 +1412,26 @@ export function ChatInput({
       ) : null}
       {canSend && !canSendAttachments ? (
         <p className="mb-2 text-sm font-semibold text-amber-800">
-          В этом чате для вас отключены фото и файлы (настройки группы).
+          В этом чате для вас отключены фото, файлы и голосовые сообщения (настройки группы).
         </p>
+      ) : null}
+
+      {voiceRecording ? (
+        <div
+          className="mb-2 flex items-center gap-3 rounded-2xl border border-red-200/90 bg-red-50/95 px-4 py-2.5 shadow-sm dark:border-red-900/50 dark:bg-red-950/40"
+          aria-live="polite"
+        >
+          <span className="relative flex h-2.5 w-2.5 shrink-0">
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400 opacity-60" />
+            <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-red-500" />
+          </span>
+          <p className="min-w-0 flex-1 text-sm font-semibold text-red-950 dark:text-red-100">
+            Запись… Отпустите кнопку, чтобы отправить
+          </p>
+          <span className="shrink-0 tabular-nums text-sm font-bold text-red-900 dark:text-red-200">
+            {formatVoiceElapsed(voiceRecording.startedAt, voiceTick)}
+          </span>
+        </div>
       ) : null}
 
       <div className="relative w-full min-w-0">
@@ -1327,9 +1615,10 @@ export function ChatInput({
 
           <div className="shrink-0">
             <button
+              ref={sendOrMicBtnRef}
               type="button"
               className={[
-                'tg-send-btn relative !flex !h-11 !w-11 !min-h-[44px] !min-w-[44px] shrink-0 items-center justify-center !rounded-full border-2 transition-colors duration-200',
+                'tg-send-btn relative !flex !h-11 !w-11 !min-h-[44px] !min-w-[44px] shrink-0 touch-none select-none items-center justify-center !rounded-full border-2 transition-colors duration-200',
                 hasSendAction
                   ? [
                       '!border-[color:var(--tg-primary)] !bg-[var(--tg-primary)] !text-white',
@@ -1341,16 +1630,55 @@ export function ChatInput({
                       'dark:!border-stone-500/80 dark:!bg-stone-800/90 dark:!text-stone-100 dark:hover:!bg-stone-700',
                     ].join(' '),
               ].join(' ')}
+              onPointerDown={!editing ? onSendOrMicPointerDown : undefined}
+              onPointerUp={!editing ? (ev) => onSendOrMicPointerEnd(ev, true) : undefined}
+              onPointerCancel={!editing ? (ev) => onSendOrMicPointerEnd(ev, false) : undefined}
               onClick={() => {
+                if (suppressVoiceSendClickRef.current) {
+                  suppressVoiceSendClickRef.current = false;
+                  return;
+                }
                 if (hasSendAction) {
                   void handleSend();
                 } else {
-                  handleMic();
+                  textareaRef.current?.focus();
                 }
               }}
-              disabled={uploading != null}
-              aria-label={hasSendAction ? 'Отправить' : 'Голосовые сообщения пока недоступны'}
-              title={hasSendAction ? 'Отправить' : 'Голосовые сообщения скоро'}
+              disabled={uploading != null || (!hasSendAction && (!canSendAttachments || !uploadsHealthy))}
+              aria-label={(() => {
+                if (!canSendAttachments || !uploadsHealthy) {
+                  return hasSendAction ? 'Отправить' : 'Голосовые сообщения недоступны';
+                }
+                if (hasSendAction) {
+                  const canVoiceHint =
+                    !replyTo &&
+                    !replyingTo &&
+                    !pending &&
+                    pendingImages.length === 0 &&
+                    Boolean(content.trim());
+                  return canVoiceHint
+                    ? 'Отправить текст. Удерживайте кнопку, чтобы записать голосовое с этим текстом как подпись'
+                    : 'Отправить';
+                }
+                return 'Удерживайте для записи голосового сообщения';
+              })()}
+              title={(() => {
+                if (!canSendAttachments || !uploadsHealthy) {
+                  return hasSendAction ? 'Отправить' : 'Голосовые сообщения недоступны';
+                }
+                if (hasSendAction) {
+                  const canVoiceHint =
+                    !replyTo &&
+                    !replyingTo &&
+                    !pending &&
+                    pendingImages.length === 0 &&
+                    Boolean(content.trim());
+                  return canVoiceHint
+                    ? 'Отправить · удерживайте для голосового с подписью'
+                    : 'Отправить';
+                }
+                return 'Удерживайте для записи голосового';
+              })()}
             >
               <span
                 className={hasSendAction ? 'text-white drop-shadow-[0_1px_1px_rgba(0,0,0,0.35)]' : 'text-stone-800 dark:text-stone-100'}
@@ -1484,6 +1812,14 @@ export function ChatInput({
       />
     </div>
   );
+}
+
+function formatVoiceElapsed(startedAt: number, tick: number): string {
+  void tick;
+  const sec = Math.max(0, Math.floor((Date.now() - startedAt) / 1000));
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
+  return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
 function formatBytes(bytes: number): string {

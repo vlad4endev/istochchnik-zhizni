@@ -5,7 +5,7 @@ export const validateSendMessage = [
   body('content').custom((value, { req }) => {
     const pt = String(req.body?.payloadType ?? 'text');
     const v = typeof value === 'string' ? value.trim() : '';
-    if (pt === 'image' || pt === 'file') {
+    if (pt === 'image' || pt === 'file' || pt === 'audio') {
       // For attachments we allow empty content (caption is optional).
       if (value == null || value === '') return true;
       if (typeof value !== 'string') throw new Error('Message content must be a string');
@@ -54,7 +54,7 @@ export const validateSendMessage = [
 
   body('payload').custom((value, { req }) => {
     const pt = String(req.body?.payloadType ?? 'text');
-    if (pt === 'image' || pt === 'file') {
+    if (pt === 'image' || pt === 'file' || pt === 'audio') {
       const v = value as Record<string, unknown> | null | undefined;
       const url = v && typeof v === 'object' && !Array.isArray(v) ? v.url : null;
       if (typeof url !== 'string' || !url.trim()) {

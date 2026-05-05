@@ -12,7 +12,7 @@ export type AppToastPayload = {
   avatarUrl?: string | null;
   avatarText?: string;
   action?: AppToastAction;
-  /** Длительность показа (мс), по умолчанию 3600 — например 5200 для «Отменить». */
+  /** Длительность показа (мс), по умолчанию 4200 — например 5200 для «Отменить». */
   durationMs?: number;
 };
 

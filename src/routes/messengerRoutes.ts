@@ -51,6 +51,15 @@ const EXT_TO_MIME: Record<string, string> = {
   '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   '.ppt': 'application/vnd.ms-powerpoint',
   '.pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  '.webm': 'audio/webm',
+  '.ogg': 'audio/ogg',
+  '.oga': 'audio/ogg',
+  '.opus': 'audio/ogg',
+  '.m4a': 'audio/mp4',
+  '.mp3': 'audio/mpeg',
+  '.aac': 'audio/aac',
+  '.wav': 'audio/wav',
+  '.caf': 'audio/x-caf',
 };
 const MIME_TO_EXT: Record<string, string> = Object.entries(EXT_TO_MIME).reduce<Record<string, string>>(
   (acc, [ext, mime]) => {
@@ -890,7 +899,7 @@ router.post(
     const replyId = normalizeOptionalBigintId(replyToMessageId);
     try {
       if (
-        (pt === 'image' || pt === 'file') &&
+        (pt === 'image' || pt === 'file' || pt === 'audio') &&
         req.chatAuth &&
         !req.chatAuth.effective.can_send_media
       ) {
@@ -967,9 +976,11 @@ router.post(
           String(message.content ?? '').trim() ||
           (ptype === 'poll'
             ? '📊 Опрос'
-            : ptype !== 'text'
-              ? 'Вложение'
-              : 'Новое сообщение');
+            : ptype === 'audio'
+              ? '🎤 Голосовое сообщение'
+              : ptype !== 'text'
+                ? 'Вложение'
+                : 'Новое сообщение');
         const mpl =
           message.payload && typeof message.payload === 'object' && !Array.isArray(message.payload)
             ? (message.payload as Record<string, unknown>)

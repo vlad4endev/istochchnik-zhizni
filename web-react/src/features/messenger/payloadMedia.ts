@@ -48,8 +48,10 @@ export function inferMessengerPayloadType(
   const p = (message.payload ?? {}) as Record<string, unknown>;
   const rawUrl = String(p.url ?? '').trim();
   const mime = String(p.mimeType ?? p.mimetype ?? '').trim().toLowerCase();
+  const mimeMain = mime.split(';')[0].trim();
   const images = Array.isArray(p.images) ? p.images : [];
   if (images.length > 0) return 'image';
+  if (mimeMain.startsWith('audio/')) return 'audio';
   if (mime.startsWith('image/') || IMAGE_EXT_RE.test(rawUrl)) return 'image';
   if (rawUrl) return 'file';
   const alt = pickUrlFromNestedPayload(p);

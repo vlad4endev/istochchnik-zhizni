@@ -10,6 +10,7 @@ import {
 import { apiErrorMessage, approveAccessRequest, rejectAccessRequest } from '../../admin/api';
 import { IoCheckmark, IoCheckmarkDone } from 'react-icons/io5';
 import { LuDownload, LuExternalLink, LuFileText, LuLoader, LuRefreshCw, LuX } from 'react-icons/lu';
+import { VoiceMessageAttachment } from './VoiceMessageAttachment';
 import { resolvePublicUrl } from '../../../lib/resolvePublicUrl';
 import { emitAppToast } from '../../../lib/uiFeedback';
 import { motion, useMotionValue, useTransform, animate } from 'framer-motion';
@@ -591,7 +592,7 @@ function MessageBubbleInner({
   }, [message.id]);
 
   useEffect(() => {
-    if (payloadType !== 'image' && payloadType !== 'file') return undefined;
+    if (payloadType !== 'image' && payloadType !== 'file' && payloadType !== 'audio') return undefined;
     if (payloadType === 'image' && albumImages.length > 0) return undefined;
     if (!/^\d+$/.test(String(message.id))) return undefined;
     if (fetchedRef.current) return undefined;
@@ -996,6 +997,28 @@ function MessageBubbleInner({
         </div>
       ) : (
         <span>Изображение недоступно</span>
+      );
+    }
+
+    if (payloadType === 'audio') {
+      const rawUrl = attachmentRawUrl;
+      const href = resolvedAttachmentUrl ?? (resolvePublicUrl(rawUrl) ?? rawUrl);
+      const caption = String(message.content ?? '').trim();
+      const durRaw = payload.durationSec ?? payload.duration_sec;
+      const durationHint = typeof durRaw === 'number' && Number.isFinite(durRaw) ? durRaw : Number(durRaw);
+      return (
+        <div className="w-full max-w-[min(85vw,280px)] space-y-2">
+          <VoiceMessageAttachment
+            audioSrc={href || null}
+            isMine={isMine}
+            durationHintSec={Number.isFinite(durationHint) && durationHint > 0 ? durationHint : undefined}
+          />
+          {caption ? (
+            <div className={['text-sm leading-relaxed', isMine ? 'text-white/95' : 'text-[var(--text)]'].join(' ')}>
+              <MentionRichText text={caption} namesById={participantLabelById} isMine={isMine} />
+            </div>
+          ) : null}
+        </div>
       );
     }
 
