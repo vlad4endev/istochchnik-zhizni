@@ -359,6 +359,17 @@ export const useAuthStore = create<AuthState>()(
   ),
 );
 
+/** Глобальная роль приложения: `admin` в `role` или в массиве `roles` (как на бэке `members.app_role`). */
+export function isAppAdministratorSession(): boolean {
+  try {
+    const { role, roles } = useAuthStore.getState();
+    if (role === 'admin') return true;
+    return Array.isArray(roles) && roles.some((r) => r === 'admin');
+  } catch {
+    return false;
+  }
+}
+
 authAxios.interceptors.request.use((config) => {
   config.baseURL = resolveAxiosBaseURL();
   config.withCredentials = true;

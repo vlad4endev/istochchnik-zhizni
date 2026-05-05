@@ -4,7 +4,9 @@ import { useChatStore } from '../chatStore';
 import {
   buildMessengerAttachmentFileUrl,
   fetchMessageAttachmentUrl,
+  fetchPollVoters,
   type MessageWithSender,
+  type PollVoter,
 } from '../api/messengerApi';
 import {
   getAlbumImageUrl,
@@ -17,6 +19,7 @@ import { IoCheckmark, IoCheckmarkDone } from 'react-icons/io5';
 import { LuBot, LuDownload, LuExternalLink, LuFileText, LuLoader, LuRefreshCw, LuReply, LuX } from 'react-icons/lu';
 import { VoiceMessageAttachment } from './VoiceMessageAttachment';
 import { PollVotersSheet } from './PollVotersSheet';
+import { AppAvatar } from '../../../components/AppAvatar';
 import { resolvePublicUrl } from '../../../lib/resolvePublicUrl';
 import { emitAppToast } from '../../../lib/uiFeedback';
 import { motion, useMotionValue, useTransform, animate } from 'framer-motion';
@@ -79,6 +82,16 @@ function formatVoteCountRU(n: number): string {
   return `${n} голосов`;
 }
 
+/** Короткая строка имён под вариантом опроса (как превью в Telegram). */
+function formatPollVoterPreviewLine(voters: PollVoter[], maxNames = 2): string {
+  if (voters.length === 0) return '';
+  if (voters.length === 1) return voters[0].display_name;
+  const shown = voters.slice(0, maxNames);
+  const rest = voters.length - shown.length;
+  if (rest === 0) return shown.map((v) => v.display_name).join(', ');
+  return `${shown.map((v) => v.display_name).join(', ')} и ещё ${rest}`;
+}
+
 /** Telegram-style poll option list shell (inside message bubble). */
 function MessengerPollCard({
   message,
@@ -103,6 +116,8 @@ function MessengerPollCard({
   const [multiEdit, setMultiEdit] = useState(false);
   const [multiPick, setMultiPick] = useState<Set<number>>(() => new Set());
   const [pollVotersFor, setPollVotersFor] = useState<{ optionIndex: number; label: string } | null>(null);
+  /** null — не загружали; объект — списки по индексу варианта (пустой {} при ошибке) */
+  const [votersPreviewByOption, setVotersPreviewByOption] = useState<Record<number, PollVoter[]> | null>(null);
 
   const toggleMulti = (i: number) => {
     setMultiPick((prev) => {
@@ -168,6 +183,40 @@ function MessengerPollCard({
   const showMultiPicker = allowsMultiple && (!hasMyVote || multiEdit);
   const showSinglePicker = !allowsMultiple && !hasMyVote;
   const showPollResults = !showSinglePicker && !(allowsMultiple && showMultiPicker);
+
+  useEffect(() => {
+    if (isOptimistic || isAnonymous || !showPollResults) {
+      setVotersPreviewByOption(null);
+      return;
+    }
+    let cancelled = false;
+    void fetchPollVoters(String(message.id))
+      .then((res) => {
+        if (cancelled) return;
+        if (res.anonymous) {
+          setVotersPreviewByOption({});
+          return;
+        }
+        const rec: Record<number, PollVoter[]> = {};
+        for (const o of res.options) {
+          rec[o.index] = o.voters;
+        }
+        setVotersPreviewByOption(rec);
+      })
+      .catch(() => {
+        if (!cancelled) setVotersPreviewByOption({});
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    isAnonymous,
+    isOptimistic,
+    message.id,
+    showPollResults,
+    message.poll_tallies,
+    message.poll_my_options,
+  ]);
 
   return (
     <div className="w-full max-w-[18.5rem] space-y-2">
@@ -342,6 +391,40 @@ function MessengerPollCard({
                   </button>
                 )}
               </div>
+              {!isAnonymous &&
+              votersPreviewByOption &&
+              (votersPreviewByOption[i]?.length ?? 0) > 0 ? (
+                <button
+                  type="button"
+                  className={[
+                    'relative z-10 flex w-full items-center gap-2 border-t px-3 py-2 text-left transition-colors',
+                    isMine ? 'border-white/10 text-white/75 hover:bg-white/[0.06]' : 'border-black/[0.06] text-[var(--text-secondary)] hover:bg-black/[0.03]',
+                  ].join(' ')}
+                  onClick={() => setPollVotersFor({ optionIndex: i, label })}
+                  aria-label={`Полный список голосов: ${label}`}
+                >
+                  <div className="flex shrink-0 -space-x-2 ps-0.5" aria-hidden>
+                    {votersPreviewByOption[i]!.slice(0, 4).map((v, vi) => (
+                      <AppAvatar
+                        key={`${v.member_id}-${vi}`}
+                        className={[
+                          'relative h-7 w-7 shrink-0 rounded-full ring-2',
+                          isMine ? 'ring-[color:var(--tg-bubble-out-solid,#6d2f38)]' : 'ring-white',
+                        ].join(' ')}
+                        src={v.avatar_url}
+                        alt=""
+                        initialsFallbackText={v.display_name}
+                        initialsColorSeed={String(v.member_id)}
+                        priority
+                        fallback={<span className="block h-full w-full rounded-full bg-stone-200" />}
+                      />
+                    ))}
+                  </div>
+                  <span className="min-w-0 flex-1 truncate text-[12px] font-medium leading-snug">
+                    {formatPollVoterPreviewLine(votersPreviewByOption[i]!)}
+                  </span>
+                </button>
+              ) : null}
             </li>
           );
         })}
@@ -866,7 +949,8 @@ function MessageBubbleInner({
   }, [message.id]);
 
   useEffect(() => {
-    if (payloadType !== 'image' && payloadType !== 'file' && payloadType !== 'audio') return undefined;
+    if (payloadType !== 'image' && payloadType !== 'file' && payloadType !== 'audio' && payloadType !== 'video_note')
+      return undefined;
     if (payloadType === 'image' && albumImages.length > 0) return undefined;
     if (!/^\d+$/.test(String(message.id))) return undefined;
     if (fetchedRef.current) return undefined;
@@ -1346,6 +1430,37 @@ function MessageBubbleInner({
             isMine={isMine}
             durationHintSec={Number.isFinite(durationHint) && durationHint > 0 ? durationHint : undefined}
           />
+          {caption ? (
+            <div className={['text-sm leading-relaxed', isMine ? 'text-white/95' : 'text-[var(--text)]'].join(' ')}>
+              <MentionRichText text={caption} namesById={participantLabelById} isMine={isMine} />
+            </div>
+          ) : null}
+        </div>
+      );
+    }
+
+    if (payloadType === 'video_note') {
+      const rawUrl = attachmentRawUrl;
+      const href = resolvedAttachmentUrl ?? (resolvePublicUrl(rawUrl) ?? rawUrl);
+      const caption = String(message.content ?? '').trim();
+      return (
+        <div className="w-full max-w-[min(85vw,280px)] space-y-2">
+          <div className="msg-video-note-wrap">
+            {href ? (
+              <video
+                src={href}
+                className="msg-video-note"
+                playsInline
+                controls
+                preload="metadata"
+                aria-label="Видеосообщение"
+              />
+            ) : (
+              <div className="flex h-full w-full items-center justify-center text-xs font-semibold text-[var(--text-secondary)]">
+                Видео…
+              </div>
+            )}
+          </div>
           {caption ? (
             <div className={['text-sm leading-relaxed', isMine ? 'text-white/95' : 'text-[var(--text)]'].join(' ')}>
               <MentionRichText text={caption} namesById={participantLabelById} isMine={isMine} />

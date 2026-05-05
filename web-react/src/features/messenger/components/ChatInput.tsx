@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
+import type { MutableRefObject } from 'react';
 import { createPortal } from 'react-dom';
 import { useChatStore, isDraftPrivateConversationId } from '../chatStore';
 import {
@@ -20,14 +21,23 @@ import { buildMentionToken, denormalizeMentionsForEditor, normalizeMentionsToCan
 import { compressImageForMessengerUpload } from '../compressImageForUpload';
 import axios from 'axios';
 import { emitAppToast } from '../../../lib/uiFeedback';
-import { voiceBlobFileName, voiceRecorderOptions } from '../voiceRecording';
+import {
+  voiceBlobFileName,
+  voiceRecorderOptions,
+  videoNoteBlobFileName,
+  videoNoteRecorderOptions,
+} from '../voiceRecording';
 
 function toastMessengerUploadError(e: unknown): void {
   const err = e as Error & { code?: string };
   if (axios.isAxiosError(e)) {
     const data = e.response?.data as { error?: string; code?: string } | undefined;
     if (data?.code === 'supabase_not_configured') {
-      emitAppToast('Загрузка файлов временно недоступна', 'error');
+      emitAppToast({
+        message: 'Загрузка файлов временно недоступна (хранилище не настроено).',
+        kind: 'error',
+        adminOnly: true,
+      });
       return;
     }
     if (typeof data?.error === 'string' && data.error.trim()) {
@@ -36,7 +46,11 @@ function toastMessengerUploadError(e: unknown): void {
     }
   }
   if (typeof err?.code === 'string' && err.code === 'supabase_not_configured') {
-    emitAppToast('Загрузка файлов временно недоступна', 'error');
+    emitAppToast({
+      message: 'Загрузка файлов временно недоступна (хранилище не настроено).',
+      kind: 'error',
+      adminOnly: true,
+    });
     return;
   }
   emitAppToast('Не удалось загрузить файл', 'error');
@@ -254,15 +268,37 @@ export function ChatInput({
   const sendInFlightRef = useRef(false);
 
   const VOICE_MAX_MS = 10 * 60 * 1000;
+  const VIDEO_NOTE_MAX_MS = 60 * 1000;
   const VOICE_MIN_MS = 450;
   /** После появления текста кнопка — «Отправить»; удержание ~420ms запускает запись с подписью. */
   const VOICE_ARM_MS = 420;
-  const [voiceRecording, setVoiceRecording] = useState<{ startedAt: number } | null>(null);
+  /** Порог свайпа (px): чуть ниже, чем было 44 — удобнее большим пальцем, без ложных срабатываний. */
+  const SWIPE_SWITCH_PX = 38;
+
+  type CaptureKind = 'audio' | 'video_note';
+  type MediaCaptureState = {
+    kind: CaptureKind;
+    connecting: boolean;
+    wallStartedAt: number;
+    segmentStartedAt: number;
+  };
+  const [mediaCapture, setMediaCapture] = useState<MediaCaptureState | null>(null);
+  const [videoPreviewNonce, setVideoPreviewNonce] = useState(0);
+  const captureKindRef = useRef<CaptureKind>('audio');
+  const activeSegmentKindRef = useRef<CaptureKind>('audio');
+  const recordSwipeOriginXRef = useRef(0);
+  const voiceSwipeActiveRef = useRef(false);
+  const wallClockStartRef = useRef(0);
+  const wallInitRef = useRef(false);
+  const segmentClockStartRef = useRef(0);
+  const swapInFlightRef = useRef(false);
+  const swipeMoveHandlerRef: MutableRefObject<((ev: PointerEvent) => void) | null> = useRef(null);
+  const capturePreviewVideoRef = useRef<HTMLVideoElement | null>(null);
+
   const voiceRecorderRef = useRef<MediaRecorder | null>(null);
   const voiceStreamRef = useRef<MediaStream | null>(null);
   const voiceChunksRef = useRef<BlobPart[]>([]);
   const voiceMimeRef = useRef('');
-  const voiceStartedAtRef = useRef(0);
   const voicePointerDownRef = useRef(false);
   const voiceSessionGenRef = useRef(0);
   const voiceMaxTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -307,6 +343,10 @@ export function ChatInput({
       if (voiceArmTimerRef.current) {
         clearTimeout(voiceArmTimerRef.current);
         voiceArmTimerRef.current = null;
+      }
+      if (swipeMoveHandlerRef.current) {
+        window.removeEventListener('pointermove', swipeMoveHandlerRef.current);
+        swipeMoveHandlerRef.current = null;
       }
       voiceStreamRef.current?.getTracks().forEach((t) => t.stop());
       voiceStreamRef.current = null;
@@ -1044,14 +1084,240 @@ export function ChatInput({
     }
   };
 
-  const clearVoiceArmTimer = () => {
+  const unbindSwipeListeners = () => {
+    if (swipeMoveHandlerRef.current) {
+      window.removeEventListener('pointermove', swipeMoveHandlerRef.current);
+      swipeMoveHandlerRef.current = null;
+    }
+  };
+
+  const stopVoiceArmTimerOnly = () => {
     if (voiceArmTimerRef.current) {
       clearTimeout(voiceArmTimerRef.current);
       voiceArmTimerRef.current = null;
     }
   };
 
-  const processVoiceBlob = async (blob: Blob, durationMs: number, captionRaw?: string) => {
+  const endVoiceGestureTracking = () => {
+    stopVoiceArmTimerOnly();
+    voiceSwipeActiveRef.current = false;
+    unbindSwipeListeners();
+  };
+
+  const scheduleSegmentMaxTimer = (kind: CaptureKind) => {
+    if (voiceMaxTimerRef.current) {
+      clearTimeout(voiceMaxTimerRef.current);
+      voiceMaxTimerRef.current = null;
+    }
+    const cap = kind === 'video_note' ? VIDEO_NOTE_MAX_MS : VOICE_MAX_MS;
+    voiceMaxTimerRef.current = setTimeout(() => {
+      try {
+        voiceRecorderRef.current?.stop();
+      } catch {
+        /* ignore */
+      }
+    }, cap);
+  };
+
+  const buildConstraints = (kind: CaptureKind): MediaStreamConstraints => {
+    const audio = { echoCancellation: true, noiseSuppression: true } as const;
+    if (kind === 'audio') {
+      return { audio };
+    }
+    return {
+      audio: { ...audio },
+      video: {
+        facingMode: 'user',
+        width: { ideal: 480, max: 720 },
+        height: { ideal: 480, max: 720 },
+        aspectRatio: { ideal: 1 },
+      },
+    };
+  };
+
+  const stopCurrentRecorderSegment = async () => {
+    const rec = voiceRecorderRef.current;
+    await new Promise<void>((resolve) => {
+      if (!rec || rec.state === 'inactive') {
+        resolve();
+        return;
+      }
+      rec.onstop = () => resolve();
+      try {
+        rec.stop();
+      } catch {
+        resolve();
+      }
+    });
+    voiceStreamRef.current?.getTracks().forEach((t) => t.stop());
+    voiceStreamRef.current = null;
+    voiceRecorderRef.current = null;
+    voiceChunksRef.current = [];
+  };
+
+  const acquireStreamMatchingKind = async (myGen: number): Promise<MediaStream> => {
+    for (let attempt = 0; attempt < 8; attempt += 1) {
+      const kind = captureKindRef.current;
+      const stream = await navigator.mediaDevices.getUserMedia(buildConstraints(kind));
+      if (myGen !== voiceSessionGenRef.current) {
+        stream.getTracks().forEach((t) => t.stop());
+        throw new Error('stale_gen');
+      }
+      const wantsVideo = kind === 'video_note';
+      const hasVideo = stream.getVideoTracks().length > 0;
+      if (wantsVideo === hasVideo) return stream;
+      stream.getTracks().forEach((t) => t.stop());
+      await new Promise((r) => setTimeout(r, 50));
+    }
+    throw new Error('acquire_failed');
+  };
+
+  const startRecorderFromStream = (stream: MediaStream, kind: CaptureKind, myGen: number) => {
+    const opts = kind === 'audio' ? voiceRecorderOptions() : videoNoteRecorderOptions();
+    if (kind === 'video_note' && !opts) {
+      stream.getTracks().forEach((t) => t.stop());
+      if (myGen === voiceSessionGenRef.current) {
+        emitAppToast('Видеокружок не поддерживается в этом браузере', 'error');
+        voicePointerDownRef.current = false;
+        voiceSwipeActiveRef.current = false;
+        endVoiceGestureTracking();
+        wallInitRef.current = false;
+        setMediaCapture(null);
+      }
+      return;
+    }
+    voiceStreamRef.current = stream;
+    voiceChunksRef.current = [];
+    const rec = opts ? new MediaRecorder(stream, opts) : new MediaRecorder(stream);
+    const mimeRaw = (
+      (opts as MediaRecorderOptions | undefined)?.mimeType ||
+      rec.mimeType ||
+      (kind === 'video_note' ? 'video/webm' : 'audio/webm')
+    )
+      .split(';')[0]
+      .trim();
+    voiceMimeRef.current = mimeRaw;
+    rec.ondataavailable = (ev) => {
+      if (ev.data.size > 0) voiceChunksRef.current.push(ev.data);
+    };
+    rec.start(200);
+    voiceRecorderRef.current = rec;
+    activeSegmentKindRef.current = kind;
+    const segT = Date.now();
+    segmentClockStartRef.current = segT;
+    if (!wallInitRef.current) {
+      wallInitRef.current = true;
+      wallClockStartRef.current = segT;
+    }
+    scheduleSegmentMaxTimer(kind);
+    captureKindRef.current = kind;
+    setMediaCapture((prev) =>
+      prev
+        ? {
+            ...prev,
+            kind,
+            connecting: false,
+            segmentStartedAt: segmentClockStartRef.current,
+          }
+        : {
+            kind,
+            connecting: false,
+            wallStartedAt: wallClockStartRef.current,
+            segmentStartedAt: segmentClockStartRef.current,
+          },
+    );
+    if (kind === 'video_note') setVideoPreviewNonce((n) => n + 1);
+  };
+
+  const beginCaptureAfterPermission = async (myGen: number) => {
+    voicePointerDownRef.current = true;
+    let stream: MediaStream | null = null;
+    try {
+      stream = await acquireStreamMatchingKind(myGen);
+    } catch (e) {
+      if (myGen !== voiceSessionGenRef.current) return;
+      const msg = e instanceof Error ? e.message : String(e);
+      if (msg === 'stale_gen') return;
+      voicePointerDownRef.current = false;
+      voiceSwipeActiveRef.current = false;
+      endVoiceGestureTracking();
+      setMediaCapture(null);
+      emitAppToast(
+        captureKindRef.current === 'video_note'
+          ? 'Не удалось получить доступ к камере'
+          : 'Не удалось получить доступ к микрофону',
+        'error',
+      );
+      return;
+    }
+    if (!stream || myGen !== voiceSessionGenRef.current) return;
+    if (!voiceSwipeActiveRef.current && !voicePointerDownRef.current) {
+      stream.getTracks().forEach((t) => t.stop());
+      setMediaCapture(null);
+      return;
+    }
+    startRecorderFromStream(stream, captureKindRef.current, myGen);
+  };
+
+  const swapCaptureKindIfRecording = async (next: CaptureKind) => {
+    if (swapInFlightRef.current) return;
+    if (!voiceRecorderRef.current || voiceRecorderRef.current.state !== 'recording') return;
+    if (activeSegmentKindRef.current === next) return;
+    swapInFlightRef.current = true;
+    const myGen = voiceSessionGenRef.current;
+    try {
+      await stopCurrentRecorderSegment();
+      if (myGen !== voiceSessionGenRef.current) return;
+      const stream = await acquireStreamMatchingKind(myGen);
+      if (myGen !== voiceSessionGenRef.current) {
+        stream.getTracks().forEach((t) => t.stop());
+        return;
+      }
+      if (!voiceSwipeActiveRef.current && !voicePointerDownRef.current) {
+        stream.getTracks().forEach((t) => t.stop());
+        return;
+      }
+      startRecorderFromStream(stream, next, myGen);
+    } catch {
+      if (myGen === voiceSessionGenRef.current) {
+        emitAppToast('Не удалось переключить режим записи', 'error');
+      }
+      try {
+        await stopCurrentRecorderSegment();
+      } catch {
+        /* ignore */
+      }
+      setMediaCapture(null);
+    } finally {
+      swapInFlightRef.current = false;
+    }
+  };
+
+  const bindSwipeListeners = (originX: number) => {
+    unbindSwipeListeners();
+    recordSwipeOriginXRef.current = originX;
+    const onMove = (moveEv: PointerEvent) => {
+      if (!voiceSwipeActiveRef.current) return;
+      const dx = moveEv.clientX - recordSwipeOriginXRef.current;
+      let next = captureKindRef.current;
+      if (dx <= -SWIPE_SWITCH_PX) next = 'video_note';
+      else if (dx >= SWIPE_SWITCH_PX) next = 'audio';
+      else return;
+      if (next === captureKindRef.current) return;
+      captureKindRef.current = next;
+      setMediaCapture((s) => (s ? { ...s, kind: next } : s));
+      void swapCaptureKindIfRecording(next);
+    };
+    swipeMoveHandlerRef.current = onMove;
+    window.addEventListener('pointermove', onMove, { passive: true });
+  };
+
+  const processRecordedBlob = async (
+    payloadType: 'audio' | 'video_note',
+    blob: Blob,
+    segmentDurationMs: number,
+    captionRaw?: string,
+  ) => {
     if (!canSendAttachments) {
       setUploadErr('В этом чате для вас отключена отправка фото и файлов.');
       return;
@@ -1060,8 +1326,13 @@ export function ChatInput({
       emitAppToast('Запись слишком короткая', 'error');
       return;
     }
-    const mimeMain = (voiceMimeRef.current || blob.type || 'audio/webm').split(';')[0].trim();
-    const file = new File([blob], voiceBlobFileName(mimeMain), { type: mimeMain });
+    const fallbackMime = payloadType === 'video_note' ? 'video/webm' : 'audio/webm';
+    const mimeMain = (voiceMimeRef.current || blob.type || fallbackMime).split(';')[0].trim();
+    const file = new File(
+      [blob],
+      payloadType === 'video_note' ? videoNoteBlobFileName(mimeMain) : voiceBlobFileName(mimeMain),
+      { type: mimeMain },
+    );
     const caption = normalizeMentionsToCanonical(String(captionRaw ?? '').trim());
 
     setUploadErr(null);
@@ -1075,8 +1346,8 @@ export function ChatInput({
         signal: ctrl.signal,
         conversationId,
       });
-      const durationSec = Math.max(1, Math.round(durationMs / 1000));
-      const sent = await sendMessage(conversationId, caption, null, 'audio', {
+      const durationSec = Math.max(1, Math.round(segmentDurationMs / 1000));
+      const sent = await sendMessage(conversationId, caption, null, payloadType, {
         url: uploaded.url,
         name: uploaded.name || file.name,
         objectPath: uploaded.objectPath,
@@ -1096,7 +1367,11 @@ export function ChatInput({
       if (msg.toLowerCase().includes('canceled') || msg.toLowerCase().includes('abort')) {
         setUploadErr('Загрузка отменена');
       } else {
-        setUploadErr('Не удалось отправить голосовое сообщение');
+        setUploadErr(
+          payloadType === 'video_note'
+            ? 'Не удалось отправить видеосообщение'
+            : 'Не удалось отправить голосовое сообщение',
+        );
         toastMessengerUploadError(e);
       }
     } finally {
@@ -1104,45 +1379,6 @@ export function ChatInput({
       setUploadPct(0);
       uploadAbortRef.current = null;
     }
-  };
-
-  const startVoiceMediaSession = (myGen: number) => {
-    voicePointerDownRef.current = true;
-    void navigator.mediaDevices
-      .getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } })
-      .then((stream) => {
-        if (myGen !== voiceSessionGenRef.current) {
-          stream.getTracks().forEach((t) => t.stop());
-          return;
-        }
-        voiceStreamRef.current = stream;
-        const opts = voiceRecorderOptions();
-        const rec = new MediaRecorder(stream, opts);
-        voiceChunksRef.current = [];
-        voiceMimeRef.current = (opts?.mimeType || rec.mimeType || 'audio/webm').split(';')[0].trim();
-        rec.ondataavailable = (ev) => {
-          if (ev.data.size > 0) voiceChunksRef.current.push(ev.data);
-        };
-        rec.start(200);
-        voiceRecorderRef.current = rec;
-        const t0 = Date.now();
-        voiceStartedAtRef.current = t0;
-        setVoiceRecording({ startedAt: t0 });
-        if (voiceMaxTimerRef.current) clearTimeout(voiceMaxTimerRef.current);
-        voiceMaxTimerRef.current = setTimeout(() => {
-          try {
-            voiceRecorderRef.current?.stop();
-          } catch {
-            /* ignore */
-          }
-        }, VOICE_MAX_MS);
-      })
-      .catch(() => {
-        if (myGen !== voiceSessionGenRef.current) return;
-        voicePointerDownRef.current = false;
-        setVoiceRecording(null);
-        emitAppToast('Не удалось получить доступ к микрофону', 'error');
-      });
   };
 
   const onSendOrMicPointerDown = (e: React.PointerEvent<HTMLButtonElement>) => {
@@ -1175,8 +1411,12 @@ export function ChatInput({
     const emptyComposer = !content.trim();
 
     if (onlyText) {
+      wallInitRef.current = false;
+      voiceSwipeActiveRef.current = true;
+      bindSwipeListeners(e.clientX);
+      captureKindRef.current = 'audio';
       voiceHoldPointerIdRef.current = e.pointerId;
-      clearVoiceArmTimer();
+      stopVoiceArmTimerOnly();
       voiceArmTimerRef.current = window.setTimeout(() => {
         voiceArmTimerRef.current = null;
         const btn = sendOrMicBtnRef.current;
@@ -1188,16 +1428,35 @@ export function ChatInput({
         } catch {
           /* ignore */
         }
-        startVoiceMediaSession(myGen);
+        const t0 = Date.now();
+        setMediaCapture({
+          kind: captureKindRef.current,
+          connecting: true,
+          wallStartedAt: t0,
+          segmentStartedAt: t0,
+        });
+        void beginCaptureAfterPermission(myGen);
       }, VOICE_ARM_MS) as unknown as number;
       return;
     }
 
     if (emptyComposer) {
+      wallInitRef.current = false;
       haptic(12);
       const myGen = (voiceSessionGenRef.current += 1);
       void e.currentTarget.setPointerCapture(e.pointerId);
-      startVoiceMediaSession(myGen);
+      voiceSwipeActiveRef.current = true;
+      bindSwipeListeners(e.clientX);
+      captureKindRef.current = 'audio';
+      voicePointerDownRef.current = true;
+      const t0 = Date.now();
+      setMediaCapture({
+        kind: 'audio',
+        connecting: true,
+        wallStartedAt: t0,
+        segmentStartedAt: t0,
+      });
+      void beginCaptureAfterPermission(myGen);
     }
   };
 
@@ -1205,9 +1464,13 @@ export function ChatInput({
     if (editing) return;
     if (pending || pendingImages.length > 0) return;
 
-    clearVoiceArmTimer();
+    endVoiceGestureTracking();
 
-    if (!voiceRecorderRef.current && !voicePointerDownRef.current) {
+    if (
+      !voiceRecorderRef.current &&
+      !voicePointerDownRef.current &&
+      !mediaCapture?.connecting
+    ) {
       return;
     }
 
@@ -1231,13 +1494,13 @@ export function ChatInput({
     }
 
     const rec = voiceRecorderRef.current;
-    const startedAt = voiceStartedAtRef.current;
 
     if (!rec || rec.state === 'inactive') {
       voiceStreamRef.current?.getTracks().forEach((t) => t.stop());
       voiceStreamRef.current = null;
       voiceRecorderRef.current = null;
-      setVoiceRecording(null);
+      wallInitRef.current = false;
+      setMediaCapture(null);
       return;
     }
 
@@ -1252,31 +1515,53 @@ export function ChatInput({
       voiceStreamRef.current?.getTracks().forEach((t) => t.stop());
       voiceStreamRef.current = null;
       voiceRecorderRef.current = null;
-      setVoiceRecording(null);
-      const durationMs = Date.now() - startedAt;
+      setMediaCapture(null);
+      const segmentDurationMs = Date.now() - segmentClockStartRef.current;
+      const wallDurationMs = wallInitRef.current ? Date.now() - wallClockStartRef.current : 0;
       const chunks = voiceChunksRef.current;
       voiceChunksRef.current = [];
 
       if (!shouldSend) {
         return;
       }
-      if (durationMs < VOICE_MIN_MS) {
+      if (!wallInitRef.current || wallDurationMs < VOICE_MIN_MS) {
         emitAppToast('Удерживайте кнопку, чтобы записать', 'error');
         return;
       }
-      const mime = voiceMimeRef.current || 'audio/webm';
+      const mime =
+        voiceMimeRef.current ||
+        (captureKindRef.current === 'video_note' ? 'video/webm' : 'audio/webm');
       const blob = new Blob(chunks, { type: mime });
       const captionSnap = normalizeMentionsToCanonical(contentForVoiceRef.current.trim());
-      await processVoiceBlob(blob, durationMs, captionSnap);
-    });
+      const sendPt: 'audio' | 'video_note' =
+        captureKindRef.current === 'video_note' ? 'video_note' : 'audio';
+      await processRecordedBlob(sendPt, blob, segmentDurationMs, captionSnap);
+    })
+      .finally(() => {
+        wallInitRef.current = false;
+      });
   };
 
   const [voiceTick, setVoiceTick] = useState(0);
   useEffect(() => {
-    if (!voiceRecording) return;
+    if (!mediaCapture) return;
     const id = window.setInterval(() => setVoiceTick((n) => n + 1), 250);
     return () => clearInterval(id);
-  }, [voiceRecording]);
+  }, [mediaCapture]);
+
+  useEffect(() => {
+    const el = capturePreviewVideoRef.current;
+    if (!el) return;
+    const s = voiceStreamRef.current;
+    if (mediaCapture?.kind === 'video_note' && !mediaCapture.connecting && s?.getVideoTracks()[0]) {
+      el.srcObject = s;
+      void el.play().catch(() => {
+        /* autoplay policies */
+      });
+    } else {
+      el.srcObject = null;
+    }
+  }, [mediaCapture, videoPreviewNonce]);
 
   const hasSendAction = Boolean(content.trim() || pending || pendingImages.length > 0);
 
@@ -1531,25 +1816,74 @@ export function ChatInput({
       ) : null}
       {canSend && !canSendAttachments ? (
         <p className="mb-2 text-sm font-semibold text-amber-800">
-          В этом чате для вас отключены фото, файлы и голосовые сообщения (настройки группы).
+          В этом чате для вас отключены фото, файлы, голосовые и видеосообщения (настройки группы).
         </p>
       ) : null}
 
-      {voiceRecording ? (
+      {mediaCapture ? (
         <div
-          className="mb-2 flex items-center gap-3 rounded-2xl border border-red-200/90 bg-red-50/95 px-4 py-2.5 shadow-sm dark:border-red-900/50 dark:bg-red-950/40"
+          className="mb-2 rounded-2xl border border-red-200/90 bg-red-50/95 px-4 py-3 shadow-sm dark:border-red-900/50 dark:bg-red-950/40"
           aria-live="polite"
         >
-          <span className="relative flex h-2.5 w-2.5 shrink-0">
-            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400 opacity-60" />
-            <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-red-500" />
-          </span>
-          <p className="min-w-0 flex-1 text-sm font-semibold text-red-950 dark:text-red-100">
-            Запись… Отпустите кнопку, чтобы отправить
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="relative flex h-2.5 w-2.5 shrink-0">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400 opacity-60" />
+              <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-red-500" />
+            </span>
+            <div className="tg-capture-hud-chips flex min-w-0 flex-1 items-center justify-center gap-4 sm:gap-5">
+              <span
+                className={[
+                  'flex h-11 w-11 items-center justify-center rounded-full border-2 transition-colors duration-150',
+                  mediaCapture.kind === 'audio'
+                    ? 'border-red-600 bg-white text-red-700 shadow-sm dark:border-red-300 dark:bg-red-950 dark:text-red-50'
+                    : 'border-transparent text-red-800/50 dark:text-red-200/45',
+                ].join(' ')}
+                aria-hidden
+              >
+                <LuMic className="h-5 w-5" strokeWidth={2.25} />
+              </span>
+              <div className="flex min-w-[4.5rem] flex-col items-center gap-1">
+                <span className="shrink-0 tabular-nums text-base font-bold text-red-900 dark:text-red-200">
+                  {mediaCapture.connecting
+                    ? '…'
+                    : formatVoiceElapsed(mediaCapture.segmentStartedAt, voiceTick)}
+                </span>
+                <span className="text-center text-[10px] font-semibold tracking-wide text-red-900/80 dark:text-red-200/80">
+                  ← кружок · голос →
+                </span>
+              </div>
+              <span
+                className={[
+                  'flex h-11 w-11 items-center justify-center rounded-full border-2 transition-colors duration-150',
+                  mediaCapture.kind === 'video_note'
+                    ? 'border-red-600 bg-white text-red-700 shadow-sm dark:border-red-300 dark:bg-red-950 dark:text-red-50'
+                    : 'border-transparent text-red-800/50 dark:text-red-200/45',
+                ].join(' ')}
+                aria-hidden
+              >
+                <LuVideo className="h-5 w-5" strokeWidth={2.25} />
+              </span>
+            </div>
+          </div>
+          {mediaCapture.kind === 'video_note' && !mediaCapture.connecting ? (
+            <div className="mt-3 flex justify-center">
+              <div className="tg-capture-hud-videonote-ring">
+                <video
+                  ref={capturePreviewVideoRef}
+                  className="tg-capture-hud-videonote"
+                  muted
+                  playsInline
+                  autoPlay
+                  aria-hidden
+                />
+              </div>
+            </div>
+          ) : null}
+          <p className="mt-2 text-center text-xs font-semibold leading-snug text-red-950/90 dark:text-red-100/90">
+            {mediaCapture.connecting
+              ? 'Разрешите доступ к микрофону или камере'
+              : 'Во время записи: влево — кружок (до 1 мин), вправо — голос. Отпустите кнопку — отправить.'}
           </p>
-          <span className="shrink-0 tabular-nums text-sm font-bold text-red-900 dark:text-red-200">
-            {formatVoiceElapsed(voiceRecording.startedAt, voiceTick)}
-          </span>
         </div>
       ) : null}
 
@@ -1776,10 +2110,10 @@ export function ChatInput({
                     pendingImages.length === 0 &&
                     Boolean(content.trim());
                   return canVoiceHint
-                    ? 'Отправить текст. Удерживайте кнопку, чтобы записать голосовое с этим текстом как подпись'
+                    ? 'Отправить. Удерживайте — голос или кружок; текст пойдёт подписью'
                     : 'Отправить';
                 }
-                return 'Удерживайте для записи голосового сообщения';
+                return 'Удерживайте: запись. Влево — видеокружок до 1 мин, вправо — голос';
               })()}
               title={(() => {
                 if (!canSendAttachments || !uploadsHealthy) {
@@ -1793,10 +2127,10 @@ export function ChatInput({
                     pendingImages.length === 0 &&
                     Boolean(content.trim());
                   return canVoiceHint
-                    ? 'Отправить · удерживайте для голосового с подписью'
+                    ? 'Отправить · удерживайте — голос или кружок с подписью'
                     : 'Отправить';
                 }
-                return 'Удерживайте для записи голосового';
+                return 'Удерживайте: влево — кружок, вправо — голос';
               })()}
             >
               <span

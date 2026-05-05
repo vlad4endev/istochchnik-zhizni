@@ -14,6 +14,7 @@ import {
   LuEllipsis,
   LuEye,
   LuEyeOff,
+  LuFileText,
   LuGripVertical,
   LuLink,
   LuListOrdered,
@@ -68,6 +69,11 @@ import {
   type ServiceTemplateDetails,
 } from '../api';
 import { meaningfulNoteLinesFromRaw } from '../plannerNoteText';
+import {
+  estimateServicePlanPrintBaseFontPx,
+  openServicePlanA4PrintSheet,
+  type ServicePlanPrintRow,
+} from '../servicePlanPrintSheet';
 import { useServicePlanEditorsPresence } from '../useServicePlanEditorsPresence';
 import { emitAppToast } from '@/lib/uiFeedback';
 import { useScrollInputIntoView } from '@/hooks/useScrollInputIntoView';
@@ -953,6 +959,87 @@ export function ServicePlannerPage() {
       return value;
     }
     return null;
+  }
+
+  function handlePrintPlanSheet(): void {
+    if (!draft) return;
+    const rows: ServicePlanPrintRow[] = timedBlocks.map((block) => {
+      if (isSeparatorBlock(block)) {
+        return { type: 'separator', label: separatorLabel(block) };
+      }
+      const heading = isPoemBlock(block)
+        ? poemHeading(block)
+        : isSermonBlock(block)
+          ? sermonHeading(block)
+          : isBirthdaysBlock(block)
+            ? 'Дни рождения недели'
+            : block.title;
+      const { title: blockTitle, key: blockKey } = splitHeadingAndKey(heading);
+      const title = blockKey ? `${blockTitle} [${blockKey}]` : blockTitle;
+      const blockTypeLabel = blockTypes.find((t) => t.id === block.block_type_id)?.name ?? 'Блок';
+      const subtitle = `${blockTypeLabel} · ${block.duration_minutes} мин`;
+      const details: string[] = [];
+      if (isPoemBlock(block)) {
+        const sub = poemSubline(block);
+        if (sub) details.push(sub);
+      }
+      if (isBirthdaysBlock(block)) {
+        const bl = birthdayLines(block);
+        if (bl.length) details.push(`Именинники: ${bl.join(' · ')}`);
+      }
+      if (isScheduleBlock(block)) {
+        const sl = scheduleLines(block);
+        if (sl.length) {
+          details.push('Расписание:');
+          for (const line of sl.slice(0, 8)) details.push(`· ${line}`);
+          if (sl.length > 8) details.push(`… ещё ${sl.length - 8}`);
+        }
+      }
+      if (isSermonBlock(block) && sermonScripture(block)) {
+        details.push(`Писание: ${sermonScripture(block)}`);
+      }
+      const note = getBlockNotePreview(block);
+      if (note) details.push(`Заметка: ${note}`);
+      const resp = getResponsibleLabel(block);
+      const dir = getDirectionLabel(block);
+      const responsible = resp && dir ? `${resp} · ${dir}` : resp || dir;
+      return {
+        type: 'block' as const,
+        time: block.startsAt,
+        title,
+        subtitle,
+        details,
+        minutes: block.duration_minutes,
+        responsible,
+        hiddenFromPublic: isHiddenFromPublic(block),
+      };
+    });
+    const baseFontPx = estimateServicePlanPrintBaseFontPx(rows);
+    const dateLine = new Intl.DateTimeFormat('ru-RU', {
+      weekday: 'long',
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+    }).format(new Date(`${draft.service_date}T12:00:00`));
+    const leader = draft.leader_member_id ? usersById.get(draft.leader_member_id) ?? null : null;
+    const preacher = draft.preacher_member_id ? usersById.get(draft.preacher_member_id) ?? null : null;
+    const ok = openServicePlanA4PrintSheet({
+      documentTitle: `Программа служения ${draft.service_date}`,
+      heading: 'Программа служения',
+      dateLine,
+      startTime: draft.start_time,
+      totalMinutes: totalDuration,
+      leader: leader ? userLabel(leader) : null,
+      preacher: preacher ? userLabel(preacher) : null,
+      baseFontPx,
+      rows,
+    });
+    if (!ok) {
+      emitAppToast({
+        kind: 'error',
+        message: 'Не удалось открыть окно печати. Разрешите всплывающие окна для этого сайта.',
+      });
+    }
   }
 
   function onDragEnd(result: DropResult): void {
@@ -2252,6 +2339,15 @@ export function ServicePlannerPage() {
               ) : null}
               <button
                 type="button"
+                onClick={() => handlePrintPlanSheet()}
+                className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-lg border border-stone-300 bg-white px-2.5 py-1 text-[11px] font-semibold text-stone-800 hover:border-primary hover:text-primary sm:px-3 sm:py-1.5 sm:text-xs"
+                title="Откроется окно печати: выберите «Сохранить как PDF» или «Печать в PDF»"
+              >
+                <LuFileText className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                Лист A4
+              </button>
+              <button
+                type="button"
                 onClick={() => void toggleArchiveCurrentPlan()}
                 className="shrink-0 whitespace-nowrap rounded-lg border border-amber-300 px-2.5 py-1 text-[11px] font-semibold text-amber-800 hover:bg-amber-50 sm:px-3 sm:py-1.5 sm:text-xs"
               >
@@ -2314,6 +2410,15 @@ export function ServicePlannerPage() {
                   ) : null}
                 </div>
               ) : null}
+              <button
+                type="button"
+                onClick={() => handlePrintPlanSheet()}
+                className="inline-flex min-h-[36px] shrink-0 items-center gap-1 whitespace-nowrap rounded-lg border border-stone-300 px-2.5 py-1 text-[11px] font-semibold text-stone-800 hover:border-primary hover:text-primary sm:hidden"
+                title="Печать на одном листе A4 — сохраните как PDF в диалоге"
+              >
+                <LuFileText className="h-4 w-4 shrink-0" aria-hidden />
+                Лист A4
+              </button>
               <button
                 type="button"
                 onClick={() => void toggleArchiveCurrentPlan()}
@@ -2507,14 +2612,25 @@ export function ServicePlannerPage() {
           </button>
           </div>
         </div>
-        <button
-          type="button"
-          onClick={() => void saveProgramMut.mutateAsync()}
-          className="mt-2 hidden min-h-[44px] w-full items-center justify-center gap-2 rounded-xl bg-primary px-3 py-2 text-sm font-semibold text-white hover:bg-primary-dark md:inline-flex"
-        >
-          <LuSave className="h-4 w-4" />
-          Сохранить программу
-        </button>
+        <div className="mt-2 hidden flex-col gap-2 md:flex md:flex-row md:flex-wrap md:justify-end">
+          <button
+            type="button"
+            onClick={() => handlePrintPlanSheet()}
+            className="inline-flex min-h-[44px] min-w-[10rem] items-center justify-center gap-2 rounded-xl border border-stone-300 bg-white px-3 py-2 text-sm font-semibold text-stone-800 hover:border-primary hover:text-primary"
+            title="Печать на одном листе A4 — в диалоге можно сохранить как PDF"
+          >
+            <LuFileText className="h-4 w-4 shrink-0" aria-hidden />
+            Лист A4 (PDF)
+          </button>
+          <button
+            type="button"
+            onClick={() => void saveProgramMut.mutateAsync()}
+            className="inline-flex min-h-[44px] min-w-[12rem] flex-1 items-center justify-center gap-2 rounded-xl bg-primary px-3 py-2 text-sm font-semibold text-white hover:bg-primary-dark md:max-w-md md:flex-none"
+          >
+            <LuSave className="h-4 w-4" />
+            Сохранить программу
+          </button>
+        </div>
       </section>
 
       <section className="rounded-2xl border border-stone-200 bg-white p-3 shadow-sm">

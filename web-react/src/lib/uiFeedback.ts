@@ -14,6 +14,11 @@ export type AppToastPayload = {
   action?: AppToastAction;
   /** Длительность показа (мс), по умолчанию 4200 — например 5200 для «Отменить». */
   durationMs?: number;
+  /**
+   * Только для администраторов приложения: технические / API сообщения, не для обычных пользователей.
+   * Фильтр в `AppToastHost` (см. `isAppAdministratorSession`).
+   */
+  adminOnly?: boolean;
 };
 
 export function emitAppToast(message: string, kind?: AppToastKind): void;

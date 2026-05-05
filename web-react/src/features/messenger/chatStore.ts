@@ -604,6 +604,7 @@ function listPreviewFromMessage(tail: MessageWithSender): NonNullable<Conversati
   let preview = String(tail.content ?? '').trim();
   if (!preview) {
     if (pt === 'audio') preview = '🎤 Голосовое сообщение';
+    else if (pt === 'video_note') preview = '🎥 Видеосообщение';
     else if (pt === 'image') preview = '📷 Фото';
     else if (pt === 'file') preview = '📎 Файл';
     else if (pt === 'poll') preview = '📊 Опрос';
@@ -817,7 +818,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
       // Offline/backend down: use cached snapshot.
       hydrateFromCacheIntoStore(set, get);
       if (!wasLoaded) {
-        emitAppToast('Нет соединения. Показываем кэшированные данные.', 'info');
+        emitAppToast({
+          message: 'Нет соединения. Показываем кэшированные данные.',
+          kind: 'info',
+          adminOnly: true,
+        });
       }
     } finally {
       set({ conversationsLoading: false });
@@ -1026,6 +1031,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       payloadType === 'image' ||
       payloadType === 'file' ||
       payloadType === 'audio' ||
+      payloadType === 'video_note' ||
       payloadType === 'prayer_request' ||
       payloadType === 'poll'
         ? payloadType
@@ -1764,28 +1770,40 @@ export const useChatStore = create<ChatState>((set, get) => ({
     if (pollVoteInFlightByMsg.has(mid)) return;
     pollVoteInFlightByMsg.add(mid);
 
-    // Find message for optimistic update
     let convId: string | null = null;
-    let originalTallies: number[] | undefined;
-    let originalMyOptions: number[] | undefined;
+    /** Снимок до оптимистичного UI (для отката и корректного пересчёта) */
+    let preTallies: number[] | null = null;
+    let preMy: number[] | null = null;
 
     for (const [cid, msgs] of Object.entries(state.messagesByConv)) {
       const found = msgs.find((m) => String(m.id) === mid);
-      if (found) {
-        convId = cid;
-        originalTallies = found.poll_tallies ? [...found.poll_tallies] : undefined;
-        originalMyOptions = found.poll_my_options ? [...found.poll_my_options] : undefined;
-        break;
+      if (!found) continue;
+      const optLen =
+        found.payload_type === 'poll' &&
+        found.payload &&
+        typeof found.payload === 'object' &&
+        !Array.isArray(found.payload) &&
+        Array.isArray((found.payload as { options?: unknown }).options)
+          ? (found.payload as { options: unknown[] }).options.length
+          : 0;
+      if (optLen < 1) break;
+      convId = cid;
+      preMy = found.poll_my_options ? [...found.poll_my_options] : [];
+      preTallies =
+        found.poll_tallies && found.poll_tallies.length === optLen
+          ? [...found.poll_tallies]
+          : Array.from({ length: optLen }, () => 0);
+      const optimisticTallies = [...preTallies];
+      for (const j of preMy) {
+        if (typeof optimisticTallies[j] === 'number' && optimisticTallies[j] > 0) {
+          optimisticTallies[j] -= 1;
+        }
       }
-    }
-
-    // Optimistic: increment counters immediately
-    if (convId && originalTallies) {
-      const optimisticTallies = [...originalTallies];
       for (const idx of optionIndexes) {
         if (optimisticTallies[idx] !== undefined) optimisticTallies[idx] += 1;
       }
       get().handlePollTallies(convId, messageId, optimisticTallies, optionIndexes);
+      break;
     }
 
     try {
@@ -1795,9 +1813,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
         get().handlePollTallies(convId, messageId, tallies, my_options);
       }
     } catch (e) {
-      // Rollback
-      if (convId && originalTallies !== undefined) {
-        get().handlePollTallies(convId, messageId, originalTallies, originalMyOptions);
+      if (convId && preTallies) {
+        get().handlePollTallies(convId, messageId, [...preTallies], preMy ?? []);
       }
       if (axios.isAxiosError(e)) {
         const err = e.response?.data as { error?: string } | undefined;

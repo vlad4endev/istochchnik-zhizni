@@ -25,7 +25,7 @@ import {
   LuInfo,
 } from 'react-icons/lu';
 
-import { useAuthStore } from '../features/auth/authStore';
+import { isAppAdministratorSession, useAuthStore } from '../features/auth/authStore';
 import { useBrandingStore } from '../features/branding/brandingStore';
 import { useFCM } from '../hooks/useFCM';
 import { useWebPushSync } from '../hooks/useWebPushSync';
@@ -95,70 +95,39 @@ function navIconClass(isActive: boolean, compact: boolean) {
   ].join(' ');
 }
 
-/** Видимая обратная связь при обрыве сети и типичных ошибках API (многопользовательский режим). */
+/** Только офлайн: компактная полоса без янтарного «алерта»; ошибки API — через `emitAppToast`. */
 function ConnectivityBanner() {
-  const [apiMessage, setApiMessage] = useState<string | null>(null);
   const [offline, setOffline] = useState(
     () => typeof navigator !== 'undefined' && !navigator.onLine,
   );
 
   useEffect(() => {
-    const onWarn = (e: Event) => {
-      const ce = e as CustomEvent<{ message?: string }>;
-      const msg = ce.detail?.message;
-      if (typeof msg === 'string' && msg.trim()) {
-        setApiMessage(msg.trim());
-      }
-    };
-    const onClear = () => setApiMessage(null);
     const goOffline = () => setOffline(true);
     const goOnline = () => setOffline(false);
-
-    window.addEventListener('app:api-warning', onWarn);
-    window.addEventListener('app:api-clear-warning', onClear);
     window.addEventListener('offline', goOffline);
     window.addEventListener('online', goOnline);
-
     return () => {
-      window.removeEventListener('app:api-warning', onWarn);
-      window.removeEventListener('app:api-clear-warning', onClear);
       window.removeEventListener('offline', goOffline);
       window.removeEventListener('online', goOnline);
     };
   }, []);
 
-  const showOffline = offline;
-  const showApi = !showOffline && apiMessage != null;
-  if (!showOffline && !showApi) {
-    return null;
-  }
-
-  const text = showOffline
-    ? 'Нет подключения к интернету. Данные могут быть неактуальны, действия не сохранятся.'
-    : apiMessage!;
+  if (!offline) return null;
 
   return (
     <div
       role="status"
       aria-live="polite"
-      className="flex shrink-0 items-start gap-3 border-b border-amber-200/90 bg-amber-50 px-4 py-3 text-[13px] font-medium leading-snug text-amber-950 md:px-5"
+      className="flex shrink-0 items-center justify-center gap-2.5 border-b border-white/[0.07] bg-zinc-950/88 px-3 py-2.5 text-center backdrop-blur-xl supports-[backdrop-filter]:bg-zinc-950/72 sm:gap-3 sm:px-4"
     >
-      {showOffline ? (
-        <LuWifiOff className="mt-0.5 h-5 w-5 shrink-0 text-amber-800" strokeWidth={2} aria-hidden />
-      ) : (
-        <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-amber-500" aria-hidden />
-      )}
-      <p className="min-w-0 flex-1">{text}</p>
-      {showApi ? (
-        <button
-          type="button"
-          onClick={() => setApiMessage(null)}
-          className="shrink-0 rounded-lg p-1 text-amber-900/80 hover:bg-amber-200/50"
-          aria-label="Скрыть предупреждение"
-        >
-          <LuX className="h-5 w-5" strokeWidth={2} aria-hidden />
-        </button>
-      ) : null}
+      <span className="relative flex h-2 w-2 shrink-0" aria-hidden>
+        <span className="absolute inline-flex h-full w-full motion-reduce:hidden animate-ping rounded-full bg-rose-400/45" />
+        <span className="relative inline-flex h-2 w-2 rounded-full bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.4)]" />
+      </span>
+      <LuWifiOff className="h-4 w-4 shrink-0 text-zinc-400" strokeWidth={2} aria-hidden />
+      <p className="min-w-0 max-w-[min(100%,40rem)] text-[13px] font-medium leading-snug text-zinc-100">
+        Нет сети — данные могут быть неактуальны, действия не сохранятся до восстановления связи.
+      </p>
     </div>
   );
 }
@@ -210,7 +179,11 @@ function AppToastHost() {
         avatarText?: string;
         action?: AppToastAction;
         durationMs?: number;
+        adminOnly?: boolean;
       }>;
+      if (ce.detail?.adminOnly === true && !isAppAdministratorSession()) {
+        return;
+      }
       const message = String(ce.detail?.message ?? '').trim();
       if (!message) return;
       const kind = normalizeToastKind(ce.detail?.kind);

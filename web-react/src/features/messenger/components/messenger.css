@@ -1705,28 +1705,32 @@
   font-style: italic;
 }
 
-/* Reactions row */
+/* Реакции под пузырьком (как в Telegram: ряд «таблеток», читаемый счётчик) */
 .msg-reactions {
-  position: absolute;
-  bottom: -10px;
-  z-index: 1;
+  position: relative;
+  z-index: 2;
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  align-items: center;
+  gap: 5px;
   max-width: 100%;
+  margin-top: 5px;
+  padding: 0 1px 2px;
 }
 
 .msg-reactions--mine {
-  right: 8px;
+  align-self: flex-end;
+  justify-content: flex-end;
 }
 
 .msg-reactions--in {
-  left: 8px;
+  align-self: flex-start;
+  justify-content: flex-start;
 }
 
 .msg-bubble-shell {
   position: relative;
-  margin-bottom: 14px;
+  margin-bottom: 10px;
 }
 
 .message-bubble {
@@ -1748,36 +1752,101 @@
 .msg-reaction-chip {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 4px 10px;
+  justify-content: center;
+  gap: 5px;
+  min-height: 30px;
+  padding: 4px 9px 4px 7px;
   border-radius: 999px;
-  border: 0.5px solid var(--color-border-tertiary, var(--tg-border));
-  background: var(--color-background-primary, var(--tg-surface));
-  font-size: 0.8125rem;
+  border: 1px solid rgba(28, 25, 23, 0.1);
+  background: linear-gradient(180deg, #ffffff 0%, #faf8f6 100%);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.9) inset,
+    0 1px 2px rgba(28, 25, 23, 0.06),
+    0 0 0 1px rgba(28, 25, 23, 0.04);
   cursor: pointer;
-  transition: background 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
-  box-shadow: none;
+  font-family: inherit;
+  line-height: 1;
+  transition:
+    background 0.14s ease,
+    border-color 0.14s ease,
+    box-shadow 0.14s ease,
+    transform 0.12s ease;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
 }
 
 .msg-reaction-chip:hover {
-  border-color: rgba(125, 54, 64, 0.35);
-  transform: translateY(-1px);
+  border-color: rgba(125, 54, 64, 0.32);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.95) inset,
+    0 2px 6px rgba(28, 25, 23, 0.08),
+    0 0 0 1px rgba(125, 54, 64, 0.12);
+  transform: translateY(-0.5px);
+}
+
+.msg-reaction-chip:active {
+  transform: scale(0.97);
 }
 
 .msg-reaction-chip--active {
-  background: var(--tg-primary-light);
+  background: linear-gradient(180deg, rgba(125, 54, 64, 0.14) 0%, rgba(125, 54, 64, 0.1) 100%);
   border-color: rgba(125, 54, 64, 0.45);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.65) inset,
+    0 2px 8px rgba(125, 54, 64, 0.12),
+    0 0 0 1px rgba(125, 54, 64, 0.1);
+}
+
+.msg-reaction-chip--active:hover {
+  border-color: rgba(125, 54, 64, 0.55);
+}
+
+.msg-reaction-emoji {
+  display: block;
+  font-size: 1.2rem;
+  line-height: 1;
 }
 
 .msg-reaction-count {
-  font-size: 0.7rem;
+  font-size: 0.8125rem;
   font-weight: 700;
-  color: var(--tg-text-muted);
-  min-width: 1ch;
+  letter-spacing: -0.02em;
+  color: var(--tg-text-secondary);
+  min-width: 1.1ch;
 }
 
 .msg-reaction-chip--active .msg-reaction-count {
   color: var(--tg-primary);
+}
+
+html.dark .msg-reaction-chip {
+  background: linear-gradient(180deg, rgba(38, 38, 40, 0.98) 0%, rgba(28, 28, 30, 0.98) 100%);
+  border-color: rgba(255, 255, 255, 0.1);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.06) inset,
+    0 2px 8px rgba(0, 0, 0, 0.35),
+    0 0 0 1px rgba(0, 0, 0, 0.25);
+}
+
+html.dark .msg-reaction-chip:hover {
+  border-color: rgba(244, 114, 182, 0.35);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.08) inset,
+    0 3px 12px rgba(0, 0, 0, 0.45),
+    0 0 0 1px rgba(244, 114, 182, 0.15);
+}
+
+html.dark .msg-reaction-chip--active {
+  background: linear-gradient(180deg, rgba(125, 54, 64, 0.35) 0%, rgba(125, 54, 64, 0.22) 100%);
+  border-color: rgba(244, 114, 182, 0.45);
+}
+
+html.dark .msg-reaction-count {
+  color: #d6d3d1;
+}
+
+html.dark .msg-reaction-chip--active .msg-reaction-count {
+  color: #fecdd3;
 }
 
 /* Long-press: плашка реакций над сообщением (как в Telegram) */
@@ -1799,15 +1868,27 @@
   left: 0;
   display: flex;
   align-items: center;
-  gap: 1px;
-  padding: 5px 6px;
+  gap: 2px;
+  padding: 6px 8px;
   border-radius: 999px;
-  background: var(--tg-surface-elevated);
-  border: 1px solid var(--tg-border);
-  box-shadow: 0 10px 36px rgba(28, 25, 23, 0.16), 0 2px 8px rgba(28, 25, 23, 0.06);
+  background: var(--tg-surface);
+  border: 1px solid rgba(28, 25, 23, 0.1);
+  box-shadow:
+    0 12px 40px rgba(28, 25, 23, 0.14),
+    0 2px 10px rgba(28, 25, 23, 0.08),
+    0 0 0 1px rgba(255, 255, 255, 0.5) inset;
   animation: tg-scale-up 0.14s ease-out;
-  max-width: min(100vw - 16px, 320px);
+  max-width: min(100vw - 16px, 340px);
   flex-wrap: nowrap;
+}
+
+html.dark .msg-reaction-floating {
+  background: #252528;
+  border-color: rgba(255, 255, 255, 0.12);
+  box-shadow:
+    0 14px 44px rgba(0, 0, 0, 0.55),
+    0 2px 12px rgba(0, 0, 0, 0.35),
+    0 0 0 1px rgba(255, 255, 255, 0.05) inset;
 }
 
 .msg-reaction-floating--mine {
@@ -1818,16 +1899,17 @@
 .msg-reaction-floating__emoji {
   display: grid;
   place-items: center;
-  width: 2.25rem;
-  height: 2.25rem;
+  width: 2.5rem;
+  height: 2.5rem;
   border: none;
   border-radius: 999px;
   background: transparent;
-  font-size: 1.35rem;
+  font-size: 1.45rem;
   line-height: 1;
   cursor: pointer;
   transition: transform 0.12s ease, background 0.12s ease;
   flex-shrink: 0;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .msg-reaction-floating__emoji:hover,
@@ -1935,16 +2017,24 @@
 .msg-quick-reaction {
   background: none;
   border: none;
-  font-size: 1.5rem;
+  font-size: 1.65rem;
+  line-height: 1;
   cursor: pointer;
-  padding: 6px;
-  border-radius: 8px;
-  transition: all 0.2s;
+  padding: 8px 10px;
+  min-width: 2.75rem;
+  min-height: 2.75rem;
+  border-radius: 12px;
+  transition: background 0.15s ease, transform 0.12s ease;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .msg-quick-reaction:hover {
-  background: rgba(0, 0, 0, 0.08);
-  transform: scale(1.15);
+  background: rgba(125, 54, 64, 0.1);
+  transform: scale(1.08);
+}
+
+html.dark .msg-quick-reaction:hover {
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .tg-reaction-badge {
@@ -2502,6 +2592,7 @@
   .tg-icon-btn,
   .tg-send-btn,
   .msg-quick-reaction,
+  .msg-reaction-chip,
   .app-bottom-nav a,
   .app-bottom-nav button {
     -webkit-tap-highlight-color: transparent;
@@ -2607,4 +2698,39 @@ html[data-chat-open='1'] .tg-main--visible .tg-chat-window .tg-input-container.t
   box-sizing: border-box !important;
   padding-right: 3.5rem !important;
   align-self: stretch !important;
+}
+
+/* Запись: превью видеокружка (как в Telegram) */
+.tg-capture-hud-videonote-ring {
+  width: min(200px, 52vw);
+  height: min(200px, 52vw);
+  border-radius: 50%;
+  overflow: hidden;
+  background: rgba(0, 0, 0, 0.2);
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.35), 0 8px 28px rgba(0, 0, 0, 0.25);
+}
+
+.tg-capture-hud-videonote {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  transform: scaleX(-1);
+}
+
+/* Сообщение: видеокружок в треде */
+.msg-video-note-wrap {
+  width: min(240px, 78vw);
+  height: min(240px, 78vw);
+  border-radius: 50%;
+  overflow: hidden;
+  background: var(--surface, #f4f4f5);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.12);
+}
+
+.msg-video-note {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
 }

@@ -1255,6 +1255,11 @@ BEGIN
     EXCEPTION WHEN duplicate_object THEN
       NULL;
     END;
+    BEGIN
+      ALTER TYPE message_payload_type ADD VALUE IF NOT EXISTS 'video_note';
+    EXCEPTION WHEN duplicate_object THEN
+      NULL;
+    END;
   END IF;
 END $$;
 

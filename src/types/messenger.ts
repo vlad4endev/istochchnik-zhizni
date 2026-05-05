@@ -29,6 +29,7 @@ export type MessagePayloadType =
   | 'text'
   | 'prayer_request'
   | 'audio'
+  | 'video_note'
   | 'image'
   | 'file'
   | 'poll'

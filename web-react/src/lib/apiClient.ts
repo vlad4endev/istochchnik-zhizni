@@ -4,6 +4,7 @@ import { useAuthStore } from '../features/auth/authStore';
 
 import { isCookieOnlySessionToken } from './authSessionConstants';
 import { resolveAxiosBaseURL } from './config';
+import { emitAppToast } from './uiFeedback';
 
 const AUTH_PATHS_SKIP_401_HANDLING = ['/api/auth/login', '/api/auth/register'];
 
@@ -26,16 +27,6 @@ function formatApiFailureHint(status: number | undefined, url: string, fallback:
   if (!code && !cleanUrl) return fallback;
   const prefix = code ? `Ошибка ${code}` : 'Ошибка';
   return cleanUrl ? `${prefix}: ${cleanUrl}` : `${prefix}. ${fallback}`;
-}
-
-function emitApiWarning(message: string): void {
-  if (typeof window === 'undefined') return;
-  window.dispatchEvent(new CustomEvent('app:api-warning', { detail: { message } }));
-}
-
-function emitApiClearWarning(): void {
-  if (typeof window === 'undefined') return;
-  window.dispatchEvent(new CustomEvent('app:api-clear-warning'));
 }
 
 function getTokenForRequest(): string | null {
@@ -75,10 +66,7 @@ apiClient.interceptors.request.use((config) => {
 });
 
 apiClient.interceptors.response.use(
-  (response) => {
-    emitApiClearWarning();
-    return response;
-  },
+  (response) => response,
   (error: AxiosError) => {
     if (isCancel(error)) {
       return Promise.reject(error);
@@ -96,16 +84,27 @@ apiClient.interceptors.response.use(
         } catch {
           /* store недоступен (SSR и т.п.) */
         }
-        emitApiWarning(bodyMsg ?? 'Сессия недействительна или истекла. Войдите снова.');
+        emitAppToast({ message: bodyMsg ?? 'Сессия недействительна или истекла. Войдите снова.', kind: 'error' });
       }
     } else if (!error.response) {
-      emitApiWarning('Нет связи с сервером. Проверьте интернет и доступность API.');
+      emitAppToast({
+        message: 'Нет связи с сервером. Проверьте интернет и доступность API.',
+        kind: 'error',
+        adminOnly: true,
+      });
     } else if (status != null && status >= 500) {
-      emitApiWarning(bodyMsg ?? formatApiFailureHint(status, url, 'Сервер временно недоступен. Попробуйте через несколько минут.'));
+      emitAppToast({
+        message: bodyMsg ?? formatApiFailureHint(status, url, 'Сервер временно недоступен. Попробуйте через несколько минут.'),
+        kind: 'error',
+        adminOnly: true,
+      });
     } else if (status === 403) {
-      emitApiWarning(
-        bodyMsg ?? 'Недостаточно прав для действия. Если роль изменилась, обновите страницу.',
-      );
+      emitAppToast({
+        message:
+          bodyMsg ?? 'Недостаточно прав для действия. Если роль изменилась, обновите страницу.',
+        kind: 'error',
+        adminOnly: true,
+      });
     }
 
     return Promise.reject(error);
