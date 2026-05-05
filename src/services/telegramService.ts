@@ -797,14 +797,6 @@ function extractTelegramFailureDescription(
   return typeof result.body?.description === 'string' ? result.body.description.trim() : '';
 }
 
-function isTelegramUserDeactivatedFailure(
-  result: Awaited<ReturnType<typeof sendTelegramMessageRawSequence>>,
-): boolean {
-  if (result.status !== 403) return false;
-  const d = extractTelegramFailureDescription(result).toLowerCase();
-  return d.includes('user is deactivated');
-}
-
 function isTelegramPermanentRecipientFailure(
   result: Awaited<ReturnType<typeof sendTelegramMessageRawSequence>>,
 ): boolean {
