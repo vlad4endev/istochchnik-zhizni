@@ -857,13 +857,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
       const messages = await api.fetchMessages(conversationId, beforeId, limit);
 
       set((s) => {
-        const prev = older ? (s.messagesByConv[conversationId] || []) : [];
-        const merged = older ? [...messages, ...prev] : messages;
-        // Keep the same dedupe policy as optimistic/WS merge.
+        const prev = s.messagesByConv[conversationId] || [];
+        const merged = older ? [...messages, ...prev] : [...prev, ...messages];
+        // Keep the same dedupe policy as optimistic/WS merge and keep stable numeric order.
         const deduped = dedupeMessages(merged);
+        const sorted = sortMessagesByNumericIdAsc(deduped);
 
         return {
-          messagesByConv: { ...s.messagesByConv, [conversationId]: deduped },
+          messagesByConv: { ...s.messagesByConv, [conversationId]: sorted },
           hasMore: { ...s.hasMore, [conversationId]: messages.length >= limit },
           messagesLastLoadedAt: older
             ? s.messagesLastLoadedAt

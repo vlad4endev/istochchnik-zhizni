@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, useEffect, useCallback } from 'react';
+import { memo, useMemo, useRef, useState, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { useChatStore, EMPTY_ARRAY, type ChatTab } from '../chatStore';
 import type { ConversationListItem, PatchMyConversationUiBody } from '../api/messengerApi';
@@ -72,12 +72,12 @@ export function ChatList({ onSelect, activeId }: ChatListProps) {
         <ul className="min-h-full list-none bg-[var(--surface-elevated)]" role="list">
           {filtered.map((conv: ConversationListItem, index: number) => (
             <li key={conv.id}>
-              <ChatListItem
+              <MemoChatListItem
                 conv={conv}
                 isActive={conv.id === activeId}
                 isLast={index === filtered.length - 1}
                 avatarPriority={index < 16 || conv.id === activeId}
-                onClick={() => onSelect(conv.id)}
+                onSelect={onSelect}
               />
             </li>
           ))}
@@ -156,16 +156,12 @@ function ChatListItem({
   isActive,
   isLast,
   avatarPriority,
-  onClick,
-}: {
-  conv: ConversationListItem;
-  isActive: boolean;
-  /** Последняя строка — без нижнего разделителя у текстовой колонки. */
-  isLast: boolean;
-  /** Первые строки списка + активный чат — eager-загрузка фото. */
-  avatarPriority: boolean;
-  onClick: () => void;
-}) {
+  onSelect,
+}: ChatListItemProps) {
+  const handleSelect = useCallback(() => {
+    onSelect(conv.id);
+  }, [conv.id, onSelect]);
+
   const typingUsers = useChatStore((s) => s.typingByConv[conv.id] || EMPTY_ARRAY);
   const isOnline = useChatStore((s) => {
     if (conv.type !== 'private' || !conv.other_member) return false;
@@ -265,7 +261,7 @@ function ChatListItem({
       longPressFiredRef.current = false;
       return;
     }
-    onClick();
+    handleSelect();
   };
 
   const onContextMenu = (e: React.MouseEvent) => {
@@ -351,6 +347,8 @@ function ChatListItem({
                   </span>
                 }
                 priority={avatarPriority}
+                width={48}
+                height={48}
                 className="grid h-full w-full place-items-center"
                 imgClassName="h-full w-full object-cover"
               />
@@ -422,6 +420,26 @@ function ChatListItem({
     </>
   );
 }
+
+type ChatListItemProps = {
+  conv: ConversationListItem;
+  isActive: boolean;
+  /** Последняя строка — без нижнего разделителя у текстовой колонки. */
+  isLast: boolean;
+  /** Первые строки списка + активный чат — eager-загрузка фото. */
+  avatarPriority: boolean;
+  onSelect: (id: string) => void;
+};
+
+const MemoChatListItem = memo(ChatListItem, (prev, next) => {
+  return (
+    prev.conv === next.conv &&
+    prev.isActive === next.isActive &&
+    prev.isLast === next.isLast &&
+    prev.avatarPriority === next.avatarPriority &&
+    prev.onSelect === next.onSelect
+  );
+});
 
 
 function ChatRowContextMenu({

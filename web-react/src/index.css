@@ -402,6 +402,14 @@ button {
   transition: background-color 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease;
 }
 
+/* Messenger surfaces update frequently from realtime events; avoid global transition-induced flicker. */
+.tg-messenger-page main,
+.tg-messenger-page aside,
+.tg-messenger-page section,
+.tg-messenger-page article {
+  transition: none;
+}
+
 /* Таб-бар: только скрытие при клавиатуре — без «плывущего» фона от глобального правила nav {} */
 nav.app-bottom-nav {
   transition: opacity 0.15s ease-out;

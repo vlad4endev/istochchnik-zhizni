@@ -37,7 +37,7 @@ export default defineConfig(({ mode }) => {
     .toString()
     .trim()
     .slice(0, 12);
-  const runtimeCacheSuffix = deployCacheTag || `local-${Date.now().toString(36)}`;
+  const runtimeCacheSuffix = deployCacheTag || 'dev';
 
   const apiProxy = {
     '/api': {
@@ -229,7 +229,19 @@ export default defineConfig(({ mode }) => {
               },
             },
             {
-              urlPattern: /\.(?:png|jpg|jpeg|svg|gif|webp|ico)$/,
+              urlPattern: /\/(?:uploads\/avatars|storage\/v1\/object)\/?/,
+              handler: 'CacheFirst',
+              options: {
+                cacheName: `avatars-media-cache-${runtimeCacheSuffix}`,
+                expiration: {
+                  maxEntries: 250,
+                  maxAgeSeconds: 30 * 24 * 60 * 60,
+                },
+                cacheableResponse: { statuses: [0, 200] },
+              },
+            },
+            {
+              urlPattern: /\.(?:png|jpg|jpeg|svg|gif|webp|ico)(?:\?.*)?$/,
               handler: 'StaleWhileRevalidate',
               options: {
                 cacheName: `images-cache-${runtimeCacheSuffix}`,

@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { StrictMode } from 'react';
+import React, { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
 import { registerSW } from 'virtual:pwa-register';
@@ -17,6 +17,19 @@ import { usePwaStore, type BeforeInstallPromptEvent } from './stores/pwaStore';
 import { initAppearance, useAppearanceStore } from './stores/useAppearanceStore';
 import './index.css';
 import './styles/mobile.css';
+
+if (import.meta.env.DEV) {
+  void import('@welldone-software/why-did-you-render')
+    .then(({ default: whyDidYouRender }) => {
+      whyDidYouRender(React, {
+        trackAllPureComponents: true,
+        include: [/Chat/, /Message/, /Avatar/, /ConversationList/],
+      });
+    })
+    .catch(() => {
+      // Optional dev profiling helper.
+    });
+}
 
 applyNativeShellViewportLock();
 window.addEventListener('load', () => applyNativeShellViewportLock());

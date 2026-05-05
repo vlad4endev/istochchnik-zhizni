@@ -91,6 +91,7 @@ function withAvatarCacheBust(url: string | null, versionIso: string | null | und
   if (!url) return null;
   const t = versionIso ? Date.parse(String(versionIso)) : NaN;
   if (!Number.isFinite(t)) return url;
+  if (/[?&]v=\d/.test(url)) return url;
   const sep = url.includes('?') ? '&' : '?';
   return `${url}${sep}v=${t}`;
 }

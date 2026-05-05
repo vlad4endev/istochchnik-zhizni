@@ -66,8 +66,22 @@ export function useMessengerWs(): {
 
   useEffect(() => {
     if (!token) return;
-
-    const unsubMsg = subscribeRealtimeMessages((msg) => handleWsMessage(msg));
+    const queue: any[] = [];
+    let flushTimer: ReturnType<typeof setTimeout> | null = null;
+    const flush = () => {
+      flushTimer = null;
+      if (!queue.length) return;
+      const batch = queue.splice(0, queue.length);
+      for (const event of batch) {
+        handleWsMessage(event);
+      }
+    };
+    const unsubMsg = subscribeRealtimeMessages((msg) => {
+      queue.push(msg);
+      if (flushTimer == null) {
+        flushTimer = setTimeout(flush, 16);
+      }
+    });
     const unsubOpen = subscribeRealtimeOpen(({ wasReconnected }) => {
       const openedAt = performance.now();
       const store = useChatStore.getState();
@@ -104,6 +118,10 @@ export function useMessengerWs(): {
     });
 
     return () => {
+      if (flushTimer != null) {
+        clearTimeout(flushTimer);
+        flush();
+      }
       unsubMsg();
       unsubOpen();
     };
@@ -114,6 +132,21 @@ export function useMessengerWs(): {
 
 /** Throttle: `ready` replay при каждом subscribeRealtimeMessages не должен ддосить API. */
 let lastMessengerReadySyncAt = 0;
+let convFallbackRefreshTimer: ReturnType<typeof setTimeout> | null = null;
+let lastConvFallbackRefreshAt = 0;
+
+function scheduleConversationsFallbackRefresh(force = false): void {
+  const store = useChatStore.getState();
+  const now = Date.now();
+  const minGapMs = 1500;
+  if (!force && now - lastConvFallbackRefreshAt < minGapMs) return;
+  if (convFallbackRefreshTimer != null) return;
+  convFallbackRefreshTimer = setTimeout(() => {
+    convFallbackRefreshTimer = null;
+    lastConvFallbackRefreshAt = Date.now();
+    void store.loadConversations({ force });
+  }, 120);
+}
 
 function handleWsMessage(msg: any): void {
   const store = useChatStore.getState();
@@ -324,10 +357,11 @@ function handleWsMessage(msg: any): void {
           if (typeof m.updated_at === 'string') patch.updated_at = m.updated_at;
           store.handleConvUpdated(cid, patch);
         } else {
-          void store.loadConversations({ force: true });
+          // Fallback only when payload has no patchable fields; throttle to avoid list-wide churn.
+          scheduleConversationsFallbackRefresh(false);
         }
       } else {
-        void store.loadConversations({ force: true });
+        scheduleConversationsFallbackRefresh(false);
       }
       break;
     }
@@ -335,7 +369,7 @@ function handleWsMessage(msg: any): void {
     case 'conv:history_cleared':
       if (typeof msg.conversationId === 'string' && msg.conversationId) {
         store.handleConvHistoryCleared(msg.conversationId);
-        void store.loadConversations({ force: true });
+        scheduleConversationsFallbackRefresh(false);
       }
       break;
 

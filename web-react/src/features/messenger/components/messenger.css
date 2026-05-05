@@ -895,7 +895,7 @@
   overflow-x: hidden;
   -webkit-overflow-scrolling: touch;
   padding: 8px 16px 20px;
-  scroll-behavior: smooth;
+  scroll-behavior: auto;
   touch-action: pan-y;
   overscroll-behavior-y: contain;
 }

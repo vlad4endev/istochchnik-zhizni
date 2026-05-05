@@ -451,6 +451,7 @@ const QUICK_REACTIONS = [
   '✨',
   '👏',
 ];
+const EMPTY_READ_CURSORS: Record<string, string> = {};
 
 interface MessageBubbleProps {
   message: MessageWithSender;
@@ -473,7 +474,8 @@ function MessageBubbleInner({
   onPinToggle,
 }: MessageBubbleProps) {
   const currentMemberId = useChatStore((s) => s.currentMemberId);
-  const readCursorsByConv = useChatStore((s) => s.readCursorsByConv);
+  const convIdKey = String(message.conversation_id);
+  const convReadCursors = useChatStore((s) => s.readCursorsByConv[convIdKey] || EMPTY_READ_CURSORS);
   const addReaction = useChatStore((s) => s.addReaction);
   const removeReaction = useChatStore((s) => s.removeReaction);
   const setReplyTo = useChatStore((s) => s.setReplyTo);
@@ -488,6 +490,8 @@ function MessageBubbleInner({
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
   /** Имя файла для «Сохранить» в полноэкранном просмотре фото */
   const [lightboxDownloadName, setLightboxDownloadName] = useState<string | null>(null);
+  const [mainImageLoaded, setMainImageLoaded] = useState(false);
+  const [albumSlotLoaded, setAlbumSlotLoaded] = useState<Record<number, boolean>>({});
   const longPressTimer = useRef<number | null>(null);
   const longPressOrigin = useRef<{ x: number; y: number } | null>(null);
   const lastTapUpRef = useRef<{ t: number; x: number; y: number } | null>(null);
@@ -520,8 +524,6 @@ function MessageBubbleInner({
   });
   const isDeleted = message.is_deleted;
   const status = message.status ?? (isOptimistic ? 'sending' : 'sent');
-  const convReadCursors = readCursorsByConv[String(message.conversation_id)] || {};
-
   const maxOtherReadId = useMemo(() => {
     const ids = Object.values(convReadCursors);
     let max: bigint = 0n;
@@ -567,6 +569,10 @@ function MessageBubbleInner({
     if (firstAlbumImage) return getAlbumImageUrl(firstAlbumImage);
     return '';
   })();
+  useEffect(() => {
+    setMainImageLoaded(false);
+    setAlbumSlotLoaded({});
+  }, [attachmentRawUrl, message.id]);
   const attachmentObjectPath = String(payload.object_path ?? payload.objectPath ?? '').trim();
   const [resolvedAttachmentUrl, setResolvedAttachmentUrl] = useState<string | null>(null);
   /** Подписанные URL по кадру альбома (раньше альбом не ходил в attachment-url — фото «протухали»). */
@@ -819,16 +825,30 @@ function MessageBubbleInner({
                         String(img.name ?? img.filename ?? '').trim() || `photo-${idx + 1}.jpg`,
                       );
                     }}
-                    className={['overflow-hidden rounded-xl', isMine ? 'bg-white/10' : 'bg-black/[0.04]'].join(' ')}
+                    className={['relative overflow-hidden rounded-xl', isMine ? 'bg-white/10' : 'bg-black/[0.04]'].join(' ')}
+                    style={{ aspectRatio: '4 / 3' }}
                     aria-label={`Открыть изображение ${idx + 1}`}
                   >
+                    {!albumSlotLoaded[idx] ? (
+                      <span
+                        className={[
+                          'absolute inset-0 animate-pulse',
+                          isMine ? 'bg-white/10' : 'bg-[var(--surface)]',
+                        ].join(' ')}
+                        aria-hidden
+                      />
+                    ) : null}
                     <img
                       src={slideSrc}
                       alt=""
-                      className="max-h-[220px] w-full object-cover"
+                      className={[
+                        'h-full w-full object-cover transition-opacity duration-200',
+                        albumSlotLoaded[idx] ? 'opacity-100' : 'opacity-0',
+                      ].join(' ')}
                       loading="lazy"
                       decoding="async"
                       referrerPolicy="no-referrer"
+                      onLoad={() => setAlbumSlotLoaded((prev) => ({ ...prev, [idx]: true }))}
                       onError={() => setAlbumSlotFailed((prev) => ({ ...prev, [idx]: true }))}
                     />
                   </button>
@@ -916,7 +936,7 @@ function MessageBubbleInner({
         );
       }
       return src ? (
-        <div className="w-full max-w-[min(78vw,22rem)] overflow-hidden rounded-2xl">
+        <div className="relative w-full max-w-[min(78vw,22rem)] overflow-hidden rounded-2xl" style={{ aspectRatio: '4 / 3' }}>
           {imgFailed ? (
             <div
               className={[
@@ -928,6 +948,16 @@ function MessageBubbleInner({
               <span>Файл недоступен</span>
             </div>
           ) : (
+            <>
+              {!mainImageLoaded ? (
+                <span
+                  className={[
+                    'absolute inset-0 animate-pulse',
+                    isMine ? 'bg-white/10' : 'bg-[var(--surface)]',
+                  ].join(' ')}
+                  aria-hidden
+                />
+              ) : null}
             <button
               type="button"
               onClick={() => {
@@ -945,13 +975,18 @@ function MessageBubbleInner({
               <img
                 src={src}
                 alt=""
-                className="max-h-[420px] w-full object-cover"
+                className={[
+                  'h-full w-full object-cover transition-opacity duration-200',
+                  mainImageLoaded ? 'opacity-100' : 'opacity-0',
+                ].join(' ')}
                 loading="lazy"
                 decoding="async"
                 referrerPolicy="no-referrer"
+                onLoad={() => setMainImageLoaded(true)}
                 onError={() => setImgFailed(true)}
               />
             </button>
+            </>
           )}
           {caption ? (
             <div className={['px-3 py-2 text-sm leading-relaxed', isMine ? 'text-white/95' : 'text-[var(--text)]'].join(' ')}>

@@ -52,7 +52,28 @@ export function MessengerPage() {
     return window.localStorage.getItem('messenger:desktop-density') === 'compact' ? 'compact' : 'comfortable';
   });
   const messengerRef = useRef<HTMLDivElement>(null);
+  const transitionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const location = useLocation();
+  const clearTransitionTimer = useCallback(() => {
+    if (transitionTimerRef.current != null) {
+      clearTimeout(transitionTimerRef.current);
+      transitionTimerRef.current = null;
+    }
+  }, []);
+
+  const runTransitionWindow = useCallback(() => {
+    setIsTransitioning(true);
+    clearTransitionTimer();
+    transitionTimerRef.current = setTimeout(() => {
+      setIsTransitioning(false);
+      transitionTimerRef.current = null;
+    }, 350);
+  }, [clearTransitionTimer]);
+
+  useEffect(() => {
+    return () => clearTransitionTimer();
+  }, [clearTransitionTimer]);
+
 
   const ws = useMessengerWsContext();
 
@@ -119,15 +140,14 @@ export function MessengerPage() {
 
   const handleSelectConversation = useCallback((id: string) => {
     blurActiveElement();
-    setIsTransitioning(true);
+    runTransitionWindow();
     setActive(id);
     setMobileView('chat');
-    setTimeout(() => setIsTransitioning(false), 350);
-  }, [setActive]);
+  }, [runTransitionWindow, setActive]);
 
   const handleBack = useCallback(() => {
     blurActiveElement();
-    setIsTransitioning(true);
+    runTransitionWindow();
     // Совпадает с messenger.css (split ≥769px) и messengerReadSurface (≤768px «только чат»).
     const stackLayout =
       typeof window !== 'undefined' && window.matchMedia('(max-width: 768px)').matches;
@@ -137,8 +157,7 @@ export function MessengerPage() {
       setActive(null);
     }
     setMobileView('list');
-    setTimeout(() => setIsTransitioning(false), 350);
-  }, [activeId, setActive]);
+  }, [activeId, runTransitionWindow, setActive]);
 
   return (
     <div className="tg-messenger-page messenger-layout flex h-full min-h-0 flex-1 flex-col bg-white">
