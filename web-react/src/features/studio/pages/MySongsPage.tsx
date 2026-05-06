@@ -70,13 +70,6 @@ export function MySongsPage() {
     onError: () => emitAppToast('Не удалось удалить выбранные песни'),
   });
 
-  if (q.isLoading) {
-    return <SongListSkeleton />;
-  }
-  if (q.isError) {
-    return <p className="text-sm text-red-600">Не удалось загрузить список.</p>;
-  }
-
   const rows = q.data ?? [];
   const filteredRows = rows.filter((v) => {
     const qText = savedSearch.trim().toLowerCase();
@@ -93,6 +86,13 @@ export function MySongsPage() {
     const allowed = new Set(importedRows.map((song) => Number(song.id)));
     setSelectedImportedSongIds((prev) => prev.filter((songId) => allowed.has(songId)));
   }, [importedRows]);
+
+  if (q.isLoading) {
+    return <SongListSkeleton />;
+  }
+  if (q.isError) {
+    return <p className="text-sm text-red-600">Не удалось загрузить список.</p>;
+  }
 
   const isImportedSelected = (songId: number): boolean => selectedImportedSongIds.includes(songId);
   const toggleImportedSelection = (songId: number): void => {
