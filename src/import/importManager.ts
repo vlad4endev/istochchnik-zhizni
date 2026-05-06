@@ -80,6 +80,7 @@ export async function importSongsFromXlsxRows(
   let success = 0;
   let failed = 0;
   const skipped = deduped.skipped;
+  let placeholders = 0;
 
   if (!pool) {
     throw new Error('DATABASE_URL is not set');
@@ -131,6 +132,7 @@ export async function importSongsFromXlsxRows(
       const content = smartImportTextToChordPro(sourceText).trimEnd() || sourceText;
       const isPlaceholder = !content.trim();
       const importedTags = isPlaceholder ? [TAG_MISSING_TEXT] : [];
+      if (isPlaceholder) placeholders += 1;
 
       let songId: number;
 
@@ -181,6 +183,6 @@ export async function importSongsFromXlsxRows(
     }
   }
 
-  return { success, failed, skipped, errors };
+  return { success, failed, skipped, placeholders, errors };
 }
 

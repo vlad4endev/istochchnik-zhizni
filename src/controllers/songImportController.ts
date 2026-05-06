@@ -217,7 +217,7 @@ export async function startSongImportXlsx(req: Request, res: Response): Promise<
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       job.done = true;
-      job.result = { success: 0, failed: job.total, skipped: 0, errors: [{ song_number: 0, title: '', error: msg }] };
+      job.result = { success: 0, failed: job.total, skipped: 0, placeholders: 0, errors: [{ song_number: 0, title: '', error: msg }] };
       job.log.push({ ts: Date.now(), kind: 'error', message: `Импорт упал: ${msg}` });
       emit(job, 'done', job.result);
     }

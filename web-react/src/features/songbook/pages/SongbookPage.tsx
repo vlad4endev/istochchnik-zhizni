@@ -4,19 +4,14 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { LuHeart, LuSearch, LuX } from 'react-icons/lu';
 
 import { emitAppToast } from '../../../lib/uiFeedback';
-import { SectionHeroChrome } from '@/components/SectionHeroChrome';
 import { SongListSkeleton } from '@/components/skeletons/SongListSkeleton';
 import { keys } from '@/lib/queryKeys';
-import { useAuthStore } from '../../auth/authStore';
-import { canModerateSongCatalog } from '../../auth/studioAccess';
 import { deleteFavorite, fetchSongs, postFavorite, type SongListQuery } from '../api';
 import { useSongbookChrome } from '../SongbookChromeContext';
 
 export function SongbookPage() {
   const qc = useQueryClient();
   const { stageMode, toggleStageMode } = useSongbookChrome();
-  const role = useAuthStore((s) => s.role);
-  const canAddSong = canModerateSongCatalog(role);
   const [sp, setSp] = useSearchParams();
 
   const [tab, setTab] = useState<'catalog' | 'favorites'>(
@@ -79,29 +74,21 @@ export function SongbookPage() {
     return tabRows;
   }, [query.data, tab]);
 
-  const stageModeButton = (
-    <button
-      type="button"
-      onClick={toggleStageMode}
-      className={[
-        'inline-flex min-h-[36px] items-center rounded-full border px-3 text-xs font-semibold transition-colors',
-        stageMode
-          ? 'border-white/35 bg-white/10 text-white hover:bg-white/15'
-          : 'border-white/50 bg-white/10 text-white hover:bg-white/20',
-      ].join(' ')}
-    >
-      {stageMode ? 'Светлая тема' : 'Режим сцены'}
-    </button>
-  );
-
   if (query.isLoading) {
     return (
       <div className="mx-auto flex h-full min-h-0 max-w-3xl flex-col text-[var(--text)]">
-        <SectionHeroChrome
-          title="Песенник"
-          subtitle="Тексты и аккорды для богослужения"
-          actions={stageModeButton}
-        />
+        <header className="flex-shrink-0 border-b border-stone-200/80 bg-[var(--surface)]/95 px-3 py-2 backdrop-blur md:px-0">
+          <div className="flex min-h-[44px] items-center justify-between">
+            <h1 className="text-base font-semibold text-[var(--text)]">Песни</h1>
+            <button
+              type="button"
+              onClick={toggleStageMode}
+              className="inline-flex min-h-[36px] items-center rounded-full border border-stone-200 bg-[var(--surface-elevated)] px-3 text-xs font-semibold text-[var(--text-secondary)] hover:bg-[var(--surface)]"
+            >
+              {stageMode ? 'Светлая тема' : 'Режим сцены'}
+            </button>
+          </div>
+        </header>
         <SongListSkeleton />
       </div>
     );
@@ -109,11 +96,18 @@ export function SongbookPage() {
   if (query.isError) {
     return (
       <div className="mx-auto flex h-full min-h-0 max-w-3xl flex-col gap-3 text-[var(--text)]">
-        <SectionHeroChrome
-          title="Песенник"
-          subtitle="Тексты и аккорды для богослужения"
-          actions={stageModeButton}
-        />
+        <header className="flex-shrink-0 border-b border-stone-200/80 bg-[var(--surface)]/95 px-3 py-2 backdrop-blur md:px-0">
+          <div className="flex min-h-[44px] items-center justify-between">
+            <h1 className="text-base font-semibold text-[var(--text)]">Песни</h1>
+            <button
+              type="button"
+              onClick={toggleStageMode}
+              className="inline-flex min-h-[36px] items-center rounded-full border border-stone-200 bg-[var(--surface-elevated)] px-3 text-xs font-semibold text-[var(--text-secondary)] hover:bg-[var(--surface)]"
+            >
+              {stageMode ? 'Светлая тема' : 'Режим сцены'}
+            </button>
+          </div>
+        </header>
         <p className="text-sm text-red-600">Не удалось загрузить каталог.</p>
       </div>
     );
@@ -121,15 +115,20 @@ export function SongbookPage() {
 
   return (
     <div className="mx-auto flex h-full min-h-0 max-w-3xl flex-col text-[var(--text)]">
-      <SectionHeroChrome
-        title="Песенник"
-        subtitle="Тексты и аккорды для богослужения"
-        actions={stageModeButton}
-      />
-      <header className="flex-shrink-0 -mx-3 min-h-[126px] border-b border-stone-200/80 bg-[var(--surface)]/95 px-3 py-2 backdrop-blur md:mx-0 md:px-0">
-        <label className="mb-2 block">
-          <span className="sr-only">Поиск по номеру или названию</span>
-          <div className="relative">
+      <header className="flex-shrink-0 border-b border-stone-200/80 bg-[var(--surface)]/95 px-3 py-2 backdrop-blur md:px-0">
+        <div className="flex min-h-[44px] items-center justify-between gap-2">
+          <h1 className="text-base font-semibold text-[var(--text)]">Песни</h1>
+          <button
+            type="button"
+            onClick={toggleStageMode}
+            className="inline-flex min-h-[36px] items-center rounded-full border border-stone-200 bg-[var(--surface-elevated)] px-3 text-xs font-semibold text-[var(--text-secondary)] hover:bg-[var(--surface)]"
+          >
+            {stageMode ? 'Светлая тема' : 'Режим сцены'}
+          </button>
+        </div>
+
+        <div className="mt-2 flex items-center gap-2">
+          <div className="relative min-w-0 flex-1">
             <LuSearch
               className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--text-muted)]"
               aria-hidden
@@ -153,13 +152,14 @@ export function SongbookPage() {
               </button>
             ) : null}
           </div>
-        </label>
-        <div className="inline-flex rounded-full bg-[var(--surface)] p-0.5 dark:bg-[var(--bg-interactive)]">
+        </div>
+
+        <div className="mt-2 inline-flex w-full rounded-xl bg-[var(--surface)] p-1 dark:bg-[var(--bg-interactive)]">
           <button
             type="button"
             onClick={() => setTab('catalog')}
             className={[
-              'min-h-[34px] min-w-[116px] rounded-full px-3 text-center text-sm font-medium transition-colors',
+              'min-h-[38px] flex-1 rounded-lg px-3 text-center text-sm font-semibold transition-colors',
               tab === 'catalog' ? 'bg-[var(--primary)] text-[var(--text-on-primary)]' : 'text-[var(--text-secondary)]',
             ].join(' ')}
           >
@@ -169,26 +169,16 @@ export function SongbookPage() {
             type="button"
             onClick={() => setTab('favorites')}
             className={[
-              'min-h-[34px] min-w-[116px] rounded-full px-3 text-center text-sm font-medium transition-colors',
+              'min-h-[38px] flex-1 rounded-lg px-3 text-center text-sm font-semibold transition-colors',
               tab === 'favorites' ? 'bg-[var(--primary)] text-[var(--text-on-primary)]' : 'text-[var(--text-secondary)]',
             ].join(' ')}
           >
             Избранное
           </button>
         </div>
-        <div className="mt-2 flex min-h-[34px] justify-end">
-          {canAddSong ? (
-            <Link
-              to="/songbook/add"
-              className="inline-flex min-h-[34px] items-center justify-center rounded-lg border border-stone-300 bg-[var(--surface-elevated)] px-3 text-xs font-semibold text-[var(--text-secondary)] hover:bg-[var(--surface)]"
-            >
-              Новая песня
-            </Link>
-          ) : null}
-        </div>
       </header>
 
-      <div className="min-h-0 flex-1 overflow-y-auto [webkit-overflow-scrolling:touch] pt-3">
+      <div className="min-h-0 flex-1 overflow-y-auto [webkit-overflow-scrolling:touch] pt-2">
       <ul className="overflow-hidden rounded-xl border border-stone-200/80 bg-[var(--surface-elevated)]">
         {rows.map((s, idx) => (
           <li key={s.id} className="border-b border-stone-200/70 last:border-b-0">
@@ -202,11 +192,6 @@ export function SongbookPage() {
                 </span>
                 <div className="min-w-0">
                   <h2 className="truncate text-sm font-medium text-[var(--text)]">{s.title}</h2>
-                  <p className="truncate text-xs text-[var(--text-secondary)]">
-                    {s.tags.find((t) => t.toLowerCase().startsWith('artist:'))?.split(':').slice(1).join(':').trim() ||
-                      s.tags[0] ||
-                      '—'}
-                  </p>
                 </div>
               </Link>
               {s.default_key ? (

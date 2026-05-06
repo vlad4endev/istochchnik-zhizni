@@ -85,7 +85,7 @@ export function SmartImportModal({
   const [xlsxMassProgress, setXlsxMassProgress] = useState<{ current: number; total: number; song_title: string; status: string; message?: string } | null>(
     null,
   );
-  const [xlsxMassResult, setXlsxMassResult] = useState<{ success: number; failed: number; skipped: number; errors: Array<{ song_number: number; title: string; error: string }> } | null>(
+  const [xlsxMassResult, setXlsxMassResult] = useState<{ success: number; failed: number; skipped: number; placeholders?: number; errors: Array<{ song_number: number; title: string; error: string }> } | null>(
     null,
   );
   const xlsxMassLogRef = useRef<Array<{ ts: number; kind: string; message: string }>>([]);
@@ -1002,6 +1002,12 @@ export function SmartImportModal({
                         <p className={`text-xs ${muted}`}>
                           Готово. Успешно: <strong>{xlsxMassResult.success}</strong>, ошибок: <strong>{xlsxMassResult.failed}</strong>, пропущено:{' '}
                           <strong>{xlsxMassResult.skipped}</strong>.
+                          {typeof xlsxMassResult.placeholders === 'number' ? (
+                            <>
+                              {' '}
+                              Заготовок без текста: <strong>{xlsxMassResult.placeholders}</strong> (они скрыты в песеннике).
+                            </>
+                          ) : null}
                         </p>
                         <button
                           type="button"

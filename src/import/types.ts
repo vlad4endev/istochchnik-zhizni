@@ -46,6 +46,8 @@ export type ImportResult = {
   success: number;
   failed: number;
   skipped: number;
+  /** saved as unpublished placeholders (tag: нет_текста) */
+  placeholders: number;
   errors: Array<{ song_number: number; title: string; error: string }>;
 };
 
