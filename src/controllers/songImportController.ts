@@ -5,7 +5,7 @@ import { canModerateCatalog, normalizeAppRole, type AppRole } from '../types/app
 import { query } from '../config/db';
 import { importSongsFromXlsxRows } from '../import/importManager';
 import { parseXlsxBuffer } from '../import/xlsxParser';
-import type { ImportProgress, ImportResult, ParsedXlsxSong } from '../import/types';
+import type { ImportProgress, ImportResult } from '../import/types';
 
 type AuthReq = Request & { authUserId?: number; authUserRole?: AppRole };
 
@@ -98,8 +98,38 @@ function emit(job: JobState, event: string, data: unknown) {
   }
 }
 
+async function ensureSongImportSchema(res: Response): Promise<boolean> {
+  try {
+    // Minimal schema for import (legacy-compatible): songs table must exist and have song_number/title/content.
+    const r = await query(
+      `SELECT 1
+       FROM information_schema.columns
+       WHERE table_schema = 'public'
+         AND table_name = 'songs'
+         AND column_name IN ('song_number','title','content')
+       GROUP BY table_name
+       HAVING COUNT(*) = 3
+       LIMIT 1`,
+    );
+    const ok = (r.rowCount ?? 0) > 0;
+    if (!ok) {
+      res.status(503).json({
+        error: 'Импорт песен недоступен: таблица songs не содержит нужных колонок (song_number/title/content).',
+        code: 'SONG_IMPORT_SCHEMA_MISSING',
+      });
+      return false;
+    }
+    return true;
+  } catch (e) {
+    console.error('[song-import] schema check failed:', e);
+    res.status(500).json({ error: 'Не удалось проверить схему базы данных' });
+    return false;
+  }
+}
+
 export async function previewSongImportXlsx(req: Request, res: Response): Promise<void> {
   if (!(await ensureCatalogModerator(req, res)).ok) return;
+  if (!(await ensureSongImportSchema(res))) return;
   const file = (req as Request & { file?: Express.Multer.File }).file;
   if (!file?.buffer || file.buffer.length === 0) {
     res.status(400).json({ error: 'xlsx file required (field: file)' });
@@ -117,6 +147,7 @@ export async function previewSongImportXlsx(req: Request, res: Response): Promis
 /** Для UI добавления одной песни: распарсить XLSX и вернуть список песен (без запуска импорта). */
 export async function parseSongImportXlsx(req: Request, res: Response): Promise<void> {
   if (!(await ensureCatalogModerator(req, res)).ok) return;
+  if (!(await ensureSongImportSchema(res))) return;
   const file = (req as Request & { file?: Express.Multer.File }).file;
   if (!file?.buffer || file.buffer.length === 0) {
     res.status(400).json({ error: 'xlsx file required (field: file)' });
@@ -134,6 +165,7 @@ export async function parseSongImportXlsx(req: Request, res: Response): Promise<
 export async function startSongImportXlsx(req: Request, res: Response): Promise<void> {
   const auth = await ensureCatalogModerator(req, res);
   if (!auth.ok) return;
+  if (!(await ensureSongImportSchema(res))) return;
   const file = (req as Request & { file?: Express.Multer.File }).file;
   if (!file?.buffer || file.buffer.length === 0) {
     res.status(400).json({ error: 'xlsx file required (field: file)' });
@@ -196,6 +228,7 @@ export async function startSongImportXlsx(req: Request, res: Response): Promise<
 
 export async function songImportProgressSse(req: Request, res: Response): Promise<void> {
   if (!(await ensureCatalogModerator(req, res)).ok) return;
+  if (!(await ensureSongImportSchema(res))) return;
   const jobId = String(req.params.jobId ?? '').trim();
   const job = jobs.get(jobId);
   if (!job) {
@@ -232,6 +265,7 @@ export async function songImportProgressSse(req: Request, res: Response): Promis
 
 export async function songImportProgressSnapshot(req: Request, res: Response): Promise<void> {
   if (!(await ensureCatalogModerator(req, res)).ok) return;
+  if (!(await ensureSongImportSchema(res))) return;
   const jobId = String(req.params.jobId ?? '').trim();
   const job = jobs.get(jobId);
   if (!job) {
@@ -250,58 +284,12 @@ export async function songImportProgressSnapshot(req: Request, res: Response): P
 export async function retryFailedSongImports(req: Request, res: Response): Promise<void> {
   const auth = await ensureCatalogModerator(req, res);
   if (!auth.ok) return;
-
-  const r = await query(
-    `SELECT external_id, song_number, title, table_of_contents, url_lyrics, url_chords, url_youtube
-     FROM songs
-     WHERE needs_retry = TRUE
-       AND external_id IS NOT NULL
-       AND url_lyrics IS NOT NULL
-       AND url_chords IS NOT NULL
-     ORDER BY COALESCE(song_number, 2147483647) ASC, title ASC`,
-  );
-  const songs: ParsedXlsxSong[] = (r.rows as Record<string, unknown>[]).map((row) => ({
-    external_id: String(row.external_id ?? ''),
-    song_number: Number(row.song_number ?? 0),
-    title: String(row.title ?? ''),
-    table_of_contents: String(row.table_of_contents ?? ''),
-    url_lyrics: String(row.url_lyrics ?? ''),
-    url_chords: String(row.url_chords ?? ''),
-    url_youtube: row.url_youtube != null && String(row.url_youtube).trim() ? String(row.url_youtube) : null,
-  })).filter((s) => s.external_id && s.song_number > 0 && s.title);
-
-  if (songs.length === 0) {
-    res.json({ ok: true, total: 0, message: 'Нет песен для повтора' });
-    return;
-  }
-
-  cleanupJobs();
-  const jobId = newJobId();
-  const job: JobState = {
-    createdAt: Date.now(),
-    total: songs.length,
-    done: false,
-    result: null,
-    progress: null,
-    log: [],
-    listeners: new Set(),
-  };
-  jobs.set(jobId, job);
-
-  void (async () => {
-    const result = await importSongsFromXlsxRows(songs, {
-      createdByMemberId: auth.userId,
-      requestDelayMs: 1500,
-      onProgress: (p) => {
-        job.progress = p;
-        emit(job, 'progress', p);
-      },
-    });
-    job.done = true;
-    job.result = result;
-    emit(job, 'done', result);
-  })();
-
-  res.json({ jobId, total: songs.length });
+  if (!(await ensureSongImportSchema(res))) return;
+  // Retry requires extended import schema (needs_retry + urls), which may be absent in legacy DB.
+  res.status(501).json({
+    error: 'Повтор ошибок доступен только при включённых колонках импорта (needs_retry/url_lyrics/url_chords).',
+    code: 'SONG_IMPORT_RETRY_NOT_SUPPORTED',
+  });
+  return;
 }
 

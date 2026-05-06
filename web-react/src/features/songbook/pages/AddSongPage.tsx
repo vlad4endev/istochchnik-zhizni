@@ -10,6 +10,7 @@ import {
   LuYoutube,
 } from 'react-icons/lu';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
+import axios from 'axios';
 
 import { useAuthStore } from '../../auth/authStore';
 import { canModerateSongCatalog } from '../../auth/studioAccess';
@@ -204,23 +205,43 @@ export function AddSongPage() {
     }
   };
 
+  const buildCreatePayload = (force?: boolean) => ({
+    song_number: autoSongNumber ? null : songNumber.trim() ? Number(songNumber) : null,
+    title: title.trim(),
+    content,
+    default_key: defaultKey.trim() || null,
+    tempo: tempo.trim() ? Number(tempo) : null,
+    time_signature: timeSig.trim() || null,
+    tags: tags
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean),
+    is_published: true,
+    ...(force ? { force: true } : {}),
+  });
+
   const createMut = useMutation({
-    mutationFn: () =>
-      createSong({
-        song_number: autoSongNumber ? null : songNumber.trim() ? Number(songNumber) : null,
-        title: title.trim(),
-        content,
-        default_key: defaultKey.trim() || null,
-        tempo: tempo.trim() ? Number(tempo) : null,
-        time_signature: timeSig.trim() || null,
-        tags: tags
-          .split(',')
-          .map((s) => s.trim())
-          .filter(Boolean),
-        is_published: true,
-      }),
+    mutationFn: ({ force }: { force?: boolean } = {}) => createSong(buildCreatePayload(force)),
     onSuccess: (song) => {
       void navigate(`/songbook/${song.id}`);
+    },
+    onError: async (err: unknown) => {
+      if (!axios.isAxiosError(err)) return;
+      if (err.response?.status !== 409) return;
+      const data = err.response.data as { matches?: Array<{ id: string; title: string; song_number: number | null }> } | undefined;
+      const lines = (data?.matches ?? [])
+        .slice(0, 5)
+        .map((m) => `${m.song_number ?? '—'}. ${m.title}`)
+        .join('\n');
+      const ok = window.confirm(
+        `Похоже, такая песня уже есть в каталоге.\n\n${lines || '(совпадения не перечислены)'}\n\nСоздать всё равно?`,
+      );
+      if (!ok) return;
+      try {
+        await createMut.mutateAsync({ force: true });
+      } catch {
+        // ignore
+      }
     },
   });
 
@@ -726,7 +747,7 @@ export function AddSongPage() {
             <button
               type="button"
               disabled={!canSaveSong}
-              onClick={() => createMut.mutate()}
+              onClick={() => createMut.mutate({})}
               className={`inline-flex items-center gap-2 rounded-xl px-6 py-2.5 text-sm font-semibold disabled:opacity-50 ${theme.saveBtn}`}
             >
               {createMut.isPending ? <LuLoader className="h-4 w-4 animate-spin" /> : null}
@@ -789,7 +810,7 @@ export function AddSongPage() {
               <button
                 type="button"
                 disabled={!canSaveSong}
-                onClick={() => createMut.mutate()}
+                onClick={() => createMut.mutate({})}
                 className={`min-h-[44px] flex-1 rounded-xl text-sm font-semibold disabled:opacity-50 ${theme.saveBtn}`}
               >
                 {createMut.isPending ? 'Сохраняем…' : 'Сохранить в каталог'}

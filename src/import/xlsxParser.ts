@@ -105,7 +105,7 @@ function buildHeaderMap(headers: unknown[]): { map: HeaderMap; errors: Validatio
     map[key] = col;
   }
 
-  const required: ColumnKey[] = ['external_id', 'song_number', 'table_of_contents'];
+  const required: ColumnKey[] = ['song_number', 'table_of_contents'];
   for (const k of required) {
     if (map[k] == null) {
       errors.push({
@@ -138,7 +138,8 @@ function validateRow(rowNumExcel: number, row: unknown[], headerMap: HeaderMap):
   const url_chords = normalizeUrl(cell(row, headerMap.url_chords));
   const url_youtube_raw = normalizeUrl(cell(row, headerMap.url_youtube));
 
-  if (!external_id || !is24Hex(external_id)) {
+  // external_id is optional and ignored by import. Still validate if present to help data quality.
+  if (external_id && !is24Hex(external_id)) {
     errors.push({ row: rowNumExcel, field: 'external_id', message: 'external_id должен быть 24-char hex', value: external_id });
   }
 
@@ -173,7 +174,7 @@ function validateRow(rowNumExcel: number, row: unknown[], headerMap: HeaderMap):
 
   return {
     song: {
-      external_id: external_id.trim(),
+      ...(external_id ? { external_id: external_id.trim() } : {}),
       song_number: song_number!,
       title: title.trim(),
       table_of_contents: table_of_contents.trim(),

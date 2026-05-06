@@ -978,6 +978,7 @@ export function SmartImportModal({
                           disabled={xlsxMassBusy}
                           onClick={() => void retryFailedXlsxMassImport()}
                           className={`inline-flex min-h-[40px] items-center justify-center gap-2 rounded-lg border px-3 text-xs font-semibold disabled:opacity-50 ${btnGhost}`}
+                          title="Повтор ошибок требует расширенной схемы импорта (needs_retry/url_*)."
                         >
                           <LuRefreshCcw className="h-4 w-4" />
                           Повторить ошибки

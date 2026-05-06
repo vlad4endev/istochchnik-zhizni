@@ -6,14 +6,6 @@ import { smartImportTextToChordPro } from './smartImportToChordPro';
 
 const TAG_MISSING_TEXT = 'нет_текста';
 
-function normTitleForDedupe(title: string): string {
-  return (title ?? '')
-    .trim()
-    .toLowerCase()
-    .replace(/ё/g, 'е')
-    .replace(/\s+/g, ' ');
-}
-
 function looksLikeChordsLink(url: string): boolean {
   // Heuristic: in the source xlsx usually "with chords" is stored in url_chords column.
   // Still, we keep it generic: any telegra.ph link counts as usable.
@@ -23,11 +15,12 @@ function looksLikeChordsLink(url: string): boolean {
 function dedupePreferChords(
   rows: ParsedXlsxSong[],
 ): { songs: ParsedXlsxSong[]; skipped: number } {
-  const byKey = new Map<string, ParsedXlsxSong>();
+  // external_id is ignored; primary identity is song_number.
+  const byKey = new Map<number, ParsedXlsxSong>();
   let skipped = 0;
 
   for (const r of rows) {
-    const key = `${r.song_number}|${normTitleForDedupe(r.title)}`;
+    const key = r.song_number;
     const prev = byKey.get(key);
     if (!prev) {
       byKey.set(key, r);
@@ -66,10 +59,6 @@ function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-function nowIso(): string {
-  return new Date().toISOString();
-}
-
 type ImportManagerOptions = {
   /** delay between Telegraph requests */
   requestDelayMs?: number;
@@ -87,11 +76,10 @@ export async function importSongsFromXlsxRows(
   const total = effectiveSongs.length;
   const onProgress = options.onProgress;
 
-  const seenExternal = new Set<string>();
   const errors: ImportResult['errors'] = [];
   let success = 0;
   let failed = 0;
-  let skipped = deduped.skipped;
+  const skipped = deduped.skipped;
 
   if (!pool) {
     throw new Error('DATABASE_URL is not set');
@@ -100,12 +88,6 @@ export async function importSongsFromXlsxRows(
   for (let idx = 0; idx < effectiveSongs.length; idx += 1) {
     const row = effectiveSongs[idx]!;
     const current = idx + 1;
-
-    if (seenExternal.has(row.external_id)) {
-      skipped += 1;
-      continue;
-    }
-    seenExternal.add(row.external_id);
 
     onProgress?.({ current, total, song_title: row.title, status: 'fetching' });
 
@@ -142,15 +124,13 @@ export async function importSongsFromXlsxRows(
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
-      const existing = await client.query<{ id: string }>(
-        'SELECT id FROM songs WHERE external_id = $1 LIMIT 1',
-        [row.external_id],
-      );
+      const existing = await client.query<{ id: string }>('SELECT id FROM songs WHERE song_number = $1 LIMIT 1', [
+        row.song_number,
+      ]);
       const sourceText = (chordsText ?? lyricsText ?? '').trimEnd();
       const content = smartImportTextToChordPro(sourceText).trimEnd() || sourceText;
       const isPlaceholder = !content.trim();
       const importedTags = isPlaceholder ? [TAG_MISSING_TEXT] : [];
-      const importedAt = nowIso();
 
       let songId: number;
 
@@ -158,61 +138,25 @@ export async function importSongsFromXlsxRows(
         songId = Number(existing.rows[0].id);
         await client.query(
           `UPDATE songs
-           SET song_number = $2,
-               title = $3,
-               content = $4,
-               table_of_contents = $5,
-               url_lyrics = $6,
-               url_chords = $7,
-               url_youtube = $8,
-               lyrics_text = $9,
-               chords_text = $10,
-               needs_retry = $11,
-               imported_at = $12,
-               tags = (SELECT ARRAY(SELECT DISTINCT unnest(songs.tags || $13::text[]))),
-               is_published = $14,
+           SET title = $2,
+               content = $3,
+               tags = (SELECT ARRAY(SELECT DISTINCT unnest(songs.tags || $4::text[]))),
+               is_published = $5,
                updated_at = NOW()
-           WHERE external_id = $1`,
-          [
-            row.external_id,
-            row.song_number,
-            row.title,
-            content,
-            row.table_of_contents,
-            row.url_lyrics,
-            row.url_chords,
-            row.url_youtube,
-            lyricsText,
-            chordsText,
-            needsRetry,
-            importedAt,
-            importedTags,
-            !isPlaceholder,
-          ],
+           WHERE song_number = $1`,
+          [row.song_number, row.title, content, importedTags, !isPlaceholder],
         );
       } else {
         const ins = await client.query<{ id: string }>(
           `INSERT INTO songs (
-             external_id, song_number, title, slug, content,
-             table_of_contents, url_lyrics, url_chords, url_youtube,
-             lyrics_text, chords_text, needs_retry, imported_at,
-             tags, is_published, created_by_member_id
+             song_number, title, slug, content, tags, is_published, created_by_member_id
            )
-           VALUES ($1,$2,$3,gen_random_uuid()::text,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+           VALUES ($1,$2,gen_random_uuid()::text,$3,$4,$5,$6)
            RETURNING id`,
           [
-            row.external_id,
             row.song_number,
             row.title,
             content,
-            row.table_of_contents,
-            row.url_lyrics,
-            row.url_chords,
-            row.url_youtube,
-            lyricsText,
-            chordsText,
-            needsRetry,
-            importedAt,
             importedTags,
             !isPlaceholder,
             options.createdByMemberId,

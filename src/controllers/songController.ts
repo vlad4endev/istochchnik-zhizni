@@ -7,6 +7,7 @@ import {
   type AppRole,
 } from '../types/appRole';
 import type { SongListFilters } from '../services/songService';
+import { query as dbQuery } from '../config/db';
 import {
   addFavorite,
   createSong,
@@ -222,6 +223,7 @@ export async function createSongHandler(req: Request, res: Response): Promise<vo
       time_signature?: string | null;
       tags?: unknown;
       is_published?: boolean;
+      force?: boolean;
     };
     const title = typeof body.title === 'string' ? body.title : '';
     if (!title.trim()) {
@@ -237,6 +239,58 @@ export async function createSongHandler(req: Request, res: Response): Promise<vo
     if (Number.isNaN(songNumber)) {
       res.status(400).json({ error: 'song_number должен быть целым положительным числом' });
       return;
+    }
+
+    // Soft-duplicate warning: let UI confirm "create anyway".
+    if (body.force !== true) {
+      const matches: Array<{ id: string; title: string; song_number: number | null; slug: string }> = [];
+      if (songNumber != null) {
+        const byNum = await dbQuery(
+          `SELECT id, title, song_number, slug
+           FROM songs
+           WHERE song_number = $1
+           ORDER BY updated_at DESC
+           LIMIT 5`,
+          [songNumber],
+        );
+        matches.push(
+          ...(byNum.rows as Array<{ id: unknown; title: unknown; song_number: unknown; slug: unknown }>).map((r) => ({
+            id: String(r.id),
+            title: String(r.title),
+            song_number: r.song_number != null ? Number(r.song_number) : null,
+            slug: String(r.slug),
+          })),
+        );
+      }
+      const byTitle = await dbQuery(
+        `SELECT id, title, song_number, slug
+         FROM songs
+         WHERE LOWER(TRIM(title)) = LOWER(TRIM($1))
+         ORDER BY updated_at DESC
+         LIMIT 5`,
+        [title],
+      );
+      for (const row of byTitle.rows as Array<{ id: unknown; title: unknown; song_number: unknown; slug: unknown }>) {
+        if (matches.some((m) => String(m.id) === String(row.id))) continue;
+        matches.push({
+          id: String(row.id),
+          title: String(row.title),
+          song_number: row.song_number != null ? Number(row.song_number) : null,
+          slug: String(row.slug),
+        });
+      }
+      if (matches.length > 0) {
+        res.status(409).json({
+          error: 'Песня с таким номером или названием уже существует',
+          matches: matches.map((m) => ({
+            id: String(m.id),
+            title: String(m.title),
+            song_number: m.song_number != null ? Number(m.song_number) : null,
+            slug: String(m.slug),
+          })),
+        });
+        return;
+      }
     }
 
     const tags = parseTagsField(body);

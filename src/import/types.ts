@@ -1,5 +1,6 @@
 export type ParsedXlsxSong = {
-  external_id: string;
+  /** external id from source (ignored by import) */
+  external_id?: string;
   song_number: number;
   title: string;
   table_of_contents: string;

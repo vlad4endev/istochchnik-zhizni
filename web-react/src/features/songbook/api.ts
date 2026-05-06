@@ -144,6 +144,7 @@ export async function createSong(body: {
   time_signature?: string | null;
   tags?: string[];
   is_published?: boolean;
+  force?: boolean;
 }): Promise<SongListItem> {
   const { data } = await apiClient.post<SongListItem>(SONGS, body);
   return data;
