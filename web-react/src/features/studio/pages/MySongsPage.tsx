@@ -5,7 +5,6 @@ import { LuPenLine, LuTrash2 } from 'react-icons/lu';
 
 import { SongListSkeleton } from '@/components/skeletons/SongListSkeleton';
 import { useAuthStore } from '../../auth/authStore';
-import { canModerateSongCatalog } from '../../auth/studioAccess';
 import {
   createDraft,
   deleteDraft,
@@ -91,7 +90,7 @@ export function MySongsPage() {
   const surface = useStudioModuleSurface();
   const qc = useQueryClient();
   const role = useAuthStore((s) => s.role);
-  const canModerate = canModerateSongCatalog(role);
+  void role;
 
   const q = useQuery({ queryKey: ['studio', 'versions'], queryFn: fetchMyVersions });
   const draftsQ = useQuery({ queryKey: ['studio', 'drafts'], queryFn: fetchDrafts });
@@ -102,7 +101,8 @@ export function MySongsPage() {
   const missingQ = useQuery({
     queryKey: ['studio', 'missing-text-songs'],
     queryFn: () => fetchSongsForModeration({ tags: ['нет_текста'] }),
-    enabled: canModerate,
+    // backend также разрешает участникам музыкального служения (как и импорт)
+    enabled: true,
   });
 
   const [tab, setTab] = useState<MySongsTab>('saved');
@@ -150,7 +150,7 @@ export function MySongsPage() {
   const recent = recentQ.data ?? [];
   const drafts = draftsQ.data ?? [];
   const showRecentTab = recent.length > 0;
-  const showMissingTab = canModerate;
+  const showMissingTab = true;
 
   const pageCard =
     surface === 'songbook'

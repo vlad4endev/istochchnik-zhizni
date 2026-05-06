@@ -31,6 +31,22 @@ function roleOf(req: AuthReq): AppRole {
   return normalizeAppRole(req.authUserRole);
 }
 
+function normalizeMinistryDirection(value: unknown): string {
+  return String(value ?? '').trim().toLowerCase().replace(/ё/g, 'е');
+}
+
+async function hasMusicMinistryDirection(memberId: number): Promise<boolean> {
+  const r = await dbQuery(`select ministry_direction from public.members where id = $1 limit 1`, [memberId]);
+  const raw = (r.rows[0] as { ministry_direction?: string } | undefined)?.ministry_direction;
+  const v = normalizeMinistryDirection(raw);
+  if (!v) return false;
+  const target = normalizeMinistryDirection('Музыкальное служение');
+  return v
+    .split(/[;,]/)
+    .map((s) => normalizeMinistryDirection(s))
+    .some((s) => s === target || s.includes(target));
+}
+
 function parseSongListFilters(req: Request): SongListFilters {
   const q = req.query as Record<string, string | string[] | undefined>;
   const filters: SongListFilters = {};
@@ -88,8 +104,11 @@ export async function listSongsForModeration(req: Request, res: Response): Promi
       return;
     }
     if (!canModerateCatalog(roleOf(r))) {
-      res.status(403).json({ error: 'Недостаточно прав' });
-      return;
+      const ok = await hasMusicMinistryDirection(r.authUserId);
+      if (!ok) {
+        res.status(403).json({ error: 'Недостаточно прав' });
+        return;
+      }
     }
     const filters = parseSongListFilters(req);
     const songs = await listCatalogSongsForModeration(r.authUserId ?? null, filters);
