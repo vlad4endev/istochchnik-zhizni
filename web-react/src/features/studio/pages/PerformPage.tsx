@@ -17,6 +17,7 @@ import { fetchPerformance } from '../api';
 import { notesFromItem } from '../performNotes';
 import { studioSetlistDetailPath, useStudioModuleSurface } from '../studioPaths';
 import { SkeletonBox } from '@/components/ui/SkeletonBox';
+import { useAppearanceStore } from '@/stores/useAppearanceStore';
 
 export function PerformPage() {
   const { id } = useParams<{ id: string }>();
@@ -34,6 +35,7 @@ export function PerformPage() {
   const [autoScroll, setAutoScroll] = useState(false);
   const [speedPxPerSec, setSpeedPxPerSec] = useState(28);
   const [useBpmSpeed, setUseBpmSpeed] = useState(true);
+  const appearanceTheme = useAppearanceStore((state) => state.theme);
   const touchStartX = useRef<number | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const rafRef = useRef<number | null>(null);
@@ -45,6 +47,11 @@ export function PerformPage() {
   const current = items[index];
   const title = q.data?.setlist.title ?? '';
   const bpm = current?.song.tempo;
+  const darkThemeEnabled =
+    appearanceTheme === 'dark' ||
+    (appearanceTheme === 'system' &&
+      typeof window !== 'undefined' &&
+      window.matchMedia('(prefers-color-scheme: dark)').matches);
 
   const go = useCallback(
     (dir: -1 | 1) => {
@@ -100,7 +107,7 @@ export function PerformPage() {
 
   if (q.isLoading) {
     return (
-      <div className="flex min-h-[var(--app-viewport-height,100dvh)] items-center justify-center bg-stone-100 px-4">
+      <div className="flex min-h-[var(--app-viewport-height,100dvh)] items-center justify-center bg-[var(--surface)] px-4">
         <div className="w-full max-w-3xl space-y-3">
           <SkeletonBox width="32%" height="20px" />
           <SkeletonBox width="100%" height="14px" />
@@ -112,12 +119,12 @@ export function PerformPage() {
   }
   if (!q.data || items.length === 0) {
     return (
-      <div className="flex min-h-[var(--app-viewport-height,100dvh)] flex-col items-center justify-center gap-4 bg-stone-100 px-4 text-center text-stone-600">
+      <div className="flex min-h-[var(--app-viewport-height,100dvh)] flex-col items-center justify-center gap-4 bg-[var(--surface)] px-4 text-center text-[var(--text-secondary)]">
         <p>В сетлисте нет песен. Добавьте их в редакторе сетлиста.</p>
         <button
           type="button"
           onClick={() => navigate(studioSetlistDetailPath(surface, setlistId))}
-          className="rounded-lg bg-stone-900 px-4 py-2 text-sm font-semibold text-white hover:bg-stone-800"
+          className="rounded-lg bg-[var(--primary)] px-4 py-2 text-sm font-semibold text-[var(--text-on-primary)] hover:bg-[var(--primary-dark)]"
         >
           К сетлисту
         </button>
@@ -129,7 +136,7 @@ export function PerformPage() {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex max-h-[var(--app-viewport-height,100dvh)] min-h-0 flex-col bg-stone-100 text-stone-900"
+      className="fixed inset-0 z-50 flex max-h-[var(--app-viewport-height,100dvh)] min-h-0 flex-col bg-[var(--surface)] text-[var(--text)]"
       onTouchStart={(e) => {
         touchStartX.current = e.touches[0]?.clientX ?? null;
       }}
@@ -143,19 +150,19 @@ export function PerformPage() {
         if (dx < -60) go(1);
       }}
     >
-      <header className="flex shrink-0 items-center justify-between border-b border-stone-200 bg-white/90 px-2 py-2 backdrop-blur-sm">
+      <header className="flex shrink-0 items-center justify-between border-b border-[var(--border)] bg-[var(--surface-elevated)]/90 px-2 py-2 backdrop-blur-sm">
         <button
           type="button"
           onClick={() => navigate(studioSetlistDetailPath(surface, setlistId))}
-          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-stone-500 hover:bg-stone-100 hover:text-stone-800"
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-[var(--text-muted)] hover:bg-[var(--bg-elevated)] hover:text-[var(--text)]"
           aria-label="Закрыть"
         >
           <LuX className="h-6 w-6" />
         </button>
         <div className="min-w-0 flex-1 px-2 text-center">
-          <p className="truncate text-xs text-stone-500">{title}</p>
+          <p className="truncate text-xs text-[var(--text-muted)]">{title}</p>
           <div className="flex items-center justify-center gap-2">
-            <p className="truncate text-sm font-semibold text-stone-900">{current?.song.title}</p>
+            <p className="truncate text-sm font-semibold text-[var(--text)]">{current?.song.title}</p>
             {bpm ? (
               <span
                 className="inline-block h-2 w-2 shrink-0 rounded-full bg-emerald-500"
@@ -167,41 +174,43 @@ export function PerformPage() {
             ) : null}
           </div>
         </div>
-        <span className="w-10 shrink-0 text-right text-xs font-medium text-stone-500">
+        <span className="w-10 shrink-0 text-right text-xs font-medium text-[var(--text-muted)]">
           {index + 1}/{items.length}
         </span>
       </header>
 
-      <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-stone-200 bg-white/80 px-3 py-2 text-xs backdrop-blur-sm">
-        <span className="text-stone-500">Трансп.</span>
+      <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-[var(--border)] bg-[var(--surface-elevated)]/80 px-3 py-2 text-xs backdrop-blur-sm">
+        <span className="text-[var(--text-muted)]">Трансп.</span>
         <button
           type="button"
-          className="rounded-lg border border-stone-200 bg-stone-50 px-2 py-1 text-stone-800 hover:bg-stone-100"
+          className="rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] px-2 py-1 text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]"
           onClick={() => setTranspose((t) => Math.max(t - 1, -11))}
         >
           <LuMinus className="h-4 w-4" />
         </button>
-        <span className="w-8 text-center font-mono font-semibold text-stone-900">{transpose}</span>
+        <span className="w-8 text-center font-mono font-semibold text-[var(--text)]">{transpose}</span>
         <button
           type="button"
-          className="rounded-lg border border-stone-200 bg-stone-50 px-2 py-1 text-stone-800 hover:bg-stone-100"
+          className="rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] px-2 py-1 text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]"
           onClick={() => setTranspose((t) => Math.min(t + 1, 11))}
           aria-label="Выше"
         >
           <LuPlus className="h-4 w-4" />
         </button>
-        <div className="mx-1 h-4 w-px bg-stone-200" />
+        <div className="mx-1 h-4 w-px bg-[var(--border)]" />
         <button
           type="button"
           onClick={() => setAutoScroll((a) => !a)}
           className={`inline-flex items-center gap-1 rounded-lg px-3 py-1.5 font-semibold ${
-            autoScroll ? 'bg-emerald-600 text-white shadow-sm' : 'border border-stone-200 bg-white text-stone-700'
+            autoScroll
+              ? 'bg-emerald-600 text-white shadow-sm'
+              : 'border border-[var(--border)] bg-[var(--surface-elevated)] text-[var(--text-secondary)]'
           }`}
         >
           {autoScroll ? <LuPause className="h-4 w-4" /> : <LuPlay className="h-4 w-4" />}
           Автоскролл
         </button>
-        <label className="flex cursor-pointer items-center gap-1 text-stone-600">
+        <label className="flex cursor-pointer items-center gap-1 text-[var(--text-secondary)]">
           <input
             type="checkbox"
             checked={useBpmSpeed}
@@ -221,22 +230,22 @@ export function PerformPage() {
         />
       </div>
 
-      <div ref={scrollRef} className="min-h-0 flex-1 overflow-auto bg-stone-50 px-4 py-5">
+      <div ref={scrollRef} className="min-h-0 flex-1 overflow-auto bg-[var(--bg-elevated)] px-4 py-5">
         <LyricsWithMusicianNotes
           content={body}
           notes={notesFromItem(current?.musician_notes)}
           transposeSemitones={transpose}
-          chordTone="light"
-          className="font-sans text-lg text-stone-900 md:text-xl"
+          chordTone={darkThemeEnabled ? 'dark' : 'light'}
+          className="font-sans text-lg text-[var(--text)] md:text-xl"
         />
       </div>
 
-      <footer className="flex shrink-0 items-center justify-between gap-4 border-t border-stone-200 bg-white/95 p-4 backdrop-blur-sm">
+      <footer className="flex shrink-0 items-center justify-between gap-4 border-t border-[var(--border)] bg-[var(--surface-elevated)]/95 p-4 backdrop-blur-sm">
         <button
           type="button"
           onClick={() => go(-1)}
           disabled={index <= 0}
-          className="flex h-14 flex-1 items-center justify-center rounded-xl border border-stone-200 bg-white text-stone-900 shadow-sm hover:bg-stone-50 disabled:opacity-30"
+          className="flex h-14 flex-1 items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--surface-elevated)] text-[var(--text)] shadow-sm hover:bg-[var(--bg-elevated)] disabled:opacity-30"
         >
           <LuChevronLeft className="h-8 w-8" />
         </button>
@@ -244,7 +253,7 @@ export function PerformPage() {
           type="button"
           onClick={() => go(1)}
           disabled={index >= items.length - 1}
-          className="flex h-14 flex-1 items-center justify-center rounded-xl border border-stone-200 bg-white text-stone-900 shadow-sm hover:bg-stone-50 disabled:opacity-30"
+          className="flex h-14 flex-1 items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--surface-elevated)] text-[var(--text)] shadow-sm hover:bg-[var(--bg-elevated)] disabled:opacity-30"
         >
           <LuChevronRight className="h-8 w-8" />
         </button>

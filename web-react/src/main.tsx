@@ -7,6 +7,7 @@ import { BrowserRouter } from 'react-router-dom';
 import { registerSW } from 'virtual:pwa-register';
 
 import { applyNativeShellViewportLock } from './lib/nativeShellViewport';
+import { client } from './lib/appwrite';
 import { initPwaStandaloneHtmlHint } from './features/pwa/utils/pwaEnvironment';
 import { AppRouter } from './app/Router';
 import { AppRouterMain } from './app/RouterMain';
@@ -41,6 +42,9 @@ applyNativeShellViewportLock();
 window.addEventListener('load', () => applyNativeShellViewportLock());
 initPwaStandaloneHtmlHint();
 initAppearance();
+void client.ping().catch((error: unknown) => {
+  console.warn('Appwrite ping failed:', error);
+});
 
 try {
   const osThemeMql = window.matchMedia('(prefers-color-scheme: dark)');

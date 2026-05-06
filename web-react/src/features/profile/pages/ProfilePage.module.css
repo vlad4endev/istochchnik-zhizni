@@ -25,7 +25,7 @@
   width: 7.5rem;
   border-radius: 9999px;
   background-color: var(--profile-media-placeholder-mid);
-  box-shadow: 0 0 0 4px #fff;
+  box-shadow: 0 0 0 4px var(--profile-surface-elevated);
 }
 
 @media (min-width: 640px) {

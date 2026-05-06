@@ -1,10 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useState } from 'react';
+import { type CSSProperties, useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { LuPenLine } from 'react-icons/lu';
 
 import { emitAppToast } from '../../../lib/uiFeedback';
 import { SongListSkeleton } from '@/components/skeletons/SongListSkeleton';
+import { SEMANTIC_COLORS } from '@/lib/designTokens';
 import { useAuthStore } from '../../auth/authStore';
 import { fetchMyVersions } from '../api';
 import { studioEditSongPath, useStudioModuleSurface } from '../studioPaths';
@@ -106,7 +107,11 @@ export function MySongsPage() {
     return <SongListSkeleton />;
   }
   if (q.isError) {
-    return <p className="text-sm text-red-600">Не удалось загрузить список.</p>;
+    return (
+      <p className="text-sm" style={{ color: SEMANTIC_COLORS.accent }}>
+        Не удалось загрузить список.
+      </p>
+    );
   }
 
   const isImportedSelected = (songId: number): boolean => selectedImportedSongIds.includes(songId);
@@ -141,8 +146,22 @@ export function MySongsPage() {
 
   const pageCard =
     surface === 'songbook'
-      ? 'rounded-2xl border border-[var(--border)] bg-[var(--surface-elevated)] p-4 shadow-sm md:p-6'
+      ? 'rounded-2xl border border-[var(--ms-border)] bg-[var(--ms-surface-elevated)] p-4 shadow-sm md:p-6'
       : '';
+
+  const semanticVars: Record<`--${string}`, string> = {
+    '--ms-surface': `var(--surface, ${SEMANTIC_COLORS.surface})`,
+    '--ms-surface-elevated': `var(--surface-elevated, ${SEMANTIC_COLORS.surfaceElevated})`,
+    '--ms-text': `var(--text, ${SEMANTIC_COLORS.text})`,
+    '--ms-text-secondary': `var(--text-secondary, ${SEMANTIC_COLORS.textSecondary})`,
+    '--ms-text-muted': `var(--text-muted, ${SEMANTIC_COLORS.textMuted})`,
+    '--ms-primary': `var(--primary, ${SEMANTIC_COLORS.primary})`,
+    '--ms-primary-dark': `var(--primary-dark, ${SEMANTIC_COLORS.primaryDark})`,
+    '--ms-on-primary': 'var(--text-on-primary, rgb(255 255 255))',
+    '--ms-border': 'var(--border, rgba(0, 0, 0, 0.08))',
+    '--ms-bg-elevated': 'var(--bg-elevated, rgba(0, 0, 0, 0.04))',
+    '--ms-error': SEMANTIC_COLORS.accent,
+  };
 
   const tabBtn = (id: MySongsTab, label: string, hint: string) => (
     <button
@@ -155,8 +174,8 @@ export function MySongsPage() {
       className={[
         'min-h-[44px] flex-1 rounded-xl px-2 py-2 text-center text-xs font-semibold transition-colors sm:text-sm',
         tab === id
-          ? 'bg-[var(--primary)] text-[var(--text-on-primary)] shadow-sm'
-          : 'text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)] hover:text-[var(--text)]',
+          ? 'bg-[var(--ms-primary)] text-[var(--ms-on-primary)] shadow-sm'
+          : 'text-[var(--ms-text-secondary)] hover:bg-[var(--ms-bg-elevated)] hover:text-[var(--ms-text)]',
       ].join(' ')}
     >
       {label}
@@ -164,11 +183,11 @@ export function MySongsPage() {
   );
 
   return (
-    <div className={['mx-auto max-w-3xl space-y-6', pageCard].filter(Boolean).join(' ')}>
-      <header className="space-y-3 border-b border-[var(--border)] pb-5">
+    <div style={semanticVars as CSSProperties} className={['mx-auto max-w-3xl space-y-6', pageCard].filter(Boolean).join(' ')}>
+      <header className="space-y-3 border-b border-[var(--ms-border)] pb-5">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-[var(--text)]">Мои версии</h1>
-          <p className="mt-1 max-w-xl text-sm leading-relaxed text-[var(--text-secondary)]">
+          <h1 className="text-2xl font-bold tracking-tight text-[var(--ms-text)]">Мои версии</h1>
+          <p className="mt-1 max-w-xl text-sm leading-relaxed text-[var(--ms-text-secondary)]">
             Работа с песнями каталога, заготовками без текста и импортированными песнями.
           </p>
         </div>
@@ -181,7 +200,7 @@ export function MySongsPage() {
           </Link>
         </div>
         <div
-          className="flex w-full gap-1 rounded-2xl bg-[var(--bg-elevated)] p-1"
+          className="flex w-full gap-1 rounded-2xl bg-[var(--ms-bg-elevated)] p-1"
           role="tablist"
           aria-label="Разделы «Мои версии»"
         >
@@ -206,25 +225,25 @@ export function MySongsPage() {
       >
         {tab === 'saved' ? (
           <section className="space-y-3">
-            <p className="text-sm text-[var(--text-secondary)]">
+            <p className="text-sm text-[var(--ms-text-secondary)]">
               Это ваши сохранённые правки к песням из общего каталога. Оригинал в песеннике не меняется.
             </p>
-            <div className="grid gap-2 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-3 sm:grid-cols-2">
+            <div className="grid gap-2 rounded-xl border border-[var(--ms-border)] bg-[var(--ms-bg-elevated)] p-3 sm:grid-cols-2">
               <input
                 value={savedSearch}
                 onChange={(e) => setSavedSearch(e.target.value)}
                 placeholder="Поиск по названию"
-                className="min-h-[42px] rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] px-3 text-sm text-[var(--text)] outline-none placeholder:text-[var(--text-muted)]"
+                className="min-h-[42px] rounded-lg border border-[var(--ms-border)] bg-[var(--ms-surface-elevated)] px-3 text-sm text-[var(--ms-text)] outline-none placeholder:text-[var(--ms-text-muted)]"
               />
               <input
                 value={savedKeyFilter}
                 onChange={(e) => setSavedKeyFilter(e.target.value)}
                 placeholder="Фильтр по тональности"
-                className="min-h-[42px] rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] px-3 text-sm text-[var(--text)] outline-none placeholder:text-[var(--text-muted)]"
+                className="min-h-[42px] rounded-lg border border-[var(--ms-border)] bg-[var(--ms-surface-elevated)] px-3 text-sm text-[var(--ms-text)] outline-none placeholder:text-[var(--ms-text-muted)]"
               />
             </div>
             {rows.length === 0 ? (
-              <div className="space-y-3 rounded-xl border border-dashed border-[var(--border)] bg-[var(--bg-elevated)] px-4 py-6 text-sm text-[var(--text-secondary)]">
+              <div className="space-y-3 rounded-xl border border-dashed border-[var(--ms-border)] bg-[var(--ms-bg-elevated)] px-4 py-6 text-sm text-[var(--ms-text-secondary)]">
                 <p>Пока нет сохранённых версий. Откройте песню в песеннике и выберите «В студию».</p>
                 <Link to="/songbook" className="inline-flex font-semibold text-sky-700 hover:text-sky-800">
                   Перейти в песенник →
@@ -233,22 +252,22 @@ export function MySongsPage() {
             ) : (
               <>
                 {filteredRows.length === 0 ? (
-                  <p className="text-sm text-[var(--text-muted)]">По выбранным фильтрам ничего не найдено.</p>
+                  <p className="text-sm text-[var(--ms-text-muted)]">По выбранным фильтрам ничего не найдено.</p>
                 ) : (
                   <ul className="flex flex-col gap-2">
                     {filteredRows.map((v) => (
                       <li key={v.id}>
                         <Link
                           to={studioEditSongPath(surface, Number(v.song_id))}
-                          className="flex min-h-[52px] items-center justify-between gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface-elevated)] px-4 py-3 shadow-sm transition hover:bg-[var(--bg-elevated)]"
+                          className="flex min-h-[52px] items-center justify-between gap-3 rounded-xl border border-[var(--ms-border)] bg-[var(--ms-surface-elevated)] px-4 py-3 shadow-sm transition hover:bg-[var(--ms-bg-elevated)]"
                         >
                           <div className="min-w-0">
-                            <p className="truncate font-medium text-[var(--text)]">{v.song_title}</p>
-                            <p className="mt-0.5 text-xs text-[var(--text-muted)]">
+                            <p className="truncate font-medium text-[var(--ms-text)]">{v.song_title}</p>
+                            <p className="mt-0.5 text-xs text-[var(--ms-text-muted)]">
                               {v.custom_key ?? '—'} · {new Date(v.updated_at).toLocaleString()}
                             </p>
                           </div>
-                          <LuPenLine className="h-5 w-5 shrink-0 text-[var(--text-muted)]" aria-hidden />
+                          <LuPenLine className="h-5 w-5 shrink-0 text-[var(--ms-text-muted)]" aria-hidden />
                         </Link>
                       </li>
                     ))}
@@ -261,31 +280,31 @@ export function MySongsPage() {
 
         {tab === 'missingText' ? (
           <section className="space-y-3">
-            <p className="text-sm text-[var(--text-secondary)]">
+            <p className="text-sm text-[var(--ms-text-secondary)]">
               Это заготовки, которые не отображаются в песеннике. Откройте редактор и добавьте слова/аккорды.
             </p>
             {missingQ.isLoading ? (
               <SongListSkeleton />
             ) : missingQ.isError ? (
-              <p className="text-sm text-red-600">Не удалось загрузить список заготовок.</p>
+              <p className="text-sm text-[var(--ms-error)]">Не удалось загрузить список заготовок.</p>
             ) : (missingQ.data ?? []).length === 0 ? (
-              <p className="text-sm text-[var(--text-muted)]">Заготовок без текста нет.</p>
+              <p className="text-sm text-[var(--ms-text-muted)]">Заготовок без текста нет.</p>
             ) : (
               <ul className="flex flex-col gap-2">
                 {(missingQ.data ?? []).map((s: SongListItem) => (
                   <li
                     key={s.id}
-                    className="flex min-h-[48px] items-center gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface-elevated)] px-4 py-3 shadow-sm"
+                    className="flex min-h-[48px] items-center gap-3 rounded-xl border border-[var(--ms-border)] bg-[var(--ms-surface-elevated)] px-4 py-3 shadow-sm"
                   >
                     <div className="min-w-0 flex-1">
-                      <p className="truncate font-medium text-[var(--text)]">
+                      <p className="truncate font-medium text-[var(--ms-text)]">
                         {s.song_number ?? '—'}. {s.title}
                       </p>
                       <div className="mt-1 flex flex-wrap items-center gap-2">
                         <span className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/15 dark:text-amber-200">
                           нет текста
                         </span>
-                        <span className="text-xs text-[var(--text-muted)]">не опубликовано</span>
+                        <span className="text-xs text-[var(--ms-text-muted)]">не опубликовано</span>
                       </div>
                     </div>
                     <Link
@@ -303,7 +322,7 @@ export function MySongsPage() {
         ) : null}
         {tab === 'imported' ? (
           <section className="space-y-3">
-            <p className="text-sm text-[var(--text-secondary)]">
+            <p className="text-sm text-[var(--ms-text-secondary)]">
               Здесь отображаются импортированные непубликованные песни (включая ранее импортированные). Отредактируйте и нажмите
               «Опубликовать», чтобы песня попала в общий песенник.
             </p>
@@ -312,7 +331,7 @@ export function MySongsPage() {
                 <button
                   type="button"
                   onClick={toggleSelectAllImported}
-                  className="inline-flex min-h-[36px] items-center rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] px-3 text-xs font-semibold text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)]"
+                  className="inline-flex min-h-[36px] items-center rounded-lg border border-[var(--ms-border)] bg-[var(--ms-surface-elevated)] px-3 text-xs font-semibold text-[var(--ms-text-secondary)] hover:bg-[var(--ms-bg-elevated)]"
                 >
                   {selectedImportedCount === importedRows.length ? 'Снять выбор' : 'Выбрать все'}
                 </button>
@@ -329,9 +348,9 @@ export function MySongsPage() {
             {importedQ.isLoading ? (
               <SongListSkeleton />
             ) : importedQ.isError ? (
-              <p className="text-sm text-red-600">Не удалось загрузить импортированные песни.</p>
+              <p className="text-sm text-[var(--ms-error)]">Не удалось загрузить импортированные песни.</p>
             ) : importedRows.length === 0 ? (
-              <p className="text-sm text-[var(--text-muted)]">Нет импортированных черновиков.</p>
+              <p className="text-sm text-[var(--ms-text-muted)]">Нет импортированных черновиков.</p>
             ) : (
               <ul className="flex flex-col gap-2">
                 {importedRows.map((s: SongListItem) => {
@@ -340,7 +359,7 @@ export function MySongsPage() {
                   return (
                     <li
                       key={s.id}
-                      className="flex min-h-[48px] items-center gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface-elevated)] px-4 py-3 shadow-sm"
+                      className="flex min-h-[48px] items-center gap-3 rounded-xl border border-[var(--ms-border)] bg-[var(--ms-surface-elevated)] px-4 py-3 shadow-sm"
                     >
                       {isAdmin ? (
                         <label className="inline-flex min-h-[40px] min-w-[40px] items-center justify-center">
@@ -352,7 +371,7 @@ export function MySongsPage() {
                         </label>
                       ) : null}
                       <div className="min-w-0 flex-1">
-                        <p className="truncate font-medium text-[var(--text)]">
+                        <p className="truncate font-medium text-[var(--ms-text)]">
                           {s.song_number ?? '—'}. {s.title}
                         </p>
                         <div className="mt-1 flex flex-wrap items-center gap-2">
@@ -361,7 +380,7 @@ export function MySongsPage() {
                           >
                             {sourceBadge.text}
                           </span>
-                          <span className="text-xs text-[var(--text-muted)]">черновик</span>
+                          <span className="text-xs text-[var(--ms-text-muted)]">черновик</span>
                           {isMissingText ? (
                             <span className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/15 dark:text-amber-200">
                               нет текста
@@ -380,7 +399,7 @@ export function MySongsPage() {
                         type="button"
                         onClick={() => publishImportedMut.mutate(s)}
                         disabled={publishImportedMut.isPending}
-                        className="inline-flex min-h-[40px] shrink-0 items-center rounded-lg bg-[var(--primary)] px-3 text-sm font-semibold text-[var(--text-on-primary)] hover:bg-[var(--primary-dark)] disabled:opacity-50"
+                        className="inline-flex min-h-[40px] shrink-0 items-center rounded-lg bg-[var(--ms-primary)] px-3 text-sm font-semibold text-[var(--ms-on-primary)] hover:bg-[var(--ms-primary-dark)] disabled:opacity-50"
                       >
                         Опубликовать
                       </button>

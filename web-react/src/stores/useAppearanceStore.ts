@@ -21,6 +21,7 @@ function applyTheme(theme: Theme): void {
   else if (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches) {
     root.classList.add('dark');
   }
+
   syncThemeColorMeta();
 }
 

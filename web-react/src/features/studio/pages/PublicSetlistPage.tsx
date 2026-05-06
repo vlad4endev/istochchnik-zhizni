@@ -2,16 +2,23 @@ import { useQuery } from '@tanstack/react-query';
 import { Link, useParams } from 'react-router-dom';
 
 import { SongListSkeleton } from '@/components/skeletons/SongListSkeleton';
+import { useAppearanceStore } from '@/stores/useAppearanceStore';
 import { LyricsWithChords } from '../../songbook/components/LyricsWithChords';
 import { fetchPublicSetlist } from '../api';
 
 export function PublicSetlistPage() {
   const { token } = useParams<{ token: string }>();
+  const appearanceTheme = useAppearanceStore((state) => state.theme);
   const q = useQuery({
     queryKey: ['public', 'setlist', token],
     queryFn: () => fetchPublicSetlist(token ?? ''),
     enabled: Boolean(token && token.length > 20),
   });
+  const darkThemeEnabled =
+    appearanceTheme === 'dark' ||
+    (appearanceTheme === 'system' &&
+      typeof window !== 'undefined' &&
+      window.matchMedia('(prefers-color-scheme: dark)').matches);
 
   if (!token) {
     return <p className="p-6 text-red-600">Некорректная ссылка</p>;
@@ -42,30 +49,30 @@ export function PublicSetlistPage() {
           </Link>
         </p>
       <header>
-        <h1 className="text-2xl font-bold text-stone-900">{setlist.title}</h1>
+        <h1 className="text-2xl font-bold text-[var(--text)]">{setlist.title}</h1>
         {setlist.event_date && (
-          <p className="text-sm text-stone-500">{setlist.event_date}</p>
+          <p className="text-sm text-[var(--text-muted)]">{setlist.event_date}</p>
         )}
-        <p className="mt-2 text-sm text-stone-600">
+        <p className="mt-2 text-sm text-[var(--text-secondary)]">
           Публичный просмотр — только список и тексты, без редактирования.
         </p>
       </header>
 
       <ol className="space-y-10">
         {items.map((it, idx) => (
-          <li key={it.id} className="scroll-mt-4 border-b border-stone-200 pb-10 last:border-0 last:pb-0">
-            <h2 className="text-lg font-semibold text-stone-900">
+          <li key={it.id} className="scroll-mt-4 border-b border-[var(--border)] pb-10 last:border-0 last:pb-0">
+            <h2 className="text-lg font-semibold text-[var(--text)]">
               {idx + 1}. {it.song.title}
             </h2>
-            <p className="mt-1 text-xs text-stone-500">
+            <p className="mt-1 text-xs text-[var(--text-muted)]">
               Тональность: {it.effective_key ?? it.song.default_key ?? '—'} · BPM:{' '}
               {it.song.tempo ?? '—'}
             </p>
-            <div className="mt-3 font-sans text-base text-stone-800">
+            <div className="mt-3 font-sans text-base text-[var(--text-secondary)]">
               <LyricsWithChords
                 text={it.effective_content || it.song.content || ''}
                 transposeSemitones={0}
-                chordTone="light"
+                chordTone={darkThemeEnabled ? 'dark' : 'light'}
                 className="leading-relaxed"
               />
             </div>

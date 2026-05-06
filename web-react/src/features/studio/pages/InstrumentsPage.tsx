@@ -35,15 +35,15 @@ export function InstrumentsPage() {
 
   return (
     <div className="mx-auto max-w-xl space-y-5">
-      <header className="space-y-2 border-b border-stone-200 pb-5">
-        <h1 className="text-xl font-bold text-stone-900">Инструменты</h1>
-        <p className="text-sm leading-relaxed text-stone-600">
+      <header className="space-y-2 border-b border-[var(--border)] pb-5">
+        <h1 className="text-xl font-bold text-[var(--text)]">Инструменты</h1>
+        <p className="text-sm leading-relaxed text-[var(--text-secondary)]">
           Расширенные настройки в формате JSON (транспонирование по умолчанию, MIDI и т.д.). Обычно этот раздел
           не нужен — меняйте только если знаете, зачем.
         </p>
       </header>
       <textarea
-        className="min-h-[220px] w-full rounded-xl border border-stone-200 bg-stone-50 px-3 py-3 font-mono text-xs text-stone-900 outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
+        className="min-h-[220px] w-full rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-3 font-mono text-xs text-[var(--text)] outline-none placeholder:text-[var(--text-muted)] focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
         value={jsonText}
         onChange={(e) => setJsonText(e.target.value)}
         spellCheck={false}
@@ -60,7 +60,7 @@ export function InstrumentsPage() {
           save.mutate();
         }}
         disabled={save.isPending}
-        className="rounded-lg bg-stone-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-stone-800 disabled:opacity-50"
+        className="rounded-lg bg-[var(--primary)] px-4 py-2.5 text-sm font-semibold text-[var(--text-on-primary)] hover:bg-[var(--primary-dark)] disabled:opacity-50"
       >
         Сохранить
       </button>

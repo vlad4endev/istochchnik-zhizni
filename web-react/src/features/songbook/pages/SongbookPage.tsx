@@ -1,10 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useMemo, useState } from 'react';
+import { type CSSProperties, useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { LuHeart, LuSearch, LuX } from 'react-icons/lu';
 
 import { emitAppToast } from '../../../lib/uiFeedback';
 import { SongListSkeleton } from '@/components/skeletons/SongListSkeleton';
+import { SEMANTIC_COLORS } from '@/lib/designTokens';
 import { keys } from '@/lib/queryKeys';
 import { deleteFavorite, fetchSongs, postFavorite, type SongListQuery } from '../api';
 
@@ -72,14 +73,28 @@ export function SongbookPage() {
     return tabRows;
   }, [query.data, tab]);
 
+  const semanticVars: Record<`--${string}`, string> = {
+    '--sb-surface': `var(--surface, ${SEMANTIC_COLORS.surface})`,
+    '--sb-surface-elevated': `var(--surface-elevated, ${SEMANTIC_COLORS.surfaceElevated})`,
+    '--sb-text': `var(--text, ${SEMANTIC_COLORS.text})`,
+    '--sb-text-secondary': `var(--text-secondary, ${SEMANTIC_COLORS.textSecondary})`,
+    '--sb-text-muted': `var(--text-muted, ${SEMANTIC_COLORS.textMuted})`,
+    '--sb-border': 'var(--border, rgba(0, 0, 0, 0.08))',
+    '--sb-border-hover': 'var(--border-hover, rgba(0, 0, 0, 0.16))',
+    '--sb-primary': `var(--primary, ${SEMANTIC_COLORS.primary})`,
+    '--sb-on-primary': 'var(--text-on-primary, #ffffff)',
+    '--sb-favorite-active': SEMANTIC_COLORS.accent,
+    '--sb-error': SEMANTIC_COLORS.accent,
+  };
+
   if (query.isLoading) {
     return (
-      <div className="mx-auto flex h-full min-h-0 max-w-3xl flex-col text-[var(--text)]">
-        <header className="flex-shrink-0 border-b border-[var(--border)] bg-[var(--surface)]/95 px-0 py-1.5 backdrop-blur">
+      <div style={semanticVars as CSSProperties} className="mx-auto flex h-full min-h-0 max-w-3xl flex-col text-[var(--sb-text)]">
+        <header className="flex-shrink-0 border-b border-[var(--sb-border)] bg-[var(--sb-surface)]/95 px-0 py-1.5 backdrop-blur">
           <div className="flex items-center gap-2">
             <div className="relative min-w-0 flex-1">
               <LuSearch
-                className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--text-muted)]"
+                className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--sb-text-muted)]"
                 aria-hidden
               />
               <input
@@ -88,13 +103,13 @@ export function SongbookPage() {
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Поиск по названию или тексту…"
                 autoComplete="off"
-                className="w-full min-h-[40px] rounded-xl border border-[var(--border)] bg-[var(--surface-elevated)] py-2 pl-9 pr-9 text-sm text-[var(--text)] outline-none placeholder:text-[var(--text-muted)] focus:border-[var(--border-hover)]"
+                className="w-full min-h-[40px] rounded-xl border border-[var(--sb-border)] bg-[var(--sb-surface-elevated)] py-2 pl-9 pr-9 text-sm text-[var(--sb-text)] outline-none placeholder:text-[var(--sb-text-muted)] focus:border-[var(--sb-border-hover)]"
               />
               {search.trim() ? (
                 <button
                   type="button"
                   onClick={() => setSearch('')}
-                  className="absolute right-1.5 top-1/2 inline-flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-md text-[var(--text-muted)] hover:bg-[var(--surface)] hover:text-[var(--text-secondary)]"
+                  className="absolute right-1.5 top-1/2 inline-flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-md text-[var(--sb-text-muted)] hover:bg-[var(--sb-surface)] hover:text-[var(--sb-text-secondary)]"
                   aria-label="Очистить поиск"
                 >
                   <LuX className="h-4 w-4" />
@@ -102,13 +117,13 @@ export function SongbookPage() {
               ) : null}
             </div>
           </div>
-          <div className="mt-1.5 inline-flex w-full rounded-xl bg-[var(--surface)] p-1 dark:bg-[var(--bg-interactive)]">
+          <div className="mt-1.5 inline-flex w-full rounded-xl bg-[var(--sb-surface)] p-1 dark:bg-[var(--bg-interactive)]">
             <button
               type="button"
               onClick={() => setTab('catalog')}
               className={[
                 'min-h-[36px] flex-1 rounded-lg px-3 text-center text-sm font-semibold transition-colors',
-                tab === 'catalog' ? 'bg-[var(--primary)] text-[var(--text-on-primary)]' : 'text-[var(--text-secondary)]',
+                tab === 'catalog' ? 'bg-[var(--sb-primary)] text-[var(--sb-on-primary)]' : 'text-[var(--sb-text-secondary)]',
               ].join(' ')}
             >
               Сборник
@@ -118,7 +133,7 @@ export function SongbookPage() {
               onClick={() => setTab('favorites')}
               className={[
                 'min-h-[36px] flex-1 rounded-lg px-3 text-center text-sm font-semibold transition-colors',
-                tab === 'favorites' ? 'bg-[var(--primary)] text-[var(--text-on-primary)]' : 'text-[var(--text-secondary)]',
+                tab === 'favorites' ? 'bg-[var(--sb-primary)] text-[var(--sb-on-primary)]' : 'text-[var(--sb-text-secondary)]',
               ].join(' ')}
             >
               Избранное
@@ -131,12 +146,12 @@ export function SongbookPage() {
   }
   if (query.isError) {
     return (
-      <div className="mx-auto flex h-full min-h-0 max-w-3xl flex-col gap-2 text-[var(--text)]">
-        <header className="flex-shrink-0 border-b border-[var(--border)] bg-[var(--surface)]/95 px-0 py-1.5 backdrop-blur">
+      <div style={semanticVars as CSSProperties} className="mx-auto flex h-full min-h-0 max-w-3xl flex-col gap-2 text-[var(--sb-text)]">
+        <header className="flex-shrink-0 border-b border-[var(--sb-border)] bg-[var(--sb-surface)]/95 px-0 py-1.5 backdrop-blur">
           <div className="flex items-center gap-2">
             <div className="relative min-w-0 flex-1">
               <LuSearch
-                className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--text-muted)]"
+                className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--sb-text-muted)]"
                 aria-hidden
               />
               <input
@@ -145,13 +160,13 @@ export function SongbookPage() {
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Поиск по названию или тексту…"
                 autoComplete="off"
-                className="w-full min-h-[40px] rounded-xl border border-[var(--border)] bg-[var(--surface-elevated)] py-2 pl-9 pr-9 text-sm text-[var(--text)] outline-none placeholder:text-[var(--text-muted)] focus:border-[var(--border-hover)]"
+                className="w-full min-h-[40px] rounded-xl border border-[var(--sb-border)] bg-[var(--sb-surface-elevated)] py-2 pl-9 pr-9 text-sm text-[var(--sb-text)] outline-none placeholder:text-[var(--sb-text-muted)] focus:border-[var(--sb-border-hover)]"
               />
               {search.trim() ? (
                 <button
                   type="button"
                   onClick={() => setSearch('')}
-                  className="absolute right-1.5 top-1/2 inline-flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-md text-[var(--text-muted)] hover:bg-[var(--surface)] hover:text-[var(--text-secondary)]"
+                  className="absolute right-1.5 top-1/2 inline-flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-md text-[var(--sb-text-muted)] hover:bg-[var(--sb-surface)] hover:text-[var(--sb-text-secondary)]"
                   aria-label="Очистить поиск"
                 >
                   <LuX className="h-4 w-4" />
@@ -159,13 +174,13 @@ export function SongbookPage() {
               ) : null}
             </div>
           </div>
-          <div className="mt-1.5 inline-flex w-full rounded-xl bg-[var(--surface)] p-1 dark:bg-[var(--bg-interactive)]">
+          <div className="mt-1.5 inline-flex w-full rounded-xl bg-[var(--sb-surface)] p-1 dark:bg-[var(--bg-interactive)]">
             <button
               type="button"
               onClick={() => setTab('catalog')}
               className={[
                 'min-h-[36px] flex-1 rounded-lg px-3 text-center text-sm font-semibold transition-colors',
-                tab === 'catalog' ? 'bg-[var(--primary)] text-[var(--text-on-primary)]' : 'text-[var(--text-secondary)]',
+                tab === 'catalog' ? 'bg-[var(--sb-primary)] text-[var(--sb-on-primary)]' : 'text-[var(--sb-text-secondary)]',
               ].join(' ')}
             >
               Сборник
@@ -175,25 +190,25 @@ export function SongbookPage() {
               onClick={() => setTab('favorites')}
               className={[
                 'min-h-[36px] flex-1 rounded-lg px-3 text-center text-sm font-semibold transition-colors',
-                tab === 'favorites' ? 'bg-[var(--primary)] text-[var(--text-on-primary)]' : 'text-[var(--text-secondary)]',
+                tab === 'favorites' ? 'bg-[var(--sb-primary)] text-[var(--sb-on-primary)]' : 'text-[var(--sb-text-secondary)]',
               ].join(' ')}
             >
               Избранное
             </button>
           </div>
         </header>
-        <p className="text-sm text-red-600">Не удалось загрузить каталог.</p>
+        <p className="text-sm text-[var(--sb-error)]">Не удалось загрузить каталог.</p>
       </div>
     );
   }
 
   return (
-    <div className="mx-auto flex h-full min-h-0 max-w-3xl flex-col text-[var(--text)]">
-      <header className="flex-shrink-0 border-b border-[var(--border)] bg-[var(--surface)]/95 px-0 py-1.5 backdrop-blur">
+    <div style={semanticVars as CSSProperties} className="mx-auto flex h-full min-h-0 max-w-3xl flex-col text-[var(--sb-text)]">
+      <header className="flex-shrink-0 border-b border-[var(--sb-border)] bg-[var(--sb-surface)]/95 px-0 py-1.5 backdrop-blur">
         <div className="flex items-center gap-2">
           <div className="relative min-w-0 flex-1">
             <LuSearch
-              className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--text-muted)]"
+              className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--sb-text-muted)]"
               aria-hidden
             />
             <input
@@ -202,13 +217,13 @@ export function SongbookPage() {
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Поиск по названию или тексту…"
               autoComplete="off"
-              className="w-full min-h-[40px] rounded-xl border border-[var(--border)] bg-[var(--surface-elevated)] py-2 pl-9 pr-9 text-sm text-[var(--text)] outline-none placeholder:text-[var(--text-muted)] focus:border-[var(--border-hover)]"
+              className="w-full min-h-[40px] rounded-xl border border-[var(--sb-border)] bg-[var(--sb-surface-elevated)] py-2 pl-9 pr-9 text-sm text-[var(--sb-text)] outline-none placeholder:text-[var(--sb-text-muted)] focus:border-[var(--sb-border-hover)]"
             />
             {search.trim() ? (
               <button
                 type="button"
                 onClick={() => setSearch('')}
-                className="absolute right-1.5 top-1/2 inline-flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-md text-[var(--text-muted)] hover:bg-[var(--surface)] hover:text-[var(--text-secondary)]"
+                className="absolute right-1.5 top-1/2 inline-flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-md text-[var(--sb-text-muted)] hover:bg-[var(--sb-surface)] hover:text-[var(--sb-text-secondary)]"
                 aria-label="Очистить поиск"
               >
                 <LuX className="h-4 w-4" />
@@ -217,13 +232,13 @@ export function SongbookPage() {
           </div>
         </div>
 
-        <div className="mt-1.5 inline-flex w-full rounded-xl bg-[var(--surface)] p-1 dark:bg-[var(--bg-interactive)]">
+        <div className="mt-1.5 inline-flex w-full rounded-xl bg-[var(--sb-surface)] p-1 dark:bg-[var(--bg-interactive)]">
           <button
             type="button"
             onClick={() => setTab('catalog')}
             className={[
               'min-h-[36px] flex-1 rounded-lg px-3 text-center text-sm font-semibold transition-colors',
-              tab === 'catalog' ? 'bg-[var(--primary)] text-[var(--text-on-primary)]' : 'text-[var(--text-secondary)]',
+              tab === 'catalog' ? 'bg-[var(--sb-primary)] text-[var(--sb-on-primary)]' : 'text-[var(--sb-text-secondary)]',
             ].join(' ')}
           >
             Сборник
@@ -233,7 +248,7 @@ export function SongbookPage() {
             onClick={() => setTab('favorites')}
             className={[
               'min-h-[36px] flex-1 rounded-lg px-3 text-center text-sm font-semibold transition-colors',
-              tab === 'favorites' ? 'bg-[var(--primary)] text-[var(--text-on-primary)]' : 'text-[var(--text-secondary)]',
+              tab === 'favorites' ? 'bg-[var(--sb-primary)] text-[var(--sb-on-primary)]' : 'text-[var(--sb-text-secondary)]',
             ].join(' ')}
           >
             Избранное
@@ -242,23 +257,23 @@ export function SongbookPage() {
       </header>
 
       <div className="min-h-0 flex-1 overflow-y-auto [webkit-overflow-scrolling:touch] pt-1">
-      <ul className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface-elevated)]">
+      <ul className="overflow-hidden rounded-xl border border-[var(--sb-border)] bg-[var(--sb-surface-elevated)]">
         {rows.map((s, idx) => (
-          <li key={s.id} className="border-b border-[var(--border)] last:border-b-0">
+          <li key={s.id} className="border-b border-[var(--sb-border)] last:border-b-0">
             <div className="flex min-h-[44px] items-center gap-2 px-2.5">
               <Link
                 to={`/songbook/${s.id}`}
                 className="flex min-h-[44px] min-w-0 flex-1 items-center gap-2.5"
               >
-                <span className="w-[22px] shrink-0 text-right text-xs font-medium text-[var(--text-secondary)]">
+                <span className="w-[22px] shrink-0 text-right text-xs font-medium text-[var(--sb-text-secondary)]">
                   {s.song_number ?? idx + 1}
                 </span>
                 <div className="min-w-0">
-                  <h2 className="truncate text-sm font-medium text-[var(--text)]">{s.title}</h2>
+                  <h2 className="truncate text-sm font-medium text-[var(--sb-text)]">{s.title}</h2>
                 </div>
               </Link>
               {s.default_key ? (
-                <span className="inline-flex h-6 min-w-[26px] shrink-0 items-center justify-center rounded-full bg-[var(--surface)] px-2 text-xs font-semibold text-[var(--primary)]">
+                <span className="inline-flex h-6 min-w-[26px] shrink-0 items-center justify-center rounded-full bg-[var(--sb-surface)] px-2 text-xs font-semibold text-[var(--sb-primary)]">
                   {s.default_key}
                 </span>
               ) : null}
@@ -268,7 +283,9 @@ export function SongbookPage() {
                 disabled={favoriteMut.isPending}
                 className={[
                   'inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-colors',
-                  s.is_favorite ? 'text-[#D64035]' : 'text-[var(--text-muted)] hover:text-[var(--text-secondary)]',
+                  s.is_favorite
+                    ? 'text-[var(--sb-favorite-active)]'
+                    : 'text-[var(--sb-text-muted)] hover:text-[var(--sb-text-secondary)]',
                 ].join(' ')}
                 aria-label={s.is_favorite ? 'Убрать из избранного' : 'Добавить в избранное'}
               >
@@ -280,7 +297,7 @@ export function SongbookPage() {
       </ul>
 
       {rows.length === 0 ? (
-        <p className="rounded-xl border border-[var(--border)] bg-[var(--surface-elevated)] py-10 text-center text-sm text-[var(--text-secondary)]">
+        <p className="rounded-xl border border-[var(--sb-border)] bg-[var(--sb-surface-elevated)] py-10 text-center text-sm text-[var(--sb-text-secondary)]">
           {tab === 'favorites'
             ? 'В избранном пока нет песен.'
             : debouncedSearch.trim()

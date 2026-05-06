@@ -128,23 +128,23 @@ export function SetlistDetailPage() {
 
   const pageCard =
     surface === 'songbook'
-      ? 'rounded-2xl border border-stone-200 bg-white p-4 shadow-sm md:p-6'
+      ? 'rounded-2xl border border-[var(--border)] bg-[var(--surface-elevated)] p-4 shadow-sm md:p-6'
       : '';
 
   return (
     <div className={['mx-auto max-w-3xl space-y-8', pageCard].filter(Boolean).join(' ')}>
       <Link
         to={studioSetlistsIndexPath(surface)}
-        className="inline-flex items-center gap-1 text-sm font-medium text-stone-600 hover:text-sky-700"
+        className="inline-flex items-center gap-1 text-sm font-medium text-[var(--text-secondary)] hover:text-sky-700"
       >
         <LuChevronLeft className="h-4 w-4" aria-hidden />
         Все сетлисты
       </Link>
 
-      <div className="space-y-4 border-b border-stone-200 pb-5">
+      <div className="space-y-4 border-b border-[var(--border)] pb-5">
         <div className="min-w-0">
-          <h1 className="text-xl font-bold text-stone-900">{meta?.title ?? 'Сетлист'}</h1>
-          <p className="mt-1 text-sm text-stone-600">
+          <h1 className="text-xl font-bold text-[var(--text)]">{meta?.title ?? 'Сетлист'}</h1>
+          <p className="mt-1 text-sm text-[var(--text-secondary)]">
             Сначала соберите программу, затем используйте режим выступления или экспорт PDF.
           </p>
         </div>
@@ -172,7 +172,7 @@ export function SetlistDetailPage() {
               });
             }}
             disabled={!itemsQ.data?.length}
-            className="inline-flex min-h-[44px] items-center gap-2 rounded-lg border border-stone-300 bg-white px-4 py-2 text-sm font-medium text-stone-800 shadow-sm hover:bg-stone-50 disabled:opacity-40"
+            className="inline-flex min-h-[44px] items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] px-4 py-2 text-sm font-medium text-[var(--text-secondary)] shadow-sm hover:bg-[var(--bg-elevated)] disabled:opacity-40"
           >
             <LuFileDown className="h-4 w-4 shrink-0" aria-hidden />
             Скачать PDF
@@ -181,19 +181,19 @@ export function SetlistDetailPage() {
       </div>
 
       <section className="space-y-3" aria-labelledby="setlist-build-heading">
-        <h2 id="setlist-build-heading" className="text-sm font-semibold text-stone-900">
+        <h2 id="setlist-build-heading" className="text-sm font-semibold text-[var(--text)]">
           Сборка программы
         </h2>
 
-        <details className="rounded-xl border border-stone-200 bg-stone-50/80" open={Boolean(meta?.is_public)}>
-          <summary className="cursor-pointer list-none px-4 py-3 text-sm font-medium text-stone-800 marker:hidden [&::-webkit-details-marker]:hidden">
+        <details className="rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)]" open={Boolean(meta?.is_public)}>
+          <summary className="cursor-pointer list-none px-4 py-3 text-sm font-medium text-[var(--text-secondary)] marker:hidden [&::-webkit-details-marker]:hidden">
             Публичная ссылка для группы
           </summary>
-          <div className="border-t border-stone-200 px-4 pb-4 pt-2">
-            <label className="flex cursor-pointer items-center gap-2 text-sm text-stone-700">
+          <div className="border-t border-[var(--border)] px-4 pb-4 pt-2">
+            <label className="flex cursor-pointer items-center gap-2 text-sm text-[var(--text-secondary)]">
               <input
                 type="checkbox"
-                className="rounded border-stone-300 text-sky-600 focus:ring-sky-500"
+                className="rounded border-[var(--border)] text-sky-600 focus:ring-sky-500"
                 checked={Boolean(meta?.is_public)}
                 onChange={(e) => publicMut.mutate(e.target.checked)}
                 disabled={publicMut.isPending || !meta}
@@ -202,12 +202,12 @@ export function SetlistDetailPage() {
             </label>
             {meta?.is_public && shareUrl && (
               <div className="mt-3 flex flex-wrap items-center gap-2">
-                <code className="max-w-full truncate rounded-lg border border-stone-200 bg-white px-2 py-1.5 text-xs text-sky-800">
+                <code className="max-w-full truncate rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] px-2 py-1.5 text-xs text-sky-700">
                   {shareUrl}
                 </code>
                 <button
                   type="button"
-                  className="inline-flex items-center gap-1 rounded-lg border border-stone-300 bg-white px-2 py-1.5 text-xs font-medium text-stone-800 hover:bg-stone-50"
+                  className="inline-flex items-center gap-1 rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] px-2 py-1.5 text-xs font-medium text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)]"
                   onClick={() => void navigator.clipboard.writeText(shareUrl)}
                 >
                   <LuCopy className="h-3 w-3" />
@@ -218,16 +218,16 @@ export function SetlistDetailPage() {
           </div>
         </details>
 
-        <div className="rounded-xl border border-stone-200 bg-white p-4 shadow-sm">
-          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-stone-500">Добавить песню</p>
+        <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-elevated)] p-4 shadow-sm">
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">Добавить песню</p>
           <div className="relative mb-3">
-            <LuSearch className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-stone-400" />
+            <LuSearch className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--text-muted)]" />
             <input
               type="search"
               value={songSearch}
               onChange={(e) => setSongSearch(e.target.value)}
               placeholder="Поиск по названию…"
-              className="w-full rounded-lg border border-stone-200 bg-stone-50 py-2.5 pl-10 pr-3 text-sm text-stone-900 outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
+              className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] py-2.5 pl-10 pr-3 text-sm text-[var(--text)] outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
             />
           </div>
           {songsQ.isLoading && (
@@ -242,7 +242,7 @@ export function SetlistDetailPage() {
             </p>
           )}
           {!songsQ.isLoading && !songsQ.isError && songs.length === 0 && (
-            <p className="text-sm text-stone-600">
+            <p className="text-sm text-[var(--text-secondary)]">
               В песеннике пока нет песен — сначала добавьте их в разделе{' '}
               <Link to={songbookHome} className="font-semibold text-sky-700 hover:text-sky-800">
                 Песенник
@@ -252,7 +252,7 @@ export function SetlistDetailPage() {
           )}
           <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
             <select
-              className="min-h-[44px] flex-1 rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm text-stone-900 outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100 disabled:opacity-50"
+              className="min-h-[44px] flex-1 rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] px-3 py-2 text-sm text-[var(--text)] outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100 disabled:opacity-50"
               value={pickSong}
               onChange={(e) => setPickSong(e.target.value)}
               disabled={songsQ.isLoading || songsQ.isError || songs.length === 0}
@@ -264,10 +264,10 @@ export function SetlistDetailPage() {
                 </option>
               ))}
             </select>
-            <label className="flex min-h-[44px] cursor-pointer items-center gap-2 text-sm text-stone-600">
+            <label className="flex min-h-[44px] cursor-pointer items-center gap-2 text-sm text-[var(--text-secondary)]">
               <input
                 type="checkbox"
-                className="rounded border-stone-300 text-sky-600 focus:ring-sky-500"
+                className="rounded border-[var(--border)] text-sky-600 focus:ring-sky-500"
                 checked={useMyVersion}
                 onChange={(e) => setUseMyVersion(e.target.checked)}
                 disabled={!pickSong || !hasVersionFor(pickSong)}
@@ -287,14 +287,14 @@ export function SetlistDetailPage() {
       </section>
 
       <section className="space-y-3" aria-labelledby="setlist-order-heading">
-        <h2 id="setlist-order-heading" className="text-sm font-semibold text-stone-900">
+        <h2 id="setlist-order-heading" className="text-sm font-semibold text-[var(--text)]">
           Порядок в программе
         </h2>
-        <p className="text-xs text-stone-500">
+        <p className="text-xs text-[var(--text-muted)]">
           Стрелки меняют порядок. Заметки для группы — только в режиме выступления (вошедшие пользователи), не в
           публичной ссылке.
         </p>
-        <ol className="list-decimal space-y-2 pl-5 text-stone-800">
+        <ol className="list-decimal space-y-2 pl-5 text-[var(--text-secondary)]">
           {itemsQ.isLoading && (
             <li className="-ml-1 list-none space-y-2">
               <SkeletonBox width="52%" height="13px" />
@@ -303,7 +303,7 @@ export function SetlistDetailPage() {
             </li>
           )}
           {!itemsQ.isLoading && (itemsQ.data ?? []).length === 0 && (
-            <li className="-ml-1 list-none rounded-xl border border-dashed border-stone-300 py-8 pl-4 text-sm text-stone-600">
+            <li className="-ml-1 list-none rounded-xl border border-dashed border-[var(--border)] py-8 pl-4 text-sm text-[var(--text-secondary)]">
               Пока пусто — выберите песню выше и нажмите «Добавить».
             </li>
           )}
@@ -315,13 +315,13 @@ export function SetlistDetailPage() {
             return (
               <li
                 key={it.id}
-                className="rounded-xl border border-stone-200 bg-white py-3 pr-3 pl-3 shadow-sm"
+                className="rounded-xl border border-[var(--border)] bg-[var(--surface-elevated)] py-3 pr-3 pl-3 shadow-sm"
               >
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-xs font-medium text-stone-500">{idx + 1}.</span>
-                      <span className="font-semibold text-stone-900">{it.song.title}</span>
+                      <span className="text-xs font-medium text-[var(--text-muted)]">{idx + 1}.</span>
+                      <span className="font-semibold text-[var(--text)]">{it.song.title}</span>
                       {it.studio_version_id ? (
                         <span className="text-xs font-medium text-amber-700">моя версия</span>
                       ) : null}
@@ -331,7 +331,7 @@ export function SetlistDetailPage() {
                         </span>
                       ) : null}
                     </div>
-                    <p className="mt-1 font-mono text-xs text-stone-500 line-clamp-2">
+                    <p className="mt-1 font-mono text-xs text-[var(--text-muted)] line-clamp-2">
                       {it.effective_content_preview}
                     </p>
                   </div>
@@ -341,7 +341,7 @@ export function SetlistDetailPage() {
                         type="button"
                         disabled={idx <= 0 || reorderMut.isPending}
                         onClick={() => moveItem(idx, -1)}
-                        className="rounded-lg border border-stone-200 p-2 text-stone-600 hover:bg-stone-50 disabled:opacity-30"
+                        className="rounded-lg border border-[var(--border)] p-2 text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)] disabled:opacity-30"
                         aria-label="Выше"
                       >
                         <LuArrowUp className="h-4 w-4" />
@@ -350,7 +350,7 @@ export function SetlistDetailPage() {
                         type="button"
                         disabled={idx >= (itemsQ.data ?? []).length - 1 || reorderMut.isPending}
                         onClick={() => moveItem(idx, 1)}
-                        className="rounded-lg border border-stone-200 p-2 text-stone-600 hover:bg-stone-50 disabled:opacity-30"
+                        className="rounded-lg border border-[var(--border)] p-2 text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)] disabled:opacity-30"
                         aria-label="Ниже"
                       >
                         <LuArrowDown className="h-4 w-4" />

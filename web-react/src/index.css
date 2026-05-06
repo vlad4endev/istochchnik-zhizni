@@ -428,14 +428,19 @@ html.dark .text-gray-700 {
 
 html.dark .text-stone-600,
 html.dark .text-stone-500,
+html.dark .text-stone-400,
 html.dark .text-zinc-600,
 html.dark .text-zinc-500,
+html.dark .text-zinc-400,
 html.dark .text-neutral-600,
 html.dark .text-neutral-500,
+html.dark .text-neutral-400,
 html.dark .text-slate-600,
 html.dark .text-slate-500,
+html.dark .text-slate-400,
 html.dark .text-gray-600,
-html.dark .text-gray-500 {
+html.dark .text-gray-500,
+html.dark .text-gray-400 {
   color: color-mix(in srgb, var(--text-secondary) 78%, var(--text) 22%) !important;
 }
 
@@ -457,9 +462,13 @@ html.dark .bg-slate-100 {
 }
 
 html.dark .bg-stone-200,
+html.dark .bg-stone-300,
 html.dark .bg-zinc-200,
+html.dark .bg-zinc-300,
 html.dark .bg-neutral-200,
+html.dark .bg-neutral-300,
 html.dark .bg-gray-200,
+html.dark .bg-gray-300,
 html.dark .bg-slate-200 {
   background-color: var(--bg-hover) !important;
 }
@@ -467,31 +476,46 @@ html.dark .bg-slate-200 {
 html.dark .border-stone-100,
 html.dark .border-stone-200,
 html.dark .border-stone-300,
+html.dark .border-stone-400,
+html.dark .border-stone-500,
 html.dark .border-zinc-100,
 html.dark .border-zinc-200,
 html.dark .border-zinc-300,
+html.dark .border-zinc-400,
+html.dark .border-zinc-500,
 html.dark .border-neutral-100,
 html.dark .border-neutral-200,
 html.dark .border-neutral-300,
+html.dark .border-neutral-400,
+html.dark .border-neutral-500,
 html.dark .border-slate-100,
 html.dark .border-slate-200,
 html.dark .border-slate-300,
+html.dark .border-slate-400,
+html.dark .border-slate-500,
 html.dark .border-gray-100,
 html.dark .border-gray-200,
-html.dark .border-gray-300 {
+html.dark .border-gray-300,
+html.dark .border-gray-400,
+html.dark .border-gray-500 {
   border-color: var(--border) !important;
 }
 
 html.dark .divide-stone-100 > :not([hidden]) ~ :not([hidden]),
 html.dark .divide-stone-200 > :not([hidden]) ~ :not([hidden]),
+html.dark .divide-stone-300 > :not([hidden]) ~ :not([hidden]),
 html.dark .divide-zinc-100 > :not([hidden]) ~ :not([hidden]),
 html.dark .divide-zinc-200 > :not([hidden]) ~ :not([hidden]),
+html.dark .divide-zinc-300 > :not([hidden]) ~ :not([hidden]),
 html.dark .divide-neutral-100 > :not([hidden]) ~ :not([hidden]),
 html.dark .divide-neutral-200 > :not([hidden]) ~ :not([hidden]),
+html.dark .divide-neutral-300 > :not([hidden]) ~ :not([hidden]),
 html.dark .divide-slate-100 > :not([hidden]) ~ :not([hidden]),
 html.dark .divide-slate-200 > :not([hidden]) ~ :not([hidden]),
+html.dark .divide-slate-300 > :not([hidden]) ~ :not([hidden]),
 html.dark .divide-gray-100 > :not([hidden]) ~ :not([hidden]),
-html.dark .divide-gray-200 > :not([hidden]) ~ :not([hidden]) {
+html.dark .divide-gray-200 > :not([hidden]) ~ :not([hidden]),
+html.dark .divide-gray-300 > :not([hidden]) ~ :not([hidden]) {
   border-color: var(--border) !important;
 }
 
@@ -510,15 +534,33 @@ html.dark .placeholder\:text-slate-500::placeholder {
 
 html.dark .ring-stone-200,
 html.dark .ring-stone-300,
+html.dark .ring-stone-400,
+html.dark .ring-stone-500,
 html.dark .ring-zinc-200,
 html.dark .ring-zinc-300,
+html.dark .ring-zinc-400,
+html.dark .ring-zinc-500,
 html.dark .ring-neutral-200,
 html.dark .ring-neutral-300,
+html.dark .ring-neutral-400,
+html.dark .ring-neutral-500,
 html.dark .ring-gray-200,
 html.dark .ring-gray-300,
+html.dark .ring-gray-400,
+html.dark .ring-gray-500,
 html.dark .ring-slate-200,
-html.dark .ring-slate-300 {
+html.dark .ring-slate-300,
+html.dark .ring-slate-400,
+html.dark .ring-slate-500 {
   --tw-ring-color: var(--border) !important;
+}
+
+html.dark [class*='bg-white/'],
+html.dark [class*='bg-stone-50/'],
+html.dark [class*='bg-stone-100/'],
+html.dark [class*='bg-zinc-50/'],
+html.dark [class*='bg-zinc-100/'] {
+  background-color: color-mix(in srgb, var(--surface-elevated) 86%, transparent) !important;
 }
 
 #root,
@@ -725,6 +767,51 @@ nav[aria-label='Основная навигация'] svg {
   ::-webkit-scrollbar {
     display: none;
   }
+}
+
+/* Dashboard: normalize heavy custom palette in dark accessibility themes */
+html.dark .dashboard-adaptive section,
+html.dark .dashboard-adaptive article,
+html.dark .dashboard-adaptive details,
+html.dark .dashboard-adaptive .dashboard-sheet {
+  border-color: var(--border) !important;
+}
+
+html.dark .dashboard-adaptive section[class*='bg-gradient-to-br'],
+html.dark .dashboard-adaptive button[class*='bg-gradient-to-br'],
+html.dark .dashboard-adaptive div[class*='bg-gradient-to-br'] {
+  background: var(--bg-elevated) !important;
+}
+
+html.dark .dashboard-adaptive section[class*='bg-white'],
+html.dark .dashboard-adaptive button[class*='bg-white'],
+html.dark .dashboard-adaptive div[class*='bg-white'],
+html.dark .dashboard-adaptive .dashboard-sheet {
+  background: var(--surface-elevated) !important;
+}
+
+html.dark .dashboard-adaptive [class*='text-stone-900'],
+html.dark .dashboard-adaptive [class*='text-stone-800'],
+html.dark .dashboard-adaptive [class*='text-\\[#1a1a1a\\]'],
+html.dark .dashboard-adaptive [class*='text-\\[#3D1520\\]'],
+html.dark .dashboard-adaptive [class*='text-\\[#1A2560\\]'],
+html.dark .dashboard-adaptive [class*='text-\\[#0A2E18\\]'],
+html.dark .dashboard-adaptive [class*='text-\\[#3D2800\\]'] {
+  color: var(--text) !important;
+}
+
+html.dark .dashboard-adaptive [class*='text-stone-700'],
+html.dark .dashboard-adaptive [class*='text-stone-600'],
+html.dark .dashboard-adaptive [class*='text-stone-500'],
+html.dark .dashboard-adaptive [class*='text-\\[#C23D57\\]'],
+html.dark .dashboard-adaptive [class*='text-\\[#3042A8\\]'],
+html.dark .dashboard-adaptive [class*='text-\\[#4A5FD5\\]'],
+html.dark .dashboard-adaptive [class*='text-\\[#9A6200\\]'],
+html.dark .dashboard-adaptive [class*='text-\\[#B87800\\]'],
+html.dark .dashboard-adaptive [class*='text-\\[#0F6636\\]'],
+html.dark .dashboard-adaptive [class*='text-\\[#1A9A55\\]'],
+html.dark .dashboard-adaptive [class*='text-\\[#0A5A4C\\]'] {
+  color: var(--text-secondary) !important;
 }
 
 /* Safer adaptive defaults across content-heavy sections */

@@ -1,11 +1,11 @@
 import { createTheme } from '@mantine/core';
 
-import { BRAND_COLORS, TYPOGRAPHY } from './designTokens';
+import { BRAND_COLORS, COMPONENT_TOKENS, RADII, TYPOGRAPHY } from './designTokens';
 
 export const theme = createTheme({
   primaryColor: 'brand',
   colors: { brand: BRAND_COLORS },
-  defaultRadius: 'sm',
+  defaultRadius: RADII.default,
   fontFamily: TYPOGRAPHY.fontFamily,
   fontFamilyMonospace: TYPOGRAPHY.fontFamilyMonospace,
   headings: {
@@ -13,12 +13,23 @@ export const theme = createTheme({
     fontWeight: TYPOGRAPHY.headingsFontWeight,
   },
   components: {
-    Button: { defaultProps: { radius: 'sm' } },
-    TextInput: { defaultProps: { radius: 'sm' } },
-    Select: { defaultProps: { radius: 'sm' } },
-    Card: { defaultProps: { radius: 'md', shadow: 'xs', withBorder: true } },
-    Table: { defaultProps: { striped: true, highlightOnHover: true } },
-    Badge: { defaultProps: { radius: 'sm' } },
-    NavLink: { defaultProps: { variant: 'subtle' } },
+    Button: { defaultProps: { radius: RADII.button } },
+    TextInput: { defaultProps: { radius: RADII.input } },
+    Select: { defaultProps: { radius: RADII.input } },
+    Card: {
+      defaultProps: {
+        radius: RADII.card,
+        shadow: COMPONENT_TOKENS.cardShadow,
+        withBorder: COMPONENT_TOKENS.cardWithBorder,
+      },
+    },
+    Table: {
+      defaultProps: {
+        striped: COMPONENT_TOKENS.tableStriped,
+        highlightOnHover: COMPONENT_TOKENS.tableHighlightOnHover,
+      },
+    },
+    Badge: { defaultProps: { radius: RADII.badge } },
+    NavLink: { defaultProps: { variant: COMPONENT_TOKENS.navLinkVariant } },
   },
 });
