@@ -297,6 +297,9 @@ export default defineConfig(({ mode }) => {
       port: 4173,
       proxy: apiProxy,
     },
+    css: {
+      postcss: './postcss.config.cjs',
+    },
     build: {
       outDir: 'dist',
       assetsDir: 'assets',

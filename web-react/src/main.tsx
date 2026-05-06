@@ -1,4 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { MantineProvider } from '@mantine/core';
+import { Notifications } from '@mantine/notifications';
 import React, { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
@@ -15,6 +17,9 @@ import { getAppVariant } from './lib/appVariant';
 import { useAppUpdate } from './hooks/useAppUpdate';
 import { usePwaStore, type BeforeInstallPromptEvent } from './stores/pwaStore';
 import { initAppearance, useAppearanceStore } from './stores/useAppearanceStore';
+import { theme } from './lib/theme';
+import '@mantine/core/styles.css';
+import '@mantine/notifications/styles.css';
 import './index.css';
 import './styles/mobile.css';
 
@@ -131,17 +136,20 @@ if (typeof window !== 'undefined') {
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <div className="flex min-h-0 w-full max-w-full flex-1 flex-col">
-      <QueryClientProvider client={queryClient}>
-        <PwaUpdateListener />
-        <TopLoader />
-        <BrowserRouter>
-          <AccessibilityProvider>
-            <RootRouter />
-          </AccessibilityProvider>
-        </BrowserRouter>
-      </QueryClientProvider>
-    </div>
+    <MantineProvider theme={theme} defaultColorScheme="auto">
+      <Notifications position="top-right" />
+      <div className="flex min-h-0 w-full max-w-full flex-1 flex-col">
+        <QueryClientProvider client={queryClient}>
+          <PwaUpdateListener />
+          <TopLoader />
+          <BrowserRouter>
+            <AccessibilityProvider>
+              <RootRouter />
+            </AccessibilityProvider>
+          </BrowserRouter>
+        </QueryClientProvider>
+      </div>
+    </MantineProvider>
   </StrictMode>,
 );
 

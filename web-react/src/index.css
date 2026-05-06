@@ -223,8 +223,8 @@ body {
     Roboto,
     'Helvetica Neue',
     sans-serif;
-  background: var(--surface);
-  color: var(--text);
+  background: var(--mantine-color-body, var(--surface));
+  color: var(--mantine-color-text, var(--text));
   line-height: var(--a11y-line-height, 1.55);
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
@@ -232,6 +232,12 @@ body {
   /* Верх: вырез/notch. Низ: отступ под таб-бар — у самой панели `padding-bottom` под safe-area. */
   padding-top: env(safe-area-inset-top, 0px);
   padding-bottom: 0;
+}
+
+.corporate-surface {
+  background: var(--mantine-color-default, var(--surface-elevated));
+  border: 1px solid var(--mantine-color-default-border, var(--border, transparent));
+  border-radius: var(--mantine-radius-md, 0.5rem);
 }
 
 /* После правил `body { … min-height: 100dvh }`: иначе 100dvh на iOS > layout viewport и под `.app-bottom-nav` остаётся полоска фона.

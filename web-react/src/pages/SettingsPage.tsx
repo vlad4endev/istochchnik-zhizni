@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import { LuChevronRight, LuMoon, LuSettings, LuSun, LuUserRound } from 'react-icons/lu';
+import { ThemeToggle } from '../components/ThemeToggle';
 import { useAppearanceStore } from '../stores/useAppearanceStore';
 
 export function SettingsPage() {
@@ -43,6 +44,7 @@ export function SettingsPage() {
           <div>
             <div className="mb-3 flex items-center justify-between gap-3">
               <h3 className="text-base font-semibold text-[var(--text)]">Тема оформления</h3>
+              <ThemeToggle />
               <button
                 type="button"
                 role="switch"

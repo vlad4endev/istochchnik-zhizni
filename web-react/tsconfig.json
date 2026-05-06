@@ -10,6 +10,7 @@
     "jsx": "react-jsx",
     "resolveJsonModule": true,
     "isolatedModules": true,
+    "allowJs": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
@@ -19,5 +20,5 @@
       "@features/*": ["src/features/*"]
     }
   },
-  "include": ["src/**/*.ts", "src/**/*.tsx"]
+  "include": ["src/**/*.ts", "src/**/*.tsx", "src/**/*.js", "src/**/*.jsx"]
 }

@@ -1,6 +1,15 @@
 <!doctype html>
 <html lang="ru" class="app-native-shell">
   <head>
+    <script>
+      (function () {
+        const stored = localStorage.getItem('mantine-color-scheme-value');
+        const scheme =
+          stored ||
+          (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+        document.documentElement.setAttribute('data-mantine-color-scheme', scheme);
+      })();
+    </script>
     <meta charset="UTF-8" />
     <!-- Без ручного pinch/double-tap zoom: размер — из ОС и панели доступности (CSS), не из зума страницы. -->
     <!-- Zoom разрешён; interactive-widget=resizes-content — при клавиатуре сжимается layout viewport, иначе iOS оставляет «высоту экрана» и появляется пустота над клавиатурой (синхронизируйте с nativeShellViewport.ts). -->
