@@ -75,6 +75,9 @@ export function SmartImportModal({
   const [xlsxName, setXlsxName] = useState<string | null>(null);
   const [xlsxSongs, setXlsxSongs] = useState<XlsxImportParsedSong[]>([]);
   const [xlsxSearch, setXlsxSearch] = useState('');
+  const [xlsxParseErrors, setXlsxParseErrors] = useState<Array<{ row: number; field: string; message: string; value?: string }>>(
+    [],
+  );
   const [xlsxFile, setXlsxFile] = useState<File | null>(null);
   const [xlsxMassBusy, setXlsxMassBusy] = useState(false);
   const [xlsxJobId, setXlsxJobId] = useState<string | null>(null);
@@ -106,6 +109,7 @@ export function SmartImportModal({
     setXlsxFile(null);
     setXlsxSongs([]);
     setXlsxSearch('');
+    setXlsxParseErrors([]);
     setXlsxMassBusy(false);
     setXlsxJobId(null);
     setXlsxProgress(null);
@@ -253,8 +257,11 @@ export function SmartImportModal({
     try {
       const parsed = await parseSongImportXlsxFile(f);
       setXlsxSongs(parsed.songs ?? []);
+      setXlsxParseErrors(parsed.errors ?? []);
       if ((parsed.errors?.length ?? 0) > 0) {
-        setXlsxError(`В файле найдены ошибки: ${parsed.errors.length}. Исправьте файл или выберите другую строку.`);
+        setXlsxError(
+          `В файле найдены ошибки: ${parsed.errors.length}. Ниже список — исправьте и загрузите файл заново.`,
+        );
       }
     } catch (err) {
       let msg = 'Не удалось прочитать XLSX';
@@ -268,6 +275,20 @@ export function SmartImportModal({
     } finally {
       setXlsxBusy(false);
     }
+  };
+
+  const downloadXlsxErrorsJson = () => {
+    const blob = new Blob([JSON.stringify({ errors: xlsxParseErrors }, null, 2)], {
+      type: 'application/json;charset=utf-8',
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `xlsx-import-errors-${Date.now()}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1500);
   };
 
   const startXlsxMassImport = async () => {
@@ -788,13 +809,40 @@ export function SmartImportModal({
                   </div>
                   {xlsxError ? <p className="mt-2 text-sm text-red-500">{xlsxError}</p> : null}
                   {xlsxBusy ? <p className={`mt-2 text-xs ${muted}`}>Читаем XLSX…</p> : null}
+                  {xlsxParseErrors.length > 0 ? (
+                    <div className="mt-3 space-y-2">
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                        <p className={`text-xs ${muted}`}>Ошибки файла (первые 12):</p>
+                        <button
+                          type="button"
+                          onClick={downloadXlsxErrorsJson}
+                          className={`inline-flex min-h-[36px] items-center justify-center rounded-lg border px-3 text-xs font-semibold ${btnGhost}`}
+                        >
+                          Скачать отчёт (JSON)
+                        </button>
+                      </div>
+                      <ul className={`rounded-xl border p-3 text-xs ${isStudio ? 'border-zinc-700 bg-zinc-950/40 text-zinc-200' : 'border-stone-200 bg-white text-stone-800'}`}>
+                        {xlsxParseErrors.slice(0, 12).map((e, idx) => (
+                          <li key={`${e.row}-${e.field}-${idx}`} className="py-1">
+                            <strong>Строка {e.row}</strong>, поле <strong>{e.field}</strong>: {e.message}
+                            {typeof e.value === 'string' && e.value.trim() ? (
+                              <>
+                                {' '}
+                                <span className={muted}>(значение: {e.value})</span>
+                              </>
+                            ) : null}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : null}
                   <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
                     <button
                       type="button"
-                      disabled={!xlsxFile || xlsxMassBusy || !!xlsxError}
+                      disabled={!xlsxFile || xlsxMassBusy || xlsxParseErrors.length > 0}
                       onClick={() => void startXlsxMassImport()}
                       className={`inline-flex w-full min-h-[44px] items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold disabled:opacity-50 sm:w-auto ${btnPrimary}`}
-                      title={xlsxError ? 'Сначала исправьте ошибки файла (или загрузите файл без ошибок).' : undefined}
+                      title={xlsxParseErrors.length > 0 ? 'Сначала исправьте ошибки файла и загрузите заново.' : undefined}
                     >
                       {xlsxMassBusy ? <LuLoader className="h-4 w-4 animate-spin" /> : <LuPlay className="h-4 w-4" />}
                       Импортировать все в каталог
