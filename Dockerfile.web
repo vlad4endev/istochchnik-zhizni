@@ -1,11 +1,9 @@
 # React (Vite) + nginx: тот же origin для SPA и /api (прокси к сервису api в compose).
-FROM node:22-alpine AS build
+FROM node:20-bookworm-slim AS build
 WORKDIR /app
 
-# sharp (транзитивно от @capacitor/assets в devDependencies) по умолчанию тянет prebuild libvips
-# с GitHub — в Docker это часто падает по таймауту. Системный vips + toolchain позволяют
-# использовать/собрать sharp без этого скачивания.
-RUN apk add --no-cache python3 make g++ vips-dev
+# В glibc-образе sharp обычно устанавливается из prebuilt-бинаря
+# (без сборки через node-gyp), что заметно надежнее в CI/production-сборках.
 
 # Vite: только переменные с префиксом VITE_ доступны в import.meta.env при сборке.
 ARG VITE_PWA_ORIGIN=

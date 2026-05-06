@@ -18,7 +18,6 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
   const apiProxyTarget = env.VITE_DEV_API_PROXY || 'http://127.0.0.1:40978';
-  const enablePwaDev = String(env.VITE_PWA_DEV ?? '').trim() === 'true';
   /** Видно внизу админки — чтобы отличить свежий деплой от старой «Заглушки». */
   const buildStamp = new Date().toISOString().replace('T', ' ').slice(0, 16);
   /**
@@ -82,8 +81,9 @@ export default defineConfig(({ mode }) => {
     plugins: [
       react(),
       VitePWA({
-        registerType: 'autoUpdate',
-        injectRegister: 'auto',
+        registerType: 'prompt',
+        injectRegister: false,
+        includeAssets: ['assets/favicon.ico', 'assets/apple-touch-icon-180x180.png'],
         manifest: {
           id: pwaManifestId,
           name: 'Моя церковь - цифровая платформа',
@@ -93,8 +93,7 @@ export default defineConfig(({ mode }) => {
           theme_color: '#7d3640',
           background_color: '#f4f1ed',
           display: 'standalone',
-          /* Планшеты и ландшафт — не блокируем ориентацию (раньше portrait ломал iPad). */
-          orientation: 'any',
+          orientation: 'portrait',
           /* Не задаём display_override: на iOS WebKit это часто игнорируется или ведёт себя иначе, чем один display. */
           prefer_related_applications: false,
           start_url: pwaStartUrl,
@@ -131,7 +130,7 @@ export default defineConfig(({ mode }) => {
               src: 'assets/maskable-icon-512x512.png',
               sizes: '512x512',
               type: 'image/png',
-              purpose: 'maskable',
+              purpose: 'maskable any',
             },
           ],
           shortcuts: [
@@ -200,7 +199,7 @@ export default defineConfig(({ mode }) => {
             '**/maskable-icon-192x192.png',
             '**/maskable-icon-512x512.png',
           ],
-          skipWaiting: true,
+          skipWaiting: false,
           clientsClaim: true,
           navigateFallback: '/index.html',
           /**
@@ -220,10 +219,22 @@ export default defineConfig(({ mode }) => {
               handler: 'NetworkFirst',
               options: {
                 cacheName: `api-cache-${runtimeCacheSuffix}`,
-                networkTimeoutSeconds: 3,
+                networkTimeoutSeconds: 5,
                 expiration: {
                   maxEntries: 100,
-                  maxAgeSeconds: 60 * 60,
+                  maxAgeSeconds: 60 * 5,
+                },
+                cacheableResponse: { statuses: [0, 200] },
+              },
+            },
+            {
+              urlPattern: /^https:\/\/fonts\.(?:googleapis|gstatic)\.com\//,
+              handler: 'CacheFirst',
+              options: {
+                cacheName: `google-fonts-${runtimeCacheSuffix}`,
+                expiration: {
+                  maxEntries: 20,
+                  maxAgeSeconds: 60 * 60 * 24 * 365,
                 },
                 cacheableResponse: { statuses: [0, 200] },
               },
@@ -241,7 +252,7 @@ export default defineConfig(({ mode }) => {
               },
             },
             {
-              urlPattern: /\.(?:png|jpg|jpeg|svg|gif|webp|ico)(?:\?.*)?$/,
+              urlPattern: /\.(?:png|jpg|jpeg|svg|gif|webp|avif|ico)(?:\?.*)?$/,
               handler: 'StaleWhileRevalidate',
               options: {
                 cacheName: `images-cache-${runtimeCacheSuffix}`,
@@ -280,9 +291,8 @@ export default defineConfig(({ mode }) => {
           ],
         },
         devOptions: {
-          // Push notifications require an installed Service Worker.
-          // In dev we keep it opt-in to avoid caching surprises: set VITE_PWA_DEV=true in web-react/.env
-          enabled: mode === 'development' && enablePwaDev,
+          enabled: false,
+          type: 'module',
         },
       }),
     ],

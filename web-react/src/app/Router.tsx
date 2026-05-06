@@ -4,6 +4,7 @@ import { Navigate, Route, Routes } from 'react-router-dom';
 import { AuthLandingPage } from '../features/auth/pages/AuthLandingPage';
 import { LoginPage } from '../features/auth/pages/LoginPage';
 
+import { OfflinePage } from '../pages/Offline';
 import { Layout } from './Layout';
 import { ModuleErrorBoundary } from './ModuleErrorBoundary';
 import { ProfileRouteBoundary } from './ProfileRouteBoundary';
@@ -164,6 +165,7 @@ export function AppRouter() {
   usePageTracking();
   return (
     <Routes>
+      <Route path="/offline" element={<OfflinePage />} />
       <Route path={LOGIN_PATH} element={<AuthLandingPage />} />
       <Route path={`${LOGIN_PATH}/form`} element={<LoginPage />} />
 

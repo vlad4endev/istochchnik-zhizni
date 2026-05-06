@@ -4,7 +4,6 @@ import { Notifications } from '@mantine/notifications';
 import React, { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
-import { registerSW } from 'virtual:pwa-register';
 
 import { applyNativeShellViewportLock } from './lib/nativeShellViewport';
 import { client } from './lib/appwrite';
@@ -12,6 +11,7 @@ import { initPwaStandaloneHtmlHint } from './features/pwa/utils/pwaEnvironment';
 import { AppRouter } from './app/Router';
 import { AppRouterMain } from './app/RouterMain';
 import { AppRouterStudio } from './app/RouterStudio';
+import { PWAUpdatePrompt } from './components/PWAUpdatePrompt';
 import { TopLoader } from './components/ui/TopLoader';
 import { AccessibilityProvider } from './lib/accessibility/AccessibilityProvider';
 import { getAppVariant } from './lib/appVariant';
@@ -87,42 +87,6 @@ const queryClient = new QueryClient({
   },
 });
 
-// PWA (iOS Safari) update hardening:
-// iOS PWAs may keep serving stale cached assets unless we aggressively update + reload.
-if (import.meta.env.PROD) {
-  try {
-    let swUpdateErrorLogged = false;
-    const safeUpdateRegistration = (reg: ServiceWorkerRegistration) => {
-      void reg.update().catch((error) => {
-        // Intermittent network/CDN hiccups should not create unhandled rejections.
-        if (swUpdateErrorLogged) return;
-        swUpdateErrorLogged = true;
-        console.warn('Service Worker update check failed (will retry later):', error);
-      });
-    };
-
-    const updateSW = registerSW({
-      immediate: true,
-      onNeedRefresh: () => {
-        // Activate waiting SW and reload the app.
-        void updateSW(true);
-      },
-      onRegisteredSW: (_swUrl, reg) => {
-        if (!reg) return;
-        // Re-check when returning to the app (useAppUpdate polls on an interval).
-        document.addEventListener('visibilitychange', () => {
-          if (document.visibilityState === 'visible') safeUpdateRegistration(reg);
-        });
-      },
-      onRegisterError: (error) => {
-        console.warn('SW registration failed:', error);
-      },
-    });
-  } catch {
-    /* ignore */
-  }
-}
-
 if (typeof window !== 'undefined') {
   const pwaStore = usePwaStore.getState();
 
@@ -149,6 +113,7 @@ createRoot(document.getElementById('root')!).render(
       <Notifications position="top-right" />
       <div className="flex min-h-0 w-full max-w-full flex-1 flex-col">
         <QueryClientProvider client={queryClient}>
+          {import.meta.env.PROD ? <PWAUpdatePrompt /> : null}
           <PwaUpdateListener />
           <TopLoader />
           <BrowserRouter>

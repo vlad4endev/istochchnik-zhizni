@@ -89,11 +89,11 @@ export function useWebRTC({
       config: ICE_SERVERS,
     });
 
-    peer.on('signal', (data) => {
+    peer.on('signal', (data: Parameters<SimplePeer.Instance['signal']>[0]) => {
       sendRealtimeJson({ type: 'call:signal', callId, data });
     });
 
-    peer.on('stream', (remote) => {
+    peer.on('stream', (remote: MediaStream) => {
       onRemoteStreamRef.current?.(remote);
     });
 
@@ -101,7 +101,7 @@ export function useWebRTC({
       onCallEndedRef.current?.();
     });
 
-    peer.on('error', (err) => {
+    peer.on('error', (err: Error) => {
       console.error('[webrtc]', err);
     });
 

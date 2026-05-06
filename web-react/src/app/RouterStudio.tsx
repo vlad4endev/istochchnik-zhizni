@@ -1,6 +1,7 @@
 import { lazy, Suspense } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 
+import { OfflinePage } from '../pages/Offline';
 import { AuthLandingPage } from '../features/auth/pages/AuthLandingPage';
 import { LoginPage } from '../features/auth/pages/LoginPage';
 import { PendingReviewPage } from '../features/auth/pages/PendingReviewPage';
@@ -73,6 +74,7 @@ const EditableServicePlanPage = lazy(async () => {
 export function AppRouterStudio() {
   return (
     <Routes>
+      <Route path="/offline" element={<OfflinePage />} />
       <Route path={LOGIN_PATH} element={<AuthLandingPage />} />
       <Route path={`${LOGIN_PATH}/form`} element={<LoginPage />} />
 

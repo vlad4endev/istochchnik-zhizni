@@ -2,7 +2,13 @@
  * Старые runtime-кэши с фиксированными именами (до суффикса по коммиту в vite.config).
  * После активации нового SW удаляем, чтобы не копить мусор и не путать отладку.
  */
-var LEGACY_RUNTIME_CACHE_NAMES = ['static-cache', 'images-cache', 'fonts-cache', 'api-cache'];
+var LEGACY_RUNTIME_CACHE_NAMES = [
+  'static-cache',
+  'images-cache',
+  'fonts-cache',
+  'api-cache',
+  'google-fonts',
+];
 self.addEventListener('activate', function (event) {
   event.waitUntil(
     caches.keys().then(function (keys) {

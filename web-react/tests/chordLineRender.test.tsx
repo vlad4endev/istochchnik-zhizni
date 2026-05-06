@@ -12,8 +12,8 @@ describe('ChordLine render regression', () => {
       <ChordLine line={line} chordsVisible layoutMode="mono" chordTone="light" />,
     );
 
-    expect(html).toContain('<pre class="chords-line');
-    expect(html).toContain('<pre class="text-line');
+    expect(html).toContain('<pre class="chord-line');
+    expect(html).toContain('<pre class="lyric-line');
     expect(html).toContain('Am');
     expect(html).toContain('C');
     expect(html).toContain('Когда качаются');
@@ -25,7 +25,7 @@ describe('ChordLine render regression', () => {
       <ChordLine line={line} chordsVisible={false} layoutMode="mono" chordTone="light" />,
     );
 
-    expect(html).not.toContain('chords-line');
+    expect(html).not.toContain('chord-line');
     expect(html).toContain('Когда качаются');
   });
 
@@ -36,7 +36,7 @@ describe('ChordLine render regression', () => {
     );
 
     expect(html).toContain('Em  C  D');
-    expect(html).not.toContain('text-line');
+    expect(html).not.toContain('lyric-line');
   });
 });
 
