@@ -311,6 +311,11 @@ export function ServicePlannerPage() {
   /** Отложенное удаление блока программы: таймер API + снимок для отмены из toast */
   const pendingPlanBlockDeleteTimersRef = useRef<Map<number, number>>(new Map());
   const pendingPlanBlockDeleteSnapshotsRef = useRef<Map<number, ServicePlanBlock>>(new Map());
+  /** Нужно чтобы автосохранение не запускалось на входящих данных с сервера */
+  const suppressNextAutosaveRef = useRef(false);
+  const autosaveTimerRef = useRef<number | null>(null);
+  const [autosaveStatus, setAutosaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const [autosaveSavedAt, setAutosaveSavedAt] = useState<number | null>(null);
   const plannerModalOpen = editingTemplateBlockId != null || editingBlockId != null;
   /** Совпадает с Tailwind `md:` — на мобильной весь блок — ручка перетаскивания */
   const [isNarrowViewport, setIsNarrowViewport] = useState(
@@ -484,6 +489,7 @@ export function ServicePlannerPage() {
               })
               .filter((b) => !pendingDeletes.has(b.id)),
             };
+      suppressNextAutosaveRef.current = true;
       setDraft((prev) => {
         if (!prev || prev.id !== normalized.id) return normalized;
         const normalizedIds = new Set(normalized.blocks.map((b) => b.id));
@@ -659,6 +665,8 @@ export function ServicePlannerPage() {
     })();
   }
 
+  // NOTE: типы useMutation в этом файле иногда ломают вывод TVariables для mutationFn без аргументов.
+  // Для автосохранения нам нужны mutateAsync/isPending, поэтому фиксируем тип как any.
   const saveProgramMut = useMutation({
     mutationFn: async () => {
       if (!draft) return;
@@ -687,8 +695,52 @@ export function ServicePlannerPage() {
         qc.invalidateQueries({ queryKey: ['service-planner', 'plans'] }),
         qc.invalidateQueries({ queryKey: ['service-planner', 'plan', activePlanId] }),
       ]);
+      setAutosaveSavedAt(Date.now());
+      setAutosaveStatus('saved');
     },
-  });
+    onError: () => {
+      setAutosaveStatus('error');
+    },
+  }) as any;
+
+  // Автосохранение: любое изменение draft → дебаунс 800мс → saveProgramMut
+  useEffect(() => {
+    if (!draft) return;
+    if (screen !== 'plan') return;
+    if (suppressNextAutosaveRef.current) {
+      suppressNextAutosaveRef.current = false;
+      return;
+    }
+
+    if (autosaveTimerRef.current != null) {
+      window.clearTimeout(autosaveTimerRef.current);
+      autosaveTimerRef.current = null;
+    }
+
+    autosaveTimerRef.current = window.setTimeout(() => {
+      autosaveTimerRef.current = null;
+      if (saveProgramMut.isPending) {
+        // если уже сохраняем — попробуем снова чуть позже
+        autosaveTimerRef.current = window.setTimeout(() => {
+          autosaveTimerRef.current = null;
+          if (!saveProgramMut.isPending) {
+            setAutosaveStatus('saving');
+            void saveProgramMut.mutateAsync();
+          }
+        }, 600);
+        return;
+      }
+      setAutosaveStatus('saving');
+      void saveProgramMut.mutateAsync();
+    }, 800);
+
+    return () => {
+      if (autosaveTimerRef.current != null) {
+        window.clearTimeout(autosaveTimerRef.current);
+        autosaveTimerRef.current = null;
+      }
+    };
+  }, [draft, screen]);
 
   const updateTemplateMut = useMutation({
     mutationFn: ({ id, body }: { id: number; body: Parameters<typeof patchServiceTemplate>[1] }) =>
@@ -1454,11 +1506,11 @@ export function ServicePlannerPage() {
         <section className="grid gap-3 md:grid-cols-2">
           <div className="rounded-2xl border border-primary/30 bg-primary/5 p-4 shadow-sm">
             <p className="text-xs font-semibold uppercase tracking-wide text-primary">Новый план</p>
-            <div className="mt-2 grid gap-2 sm:grid-cols-2">
+            <div className="mt-2 grid min-w-0 gap-2 sm:grid-cols-2">
               <select
                 value={activeTemplateId ?? ''}
                 onChange={(e) => setActiveTemplateId(e.target.value ? Number(e.target.value) : null)}
-                className="min-h-[46px] rounded-xl border border-stone-300 bg-white px-3 py-2 text-base sm:text-sm"
+                className="min-h-[46px] w-full min-w-0 rounded-xl border border-stone-300 bg-white px-3 py-2 text-base sm:text-sm"
               >
                 {templates.map((tpl) => (
                   <option key={tpl.id} value={tpl.id}>
@@ -1473,7 +1525,7 @@ export function ServicePlannerPage() {
                   const next = e.target.value;
                   if (isIsoDate(next)) setCreatePlanDate(next);
                 }}
-                className="min-h-[46px] rounded-xl border border-stone-300 bg-white px-3 py-2 text-base sm:text-sm"
+                className="min-h-[46px] w-full min-w-0 rounded-xl border border-stone-300 bg-white px-3 py-2 text-base sm:text-sm"
               />
             </div>
             <p className="mt-2 text-xs leading-snug text-stone-600">
@@ -2086,7 +2138,7 @@ export function ServicePlannerPage() {
                 </button>
               </div>
 
-              <div className="min-h-0 flex-1 basis-0 overflow-y-auto overflow-x-hidden px-3 py-3 [-webkit-overflow-scrolling:touch] [touch-action:pan-y] sm:px-4">
+              <div className="overflow-y-auto overflow-x-hidden px-3 py-3 [-webkit-overflow-scrolling:touch] [touch-action:pan-y] max-md:min-h-0 max-md:flex-1 max-md:basis-0 sm:px-4">
                 <div className="grid gap-2 rounded-xl bg-stone-50 p-3 sm:grid-cols-2">
                 <input
                   value={isTemplateSeparatorBlock(editingTemplateBlock) ? templateSeparatorLabel(editingTemplateBlock) : editingTemplateBlock.title}
@@ -2449,6 +2501,17 @@ export function ServicePlannerPage() {
           <span className="inline-flex items-center gap-1">
             <LuClock3 className="h-4 w-4" /> {draft.start_time}
           </span>
+          <span
+            className={[
+              'inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-semibold',
+              draft.status === 'published'
+                ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+                : 'border-amber-200 bg-amber-50 text-amber-800',
+            ].join(' ')}
+            aria-live="polite"
+          >
+            {draft.status === 'published' ? 'Опубликован' : 'Черновик'}
+          </span>
           <span className="inline-flex items-center gap-1">
             <LuUsers className="h-4 w-4" /> {timedBlocks.length} блоков / {totalDuration} мин
           </span>
@@ -2484,7 +2547,7 @@ export function ServicePlannerPage() {
         </div>
         <div className={isPlanSettingsOpenMobile ? 'block md:block' : 'hidden md:block'}>
         <p className="mb-2 text-xs text-stone-500">Укажите дату, время и ответственных служителей.</p>
-        <div className="grid gap-2 md:grid-cols-2 [&_input]:bg-white [&_input]:text-stone-900 [&_select]:bg-white [&_select]:text-stone-900">
+        <div className="grid min-w-0 gap-2 md:grid-cols-2 [&_input]:min-w-0 [&_input]:w-full [&_input]:bg-white [&_input]:text-stone-900 [&_select]:min-w-0 [&_select]:w-full [&_select]:bg-white [&_select]:text-stone-900">
           <input
             type="date"
             value={draft.service_date}
@@ -2492,18 +2555,18 @@ export function ServicePlannerPage() {
               const next = e.target.value;
               if (isIsoDate(next)) setDraft({ ...draft, service_date: next });
             }}
-            className="rounded-xl border border-stone-300 px-3 py-2 text-sm shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+            className="w-full min-w-0 rounded-xl border border-stone-300 px-3 py-2 text-sm shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
           />
           <input
             type="time"
             value={draft.start_time}
             onChange={(e) => setDraft({ ...draft, start_time: e.target.value || '10:00' })}
-            className="rounded-xl border border-stone-300 px-3 py-2 text-sm shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+            className="w-full min-w-0 rounded-xl border border-stone-300 px-3 py-2 text-sm shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
           />
           <select
             value={draft.leader_member_id ?? ''}
             onChange={(e) => setDraft({ ...draft, leader_member_id: e.target.value ? Number(e.target.value) : null })}
-            className="rounded-xl border border-stone-300 px-3 py-2 text-sm shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+            className="w-full min-w-0 rounded-xl border border-stone-300 px-3 py-2 text-sm shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
           >
             <option value="">Ведущий</option>
             {leaderCandidates.map((u) => (
@@ -2536,7 +2599,7 @@ export function ServicePlannerPage() {
                 };
               });
             }}
-            className="rounded-xl border border-stone-300 px-3 py-2 text-sm shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+            className="w-full min-w-0 rounded-xl border border-stone-300 px-3 py-2 text-sm shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
           >
             <option value="">Проповедник</option>
             {preacherCandidates.map((u) => (
@@ -2593,17 +2656,6 @@ export function ServicePlannerPage() {
             <LuPlus className="h-4 w-4" />
             Разделитель
           </button>
-          <span
-            className={[
-              'inline-flex min-h-[40px] shrink-0 cursor-default items-center justify-center gap-1.5 rounded-full px-3 py-1 text-sm font-medium md:min-h-[44px] md:min-w-0 md:self-center',
-              draft.status === 'published'
-                ? 'border border-emerald-200 bg-emerald-50 text-emerald-800'
-                : 'border border-amber-200 bg-amber-50 text-amber-800',
-            ].join(' ')}
-            aria-live="polite"
-          >
-            {draft.status === 'published' ? 'Опубликован' : 'Черновик'}
-          </span>
           <button
             type="button"
             onClick={() => {
@@ -2625,11 +2677,15 @@ export function ServicePlannerPage() {
         <div className="mt-2 hidden md:block">
           <button
             type="button"
-            onClick={() => void saveProgramMut.mutateAsync()}
-            className="inline-flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl bg-primary px-3 py-2 text-sm font-semibold text-white hover:bg-primary-dark"
+            onClick={() => {
+              setAutosaveStatus('saving');
+              void saveProgramMut.mutateAsync();
+            }}
+            className="inline-flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl border border-stone-300 bg-white px-3 py-2 text-sm font-semibold text-stone-800 enabled:hover:border-primary enabled:hover:text-primary disabled:cursor-not-allowed disabled:opacity-60"
+            disabled={saveProgramMut.isPending}
           >
             <LuSave className="h-4 w-4" />
-            Сохранить программу
+            Сохранить сейчас
           </button>
         </div>
       </section>
@@ -3146,15 +3202,30 @@ export function ServicePlannerPage() {
           Сохраняю изменения...
         </div>
       )}
+      {draft && screen === 'plan' ? (
+        <div className="text-[11px] font-semibold text-stone-500">
+          {autosaveStatus === 'saving'
+            ? 'Автосохранение…'
+            : autosaveStatus === 'error'
+              ? 'Не удалось сохранить'
+              : autosaveSavedAt
+                ? `Сохранено ${new Date(autosaveSavedAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}`
+                : 'Автосохранение включено'}
+        </div>
+      ) : null}
 
       <div className="fixed inset-x-0 bottom-[var(--app-bottom-nav-total-height)] z-[60] border-t border-stone-200 bg-white/95 px-3 py-2 backdrop-blur md:hidden [padding-bottom:max(0.5rem,var(--app-safe-bottom))]">
         <button
           type="button"
-          onClick={() => void saveProgramMut.mutateAsync()}
-          className="inline-flex min-h-[46px] w-full items-center justify-center gap-2 rounded-xl bg-primary px-3 py-2 text-sm font-bold text-white"
+          onClick={() => {
+            setAutosaveStatus('saving');
+            void saveProgramMut.mutateAsync();
+          }}
+          className="inline-flex min-h-[46px] w-full items-center justify-center gap-2 rounded-xl border border-stone-300 bg-white px-3 py-2 text-sm font-bold text-stone-800 enabled:hover:border-primary enabled:hover:text-primary disabled:cursor-not-allowed disabled:opacity-60"
+          disabled={saveProgramMut.isPending}
         >
           <LuSave className="h-4 w-4" />
-          Сохранить программу
+          Сохранить сейчас
         </button>
       </div>
 
@@ -3195,7 +3266,7 @@ export function ServicePlannerPage() {
                 </button>
               </div>
             </div>
-            <div className="min-h-0 flex-1 basis-0 overflow-y-auto overflow-x-hidden px-3 py-3 [-webkit-overflow-scrolling:touch] [touch-action:pan-y] sm:px-4">
+            <div className="overflow-y-auto overflow-x-hidden px-3 py-3 [-webkit-overflow-scrolling:touch] [touch-action:pan-y] max-md:min-h-0 max-md:flex-1 max-md:basis-0 sm:px-4">
             <div className="grid min-w-0 gap-2 rounded-xl bg-stone-50 p-3 sm:grid-cols-2 [&_input]:w-full [&_input]:bg-white [&_input]:text-stone-900 [&_input]:placeholder:text-stone-400 [&_select]:w-full [&_select]:bg-white [&_select]:text-stone-900 [&_textarea]:w-full [&_textarea]:bg-white [&_textarea]:text-stone-900 [&_textarea]:placeholder:text-stone-400">
               <label className="flex flex-col gap-1 text-xs font-semibold text-stone-700 sm:col-span-2">
                 {isSeparatorBlock(editingBlock) ? 'Текст разделителя' : 'Название блока'}

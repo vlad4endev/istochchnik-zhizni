@@ -1,6 +1,8 @@
 import { fetch as undiciFetch, ProxyAgent } from 'undici';
 
 import { query } from '../config/db';
+import { loadNotificationSettings } from './notificationSettingsService';
+import { formatYmdInTimeZone, getZonedNow } from '../utils/zonedTime';
 import { getMemberAssignmentsForWeek, getPrayerDataByDate, type PrayerPlanSections } from './calendarService';
 
 export interface TelegramSettings {
@@ -1169,13 +1171,12 @@ export async function processTelegramDispatchDue(now = new Date()): Promise<{ tr
   const last = s.last_sent_at_iso ? new Date(s.last_sent_at_iso) : null;
   if (s.kind === 'daily') {
     const hhmm = s.time_hhmm ?? '09:00';
-    // Сравнение с локальным временем процесса Node (часовой пояс сервера / контейнера)
-    const cur = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+    const notificationSettings = await loadNotificationSettings().catch(() => null);
+    const tz = notificationSettings?.timezone?.trim() || 'Europe/Moscow';
+    const zNow = getZonedNow(tz, now);
+    const cur = `${String(zNow.hour).padStart(2, '0')}:${String(zNow.minute).padStart(2, '0')}`;
     const alreadyToday =
-      last != null &&
-      last.getFullYear() === now.getFullYear() &&
-      last.getMonth() === now.getMonth() &&
-      last.getDate() === now.getDate();
+      last != null && formatYmdInTimeZone(tz, last) === formatYmdInTimeZone(tz, now);
     if (cur !== hhmm || alreadyToday) return { triggered: false };
     const run = await runTelegramDispatchNow();
     await markSent();
