@@ -1,11 +1,11 @@
-import { useEffect, useId, useRef, useState } from 'react';
-import { LuFileText, LuLink2, LuLoader, LuSparkles, LuUpload, LuWand, LuX } from 'react-icons/lu';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import { LuFileSpreadsheet, LuFileText, LuLink2, LuLoader, LuSearch, LuSparkles, LuUpload, LuWand, LuX } from 'react-icons/lu';
 import axios from 'axios';
 
 import { extractTextFromPdfBufferWithMeta } from './extractTextFromPdf';
 import { analyzeImportedSongText, type ImportedTextAnalysis } from './analyzeImportedSongText';
 import { smartImportTextToChordPro } from './smartImportToBlocks';
-import { aiSplitSongIntoBlocks, fetchImportUrlText } from '../api';
+import { aiSplitSongIntoBlocks, fetchImportUrlText, parseSongImportXlsxFile, type XlsxImportParsedSong } from '../api';
 
 export type SmartImportSourceTab = 'text' | 'pdf' | 'url';
 
@@ -48,6 +48,14 @@ export function SmartImportModal({
   const aiProgressTimersRef = useRef<number[]>([]);
   const fileTxtRef = useRef<HTMLInputElement>(null);
   const filePdfRef = useRef<HTMLInputElement>(null);
+  const fileXlsxRef = useRef<HTMLInputElement>(null);
+
+  const [pdfFormat, setPdfFormat] = useState<'pdf' | 'xlsx'>('pdf');
+  const [xlsxBusy, setXlsxBusy] = useState(false);
+  const [xlsxError, setXlsxError] = useState<string | null>(null);
+  const [xlsxName, setXlsxName] = useState<string | null>(null);
+  const [xlsxSongs, setXlsxSongs] = useState<XlsxImportParsedSong[]>([]);
+  const [xlsxSearch, setXlsxSearch] = useState('');
 
   const isStudio = variant === 'studio';
 
@@ -66,6 +74,12 @@ export function SmartImportModal({
     setPdfAnalysis(null);
     setPdfSafeModeInfo(null);
     setPdfProgressText(null);
+    setPdfFormat('pdf');
+    setXlsxBusy(false);
+    setXlsxError(null);
+    setXlsxName(null);
+    setXlsxSongs([]);
+    setXlsxSearch('');
     setAiBusy(false);
     setAiError(null);
     setAiProgressText(null);
@@ -146,6 +160,41 @@ export function SmartImportModal({
     setPdfBuffer(await f.arrayBuffer());
   };
 
+  const onPickXlsx = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    e.target.value = '';
+    if (!f) return;
+    if (f.size > 8 * 1024 * 1024) {
+      setXlsxError('Файл слишком большой. Максимум 8 МБ.');
+      return;
+    }
+    if (!f.name.toLowerCase().endsWith('.xlsx')) {
+      setXlsxError('Пожалуйста, выберите .xlsx файл.');
+      return;
+    }
+    setXlsxName(f.name);
+    setXlsxError(null);
+    setXlsxBusy(true);
+    try {
+      const parsed = await parseSongImportXlsxFile(f);
+      setXlsxSongs(parsed.songs ?? []);
+      if ((parsed.errors?.length ?? 0) > 0) {
+        setXlsxError(`В файле найдены ошибки: ${parsed.errors.length}. Исправьте файл или выберите другую строку.`);
+      }
+    } catch (err) {
+      let msg = 'Не удалось прочитать XLSX';
+      if (axios.isAxiosError(err)) {
+        const d = err.response?.data as { error?: string } | undefined;
+        if (d?.error) msg = d.error;
+      } else if (err instanceof Error && err.message) {
+        msg = err.message;
+      }
+      setXlsxError(msg);
+    } finally {
+      setXlsxBusy(false);
+    }
+  };
+
   const runPdfExtract = async () => {
     const buf = pdfBuffer;
     if (!buf || buf.byteLength === 0) {
@@ -200,6 +249,47 @@ export function SmartImportModal({
     } finally {
       setPdfProgressText(null);
       setPdfBusy(false);
+    }
+  };
+
+  const filteredXlsxSongs = useMemo(() => {
+    const q = xlsxSearch.trim().toLowerCase();
+    const list = xlsxSongs ?? [];
+    if (!q) return list.slice(0, 60);
+    const out = list.filter((s) => {
+      const blob = `${s.song_number} ${s.title} ${s.table_of_contents}`.toLowerCase();
+      return blob.includes(q);
+    });
+    return out.slice(0, 60);
+  }, [xlsxSongs, xlsxSearch]);
+
+  const importFromXlsxRow = async (song: XlsxImportParsedSong, mode: 'chords' | 'lyrics') => {
+    const url = mode === 'chords' ? song.url_chords : song.url_lyrics;
+    if (!url?.trim()) {
+      setXlsxError('В выбранной строке нет ссылки для загрузки.');
+      return;
+    }
+    setXlsxBusy(true);
+    setXlsxError(null);
+    try {
+      const { text } = await fetchImportUrlText(url);
+      if (!text.trim()) {
+        setXlsxError('По ссылке пришёл пустой текст.');
+        return;
+      }
+      setRaw(text);
+      setTab('text');
+    } catch (err) {
+      let msg = 'Не удалось загрузить текст песни';
+      if (axios.isAxiosError(err)) {
+        const d = err.response?.data as { error?: string } | undefined;
+        if (d?.error) msg = d.error;
+      } else if (err instanceof Error && err.message) {
+        msg = err.message;
+      }
+      setXlsxError(msg);
+    } finally {
+      setXlsxBusy(false);
     }
   };
 
@@ -362,6 +452,7 @@ export function SmartImportModal({
 
         <input ref={fileTxtRef} type="file" accept=".txt,.cho,.chopro,.chordpro,.cpm,.pro,text/plain" className="hidden" onChange={onPickTxt} />
         <input ref={filePdfRef} type="file" accept=".pdf,application/pdf" className="hidden" onChange={onPickPdf} />
+        <input ref={fileXlsxRef} type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" className="hidden" onChange={onPickXlsx} />
 
         {tab === 'text' ? (
           <div
@@ -422,9 +513,38 @@ export function SmartImportModal({
 
         {tab === 'pdf' ? (
           <div id={`${baseId}-panel-pdf`} role="tabpanel" aria-labelledby={`${baseId}-tab-pdf`} className="space-y-4">
-            <p className={`text-sm leading-relaxed ${muted}`}>
-              Перетащите PDF сюда или нажмите для выбора. Подойдёт PDF с выделяемым текстом (не скан без OCR).
-            </p>
+            <div className={`rounded-[10px] ${isStudio ? 'bg-zinc-950/70' : 'bg-stone-100'} p-1`}>
+              <div className="grid grid-cols-2 gap-1">
+                <button
+                  type="button"
+                  className={
+                    pdfFormat === 'pdf'
+                      ? `rounded-lg px-3 py-2.5 text-sm font-semibold shadow ${isStudio ? 'bg-zinc-800 text-white' : 'bg-white text-stone-900'}`
+                      : `rounded-lg px-3 py-2.5 text-sm font-semibold ${muted}`
+                  }
+                  onClick={() => setPdfFormat('pdf')}
+                >
+                  PDF
+                </button>
+                <button
+                  type="button"
+                  className={
+                    pdfFormat === 'xlsx'
+                      ? `rounded-lg px-3 py-2.5 text-sm font-semibold shadow ${isStudio ? 'bg-zinc-800 text-white' : 'bg-white text-stone-900'}`
+                      : `rounded-lg px-3 py-2.5 text-sm font-semibold ${muted}`
+                  }
+                  onClick={() => setPdfFormat('xlsx')}
+                >
+                  XLSX
+                </button>
+              </div>
+            </div>
+
+            {pdfFormat === 'pdf' ? (
+              <>
+                <p className={`text-sm leading-relaxed ${muted}`}>
+                  Перетащите PDF сюда или нажмите для выбора. Подойдёт PDF с выделяемым текстом (не скан без OCR).
+                </p>
             <div
               className={`rounded-xl border-2 border-dashed p-4 ${
                 isStudio ? 'border-zinc-700 bg-zinc-950/60' : 'border-stone-200 bg-stone-50'
@@ -543,6 +663,82 @@ export function SmartImportModal({
                 </div>
               </div>
             ) : null}
+              </>
+            ) : (
+              <>
+                <p className={`text-sm leading-relaxed ${muted}`}>
+                  Загрузите таблицу песен `.xlsx`, найдите песню и импортируйте текст (с аккордами в приоритете).
+                </p>
+                <div className={`rounded-xl border p-4 ${isStudio ? 'border-zinc-700 bg-zinc-950/60' : 'border-stone-200 bg-stone-50'}`}>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => fileXlsxRef.current?.click()}
+                      className={`inline-flex min-h-[44px] items-center gap-2 rounded-xl border px-4 py-2 text-sm font-semibold ${btnGhost}`}
+                    >
+                      <LuFileSpreadsheet className="h-4 w-4" />
+                      Выбрать XLSX
+                    </button>
+                    {xlsxName ? (
+                      <span className={`text-sm ${isStudio ? 'text-zinc-300' : 'text-stone-700'}`}>{xlsxName}</span>
+                    ) : (
+                      <span className={`text-sm ${muted}`}>Файл не выбран</span>
+                    )}
+                  </div>
+                  {xlsxError ? <p className="mt-2 text-sm text-red-500">{xlsxError}</p> : null}
+                  {xlsxBusy ? <p className={`mt-2 text-xs ${muted}`}>Читаем XLSX…</p> : null}
+
+                  {xlsxSongs.length > 0 ? (
+                    <div className="mt-3 space-y-2">
+                      <div className={`flex items-center gap-2 rounded-xl border px-3 py-2 ${isStudio ? 'border-zinc-700 bg-zinc-950' : 'border-stone-200 bg-white'}`}>
+                        <LuSearch className={`h-4 w-4 ${muted}`} />
+                        <input
+                          value={xlsxSearch}
+                          onChange={(e) => setXlsxSearch(e.target.value)}
+                          placeholder="Поиск по номеру или названию…"
+                          className={`w-full bg-transparent text-sm outline-none ${isStudio ? 'text-zinc-100 placeholder:text-zinc-500' : 'text-stone-900 placeholder:text-stone-400'}`}
+                        />
+                      </div>
+                      <div className={`max-h-[360px] overflow-auto rounded-xl border ${isStudio ? 'border-zinc-700' : 'border-stone-200'}`}>
+                        <ul className={`${isStudio ? 'divide-y divide-zinc-800' : 'divide-y divide-stone-200'}`}>
+                          {filteredXlsxSongs.map((s) => (
+                            <li key={s.external_id} className={`p-3 ${isStudio ? 'bg-zinc-950/40' : 'bg-white'}`}>
+                              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                                <div className="min-w-0">
+                                  <p className={`truncate text-sm font-semibold ${isStudio ? 'text-zinc-100' : 'text-stone-900'}`}>
+                                    {s.song_number}. {s.title}
+                                  </p>
+                                  <p className={`truncate text-xs ${muted}`}>{s.table_of_contents}</p>
+                                </div>
+                                <div className="flex flex-col gap-2 sm:flex-row">
+                                  <button
+                                    type="button"
+                                    disabled={xlsxBusy}
+                                    onClick={() => void importFromXlsxRow(s, 'chords')}
+                                    className={`inline-flex min-h-[40px] items-center justify-center rounded-lg px-3 text-xs font-semibold disabled:opacity-50 ${btnPrimary}`}
+                                  >
+                                    С аккордами
+                                  </button>
+                                  <button
+                                    type="button"
+                                    disabled={xlsxBusy}
+                                    onClick={() => void importFromXlsxRow(s, 'lyrics')}
+                                    className={`inline-flex min-h-[40px] items-center justify-center rounded-lg border px-3 text-xs font-semibold disabled:opacity-50 ${btnGhost}`}
+                                  >
+                                    Без аккордов
+                                  </button>
+                                </div>
+                              </div>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                      <p className={`text-xs ${muted}`}>Показано: {filteredXlsxSongs.length} (из {xlsxSongs.length}).</p>
+                    </div>
+                  ) : null}
+                </div>
+              </>
+            )}
           </div>
         ) : null}
 

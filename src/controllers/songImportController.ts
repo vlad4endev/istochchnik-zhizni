@@ -86,6 +86,23 @@ export async function previewSongImportXlsx(req: Request, res: Response): Promis
   });
 }
 
+/** Для UI добавления одной песни: распарсить XLSX и вернуть список песен (без запуска импорта). */
+export async function parseSongImportXlsx(req: Request, res: Response): Promise<void> {
+  if (!ensureCatalogModerator(req, res).ok) return;
+  const file = (req as Request & { file?: Express.Multer.File }).file;
+  if (!file?.buffer || file.buffer.length === 0) {
+    res.status(400).json({ error: 'xlsx file required (field: file)' });
+    return;
+  }
+  const parsed = parseXlsxBuffer(Buffer.from(file.buffer), { previewLimit: 0 });
+  res.json({
+    totalRows: parsed.totalRows,
+    parsedSongs: parsed.songs.length,
+    songs: parsed.songs,
+    errors: parsed.errors,
+  });
+}
+
 export async function startSongImportXlsx(req: Request, res: Response): Promise<void> {
   const auth = ensureCatalogModerator(req, res);
   if (!auth.ok) return;

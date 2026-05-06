@@ -15,6 +15,21 @@ export interface SongListItem {
   is_favorite?: boolean;
 }
 
+export type SongUsageSummary = {
+  song_id: number;
+  last_service_date: string | null;
+  uses_total: number;
+  uses_90d: number;
+};
+
+export type SongUsageTopRow = {
+  song_id: number;
+  title: string;
+  default_key: string | null;
+  last_service_date: string | null;
+  uses: number;
+};
+
 const SONGS = '/api/songs';
 
 export type SongListQuery = {
@@ -44,6 +59,25 @@ export async function fetchSongs(params?: SongListQuery): Promise<SongListItem[]
 
 export async function fetchSong(id: number): Promise<SongListItem> {
   const { data } = await apiClient.get<SongListItem>(`${SONGS}/${id}`);
+  return data;
+}
+
+export async function fetchSongUsage(songId: number): Promise<SongUsageSummary> {
+  const { data } = await apiClient.get<SongUsageSummary>(`${SONGS}/${songId}/usage`);
+  return data;
+}
+
+export async function fetchTopSongUsages(params?: {
+  from?: string;
+  to?: string;
+  limit?: number;
+}): Promise<SongUsageTopRow[]> {
+  const sp = new URLSearchParams();
+  if (params?.from?.trim()) sp.set('from', params.from.trim());
+  if (params?.to?.trim()) sp.set('to', params.to.trim());
+  if (params?.limit != null) sp.set('limit', String(params.limit));
+  const qs = sp.toString();
+  const { data } = await apiClient.get<SongUsageTopRow[]>(`${SONGS}/usage/top${qs ? `?${qs}` : ''}`);
   return data;
 }
 
@@ -127,4 +161,28 @@ export async function fetchImportUrlText(url: string): Promise<{ text: string; c
 export async function aiSplitSongIntoBlocks(text: string): Promise<{ chordPro: string }> {
   const { data } = await apiClient.post<{ chordPro: string }>(`${SONGS}/ai/split-blocks`, { text });
   return data;
+}
+
+export type XlsxImportParsedSong = {
+  external_id: string;
+  song_number: number;
+  title: string;
+  table_of_contents: string;
+  url_lyrics: string;
+  url_chords: string;
+  url_youtube: string | null;
+};
+
+export async function parseSongImportXlsxFile(file: File): Promise<{
+  totalRows: number;
+  parsedSongs: number;
+  songs: XlsxImportParsedSong[];
+  errors: Array<{ row: number; field: string; message: string; value?: string }>;
+}> {
+  const fd = new FormData();
+  fd.set('file', file);
+  const { data } = await apiClient.post('/api/song-import/parse', fd, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
+  return data as any;
 }
