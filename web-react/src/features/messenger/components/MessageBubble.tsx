@@ -18,6 +18,7 @@ import { apiErrorMessage, approveAccessRequest, rejectAccessRequest } from '../.
 import { IoCheckmark, IoCheckmarkDone } from 'react-icons/io5';
 import { LuBot, LuDownload, LuExternalLink, LuFileText, LuLoader, LuRefreshCw, LuReply, LuX } from 'react-icons/lu';
 import { VoiceMessageAttachment } from './VoiceMessageAttachment';
+import { VideoNoteAttachment } from './VideoNoteAttachment';
 import { PollVotersSheet } from './PollVotersSheet';
 import { AppAvatar } from '../../../components/AppAvatar';
 import { resolvePublicUrl } from '../../../lib/resolvePublicUrl';
@@ -1027,6 +1028,27 @@ function MessageBubbleInner({
     payloadType === 'text' &&
     !message.is_pinned;
 
+  const isVideoNoteLayout = payloadType === 'video_note' && !isDeleted;
+  const videoNoteHref = useMemo(() => {
+    if (!isVideoNoteLayout) return null;
+    const raw = attachmentRawUrl;
+    const fallback = raw ? (resolvePublicUrl(raw) ?? raw) : '';
+    const href = resolvedAttachmentUrl ?? fallback;
+    return href || null;
+  }, [isVideoNoteLayout, attachmentRawUrl, resolvedAttachmentUrl]);
+
+  const videoNoteDurationSec = useMemo(() => {
+    if (!isVideoNoteLayout) return undefined;
+    const durRaw = payload.durationSec ?? payload.duration_sec;
+    const n = typeof durRaw === 'number' && Number.isFinite(durRaw) ? durRaw : Number(durRaw);
+    return Number.isFinite(n) && n > 0 ? n : undefined;
+  }, [isVideoNoteLayout, payload.durationSec, payload.duration_sec]);
+
+  const videoNoteCaption = useMemo(() => {
+    if (!isVideoNoteLayout) return '';
+    return String(message.content ?? '').trim();
+  }, [isVideoNoteLayout, message.content]);
+
   const handlePrayClick = () => {
     // Этап 2: заглушка для интерактивной карточки
     // В Этапе 3/следующих этапах подключим API + WS синк.
@@ -1035,6 +1057,8 @@ function MessageBubbleInner({
   };
 
   const renderContent = () => {
+    if (payloadType === 'video_note') return null;
+
     if (payloadType === 'poll') {
       return <MessengerPollCard message={message} isMine={isMine} isOptimistic={isOptimistic} />;
     }
@@ -1439,37 +1463,6 @@ function MessageBubbleInner({
       );
     }
 
-    if (payloadType === 'video_note') {
-      const rawUrl = attachmentRawUrl;
-      const href = resolvedAttachmentUrl ?? (resolvePublicUrl(rawUrl) ?? rawUrl);
-      const caption = String(message.content ?? '').trim();
-      return (
-        <div className="w-full max-w-[min(85vw,280px)] space-y-2">
-          <div className="msg-video-note-wrap">
-            {href ? (
-              <video
-                src={href}
-                className="msg-video-note"
-                playsInline
-                controls
-                preload="metadata"
-                aria-label="Видеосообщение"
-              />
-            ) : (
-              <div className="flex h-full w-full items-center justify-center text-xs font-semibold text-[var(--text-secondary)]">
-                Видео…
-              </div>
-            )}
-          </div>
-          {caption ? (
-            <div className={['text-sm leading-relaxed', isMine ? 'text-white/95' : 'text-[var(--text)]'].join(' ')}>
-              <MentionRichText text={caption} namesById={participantLabelById} isMine={isMine} />
-            </div>
-          ) : null}
-        </div>
-      );
-    }
-
     if (payloadType === 'file') {
       const rawUrl = attachmentRawUrl;
       const fallbackHref = resolvedAttachmentUrl ?? (resolvePublicUrl(rawUrl) ?? rawUrl);
@@ -1726,23 +1719,27 @@ function MessageBubbleInner({
     );
   }
 
-  const bubbleShapeClass = systemBotAccessMessage
-    ? 'rounded-2xl'
-    : isMine
-      ? 'rounded-tl-[18px] rounded-tr-[4px] rounded-br-[18px] rounded-bl-[18px]'
-      : 'rounded-tl-[4px] rounded-tr-[18px] rounded-br-[18px] rounded-bl-[18px]';
-
-  const bubbleClasses = [
-    'relative px-3 py-2 sm:px-3.5 sm:py-2',
-    bubbleShapeClass,
-    systemBotAccessMessage
-      ? 'bg-[var(--surface-elevated)] text-[var(--text)] shadow-[0_1px_0.5px_rgba(0,0,0,0.06)] ring-1 ring-stone-200/55'
+  const bubbleShapeClass = isVideoNoteLayout
+    ? 'rounded-none'
+    : systemBotAccessMessage
+      ? 'rounded-2xl'
       : isMine
-        ? 'bg-primary text-white'
-        : 'bg-[var(--surface-elevated)] text-[var(--text)] shadow-[0_1px_0.5px_rgba(0,0,0,0.06)]',
-  ]
-    .filter(Boolean)
-    .join(' ');
+        ? 'rounded-tl-[18px] rounded-tr-[4px] rounded-br-[18px] rounded-bl-[18px]'
+        : 'rounded-tl-[4px] rounded-tr-[18px] rounded-br-[18px] rounded-bl-[18px]';
+
+  const bubbleClasses = isVideoNoteLayout
+    ? ['relative bg-transparent p-0 shadow-none ring-0', bubbleShapeClass].join(' ')
+    : [
+        'relative px-3 py-2 sm:px-3.5 sm:py-2',
+        bubbleShapeClass,
+        systemBotAccessMessage
+          ? 'bg-[var(--surface-elevated)] text-[var(--text)] shadow-[0_1px_0.5px_rgba(0,0,0,0.06)] ring-1 ring-stone-200/55'
+          : isMine
+            ? 'bg-primary text-white'
+            : 'bg-[var(--surface-elevated)] text-[var(--text)] shadow-[0_1px_0.5px_rgba(0,0,0,0.06)]',
+      ]
+        .filter(Boolean)
+        .join(' ');
 
   const metaRowClass = [
     'inline-flex shrink-0 items-center gap-0.5 whitespace-nowrap text-xs leading-none',
@@ -1837,10 +1834,15 @@ function MessageBubbleInner({
     'msg-bubble-shell message-bubble relative flex flex-col',
     systemBotAccessMessage
       ? 'mx-auto w-full max-w-[min(100%,26rem)] min-w-0 items-center'
-      : ['w-fit min-w-[80px] max-w-[75%]', isMine ? 'ml-auto items-end' : 'mr-auto items-start'].join(' '),
+      : isVideoNoteLayout
+        ? ['w-fit max-w-[min(85vw,280px)]', isMine ? 'ml-auto items-end' : 'mr-auto items-start'].join(' ')
+        : ['w-fit min-w-[80px] max-w-[75%]', isMine ? 'ml-auto items-end' : 'mr-auto items-start'].join(' '),
     !isGroupedPrev ? 'group-start' : '',
     isMine ? 'outgoing' : 'incoming',
-  ].join(' ');
+    isVideoNoteLayout ? 'msg-bubble-shell--videonote' : '',
+  ]
+    .filter(Boolean)
+    .join(' ');
 
   return (
     <>
@@ -1948,7 +1950,7 @@ function MessageBubbleInner({
         {message.reply_preview && (
           <button
             type="button"
-            className={`msg-reply-preview message-quote ${isMine ? 'msg-reply-preview--out' : 'msg-reply-preview--in'}`}
+            className={`msg-reply-preview message-quote ${isMine ? 'msg-reply-preview--out' : 'msg-reply-preview--in'} ${isVideoNoteLayout ? 'mb-2' : ''}`}
             onClick={(e) => {
               e.stopPropagation();
               const id = String(message.reply_preview?.id ?? '').trim();
@@ -1968,7 +1970,35 @@ function MessageBubbleInner({
           </button>
         )}
 
-        {useInlineTextMeta ? (
+        {isVideoNoteLayout ? (
+          <>
+            <VideoNoteAttachment
+              videoSrc={videoNoteHref}
+              isMine={isMine}
+              durationHintSec={videoNoteDurationSec}
+              metaOverlay={<div className="msg-videonote-bubble-meta">{bubbleMeta}</div>}
+            />
+            {videoNoteCaption ? (
+              <div
+                className={[
+                  'msg-videonote-caption mt-2 max-w-[min(85vw,280px)] text-sm leading-relaxed',
+                  isMine ? 'text-primary' : 'text-[var(--text)]',
+                ].join(' ')}
+              >
+                <MentionRichText text={videoNoteCaption} namesById={participantLabelById} isMine={isMine} />
+              </div>
+            ) : null}
+            {message.is_pinned ? (
+              <div
+                className={['mt-1 text-xs font-bold uppercase tracking-wide', isMine ? 'text-primary/80' : 'text-amber-600'].join(
+                  ' ',
+                )}
+              >
+                📌 Закреплено
+              </div>
+            ) : null}
+          </>
+        ) : useInlineTextMeta ? (
           <div className="flex min-w-0 flex-row flex-wrap items-end gap-x-2 gap-y-0.5">
             <div className="msg-content min-w-0 flex-1 whitespace-pre-wrap break-words text-sm leading-relaxed sm:text-base">
               {renderContent()}

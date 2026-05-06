@@ -9,6 +9,7 @@ import { resolveSessionByToken } from '../services/authService';
 import { isMemberInConversation, verifyMessageSenderInConversation } from '../services/messengerService';
 import { memberCanJoinServicePlanPresenceSession } from '../services/servicePlannerService';
 import type { WsMessengerEvent } from '../types/messenger';
+import { handleCallClientMessage, initCallSignaling } from './callSignaling';
 
 // ─── Redis pub/sub (ioredis, горизонтальное масштабирование, без Socket.io) ──
 // Проект использует пакет `ws`, а не socket.io — @socket.io/redis-adapter сюда не подключается.
@@ -482,6 +483,14 @@ type ClientInboundMessage = {
 };
 
 async function handleClientMessage(client: AuthenticatedClient, msg: ClientInboundMessage): Promise<void> {
+  if (typeof msg.type === 'string' && msg.type.startsWith('call:')) {
+    await handleCallClientMessage(
+      { ws: client.ws, memberId: client.memberId, memberName: client.memberName },
+      msg,
+    );
+    return;
+  }
+
   switch (msg.type) {
     case 'join': {
       // Join a conversation room: { type: 'join', conversationId }
@@ -1040,3 +1049,8 @@ function persistLastSeenAndBroadcastOffline(memberId: number): void {
     broadcastPresence(event);
   })();
 }
+
+initCallSignaling({
+  sendToMember,
+  isMemberOnline,
+});

@@ -77,6 +77,9 @@ export interface ConversationListItem {
     last_name: string | null;
     avatar_url?: string | null;
     last_seen_at?: string | null;
+    /** Глобальная роль; звонок в шапке — только если собеседник администратор приложения. */
+    app_role?: string | null;
+    app_roles?: string[] | null;
   } | null;
   my_muted?: boolean;
   my_muted_until?: string | null;

@@ -1821,52 +1821,9 @@ export function ChatInput({
       ) : null}
 
       {mediaCapture ? (
-        <div
-          className="mb-2 rounded-2xl border border-red-200/90 bg-red-50/95 px-4 py-3 shadow-sm dark:border-red-900/50 dark:bg-red-950/40"
-          aria-live="polite"
-        >
-          <div className="flex flex-wrap items-center gap-3">
-            <span className="relative flex h-2.5 w-2.5 shrink-0">
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400 opacity-60" />
-              <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-red-500" />
-            </span>
-            <div className="tg-capture-hud-chips flex min-w-0 flex-1 items-center justify-center gap-4 sm:gap-5">
-              <span
-                className={[
-                  'flex h-11 w-11 items-center justify-center rounded-full border-2 transition-colors duration-150',
-                  mediaCapture.kind === 'audio'
-                    ? 'border-red-600 bg-white text-red-700 shadow-sm dark:border-red-300 dark:bg-red-950 dark:text-red-50'
-                    : 'border-transparent text-red-800/50 dark:text-red-200/45',
-                ].join(' ')}
-                aria-hidden
-              >
-                <LuMic className="h-5 w-5" strokeWidth={2.25} />
-              </span>
-              <div className="flex min-w-[4.5rem] flex-col items-center gap-1">
-                <span className="shrink-0 tabular-nums text-base font-bold text-red-900 dark:text-red-200">
-                  {mediaCapture.connecting
-                    ? '…'
-                    : formatVoiceElapsed(mediaCapture.segmentStartedAt, voiceTick)}
-                </span>
-                <span className="text-center text-[10px] font-semibold tracking-wide text-red-900/80 dark:text-red-200/80">
-                  ← кружок · голос →
-                </span>
-              </div>
-              <span
-                className={[
-                  'flex h-11 w-11 items-center justify-center rounded-full border-2 transition-colors duration-150',
-                  mediaCapture.kind === 'video_note'
-                    ? 'border-red-600 bg-white text-red-700 shadow-sm dark:border-red-300 dark:bg-red-950 dark:text-red-50'
-                    : 'border-transparent text-red-800/50 dark:text-red-200/45',
-                ].join(' ')}
-                aria-hidden
-              >
-                <LuVideo className="h-5 w-5" strokeWidth={2.25} />
-              </span>
-            </div>
-          </div>
-          {mediaCapture.kind === 'video_note' && !mediaCapture.connecting ? (
-            <div className="mt-3 flex justify-center">
+        <div className="tg-videonote-capture mb-2" aria-live="polite">
+          <div className="tg-videonote-capture__stage">
+            {mediaCapture.kind === 'video_note' && !mediaCapture.connecting ? (
               <div className="tg-capture-hud-videonote-ring">
                 <video
                   ref={capturePreviewVideoRef}
@@ -1877,12 +1834,47 @@ export function ChatInput({
                   aria-hidden
                 />
               </div>
+            ) : (
+              <div className="tg-videonote-capture__audio-visual">
+                <LuMic className="h-12 w-12" strokeWidth={1.75} aria-hidden />
+                <div className="tg-videonote-capture__waves" aria-hidden>
+                  <span />
+                  <span />
+                  <span />
+                  <span />
+                </div>
+              </div>
+            )}
+          </div>
+          <div className="tg-videonote-capture__rail">
+            <span
+              className={[
+                'tg-videonote-capture__mode',
+                mediaCapture.kind === 'audio' ? 'tg-videonote-capture__mode--on' : '',
+              ].join(' ')}
+              aria-hidden
+            >
+              <LuMic className="h-5 w-5" strokeWidth={2.25} />
+            </span>
+            <div className="tg-videonote-capture__timer">
+              {mediaCapture.connecting
+                ? '…'
+                : formatVoiceElapsed(mediaCapture.segmentStartedAt, voiceTick)}
             </div>
-          ) : null}
-          <p className="mt-2 text-center text-xs font-semibold leading-snug text-red-950/90 dark:text-red-100/90">
+            <span
+              className={[
+                'tg-videonote-capture__mode',
+                mediaCapture.kind === 'video_note' ? 'tg-videonote-capture__mode--on' : '',
+              ].join(' ')}
+              aria-hidden
+            >
+              <LuVideo className="h-5 w-5" strokeWidth={2.25} />
+            </span>
+          </div>
+          <p className="tg-videonote-capture__hint">
             {mediaCapture.connecting
               ? 'Разрешите доступ к микрофону или камере'
-              : 'Во время записи: влево — кружок (до 1 мин), вправо — голос. Отпустите кнопку — отправить.'}
+              : 'Свайп влево — видеокружок (до 1 мин), вправо — голос. Отпустите — отправить.'}
           </p>
         </div>
       ) : null}

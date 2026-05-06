@@ -109,6 +109,9 @@ export interface ConversationListItem {
     avatar_url?: string | null;
     /** ISO time of last disconnect (WS), optional until backfill */
     last_seen_at?: string | null;
+    /** Глобальная роль в приложении; для звонков — только к `admin`. */
+    app_role?: string | null;
+    app_roles?: string[] | null;
   } | null;
   /** Персонально для текущего пользователя (из conversation_participants). */
   my_muted?: boolean;
@@ -206,4 +209,27 @@ export type WsMessengerEvent =
       type: 'service_plan:presence';
       servicePlanId: number;
       peers: Array<{ memberId: number; memberName: string }>;
-    };
+    }
+  /** WebRTC звонки 1:1 (сигнализация через тот же WS, что и мессенджер). */
+  | {
+      type: 'call:incoming';
+      callId: string;
+      callerId: number;
+      conversationId: string;
+      callType: 'audio' | 'video';
+      callerName: string;
+      callerAvatar: string | null;
+    }
+  | {
+      type: 'call:error';
+      callId: string;
+      error: 'busy' | 'already_in_call' | 'user_offline' | 'forbidden' | 'invalid';
+    }
+  | { type: 'call:accepted'; callId: string }
+  | { type: 'call:rejected'; callId: string; reason?: string }
+  | { type: 'call:cancelled'; callId: string }
+  | { type: 'call:ended'; callId: string; reason?: string; duration?: number }
+  | { type: 'call:signal'; callId: string; data: unknown }
+  | { type: 'call:peer_video'; callId: string; userId: number; enabled: boolean }
+  | { type: 'call:peer_audio'; callId: string; userId: number; enabled: boolean }
+  | { type: 'call:peer_screen'; callId: string; enabled: boolean };

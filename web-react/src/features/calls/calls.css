@@ -1,0 +1,223 @@
+/* Глобальные оверлеи звонков (вне темы Tailwind в отдельных блоках). */
+.incoming-call-toast {
+  position: fixed;
+  top: max(24px, env(safe-area-inset-top, 0px));
+  right: max(24px, env(safe-area-inset-right, 0px));
+  z-index: 10050;
+  background: var(--surface-elevated, #fff);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 16px;
+  padding: 16px 20px;
+  width: min(320px, calc(100vw - 32px));
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
+  animation: incoming-call-slide 0.3s ease;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+@keyframes incoming-call-slide {
+  from {
+    transform: translateX(110%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+.incoming-call-toast .caller-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.incoming-call-toast .caller-avatar {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.incoming-call-toast .caller-name {
+  font-weight: 600;
+  font-size: 16px;
+  color: var(--text, #1c1917);
+}
+
+.incoming-call-toast .call-type {
+  font-size: 13px;
+  color: var(--text-secondary, #78716c);
+}
+
+.incoming-call-toast .call-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.incoming-call-toast .btn-reject {
+  flex: 1;
+  padding: 10px;
+  border-radius: 10px;
+  border: none;
+  background: #ef4444;
+  color: white;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.incoming-call-toast .btn-accept {
+  flex: 1;
+  padding: 10px;
+  border-radius: 10px;
+  border: none;
+  background: #22c55e;
+  color: white;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.call-window {
+  position: fixed;
+  inset: 0;
+  z-index: 10040;
+  background: #1a1a2e;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.call-window .remote-video-wrap {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  flex: 1;
+  min-height: 0;
+}
+
+.call-window .remote-video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.call-window .local-video {
+  position: absolute;
+  bottom: 100px;
+  right: 20px;
+  width: 160px;
+  height: 90px;
+  border-radius: 12px;
+  object-fit: cover;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+}
+
+.call-window .audio-call-center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  color: white;
+  padding: 24px;
+  text-align: center;
+}
+
+.call-window .peer-avatar-large {
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 3px solid rgba(255, 255, 255, 0.3);
+}
+
+.call-window .peer-name {
+  font-size: 24px;
+  font-weight: 600;
+  color: white;
+}
+
+.call-window .call-status {
+  font-size: 16px;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.call-window .call-duration {
+  position: absolute;
+  top: max(20px, env(safe-area-inset-top, 0px));
+  left: 50%;
+  transform: translateX(-50%);
+  color: white;
+  font-size: 14px;
+  background: rgba(0, 0, 0, 0.4);
+  padding: 4px 12px;
+  border-radius: 20px;
+}
+
+.call-window .call-controls {
+  position: absolute;
+  bottom: max(40px, env(safe-area-inset-bottom, 0px));
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  padding: 0 16px;
+}
+
+.call-window .ctrl-btn {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(255, 255, 255, 0.15);
+  font-size: 22px;
+  cursor: pointer;
+  transition: background 0.2s;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.call-window .ctrl-btn:hover {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+.call-window .ctrl-btn--off {
+  background: rgba(255, 255, 255, 0.08);
+  opacity: 0.5;
+}
+
+.call-window .ctrl-btn--active {
+  background: rgba(59, 130, 246, 0.5);
+}
+
+.call-window .ctrl-btn--end {
+  background: #ef4444;
+  width: 64px;
+  height: 64px;
+  font-size: 26px;
+}
+
+.call-window .ctrl-btn--end:hover {
+  background: #dc2626;
+}
+
+.call-window .video-off-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  background: rgba(0, 0, 0, 0.55);
+  color: white;
+  font-weight: 500;
+}
+
+.call-window .mute-indicator {
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.75);
+}

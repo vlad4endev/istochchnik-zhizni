@@ -230,7 +230,9 @@ export async function listConversations(memberId: number): Promise<ConversationL
       om.first_name  AS om_first_name,
       om.last_name   AS om_last_name,
       om.avatar_url  AS om_avatar_url,
-      om.last_seen_at AS om_last_seen_at
+      om.last_seen_at AS om_last_seen_at,
+      om.app_role    AS om_app_role,
+      om.app_roles   AS om_app_roles
     FROM conversation_participants cp
     JOIN conversations c ON c.id = cp.conversation_id
     -- last message via lateral
@@ -244,7 +246,7 @@ export async function listConversations(memberId: number): Promise<ConversationL
     LEFT JOIN members lm_sender ON lm_sender.id = lm.sender_id
     -- other member for private chats
     LEFT JOIN LATERAL (
-      SELECT om2.id, om2.name, om2.first_name, om2.last_name, om2.avatar_url, om2.last_seen_at
+      SELECT om2.id, om2.name, om2.first_name, om2.last_name, om2.avatar_url, om2.last_seen_at, om2.app_role, om2.app_roles
       FROM conversation_participants op
       JOIN members om2 ON om2.id = op.member_id
       WHERE op.conversation_id = c.id
@@ -313,6 +315,10 @@ export async function listConversations(memberId: number): Promise<ConversationL
               r.om_last_seen_at != null
                 ? new Date(r.om_last_seen_at as string | Date).toISOString()
                 : null,
+            app_role: r.om_app_role != null ? String(r.om_app_role) : null,
+            app_roles: Array.isArray(r.om_app_roles)
+              ? (r.om_app_roles as unknown[]).map((x) => String(x))
+              : null,
           }
         : null,
       ...mapParticipantUiExtras({
@@ -710,7 +716,9 @@ export async function getConversationListItem(
       om.first_name  AS om_first_name,
       om.last_name   AS om_last_name,
       om.avatar_url  AS om_avatar_url,
-      om.last_seen_at AS om_last_seen_at
+      om.last_seen_at AS om_last_seen_at,
+      om.app_role    AS om_app_role,
+      om.app_roles   AS om_app_roles
     FROM conversation_participants cp
     JOIN conversations c ON c.id = cp.conversation_id
     LEFT JOIN LATERAL (
@@ -722,7 +730,7 @@ export async function getConversationListItem(
     ) lm ON TRUE
     LEFT JOIN members lm_sender ON lm_sender.id = lm.sender_id
     LEFT JOIN LATERAL (
-      SELECT om2.id, om2.name, om2.first_name, om2.last_name, om2.avatar_url, om2.last_seen_at
+      SELECT om2.id, om2.name, om2.first_name, om2.last_name, om2.avatar_url, om2.last_seen_at, om2.app_role, om2.app_roles
       FROM conversation_participants op
       JOIN members om2 ON om2.id = op.member_id
       WHERE op.conversation_id = c.id
@@ -791,6 +799,10 @@ export async function getConversationListItem(
             r.om_last_seen_at != null
               ? new Date(r.om_last_seen_at as string | Date).toISOString()
               : null,
+          app_role: r.om_app_role != null ? String(r.om_app_role) : null,
+          app_roles: Array.isArray(r.om_app_roles)
+            ? (r.om_app_roles as unknown[]).map((x) => String(x))
+            : null,
         }
       : null,
     ...mapParticipantUiExtras({

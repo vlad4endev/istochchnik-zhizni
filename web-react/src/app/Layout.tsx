@@ -40,6 +40,8 @@ import { ScrollRestoration } from '../components/ScrollRestoration';
 import type { AppToastAction, AppToastKind } from '../lib/uiFeedback';
 import { useChatStore } from '../features/messenger/chatStore';
 import { MessengerWsProvider } from '../features/messenger/MessengerWsContext';
+import { CallWindow } from '../features/calls/CallWindow';
+import { IncomingCallToast } from '../features/calls/IncomingCallToast';
 import { useBrowserNotificationScheduler } from '../features/notifications/useBrowserNotificationScheduler';
 import { useProfileDraftStore } from '../features/profile/profileDraftStore';
 import { canAccessStudioRole } from '../features/auth/studioAccess';
@@ -1069,6 +1071,8 @@ export function Layout() {
       <AndroidInstallBanner />
       <AppToastHost />
       <NotificationPrompt />
+      <IncomingCallToast />
+      <CallWindow />
     </div>
     </MessengerWsProvider>
   );

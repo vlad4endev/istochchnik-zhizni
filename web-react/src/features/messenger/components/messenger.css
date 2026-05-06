@@ -1204,6 +1204,14 @@
   display: inline-block;
 }
 
+.tg-chat-header-call-btn {
+  outline: none;
+}
+
+.tg-chat-header-call-btn:focus-visible {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary, #7d3640) 32%, transparent);
+}
+
 @keyframes tg-skeleton-shimmer {
   0% {
     background-position: 200% 0;
@@ -2700,14 +2708,81 @@ html[data-chat-open='1'] .tg-main--visible .tg-chat-window .tg-input-container.t
   align-self: stretch !important;
 }
 
-/* Запись: превью видеокружка (как в Telegram) */
+/* ─── Запись видеокружка / голоса: панель как в Telegram (тёмная, без «алертной» рамки) ─── */
+.tg-videonote-capture {
+  margin-bottom: 0.5rem;
+  border-radius: 1.35rem;
+  background: linear-gradient(180deg, rgba(55, 55, 58, 0.97) 0%, rgba(38, 38, 40, 0.99) 100%);
+  color: #fff;
+  padding: 0.75rem 0.65rem 0.65rem;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.28);
+}
+
+.tg-videonote-capture__stage {
+  display: flex;
+  min-height: min(200px, 48vw);
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 0.5rem;
+}
+
+.tg-videonote-capture__audio-visual {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  color: rgba(255, 255, 255, 0.88);
+}
+
+.tg-videonote-capture__audio-visual svg {
+  opacity: 0.92;
+}
+
+.tg-videonote-capture__waves {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 4px;
+  height: 28px;
+}
+
+.tg-videonote-capture__waves span {
+  width: 4px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.55);
+  animation: tg-vn-wave 0.9s ease-in-out infinite;
+}
+
+.tg-videonote-capture__waves span:nth-child(2) {
+  animation-delay: 0.12s;
+}
+.tg-videonote-capture__waves span:nth-child(3) {
+  animation-delay: 0.24s;
+}
+.tg-videonote-capture__waves span:nth-child(4) {
+  animation-delay: 0.36s;
+}
+
+@keyframes tg-vn-wave {
+  0%,
+  100% {
+    height: 6px;
+    opacity: 0.5;
+  }
+  50% {
+    height: 24px;
+    opacity: 1;
+  }
+}
+
 .tg-capture-hud-videonote-ring {
-  width: min(200px, 52vw);
-  height: min(200px, 52vw);
+  width: min(220px, 58vw);
+  height: min(220px, 58vw);
   border-radius: 50%;
   overflow: hidden;
-  background: rgba(0, 0, 0, 0.2);
-  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.35), 0 8px 28px rgba(0, 0, 0, 0.25);
+  background: #1a1a1c;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.14), inset 0 0 0 1px rgba(0, 0, 0, 0.35);
 }
 
 .tg-capture-hud-videonote {
@@ -2718,19 +2793,172 @@ html[data-chat-open='1'] .tg-main--visible .tg-chat-window .tg-input-container.t
   transform: scaleX(-1);
 }
 
-/* Сообщение: видеокружок в треде */
-.msg-video-note-wrap {
+.tg-videonote-capture__rail {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.2rem 0.35rem 0;
+}
+
+.tg-videonote-capture__mode {
+  display: grid;
+  place-items: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  border-radius: 999px;
+  color: rgba(255, 255, 255, 0.45);
+  transition: background 0.15s ease, color 0.15s ease, transform 0.15s ease;
+}
+
+.tg-videonote-capture__mode--on {
+  background: rgba(255, 255, 255, 0.18);
+  color: #fff;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.22);
+}
+
+.tg-videonote-capture__timer {
+  flex: 1;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  font-size: 1.125rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: rgba(255, 255, 255, 0.95);
+}
+
+.tg-videonote-capture__hint {
+  margin-top: 0.35rem;
+  text-align: center;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  line-height: 1.35;
+  color: rgba(255, 255, 255, 0.48);
+}
+
+/* Сообщение: видеокружок в ленте (Telegram — только круг, без «карточки») */
+.msg-bubble-shell--videonote .msg-reply-preview {
+  max-width: min(85vw, 280px);
+}
+
+.msg-videonote-circle-wrap {
+  line-height: 0;
+}
+
+.msg-videonote-circle {
+  width: min(240px, 78vw);
+  height: min(240px, 78vw);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.msg-videonote-circle--placeholder {
+  display: grid;
+  place-items: center;
   width: min(240px, 78vw);
   height: min(240px, 78vw);
   border-radius: 50%;
-  overflow: hidden;
-  background: var(--surface, #f4f4f5);
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.12);
+  background: var(--surface, #ececee);
 }
 
-.msg-video-note {
+html.dark .msg-videonote-circle--placeholder {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.msg-videonote-video {
   width: 100%;
   height: 100%;
   object-fit: cover;
   display: block;
+}
+
+.msg-videonote-play-veil {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgba(0, 0, 0, 0.22);
+  transition: opacity 0.15s ease;
+}
+
+.msg-videonote-play-btn {
+  display: grid;
+  place-items: center;
+  width: 4.25rem;
+  height: 4.25rem;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(4px);
+}
+
+.msg-videonote-pause-hit {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+}
+
+.msg-videonote-progress-track {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 3px;
+  background: rgba(255, 255, 255, 0.22);
+  overflow: hidden;
+}
+
+.msg-videonote-progress-fill {
+  height: 100%;
+  background: rgba(255, 255, 255, 0.92);
+  transition: width 0.1s linear;
+}
+
+.msg-videonote-meta-overlay {
+  position: absolute;
+  right: 6px;
+  bottom: 7px;
+  left: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  pointer-events: none;
+}
+
+.msg-videonote-meta-overlay .msg-videonote-bubble-meta {
+  pointer-events: auto;
+}
+
+.msg-videonote-bubble-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.125rem;
+  padding: 2px 7px 3px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  color: rgba(255, 255, 255, 0.96);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.65);
+  background: rgba(0, 0, 0, 0.38);
+  backdrop-filter: blur(6px);
+}
+
+.msg-videonote-bubble-meta .msg-edited {
+  opacity: 0.88;
+  font-weight: 600;
+}
+
+.msg-videonote-bubble-meta .tabular-nums {
+  color: inherit;
+}
+
+.msg-videonote-bubble-meta svg {
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.5));
+}
+
+.msg-videonote-bubble-meta .text-\[var\(--text-muted\)\],
+.msg-videonote-bubble-meta .text-white\/70 {
+  color: rgba(255, 255, 255, 0.88) !important;
 }

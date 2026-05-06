@@ -8,7 +8,7 @@ import * as api from '../api/messengerApi';
 import { MessageBubble } from './MessageBubble';
 import { ChatInput } from './ChatInput';
 import { SearchChat } from './SearchChat';
-import { LuArrowLeft, LuLayers, LuSearch } from 'react-icons/lu';
+import { LuArrowLeft, LuLayers, LuPhone, LuSearch, LuVideo } from 'react-icons/lu';
 import { AppAvatar } from '../../../components/AppAvatar';
 import { resolvePublicUrl } from '../../../lib/resolvePublicUrl';
 import { ChatMediaGallery } from './ChatMediaGallery';
@@ -17,6 +17,10 @@ import { groupMessages } from '../groupMessages';
 import { getAlbumImageUrl, getPrimaryAttachmentUrl, inferMessengerPayloadType } from '../payloadMedia';
 import { getAvatarColor, getAvatarInitial } from '../avatarUtils';
 import { isAccessRequestsMessengerChannel } from '../messengerChannelKinds';
+import { isAppAdministratorRole } from '../manage/messengerManageAccess';
+import { useCallStore } from '../../calls/callStore';
+import { requestCallNotificationsFromUserGesture } from '../../calls/incomingCallBackground';
+import { sendRealtimeJson } from '../../../lib/realtimeWsClient';
 import './messenger.css';
 
 /** Склонение «N участников» по-русски (как в интерфейсах мессенджеров). */
@@ -75,6 +79,9 @@ export function ChatWindow({
   /** Плашка «к новым», если лента уехала вверх и пришло чужое сообщение. */
   const [showNewBelow, setShowNewBelow] = useState(false);
   const [showMediaGallery, setShowMediaGallery] = useState(false);
+  /** Меню звонка в шапке (аудио / видео). */
+  const [callHeaderMenuOpen, setCallHeaderMenuOpen] = useState(false);
+  const callHeaderMenuRef = useRef<HTMLDivElement>(null);
   const nodeByMsgIdRef = useRef<Map<string, HTMLElement>>(new Map());
   const autoJumpUnreadKeyRef = useRef<string | null>(null);
   const lastSentReadIdRef = useRef<bigint>(0n);
@@ -111,6 +118,38 @@ export function ChatWindow({
     () => isAccessRequestsMessengerChannel(chatMeta?.metadata ?? conv?.metadata),
     [chatMeta?.metadata, conv?.metadata],
   );
+
+  /** Пока звонки разрешены только администратору приложения — кнопка только в личке с admin. */
+  const canShowPrivateCallToAdmin = useMemo(() => {
+    if (isDraft || !conv || conv.type !== 'private' || !conv.other_member || isAccessRequestsChannel) {
+      return false;
+    }
+    const om = conv.other_member;
+    return isAppAdministratorRole(om.app_role ?? null, om.app_roles ?? null);
+  }, [conv, isAccessRequestsChannel, isDraft]);
+
+  useEffect(() => {
+    setCallHeaderMenuOpen(false);
+  }, [conversationId]);
+
+  useEffect(() => {
+    if (!callHeaderMenuOpen) return;
+    const onPointerDown = (e: PointerEvent) => {
+      const el = callHeaderMenuRef.current;
+      if (el && !el.contains(e.target as Node)) {
+        setCallHeaderMenuOpen(false);
+      }
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setCallHeaderMenuOpen(false);
+    };
+    document.addEventListener('pointerdown', onPointerDown, true);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown, true);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [callHeaderMenuOpen]);
 
   useEffect(() => {
     if (isDraft) {
@@ -741,6 +780,39 @@ export function ChatWindow({
     return 'чат';
   }, [chatHeadReady, conv, typingUsers, isOnline, isDraft, memberLastSeenAt, groupParticipantIds.length, onlineInGroupCount]);
 
+  const initiateCall = useCallback(
+    (callType: 'audio' | 'video') => {
+      if (isDraft || isAccessRequestsChannel) return;
+      if (conv?.type !== 'private' || !conv.other_member) return;
+      if (!isAppAdministratorRole(conv.other_member.app_role ?? null, conv.other_member.app_roles ?? null)) {
+        return;
+      }
+      requestCallNotificationsFromUserGesture();
+      const callId = crypto.randomUUID();
+      sendRealtimeJson({
+        type: 'call:initiate',
+        callId,
+        receiverId: conv.other_member.id,
+        conversationId,
+        callType,
+      });
+      const fn = conv.other_member.first_name || '';
+      const ln = conv.other_member.last_name || '';
+      const peerName = `${fn} ${ln}`.trim() || conv.other_member.name;
+      const peerAvatar = conv.other_member.avatar_url ?? '';
+      useCallStore.getState().openCall({
+        callId,
+        conversationId,
+        peerId: conv.other_member.id,
+        peerName,
+        peerAvatar,
+        callType,
+        isInitiator: true,
+      });
+    },
+    [conversationId, conv, isAccessRequestsChannel, isDraft],
+  );
+
   const typingFirstNames = useMemo(
     () =>
       typingUsers
@@ -894,6 +966,74 @@ export function ChatWindow({
                   >
                     <LuLayers size={20} strokeWidth={2.25} />
                   </button>
+                ) : null}
+                {!isDraft && canShowPrivateCallToAdmin ? (
+                  <div className="relative" ref={callHeaderMenuRef}>
+                    <button
+                      type="button"
+                      onClick={() => setCallHeaderMenuOpen((v) => !v)}
+                      aria-label="Позвонить"
+                      title="Позвонить"
+                      aria-haspopup="menu"
+                      aria-expanded={callHeaderMenuOpen}
+                      className={[
+                        'tg-chat-header-call-btn inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full transition-all duration-200',
+                        'text-primary ring-2 ring-primary/[0.18] bg-primary/[0.07] shadow-sm',
+                        'hover:bg-primary/[0.13] hover:ring-primary/30 active:scale-[0.96]',
+                        callHeaderMenuOpen ? 'bg-primary/[0.14] ring-primary/35' : '',
+                      ].join(' ')}
+                    >
+                      <LuPhone className="h-[20px] w-[20px]" strokeWidth={2.35} aria-hidden />
+                    </button>
+                    {callHeaderMenuOpen ? (
+                      <div
+                        role="menu"
+                        className="tg-chat-header-call-menu absolute right-0 top-[calc(100%+6px)] z-[220] min-w-[12.5rem] overflow-hidden rounded-2xl border border-stone-200/90 bg-[var(--surface-elevated)] py-1.5 shadow-[0_12px_40px_rgba(0,0,0,0.12)] dark:border-white/[0.1] dark:shadow-[0_16px_48px_rgba(0,0,0,0.45)]"
+                      >
+                        <p className="px-3.5 pb-1.5 pt-0.5 text-[11px] font-medium leading-snug text-[var(--text-secondary)]">
+                          Звонок доступен только администратору церкви.
+                        </p>
+                        <button
+                          type="button"
+                          role="menuitem"
+                          className="flex w-full items-center gap-3 px-3.5 py-2.5 text-left text-sm font-semibold text-[var(--text)] transition-colors hover:bg-stone-100/90 active:bg-stone-200/80 dark:hover:bg-stone-800/80"
+                          onClick={() => {
+                            setCallHeaderMenuOpen(false);
+                            initiateCall('audio');
+                          }}
+                        >
+                          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                            <LuPhone className="h-[18px] w-[18px]" strokeWidth={2.25} aria-hidden />
+                          </span>
+                          <span className="min-w-0">
+                            <span className="block leading-tight">Аудиозвонок</span>
+                            <span className="mt-0.5 block text-xs font-medium text-[var(--text-secondary)]">
+                              Только голос
+                            </span>
+                          </span>
+                        </button>
+                        <button
+                          type="button"
+                          role="menuitem"
+                          className="flex w-full items-center gap-3 px-3.5 py-2.5 text-left text-sm font-semibold text-[var(--text)] transition-colors hover:bg-stone-100/90 active:bg-stone-200/80 dark:hover:bg-stone-800/80"
+                          onClick={() => {
+                            setCallHeaderMenuOpen(false);
+                            initiateCall('video');
+                          }}
+                        >
+                          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-sky-500/10 text-sky-600 dark:text-sky-400">
+                            <LuVideo className="h-[18px] w-[18px]" strokeWidth={2.25} aria-hidden />
+                          </span>
+                          <span className="min-w-0">
+                            <span className="block leading-tight">Видеозвонок</span>
+                            <span className="mt-0.5 block text-xs font-medium text-[var(--text-secondary)]">
+                              С камерой
+                            </span>
+                          </span>
+                        </button>
+                      </div>
+                    ) : null}
+                  </div>
                 ) : null}
                 <button
                   type="button"
