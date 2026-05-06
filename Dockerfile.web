@@ -2,8 +2,11 @@
 FROM node:20-bookworm-slim AS build
 WORKDIR /app
 
-# В glibc-образе sharp обычно устанавливается из prebuilt-бинаря
-# (без сборки через node-gyp), что заметно надежнее в CI/production-сборках.
+# sharp обычно ставится из prebuilt-бинаря, но при сетевых таймаутах
+# fallback идет в сборку через node-gyp. Держим toolchain в build-слое.
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends python3 make g++ \
+  && rm -rf /var/lib/apt/lists/*
 
 # Vite: только переменные с префиксом VITE_ доступны в import.meta.env при сборке.
 ARG VITE_PWA_ORIGIN=
