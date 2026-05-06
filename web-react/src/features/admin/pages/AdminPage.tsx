@@ -109,6 +109,58 @@ import type { AppUser } from '../types';
 import { fetchPrayerRequestHistory, type PrayerHistoryItem } from '../../profile/api';
 import { useMe } from '@/hooks/useMe';
 
+type UpcomingBirthday = {
+  nextDate: Date;
+  daysUntil: number;
+  /** "12 мая" */
+  dateLabel: string;
+  /** "через 5 дн." / "сегодня" / "завтра" */
+  relativeLabel: string;
+};
+
+function nextBirthdayLocal(birthDateYmd: string, now: Date): Date | null {
+  // birthDateYmd: "YYYY-MM-DD"
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(birthDateYmd);
+  if (!m) return null;
+  const month = Number(m[2]); // 1-12
+  const day = Number(m[3]); // 1-31
+  if (!Number.isFinite(month) || !Number.isFinite(day) || month < 1 || month > 12 || day < 1 || day > 31) return null;
+
+  // Use local noon to reduce DST/timezone edge cases.
+  const todayNoon = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 12, 0, 0, 0);
+  let candidate = new Date(todayNoon.getFullYear(), month - 1, day, 12, 0, 0, 0);
+
+  // If already passed today, move to next year.
+  if (candidate.getTime() < todayNoon.getTime()) {
+    candidate = new Date(todayNoon.getFullYear() + 1, month - 1, day, 12, 0, 0, 0);
+  }
+
+  // Guard invalid dates (e.g. 29 Feb on non-leap year) - JS will roll over to Mar.
+  if (candidate.getMonth() !== month - 1 || candidate.getDate() !== day) return null;
+  return candidate;
+}
+
+function upcomingBirthday(birthDateYmd: string | null | undefined, now: Date, withinDays: number): UpcomingBirthday | null {
+  if (!birthDateYmd) return null;
+  const next = nextBirthdayLocal(birthDateYmd, now);
+  if (!next) return null;
+
+  const todayNoon = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 12, 0, 0, 0);
+  const msPerDay = 24 * 60 * 60 * 1000;
+  const daysUntil = Math.round((next.getTime() - todayNoon.getTime()) / msPerDay);
+  if (daysUntil < 0 || daysUntil > withinDays) return null;
+
+  const relativeLabel =
+    daysUntil === 0 ? 'сегодня' : daysUntil === 1 ? 'завтра' : `через ${daysUntil} дн.`;
+
+  return {
+    nextDate: next,
+    daysUntil,
+    dateLabel: format(next, 'd MMMM', { locale: ru }),
+    relativeLabel,
+  };
+}
+
 function appRoleLabel(role: string): string {
   switch (role) {
     case 'admin':
@@ -311,6 +363,10 @@ function memberAvatarColors(name: string): { bg: string; fg: string } {
   ] as const;
   const code = (name || '').trim().toUpperCase().charCodeAt(0) || 0;
   return PALETTES[code % PALETTES.length]!;
+}
+
+function birthdayBadge(u: AppUser, now: Date, withinDays: number): UpcomingBirthday | null {
+  return upcomingBirthday(u.birth_date, now, withinDays);
 }
 
 function fieldClass() {
@@ -609,6 +665,21 @@ function MembersSection({
         });
     return [...matched].sort(compareMembersByPrayerCycleOrder);
   }, [data, search, roleFilter]);
+
+  const now = useMemo(() => new Date(), []);
+  const upcomingBirthdays = useMemo(() => {
+    const list = data ?? [];
+    const withinDays = 30;
+    const rows = list
+      .filter((u) => u.is_active)
+      .map((u) => {
+        const b = birthdayBadge(u, now, withinDays);
+        return b ? { u, b } : null;
+      })
+      .filter(Boolean) as Array<{ u: AppUser; b: UpcomingBirthday }>;
+    rows.sort((a, b) => a.b.daysUntil - b.b.daysUntil || memberRosterName(a.u).localeCompare(memberRosterName(b.u), 'ru'));
+    return rows;
+  }, [data, now]);
 
   const dirs = (dirsQ.data ?? []) as MinistryDirectionTemplate[];
   const rolesForDirection = (directionTitlesRaw: string) => {
@@ -1004,6 +1075,52 @@ function MembersSection({
           <p className="mt-1 text-2xl font-extrabold text-primary">{stats.admins}</p>
         </div>
       </div>
+
+      {/* Upcoming birthdays */}
+      {upcomingBirthdays.length ? (
+        <div className="rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] p-4 shadow-[var(--shadow)]">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="min-w-0">
+              <p className="text-xs font-extrabold uppercase tracking-[0.14em] text-stone-400">Дни рождения</p>
+              <p className="mt-1 text-sm font-semibold text-stone-900">
+                <span aria-hidden>🎂</span> Ближайшие 30 дней
+              </p>
+            </div>
+            <p className="text-xs text-stone-500">Показаны активные пользователи</p>
+          </div>
+
+          <div className="mt-3 grid gap-2 sm:grid-cols-2">
+            {upcomingBirthdays.slice(0, 8).map(({ u, b }) => (
+              <button
+                key={u.id}
+                type="button"
+                onClick={() => openEdit(u)}
+                className="group flex min-w-0 items-center justify-between gap-3 rounded-xl border border-stone-200/80 bg-white px-3 py-2 text-left shadow-sm transition hover:border-primary/40 hover:bg-primary/[0.04]"
+                title="Открыть карточку"
+              >
+                <span className="min-w-0">
+                  <span className="block truncate text-sm font-semibold text-stone-900">
+                    {memberRosterName(u)}
+                  </span>
+                  <span className="mt-0.5 block truncate text-xs text-stone-500">{u.phone_number ?? '—'}</span>
+                </span>
+                <span className="shrink-0 text-right">
+                  <span className="block whitespace-nowrap text-xs font-semibold text-stone-700">{b.dateLabel}</span>
+                  <span className="mt-0.5 block whitespace-nowrap text-[11px] font-bold text-primary">
+                    {b.relativeLabel}
+                  </span>
+                </span>
+              </button>
+            ))}
+          </div>
+
+          {upcomingBirthdays.length > 8 ? (
+            <p className="mt-2 text-xs text-stone-500">
+              И ещё: <strong>{upcomingBirthdays.length - 8}</strong>
+            </p>
+          ) : null}
+        </div>
+      ) : null}
 
       {/* Toolbar */}
       <div className="flex flex-wrap items-center gap-2">
@@ -1470,58 +1587,68 @@ function MembersSection({
             {search.trim() ? 'Никого не найдено.' : 'Список пуст.'}
           </p>
         ) : (
-          filtered.map((u) => (
-            <article
-              key={u.id}
-              className="cursor-pointer rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] p-4 shadow-[var(--shadow)] transition hover:border-primary/40 hover:shadow-md"
-              role="button"
-              tabIndex={0}
-              onClick={() => openEdit(u)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                  e.preventDefault();
-                  openEdit(u);
-                }
-              }}
-            >
-              <div className="flex items-start justify-between gap-2">
-                <div>
-                  <p className="font-bold text-stone-900">{memberRosterName(u)}</p>
-                  <p className="mt-0.5 text-sm text-stone-600">{u.phone_number ?? '—'}</p>
-                </div>
-                <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-[11px] font-bold text-primary">
-                  Карточка
-                </span>
-              </div>
-              <div className="mt-3 flex flex-wrap items-center gap-2">
-                <MemberRegistrationBadge u={u} />
-                <span className={appRoleBadgeClass(u.app_role)}>{appRoleLabel(u.app_role)}</span>
-                <span
-                  className={
-                    u.is_active
-                      ? 'rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-semibold text-emerald-800'
-                      : 'rounded-full bg-stone-100 px-2.5 py-0.5 text-xs font-semibold text-stone-500'
+          filtered.map((u) => {
+            const bday = birthdayBadge(u, now, 30);
+            return (
+              <article
+                key={u.id}
+                className="cursor-pointer rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] p-4 shadow-[var(--shadow)] transition hover:border-primary/40 hover:shadow-md"
+                role="button"
+                tabIndex={0}
+                onClick={() => openEdit(u)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    openEdit(u);
                   }
-                >
-                  {u.is_active ? 'Активен' : 'Неактивен'}
-                </span>
-                {u.is_collection_coordinator ? (
-                  <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-900">
-                    Сбор
+                }}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <p className="font-bold text-stone-900">{memberRosterName(u)}</p>
+                    <p className="mt-0.5 text-sm text-stone-600">{u.phone_number ?? '—'}</p>
+                  </div>
+                  <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-[11px] font-bold text-primary">
+                    Карточка
                   </span>
-                ) : null}
-                {u.in_prayer_cycle ? (
-                  <span className="rounded-full bg-sky-100 px-2.5 py-0.5 text-xs font-semibold text-sky-900">
-                    В цикле
+                </div>
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                  <MemberRegistrationBadge u={u} />
+                  <span className={appRoleBadgeClass(u.app_role)}>{appRoleLabel(u.app_role)}</span>
+                  {bday ? (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-pink-50 px-2.5 py-0.5 text-xs font-semibold text-pink-800">
+                      <span aria-hidden>🎂</span>
+                      {bday.dateLabel}
+                      <span className="font-bold text-pink-700">· {bday.relativeLabel}</span>
+                    </span>
+                  ) : null}
+                  <span
+                    className={
+                      u.is_active
+                        ? 'rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-semibold text-emerald-800'
+                        : 'rounded-full bg-stone-100 px-2.5 py-0.5 text-xs font-semibold text-stone-500'
+                    }
+                  >
+                    {u.is_active ? 'Активен' : 'Неактивен'}
                   </span>
-                ) : (
-                  <span className="rounded-full bg-stone-100 px-2.5 py-0.5 text-xs font-semibold text-stone-500">
-                    Вне цикла
-                  </span>
-                )}
-              </div>
-            </article>
-          ))
+                  {u.is_collection_coordinator ? (
+                    <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-900">
+                      Сбор
+                    </span>
+                  ) : null}
+                  {u.in_prayer_cycle ? (
+                    <span className="rounded-full bg-sky-100 px-2.5 py-0.5 text-xs font-semibold text-sky-900">
+                      В цикле
+                    </span>
+                  ) : (
+                    <span className="rounded-full bg-stone-100 px-2.5 py-0.5 text-xs font-semibold text-stone-500">
+                      Вне цикла
+                    </span>
+                  )}
+                </div>
+              </article>
+            );
+          })
         )}
       </div>
 
@@ -1548,6 +1675,7 @@ function MembersSection({
                 filtered.map((u) => {
                   const name = memberRosterName(u);
                   const { bg, fg } = memberAvatarColors(name);
+                  const bday = birthdayBadge(u, now, 30);
                   return (
                     <tr
                       key={u.id}
@@ -1575,6 +1703,12 @@ function MembersSection({
                             <p className="truncate font-medium text-stone-900">{name}</p>
                             {u.ministry_role ? (
                               <p className="truncate text-xs text-stone-500">{u.ministry_role}</p>
+                            ) : null}
+                            {bday ? (
+                              <p className="mt-0.5 truncate text-[11px] font-semibold text-pink-800">
+                                <span aria-hidden>🎂</span> {bday.dateLabel}{' '}
+                                <span className="font-bold text-pink-700">· {bday.relativeLabel}</span>
+                              </p>
                             ) : null}
                           </div>
                         </div>

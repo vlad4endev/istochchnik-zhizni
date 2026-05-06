@@ -1,11 +1,11 @@
 import { useEffect, useId, useRef, useState } from 'react';
-import { LuFileText, LuLink2, LuLoader, LuUpload, LuWand, LuX } from 'react-icons/lu';
+import { LuFileText, LuLink2, LuLoader, LuSparkles, LuUpload, LuWand, LuX } from 'react-icons/lu';
 import axios from 'axios';
 
-import { convertToChordPro } from './chordProConversion';
 import { extractTextFromPdfBufferWithMeta } from './extractTextFromPdf';
 import { analyzeImportedSongText, type ImportedTextAnalysis } from './analyzeImportedSongText';
-import { fetchImportUrlText } from '../api';
+import { smartImportTextToChordPro } from './smartImportToBlocks';
+import { aiSplitSongIntoBlocks, fetchImportUrlText } from '../api';
 
 export type SmartImportSourceTab = 'text' | 'pdf' | 'url';
 
@@ -42,6 +42,10 @@ export function SmartImportModal({
   const [pdfAnalysis, setPdfAnalysis] = useState<ImportedTextAnalysis | null>(null);
   const [pdfSafeModeInfo, setPdfSafeModeInfo] = useState<string | null>(null);
   const [pdfProgressText, setPdfProgressText] = useState<string | null>(null);
+  const [aiBusy, setAiBusy] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
+  const [aiProgressText, setAiProgressText] = useState<string | null>(null);
+  const aiProgressTimersRef = useRef<number[]>([]);
   const fileTxtRef = useRef<HTMLInputElement>(null);
   const filePdfRef = useRef<HTMLInputElement>(null);
 
@@ -62,6 +66,15 @@ export function SmartImportModal({
     setPdfAnalysis(null);
     setPdfSafeModeInfo(null);
     setPdfProgressText(null);
+    setAiBusy(false);
+    setAiError(null);
+    setAiProgressText(null);
+
+    // cancel any previous staged progress timers
+    for (const id of aiProgressTimersRef.current) {
+      window.clearTimeout(id);
+    }
+    aiProgressTimersRef.current = [];
   }, [open, initialRaw, initialTab]);
 
   if (!open) return null;
@@ -196,9 +209,56 @@ export function SmartImportModal({
     setTab('text');
   };
 
+  const runAiSplit = async (sourceText: string) => {
+    const t = sourceText.trim();
+    if (!t) return;
+    setAiBusy(true);
+    setAiError(null);
+    setAiProgressText('Отправляем текст в ИИ…');
+
+    // staged progress so user sees "what is happening" while waiting
+    for (const id of aiProgressTimersRef.current) {
+      window.clearTimeout(id);
+    }
+    aiProgressTimersRef.current = [
+      window.setTimeout(() => setAiProgressText('ИИ анализирует текст и выделяет секции…'), 900),
+      window.setTimeout(() => setAiProgressText('ИИ формирует блоки (куплет/припев/бридж)…'), 2400),
+      window.setTimeout(() => setAiProgressText('Проверяем и подготавливаем результат…'), 4200),
+    ];
+
+    try {
+      const { chordPro } = await aiSplitSongIntoBlocks(t);
+      const next = typeof chordPro === 'string' ? chordPro : '';
+      if (!next.trim()) {
+        setAiError('ИИ вернул пустой результат. Попробуйте ещё раз.');
+        return;
+      }
+      setRaw(next);
+      setTab('text');
+      setAiProgressText('Готово: секции добавлены. Можно редактировать и вставлять в форму.');
+    } catch (err) {
+      let msg = 'Не удалось разметить через ИИ';
+      if (axios.isAxiosError(err)) {
+        const d = err.response?.data as { error?: string } | undefined;
+        if (d?.error) msg = d.error;
+      } else if (err instanceof Error && err.message) {
+        msg = err.message;
+      }
+      setAiError(msg);
+    } finally {
+      setAiBusy(false);
+      for (const id of aiProgressTimersRef.current) {
+        window.clearTimeout(id);
+      }
+      aiProgressTimersRef.current = [];
+      // leave success text for a moment; clear on error or next open/reset
+      if (aiError) setAiProgressText(null);
+    }
+  };
+
   const applyPdfImmediately = () => {
     if (!pdfExtractedText.trim()) return;
-    onApply({ raw: pdfExtractedText, chordPro: convertToChordPro(pdfExtractedText) });
+    onApply({ raw: pdfExtractedText, chordPro: smartImportTextToChordPro(pdfExtractedText) });
     onClose();
   };
 
@@ -233,7 +293,7 @@ export function SmartImportModal({
   };
 
   const handleApply = () => {
-    const chordPro = convertToChordPro(raw);
+    const chordPro = smartImportTextToChordPro(raw);
     onApply({ raw, chordPro });
     onClose();
   };
@@ -332,15 +392,27 @@ export function SmartImportModal({
               placeholder={'Вставьте текст с аккордами над строками или уже в ChordPro:\n\n   Am         C\nСтрока…\n\n[Am]ChordPro'}
               className={`w-full resize-y rounded-lg border p-3 font-mono text-sm leading-relaxed ${textarea}`}
             />
-            <div className={`mt-3 flex flex-wrap items-center gap-2 text-xs ${muted}`}>
+            {aiError ? <p className="mt-2 text-sm text-red-500">{aiError}</p> : null}
+            {aiBusy && aiProgressText ? <p className={`mt-2 text-sm ${muted}`}>{aiProgressText}</p> : null}
+            <div className={`mt-3 flex flex-col gap-2 text-xs sm:flex-row sm:flex-wrap sm:items-center ${muted}`}>
               <button
                 type="button"
                 onClick={() => fileTxtRef.current?.click()}
-                className={`rounded-lg border px-3 py-2 text-xs font-semibold ${btnGhost}`}
+                className={`w-full rounded-lg border px-3 py-2 text-xs font-semibold sm:w-auto ${btnGhost}`}
               >
                 Выбрать .txt / ChordPro
               </button>
-              <span className="inline-flex items-center gap-1">
+              <button
+                type="button"
+                disabled={aiBusy || !raw.trim()}
+                onClick={() => void runAiSplit(raw)}
+                className={`inline-flex w-full min-h-[44px] items-center justify-center gap-2 rounded-lg border px-3 py-2 text-xs font-semibold disabled:opacity-50 sm:w-auto ${btnGhost}`}
+                title={!raw.trim() ? 'Сначала вставьте текст' : 'ИИ разложит текст по секциям и вернёт ChordPro'}
+              >
+                {aiBusy ? <LuLoader className="h-4 w-4 animate-spin" /> : <LuSparkles className="h-4 w-4" />}
+                ИИ: по блокам
+              </button>
+              <span className="inline-flex items-center justify-center gap-1 sm:justify-start">
                 <LuUpload className="h-4 w-4" aria-hidden />
                 Можно перетащить файл сюда (.txt, .cho, .pdf → откроется вкладка PDF)
               </span>
@@ -442,18 +514,29 @@ export function SmartImportModal({
                     ) : null}
                   </div>
                 ) : null}
-                <div className="flex flex-wrap gap-2">
+                {aiError ? <p className="text-sm text-red-500">{aiError}</p> : null}
+                {aiBusy && aiProgressText ? <p className={`text-sm ${muted}`}>{aiProgressText}</p> : null}
+                <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
                   <button
                     type="button"
                     onClick={applyPdfImmediately}
-                    className={`inline-flex min-h-[44px] items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold ${btnPrimary}`}
+                    className={`inline-flex w-full min-h-[44px] items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold sm:w-auto ${btnPrimary}`}
                   >
                     Загрузить
                   </button>
                   <button
                     type="button"
+                    disabled={aiBusy}
+                    onClick={() => void runAiSplit(pdfExtractedText)}
+                    className={`inline-flex w-full min-h-[44px] items-center justify-center gap-2 rounded-xl border px-4 py-2 text-sm font-semibold disabled:opacity-50 sm:w-auto ${btnGhost}`}
+                  >
+                    {aiBusy ? <LuLoader className="h-4 w-4 animate-spin" /> : <LuSparkles className="h-4 w-4" />}
+                    ИИ: распределить по блокам
+                  </button>
+                  <button
+                    type="button"
                     onClick={applyPdfAndContinueEditing}
-                    className={`rounded-xl border px-4 py-2 text-sm ${btnGhost}`}
+                    className={`w-full rounded-xl border px-4 py-2 text-sm sm:w-auto ${btnGhost}`}
                   >
                     Редактировать перед загрузкой
                   </button>

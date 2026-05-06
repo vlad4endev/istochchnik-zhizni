@@ -21,6 +21,7 @@ import {
 import pdfParse from 'pdf-parse';
 
 import { safeFetchUrlForSongImport } from '../utils/safeUrlTextFetch';
+import { AiAgentError, chatCompletion } from '../ai';
 
 type AuthReq = Request & { authUserId?: number; authUserRole?: AppRole };
 
@@ -400,5 +401,106 @@ export async function youtubeOembed(req: Request, res: Response): Promise<void> 
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: 'Ошибка' });
+  }
+}
+
+function stripMarkdownFences(text: string): string {
+  const t = text.trim();
+  if (!t.startsWith('```')) return t;
+  // ```chordpro\n...\n```
+  return t.replace(/^```[a-zA-Z0-9_-]*\s*\n?/u, '').replace(/\n?```$/u, '').trim();
+}
+
+/** ИИ: разложить текст песни по блокам и вернуть ChordPro с `{sec:...}`. */
+export async function aiSplitBlocksHandler(req: Request, res: Response): Promise<void> {
+  const r = req as AuthReq;
+  if (!r.authUserId) {
+    res.status(401).json({ error: 'Требуется вход' });
+    return;
+  }
+  if (!canModerateCatalog(roleOf(r))) {
+    res.status(403).json({ error: 'Недостаточно прав для редактирования каталога' });
+    return;
+  }
+  const body = req.body as { text?: unknown } | null;
+  const text = typeof body?.text === 'string' ? body.text : '';
+  const trimmed = text.trim();
+  if (!trimmed) {
+    res.status(400).json({ error: 'text required' });
+    return;
+  }
+  if (trimmed.length > 120_000) {
+    res.status(413).json({ error: 'Слишком большой текст для ИИ. Уменьшите объём и попробуйте снова.' });
+    return;
+  }
+
+  const system = [
+    'Ты помощник песенника. Твоя задача — разметить текст песни по секциям (блокам) и вернуть ОДИН ChordPro-текст.',
+    '',
+    'ВАЖНО: Ответ должен быть ТОЛЬКО ЧИСТЫМ ТЕКСТОМ ChordPro, без Markdown, без объяснений, без JSON.',
+    '',
+    'Формат секций: каждая секция начинается отдельной строкой вида {sec:НАЗВАНИЕ}.',
+    'Разрешённые типы секций по смыслу (используй русские названия):',
+    '- Интро / Вступление',
+    '- Куплет 1, Куплет 2, Куплет 3, ... (нумеруй куплеты последовательно)',
+    '- Предприпев (если есть)',
+    '- Припев',
+    '- Бридж / Мост',
+    '- Соло',
+    '- Аутро / Финал',
+    '',
+    'Правила:',
+    '- Сохраняй строки и переносы. Не ломай структуру строк.',
+    '- Если в тексте уже есть аккорды в квадратных скобках [Am] — сохраняй их как есть.',
+    '- Если аккорды “над строкой” (отдельной строкой) — оставляй их как строки, не пытайся переставлять символы.',
+    '- Если заголовки секций уже есть (Куплет/Припев/Bridge/Chorus и т.п.) — используй их и нормализуй в {sec:...}.',
+    '- Если заголовков нет, но виден повторяющийся блок — пометь повтор как {sec:Припев}, остальное как {sec:Куплет N}.',
+    '- Не добавляй новых слов песни, не исправляй орфографию, не “улучшай” текст.',
+  ].join('\n');
+
+  try {
+    const reply = await chatCompletion(
+      [
+        { role: 'system', content: system },
+        { role: 'user', content: trimmed },
+      ],
+      {
+        section: 'songbook',
+        temperature: 0.2,
+        max_tokens: 6000,
+        skipSystemPrompt: true,
+      },
+    );
+
+    let out = stripMarkdownFences(String(reply ?? '')).replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim();
+    if (!out) {
+      res.status(502).json({ error: 'ИИ вернул пустой ответ. Попробуйте ещё раз.' });
+      return;
+    }
+    if (!/\{sec:/i.test(out) && !/\{section:/i.test(out)) {
+      out = `{sec:Куплет 1}\n${out}`;
+    }
+    res.json({ chordPro: out });
+  } catch (e) {
+    if (e instanceof AiAgentError) {
+      const status =
+        e.code === 'ai_disabled'
+          ? 409
+          : e.code === 'ai_not_configured'
+            ? 400
+            : e.code === 'ai_http_error'
+              ? e.status && e.status >= 400 && e.status < 600
+                ? e.status
+                : 502
+              : 502;
+      res.status(status).json({
+        error: e.message,
+        code: e.code,
+        details: e.bodySnippet ? { bodySnippet: e.bodySnippet } : undefined,
+      });
+      return;
+    }
+    console.error('[songs] ai split-blocks error', e);
+    res.status(500).json({ error: 'Не удалось выполнить разметку через ИИ' });
   }
 }

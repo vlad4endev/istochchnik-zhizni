@@ -61,6 +61,43 @@ function bufferToUtf8(buf: ArrayBuffer): string {
   return new TextDecoder('utf-8', { fatal: false }).decode(buf);
 }
 
+function isTelegraphHost(hostname: string): boolean {
+  const h = hostname.trim().toLowerCase();
+  return h === 'telegra.ph' || h.endsWith('.telegra.ph');
+}
+
+function htmlToTextBasic(html: string): string {
+  let s = html;
+  // remove scripts/styles
+  s = s.replace(/<script\b[\s\S]*?<\/script>/gi, '');
+  s = s.replace(/<style\b[\s\S]*?<\/style>/gi, '');
+  // block breaks
+  s = s.replace(/<(?:br)\s*\/?>/gi, '\n');
+  s = s.replace(/<\/(?:p|div|h1|h2|h3|h4|h5|h6|li|pre|blockquote|section|article)>/gi, '\n');
+  // strip tags
+  s = s.replace(/<[^>]+>/g, '');
+  // decode minimal entities
+  s = s
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>');
+  // normalize whitespace
+  s = s.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  s = s.replace(/[ \t]+\n/g, '\n');
+  s = s.replace(/\n{3,}/g, '\n\n');
+  return s.trim();
+}
+
+function extractTelegraphArticleText(html: string): string {
+  // Telegraph обычно содержит <article>...</article>. Если не нашли — fallback на весь документ.
+  const m = /<article\b[^>]*>([\s\S]*?)<\/article>/i.exec(html);
+  const fragment = m?.[1] ?? html;
+  return htmlToTextBasic(fragment);
+}
+
 export type SongUrlImportFetchResult =
   | { kind: 'text'; text: string; contentType: string }
   | { kind: 'pdf'; buffer: Buffer; contentType: string };
@@ -135,11 +172,19 @@ export async function safeFetchUrlForSongImport(urlString: string): Promise<Song
       const pathname = u.pathname;
       const kind = songImportKind(ct, pathname);
       if (!kind) {
-        throw new Error(
-          'Поддерживаются текст (text/*, JSON, .txt/.cho/.chordpro по ссылке) или PDF (application/pdf / файл .pdf).',
-        );
+        const ctLower = ct.toLowerCase().split(';')[0]?.trim() ?? '';
+        if (ctLower === 'text/html' && isTelegraphHost(u.hostname)) {
+          // Allow Telegraph HTML pages: extract article text server-side.
+        } else {
+          throw new Error(
+            'Поддерживаются текст (text/*, JSON, .txt/.cho/.chordpro по ссылке) или PDF (application/pdf / файл .pdf). ' +
+              'Также поддерживается Telegraph (telegra.ph) со страницей HTML.',
+          );
+        }
       }
 
+      const ctLower = ct.toLowerCase().split(';')[0]?.trim() ?? '';
+      const isTelegraphHtml = ctLower === 'text/html' && isTelegraphHost(u.hostname);
       const maxBytes = kind === 'pdf' ? MAX_PDF_BYTES : MAX_TEXT_BYTES;
       const len = res.headers.get('content-length');
       if (len && Number(len) > maxBytes) {
@@ -157,8 +202,10 @@ export async function safeFetchUrlForSongImport(urlString: string): Promise<Song
         );
       }
 
-      if (kind === 'text') {
-        return { kind: 'text', text: bufferToUtf8(buf), contentType: ct };
+      if (kind === 'text' || isTelegraphHtml) {
+        const rawText = bufferToUtf8(buf);
+        const text = isTelegraphHtml ? extractTelegraphArticleText(rawText) : rawText;
+        return { kind: 'text', text, contentType: ct };
       }
 
       const b = Buffer.from(buf);

@@ -123,3 +123,8 @@ export async function fetchImportUrlText(url: string): Promise<{ text: string; c
   );
   return data;
 }
+
+export async function aiSplitSongIntoBlocks(text: string): Promise<{ chordPro: string }> {
+  const { data } = await apiClient.post<{ chordPro: string }>(`${SONGS}/ai/split-blocks`, { text });
+  return data;
+}
