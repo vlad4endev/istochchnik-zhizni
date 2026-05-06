@@ -1,15 +1,12 @@
 import { useEffect, useCallback, useState, useRef, lazy, Suspense } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useChatStore, isDraftPrivateConversationId } from '../chatStore';
+import { useMessengerWsContext } from '../MessengerWsContext';
 import { useSwipeGesture } from '../hooks/useSwipeGesture';
-import { ChatList } from '../../chat/components/ChatList';
-import { useSocket } from '../../chat/hooks/useSocket';
-import { MessengerChatSession } from '../../chat/MessengerChatSession';
-import { MessengerChatUiProvider } from '../../chat/MessengerChatUiProvider';
-import { LuMoon, LuPlus, LuMessageSquare, LuSlidersHorizontal, LuSun } from 'react-icons/lu';
+import { ChatList } from './ChatList';
+import { LuPlus, LuMessageSquare, LuSlidersHorizontal } from 'react-icons/lu';
 import { SkeletonBox } from '@/components/ui/SkeletonBox';
 import { dispatchLayoutMainChrome } from '../../../app/layoutChrome';
-import { useAppearanceStore } from '../../../stores/useAppearanceStore';
 import './messenger.css';
 
 const ChatWindow = lazy(async () => {
@@ -77,21 +74,7 @@ export function MessengerPage() {
     return () => clearTransitionTimer();
   }, [clearTransitionTimer]);
 
-
-  const { sendMessage, sendTyping } = useSocket();
-  const theme = useAppearanceStore((s) => s.theme);
-  const setTheme = useAppearanceStore((s) => s.setTheme);
-
-  const toggleMessengerTheme = useCallback(() => {
-    if (theme === 'dark') {
-      setTheme('light');
-    } else if (theme === 'light') {
-      setTheme('dark');
-    } else {
-      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-      setTheme(prefersDark ? 'light' : 'dark');
-    }
-  }, [theme, setTheme]);
+  const ws = useMessengerWsContext();
 
   useEffect(() => {
     document.documentElement.dataset.messengerOpen = '1';
@@ -176,10 +159,9 @@ export function MessengerPage() {
   }, [activeId, runTransitionWindow, setActive]);
 
   return (
-    <MessengerChatUiProvider>
-    <div className="tg-messenger-page messenger-layout flex h-full min-h-0 flex-1 flex-col bg-white dark:bg-gray-950">
+    <div className="tg-messenger-page messenger-layout flex h-full min-h-0 flex-1 flex-col bg-white">
       <div
-        className={`tg-messenger min-h-0 flex-1 bg-white dark:bg-gray-950 tg-density--${density} ${isTransitioning ? 'transitioning' : ''}`}
+        className={`tg-messenger min-h-0 flex-1 bg-white tg-density--${density} ${isTransitioning ? 'transitioning' : ''}`}
         ref={messengerRef}
       >
       {/* Sidebar */}
@@ -200,20 +182,6 @@ export function MessengerPage() {
             </button>
             <button
               type="button"
-              className="inline-flex h-8 w-8 items-center justify-center rounded-full text-stone-600 hover:bg-stone-100 dark:text-stone-300 dark:hover:bg-stone-800"
-              onClick={toggleMessengerTheme}
-              title="Тема"
-              aria-label="Переключить тему"
-            >
-              {theme === 'dark' ||
-              (theme === 'system' && typeof document !== 'undefined' && document.documentElement.classList.contains('dark')) ? (
-                <LuSun size={18} />
-              ) : (
-                <LuMoon size={18} />
-              )}
-            </button>
-            <button
-              type="button"
               className="tg-compose-btn-sm"
               onClick={() => setShowNewChat(true)}
               aria-label="Новый чат"
@@ -222,7 +190,7 @@ export function MessengerPage() {
             </button>
           </div>
         </div>
-        <ChatList onSelect={handleSelectConversation} activeId={activeId} withChrome={false} />
+        <ChatList onSelect={handleSelectConversation} activeId={activeId} />
       </aside>
       {mobileView === 'list' && activeId ? (
         <button
@@ -235,22 +203,15 @@ export function MessengerPage() {
 
       {/* Main chat area */}
       <main className={`tg-main chat-window-panel ${mobileView === 'chat' ? 'tg-main--visible' : ''}`}>
-        {activeId && isDraftPrivateConversationId(activeId) ? (
+        {activeId ? (
           <Suspense fallback={<MessengerFallback title="Загрузка чата…" />}>
             <ChatWindow
               conversationId={activeId}
               onBack={handleBack}
-              sendTypingStart={(id) => sendTyping(id, 'start')}
-              sendTypingStop={(id) => sendTyping(id, 'stop')}
+              sendTypingStart={ws.sendTypingStart}
+              sendTypingStop={ws.sendTypingStop}
             />
           </Suspense>
-        ) : activeId ? (
-          <MessengerChatSession
-            conversationId={activeId}
-            onBack={handleBack}
-            sendMessage={sendMessage}
-            sendTyping={sendTyping}
-          />
         ) : (
           <div className="tg-empty-state chat-empty-state">
             <div className="tg-empty-icon">
@@ -275,6 +236,5 @@ export function MessengerPage() {
       )}
       </div>
     </div>
-    </MessengerChatUiProvider>
   );
 }
