@@ -177,6 +177,7 @@ function lastMessageListPreviewContent(rawContent: unknown, payloadType: unknown
   if (s) return rawContent as string;
   const pt = String(payloadType ?? '').trim();
   if (pt === 'audio') return '🎤 Голосовое сообщение';
+  if (pt === 'video_note') return '🎥 Видеосообщение';
   if (pt === 'image') return '📷 Фото';
   if (pt === 'file') return '📎 Файл';
   if (pt === 'poll') return '📊 Опрос';
@@ -1266,6 +1267,7 @@ function normalizePayloadType(raw: unknown): MessagePayloadType {
   if (
     raw === 'prayer_request' ||
     raw === 'audio' ||
+    raw === 'video_note' ||
     raw === 'image' ||
     raw === 'file' ||
     raw === 'poll' ||
@@ -1442,7 +1444,7 @@ export async function prepareMessageForSend(
   let pl: MessagePayload;
   if (pt === 'poll') {
     pl = normalizePollPayloadForSend(contentStored, plRaw);
-  } else if (pt === 'image' || pt === 'file' || pt === 'audio') {
+  } else if (pt === 'image' || pt === 'file' || pt === 'audio' || pt === 'video_note') {
     pl = normalizeAttachmentPayloadForSend(plRaw);
   } else if (pt === 'text' && Object.keys(plRaw).length === 0) {
     pl = { text: contentStored };
@@ -2339,7 +2341,13 @@ export async function getMessageAttachmentForMember(
     throw new Error('Forbidden');
   }
   const payloadType = String(row.payload_type);
-  if (payloadType !== 'image' && payloadType !== 'file' && payloadType !== 'audio') return null;
+  if (
+    payloadType !== 'image' &&
+    payloadType !== 'file' &&
+    payloadType !== 'audio' &&
+    payloadType !== 'video_note'
+  )
+    return null;
   const payload = normalizePayload(row.payload);
 
   let urlRaw = String(payload.url ?? '').trim();

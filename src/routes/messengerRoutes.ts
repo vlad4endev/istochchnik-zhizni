@@ -1048,6 +1048,7 @@ router.post(
       payloadType === 'prayer_request' ||
       payloadType === 'text' ||
       payloadType === 'audio' ||
+      payloadType === 'video_note' ||
       payloadType === 'image' ||
       payloadType === 'file' ||
       payloadType === 'poll'
@@ -1060,7 +1061,7 @@ router.post(
     const replyId = normalizeOptionalBigintId(replyToMessageId);
     try {
       if (
-        (pt === 'image' || pt === 'file' || pt === 'audio') &&
+        (pt === 'image' || pt === 'file' || pt === 'audio' || pt === 'video_note') &&
         req.chatAuth &&
         !req.chatAuth.effective.can_send_media
       ) {
@@ -1139,9 +1140,11 @@ router.post(
             ? '📊 Опрос'
             : ptype === 'audio'
               ? '🎤 Голосовое сообщение'
-              : ptype !== 'text'
-                ? 'Вложение'
-                : 'Новое сообщение');
+              : ptype === 'video_note'
+                ? '🎥 Видеосообщение'
+                : ptype !== 'text'
+                  ? 'Вложение'
+                  : 'Новое сообщение');
         const mpl =
           message.payload && typeof message.payload === 'object' && !Array.isArray(message.payload)
             ? (message.payload as Record<string, unknown>)
