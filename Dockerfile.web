@@ -3,9 +3,9 @@ FROM node:20-bookworm-slim AS build
 WORKDIR /app
 
 # sharp обычно ставится из prebuilt-бинаря, но при сетевых таймаутах
-# fallback идет в сборку через node-gyp. Держим toolchain в build-слое.
+# fallback идет в сборку через node-gyp. Нужны toolchain + vips headers.
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends python3 make g++ \
+  && apt-get install -y --no-install-recommends python3 make g++ pkg-config libvips-dev \
   && rm -rf /var/lib/apt/lists/*
 
 # Vite: только переменные с префиксом VITE_ доступны в import.meta.env при сборке.
