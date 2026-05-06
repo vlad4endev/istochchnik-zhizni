@@ -91,8 +91,6 @@ export function SmartImportModal({
     aiProgressTimersRef.current = [];
   }, [open, initialRaw, initialTab]);
 
-  if (!open) return null;
-
   const panel = isStudio
     ? 'border-zinc-600 bg-zinc-900 text-zinc-100'
     : 'border-stone-200 bg-white text-stone-900';
@@ -262,6 +260,9 @@ export function SmartImportModal({
     });
     return out.slice(0, 60);
   }, [xlsxSongs, xlsxSearch]);
+
+  // IMPORTANT: all hooks must run before conditional return
+  if (!open) return null;
 
   const importFromXlsxRow = async (song: XlsxImportParsedSong, mode: 'chords' | 'lyrics') => {
     const url = mode === 'chords' ? song.url_chords : song.url_lyrics;
