@@ -15,6 +15,41 @@ import { useSongbookChrome } from '../SongbookChromeContext';
 import { fetchVersionForSong } from '../../studio/api';
 import { useMe } from '@/hooks/useMe';
 
+/** Компактный переключатель вместо нативного checkbox (единообразно на iOS/Android). */
+function SheetSwitch({
+  checked,
+  onCheckedChange,
+  disabled,
+  ariaLabel,
+}: {
+  checked: boolean;
+  onCheckedChange: (v: boolean) => void;
+  disabled?: boolean;
+  ariaLabel: string;
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      aria-label={ariaLabel}
+      disabled={disabled}
+      onClick={() => !disabled && onCheckedChange(!checked)}
+      className={[
+        'relative h-[30px] w-[50px] shrink-0 rounded-full transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)]/35 disabled:cursor-not-allowed disabled:opacity-40',
+        checked ? 'bg-[var(--primary)]' : 'bg-stone-300 dark:bg-stone-600',
+      ].join(' ')}
+    >
+      <span
+        className={[
+          'absolute top-0.5 left-0.5 h-[26px] w-[26px] rounded-full bg-white shadow-sm transition-transform duration-200 ease-out',
+          checked ? 'translate-x-5' : 'translate-x-0',
+        ].join(' ')}
+      />
+    </button>
+  );
+}
+
 export function SongDetailPage() {
   const { id } = useParams<{ id: string }>();
   const songId = Number(id);
@@ -22,7 +57,7 @@ export function SongDetailPage() {
   const token = useAuthStore((s) => s.token);
   const meQ = useMe(Boolean(token));
   const studioOk = canAccessStudio(role, meQ.data?.ministry_direction);
-  const { stageMode } = useSongbookChrome();
+  const { stageMode, setStageMode } = useSongbookChrome();
   const [transpose, setTranspose] = useState(0);
   const [showChords, setShowChords] = useState(true);
   const [fontSize, setFontSize] = useState(18);
@@ -123,107 +158,140 @@ export function SongDetailPage() {
             onClick={() => setSettingsOpen(false)}
           />
           <div
-            className="fixed inset-x-0 bottom-0 z-[121] max-h-[62dvh] overflow-y-auto rounded-t-3xl border border-stone-200 bg-white p-4 shadow-2xl"
+            className="fixed inset-x-0 bottom-0 z-[121] flex max-h-[min(85dvh,640px)] flex-col overflow-hidden rounded-t-[1.25rem] border border-stone-200 bg-stone-50 shadow-2xl sm:left-1/2 sm:max-w-md sm:-translate-x-1/2"
             role="dialog"
             aria-label="Настройки текста песни"
           >
-            <div className="mx-auto mb-3 h-1.5 w-12 rounded-full bg-stone-200" aria-hidden />
-            <div className="mb-3 flex items-center justify-between gap-2">
-              <p className="text-xs font-semibold uppercase tracking-widest text-stone-500">Настройки</p>
-              <button
-                type="button"
-                className="inline-flex h-10 w-10 items-center justify-center rounded-xl text-stone-600 hover:bg-stone-100"
-                onClick={() => setSettingsOpen(false)}
-                aria-label="Закрыть"
-              >
-                <LuX className="h-5 w-5" />
-              </button>
+            <div className="flex shrink-0 flex-col items-center border-b border-stone-200/80 bg-white px-4 pb-3 pt-2">
+              <div className="mb-2 h-1 w-10 rounded-full bg-stone-300" aria-hidden />
+              <div className="flex w-full items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-base font-semibold text-stone-900">Как показать текст</p>
+                  <p className="mt-0.5 text-xs text-stone-500">Аккорды, тон, размер и режим для сцены</p>
+                </div>
+                <button
+                  type="button"
+                  className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-stone-600 hover:bg-stone-100"
+                  onClick={() => setSettingsOpen(false)}
+                  aria-label="Закрыть"
+                >
+                  <LuX className="h-5 w-5" />
+                </button>
+              </div>
             </div>
 
-            <div className="grid gap-3">
-              <div className="rounded-2xl border border-stone-200 bg-stone-50 p-3">
-                <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-stone-500">Аккорды</p>
-                <label className="flex min-h-[44px] items-center justify-between rounded-xl bg-white px-3 py-2">
-                  <span className="text-sm font-medium text-stone-800">Показать аккорды</span>
-                  <input
-                    type="checkbox"
-                    className="h-6 w-11 accent-primary"
-                    checked={showChords}
-                    onChange={(e) => setShowChords(e.target.checked)}
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-[max(1rem,env(safe-area-inset-bottom,0px))] pt-3">
+              <div className="divide-y divide-stone-200/90 overflow-hidden rounded-2xl border border-stone-200/90 bg-white shadow-sm">
+                <div className="flex items-start gap-3 px-4 py-3.5">
+                  <div className="min-w-0 flex-1 pt-0.5">
+                    <p className="text-sm font-medium text-stone-900">Аккорды</p>
+                    <p className="mt-0.5 text-xs leading-snug text-stone-500">
+                      {stageMode ? 'В режиме сцены аккорды всегда скрыты.' : 'Показывать строку с аккордами над текстом.'}
+                    </p>
+                  </div>
+                  <SheetSwitch
+                    checked={stageMode ? false : showChords}
+                    disabled={stageMode}
+                    ariaLabel="Показать аккорды"
+                    onCheckedChange={setShowChords}
                   />
-                </label>
-              </div>
-
-              <div className="rounded-2xl border border-stone-200 bg-stone-50 p-3">
-                <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-stone-500">Тональность</p>
-                <div className="flex items-center justify-between gap-2 rounded-xl bg-white p-2">
-                  <button
-                    type="button"
-                    onClick={() => setTranspose((v) => Math.max(-11, v - 1))}
-                    className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-stone-200 bg-white text-stone-800 hover:bg-stone-50"
-                    aria-label="Ниже"
-                  >
-                    <LuMinus className="h-5 w-5" />
-                  </button>
-                  <span className="min-w-[4rem] text-center text-base font-semibold tabular-nums text-stone-900">
-                    {transpose > 0 ? `+${transpose}` : transpose}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setTranspose((v) => Math.min(11, v + 1))}
-                    className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-stone-200 bg-white text-stone-800 hover:bg-stone-50"
-                    aria-label="Выше"
-                  >
-                    <LuPlus className="h-5 w-5" />
-                  </button>
                 </div>
-                {keyBadge ? <p className="mt-2 text-[11px] text-stone-500">{keyBadge}</p> : null}
-              </div>
 
-              <div className="rounded-2xl border border-stone-200 bg-stone-50 p-3">
-                <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-stone-500">Размер текста</p>
-                <div className="flex items-center justify-between gap-2 rounded-xl bg-white p-2">
-                  <button
-                    type="button"
-                    onClick={() => setFontSize((v) => Math.max(16, v - 1))}
-                    className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-stone-200 bg-white text-stone-800 hover:bg-stone-50"
-                    aria-label="Меньше"
-                  >
-                    <LuMinus className="h-5 w-5" />
-                  </button>
-                  <span className="min-w-[4rem] text-center text-base font-semibold tabular-nums text-stone-900">
-                    {fontSize}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setFontSize((v) => Math.min(28, v + 1))}
-                    className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-stone-200 bg-white text-stone-800 hover:bg-stone-50"
-                    aria-label="Больше"
-                  >
-                    <LuPlus className="h-5 w-5" />
-                  </button>
+                <div className="px-4 py-3.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-sm font-medium text-stone-900">Тональность</p>
+                    <span className="text-xs tabular-nums text-stone-500">
+                      {transpose > 0 ? `+${transpose}` : transpose} полутонов
+                    </span>
+                  </div>
+                  {keyBadge ? <p className="mt-1 text-xs text-stone-500">{keyBadge}</p> : null}
+                  <div className="mt-2.5 flex items-center justify-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setTranspose((v) => Math.max(-11, v - 1))}
+                      className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-stone-200 bg-stone-50 text-stone-800 hover:bg-stone-100 active:scale-[0.98]"
+                      aria-label="На полтона ниже"
+                    >
+                      <LuMinus className="h-4 w-4" />
+                    </button>
+                    <span className="min-w-[3.5rem] text-center text-lg font-semibold tabular-nums text-stone-900">
+                      {transpose > 0 ? `+${transpose}` : transpose}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setTranspose((v) => Math.min(11, v + 1))}
+                      className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-stone-200 bg-stone-50 text-stone-800 hover:bg-stone-100 active:scale-[0.98]"
+                      aria-label="На полтона выше"
+                    >
+                      <LuPlus className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+
+                <div className="px-4 py-3.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-sm font-medium text-stone-900">Размер текста</p>
+                    <span className="text-xs tabular-nums text-stone-500">{fontSize} px</span>
+                  </div>
+                  <div className="mt-2.5 flex items-center justify-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setFontSize((v) => Math.max(16, v - 1))}
+                      className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-stone-200 bg-stone-50 text-stone-800 hover:bg-stone-100 active:scale-[0.98]"
+                      aria-label="Уменьшить шрифт"
+                    >
+                      <LuMinus className="h-4 w-4" />
+                    </button>
+                    <span className="min-w-[3.5rem] text-center text-lg font-semibold tabular-nums text-stone-900">
+                      {fontSize}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setFontSize((v) => Math.min(28, v + 1))}
+                      className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-stone-200 bg-stone-50 text-stone-800 hover:bg-stone-100 active:scale-[0.98]"
+                      aria-label="Увеличить шрифт"
+                    >
+                      <LuPlus className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-3 px-4 py-3.5">
+                  <div className="min-w-0 flex-1 pt-0.5">
+                    <p className="text-sm font-medium text-stone-900">Режим сцены</p>
+                    <p className="mt-0.5 text-xs leading-snug text-stone-500">
+                      Тёмный фон и крупный текст — удобно держать телефон на стойке.
+                    </p>
+                  </div>
+                  <SheetSwitch
+                    checked={stageMode}
+                    ariaLabel="Режим сцены"
+                    onCheckedChange={setStageMode}
+                  />
                 </div>
               </div>
 
-              <button
-                type="button"
-                onClick={() => {
-                  setTranspose(0);
-                  setFontSize(18);
-                  setShowChords(true);
-                }}
-                className="inline-flex min-h-[44px] items-center justify-center rounded-2xl border border-stone-200 bg-white text-sm font-semibold text-stone-800 hover:bg-stone-50"
-              >
-                Сбросить настройки
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setSettingsOpen(false)}
-                className="inline-flex min-h-[44px] items-center justify-center rounded-2xl bg-stone-900 text-sm font-semibold text-white hover:bg-stone-800"
-              >
-                Готово
-              </button>
+              <div className="mt-4 grid gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTranspose(0);
+                    setFontSize(18);
+                    setShowChords(true);
+                    setStageMode(false);
+                  }}
+                  className="inline-flex min-h-11 w-full items-center justify-center rounded-xl border border-stone-200 bg-white text-sm font-semibold text-stone-800 hover:bg-stone-50"
+                >
+                  Сбросить к умолчанию
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSettingsOpen(false)}
+                  className="inline-flex min-h-11 w-full items-center justify-center rounded-xl bg-stone-900 text-sm font-semibold text-white hover:bg-stone-800"
+                >
+                  Готово
+                </button>
+              </div>
             </div>
           </div>
         </>

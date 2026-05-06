@@ -556,6 +556,13 @@ export function StudioEditor() {
   const handleSmartImport = ({ raw, chordPro }: { raw: string; chordPro: string }) => {
     setRawPaste(raw);
     setBlocks(chordProToBlocks(chordPro));
+    const source = chordPro || raw;
+    const chords = extractChordsFromText(source);
+    const guess = chords.length > 0 ? guessKeyFromChords(chords) : null;
+    if (!guess) return;
+    const detected = parseKeyForApi(guess.label);
+    if (detected) setKey(detected);
+    setKeyHint(`Авто: ${guess.label} (${guess.confidence})`);
   };
 
   const runAiChordPlacement = () => {
@@ -888,6 +895,9 @@ export function StudioEditor() {
         onClose={() => {
           setImportOpen(false);
           setImportInitialTab('text');
+        }}
+        onMassImportDone={() => {
+          void navigate(`${studioMySongsPath(surface)}?tab=imported`);
         }}
         onApply={handleSmartImport}
         initialRaw={rawPaste}

@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { LuPenLine } from 'react-icons/lu';
 
 import { emitAppToast } from '../../../lib/uiFeedback';
@@ -17,6 +17,7 @@ const MISSING_TEXT_TAG = 'нет_текста';
 export function MySongsPage() {
   const surface = useStudioModuleSurface();
   const qc = useQueryClient();
+  const [sp, setSp] = useSearchParams();
   const role = useAuthStore((s) => s.role);
   const isAdmin = (role ?? 'member').toLowerCase() === 'admin';
 
@@ -33,7 +34,11 @@ export function MySongsPage() {
     enabled: true,
   });
 
-  const [tab, setTab] = useState<MySongsTab>('saved');
+  const [tab, setTab] = useState<MySongsTab>(() => {
+    const t = sp.get('tab');
+    if (t === 'missingText' || t === 'imported') return t;
+    return 'saved';
+  });
   const [savedSearch, setSavedSearch] = useState('');
   const [savedKeyFilter, setSavedKeyFilter] = useState('');
   const [selectedImportedSongIds, setSelectedImportedSongIds] = useState<number[]>([]);
@@ -86,6 +91,16 @@ export function MySongsPage() {
     const allowed = new Set(importedRows.map((song) => Number(song.id)));
     setSelectedImportedSongIds((prev) => prev.filter((songId) => allowed.has(songId)));
   }, [importedRows]);
+
+  useEffect(() => {
+    const next = new URLSearchParams(sp);
+    if (tab === 'saved') next.delete('tab');
+    else next.set('tab', tab);
+    if (next.toString() !== sp.toString()) {
+      setSp(next, { replace: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab]);
 
   if (q.isLoading) {
     return <SongListSkeleton />;

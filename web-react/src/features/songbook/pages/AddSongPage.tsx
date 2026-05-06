@@ -274,6 +274,19 @@ export function AddSongPage() {
   const handleSmartImport = ({ raw, chordPro }: { raw: string; chordPro: string }) => {
     setRawPaste(raw);
     setContent(chordPro);
+    const chords = extractChordsFromText(chordPro || raw);
+    const guess = chords.length > 0 ? guessKeyFromChords(chords) : null;
+    if (!guess) return;
+    const detected = parseKeyForApi(guess.label);
+    if (detected) {
+      setDefaultKey(detected);
+      if (KEY_ROOTS.includes(detected as (typeof KEY_ROOTS)[number])) {
+        setQuickRoot(detected);
+      }
+      if (guess.label.includes('minor')) setQuickMode('minor');
+      else if (guess.label.includes('major')) setQuickMode('major');
+    }
+    setKeyHint(`Авто: ${guess.label} (${guess.confidence})`);
   };
 
   const goPrev = () => {
@@ -304,6 +317,14 @@ export function AddSongPage() {
         onClose={() => {
           setImportOpen(false);
           setImportInitialTab('text');
+        }}
+        onMassImportDone={() => {
+          const target = isStudio
+            ? location.pathname.startsWith('/songbook')
+              ? '/songbook/studio?tab=imported'
+              : '/studio/my-songs?tab=imported'
+            : '/songbook/studio?tab=imported';
+          void navigate(target);
         }}
         onApply={handleSmartImport}
         initialRaw={rawPaste}

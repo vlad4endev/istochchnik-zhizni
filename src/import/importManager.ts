@@ -6,6 +6,66 @@ import { smartImportTextToChordPro } from './smartImportToChordPro';
 
 const TAG_MISSING_TEXT = 'нет_текста';
 const TAG_IMPORTED = 'импортировано';
+const BRACKET_CHORD_RE = /\[([^\]]+)\]/g;
+
+function normalizeChordToCatalogKey(raw: string): string | null {
+  const chord = String(raw ?? '').trim();
+  if (!chord) return null;
+  const main = chord.split('/')[0]?.trim() ?? chord;
+  const m = /^([A-Ga-g])([#b]?)(.*)$/.exec(main);
+  if (!m) return null;
+  const letter = m[1].toUpperCase();
+  const accidental = m[2] ?? '';
+  const rest = (m[3] ?? '').toLowerCase();
+  // "maj" не считаем минором; "m", "min", "m7" и т.п. — минор.
+  const isMinor = /^m(?!aj)/.test(rest) || rest.startsWith('min');
+  return `${letter}${accidental}${isMinor ? 'm' : ''}`;
+}
+
+function looksLikeChordToken(token: string): boolean {
+  const t = token.trim();
+  if (!t) return false;
+  return /^[A-Ga-g][#b]?(?:m|maj|min|sus|dim|aug|add|\d|\/|\(|\)|\+|-)*$/.test(t);
+}
+
+function extractChordCandidates(text: string): string[] {
+  const source = String(text ?? '');
+  if (!source.trim()) return [];
+
+  const fromBrackets: string[] = [];
+  let m: RegExpExecArray | null;
+  while ((m = BRACKET_CHORD_RE.exec(source)) !== null) {
+    const c = (m[1] ?? '').trim();
+    if (c) fromBrackets.push(c);
+  }
+  if (fromBrackets.length > 0) return fromBrackets;
+
+  const out: string[] = [];
+  const lines = source.replace(/\r/g, '').split('\n');
+  for (const line of lines) {
+    const tokens = line
+      .trim()
+      .split(/\s+/)
+      .map((t) => t.trim())
+      .filter(Boolean);
+    if (tokens.length === 0) continue;
+    const chordLike = tokens.filter(looksLikeChordToken);
+    // Эвристика "строка аккордов": большинство токенов похоже на аккорды.
+    if (chordLike.length > 0 && chordLike.length >= Math.max(2, Math.ceil(tokens.length * 0.6))) {
+      out.push(...chordLike);
+    }
+  }
+  return out;
+}
+
+function detectDefaultKeyFromImportedText(text: string): string | null {
+  const chords = extractChordCandidates(text);
+  for (const c of chords) {
+    const key = normalizeChordToCatalogKey(c);
+    if (key) return key;
+  }
+  return null;
+}
 
 function looksLikeChordsLink(url: string): boolean {
   // Heuristic: in the source xlsx usually "with chords" is stored in url_chords column.
@@ -131,6 +191,8 @@ export async function importSongsFromXlsxRows(
       ]);
       const sourceText = (chordsText ?? lyricsText ?? '').trimEnd();
       const content = smartImportTextToChordPro(sourceText).trimEnd() || sourceText;
+      const detectedKey =
+        detectDefaultKeyFromImportedText(content) ?? detectDefaultKeyFromImportedText(sourceText);
       const isPlaceholder = !content.trim();
       const importedTags = isPlaceholder ? [TAG_IMPORTED, TAG_MISSING_TEXT] : [TAG_IMPORTED];
       if (isPlaceholder) placeholders += 1;
@@ -145,21 +207,23 @@ export async function importSongsFromXlsxRows(
                content = $3,
                tags = (SELECT ARRAY(SELECT DISTINCT unnest(songs.tags || $4::text[]))),
                is_published = $5,
+               default_key = COALESCE($6, songs.default_key),
                updated_at = NOW()
            WHERE song_number = $1`,
-          [row.song_number, row.title, content, importedTags, false],
+          [row.song_number, row.title, content, importedTags, false, detectedKey],
         );
       } else {
         const ins = await client.query<{ id: string }>(
           `INSERT INTO songs (
-             song_number, title, slug, content, tags, is_published, created_by_member_id
+             song_number, title, slug, content, default_key, tags, is_published, created_by_member_id
            )
-           VALUES ($1,$2,gen_random_uuid()::text,$3,$4,$5,$6)
+           VALUES ($1,$2,gen_random_uuid()::text,$3,$4,$5,$6,$7)
            RETURNING id`,
           [
             row.song_number,
             row.title,
             content,
+            detectedKey,
             importedTags,
             false,
             options.createdByMemberId,
