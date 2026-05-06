@@ -550,8 +550,8 @@ export function SmartImportModal({
           <div id={`${baseId}-panel-url`} role="tabpanel" aria-labelledby={`${baseId}-tab-url`} className="space-y-4">
             <p className={`text-sm leading-relaxed ${muted}`}>
               Укажите прямую ссылку на файл в интернете (например <code className={isStudio ? 'text-sky-300' : 'text-stone-700'}>https://…/pesnya.txt</code>
-              ). Загрузка идёт через сервер приложения: доступны только публичные адреса, не HTML-страницы и не
-              локальная сеть.
+              ) или ссылку на страницу Telegraph (<code className={isStudio ? 'text-sky-300' : 'text-stone-700'}>https://telegra.ph/…</code>). Загрузка идёт через сервер приложения:
+              доступны только публичные адреса (локальная сеть недоступна).
             </p>
             <input
               type="url"
