@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { LuArrowLeft, LuMinus, LuPlus } from 'react-icons/lu';
 
@@ -57,12 +57,12 @@ export function SongDetailPage() {
   const currentShift = showChords ? transpose : 0;
   const transposedKey = effectiveKey ? transposeChordSymbol(effectiveKey, currentShift) : null;
 
-  const keyBadge = useMemo(() => {
+  const keyBadge = (() => {
     if (!effectiveKey && currentShift === 0) return null;
     if (!effectiveKey) return `Сдвиг ${currentShift > 0 ? '+' : ''}${currentShift}`;
     const next = transposedKey ?? effectiveKey;
     return currentShift === 0 ? next : `${effectiveKey} → ${next}`;
-  }, [effectiveKey, currentShift, transposedKey]);
+  })();
 
   return (
     <div className="mx-auto flex h-full min-h-0 max-w-3xl flex-col text-stone-900">
@@ -75,7 +75,7 @@ export function SongDetailPage() {
               aria-label="Назад к списку"
             >
               <LuArrowLeft className="h-4 w-4" />
-              Назад
+              <span className="hidden sm:inline">Назад</span>
             </Link>
             <div className="flex items-center gap-2">
               <button
@@ -88,26 +88,26 @@ export function SongDetailPage() {
             </div>
           </div>
 
-          <div className="mt-2 flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <h1 className="truncate text-lg font-semibold text-stone-900">{s.title}</h1>
-              <div className="mt-1 flex flex-wrap items-center gap-2">
-                {keyBadge ? (
-                  <span className="inline-flex items-center rounded-full bg-stone-100 px-2.5 py-1 text-[11px] font-semibold text-stone-700">
-                    {keyBadge}
-                  </span>
-                ) : null}
-                {s.tempo != null ? (
-                  <span className="inline-flex items-center rounded-full bg-stone-100 px-2.5 py-1 text-[11px] font-semibold text-stone-700">
-                    {s.tempo} BPM
-                  </span>
-                ) : null}
-              </div>
+          <div className="mt-2 min-w-0">
+            <h1 className="truncate text-[17px] font-semibold leading-snug text-stone-900 sm:text-lg">
+              {s.title}
+            </h1>
+            <div className="mt-1 flex flex-wrap items-center gap-2">
+              {keyBadge ? (
+                <span className="inline-flex items-center rounded-full bg-stone-100 px-2.5 py-1 text-[11px] font-semibold text-stone-700">
+                  {keyBadge}
+                </span>
+              ) : null}
+              {s.tempo != null ? (
+                <span className="inline-flex items-center rounded-full bg-stone-100 px-2.5 py-1 text-[11px] font-semibold text-stone-700">
+                  {s.tempo} BPM
+                </span>
+              ) : null}
             </div>
           </div>
 
-          <div className="mt-2 flex flex-wrap items-center gap-2">
-            <div className="inline-flex items-center rounded-xl border border-stone-200 bg-white p-1">
+          <div className="mt-2 grid gap-2 sm:grid-cols-2">
+            <div className="inline-flex w-full items-center justify-between rounded-xl border border-stone-200 bg-white p-1">
               <button
                 type="button"
                 onClick={() => setTranspose((v) => Math.max(-11, v - 1))}
@@ -130,12 +130,12 @@ export function SongDetailPage() {
             <button
               type="button"
               onClick={() => setShowChords((v) => !v)}
-              className="inline-flex min-h-[40px] items-center rounded-xl border border-stone-200 bg-white px-3 text-xs font-semibold text-stone-800 hover:bg-stone-50"
+              className="inline-flex min-h-[40px] w-full items-center justify-center rounded-xl border border-stone-200 bg-white px-3 text-xs font-semibold text-stone-800 hover:bg-stone-50"
             >
               {showChords ? 'Аккорды: вкл' : 'Аккорды: выкл'}
             </button>
 
-            <div className="inline-flex items-center rounded-xl border border-stone-200 bg-white p-1">
+            <div className="inline-flex w-full items-center justify-between rounded-xl border border-stone-200 bg-white p-1">
               <button
                 type="button"
                 onClick={() => setFontSize((v) => Math.max(16, v - 1))}
@@ -154,6 +154,18 @@ export function SongDetailPage() {
                 <LuPlus className="h-4 w-4" />
               </button>
             </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                setTranspose(0);
+                setFontSize(18);
+                setShowChords(true);
+              }}
+              className="inline-flex min-h-[40px] w-full items-center justify-center rounded-xl border border-stone-200 bg-stone-50 px-3 text-xs font-semibold text-stone-800 hover:bg-stone-100"
+            >
+              Сброс
+            </button>
           </div>
         </div>
       </header>

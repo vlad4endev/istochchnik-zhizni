@@ -108,7 +108,7 @@ import {
 import type { AppUser } from '../types';
 import { fetchPrayerRequestHistory, type PrayerHistoryItem } from '../../profile/api';
 import { useMe } from '@/hooks/useMe';
-import { SongbookImportSection } from '../SongbookImportSection';
+import { Link } from 'react-router-dom';
 
 type UpcomingBirthday = {
   nextDate: Date;
@@ -590,7 +590,24 @@ function IntegrationsSection() {
         </div>
       </section>
 
-      {subTab === 'sms' ? <SmsSection /> : subTab === 'ai' ? <AiSettingsSection /> : <SongbookImportSection />}
+      {subTab === 'sms' ? (
+        <SmsSection />
+      ) : subTab === 'ai' ? (
+        <AiSettingsSection />
+      ) : (
+        <section className="rounded-2xl border border-stone-200 bg-white p-4">
+          <h3 className="text-sm font-semibold text-stone-900">Импорт песен</h3>
+          <p className="mt-1 text-xs text-stone-500">
+            Импорт перенесён в окно добавления песни, чтобы всё было в одном месте.
+          </p>
+          <Link
+            to="/songbook/add"
+            className="mt-3 inline-flex min-h-[40px] items-center justify-center rounded-xl bg-stone-900 px-4 text-sm font-semibold text-white hover:bg-stone-800"
+          >
+            Открыть импорт
+          </Link>
+        </section>
+      )}
     </div>
   );
 }

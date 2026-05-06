@@ -12,22 +12,6 @@ import { canModerateSongCatalog } from '../../auth/studioAccess';
 import { deleteFavorite, fetchSongs, postFavorite, type SongListQuery } from '../api';
 import { useSongbookChrome } from '../SongbookChromeContext';
 
-function parseIntParam(v: string | null): number | null {
-  if (!v) return null;
-  const n = Number(v);
-  if (!Number.isFinite(n)) return null;
-  const i = Math.floor(n);
-  if (!Number.isFinite(i)) return null;
-  return i;
-}
-
-function toTagsList(raw: string): string[] {
-  return raw
-    .split(',')
-    .map((s) => s.trim())
-    .filter(Boolean);
-}
-
 export function SongbookPage() {
   const qc = useQueryClient();
   const { stageMode, toggleStageMode } = useSongbookChrome();
@@ -40,10 +24,6 @@ export function SongbookPage() {
   );
   const [search, setSearch] = useState(sp.get('q') ?? '');
   const [debouncedSearch, setDebouncedSearch] = useState(search);
-  const [keyFilter, setKeyFilter] = useState(sp.get('key') ?? '');
-  const [tempoMin, setTempoMin] = useState<string>(sp.get('tempoMin') ?? '');
-  const [tempoMax, setTempoMax] = useState<string>(sp.get('tempoMax') ?? '');
-  const [tagsText, setTagsText] = useState<string>(sp.get('tags') ?? '');
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search), 320);
@@ -55,19 +35,8 @@ export function SongbookPage() {
     const q = debouncedSearch.trim();
     if (q) next.q = q;
 
-    const key = keyFilter.trim();
-    if (key) next.key = key;
-
-    const tMin = parseIntParam(tempoMin.trim() || null);
-    const tMax = parseIntParam(tempoMax.trim() || null);
-    if (tMin != null) next.tempoMin = tMin;
-    if (tMax != null) next.tempoMax = tMax;
-
-    const tags = toTagsList(tagsText);
-    if (tags.length) next.tags = tags;
-
     return next;
-  }, [debouncedSearch, keyFilter, tempoMin, tempoMax, tagsText]);
+  }, [debouncedSearch]);
 
   useEffect(() => {
     const next = new URLSearchParams(sp);
@@ -79,28 +48,12 @@ export function SongbookPage() {
     if (q) next.set('q', q);
     else next.delete('q');
 
-    const key = keyFilter.trim();
-    if (key) next.set('key', key);
-    else next.delete('key');
-
-    const tMin = tempoMin.trim();
-    if (tMin) next.set('tempoMin', tMin);
-    else next.delete('tempoMin');
-
-    const tMax = tempoMax.trim();
-    if (tMax) next.set('tempoMax', tMax);
-    else next.delete('tempoMax');
-
-    const tags = tagsText.trim();
-    if (tags) next.set('tags', tags);
-    else next.delete('tags');
-
     // avoid replace-loop on same string
     if (next.toString() !== sp.toString()) {
       setSp(next, { replace: true });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab, search, keyFilter, tempoMin, tempoMax, tagsText]);
+  }, [tab, search]);
 
   const query = useQuery({
     queryKey: [...keys.songs, queryParams] as const,
@@ -201,34 +154,6 @@ export function SongbookPage() {
             ) : null}
           </div>
         </label>
-        <div className="mb-2 grid gap-2 md:grid-cols-[minmax(0,1fr)_132px_132px]">
-          <input
-            value={keyFilter}
-            onChange={(e) => setKeyFilter(e.target.value)}
-            placeholder="Тональность (напр. G, Am)"
-            className="min-h-[40px] rounded-xl border border-stone-200/70 bg-[var(--surface-elevated)] px-3 py-2 text-sm text-[var(--text)] outline-none placeholder:text-[var(--text-muted)] focus:border-stone-300"
-          />
-          <input
-            inputMode="numeric"
-            value={tempoMin}
-            onChange={(e) => setTempoMin(e.target.value)}
-            placeholder="BPM от"
-            className="min-h-[40px] rounded-xl border border-stone-200/70 bg-[var(--surface-elevated)] px-3 py-2 text-sm text-[var(--text)] outline-none placeholder:text-[var(--text-muted)] focus:border-stone-300"
-          />
-          <input
-            inputMode="numeric"
-            value={tempoMax}
-            onChange={(e) => setTempoMax(e.target.value)}
-            placeholder="BPM до"
-            className="min-h-[40px] rounded-xl border border-stone-200/70 bg-[var(--surface-elevated)] px-3 py-2 text-sm text-[var(--text)] outline-none placeholder:text-[var(--text-muted)] focus:border-stone-300"
-          />
-        </div>
-        <input
-          value={tagsText}
-          onChange={(e) => setTagsText(e.target.value)}
-          placeholder="Теги (через запятую)"
-          className="mb-2 min-h-[40px] rounded-xl border border-stone-200/70 bg-[var(--surface-elevated)] px-3 py-2 text-sm text-[var(--text)] outline-none placeholder:text-[var(--text-muted)] focus:border-stone-300"
-        />
         <div className="inline-flex rounded-full bg-[var(--surface)] p-0.5 dark:bg-[var(--bg-interactive)]">
           <button
             type="button"
@@ -310,7 +235,7 @@ export function SongbookPage() {
         <p className="rounded-xl border border-stone-200 bg-[var(--surface-elevated)] py-10 text-center text-sm text-[var(--text-secondary)]">
           {tab === 'favorites'
             ? 'В избранном пока нет песен.'
-            : debouncedSearch.trim() || keyFilter.trim() || tempoMin.trim() || tempoMax.trim() || tagsText.trim()
+            : debouncedSearch.trim()
               ? 'Ничего не найдено по фильтрам.'
               : 'В каталоге пока нет песен.'}
         </p>
