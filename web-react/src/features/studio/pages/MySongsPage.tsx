@@ -4,6 +4,8 @@ import { Link } from 'react-router-dom';
 import { LuPenLine, LuTrash2 } from 'react-icons/lu';
 
 import { SongListSkeleton } from '@/components/skeletons/SongListSkeleton';
+import { useAuthStore } from '../../auth/authStore';
+import { canModerateSongCatalog } from '../../auth/studioAccess';
 import {
   createDraft,
   deleteDraft,
@@ -14,8 +16,9 @@ import {
   type StudioDraft,
 } from '../api';
 import { studioEditSongPath, useStudioModuleSurface } from '../studioPaths';
+import { fetchSongsForModeration, type SongListItem } from '../../songbook/api';
 
-type MySongsTab = 'saved' | 'drafts' | 'recent';
+type MySongsTab = 'saved' | 'drafts' | 'recent' | 'missingText';
 
 function DraftRow({
   draft,
@@ -87,12 +90,19 @@ function DraftRow({
 export function MySongsPage() {
   const surface = useStudioModuleSurface();
   const qc = useQueryClient();
+  const role = useAuthStore((s) => s.role);
+  const canModerate = canModerateSongCatalog(role);
 
   const q = useQuery({ queryKey: ['studio', 'versions'], queryFn: fetchMyVersions });
   const draftsQ = useQuery({ queryKey: ['studio', 'drafts'], queryFn: fetchDrafts });
   const recentQ = useQuery({
     queryKey: ['studio', 'recent-songs'],
     queryFn: () => fetchRecentSongs(8),
+  });
+  const missingQ = useQuery({
+    queryKey: ['studio', 'missing-text-songs'],
+    queryFn: () => fetchSongsForModeration({ tags: ['нет_текста'] }),
+    enabled: canModerate,
   });
 
   const [tab, setTab] = useState<MySongsTab>('saved');
@@ -140,6 +150,7 @@ export function MySongsPage() {
   const recent = recentQ.data ?? [];
   const drafts = draftsQ.data ?? [];
   const showRecentTab = recent.length > 0;
+  const showMissingTab = canModerate;
 
   const pageCard =
     surface === 'songbook'
@@ -188,10 +199,15 @@ export function MySongsPage() {
           {tabBtn('saved', 'Каталог', 'Сохранённые студийные версии песен из общего списка')}
           {showRecentTab ? tabBtn('recent', 'Недавние', 'Песни, которые вы недавно открывали в песеннике') : null}
           {tabBtn('drafts', 'Черновики', 'Тексты без привязки к песне из каталога')}
+          {showMissingTab ? tabBtn('missingText', 'Без текста', 'Заготовки песен без слов (тег: нет_текста)') : null}
         </div>
       </header>
 
-      <div className="min-h-[12rem]" role="tabpanel" aria-label={tab === 'saved' ? 'Каталог' : tab === 'recent' ? 'Недавние' : 'Черновики'}>
+      <div
+        className="min-h-[12rem]"
+        role="tabpanel"
+        aria-label={tab === 'saved' ? 'Каталог' : tab === 'recent' ? 'Недавние' : tab === 'missingText' ? 'Без текста' : 'Черновики'}
+      >
         {tab === 'drafts' ? (
           <section className="space-y-4">
             <div className="rounded-xl border border-stone-200 bg-stone-50/80 p-4">
@@ -316,6 +332,49 @@ export function MySongsPage() {
                   </ul>
                 )}
               </>
+            )}
+          </section>
+        ) : null}
+
+        {tab === 'missingText' ? (
+          <section className="space-y-3">
+            <p className="text-sm text-stone-600">
+              Это заготовки, которые не отображаются в песеннике. Откройте редактор и добавьте слова/аккорды.
+            </p>
+            {missingQ.isLoading ? (
+              <SongListSkeleton />
+            ) : missingQ.isError ? (
+              <p className="text-sm text-red-600">Не удалось загрузить список заготовок.</p>
+            ) : (missingQ.data ?? []).length === 0 ? (
+              <p className="text-sm text-stone-500">Заготовок без текста нет.</p>
+            ) : (
+              <ul className="flex flex-col gap-2">
+                {(missingQ.data ?? []).map((s: SongListItem) => (
+                  <li
+                    key={s.id}
+                    className="flex min-h-[48px] items-center gap-3 rounded-xl border border-stone-200 bg-white px-4 py-3 shadow-sm"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate font-medium text-stone-900">
+                        {s.song_number ?? '—'}. {s.title}
+                      </p>
+                      <div className="mt-1 flex flex-wrap items-center gap-2">
+                        <span className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-900">
+                          нет текста
+                        </span>
+                        <span className="text-xs text-stone-500">не опубликовано</span>
+                      </div>
+                    </div>
+                    <Link
+                      to={studioEditSongPath(surface, Number(s.id))}
+                      className="inline-flex shrink-0 items-center gap-1 text-sm font-semibold text-sky-700 hover:text-sky-800"
+                    >
+                      <LuPenLine className="h-4 w-4" aria-hidden />
+                      Редактор
+                    </Link>
+                  </li>
+                ))}
+              </ul>
             )}
           </section>
         ) : null}

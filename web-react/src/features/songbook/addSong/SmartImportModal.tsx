@@ -4,7 +4,6 @@ import {
   LuFileText,
   LuLink2,
   LuLoader,
-  LuPlay,
   LuSearch,
   LuSparkles,
   LuUpload,
@@ -20,9 +19,6 @@ import {
   aiSplitSongIntoBlocks,
   fetchImportUrlText,
   parseSongImportXlsxFile,
-  startSongImportXlsxFile,
-  type SongImportProgress,
-  type SongImportResult,
   type XlsxImportParsedSong,
 } from '../api';
 
@@ -78,12 +74,6 @@ export function SmartImportModal({
   const [xlsxParseErrors, setXlsxParseErrors] = useState<Array<{ row: number; field: string; message: string; value?: string }>>(
     [],
   );
-  const [xlsxFile, setXlsxFile] = useState<File | null>(null);
-  const [xlsxMassBusy, setXlsxMassBusy] = useState(false);
-  const [xlsxJobId, setXlsxJobId] = useState<string | null>(null);
-  const [xlsxProgress, setXlsxProgress] = useState<SongImportProgress | null>(null);
-  const [xlsxResult, setXlsxResult] = useState<SongImportResult | null>(null);
-  const xlsxEsRef = useRef<EventSource | null>(null);
 
   const isStudio = variant === 'studio';
 
@@ -106,16 +96,9 @@ export function SmartImportModal({
     setXlsxBusy(false);
     setXlsxError(null);
     setXlsxName(null);
-    setXlsxFile(null);
     setXlsxSongs([]);
     setXlsxSearch('');
     setXlsxParseErrors([]);
-    setXlsxMassBusy(false);
-    setXlsxJobId(null);
-    setXlsxProgress(null);
-    setXlsxResult(null);
-    xlsxEsRef.current?.close();
-    xlsxEsRef.current = null;
     setAiBusy(false);
     setAiError(null);
     setAiProgressText(null);
@@ -126,50 +109,6 @@ export function SmartImportModal({
     }
     aiProgressTimersRef.current = [];
   }, [open, initialRaw, initialTab]);
-
-  useEffect(() => {
-    if (!xlsxJobId) return;
-    xlsxEsRef.current?.close();
-    setXlsxProgress(null);
-    setXlsxResult(null);
-
-    const es = new EventSource(`/api/song-import/progress/${encodeURIComponent(xlsxJobId)}`);
-    xlsxEsRef.current = es;
-
-    const onProgress = (ev: MessageEvent) => {
-      try {
-        setXlsxProgress(JSON.parse(ev.data) as SongImportProgress);
-      } catch {
-        // ignore
-      }
-    };
-    const onDone = (ev: MessageEvent) => {
-      try {
-        setXlsxResult(JSON.parse(ev.data) as SongImportResult);
-      } catch {
-        // ignore
-      } finally {
-        es.close();
-        xlsxEsRef.current = null;
-        setXlsxMassBusy(false);
-      }
-    };
-
-    es.addEventListener('progress', onProgress as any);
-    es.addEventListener('done', onDone as any);
-    es.onerror = () => {
-      // In some auth modes EventSource may fail; surface a hint.
-      setXlsxError((prev) => prev ?? 'Не удалось подключиться к прогрессу импорта. Откройте массовый импорт в админке.');
-      es.close();
-      xlsxEsRef.current = null;
-      setXlsxMassBusy(false);
-    };
-
-    return () => {
-      es.close();
-      if (xlsxEsRef.current === es) xlsxEsRef.current = null;
-    };
-  }, [xlsxJobId]);
 
   const panel = isStudio
     ? 'border-zinc-600 bg-zinc-900 text-zinc-100'
@@ -251,7 +190,6 @@ export function SmartImportModal({
       return;
     }
     setXlsxName(f.name);
-    setXlsxFile(f);
     setXlsxError(null);
     setXlsxBusy(true);
     try {
@@ -289,29 +227,6 @@ export function SmartImportModal({
     a.click();
     a.remove();
     window.setTimeout(() => URL.revokeObjectURL(url), 1500);
-  };
-
-  const startXlsxMassImport = async () => {
-    if (!xlsxFile) return;
-    setXlsxMassBusy(true);
-    setXlsxError(null);
-    setXlsxJobId(null);
-    setXlsxProgress(null);
-    setXlsxResult(null);
-    try {
-      const r = await startSongImportXlsxFile(xlsxFile);
-      setXlsxJobId(r.jobId);
-    } catch (err) {
-      let msg = 'Не удалось запустить массовый импорт';
-      if (axios.isAxiosError(err)) {
-        const d = err.response?.data as { error?: string } | undefined;
-        if (d?.error) msg = d.error;
-      } else if (err instanceof Error && err.message) {
-        msg = err.message;
-      }
-      setXlsxError(msg);
-      setXlsxMassBusy(false);
-    }
   };
 
   const runPdfExtract = async () => {
@@ -836,34 +751,9 @@ export function SmartImportModal({
                       </ul>
                     </div>
                   ) : null}
-                  <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
-                    <button
-                      type="button"
-                      disabled={!xlsxFile || xlsxMassBusy || xlsxParseErrors.length > 0}
-                      onClick={() => void startXlsxMassImport()}
-                      className={`inline-flex w-full min-h-[44px] items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold disabled:opacity-50 sm:w-auto ${btnPrimary}`}
-                      title={xlsxParseErrors.length > 0 ? 'Сначала исправьте ошибки файла и загрузите заново.' : undefined}
-                    >
-                      {xlsxMassBusy ? <LuLoader className="h-4 w-4 animate-spin" /> : <LuPlay className="h-4 w-4" />}
-                      Импортировать все в каталог
-                    </button>
-                    {xlsxJobId ? (
-                      <p className={`text-xs ${muted}`}>
-                        Job: <span className={isStudio ? 'text-zinc-200' : 'text-stone-700'}>{xlsxJobId}</span>
-                      </p>
-                    ) : null}
-                  </div>
-                  {xlsxProgress ? (
-                    <p className={`mt-2 text-xs ${muted}`}>
-                      {xlsxProgress.current}/{xlsxProgress.total} — {xlsxProgress.song_title} ({xlsxProgress.status})
-                    </p>
-                  ) : null}
-                  {xlsxResult ? (
-                    <p className={`mt-2 text-xs ${muted}`}>
-                      Готово. Успешно: <strong>{xlsxResult.success}</strong>, ошибок: <strong>{xlsxResult.failed}</strong>, пропущено:{' '}
-                      <strong>{xlsxResult.skipped}</strong>.
-                    </p>
-                  ) : null}
+                  <p className={`mt-3 text-xs ${muted}`}>
+                    Массовый импорт (создать/обновить все песни из XLSX) находится в админке: «Админка → Импорт песен».
+                  </p>
 
                   {xlsxSongs.length > 0 ? (
                     <div className="mt-3 space-y-2">

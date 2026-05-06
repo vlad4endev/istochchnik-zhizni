@@ -13,6 +13,7 @@ import {
   deleteSong,
   getSongById,
   getVersionFlags,
+  listCatalogSongsForModeration,
   listPublishedSongs,
   recordSongOpened,
   removeFavorite,
@@ -75,6 +76,26 @@ export async function listSongs(req: Request, res: Response): Promise<void> {
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: 'Не удалось загрузить песни' });
+  }
+}
+
+export async function listSongsForModeration(req: Request, res: Response): Promise<void> {
+  try {
+    const r = req as AuthReq;
+    if (!r.authUserId) {
+      res.status(401).json({ error: 'Требуется вход' });
+      return;
+    }
+    if (!canModerateCatalog(roleOf(r))) {
+      res.status(403).json({ error: 'Недостаточно прав' });
+      return;
+    }
+    const filters = parseSongListFilters(req);
+    const songs = await listCatalogSongsForModeration(r.authUserId ?? null, filters);
+    res.json(songs);
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Не удалось загрузить каталог для модерации' });
   }
 }
 

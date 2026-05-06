@@ -4,6 +4,8 @@ import type { ImportProgress, ImportResult, ParsedXlsxSong } from './types';
 import { fetchTelegraphTextDetailed } from './telegraphParser';
 import { smartImportTextToChordPro } from './smartImportToChordPro';
 
+const TAG_MISSING_TEXT = 'нет_текста';
+
 function normTitleForDedupe(title: string): string {
   return (title ?? '')
     .trim()
@@ -112,24 +114,28 @@ export async function importSongsFromXlsxRows(
     let chordsText: string | null = null;
 
     // fetch lyrics
-    const lyr = await fetchTelegraphTextDetailed(row.url_lyrics);
-    if (lyr.ok) {
-      lyricsText = lyr.text;
-    } else {
-      needsRetry = needsRetry || lyr.needsRetry;
-      if (lyr.retryAfterMs) await sleep(lyr.retryAfterMs);
+    if (row.url_lyrics?.trim()) {
+      const lyr = await fetchTelegraphTextDetailed(row.url_lyrics);
+      if (lyr.ok) {
+        lyricsText = lyr.text;
+      } else {
+        needsRetry = needsRetry || lyr.needsRetry;
+        if (lyr.retryAfterMs) await sleep(lyr.retryAfterMs);
+      }
+      await sleep(requestDelayMs);
     }
-    await sleep(requestDelayMs);
 
     // fetch chords
-    const chr = await fetchTelegraphTextDetailed(row.url_chords);
-    if (chr.ok) {
-      chordsText = chr.text;
-    } else {
-      needsRetry = needsRetry || chr.needsRetry;
-      if (chr.retryAfterMs) await sleep(chr.retryAfterMs);
+    if (row.url_chords?.trim()) {
+      const chr = await fetchTelegraphTextDetailed(row.url_chords);
+      if (chr.ok) {
+        chordsText = chr.text;
+      } else {
+        needsRetry = needsRetry || chr.needsRetry;
+        if (chr.retryAfterMs) await sleep(chr.retryAfterMs);
+      }
+      await sleep(requestDelayMs);
     }
-    await sleep(requestDelayMs);
 
     onProgress?.({ current, total, song_title: row.title, status: 'saving' });
 
@@ -142,6 +148,8 @@ export async function importSongsFromXlsxRows(
       );
       const sourceText = (chordsText ?? lyricsText ?? '').trimEnd();
       const content = smartImportTextToChordPro(sourceText).trimEnd() || sourceText;
+      const isPlaceholder = !content.trim();
+      const importedTags = isPlaceholder ? [TAG_MISSING_TEXT] : [];
       const importedAt = nowIso();
 
       let songId: number;
@@ -161,6 +169,8 @@ export async function importSongsFromXlsxRows(
                chords_text = $10,
                needs_retry = $11,
                imported_at = $12,
+               tags = (SELECT ARRAY(SELECT DISTINCT unnest(songs.tags || $13::text[]))),
+               is_published = $14,
                updated_at = NOW()
            WHERE external_id = $1`,
           [
@@ -176,6 +186,8 @@ export async function importSongsFromXlsxRows(
             chordsText,
             needsRetry,
             importedAt,
+            importedTags,
+            !isPlaceholder,
           ],
         );
       } else {
@@ -184,9 +196,9 @@ export async function importSongsFromXlsxRows(
              external_id, song_number, title, slug, content,
              table_of_contents, url_lyrics, url_chords, url_youtube,
              lyrics_text, chords_text, needs_retry, imported_at,
-             is_published, created_by_member_id
+             tags, is_published, created_by_member_id
            )
-           VALUES ($1,$2,$3,gen_random_uuid()::text,$4,$5,$6,$7,$8,$9,$10,$11,$12,TRUE,$13)
+           VALUES ($1,$2,$3,gen_random_uuid()::text,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
            RETURNING id`,
           [
             row.external_id,
@@ -201,6 +213,8 @@ export async function importSongsFromXlsxRows(
             chordsText,
             needsRetry,
             importedAt,
+            importedTags,
+            !isPlaceholder,
             options.createdByMemberId,
           ],
         );

@@ -57,6 +57,12 @@ export async function fetchSongs(params?: SongListQuery): Promise<SongListItem[]
   return data;
 }
 
+/** Для модераторов каталога: включает непубличные песни (например заготовки с тегом `нет_текста`). */
+export async function fetchSongsForModeration(params?: SongListQuery): Promise<SongListItem[]> {
+  const { data } = await apiClient.get<SongListItem[]>(`${SONGS}/moderation${buildSongQuery(params)}`);
+  return data;
+}
+
 export async function fetchSong(id: number): Promise<SongListItem> {
   const { data } = await apiClient.get<SongListItem>(`${SONGS}/${id}`);
   return data;
@@ -185,28 +191,4 @@ export async function parseSongImportXlsxFile(file: File): Promise<{
     headers: { 'Content-Type': 'multipart/form-data' },
   });
   return data as any;
-}
-
-export type SongImportProgress = {
-  current: number;
-  total: number;
-  song_title: string;
-  status: 'fetching' | 'saving' | 'done' | 'error';
-  message?: string;
-};
-
-export type SongImportResult = {
-  success: number;
-  failed: number;
-  skipped: number;
-  errors: Array<{ song_number: number; title: string; error: string }>;
-};
-
-export async function startSongImportXlsxFile(file: File): Promise<{ jobId: string; total: number }> {
-  const fd = new FormData();
-  fd.set('file', file);
-  const { data } = await apiClient.post<{ jobId: string; total: number }>('/api/song-import/start', fd, {
-    headers: { 'Content-Type': 'multipart/form-data' },
-  });
-  return data;
 }

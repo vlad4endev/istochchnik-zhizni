@@ -3,7 +3,9 @@ export type ParsedXlsxSong = {
   song_number: number;
   title: string;
   table_of_contents: string;
+  /** optional */
   url_lyrics: string;
+  /** optional */
   url_chords: string;
   url_youtube: string | null;
 };

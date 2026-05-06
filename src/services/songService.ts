@@ -64,9 +64,10 @@ export interface SongListFilters {
   tags?: string[];
 }
 
-export async function listPublishedSongs(
+async function listSongsInternal(
   memberId: number | null,
-  filters?: SongListFilters
+  filters: SongListFilters | undefined,
+  options: { includeUnpublished: boolean },
 ): Promise<SongListItem[]> {
   const f = filters ?? {};
   const search = (f.q ?? '').trim();
@@ -75,7 +76,7 @@ export async function listPublishedSongs(
   const hasTempoMax = f.tempoMax != null && Number.isFinite(f.tempoMax);
   const tagList = (f.tags ?? []).map((t) => t.trim()).filter(Boolean);
 
-  const conditions: string[] = ['s.is_published = TRUE'];
+  const conditions: string[] = options.includeUnpublished ? [] : ['s.is_published = TRUE'];
   const params: unknown[] = [];
 
   if (search.length > 0) {
@@ -105,7 +106,7 @@ export async function listPublishedSongs(
 
   if (memberId == null) {
     const result = await query(
-      `SELECT * FROM songs s WHERE ${whereSql} ORDER BY COALESCE(s.song_number, 2147483647) ASC, s.title ASC`,
+      `SELECT * FROM songs s ${whereSql ? `WHERE ${whereSql}` : ''} ORDER BY COALESCE(s.song_number, 2147483647) ASC, s.title ASC`,
       params
     );
     return result.rows.map((row) => ({ ...mapSong(row as Record<string, unknown>) }));
@@ -120,7 +121,7 @@ export async function listPublishedSongs(
      FROM songs s
      LEFT JOIN studio_versions sv ON sv.song_id = s.id AND sv.member_id = $${mid1}
      LEFT JOIN song_favorites f ON f.song_id = s.id AND f.member_id = $${mid2}
-     WHERE ${whereSql}
+     ${whereSql ? `WHERE ${whereSql}` : ''}
      ORDER BY COALESCE(s.song_number, 2147483647) ASC, s.title ASC`,
     [...params, memberId, memberId]
   );
@@ -133,6 +134,20 @@ export async function listPublishedSongs(
       is_favorite: Boolean((row as { is_favorite?: boolean }).is_favorite),
     };
   });
+}
+
+export async function listPublishedSongs(
+  memberId: number | null,
+  filters?: SongListFilters
+): Promise<SongListItem[]> {
+  return listSongsInternal(memberId, filters, { includeUnpublished: false });
+}
+
+export async function listCatalogSongsForModeration(
+  memberId: number | null,
+  filters?: SongListFilters
+): Promise<SongListItem[]> {
+  return listSongsInternal(memberId, filters, { includeUnpublished: true });
 }
 
 export async function getSongById(

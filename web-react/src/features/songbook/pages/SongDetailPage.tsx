@@ -1,15 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { LuArrowLeft, LuPlus, LuMinus, LuSettings2 } from 'react-icons/lu';
+import { LuArrowLeft, LuMinus, LuPlus } from 'react-icons/lu';
 
-import { dispatchLayoutMainChrome } from '../../../app/layoutChrome';
-import {
-  getAppScrollMetrics,
-  getAppScrollRoot,
-  getAppScrollTop,
-  scrollAppBy,
-} from '@/lib/appScroll';
 import { SongListSkeleton } from '@/components/skeletons/SongListSkeleton';
 import { keys } from '@/lib/queryKeys';
 import { useAuthStore } from '../../auth/authStore';
@@ -18,7 +11,6 @@ import { useWakeLock } from '../../../hooks/useWakeLock';
 import { fetchSong, recordSongOpened } from '../api';
 import { transposeChordSymbol } from '../chordUtils';
 import { LyricsWithChords } from '../components/LyricsWithChords';
-import { SongReaderSettings } from '../components/SongReaderSettings';
 import { useSongbookChrome } from '../SongbookChromeContext';
 import { fetchVersionForSong } from '../../studio/api';
 
@@ -31,19 +23,7 @@ export function SongDetailPage() {
   const { stageMode, toggleStageMode } = useSongbookChrome();
   const [transpose, setTranspose] = useState(0);
   const [showChords, setShowChords] = useState(true);
-  const [autoScroll, setAutoScroll] = useState(false);
-  const [scrollSpeedLevel, setScrollSpeedLevel] = useState(2);
-  const [fontSize, setFontSize] = useState(16);
-  const [capo, setCapo] = useState(0);
-  const [showConcertChords, setShowConcertChords] = useState(false);
-  const [chordLayoutMode, setChordLayoutMode] = useState<'mono' | 'measured'>('mono');
-  const [fullscreen, setFullscreen] = useState(false);
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  const [scrollProgress, setScrollProgress] = useState(0);
-  const [topOffset, setTopOffset] = useState(118);
-  const resumeAutoscrollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const resumeAutoscrollWantedRef = useRef(false);
-  const topBarRef = useRef<HTMLDivElement | null>(null);
+  const [fontSize, setFontSize] = useState(18);
 
   const q = useQuery({
     queryKey: keys.song(songId),
@@ -64,148 +44,6 @@ export function SongDetailPage() {
     void recordSongOpened(songId).catch(() => {});
   }, [token, songId]);
 
-  const scrollSpeedPxPerSec = 20 + (Math.max(1, Math.min(10, scrollSpeedLevel)) - 1) * 20;
-
-  const stopAutoScroll = () => {
-    resumeAutoscrollWantedRef.current = false;
-    if (resumeAutoscrollTimeoutRef.current) {
-      clearTimeout(resumeAutoscrollTimeoutRef.current);
-      resumeAutoscrollTimeoutRef.current = null;
-    }
-    setAutoScroll(false);
-  };
-
-  const startAutoScroll = () => {
-    resumeAutoscrollWantedRef.current = false;
-    if (resumeAutoscrollTimeoutRef.current) {
-      clearTimeout(resumeAutoscrollTimeoutRef.current);
-      resumeAutoscrollTimeoutRef.current = null;
-    }
-    setAutoScroll(true);
-  };
-
-  const pauseAutoScrollByUser = () => {
-    if (!autoScroll) return;
-    setAutoScroll(false);
-    resumeAutoscrollWantedRef.current = true;
-    if (resumeAutoscrollTimeoutRef.current) {
-      clearTimeout(resumeAutoscrollTimeoutRef.current);
-      resumeAutoscrollTimeoutRef.current = null;
-    }
-    resumeAutoscrollTimeoutRef.current = setTimeout(() => {
-      if (!resumeAutoscrollWantedRef.current) return;
-      setAutoScroll(true);
-      resumeAutoscrollTimeoutRef.current = null;
-    }, 3000);
-  };
-
-  /** Режим «чистого чтения»: при прокрутке вниз скрываем основной хром приложения. */
-  useEffect(() => {
-    const isMobileViewport = () =>
-      typeof window !== 'undefined' && window.matchMedia('(max-width: 767px)').matches;
-
-    if (fullscreen) {
-      dispatchLayoutMainChrome(false);
-      return () => dispatchLayoutMainChrome(true);
-    }
-
-    if (!isMobileViewport()) {
-      dispatchLayoutMainChrome(true);
-      return;
-    }
-
-    const onScroll = () => {
-      const y = getAppScrollTop();
-      const visible = y < 56;
-      dispatchLayoutMainChrome(visible);
-    };
-    const scrollEl = getAppScrollRoot() ?? window;
-    scrollEl.addEventListener('scroll', onScroll, { passive: true });
-    onScroll();
-    return () => {
-      scrollEl.removeEventListener('scroll', onScroll);
-      dispatchLayoutMainChrome(true);
-    };
-  }, [fullscreen]);
-
-  useEffect(() => {
-    if (!autoScroll) return;
-    let raf = 0;
-    let last = performance.now();
-    const tick = (now: number) => {
-      const dt = Math.min((now - last) / 1000, 0.05);
-      last = now;
-      const bpmFactor = q.data?.tempo ? Math.max(0.65, Math.min(2.4, Number(q.data.tempo) / 80)) : 1;
-      scrollAppBy(0, scrollSpeedPxPerSec * bpmFactor * dt);
-      raf = requestAnimationFrame(tick);
-    };
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
-  }, [autoScroll, scrollSpeedPxPerSec, q.data?.tempo]);
-
-  useEffect(() => {
-    const updateProgress = () => {
-      const { scrollTop, maxScroll } = getAppScrollMetrics();
-      setScrollProgress(scrollTop / maxScroll);
-    };
-    updateProgress();
-    const scrollEl = getAppScrollRoot() ?? window;
-    scrollEl.addEventListener('scroll', updateProgress, { passive: true });
-    window.addEventListener('resize', updateProgress);
-    return () => {
-      scrollEl.removeEventListener('scroll', updateProgress);
-      window.removeEventListener('resize', updateProgress);
-    };
-  }, []);
-
-  useEffect(() => {
-    if (fullscreen) return;
-    const node = topBarRef.current;
-    if (!node) return;
-
-    const updateOffset = () => {
-      const next = Math.ceil(node.getBoundingClientRect().height);
-      if (next > 0) setTopOffset(next);
-    };
-    updateOffset();
-
-    const observer = new ResizeObserver(() => updateOffset());
-    observer.observe(node);
-    window.addEventListener('resize', updateOffset);
-    return () => {
-      observer.disconnect();
-      window.removeEventListener('resize', updateOffset);
-    };
-  }, [fullscreen]);
-
-  useEffect(() => {
-    const onWheel = () => pauseAutoScrollByUser();
-    const onTouchMove = () => pauseAutoScrollByUser();
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'PageDown' || e.key === 'PageUp' || e.key === ' ') {
-        pauseAutoScrollByUser();
-      }
-    };
-    window.addEventListener('wheel', onWheel, { passive: true });
-    window.addEventListener('touchmove', onTouchMove, { passive: true });
-    window.addEventListener('keydown', onKeyDown);
-    return () => {
-      window.removeEventListener('wheel', onWheel);
-      window.removeEventListener('touchmove', onTouchMove);
-      window.removeEventListener('keydown', onKeyDown);
-    };
-  }, [autoScroll]);
-
-  useEffect(() => {
-    if (!autoScroll) return;
-    return () => {
-      if (resumeAutoscrollTimeoutRef.current) {
-        clearTimeout(resumeAutoscrollTimeoutRef.current);
-        resumeAutoscrollTimeoutRef.current = null;
-      }
-    };
-  }, [autoScroll]);
-
   if (!Number.isInteger(songId) || songId <= 0) {
     return <p className="text-red-600">Некорректная ссылка</p>;
   }
@@ -216,168 +54,125 @@ export function SongDetailPage() {
   const version = (versionQ.data as { custom_content?: string | null; custom_key?: string | null } | null) ?? null;
   const effectiveContent = version?.custom_content ?? s.content;
   const effectiveKey = version?.custom_key ?? s.default_key;
-  const currentShift = showChords
-    ? showConcertChords
-      ? transpose
-      : transpose - capo
-    : 0;
+  const currentShift = showChords ? transpose : 0;
   const transposedKey = effectiveKey ? transposeChordSymbol(effectiveKey, currentShift) : null;
-  const keyLabel = effectiveKey
-    ? `${effectiveKey} \u2192 ${transposedKey ?? effectiveKey}`
-    : currentShift === 0
-      ? 'Тональность: без сдвига'
-      : `Тональность: сдвиг ${currentShift > 0 ? '+' : ''}${currentShift}`;
 
-  const shell = {
-    page: 'text-stone-900',
-    top: 'border-stone-200 bg-[var(--surface)]/95',
-    title: 'text-stone-900',
-    meta: 'text-stone-500',
-    card: 'border border-stone-200 bg-white',
-    settingsBtn: 'border-stone-200 bg-white text-stone-700 hover:bg-stone-50',
-  };
+  const keyBadge = useMemo(() => {
+    if (!effectiveKey && currentShift === 0) return null;
+    if (!effectiveKey) return `Сдвиг ${currentShift > 0 ? '+' : ''}${currentShift}`;
+    const next = transposedKey ?? effectiveKey;
+    return currentShift === 0 ? next : `${effectiveKey} → ${next}`;
+  }, [effectiveKey, currentShift, transposedKey]);
 
   return (
-    <div className={`relative mx-auto max-w-3xl ${shell.page}`}>
-      <div className="fixed inset-x-0 top-0 z-[55] h-1 bg-stone-200/70">
-        <div className="h-full bg-primary transition-[width] duration-150" style={{ width: `${scrollProgress * 100}%` }} />
-      </div>
-      <div
-        ref={topBarRef}
-        className={['fixed inset-x-0 top-0 z-40 border-b backdrop-blur', shell.top, fullscreen ? 'hidden' : ''].join(' ')}
-      >
-        <div className="mx-auto max-w-3xl px-3 py-2 md:px-0">
-          <div className="mb-1 flex min-w-0 items-center gap-2">
+    <div className="mx-auto flex h-full min-h-0 max-w-3xl flex-col text-stone-900">
+      <header className="sticky top-0 z-30 border-b border-stone-200/80 bg-[var(--surface)]/90 backdrop-blur">
+        <div className="px-3 py-2 md:px-0">
+          <div className="flex items-center justify-between gap-2">
             <Link
               to="/songbook"
-              className="inline-flex items-center gap-1.5 rounded-md px-1 py-1 text-[12px] text-stone-500 hover:bg-stone-100"
+              className="inline-flex min-h-[40px] items-center gap-2 rounded-xl px-2 text-sm font-semibold text-stone-700 hover:bg-stone-100"
               aria-label="Назад к списку"
             >
               <LuArrowLeft className="h-4 w-4" />
-              <span>Назад</span>
+              Назад
             </Link>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={toggleStageMode}
+                className="inline-flex min-h-[40px] items-center rounded-xl border border-stone-200 bg-white px-3 text-xs font-semibold text-stone-800 hover:bg-stone-50"
+              >
+                Режим сцены
+              </button>
+            </div>
           </div>
-          <div className="flex items-start justify-between gap-3">
+
+          <div className="mt-2 flex items-start justify-between gap-3">
             <div className="min-w-0">
-              <h1 className={`truncate text-[20px] font-medium tracking-normal ${shell.title}`}>
-                {s.title}
-              </h1>
-              <div className="mt-1 flex flex-wrap items-center gap-1.5">
-                {transposedKey || effectiveKey ? (
-                  <span className="inline-flex h-6 items-center rounded-full bg-[#F3EEF0] px-2.5 text-[11px] font-semibold text-[#7B2D3F]">
-                    {transposedKey ?? effectiveKey}
+              <h1 className="truncate text-lg font-semibold text-stone-900">{s.title}</h1>
+              <div className="mt-1 flex flex-wrap items-center gap-2">
+                {keyBadge ? (
+                  <span className="inline-flex items-center rounded-full bg-stone-100 px-2.5 py-1 text-[11px] font-semibold text-stone-700">
+                    {keyBadge}
                   </span>
                 ) : null}
-                {(s.tags[0] ?? '').trim() ? (
-                  <span className="inline-flex h-6 items-center rounded-full border border-stone-300 px-2.5 text-[11px] font-medium text-stone-600">
-                    {s.tags[0]}
+                {s.tempo != null ? (
+                  <span className="inline-flex items-center rounded-full bg-stone-100 px-2.5 py-1 text-[11px] font-semibold text-stone-700">
+                    {s.tempo} BPM
                   </span>
                 ) : null}
               </div>
             </div>
-            <div className={`pt-0.5 text-right text-[11px] ${shell.meta}`}>{autoScroll ? 'Автопрокрутка' : 'Ручной режим'}</div>
           </div>
-        </div>
-        <div className="mx-auto mt-2 flex max-w-3xl flex-wrap items-center gap-1.5 px-3 pb-2 md:px-0">
-          <div className="inline-flex min-h-[28px] items-center rounded-md border border-stone-300 bg-white px-1 text-[11px] text-stone-700">
+
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <div className="inline-flex items-center rounded-xl border border-stone-200 bg-white p-1">
+              <button
+                type="button"
+                onClick={() => setTranspose((v) => Math.max(-11, v - 1))}
+                className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-stone-700 hover:bg-stone-100"
+                aria-label="Уменьшить тональность"
+              >
+                <LuMinus className="h-4 w-4" />
+              </button>
+              <span className="px-2 text-xs font-semibold text-stone-700">Тональность</span>
+              <button
+                type="button"
+                onClick={() => setTranspose((v) => Math.min(11, v + 1))}
+                className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-stone-700 hover:bg-stone-100"
+                aria-label="Повысить тональность"
+              >
+                <LuPlus className="h-4 w-4" />
+              </button>
+            </div>
+
             <button
               type="button"
-              onClick={() => setTranspose((v) => Math.max(-11, v - 1))}
-              className="inline-flex h-6 w-6 items-center justify-center rounded hover:bg-stone-100"
-              aria-label="Уменьшить тональность"
+              onClick={() => setShowChords((v) => !v)}
+              className="inline-flex min-h-[40px] items-center rounded-xl border border-stone-200 bg-white px-3 text-xs font-semibold text-stone-800 hover:bg-stone-50"
             >
-              <LuMinus className="h-3.5 w-3.5" />
+              {showChords ? 'Аккорды: вкл' : 'Аккорды: выкл'}
             </button>
-            <span className="px-1">Тональность</span>
-            <button
-              type="button"
-              onClick={() => setTranspose((v) => Math.min(11, v + 1))}
-              className="inline-flex h-6 w-6 items-center justify-center rounded hover:bg-stone-100"
-              aria-label="Повысить тональность"
-            >
-              <LuPlus className="h-3.5 w-3.5" />
-            </button>
+
+            <div className="inline-flex items-center rounded-xl border border-stone-200 bg-white p-1">
+              <button
+                type="button"
+                onClick={() => setFontSize((v) => Math.max(16, v - 1))}
+                className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-stone-700 hover:bg-stone-100"
+                aria-label="Уменьшить шрифт"
+              >
+                <LuMinus className="h-4 w-4" />
+              </button>
+              <span className="px-2 text-xs font-semibold text-stone-700">Шрифт</span>
+              <button
+                type="button"
+                onClick={() => setFontSize((v) => Math.min(26, v + 1))}
+                className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-stone-700 hover:bg-stone-100"
+                aria-label="Увеличить шрифт"
+              >
+                <LuPlus className="h-4 w-4" />
+              </button>
+            </div>
           </div>
-          <button
-            type="button"
-            className="inline-flex min-h-[28px] items-center rounded-md border border-stone-300 bg-white px-2.5 text-[11px] font-medium text-stone-700"
-          >
-            Темп {s.tempo ?? '—'}
-          </button>
-          <button
-            type="button"
-            onClick={toggleStageMode}
-            className="inline-flex min-h-[28px] items-center rounded-md border border-stone-300 bg-white px-2.5 text-[11px] font-medium text-stone-700"
-          >
-            Режим сцены
-          </button>
         </div>
-      </div>
+      </header>
 
-      <div
-        className="fixed right-4 z-[60]"
-        style={{
-          bottom: fullscreen
-            ? 'calc(env(safe-area-inset-bottom, 0px) + 1rem)'
-            : 'calc(var(--app-bottom-nav-total-height) + 1rem)',
-        }}
-      >
-        <SongReaderSettings
-          open={settingsOpen}
-          onOpenChange={setSettingsOpen}
-          showTrigger={false}
-          currentKeyLabel={keyLabel}
-          fontSize={fontSize}
-          onFontSize={setFontSize}
-          transpose={transpose}
-          onTranspose={setTranspose}
-          onResetTranspose={() => setTranspose(0)}
-          showChords={showChords}
-          onShowChords={setShowChords}
-          autoScroll={autoScroll}
-          onAutoScroll={(next) => (next ? startAutoScroll() : stopAutoScroll())}
-          onAutoScrollStart={startAutoScroll}
-          onAutoScrollStop={stopAutoScroll}
-          scrollSpeedLevel={scrollSpeedLevel}
-          onScrollSpeedLevel={setScrollSpeedLevel}
-          capo={capo}
-          onCapo={setCapo}
-          showConcertChords={showConcertChords}
-          onShowConcertChords={setShowConcertChords}
-          chordLayoutMode={chordLayoutMode}
-          onChordLayoutMode={setChordLayoutMode}
-          fullscreen={fullscreen}
-          onFullscreen={setFullscreen}
-          stageMode={stageMode}
-        />
-        <button
-          type="button"
-          onClick={() => setSettingsOpen((v) => !v)}
-          className="inline-flex h-12 w-12 items-center justify-center rounded-full border border-stone-200 bg-white/90 text-stone-800 shadow-lg backdrop-blur hover:bg-white"
-          aria-label="Настройки песни"
-        >
-          <LuSettings2 className="h-5 w-5" />
-        </button>
-      </div>
-
-      <div style={{ height: fullscreen ? 12 : topOffset }} />
-      <div className="space-y-2">
+      <main className="min-h-0 flex-1 overflow-y-auto px-3 py-3 [webkit-overflow-scrolling:touch] md:px-0">
         <LyricsWithChords
           text={effectiveContent}
           transposeSemitones={currentShift}
-          chordLayoutMode={chordLayoutMode}
           chordsVisible={stageMode ? false : showChords}
-          fontSizePx={stageMode ? 22 : Math.max(16, fontSize)}
+          fontSizePx={stageMode ? 22 : fontSize}
           chordTone="light"
           className={[
-            'songbook-reader rounded-xl p-4 font-sans text-base',
+            'songbook-reader rounded-2xl border border-stone-200 bg-white p-5',
+            'font-sans leading-relaxed text-stone-900',
             stageMode ? 'songbook-reader--stage' : '',
-            shell.card,
-            'text-stone-900',
-            fullscreen ? 'min-h-[calc(100dvh-4rem)]' : '',
           ].join(' ')}
         />
-      </div>
+        <div className="h-[calc(var(--app-bottom-nav-total-height)+12px)]" />
+      </main>
     </div>
   );
 }

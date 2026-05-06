@@ -105,14 +105,7 @@ function buildHeaderMap(headers: unknown[]): { map: HeaderMap; errors: Validatio
     map[key] = col;
   }
 
-  const required: ColumnKey[] = [
-    'external_id',
-    'song_number',
-    'title',
-    'table_of_contents',
-    'url_lyrics',
-    'url_chords',
-  ];
+  const required: ColumnKey[] = ['external_id', 'song_number', 'table_of_contents'];
   for (const k of required) {
     if (map[k] == null) {
       errors.push({
@@ -139,7 +132,7 @@ function validateRow(rowNumExcel: number, row: unknown[], headerMap: HeaderMap):
 
   const external_id = cell(row, headerMap.external_id);
   const song_number_raw = cell(row, headerMap.song_number);
-  const title = cell(row, headerMap.title);
+  const titleRaw = cell(row, headerMap.title);
   const table_of_contents = cell(row, headerMap.table_of_contents);
   const url_lyrics = normalizeUrl(cell(row, headerMap.url_lyrics));
   const url_chords = normalizeUrl(cell(row, headerMap.url_chords));
@@ -154,19 +147,21 @@ function validateRow(rowNumExcel: number, row: unknown[], headerMap: HeaderMap):
     errors.push({ row: rowNumExcel, field: 'song_number', message: 'Номер песни должен быть целым > 0', value: song_number_raw });
   }
 
-  if (!title.trim()) {
-    errors.push({ row: rowNumExcel, field: 'title', message: 'Название не может быть пустым', value: title });
-  }
-
   if (!table_of_contents.trim()) {
     errors.push({ row: rowNumExcel, field: 'table_of_contents', message: 'Оглавление не может быть пустым', value: table_of_contents });
   }
 
-  if (!url_lyrics || !isHttpsUrl(url_lyrics) || !isTelegraphUrl(url_lyrics)) {
+  // URLs are optional: allow empty placeholders for “no text yet”.
+  if (url_lyrics && (!isHttpsUrl(url_lyrics) || !isTelegraphUrl(url_lyrics))) {
     errors.push({ row: rowNumExcel, field: 'url_lyrics', message: 'url_lyrics должен быть https://telegra.ph/...', value: url_lyrics });
   }
-  if (!url_chords || !isHttpsUrl(url_chords) || !isTelegraphUrl(url_chords)) {
+  if (url_chords && (!isHttpsUrl(url_chords) || !isTelegraphUrl(url_chords))) {
     errors.push({ row: rowNumExcel, field: 'url_chords', message: 'url_chords должен быть https://telegra.ph/...', value: url_chords });
+  }
+
+  const title = (titleRaw ?? '').trim() ? titleRaw : table_of_contents;
+  if (!title.trim()) {
+    errors.push({ row: rowNumExcel, field: 'title', message: 'Название не может быть пустым (используйте хотя бы оглавление)', value: titleRaw });
   }
 
   let url_youtube: string | null = null;
@@ -182,8 +177,8 @@ function validateRow(rowNumExcel: number, row: unknown[], headerMap: HeaderMap):
       song_number: song_number!,
       title: title.trim(),
       table_of_contents: table_of_contents.trim(),
-      url_lyrics,
-      url_chords,
+      url_lyrics: url_lyrics ? url_lyrics : '',
+      url_chords: url_chords ? url_chords : '',
       url_youtube,
     },
     errors: [],
