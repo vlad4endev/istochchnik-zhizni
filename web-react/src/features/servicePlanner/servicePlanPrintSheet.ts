@@ -110,6 +110,37 @@ function buildPrintHtml(payload: ServicePlanPrintPayload): string {
       -webkit-print-color-adjust: exact;
       print-color-adjust: exact;
     }
+    .toolbar{
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 12px;
+      background: rgba(255,255,255,0.92);
+      border-bottom: 1px solid #e7e5e4;
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+    }
+    .toolbar button{
+      appearance: none;
+      border: 1px solid #d6d3d1;
+      background: #0c4a6e;
+      color: #fff;
+      border-radius: 10px;
+      padding: 8px 12px;
+      font-weight: 800;
+      font-size: 14px;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .toolbar button:active{ transform: translateY(1px); }
+    .toolbar .hint{
+      font-size: 12px;
+      color: #57534e;
+      line-height: 1.2;
+    }
     #sheet { padding: 0 1mm 2mm; max-width: 100%; }
     h1 {
       font-size: var(--fs-h);
@@ -193,10 +224,15 @@ function buildPrintHtml(payload: ServicePlanPrintPayload): string {
     @media print {
       body { background: #fff; }
       #sheet { padding: 0; }
+      .toolbar { display: none; }
     }
   </style>
 </head>
 <body>
+  <div class="toolbar" role="toolbar" aria-label="Действия печати">
+    <button type="button" id="printBtn">Печать / PDF</button>
+    <span class="hint">Если нужен файл: в диалоге печати выберите «Сохранить как PDF».</span>
+  </div>
   <div id="sheet">
     <h1>${escapeHtml(payload.heading)}</h1>
     <div class="meta">${escapeHtml(payload.dateLine)} · начало ${escapeHtml(payload.startTime)} · всего ${payload.totalMinutes} мин</div>
@@ -216,6 +252,13 @@ function buildPrintHtml(payload: ServicePlanPrintPayload): string {
   </div>
   <script>
     (function () {
+      function isMobile() {
+        try {
+          return /Android|iPhone|iPad|iPod|Mobi/i.test(navigator.userAgent || '');
+        } catch (e) {
+          return false;
+        }
+      }
       function fitOnePage() {
         var el = document.getElementById('sheet');
         if (!el) return;
@@ -231,7 +274,10 @@ function buildPrintHtml(payload: ServicePlanPrintPayload): string {
       }
       window.addEventListener('load', function () {
         fitOnePage();
-        setTimeout(function () { window.print(); }, 120);
+        var btn = document.getElementById('printBtn');
+        if (btn) btn.addEventListener('click', function () { window.print(); });
+        // На десктопе можно сразу открыть печать. На мобилке часто блокируется — оставляем предпросмотр.
+        if (!isMobile()) setTimeout(function () { window.print(); }, 160);
       });
     })();
   </script>
@@ -244,11 +290,21 @@ function buildPrintHtml(payload: ServicePlanPrintPayload): string {
  * @returns false если браузер заблокировал всплывающее окно
  */
 export function openServicePlanA4PrintSheet(payload: ServicePlanPrintPayload): boolean {
-  const w = window.open('', '_blank', 'noopener,noreferrer,width=900,height=1100');
+  const w = window.open('about:blank', '_blank', 'noopener,noreferrer,width=900,height=1100');
   if (!w) return false;
-  const doc = w.document;
-  doc.open();
-  doc.write(buildPrintHtml(payload));
-  doc.close();
+  const html = buildPrintHtml(payload);
+  try {
+    const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    w.location.replace(url);
+    // Даем вкладке загрузиться; после этого URL можно освобождать.
+    setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  } catch {
+    // Fallback: старые браузеры / webview
+    const doc = w.document;
+    doc.open();
+    doc.write(html);
+    doc.close();
+  }
   return true;
 }

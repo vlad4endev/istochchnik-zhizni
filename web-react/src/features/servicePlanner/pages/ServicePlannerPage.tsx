@@ -11,10 +11,10 @@ import {
   LuChevronUp,
   LuClock3,
   LuCopy,
+  LuDownload,
   LuEllipsis,
   LuEye,
   LuEyeOff,
-  LuFileText,
   LuGripVertical,
   LuLink,
   LuListOrdered,
@@ -463,9 +463,13 @@ export function ServicePlannerPage() {
       const preacherId = planQ.data.preacher_member_id ?? null;
       const preacher = preacherId ? (membersQ.data ?? []).find((u) => u.id === preacherId) ?? null : null;
       const preacherName = preacher ? userLabel(preacher) : 'Проповедник';
+      const pendingDeletes = pendingPlanBlockDeleteTimersRef.current;
       const normalized =
         sermonTypeIds.size === 0
-          ? planQ.data
+          ? {
+              ...planQ.data,
+              blocks: planQ.data.blocks.filter((b) => !pendingDeletes.has(b.id)),
+            }
           : {
               ...planQ.data,
               blocks: planQ.data.blocks.map((b) => {
@@ -477,7 +481,8 @@ export function ServicePlannerPage() {
                   assigned_member_id: preacherId,
                   title: topic ? `${preacherName} - ${topic}` : preacherName,
                 };
-              }),
+              })
+              .filter((b) => !pendingDeletes.has(b.id)),
             };
       setDraft(normalized);
       if (planQ.data.template_id) {
@@ -594,6 +599,13 @@ export function ServicePlannerPage() {
 
   const deleteBlockMut = useMutation({
     mutationFn: (id: number) => deleteServiceBlock(id),
+    onSuccess: async () => {
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ['service-planner', 'plans'] }),
+        qc.invalidateQueries({ queryKey: ['service-planner', 'plans', 'all'] }),
+        qc.invalidateQueries({ queryKey: ['service-planner', 'plan', activePlanId] }),
+      ]);
+    },
   });
 
   function flushPendingPlanBlockDelete(blockId: number): void {
@@ -2341,10 +2353,10 @@ export function ServicePlannerPage() {
                 type="button"
                 onClick={() => handlePrintPlanSheet()}
                 className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-lg border border-stone-300 bg-white px-2.5 py-1 text-[11px] font-semibold text-stone-800 hover:border-primary hover:text-primary sm:px-3 sm:py-1.5 sm:text-xs"
-                title="Откроется окно печати: выберите «Сохранить как PDF» или «Печать в PDF»"
+                title="Откроется предпросмотр: затем «Печать / PDF»"
               >
-                <LuFileText className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                Лист A4
+                <LuDownload className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                PDF
               </button>
               <button
                 type="button"
@@ -2362,7 +2374,7 @@ export function ServicePlannerPage() {
               </button>
             </div>
 
-            <div className="flex w-full flex-wrap items-center justify-end gap-1 sm:hidden">
+            <div className="flex w-full items-center justify-end gap-1 overflow-x-auto pb-0.5 sm:hidden [mask-image:linear-gradient(to_right,black_88%,transparent_100%)]">
               {/* UX #6: шаблоны — в «⋯», архив/удаление остаются на виду */}
               {canManageTemplates ? (
                 <div className="relative">
@@ -2412,12 +2424,15 @@ export function ServicePlannerPage() {
               ) : null}
               <button
                 type="button"
-                onClick={() => handlePrintPlanSheet()}
+                onClick={() => {
+                  setPlanHeaderMoreOpen(false);
+                  handlePrintPlanSheet();
+                }}
                 className="inline-flex min-h-[36px] shrink-0 items-center gap-1 whitespace-nowrap rounded-lg border border-stone-300 px-2.5 py-1 text-[11px] font-semibold text-stone-800 hover:border-primary hover:text-primary sm:hidden"
-                title="Печать на одном листе A4 — сохраните как PDF в диалоге"
+                title="Откроется предпросмотр: затем «Печать / PDF»"
               >
-                <LuFileText className="h-4 w-4 shrink-0" aria-hidden />
-                Лист A4
+                <LuDownload className="h-4 w-4 shrink-0" aria-hidden />
+                PDF
               </button>
               <button
                 type="button"
@@ -2612,20 +2627,11 @@ export function ServicePlannerPage() {
           </button>
           </div>
         </div>
-        <div className="mt-2 hidden flex-col gap-2 md:flex md:flex-row md:flex-wrap md:justify-end">
-          <button
-            type="button"
-            onClick={() => handlePrintPlanSheet()}
-            className="inline-flex min-h-[44px] min-w-[10rem] items-center justify-center gap-2 rounded-xl border border-stone-300 bg-white px-3 py-2 text-sm font-semibold text-stone-800 hover:border-primary hover:text-primary"
-            title="Печать на одном листе A4 — в диалоге можно сохранить как PDF"
-          >
-            <LuFileText className="h-4 w-4 shrink-0" aria-hidden />
-            Лист A4 (PDF)
-          </button>
+        <div className="mt-2 hidden md:block">
           <button
             type="button"
             onClick={() => void saveProgramMut.mutateAsync()}
-            className="inline-flex min-h-[44px] min-w-[12rem] flex-1 items-center justify-center gap-2 rounded-xl bg-primary px-3 py-2 text-sm font-semibold text-white hover:bg-primary-dark md:max-w-md md:flex-none"
+            className="inline-flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl bg-primary px-3 py-2 text-sm font-semibold text-white hover:bg-primary-dark"
           >
             <LuSave className="h-4 w-4" />
             Сохранить программу
