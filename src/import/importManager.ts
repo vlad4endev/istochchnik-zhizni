@@ -2,6 +2,7 @@ import { pool } from '../config/db';
 import { slugifyTitle } from '../services/songService';
 import type { ImportProgress, ImportResult, ParsedXlsxSong } from './types';
 import { fetchTelegraphTextDetailed } from './telegraphParser';
+import { smartImportTextToChordPro } from './smartImportToChordPro';
 
 function normTitleForDedupe(title: string): string {
   return (title ?? '')
@@ -139,7 +140,8 @@ export async function importSongsFromXlsxRows(
         'SELECT id FROM songs WHERE external_id = $1 LIMIT 1',
         [row.external_id],
       );
-      const content = (chordsText ?? lyricsText ?? '').trimEnd();
+      const sourceText = (chordsText ?? lyricsText ?? '').trimEnd();
+      const content = smartImportTextToChordPro(sourceText).trimEnd() || sourceText;
       const importedAt = nowIso();
 
       let songId: number;
