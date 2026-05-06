@@ -2,6 +2,11 @@
 FROM node:22-alpine AS build
 WORKDIR /app
 
+# sharp (транзитивно от @capacitor/assets в devDependencies) по умолчанию тянет prebuild libvips
+# с GitHub — в Docker это часто падает по таймауту. Системный vips + toolchain позволяют
+# использовать/собрать sharp без этого скачивания.
+RUN apk add --no-cache python3 make g++ vips-dev
+
 # Vite: только переменные с префиксом VITE_ доступны в import.meta.env при сборке.
 ARG VITE_PWA_ORIGIN=
 ENV VITE_PWA_ORIGIN=$VITE_PWA_ORIGIN

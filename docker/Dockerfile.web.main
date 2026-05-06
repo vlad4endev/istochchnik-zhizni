@@ -2,6 +2,10 @@
 FROM node:22-alpine AS build
 WORKDIR /app
 
+# См. Dockerfile.web: vips + toolchain для sharp (@capacitor/assets), иначе npm ci часто
+# падает на таймауте скачивания libvips с GitHub.
+RUN apk add --no-cache python3 make g++ vips-dev
+
 ARG VITE_APP_VARIANT=main
 ENV VITE_APP_VARIANT=$VITE_APP_VARIANT
 ARG VITE_PWA_ORIGIN=
