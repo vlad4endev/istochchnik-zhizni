@@ -1,0 +1,22 @@
+import { Router } from 'express';
+
+import { requireAuthSession } from '../middleware/authSession';
+import {
+  previewSongImportXlsx,
+  retryFailedSongImports,
+  songImportProgressSse,
+  songImportProgressSnapshot,
+  songImportUploadXlsx,
+  startSongImportXlsx,
+} from '../controllers/songImportController';
+
+const router = Router();
+
+router.post('/preview', requireAuthSession, songImportUploadXlsx, previewSongImportXlsx);
+router.post('/start', requireAuthSession, songImportUploadXlsx, startSongImportXlsx);
+router.get('/progress/:jobId', requireAuthSession, songImportProgressSse);
+router.get('/snapshot/:jobId', requireAuthSession, songImportProgressSnapshot);
+router.post('/retry-failed', requireAuthSession, retryFailedSongImports);
+
+export default router;
+

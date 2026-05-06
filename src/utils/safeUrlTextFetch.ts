@@ -152,6 +152,7 @@ export async function safeFetchUrlForSongImport(urlString: string): Promise<Song
         redirect: 'manual',
         headers: {
           Accept: 'text/plain,application/pdf;q=0.6,text/html;q=0.3,application/json;q=0.5,*/*;q=0.1',
+          'Accept-Language': 'ru,en;q=0.8',
           'User-Agent': 'IstochnikSongbookImport/1.0',
         },
         signal: controller.signal,

@@ -22,6 +22,7 @@ import { canDeleteSongFromCatalog, canModerateSongCatalog } from '../../auth/stu
 import { emitAppToast } from '../../../lib/uiFeedback';
 import { useScrollInputIntoView } from '@/hooks/useScrollInputIntoView';
 import { SkeletonBox } from '@/components/ui/SkeletonBox';
+import { keys } from '@/lib/queryKeys';
 import { deleteSong, fetchSong, updateSong } from '../api';
 import { convertToChordPro } from '../addSong/chordProConversion';
 import { SmartImportModal, type SmartImportSourceTab } from '../addSong/SmartImportModal';
@@ -350,8 +351,7 @@ export function StudioEditor() {
     mutationFn: () => deleteSong(id),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['songs'] });
-      void qc.invalidateQueries({ queryKey: ['songs', 'catalog'] });
-      void qc.invalidateQueries({ queryKey: ['songs', 'catalog-all'] });
+      void qc.invalidateQueries({ queryKey: keys.songs });
       void qc.invalidateQueries({ queryKey: ['studio', 'versions'] });
       void qc.invalidateQueries({ queryKey: ['studio', 'setlists'] });
       emitAppToast({ kind: 'success', message: 'Песня удалена из каталога' });
@@ -384,7 +384,6 @@ export function StudioEditor() {
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['song', id] });
       void qc.invalidateQueries({ queryKey: ['songs'] });
-      void qc.invalidateQueries({ queryKey: ['songs', 'catalog'] });
       emitAppToast({ kind: 'success', message: 'Метаданные каталога сохранены' });
     },
     onError: (err: unknown) => {

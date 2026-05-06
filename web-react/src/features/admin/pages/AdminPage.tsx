@@ -108,6 +108,7 @@ import {
 import type { AppUser } from '../types';
 import { fetchPrayerRequestHistory, type PrayerHistoryItem } from '../../profile/api';
 import { useMe } from '@/hooks/useMe';
+import { SongbookImportSection } from '../SongbookImportSection';
 
 type UpcomingBirthday = {
   nextDate: Date;
@@ -543,11 +544,11 @@ export function AdminPage() {
 }
 
 function IntegrationsSection() {
-  const [subTab, setSubTab] = useState<'sms' | 'ai'>('sms');
+  const [subTab, setSubTab] = useState<'sms' | 'ai' | 'song_import'>('sms');
   return (
     <div className="space-y-6">
       <section className="rounded-[10px] bg-stone-100 p-1">
-        <div className="grid grid-cols-2 gap-1">
+        <div className="grid grid-cols-3 gap-1">
           <button
             type="button"
             className={
@@ -574,10 +575,22 @@ function IntegrationsSection() {
             ИИ интеграции
             <span className="rounded-lg bg-emerald-100 px-1.5 py-0.5 text-[11px] text-emerald-700">Подключено</span>
           </button>
+          <button
+            type="button"
+            className={
+              subTab === 'song_import'
+                ? 'flex items-center justify-center gap-2 rounded-lg bg-white px-3 py-2.5 text-sm font-medium text-stone-900 shadow'
+                : 'flex items-center justify-center gap-2 rounded-lg bg-transparent px-3 py-2.5 text-sm font-medium text-stone-500'
+            }
+            onClick={() => setSubTab('song_import')}
+          >
+            <span aria-hidden>🎵</span>
+            Импорт песен
+          </button>
         </div>
       </section>
 
-      {subTab === 'sms' ? <SmsSection /> : <AiSettingsSection />}
+      {subTab === 'sms' ? <SmsSection /> : subTab === 'ai' ? <AiSettingsSection /> : <SongbookImportSection />}
     </div>
   );
 }

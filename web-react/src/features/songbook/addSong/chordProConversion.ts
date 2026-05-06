@@ -37,16 +37,95 @@ export function expandTabsToSpaces(line: string, tabWidth = 8): string {
   return out;
 }
 
+function normalizeCyrillicChordLetters(input: string): string {
+  // Частая проблема: в PDF/Word аккорды выглядят латинскими, но содержат кириллические буквы.
+  // Маппим только визуально похожие символы, чтобы не ломать обычный русский текст.
+  const map: Record<string, string> = {
+    А: 'A',
+    а: 'a',
+    В: 'B',
+    в: 'b',
+    С: 'C',
+    с: 'c',
+    Е: 'E',
+    е: 'e',
+    Н: 'H',
+    н: 'h',
+    К: 'K',
+    к: 'k',
+    М: 'M',
+    м: 'm',
+    О: 'O',
+    о: 'o',
+    Р: 'P',
+    р: 'p',
+    Т: 'T',
+    т: 't',
+    Х: 'X',
+    х: 'x',
+  };
+  return input.replace(/[АаВСсЕеНнКкМмОоРрТтХх]/g, (ch) => map[ch] ?? ch);
+}
+
+function normalizeChordTokenLoose(raw: string): string | null {
+  const base = raw.trim().normalize('NFKC');
+  if (!base) return null;
+  if (isNoChordPlaceholder(base)) return null;
+
+  let s = base;
+  s = s.replace(/[\u200B-\u200D\uFEFF]/g, '');
+  s = s.replace(/♯/g, '#').replace(/♭/g, 'b');
+  s = normalizeCyrillicChordLetters(s);
+  // Частая запись баса через "\".
+  s = s.replace(/\\/g, '/');
+  // Убираем обрамляющие скобки/черты.
+  s = s.replace(/^[|()[\]{}]+|[|()[\]{}]+$/g, '').trim();
+  if (!s) return null;
+
+  // Root: A-G or H with optional accidental.
+  // Затем произвольный "хвост" качества/надстроек.
+  // Slash bass: optional / + note.
+  const m = s.match(/^([A-GH])([#b]?)(.*?)(?:\/([A-GH])([#b]?))?$/i);
+  if (!m) return null;
+  const root = (m[1] ?? '').toUpperCase();
+  const acc = (m[2] ?? '') as '' | '#' | 'b';
+  const tail = (m[3] ?? '').trimEnd();
+  const bassRoot = (m[4] ?? '').toUpperCase();
+  const bassAcc = (m[5] ?? '') as '' | '#' | 'b';
+
+  // Быстрая валидация хвоста: только типичные символы аккордов.
+  if (tail && !/^[a-z0-9()+\-_.:]*$/i.test(tail.replace(/\s+/g, ''))) {
+    return null;
+  }
+
+  const head = `${root}${acc}${tail}`;
+  if (bassRoot) {
+    return `${head}/${bassRoot}${bassAcc}`;
+  }
+  return head;
+}
+
 function buildChordParseVariants(input: string): string[] {
   let s = input.trim().normalize('NFKC');
   s = s.replace(/[\u200B-\u200D\uFEFF]/g, '');
   s = s.replace(/♯/g, '#').replace(/♭/g, 'b');
+  s = normalizeCyrillicChordLetters(s);
+  // В русских распечатках/Word иногда бас пишут через "\" вместо "/"
+  s = s.replace(/\\/g, '/');
   const out = new Set<string>();
   const add = (v: string) => {
     const t = v.trim();
     if (t) out.add(t);
   };
   add(s);
+  // Tonal не понимает slash-инверсии (B/D#). Для совместимости добавляем вариант без баса.
+  if (s.includes('/')) {
+    const rootOnly = (s.split('/')[0] ?? '').trim();
+    add(rootOnly);
+    // Нем. H как корень без суффикса: H -> B; Hb -> Bb
+    if (/^H$/i.test(rootOnly)) add('B');
+    if (/^Hb$/i.test(rootOnly)) add('Bb');
+  }
 
   // Разделённые точкой сомнения: «Am.» в PDF
   add(s.replace(/\.+$/u, ''));
@@ -85,6 +164,8 @@ function buildChordParseVariants(input: string): string[] {
 
   // Нем. H = ноте B (осторожно: только короткие токены с типичными суффиксами аккорда)
   if (/^H(m|maj|dim|aug|sus|add|7|9|11|13|6|\/)/i.test(s)) add(`B${s.slice(1)}`);
+  // Также поддерживаем H как голый корень и H/<bass>
+  if (/^H(?:\/[A-G](?:#|b)?)?$/i.test(s)) add(`B${s.slice(1)}`);
   if (/^Hb/i.test(s)) add(`Bb${s.slice(2)}`);
 
   // × как maj7 в старых партитурах
@@ -118,7 +199,7 @@ export function normalizeChordSymbolForCatalog(raw: string): string | null {
 
 /** Распознавание токена аккорда (расширенные варианты записи). */
 export function isChordToken(raw: string): boolean {
-  return normalizeChordSymbolForCatalog(raw) != null;
+  return normalizeChordSymbolForCatalog(raw) != null || normalizeChordTokenLoose(raw) != null;
 }
 
 function tokenizeChordLine(line: string): string[] {
@@ -129,7 +210,15 @@ function tokenizeChordLine(line: string): string[] {
     .map((x) => x.trim())
     .filter(Boolean)
     .filter((p) => !isNoChordPlaceholder(p))
-    .map((p) => normalizeChordSymbolForCatalog(p))
+    .map((p) => {
+      const loose = normalizeChordTokenLoose(p);
+      // Для отображения важно сохранять запись пользователя для инверсий/немецкой нотации:
+      // H\D# / H/D# / Hb/... и т.п.
+      if (loose && (/[\\/]/.test(p) || /^[Hh]/.test(loose))) {
+        return loose;
+      }
+      return normalizeChordSymbolForCatalog(p) ?? loose;
+    })
     .filter((x): x is string => x != null);
 }
 
@@ -188,7 +277,7 @@ export function normalizeSplitWordChordsInText(text: string): string {
  * Обрабатываем только вне `[...]`; однобуквенный «C» не трогаем (конфликт со словами вроде «Составил»).
  */
 export function normalizeDetachedChordBeforeCyrillicInLine(line: string): string {
-  const singleRootOk = (tok: string) => /^[ABDEFG]$/i.test(tok);
+  const singleRootOk = (tok: string) => /^[ABDEFGH]$/i.test(tok);
 
   let out = '';
   let i = 0;
@@ -212,7 +301,7 @@ export function normalizeDetachedChordBeforeCyrillicInLine(line: string): string
       continue;
     }
 
-    if (!/[A-G]/i.test(ch)) {
+    if (!/[A-GH]/i.test(ch)) {
       out += ch;
       i += 1;
       continue;
@@ -235,7 +324,7 @@ export function normalizeDetachedChordBeforeCyrillicInLine(line: string): string
 
     if (bestLen > 0) {
       const tok = line.slice(i, i + bestLen);
-      const norm = normalizeChordSymbolForCatalog(tok);
+      const norm = normalizeChordSymbolForCatalog(tok) ?? normalizeChordTokenLoose(tok);
       out += `[${norm ?? tok}]`;
       i += bestLen;
       continue;
@@ -261,7 +350,11 @@ function mergeByColumnPositions(chordLine: string, lyricLine: string): string | 
   for (const match of chordExp.matchAll(/\S+/g)) {
     const tok = match[0];
     if (isNoChordPlaceholder(tok)) continue;
-    const norm = normalizeChordSymbolForCatalog(tok);
+    const loose = normalizeChordTokenLoose(tok);
+    const norm =
+      loose && (/[\\/]/.test(tok) || /^[Hh]/.test(loose))
+        ? loose
+        : normalizeChordSymbolForCatalog(tok) ?? loose;
     if (norm == null) return null;
     chords.push({ chord: norm, pos: match.index ?? 0 });
   }
@@ -360,6 +453,13 @@ export function normalizeChordProBracketsInText(text: string): string {
   return text.replace(/\[([^\]]+)\]/g, (full, inner: string) => {
     const trimmed = inner.trim();
     if (!trimmed) return full;
+    // Slash-инверсии и немецкая нотация (H) должны сохраняться для отображения/транспозиции.
+    // `normalizeChordSymbolForCatalog` может потерять бас/перевести H->B.
+    const loose = normalizeChordTokenLoose(trimmed);
+    if (loose && (/[\\/]/.test(trimmed) || /^[Hh]/.test(loose))) {
+      return `[${loose}]`;
+    }
+
     const norm = normalizeChordSymbolForCatalog(trimmed);
     if (norm) return `[${norm}]`;
     return full;

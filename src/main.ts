@@ -25,6 +25,7 @@ import telegramRoutes from './routes/telegramRoutes';
 import smsRoutes from './routes/smsRoutes';
 import publicRoutes from './routes/publicRoutes';
 import songRoutes from './routes/songRoutes';
+import songImportRoutes from './routes/songImportRoutes';
 import studioRoutes from './routes/studioRoutes';
 import settingsRoutes from './routes/settingsRoutes';
 import messengerRoutes from './routes/messengerRoutes';
@@ -301,6 +302,7 @@ app.get('/health', async (_req, res) => {
 app.use('/api/users', userRoutes);
 app.use('/api/public', publicRoutes);
 app.use('/api/songs', songRoutes);
+app.use('/api/song-import', songImportRoutes);
 app.use('/api/studio', studioRoutes);
 app.use('/api/calendar', calendarRoutes);
 app.use('/api/settings', settingsRoutes);

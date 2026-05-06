@@ -228,6 +228,24 @@ function isLikelyGarbled(text: string): boolean {
   const clean = text
     .replace(/\[[^\]]{1,8}\]/g, ' ')  // [Am], [F#m7], ...
     .replace(/^[ \t]*[A-G][^\n]{0,10}$/gm, ' '); // строки типа "Am C F G"
+
+  // Сценарий «битой ToUnicode»: много цифр/знаков ><= и очень мало букв.
+  // Такой текст может проходить среднюю длину слов, но по сути нечитабелен.
+  {
+    const sample = clean.slice(0, 4000);
+    const letters = (sample.match(/[A-Za-zА-Яа-яЁё\u0400-\u04FF]/g) ?? []).length;
+    const digits = (sample.match(/\d/g) ?? []).length;
+    const weird = (sample.match(/[><=]/g) ?? []).length;
+    const significant = letters + digits + weird;
+    if (significant >= 120) {
+      const letterRatio = letters / Math.max(1, significant);
+      const weirdRatio = weird / Math.max(1, significant);
+      if (letterRatio < 0.22 && (digits / Math.max(1, significant)) > 0.25 && weirdRatio > 0.08) {
+        return true;
+      }
+    }
+  }
+
   const words = clean
     .split(/\s+/)
     .filter((w) => w.length > 0 && /[a-zA-Zа-яёА-ЯЁ\u0400-\u04FF]/.test(w));

@@ -10,6 +10,7 @@ import { SkeletonBox } from '@/components/ui/SkeletonBox';
 
 import { exportSetlistPdf } from '../../songbook/pdfExport';
 import { fetchSongs } from '../../songbook/api';
+import { keys } from '@/lib/queryKeys';
 import {
   addSetlistItem,
   fetchMyVersions,
@@ -35,7 +36,7 @@ export function SetlistDetailPage() {
 
   const setlistsQ = useQuery({ queryKey: ['studio', 'setlists'], queryFn: fetchSetlists });
   const songsQ = useQuery({
-    queryKey: ['songs', 'catalog-all'],
+    queryKey: keys.songs,
     queryFn: () => fetchSongs(),
   });
   const versionsQ = useQuery({ queryKey: ['studio', 'versions'], queryFn: fetchMyVersions });

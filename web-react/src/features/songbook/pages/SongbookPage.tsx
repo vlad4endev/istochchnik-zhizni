@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useEffect, useMemo, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import { LuHeart, LuSearch, LuX } from 'react-icons/lu';
 
 import { emitAppToast } from '../../../lib/uiFeedback';
@@ -9,20 +9,102 @@ import { SongListSkeleton } from '@/components/skeletons/SongListSkeleton';
 import { keys } from '@/lib/queryKeys';
 import { useAuthStore } from '../../auth/authStore';
 import { canModerateSongCatalog } from '../../auth/studioAccess';
-import { deleteFavorite, fetchSongs, postFavorite } from '../api';
+import { deleteFavorite, fetchSongs, postFavorite, type SongListQuery } from '../api';
 import { useSongbookChrome } from '../SongbookChromeContext';
+
+function parseIntParam(v: string | null): number | null {
+  if (!v) return null;
+  const n = Number(v);
+  if (!Number.isFinite(n)) return null;
+  const i = Math.floor(n);
+  if (!Number.isFinite(i)) return null;
+  return i;
+}
+
+function toTagsList(raw: string): string[] {
+  return raw
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
 
 export function SongbookPage() {
   const qc = useQueryClient();
   const { stageMode, toggleStageMode } = useSongbookChrome();
   const role = useAuthStore((s) => s.role);
-  const canAddSong = canModerateSongCatalog(role) && (role ?? '').toLowerCase() === 'admin';
-  const [tab, setTab] = useState<'catalog' | 'favorites'>('catalog');
-  const [search, setSearch] = useState('');
+  const canAddSong = canModerateSongCatalog(role);
+  const [sp, setSp] = useSearchParams();
+
+  const [tab, setTab] = useState<'catalog' | 'favorites'>(
+    sp.get('tab') === 'favorites' ? 'favorites' : 'catalog',
+  );
+  const [search, setSearch] = useState(sp.get('q') ?? '');
+  const [debouncedSearch, setDebouncedSearch] = useState(search);
+  const [keyFilter, setKeyFilter] = useState(sp.get('key') ?? '');
+  const [tempoMin, setTempoMin] = useState<string>(sp.get('tempoMin') ?? '');
+  const [tempoMax, setTempoMax] = useState<string>(sp.get('tempoMax') ?? '');
+  const [tagsText, setTagsText] = useState<string>(sp.get('tags') ?? '');
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 320);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  const queryParams = useMemo((): SongListQuery => {
+    const next: SongListQuery = {};
+    const q = debouncedSearch.trim();
+    if (q) next.q = q;
+
+    const key = keyFilter.trim();
+    if (key) next.key = key;
+
+    const tMin = parseIntParam(tempoMin.trim() || null);
+    const tMax = parseIntParam(tempoMax.trim() || null);
+    if (tMin != null) next.tempoMin = tMin;
+    if (tMax != null) next.tempoMax = tMax;
+
+    const tags = toTagsList(tagsText);
+    if (tags.length) next.tags = tags;
+
+    return next;
+  }, [debouncedSearch, keyFilter, tempoMin, tempoMax, tagsText]);
+
+  useEffect(() => {
+    const next = new URLSearchParams(sp);
+
+    if (tab === 'favorites') next.set('tab', 'favorites');
+    else next.delete('tab');
+
+    const q = search.trim();
+    if (q) next.set('q', q);
+    else next.delete('q');
+
+    const key = keyFilter.trim();
+    if (key) next.set('key', key);
+    else next.delete('key');
+
+    const tMin = tempoMin.trim();
+    if (tMin) next.set('tempoMin', tMin);
+    else next.delete('tempoMin');
+
+    const tMax = tempoMax.trim();
+    if (tMax) next.set('tempoMax', tMax);
+    else next.delete('tempoMax');
+
+    const tags = tagsText.trim();
+    if (tags) next.set('tags', tags);
+    else next.delete('tags');
+
+    // avoid replace-loop on same string
+    if (next.toString() !== sp.toString()) {
+      setSp(next, { replace: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab, search, keyFilter, tempoMin, tempoMax, tagsText]);
 
   const query = useQuery({
-    queryKey: keys.songs,
-    queryFn: () => fetchSongs(),
+    queryKey: [...keys.songs, queryParams] as const,
+    queryFn: () => fetchSongs(queryParams),
     staleTime: 5 * 60_000,
   });
 
@@ -32,8 +114,7 @@ export function SongbookPage() {
       else await deleteFavorite(id);
     },
     onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: keys.songs });
-      void qc.invalidateQueries({ queryKey: ['songs', 'catalog-all'] });
+      void qc.invalidateQueries({ queryKey: ['songs'] });
       emitAppToast({ kind: 'success', message: 'Избранное обновлено' });
     },
     onError: () => emitAppToast('Не удалось обновить избранное'),
@@ -42,14 +123,8 @@ export function SongbookPage() {
   const rows = useMemo(() => {
     const source = query.data ?? [];
     const tabRows = tab === 'favorites' ? source.filter((s) => s.is_favorite) : source;
-    const q = search.trim().toLowerCase();
-    if (!q) return tabRows;
-    return tabRows.filter((s) => {
-      const number = s.song_number == null ? '' : String(s.song_number);
-      const title = String(s.title ?? '').toLowerCase();
-      return number.includes(q) || title.includes(q);
-    });
-  }, [query.data, tab, search]);
+    return tabRows;
+  }, [query.data, tab]);
 
   const stageModeButton = (
     <button
@@ -110,7 +185,7 @@ export function SongbookPage() {
               type="search"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Поиск: номер или название"
+              placeholder="Поиск по названию или тексту…"
               autoComplete="off"
               className="w-full min-h-[40px] rounded-xl border border-stone-200/70 bg-[var(--surface-elevated)] py-2 pl-9 pr-9 text-sm text-[var(--text)] outline-none placeholder:text-[var(--text-muted)] focus:border-stone-300"
             />
@@ -126,6 +201,34 @@ export function SongbookPage() {
             ) : null}
           </div>
         </label>
+        <div className="mb-2 grid gap-2 md:grid-cols-[minmax(0,1fr)_132px_132px]">
+          <input
+            value={keyFilter}
+            onChange={(e) => setKeyFilter(e.target.value)}
+            placeholder="Тональность (напр. G, Am)"
+            className="min-h-[40px] rounded-xl border border-stone-200/70 bg-[var(--surface-elevated)] px-3 py-2 text-sm text-[var(--text)] outline-none placeholder:text-[var(--text-muted)] focus:border-stone-300"
+          />
+          <input
+            inputMode="numeric"
+            value={tempoMin}
+            onChange={(e) => setTempoMin(e.target.value)}
+            placeholder="BPM от"
+            className="min-h-[40px] rounded-xl border border-stone-200/70 bg-[var(--surface-elevated)] px-3 py-2 text-sm text-[var(--text)] outline-none placeholder:text-[var(--text-muted)] focus:border-stone-300"
+          />
+          <input
+            inputMode="numeric"
+            value={tempoMax}
+            onChange={(e) => setTempoMax(e.target.value)}
+            placeholder="BPM до"
+            className="min-h-[40px] rounded-xl border border-stone-200/70 bg-[var(--surface-elevated)] px-3 py-2 text-sm text-[var(--text)] outline-none placeholder:text-[var(--text-muted)] focus:border-stone-300"
+          />
+        </div>
+        <input
+          value={tagsText}
+          onChange={(e) => setTagsText(e.target.value)}
+          placeholder="Теги (через запятую)"
+          className="mb-2 min-h-[40px] rounded-xl border border-stone-200/70 bg-[var(--surface-elevated)] px-3 py-2 text-sm text-[var(--text)] outline-none placeholder:text-[var(--text-muted)] focus:border-stone-300"
+        />
         <div className="inline-flex rounded-full bg-[var(--surface)] p-0.5 dark:bg-[var(--bg-interactive)]">
           <button
             type="button"
@@ -205,7 +308,11 @@ export function SongbookPage() {
 
       {rows.length === 0 ? (
         <p className="rounded-xl border border-stone-200 bg-[var(--surface-elevated)] py-10 text-center text-sm text-[var(--text-secondary)]">
-          {tab === 'favorites' ? 'В избранном пока нет песен.' : 'В каталоге пока нет песен.'}
+          {tab === 'favorites'
+            ? 'В избранном пока нет песен.'
+            : debouncedSearch.trim() || keyFilter.trim() || tempoMin.trim() || tempoMax.trim() || tagsText.trim()
+              ? 'Ничего не найдено по фильтрам.'
+              : 'В каталоге пока нет песен.'}
         </p>
       ) : null}
       </div>
