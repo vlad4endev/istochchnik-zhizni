@@ -1,0 +1,37 @@
+.header {
+  background: rgba(0, 0, 0, 0.55);
+  flex-shrink: 0;
+}
+
+.stage {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  overflow: hidden;
+  min-height: 0;
+}
+
+.navLeft {
+  position: absolute;
+  left: 12px;
+  background: rgba(255, 255, 255, 0.12) !important;
+}
+
+.navRight {
+  position: absolute;
+  right: 12px;
+  background: rgba(255, 255, 255, 0.12) !important;
+}
+
+.navLeft:hover,
+.navRight:hover {
+  background: rgba(255, 255, 255, 0.22) !important;
+}
+
+.footer {
+  background: rgba(0, 0, 0, 0.55);
+  padding: 10px 0 12px;
+  flex-shrink: 0;
+}

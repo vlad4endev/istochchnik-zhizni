@@ -11,6 +11,7 @@ import { initPwaStandaloneHtmlHint } from './features/pwa/utils/pwaEnvironment';
 import { AppRouter } from './app/Router';
 import { AppRouterMain } from './app/RouterMain';
 import { AppRouterStudio } from './app/RouterStudio';
+import { MediaViewer } from './components/MediaViewer';
 import { PWAUpdatePrompt } from './components/PWAUpdatePrompt';
 import { TopLoader } from './components/ui/TopLoader';
 import { AccessibilityProvider } from './lib/accessibility/AccessibilityProvider';
@@ -119,6 +120,7 @@ createRoot(document.getElementById('root')!).render(
           <BrowserRouter>
             <AccessibilityProvider>
               <RootRouter />
+              <MediaViewer />
             </AccessibilityProvider>
           </BrowserRouter>
         </QueryClientProvider>

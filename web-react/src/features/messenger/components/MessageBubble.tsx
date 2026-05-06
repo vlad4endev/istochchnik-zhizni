@@ -16,11 +16,13 @@ import {
 } from '../payloadMedia';
 import { apiErrorMessage, approveAccessRequest, rejectAccessRequest } from '../../admin/api';
 import { IoCheckmark, IoCheckmarkDone } from 'react-icons/io5';
-import { LuBot, LuDownload, LuExternalLink, LuFileText, LuLoader, LuRefreshCw, LuReply, LuX } from 'react-icons/lu';
+import { LuBot, LuDownload, LuExternalLink, LuFileText, LuLoader, LuRefreshCw, LuReply } from 'react-icons/lu';
 import { VoiceMessageAttachment } from './VoiceMessageAttachment';
 import { VideoNoteAttachment } from './VideoNoteAttachment';
 import { PollVotersSheet } from './PollVotersSheet';
 import { AppAvatar } from '../../../components/AppAvatar';
+import { useMediaViewer, type MediaItem } from '../../../components/MediaViewer';
+import { DocumentViewerModal, canPreviewDocumentInline } from '../../../components/DocumentViewerModal';
 import { resolvePublicUrl } from '../../../lib/resolvePublicUrl';
 import { emitAppToast } from '../../../lib/uiFeedback';
 import { motion, useMotionValue, useTransform, animate } from 'framer-motion';
@@ -633,6 +635,26 @@ function openUrlInNewTab(url: string): void {
   }
 }
 
+function formatViewerDate(value: string): string {
+  const date = new Date(value);
+  return date.toLocaleString('ru-RU', {
+    day: '2-digit',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+function initialsFromName(name: string): string {
+  const parts = name
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+  if (parts.length === 0) return '??';
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return `${parts[0][0] ?? ''}${parts[1][0] ?? ''}`.toUpperCase();
+}
+
 /** Сохранение на устройство: сначала blob (как в Telegram), иначе fallback через ссылку. */
 async function saveUrlToDevice(url: string, filename: string): Promise<void> {
   const safeName = filename.trim() || 'file';
@@ -825,6 +847,7 @@ function MessageBubbleInner({
   onPinToggle,
   accessRequestsSystemChannel = false,
 }: MessageBubbleProps) {
+  const openViewer = useMediaViewer((s) => s.openViewer);
   const currentMemberId = useChatStore((s) => s.currentMemberId);
   const convIdKey = String(message.conversation_id);
   const convReadCursors = useChatStore((s) => s.readCursorsByConv[convIdKey] || EMPTY_READ_CURSORS);
@@ -839,28 +862,12 @@ function MessageBubbleInner({
   const [showReactions, setShowReactions] = useState(false);
   /** Плашка реакций над пузырьком (long-press), как в Telegram */
   const [showReactionBar, setShowReactionBar] = useState(false);
-  const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
-  /** Имя файла для «Сохранить» в полноэкранном просмотре фото */
-  const [lightboxDownloadName, setLightboxDownloadName] = useState<string | null>(null);
-  const [lightboxIsVideo, setLightboxIsVideo] = useState(false);
+  const [documentViewer, setDocumentViewer] = useState<{ url: string; name: string; mime: string } | null>(null);
   const [mainImageLoaded, setMainImageLoaded] = useState(false);
   const [albumSlotLoaded, setAlbumSlotLoaded] = useState<Record<number, boolean>>({});
   const longPressTimer = useRef<number | null>(null);
   const longPressOrigin = useRef<{ x: number; y: number } | null>(null);
   const lastTapUpRef = useRef<{ t: number; x: number; y: number } | null>(null);
-
-  useEffect(() => {
-    if (!lightboxSrc) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        setLightboxSrc(null);
-        setLightboxDownloadName(null);
-        setLightboxIsVideo(false);
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [lightboxSrc]);
 
   const isOptimistic = message.id.startsWith('temp-');
   const isMine = isOptimistic || (currentMemberId != null && message.sender_id === currentMemberId);
@@ -914,6 +921,19 @@ function MessageBubbleInner({
     message.sender_id == null &&
     !isDeleted;
   const payload = (message.payload ?? {}) as Record<string, unknown>;
+  const senderName = String(
+    message.sender_name ??
+      [message.sender_first_name, message.sender_last_name].filter(Boolean).join(' ') ??
+      '',
+  ).trim() || 'Неизвестно';
+  const viewerDate = useMemo(() => formatViewerDate(message.created_at), [message.created_at]);
+  const viewerSender = useMemo(
+    () => ({
+      name: senderName,
+      initials: initialsFromName(senderName),
+    }),
+    [senderName],
+  );
   const albumImages = Array.isArray(payload.images)
     ? payload.images
         .map((x) => (typeof x === 'object' && x !== null ? (x as Record<string, unknown>) : null))
@@ -1056,6 +1076,57 @@ function MessageBubbleInner({
     console.log('[messenger] pray click', { messageId: message.id });
   };
 
+  const openDocument = useCallback((url: string, name: string, mimeHint: string) => {
+    if (!url) return;
+    if (canPreviewDocumentInline(name, mimeHint)) {
+      setDocumentViewer({ url, name, mime: mimeHint });
+      return;
+    }
+    openUrlInNewTab(url);
+  }, []);
+
+  const buildAlbumViewer = useCallback((): {
+    items: MediaItem[];
+    indexBySource: Record<number, number>;
+  } => {
+    const items: MediaItem[] = [];
+    const indexBySource: Record<number, number> = {};
+    const caption = String(message.content ?? '').trim();
+
+    albumImages.forEach((img, idx) => {
+      const rawUrl = getAlbumImageUrl(img);
+      const src = resolvedAlbumUrls[idx] ?? (resolvePublicUrl(rawUrl) ?? rawUrl);
+      if (!src) return;
+      const mime = String(img.mimeType ?? img.mimetype ?? '').trim().toLowerCase();
+      const name = String(img.name ?? img.filename ?? '').trim().toLowerCase();
+      const urlPath = rawUrl.split('?')[0].toLowerCase();
+      const isHeicLike =
+        mime === 'image/heic' ||
+        mime === 'image/heif' ||
+        urlPath.endsWith('.heic') ||
+        urlPath.endsWith('.heif') ||
+        name.endsWith('.heic') ||
+        name.endsWith('.heif');
+      if (isHeicLike) return;
+
+      const mediaType: MediaItem['type'] = isMessengerVideoAttachment(img as Record<string, unknown>, rawUrl)
+        ? 'video'
+        : 'photo';
+      indexBySource[idx] = items.length;
+      items.push({
+        id: `${message.id}-${idx}`,
+        type: mediaType,
+        src,
+        thumb: mediaType === 'photo' ? src : undefined,
+        caption,
+        sender: viewerSender,
+        date: viewerDate,
+      });
+    });
+
+    return { items, indexBySource };
+  }, [albumImages, message.content, message.id, resolvedAlbumUrls, viewerDate, viewerSender]);
+
   const renderContent = () => {
     if (payloadType === 'video_note') return null;
 
@@ -1186,15 +1257,15 @@ function MessageBubbleInner({
                   );
                 }
                 if (isMessengerVideoAttachment(img as Record<string, unknown>, rawUrl)) {
-                  const vName = String(img.name ?? img.filename ?? '').trim() || `video-${idx + 1}.mp4`;
                   return (
                     <button
                       key={`${slideSrc}-${idx}-video`}
                       type="button"
                       onClick={() => {
-                        setLightboxSrc(slideSrc);
-                        setLightboxIsVideo(true);
-                        setLightboxDownloadName(vName);
+                        const { items, indexBySource } = buildAlbumViewer();
+                        const targetIndex = indexBySource[idx];
+                        if (targetIndex == null || items.length === 0) return;
+                        openViewer(items, targetIndex);
                       }}
                       className={['relative overflow-hidden rounded-xl', isMine ? 'bg-white/10' : 'bg-black/[0.04]'].join(' ')}
                       style={{ aspectRatio: '4 / 3' }}
@@ -1243,11 +1314,10 @@ function MessageBubbleInner({
                     key={`${slideSrc}-${idx}`}
                     type="button"
                     onClick={() => {
-                      setLightboxSrc(slideSrc);
-                      setLightboxIsVideo(false);
-                      setLightboxDownloadName(
-                        String(img.name ?? img.filename ?? '').trim() || `photo-${idx + 1}.jpg`,
-                      );
+                      const { items, indexBySource } = buildAlbumViewer();
+                      const targetIndex = indexBySource[idx];
+                      if (targetIndex == null || items.length === 0) return;
+                      openViewer(items, targetIndex);
                     }}
                     className={['relative overflow-hidden rounded-xl', isMine ? 'bg-white/10' : 'bg-black/[0.04]'].join(' ')}
                     style={{ aspectRatio: '4 / 3' }}
@@ -1386,11 +1456,19 @@ function MessageBubbleInner({
             <button
               type="button"
               onClick={() => {
-                setLightboxSrc(src);
-                setLightboxIsVideo(isSingleVideo);
-                setLightboxDownloadName(
-                  String(payload.name ?? payload.filename ?? '').trim() ||
-                    (isSingleVideo ? 'video.mp4' : 'image.jpg'),
+                openViewer(
+                  [
+                    {
+                      id: message.id,
+                      type: isSingleVideo ? 'video' : 'photo',
+                      src,
+                      thumb: isSingleVideo ? undefined : src,
+                      caption,
+                      sender: viewerSender,
+                      date: viewerDate,
+                    },
+                  ],
+                  0,
                 );
               }}
               className={[
@@ -1496,7 +1574,7 @@ function MessageBubbleInner({
             onClick={(e) => {
               e.preventDefault();
               e.stopPropagation();
-              if (openHref) openUrlInNewTab(openHref);
+              if (openHref) openDocument(openHref, name, mimeHint);
             }}
             className={[
               'flex w-full min-w-0 items-start gap-3 p-3 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-45',
@@ -1543,7 +1621,7 @@ function MessageBubbleInner({
               onClick={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
-                if (openHref) openUrlInNewTab(openHref);
+                if (openHref) openDocument(openHref, name, mimeHint);
               }}
               className={[
                 'inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-extrabold disabled:opacity-40',
@@ -2120,69 +2198,13 @@ function MessageBubbleInner({
       )}
     </div>
 
-    {lightboxSrc ? (
-      <div
-        className="fixed inset-0 z-[5000] bg-black/80 p-4"
-        onClick={() => {
-          setLightboxSrc(null);
-          setLightboxDownloadName(null);
-          setLightboxIsVideo(false);
-        }}
-        role="dialog"
-        aria-modal="true"
-        aria-label={lightboxIsVideo ? 'Просмотр видео' : 'Просмотр изображения'}
-      >
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            const n = (lightboxDownloadName ?? 'image.jpg').trim() || 'image.jpg';
-            void saveUrlToDevice(lightboxSrc, n).catch(() =>
-              emitAppToast({
-              kind: 'error',
-              message: lightboxIsVideo ? 'Не удалось сохранить видео' : 'Не удалось сохранить фото',
-            }),
-            );
-          }}
-          className="absolute left-4 top-4 z-[5001] inline-flex h-11 min-w-[11rem] items-center justify-center gap-2 rounded-full bg-white/10 px-4 text-sm font-bold text-white backdrop-blur-sm transition hover:bg-white/20"
-        >
-          <LuDownload className="h-5 w-5 shrink-0" strokeWidth={2} aria-hidden />
-          Сохранить
-        </button>
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            setLightboxSrc(null);
-            setLightboxDownloadName(null);
-            setLightboxIsVideo(false);
-          }}
-          className="absolute right-4 top-4 z-[5001] flex h-11 w-11 items-center justify-center rounded-full bg-white/10 text-white backdrop-blur-sm transition hover:bg-white/20"
-          aria-label="Закрыть"
-        >
-          <LuX className="h-6 w-6" strokeWidth={2} aria-hidden />
-        </button>
-        <div className="mx-auto flex h-full max-w-2xl items-center justify-center">
-          {lightboxIsVideo ? (
-            <video
-              src={lightboxSrc}
-              controls
-              playsInline
-              className="max-h-full max-w-full rounded-2xl shadow-2xl"
-              onClick={(e) => e.stopPropagation()}
-            />
-          ) : (
-            <img
-              src={lightboxSrc}
-              alt=""
-              className="max-h-full max-w-full rounded-2xl object-contain shadow-2xl"
-              referrerPolicy="no-referrer"
-              onClick={(e) => e.stopPropagation()}
-            />
-          )}
-        </div>
-      </div>
-    ) : null}
+    <DocumentViewerModal
+      open={documentViewer != null}
+      fileUrl={documentViewer?.url ?? null}
+      fileName={documentViewer?.name ?? 'Документ'}
+      fileMime={documentViewer?.mime}
+      onClose={() => setDocumentViewer(null)}
+    />
     </>
   );
 }

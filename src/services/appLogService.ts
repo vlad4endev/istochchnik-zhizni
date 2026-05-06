@@ -34,17 +34,17 @@ export interface WriteAppLogInput {
   user_agent?: string;
 }
 
-const LOG_LIMIT = Math.max(1000, Number(process.env.APP_LOG_MAX_ROWS ?? 10000));
-let writesSinceCleanup = 0;
+const LOG_LIMIT = Math.min(3000, Math.max(1000, Number(process.env.APP_LOG_MAX_ROWS ?? 3000)));
+const LOG_RETENTION_DAYS = Math.max(1, Number(process.env.APP_LOG_RETENTION_DAYS ?? 90));
 
 function safeContext(input: unknown): Record<string, unknown> {
   if (!input || typeof input !== 'object' || Array.isArray(input)) return {};
   return input as Record<string, unknown>;
 }
 
-async function cleanupLogTail(): Promise<void> {
-  if (!pool) return;
-  await pool.query(
+async function cleanupLogTail(): Promise<number> {
+  if (!pool) return 0;
+  const result = await pool.query(
     `
       DELETE FROM app_logs
       WHERE id IN (
@@ -56,6 +56,28 @@ async function cleanupLogTail(): Promise<void> {
     `,
     [LOG_LIMIT],
   );
+  return result.rowCount ?? 0;
+}
+
+async function cleanupOldLogsByRetention(): Promise<number> {
+  if (!pool) return 0;
+  const result = await pool.query(
+    `
+      DELETE FROM app_logs
+      WHERE created_at < NOW() - ($1::int * INTERVAL '1 day')
+    `,
+    [LOG_RETENTION_DAYS],
+  );
+  return result.rowCount ?? 0;
+}
+
+export async function runAppLogCleanup(): Promise<{
+  deletedByRetention: number;
+  deletedByLimit: number;
+}> {
+  const deletedByRetention = await cleanupOldLogsByRetention();
+  const deletedByLimit = await cleanupLogTail();
+  return { deletedByRetention, deletedByLimit };
 }
 
 export async function writeAppLog(input: WriteAppLogInput): Promise<void> {
@@ -84,11 +106,6 @@ export async function writeAppLog(input: WriteAppLogInput): Promise<void> {
         input.user_agent ?? null,
       ],
     );
-    writesSinceCleanup += 1;
-    if (writesSinceCleanup >= 30) {
-      writesSinceCleanup = 0;
-      await cleanupLogTail();
-    }
   } catch (err) {
     console.error('[app-log] write failed', err);
   }
