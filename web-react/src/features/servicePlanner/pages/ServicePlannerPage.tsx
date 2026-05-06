@@ -484,7 +484,14 @@ export function ServicePlannerPage() {
               })
               .filter((b) => !pendingDeletes.has(b.id)),
             };
-      setDraft(normalized);
+      setDraft((prev) => {
+        if (!prev || prev.id !== normalized.id) return normalized;
+        const normalizedIds = new Set(normalized.blocks.map((b) => b.id));
+        const extras = prev.blocks.filter((b) => !normalizedIds.has(b.id) && !pendingDeletes.has(b.id));
+        if (extras.length === 0) return normalized;
+        const merged = [...normalized.blocks, ...extras].sort((a, b) => a.order_index - b.order_index);
+        return { ...normalized, blocks: merged };
+      });
       if (planQ.data.template_id) {
         setActiveTemplateId(planQ.data.template_id);
       }
@@ -595,6 +602,13 @@ export function ServicePlannerPage() {
 
   const createBlockMut = useMutation({
     mutationFn: (body: Parameters<typeof createServiceBlock>[0]) => createServiceBlock(body),
+    onSuccess: async () => {
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ['service-planner', 'plans'] }),
+        qc.invalidateQueries({ queryKey: ['service-planner', 'plans', 'all'] }),
+        qc.invalidateQueries({ queryKey: ['service-planner', 'plan', activePlanId] }),
+      ]);
+    },
   });
 
   const deleteBlockMut = useMutation({
@@ -615,11 +629,11 @@ export function ServicePlannerPage() {
     pendingPlanBlockDeleteSnapshotsRef.current.delete(blockId);
   }
 
-  /** UX #8: удаление через 5 с с toast «Отменить», без немедленного API */
+  /** Мгновенное удаление блока: оптимистично в UI + сразу API. */
   function scheduleDeletePlanBlock(block: ServicePlanBlock, planId: number): void {
     flushPendingPlanBlockDelete(block.id);
-    pendingPlanBlockDeleteSnapshotsRef.current.set(block.id, { ...block });
 
+    const snapshot = { ...block };
     setDraft((prev) => {
       if (!prev || prev.id !== planId) return prev;
       return {
@@ -630,42 +644,20 @@ export function ServicePlannerPage() {
     setMobilePlanBlockMenuId(null);
     setEditingBlockId((cur) => (cur === block.id ? null : cur));
 
-    const timer = window.setTimeout(() => {
-      flushPendingPlanBlockDelete(block.id);
-      void deleteBlockMut.mutateAsync(block.id);
-    }, 5000);
-    pendingPlanBlockDeleteTimersRef.current.set(block.id, timer);
-
-    emitAppToast({
-      message: 'Блок удалён · нажмите для отмены',
-      kind: 'info',
-      durationMs: 5200,
-      action: {
-        event: 'service-planner:undo-block-delete',
-        detail: { planId, blockId: block.id },
-      },
-    });
+    void (async () => {
+      try {
+        await deleteBlockMut.mutateAsync(block.id);
+      } catch {
+        // Если API не удалил — возвращаем блок обратно (без системных alert).
+        setDraft((prev) => {
+          if (!prev || prev.id !== planId) return prev;
+          if (prev.blocks.some((b) => b.id === snapshot.id)) return prev;
+          const blocks = [...prev.blocks, snapshot].sort((a, b) => a.order_index - b.order_index);
+          return { ...prev, blocks };
+        });
+      }
+    })();
   }
-
-  useEffect(() => {
-    const onUndo = (e: Event) => {
-      const ce = e as CustomEvent<{ planId?: number; blockId?: number }>;
-      const planId = ce.detail?.planId;
-      const blockId = ce.detail?.blockId;
-      if (planId == null || blockId == null) return;
-      const snapshot = pendingPlanBlockDeleteSnapshotsRef.current.get(blockId);
-      if (!snapshot) return;
-      flushPendingPlanBlockDelete(blockId);
-      setDraft((prev) => {
-        if (!prev || prev.id !== planId) return prev;
-        if (prev.blocks.some((b) => b.id === blockId)) return prev;
-        const blocks = [...prev.blocks, snapshot].sort((a, b) => a.order_index - b.order_index);
-        return { ...prev, blocks };
-      });
-    };
-    window.addEventListener('service-planner:undo-block-delete', onUndo as EventListener);
-    return () => window.removeEventListener('service-planner:undo-block-delete', onUndo as EventListener);
-  }, []);
 
   const saveProgramMut = useMutation({
     mutationFn: async () => {
@@ -1213,6 +1205,7 @@ export function ServicePlannerPage() {
           ],
         };
       });
+      setEditingBlockId(created.id);
     })();
   }
 
@@ -2585,7 +2578,8 @@ export function ServicePlannerPage() {
           <button
             type="button"
             onClick={addPlanBlock}
-            className="inline-flex min-h-[40px] shrink-0 items-center justify-center gap-2 rounded-xl border border-stone-300 px-3 py-2 text-sm font-semibold text-stone-700 hover:border-primary hover:text-primary md:min-h-[44px] md:min-w-0"
+            disabled={createBlockMut.isPending || blockTypes.length === 0}
+            className="inline-flex min-h-[40px] shrink-0 items-center justify-center gap-2 rounded-xl border border-stone-300 px-3 py-2 text-sm font-semibold text-stone-700 enabled:hover:border-primary enabled:hover:text-primary disabled:cursor-not-allowed disabled:opacity-60 md:min-h-[44px] md:min-w-0"
           >
             <LuPlus className="h-4 w-4" />
             Добавить блок
@@ -2593,7 +2587,8 @@ export function ServicePlannerPage() {
           <button
             type="button"
             onClick={addSeparatorBlock}
-            className="inline-flex min-h-[40px] shrink-0 items-center justify-center gap-2 rounded-xl border border-stone-300 px-3 py-2 text-sm font-semibold text-stone-700 hover:border-primary hover:text-primary md:min-h-[44px] md:min-w-0"
+            disabled={createBlockMut.isPending || blockTypes.length === 0}
+            className="inline-flex min-h-[40px] shrink-0 items-center justify-center gap-2 rounded-xl border border-stone-300 px-3 py-2 text-sm font-semibold text-stone-700 enabled:hover:border-primary enabled:hover:text-primary disabled:cursor-not-allowed disabled:opacity-60 md:min-h-[44px] md:min-w-0"
           >
             <LuPlus className="h-4 w-4" />
             Разделитель
