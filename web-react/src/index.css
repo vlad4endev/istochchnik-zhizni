@@ -396,6 +396,131 @@ html.dark .app-bottom-nav .bottom-nav-active-icon {
   filter: drop-shadow(0 0 6px var(--primary-glow));
 }
 
+/* Global dark-mode bridge for legacy Tailwind light utilities.
+   Many sections still use `text-stone-*`/`bg-white` classes, so map them to
+   readable dark tokens centrally until all screens are fully tokenized. */
+html.dark .text-black,
+html.dark .text-stone-950,
+html.dark .text-stone-900,
+html.dark .text-zinc-950,
+html.dark .text-zinc-900,
+html.dark .text-neutral-950,
+html.dark .text-neutral-900,
+html.dark .text-slate-950,
+html.dark .text-slate-900,
+html.dark .text-gray-950,
+html.dark .text-gray-900 {
+  color: var(--text) !important;
+}
+
+html.dark .text-stone-800,
+html.dark .text-stone-700,
+html.dark .text-zinc-800,
+html.dark .text-zinc-700,
+html.dark .text-neutral-800,
+html.dark .text-neutral-700,
+html.dark .text-slate-800,
+html.dark .text-slate-700,
+html.dark .text-gray-800,
+html.dark .text-gray-700 {
+  color: var(--text-secondary) !important;
+}
+
+html.dark .text-stone-600,
+html.dark .text-stone-500,
+html.dark .text-zinc-600,
+html.dark .text-zinc-500,
+html.dark .text-neutral-600,
+html.dark .text-neutral-500,
+html.dark .text-slate-600,
+html.dark .text-slate-500,
+html.dark .text-gray-600,
+html.dark .text-gray-500 {
+  color: color-mix(in srgb, var(--text-secondary) 78%, var(--text) 22%) !important;
+}
+
+html.dark .bg-white,
+html.dark .bg-stone-50,
+html.dark .bg-zinc-50,
+html.dark .bg-neutral-50,
+html.dark .bg-gray-50,
+html.dark .bg-slate-50 {
+  background-color: var(--bg-card) !important;
+}
+
+html.dark .bg-stone-100,
+html.dark .bg-zinc-100,
+html.dark .bg-neutral-100,
+html.dark .bg-gray-100,
+html.dark .bg-slate-100 {
+  background-color: var(--bg-elevated) !important;
+}
+
+html.dark .bg-stone-200,
+html.dark .bg-zinc-200,
+html.dark .bg-neutral-200,
+html.dark .bg-gray-200,
+html.dark .bg-slate-200 {
+  background-color: var(--bg-hover) !important;
+}
+
+html.dark .border-stone-100,
+html.dark .border-stone-200,
+html.dark .border-stone-300,
+html.dark .border-zinc-100,
+html.dark .border-zinc-200,
+html.dark .border-zinc-300,
+html.dark .border-neutral-100,
+html.dark .border-neutral-200,
+html.dark .border-neutral-300,
+html.dark .border-slate-100,
+html.dark .border-slate-200,
+html.dark .border-slate-300,
+html.dark .border-gray-100,
+html.dark .border-gray-200,
+html.dark .border-gray-300 {
+  border-color: var(--border) !important;
+}
+
+html.dark .divide-stone-100 > :not([hidden]) ~ :not([hidden]),
+html.dark .divide-stone-200 > :not([hidden]) ~ :not([hidden]),
+html.dark .divide-zinc-100 > :not([hidden]) ~ :not([hidden]),
+html.dark .divide-zinc-200 > :not([hidden]) ~ :not([hidden]),
+html.dark .divide-neutral-100 > :not([hidden]) ~ :not([hidden]),
+html.dark .divide-neutral-200 > :not([hidden]) ~ :not([hidden]),
+html.dark .divide-slate-100 > :not([hidden]) ~ :not([hidden]),
+html.dark .divide-slate-200 > :not([hidden]) ~ :not([hidden]),
+html.dark .divide-gray-100 > :not([hidden]) ~ :not([hidden]),
+html.dark .divide-gray-200 > :not([hidden]) ~ :not([hidden]) {
+  border-color: var(--border) !important;
+}
+
+html.dark .placeholder\:text-stone-400::placeholder,
+html.dark .placeholder\:text-stone-500::placeholder,
+html.dark .placeholder\:text-zinc-400::placeholder,
+html.dark .placeholder\:text-zinc-500::placeholder,
+html.dark .placeholder\:text-neutral-400::placeholder,
+html.dark .placeholder\:text-neutral-500::placeholder,
+html.dark .placeholder\:text-gray-400::placeholder,
+html.dark .placeholder\:text-gray-500::placeholder,
+html.dark .placeholder\:text-slate-400::placeholder,
+html.dark .placeholder\:text-slate-500::placeholder {
+  color: var(--text-muted) !important;
+}
+
+html.dark .ring-stone-200,
+html.dark .ring-stone-300,
+html.dark .ring-zinc-200,
+html.dark .ring-zinc-300,
+html.dark .ring-neutral-200,
+html.dark .ring-neutral-300,
+html.dark .ring-gray-200,
+html.dark .ring-gray-300,
+html.dark .ring-slate-200,
+html.dark .ring-slate-300 {
+  --tw-ring-color: var(--border) !important;
+}
+
 #root,
 main,
 aside,
@@ -602,6 +727,26 @@ nav[aria-label='Основная навигация'] svg {
   }
 }
 
+/* Safer adaptive defaults across content-heavy sections */
+img,
+video,
+canvas,
+svg {
+  max-width: 100%;
+}
+
+table {
+  max-width: 100%;
+}
+
+@media (max-width: 767px) {
+  table {
+    display: block;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
 button {
   font: inherit;
   cursor: pointer;
@@ -652,7 +797,7 @@ button {
   font-family: 'Courier New', monospace;
   font-size: 0.75rem;
   font-weight: 500;
-  color: #2563eb;
+  color: color-mix(in srgb, var(--primary) 75%, #2563eb);
   line-height: 1.3;
   min-height: 1rem;
 }
@@ -680,8 +825,8 @@ button {
   font-weight: 500;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  background: #f3eef0;
-  color: #7b2d3f;
+  background: color-mix(in srgb, var(--surface-elevated) 70%, var(--primary) 30%);
+  color: color-mix(in srgb, var(--primary-dark) 70%, var(--text) 30%);
   padding: 0.1875rem 0.5rem;
   border-radius: 0.25rem;
   margin-bottom: 0.75rem;
@@ -689,7 +834,7 @@ button {
 
 .songbook-reader .chorus-block {
   padding-left: 0.875rem;
-  border-left: 3px solid #7b2d3f;
+  border-left: 3px solid color-mix(in srgb, var(--primary) 70%, var(--text) 30%);
 }
 
 .songbook-reader .section-label:not(:first-child) {
@@ -710,6 +855,19 @@ button {
   line-height: 1.8;
   text-align: center;
   color: #f5f5f5;
+}
+
+html.dark .songbook-reader .chord-line {
+  color: #fbbf24;
+}
+
+html.dark .songbook-reader .section-label {
+  background: color-mix(in srgb, var(--bg-elevated) 80%, var(--primary) 20%);
+  color: color-mix(in srgb, #f8d1d8 78%, var(--text) 22%);
+}
+
+html.dark .songbook-reader .chorus-block {
+  border-left-color: color-mix(in srgb, var(--primary) 55%, #fbcfe8 45%);
 }
 
 /* Замещающий блок для режима «только описание изображения» */

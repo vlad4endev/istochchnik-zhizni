@@ -65,16 +65,16 @@ export function BlockWrapper({
   const [sectionName, setSectionName] = useState(block.sectionHint ?? '');
   const localTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const card = darkUi
-    ? `border-slate-800 bg-slate-950/60 ring-1 ${isActive ? 'ring-sky-400/80' : 'ring-slate-800/90'}`
-    : `border-stone-200 bg-white ring-1 ${isActive ? 'ring-sky-400/70' : 'ring-stone-200/90'}`;
+    ? `border-[var(--border)] bg-[var(--bg-card)] ring-1 ${isActive ? 'ring-sky-400/80' : 'ring-[var(--border)]'}`
+    : `border-[var(--border)] bg-[var(--surface-elevated)] ring-1 ${isActive ? 'ring-sky-400/70' : 'ring-[var(--border)]'}`;
 
   const badge = darkUi
-    ? 'border-slate-700 bg-slate-900 text-[10px] font-bold tracking-wide text-slate-300'
-    : 'border-stone-200 bg-stone-100 text-[10px] font-bold tracking-wide text-stone-700';
+    ? 'border-[var(--border)] bg-[var(--bg-elevated)] text-[10px] font-bold tracking-wide text-[var(--text-secondary)]'
+    : 'border-[var(--border)] bg-[var(--bg-elevated)] text-[10px] font-bold tracking-wide text-[var(--text-secondary)]';
 
   const iconBtn = darkUi
-    ? 'rounded-lg border border-slate-700 text-slate-400 hover:bg-slate-800 hover:text-slate-100'
-    : 'rounded-lg border border-stone-200 text-stone-600 hover:bg-stone-50 hover:text-stone-900';
+    ? 'rounded-lg border border-[var(--border)] text-[var(--text-muted)] hover:bg-[var(--bg-hover)] hover:text-[var(--text)]'
+    : 'rounded-lg border border-[var(--border)] text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)] hover:text-[var(--text)]';
 
   useLayoutEffect(() => {
     const el = localTextareaRef.current;
@@ -89,7 +89,11 @@ export function BlockWrapper({
         <div className="inline-flex min-w-0 items-center gap-2">
           <button
             type="button"
-            className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-slate-500 transition hover:bg-black/10 hover:text-slate-900"
+            className={`inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg transition ${
+              darkUi
+                ? 'text-[var(--text-muted)] hover:bg-[var(--bg-hover)] hover:text-[var(--text)]'
+                : 'text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)] hover:text-[var(--text)]'
+            }`}
             aria-label="Перетащить блок"
             {...dragHandleProps}
           >
@@ -145,7 +149,7 @@ export function BlockWrapper({
           <button
             type="button"
             onClick={() => onDelete(block.id)}
-            className={`inline-flex h-9 w-9 items-center justify-center text-red-500 hover:bg-red-500/10 ${iconBtn}`}
+            className={`inline-flex h-9 w-9 items-center justify-center text-red-500 hover:bg-red-500/10 dark:hover:bg-red-500/20 ${iconBtn}`}
             aria-label="Удалить блок"
           >
             <LuTrash2 className="h-4 w-4" />
@@ -166,7 +170,7 @@ export function BlockWrapper({
               onRename?.(block.id, sectionName.trim());
               setRenaming(false);
             }}
-            className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${darkUi ? 'bg-slate-700 text-white' : 'bg-stone-900 text-white'}`}
+            className="rounded-lg bg-[var(--primary)] px-3 py-1.5 text-xs font-semibold text-[var(--text-on-primary)] hover:bg-[var(--primary-dark)]"
           >
             OK
           </button>

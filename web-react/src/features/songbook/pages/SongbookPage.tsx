@@ -75,7 +75,7 @@ export function SongbookPage() {
   if (query.isLoading) {
     return (
       <div className="mx-auto flex h-full min-h-0 max-w-3xl flex-col text-[var(--text)]">
-        <header className="flex-shrink-0 border-b border-stone-200/80 bg-[var(--surface)]/95 px-0 py-1.5 backdrop-blur">
+        <header className="flex-shrink-0 border-b border-[var(--border)] bg-[var(--surface)]/95 px-0 py-1.5 backdrop-blur">
           <div className="flex items-center gap-2">
             <div className="relative min-w-0 flex-1">
               <LuSearch
@@ -88,7 +88,7 @@ export function SongbookPage() {
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Поиск по названию или тексту…"
                 autoComplete="off"
-                className="w-full min-h-[40px] rounded-xl border border-stone-200/70 bg-[var(--surface-elevated)] py-2 pl-9 pr-9 text-sm text-[var(--text)] outline-none placeholder:text-[var(--text-muted)] focus:border-stone-300"
+                className="w-full min-h-[40px] rounded-xl border border-[var(--border)] bg-[var(--surface-elevated)] py-2 pl-9 pr-9 text-sm text-[var(--text)] outline-none placeholder:text-[var(--text-muted)] focus:border-[var(--border-hover)]"
               />
               {search.trim() ? (
                 <button
@@ -132,7 +132,7 @@ export function SongbookPage() {
   if (query.isError) {
     return (
       <div className="mx-auto flex h-full min-h-0 max-w-3xl flex-col gap-2 text-[var(--text)]">
-        <header className="flex-shrink-0 border-b border-stone-200/80 bg-[var(--surface)]/95 px-0 py-1.5 backdrop-blur">
+        <header className="flex-shrink-0 border-b border-[var(--border)] bg-[var(--surface)]/95 px-0 py-1.5 backdrop-blur">
           <div className="flex items-center gap-2">
             <div className="relative min-w-0 flex-1">
               <LuSearch
@@ -145,7 +145,7 @@ export function SongbookPage() {
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Поиск по названию или тексту…"
                 autoComplete="off"
-                className="w-full min-h-[40px] rounded-xl border border-stone-200/70 bg-[var(--surface-elevated)] py-2 pl-9 pr-9 text-sm text-[var(--text)] outline-none placeholder:text-[var(--text-muted)] focus:border-stone-300"
+                className="w-full min-h-[40px] rounded-xl border border-[var(--border)] bg-[var(--surface-elevated)] py-2 pl-9 pr-9 text-sm text-[var(--text)] outline-none placeholder:text-[var(--text-muted)] focus:border-[var(--border-hover)]"
               />
               {search.trim() ? (
                 <button
@@ -189,7 +189,7 @@ export function SongbookPage() {
 
   return (
     <div className="mx-auto flex h-full min-h-0 max-w-3xl flex-col text-[var(--text)]">
-      <header className="flex-shrink-0 border-b border-stone-200/80 bg-[var(--surface)]/95 px-0 py-1.5 backdrop-blur">
+      <header className="flex-shrink-0 border-b border-[var(--border)] bg-[var(--surface)]/95 px-0 py-1.5 backdrop-blur">
         <div className="flex items-center gap-2">
           <div className="relative min-w-0 flex-1">
             <LuSearch
@@ -202,7 +202,7 @@ export function SongbookPage() {
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Поиск по названию или тексту…"
               autoComplete="off"
-              className="w-full min-h-[40px] rounded-xl border border-stone-200/70 bg-[var(--surface-elevated)] py-2 pl-9 pr-9 text-sm text-[var(--text)] outline-none placeholder:text-[var(--text-muted)] focus:border-stone-300"
+              className="w-full min-h-[40px] rounded-xl border border-[var(--border)] bg-[var(--surface-elevated)] py-2 pl-9 pr-9 text-sm text-[var(--text)] outline-none placeholder:text-[var(--text-muted)] focus:border-[var(--border-hover)]"
             />
             {search.trim() ? (
               <button
@@ -242,9 +242,9 @@ export function SongbookPage() {
       </header>
 
       <div className="min-h-0 flex-1 overflow-y-auto [webkit-overflow-scrolling:touch] pt-1">
-      <ul className="overflow-hidden rounded-xl border border-stone-200/80 bg-[var(--surface-elevated)]">
+      <ul className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface-elevated)]">
         {rows.map((s, idx) => (
-          <li key={s.id} className="border-b border-stone-200/70 last:border-b-0">
+          <li key={s.id} className="border-b border-[var(--border)] last:border-b-0">
             <div className="flex min-h-[44px] items-center gap-2 px-2.5">
               <Link
                 to={`/songbook/${s.id}`}
@@ -280,7 +280,7 @@ export function SongbookPage() {
       </ul>
 
       {rows.length === 0 ? (
-        <p className="rounded-xl border border-stone-200 bg-[var(--surface-elevated)] py-10 text-center text-sm text-[var(--text-secondary)]">
+        <p className="rounded-xl border border-[var(--border)] bg-[var(--surface-elevated)] py-10 text-center text-sm text-[var(--text-secondary)]">
           {tab === 'favorites'
             ? 'В избранном пока нет песен.'
             : debouncedSearch.trim()

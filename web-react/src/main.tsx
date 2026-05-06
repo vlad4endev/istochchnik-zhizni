@@ -17,6 +17,7 @@ import { getAppVariant } from './lib/appVariant';
 import { useAppUpdate } from './hooks/useAppUpdate';
 import { usePwaStore, type BeforeInstallPromptEvent } from './stores/pwaStore';
 import { initAppearance, useAppearanceStore } from './stores/useAppearanceStore';
+import { appearanceColorSchemeManager } from './lib/mantineAppearanceColorSchemeManager';
 import { theme } from './lib/theme';
 import '@mantine/core/styles.css';
 import '@mantine/notifications/styles.css';
@@ -136,7 +137,11 @@ if (typeof window !== 'undefined') {
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <MantineProvider theme={theme} defaultColorScheme="auto">
+    <MantineProvider
+      theme={theme}
+      defaultColorScheme="light"
+      colorSchemeManager={appearanceColorSchemeManager}
+    >
       <Notifications position="top-right" />
       <div className="flex min-h-0 w-full max-w-full flex-1 flex-col">
         <QueryClientProvider client={queryClient}>

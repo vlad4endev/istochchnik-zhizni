@@ -2,7 +2,8 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
 type FontSize = 'small' | 'normal' | 'large' | 'xlarge';
-type Theme = 'light' | 'dark' | 'sepia' | 'system';
+export type AppearanceTheme = 'light' | 'dark' | 'sepia' | 'system';
+type Theme = AppearanceTheme;
 
 const fontScaleMap: Record<FontSize, number> = {
   small: 0.875,
@@ -70,9 +71,18 @@ export const useAppearanceStore = create<AppearanceState>()(
   ),
 );
 
+const MANTINE_COLOR_SCHEME_STORAGE_KEY = 'mantine-color-scheme-value';
+
 export function initAppearance(): void {
+  try {
+    localStorage.removeItem(MANTINE_COLOR_SCHEME_STORAGE_KEY);
+  } catch {
+    /* ignore */
+  }
+
   const stored = localStorage.getItem('app-appearance');
   if (!stored) {
+    useAppearanceStore.setState({ theme: 'light', fontSize: 'normal' });
     applyTheme('light');
     applyFontSize('normal');
     return;
@@ -82,9 +92,11 @@ export function initAppearance(): void {
     const parsed = JSON.parse(stored) as { state?: { theme?: Theme; fontSize?: FontSize } };
     const theme = parsed.state?.theme ?? 'light';
     const fontSize = parsed.state?.fontSize ?? 'normal';
+    useAppearanceStore.setState({ theme, fontSize });
     applyTheme(theme);
     applyFontSize(fontSize);
   } catch {
+    useAppearanceStore.setState({ theme: 'light', fontSize: 'normal' });
     applyTheme('light');
     applyFontSize('normal');
   }

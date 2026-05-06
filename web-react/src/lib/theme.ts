@@ -1,27 +1,16 @@
-import { createTheme, type MantineColorsTuple } from '@mantine/core';
+import { createTheme } from '@mantine/core';
 
-const brand: MantineColorsTuple = [
-  '#eef2ff',
-  '#dbe4ff',
-  '#bac8ff',
-  '#91a7ff',
-  '#748ffc',
-  '#5c7cfa',
-  '#4c6ef5',
-  '#4263eb',
-  '#3b5bdb',
-  '#364fc7',
-];
+import { BRAND_COLORS, TYPOGRAPHY } from './designTokens';
 
 export const theme = createTheme({
   primaryColor: 'brand',
-  colors: { brand },
+  colors: { brand: BRAND_COLORS },
   defaultRadius: 'sm',
-  fontFamily: 'Inter, sans-serif',
-  fontFamilyMonospace: 'monospace',
+  fontFamily: TYPOGRAPHY.fontFamily,
+  fontFamilyMonospace: TYPOGRAPHY.fontFamilyMonospace,
   headings: {
-    fontFamily: 'Inter, sans-serif',
-    fontWeight: '600',
+    fontFamily: TYPOGRAPHY.headingsFontFamily,
+    fontWeight: TYPOGRAPHY.headingsFontWeight,
   },
   components: {
     Button: { defaultProps: { radius: 'sm' } },

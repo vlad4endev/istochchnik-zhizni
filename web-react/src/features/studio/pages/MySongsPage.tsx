@@ -130,18 +130,18 @@ export function MySongsPage() {
     if (tags.includes(IMPORTED_TAG)) {
       return {
         text: 'новый импорт',
-        className: 'border-sky-200 bg-sky-50 text-sky-900',
+        className: 'border-sky-200 bg-sky-50 text-sky-900 dark:border-sky-500/40 dark:bg-sky-500/15 dark:text-sky-200',
       };
     }
     return {
       text: 'старый импорт',
-      className: 'border-violet-200 bg-violet-50 text-violet-900',
+      className: 'border-violet-200 bg-violet-50 text-violet-900 dark:border-violet-500/40 dark:bg-violet-500/15 dark:text-violet-200',
     };
   };
 
   const pageCard =
     surface === 'songbook'
-      ? 'rounded-2xl border border-stone-200 bg-white p-4 shadow-sm md:p-6'
+      ? 'rounded-2xl border border-[var(--border)] bg-[var(--surface-elevated)] p-4 shadow-sm md:p-6'
       : '';
 
   const tabBtn = (id: MySongsTab, label: string, hint: string) => (
@@ -154,7 +154,9 @@ export function MySongsPage() {
       onClick={() => setTab(id)}
       className={[
         'min-h-[44px] flex-1 rounded-xl px-2 py-2 text-center text-xs font-semibold transition-colors sm:text-sm',
-        tab === id ? 'bg-stone-900 text-white shadow-sm' : 'text-stone-600 hover:bg-stone-100 hover:text-stone-900',
+        tab === id
+          ? 'bg-[var(--primary)] text-[var(--text-on-primary)] shadow-sm'
+          : 'text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)] hover:text-[var(--text)]',
       ].join(' ')}
     >
       {label}
@@ -163,10 +165,10 @@ export function MySongsPage() {
 
   return (
     <div className={['mx-auto max-w-3xl space-y-6', pageCard].filter(Boolean).join(' ')}>
-      <header className="space-y-3 border-b border-stone-200 pb-5">
+      <header className="space-y-3 border-b border-[var(--border)] pb-5">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-stone-900">Мои версии</h1>
-          <p className="mt-1 max-w-xl text-sm leading-relaxed text-stone-600">
+          <h1 className="text-2xl font-bold tracking-tight text-[var(--text)]">Мои версии</h1>
+          <p className="mt-1 max-w-xl text-sm leading-relaxed text-[var(--text-secondary)]">
             Работа с песнями каталога, заготовками без текста и импортированными песнями.
           </p>
         </div>
@@ -179,7 +181,7 @@ export function MySongsPage() {
           </Link>
         </div>
         <div
-          className="flex w-full gap-1 rounded-2xl bg-stone-100 p-1"
+          className="flex w-full gap-1 rounded-2xl bg-[var(--bg-elevated)] p-1"
           role="tablist"
           aria-label="Разделы «Мои версии»"
         >
@@ -204,25 +206,25 @@ export function MySongsPage() {
       >
         {tab === 'saved' ? (
           <section className="space-y-3">
-            <p className="text-sm text-stone-600">
+            <p className="text-sm text-[var(--text-secondary)]">
               Это ваши сохранённые правки к песням из общего каталога. Оригинал в песеннике не меняется.
             </p>
-            <div className="grid gap-2 rounded-xl border border-stone-200 bg-stone-50 p-3 sm:grid-cols-2">
+            <div className="grid gap-2 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-3 sm:grid-cols-2">
               <input
                 value={savedSearch}
                 onChange={(e) => setSavedSearch(e.target.value)}
                 placeholder="Поиск по названию"
-                className="min-h-[42px] rounded-lg border border-stone-200 bg-white px-3 text-sm outline-none"
+                className="min-h-[42px] rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] px-3 text-sm text-[var(--text)] outline-none placeholder:text-[var(--text-muted)]"
               />
               <input
                 value={savedKeyFilter}
                 onChange={(e) => setSavedKeyFilter(e.target.value)}
                 placeholder="Фильтр по тональности"
-                className="min-h-[42px] rounded-lg border border-stone-200 bg-white px-3 text-sm outline-none"
+                className="min-h-[42px] rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] px-3 text-sm text-[var(--text)] outline-none placeholder:text-[var(--text-muted)]"
               />
             </div>
             {rows.length === 0 ? (
-              <div className="space-y-3 rounded-xl border border-dashed border-stone-300 bg-stone-50 px-4 py-6 text-sm text-stone-600">
+              <div className="space-y-3 rounded-xl border border-dashed border-[var(--border)] bg-[var(--bg-elevated)] px-4 py-6 text-sm text-[var(--text-secondary)]">
                 <p>Пока нет сохранённых версий. Откройте песню в песеннике и выберите «В студию».</p>
                 <Link to="/songbook" className="inline-flex font-semibold text-sky-700 hover:text-sky-800">
                   Перейти в песенник →
@@ -231,22 +233,22 @@ export function MySongsPage() {
             ) : (
               <>
                 {filteredRows.length === 0 ? (
-                  <p className="text-sm text-stone-500">По выбранным фильтрам ничего не найдено.</p>
+                  <p className="text-sm text-[var(--text-muted)]">По выбранным фильтрам ничего не найдено.</p>
                 ) : (
                   <ul className="flex flex-col gap-2">
                     {filteredRows.map((v) => (
                       <li key={v.id}>
                         <Link
                           to={studioEditSongPath(surface, Number(v.song_id))}
-                          className="flex min-h-[52px] items-center justify-between gap-3 rounded-xl border border-stone-200 bg-white px-4 py-3 shadow-sm transition hover:border-stone-300 hover:bg-stone-50"
+                          className="flex min-h-[52px] items-center justify-between gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface-elevated)] px-4 py-3 shadow-sm transition hover:bg-[var(--bg-elevated)]"
                         >
                           <div className="min-w-0">
-                            <p className="truncate font-medium text-stone-900">{v.song_title}</p>
-                            <p className="mt-0.5 text-xs text-stone-500">
+                            <p className="truncate font-medium text-[var(--text)]">{v.song_title}</p>
+                            <p className="mt-0.5 text-xs text-[var(--text-muted)]">
                               {v.custom_key ?? '—'} · {new Date(v.updated_at).toLocaleString()}
                             </p>
                           </div>
-                          <LuPenLine className="h-5 w-5 shrink-0 text-stone-400" aria-hidden />
+                          <LuPenLine className="h-5 w-5 shrink-0 text-[var(--text-muted)]" aria-hidden />
                         </Link>
                       </li>
                     ))}
@@ -259,7 +261,7 @@ export function MySongsPage() {
 
         {tab === 'missingText' ? (
           <section className="space-y-3">
-            <p className="text-sm text-stone-600">
+            <p className="text-sm text-[var(--text-secondary)]">
               Это заготовки, которые не отображаются в песеннике. Откройте редактор и добавьте слова/аккорды.
             </p>
             {missingQ.isLoading ? (
@@ -267,23 +269,23 @@ export function MySongsPage() {
             ) : missingQ.isError ? (
               <p className="text-sm text-red-600">Не удалось загрузить список заготовок.</p>
             ) : (missingQ.data ?? []).length === 0 ? (
-              <p className="text-sm text-stone-500">Заготовок без текста нет.</p>
+              <p className="text-sm text-[var(--text-muted)]">Заготовок без текста нет.</p>
             ) : (
               <ul className="flex flex-col gap-2">
                 {(missingQ.data ?? []).map((s: SongListItem) => (
                   <li
                     key={s.id}
-                    className="flex min-h-[48px] items-center gap-3 rounded-xl border border-stone-200 bg-white px-4 py-3 shadow-sm"
+                    className="flex min-h-[48px] items-center gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface-elevated)] px-4 py-3 shadow-sm"
                   >
                     <div className="min-w-0 flex-1">
-                      <p className="truncate font-medium text-stone-900">
+                      <p className="truncate font-medium text-[var(--text)]">
                         {s.song_number ?? '—'}. {s.title}
                       </p>
                       <div className="mt-1 flex flex-wrap items-center gap-2">
-                        <span className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-900">
+                        <span className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/15 dark:text-amber-200">
                           нет текста
                         </span>
-                        <span className="text-xs text-stone-500">не опубликовано</span>
+                        <span className="text-xs text-[var(--text-muted)]">не опубликовано</span>
                       </div>
                     </div>
                     <Link
@@ -301,16 +303,16 @@ export function MySongsPage() {
         ) : null}
         {tab === 'imported' ? (
           <section className="space-y-3">
-            <p className="text-sm text-stone-600">
+            <p className="text-sm text-[var(--text-secondary)]">
               Здесь отображаются импортированные непубликованные песни (включая ранее импортированные). Отредактируйте и нажмите
               «Опубликовать», чтобы песня попала в общий песенник.
             </p>
             {isAdmin && importedRows.length > 0 ? (
-              <div className="flex flex-wrap items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2">
+              <div className="flex flex-wrap items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2 dark:border-red-500/40 dark:bg-red-500/10">
                 <button
                   type="button"
                   onClick={toggleSelectAllImported}
-                  className="inline-flex min-h-[36px] items-center rounded-lg border border-stone-300 bg-white px-3 text-xs font-semibold text-stone-800 hover:bg-stone-50"
+                  className="inline-flex min-h-[36px] items-center rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] px-3 text-xs font-semibold text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)]"
                 >
                   {selectedImportedCount === importedRows.length ? 'Снять выбор' : 'Выбрать все'}
                 </button>
@@ -329,7 +331,7 @@ export function MySongsPage() {
             ) : importedQ.isError ? (
               <p className="text-sm text-red-600">Не удалось загрузить импортированные песни.</p>
             ) : importedRows.length === 0 ? (
-              <p className="text-sm text-stone-500">Нет импортированных черновиков.</p>
+              <p className="text-sm text-[var(--text-muted)]">Нет импортированных черновиков.</p>
             ) : (
               <ul className="flex flex-col gap-2">
                 {importedRows.map((s: SongListItem) => {
@@ -338,7 +340,7 @@ export function MySongsPage() {
                   return (
                     <li
                       key={s.id}
-                      className="flex min-h-[48px] items-center gap-3 rounded-xl border border-stone-200 bg-white px-4 py-3 shadow-sm"
+                      className="flex min-h-[48px] items-center gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface-elevated)] px-4 py-3 shadow-sm"
                     >
                       {isAdmin ? (
                         <label className="inline-flex min-h-[40px] min-w-[40px] items-center justify-center">
@@ -350,7 +352,7 @@ export function MySongsPage() {
                         </label>
                       ) : null}
                       <div className="min-w-0 flex-1">
-                        <p className="truncate font-medium text-stone-900">
+                        <p className="truncate font-medium text-[var(--text)]">
                           {s.song_number ?? '—'}. {s.title}
                         </p>
                         <div className="mt-1 flex flex-wrap items-center gap-2">
@@ -359,9 +361,9 @@ export function MySongsPage() {
                           >
                             {sourceBadge.text}
                           </span>
-                          <span className="text-xs text-stone-500">черновик</span>
+                          <span className="text-xs text-[var(--text-muted)]">черновик</span>
                           {isMissingText ? (
-                            <span className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-900">
+                            <span className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/15 dark:text-amber-200">
                               нет текста
                             </span>
                           ) : null}
@@ -378,7 +380,7 @@ export function MySongsPage() {
                         type="button"
                         onClick={() => publishImportedMut.mutate(s)}
                         disabled={publishImportedMut.isPending}
-                        className="inline-flex min-h-[40px] shrink-0 items-center rounded-lg bg-stone-900 px-3 text-sm font-semibold text-white hover:bg-stone-800 disabled:opacity-50"
+                        className="inline-flex min-h-[40px] shrink-0 items-center rounded-lg bg-[var(--primary)] px-3 text-sm font-semibold text-[var(--text-on-primary)] hover:bg-[var(--primary-dark)] disabled:opacity-50"
                       >
                         Опубликовать
                       </button>

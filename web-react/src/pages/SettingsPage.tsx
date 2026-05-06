@@ -1,11 +1,10 @@
 import { Link } from 'react-router-dom';
-import { LuChevronRight, LuMoon, LuSettings, LuSun, LuUserRound } from 'react-icons/lu';
+import { LuChevronRight, LuSettings, LuUserRound } from 'react-icons/lu';
 import { ThemeToggle } from '../components/ThemeToggle';
 import { useAppearanceStore } from '../stores/useAppearanceStore';
 
 export function SettingsPage() {
   const { theme, fontSize, setTheme, setFontSize } = useAppearanceStore();
-  const darkEnabled = theme === 'dark';
 
   return (
     <div className="mx-auto w-full max-w-3xl px-4 py-4 sm:px-6">
@@ -45,28 +44,6 @@ export function SettingsPage() {
             <div className="mb-3 flex items-center justify-between gap-3">
               <h3 className="text-base font-semibold text-[var(--text)]">Тема оформления</h3>
               <ThemeToggle />
-              <button
-                type="button"
-                role="switch"
-                aria-checked={darkEnabled}
-                aria-label="Переключить тёмную тему"
-                onClick={() => setTheme(darkEnabled ? 'light' : 'dark')}
-                className="group relative inline-flex h-9 w-[74px] items-center rounded-full border border-stone-300/80 bg-[var(--surface)] px-1 transition-all duration-300 ease-out dark:border-[var(--border-hover)] dark:shadow-[0_0_12px_var(--accent-glow)]"
-              >
-                <span
-                  className={`absolute left-1 inline-flex h-7 w-7 items-center justify-center rounded-full bg-[var(--surface-elevated)] text-amber-500 shadow-sm transition-transform duration-300 ease-out ${darkEnabled ? 'translate-x-9 text-primary' : 'translate-x-0'}`}
-                >
-                  {darkEnabled ? (
-                    <LuMoon className="h-4 w-4 filter dark:drop-shadow-[0_0_4px_var(--primary)]" aria-hidden />
-                  ) : (
-                    <LuSun className="h-4 w-4" aria-hidden />
-                  )}
-                </span>
-                <span className="ml-[10px] flex w-full items-center justify-between px-0.5 text-xs font-extrabold uppercase tracking-[0.08em] text-[var(--text-muted)]">
-                  <LuSun className="h-3.5 w-3.5" aria-hidden />
-                  <LuMoon className="h-3.5 w-3.5" aria-hidden />
-                </span>
-              </button>
             </div>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               {([

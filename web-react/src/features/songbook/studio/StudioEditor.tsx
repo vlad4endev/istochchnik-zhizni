@@ -33,6 +33,7 @@ import { extractCommonChords } from '../chordProEngine';
 import { aiChordPlacement, fetchVersionForSong, saveVersion } from '../../studio/api';
 import { studioMySongsPath, getStudioModuleSurface } from '../../studio/studioPaths';
 import { useSongbookChrome } from '../SongbookChromeContext';
+import { useAppearanceStore } from '../../../stores/useAppearanceStore';
 
 import { BlockWrapper } from './BlockWrapper';
 import {
@@ -802,8 +803,14 @@ export function StudioEditor() {
   );
   const undoSecondsLeft = chordAutoUndo ? Math.max(0, Math.ceil((chordAutoUndo.expiresAt - undoNow) / 1000)) : 0;
 
-  /** Тёмный интерфейс только в режиме сцены внутри песенника; отдельная /studio — светлая тема. */
-  const darkUi = surface === 'songbook' && stageMode;
+  /** Режим сцены всегда тёмный; в остальных случаях следуем выбранной теме приложения. */
+  const appearanceTheme = useAppearanceStore((state) => state.theme);
+  const darkThemeEnabled =
+    appearanceTheme === 'dark' ||
+    (appearanceTheme === 'system' &&
+      typeof window !== 'undefined' &&
+      window.matchMedia('(prefers-color-scheme: dark)').matches);
+  const darkUi = (surface === 'songbook' && stageMode) || darkThemeEnabled;
 
   const shell = darkUi
     ? {
