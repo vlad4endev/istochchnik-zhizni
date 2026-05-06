@@ -90,6 +90,7 @@ export function SmartImportModal({
   );
   const xlsxMassLogRef = useRef<Array<{ ts: number; kind: string; message: string }>>([]);
   const xlsxEsRef = useRef<EventSource | null>(null);
+  const xlsxPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const isStudio = variant === 'studio';
 
@@ -124,6 +125,8 @@ export function SmartImportModal({
     xlsxMassLogRef.current = [];
     xlsxEsRef.current?.close();
     xlsxEsRef.current = null;
+    if (xlsxPollRef.current) clearInterval(xlsxPollRef.current);
+    xlsxPollRef.current = null;
     setAiBusy(false);
     setAiError(null);
     setAiProgressText(null);
@@ -135,9 +138,43 @@ export function SmartImportModal({
     aiProgressTimersRef.current = [];
   }, [open, initialRaw, initialTab]);
 
+  const stopXlsxPolling = () => {
+    if (xlsxPollRef.current) clearInterval(xlsxPollRef.current);
+    xlsxPollRef.current = null;
+  };
+
+  const startXlsxPolling = (jobId: string) => {
+    stopXlsxPolling();
+    xlsxPollRef.current = setInterval(() => {
+      void (async () => {
+        try {
+          const { data } = await apiClient.get(`/api/song-import/snapshot/${encodeURIComponent(jobId)}`);
+          const snap = data as {
+            total: number;
+            done: boolean;
+            progress: any | null;
+            result: any | null;
+            log: Array<{ ts: number; kind: string; message: string }>;
+          };
+          if (snap.progress) setXlsxMassProgress(snap.progress);
+          if (snap.result) setXlsxMassResult(snap.result);
+          if (Array.isArray(snap.log)) xlsxMassLogRef.current = snap.log;
+          if (snap.done) {
+            stopXlsxPolling();
+            setXlsxMassBusy(false);
+          }
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : '';
+          if (msg) setXlsxError((prev) => prev ?? msg);
+        }
+      })();
+    }, 1200);
+  };
+
   useEffect(() => {
     if (!xlsxMassJobId) return;
     xlsxEsRef.current?.close();
+    stopXlsxPolling();
     setXlsxMassProgress(null);
     setXlsxMassResult(null);
     xlsxMassLogRef.current = [];
@@ -178,15 +215,16 @@ export function SmartImportModal({
     es.addEventListener('progress', onProgress as any);
     es.addEventListener('done', onDone as any);
     es.onerror = () => {
-      setXlsxError((prev) => prev ?? 'Не удалось подключиться к прогрессу импорта. Попробуйте ещё раз.');
+      // Fallback: EventSource can't send Authorization header in bearer-only sessions.
+      startXlsxPolling(xlsxMassJobId);
       es.close();
       xlsxEsRef.current = null;
-      setXlsxMassBusy(false);
     };
 
     return () => {
       es.close();
       if (xlsxEsRef.current === es) xlsxEsRef.current = null;
+      stopXlsxPolling();
     };
   }, [xlsxMassJobId]);
 

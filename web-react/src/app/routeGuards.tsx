@@ -3,7 +3,7 @@ import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 
 import { useAuthStore } from '../features/auth/authStore';
-import { canAccessStudioRole, canModerateSongCatalog } from '../features/auth/studioAccess';
+import { canAccessStudio, canModerateSongCatalog } from '../features/auth/studioAccess';
 import { SkeletonBox } from '@/components/ui/SkeletonBox';
 import {
   canRoleAccessSection,
@@ -12,6 +12,7 @@ import {
 } from '../features/settings/sectionVisibilityApi';
 import { getAppVariant } from '../lib/appVariant';
 import { useAuthSessionReady } from '../hooks/useAuthSessionReady';
+import { useMe } from '@/hooks/useMe';
 
 export const LOGIN_PATH = '/login';
 
@@ -127,7 +128,10 @@ export function RequireMessengerAccess({ children }: { children: ReactNode }) {
 
 export function RequireStudioAccess({ children }: { children: ReactNode }) {
   const role = useAuthStore((s) => s.role);
-  if (!canAccessStudioRole(role)) {
+  const token = useAuthStore((s) => s.token);
+  const meQ = useMe(Boolean(token));
+  if (meQ.isLoading) return <RouteFallback />;
+  if (!canAccessStudio(role, meQ.data?.ministry_direction)) {
     return <Navigate to={getStudioRoleDeniedPath()} replace />;
   }
   return <>{children}</>;

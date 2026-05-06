@@ -7,6 +7,7 @@ import {
   canModerateCatalog,
   normalizeAppRole,
 } from '../types/appRole';
+import { query } from '../config/db';
 
 /**
  * Грубая фильтрация по роли из сессии (Bearer).
@@ -21,6 +22,22 @@ type RoleRequest = Request & {
 };
 
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
+
+function normalizeMinistryDirection(value: unknown): string {
+  return String(value ?? '').trim().toLowerCase().replace(/ё/g, 'е');
+}
+
+async function hasMusicMinistryDirection(memberId: number): Promise<boolean> {
+  const r = await query(`select ministry_direction from public.members where id = $1 limit 1`, [memberId]);
+  const raw = (r.rows[0] as { ministry_direction?: string } | undefined)?.ministry_direction;
+  const v = normalizeMinistryDirection(raw);
+  if (!v) return false;
+  const target = normalizeMinistryDirection('Музыкальное служение');
+  return v
+    .split(/[;,]/)
+    .map((s) => normalizeMinistryDirection(s))
+    .some((s) => s === target || s.includes(target));
+}
 
 export function resolveUserRole(req: Request, _res: Response, next: NextFunction): void {
   const roleReq = req as RoleRequest;
@@ -199,8 +216,24 @@ export function enforceRoleAccess(req: Request, res: Response, next: NextFunctio
     return;
   }
 
-  if (isStudioApiPath(fullPath) && authId && canAccessStudio(role)) {
-    next();
+  if (isStudioApiPath(fullPath) && authId) {
+    if (canAccessStudio(role)) {
+      next();
+      return;
+    }
+    void hasMusicMinistryDirection(authId)
+      .then((ok) => {
+        if (ok) next();
+        else {
+          res.status(403).json({
+            error: 'Access denied. Роль "Пользователь" может только просматривать данные.',
+          });
+        }
+      })
+      .catch((e) => {
+        console.error('[roleAccess] studio ministry_direction lookup failed:', e);
+        res.status(500).json({ error: 'Не удалось проверить права доступа' });
+      });
     return;
   }
 

@@ -44,7 +44,7 @@ import { CallWindow } from '../features/calls/CallWindow';
 import { IncomingCallToast } from '../features/calls/IncomingCallToast';
 import { useBrowserNotificationScheduler } from '../features/notifications/useBrowserNotificationScheduler';
 import { useProfileDraftStore } from '../features/profile/profileDraftStore';
-import { canAccessStudioRole } from '../features/auth/studioAccess';
+import { canAccessStudio } from '../features/auth/studioAccess';
 import { LAYOUT_MAIN_CHROME_EVENT } from './layoutChrome';
 import { AppAvatar } from '../components/AppAvatar';
 import { CoordinatorDashboardNoteFab } from '../features/dashboard/components/CoordinatorDashboardNoteFab';
@@ -583,6 +583,7 @@ export function Layout() {
   const isAdmin = (role ?? 'member').toLowerCase() === 'admin';
   const meQ = useMe(Boolean(token));
   const canSeeBroadcastNav = isAdmin || normalizeMinistryDirection(meQ.data?.ministry_direction) === 'медиа служения';
+  const canSeeStudioNav = canAccessStudio(role, meQ.data?.ministry_direction);
   const registrationStatus = useAuthStore((s) => s.registrationStatus ?? 'active');
   const profileUsername = useAuthStore((s) => s.username ?? '');
   const profileMemberId = useAuthStore((s) => s.memberId);
@@ -603,7 +604,7 @@ export function Layout() {
     return navBase.filter(
       (item) =>
         (!item.adminOnly || isAdmin) &&
-        (!item.studioOnly || canAccessStudioRole(role)) &&
+        (!item.studioOnly || canSeeStudioNav) &&
         (!item.adminOrMediaMinistryOnly || canSeeBroadcastNav) &&
         (!item.sectionId ||
           isAdmin ||
@@ -616,6 +617,7 @@ export function Layout() {
     roles,
     sectionVisibilityQ.data,
     canSeeBroadcastNav,
+    canSeeStudioNav,
   ]);
   const sidebarItems = items;
   const mobileNavSplit = useMemo(() => splitMobileNavFourTabs(items), [items]);

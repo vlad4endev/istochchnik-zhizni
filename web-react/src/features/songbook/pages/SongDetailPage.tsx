@@ -6,20 +6,22 @@ import { LuArrowLeft, LuMinus, LuPlus } from 'react-icons/lu';
 import { SongListSkeleton } from '@/components/skeletons/SongListSkeleton';
 import { keys } from '@/lib/queryKeys';
 import { useAuthStore } from '../../auth/authStore';
-import { canAccessStudioRole } from '../../auth/studioAccess';
+import { canAccessStudio } from '../../auth/studioAccess';
 import { useWakeLock } from '../../../hooks/useWakeLock';
 import { fetchSong, recordSongOpened } from '../api';
 import { transposeChordSymbol } from '../chordUtils';
 import { LyricsWithChords } from '../components/LyricsWithChords';
 import { useSongbookChrome } from '../SongbookChromeContext';
 import { fetchVersionForSong } from '../../studio/api';
+import { useMe } from '@/hooks/useMe';
 
 export function SongDetailPage() {
   const { id } = useParams<{ id: string }>();
   const songId = Number(id);
   const role = useAuthStore((s) => s.role);
-  const studioOk = canAccessStudioRole(role);
   const token = useAuthStore((s) => s.token);
+  const meQ = useMe(Boolean(token));
+  const studioOk = canAccessStudio(role, meQ.data?.ministry_direction);
   const { stageMode, toggleStageMode } = useSongbookChrome();
   const [transpose, setTranspose] = useState(0);
   const [showChords, setShowChords] = useState(true);

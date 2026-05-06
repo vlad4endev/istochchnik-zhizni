@@ -13,15 +13,43 @@ function roleOf(req: AuthReq): AppRole {
   return normalizeAppRole(req.authUserRole);
 }
 
-function ensureCatalogModerator(req: Request, res: Response): { ok: true; userId: number } | { ok: false } {
+function normalizeMinistryDirection(value: unknown): string {
+  return String(value ?? '').trim().toLowerCase().replace(/ё/g, 'е');
+}
+
+async function hasMusicMinistryDirection(memberId: number): Promise<boolean> {
+  const r = await query(`select ministry_direction from public.members where id = $1 limit 1`, [memberId]);
+  const raw = (r.rows[0] as { ministry_direction?: string } | undefined)?.ministry_direction;
+  const v = normalizeMinistryDirection(raw);
+  if (!v) return false;
+  const target = normalizeMinistryDirection('Музыкальное служение');
+  return v
+    .split(/[;,]/)
+    .map((s) => normalizeMinistryDirection(s))
+    .some((s) => s === target || s.includes(target));
+}
+
+async function ensureCatalogModerator(
+  req: Request,
+  res: Response,
+): Promise<{ ok: true; userId: number } | { ok: false }> {
   const r = req as AuthReq;
   if (!r.authUserId) {
     res.status(401).json({ error: 'Требуется вход' });
     return { ok: false };
   }
   if (!canModerateCatalog(roleOf(r))) {
-    res.status(403).json({ error: 'Недостаточно прав' });
-    return { ok: false };
+    try {
+      const ok = await hasMusicMinistryDirection(r.authUserId);
+      if (!ok) {
+        res.status(403).json({ error: 'Недостаточно прав' });
+        return { ok: false };
+      }
+    } catch (e) {
+      console.error('[song-import] ensureCatalogModerator ministry_direction lookup failed:', e);
+      res.status(500).json({ error: 'Не удалось проверить права доступа' });
+      return { ok: false };
+    }
   }
   return { ok: true, userId: r.authUserId };
 }
@@ -71,7 +99,7 @@ function emit(job: JobState, event: string, data: unknown) {
 }
 
 export async function previewSongImportXlsx(req: Request, res: Response): Promise<void> {
-  if (!ensureCatalogModerator(req, res).ok) return;
+  if (!(await ensureCatalogModerator(req, res)).ok) return;
   const file = (req as Request & { file?: Express.Multer.File }).file;
   if (!file?.buffer || file.buffer.length === 0) {
     res.status(400).json({ error: 'xlsx file required (field: file)' });
@@ -88,7 +116,7 @@ export async function previewSongImportXlsx(req: Request, res: Response): Promis
 
 /** Для UI добавления одной песни: распарсить XLSX и вернуть список песен (без запуска импорта). */
 export async function parseSongImportXlsx(req: Request, res: Response): Promise<void> {
-  if (!ensureCatalogModerator(req, res).ok) return;
+  if (!(await ensureCatalogModerator(req, res)).ok) return;
   const file = (req as Request & { file?: Express.Multer.File }).file;
   if (!file?.buffer || file.buffer.length === 0) {
     res.status(400).json({ error: 'xlsx file required (field: file)' });
@@ -104,7 +132,7 @@ export async function parseSongImportXlsx(req: Request, res: Response): Promise<
 }
 
 export async function startSongImportXlsx(req: Request, res: Response): Promise<void> {
-  const auth = ensureCatalogModerator(req, res);
+  const auth = await ensureCatalogModerator(req, res);
   if (!auth.ok) return;
   const file = (req as Request & { file?: Express.Multer.File }).file;
   if (!file?.buffer || file.buffer.length === 0) {
@@ -167,7 +195,7 @@ export async function startSongImportXlsx(req: Request, res: Response): Promise<
 }
 
 export async function songImportProgressSse(req: Request, res: Response): Promise<void> {
-  if (!ensureCatalogModerator(req, res).ok) return;
+  if (!(await ensureCatalogModerator(req, res)).ok) return;
   const jobId = String(req.params.jobId ?? '').trim();
   const job = jobs.get(jobId);
   if (!job) {
@@ -203,7 +231,7 @@ export async function songImportProgressSse(req: Request, res: Response): Promis
 }
 
 export async function songImportProgressSnapshot(req: Request, res: Response): Promise<void> {
-  if (!ensureCatalogModerator(req, res).ok) return;
+  if (!(await ensureCatalogModerator(req, res)).ok) return;
   const jobId = String(req.params.jobId ?? '').trim();
   const job = jobs.get(jobId);
   if (!job) {
@@ -220,7 +248,7 @@ export async function songImportProgressSnapshot(req: Request, res: Response): P
 }
 
 export async function retryFailedSongImports(req: Request, res: Response): Promise<void> {
-  const auth = ensureCatalogModerator(req, res);
+  const auth = await ensureCatalogModerator(req, res);
   if (!auth.ok) return;
 
   const r = await query(

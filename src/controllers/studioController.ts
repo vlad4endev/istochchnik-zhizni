@@ -1,6 +1,7 @@
 import type { Request, Response } from 'express';
 
 import { canAccessStudio, normalizeAppRole, type AppRole } from '../types/appRole';
+import { query } from '../config/db';
 import { listRecentSongs } from '../services/songService';
 import {
   addSetlistItem,
@@ -27,14 +28,39 @@ import { AiAgentError, improveChordPlacementWithAi } from '../services/studioAiC
 
 type AuthReq = Request & { authUserId?: number; authUserRole?: AppRole };
 
-function ensureStudio(req: AuthReq, res: Response): boolean {
+function normalizeMinistryDirection(value: unknown): string {
+  return String(value ?? '').trim().toLowerCase().replace(/ё/g, 'е');
+}
+
+async function hasMusicMinistryDirection(memberId: number): Promise<boolean> {
+  const r = await query(`select ministry_direction from public.members where id = $1 limit 1`, [memberId]);
+  const raw = (r.rows[0] as { ministry_direction?: string } | undefined)?.ministry_direction;
+  const v = normalizeMinistryDirection(raw);
+  if (!v) return false;
+  const target = normalizeMinistryDirection('Музыкальное служение');
+  return v
+    .split(/[;,]/)
+    .map((s) => normalizeMinistryDirection(s))
+    .some((s) => s === target || s.includes(target));
+}
+
+async function ensureStudio(req: AuthReq, res: Response): Promise<boolean> {
   if (!req.authUserId) {
     res.status(401).json({ error: 'Требуется вход' });
     return false;
   }
   if (!canAccessStudio(normalizeAppRole(req.authUserRole))) {
-    res.status(403).json({ error: 'Нет доступа к студии' });
-    return false;
+    try {
+      const ok = await hasMusicMinistryDirection(req.authUserId);
+      if (!ok) {
+        res.status(403).json({ error: 'Нет доступа к студии' });
+        return false;
+      }
+    } catch (e) {
+      console.error('[studio] ensureStudio ministry_direction lookup failed:', e);
+      res.status(500).json({ error: 'Не удалось проверить права доступа' });
+      return false;
+    }
   }
   return true;
 }
@@ -42,7 +68,7 @@ function ensureStudio(req: AuthReq, res: Response): boolean {
 export async function forkVersion(req: Request, res: Response): Promise<void> {
   try {
     const r = req as AuthReq;
-    if (!ensureStudio(r, res)) return;
+    if (!(await ensureStudio(r, res))) return;
     const songId = Number(req.params.songId);
     if (!Number.isInteger(songId) || songId <= 0) {
       res.status(400).json({ error: 'Invalid songId' });
@@ -65,7 +91,7 @@ export async function forkVersion(req: Request, res: Response): Promise<void> {
 export async function putVersion(req: Request, res: Response): Promise<void> {
   try {
     const r = req as AuthReq;
-    if (!ensureStudio(r, res)) return;
+    if (!(await ensureStudio(r, res))) return;
     const songId = Number(req.params.songId);
     if (!Number.isInteger(songId) || songId <= 0) {
       res.status(400).json({ error: 'Invalid songId' });
@@ -88,7 +114,7 @@ export async function putVersion(req: Request, res: Response): Promise<void> {
 export async function getMyVersions(req: Request, res: Response): Promise<void> {
   try {
     const r = req as AuthReq;
-    if (!ensureStudio(r, res)) return;
+    if (!(await ensureStudio(r, res))) return;
     const rows = await listMyStudioVersions(r.authUserId!);
     res.json(rows);
   } catch (e) {
@@ -100,7 +126,7 @@ export async function getMyVersions(req: Request, res: Response): Promise<void> 
 export async function getVersionForSong(req: Request, res: Response): Promise<void> {
   try {
     const r = req as AuthReq;
-    if (!ensureStudio(r, res)) return;
+    if (!(await ensureStudio(r, res))) return;
     const songId = Number(req.params.songId);
     if (!Number.isInteger(songId) || songId <= 0) {
       res.status(400).json({ error: 'Invalid songId' });
@@ -122,7 +148,7 @@ export async function getVersionForSong(req: Request, res: Response): Promise<vo
 export async function draftsList(req: Request, res: Response): Promise<void> {
   try {
     const r = req as AuthReq;
-    if (!ensureStudio(r, res)) return;
+    if (!(await ensureStudio(r, res))) return;
     res.json(await listDrafts(r.authUserId!));
   } catch (e) {
     console.error(e);
@@ -133,7 +159,7 @@ export async function draftsList(req: Request, res: Response): Promise<void> {
 export async function draftsCreate(req: Request, res: Response): Promise<void> {
   try {
     const r = req as AuthReq;
-    if (!ensureStudio(r, res)) return;
+    if (!(await ensureStudio(r, res))) return;
     const body = req.body as { title?: string; content?: string };
     const draft = await createDraft(
       r.authUserId!,
@@ -150,7 +176,7 @@ export async function draftsCreate(req: Request, res: Response): Promise<void> {
 export async function draftsUpdate(req: Request, res: Response): Promise<void> {
   try {
     const r = req as AuthReq;
-    if (!ensureStudio(r, res)) return;
+    if (!(await ensureStudio(r, res))) return;
     const id = Number(req.params.id);
     if (!Number.isInteger(id) || id <= 0) {
       res.status(400).json({ error: 'Invalid id' });
@@ -172,7 +198,7 @@ export async function draftsUpdate(req: Request, res: Response): Promise<void> {
 export async function draftsDelete(req: Request, res: Response): Promise<void> {
   try {
     const r = req as AuthReq;
-    if (!ensureStudio(r, res)) return;
+    if (!(await ensureStudio(r, res))) return;
     const id = Number(req.params.id);
     if (!Number.isInteger(id) || id <= 0) {
       res.status(400).json({ error: 'Invalid id' });
@@ -193,7 +219,7 @@ export async function draftsDelete(req: Request, res: Response): Promise<void> {
 export async function instrumentsGet(req: Request, res: Response): Promise<void> {
   try {
     const r = req as AuthReq;
-    if (!ensureStudio(r, res)) return;
+    if (!(await ensureStudio(r, res))) return;
     res.json(await getInstrumentSettings(r.authUserId!));
   } catch (e) {
     console.error(e);
@@ -204,7 +230,7 @@ export async function instrumentsGet(req: Request, res: Response): Promise<void>
 export async function instrumentsPatch(req: Request, res: Response): Promise<void> {
   try {
     const r = req as AuthReq;
-    if (!ensureStudio(r, res)) return;
+    if (!(await ensureStudio(r, res))) return;
     const body = req.body as Record<string, unknown>;
     if (!body || typeof body !== 'object') {
       res.status(400).json({ error: 'JSON object required' });
@@ -220,7 +246,7 @@ export async function instrumentsPatch(req: Request, res: Response): Promise<voi
 export async function recentSongsList(req: Request, res: Response): Promise<void> {
   try {
     const r = req as AuthReq;
-    if (!ensureStudio(r, res)) return;
+    if (!(await ensureStudio(r, res))) return;
     const limRaw = req.query.limit;
     let limit = 10;
     if (typeof limRaw === 'string') {
@@ -237,7 +263,7 @@ export async function recentSongsList(req: Request, res: Response): Promise<void
 export async function setlistsList(req: Request, res: Response): Promise<void> {
   try {
     const r = req as AuthReq;
-    if (!ensureStudio(r, res)) return;
+    if (!(await ensureStudio(r, res))) return;
     res.json(await listSetlists(r.authUserId!));
   } catch (e) {
     console.error(e);
@@ -248,7 +274,7 @@ export async function setlistsList(req: Request, res: Response): Promise<void> {
 export async function setlistsCreate(req: Request, res: Response): Promise<void> {
   try {
     const r = req as AuthReq;
-    if (!ensureStudio(r, res)) return;
+    if (!(await ensureStudio(r, res))) return;
     const body = req.body as { title?: string; event_date?: string | null };
     const title = typeof body.title === 'string' ? body.title.trim() : '';
     if (!title) {
@@ -269,7 +295,7 @@ export async function setlistsCreate(req: Request, res: Response): Promise<void>
 export async function setlistsUpdate(req: Request, res: Response): Promise<void> {
   try {
     const r = req as AuthReq;
-    if (!ensureStudio(r, res)) return;
+    if (!(await ensureStudio(r, res))) return;
     const id = Number(req.params.id);
     if (!Number.isInteger(id) || id <= 0) {
       res.status(400).json({ error: 'Invalid id' });
@@ -299,7 +325,7 @@ export async function setlistsUpdate(req: Request, res: Response): Promise<void>
 export async function setlistsDelete(req: Request, res: Response): Promise<void> {
   try {
     const r = req as AuthReq;
-    if (!ensureStudio(r, res)) return;
+    if (!(await ensureStudio(r, res))) return;
     const id = Number(req.params.id);
     if (!Number.isInteger(id) || id <= 0) {
       res.status(400).json({ error: 'Invalid id' });
@@ -320,7 +346,7 @@ export async function setlistsDelete(req: Request, res: Response): Promise<void>
 export async function setlistItemsList(req: Request, res: Response): Promise<void> {
   try {
     const r = req as AuthReq;
-    if (!ensureStudio(r, res)) return;
+    if (!(await ensureStudio(r, res))) return;
     const setlistId = Number(req.params.id);
     if (!Number.isInteger(setlistId) || setlistId <= 0) {
       res.status(400).json({ error: 'Invalid id' });
@@ -336,7 +362,7 @@ export async function setlistItemsList(req: Request, res: Response): Promise<voi
 export async function setlistItemsAdd(req: Request, res: Response): Promise<void> {
   try {
     const r = req as AuthReq;
-    if (!ensureStudio(r, res)) return;
+    if (!(await ensureStudio(r, res))) return;
     const setlistId = Number(req.params.id);
     if (!Number.isInteger(setlistId) || setlistId <= 0) {
       res.status(400).json({ error: 'Invalid id' });
@@ -364,7 +390,7 @@ export async function setlistItemsAdd(req: Request, res: Response): Promise<void
 export async function setlistItemsRemove(req: Request, res: Response): Promise<void> {
   try {
     const r = req as AuthReq;
-    if (!ensureStudio(r, res)) return;
+    if (!(await ensureStudio(r, res))) return;
     const setlistId = Number(req.params.id);
     const itemId = Number(req.params.itemId);
     if (!Number.isInteger(setlistId) || !Number.isInteger(itemId)) {
@@ -382,7 +408,7 @@ export async function setlistItemsRemove(req: Request, res: Response): Promise<v
 export async function setlistItemsReorder(req: Request, res: Response): Promise<void> {
   try {
     const r = req as AuthReq;
-    if (!ensureStudio(r, res)) return;
+    if (!(await ensureStudio(r, res))) return;
     const setlistId = Number(req.params.id);
     if (!Number.isInteger(setlistId) || setlistId <= 0) {
       res.status(400).json({ error: 'Invalid id' });
@@ -405,7 +431,7 @@ export async function setlistItemsReorder(req: Request, res: Response): Promise<
 export async function setlistItemPatch(req: Request, res: Response): Promise<void> {
   try {
     const r = req as AuthReq;
-    if (!ensureStudio(r, res)) return;
+    if (!(await ensureStudio(r, res))) return;
     const setlistId = Number(req.params.id);
     const itemId = Number(req.params.itemId);
     if (!Number.isInteger(setlistId) || setlistId <= 0 || !Number.isInteger(itemId) || itemId <= 0) {
@@ -432,7 +458,7 @@ export async function setlistItemPatch(req: Request, res: Response): Promise<voi
 export async function performanceGet(req: Request, res: Response): Promise<void> {
   try {
     const r = req as AuthReq;
-    if (!ensureStudio(r, res)) return;
+    if (!(await ensureStudio(r, res))) return;
     const setlistId = Number(req.params.id);
     if (!Number.isInteger(setlistId) || setlistId <= 0) {
       res.status(400).json({ error: 'Invalid id' });
@@ -453,7 +479,7 @@ export async function performanceGet(req: Request, res: Response): Promise<void>
 export async function postAiChordPlacement(req: Request, res: Response): Promise<void> {
   try {
     const r = req as AuthReq;
-    if (!ensureStudio(r, res)) return;
+    if (!(await ensureStudio(r, res))) return;
 
     const body = req.body as { content?: unknown } | null;
     const content = typeof body?.content === 'string' ? body.content : '';
