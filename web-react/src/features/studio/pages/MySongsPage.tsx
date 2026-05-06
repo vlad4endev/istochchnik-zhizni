@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { LuPenLine, LuTrash2 } from 'react-icons/lu';
 
+import { emitAppToast } from '../../../lib/uiFeedback';
 import { SongListSkeleton } from '@/components/skeletons/SongListSkeleton';
 import { useAuthStore } from '../../auth/authStore';
 import {
@@ -15,9 +16,10 @@ import {
   type StudioDraft,
 } from '../api';
 import { studioEditSongPath, useStudioModuleSurface } from '../studioPaths';
-import { fetchSongsForModeration, type SongListItem } from '../../songbook/api';
+import { fetchSongsForModeration, type SongListItem, updateSong } from '../../songbook/api';
 
-type MySongsTab = 'saved' | 'drafts' | 'recent' | 'missingText';
+type MySongsTab = 'saved' | 'drafts' | 'recent' | 'missingText' | 'imported';
+const IMPORTED_TAG = 'импортировано';
 
 function DraftRow({
   draft,
@@ -104,6 +106,11 @@ export function MySongsPage() {
     // backend также разрешает участникам музыкального служения (как и импорт)
     enabled: true,
   });
+  const importedQ = useQuery({
+    queryKey: ['studio', 'imported-songs'],
+    queryFn: () => fetchSongsForModeration({ tags: [IMPORTED_TAG], isPublished: false }),
+    enabled: true,
+  });
 
   const [tab, setTab] = useState<MySongsTab>('saved');
   const [draftTitle, setDraftTitle] = useState('');
@@ -123,6 +130,22 @@ export function MySongsPage() {
   const delDraftMut = useMutation({
     mutationFn: (id: number) => deleteDraft(id),
     onSuccess: () => void qc.invalidateQueries({ queryKey: ['studio', 'drafts'] }),
+  });
+  const publishImportedMut = useMutation({
+    mutationFn: async (song: SongListItem) => {
+      await updateSong(Number(song.id), {
+        is_published: true,
+        tags: (song.tags ?? []).filter((tag) => tag !== IMPORTED_TAG),
+      });
+    },
+    onSuccess: () => {
+      emitAppToast({ kind: 'success', message: 'Песня опубликована и попала в каталог' });
+      void qc.invalidateQueries({ queryKey: ['songs'] });
+      void qc.invalidateQueries({ queryKey: ['song'] });
+      void qc.invalidateQueries({ queryKey: ['studio', 'imported-songs'] });
+      void qc.invalidateQueries({ queryKey: ['studio', 'missing-text-songs'] });
+    },
+    onError: () => emitAppToast('Не удалось опубликовать песню'),
   });
 
   useEffect(() => {
@@ -151,6 +174,8 @@ export function MySongsPage() {
   const drafts = draftsQ.data ?? [];
   const showRecentTab = recent.length > 0;
   const showMissingTab = true;
+  const importedRows = importedQ.data ?? [];
+  const showImportedTab = true;
 
   const pageCard =
     surface === 'songbook'
@@ -200,13 +225,24 @@ export function MySongsPage() {
           {showRecentTab ? tabBtn('recent', 'Недавние', 'Песни, которые вы недавно открывали в песеннике') : null}
           {tabBtn('drafts', 'Черновики', 'Тексты без привязки к песне из каталога')}
           {showMissingTab ? tabBtn('missingText', 'Без текста', 'Заготовки песен без слов (тег: нет_текста)') : null}
+          {showImportedTab ? tabBtn('imported', 'Импортированные', 'Черновики, созданные импортом из таблицы') : null}
         </div>
       </header>
 
       <div
         className="min-h-[12rem]"
         role="tabpanel"
-        aria-label={tab === 'saved' ? 'Каталог' : tab === 'recent' ? 'Недавние' : tab === 'missingText' ? 'Без текста' : 'Черновики'}
+        aria-label={
+          tab === 'saved'
+            ? 'Каталог'
+            : tab === 'recent'
+              ? 'Недавние'
+              : tab === 'missingText'
+                ? 'Без текста'
+                : tab === 'imported'
+                  ? 'Импортированные'
+                  : 'Черновики'
+        }
       >
         {tab === 'drafts' ? (
           <section className="space-y-4">
@@ -372,6 +408,57 @@ export function MySongsPage() {
                       <LuPenLine className="h-4 w-4" aria-hidden />
                       Редактор
                     </Link>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        ) : null}
+        {tab === 'imported' ? (
+          <section className="space-y-3">
+            <p className="text-sm text-stone-600">
+              Здесь все песни, загруженные импортом из таблицы. Отредактируйте и нажмите «Опубликовать», чтобы песня попала в
+              общий песенник.
+            </p>
+            {importedQ.isLoading ? (
+              <SongListSkeleton />
+            ) : importedQ.isError ? (
+              <p className="text-sm text-red-600">Не удалось загрузить импортированные песни.</p>
+            ) : importedRows.length === 0 ? (
+              <p className="text-sm text-stone-500">Нет импортированных черновиков.</p>
+            ) : (
+              <ul className="flex flex-col gap-2">
+                {importedRows.map((s: SongListItem) => (
+                  <li
+                    key={s.id}
+                    className="flex min-h-[48px] items-center gap-3 rounded-xl border border-stone-200 bg-white px-4 py-3 shadow-sm"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate font-medium text-stone-900">
+                        {s.song_number ?? '—'}. {s.title}
+                      </p>
+                      <div className="mt-1 flex flex-wrap items-center gap-2">
+                        <span className="inline-flex items-center rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-[11px] font-semibold text-sky-900">
+                          импортировано
+                        </span>
+                        <span className="text-xs text-stone-500">черновик</span>
+                      </div>
+                    </div>
+                    <Link
+                      to={studioEditSongPath(surface, Number(s.id))}
+                      className="inline-flex shrink-0 items-center gap-1 text-sm font-semibold text-sky-700 hover:text-sky-800"
+                    >
+                      <LuPenLine className="h-4 w-4" aria-hidden />
+                      Редактор
+                    </Link>
+                    <button
+                      type="button"
+                      onClick={() => publishImportedMut.mutate(s)}
+                      disabled={publishImportedMut.isPending}
+                      className="inline-flex min-h-[40px] shrink-0 items-center rounded-lg bg-stone-900 px-3 text-sm font-semibold text-white hover:bg-stone-800 disabled:opacity-50"
+                    >
+                      Опубликовать
+                    </button>
                   </li>
                 ))}
               </ul>

@@ -1005,7 +1005,8 @@ export function SmartImportModal({
                           {typeof xlsxMassResult.placeholders === 'number' ? (
                             <>
                               {' '}
-                              Заготовок без текста: <strong>{xlsxMassResult.placeholders}</strong> (они скрыты в песеннике).
+                              Заготовок без текста: <strong>{xlsxMassResult.placeholders}</strong> (правьте их во вкладке
+                              «Импортированные», затем публикуйте).
                             </>
                           ) : null}
                         </p>

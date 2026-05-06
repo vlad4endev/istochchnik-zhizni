@@ -25,9 +25,9 @@ import { SkeletonBox } from '@/components/ui/SkeletonBox';
 import { keys } from '@/lib/queryKeys';
 import { deleteSong, fetchSong, updateSong } from '../api';
 import { convertToChordPro } from '../addSong/chordProConversion';
+import { extractChordsFromText, guessKeyFromChords } from '../addSong/keyDetection';
 import { SmartImportModal, type SmartImportSourceTab } from '../addSong/SmartImportModal';
 import { LyricsWithChords } from '../components/LyricsWithChords';
-import { SectionInsertToolbar } from '../components/SectionInsertToolbar';
 import { quickChordsForKey } from '../addSong/quickChords';
 import { extractCommonChords } from '../chordProEngine';
 import { aiChordPlacement, fetchVersionForSong, saveVersion } from '../../studio/api';
@@ -69,6 +69,13 @@ function detectSongStatus(isPublished: boolean, tags: string[]): SongStatus {
 function withArchiveTag(tags: string[], status: SongStatus): string[] {
   const clean = tags.filter((t) => t !== ARCHIVE_TAG);
   return status === 'archived' ? [...clean, ARCHIVE_TAG] : clean;
+}
+
+function parseKeyForApi(guessLabel: string): string {
+  const t = guessLabel.trim();
+  if (!t) return '';
+  const first = t.split(/\s+/)[0];
+  return first ?? t;
 }
 
 function studioPreviewFrame(type: SongBlockType, darkUi: boolean): string {
@@ -201,6 +208,7 @@ export function StudioEditor() {
 
   const [blocks, setBlocks] = useState<SongBlock[]>(() => [createSongBlock('verse', '')]);
   const [key, setKey] = useState('');
+  const [keyHint, setKeyHint] = useState<string | null>(null);
   const [catalogTempo, setCatalogTempo] = useState('');
   const [catalogTimeSignature, setCatalogTimeSignature] = useState('');
   const [catalogTags, setCatalogTags] = useState('');
@@ -566,6 +574,25 @@ export function StudioEditor() {
     aiChordPlacementMut.mutate(source);
   };
 
+  const detectSongKey = () => {
+    const chords = extractChordsFromText(joinedChordPro);
+    if (chords.length === 0) {
+      setKeyHint('Не удалось найти аккорды для определения тональности.');
+      emitAppToast('Не найдены аккорды для автоопределения тональности');
+      return;
+    }
+    const guess = guessKeyFromChords(chords);
+    if (!guess) {
+      setKeyHint('Не удалось определить тональность автоматически.');
+      emitAppToast('Не удалось определить тональность');
+      return;
+    }
+    const detected = parseKeyForApi(guess.label);
+    if (detected) setKey(detected);
+    setKeyHint(`${guess.label} (${guess.confidence})`);
+    emitAppToast({ kind: 'success', message: `Тональность определена: ${guess.label}` });
+  };
+
   const openAutoChordModal = () => {
     const withChords = blocks.filter((block) => hasAnyChordsInBlock(block));
     if (withChords.length === 0) {
@@ -909,6 +936,21 @@ export function StudioEditor() {
                   onChange={(e) => setKey(e.target.value)}
                   placeholder="напр. Am"
                 />
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={detectSongKey}
+                    className={`inline-flex min-h-[38px] items-center gap-2 rounded-lg border px-3 text-xs font-semibold ${
+                      darkUi
+                        ? 'border-violet-500/70 bg-violet-950/30 text-violet-100 hover:bg-violet-950/45'
+                        : 'border-violet-200 bg-violet-50 text-violet-900 hover:bg-violet-100'
+                    }`}
+                  >
+                    <LuSparkles className="h-3.5 w-3.5" />
+                    Автоопределить
+                  </button>
+                  {keyHint ? <span className={`text-xs ${shell.muted}`}>{keyHint}</span> : null}
+                </div>
               </div>
               <p
                 className={`rounded-xl px-3 py-2 text-xs leading-relaxed ${shell.muted} ${
@@ -1329,19 +1371,6 @@ export function StudioEditor() {
           <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
-              onClick={runAiChordPlacement}
-              disabled={aiChordPlacementMut.isPending}
-              className={`inline-flex min-h-[40px] items-center gap-1 rounded-lg border px-3 text-sm font-semibold disabled:opacity-60 ${
-                darkUi
-                  ? 'border-violet-400/70 bg-violet-950/30 text-violet-100 hover:bg-violet-950/45'
-                  : 'border-violet-200 bg-violet-50 text-violet-900 hover:bg-violet-100'
-              }`}
-            >
-              <LuWand className="h-4 w-4" />
-              {aiChordPlacementMut.isPending ? 'AI анализирует…' : '✨ AI-разбор'}
-            </button>
-            <button
-              type="button"
               onClick={runAutoChordPlacementForAll}
               className={`inline-flex min-h-[40px] items-center gap-1 rounded-lg border px-3 text-sm font-semibold ${
                 darkUi
@@ -1411,8 +1440,6 @@ export function StudioEditor() {
           </div>
         ) : null}
       </section>
-
-      <SectionInsertToolbar dark={darkUi} onPresetAsBlock={addBlockFromPreset} className="mb-1" />
 
       <div className="mb-1 flex items-center justify-between">
         <p className={`inline-flex items-center gap-1 text-xs ${shell.muted}`}>

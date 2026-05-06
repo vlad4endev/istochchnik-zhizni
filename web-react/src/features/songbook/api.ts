@@ -38,6 +38,7 @@ export type SongListQuery = {
   tempoMax?: number;
   key?: string;
   tags?: string[];
+  isPublished?: boolean;
 };
 
 function buildSongQuery(params?: SongListQuery): string {
@@ -48,6 +49,7 @@ function buildSongQuery(params?: SongListQuery): string {
   if (params.tempoMax != null) sp.set('tempoMax', String(params.tempoMax));
   if (params.key?.trim()) sp.set('key', params.key.trim());
   if (params.tags?.length) sp.set('tags', params.tags.join(','));
+  if (params.isPublished !== undefined) sp.set('isPublished', String(params.isPublished));
   const s = sp.toString();
   return s ? `?${s}` : '';
 }

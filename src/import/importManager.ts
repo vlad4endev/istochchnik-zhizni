@@ -5,6 +5,7 @@ import { fetchTelegraphTextDetailed } from './telegraphParser';
 import { smartImportTextToChordPro } from './smartImportToChordPro';
 
 const TAG_MISSING_TEXT = 'нет_текста';
+const TAG_IMPORTED = 'импортировано';
 
 function looksLikeChordsLink(url: string): boolean {
   // Heuristic: in the source xlsx usually "with chords" is stored in url_chords column.
@@ -131,7 +132,7 @@ export async function importSongsFromXlsxRows(
       const sourceText = (chordsText ?? lyricsText ?? '').trimEnd();
       const content = smartImportTextToChordPro(sourceText).trimEnd() || sourceText;
       const isPlaceholder = !content.trim();
-      const importedTags = isPlaceholder ? [TAG_MISSING_TEXT] : [];
+      const importedTags = isPlaceholder ? [TAG_IMPORTED, TAG_MISSING_TEXT] : [TAG_IMPORTED];
       if (isPlaceholder) placeholders += 1;
 
       let songId: number;
@@ -146,7 +147,7 @@ export async function importSongsFromXlsxRows(
                is_published = $5,
                updated_at = NOW()
            WHERE song_number = $1`,
-          [row.song_number, row.title, content, importedTags, !isPlaceholder],
+          [row.song_number, row.title, content, importedTags, false],
         );
       } else {
         const ins = await client.query<{ id: string }>(
@@ -160,7 +161,7 @@ export async function importSongsFromXlsxRows(
             row.title,
             content,
             importedTags,
-            !isPlaceholder,
+            false,
             options.createdByMemberId,
           ],
         );

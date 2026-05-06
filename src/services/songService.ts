@@ -62,6 +62,8 @@ export interface SongListFilters {
   key?: string;
   /** любой из перечисленных тегов */
   tags?: string[];
+  /** фильтр публикации (для модерации/внутренних списков) */
+  isPublished?: boolean;
 }
 
 async function listSongsInternal(
@@ -100,6 +102,10 @@ async function listSongsInternal(
   if (tagList.length > 0) {
     params.push(tagList);
     conditions.push(`s.tags && $${params.length}::text[]`);
+  }
+  if (f.isPublished !== undefined) {
+    params.push(Boolean(f.isPublished));
+    conditions.push(`s.is_published = $${params.length}`);
   }
 
   const whereSql = conditions.join(' AND ');
@@ -171,6 +177,30 @@ export async function getSongById(
      LEFT JOIN studio_versions sv ON sv.song_id = s.id AND sv.member_id = $2
      LEFT JOIN song_favorites f ON f.song_id = s.id AND f.member_id = $2
      WHERE s.id = $1 AND s.is_published = TRUE`,
+    [id, memberId]
+  );
+  const row = result.rows[0] as Record<string, unknown> | undefined;
+  if (!row) return null;
+  const base = mapSong(row);
+  return {
+    ...base,
+    has_studio_version: Boolean((row as { has_studio_version?: boolean }).has_studio_version),
+    is_favorite: Boolean((row as { is_favorite?: boolean }).is_favorite),
+  };
+}
+
+export async function getSongByIdForModeration(
+  id: number,
+  memberId: number
+): Promise<SongListItem | null> {
+  const result = await query(
+    `SELECT s.*,
+            (sv.id IS NOT NULL) AS has_studio_version,
+            (f.song_id IS NOT NULL) AS is_favorite
+     FROM songs s
+     LEFT JOIN studio_versions sv ON sv.song_id = s.id AND sv.member_id = $2
+     LEFT JOIN song_favorites f ON f.song_id = s.id AND f.member_id = $2
+     WHERE s.id = $1`,
     [id, memberId]
   );
   const row = result.rows[0] as Record<string, unknown> | undefined;

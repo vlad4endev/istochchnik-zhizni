@@ -13,6 +13,7 @@ import {
   createSong,
   deleteSong,
   getSongById,
+  getSongByIdForModeration,
   getVersionFlags,
   listCatalogSongsForModeration,
   listPublishedSongs,
@@ -68,6 +69,14 @@ function parseSongListFilters(req: Request): SongListFilters {
   if (tagsRaw && tagsRaw.trim()) {
     filters.tags = tagsRaw.split(',').map((s) => s.trim()).filter(Boolean);
   }
+  const isPublishedRaw =
+    typeof q.isPublished === 'string'
+      ? q.isPublished
+      : Array.isArray(q.isPublished)
+        ? q.isPublished[0]
+        : '';
+  if (isPublishedRaw === 'true') filters.isPublished = true;
+  if (isPublishedRaw === 'false') filters.isPublished = false;
   return filters;
 }
 
@@ -127,7 +136,14 @@ export async function getSong(req: Request, res: Response): Promise<void> {
       return;
     }
     const r = req as AuthReq;
-    const song = await getSongById(id, r.authUserId ?? null);
+    let song = await getSongById(id, r.authUserId ?? null);
+    if (!song && r.authUserId) {
+      const allowModerationView =
+        canModerateCatalog(roleOf(r)) || (await hasMusicMinistryDirection(r.authUserId));
+      if (allowModerationView) {
+        song = await getSongByIdForModeration(id, r.authUserId);
+      }
+    }
     if (!song) {
       res.status(404).json({ error: 'Не найдено' });
       return;
