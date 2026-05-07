@@ -156,6 +156,11 @@ const EditableServicePlanPage = lazy(async () => {
   return { default: m.EditableServicePlanPage };
 });
 
+const SermonCommentsPage = lazy(async () => {
+  const m = await import('../features/servicePlanner/pages/SermonCommentsPage');
+  return { default: m.SermonCommentsPage };
+});
+
 const ServicePlannerPage = lazy(async () => {
   const m = await import('../features/servicePlanner/pages/ServicePlannerPage');
   return { default: m.ServicePlannerPage };
@@ -194,6 +199,14 @@ export function AppRouter() {
         }
       />
       <Route element={<RequireAuth />}>
+        <Route
+          path="/service-plan/sermon-comments/:token"
+          element={
+            <Suspense fallback={<RouteFallback />}>
+              <SermonCommentsPage />
+            </Suspense>
+          }
+        />
         <Route
           path="studio"
           element={

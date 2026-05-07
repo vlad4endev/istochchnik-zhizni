@@ -31,6 +31,7 @@ import {
 } from '../api';
 import { fetchDirectionTemplates, type MinistryDirectionTemplate } from '../../admin/api';
 import { fetchProfileByMemberId, patchPublicProfileSettings } from '../publicProfileApi';
+import { fetchMyPreacherSermonHistory, type PreacherSermonHistoryRow } from '../../servicePlanner/sermonFeedbackApi';
 import { ProfileAccessibilitySection } from '../components/ProfileAccessibilitySection';
 import { SkeletonBox } from '@/components/ui/SkeletonBox';
 import { memberNameFirstLast } from '../memberDisplayName';
@@ -150,6 +151,9 @@ export function ProfilePage() {
   const [history, setHistory] = useState<PrayerHistoryItem[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyError, setHistoryError] = useState<string | null>(null);
+  const [sermonHistory, setSermonHistory] = useState<PreacherSermonHistoryRow[]>([]);
+  const [sermonHistoryLoading, setSermonHistoryLoading] = useState(false);
+  const [sermonHistoryError, setSermonHistoryError] = useState<string | null>(null);
 
   /* ── Data fetching ── */
 
@@ -226,6 +230,32 @@ export function ProfilePage() {
       cancelled = true;
     };
   }, [user?.id]);
+
+  const canViewSermonHistory = useMemo(() => {
+    const role = String(user?.app_role ?? '').toLowerCase();
+    if (role === 'pastor' || role === 'minister' || role === 'admin') return true;
+    return String(user?.ministry_role ?? '').toLowerCase().includes('проповед');
+  }, [user?.app_role, user?.ministry_role]);
+
+  useEffect(() => {
+    if (!user?.id || !canViewSermonHistory) return;
+    let cancelled = false;
+    setSermonHistoryLoading(true);
+    setSermonHistoryError(null);
+    void fetchMyPreacherSermonHistory(20)
+      .then((items) => {
+        if (!cancelled) setSermonHistory(items);
+      })
+      .catch((e) => {
+        if (!cancelled) setSermonHistoryError(axiosMessage(e));
+      })
+      .finally(() => {
+        if (!cancelled) setSermonHistoryLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id, canViewSermonHistory]);
 
   useEffect(() => {
     if (!user?.id) return;
@@ -853,6 +883,43 @@ export function ProfilePage() {
             )}
           </div>
         </section>
+
+        {canViewSermonHistory ? (
+          <section className={CARD}>
+            <p className={LABEL}>История проповедей</p>
+            <div className="mt-4">
+              {sermonHistoryLoading ? (
+                <div className="space-y-3">
+                  <div className="h-14 animate-pulse rounded-2xl bg-[color:var(--profile-media-placeholder-mid)]" />
+                  <div className="h-14 animate-pulse rounded-2xl bg-[color:var(--profile-media-placeholder-mid)]" />
+                </div>
+              ) : sermonHistoryError ? (
+                <p className="text-sm font-semibold text-red-600">{sermonHistoryError}</p>
+              ) : sermonHistory.length === 0 ? (
+                <p className="text-sm font-semibold text-[color:var(--profile-text-muted)]">Пока пусто.</p>
+              ) : (
+                <div className="space-y-2">
+                  {sermonHistory.map((row) => (
+                    <div key={row.service_plan_id} className="rounded-2xl bg-[color:color-mix(in_srgb,var(--profile-card-bg)_72%,var(--profile-surface))] p-4 ring-1 ring-[color:var(--profile-card-ring)]">
+                      <p className="text-sm font-extrabold text-[color:var(--profile-text-heading)]">{row.topic}</p>
+                      <p className="mt-1 text-xs font-semibold text-[color:var(--profile-text-muted)]">Писание: {row.scripture}</p>
+                      <p className="mt-1 text-xs font-semibold text-[color:var(--profile-text-muted)]">
+                        {new Date(`${row.service_date}T12:00:00`).toLocaleDateString('ru-RU')} •
+                        {' '}оценок: {row.ratings_count} • средняя: {row.avg_rating == null ? '—' : row.avg_rating.toFixed(2)}
+                      </p>
+                      <Link
+                        to={`/service-plan/sermon-comments/${row.share_token}`}
+                        className="mt-2 inline-flex text-xs font-bold text-[color:var(--profile-primary)] hover:underline"
+                      >
+                        Открыть комментарии
+                      </Link>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </section>
+        ) : null}
 
         {/* Version stamp */}
         <p className="text-center text-[11px] font-semibold text-[color:var(--profile-text-faint)]">

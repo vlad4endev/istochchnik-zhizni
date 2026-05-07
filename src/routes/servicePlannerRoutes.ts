@@ -6,15 +6,19 @@ import {
   deleteServiceTemplateById,
   getServiceBlockTypes,
   getServicePlannerMembers,
+  getSermonFeedbackByToken,
   getServiceTemplateById,
+  getMyPreacherSermonHistory,
   getServicePlanById,
   getServicePlans,
   getServiceTemplates,
   patchServiceBlockById,
+  postSermonFeedbackByToken,
   patchServiceBlocksReorder,
   patchServicePlanById,
   patchServiceTemplateById,
   postServiceBlock,
+  runSermonFeedbackNotificationTick,
   postServicePlan,
   postServiceTemplate,
 } from '../controllers/servicePlannerController';
@@ -39,5 +43,10 @@ router.patch('/service-blocks/reorder', requireAuthSession, patchServiceBlocksRe
 router.post('/service-blocks', requireAuthSession, postServiceBlock);
 router.patch('/service-blocks/:id', requireAuthSession, patchServiceBlockById);
 router.delete('/service-blocks/:id', requireAuthSession, deleteServiceBlockById);
+
+router.get('/service-plans/sermon-feedback/:token', requireAuthSession, getSermonFeedbackByToken);
+router.post('/service-plans/sermon-feedback/:token/comments', requireAuthSession, postSermonFeedbackByToken);
+router.get('/service-plans/my-sermon-history', requireAuthSession, getMyPreacherSermonHistory);
+router.post('/service-plans/sermon-feedback/notify-tick', requireAuthSession, runSermonFeedbackNotificationTick);
 
 export default router;

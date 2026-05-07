@@ -22,6 +22,12 @@ import {
   patchTemplate,
   reorderBlocks,
 } from '../services/servicePlannerService';
+import {
+  dispatchDueSermonFeedbackNotifications,
+  getSermonFeedbackPayloadByToken,
+  listPreacherSermonHistory,
+  upsertSermonFeedbackComment,
+} from '../services/sermonFeedbackService';
 
 function parseId(raw: unknown): number | null {
   const n = Number(raw);
@@ -63,6 +69,13 @@ function hasMinistryRole(raw: unknown, roleName: string): boolean {
     .split(/[;,]/)
     .map((s) => normalize(s))
     .some((s) => s === target || s.includes(target));
+}
+
+function hasElevatedPreacherRole(req: Request): boolean {
+  const role = String(req.authUserRole ?? 'member').toLowerCase();
+  if (role === 'pastor' || role === 'minister' || role === 'admin') return true;
+  const roles = Array.isArray(req.authUserRoles) ? req.authUserRoles : [];
+  return roles.includes('pastor') || roles.includes('minister') || roles.includes('admin');
 }
 
 async function ensureTemplateManager(req: Request, res: Response): Promise<boolean> {
@@ -743,6 +756,109 @@ export async function patchServiceBlockById(req: Request, res: Response): Promis
   } catch (e) {
     console.error('[service-planner] patchServiceBlockById:', e);
     res.status(500).json({ error: 'Не удалось обновить блок' });
+  }
+}
+
+export async function getSermonFeedbackByToken(req: Request, res: Response): Promise<void> {
+  if (!req.authUserId) {
+    res.status(401).json({ error: 'Требуется авторизация' });
+    return;
+  }
+  try {
+    const token = String(req.params.token ?? '').trim();
+    const payload = await getSermonFeedbackPayloadByToken(token);
+    if (!payload) {
+      res.status(404).json({ error: 'Проповедь не найдена или ссылка недействительна' });
+      return;
+    }
+    res.json(payload);
+  } catch (e) {
+    console.error('[service-planner] getSermonFeedbackByToken:', e);
+    res.status(500).json({ error: 'Не удалось получить комментарии к проповеди' });
+  }
+}
+
+export async function postSermonFeedbackByToken(req: Request, res: Response): Promise<void> {
+  if (!req.authUserId) {
+    res.status(401).json({ error: 'Требуется авторизация' });
+    return;
+  }
+  const token = String(req.params.token ?? '').trim();
+  const body = parseJsonObject(req.body);
+  const ratingRaw = Number(body.rating);
+  const rating = Number.isFinite(ratingRaw) ? Math.round(ratingRaw) : NaN;
+  const comment = String(body.comment ?? '').trim();
+  if (!Number.isFinite(rating) || rating < 1 || rating > 5) {
+    res.status(400).json({ error: 'Оценка должна быть от 1 до 5' });
+    return;
+  }
+  if (comment.length > 4000) {
+    res.status(400).json({ error: 'Комментарий слишком длинный (максимум 4000 символов)' });
+    return;
+  }
+  try {
+    const result = await upsertSermonFeedbackComment({
+      token,
+      authorMemberId: req.authUserId,
+      rating,
+      comment,
+    });
+    if (!result.ok) {
+      if (result.reason === 'closed') {
+        res.status(409).json({ error: 'Окно для оценки и комментариев уже закрыто' });
+        return;
+      }
+      if (result.reason === 'invalid') {
+        res.status(409).json({ error: 'У этой проповеди не заполнены тема или стих' });
+        return;
+      }
+      res.status(404).json({ error: 'Проповедь не найдена или ссылка недействительна' });
+      return;
+    }
+    notifyRealtime(['service-planner']);
+    res.status(201).json({ ok: true });
+  } catch (e) {
+    console.error('[service-planner] postSermonFeedbackByToken:', e);
+    res.status(500).json({ error: 'Не удалось сохранить комментарий' });
+  }
+}
+
+export async function getMyPreacherSermonHistory(req: Request, res: Response): Promise<void> {
+  if (!req.authUserId) {
+    res.status(401).json({ error: 'Требуется авторизация' });
+    return;
+  }
+  try {
+    let allow = hasElevatedPreacherRole(req);
+    if (!allow) {
+      const roleRes = await query(`select ministry_role from public.members where id = $1 limit 1`, [req.authUserId]);
+      const ministryRole = (roleRes.rows[0] as { ministry_role?: string | null } | undefined)?.ministry_role;
+      allow = hasMinistryRole(ministryRole, 'проповедник');
+    }
+    if (!allow) {
+      res.status(403).json({ error: 'Блок истории проповедей доступен только пастору или проповеднику' });
+      return;
+    }
+    const limit = Math.max(1, Math.min(100, Number(req.query.limit ?? 20) || 20));
+    const rows = await listPreacherSermonHistory(req.authUserId, limit);
+    res.json({ items: rows });
+  } catch (e) {
+    console.error('[service-planner] getMyPreacherSermonHistory:', e);
+    res.status(500).json({ error: 'Не удалось загрузить историю проповедей' });
+  }
+}
+
+export async function runSermonFeedbackNotificationTick(_req: Request, res: Response): Promise<void> {
+  if (String(_req.authUserRole ?? '').toLowerCase() !== 'admin') {
+    res.status(403).json({ error: 'Только администратор' });
+    return;
+  }
+  try {
+    const sent = await dispatchDueSermonFeedbackNotifications();
+    res.json({ ok: true, sent });
+  } catch (e) {
+    console.error('[service-planner] runSermonFeedbackNotificationTick:', e);
+    res.status(500).json({ error: 'Не удалось выполнить проверку уведомлений' });
   }
 }
 

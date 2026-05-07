@@ -215,19 +215,61 @@ function parseServiceDateTime(plan: Pick<ServicePlanListItem, 'service_date' | '
   return Number.isNaN(dt.getTime()) ? null : dt;
 }
 
-function pickNearestPlan(plans: ServicePlanListItem[], now: Date): ServicePlanListItem | null {
+type SermonPlanPhase = 'upcoming' | 'live' | 'feedback' | 'closed';
+
+function computeSermonPlanPhase(
+  plan: Pick<ServicePlanListItem, 'service_date' | 'start_time' | 'total_duration_minutes'>,
+  now: Date,
+): { phase: SermonPlanPhase; startsAt: Date | null; endsAt: Date | null; feedbackEndsAt: Date | null } {
+  const startsAt = parseServiceDateTime(plan);
+  if (!startsAt) return { phase: 'closed', startsAt: null, endsAt: null, feedbackEndsAt: null };
+  const durationMin = Math.max(0, Number(plan.total_duration_minutes || 0));
+  const endsAt = new Date(startsAt.getTime() + durationMin * 60_000);
+  const feedbackEndsAt = new Date(endsAt.getTime() + 5 * 60 * 60_000);
+  const nowMs = now.getTime();
+  if (nowMs < startsAt.getTime()) return { phase: 'upcoming', startsAt, endsAt, feedbackEndsAt };
+  if (nowMs <= endsAt.getTime()) return { phase: 'live', startsAt, endsAt, feedbackEndsAt };
+  if (nowMs <= feedbackEndsAt.getTime()) return { phase: 'feedback', startsAt, endsAt, feedbackEndsAt };
+  return { phase: 'closed', startsAt, endsAt, feedbackEndsAt };
+}
+
+function pickNearestPlan(
+  plans: ServicePlanListItem[],
+  now: Date,
+): { plan: ServicePlanListItem; phase: SermonPlanPhase; startsAt: Date; endsAt: Date; feedbackEndsAt: Date } | null {
   const dated = plans
     .map((plan) => {
-      const dt = parseServiceDateTime(plan);
-      return dt ? { plan, dt } : null;
+      const phaseData = computeSermonPlanPhase(plan, now);
+      if (!phaseData.startsAt || !phaseData.endsAt || !phaseData.feedbackEndsAt) return null;
+      return { plan, ...phaseData };
     })
-    .filter((row): row is { plan: ServicePlanListItem; dt: Date } => row != null)
-    .sort((a, b) => a.dt.getTime() - b.dt.getTime());
-  return dated.find((row) => row.dt.getTime() >= now.getTime())?.plan ?? null;
+    .filter(
+      (
+        row,
+      ): row is {
+        plan: ServicePlanListItem;
+        phase: SermonPlanPhase;
+        startsAt: Date;
+        endsAt: Date;
+        feedbackEndsAt: Date;
+      } => row != null,
+    )
+    .filter((row) => row.phase !== 'closed');
+
+  const started = dated
+    .filter((row) => row.phase === 'live' || row.phase === 'feedback')
+    .sort((a, b) => b.startsAt.getTime() - a.startsAt.getTime());
+  if (started[0]) return started[0];
+
+  const upcoming = dated
+    .filter((row) => row.phase === 'upcoming')
+    .sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime());
+  return upcoming[0] ?? null;
 }
 
 type NearestSermonData = {
   planId: number;
+  shareToken: string;
   serviceDate: string;
   startTime: string;
   preacherMemberId: number;
@@ -247,6 +289,7 @@ function extractNearestSermonData(plan: ServicePlanDetails | null): NearestSermo
   if (!sermonBlock) return null;
   return {
     planId: plan.id,
+    shareToken: plan.share_token,
     serviceDate: plan.service_date,
     startTime: plan.start_time,
     preacherMemberId: plan.preacher_member_id,
@@ -261,12 +304,16 @@ function UpcomingPreacherCard({
   topic,
   scripture,
   startsAtLabel,
+  canRate,
+  onOpenComments,
 }: {
   preacherName: string;
   preacherAvatarUrl: string | null;
   topic: string;
   scripture: string;
   startsAtLabel: string;
+  canRate: boolean;
+  onOpenComments: () => void;
 }) {
   return (
     <section className="overflow-hidden rounded-2xl border border-[#BFD7FF] bg-gradient-to-br from-[#EEF5FF] to-[#E3EEFF] p-4 shadow-[var(--shadow-card)]">
@@ -295,6 +342,15 @@ function UpcomingPreacherCard({
           <p className="text-[10px] font-bold uppercase tracking-[0.04em] text-[#6A7FC5]">Стих из Библии</p>
           <p className="mt-1 text-sm font-semibold leading-snug text-[#1A2560]">{scripture}</p>
         </div>
+        {canRate ? (
+          <button
+            type="button"
+            onClick={onOpenComments}
+            className="inline-flex min-h-[42px] items-center justify-center rounded-xl bg-[#2F4DA4] px-4 text-sm font-extrabold text-white hover:bg-[#273f88]"
+          >
+            Оценить и оставить комментарий
+          </button>
+        ) : null}
       </div>
     </section>
   );
@@ -600,8 +656,8 @@ function DashboardMain() {
     [upcomingPlansQ.data, now],
   );
   const nearestPlanDetailsQ = useQuery({
-    queryKey: ['service-plan', 'dashboard-nearest', nearestPlan?.id ?? null],
-    queryFn: () => fetchServicePlan(nearestPlan!.id),
+    queryKey: ['service-plan', 'dashboard-nearest', nearestPlan?.plan.id ?? null],
+    queryFn: () => fetchServicePlan(nearestPlan!.plan.id),
     enabled: nearestPlan != null,
     staleTime: 60_000,
   });
@@ -626,15 +682,17 @@ function DashboardMain() {
     return 'Проповедник';
   }, [preacherProfileQ.data?.profile]);
   const nearestSermonStartsAtLabel = useMemo(() => {
-    if (!nearestSermonData) return '';
-    const dt = parseServiceDateTime({
-      service_date: nearestSermonData.serviceDate,
-      start_time: nearestSermonData.startTime,
-    });
-    if (!dt) return 'Ближайшее собрание';
-    return `Собрание ${format(dt, 'd MMMM, HH:mm', { locale: ru })}`;
-  }, [nearestSermonData]);
-  const showNearestPreacherWidget = nearestSermonData != null;
+    if (!nearestPlan?.startsAt) return '';
+    if (nearestPlan.phase === 'upcoming') {
+      return `Собрание ${format(nearestPlan.startsAt, 'd MMMM, HH:mm', { locale: ru })}`;
+    }
+    if (nearestPlan.phase === 'live') {
+      return `Идёт до ${format(nearestPlan.endsAt, 'HH:mm', { locale: ru })}`;
+    }
+    return `Отзывы до ${format(nearestPlan.feedbackEndsAt, 'HH:mm', { locale: ru })}`;
+  }, [nearestPlan]);
+  const canRateSermon = nearestPlan?.phase === 'feedback';
+  const showNearestPreacherWidget = nearestSermonData != null && nearestPlan != null;
   const birthdaysThisWeek: BirthdayWeekItem[] = useMemo(() => {
     const items = birthdaysQ.data?.items ?? [];
     const todayStart = startOfDay(now);
@@ -904,6 +962,8 @@ function DashboardMain() {
                   topic={nearestSermonData!.topic}
                   scripture={nearestSermonData!.scripture}
                   startsAtLabel={nearestSermonStartsAtLabel}
+                  canRate={canRateSermon}
+                  onOpenComments={() => navigate(`/service-plan/sermon-comments/${nearestSermonData!.shareToken}`)}
                 />
               </div>
             ) : null}
@@ -1194,6 +1254,8 @@ function DashboardMain() {
                 topic={nearestSermonData!.topic}
                 scripture={nearestSermonData!.scripture}
                 startsAtLabel={nearestSermonStartsAtLabel}
+                canRate={canRateSermon}
+                onOpenComments={() => navigate(`/service-plan/sermon-comments/${nearestSermonData!.shareToken}`)}
               />
             </div>
           ) : null}

@@ -49,6 +49,11 @@ const EditableServicePlanPage = lazy(async () => {
   return { default: m.EditableServicePlanPage };
 });
 
+const SermonCommentsPage = lazy(async () => {
+  const m = await import('../features/servicePlanner/pages/SermonCommentsPage');
+  return { default: m.SermonCommentsPage };
+});
+
 /** Только просмотр песенника + публичные сетлисты (основной домен). */
 export function AppRouterMain() {
   return (
@@ -82,6 +87,14 @@ export function AppRouterMain() {
         }
       />
       <Route element={<RequireAuth />}>
+        <Route
+          path="/service-plan/sermon-comments/:token"
+          element={
+            <Suspense fallback={<RouteFallback />}>
+              <SermonCommentsPage />
+            </Suspense>
+          }
+        />
         <Route path="/pending-review" element={<PendingReviewPage />} />
         <Route index element={<Navigate to="/songbook" replace />} />
         <Route

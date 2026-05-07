@@ -4,6 +4,7 @@ import { snapshotPastCyclePrayersToHistory } from '../services/userService';
 import { runNotificationRulesTick } from '../services/notificationRulesRunner';
 import { DistributionService } from '../services/DistributionService';
 import { sendPush } from '../services/pushService';
+import { dispatchDueSermonFeedbackNotifications } from '../services/sermonFeedbackService';
 
 type CuratorWeekKind = 'current' | 'next';
 
@@ -128,5 +129,24 @@ export function initPushCronJobs() {
       }
     },
     { timezone: process.env.CURATOR_DISTRIBUTION_TZ?.trim() || 'Europe/Moscow' },
+  );
+
+  /** Раз в 10 минут: по истечении 5 часов после собрания отправляем проповеднику комментарии к проповеди. */
+  cron.schedule(
+    '*/10 * * * *',
+    async () => {
+      if (process.env.DISABLE_SERMON_FEEDBACK_NOTIFY_CRON === 'true') {
+        return;
+      }
+      try {
+        const sent = await dispatchDueSermonFeedbackNotifications();
+        if (sent > 0) {
+          console.log(`[CRON] sermon feedback notifications sent: ${sent}`);
+        }
+      } catch (e) {
+        console.error('[CRON] sermon feedback notifications', e);
+      }
+    },
+    { timezone: 'UTC' },
   );
 }
