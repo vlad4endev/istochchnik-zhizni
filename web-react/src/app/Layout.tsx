@@ -758,6 +758,34 @@ export function Layout() {
     };
   }, [navigate, setActiveConversation]);
 
+  useEffect(() => {
+    const onNativePushNavigate = (e: Event) => {
+      const ce = e as CustomEvent<{ url?: string; conversationId?: string | null }>;
+      const payload = ce.detail ?? {};
+      const conversationId = String(payload.conversationId ?? '').trim();
+      if (conversationId) {
+        setActiveConversation(conversationId);
+        navigate(`/messenger?conversationId=${encodeURIComponent(conversationId)}`);
+        return;
+      }
+
+      const targetUrl = String(payload.url ?? '').trim();
+      if (!targetUrl) return;
+      try {
+        const parsed = new URL(targetUrl, window.location.origin);
+        const nextPath = `${parsed.pathname}${parsed.search}${parsed.hash}`;
+        if (nextPath) navigate(nextPath);
+      } catch {
+        /* ignore malformed native payload URLs */
+      }
+    };
+
+    window.addEventListener('app:native-push-navigate', onNativePushNavigate as EventListener);
+    return () => {
+      window.removeEventListener('app:native-push-navigate', onNativePushNavigate as EventListener);
+    };
+  }, [navigate, setActiveConversation]);
+
   /** Бейдж на иконке PWA: чаты + неоткрытые push/напоминания из журнала. */
   useEffect(() => {
     if (typeof navigator === 'undefined') return;

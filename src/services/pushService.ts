@@ -267,17 +267,40 @@ export async function sendPush(
   if (typeof webPayload.badgeCount === 'string') {
     dataStrings.badgeCount = webPayload.badgeCount;
   }
+  const isMessengerLikePush =
+    (typeof dataStrings.conversationId === 'string' && dataStrings.conversationId.trim().length > 0) ||
+    (typeof dataStrings.tag === 'string' && dataStrings.tag.startsWith('chat-'));
+  const notificationCount =
+    typeof webPayload.badgeCount === 'string' ? Number.parseInt(webPayload.badgeCount, 10) || 0 : 0;
+  const senderName = typeof dataStrings.senderName === 'string' ? dataStrings.senderName.trim() : '';
 
   for (let i = 0; i < tokens.length; i += FCM_MULTICAST_CHUNK) {
     const slice = tokens.slice(i, i + FCM_MULTICAST_CHUNK);
     const res = await messaging.sendEachForMulticast({
       tokens: slice,
-      notification: { title, body },
       data: dataStrings,
-      android: { priority: 'high' },
+      android: {
+        priority: 'high',
+      },
       apns: {
-        headers: { 'apns-priority': '10' },
-        payload: { aps: { sound: 'default' } },
+        headers: {
+          'apns-priority': '10',
+          'apns-push-type': 'alert',
+        },
+        payload: {
+          aps: {
+            alert: { title, body },
+            sound: 'default',
+            threadId: isMessengerLikePush ? dataStrings.conversationId ?? undefined : undefined,
+            category: isMessengerLikePush ? 'MESSAGE' : 'GENERAL',
+            badge: notificationCount > 0 ? notificationCount : undefined,
+            mutableContent: true,
+            interruptionLevel: isMessengerLikePush ? 'active' : 'passive',
+            relevanceScore: isMessengerLikePush ? 0.8 : 0.3,
+            summaryArg: isMessengerLikePush ? senderName || title : undefined,
+            summaryArgCount: isMessengerLikePush ? 1 : undefined,
+          },
+        },
       },
     });
     for (let j = 0; j < res.responses.length; j++) {

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type MouseEvent, type TouchEvent } from 'react';
 import { ActionIcon, Avatar, Box, Group, Image, Modal, Stack, Text, Tooltip } from '@mantine/core';
+import { useMediaQuery } from '@mantine/hooks';
 import { IconChevronLeft, IconChevronRight, IconDownload, IconShare, IconX } from '@tabler/icons-react';
 
 import { MediaStrip } from './MediaStrip';
@@ -16,6 +17,13 @@ export function MediaViewer() {
   const dragStart = useRef<{ x: number; y: number } | null>(null);
   const dragBase = useRef({ x: 0, y: 0 });
   const touchStartX = useRef<number | null>(null);
+  const isMobile = useMediaQuery('(max-width: 48em)');
+  const hasMultipleItems = items.length > 1;
+  const mediaMaxHeight = isMobile
+    ? hasMultipleItems
+      ? 'calc(100dvh - 190px)'
+      : 'calc(100dvh - 128px)'
+    : '82vh';
 
   useEffect(() => {
     setScale(1);
@@ -106,32 +114,50 @@ export function MediaViewer() {
         content: { background: '#0e0e0e' },
       }}
     >
-      <Group px="md" py="sm" justify="space-between" className={classes.header}>
-        <Group gap="sm">
-          <Avatar size={36} radius="xl" src={item.sender?.avatar} color={item.sender?.color ?? 'blue'}>
+      <Group
+        px={isMobile ? 'xs' : 'md'}
+        py={isMobile ? 8 : 'sm'}
+        justify="space-between"
+        className={classes.header}
+      >
+        <Group gap={isMobile ? 8 : 'sm'} wrap="nowrap">
+          <Avatar
+            size={isMobile ? 30 : 36}
+            radius="xl"
+            src={item.sender?.avatar}
+            color={item.sender?.color ?? 'blue'}
+          >
             {item.sender?.initials ?? '??'}
           </Avatar>
-          <Stack gap={0}>
-            <Text size="sm" fw={500} c="white">
+          <Stack gap={0} style={{ minWidth: 0 }}>
+            <Text size={isMobile ? 'xs' : 'sm'} fw={500} c="white" truncate>
               {item.sender?.name ?? 'Неизвестно'}
             </Text>
-            <Text size="xs" c="rgba(255,255,255,.5)">
+            <Text size="xs" c="rgba(255,255,255,.5)" truncate>
               {item.date ?? ''}
             </Text>
           </Stack>
         </Group>
-        <Group gap="xs">
-          <Tooltip label="Скачать">
-            <ActionIcon variant="subtle" color="gray" radius="xl" size="lg" component="a" href={item.src} download>
-              <IconDownload size={18} color="white" />
-            </ActionIcon>
-          </Tooltip>
-          <Tooltip label="Поделиться">
+        <Group gap={isMobile ? 4 : 'xs'} wrap="nowrap">
+          <Tooltip label="Скачать" disabled={isMobile}>
             <ActionIcon
               variant="subtle"
               color="gray"
               radius="xl"
-              size="lg"
+              size={isMobile ? 'md' : 'lg'}
+              component="a"
+              href={item.src}
+              download
+            >
+              <IconDownload size={18} color="white" />
+            </ActionIcon>
+          </Tooltip>
+          <Tooltip label="Поделиться" disabled={isMobile}>
+            <ActionIcon
+              variant="subtle"
+              color="gray"
+              radius="xl"
+              size={isMobile ? 'md' : 'lg'}
               onClick={() => {
                 void navigator.share?.({ url: item.src });
               }}
@@ -139,7 +165,13 @@ export function MediaViewer() {
               <IconShare size={18} color="white" />
             </ActionIcon>
           </Tooltip>
-          <ActionIcon variant="subtle" color="gray" radius="xl" size="lg" onClick={closeViewer}>
+          <ActionIcon
+            variant="subtle"
+            color="gray"
+            radius="xl"
+            size={isMobile ? 'md' : 'lg'}
+            onClick={closeViewer}
+          >
             <IconX size={18} color="white" />
           </ActionIcon>
         </Group>
@@ -157,6 +189,7 @@ export function MediaViewer() {
         style={{
           cursor:
             scale > 1 ? (dragging ? 'grabbing' : 'grab') : item.type === 'photo' ? 'zoom-in' : 'default',
+          padding: isMobile ? '4px 8px' : '8px 16px',
         }}
       >
         {index > 0 ? (
@@ -164,7 +197,7 @@ export function MediaViewer() {
             className={classes.navLeft}
             onClick={() => navigate(-1)}
             radius="xl"
-            size="xl"
+            size={isMobile ? 'lg' : 'xl'}
             variant="subtle"
             color="gray"
           >
@@ -176,7 +209,7 @@ export function MediaViewer() {
             className={classes.navRight}
             onClick={() => navigate(1)}
             radius="xl"
-            size="xl"
+            size={isMobile ? 'lg' : 'xl'}
             variant="subtle"
             color="gray"
           >
@@ -190,7 +223,7 @@ export function MediaViewer() {
             alt={item.caption ?? ''}
             fit="contain"
             style={{
-              maxHeight: '70vh',
+              maxHeight: mediaMaxHeight,
               maxWidth: '100%',
               transform: `scale(${scale}) translate(${translate.x}px, ${translate.y}px)`,
               transition: dragging ? 'none' : 'transform .2s cubic-bezier(.4,0,.2,1)',
@@ -202,21 +235,31 @@ export function MediaViewer() {
             ref={videoRef}
             src={item.src}
             controls
-            style={{ maxHeight: '70vh', maxWidth: '100%', borderRadius: 6 }}
+            style={{ maxHeight: mediaMaxHeight, maxWidth: '100%', borderRadius: 6 }}
           />
         )}
       </Box>
 
-      <Box className={classes.footer}>
+      <Box className={classes.footer} data-mobile={isMobile ? 'true' : 'false'}>
         {item.caption ? (
-          <Text size="sm" c="rgba(255,255,255,.85)" px="md" pb="xs" style={{ lineHeight: 1.4 }}>
+          <Text
+            size={isMobile ? 'xs' : 'sm'}
+            c="rgba(255,255,255,.85)"
+            px={isMobile ? 'sm' : 'md'}
+            pb="xs"
+            style={{ lineHeight: 1.4 }}
+          >
             {item.caption}
           </Text>
         ) : null}
-        <Text size="xs" c="rgba(255,255,255,.4)" ta="center" pb="xs">
-          {index + 1} / {items.length}
-        </Text>
-        <MediaStrip items={items} current={index} onSelect={setIndex} />
+        {hasMultipleItems ? (
+          <>
+            <Text size="xs" c="rgba(255,255,255,.4)" ta="center" pb="xs">
+              {index + 1} / {items.length}
+            </Text>
+            <MediaStrip items={items} current={index} onSelect={setIndex} />
+          </>
+        ) : null}
       </Box>
     </Modal>
   );

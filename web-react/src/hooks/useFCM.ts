@@ -6,6 +6,9 @@ import { useAuthStore } from '../features/auth/authStore';
 import { apiClient } from '../lib/apiClient';
 
 const DEVICE_ID_KEY = 'fcm_push_device_id';
+const MESSAGES_CHANNEL_ID = 'messages';
+const MESSAGES_CHANNEL_NAME = 'Сообщения';
+const MESSAGES_CHANNEL_DESCRIPTION = 'Личные и групповые сообщения';
 
 function getOrCreateDeviceId(): string {
   if (typeof localStorage === 'undefined') {
@@ -55,6 +58,20 @@ export function useFCM(): void {
 
     void (async () => {
       try {
+        // Отдельный канал для чатов: высокий приоритет + звук/вибрация.
+        await PushNotifications.createChannel({
+          id: MESSAGES_CHANNEL_ID,
+          name: MESSAGES_CHANNEL_NAME,
+          description: MESSAGES_CHANNEL_DESCRIPTION,
+          importance: 5,
+          visibility: 1,
+          vibration: true,
+          sound: 'default',
+          lights: true,
+          lightColor: '#2dd4bf',
+        }).catch(() => {
+          // Канал мог уже существовать.
+        });
         const perm = await PushNotifications.requestPermissions();
         if (cancelled) return;
         if (perm.receive !== 'granted') {

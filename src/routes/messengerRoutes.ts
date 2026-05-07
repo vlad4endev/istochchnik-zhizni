@@ -885,6 +885,7 @@ router.post(
           await sendPushNotification(parsed, {
             title: `Вас добавили в чат «${chatLabel}»`,
             body: `${inviterName} добавил(а) вас в чат`,
+            senderName: inviterName,
             conversationId: String(convId),
             url: resolveMessengerConversationDeepLink(String(convId)),
             tag: `chat-added-${String(convId)}`,
@@ -1177,6 +1178,7 @@ router.post(
           const payload = {
             title: mentioned ? `Вас упомянули в «${chatLabel}»` : senderName,
             body: mentioned ? `${senderName}: ${previewShort || 'Сообщение'}` : bodyText,
+            senderName,
             conversationId: convKey,
             messageId: String(message.id ?? ''),
             url: resolveMessengerConversationDeepLink(convKey),

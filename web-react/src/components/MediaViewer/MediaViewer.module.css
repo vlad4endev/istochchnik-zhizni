@@ -16,12 +16,16 @@
 .navLeft {
   position: absolute;
   left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
   background: rgba(255, 255, 255, 0.12) !important;
 }
 
 .navRight {
   position: absolute;
   right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
   background: rgba(255, 255, 255, 0.12) !important;
 }
 
@@ -34,4 +38,22 @@
   background: rgba(0, 0, 0, 0.55);
   padding: 10px 0 12px;
   flex-shrink: 0;
+}
+
+@media (max-width: 48em) {
+  .header {
+    padding-top: max(8px, env(safe-area-inset-top));
+  }
+
+  .navLeft {
+    left: 8px;
+  }
+
+  .navRight {
+    right: 8px;
+  }
+
+  .footer {
+    padding-bottom: max(8px, env(safe-area-inset-bottom));
+  }
 }
