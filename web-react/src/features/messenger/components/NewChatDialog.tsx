@@ -1,6 +1,15 @@
 import * as api from '../api/messengerApi';
 import type { SearchMember } from '../api/messengerApi';
-import { useEffect, useRef, useCallback, useMemo, useState, type ChangeEvent } from 'react';
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useCallback,
+  useMemo,
+  useState,
+  type ChangeEvent,
+  type CSSProperties,
+} from 'react';
 import { LuSearch, LuX, LuUsers, LuMegaphone, LuChevronLeft, LuCamera } from 'react-icons/lu';
 import { useChatStore, DRAFT_PRIVATE_PREFIX } from '../chatStore';
 import { AppAvatar } from '../../../components/AppAvatar';
@@ -17,16 +26,30 @@ type GroupWizardStep = 'members' | 'details';
 
 const DIALOG_STYLES = `
   .tg-dialog-overlay {
-    position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+    position: fixed;
+    left: 0;
+    top: 0;
+    right: 0;
+    bottom: 0;
     background: rgba(0,0,0,0.4); z-index: 1000;
-    display: flex; align-items: center; justify-content: center;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    box-sizing: border-box;
+    padding: max(12px, env(safe-area-inset-top)) 12px max(12px, env(safe-area-inset-bottom));
     backdrop-filter: blur(2px);
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
   }
   .tg-dialog {
     width: 90%; max-width: 440px; background: var(--tg-surface);
     border-radius: 12px; box-shadow: 0 8px 32px rgba(0,0,0,0.2);
-    display: flex; flex-direction: column; max-height: 85vh;
+    display: flex; flex-direction: column;
+    max-height: min(85vh, calc(100% - 8px));
     overflow: hidden; animation: tgPop 0.2s ease-out;
+    flex-shrink: 0;
   }
   @keyframes tgPop { from { transform: scale(0.95); opacity: 0; } to { transform: scale(1); opacity: 1; } }
   .tg-dialog-header {
@@ -113,6 +136,11 @@ const DIALOG_STYLES = `
     font-weight: 600;
     color: #b91c1c;
   }
+  @media (min-width: 769px) {
+    .tg-dialog-overlay {
+      align-items: center;
+    }
+  }
 `;
 
 export function NewChatDialog({ onClose, onCreated }: NewChatDialogProps) {
@@ -153,6 +181,50 @@ export function NewChatDialog({ onClose, onCreated }: NewChatDialogProps) {
       });
     };
   }, []);
+
+  /** iOS/Android: при открытой клавиатуре `fixed + 100vh` оставляет «белую полосу» — совмещаем оверлей с visualViewport. */
+  const [vvRect, setVvRect] = useState<{
+    top: number;
+    left: number;
+    width: number;
+    height: number;
+  } | null>(null);
+
+  useLayoutEffect(() => {
+    if (typeof window === 'undefined') return;
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const sync = () => {
+      setVvRect({
+        top: vv.offsetTop,
+        left: vv.offsetLeft,
+        width: vv.width,
+        height: vv.height,
+      });
+    };
+    sync();
+    vv.addEventListener('resize', sync);
+    vv.addEventListener('scroll', sync);
+    const onWin = () => sync();
+    window.addEventListener('orientationchange', onWin);
+    return () => {
+      vv.removeEventListener('resize', sync);
+      vv.removeEventListener('scroll', sync);
+      window.removeEventListener('orientationchange', onWin);
+    };
+  }, []);
+
+  const overlayVisualViewportStyle = useMemo((): CSSProperties => {
+    if (!vvRect) return {};
+    return {
+      top: vvRect.top,
+      left: vvRect.left,
+      width: vvRect.width,
+      height: vvRect.height,
+      right: 'auto',
+      bottom: 'auto',
+    };
+  }, [vvRect]);
 
   const performSearch = useCallback(async (q: string) => {
     setSearching(true);
@@ -324,7 +396,7 @@ export function NewChatDialog({ onClose, onCreated }: NewChatDialogProps) {
   };
 
   return (
-    <div className="tg-dialog-overlay" onClick={onClose}>
+    <div className="tg-dialog-overlay" style={overlayVisualViewportStyle} onClick={onClose}>
       <div className="tg-dialog" onClick={(e) => e.stopPropagation()}>
         <div className="tg-dialog-header">
           <div className="tg-dialog-header-main">
@@ -409,7 +481,7 @@ export function NewChatDialog({ onClose, onCreated }: NewChatDialogProps) {
               padding: 0,
               display: 'flex',
               flexDirection: 'column',
-              maxHeight: 'min(72vh, 640px)',
+              minHeight: 0,
             }}
           >
             {groupWizardStep === 'members' ? (
