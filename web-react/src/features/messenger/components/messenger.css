@@ -2989,3 +2989,138 @@ html.dark .msg-videonote-circle--placeholder {
 .msg-videonote-bubble-meta .text-white\/70 {
   color: rgba(255, 255, 255, 0.88) !important;
 }
+
+/* Send/mic button animations (Telegram-like) */
+.sendBtn {
+  position: relative;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  transition:
+    background-color var(--send-btn-bg-dur, 200ms) ease,
+    transform var(--send-btn-transform-dur, 150ms) ease;
+  background-color: var(--tg-primary, #2AABEE);
+  -webkit-tap-highlight-color: transparent;
+  touch-action: none;
+}
+
+.sendBtn:active:not(:disabled) {
+  transform: scale(0.92);
+}
+
+.sendBtn.recording {
+  background-color: #FF3B30;
+  transform: scale(1.15);
+  transition:
+    background-color var(--send-btn-record-bg-dur, 250ms) ease,
+    transform var(--send-btn-record-scale-dur, 250ms) cubic-bezier(0.34, 1.56, 0.64, 1);
+  animation: recordPulse 1.2s ease-in-out infinite;
+}
+
+.sendBtn.videoMode {
+  background-color: #5856D6;
+}
+
+.iconWrapper {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition:
+    opacity var(--send-icon-opacity-dur, 180ms) ease,
+    transform var(--send-icon-transform-dur, 220ms) cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.iconWrapper.hidden {
+  opacity: 0;
+  transform: scale(0.4) rotate(30deg);
+  pointer-events: none;
+}
+
+.iconWrapper.visible {
+  opacity: 1;
+  transform: scale(1) rotate(0deg);
+}
+
+.iconWrapper.sendEnter {
+  opacity: 0;
+  transform: scale(0.4) rotate(-30deg) translateY(8px);
+}
+
+.iconWrapper.sendEnter.visible {
+  opacity: 1;
+  transform: scale(1) rotate(0deg) translateY(0);
+}
+
+@keyframes recordPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(255, 59, 48, 0.4); }
+  50% { box-shadow: 0 0 0 8px rgba(255, 59, 48, 0); }
+}
+
+.swipeHint {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 13px;
+  font-weight: 600;
+  padding: 6px 16px;
+  margin-top: 0.35rem;
+  background: rgba(0, 0, 0, 0.35);
+  border-radius: 20px;
+  transition: all 0.2s ease;
+}
+
+.hintActive {
+  color: #fff;
+  transform: scale(1.2);
+}
+
+/* Mobile touch: чуть мягче анимация, без резкого "щелчка". */
+@media (hover: none) and (pointer: coarse) {
+  .sendBtn {
+    --send-btn-bg-dur: 220ms;
+    --send-btn-transform-dur: 170ms;
+    --send-btn-record-bg-dur: 270ms;
+    --send-btn-record-scale-dur: 290ms;
+  }
+
+  .iconWrapper {
+    --send-icon-opacity-dur: 200ms;
+    --send-icon-transform-dur: 250ms;
+  }
+}
+
+/* iOS Safari: более "snap" переключение, ближе к Telegram. */
+@supports (-webkit-touch-callout: none) {
+  .sendBtn {
+    --send-btn-bg-dur: 170ms;
+    --send-btn-transform-dur: 130ms;
+    --send-btn-record-bg-dur: 220ms;
+    --send-btn-record-scale-dur: 230ms;
+  }
+
+  .iconWrapper {
+    --send-icon-opacity-dur: 150ms;
+    --send-icon-transform-dur: 185ms;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sendBtn,
+  .sendBtn.recording,
+  .iconWrapper,
+  .swipeHint,
+  .hintActive {
+    transition: none !important;
+    animation: none !important;
+  }
+}

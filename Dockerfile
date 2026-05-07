@@ -24,7 +24,7 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=40978
 
-RUN apk add --no-cache curl su-exec && \
+RUN apk add --no-cache curl su-exec ffmpeg && \
   addgroup -g 1001 -S app && adduser -S app -u 1001 -G app
 
 COPY package.json package-lock.json ./

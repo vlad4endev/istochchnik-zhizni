@@ -5,7 +5,6 @@ import { useChatStore, isDraftPrivateConversationId } from '../chatStore';
 import {
   LuPaperclip,
   LuSmile,
-  LuSend,
   LuX,
   LuImage,
   LuVideo,
@@ -1586,6 +1585,24 @@ export function ChatInput({
   }, [mediaCapture, videoPreviewNonce]);
 
   const hasSendAction = Boolean(content.trim() || pending || pendingImages.length > 0);
+  type IconMode = 'send' | 'mic' | 'video';
+  const isRecording = Boolean(mediaCapture && !mediaCapture.connecting);
+  const captureKind = mediaCapture?.kind === 'video_note' ? 'video_note' : 'audio';
+  const iconMode: IconMode = isRecording
+    ? (captureKind === 'video_note' ? 'video' : 'mic')
+    : (hasSendAction ? 'send' : 'mic');
+  const prevIconModeRef = useRef<IconMode>(iconMode);
+  const [exitingMode, setExitingMode] = useState<IconMode | null>(null);
+
+  useEffect(() => {
+    if (prevIconModeRef.current !== iconMode) {
+      setExitingMode(prevIconModeRef.current);
+      const t = window.setTimeout(() => setExitingMode(null), 200);
+      prevIconModeRef.current = iconMode;
+      return () => window.clearTimeout(t);
+    }
+    return undefined;
+  }, [iconMode]);
 
   if (!canSend) {
     return (
@@ -1924,6 +1941,23 @@ export function ChatInput({
               <LuVideo className="h-5 w-5" strokeWidth={2.25} />
             </span>
           </div>
+          {isRecording ? (
+            <div className="swipeHint" aria-hidden>
+              <span className={captureKind === 'video_note' ? 'hintActive' : ''}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                  <rect x="2" y="6" width="13" height="12" rx="2.5" fill="currentColor" />
+                  <path d="M15 10l5-3v10l-5-3V10z" fill="currentColor" />
+                </svg>
+              </span>
+              <span>← свайп →</span>
+              <span className={captureKind === 'audio' ? 'hintActive' : ''}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                  <rect x="9" y="2" width="6" height="12" rx="3" fill="currentColor" />
+                  <path d="M5 10a7 7 0 0014 0M12 19v3M9 22h6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                </svg>
+              </span>
+            </div>
+          ) : null}
           <p className="tg-videonote-capture__hint">
             {mediaCapture.connecting
               ? 'Разрешите доступ к микрофону или камере'
@@ -2116,17 +2150,9 @@ export function ChatInput({
               ref={sendOrMicBtnRef}
               type="button"
               className={[
-                'tg-send-btn relative !flex !h-11 !w-11 !min-h-[44px] !min-w-[44px] shrink-0 touch-none select-none items-center justify-center !rounded-full border-2 transition-colors duration-200',
-                hasSendAction
-                  ? [
-                      '!border-[color:var(--tg-primary)] !bg-[var(--tg-primary)] !text-white',
-                      '!shadow-[0_4px_14px_rgba(125,54,64,0.55)] hover:!brightness-110 active:!brightness-95',
-                    ].join(' ')
-                  : [
-                      '!border-stone-400/70 !bg-white/75 !text-stone-800 !shadow-md',
-                      'hover:!border-stone-500 hover:!bg-white hover:!text-stone-900',
-                      'dark:!border-stone-500/80 dark:!bg-stone-800/90 dark:!text-stone-100 dark:hover:!bg-stone-700',
-                    ].join(' '),
+                'tg-send-btn sendBtn relative !flex !h-11 !w-11 !min-h-[44px] !min-w-[44px] shrink-0 touch-none select-none items-center justify-center !rounded-full',
+                isRecording ? 'recording' : '',
+                isRecording && captureKind === 'video_note' ? 'videoMode' : '',
               ].join(' ')}
               onPointerDown={!editing ? onSendOrMicPointerDown : undefined}
               onPointerUp={!editing ? (ev) => onSendOrMicPointerEnd(ev, true) : undefined}
@@ -2179,30 +2205,53 @@ export function ChatInput({
               })()}
             >
               <span
-                className={hasSendAction ? 'text-white drop-shadow-[0_1px_1px_rgba(0,0,0,0.35)]' : 'text-stone-800 dark:text-stone-100'}
-                style={{
-                  display: 'grid',
-                  placeItems: 'center',
-                  position: 'absolute',
-                  transition: 'transform 0.2s ease, opacity 0.2s ease',
-                  transform: hasSendAction ? 'scale(1) rotate(0deg)' : 'scale(0.7) rotate(-30deg)',
-                  opacity: hasSendAction ? 1 : 0,
-                }}
+                className={[
+                  'iconWrapper sendEnter',
+                  iconMode === 'send' ? 'visible' : 'hidden',
+                  exitingMode === 'send' ? 'hidden' : '',
+                ].join(' ')}
+                aria-hidden
               >
-                <LuSend size={22} strokeWidth={2.25} aria-hidden />
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+                  <path
+                    d="M12 20V4M12 4L5 11M12 4L19 11"
+                    stroke="white"
+                    strokeWidth="2.2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
               </span>
               <span
-                className={!hasSendAction ? 'text-stone-800 dark:text-stone-100' : undefined}
-                style={{
-                  display: 'grid',
-                  placeItems: 'center',
-                  position: 'absolute',
-                  transition: 'transform 0.2s ease, opacity 0.2s ease',
-                  transform: hasSendAction ? 'scale(0.7) rotate(30deg)' : 'scale(1) rotate(0deg)',
-                  opacity: hasSendAction ? 0 : 1,
-                }}
+                className={[
+                  'iconWrapper',
+                  iconMode === 'mic' ? 'visible' : 'hidden',
+                  exitingMode === 'mic' ? 'hidden' : '',
+                ].join(' ')}
+                aria-hidden
               >
-                <LuMic size={22} strokeWidth={2.25} aria-hidden />
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+                  <rect x="9" y="2" width="6" height="12" rx="3" fill="white" />
+                  <path
+                    d="M5 10a7 7 0 0014 0M12 19v3M9 22h6"
+                    stroke="white"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                  />
+                </svg>
+              </span>
+              <span
+                className={[
+                  'iconWrapper',
+                  iconMode === 'video' ? 'visible' : 'hidden',
+                  exitingMode === 'video' ? 'hidden' : '',
+                ].join(' ')}
+                aria-hidden
+              >
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+                  <rect x="2" y="6" width="13" height="12" rx="2.5" fill="white" />
+                  <path d="M15 10l5-3v10l-5-3V10z" fill="white" />
+                </svg>
               </span>
             </button>
           </div>
