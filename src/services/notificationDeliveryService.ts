@@ -2,14 +2,40 @@ import { query } from '../config/db';
 import { getUnreadEventsCount } from './eventsService';
 import { getUnreadMessagesCount } from '../lib/unreadHelpers';
 
+let hasDismissedAtColumnCache: boolean | null = null;
+
+async function hasDismissedAtColumn(): Promise<boolean> {
+  if (hasDismissedAtColumnCache != null) {
+    return hasDismissedAtColumnCache;
+  }
+  try {
+    const result = await query(
+      `
+      SELECT EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'member_notification_deliveries'
+          AND column_name = 'dismissed_at'
+      ) AS ok
+      `,
+    );
+    hasDismissedAtColumnCache = Boolean(result.rows[0]?.ok);
+  } catch {
+    hasDismissedAtColumnCache = false;
+  }
+  return hasDismissedAtColumnCache;
+}
+
 export async function getUnreadNotificationDeliveryCount(memberId: number): Promise<number> {
+  const hasDismissedAt = await hasDismissedAtColumn();
   const result = await query(
     `
     SELECT COUNT(*)::int AS n
     FROM member_notification_deliveries
     WHERE member_id = $1
       AND opened_at IS NULL
-      AND dismissed_at IS NULL
+      ${hasDismissedAt ? 'AND dismissed_at IS NULL' : ''}
       AND created_at > NOW() - INTERVAL '90 days'
     `,
     [memberId],
@@ -58,10 +84,12 @@ export async function markNotificationDeliveryOpened(
   deliveryId: number,
   memberId: number,
 ): Promise<boolean> {
+  const hasDismissedAt = await hasDismissedAtColumn();
   const result = await query(
     `
     UPDATE member_notification_deliveries
-    SET opened_at = NOW(), dismissed_at = NULL
+    SET opened_at = NOW()
+    ${hasDismissedAt ? ', dismissed_at = NULL' : ''}
     WHERE id = $1 AND member_id = $2 AND opened_at IS NULL
     `,
     [deliveryId, memberId],
@@ -73,6 +101,11 @@ export async function markNotificationDeliveryDismissed(
   deliveryId: number,
   memberId: number,
 ): Promise<boolean> {
+  const hasDismissedAt = await hasDismissedAtColumn();
+  if (!hasDismissedAt) {
+    // Старые БД без dismissed_at: считаем dismiss неподдерживаемым, но не роняем API.
+    return false;
+  }
   const result = await query(
     `
     UPDATE member_notification_deliveries
@@ -88,13 +121,14 @@ export async function markNotificationDeliveryDismissed(
 }
 
 export async function markAllNotificationDeliveriesOpened(memberId: number): Promise<number> {
+  const hasDismissedAt = await hasDismissedAtColumn();
   const result = await query(
     `
     UPDATE member_notification_deliveries
     SET opened_at = NOW()
     WHERE member_id = $1
       AND opened_at IS NULL
-      AND dismissed_at IS NULL
+      ${hasDismissedAt ? 'AND dismissed_at IS NULL' : ''}
       AND created_at > NOW() - INTERVAL '90 days'
     `,
     [memberId],
