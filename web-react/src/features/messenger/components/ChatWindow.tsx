@@ -21,7 +21,10 @@ import { isAppAdministratorRole } from '../manage/messengerManageAccess';
 import { useCallStore } from '../../calls/callStore';
 import { requestCallNotificationsFromUserGesture } from '../../calls/incomingCallBackground';
 import { sendRealtimeJson } from '../../../lib/realtimeWsClient';
+import { emitAppToast } from '../../../lib/uiFeedback';
 import './messenger.css';
+
+const CALLS_FEATURE_ENABLED = import.meta.env.VITE_CALLS_ENABLED === 'true';
 
 /** Склонение «N участников» по-русски (как в интерфейсах мессенджеров). */
 function formatParticipantCountRU(n: number): string {
@@ -121,6 +124,7 @@ export function ChatWindow({
 
   /** Пока звонки разрешены только администратору приложения — кнопка только в личке с admin. */
   const canShowPrivateCallToAdmin = useMemo(() => {
+    if (!CALLS_FEATURE_ENABLED) return false;
     if (isDraft || !conv || conv.type !== 'private' || !conv.other_member || isAccessRequestsChannel) {
       return false;
     }
@@ -782,6 +786,10 @@ export function ChatWindow({
 
   const initiateCall = useCallback(
     (callType: 'audio' | 'video') => {
+      if (!CALLS_FEATURE_ENABLED) {
+        emitAppToast('Звонки временно отключены', 'info');
+        return;
+      }
       if (isDraft || isAccessRequestsChannel) return;
       if (conv?.type !== 'private' || !conv.other_member) return;
       if (!isAppAdministratorRole(conv.other_member.app_role ?? null, conv.other_member.app_roles ?? null)) {
@@ -789,13 +797,17 @@ export function ChatWindow({
       }
       requestCallNotificationsFromUserGesture();
       const callId = crypto.randomUUID();
-      sendRealtimeJson({
+      const sent = sendRealtimeJson({
         type: 'call:initiate',
         callId,
         receiverId: conv.other_member.id,
         conversationId,
         callType,
       });
+      if (!sent) {
+        emitAppToast('Нет подключения к серверу. Повторите звонок через пару секунд.', 'error');
+        return;
+      }
       const fn = conv.other_member.first_name || '';
       const ln = conv.other_member.last_name || '';
       const peerName = `${fn} ${ln}`.trim() || conv.other_member.name;

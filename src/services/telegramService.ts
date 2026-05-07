@@ -1,6 +1,12 @@
 import { fetch as undiciFetch, ProxyAgent } from 'undici';
 
 import { query } from '../config/db';
+import {
+  buildUserMediaAvatarPath,
+  isSupabaseStorageConfigured,
+  uploadBufferToPublicBucket,
+  userMediaBucket,
+} from '../lib/supabaseStorage';
 import { loadNotificationSettings } from './notificationSettingsService';
 import { formatYmdInTimeZone, getZonedNow } from '../utils/zonedTime';
 import { getMemberAssignmentsForWeek, getPrayerDataByDate, type PrayerPlanSections } from './calendarService';
@@ -655,6 +661,266 @@ export interface TelegramGetMeResult {
   is_bot: boolean;
   username: string | null;
   first_name: string | null;
+}
+
+export interface TelegramProfileSyncErrorItem {
+  member_id: number;
+  telegram_chat_id: string;
+  error: string;
+}
+
+export interface TelegramMembersProfileSyncResult {
+  scanned: number;
+  processed: number;
+  avatars_updated: number;
+  phones_updated: number;
+  skipped_without_photo: number;
+  skipped_without_phone: number;
+  storage_enabled: boolean;
+  errors: TelegramProfileSyncErrorItem[];
+}
+
+function isValidPhoneForMemberProfile(value: string): boolean {
+  const normalized = value.trim();
+  if (normalized.length < 7 || normalized.length > 20) return false;
+  return /^[0-9+\-() ]+$/.test(normalized);
+}
+
+function normalizePhoneForMemberProfile(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const normalized = value.trim();
+  if (!normalized) return null;
+  return isValidPhoneForMemberProfile(normalized) ? normalized : null;
+}
+
+function detectImageExtension(filePath: string | null, contentType: string | null): string {
+  const fp = (filePath ?? '').toLowerCase();
+  if (fp.endsWith('.jpg') || fp.endsWith('.jpeg')) return '.jpg';
+  if (fp.endsWith('.png')) return '.png';
+  if (fp.endsWith('.webp')) return '.webp';
+
+  const ct = (contentType ?? '').toLowerCase();
+  if (ct.includes('image/png')) return '.png';
+  if (ct.includes('image/webp')) return '.webp';
+  if (ct.includes('image/jpeg') || ct.includes('image/jpg')) return '.jpg';
+  return '.jpg';
+}
+
+async function fetchTelegramApiJson(
+  botToken: string,
+  method: string,
+  payload: Record<string, unknown>
+): Promise<{ ok: boolean; status: number; body: Record<string, unknown> | null }> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 20_000);
+  try {
+    const endpoint = `${telegramApiBaseForBot(botToken)}/${method}`;
+    const response = await fetchTelegramHttp(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      signal: controller.signal,
+      body: JSON.stringify(payload),
+    });
+    let body: unknown = null;
+    try {
+      body = (await response.json()) as unknown;
+    } catch {
+      body = null;
+    }
+    return {
+      ok: response.ok,
+      status: response.status,
+      body: body && typeof body === 'object' ? (body as Record<string, unknown>) : null,
+    };
+  } catch (e) {
+    if (e instanceof Error && e.message === 'telegram_bot_token_invalid_chars') {
+      throw e;
+    }
+    if (isLikelyAbortError(e) || (e instanceof Error && e.name === 'AbortError')) {
+      throw new Error('telegram_connection_timeout');
+    }
+    const detail = e instanceof Error ? e.message : String(e);
+    const safe = detail.length > 400 ? `${detail.slice(0, 400)}...` : detail;
+    throw new Error(`telegram_request_failed:${safe}`);
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function downloadTelegramFileByPath(
+  botToken: string,
+  filePath: string
+): Promise<{ buffer: Buffer; contentType: string | null; filePath: string }> {
+  const safePath = String(filePath || '').trim().replace(/^\/+/, '');
+  if (!safePath) {
+    throw new Error('telegram_file_path_empty');
+  }
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 20_000);
+  try {
+    const endpoint = `${telegramApiBaseForBot(botToken).replace('/bot', '/file/bot')}/${safePath}`;
+    const response = await fetchTelegramHttp(endpoint, {
+      method: 'GET',
+      signal: controller.signal,
+    });
+    if (!response.ok) {
+      throw new Error(`telegram_file_download_failed:${response.status}`);
+    }
+    const arr = await response.arrayBuffer();
+    const buffer = Buffer.from(arr);
+    const contentType = normalizeOptionalString(response.headers.get('content-type'));
+    return { buffer, contentType, filePath: safePath };
+  } catch (e) {
+    if (isLikelyAbortError(e) || (e instanceof Error && e.name === 'AbortError')) {
+      throw new Error('telegram_connection_timeout');
+    }
+    if (e instanceof Error) throw e;
+    throw new Error(String(e));
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+export async function syncMembersTelegramProfiles(): Promise<TelegramMembersProfileSyncResult> {
+  await ensureMembersTelegramColumn();
+  await query('ALTER TABLE members ADD COLUMN IF NOT EXISTS avatar_url TEXT');
+
+  const row = await readSettingsRow();
+  const tokenRaw = row.telegram_bot_token ?? normalizeOptionalString(process.env.TELEGRAM_BOT_TOKEN);
+  const token = tokenRaw ? sanitizeBotTokenForHttp(tokenRaw) : '';
+  if (!token) {
+    throw new Error('telegram_missing_token');
+  }
+
+  const membersRes = await query(
+    `SELECT
+       id,
+       trim(telegram_chat_id) AS telegram_chat_id,
+       phone_number
+     FROM members
+     WHERE NULLIF(trim(COALESCE(telegram_chat_id, '')), '') IS NOT NULL
+     ORDER BY id ASC`
+  );
+
+  const storageEnabled = isSupabaseStorageConfigured();
+  const rows = membersRes.rows as Array<{ id: unknown; telegram_chat_id: unknown; phone_number: unknown }>;
+  const result: TelegramMembersProfileSyncResult = {
+    scanned: rows.length,
+    processed: 0,
+    avatars_updated: 0,
+    phones_updated: 0,
+    skipped_without_photo: 0,
+    skipped_without_phone: 0,
+    storage_enabled: storageEnabled,
+    errors: [],
+  };
+
+  for (const rowItem of rows) {
+    const memberId = Number(rowItem.id);
+    const chatId = normalizeOptionalString(rowItem.telegram_chat_id);
+    if (!Number.isInteger(memberId) || !chatId) {
+      continue;
+    }
+    result.processed += 1;
+
+    try {
+      const chatRaw = await fetchTelegramApiJson(token, 'getChat', { chat_id: chatId });
+      if (!chatRaw.ok || chatRaw.body?.ok !== true) {
+        const desc =
+          typeof chatRaw.body?.description === 'string' ? chatRaw.body.description : `http_${chatRaw.status}`;
+        throw new Error(`telegram_getchat_failed:${desc}`);
+      }
+
+      const chatObj =
+        chatRaw.body.result && typeof chatRaw.body.result === 'object'
+          ? (chatRaw.body.result as Record<string, unknown>)
+          : null;
+      if (!chatObj) {
+        throw new Error('telegram_getchat_invalid_response');
+      }
+
+      const phoneFromTelegram = normalizePhoneForMemberProfile(chatObj.phone_number);
+      const currentPhone = normalizePhoneForMemberProfile(rowItem.phone_number);
+      if (phoneFromTelegram && phoneFromTelegram !== currentPhone) {
+        await query(`UPDATE members SET phone_number = $1, updated_at = NOW() WHERE id = $2`, [
+          phoneFromTelegram,
+          memberId,
+        ]);
+        result.phones_updated += 1;
+      } else {
+        result.skipped_without_phone += 1;
+      }
+
+      const photo =
+        chatObj.photo && typeof chatObj.photo === 'object'
+          ? (chatObj.photo as Record<string, unknown>)
+          : null;
+      const fileId =
+        (typeof photo?.big_file_id === 'string' && photo.big_file_id.trim()) ||
+        (typeof photo?.small_file_id === 'string' && photo.small_file_id.trim()) ||
+        null;
+      if (!fileId) {
+        result.skipped_without_photo += 1;
+        continue;
+      }
+
+      if (!storageEnabled) {
+        result.errors.push({
+          member_id: memberId,
+          telegram_chat_id: chatId,
+          error: 'storage_not_configured',
+        });
+        continue;
+      }
+
+      const fileRaw = await fetchTelegramApiJson(token, 'getFile', { file_id: fileId });
+      if (!fileRaw.ok || fileRaw.body?.ok !== true) {
+        const desc =
+          typeof fileRaw.body?.description === 'string' ? fileRaw.body.description : `http_${fileRaw.status}`;
+        throw new Error(`telegram_getfile_failed:${desc}`);
+      }
+      const fileResult =
+        fileRaw.body.result && typeof fileRaw.body.result === 'object'
+          ? (fileRaw.body.result as Record<string, unknown>)
+          : null;
+      const filePath = typeof fileResult?.file_path === 'string' ? fileResult.file_path.trim() : '';
+      if (!filePath) {
+        throw new Error('telegram_getfile_invalid_response');
+      }
+
+      const downloaded = await downloadTelegramFileByPath(token, filePath);
+      if (!downloaded.buffer.length) {
+        throw new Error('telegram_avatar_empty');
+      }
+
+      const ext = detectImageExtension(downloaded.filePath, downloaded.contentType);
+      const objectPath = buildUserMediaAvatarPath(memberId, ext);
+      const { publicUrl } = await uploadBufferToPublicBucket({
+        bucket: userMediaBucket(),
+        objectPath,
+        file: downloaded.buffer,
+        contentType: downloaded.contentType ?? 'image/jpeg',
+        cacheControl: 'public, max-age=31536000, immutable',
+        metadata: {
+          kind: 'avatar',
+          source: 'telegram-sync',
+          memberId: String(memberId),
+          telegramChatId: chatId,
+        },
+      });
+      await query(`UPDATE members SET avatar_url = $1, updated_at = NOW() WHERE id = $2`, [publicUrl, memberId]);
+      result.avatars_updated += 1;
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      result.errors.push({
+        member_id: memberId,
+        telegram_chat_id: chatId,
+        error: msg.slice(0, 240),
+      });
+    }
+  }
+
+  return result;
 }
 
 async function fetchTelegramGetMeRaw(botToken: string): Promise<{

@@ -38,6 +38,22 @@ export function initCallSignaling(d: CallDeps): void {
   deps = d;
 }
 
+function isCallsFeatureEnabled(): boolean {
+  return process.env.CALLS_ENABLED === 'true';
+}
+
+/** Завершает все звонки пользователя, когда он полностью офлайн (все сокеты закрыты). */
+export function handleCallMemberOffline(memberId: number): void {
+  if (!deps) return;
+  for (const [callId, call] of activeCalls) {
+    if (call.callerId !== memberId && call.receiverId !== memberId) continue;
+    clearRingTimer(call);
+    activeCalls.delete(callId);
+    const peerId = call.callerId === memberId ? call.receiverId : call.callerId;
+    deps.sendToMember(peerId, { type: 'call:ended', callId, reason: 'peer_disconnected' });
+  }
+}
+
 function clearRingTimer(call: ActiveCall): void {
   clearTimeout(call.ringTimer);
 }
@@ -139,6 +155,13 @@ export async function handleCallClientMessage(client: CallSignalingClient, msg: 
   const m = msg as Record<string, unknown>;
   const t = m.type;
   if (typeof t !== 'string' || !t.startsWith('call:')) return;
+  if (!isCallsFeatureEnabled()) {
+    if (t === 'call:initiate') {
+      const callId = typeof m.callId === 'string' && m.callId.trim() ? m.callId.trim() : 'disabled';
+      sendCallError(client.memberId, callId, 'forbidden');
+    }
+    return;
+  }
 
   switch (t) {
     case 'call:initiate': {

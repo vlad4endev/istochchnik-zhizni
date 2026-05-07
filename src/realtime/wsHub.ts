@@ -9,7 +9,7 @@ import { resolveSessionByToken } from '../services/authService';
 import { isMemberInConversation, verifyMessageSenderInConversation } from '../services/messengerService';
 import { memberCanJoinServicePlanPresenceSession } from '../services/servicePlannerService';
 import type { WsMessengerEvent } from '../types/messenger';
-import { handleCallClientMessage, initCallSignaling } from './callSignaling';
+import { handleCallClientMessage, handleCallMemberOffline, initCallSignaling } from './callSignaling';
 
 // ─── Redis pub/sub (ioredis, горизонтальное масштабирование, без Socket.io) ──
 // Проект использует пакет `ws`, а не socket.io — @socket.io/redis-adapter сюда не подключается.
@@ -697,6 +697,7 @@ function removeClient(ws: WebSocket): void {
   if (memberClients) {
     memberClients.delete(client);
     if (memberClients.size === 0) {
+      handleCallMemberOffline(client.memberId);
       clientsByMember.delete(client.memberId);
       onlineMembers.delete(client.memberId);
       persistLastSeenAndBroadcastOffline(client.memberId);

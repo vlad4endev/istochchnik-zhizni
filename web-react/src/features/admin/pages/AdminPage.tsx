@@ -71,6 +71,7 @@ import {
   fetchAccessRequests,
   mergeDuplicateMembers,
   resetAdminMemberPassword,
+  syncMembersFromTelegramProfiles,
   swapAllMembersFirstLastNames,
   patchTelegramDispatchSettings,
   patchTelegramSettings,
@@ -999,6 +1000,26 @@ function MembersSection({
       setBanner({ type: 'err', text: apiErrorMessage(e, 'Не удалось выполнить массовую замену.') }),
   });
 
+  const syncTelegramProfilesMut = useMutation({
+    mutationFn: () => syncMembersFromTelegramProfiles(),
+    onSuccess: (r) => {
+      const notes: string[] = [];
+      notes.push(`Обработано: ${r.processed} из ${r.scanned}.`);
+      notes.push(`Аватаров обновлено: ${r.avatars_updated}.`);
+      notes.push(`Телефонов обновлено: ${r.phones_updated}.`);
+      if (!r.storage_enabled) {
+        notes.push('Хранилище не настроено: аватары пропущены.');
+      }
+      if (r.errors.length > 0) {
+        notes.push(`Ошибок: ${r.errors.length}.`);
+      }
+      setBanner({ type: 'ok', text: notes.join(' ') });
+      invalidate();
+    },
+    onError: (e) =>
+      setBanner({ type: 'err', text: apiErrorMessage(e, 'Не удалось синхронизировать данные из Telegram.') }),
+  });
+
   const oneTimeMut = useMutation({
     mutationFn: () => {
       if (oneTimeId == null || !oneTimeDate.trim()) throw new Error('no date');
@@ -1218,7 +1239,9 @@ function MembersSection({
                 <button
                   type="button"
                   className="w-full px-4 py-2 text-left text-sm font-semibold text-stone-700 hover:bg-stone-50 disabled:opacity-50"
-                  disabled={mergeDupesMut.isPending || swapAllNamesMut.isPending}
+                  disabled={
+                    mergeDupesMut.isPending || swapAllNamesMut.isPending || syncTelegramProfilesMut.isPending
+                  }
                   onClick={() => {
                     setShowActionsMenu(false);
                     if (
@@ -1236,7 +1259,9 @@ function MembersSection({
                 <button
                   type="button"
                   className="w-full px-4 py-2 text-left text-sm font-semibold text-amber-900 hover:bg-stone-50 disabled:opacity-50"
-                  disabled={mergeDupesMut.isPending || swapAllNamesMut.isPending}
+                  disabled={
+                    mergeDupesMut.isPending || swapAllNamesMut.isPending || syncTelegramProfilesMut.isPending
+                  }
                   onClick={() => {
                     setShowActionsMenu(false);
                     if (
@@ -1250,6 +1275,28 @@ function MembersSection({
                   }}
                 >
                   {swapAllNamesMut.isPending ? 'Обновление…' : 'Поменять имя/фамилию у всех'}
+                </button>
+                <button
+                  type="button"
+                  className="w-full px-4 py-2 text-left text-sm font-semibold text-sky-800 hover:bg-stone-50 disabled:opacity-50"
+                  disabled={
+                    mergeDupesMut.isPending || swapAllNamesMut.isPending || syncTelegramProfilesMut.isPending
+                  }
+                  onClick={() => {
+                    setShowActionsMenu(false);
+                    if (
+                      !window.confirm(
+                        'Массово обновить данные из Telegram по Telegram ID? Будут подтянуты аватары, а телефон обновится только если Telegram вернет phone_number.',
+                      )
+                    )
+                      return;
+                    setBanner(null);
+                    syncTelegramProfilesMut.mutate();
+                  }}
+                >
+                  {syncTelegramProfilesMut.isPending
+                    ? 'Синхронизация с Telegram…'
+                    : 'Обновить из Telegram по Telegram ID'}
                 </button>
               </div>
             </>

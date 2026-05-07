@@ -32,6 +32,7 @@ function CallWindowInner({ activeCall }: { activeCall: ActiveCallState }) {
     'connecting' | 'connected' | 'reconnecting' | 'failed'
   >('connecting');
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
+  const remoteAudioRef = useRef<HTMLAudioElement>(null);
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const reconnectFailTimerRef = useRef<number | null>(null);
   const connectionStateRef = useRef(connectionState);
@@ -83,8 +84,15 @@ function CallWindowInner({ activeCall }: { activeCall: ActiveCallState }) {
       isInitiator: activeCall.isInitiator,
       callType: activeCall.callType,
       onRemoteStream: (stream) => {
-        const el = remoteVideoRef.current;
-        if (el) el.srcObject = stream;
+        const videoEl = remoteVideoRef.current;
+        const audioEl = remoteAudioRef.current;
+        if (activeCall.callType === 'video') {
+          if (videoEl) videoEl.srcObject = stream;
+          if (audioEl) audioEl.srcObject = null;
+        } else {
+          if (audioEl) audioEl.srcObject = stream;
+          if (videoEl) videoEl.srcObject = null;
+        }
         setStatus('active');
       },
       onCallEnded,
@@ -135,31 +143,39 @@ function CallWindowInner({ activeCall }: { activeCall: ActiveCallState }) {
   const { callId, isInitiator, callType } = activeCall;
 
   useEffect(() => {
-    const attachLocal = () => {
+    const attachLocal = (): void => {
       const stream = localStreamRef.current;
       if (callType === 'video' && localVideoRef.current && stream) {
         localVideoRef.current.srcObject = stream;
       }
     };
 
-    if (!isInitiator) {
-      void start().then(() => {
+    const startCallMedia = async () => {
+      try {
+        await start();
         attachLocal();
-      });
+      } catch {
+        emitAppToast('Не удалось получить доступ к камере/микрофону', 'error');
+        cleanupLocal();
+        sendRealtimeJson({ type: 'call:end', callId, reason: 'media_error' });
+        closeCall();
+      }
+    };
+
+    if (!isInitiator) {
+      void startCallMedia();
       return;
     }
 
     const unsub = subscribeRealtimeMessages((raw) => {
       const m = raw as { type?: string; callId?: string };
       if (m.type === 'call:accepted' && m.callId === callId) {
-        void start().then(() => {
-          attachLocal();
-        });
+        void startCallMedia();
         unsub();
       }
     });
     return unsub;
-  }, [callId, isInitiator, callType, start, localStreamRef]);
+  }, [callId, isInitiator, callType, start, localStreamRef, cleanupLocal, closeCall]);
 
   useEffect(() => {
     if (activeCall.status !== 'active') return;
@@ -270,6 +286,7 @@ function CallWindowInner({ activeCall }: { activeCall: ActiveCallState }) {
 
   return (
     <div className="call-window">
+      <audio ref={remoteAudioRef} autoPlay playsInline />
       {connectionState !== 'connected' ? (
         <div className={`call-connection-banner call-connection-${connectionState}`}>
           {connectionState === 'connecting' ? 'Устанавливаем соединение...' : null}

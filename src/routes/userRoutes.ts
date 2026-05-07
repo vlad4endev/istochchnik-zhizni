@@ -25,6 +25,7 @@ import {
   bulkCreateUsersHandler,
   mergeDuplicateMembersHandler,
   swapAllMembersFirstLastNamesHandler,
+  syncUsersTelegramProfilesHandler,
 } from '../controllers/userController';
 
 const router = Router();
@@ -41,6 +42,7 @@ router.get('/', getUsers);
 router.post('/bulk', bulkCreateUsersHandler);
 router.post('/merge-duplicates', mergeDuplicateMembersHandler);
 router.post('/swap-all-first-last-names', swapAllMembersFirstLastNamesHandler);
+router.post('/sync-telegram-profiles', syncUsersTelegramProfilesHandler);
 router.get('/prayer-cycle/roster', getPrayerCycleRosterHandler);
 router.put('/prayer-cycle/roster-order', savePrayerCycleRosterOrderHandler);
 router.post('/prayer-cycle/anchor-member', anchorPrayerCycleMemberHandler);

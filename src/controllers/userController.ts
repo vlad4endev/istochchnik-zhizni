@@ -31,6 +31,7 @@ import {
 import { isValidAppRoleString } from '../types/appRole';
 import { notifyRealtime, type RealtimeScope } from '../realtime/notify';
 import { mergeAllDuplicateMembers } from '../services/memberMergeService';
+import { syncMembersTelegramProfiles } from '../services/telegramService';
 
 type AuthRequest = Request & { authUserId?: number; authUserRole?: string };
 
@@ -167,6 +168,30 @@ export async function swapAllMembersFirstLastNamesHandler(
   } catch (error) {
     console.error('Failed to swap all member name columns', error);
     res.status(500).json({ error: 'Не удалось обновить участников' });
+  }
+}
+
+/** Массово подтягивает аватары/телефоны пользователей из Telegram по telegram_chat_id. Только админ. */
+export async function syncUsersTelegramProfilesHandler(req: Request, res: Response): Promise<void> {
+  if (!ensureAdmin(req, res)) {
+    return;
+  }
+  try {
+    const result = await syncMembersTelegramProfiles();
+    notifyRealtime(['members']);
+    res.json({ ok: true, ...result });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (message === 'telegram_missing_token') {
+      res.status(400).json({ error: 'Не задан Telegram Bot Token' });
+      return;
+    }
+    if (message === 'telegram_bot_token_invalid_chars') {
+      res.status(400).json({ error: 'Токен содержит недопустимые символы' });
+      return;
+    }
+    console.error('Failed to sync users from Telegram profiles', error);
+    res.status(500).json({ error: 'Не удалось обновить пользователей из Telegram' });
   }
 }
 

@@ -159,6 +159,27 @@ export async function swapAllMembersFirstLastNames(): Promise<{
   return data;
 }
 
+export interface SyncTelegramProfilesResult {
+  ok: boolean;
+  scanned: number;
+  processed: number;
+  avatars_updated: number;
+  phones_updated: number;
+  skipped_without_photo: number;
+  skipped_without_phone: number;
+  storage_enabled: boolean;
+  errors: Array<{
+    member_id: number;
+    telegram_chat_id: string;
+    error: string;
+  }>;
+}
+
+export async function syncMembersFromTelegramProfiles(): Promise<SyncTelegramProfilesResult> {
+  const { data } = await apiClient.post<SyncTelegramProfilesResult>(`${USERS}/sync-telegram-profiles`, {});
+  return data;
+}
+
 export async function setMemberAppRoles(
   id: number,
   app_roles: Array<'member' | 'minister' | 'pastor' | 'musician' | 'editor' | 'admin'>,
