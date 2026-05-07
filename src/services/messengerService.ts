@@ -2415,6 +2415,14 @@ export async function getMessageAttachmentForMember(
   let mimeType =
     String(payload.mimeType ?? (payload as { mimetype?: unknown }).mimetype ?? '').trim() || null;
 
+  if (mimeType) {
+    const m = mimeType.toLowerCase();
+    // Исторически в payload встречался audio/webm даже для video_note.
+    // Нормализуем MIME по типу сообщения, чтобы браузер правильно выбирал декодер.
+    if (payloadType === 'video_note' && m === 'audio/webm') mimeType = 'video/webm';
+    if (payloadType === 'audio' && m === 'video/webm') mimeType = 'audio/webm';
+  }
+
   const slotIdx =
     typeof slot === 'number' && Number.isFinite(slot) && slot >= 0 && slot <= 32 ? Math.floor(slot) : null;
   if (slotIdx != null && payloadType === 'image') {

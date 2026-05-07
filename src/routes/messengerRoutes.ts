@@ -206,7 +206,7 @@ const EXT_TO_MIME: Record<string, string> = {
   '.mpg': 'video/mpeg',
   '.3gp': 'video/3gpp',
   '.ogv': 'video/ogg',
-  '.webm': 'audio/webm',
+  '.webm': 'video/webm',
   '.ogg': 'audio/ogg',
   '.oga': 'audio/ogg',
   '.opus': 'audio/ogg',
