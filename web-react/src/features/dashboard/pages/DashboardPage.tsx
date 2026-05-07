@@ -37,7 +37,7 @@ import {
 } from '../../calendar/api';
 import { NextWeekPrayerPlanSection, userCanViewNextWeekPrayerPlan } from '../../calendar/components/NextWeekPrayerPlanSection';
 import { useMe } from '@/hooks/useMe';
-import { fetchProfileByUsername } from '../../profile/publicProfileApi';
+import { fetchProfileByMemberId, fetchProfileByUsername } from '../../profile/publicProfileApi';
 import { memberNameFirstLast } from '../../profile/memberDisplayName';
 import { SectionHeroToolbarEnd } from '@/components/SectionHeroToolbarEnd';
 import { sectionHeroHeaderClass, sectionHeroStickyClassNested } from '../../../lib/sectionHeroChrome';
@@ -52,6 +52,7 @@ import { useCoordinatorNoteEditorRequestStore } from '../coordinatorNoteEditorRe
 import { LimitedRegistrationDashboard } from '../components/LimitedRegistrationDashboard';
 import { DashboardSkeleton } from '@/components/skeletons/DashboardSkeleton';
 import { keys } from '@/lib/queryKeys';
+import { fetchServicePlan, fetchServicePlans, type ServicePlanDetails, type ServicePlanListItem } from '../../servicePlanner/api';
 
 type DashboardEvent = {
   id: string;
@@ -204,6 +205,99 @@ function mapPlatformLabel(platform: string | null | undefined): string {
   if (p === 'rutube') return 'RuTube';
   if (p === 'vk') return 'VK Видео';
   return 'Платформа';
+}
+
+function parseServiceDateTime(plan: Pick<ServicePlanListItem, 'service_date' | 'start_time'>): Date | null {
+  const date = String(plan.service_date ?? '').trim();
+  const time = String(plan.start_time ?? '').trim().slice(0, 5);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !/^\d{2}:\d{2}$/.test(time)) return null;
+  const dt = new Date(`${date}T${time}:00`);
+  return Number.isNaN(dt.getTime()) ? null : dt;
+}
+
+function pickNearestPlan(plans: ServicePlanListItem[], now: Date): ServicePlanListItem | null {
+  const dated = plans
+    .map((plan) => {
+      const dt = parseServiceDateTime(plan);
+      return dt ? { plan, dt } : null;
+    })
+    .filter((row): row is { plan: ServicePlanListItem; dt: Date } => row != null)
+    .sort((a, b) => a.dt.getTime() - b.dt.getTime());
+  return dated.find((row) => row.dt.getTime() >= now.getTime())?.plan ?? null;
+}
+
+type NearestSermonData = {
+  planId: number;
+  serviceDate: string;
+  startTime: string;
+  preacherMemberId: number;
+  topic: string;
+  scripture: string;
+};
+
+function extractNearestSermonData(plan: ServicePlanDetails | null): NearestSermonData | null {
+  if (!plan?.preacher_member_id) return null;
+  const sermonBlock = plan.blocks.find((block) => {
+    const topicRaw = block.content_json?.sermon_topic;
+    const scriptureRaw = block.content_json?.sermon_scripture;
+    const topic = typeof topicRaw === 'string' ? topicRaw.trim() : '';
+    const scripture = typeof scriptureRaw === 'string' ? scriptureRaw.trim() : '';
+    return topic.length > 0 && scripture.length > 0;
+  });
+  if (!sermonBlock) return null;
+  return {
+    planId: plan.id,
+    serviceDate: plan.service_date,
+    startTime: plan.start_time,
+    preacherMemberId: plan.preacher_member_id,
+    topic: String(sermonBlock.content_json.sermon_topic).trim(),
+    scripture: String(sermonBlock.content_json.sermon_scripture).trim(),
+  };
+}
+
+function UpcomingPreacherCard({
+  preacherName,
+  preacherAvatarUrl,
+  topic,
+  scripture,
+  startsAtLabel,
+}: {
+  preacherName: string;
+  preacherAvatarUrl: string | null;
+  topic: string;
+  scripture: string;
+  startsAtLabel: string;
+}) {
+  return (
+    <section className="overflow-hidden rounded-2xl border border-[#BFD7FF] bg-gradient-to-br from-[#EEF5FF] to-[#E3EEFF] p-4 shadow-[var(--shadow-card)]">
+      <p className="text-[11px] font-semibold tracking-[0.02em] text-[#2F4DA4]">Ближайшая проповедь</p>
+      <div className="mt-3 flex items-start gap-3">
+        <div className="h-12 w-12 shrink-0 overflow-hidden rounded-xl border border-[#BFD7FF] bg-white">
+          {preacherAvatarUrl ? (
+            <img src={preacherAvatarUrl} alt="" className="h-full w-full object-cover" />
+          ) : (
+            <div className="grid h-full w-full place-items-center text-[#4A5FD5]">
+              <LuUser className="h-5 w-5" strokeWidth={2} aria-hidden />
+            </div>
+          )}
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-[15px] font-extrabold text-[#1A2560]">{preacherName}</p>
+          <p className="mt-0.5 text-xs font-semibold text-[#4A5FD5]">{startsAtLabel}</p>
+        </div>
+      </div>
+      <div className="mt-3 space-y-2">
+        <div className="rounded-xl border border-[#D7E5FF] bg-white/80 px-3 py-2">
+          <p className="text-[10px] font-bold uppercase tracking-[0.04em] text-[#6A7FC5]">Тема</p>
+          <p className="mt-1 text-sm font-semibold leading-snug text-[#1A2560]">{topic}</p>
+        </div>
+        <div className="rounded-xl border border-[#D7E5FF] bg-white/80 px-3 py-2">
+          <p className="text-[10px] font-bold uppercase tracking-[0.04em] text-[#6A7FC5]">Стих из Библии</p>
+          <p className="mt-1 text-sm font-semibold leading-snug text-[#1A2560]">{scripture}</p>
+        </div>
+      </div>
+    </section>
+  );
 }
 
 function BroadcastCompactCard({
@@ -400,6 +494,11 @@ function DashboardMain() {
     queryFn: getActiveEvents,
     staleTime: 60_000,
   });
+  const upcomingPlansQ = useQuery({
+    queryKey: ['service-plans', 'dashboard-nearest', todayDateKey],
+    queryFn: () => fetchServicePlans({ from: todayDateKey }),
+    staleTime: 60_000,
+  });
   const birthdaysQ = useQuery({
     queryKey: ['calendar', 'birthdays', 'week', weekStartKey, todayDateKey],
     queryFn: getWeekBirthdays,
@@ -496,6 +595,46 @@ function DashboardMain() {
 
   const latestEpisode = pickLatestEpisode(sermonsQ.data?.episodes ?? []);
   const event = pickUpcomingEvent(now, eventsQ.data ?? []);
+  const nearestPlan = useMemo(
+    () => pickNearestPlan(upcomingPlansQ.data ?? [], now),
+    [upcomingPlansQ.data, now],
+  );
+  const nearestPlanDetailsQ = useQuery({
+    queryKey: ['service-plan', 'dashboard-nearest', nearestPlan?.id ?? null],
+    queryFn: () => fetchServicePlan(nearestPlan!.id),
+    enabled: nearestPlan != null,
+    staleTime: 60_000,
+  });
+  const nearestSermonData = useMemo(
+    () => extractNearestSermonData(nearestPlanDetailsQ.data ?? null),
+    [nearestPlanDetailsQ.data],
+  );
+  const preacherProfileQ = useQuery({
+    queryKey: ['profile', 'dashboard-preacher', nearestSermonData?.preacherMemberId ?? null],
+    queryFn: () => fetchProfileByMemberId(nearestSermonData!.preacherMemberId),
+    enabled: nearestSermonData != null,
+    staleTime: 60_000,
+  });
+  const preacherAvatarUrl = resolvePublicUrl(preacherProfileQ.data?.profile.avatar_url ?? null);
+  const preacherName = useMemo(() => {
+    const profile = preacherProfileQ.data?.profile;
+    if (!profile) return 'Проповедник';
+    const full = `${profile.first_name ?? ''} ${profile.last_name ?? ''}`.trim();
+    if (full) return full;
+    const display = profile.display_name?.trim();
+    if (display) return display;
+    return 'Проповедник';
+  }, [preacherProfileQ.data?.profile]);
+  const nearestSermonStartsAtLabel = useMemo(() => {
+    if (!nearestSermonData) return '';
+    const dt = parseServiceDateTime({
+      service_date: nearestSermonData.serviceDate,
+      start_time: nearestSermonData.startTime,
+    });
+    if (!dt) return 'Ближайшее собрание';
+    return `Собрание ${format(dt, 'd MMMM, HH:mm', { locale: ru })}`;
+  }, [nearestSermonData]);
+  const showNearestPreacherWidget = nearestSermonData != null;
   const birthdaysThisWeek: BirthdayWeekItem[] = useMemo(() => {
     const items = birthdaysQ.data?.items ?? [];
     const todayStart = startOfDay(now);
@@ -823,6 +962,16 @@ function DashboardMain() {
                 </div>
               </div>
             </button>
+
+            {showNearestPreacherWidget ? (
+              <UpcomingPreacherCard
+                preacherName={preacherName}
+                preacherAvatarUrl={preacherAvatarUrl}
+                topic={nearestSermonData!.topic}
+                scripture={nearestSermonData!.scripture}
+                startsAtLabel={nearestSermonStartsAtLabel}
+              />
+            ) : null}
 
             {dashboardNotesQ.data?.announcement ? (
               <section className="col-span-2 rounded-[14px] border border-[#F5D99A] bg-gradient-to-br from-[#FFF8EC] to-[#FEF0D6] p-4 transition hover:-translate-y-0.5 hover:shadow-[0_4px_16px_rgba(107,45,62,0.1)]">
@@ -1153,6 +1302,18 @@ function DashboardMain() {
               </div>
             </div>
           </button>
+
+          {showNearestPreacherWidget ? (
+            <div className="sm:col-span-2 xl:col-span-6">
+              <UpcomingPreacherCard
+                preacherName={preacherName}
+                preacherAvatarUrl={preacherAvatarUrl}
+                topic={nearestSermonData!.topic}
+                scripture={nearestSermonData!.scripture}
+                startsAtLabel={nearestSermonStartsAtLabel}
+              />
+            </div>
+          ) : null}
 
           {showBroadcastWidget ? (
             <div className="sm:col-span-2 xl:col-span-6">

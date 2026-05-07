@@ -1,10 +1,13 @@
 import { Button, Group, Paper, Text } from '@mantine/core';
+import { useEffect, useMemo, useState } from 'react';
 import { useRegisterSW } from 'virtual:pwa-register/react';
 
 /**
  * Показ при registerType: 'prompt' — пользователь сам решает, когда активировать новый SW.
  */
 export function PWAUpdatePrompt() {
+  const DISMISS_KEY = 'pwa:update-prompt:dismissed-until';
+  const UPDATE_CLICK_COOLDOWN_MS = 10 * 60 * 1000;
   const {
     needRefresh: [needRefresh, setNeedRefresh],
     updateServiceWorker,
@@ -14,8 +17,44 @@ export function PWAUpdatePrompt() {
       console.warn('SW registration failed:', error);
     },
   });
+  const [updateInProgress, setUpdateInProgress] = useState(false);
 
-  if (!needRefresh) return null;
+  const dismissedUntil = useMemo(() => {
+    try {
+      const raw = sessionStorage.getItem(DISMISS_KEY);
+      const n = raw ? Number.parseInt(raw, 10) : 0;
+      return Number.isFinite(n) ? n : 0;
+    } catch {
+      return 0;
+    }
+  }, []);
+
+  const hiddenByCooldown = dismissedUntil > Date.now();
+
+  useEffect(() => {
+    if (!needRefresh || !hiddenByCooldown) return;
+    setNeedRefresh(false);
+  }, [hiddenByCooldown, needRefresh, setNeedRefresh]);
+
+  const persistCooldown = () => {
+    try {
+      sessionStorage.setItem(DISMISS_KEY, String(Date.now() + UPDATE_CLICK_COOLDOWN_MS));
+    } catch {
+      /* ignore storage issues */
+    }
+  };
+
+  const onUpdateClick = () => {
+    setUpdateInProgress(true);
+    setNeedRefresh(false);
+    persistCooldown();
+    void updateServiceWorker(true).catch((error) => {
+      console.warn('SW update trigger failed:', error);
+      setUpdateInProgress(false);
+    });
+  };
+
+  if (!needRefresh || hiddenByCooldown) return null;
 
   return (
     <Paper
@@ -36,10 +75,18 @@ export function PWAUpdatePrompt() {
       <Group justify="space-between" wrap="nowrap" gap="sm" align="flex-start">
         <Text size="sm">Доступна новая версия приложения. Обновить сейчас?</Text>
         <Group gap="xs" wrap="nowrap">
-          <Button variant="default" size="xs" onClick={() => setNeedRefresh(false)}>
+          <Button
+            variant="default"
+            size="xs"
+            onClick={() => {
+              persistCooldown();
+              setNeedRefresh(false);
+            }}
+            disabled={updateInProgress}
+          >
             Позже
           </Button>
-          <Button size="xs" onClick={() => void updateServiceWorker(true)}>
+          <Button size="xs" onClick={onUpdateClick} loading={updateInProgress}>
             Обновить
           </Button>
         </Group>
