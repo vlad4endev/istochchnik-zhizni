@@ -896,6 +896,18 @@ function DashboardMain() {
         <div className="min-h-0 flex-1 overflow-y-auto [webkit-overflow-scrolling:touch] max-lg:pb-0 lg:pb-[max(2rem,env(safe-area-inset-bottom,0px))]">
         <div className="hidden lg:block">
           <div className="grid grid-cols-3 gap-[14px] px-0 py-4">
+            {showNearestPreacherWidget ? (
+              <div className="col-span-3">
+                <UpcomingPreacherCard
+                  preacherName={preacherName}
+                  preacherAvatarUrl={preacherAvatarUrl}
+                  topic={nearestSermonData!.topic}
+                  scripture={nearestSermonData!.scripture}
+                  startsAtLabel={nearestSermonStartsAtLabel}
+                />
+              </div>
+            ) : null}
+
             <button
               type="button"
               onClick={() =>
@@ -962,16 +974,6 @@ function DashboardMain() {
                 </div>
               </div>
             </button>
-
-            {showNearestPreacherWidget ? (
-              <UpcomingPreacherCard
-                preacherName={preacherName}
-                preacherAvatarUrl={preacherAvatarUrl}
-                topic={nearestSermonData!.topic}
-                scripture={nearestSermonData!.scripture}
-                startsAtLabel={nearestSermonStartsAtLabel}
-              />
-            ) : null}
 
             {dashboardNotesQ.data?.announcement ? (
               <section className="col-span-2 rounded-[14px] border border-[#F5D99A] bg-gradient-to-br from-[#FFF8EC] to-[#FEF0D6] p-4 transition hover:-translate-y-0.5 hover:shadow-[0_4px_16px_rgba(107,45,62,0.1)]">
@@ -1184,6 +1186,18 @@ function DashboardMain() {
             </section>
           ) : null}
 
+          {showNearestPreacherWidget ? (
+            <div className="sm:col-span-2 xl:col-span-12">
+              <UpcomingPreacherCard
+                preacherName={preacherName}
+                preacherAvatarUrl={preacherAvatarUrl}
+                topic={nearestSermonData!.topic}
+                scripture={nearestSermonData!.scripture}
+                startsAtLabel={nearestSermonStartsAtLabel}
+              />
+            </div>
+          ) : null}
+
           <div className="flex flex-col gap-3 xl:col-span-4">
             <button
               type="button"
@@ -1302,18 +1316,6 @@ function DashboardMain() {
               </div>
             </div>
           </button>
-
-          {showNearestPreacherWidget ? (
-            <div className="sm:col-span-2 xl:col-span-6">
-              <UpcomingPreacherCard
-                preacherName={preacherName}
-                preacherAvatarUrl={preacherAvatarUrl}
-                topic={nearestSermonData!.topic}
-                scripture={nearestSermonData!.scripture}
-                startsAtLabel={nearestSermonStartsAtLabel}
-              />
-            </div>
-          ) : null}
 
           {showBroadcastWidget ? (
             <div className="sm:col-span-2 xl:col-span-6">
