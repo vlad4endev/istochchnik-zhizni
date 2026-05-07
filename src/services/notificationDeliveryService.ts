@@ -4,6 +4,27 @@ import { getUnreadMessagesCount } from '../lib/unreadHelpers';
 
 let hasDismissedAtColumnCache: boolean | null = null;
 
+function isMissingDismissedAtColumn(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  return /column\s+"dismissed_at"\s+does not exist/i.test(error.message);
+}
+
+async function runWithDismissedFallback<T>(
+  run: (hasDismissedAt: boolean) => Promise<T>,
+): Promise<T> {
+  const hasDismissedAt = await hasDismissedAtColumn();
+  try {
+    return await run(hasDismissedAt);
+  } catch (error) {
+    if (!hasDismissedAt || !isMissingDismissedAtColumn(error)) {
+      throw error;
+    }
+    // If schema changed between checks (or search_path points to legacy table), retry safely.
+    hasDismissedAtColumnCache = false;
+    return run(false);
+  }
+}
+
 async function hasDismissedAtColumn(): Promise<boolean> {
   if (hasDismissedAtColumnCache != null) {
     return hasDismissedAtColumnCache;
@@ -28,17 +49,18 @@ async function hasDismissedAtColumn(): Promise<boolean> {
 }
 
 export async function getUnreadNotificationDeliveryCount(memberId: number): Promise<number> {
-  const hasDismissedAt = await hasDismissedAtColumn();
-  const result = await query(
-    `
-    SELECT COUNT(*)::int AS n
-    FROM member_notification_deliveries
-    WHERE member_id = $1
-      AND opened_at IS NULL
-      ${hasDismissedAt ? 'AND dismissed_at IS NULL' : ''}
-      AND created_at > NOW() - INTERVAL '90 days'
-    `,
-    [memberId],
+  const result = await runWithDismissedFallback((hasDismissedAt) =>
+    query(
+      `
+      SELECT COUNT(*)::int AS n
+      FROM public.member_notification_deliveries
+      WHERE member_id = $1
+        AND opened_at IS NULL
+        ${hasDismissedAt ? 'AND dismissed_at IS NULL' : ''}
+        AND created_at > NOW() - INTERVAL '90 days'
+      `,
+      [memberId],
+    ),
   );
   return Number(result.rows[0]?.n ?? 0);
 }
@@ -63,7 +85,7 @@ export async function insertMemberNotificationDelivery(input: {
 }): Promise<number> {
   const result = await query(
     `
-    INSERT INTO member_notification_deliveries
+    INSERT INTO public.member_notification_deliveries
       (member_id, source, tag, title, body, payload)
     VALUES ($1, $2, $3, $4, $5, $6::jsonb)
     RETURNING id
@@ -84,15 +106,16 @@ export async function markNotificationDeliveryOpened(
   deliveryId: number,
   memberId: number,
 ): Promise<boolean> {
-  const hasDismissedAt = await hasDismissedAtColumn();
-  const result = await query(
-    `
-    UPDATE member_notification_deliveries
-    SET opened_at = NOW()
-    ${hasDismissedAt ? ', dismissed_at = NULL' : ''}
-    WHERE id = $1 AND member_id = $2 AND opened_at IS NULL
-    `,
-    [deliveryId, memberId],
+  const result = await runWithDismissedFallback((hasDismissedAt) =>
+    query(
+      `
+      UPDATE public.member_notification_deliveries
+      SET opened_at = NOW()
+      ${hasDismissedAt ? ', dismissed_at = NULL' : ''}
+      WHERE id = $1 AND member_id = $2 AND opened_at IS NULL
+      `,
+      [deliveryId, memberId],
+    ),
   );
   return Number(result.rowCount ?? 0) > 0;
 }
@@ -101,37 +124,39 @@ export async function markNotificationDeliveryDismissed(
   deliveryId: number,
   memberId: number,
 ): Promise<boolean> {
-  const hasDismissedAt = await hasDismissedAtColumn();
-  if (!hasDismissedAt) {
-    // Старые БД без dismissed_at: считаем dismiss неподдерживаемым, но не роняем API.
-    return false;
-  }
-  const result = await query(
-    `
-    UPDATE member_notification_deliveries
-    SET dismissed_at = NOW()
-    WHERE id = $1
-      AND member_id = $2
-      AND opened_at IS NULL
-      AND dismissed_at IS NULL
-    `,
-    [deliveryId, memberId],
-  );
+  const result = await runWithDismissedFallback(async (hasDismissedAt) => {
+    if (!hasDismissedAt) {
+      // Старые БД без dismissed_at: считаем dismiss неподдерживаемым, но не роняем API.
+      return { rowCount: 0 } as { rowCount: number };
+    }
+    return query(
+      `
+      UPDATE public.member_notification_deliveries
+      SET dismissed_at = NOW()
+      WHERE id = $1
+        AND member_id = $2
+        AND opened_at IS NULL
+        AND dismissed_at IS NULL
+      `,
+      [deliveryId, memberId],
+    );
+  });
   return Number(result.rowCount ?? 0) > 0;
 }
 
 export async function markAllNotificationDeliveriesOpened(memberId: number): Promise<number> {
-  const hasDismissedAt = await hasDismissedAtColumn();
-  const result = await query(
-    `
-    UPDATE member_notification_deliveries
-    SET opened_at = NOW()
-    WHERE member_id = $1
-      AND opened_at IS NULL
-      ${hasDismissedAt ? 'AND dismissed_at IS NULL' : ''}
-      AND created_at > NOW() - INTERVAL '90 days'
-    `,
-    [memberId],
+  const result = await runWithDismissedFallback((hasDismissedAt) =>
+    query(
+      `
+      UPDATE public.member_notification_deliveries
+      SET opened_at = NOW()
+      WHERE member_id = $1
+        AND opened_at IS NULL
+        ${hasDismissedAt ? 'AND dismissed_at IS NULL' : ''}
+        AND created_at > NOW() - INTERVAL '90 days'
+      `,
+      [memberId],
+    ),
   );
   return Number(result.rowCount ?? 0);
 }
