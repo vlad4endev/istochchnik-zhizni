@@ -1050,7 +1050,7 @@ function MessageBubbleInner({
 
   const isVideoNoteLayout = payloadType === 'video_note' && !isDeleted;
   const persistedNumericId = /^\d+$/.test(String(message.id));
-  const videoNoteHref = useMemo(() => {
+  const videoNoteMedia = useMemo(() => {
     if (!isVideoNoteLayout) return null;
     const videoMime = String(payload.mimeType ?? payload.mimetype ?? '').trim().toLowerCase();
     const rawPath = attachmentRawUrl.split('?')[0].toLowerCase();
@@ -1063,9 +1063,10 @@ function MessageBubbleInner({
     const proxied = persistedNumericId
       ? buildMessengerAttachmentFileUrl(String(message.id))
       : null;
-    // Для mobile playback приоритет у signed/storage URL (поддержка range/streaming), proxy — fallback.
-    const href = mp4Fallback || resolvedAttachmentUrl || fallback || proxied;
-    return href || null;
+    // Не форсим transcode как primary: он тяжелый и может быть недоступен.
+    const primary = resolvedAttachmentUrl || fallback || proxied || null;
+    const fallbackMp4 = mp4Fallback && mp4Fallback !== primary ? mp4Fallback : null;
+    return { primary, fallbackMp4 };
   }, [isVideoNoteLayout, payload.mimeType, payload.mimetype, attachmentRawUrl, resolvedAttachmentUrl, persistedNumericId, message.id]);
 
   const videoNoteDurationSec = useMemo(() => {
@@ -2064,7 +2065,8 @@ function MessageBubbleInner({
         {isVideoNoteLayout ? (
           <>
             <VideoNoteAttachment
-              videoSrc={videoNoteHref}
+              videoSrc={videoNoteMedia?.primary ?? null}
+              videoFallbackSrc={videoNoteMedia?.fallbackMp4 ?? null}
               isMine={isMine}
               durationHintSec={videoNoteDurationSec}
               metaOverlay={<div className="msg-videonote-bubble-meta">{bubbleMeta}</div>}

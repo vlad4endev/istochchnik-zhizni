@@ -6,11 +6,13 @@ import { LuPause, LuPlay } from 'react-icons/lu';
  */
 export function VideoNoteAttachment({
   videoSrc,
+  videoFallbackSrc,
   isMine,
   durationHintSec,
   metaOverlay,
 }: {
   videoSrc: string | null;
+  videoFallbackSrc?: string | null;
   isMine: boolean;
   /** Длительность с сервера/оптимистичного payload (сек), пока нет metadata у видео. */
   durationHintSec?: number;
@@ -20,6 +22,15 @@ export function VideoNoteAttachment({
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [playing, setPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
+  const [activeSrc, setActiveSrc] = useState<string | null>(videoSrc);
+  const [usedFallback, setUsedFallback] = useState(false);
+
+  useEffect(() => {
+    setActiveSrc(videoSrc);
+    setUsedFallback(false);
+    setProgress(0);
+    setPlaying(false);
+  }, [videoSrc, videoFallbackSrc]);
 
   useEffect(() => {
     const el = videoRef.current;
@@ -52,7 +63,7 @@ export function VideoNoteAttachment({
       e.preventDefault();
       e.stopPropagation();
       const el = videoRef.current;
-      if (!el || !videoSrc) return;
+      if (!el || !activeSrc) return;
       if (playing) el.pause();
       else {
         if (el.duration && Number.isFinite(el.duration) && el.currentTime >= el.duration - 0.05) {
@@ -61,10 +72,10 @@ export function VideoNoteAttachment({
         void el.play().catch(() => {});
       }
     },
-    [videoSrc, playing],
+    [activeSrc, playing],
   );
 
-  if (!videoSrc) {
+  if (!activeSrc) {
     return (
       <div
         className="msg-videonote-circle msg-videonote-circle--placeholder"
@@ -94,11 +105,17 @@ export function VideoNoteAttachment({
       >
         <video
           ref={videoRef}
-          src={videoSrc}
+          src={activeSrc}
           className="msg-videonote-video"
           playsInline
           preload="metadata"
           muted={false}
+          onError={() => {
+            if (!usedFallback && videoFallbackSrc && videoFallbackSrc !== activeSrc) {
+              setUsedFallback(true);
+              setActiveSrc(videoFallbackSrc);
+            }
+          }}
         />
         {!playing ? (
           <span className="msg-videonote-play-veil" aria-hidden>
