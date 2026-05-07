@@ -23,7 +23,8 @@ import {
   rotateAccessByRefreshToken,
   requestPasswordReset,
   issueRefreshSessionForUser,
-  startPasswordResetViaSms,
+  PasswordResetLockedError,
+  startPasswordResetViaTelegram,
   updateAuthUserAvatar,
   updateAuthUserProfile,
   verifyPasswordResetSmsCode,
@@ -40,7 +41,6 @@ import {
   uploadBufferToPublicBucket,
   userMediaBucket,
 } from '../lib/supabaseStorage';
-import { sendPasswordResetCodeSms } from '../services/smsRuService';
 
 type AuthRequest = Request & {
   authUserId?: number;
@@ -359,7 +359,7 @@ export async function startPasswordResetSmsHandler(req: Request, res: Response):
     return;
   }
   try {
-    const result = await startPasswordResetViaSms(phoneNumber, sendPasswordResetCodeSms);
+    const result = await startPasswordResetViaTelegram(phoneNumber);
     res.status(200).json(result);
   } catch (error) {
     if (error instanceof Error && error.message === 'Account not found') {
@@ -376,15 +376,32 @@ export async function startPasswordResetSmsHandler(req: Request, res: Response):
       res.status(400).json({ error: 'Неверный номер телефона' });
       return;
     }
-    if (error instanceof Error && error.message === 'SMS provider is not configured') {
-      res.status(503).json({ error: 'SMS-сервис не настроен на сервере' });
+    if (error instanceof Error && error.message === 'Telegram not linked') {
+      res.status(409).json({
+        error:
+          'В карточке участника не указан Telegram. Откройте бота церкви в Telegram и привяжите аккаунт или обратитесь к администратору.',
+      });
       return;
     }
-    if (error instanceof Error && error.message === 'SMS integration is disabled') {
-      res.status(409).json({ error: 'SMS-восстановление отключено администратором' });
+    if (error instanceof Error && error.message === 'Telegram delivery blocked') {
+      res.status(409).json({
+        error: 'Отправка в Telegram для этого аккаунта недоступна. Обратитесь к администратору.',
+      });
       return;
     }
-    console.error('Failed to start password reset via SMS', error);
+    if (error instanceof Error && error.message === 'telegram_disabled') {
+      res.status(503).json({ error: 'Telegram-бот отключён в настройках сервера.' });
+      return;
+    }
+    if (error instanceof Error && error.message === 'telegram_missing_token') {
+      res.status(503).json({ error: 'Не задан токен Telegram-бота в настройках сервера.' });
+      return;
+    }
+    if (error instanceof Error && /^telegram_send_failed:/.test(error.message)) {
+      res.status(503).json({ error: 'Не удалось отправить сообщение в Telegram. Попробуйте позже.' });
+      return;
+    }
+    console.error('Failed to start password reset via Telegram', error);
     res.status(500).json({ error: 'Не удалось отправить код. Попробуйте позже.' });
   }
 }
@@ -410,6 +427,14 @@ export async function verifyPasswordResetSmsHandler(req: Request, res: Response)
     }
     if (error instanceof Error && error.message === 'Code expired') {
       res.status(410).json({ error: 'Срок действия кода истек. Запросите новый.' });
+      return;
+    }
+    if (error instanceof PasswordResetLockedError) {
+      res.status(429).json({
+        error:
+          'Превышено число попыток ввода кода. Подождите несколько минут и запросите код заново.',
+        retry_after_sec: error.retryAfterSec,
+      });
       return;
     }
     if (error instanceof Error && error.message === 'Too many attempts') {

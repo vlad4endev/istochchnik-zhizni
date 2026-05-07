@@ -33,6 +33,7 @@ export function MediaStrip({
 
   return (
     <Box
+      data-media-strip=""
       style={{
         display: 'flex',
         gap,

@@ -48,6 +48,19 @@ type PasswordResetSmsRequestResponse = {
   error?: string;
 };
 
+function formatRetryWait(seconds: number): string {
+  const s = Math.max(1, Math.ceil(seconds));
+  if (s >= 60) {
+    const m = Math.floor(s / 60);
+    const r = s % 60;
+    return r > 0 ? `${m} мин ${r} с` : `${m} мин`;
+  }
+  return `${s} с`;
+}
+
+/** Same value as backend `PASSWORD_RESET_RESEND_INTERVAL_SEC` — normal cooldown after a fresh send. */
+const PASSWORD_RESET_RESEND_HINT_SEC = 60;
+
 type PasswordResetSmsVerifyResponse = {
   status?: 'verified';
   reset_token?: string;
@@ -351,7 +364,17 @@ export function LoginPage() {
         { validateStatus: (s) => s != null && s < 600 },
       );
       if (response.status === 200 && response.data?.status === 'code_sent') {
-        setStatusText('Код отправлен в SMS. Введите его для продолжения.');
+        const retry = response.data.retry_after_sec;
+        if (typeof retry === 'number' && retry > PASSWORD_RESET_RESEND_HINT_SEC) {
+          setStatusText(
+            `Новый код пока недоступен. Подождите ${formatRetryWait(retry)} (лимит запросов или блокировка после неверных попыток).`,
+          );
+          setStatusIsError(true);
+          return;
+        }
+        setStatusText(
+          'Код отправлен в Telegram (ботом на ваш привязанный аккаунт). Введите 6 цифр для продолжения.',
+        );
         setStatusIsError(false);
         return;
       }
@@ -373,7 +396,7 @@ export function LoginPage() {
     const p = resetPhone.trim();
     const code = resetCode.trim();
     if (!p || !code) {
-      setStatusText('Введите номер телефона и код из SMS.');
+      setStatusText('Введите номер телефона и код из Telegram.');
       setStatusIsError(true);
       return;
     }
@@ -385,6 +408,19 @@ export function LoginPage() {
         { phone_number: p, code },
         { validateStatus: (s) => s != null && s < 600 },
       );
+      if (response.status === 429) {
+        const data = response.data as { error?: string; retry_after_sec?: number };
+        const retry = typeof data.retry_after_sec === 'number' ? data.retry_after_sec : null;
+        const base =
+          typeof data.error === 'string'
+            ? humanizeServerError(data.error)
+            : 'Превышено число попыток или действует блокировка.';
+        setStatusText(
+          retry ? `${base} Осталось ждать: ${formatRetryWait(retry)}.` : base,
+        );
+        setStatusIsError(true);
+        return;
+      }
       if (response.status === 200 && response.data?.status === 'verified' && response.data.reset_token) {
         setResetToken(response.data.reset_token);
         setResetCodeVerified(true);
@@ -409,7 +445,7 @@ export function LoginPage() {
     const pw = resetPassword;
     const cpw = resetConfirmPassword;
     if (!adminForcedResetMode && (!resetCodeVerified || !resetToken)) {
-      setStatusText('Сначала подтвердите код из SMS.');
+      setStatusText('Сначала подтвердите код из Telegram.');
       setStatusIsError(true);
       return;
     }
@@ -680,7 +716,7 @@ export function LoginPage() {
                   <p className="text-xs font-semibold text-stone-700">
                     {adminForcedResetMode
                       ? 'Администратор запросил смену пароля. Укажите новый пароль и подтвердите его.'
-                      : 'Восстановление по SMS: введите телефон, подтвердите код и установите новый пароль.'}
+                      : 'Восстановление через Telegram: введите телефон, получите код в боте на привязанный аккаунт, затем задайте новый пароль.'}
                   </p>
                   <label className="mt-3 block">
                     <span className="mb-1 block text-xs font-semibold text-stone-600">Телефон</span>
@@ -709,7 +745,7 @@ export function LoginPage() {
                         </button>
                       </div>
                       <label className="mt-3 block">
-                        <span className="mb-1 block text-xs font-semibold text-stone-600">Код из SMS</span>
+                        <span className="mb-1 block text-xs font-semibold text-stone-600">Код из Telegram</span>
                         <input
                           className={inputClass}
                           value={resetCode}

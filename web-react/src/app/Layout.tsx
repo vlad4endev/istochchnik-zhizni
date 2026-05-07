@@ -599,7 +599,14 @@ export function Layout() {
 
   const items = useMemo(() => {
     if (isParishionerGuest) {
-      return NAV_ITEMS.filter((item) => item.to === '/dashboard' || item.to === '/messenger');
+      const parishionerPaths = new Set(['/dashboard', '/messenger', '/sermons']);
+      return NAV_ITEMS.filter(
+        (item) =>
+          parishionerPaths.has(item.to) &&
+          (!item.sectionId ||
+            isAdmin ||
+            canRoleAccessSection(sectionVisibilityQ.data, item.sectionId, role, roles)),
+      );
     }
     const navBase =
       registrationStatus === 'pending_review'

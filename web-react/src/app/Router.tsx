@@ -341,15 +341,13 @@ export function AppRouter() {
         <Route
           path="sermons"
           element={
-            <BlockParishionerGuest>
-              <RequireFullMember>
-                <RequireSectionAccess sectionId="sermons">
-                  <Suspense fallback={<RouteFallback />}>
-                    <PodcastsPage />
-                  </Suspense>
-                </RequireSectionAccess>
-              </RequireFullMember>
-            </BlockParishionerGuest>
+            <RequireFullMember>
+              <RequireSectionAccess sectionId="sermons">
+                <Suspense fallback={<RouteFallback />}>
+                  <PodcastsPage />
+                </Suspense>
+              </RequireSectionAccess>
+            </RequireFullMember>
           }
         />
         <Route
@@ -498,25 +496,21 @@ export function AppRouter() {
         <Route
           path="profile"
           element={
-            <BlockParishionerGuest>
-              <RequireFullMember>
-                <ProfileRouteBoundary moduleName="настройки профиля" fallback={<RouteFallback />}>
-                  <LazyProfilePage />
-                </ProfileRouteBoundary>
-              </RequireFullMember>
-            </BlockParishionerGuest>
+            <RequireFullMember>
+              <ProfileRouteBoundary moduleName="настройки профиля" fallback={<RouteFallback />}>
+                <LazyProfilePage />
+              </ProfileRouteBoundary>
+            </RequireFullMember>
           }
         />
         <Route
           path="profile/:username"
           element={
-            <BlockParishionerGuest>
-              <RequireFullMember>
-                <ProfileRouteBoundary moduleName="профиль" fallback={<RouteFallback />}>
-                  <LazyPublicProfilePage />
-                </ProfileRouteBoundary>
-              </RequireFullMember>
-            </BlockParishionerGuest>
+            <RequireFullMember>
+              <ProfileRouteBoundary moduleName="профиль" fallback={<RouteFallback />}>
+                <LazyPublicProfilePage />
+              </ProfileRouteBoundary>
+            </RequireFullMember>
           }
         />
         <Route

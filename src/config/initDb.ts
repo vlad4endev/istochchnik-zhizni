@@ -304,6 +304,9 @@ ALTER TABLE members ADD COLUMN IF NOT EXISTS in_prayer_cycle BOOLEAN NOT NULL DE
 ALTER TABLE members ALTER COLUMN in_prayer_cycle SET DEFAULT FALSE;
 ALTER TABLE members ADD COLUMN IF NOT EXISTS password_reset_required BOOLEAN NOT NULL DEFAULT FALSE;
 
+-- Временная блокировка сценария «забыли пароль» после исчерпания попыток ввода кода.
+ALTER TABLE members ADD COLUMN IF NOT EXISTS password_reset_locked_until TIMESTAMPTZ;
+
 -- Одноразово: меняем местами имя и фамилию (значения в first_name и last_name), пересобираем name.
 CREATE TABLE IF NOT EXISTS app_data_patches (
   patch_id TEXT PRIMARY KEY,

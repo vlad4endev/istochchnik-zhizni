@@ -8,6 +8,7 @@ import { normalizeAppRole, normalizeAppRoles } from '../types/appRole';
 import { findMemberIdConflictingName, updateUser } from './userService';
 import { postRegistrationAccessRequestMessengerNotification } from './messengerService';
 import { resolveSmsRuntimeConfig } from './smsSettingsService';
+import { sendPasswordResetTelegramMessage } from './telegramService';
 
 const scrypt = promisify(scryptCallback);
 const MIN_PASSWORD_LENGTH = 8;
@@ -22,10 +23,22 @@ const MIN_ACTIVE_SESSIONS_PER_USER = 1;
 const MAX_ACTIVE_SESSIONS_PER_USER = 20;
 const PHONE_DIGITS_MIN = 7;
 const PHONE_DIGITS_MAX = 20;
-const PASSWORD_RESET_CODE_TTL_SEC = 10 * 60;
+const PASSWORD_RESET_CODE_TTL_SEC = 5 * 60;
 const PASSWORD_RESET_VERIFY_TTL_SEC = 15 * 60;
 const PASSWORD_RESET_RESEND_INTERVAL_SEC = 60;
-const PASSWORD_RESET_MAX_ATTEMPTS = 5;
+const PASSWORD_RESET_MAX_ATTEMPTS = 3;
+const PASSWORD_RESET_LOCKOUT_SEC = 2 * 60;
+
+/** Исчерпаны попытки ввода кода или активна блокировка после них. */
+export class PasswordResetLockedError extends Error {
+  readonly retryAfterSec: number;
+
+  constructor(retryAfterSec: number) {
+    super('password_reset_locked');
+    this.name = 'PasswordResetLockedError';
+    this.retryAfterSec = retryAfterSec;
+  }
+}
 
 export type AuthRole = AppRole;
 export type AccessRequestStatus = 'pending' | 'approved' | 'rejected';
@@ -159,6 +172,9 @@ type MemberRow = {
   updated_at: string;
   password_hash?: string | null;
   password_reset_required?: boolean;
+  password_reset_locked_until?: string | null;
+  telegram_chat_id?: string | null;
+  telegram_delivery_blocked?: boolean;
   profile_username?: string | null;
 };
 
@@ -580,7 +596,10 @@ async function findMemberWithPasswordByPhone(phoneInput: string): Promise<Member
       registration_status,
       created_at,
       updated_at,
-      password_hash
+      password_hash,
+      password_reset_locked_until,
+      telegram_chat_id,
+      telegram_delivery_blocked
     FROM members
     WHERE regexp_replace(COALESCE(phone_number, ''), '\\D', '', 'g') = ANY($1::text[])
       AND password_hash IS NOT NULL
@@ -933,9 +952,8 @@ export async function requestPasswordReset(input: PasswordResetRequestInput): Pr
   };
 }
 
-export async function startPasswordResetViaSms(
+export async function startPasswordResetViaTelegram(
   phoneInput: string,
-  sendSms: (phone: string, message: string) => Promise<void>
 ): Promise<PasswordResetSmsRequestResult> {
   ensureValidPhone(phoneInput);
   const member = await findMemberWithPasswordByPhone(phoneInput);
@@ -943,8 +961,26 @@ export async function startPasswordResetViaSms(
     throw new Error('Account not found');
   }
 
-  const memberPhoneDigits = normalizePhoneDigits(member.phone_number);
+  const lockRaw = member.password_reset_locked_until;
+  const lockUntilMs = lockRaw ? new Date(lockRaw).getTime() : NaN;
   const now = Date.now();
+  if (!Number.isNaN(lockUntilMs) && lockUntilMs > now) {
+    return {
+      status: 'code_sent',
+      expires_in_sec: PASSWORD_RESET_CODE_TTL_SEC,
+      retry_after_sec: Math.max(1, Math.ceil((lockUntilMs - now) / 1000)),
+    };
+  }
+
+  const chatId = typeof member.telegram_chat_id === 'string' ? member.telegram_chat_id.trim() : '';
+  if (!chatId) {
+    throw new Error('Telegram not linked');
+  }
+  if (member.telegram_delivery_blocked) {
+    throw new Error('Telegram delivery blocked');
+  }
+
+  const memberPhoneDigits = normalizePhoneDigits(member.phone_number);
   const pending = await query(
     `SELECT send_not_before
      FROM password_reset_sms_codes
@@ -985,8 +1021,9 @@ export async function startPasswordResetViaSms(
     [member.id, memberPhoneDigits, codeHash, expiresAt, sendNotBefore]
   );
 
+  const message = `Код восстановления пароля: ${code}. Действует ${Math.floor(PASSWORD_RESET_CODE_TTL_SEC / 60)} мин. Никому его не сообщайте.`;
   try {
-    await sendSms(member.phone_number, `Код восстановления пароля: ${code}. Никому его не сообщайте.`);
+    await sendPasswordResetTelegramMessage(chatId, message);
   } catch (e) {
     await query(`DELETE FROM password_reset_sms_codes WHERE id = $1`, [
       (inserted.rows[0] as { id: number }).id,
@@ -1015,6 +1052,13 @@ export async function verifyPasswordResetSmsCode(
   if (!member?.phone_number) {
     throw new Error('Account not found');
   }
+
+  const lockRaw = member.password_reset_locked_until;
+  const lockUntilMs = lockRaw ? new Date(lockRaw).getTime() : NaN;
+  if (!Number.isNaN(lockUntilMs) && lockUntilMs > Date.now()) {
+    throw new PasswordResetLockedError(Math.max(1, Math.ceil((lockUntilMs - Date.now()) / 1000)));
+  }
+
   const memberPhoneDigits = normalizePhoneDigits(member.phone_number);
 
   const rowResult = await query(
@@ -1037,9 +1081,6 @@ export async function verifyPasswordResetSmsCode(
   if (!row) {
     throw new Error('Code expired');
   }
-  if ((row.attempts_count ?? 0) >= PASSWORD_RESET_MAX_ATTEMPTS) {
-    throw new Error('Too many attempts');
-  }
 
   const expectedHash = await hashResetValue(`${member.id}:${memberPhoneDigits}:${code}`);
   const expectedBuffer = Buffer.from(expectedHash, 'hex');
@@ -1048,12 +1089,32 @@ export async function verifyPasswordResetSmsCode(
     expectedBuffer.length === actualBuffer.length && timingSafeEqual(expectedBuffer, actualBuffer);
 
   if (!codeOk) {
+    const prevAttempts = row.attempts_count ?? 0;
+    const nextAttempts = prevAttempts + 1;
+    if (nextAttempts >= PASSWORD_RESET_MAX_ATTEMPTS) {
+      await query(
+        `UPDATE password_reset_sms_codes
+         SET attempts_count = $1,
+             consumed_at = NOW(),
+             updated_at = NOW()
+         WHERE id = $2`,
+        [nextAttempts, row.id]
+      );
+      await query(
+        `UPDATE members
+         SET password_reset_locked_until = NOW() + ($2::double precision * INTERVAL '1 second'),
+             updated_at = NOW()
+         WHERE id = $1`,
+        [member.id, PASSWORD_RESET_LOCKOUT_SEC]
+      );
+      throw new PasswordResetLockedError(PASSWORD_RESET_LOCKOUT_SEC);
+    }
     await query(
       `UPDATE password_reset_sms_codes
-       SET attempts_count = attempts_count + 1,
+       SET attempts_count = $1,
            updated_at = NOW()
-       WHERE id = $1`,
-      [row.id]
+       WHERE id = $2`,
+      [nextAttempts, row.id]
     );
     throw new Error('Invalid code');
   }
@@ -1113,10 +1174,14 @@ export async function confirmPasswordResetViaSms(
   }
 
   const newHash = await hashPassword(newPassword);
-  await query(`UPDATE members SET password_hash = $1, updated_at = NOW() WHERE id = $2`, [
-    newHash,
-    member.id,
-  ]);
+  await query(
+    `UPDATE members
+     SET password_hash = $1,
+         password_reset_locked_until = NULL,
+         updated_at = NOW()
+     WHERE id = $2`,
+    [newHash, member.id]
+  );
   await query(`DELETE FROM auth_sessions WHERE member_id = $1`, [member.id]);
   await query(
     `UPDATE password_reset_sms_codes

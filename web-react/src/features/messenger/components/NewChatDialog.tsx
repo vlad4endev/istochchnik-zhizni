@@ -1,15 +1,19 @@
 import * as api from '../api/messengerApi';
 import type { SearchMember } from '../api/messengerApi';
-import { useEffect, useRef, useCallback, useMemo, useState } from 'react';
-import { LuSearch, LuX, LuUsers, LuMegaphone } from 'react-icons/lu';
+import { useEffect, useRef, useCallback, useMemo, useState, type ChangeEvent } from 'react';
+import { LuSearch, LuX, LuUsers, LuMegaphone, LuChevronLeft, LuCamera } from 'react-icons/lu';
 import { useChatStore, DRAFT_PRIVATE_PREFIX } from '../chatStore';
 import { AppAvatar } from '../../../components/AppAvatar';
 import { getAvatarColor } from '../avatarUtils';
+import { emitAppToast } from '../../../lib/uiFeedback';
+import { compressImageForMessengerUpload } from '../compressImageForUpload';
 
 interface NewChatDialogProps {
   onClose: () => void;
   onCreated: (id: string) => void;
 }
+
+type GroupWizardStep = 'members' | 'details';
 
 const DIALOG_STYLES = `
   .tg-dialog-overlay {
@@ -21,25 +25,36 @@ const DIALOG_STYLES = `
   .tg-dialog {
     width: 90%; max-width: 440px; background: var(--tg-surface);
     border-radius: 12px; box-shadow: 0 8px 32px rgba(0,0,0,0.2);
-    display: flex; flex-direction: column; max-height: 80vh;
+    display: flex; flex-direction: column; max-height: 85vh;
     overflow: hidden; animation: tgPop 0.2s ease-out;
   }
   @keyframes tgPop { from { transform: scale(0.95); opacity: 0; } to { transform: scale(1); opacity: 1; } }
   .tg-dialog-header {
-    padding: 16px; border-bottom: 1px solid var(--tg-border);
-    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 12px 12px 8px; border-bottom: 1px solid var(--tg-border);
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    flex-shrink: 0;
   }
-  .tg-dialog-title { font-size: 1.125rem; font-weight: 700; color: var(--tg-text); }
+  .tg-dialog-header-main {
+    flex: 1; min-width: 0; display: flex; align-items: center; gap: 4px;
+  }
+  .tg-dialog-back {
+    flex-shrink: 0; width: 40px; height: 40px; border: none; border-radius: 10px;
+    background: transparent; color: var(--tg-primary); cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center;
+    transition: background 0.15s;
+  }
+  .tg-dialog-back:hover { background: rgba(0,0,0,0.06); }
+  .tg-dialog-title { font-size: 1.0625rem; font-weight: 700; color: var(--tg-text); margin: 0; line-height: 1.25; }
   .tg-dialog-search { padding: 12px 16px; background: var(--tg-surface-elevated); border-bottom: 1px solid var(--tg-border); display: flex; align-items: center; gap: 8px; }
   .tg-dialog-input { flex: 1; background: transparent; border: none; outline: none; font-size: 0.9375rem; color: var(--tg-text); }
-  .tg-dialog-results { flex: 1; overflow-y: auto; padding: 8px 0; }
+  .tg-dialog-results { flex: 1; overflow-y: auto; padding: 8px 0; min-height: 0; }
   .tg-member-item {
     width: 100%; padding: 10px 16px; display: flex; align-items: center; gap: 12px;
     transition: background 0.15s; border: none; background: transparent; text-align: left;
     cursor: pointer;
   }
   .tg-member-item:hover { background: rgba(0,0,0,0.03); }
-  .tg-member-avatar { width: 40px; height: 40px; border-radius: 50%; background: var(--tg-primary); color: white; display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 0.875rem; }
+  .tg-member-avatar { width: 40px; height: 40px; border-radius: 50%; background: var(--tg-primary); color: white; display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 0.875rem; flex-shrink: 0; }
   .tg-member-info { flex: 1; min-width: 0; }
   .tg-member-name { font-weight: 600; font-size: 0.9375rem; color: var(--tg-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .tg-member-status { font-size: 0.8125rem; color: var(--tg-text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -47,6 +62,57 @@ const DIALOG_STYLES = `
   .tg-section-btn { display: flex; align-items: center; gap: 12px; width: 100%; padding: 10px 12px; border: none; background: transparent; border-radius: 8px; cursor: pointer; transition: background 0.15s; color: var(--tg-primary); font-weight: 600; }
   .tg-section-btn:hover { background: var(--tg-primary-light); }
   .tg-section-icon { width: 40px; height: 40px; border-radius: 50%; background: var(--tg-primary-light); display: flex; align-items: center; justify-content: center; }
+  .tg-group-footer {
+    padding: 12px 16px 16px;
+    border-top: 1px solid var(--tg-border);
+    background: var(--tg-surface);
+    flex-shrink: 0;
+  }
+  .tg-group-hint {
+    margin: 0 0 10px;
+    font-size: 0.8125rem;
+    line-height: 1.35;
+    color: var(--tg-text-muted);
+  }
+  .tg-group-avatar-wrap {
+    position: relative;
+    width: 96px; height: 96px; border-radius: 50%; margin: 0 auto 10px;
+    overflow: hidden;
+    border: 2px solid var(--tg-border);
+    background: var(--tg-surface-elevated);
+    cursor: pointer;
+    padding: 0;
+    display: flex; align-items: center; justify-content: center;
+    transition: box-shadow 0.15s, transform 0.12s;
+  }
+  .tg-group-avatar-wrap:hover {
+    box-shadow: 0 4px 14px rgba(0,0,0,0.12);
+  }
+  .tg-group-avatar-wrap:focus-visible {
+    outline: 2px solid var(--tg-primary);
+    outline-offset: 2px;
+  }
+  .tg-group-avatar-overlay {
+    position: absolute; inset: 0; display: flex; flex-direction: column;
+    align-items: center; justify-content: flex-end; padding-bottom: 6px;
+    background: linear-gradient(transparent 35%, rgba(0,0,0,0.55));
+    color: white; font-size: 0.6875rem; font-weight: 700; opacity: 0;
+    transition: opacity 0.15s; pointer-events: none;
+  }
+  .tg-group-avatar-wrap:hover .tg-group-avatar-overlay { opacity: 1; }
+  .tg-group-avatar-remove {
+    margin: 6px auto 0;
+    border: none; background: none; cursor: pointer;
+    font-size: 0.8125rem; font-weight: 600; color: var(--tg-primary);
+    text-decoration: underline;
+    padding: 4px;
+  }
+  .tg-field-error {
+    margin: 6px 0 0;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: #b91c1c;
+  }
 `;
 
 export function NewChatDialog({ onClose, onCreated }: NewChatDialogProps) {
@@ -54,13 +120,39 @@ export function NewChatDialog({ onClose, onCreated }: NewChatDialogProps) {
   const [searchResults, setSearchResults] = useState<SearchMember[]>([]);
   const [searching, setSearching] = useState(false);
   const [mode, setMode] = useState<'contact' | 'group' | 'channel'>('contact');
+  const [groupWizardStep, setGroupWizardStep] = useState<GroupWizardStep>('members');
   const [title, setTitle] = useState('');
+  const [titleError, setTitleError] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
+  /** Локальное фото до создания чата (после создания загружается в Storage). */
+  const [avatarDraft, setAvatarDraft] = useState<{ file: File; url: string } | null>(null);
   /** Участники группы/канала при создании (id → карточка поиска). */
   const [groupPick, setGroupPick] = useState<Record<number, SearchMember>>({});
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const avatarFileInputRef = useRef<HTMLInputElement | null>(null);
   const conversations = useChatStore((s) => s.conversations);
   const currentMemberId = useChatStore((s) => s.currentMemberId);
   const openPrivateDraft = useChatStore((s) => s.openPrivateDraft);
+  const handleConvCreated = useChatStore((s) => s.handleConvCreated);
+  const handleConvUpdated = useChatStore((s) => s.handleConvUpdated);
+  const loadConversations = useChatStore((s) => s.loadConversations);
+
+  const clearAvatarDraft = useCallback(() => {
+    setAvatarDraft((prev) => {
+      if (prev?.url) URL.revokeObjectURL(prev.url);
+      return null;
+    });
+    if (avatarFileInputRef.current) avatarFileInputRef.current.value = '';
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      setAvatarDraft((prev) => {
+        if (prev?.url) URL.revokeObjectURL(prev.url);
+        return null;
+      });
+    };
+  }, []);
 
   const performSearch = useCallback(async (q: string) => {
     setSearching(true);
@@ -86,6 +178,15 @@ export function NewChatDialog({ onClose, onCreated }: NewChatDialogProps) {
     return () => { if (searchTimerRef.current) clearTimeout(searchTimerRef.current); };
   }, [searchQuery, performSearch]);
 
+  useEffect(() => {
+    if (mode === 'group' || mode === 'channel') {
+      setGroupWizardStep('members');
+      setTitle('');
+      setTitleError(null);
+      clearAvatarDraft();
+    }
+  }, [mode, clearAvatarDraft]);
+
   const sortedContacts = useMemo(() => {
     const byMemberId = new Map<number, { convId: string; updatedAt: string }>();
     for (const c of conversations) {
@@ -102,7 +203,6 @@ export function NewChatDialog({ onClose, onCreated }: NewChatDialogProps) {
       if (aConv && !bConv) return -1;
       if (!aConv && bConv) return 1;
       if (aConv && bConv) {
-        // newer first
         const at = Date.parse(aConv.updatedAt);
         const bt = Date.parse(bConv.updatedAt);
         if (Number.isFinite(at) && Number.isFinite(bt) && at !== bt) return bt - at;
@@ -111,8 +211,14 @@ export function NewChatDialog({ onClose, onCreated }: NewChatDialogProps) {
     });
   }, [conversations, searchResults]);
 
+  const pickedCount = useMemo(() => {
+    return Object.keys(groupPick).filter((k) => {
+      const id = Number(k);
+      return currentMemberId == null || id !== currentMemberId;
+    }).length;
+  }, [groupPick, currentMemberId]);
+
   const handleOpenChat = (member: SearchMember) => {
-    // Не создаём чат в списке до первого сообщения — открываем "черновик" private-чата.
     openPrivateDraft(member);
     onCreated(`${DRAFT_PRIVATE_PREFIX}${member.id}`);
   };
@@ -127,40 +233,127 @@ export function NewChatDialog({ onClose, onCreated }: NewChatDialogProps) {
     });
   };
 
+  const goWizardBack = () => {
+    if (groupWizardStep === 'details') {
+      setGroupWizardStep('members');
+      setTitleError(null);
+      return;
+    }
+    clearAvatarDraft();
+    setMode('contact');
+    setSearchQuery('');
+    setGroupPick({});
+    setTitle('');
+    setTitleError(null);
+  };
+
+  const goWizardNext = () => {
+    if (pickedCount === 0) {
+      emitAppToast('Выберите хотя бы одного участника', 'error');
+      return;
+    }
+    setGroupWizardStep('details');
+    setTitleError(null);
+  };
+
   const handleCreateGroup = async () => {
-    if (!title.trim()) return;
+    const trimmed = title.trim();
+    if (!trimmed) {
+      setTitleError(mode === 'group' ? 'Введите название группы' : 'Введите название канала');
+      emitAppToast(mode === 'group' ? 'Укажите название группы' : 'Укажите название канала', 'error');
+      return;
+    }
+    setTitleError(null);
+    setCreating(true);
+    const avatarToUpload = avatarDraft;
     try {
-      const type = mode === 'group' ? 'group' : 'channel';
+      const convMode = mode === 'group' ? 'group' : 'channel';
       const memberIds = Object.keys(groupPick)
         .map(Number)
         .filter((id) => currentMemberId == null || id !== currentMemberId);
-      const result = await api.createGroupChat(title.trim(), type, memberIds);
+      const result = await api.createGroupChat(trimmed, convMode, memberIds);
+      const convId = result.conversationId;
+      if (result.conversation) {
+        handleConvCreated(result.conversation);
+      } else {
+        await loadConversations({ force: true });
+      }
+
+      if (avatarToUpload) {
+        try {
+          const compressed = await compressImageForMessengerUpload(avatarToUpload.file);
+          const up = await api.uploadFile(compressed, { conversationId: convId });
+          await api.updateConversation(convId, { avatar_url: up.url });
+          const meta = await api.fetchConversationMeta(convId, { bypassCache: true });
+          handleConvUpdated(convId, { avatar_url: meta.avatar_url, updated_at: meta.updated_at });
+        } catch {
+          emitAppToast('Чат создан, но фото не удалось загрузить.', 'error');
+        } finally {
+          clearAvatarDraft();
+        }
+      }
+
       setGroupPick({});
       setTitle('');
-      onCreated(result.conversationId);
+      setGroupWizardStep('members');
+      onCreated(convId);
     } catch (e) {
-      alert('Ошибка при создании');
+      emitAppToast('Не удалось создать чат. Попробуйте ещё раз.', 'error');
+    } finally {
+      setCreating(false);
     }
+  };
+
+  const groupChannelTitle =
+    mode === 'group' ? 'Новая группа' : 'Новый канал';
+  const nameStepTitle =
+    mode === 'group' ? 'Имя группы' : 'Имя канала';
+
+  const onAvatarFileChange = (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0] ?? null;
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      emitAppToast('Выберите файл изображения', 'error');
+      e.target.value = '';
+      return;
+    }
+    setAvatarDraft((prev) => {
+      if (prev?.url) URL.revokeObjectURL(prev.url);
+      return { file, url: URL.createObjectURL(file) };
+    });
   };
 
   return (
     <div className="tg-dialog-overlay" onClick={onClose}>
       <div className="tg-dialog" onClick={(e) => e.stopPropagation()}>
         <div className="tg-dialog-header">
-          <h2 className="tg-dialog-title">
-            {mode === 'contact' ? 'Новое сообщение' : mode === 'group' ? 'Новая группа' : 'Новый канал'}
-          </h2>
-          <button className="tg-icon-btn" onClick={onClose}><LuX size={24} /></button>
+          <div className="tg-dialog-header-main">
+            {mode !== 'contact' ? (
+              <button type="button" className="tg-dialog-back" onClick={goWizardBack} aria-label="Назад">
+                <LuChevronLeft size={26} strokeWidth={2.2} aria-hidden />
+              </button>
+            ) : null}
+            <h2 className="tg-dialog-title">
+              {mode === 'contact'
+                ? 'Новое сообщение'
+                : groupWizardStep === 'members'
+                  ? groupChannelTitle
+                  : nameStepTitle}
+            </h2>
+          </div>
+          <button type="button" className="tg-icon-btn" onClick={onClose} aria-label="Закрыть">
+            <LuX size={24} />
+          </button>
         </div>
 
         {mode === 'contact' ? (
           <>
             <div className="tg-dialog-search">
-              <LuSearch size={20} className="text-stone-400" />
-              <input 
+              <LuSearch size={20} className="text-stone-400" aria-hidden />
+              <input
                 autoFocus
-                className="tg-dialog-input" 
-                placeholder="Поиск участников..." 
+                className="tg-dialog-input"
+                placeholder="Поиск участников..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
@@ -169,12 +362,12 @@ export function NewChatDialog({ onClose, onCreated }: NewChatDialogProps) {
             <div className="tg-dialog-results">
               {!searchQuery && (
                 <div className="tg-dialog-sections">
-                  <button className="tg-section-btn" onClick={() => setMode('group')}>
-                    <div className="tg-section-icon"><LuUsers size={20} /></div>
+                  <button type="button" className="tg-section-btn" onClick={() => setMode('group')}>
+                    <div className="tg-section-icon"><LuUsers size={20} aria-hidden /></div>
                     Создать группу
                   </button>
-                  <button className="tg-section-btn" onClick={() => setMode('channel')}>
-                    <div className="tg-section-icon"><LuMegaphone size={20} /></div>
+                  <button type="button" className="tg-section-btn" onClick={() => setMode('channel')}>
+                    <div className="tg-section-icon"><LuMegaphone size={20} aria-hidden /></div>
                     Создать канал
                   </button>
                 </div>
@@ -182,10 +375,10 @@ export function NewChatDialog({ onClose, onCreated }: NewChatDialogProps) {
 
               {searching ? (
                 <div className="tg-empty-state">Поиск...</div>
-              ) : sortedContacts.map((u) => {
-                return (
-                <button 
-                  key={u.id} 
+              ) : sortedContacts.map((u) => (
+                <button
+                  key={u.id}
+                  type="button"
                   className="tg-member-item"
                   onClick={() => handleOpenChat(u)}
                 >
@@ -202,8 +395,7 @@ export function NewChatDialog({ onClose, onCreated }: NewChatDialogProps) {
                     <div className="tg-member-status">Откроется как черновик · появится в списке после 1 сообщения</div>
                   </div>
                 </button>
-              );
-              })}
+              ))}
 
               {!searching && searchQuery && searchResults.length === 0 && (
                 <div className="tg-empty-state">Участники не найдены</div>
@@ -213,94 +405,192 @@ export function NewChatDialog({ onClose, onCreated }: NewChatDialogProps) {
         ) : (
           <div
             className="tg-dialog-results"
-            style={{ padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: '12px', maxHeight: '72vh' }}
+            style={{
+              padding: 0,
+              display: 'flex',
+              flexDirection: 'column',
+              maxHeight: 'min(72vh, 640px)',
+            }}
           >
-            <p className="text-sm font-semibold text-stone-600" style={{ margin: 0 }}>
-              Выберите участников и укажите название. Вы будете владельцем чата.
-            </p>
-            <p className="text-xs font-semibold leading-snug text-stone-400" style={{ margin: 0 }}>
-              В списке только пользователи с одобренной регистрацией в приложении (без заявок на модерации).
-            </p>
-            <div className="tg-dialog-search" style={{ border: '1px solid var(--tg-border)', borderRadius: '8px' }}>
-              <LuSearch size={20} className="text-stone-400" />
-              <input
-                className="tg-dialog-input"
-                placeholder="Поиск людей для добавления…"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
-            </div>
-            <div style={{ flex: 1, minHeight: '120px', maxHeight: '240px', overflowY: 'auto' }}>
-              {searching ? (
-                <div className="tg-empty-state">Поиск…</div>
-              ) : (
-                sortedContacts.map((u) => {
-                  const isSelf = currentMemberId != null && u.id === currentMemberId;
-                  const picked = Boolean(groupPick[u.id]);
-                  return (
+            {groupWizardStep === 'members' ? (
+              <>
+                <p className="tg-group-hint" style={{ padding: '12px 16px 8px', margin: 0 }}>
+                  Шаг 1 из 2 — кого добавить. На следующем шаге укажите название — без него чат не создать.
+                </p>
+                <div className="tg-dialog-search" style={{ margin: '0 12px', border: '1px solid var(--tg-border)', borderRadius: '10px' }}>
+                  <LuSearch size={20} className="text-stone-400" aria-hidden />
+                  <input
+                    className="tg-dialog-input"
+                    placeholder="Поиск по имени..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                  />
+                </div>
+                <div style={{ flex: 1, minHeight: '140px', overflowY: 'auto', padding: '8px 0' }}>
+                  {searching ? (
+                    <div className="tg-empty-state">Поиск…</div>
+                  ) : (
+                    sortedContacts.map((u) => {
+                      const isSelf = currentMemberId != null && u.id === currentMemberId;
+                      const picked = Boolean(groupPick[u.id]);
+                      return (
+                        <button
+                          key={u.id}
+                          type="button"
+                          className="tg-member-item"
+                          onClick={() => !isSelf && toggleGroupMember(u)}
+                          style={{ opacity: isSelf ? 0.45 : 1, cursor: isSelf ? 'default' : 'pointer' }}
+                        >
+                          <div
+                            className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-sm font-bold ring-2 ring-stone-200"
+                            style={{
+                              background: picked ? 'var(--tg-primary)' : 'transparent',
+                              color: picked ? 'white' : 'var(--tg-text-muted)',
+                            }}
+                            aria-hidden
+                          >
+                            {picked ? '✓' : ''}
+                          </div>
+                          <div className="tg-member-avatar" style={{ background: getAvatarColor(String(u.id)) }}>
+                            <AppAvatar
+                              src={u.avatar_url ?? null}
+                              fallback={u.first_name?.[0] || u.name[0]}
+                              className="grid h-full w-full place-items-center"
+                              imgClassName="h-full w-full rounded-full object-cover"
+                            />
+                          </div>
+                          <div className="tg-member-info">
+                            <div className="tg-member-name">
+                              {u.first_name ? `${u.first_name} ${u.last_name || ''}` : u.name}
+                              {isSelf ? ' (вы)' : ''}
+                            </div>
+                            <div className="tg-member-status">{picked ? 'Выбран(а)' : 'Нажмите, чтобы выбрать'}</div>
+                          </div>
+                        </button>
+                      );
+                    })
+                  )}
+                </div>
+                <div className="tg-group-footer">
+                  <p className="tg-group-hint" style={{ marginBottom: 10 }}>
+                    {pickedCount === 0
+                      ? 'Выберите участников — кнопка «Далее» подскажет, если список пуст.'
+                      : `Выбрано: ${pickedCount}`}
+                  </p>
+                  <button
+                    type="button"
+                    className="tg-compose-btn"
+                    style={{
+                      width: '100%',
+                      padding: '12px',
+                      background: 'var(--tg-primary)',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '10px',
+                      fontWeight: 700,
+                      fontSize: '0.9375rem',
+                    }}
+                    onClick={goWizardNext}
+                  >
+                    Далее
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div style={{ padding: '16px 16px 8px', overflowY: 'auto', flex: 1, minHeight: 0 }}>
+                  <input
+                    ref={avatarFileInputRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    aria-hidden
+                    onChange={onAvatarFileChange}
+                  />
+                  <div style={{ textAlign: 'center', marginBottom: 14 }}>
                     <button
-                      key={u.id}
                       type="button"
-                      className="tg-member-item"
-                      onClick={() => !isSelf && toggleGroupMember(u)}
-                      style={{ opacity: isSelf ? 0.45 : 1, cursor: isSelf ? 'default' : 'pointer' }}
+                      className="tg-group-avatar-wrap"
+                      onClick={() => avatarFileInputRef.current?.click()}
+                      aria-label={mode === 'group' ? 'Выбрать фото группы' : 'Выбрать фото канала'}
                     >
-                      <div
-                        className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-sm font-bold ring-2 ring-stone-200"
-                        style={{
-                          background: picked ? 'var(--tg-primary)' : 'transparent',
-                          color: picked ? 'white' : 'var(--tg-text-muted)',
-                        }}
-                        aria-hidden
-                      >
-                        {picked ? '✓' : ''}
-                      </div>
-                      <div className="tg-member-avatar" style={{ background: getAvatarColor(String(u.id)) }}>
-                        <AppAvatar
-                          src={u.avatar_url ?? null}
-                          fallback={u.first_name?.[0] || u.name[0]}
-                          className="grid h-full w-full place-items-center"
-                          imgClassName="h-full w-full rounded-full object-cover"
-                        />
-                      </div>
-                      <div className="tg-member-info">
-                        <div className="tg-member-name">
-                          {u.first_name ? `${u.first_name} ${u.last_name || ''}` : u.name}
-                          {isSelf ? ' (вы)' : ''}
-                        </div>
-                        <div className="tg-member-status">{picked ? 'Будет добавлен(а)' : 'Нажмите, чтобы выбрать'}</div>
-                      </div>
+                      <AppAvatar
+                        src={avatarDraft?.url ?? null}
+                        className="h-full w-full"
+                        imgClassName="h-full w-full object-cover"
+                        fallback={
+                          <div className="grid h-full w-full place-items-center text-stone-400">
+                            {mode === 'group' ? (
+                              <LuUsers size={38} strokeWidth={1.8} aria-hidden />
+                            ) : (
+                              <LuMegaphone size={38} strokeWidth={1.8} aria-hidden />
+                            )}
+                          </div>
+                        }
+                      />
+                      <span className="tg-group-avatar-overlay">
+                        <LuCamera size={18} strokeWidth={2.2} aria-hidden />
+                        <span style={{ marginTop: 2 }}>Фото</span>
+                      </span>
                     </button>
-                  );
-                })
-              )}
-            </div>
-            <div className="tg-dialog-search" style={{ border: '1px solid var(--tg-border)', borderRadius: '8px' }}>
-              <input
-                autoFocus
-                className="tg-dialog-input"
-                placeholder={mode === 'group' ? 'Название группы' : 'Название канала'}
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-              />
-            </div>
-            <button
-              className="tg-compose-btn"
-              style={{
-                width: '100%',
-                padding: '12px',
-                background: 'var(--tg-primary)',
-                color: 'white',
-                border: 'none',
-                borderRadius: '8px',
-                fontWeight: 'bold',
-              }}
-              type="button"
-              onClick={() => void handleCreateGroup()}
-              disabled={!title.trim()}
-            >
-              Создать{Object.keys(groupPick).length ? ` (${Object.keys(groupPick).length})` : ''}
-            </button>
+                    {avatarDraft ? (
+                      <button type="button" className="tg-group-avatar-remove" onClick={() => clearAvatarDraft()}>
+                        Убрать фото
+                      </button>
+                    ) : (
+                      <p className="tg-group-hint" style={{ margin: '8px 0 0' }}>
+                        Фото необязательно — нажмите на круг, чтобы добавить.
+                      </p>
+                    )}
+                  </div>
+                  <p className="tg-group-hint" style={{ textAlign: 'center', marginBottom: 14 }}>
+                    Шаг 2 из 2 — как чат будет называться в списке.
+                  </p>
+                  <label className="block text-xs font-semibold uppercase tracking-wide text-stone-500" style={{ marginBottom: 6 }}>
+                    {mode === 'group' ? 'Название группы' : 'Название канала'}
+                  </label>
+                  <div className="tg-dialog-search" style={{ border: titleError ? '1px solid #dc2626' : '1px solid var(--tg-border)', borderRadius: '10px' }}>
+                    <input
+                      autoFocus
+                      className="tg-dialog-input"
+                      placeholder={mode === 'group' ? 'Например: Молодёжное служение' : 'Например: Объявления'}
+                      value={title}
+                      onChange={(e) => {
+                        setTitle(e.target.value);
+                        if (titleError) setTitleError(null);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && !creating) {
+                          e.preventDefault();
+                          void handleCreateGroup();
+                        }
+                      }}
+                    />
+                  </div>
+                  {titleError ? <p className="tg-field-error">{titleError}</p> : null}
+                </div>
+                <div className="tg-group-footer">
+                  <button
+                    type="button"
+                    className="tg-compose-btn"
+                    style={{
+                      width: '100%',
+                      padding: '12px',
+                      background: creating ? 'var(--tg-text-muted)' : 'var(--tg-primary)',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '10px',
+                      fontWeight: 700,
+                      fontSize: '0.9375rem',
+                    }}
+                    disabled={creating}
+                    onClick={() => void handleCreateGroup()}
+                  >
+                    {creating ? 'Создание…' : mode === 'group' ? 'Создать группу' : 'Создать канал'}
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         )}
       </div>
@@ -308,4 +598,3 @@ export function NewChatDialog({ onClose, onCreated }: NewChatDialogProps) {
     </div>
   );
 }
-

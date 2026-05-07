@@ -1295,6 +1295,35 @@ export async function buildNextWeekPlanTelegramText(): Promise<string> {
   return lines.join('\n');
 }
 
+/** Одноразовый код восстановления пароля — в личный чат участника по `telegram_chat_id`. */
+export async function sendPasswordResetTelegramMessage(chatId: string, text: string): Promise<void> {
+  const cfg = await resolveTelegramConfig();
+  if (!cfg.enabled) {
+    throw new Error('telegram_disabled');
+  }
+  if (!cfg.botToken) {
+    throw new Error('telegram_missing_token');
+  }
+  const trimmedChat = normalizeOptionalString(chatId);
+  if (!trimmedChat) {
+    throw new Error('telegram_missing_chat');
+  }
+  const body = text.trim();
+  if (!body) {
+    throw new Error('telegram_empty_text');
+  }
+  const sent = await sendTelegramMessageRawSequence(cfg.botToken, trimmedChat, body);
+  if (!sent.ok) {
+    const description =
+      typeof sent.body?.description === 'string' ? sent.body.description.trim() : '';
+    throw new Error(
+      description
+        ? `telegram_send_failed:${sent.status}:${description}`
+        : `telegram_send_failed:${sent.status}`,
+    );
+  }
+}
+
 export async function sendTelegramByPurpose(args: {
   purpose: TelegramPurpose;
   text: string;

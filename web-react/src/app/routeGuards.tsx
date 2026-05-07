@@ -94,7 +94,7 @@ export function RequireAuth() {
   return <Outlet />;
 }
 
-/** Режим прихожанина: только главная и чаты — остальные экраны недоступны по прямой ссылке. */
+/** Режим прихожанина: главная, чаты, проповеди и профиль доступны; остальные экраны — редирект с прямой ссылки. */
 export function BlockParishionerGuest({ children }: { children: ReactNode }) {
   const role = useAuthStore((s) => s.role);
   if ((role ?? '').toLowerCase() === 'parishioner') {

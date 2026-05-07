@@ -140,7 +140,7 @@ function isStandardParticipantMutation(
   path: string,
   authUserId: number | undefined
 ): boolean {
-  /** Прихожанин: только чаты и базовые настройки сессии / push — без ленты профиля и избранного песен. */
+  /** Прихожанин: чаты, базовые настройки сессии / push, лента «Моя страница», избранное песен — без прочих мутаций. */
   if (role === 'parishioner') {
     if (path.startsWith('/api/messenger/')) {
       return true;
@@ -155,6 +155,12 @@ function isStandardParticipantMutation(
       return true;
     }
     if (method === 'POST' && MEMBER_NOTIFICATIONS_POST.test(path)) {
+      return true;
+    }
+    if (isMemberProfileMutation(method, path)) {
+      return true;
+    }
+    if (isSongFavoriteMutation(method, path) && authUserId) {
       return true;
     }
     return false;

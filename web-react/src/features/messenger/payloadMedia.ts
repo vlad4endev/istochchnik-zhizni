@@ -10,7 +10,35 @@ export function isMessengerVideoAttachment(row: Record<string, unknown>, rawUrl:
   if (mimeMain.startsWith('video/')) return true;
   const pathOnly = rawUrl.split('?')[0].toLowerCase();
   const n = String(row.name ?? row.filename ?? '').trim().toLowerCase();
-  return VIDEO_EXT_RE.test(pathOnly) || VIDEO_EXT_RE.test(n);
+  const objectPath = String(row.objectPath ?? row.object_path ?? '').split('?')[0].toLowerCase();
+  return (
+    VIDEO_EXT_RE.test(pathOnly) ||
+    VIDEO_EXT_RE.test(n) ||
+    (objectPath.length > 0 && VIDEO_EXT_RE.test(objectPath))
+  );
+}
+
+/** Длительность видео из payload (сек), если бэкенд её отдаёт. */
+export function readMessengerVideoDurationSec(row: Record<string, unknown>): number | undefined {
+  const raw =
+    row.durationSec ??
+    row.duration_sec ??
+    row.duration ??
+    row.videoDurationSec ??
+    row.video_duration_sec;
+  const n = typeof raw === 'number' && Number.isFinite(raw) ? raw : Number(raw);
+  return Number.isFinite(n) && n > 0 ? n : undefined;
+}
+
+/** Подпись длительности как в Telegram (m:ss или h:mm:ss). */
+export function formatMessengerVideoDuration(sec: number): string {
+  if (!Number.isFinite(sec) || sec < 0) return '';
+  const total = Math.floor(sec);
+  const s = total % 60;
+  const m = Math.floor(total / 60) % 60;
+  const h = Math.floor(total / 3600);
+  if (h > 0) return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  return `${m}:${String(s).padStart(2, '0')}`;
 }
 
 /** URL вложения из вложенных структур (варианты API / групповых ответов). */

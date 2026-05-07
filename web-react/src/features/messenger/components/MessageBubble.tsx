@@ -13,12 +13,14 @@ import {
   getPrimaryAttachmentUrl,
   inferMessengerPayloadType,
   isMessengerVideoAttachment,
+  readMessengerVideoDurationSec,
 } from '../payloadMedia';
 import { apiErrorMessage, approveAccessRequest, rejectAccessRequest } from '../../admin/api';
 import { IoCheckmark, IoCheckmarkDone } from 'react-icons/io5';
 import { LuBot, LuDownload, LuExternalLink, LuFileText, LuLoader, LuRefreshCw, LuReply } from 'react-icons/lu';
 import { VoiceMessageAttachment } from './VoiceMessageAttachment';
 import { VideoNoteAttachment } from './VideoNoteAttachment';
+import { ChatVideoAttachmentPreview } from './ChatVideoAttachmentPreview';
 import { PollVotersSheet } from './PollVotersSheet';
 import { AppAvatar } from '../../../components/AppAvatar';
 import { useMediaViewer, type MediaItem } from '../../../components/MediaViewer';
@@ -1289,6 +1291,21 @@ function MessageBubbleInner({
                   );
                 }
                 if (isMessengerVideoAttachment(img as Record<string, unknown>, rawUrl)) {
+                  if (albumSlotFailed[idx]) {
+                    return (
+                      <div
+                        key={`${slideSrc}-${idx}-video-failed`}
+                        className={[
+                          'flex min-h-[84px] items-center gap-2 rounded-xl px-2 py-2 text-xs font-semibold',
+                          isMine ? 'bg-white/10 text-white/75' : 'bg-[var(--surface)] text-[var(--text-secondary)]',
+                        ].join(' ')}
+                      >
+                        <LuFileText size={16} aria-hidden />
+                        <span>Видео недоступно</span>
+                      </div>
+                    );
+                  }
+                  const videoDur = readMessengerVideoDurationSec(img as Record<string, unknown>);
                   return (
                     <button
                       key={`${slideSrc}-${idx}-video`}
@@ -1312,16 +1329,15 @@ function MessageBubbleInner({
                           aria-hidden
                         />
                       ) : null}
-                      <video
+                      <ChatVideoAttachmentPreview
                         src={slideSrc}
-                        muted
-                        playsInline
-                        preload="metadata"
-                        className={[
+                        isMine={isMine}
+                        durationHintSec={videoDur}
+                        videoClassName={[
                           'h-full w-full object-cover transition-opacity duration-200',
                           albumSlotLoaded[idx] ? 'opacity-100' : 'opacity-0',
                         ].join(' ')}
-                        onLoadedData={() => setAlbumSlotLoaded((prev) => ({ ...prev, [idx]: true }))}
+                        onLoaded={() => setAlbumSlotLoaded((prev) => ({ ...prev, [idx]: true }))}
                         onError={() => setAlbumSlotFailed((prev) => ({ ...prev, [idx]: true }))}
                       />
                     </button>
@@ -1465,6 +1481,7 @@ function MessageBubbleInner({
         );
       }
       const isSingleVideo = isMessengerVideoAttachment(payload as Record<string, unknown>, rawUrl);
+      const singleVideoDur = isSingleVideo ? readMessengerVideoDurationSec(payload as Record<string, unknown>) : undefined;
       return src ? (
         <div className="relative w-full max-w-[min(78vw,22rem)] overflow-hidden rounded-2xl" style={{ aspectRatio: '4 / 3' }}>
           {imgFailed ? (
@@ -1507,22 +1524,21 @@ function MessageBubbleInner({
                 );
               }}
               className={[
-                'block w-full overflow-hidden',
+                'relative block w-full overflow-hidden',
                 isMine ? 'bg-white/10' : 'bg-black/[0.04]',
               ].join(' ')}
               aria-label={isSingleVideo ? 'Открыть видео' : 'Открыть изображение'}
             >
               {isSingleVideo ? (
-                <video
+                <ChatVideoAttachmentPreview
                   src={src}
-                  muted
-                  playsInline
-                  preload="metadata"
-                  className={[
+                  isMine={isMine}
+                  durationHintSec={singleVideoDur}
+                  videoClassName={[
                     'h-full w-full object-cover transition-opacity duration-200',
                     mainImageLoaded ? 'opacity-100' : 'opacity-0',
                   ].join(' ')}
-                  onLoadedData={() => setMainImageLoaded(true)}
+                  onLoaded={() => setMainImageLoaded(true)}
                   onError={() => setImgFailed(true)}
                 />
               ) : (
@@ -1598,6 +1614,79 @@ function MessageBubbleInner({
       const subtitle = subtitleParts.join(' · ');
       const caption = String(message.content ?? '').trim();
       const showCaption = caption.length > 0 && caption !== name;
+
+      const fileAsVideo = isMessengerVideoAttachment(payload as Record<string, unknown>, rawUrl);
+      const fileVideoDur = fileAsVideo ? readMessengerVideoDurationSec(payload as Record<string, unknown>) : undefined;
+      if (fileAsVideo && openHref) {
+        return (
+          <div className="relative w-full max-w-[min(78vw,22rem)] overflow-hidden rounded-2xl" style={{ aspectRatio: '4 / 3' }}>
+            {imgFailed ? (
+              <div
+                className={[
+                  'flex items-center gap-2 rounded-xl p-2 text-sm',
+                  isMine ? 'bg-white/10 text-white/75' : 'bg-[var(--surface)] text-[var(--text-secondary)]',
+                ].join(' ')}
+              >
+                <LuFileText size={16} aria-hidden />
+                <span>Видео недоступно</span>
+              </div>
+            ) : (
+              <>
+                {!mainImageLoaded ? (
+                  <span
+                    className={[
+                      'absolute inset-0 animate-pulse',
+                      isMine ? 'bg-white/10' : 'bg-[var(--surface)]',
+                    ].join(' ')}
+                    aria-hidden
+                  />
+                ) : null}
+                <button
+                  type="button"
+                  onClick={() => {
+                    openViewer(
+                      [
+                        {
+                          id: message.id,
+                          type: 'video',
+                          src: openHref,
+                          caption,
+                          sender: viewerSender,
+                          date: viewerDate,
+                        },
+                      ],
+                      0,
+                    );
+                  }}
+                  className={[
+                    'relative block w-full overflow-hidden',
+                    isMine ? 'bg-white/10' : 'bg-black/[0.04]',
+                  ].join(' ')}
+                  aria-label="Открыть видео"
+                >
+                  <ChatVideoAttachmentPreview
+                    src={openHref}
+                    isMine={isMine}
+                    durationHintSec={fileVideoDur}
+                    videoClassName={[
+                      'h-full w-full object-cover transition-opacity duration-200',
+                      mainImageLoaded ? 'opacity-100' : 'opacity-0',
+                    ].join(' ')}
+                    onLoaded={() => setMainImageLoaded(true)}
+                    onError={() => setImgFailed(true)}
+                  />
+                </button>
+              </>
+            )}
+            {caption ? (
+              <div className={['px-3 py-2 text-sm leading-relaxed', isMine ? 'text-white/95' : 'text-[var(--text)]'].join(' ')}>
+                <MentionRichText text={caption} namesById={participantLabelById} isMine={isMine} />
+              </div>
+            ) : null}
+          </div>
+        );
+      }
+
       return (
         <div
           className={[

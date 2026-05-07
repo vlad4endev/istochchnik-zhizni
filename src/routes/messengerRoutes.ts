@@ -386,8 +386,7 @@ function messengerUploadMiddleware(req: Request, res: Response, next: NextFuncti
 }
 
 async function getConversationListItemForMember(memberId: number, convId: string) {
-  const list = await svc.listConversations(memberId);
-  return list.find((c) => String(c.id) === String(convId)) ?? null;
+  return svc.getConversationListItem(memberId, String(convId));
 }
 
 async function getMemberDisplayName(memberId: number): Promise<string> {
@@ -678,13 +677,44 @@ router.post('/conversations/group', async (req: Request, res: Response) => {
 
     const convForMe = await getConversationListItemForMember(userId, convKey);
 
-    // Notify all members (their perspective may differ)
+    // Notify invitees (their list row shape differs from the owner's).
     for (const mId of ids) {
       const convForMember = await getConversationListItemForMember(mId, convKey);
       if (convForMember) {
         sendToMember(mId, { type: 'conv:created', conversation: convForMember });
       }
     }
+    // Creator never receives `conv:created` via the loop above — broadcast so their chat list updates on any device.
+    if (convForMe) {
+      sendToMember(userId, { type: 'conv:created', conversation: convForMe });
+    }
+
+    void (async () => {
+      try {
+        const inviterName = await getMemberDisplayName(userId);
+        const cmeta = await svc.getConversationMeta(convKey);
+        const chatLabel =
+          cmeta?.title?.trim() ||
+          title.trim() ||
+          (convType === 'channel' ? 'Канал' : 'Группа');
+        const kindWord = convType === 'channel' ? 'канал' : 'группу';
+        for (const mId of ids) {
+          await sendPushNotification(mId, {
+            title: `Вас добавили в ${kindWord} «${chatLabel}»`,
+            body: `${inviterName} пригласил(а) вас`,
+            senderName: inviterName,
+            conversationId: convKey,
+            url: resolveMessengerConversationDeepLink(convKey),
+            tag: `chat-added-${convKey}`,
+            renotify: true,
+            badge: '/assets/pwa-64x64.png',
+            icon: '/assets/pwa-192x192.png',
+          });
+        }
+      } catch (e) {
+        console.warn('[messenger] create group push failed (best-effort):', e);
+      }
+    })();
 
     res.json({ conversationId: convKey, conversation: convForMe ?? null });
   } catch (e) {
