@@ -342,49 +342,49 @@ function UpcomingPreacherCard({
   const scriptureUrl = buildBibleVerseUrl(scripture);
   const preacherNameDisplay = preacherNameTwoLines(preacherName);
   return (
-    <section className="w-full max-w-[420px] overflow-hidden rounded-2xl border-[0.5px] border-[#c9d7e6] bg-white shadow-[var(--shadow-card)]">
-      <div className="flex items-end gap-4 bg-[#0C447C] px-5 pt-5">
-        <div className="min-w-0 flex-1 pb-4">
-          <p className="text-[10px] uppercase tracking-[0.1em] text-[#85B7EB]">Проповедь</p>
-          <p className="mt-2 whitespace-pre-line text-[43px] font-medium leading-[1.05] text-white max-sm:text-[36px]">
+    <section className="w-full max-w-[420px] overflow-hidden rounded-2xl border border-[#E8E0DC] bg-white shadow-[var(--shadow-card)] lg:max-w-none">
+      <div className="flex items-end gap-3 bg-gradient-to-br from-[#6B2D3E] to-[#7F364D] px-4 pt-4 sm:gap-4 sm:px-5 sm:pt-5">
+        <div className="min-w-0 flex-1 pb-3 sm:pb-4">
+          <p className="text-[10px] uppercase tracking-[0.1em] text-[#EAC7D2]">Проповедь</p>
+          <p className="mt-2 whitespace-pre-line text-[28px] font-semibold leading-[1.08] text-white sm:text-[34px] lg:text-[38px]">
             {preacherNameDisplay}
           </p>
         </div>
-        <div className="h-[110px] w-[90px] shrink-0 overflow-hidden rounded-t-[10px] bg-[#185FA5]">
+        <div className="h-[84px] w-[70px] shrink-0 overflow-hidden rounded-t-[10px] bg-[#915066] sm:h-[98px] sm:w-[82px] lg:h-[108px] lg:w-[90px]">
           {preacherAvatarUrl ? (
             <img src={preacherAvatarUrl} alt="" className="h-full w-full object-cover" />
           ) : (
-            <div className="grid h-full w-full place-items-center text-[30px] font-medium text-[#B5D4F4]">
+            <div className="grid h-full w-full place-items-center text-[24px] font-semibold text-[#F0D9E1] sm:text-[28px]">
               {initials}
             </div>
           )}
         </div>
       </div>
-      <div className="flex flex-col gap-3 bg-[#2F2F2F] px-5 py-4">
+      <div className="flex flex-col gap-2.5 bg-white px-4 py-3 sm:gap-3 sm:px-5 sm:py-4">
         <div className="flex items-center gap-2">
-          <span className="h-1.5 w-1.5 rounded-full bg-[#378ADD]" aria-hidden />
-          <span className="text-xs font-medium text-[#C5CCD3]">{dateLabel}</span>
+          <span className="h-1.5 w-1.5 rounded-full bg-[#6B2D3E]" aria-hidden />
+          <span className="text-xs font-semibold text-stone-500">{dateLabel}</span>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <div className="inline-flex min-h-[30px] items-center gap-1.5 rounded-full border border-[#97C459] bg-[#EAF3DE] px-3 py-1 text-xs font-medium text-[#27500A]">
-            <LuStar className="h-3.5 w-3.5" aria-hidden />
-            <span>{topic}</span>
+          <div className="inline-flex min-h-[28px] max-w-full items-center gap-1.5 rounded-full border border-[#DDE7CD] bg-[#F6FAEF] px-2.5 py-1 text-[11px] font-semibold text-[#48652E] sm:min-h-[30px] sm:px-3 sm:text-xs">
+            <LuStar className="h-3.5 w-3.5 shrink-0" aria-hidden />
+            <span className="truncate">{topic}</span>
           </div>
           <a
             href={scriptureUrl}
             target="_blank"
             rel="noreferrer"
-            className="inline-flex min-h-[30px] items-center gap-1.5 rounded-full border border-[#B5D4F4] bg-[#E6F1FB] px-3 py-1 text-xs font-medium text-[#185FA5] transition hover:bg-[#B5D4F4]"
+            className="inline-flex min-h-[28px] max-w-full items-center gap-1.5 rounded-full border border-[#E3D7DB] bg-[#F8F2F4] px-2.5 py-1 text-[11px] font-semibold text-[#6B2D3E] transition hover:bg-[#EFE3E8] sm:min-h-[30px] sm:px-3 sm:text-xs"
           >
-            <span>{scripture}</span>
-            <LuExternalLink className="h-3.5 w-3.5" aria-hidden />
+            <span className="truncate">{scripture}</span>
+            <LuExternalLink className="h-3.5 w-3.5 shrink-0" aria-hidden />
           </a>
         </div>
         {canRate ? (
           <button
             type="button"
             onClick={onOpenComments}
-            className="inline-flex min-h-[40px] items-center justify-center rounded-xl bg-[#2F4DA4] px-4 text-sm font-extrabold text-white hover:bg-[#273f88]"
+            className="inline-flex min-h-[36px] items-center justify-center rounded-xl bg-[#6B2D3E] px-4 text-xs font-extrabold text-white hover:bg-[#5B2332] sm:min-h-[40px] sm:text-sm"
           >
             Оценить и оставить комментарий
           </button>
@@ -679,6 +679,8 @@ function DashboardMain() {
   const broadcastUiMode = getBroadcastUiMode(broadcastNowMs, activeBroadcast);
   const broadcastTimerText = formatBroadcastMainTimer(broadcastNowMs, activeBroadcast);
   const showBroadcastWidget = shouldShowBroadcastWidget(broadcastNowMs, activeBroadcast);
+  const announcementNote = dashboardNotesQ.data?.announcement ?? null;
+  const hasAnnouncement = announcementNote != null;
   const broadcastEndsLabel = useMemo(() => {
     if (!activeBroadcast?.starts_at) return null;
     if (broadcastUiMode !== 'pre' && broadcastUiMode !== 'onair') return null;
@@ -985,9 +987,9 @@ function DashboardMain() {
 
         <div className="min-h-0 flex-1 overflow-y-auto [webkit-overflow-scrolling:touch] max-lg:pb-0 lg:pb-[max(2rem,env(safe-area-inset-bottom,0px))]">
         <div className="hidden lg:block">
-          <div className="grid grid-cols-3 gap-[14px] px-0 py-4">
+          <div className="grid grid-flow-row-dense grid-cols-12 gap-4 px-0 py-4 xl:gap-5">
             {showNearestPreacherWidget ? (
-              <div className="col-span-3">
+              <div className="order-1 col-span-5">
                 <UpcomingPreacherCard
                   preacherName={preacherName}
                   preacherAvatarUrl={preacherAvatarUrl}
@@ -1009,7 +1011,10 @@ function DashboardMain() {
                     : '/profile',
                 )
               }
-              className="group rounded-[14px] border border-[#E8E0DC] bg-white p-0 text-left transition hover:-translate-y-0.5 hover:shadow-[0_4px_16px_rgba(107,45,62,0.1)]"
+              className={[
+                'group order-2 rounded-[14px] border border-[#E8E0DC] bg-white p-0 text-left transition hover:-translate-y-0.5 hover:shadow-[0_4px_16px_rgba(107,45,62,0.1)]',
+                showNearestPreacherWidget ? 'col-span-3' : 'col-span-4',
+              ].join(' ')}
             >
               <div className="flex items-center gap-3.5 p-[16px]">
                 <div className="h-[52px] w-[52px] shrink-0 overflow-hidden rounded-full border-2 border-[#E8D8DC] bg-stone-100">
@@ -1033,7 +1038,12 @@ function DashboardMain() {
               </div>
             </button>
 
-            <section className="rounded-[14px] border border-[#F9C0D0] bg-gradient-to-br from-[#FFF0F3] to-[#FFE4EC] p-4 transition hover:-translate-y-0.5 hover:shadow-[0_4px_16px_rgba(107,45,62,0.1)]">
+            <section
+              className={[
+                'order-3 rounded-[14px] border border-[#F9C0D0] bg-gradient-to-br from-[#FFF0F3] to-[#FFE4EC] p-4 transition hover:-translate-y-0.5 hover:shadow-[0_4px_16px_rgba(107,45,62,0.1)]',
+                showNearestPreacherWidget ? 'col-span-2' : 'col-span-4',
+              ].join(' ')}
+            >
               <p className="text-[11px] font-semibold tracking-[0.02em] text-[#C23D57]">Дни рождения</p>
               {birthdaysThisWeek[0] ? (
                 <div className="mt-3 flex items-start gap-3">
@@ -1053,7 +1063,10 @@ function DashboardMain() {
             <button
               type="button"
               onClick={() => navigate('/prayer')}
-              className="rounded-[14px] border border-[#BFC9F7] bg-gradient-to-br from-[#EEF2FF] to-[#E5EAFF] p-4 text-left transition hover:-translate-y-0.5 hover:shadow-[0_4px_16px_rgba(107,45,62,0.1)]"
+              className={[
+                'order-4 rounded-[14px] border border-[#BFC9F7] bg-gradient-to-br from-[#EEF2FF] to-[#E5EAFF] p-4 text-left transition hover:-translate-y-0.5 hover:shadow-[0_4px_16px_rgba(107,45,62,0.1)]',
+                showNearestPreacherWidget ? 'col-span-2' : 'col-span-4',
+              ].join(' ')}
             >
               <p className="text-[11px] font-semibold tracking-[0.02em] text-[#3042A8]">Молимся сегодня</p>
               <div className="mt-3 flex items-start gap-3">
@@ -1067,8 +1080,8 @@ function DashboardMain() {
               </div>
             </button>
 
-            {dashboardNotesQ.data?.announcement ? (
-              <section className="col-span-2 rounded-[14px] border border-[#F5D99A] bg-gradient-to-br from-[#FFF8EC] to-[#FEF0D6] p-4 transition hover:-translate-y-0.5 hover:shadow-[0_4px_16px_rgba(107,45,62,0.1)]">
+            {hasAnnouncement ? (
+              <section className="order-10 col-span-8 rounded-[14px] border border-[#F5D99A] bg-gradient-to-br from-[#FFF8EC] to-[#FEF0D6] p-4 transition hover:-translate-y-0.5 hover:shadow-[0_4px_16px_rgba(107,45,62,0.1)]">
                 <div className="mb-2 flex items-center justify-between gap-2">
                   <div className="flex items-center gap-2">
                     <span className="grid h-8 w-8 place-items-center rounded-[9px] bg-[#E8960F] text-white">
@@ -1101,7 +1114,7 @@ function DashboardMain() {
                   ) : null}
                 </div>
                 <p className={announcementExpanded ? 'whitespace-pre-wrap text-[13px] font-semibold leading-[1.55] text-[#3D2800]' : 'line-clamp-3 whitespace-pre-wrap text-[13px] font-semibold leading-[1.55] text-[#3D2800]'}>
-                  {dashboardNotesQ.data.announcement.text}
+                  {announcementNote?.text ?? ''}
                 </p>
                 <button
                   type="button"
@@ -1113,7 +1126,13 @@ function DashboardMain() {
               </section>
             ) : null}
 
-            <section className="rounded-[14px] border border-stone-200 bg-white p-4 transition hover:-translate-y-0.5 hover:shadow-[0_4px_16px_rgba(107,45,62,0.1)]">
+            <section
+              className={[
+                'rounded-[14px] border border-stone-200 bg-white p-4 transition hover:-translate-y-0.5 hover:shadow-[0_4px_16px_rgba(107,45,62,0.1)]',
+                hasAnnouncement ? 'order-11' : 'order-21',
+                hasAnnouncement ? 'col-span-4' : 'col-span-4',
+              ].join(' ')}
+            >
               <div className="flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
                   <span className="grid h-8 w-8 place-items-center rounded-[9px] bg-[#0E7E6A] text-white">
@@ -1163,21 +1182,27 @@ function DashboardMain() {
             </section>
 
             {showBroadcastWidget ? (
-              <BroadcastCompactCard
-                broadcast={activeBroadcast}
-                timerText={broadcastTimerText}
-                uiMode={broadcastUiMode}
-                endsAtFormatted={broadcastEndsLabel}
-                onOpen={() => navigate('/broadcast')}
-              />
-            ) : (
-              <div />
-            )}
+              <div className={hasAnnouncement ? 'order-20 col-span-4' : 'order-22 col-span-4'}>
+                <BroadcastCompactCard
+                  broadcast={activeBroadcast}
+                  timerText={broadcastTimerText}
+                  uiMode={broadcastUiMode}
+                  endsAtFormatted={broadcastEndsLabel}
+                  onOpen={() => navigate('/broadcast')}
+                />
+              </div>
+            ) : null}
 
             <button
               type="button"
               onClick={() => setEventOpen(true)}
-              className="col-span-2 rounded-[14px] border border-[#A8E4C0] bg-gradient-to-br from-[#EDFBF3] to-[#D9F5E6] p-4 text-left transition hover:-translate-y-0.5 hover:shadow-[0_4px_16px_rgba(107,45,62,0.1)]"
+              className={[
+                'rounded-[14px] border border-[#A8E4C0] bg-gradient-to-br from-[#EDFBF3] to-[#D9F5E6] p-4 text-left transition hover:-translate-y-0.5 hover:shadow-[0_4px_16px_rgba(107,45,62,0.1)]',
+                hasAnnouncement ? 'order-21' : 'order-23',
+                hasAnnouncement
+                  ? (showBroadcastWidget ? 'col-span-8' : 'col-span-12')
+                  : (showBroadcastWidget ? 'col-span-4' : 'col-span-8'),
+              ].join(' ')}
             >
               <p className="text-[11px] font-semibold tracking-[0.02em] text-[#0F6636]">Событие</p>
               <div className="mt-3 flex items-start gap-3">
@@ -1192,9 +1217,9 @@ function DashboardMain() {
             </button>
 
             {showPrayerPlanOnDashboard ? (
-              <section className="col-span-3 rounded-[14px] border border-[#E8E0DC] bg-[#F8F5F3] p-4 transition hover:-translate-y-0.5 hover:shadow-[0_4px_16px_rgba(107,45,62,0.1)]">
+              <section className="order-30 col-span-12 rounded-[14px] border border-[#E8E0DC] bg-[#F8F5F3] p-4 transition hover:-translate-y-0.5 hover:shadow-[0_4px_16px_rgba(107,45,62,0.1)]">
                 <p className="text-[11px] font-semibold tracking-[0.02em] text-[#6B2D3E]">Координаторы</p>
-                <div className="mt-3 grid grid-cols-3 gap-[10px]">
+                <div className="mt-3 grid grid-cols-2 gap-[10px] xl:grid-cols-3">
                   <div className="col-span-3">
                     <div className="mb-1 flex items-center justify-between text-xs text-stone-600">
                       <span>Заполнение нужд</span>
@@ -1379,7 +1404,7 @@ function DashboardMain() {
                     announcementExpanded ? 'announcement-text--expanded' : '',
                   ].join(' ')}
                 >
-                  {dashboardNotesQ.data.announcement.text}
+                  {announcementNote?.text ?? ''}
                 </p>
                 <button
                   type="button"
