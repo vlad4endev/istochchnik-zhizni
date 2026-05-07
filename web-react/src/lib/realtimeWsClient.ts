@@ -218,13 +218,25 @@ async function refreshAccessToken(): Promise<void> {
   if (!origin) {
     throw new Error('missing base URL for auth refresh');
   }
-  const response = await fetch(`${origin}${AUTH_API_PREFIX}/me`, {
+  const refreshResponse = await fetch(`${origin}${AUTH_API_PREFIX}/refresh`, {
+    method: 'POST',
     credentials: 'include',
   });
-  if (response.status !== 200) {
-    throw new Error(`auth refresh failed (${response.status})`);
+  if (refreshResponse.status !== 200) {
+    throw new Error(`token refresh failed (${refreshResponse.status})`);
   }
-  const user = (await response.json()) as {
+  const refreshPayload = (await refreshResponse.json()) as { accessToken?: string; token?: string };
+  const nextToken = String(refreshPayload.accessToken ?? refreshPayload.token ?? '').trim();
+  if (!nextToken) {
+    throw new Error('token refresh response has no access token');
+  }
+  const userResponse = await fetch(`${origin}${AUTH_API_PREFIX}/me`, {
+    credentials: 'include',
+  });
+  if (userResponse.status !== 200) {
+    throw new Error(`auth profile refresh failed (${userResponse.status})`);
+  }
+  const user = (await userResponse.json()) as {
     id?: number;
     first_name?: string | null;
     last_name?: string | null;
@@ -234,7 +246,7 @@ async function refreshAccessToken(): Promise<void> {
     username?: string;
   };
   useAuthStore.getState().setSession({
-    token: COOKIE_ONLY_SESSION_TOKEN,
+    token: nextToken || COOKIE_ONLY_SESSION_TOKEN,
     firstName: (user.first_name ?? '').trim(),
     lastName: (user.last_name ?? '').trim(),
     role: (user.app_role ?? 'member').trim() || 'member',

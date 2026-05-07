@@ -6,7 +6,7 @@ import { isCookieOnlySessionToken } from './authSessionConstants';
 import { resolveAxiosBaseURL } from './config';
 import { emitAppToast } from './uiFeedback';
 
-const AUTH_PATHS_SKIP_401_HANDLING = ['/api/auth/login', '/api/auth/register'];
+const AUTH_PATHS_SKIP_401_HANDLING = ['/api/auth/login', '/api/auth/register', '/api/auth/refresh'];
 
 function shouldSkip401Handling(url: string | undefined): boolean {
   if (!url) return false;
@@ -35,6 +35,39 @@ function getTokenForRequest(): string | null {
   } catch {
     return null;
   }
+}
+
+type RetryableAxiosConfig = InternalAxiosRequestConfig & {
+  _retryAfterRefresh?: boolean;
+};
+
+let refreshInFlight: Promise<string | null> | null = null;
+
+async function refreshAccessToken(): Promise<string | null> {
+  if (!refreshInFlight) {
+    refreshInFlight = (async () => {
+      const baseURL = resolveAxiosBaseURL() ?? '';
+      const response = await axios.post(
+        `${baseURL}/api/auth/refresh`,
+        null,
+        {
+          timeout: 25_000,
+          withCredentials: true,
+          validateStatus: (s) => s !== undefined && s < 500,
+        }
+      );
+      if (response.status !== 200) {
+        return null;
+      }
+      const data = response.data as { accessToken?: unknown; token?: unknown } | undefined;
+      const nextTokenRaw = data?.accessToken ?? data?.token;
+      const nextToken = typeof nextTokenRaw === 'string' ? nextTokenRaw.trim() : '';
+      return nextToken || null;
+    })().finally(() => {
+      refreshInFlight = null;
+    });
+  }
+  return refreshInFlight;
 }
 
 export const apiClient = axios.create({
@@ -67,7 +100,7 @@ apiClient.interceptors.request.use((config) => {
 
 apiClient.interceptors.response.use(
   (response) => response,
-  (error: AxiosError) => {
+  async (error: AxiosError) => {
     if (isCancel(error)) {
       return Promise.reject(error);
     }
@@ -78,6 +111,31 @@ apiClient.interceptors.response.use(
     const bodyMsg = readResponseErrorMessage(error.response?.data);
 
     if (status === 401) {
+      const retryCfg = cfg as RetryableAxiosConfig | undefined;
+      if (!shouldSkip401Handling(url) && retryCfg && !retryCfg._retryAfterRefresh) {
+        retryCfg._retryAfterRefresh = true;
+        try {
+          const nextToken = await refreshAccessToken();
+          if (nextToken) {
+            const auth = useAuthStore.getState();
+            if (auth.token) {
+              auth.setSession({
+                token: nextToken,
+                firstName: auth.firstName,
+                lastName: auth.lastName,
+                role: auth.role,
+                roles: auth.roles,
+                registrationStatus: auth.registrationStatus,
+                username: auth.username,
+                memberId: auth.memberId,
+              });
+            }
+            return apiClient.request(retryCfg);
+          }
+        } catch {
+          // fallthrough: clear session + notify below
+        }
+      }
       if (!shouldSkip401Handling(url)) {
         try {
           useAuthStore.getState().clearSession();

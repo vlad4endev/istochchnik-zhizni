@@ -189,6 +189,14 @@ CREATE TABLE IF NOT EXISTS auth_sessions (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+CREATE TABLE IF NOT EXISTS auth_refresh_sessions (
+  token_hash CHAR(64) PRIMARY KEY,
+  member_id INTEGER NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+  expires_at TIMESTAMPTZ NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  revoked_at TIMESTAMPTZ
+);
+
 CREATE TABLE IF NOT EXISTS access_requests (
   id BIGSERIAL PRIMARY KEY,
   first_name VARCHAR(120) NOT NULL,
@@ -219,6 +227,9 @@ ALTER TABLE member_prayer_by_cycle ADD CONSTRAINT member_prayer_by_cycle_member_
 
 ALTER TABLE auth_sessions DROP CONSTRAINT IF EXISTS auth_sessions_member_id_fkey;
 ALTER TABLE auth_sessions ADD CONSTRAINT auth_sessions_member_id_fkey FOREIGN KEY (member_id) REFERENCES members(id) ON DELETE CASCADE;
+
+ALTER TABLE auth_refresh_sessions DROP CONSTRAINT IF EXISTS auth_refresh_sessions_member_id_fkey;
+ALTER TABLE auth_refresh_sessions ADD CONSTRAINT auth_refresh_sessions_member_id_fkey FOREIGN KEY (member_id) REFERENCES members(id) ON DELETE CASCADE;
 
 ALTER TABLE access_requests DROP CONSTRAINT IF EXISTS access_requests_member_id_fkey;
 ALTER TABLE access_requests ADD CONSTRAINT access_requests_member_id_fkey FOREIGN KEY (member_id) REFERENCES members(id) ON DELETE SET NULL;
@@ -425,6 +436,15 @@ CREATE INDEX IF NOT EXISTS auth_sessions_member_id_idx
 
 CREATE INDEX IF NOT EXISTS auth_sessions_expires_at_idx
   ON auth_sessions (expires_at);
+
+CREATE INDEX IF NOT EXISTS auth_refresh_sessions_member_id_idx
+  ON auth_refresh_sessions (member_id);
+
+CREATE INDEX IF NOT EXISTS auth_refresh_sessions_expires_at_idx
+  ON auth_refresh_sessions (expires_at);
+
+CREATE INDEX IF NOT EXISTS auth_refresh_sessions_revoked_at_idx
+  ON auth_refresh_sessions (revoked_at);
 
 CREATE INDEX IF NOT EXISTS members_phone_digits_idx
   ON members ((regexp_replace(COALESCE(phone_number, ''), '\\D', '', 'g')));

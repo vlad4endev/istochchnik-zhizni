@@ -1,25 +1,46 @@
 import type { Response } from 'express';
 
-const DEFAULT_SESSION_TTL_DAYS = 30;
-const MIN_SESSION_TTL_DAYS = 1;
-const MAX_SESSION_TTL_DAYS = 365;
+const DEFAULT_ACCESS_TTL_MINUTES = 15;
+const MIN_ACCESS_TTL_MINUTES = 1;
+const MAX_ACCESS_TTL_MINUTES = 24 * 60;
+const DEFAULT_REFRESH_TTL_DAYS = 7;
+const MIN_REFRESH_TTL_DAYS = 1;
+const MAX_REFRESH_TTL_DAYS = 365;
 
-function getSessionTtlDays(): number {
-  const rawValue = process.env.AUTH_SESSION_TTL_DAYS;
+function getAccessTtlMinutes(): number {
+  const rawValue = process.env.AUTH_ACCESS_TOKEN_TTL_MINUTES;
   if (!rawValue) {
-    return DEFAULT_SESSION_TTL_DAYS;
+    return DEFAULT_ACCESS_TTL_MINUTES;
   }
   const parsed = Number(rawValue);
   if (!Number.isFinite(parsed)) {
-    return DEFAULT_SESSION_TTL_DAYS;
+    return DEFAULT_ACCESS_TTL_MINUTES;
   }
   const integerValue = Math.floor(parsed);
-  return Math.min(MAX_SESSION_TTL_DAYS, Math.max(MIN_SESSION_TTL_DAYS, integerValue));
+  return Math.min(MAX_ACCESS_TTL_MINUTES, Math.max(MIN_ACCESS_TTL_MINUTES, integerValue));
+}
+
+function getRefreshTtlDays(): number {
+  const rawValue = process.env.AUTH_REFRESH_TOKEN_TTL_DAYS;
+  if (!rawValue) {
+    return DEFAULT_REFRESH_TTL_DAYS;
+  }
+  const parsed = Number(rawValue);
+  if (!Number.isFinite(parsed)) {
+    return DEFAULT_REFRESH_TTL_DAYS;
+  }
+  const integerValue = Math.floor(parsed);
+  return Math.min(MAX_REFRESH_TTL_DAYS, Math.max(MIN_REFRESH_TTL_DAYS, integerValue));
 }
 
 export function getAuthCookieName(): string {
   const n = (process.env.AUTH_COOKIE_NAME ?? 'auth_access_token').trim();
   return n || 'auth_access_token';
+}
+
+export function getRefreshCookieName(): string {
+  const n = (process.env.AUTH_REFRESH_COOKIE_NAME ?? 'auth_refresh_token').trim();
+  return n || 'auth_refresh_token';
 }
 
 function getCookieDomain(): string | undefined {
@@ -65,11 +86,21 @@ export function readAuthTokenFromCookies(req: { headers: { cookie?: string } }):
 }
 
 export function getAuthCookieMaxAgeSec(): number {
-  return getSessionTtlDays() * 24 * 60 * 60;
+  return getAccessTtlMinutes() * 60;
 }
 
-function buildSetCookiePair(value: string, maxAgeSec: number): string {
-  const name = getAuthCookieName();
+export function readRefreshTokenFromCookies(req: { headers: { cookie?: string } }): string | null {
+  const cookies = parseCookies(req.headers.cookie);
+  const t = cookies[getRefreshCookieName()];
+  return t && t.trim() ? t.trim() : null;
+}
+
+export function getRefreshCookieMaxAgeSec(): number {
+  return getRefreshTtlDays() * 24 * 60 * 60;
+}
+
+function buildSetCookiePair(value: string, maxAgeSec: number, cookieName: string): string {
+  const name = cookieName.trim() || getAuthCookieName();
   const parts = [
     `${name}=${encodeURIComponent(value)}`,
     'Path=/',
@@ -89,11 +120,34 @@ function buildSetCookiePair(value: string, maxAgeSec: number): string {
 
 /** Добавляет HttpOnly cookie сессии (поддоменный wildcard через AUTH_COOKIE_DOMAIN, напр. `.church-tambov.ru`). */
 export function appendSetAuthCookie(res: Response, token: string): void {
-  res.append('Set-Cookie', buildSetCookiePair(token, getAuthCookieMaxAgeSec()));
+  res.append('Set-Cookie', buildSetCookiePair(token, getAuthCookieMaxAgeSec(), getAuthCookieName()));
+}
+
+export function appendSetRefreshCookie(res: Response, token: string): void {
+  res.append('Set-Cookie', buildSetCookiePair(token, getRefreshCookieMaxAgeSec(), getRefreshCookieName()));
 }
 
 export function appendClearAuthCookie(res: Response): void {
   const name = getAuthCookieName();
+  const parts = [
+    `${name}=`,
+    'Path=/',
+    'HttpOnly',
+    'Max-Age=0',
+    `SameSite=${sameSite()}`,
+  ];
+  const domain = getCookieDomain();
+  if (domain) {
+    parts.push(`Domain=${domain}`);
+  }
+  if (isSecureCookie()) {
+    parts.push('Secure');
+  }
+  res.append('Set-Cookie', parts.join('; '));
+}
+
+export function appendClearRefreshCookie(res: Response): void {
+  const name = getRefreshCookieName();
   const parts = [
     `${name}=`,
     'Path=/',

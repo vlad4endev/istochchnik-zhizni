@@ -11,9 +11,12 @@ import { resolveSmsRuntimeConfig } from './smsSettingsService';
 
 const scrypt = promisify(scryptCallback);
 const MIN_PASSWORD_LENGTH = 8;
-const DEFAULT_SESSION_TTL_DAYS = 365;
-const MIN_SESSION_TTL_DAYS = 7;
-const MAX_SESSION_TTL_DAYS = 3650;
+const DEFAULT_ACCESS_TTL_MINUTES = 15;
+const MIN_ACCESS_TTL_MINUTES = 1;
+const MAX_ACCESS_TTL_MINUTES = 24 * 60;
+const DEFAULT_REFRESH_TTL_DAYS = 7;
+const MIN_REFRESH_TTL_DAYS = 1;
+const MAX_REFRESH_TTL_DAYS = 365;
 const DEFAULT_MAX_ACTIVE_SESSIONS_PER_USER = 3;
 const MIN_ACTIVE_SESSIONS_PER_USER = 1;
 const MAX_ACTIVE_SESSIONS_PER_USER = 20;
@@ -254,19 +257,34 @@ async function hashResetValue(value: string): Promise<string> {
   return createHash('sha256').update(`${secret}:${value}`).digest('hex');
 }
 
-function getSessionTtlDays(): number {
-  const rawValue = process.env.AUTH_SESSION_TTL_DAYS;
+function getAccessTtlMinutes(): number {
+  const rawValue = process.env.AUTH_ACCESS_TOKEN_TTL_MINUTES;
   if (!rawValue) {
-    return DEFAULT_SESSION_TTL_DAYS;
+    return DEFAULT_ACCESS_TTL_MINUTES;
   }
 
   const parsed = Number(rawValue);
   if (!Number.isFinite(parsed)) {
-    return DEFAULT_SESSION_TTL_DAYS;
+    return DEFAULT_ACCESS_TTL_MINUTES;
   }
 
   const integerValue = Math.floor(parsed);
-  return Math.min(MAX_SESSION_TTL_DAYS, Math.max(MIN_SESSION_TTL_DAYS, integerValue));
+  return Math.min(MAX_ACCESS_TTL_MINUTES, Math.max(MIN_ACCESS_TTL_MINUTES, integerValue));
+}
+
+function getRefreshTtlDays(): number {
+  const rawValue = process.env.AUTH_REFRESH_TOKEN_TTL_DAYS;
+  if (!rawValue) {
+    return DEFAULT_REFRESH_TTL_DAYS;
+  }
+
+  const parsed = Number(rawValue);
+  if (!Number.isFinite(parsed)) {
+    return DEFAULT_REFRESH_TTL_DAYS;
+  }
+
+  const integerValue = Math.floor(parsed);
+  return Math.min(MAX_REFRESH_TTL_DAYS, Math.max(MIN_REFRESH_TTL_DAYS, integerValue));
 }
 
 function getMaxActiveSessionsPerUser(): number {
@@ -319,9 +337,9 @@ function mapAuthUser(row: MemberRow): AuthUser {
 
 async function createSessionForUser(userId: number): Promise<{ token: string; expiresAt: string }> {
   const { token, tokenHash } = createSessionToken();
-  const sessionTtlDays = getSessionTtlDays();
+  const accessTtlMinutes = getAccessTtlMinutes();
   const maxActiveSessions = getMaxActiveSessionsPerUser();
-  const expiresAt = new Date(Date.now() + sessionTtlDays * 24 * 60 * 60 * 1000);
+  const expiresAt = new Date(Date.now() + accessTtlMinutes * 60 * 1000);
 
   // Remove stale sessions first to keep per-user session limits accurate.
   await query(
@@ -352,6 +370,50 @@ async function createSessionForUser(userId: number): Promise<{ token: string; ex
   );
 
   return { token, expiresAt: expiresAt.toISOString() };
+}
+
+function createRefreshToken(): { token: string; tokenHash: string } {
+  const token = randomBytes(64).toString('hex');
+  const tokenHash = createHash('sha256').update(token).digest('hex');
+  return { token, tokenHash };
+}
+
+export async function issueRefreshSessionForUser(
+  userId: number
+): Promise<{ refreshToken: string; expiresAt: string }> {
+  const { token, tokenHash } = createRefreshToken();
+  const refreshTtlDays = getRefreshTtlDays();
+  const expiresAt = new Date(Date.now() + refreshTtlDays * 24 * 60 * 60 * 1000);
+  const maxActiveSessions = getMaxActiveSessionsPerUser();
+
+  await query(
+    `DELETE FROM auth_refresh_sessions
+     WHERE member_id = $1
+       AND (expires_at <= NOW() OR revoked_at IS NOT NULL)`,
+    [userId]
+  );
+
+  await query(
+    `INSERT INTO auth_refresh_sessions (token_hash, member_id, expires_at)
+     VALUES ($1, $2, $3)`,
+    [tokenHash, userId, expiresAt.toISOString()]
+  );
+
+  await query(
+    `DELETE FROM auth_refresh_sessions
+     WHERE member_id = $1
+       AND token_hash IN (
+         SELECT token_hash
+         FROM auth_refresh_sessions
+         WHERE member_id = $1
+           AND revoked_at IS NULL
+         ORDER BY created_at DESC, token_hash DESC
+         OFFSET $2
+       )`,
+    [userId, maxActiveSessions]
+  );
+
+  return { refreshToken: token, expiresAt: expiresAt.toISOString() };
 }
 
 async function findMemberByIdentity(
@@ -1178,8 +1240,8 @@ export async function resolveSessionByToken(token: string): Promise<SessionPrinc
   }
 
   const tokenHash = createHash('sha256').update(normalizedToken).digest('hex');
-  const sessionTtlDays = getSessionTtlDays();
-  const refreshedExpiresAt = new Date(Date.now() + sessionTtlDays * 24 * 60 * 60 * 1000);
+  const accessTtlMinutes = getAccessTtlMinutes();
+  const refreshedExpiresAt = new Date(Date.now() + accessTtlMinutes * 60 * 1000);
   const result = await query(
     `UPDATE auth_sessions s
      SET expires_at = $2
@@ -1219,6 +1281,65 @@ export async function logoutByToken(token: string): Promise<void> {
 
   const tokenHash = createHash('sha256').update(normalizedToken).digest('hex');
   await query('DELETE FROM auth_sessions WHERE token_hash = $1', [tokenHash]);
+}
+
+export async function revokeRefreshToken(token: string): Promise<void> {
+  const normalizedToken = token.trim();
+  if (!normalizedToken) {
+    return;
+  }
+  const tokenHash = createHash('sha256').update(normalizedToken).digest('hex');
+  await query(
+    `UPDATE auth_refresh_sessions
+     SET revoked_at = NOW()
+     WHERE token_hash = $1`,
+    [tokenHash]
+  );
+}
+
+export async function rotateAccessByRefreshToken(
+  refreshToken: string
+): Promise<{ token: string; expiresAt: string; refreshToken: string; refreshExpiresAt: string } | null> {
+  const normalizedToken = refreshToken.trim();
+  if (!normalizedToken) {
+    return null;
+  }
+  const tokenHash = createHash('sha256').update(normalizedToken).digest('hex');
+  const sessionResult = await query(
+    `SELECT rs.member_id
+     FROM auth_refresh_sessions rs
+     JOIN members m ON m.id = rs.member_id
+     WHERE rs.token_hash = $1
+       AND rs.expires_at > NOW()
+       AND rs.revoked_at IS NULL
+       AND (
+         m.is_active = TRUE
+         OR m.registration_status = 'rejected'
+       )
+     LIMIT 1`,
+    [tokenHash]
+  );
+  const row = sessionResult.rows[0] as { member_id: number } | undefined;
+  if (!row?.member_id) {
+    return null;
+  }
+
+  await query(
+    `UPDATE auth_refresh_sessions
+     SET revoked_at = NOW()
+     WHERE token_hash = $1`,
+    [tokenHash]
+  );
+  const { token, expiresAt } = await createSessionForUser(row.member_id);
+  const { refreshToken: nextRefreshToken, expiresAt: refreshExpiresAt } = await issueRefreshSessionForUser(
+    row.member_id
+  );
+  return {
+    token,
+    expiresAt,
+    refreshToken: nextRefreshToken,
+    refreshExpiresAt,
+  };
 }
 
 export async function getAuthUserById(userId: number): Promise<AuthUser | null> {

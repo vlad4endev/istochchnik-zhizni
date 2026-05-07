@@ -11,6 +11,7 @@ import {
   logoutHandler,
   meHandler,
   patchProfileHandler,
+  refreshHandler,
   uploadAvatarHandler,
   registerHandler,
   rejectAccessRequestHandler,
@@ -131,6 +132,7 @@ function avatarUploadMiddleware(req: Request, res: Response, next: NextFunction)
 
 router.post('/register', registerHandler);
 router.post('/login', authLoginRateLimit, loginHandler);
+router.post('/refresh', authLoginRateLimit, refreshHandler);
 router.post('/forgot-password-request', authResetRateLimit, forgotPasswordRequestHandler);
 router.post('/password-reset/sms/request', authResetRateLimit, startPasswordResetSmsHandler);
 router.post('/password-reset/sms/verify', authResetRateLimit, verifyPasswordResetSmsHandler);

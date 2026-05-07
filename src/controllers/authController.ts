@@ -1,6 +1,12 @@
 import path from 'node:path';
 import { Request, Response } from 'express';
-import { appendClearAuthCookie, appendSetAuthCookie } from '../config/authCookie';
+import {
+  appendClearAuthCookie,
+  appendClearRefreshCookie,
+  appendSetAuthCookie,
+  appendSetRefreshCookie,
+  readRefreshTokenFromCookies,
+} from '../config/authCookie';
 import {
   approveAccessRequest,
   changeMemberPhone,
@@ -13,7 +19,10 @@ import {
   logoutByToken,
   rejectAccessRequest,
   registerUser,
+  revokeRefreshToken,
+  rotateAccessByRefreshToken,
   requestPasswordReset,
+  issueRefreshSessionForUser,
   startPasswordResetViaSms,
   updateAuthUserAvatar,
   updateAuthUserProfile,
@@ -44,6 +53,15 @@ function attachSessionCookieIfPresent(res: Response, body: { token?: unknown }):
   if (typeof t === 'string' && t.length > 0) {
     appendSetAuthCookie(res, t);
   }
+}
+
+async function appendRefreshCookieForUser(res: Response, userId: unknown): Promise<void> {
+  const uid = Number(userId);
+  if (!Number.isInteger(uid) || uid <= 0) {
+    return;
+  }
+  const refresh = await issueRefreshSessionForUser(uid);
+  appendSetRefreshCookie(res, refresh.refreshToken);
 }
 
 const MIN_PASSWORD_LENGTH = 8;
@@ -167,12 +185,18 @@ export async function registerHandler(req: Request, res: Response): Promise<void
 
     if (registration.status === 'pending') {
       attachSessionCookieIfPresent(res, registration);
+      if (registration.user?.id) {
+        await appendRefreshCookieForUser(res, registration.user.id);
+      }
       res.status(202).json(registration);
       return;
     }
 
     notifyRealtime(['members', 'calendar']);
     attachSessionCookieIfPresent(res, registration);
+    if ('user' in registration && registration.user?.id) {
+      await appendRefreshCookieForUser(res, registration.user.id);
+    }
     res.status(201).json(registration);
   } catch (error) {
     if (error instanceof MemberNameDuplicateError) {
@@ -238,6 +262,7 @@ export async function loginHandler(req: Request, res: Response): Promise<void> {
     }
     if (typeof result.token === 'string' && result.token.length > 0) {
       appendSetAuthCookie(res, result.token);
+      await appendRefreshCookieForUser(res, result.user.id);
     }
     res.json(result);
   } catch (error) {
@@ -777,10 +802,42 @@ export async function logoutHandler(req: Request, res: Response): Promise<void> 
 
   try {
     await logoutByToken(token);
+    const refreshToken = readRefreshTokenFromCookies(req);
+    if (refreshToken) {
+      await revokeRefreshToken(refreshToken);
+    }
     appendClearAuthCookie(res);
+    appendClearRefreshCookie(res);
     res.status(204).send();
   } catch (error) {
     console.error('Failed to logout user', error);
+    res.status(500).json({ error: 'Database error' });
+  }
+}
+
+export async function refreshHandler(req: Request, res: Response): Promise<void> {
+  const refreshToken = readRefreshTokenFromCookies(req);
+  if (!refreshToken) {
+    res.status(401).json({ error: 'Refresh token is required' });
+    return;
+  }
+  try {
+    const rotated = await rotateAccessByRefreshToken(refreshToken);
+    if (!rotated) {
+      appendClearAuthCookie(res);
+      appendClearRefreshCookie(res);
+      res.status(401).json({ error: 'Invalid refresh token' });
+      return;
+    }
+    appendSetAuthCookie(res, rotated.token);
+    appendSetRefreshCookie(res, rotated.refreshToken);
+    res.json({
+      accessToken: rotated.token,
+      token: rotated.token,
+      expires_at: rotated.expiresAt,
+    });
+  } catch (error) {
+    console.error('Failed to refresh auth session', error);
     res.status(500).json({ error: 'Database error' });
   }
 }
