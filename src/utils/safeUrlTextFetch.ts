@@ -94,13 +94,7 @@ function htmlToTextBasic(html: string): string {
 function extractTelegraphArticleText(html: string): string {
   // Telegraph обычно содержит <article>...</article>. Если не нашли — fallback на весь документ.
   const m = /<article\b[^>]*>([\s\S]*?)<\/article>/i.exec(html);
-  let fragment = m?.[1] ?? html;
-  // В Telegraph вверху часто есть служебный header (h1 + автор + дата), его не нужно
-  // импортировать в текст песни.
-  fragment = fragment.replace(
-    /<header\b[^>]*class=(['"])[^'"]*\btl_article_header\b[^'"]*\1[^>]*>[\s\S]*?<\/header>/gi,
-    '',
-  );
+  const fragment = m?.[1] ?? html;
   return htmlToTextBasic(fragment);
 }
 

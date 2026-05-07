@@ -250,6 +250,45 @@ export type SendPushOptions = {
   recordDelivery?: boolean;
 };
 
+/** Push-доставки для роли «прихожанин»: только чаты и трансляция (см. kind/type/url в данных). */
+function isParishionerAllowedPushData(data?: Record<string, string>): boolean {
+  if (!data) return false;
+  const conv =
+    typeof data.conversationId === 'string' && data.conversationId.trim().length > 0;
+  const chatTag = typeof data.tag === 'string' && data.tag.startsWith('chat-');
+  if (conv || chatTag) return true;
+
+  const kind = typeof data.kind === 'string' ? data.kind.trim().toLowerCase() : '';
+  if (kind === 'broadcast' || kind === 'broadcast_start') return true;
+
+  const type = typeof data.type === 'string' ? data.type.trim().toLowerCase() : '';
+  if (type.startsWith('broadcast')) return true;
+
+  const url = typeof data.url === 'string' ? data.url.toLowerCase() : '';
+  if (url.includes('/broadcast')) return true;
+
+  return false;
+}
+
+async function memberIsParishioner(memberId: number): Promise<boolean> {
+  try {
+    const result = await query(
+      `SELECT lower(trim(COALESCE(app_role, ''))) AS r FROM members WHERE id = $1 LIMIT 1`,
+      [memberId],
+    );
+    const row = result.rows[0] as { r?: string } | undefined;
+    return row?.r === 'parishioner';
+  } catch {
+    return false;
+  }
+}
+
+/** Для роли parishioner отсекаются лишние массовые пуши без лишнего запроса, если тип уже разрешён. */
+async function shouldDeliverPushForMember(memberId: number, data?: Record<string, string>): Promise<boolean> {
+  if (isParishionerAllowedPushData(data)) return true;
+  return !(await memberIsParishioner(memberId));
+}
+
 /**
  * Web Push + FCM: все подписки участника.
  */
@@ -260,6 +299,10 @@ export async function sendPush(
   data?: Record<string, string>,
   opts?: SendPushOptions,
 ): Promise<void> {
+  if (!(await shouldDeliverPushForMember(memberId, data))) {
+    return;
+  }
+
   const recordDelivery = opts?.recordDelivery !== false;
   let deliveryId: number | undefined;
   if (recordDelivery) {

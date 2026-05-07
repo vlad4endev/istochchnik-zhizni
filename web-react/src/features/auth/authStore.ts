@@ -13,6 +13,7 @@ const LS_ROLE = 'auth_role';
 const LS_REG = 'auth_registration_status';
 
 export type AuthRole =
+  | 'parishioner'
   | 'member'
   | 'minister'
   | 'pastor'
@@ -64,6 +65,7 @@ function normalizeRole(raw: string | undefined): AuthRole {
   if (r === 'pastor') return 'pastor';
   if (r === 'editor') return 'editor';
   if (r === 'musician') return 'musician';
+  if (r === 'parishioner') return 'parishioner';
   return 'member';
 }
 

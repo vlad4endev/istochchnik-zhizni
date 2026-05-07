@@ -1,29 +1,50 @@
 /**
- * Упоминания для обычных пользователей: в поле ввода удобный вид `@[Имя](id)`,
- * в БД и в ленте — компактный `@[id]` (имя подставляется при отображении).
+ * Упоминания в группах: в поле ввода видно только «@Имя» (как в Telegram).
+ * Идентификатор участника кодируется невидимыми U+2060 вокруг числа.
+ * В БД и при отдаче в ленту — компактный `@[memberId]`; имя подставляется при отображении.
  */
 
-const FRIENDLY_MENTION_RE = /@\[([^\]]+)\]\((\d+)\)/g;
+/** WORD JOINER — невидимый маркер границ id в поле ввода */
+export const MENTION_ID_WRAP = '\u2060';
 
-/** Токен для вставки из списка @ (видно имя, не «цифры»). */
-export function buildMentionToken(label: string, id: number): string {
+const LEGACY_MARKDOWN_MENTION_RE = /@\[([^\]]+)\]\((\d+)\)/g;
+
+/** `@Имя\u2060id\u2060` → `@[id]` */
+const VISUAL_MENTION_RE = new RegExp(
+  `@([^${MENTION_ID_WRAP}\n]+?)${MENTION_ID_WRAP}(\\d+)${MENTION_ID_WRAP}`,
+  'g',
+);
+
+function sanitizeMentionLabel(label: string, id: number): string {
   const safe =
     String(label)
+      .replace(/\u2060/g, '')
       .replace(/\]/g, '')
       .replace(/\s+/g, ' ')
       .trim() || `участник ${id}`;
-  return `@[${safe}](${id})`;
+  return safe;
+}
+
+/** Токен для вставки из списка @ — в textarea видно только @Имя. */
+export function buildMentionToken(label: string, id: number): string {
+  const safe = sanitizeMentionLabel(label, id);
+  return `@${safe}${MENTION_ID_WRAP}${id}${MENTION_ID_WRAP}`;
 }
 
 /** Перед отправкой на сервер: только `@[число]` (как хранится в БД). */
 export function normalizeMentionsToCanonical(content: string): string {
-  return content.replace(FRIENDLY_MENTION_RE, (_m, _label, id) => {
+  let s = content.replace(VISUAL_MENTION_RE, (_m, _name, id) => {
     const digits = String(id).replace(/\D/g, '');
     return digits ? `@[${digits}]` : '';
   });
+  s = s.replace(LEGACY_MARKDOWN_MENTION_RE, (_m, _label, id) => {
+    const digits = String(id).replace(/\D/g, '');
+    return digits ? `@[${digits}]` : '';
+  });
+  return s;
 }
 
-/** При открытии редактирования: показать имя вместо сырого @[id]. */
+/** При открытии редактирования: показать «@Имя», а не сырой @[id]. */
 export function denormalizeMentionsForEditor(
   text: string,
   namesById: Record<number, string>,
@@ -35,6 +56,13 @@ export function denormalizeMentionsForEditor(
     if (!name || !String(name).trim()) return full;
     return buildMentionToken(name, id);
   });
+}
+
+/** Фрагмент строки сразу после «@»: уже набран полный визуальный токен — автодополнение не нужно. */
+export function isCompletedVisualMentionFragment(fragAfterAt: string): boolean {
+  return new RegExp(`^[^${MENTION_ID_WRAP}\n]+${MENTION_ID_WRAP}\\d+${MENTION_ID_WRAP}`).test(
+    fragAfterAt,
+  );
 }
 
 /** Все id упоминаний (после нормализации достаточно `@[число]`). */

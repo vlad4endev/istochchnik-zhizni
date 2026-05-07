@@ -9,9 +9,17 @@ export const APP_SECTION_IDS = [
 ] as const;
 
 export type AppSectionId = (typeof APP_SECTION_IDS)[number];
-export type AppRole = 'member' | 'minister' | 'pastor' | 'musician' | 'editor' | 'admin';
+export type AppRole =
+  | 'parishioner'
+  | 'member'
+  | 'minister'
+  | 'pastor'
+  | 'musician'
+  | 'editor'
+  | 'admin';
 
 export const APP_ROLE_IDS: readonly AppRole[] = [
+  'parishioner',
   'member',
   'minister',
   'pastor',
@@ -58,6 +66,7 @@ export function defaultSectionVisibilitySettings(): SectionVisibilitySettingsDoc
 function normalizeRole(raw: unknown): AppRole | null {
   const v = typeof raw === 'string' ? raw.trim().toLowerCase() : '';
   if (
+    v === 'parishioner' ||
     v === 'member' ||
     v === 'minister' ||
     v === 'pastor' ||
@@ -112,5 +121,8 @@ export function isSectionVisibleForRole(
   const role = normalizeRole(roleRaw) ?? 'member';
   const rule = doc.sections[sectionId];
   if (!rule.enabled) return false;
-  return rule.roles.includes(role);
+  return (
+    rule.roles.includes(role) ||
+    (role === 'parishioner' && rule.roles.includes('member'))
+  );
 }

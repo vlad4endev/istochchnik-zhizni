@@ -19,8 +19,17 @@ export interface AppUser {
   account_provider: string | null;
   account_id: string | null;
   is_active: boolean;
-  app_role: 'member' | 'minister' | 'pastor' | 'musician' | 'editor' | 'admin';
-  app_roles?: Array<'member' | 'minister' | 'pastor' | 'musician' | 'editor' | 'admin'>;
+  app_role:
+    | 'parishioner'
+    | 'member'
+    | 'minister'
+    | 'pastor'
+    | 'musician'
+    | 'editor'
+    | 'admin';
+  app_roles?: Array<
+    'parishioner' | 'member' | 'minister' | 'pastor' | 'musician' | 'editor' | 'admin'
+  >;
   is_collection_coordinator: boolean;
   /** Участвует в общем молитвенном цикле (очередь по дням). */
   in_prayer_cycle: boolean;

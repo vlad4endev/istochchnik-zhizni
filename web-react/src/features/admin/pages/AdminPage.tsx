@@ -71,7 +71,6 @@ import {
   fetchAccessRequests,
   mergeDuplicateMembers,
   resetAdminMemberPassword,
-  syncMembersFromTelegramProfiles,
   swapAllMembersFirstLastNames,
   patchTelegramDispatchSettings,
   patchTelegramSettings,
@@ -167,6 +166,8 @@ function appRoleLabel(role: string): string {
   switch (role) {
     case 'admin':
       return 'Администратор';
+    case 'parishioner':
+      return 'Прихожанин';
     case 'minister':
       return 'Служитель';
     case 'pastor':
@@ -183,6 +184,9 @@ function appRoleLabel(role: string): string {
 function appRoleBadgeClass(role: string): string {
   if (role === 'admin') {
     return 'rounded-full bg-primary/12 px-2.5 py-0.5 text-xs font-bold text-primary';
+  }
+  if (role === 'parishioner') {
+    return 'rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-800';
   }
   if (role === 'pastor') {
     return 'rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-semibold text-emerald-900';
@@ -943,7 +947,9 @@ function MembersSection({
       roles,
     }: {
       id: number;
-      roles: Array<'member' | 'minister' | 'pastor' | 'musician' | 'editor' | 'admin'>;
+      roles: Array<
+        'parishioner' | 'member' | 'minister' | 'pastor' | 'musician' | 'editor' | 'admin'
+      >;
     }) => setMemberAppRoles(id, roles),
     onSuccess: (updated) => {
       setEditing((prev) => (prev && prev.id === updated.id ? updated : prev));
@@ -998,26 +1004,6 @@ function MembersSection({
     },
     onError: (e) =>
       setBanner({ type: 'err', text: apiErrorMessage(e, 'Не удалось выполнить массовую замену.') }),
-  });
-
-  const syncTelegramProfilesMut = useMutation({
-    mutationFn: () => syncMembersFromTelegramProfiles(),
-    onSuccess: (r) => {
-      const notes: string[] = [];
-      notes.push(`Обработано: ${r.processed} из ${r.scanned}.`);
-      notes.push(`Аватаров обновлено: ${r.avatars_updated}.`);
-      notes.push(`Телефонов обновлено: ${r.phones_updated}.`);
-      if (!r.storage_enabled) {
-        notes.push('Хранилище не настроено: аватары пропущены.');
-      }
-      if (r.errors.length > 0) {
-        notes.push(`Ошибок: ${r.errors.length}.`);
-      }
-      setBanner({ type: 'ok', text: notes.join(' ') });
-      invalidate();
-    },
-    onError: (e) =>
-      setBanner({ type: 'err', text: apiErrorMessage(e, 'Не удалось синхронизировать данные из Telegram.') }),
   });
 
   const oneTimeMut = useMutation({
@@ -1190,6 +1176,7 @@ function MembersSection({
           aria-label="Фильтр по роли"
         >
           <option value="">Все роли</option>
+          <option value="parishioner">Прихожанин</option>
           <option value="member">Член церкви</option>
           <option value="minister">Служитель</option>
           <option value="pastor">Пастор</option>
@@ -1239,9 +1226,7 @@ function MembersSection({
                 <button
                   type="button"
                   className="w-full px-4 py-2 text-left text-sm font-semibold text-stone-700 hover:bg-stone-50 disabled:opacity-50"
-                  disabled={
-                    mergeDupesMut.isPending || swapAllNamesMut.isPending || syncTelegramProfilesMut.isPending
-                  }
+                  disabled={mergeDupesMut.isPending || swapAllNamesMut.isPending}
                   onClick={() => {
                     setShowActionsMenu(false);
                     if (
@@ -1259,9 +1244,7 @@ function MembersSection({
                 <button
                   type="button"
                   className="w-full px-4 py-2 text-left text-sm font-semibold text-amber-900 hover:bg-stone-50 disabled:opacity-50"
-                  disabled={
-                    mergeDupesMut.isPending || swapAllNamesMut.isPending || syncTelegramProfilesMut.isPending
-                  }
+                  disabled={mergeDupesMut.isPending || swapAllNamesMut.isPending}
                   onClick={() => {
                     setShowActionsMenu(false);
                     if (
@@ -1275,28 +1258,6 @@ function MembersSection({
                   }}
                 >
                   {swapAllNamesMut.isPending ? 'Обновление…' : 'Поменять имя/фамилию у всех'}
-                </button>
-                <button
-                  type="button"
-                  className="w-full px-4 py-2 text-left text-sm font-semibold text-sky-800 hover:bg-stone-50 disabled:opacity-50"
-                  disabled={
-                    mergeDupesMut.isPending || swapAllNamesMut.isPending || syncTelegramProfilesMut.isPending
-                  }
-                  onClick={() => {
-                    setShowActionsMenu(false);
-                    if (
-                      !window.confirm(
-                        'Массово обновить данные из Telegram по Telegram ID? Будут подтянуты аватары, а телефон обновится только если Telegram вернет phone_number.',
-                      )
-                    )
-                      return;
-                    setBanner(null);
-                    syncTelegramProfilesMut.mutate();
-                  }}
-                >
-                  {syncTelegramProfilesMut.isPending
-                    ? 'Синхронизация с Telegram…'
-                    : 'Обновить из Telegram по Telegram ID'}
                 </button>
               </div>
             </>
@@ -2158,6 +2119,7 @@ function MembersSection({
                       }}
                     >
                       <option value="">—</option>
+                      <option value="parishioner">Прихожанин</option>
                       <option value="member">Член церкви</option>
                       <option value="minister">Служитель</option>
                       <option value="pastor">Пастор</option>

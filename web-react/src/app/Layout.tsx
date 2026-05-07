@@ -34,6 +34,7 @@ import { useRealtimeWsConnection } from '../lib/realtimeWsClient';
 import { useSyncServerRole } from '../hooks/useSyncServerRole';
 import { IOSInstallBanner } from '../components/IOSInstallBanner';
 import { AndroidInstallBanner } from '../components/AndroidInstallBanner';
+import { PermissionsRequestModal } from '../components/PermissionsRequestModal';
 import { NotificationPrompt } from '../features/pwa';
 import { PrefetchNavLink } from '../components/PrefetchNavLink';
 import { ScrollRestoration } from '../components/ScrollRestoration';
@@ -594,7 +595,12 @@ export function Layout() {
     ? `/profile/${encodeURIComponent(publicProfileSlug)}`
     : '/dashboard';
 
+  const isParishionerGuest = (role ?? 'member').toLowerCase() === 'parishioner';
+
   const items = useMemo(() => {
+    if (isParishionerGuest) {
+      return NAV_ITEMS.filter((item) => item.to === '/dashboard' || item.to === '/messenger');
+    }
     const navBase =
       registrationStatus === 'pending_review'
         ? NAV_ITEMS.filter((item) => item.to === '/dashboard')
@@ -611,6 +617,7 @@ export function Layout() {
           canRoleAccessSection(sectionVisibilityQ.data, item.sectionId, role, roles)),
     );
   }, [
+    isParishionerGuest,
     registrationStatus,
     isAdmin,
     role,
@@ -1103,6 +1110,7 @@ export function Layout() {
       <AndroidInstallBanner />
       <AppToastHost />
       <NotificationPrompt />
+      <PermissionsRequestModal />
       <IncomingCallToast />
       <CallWindow />
     </div>

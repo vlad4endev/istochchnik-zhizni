@@ -10,6 +10,7 @@ import { ModuleErrorBoundary } from './ModuleErrorBoundary';
 import { ProfileRouteBoundary } from './ProfileRouteBoundary';
 import { usePageTracking } from '../hooks/usePageTracking';
 import {
+  BlockParishionerGuest,
   LOGIN_PATH,
   RequireAdmin,
   RequireAuth,
@@ -210,15 +211,17 @@ export function AppRouter() {
         <Route
           path="studio"
           element={
-            <RequireFullMember>
-              <RequireSectionAccess sectionId="studio">
-                <RequireStudioAccess>
-                  <Suspense fallback={<RouteFallback />}>
-                    <StudioLayout />
-                  </Suspense>
-                </RequireStudioAccess>
-              </RequireSectionAccess>
-            </RequireFullMember>
+            <BlockParishionerGuest>
+              <RequireFullMember>
+                <RequireSectionAccess sectionId="studio">
+                  <RequireStudioAccess>
+                    <Suspense fallback={<RouteFallback />}>
+                      <StudioLayout />
+                    </Suspense>
+                  </RequireStudioAccess>
+                </RequireSectionAccess>
+              </RequireFullMember>
+            </BlockParishionerGuest>
           }
         >
           <Route index element={<Navigate to="my-songs" replace />} />
@@ -300,13 +303,15 @@ export function AppRouter() {
           <Route
             path="prayer"
           element={
-            <RequireFullMember>
-              <RequireSectionAccess sectionId="prayer">
-                <Suspense fallback={<RouteFallback />}>
-                  <DailyPrayerPage />
-                </Suspense>
-              </RequireSectionAccess>
-            </RequireFullMember>
+            <BlockParishionerGuest>
+              <RequireFullMember>
+                <RequireSectionAccess sectionId="prayer">
+                  <Suspense fallback={<RouteFallback />}>
+                    <DailyPrayerPage />
+                  </Suspense>
+                </RequireSectionAccess>
+              </RequireFullMember>
+            </BlockParishionerGuest>
           }
         />
         <Route
@@ -324,67 +329,79 @@ export function AppRouter() {
         <Route
           path="broadcast"
           element={
-            <RequireFullMember>
-              <Suspense fallback={<RouteFallback />}>
-                <BroadcastPage />
-              </Suspense>
-            </RequireFullMember>
+            <BlockParishionerGuest>
+              <RequireFullMember>
+                <Suspense fallback={<RouteFallback />}>
+                  <BroadcastPage />
+                </Suspense>
+              </RequireFullMember>
+            </BlockParishionerGuest>
           }
         />
         <Route
           path="sermons"
           element={
-            <RequireFullMember>
-              <RequireSectionAccess sectionId="sermons">
-                <Suspense fallback={<RouteFallback />}>
-                  <PodcastsPage />
-                </Suspense>
-              </RequireSectionAccess>
-            </RequireFullMember>
+            <BlockParishionerGuest>
+              <RequireFullMember>
+                <RequireSectionAccess sectionId="sermons">
+                  <Suspense fallback={<RouteFallback />}>
+                    <PodcastsPage />
+                  </Suspense>
+                </RequireSectionAccess>
+              </RequireFullMember>
+            </BlockParishionerGuest>
           }
         />
         <Route
           path="resources/*"
           element={
-            <RequireFullMember>
-              <Suspense fallback={<RouteFallback />}>
-                <ResourcesRoutes />
-              </Suspense>
-            </RequireFullMember>
+            <BlockParishionerGuest>
+              <RequireFullMember>
+                <Suspense fallback={<RouteFallback />}>
+                  <ResourcesRoutes />
+                </Suspense>
+              </RequireFullMember>
+            </BlockParishionerGuest>
           }
         />
         <Route
           path="service-flow"
           element={
-            <RequireFullMember>
-              <Suspense fallback={<RouteFallback />}>
-                <ServiceFlowPage />
-              </Suspense>
-            </RequireFullMember>
+            <BlockParishionerGuest>
+              <RequireFullMember>
+                <Suspense fallback={<RouteFallback />}>
+                  <ServiceFlowPage />
+                </Suspense>
+              </RequireFullMember>
+            </BlockParishionerGuest>
           }
         />
         <Route
           path="service-planner"
           element={
-            <RequireFullMember>
-              <RequireSectionAccess sectionId="service_planner">
-                <Suspense fallback={<RouteFallback />}>
-                  <ServicePlannerPage />
-                </Suspense>
-              </RequireSectionAccess>
-            </RequireFullMember>
+            <BlockParishionerGuest>
+              <RequireFullMember>
+                <RequireSectionAccess sectionId="service_planner">
+                  <Suspense fallback={<RouteFallback />}>
+                    <ServicePlannerPage />
+                  </Suspense>
+                </RequireSectionAccess>
+              </RequireFullMember>
+            </BlockParishionerGuest>
           }
         />
         <Route
           path="songbook"
           element={
-            <RequireFullMember>
-              <RequireSectionAccess sectionId="songbook">
-                <Suspense fallback={<RouteFallback />}>
-                  <SongbookLayout />
-                </Suspense>
-              </RequireSectionAccess>
-            </RequireFullMember>
+            <BlockParishionerGuest>
+              <RequireFullMember>
+                <RequireSectionAccess sectionId="songbook">
+                  <Suspense fallback={<RouteFallback />}>
+                    <SongbookLayout />
+                  </Suspense>
+                </RequireSectionAccess>
+              </RequireFullMember>
+            </BlockParishionerGuest>
           }
         >
           <Route
@@ -469,31 +486,37 @@ export function AppRouter() {
         <Route
           path="settings"
           element={
-            <RequireFullMember>
-              <Suspense fallback={<RouteFallback />}>
-                <SettingsPage />
-              </Suspense>
-            </RequireFullMember>
+            <BlockParishionerGuest>
+              <RequireFullMember>
+                <Suspense fallback={<RouteFallback />}>
+                  <SettingsPage />
+                </Suspense>
+              </RequireFullMember>
+            </BlockParishionerGuest>
           }
         />
         <Route
           path="profile"
           element={
-            <RequireFullMember>
-              <ProfileRouteBoundary moduleName="настройки профиля" fallback={<RouteFallback />}>
-                <LazyProfilePage />
-              </ProfileRouteBoundary>
-            </RequireFullMember>
+            <BlockParishionerGuest>
+              <RequireFullMember>
+                <ProfileRouteBoundary moduleName="настройки профиля" fallback={<RouteFallback />}>
+                  <LazyProfilePage />
+                </ProfileRouteBoundary>
+              </RequireFullMember>
+            </BlockParishionerGuest>
           }
         />
         <Route
           path="profile/:username"
           element={
-            <RequireFullMember>
-              <ProfileRouteBoundary moduleName="профиль" fallback={<RouteFallback />}>
-                <LazyPublicProfilePage />
-              </ProfileRouteBoundary>
-            </RequireFullMember>
+            <BlockParishionerGuest>
+              <RequireFullMember>
+                <ProfileRouteBoundary moduleName="профиль" fallback={<RouteFallback />}>
+                  <LazyPublicProfilePage />
+                </ProfileRouteBoundary>
+              </RequireFullMember>
+            </BlockParishionerGuest>
           }
         />
         <Route

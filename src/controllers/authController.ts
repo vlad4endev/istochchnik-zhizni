@@ -895,9 +895,15 @@ export async function approveAccessRequestHandler(req: Request, res: Response): 
   }
 
   const reviewNote = readStringField(req.body.review_note);
+  const appRoleRaw = readStringField(req.body.app_role).toLowerCase();
 
   try {
-    const user = await approveAccessRequest(requestId, authReq.authUserId, reviewNote || undefined);
+    const user = await approveAccessRequest(
+      requestId,
+      authReq.authUserId,
+      reviewNote || undefined,
+      appRoleRaw === 'parishioner' ? { app_role: 'parishioner' } : undefined,
+    );
     if (!user) {
       res.status(404).json({ error: 'Pending request not found' });
       return;

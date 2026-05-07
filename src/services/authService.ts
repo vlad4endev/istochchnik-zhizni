@@ -1582,11 +1582,16 @@ async function resolveMemberForAccessRequestIdentity(requestRow: {
   return existingMember;
 }
 
+export type ApproveAccessRequestAppRoleChoice = 'member' | 'parishioner';
+
 export async function approveAccessRequest(
   requestId: number,
   reviewerId: number,
-  reviewNote?: string
+  reviewNote?: string,
+  options?: { app_role?: ApproveAccessRequestAppRoleChoice },
 ): Promise<AuthUser | null> {
+  const assignParishioner = options?.app_role === 'parishioner';
+
   const requestResult = await query(
     `SELECT
       id,
@@ -1659,117 +1664,229 @@ export async function approveAccessRequest(
     );
     member = updated.rows[0] as MemberRow;
   } else if (requestRow.request_type === 'registration' && requestRow.member_id != null) {
-    const updated = await query(
-      `UPDATE members
-       SET
-        first_name = $1,
-        last_name = $2,
-        name = $3,
-        phone_number = $4,
-        password_hash = $5,
-        registration_status = 'active',
-        is_active = TRUE,
-        app_role = COALESCE(NULLIF(app_role, ''), 'member'),
-        updated_at = NOW()
-       WHERE id = $6
-       RETURNING
-        id,
-        user_id,
-        first_name,
-        last_name,
-        name,
-        phone_number,
-        birth_date,
-        email,
-        prayer_request,
-        app_role,
-        is_active,
-        registration_status,
-        is_collection_coordinator,
-        in_prayer_cycle,
-        created_at,
-        updated_at`,
-      [
-        requestRow.first_name,
-        requestRow.last_name,
-        requestRow.full_name,
-        requestRow.phone_number,
-        requestRow.password_hash,
-        requestRow.member_id,
-      ]
-    );
+    const updated = assignParishioner
+      ? await query(
+          `UPDATE members
+           SET
+            first_name = $1,
+            last_name = $2,
+            name = $3,
+            phone_number = $4,
+            password_hash = $5,
+            registration_status = 'active',
+            is_active = TRUE,
+            app_role = 'parishioner',
+            app_roles = ARRAY['parishioner']::text[],
+            updated_at = NOW()
+           WHERE id = $6
+           RETURNING
+            id,
+            user_id,
+            first_name,
+            last_name,
+            name,
+            phone_number,
+            birth_date,
+            email,
+            prayer_request,
+            app_role,
+            is_active,
+            registration_status,
+            is_collection_coordinator,
+            in_prayer_cycle,
+            created_at,
+            updated_at`,
+          [
+            requestRow.first_name,
+            requestRow.last_name,
+            requestRow.full_name,
+            requestRow.phone_number,
+            requestRow.password_hash,
+            requestRow.member_id,
+          ],
+        )
+      : await query(
+          `UPDATE members
+           SET
+            first_name = $1,
+            last_name = $2,
+            name = $3,
+            phone_number = $4,
+            password_hash = $5,
+            registration_status = 'active',
+            is_active = TRUE,
+            app_role = COALESCE(NULLIF(app_role, ''), 'member'),
+            updated_at = NOW()
+           WHERE id = $6
+           RETURNING
+            id,
+            user_id,
+            first_name,
+            last_name,
+            name,
+            phone_number,
+            birth_date,
+            email,
+            prayer_request,
+            app_role,
+            is_active,
+            registration_status,
+            is_collection_coordinator,
+            in_prayer_cycle,
+            created_at,
+            updated_at`,
+          [
+            requestRow.first_name,
+            requestRow.last_name,
+            requestRow.full_name,
+            requestRow.phone_number,
+            requestRow.password_hash,
+            requestRow.member_id,
+          ],
+        );
     member = updated.rows[0] as MemberRow;
   } else if (existingMember) {
-    const updated = await query(
-      `UPDATE members
-       SET
-        first_name = $1,
-        last_name = $2,
-        name = $3,
-        phone_number = $4,
-        password_hash = $5,
-        app_role = COALESCE(NULLIF(app_role, ''), 'member'),
-        registration_status = 'active',
-        is_active = TRUE,
-        updated_at = NOW()
-       WHERE id = $6
-       RETURNING
-        id,
-        user_id,
-        first_name,
-        last_name,
-        name,
-        phone_number,
-        birth_date,
-        email,
-        prayer_request,
-        app_role,
-        is_active,
-        registration_status,
-        is_collection_coordinator,
-        in_prayer_cycle,
-        created_at,
-        updated_at`,
-      [
-        requestRow.first_name,
-        requestRow.last_name,
-        requestRow.full_name,
-        requestRow.phone_number,
-        requestRow.password_hash,
-        existingMember.id,
-      ]
-    );
+    const updated = assignParishioner
+      ? await query(
+          `UPDATE members
+           SET
+            first_name = $1,
+            last_name = $2,
+            name = $3,
+            phone_number = $4,
+            password_hash = $5,
+            app_role = 'parishioner',
+            app_roles = ARRAY['parishioner']::text[],
+            registration_status = 'active',
+            is_active = TRUE,
+            updated_at = NOW()
+           WHERE id = $6
+           RETURNING
+            id,
+            user_id,
+            first_name,
+            last_name,
+            name,
+            phone_number,
+            birth_date,
+            email,
+            prayer_request,
+            app_role,
+            is_active,
+            registration_status,
+            is_collection_coordinator,
+            in_prayer_cycle,
+            created_at,
+            updated_at`,
+          [
+            requestRow.first_name,
+            requestRow.last_name,
+            requestRow.full_name,
+            requestRow.phone_number,
+            requestRow.password_hash,
+            existingMember.id,
+          ],
+        )
+      : await query(
+          `UPDATE members
+           SET
+            first_name = $1,
+            last_name = $2,
+            name = $3,
+            phone_number = $4,
+            password_hash = $5,
+            app_role = COALESCE(NULLIF(app_role, ''), 'member'),
+            registration_status = 'active',
+            is_active = TRUE,
+            updated_at = NOW()
+           WHERE id = $6
+           RETURNING
+            id,
+            user_id,
+            first_name,
+            last_name,
+            name,
+            phone_number,
+            birth_date,
+            email,
+            prayer_request,
+            app_role,
+            is_active,
+            registration_status,
+            is_collection_coordinator,
+            in_prayer_cycle,
+            created_at,
+            updated_at`,
+          [
+            requestRow.first_name,
+            requestRow.last_name,
+            requestRow.full_name,
+            requestRow.phone_number,
+            requestRow.password_hash,
+            existingMember.id,
+          ],
+        );
     member = updated.rows[0] as MemberRow;
   } else {
-    const inserted = await query(
-      `INSERT INTO members
-        (first_name, last_name, name, phone_number, password_hash, app_role, is_active, registration_status, updated_at)
-       VALUES ($1, $2, $3, $4, $5, 'member', TRUE, 'active', NOW())
-       RETURNING
-        id,
-        user_id,
-        first_name,
-        last_name,
-        name,
-        phone_number,
-        birth_date,
-        email,
-        prayer_request,
-        app_role,
-        is_active,
-        registration_status,
-        is_collection_coordinator,
-        in_prayer_cycle,
-        created_at,
-        updated_at`,
-      [
-        requestRow.first_name,
-        requestRow.last_name,
-        requestRow.full_name,
-        requestRow.phone_number,
-        requestRow.password_hash,
-      ]
-    );
+    const inserted = assignParishioner
+      ? await query(
+          `INSERT INTO members
+            (first_name, last_name, name, phone_number, password_hash, app_role, app_roles, is_active, registration_status, updated_at)
+           VALUES ($1, $2, $3, $4, $5, 'parishioner', ARRAY['parishioner']::text[], TRUE, 'active', NOW())
+           RETURNING
+            id,
+            user_id,
+            first_name,
+            last_name,
+            name,
+            phone_number,
+            birth_date,
+            email,
+            prayer_request,
+            app_role,
+            is_active,
+            registration_status,
+            is_collection_coordinator,
+            in_prayer_cycle,
+            created_at,
+            updated_at`,
+          [
+            requestRow.first_name,
+            requestRow.last_name,
+            requestRow.full_name,
+            requestRow.phone_number,
+            requestRow.password_hash,
+          ],
+        )
+      : await query(
+          `INSERT INTO members
+            (first_name, last_name, name, phone_number, password_hash, app_role, is_active, registration_status, updated_at)
+           VALUES ($1, $2, $3, $4, $5, 'member', TRUE, 'active', NOW())
+           RETURNING
+            id,
+            user_id,
+            first_name,
+            last_name,
+            name,
+            phone_number,
+            birth_date,
+            email,
+            prayer_request,
+            app_role,
+            is_active,
+            registration_status,
+            is_collection_coordinator,
+            in_prayer_cycle,
+            created_at,
+            updated_at`,
+          [
+            requestRow.first_name,
+            requestRow.last_name,
+            requestRow.full_name,
+            requestRow.phone_number,
+            requestRow.password_hash,
+          ],
+        );
     member = inserted.rows[0] as MemberRow;
   }
 

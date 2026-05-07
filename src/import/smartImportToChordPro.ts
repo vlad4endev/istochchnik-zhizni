@@ -31,33 +31,6 @@ function splitByDoubleNewlines(text: string): string[] {
   return chunks;
 }
 
-const INLINE_SECTION_WITH_TEXT_RE =
-  /^\s*(куплет|припев|бридж|проигрыш|verse|chorus|bridge|intro|outro)\s*([0-9ivx]+)?\s*[:\-–—]\s*(.+?)\s*$/i;
-
-function normalizeInlineSectionBase(baseRaw: string): string {
-  const base = baseRaw.trim().toLowerCase();
-  if (base === 'verse') return 'Куплет';
-  if (base === 'chorus') return 'Припев';
-  if (base === 'bridge') return 'Бридж';
-  if (base === 'intro') return 'Вступление';
-  if (base === 'outro') return 'Аутро';
-  if (base === 'куплет') return 'Куплет';
-  if (base === 'припев') return 'Припев';
-  if (base === 'бридж') return 'Бридж';
-  if (base === 'проигрыш') return 'Проигрыш';
-  return baseRaw.trim();
-}
-
-function parseInlineSectionWithText(line: string): { title: string; rest: string } | null {
-  const m = line.match(INLINE_SECTION_WITH_TEXT_RE);
-  if (!m) return null;
-  const base = normalizeInlineSectionBase(m[1] ?? '');
-  const n = (m[2] ?? '').trim();
-  const rest = (m[3] ?? '').trim();
-  if (!base || !rest) return null;
-  return { title: n ? `${base} ${n}` : base, rest };
-}
-
 function blocksFromParagraphsWhenNoHeaders(rawText: string): string {
   const paras = splitByDoubleNewlines(rawText);
   if (paras.length === 0) return rawText.trimEnd();
@@ -138,20 +111,11 @@ export function smartImportTextToChordPro(raw: string): string {
   };
 
   for (const line of lines) {
-    const normalizedLine = unwrapHeadingDecorations(line);
-    const title = parseSectionTitle(normalizedLine);
+    const title = parseSectionTitle(unwrapHeadingDecorations(line));
     if (title !== null) {
       sawAnyHeader = true;
       flush();
       curTitle = title;
-      continue;
-    }
-    const inline = parseInlineSectionWithText(normalizedLine);
-    if (inline) {
-      sawAnyHeader = true;
-      flush();
-      curTitle = inline.title;
-      curLines.push(inline.rest);
       continue;
     }
     curLines.push(line);

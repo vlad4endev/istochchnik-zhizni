@@ -94,6 +94,15 @@ export function RequireAuth() {
   return <Outlet />;
 }
 
+/** Режим прихожанина: только главная и чаты — остальные экраны недоступны по прямой ссылке. */
+export function BlockParishionerGuest({ children }: { children: ReactNode }) {
+  const role = useAuthStore((s) => s.role);
+  if ((role ?? '').toLowerCase() === 'parishioner') {
+    return <Navigate to="/dashboard" replace />;
+  }
+  return <>{children}</>;
+}
+
 export function RequireAdmin({ children }: { children: ReactNode }) {
   const role = useAuthStore((s) => s.role);
   const isAdmin = (role ?? 'member').toLowerCase() === 'admin';

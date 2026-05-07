@@ -16,7 +16,13 @@ import * as api from '../api/messengerApi';
 import Picker from '@emoji-mart/react';
 import emojiData from '@emoji-mart/data';
 import { PollCreateModal } from './PollCreateModal';
-import { buildMentionToken, denormalizeMentionsForEditor, normalizeMentionsToCanonical } from '../mentionUtils';
+import {
+  buildMentionToken,
+  denormalizeMentionsForEditor,
+  isCompletedVisualMentionFragment,
+  MENTION_ID_WRAP,
+  normalizeMentionsToCanonical,
+} from '../mentionUtils';
 import { compressImageForMessengerUpload } from '../compressImageForUpload';
 import axios from 'axios';
 import { emitAppToast } from '../../../lib/uiFeedback';
@@ -971,8 +977,10 @@ export function ChatInput({
         const frag = before.slice(at + 1);
         if (frag.includes('\n')) {
           setMentionOpen(false);
+        } else if (isCompletedVisualMentionFragment(frag)) {
+          setMentionOpen(false);
         } else if (/^\[[^\]]*\]\(/.test(frag)) {
-          // Уже внутри или после `@[Имя](` — не показываем меню
+          // Старый черновик с `@[Имя](` — не показываем меню
           setMentionOpen(false);
         } else {
           let query = '';
@@ -985,7 +993,8 @@ export function ChatInput({
               badBracket = true;
             }
           } else {
-            query = frag.trim();
+            const beforeWJ = frag.split(MENTION_ID_WRAP)[0];
+            query = beforeWJ.trim();
           }
           if (badBracket) {
             setMentionOpen(false);

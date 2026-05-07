@@ -59,10 +59,16 @@ function periodKey(rule: NotificationRule, z: ZonedNow): string {
   }
 }
 
-async function pushToAllMembers(title: string, body: string, url: string): Promise<void> {
+async function pushToAllMembers(
+  title: string,
+  body: string,
+  url: string,
+  extra?: Record<string, string>,
+): Promise<void> {
   const ids = await getMemberIdsWithAnyPushSubscription();
+  const payload: Record<string, string> = { url, ...(extra ?? {}) };
   for (const id of ids) {
-    await sendPush(id, title, body, { url });
+    await sendPush(id, title, body, payload);
   }
 }
 
@@ -249,6 +255,7 @@ async function handleRule(rule: NotificationRule, doc: NotificationSettingsDocum
         title,
         resolveBody(rule, 'Трансляция началась — присоединяйтесь к эфиру.'),
         '/dashboard',
+        { kind: 'broadcast' },
       );
       await markBroadcastStartNotificationSent(candidate.id);
       return;

@@ -481,6 +481,8 @@ function DashboardMain() {
   const role = useAuthStore((s) => s.role);
   const isAdmin = role === 'admin';
   const isPastor = role === 'pastor';
+  /** Гостевой режим после одобрения заявки с ролью «Прихожанин». */
+  const isParishionerGuest = role === 'parishioner';
   const todayDateKey = useMemo(() => formatCalendarDayKey(now), [now]);
   /** Понедельник текущей недели (как на сервере) — чтобы кэш сбрасывался при смене недели. */
   const weekStartKey = useMemo(
@@ -681,6 +683,7 @@ function DashboardMain() {
   const showBroadcastWidget = shouldShowBroadcastWidget(broadcastNowMs, activeBroadcast);
   const announcementNote = dashboardNotesQ.data?.announcement ?? null;
   const hasAnnouncement = announcementNote != null;
+  const displayAnnouncement = hasAnnouncement && !isParishionerGuest;
   const broadcastEndsLabel = useMemo(() => {
     if (!activeBroadcast?.starts_at) return null;
     if (broadcastUiMode !== 'pre' && broadcastUiMode !== 'onair') return null;
@@ -952,34 +955,38 @@ function DashboardMain() {
                   {birthdayBadgeText}
                 </div>
               ) : null}
-              <div className="hidden items-center gap-2 lg:flex">
-                <Link
-                  to="/profile"
-                  className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-white/15 text-white transition hover:bg-white/25"
-                  aria-label="Профиль"
-                  title="Профиль"
-                >
-                  <LuUser className="h-[18px] w-[18px]" strokeWidth={2} aria-hidden />
-                </Link>
-                <Link
-                  to="/profile"
-                  className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-white/15 text-white transition hover:bg-white/25"
-                  aria-label="Настройки"
-                  title="Настройки"
-                >
-                  <LuSettings className="h-[18px] w-[18px]" strokeWidth={2} aria-hidden />
-                </Link>
-              </div>
-              <SectionHeroToolbarEnd>
-                <Link
-                  to="/profile"
-                  className="tap-highlight-transparent flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-white/25 bg-white/15 text-white shadow-sm transition hover:bg-white/25 active:scale-[0.98] md:hidden"
-                  aria-label="Настройки профиля"
-                  title="Настройки"
-                >
-                  <LuSettings className="h-5 w-5" strokeWidth={2} aria-hidden />
-                </Link>
-              </SectionHeroToolbarEnd>
+              {!isParishionerGuest ? (
+                <div className="hidden items-center gap-2 lg:flex">
+                  <Link
+                    to="/profile"
+                    className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-white/15 text-white transition hover:bg-white/25"
+                    aria-label="Профиль"
+                    title="Профиль"
+                  >
+                    <LuUser className="h-[18px] w-[18px]" strokeWidth={2} aria-hidden />
+                  </Link>
+                  <Link
+                    to="/profile"
+                    className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-white/15 text-white transition hover:bg-white/25"
+                    aria-label="Настройки"
+                    title="Настройки"
+                  >
+                    <LuSettings className="h-[18px] w-[18px]" strokeWidth={2} aria-hidden />
+                  </Link>
+                </div>
+              ) : null}
+              {!isParishionerGuest ? (
+                <SectionHeroToolbarEnd>
+                  <Link
+                    to="/profile"
+                    className="tap-highlight-transparent flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-white/25 bg-white/15 text-white shadow-sm transition hover:bg-white/25 active:scale-[0.98] md:hidden"
+                    aria-label="Настройки профиля"
+                    title="Настройки"
+                  >
+                    <LuSettings className="h-5 w-5" strokeWidth={2} aria-hidden />
+                  </Link>
+                </SectionHeroToolbarEnd>
+              ) : null}
             </div>
           </header>
         </div>
@@ -1001,41 +1008,71 @@ function DashboardMain() {
               </div>
             ) : null}
 
-            <button
-              type="button"
-              onClick={() =>
-                navigate(
-                  publicProfileSlug
-                    ? `/profile/${encodeURIComponent(publicProfileSlug)}`
-                    : '/profile',
-                )
-              }
-              className={[
-                'group order-2 rounded-[14px] border border-[#E8E0DC] bg-white p-0 text-left transition hover:-translate-y-0.5 hover:shadow-[0_4px_16px_rgba(107,45,62,0.1)]',
-                showNearestPreacherWidget ? 'col-span-3' : 'col-span-4',
-              ].join(' ')}
-            >
-              <div className="flex items-center gap-3.5 p-[16px]">
-                <div className="h-[52px] w-[52px] shrink-0 overflow-hidden rounded-full border-2 border-[#E8D8DC] bg-stone-100">
-                  {avatarUrl ? (
-                    <img src={avatarUrl} alt="" className="h-full w-full object-cover" />
-                  ) : (
-                    <div className="grid h-full w-full place-items-center text-stone-500">
-                      <LuUser className="h-5 w-5" strokeWidth={2} aria-hidden />
-                    </div>
-                  )}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-[15px] font-semibold text-stone-900">{profileDisplayTitle}</p>
-                  <span className="mt-1 inline-block rounded-full bg-[#F0ECF9] px-2 py-0.5 text-[11px] font-semibold text-[#6B47B8]">
-                    {publicationsCount} {publicationsLabel}
-                  </span>
-                  <p className="mt-1 truncate text-xs text-stone-500">
-                    {bioText || 'Откройте профиль для обновления информации'}
-                  </p>
+            {isParishionerGuest ? (
+              <div
+                className={[
+                  'group order-2 rounded-[14px] border border-[#E8E0DC] bg-white p-0 text-left',
+                  showNearestPreacherWidget ? 'col-span-3' : 'col-span-4',
+                ].join(' ')}
+              >
+                <div className="flex items-center gap-3.5 p-[16px]">
+                  <div className="h-[52px] w-[52px] shrink-0 overflow-hidden rounded-full border-2 border-[#E8D8DC] bg-stone-100">
+                    {avatarUrl ? (
+                      <img src={avatarUrl} alt="" className="h-full w-full object-cover" />
+                    ) : (
+                      <div className="grid h-full w-full place-items-center text-stone-500">
+                        <LuUser className="h-5 w-5" strokeWidth={2} aria-hidden />
+                      </div>
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-[15px] font-semibold text-stone-900">{profileDisplayTitle}</p>
+                    <span className="mt-1 inline-block rounded-full bg-[#F0ECF9] px-2 py-0.5 text-[11px] font-semibold text-[#6B47B8]">
+                      {publicationsCount} {publicationsLabel}
+                    </span>
+                    <p className="mt-1 truncate text-xs text-stone-500">
+                      {bioText || 'Добро пожаловать в приложение церкви'}
+                    </p>
+                  </div>
                 </div>
               </div>
-            </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() =>
+                  navigate(
+                    publicProfileSlug
+                      ? `/profile/${encodeURIComponent(publicProfileSlug)}`
+                      : '/profile',
+                  )
+                }
+                className={[
+                  'group order-2 rounded-[14px] border border-[#E8E0DC] bg-white p-0 text-left transition hover:-translate-y-0.5 hover:shadow-[0_4px_16px_rgba(107,45,62,0.1)]',
+                  showNearestPreacherWidget ? 'col-span-3' : 'col-span-4',
+                ].join(' ')}
+              >
+                <div className="flex items-center gap-3.5 p-[16px]">
+                  <div className="h-[52px] w-[52px] shrink-0 overflow-hidden rounded-full border-2 border-[#E8D8DC] bg-stone-100">
+                    {avatarUrl ? (
+                      <img src={avatarUrl} alt="" className="h-full w-full object-cover" />
+                    ) : (
+                      <div className="grid h-full w-full place-items-center text-stone-500">
+                        <LuUser className="h-5 w-5" strokeWidth={2} aria-hidden />
+                      </div>
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-[15px] font-semibold text-stone-900">{profileDisplayTitle}</p>
+                    <span className="mt-1 inline-block rounded-full bg-[#F0ECF9] px-2 py-0.5 text-[11px] font-semibold text-[#6B47B8]">
+                      {publicationsCount} {publicationsLabel}
+                    </span>
+                    <p className="mt-1 truncate text-xs text-stone-500">
+                      {bioText || 'Откройте профиль для обновления информации'}
+                    </p>
+                  </div>
+                </div>
+              </button>
+            )}
 
             <section
               className={[
@@ -1059,27 +1096,29 @@ function DashboardMain() {
               )}
             </section>
 
-            <button
-              type="button"
-              onClick={() => navigate('/prayer')}
-              className={[
-                'order-4 rounded-[14px] border border-[#BFC9F7] bg-gradient-to-br from-[#EEF2FF] to-[#E5EAFF] p-4 text-left transition hover:-translate-y-0.5 hover:shadow-[0_4px_16px_rgba(107,45,62,0.1)]',
-                showNearestPreacherWidget ? 'col-span-2' : 'col-span-4',
-              ].join(' ')}
-            >
-              <p className="text-[11px] font-semibold tracking-[0.02em] text-[#3042A8]">Молимся сегодня</p>
-              <div className="mt-3 flex items-start gap-3">
-                <div className="grid h-[42px] w-[42px] shrink-0 place-items-center rounded-[11px] bg-[#4A5FD5] text-white">
-                  <LuChurch className="h-[18px] w-[18px]" strokeWidth={2} aria-hidden />
+            {!isParishionerGuest ? (
+              <button
+                type="button"
+                onClick={() => navigate('/prayer')}
+                className={[
+                  'order-4 rounded-[14px] border border-[#BFC9F7] bg-gradient-to-br from-[#EEF2FF] to-[#E5EAFF] p-4 text-left transition hover:-translate-y-0.5 hover:shadow-[0_4px_16px_rgba(107,45,62,0.1)]',
+                  showNearestPreacherWidget ? 'col-span-2' : 'col-span-4',
+                ].join(' ')}
+              >
+                <p className="text-[11px] font-semibold tracking-[0.02em] text-[#3042A8]">Молимся сегодня</p>
+                <div className="mt-3 flex items-start gap-3">
+                  <div className="grid h-[42px] w-[42px] shrink-0 place-items-center rounded-[11px] bg-[#4A5FD5] text-white">
+                    <LuChurch className="h-[18px] w-[18px]" strokeWidth={2} aria-hidden />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="truncate text-[14px] font-semibold text-[#1A2560]">{memberToday?.name ?? 'Не назначен'}</p>
+                    <p className="mt-1 text-xs text-[#4A5FD5]">{todayLabel}</p>
+                  </div>
                 </div>
-                <div className="min-w-0">
-                  <p className="truncate text-[14px] font-semibold text-[#1A2560]">{memberToday?.name ?? 'Не назначен'}</p>
-                  <p className="mt-1 text-xs text-[#4A5FD5]">{todayLabel}</p>
-                </div>
-              </div>
-            </button>
+              </button>
+            ) : null}
 
-            {hasAnnouncement ? (
+            {displayAnnouncement ? (
               <section className="order-10 col-span-8 rounded-[14px] border border-[#F5D99A] bg-gradient-to-br from-[#FFF8EC] to-[#FEF0D6] p-4 transition hover:-translate-y-0.5 hover:shadow-[0_4px_16px_rgba(107,45,62,0.1)]">
                 <div className="mb-2 flex items-center justify-between gap-2">
                   <div className="flex items-center gap-2">
@@ -1128,8 +1167,8 @@ function DashboardMain() {
             <section
               className={[
                 'rounded-[14px] border border-stone-200 bg-white p-4 transition hover:-translate-y-0.5 hover:shadow-[0_4px_16px_rgba(107,45,62,0.1)]',
-                hasAnnouncement ? 'order-11' : 'order-21',
-                hasAnnouncement ? 'col-span-4' : 'col-span-4',
+                displayAnnouncement ? 'order-11' : 'order-21',
+                displayAnnouncement ? 'col-span-4' : 'col-span-4',
               ].join(' ')}
             >
               <div className="flex items-center justify-between gap-2">
@@ -1181,7 +1220,7 @@ function DashboardMain() {
             </section>
 
             {showBroadcastWidget ? (
-              <div className={hasAnnouncement ? 'order-20 col-span-4' : 'order-22 col-span-4'}>
+              <div className={displayAnnouncement ? 'order-20 col-span-4' : 'order-22 col-span-4'}>
                 <BroadcastCompactCard
                   broadcast={activeBroadcast}
                   timerText={broadcastTimerText}
@@ -1197,8 +1236,8 @@ function DashboardMain() {
               onClick={() => setEventOpen(true)}
               className={[
                 'rounded-[14px] border border-[#A8E4C0] bg-gradient-to-br from-[#EDFBF3] to-[#D9F5E6] p-4 text-left transition hover:-translate-y-0.5 hover:shadow-[0_4px_16px_rgba(107,45,62,0.1)]',
-                hasAnnouncement ? 'order-21' : 'order-23',
-                hasAnnouncement
+                displayAnnouncement ? 'order-21' : 'order-23',
+                displayAnnouncement
                   ? (showBroadcastWidget ? 'col-span-8' : 'col-span-12')
                   : (showBroadcastWidget ? 'col-span-4' : 'col-span-8'),
               ].join(' ')}
@@ -1317,55 +1356,85 @@ function DashboardMain() {
           ) : null}
 
           <div className="flex flex-col gap-3 xl:col-span-4">
-            <button
-              type="button"
-              onClick={() =>
-                navigate(
-                  publicProfileSlug
-                    ? `/profile/${encodeURIComponent(publicProfileSlug)}`
-                    : '/profile',
-                )
-              }
-                className="tap-highlight-transparent touch-manipulation relative w-full overflow-hidden rounded-2xl border border-stone-200/70 bg-white/90 p-4 text-left shadow-[var(--shadow-card)] transition hover:-translate-y-0.5 hover:shadow-[var(--shadow)] sm:min-h-[132px] sm:p-4"
-            >
-              <div className="pointer-events-none absolute right-0 top-0 h-20 w-20 rounded-full bg-primary/[0.06] blur-2xl" />
-              <div className="relative flex items-start justify-between gap-2">
-                <p className="text-[11px] font-semibold tracking-[0.02em] text-[#6B2D3E]">Мой профиль</p>
-                {hasProfilePostDraft ? (
-                  <span
-                    className="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold tracking-[0.02em] text-amber-900"
-                    title="Есть черновик поста на странице"
-                  >
-                    Черновик
-                  </span>
-                ) : null}
-              </div>
-              <div className="relative mt-3 flex items-start gap-3">
-                <div className="h-14 w-14 shrink-0 overflow-hidden rounded-2xl bg-stone-100 ring-1 ring-stone-200/70">
-                  {avatarUrl ? (
-                    <img src={avatarUrl} alt="" className="h-full w-full object-cover" />
-                  ) : (
-                    <div className="grid h-full w-full place-items-center text-stone-500">
-                      <LuUser className="h-6 w-6" strokeWidth={2} aria-hidden />
-                    </div>
-                  )}
+            {isParishionerGuest ? (
+              <div className="tap-highlight-transparent relative w-full overflow-hidden rounded-2xl border border-stone-200/70 bg-white/90 p-4 text-left shadow-[var(--shadow-card)] sm:min-h-[132px] sm:p-4">
+                <div className="pointer-events-none absolute right-0 top-0 h-20 w-20 rounded-full bg-primary/[0.06] blur-2xl" />
+                <div className="relative flex items-start justify-between gap-2">
+                  <p className="text-[11px] font-semibold tracking-[0.02em] text-[#6B2D3E]">Мой профиль</p>
                 </div>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-base font-extrabold leading-tight text-stone-900">{profileDisplayTitle}</p>
-                  {profileHandleLine ? (
-                    <p className="mt-0.5 truncate text-xs font-semibold text-stone-500">{profileHandleLine}</p>
-                  ) : null}
-                  <div className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-stone-100/90 px-2.5 py-1 text-xs font-bold text-stone-700">
-                    <span className="tabular-nums text-stone-900">{publicationsCount}</span>
-                    <span>{publicationsLabel}</span>
+                <div className="relative mt-3 flex items-start gap-3">
+                  <div className="h-14 w-14 shrink-0 overflow-hidden rounded-2xl bg-stone-100 ring-1 ring-stone-200/70">
+                    {avatarUrl ? (
+                      <img src={avatarUrl} alt="" className="h-full w-full object-cover" />
+                    ) : (
+                      <div className="grid h-full w-full place-items-center text-stone-500">
+                        <LuUser className="h-6 w-6" strokeWidth={2} aria-hidden />
+                      </div>
+                    )}
                   </div>
-                  <p className="mt-2 line-clamp-2 text-sm font-medium leading-snug text-stone-600">
-                    {bioText || 'Откройте страницу, чтобы заполнить описание.'}
-                  </p>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-base font-extrabold leading-tight text-stone-900">{profileDisplayTitle}</p>
+                    <div className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-stone-100/90 px-2.5 py-1 text-xs font-bold text-stone-700">
+                      <span className="tabular-nums text-stone-900">{publicationsCount}</span>
+                      <span>{publicationsLabel}</span>
+                    </div>
+                    <p className="mt-2 line-clamp-2 text-sm font-medium leading-snug text-stone-600">
+                      {bioText || 'Добро пожаловать в приложение церкви'}
+                    </p>
+                  </div>
                 </div>
               </div>
-            </button>
-            {dashboardNotesQ.data?.announcement ? (
+            ) : (
+              <button
+                type="button"
+                onClick={() =>
+                  navigate(
+                    publicProfileSlug
+                      ? `/profile/${encodeURIComponent(publicProfileSlug)}`
+                      : '/profile',
+                  )
+                }
+                className="tap-highlight-transparent touch-manipulation relative w-full overflow-hidden rounded-2xl border border-stone-200/70 bg-white/90 p-4 text-left shadow-[var(--shadow-card)] transition hover:-translate-y-0.5 hover:shadow-[var(--shadow)] sm:min-h-[132px] sm:p-4"
+              >
+                <div className="pointer-events-none absolute right-0 top-0 h-20 w-20 rounded-full bg-primary/[0.06] blur-2xl" />
+                <div className="relative flex items-start justify-between gap-2">
+                  <p className="text-[11px] font-semibold tracking-[0.02em] text-[#6B2D3E]">Мой профиль</p>
+                  {hasProfilePostDraft ? (
+                    <span
+                      className="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold tracking-[0.02em] text-amber-900"
+                      title="Есть черновик поста на странице"
+                    >
+                      Черновик
+                    </span>
+                  ) : null}
+                </div>
+                <div className="relative mt-3 flex items-start gap-3">
+                  <div className="h-14 w-14 shrink-0 overflow-hidden rounded-2xl bg-stone-100 ring-1 ring-stone-200/70">
+                    {avatarUrl ? (
+                      <img src={avatarUrl} alt="" className="h-full w-full object-cover" />
+                    ) : (
+                      <div className="grid h-full w-full place-items-center text-stone-500">
+                        <LuUser className="h-6 w-6" strokeWidth={2} aria-hidden />
+                      </div>
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-base font-extrabold leading-tight text-stone-900">{profileDisplayTitle}</p>
+                    {profileHandleLine ? (
+                      <p className="mt-0.5 truncate text-xs font-semibold text-stone-500">{profileHandleLine}</p>
+                    ) : null}
+                    <div className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-stone-100/90 px-2.5 py-1 text-xs font-bold text-stone-700">
+                      <span className="tabular-nums text-stone-900">{publicationsCount}</span>
+                      <span>{publicationsLabel}</span>
+                    </div>
+                    <p className="mt-2 line-clamp-2 text-sm font-medium leading-snug text-stone-600">
+                      {bioText || 'Откройте страницу, чтобы заполнить описание.'}
+                    </p>
+                  </div>
+                </div>
+              </button>
+            )}
+            {displayAnnouncement && dashboardNotesQ.data?.announcement ? (
               <section
                 aria-label="Объявление"
                 className="overflow-hidden rounded-2xl border border-[#F5D99A] bg-gradient-to-br from-[#FFF8EC] to-[#FEF0D6] p-4 shadow-[var(--shadow-card)]"
@@ -1416,24 +1485,26 @@ function DashboardMain() {
             ) : null}
           </div>
 
-          <button
-            type="button"
-            onClick={() => navigate('/prayer')}
-            className="tap-highlight-transparent touch-manipulation group min-h-[146px] overflow-hidden rounded-2xl border border-[#BFC9F7] bg-gradient-to-br from-[#EEF2FF] to-[#E5EAFF] p-4 text-left shadow-[var(--shadow-card)] transition hover:-translate-y-0.5 hover:shadow-[var(--shadow)] sm:min-h-[152px] sm:p-5 xl:col-span-8"
-          >
-            <p className="text-[11px] font-semibold tracking-[0.02em] text-[#3042A8]">Молимся сегодня</p>
-            <div className="mt-4 flex items-start gap-3">
-              <div className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-[#4A5FD5] text-white">
-                <LuChurch className="h-6 w-6" strokeWidth={2} aria-hidden />
+          {!isParishionerGuest ? (
+            <button
+              type="button"
+              onClick={() => navigate('/prayer')}
+              className="tap-highlight-transparent touch-manipulation group min-h-[146px] overflow-hidden rounded-2xl border border-[#BFC9F7] bg-gradient-to-br from-[#EEF2FF] to-[#E5EAFF] p-4 text-left shadow-[var(--shadow-card)] transition hover:-translate-y-0.5 hover:shadow-[var(--shadow)] sm:min-h-[152px] sm:p-5 xl:col-span-8"
+            >
+              <p className="text-[11px] font-semibold tracking-[0.02em] text-[#3042A8]">Молимся сегодня</p>
+              <div className="mt-4 flex items-start gap-3">
+                <div className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-[#4A5FD5] text-white">
+                  <LuChurch className="h-6 w-6" strokeWidth={2} aria-hidden />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-base font-extrabold text-[#1A2560]">{todayLabel}</p>
+                  <p className="mt-1 text-sm font-semibold text-[#4A5FD5]">
+                    {memberToday ? `Молимся за ${memberToday.name}` : 'Сегодня в цикле участник не назначен'}
+                  </p>
+                </div>
               </div>
-              <div className="min-w-0">
-                <p className="text-base font-extrabold text-[#1A2560]">{todayLabel}</p>
-                <p className="mt-1 text-sm font-semibold text-[#4A5FD5]">
-                  {memberToday ? `Молимся за ${memberToday.name}` : 'Сегодня в цикле участник не назначен'}
-                </p>
-              </div>
-            </div>
-          </button>
+            </button>
+          ) : null}
 
           {showBroadcastWidget ? (
             <div className="sm:col-span-2 xl:col-span-6">

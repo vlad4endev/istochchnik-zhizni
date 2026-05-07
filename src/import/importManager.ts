@@ -5,67 +5,7 @@ import { fetchTelegraphTextDetailed } from './telegraphParser';
 import { smartImportTextToChordPro } from './smartImportToChordPro';
 
 const TAG_MISSING_TEXT = 'нет_текста';
-const TAG_IMPORTED = 'импортировано';
-const BRACKET_CHORD_RE = /\[([^\]]+)\]/g;
-
-function normalizeChordToCatalogKey(raw: string): string | null {
-  const chord = String(raw ?? '').trim();
-  if (!chord) return null;
-  const main = chord.split('/')[0]?.trim() ?? chord;
-  const m = /^([A-Ga-g])([#b]?)(.*)$/.exec(main);
-  if (!m) return null;
-  const letter = m[1].toUpperCase();
-  const accidental = m[2] ?? '';
-  const rest = (m[3] ?? '').toLowerCase();
-  // "maj" не считаем минором; "m", "min", "m7" и т.п. — минор.
-  const isMinor = /^m(?!aj)/.test(rest) || rest.startsWith('min');
-  return `${letter}${accidental}${isMinor ? 'm' : ''}`;
-}
-
-function looksLikeChordToken(token: string): boolean {
-  const t = token.trim();
-  if (!t) return false;
-  return /^[A-Ga-g][#b]?(?:m|maj|min|sus|dim|aug|add|\d|\/|\(|\)|\+|-)*$/.test(t);
-}
-
-function extractChordCandidates(text: string): string[] {
-  const source = String(text ?? '');
-  if (!source.trim()) return [];
-
-  const fromBrackets: string[] = [];
-  let m: RegExpExecArray | null;
-  while ((m = BRACKET_CHORD_RE.exec(source)) !== null) {
-    const c = (m[1] ?? '').trim();
-    if (c) fromBrackets.push(c);
-  }
-  if (fromBrackets.length > 0) return fromBrackets;
-
-  const out: string[] = [];
-  const lines = source.replace(/\r/g, '').split('\n');
-  for (const line of lines) {
-    const tokens = line
-      .trim()
-      .split(/\s+/)
-      .map((t) => t.trim())
-      .filter(Boolean);
-    if (tokens.length === 0) continue;
-    const chordLike = tokens.filter(looksLikeChordToken);
-    // Эвристика "строка аккордов": большинство токенов похоже на аккорды.
-    if (chordLike.length > 0 && chordLike.length >= Math.max(2, Math.ceil(tokens.length * 0.6))) {
-      out.push(...chordLike);
-    }
-  }
-  return out;
-}
-
-function detectDefaultKeyFromImportedText(text: string): string | null {
-  const chords = extractChordCandidates(text);
-  for (const c of chords) {
-    const key = normalizeChordToCatalogKey(c);
-    if (key) return key;
-  }
-  return null;
-}
+export const TAG_IMPORTED = 'импортированная';
 
 function looksLikeChordsLink(url: string): boolean {
   // Heuristic: in the source xlsx usually "with chords" is stored in url_chords column.
@@ -140,7 +80,7 @@ export async function importSongsFromXlsxRows(
   const errors: ImportResult['errors'] = [];
   let success = 0;
   let failed = 0;
-  const skipped = deduped.skipped;
+  let skipped = deduped.skipped;
   let placeholders = 0;
 
   if (!pool) {
@@ -186,13 +126,12 @@ export async function importSongsFromXlsxRows(
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
-      const existing = await client.query<{ id: string }>('SELECT id FROM songs WHERE song_number = $1 LIMIT 1', [
-        row.song_number,
-      ]);
+      const existing = await client.query<{ id: string; tags: string[]; is_published: boolean }>(
+        'SELECT id, tags, is_published FROM songs WHERE song_number = $1 LIMIT 1',
+        [row.song_number],
+      );
       const sourceText = (chordsText ?? lyricsText ?? '').trimEnd();
       const content = smartImportTextToChordPro(sourceText).trimEnd() || sourceText;
-      const detectedKey =
-        detectDefaultKeyFromImportedText(content) ?? detectDefaultKeyFromImportedText(sourceText);
       const isPlaceholder = !content.trim();
       const importedTags = isPlaceholder ? [TAG_IMPORTED, TAG_MISSING_TEXT] : [TAG_IMPORTED];
       if (isPlaceholder) placeholders += 1;
@@ -200,32 +139,38 @@ export async function importSongsFromXlsxRows(
       let songId: number;
 
       if (existing.rows[0]?.id) {
+        const existingTags = (existing.rows[0].tags ?? []) as unknown as string[];
+        const isStillImported = Array.isArray(existingTags) && existingTags.includes(TAG_IMPORTED);
+        if (!isStillImported) {
+          // Песня уже в каталоге (опубликована/редактируется вручную) — не трогаем.
+          await client.query('COMMIT');
+          skipped += 1;
+          onProgress?.({ current, total, song_title: row.title, status: 'done', message: 'уже в каталоге' });
+          continue;
+        }
         songId = Number(existing.rows[0].id);
         await client.query(
           `UPDATE songs
            SET title = $2,
                content = $3,
                tags = (SELECT ARRAY(SELECT DISTINCT unnest(songs.tags || $4::text[]))),
-               is_published = $5,
-               default_key = COALESCE($6, songs.default_key),
+               is_published = FALSE,
                updated_at = NOW()
            WHERE song_number = $1`,
-          [row.song_number, row.title, content, importedTags, false, detectedKey],
+          [row.song_number, row.title, content, importedTags],
         );
       } else {
         const ins = await client.query<{ id: string }>(
           `INSERT INTO songs (
-             song_number, title, slug, content, default_key, tags, is_published, created_by_member_id
+             song_number, title, slug, content, tags, is_published, created_by_member_id
            )
-           VALUES ($1,$2,gen_random_uuid()::text,$3,$4,$5,$6,$7)
+           VALUES ($1,$2,gen_random_uuid()::text,$3,$4,FALSE,$5)
            RETURNING id`,
           [
             row.song_number,
             row.title,
             content,
-            detectedKey,
             importedTags,
-            false,
             options.createdByMemberId,
           ],
         );

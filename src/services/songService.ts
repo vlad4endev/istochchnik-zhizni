@@ -62,8 +62,6 @@ export interface SongListFilters {
   key?: string;
   /** любой из перечисленных тегов */
   tags?: string[];
-  /** фильтр публикации (для модерации/внутренних списков) */
-  isPublished?: boolean;
 }
 
 async function listSongsInternal(
@@ -102,10 +100,6 @@ async function listSongsInternal(
   if (tagList.length > 0) {
     params.push(tagList);
     conditions.push(`s.tags && $${params.length}::text[]`);
-  }
-  if (f.isPublished !== undefined) {
-    params.push(Boolean(f.isPublished));
-    conditions.push(`s.is_published = $${params.length}`);
   }
 
   const whereSql = conditions.join(' AND ');
@@ -177,30 +171,6 @@ export async function getSongById(
      LEFT JOIN studio_versions sv ON sv.song_id = s.id AND sv.member_id = $2
      LEFT JOIN song_favorites f ON f.song_id = s.id AND f.member_id = $2
      WHERE s.id = $1 AND s.is_published = TRUE`,
-    [id, memberId]
-  );
-  const row = result.rows[0] as Record<string, unknown> | undefined;
-  if (!row) return null;
-  const base = mapSong(row);
-  return {
-    ...base,
-    has_studio_version: Boolean((row as { has_studio_version?: boolean }).has_studio_version),
-    is_favorite: Boolean((row as { is_favorite?: boolean }).is_favorite),
-  };
-}
-
-export async function getSongByIdForModeration(
-  id: number,
-  memberId: number
-): Promise<SongListItem | null> {
-  const result = await query(
-    `SELECT s.*,
-            (sv.id IS NOT NULL) AS has_studio_version,
-            (f.song_id IS NOT NULL) AS is_favorite
-     FROM songs s
-     LEFT JOIN studio_versions sv ON sv.song_id = s.id AND sv.member_id = $2
-     LEFT JOIN song_favorites f ON f.song_id = s.id AND f.member_id = $2
-     WHERE s.id = $1`,
     [id, memberId]
   );
   const row = result.rows[0] as Record<string, unknown> | undefined;
@@ -319,6 +289,41 @@ export async function updateSong(id: number, input: UpdateSongInput): Promise<So
 export async function deleteSong(id: number): Promise<boolean> {
   const result = await query(`DELETE FROM songs WHERE id = $1`, [id]);
   return (result.rowCount ?? 0) > 0;
+}
+
+const TAG_IMPORTED = 'импортированная';
+const TAG_MISSING_TEXT = 'нет_текста';
+
+/** Песня в режиме “Импортированные”: not published AND has tag `импортированная`. */
+export async function getSongImportStatus(
+  id: number,
+): Promise<{ exists: boolean; isImported: boolean; isPublished: boolean } | null> {
+  const r = await query(`SELECT id, tags, is_published FROM songs WHERE id = $1 LIMIT 1`, [id]);
+  const row = r.rows[0] as { id?: string; tags?: string[]; is_published?: boolean } | undefined;
+  if (!row?.id) return null;
+  const tags = Array.isArray(row.tags) ? row.tags.map((t) => String(t)) : [];
+  return {
+    exists: true,
+    isImported: tags.includes(TAG_IMPORTED),
+    isPublished: Boolean(row.is_published),
+  };
+}
+
+/** Публикация импортированной песни: is_published = true, убираем технические теги. */
+export async function publishImportedSong(id: number): Promise<SongRow | null> {
+  const result = await query(
+    `UPDATE songs
+     SET is_published = TRUE,
+         tags = COALESCE(
+           (SELECT array_agg(t) FROM unnest(tags) AS t WHERE t NOT IN ($2, $3)),
+           '{}'::text[]
+         ),
+         updated_at = NOW()
+     WHERE id = $1
+     RETURNING *`,
+    [id, TAG_IMPORTED, TAG_MISSING_TEXT],
+  );
+  return result.rows[0] ? mapSong(result.rows[0] as Record<string, unknown>) : null;
 }
 
 export async function getVersionFlags(

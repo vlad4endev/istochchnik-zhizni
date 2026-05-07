@@ -539,17 +539,24 @@ function AccessRequestMessengerCard({
   const isRegistration = kind === 'registration';
   const isPending = resolution !== 'approved' && resolution !== 'rejected';
 
-  const run = async (action: 'approve' | 'reject') => {
+  const run = async (action: 'approve' | 'approve_parishioner' | 'reject') => {
     if (!Number.isFinite(requestId)) return;
     setBusy(true);
     setErr(null);
     try {
       if (action === 'approve') await approveAccessRequest(requestId);
+      else if (action === 'approve_parishioner')
+        await approveAccessRequest(requestId, undefined, { app_role: 'parishioner' });
       else await rejectAccessRequest(requestId);
       void qc.invalidateQueries({ queryKey: ['admin', 'access-requests'] });
     } catch (e) {
       setErr(
-        apiErrorMessage(e, action === 'approve' ? 'Не удалось принять' : 'Не удалось отклонить'),
+        apiErrorMessage(
+          e,
+          action === 'reject'
+            ? 'Не удалось отклонить'
+            : 'Не удалось принять',
+        ),
       );
     } finally {
       setBusy(false);
@@ -597,6 +604,19 @@ function AccessRequestMessengerCard({
           >
             Принять
           </button>
+          {isRegistration ? (
+            <button
+              type="button"
+              disabled={busy || !Number.isFinite(requestId)}
+              onClick={() => void run('approve_parishioner')}
+              className={[
+                'rounded-full px-4 py-2 text-sm font-extrabold transition-colors disabled:opacity-40',
+                isMine ? 'bg-white/90 text-stone-800' : 'bg-sky-600 text-white hover:bg-sky-700',
+              ].join(' ')}
+            >
+              Прихожанин
+            </button>
+          ) : null}
           <button
             type="button"
             disabled={busy || !Number.isFinite(requestId)}
@@ -1064,7 +1084,7 @@ function MessageBubbleInner({
       ? buildMessengerAttachmentFileUrl(String(message.id))
       : null;
     // Не форсим transcode как primary: он тяжелый и может быть недоступен.
-    const primary = resolvedAttachmentUrl || fallback || proxied || null;
+    const primary = proxied || resolvedAttachmentUrl || fallback || null;
     const fallbackMp4 = mp4Fallback && mp4Fallback !== primary ? mp4Fallback : null;
     return { primary, fallbackMp4 };
   }, [isVideoNoteLayout, payload.mimeType, payload.mimetype, attachmentRawUrl, resolvedAttachmentUrl, persistedNumericId, message.id]);
@@ -1371,7 +1391,10 @@ function MessageBubbleInner({
       }
 
       const rawUrl = attachmentRawUrl;
-      const src = resolvedAttachmentUrl ?? (resolvePublicUrl(rawUrl) ?? rawUrl);
+      const attachmentProxyHref = persistedNumericId
+        ? buildMessengerAttachmentFileUrl(String(message.id))
+        : null;
+      const src = attachmentProxyHref || resolvedAttachmentUrl || (resolvePublicUrl(rawUrl) ?? rawUrl);
       const caption = String(message.content ?? '').trim();
       const attachmentMime = String(payload.mimeType ?? payload.mimetype ?? '').trim().toLowerCase();
       const attachmentName = String(payload.name ?? payload.filename ?? '').trim().toLowerCase();
@@ -1535,7 +1558,7 @@ function MessageBubbleInner({
       const rawUrl = attachmentRawUrl;
       const fallbackHref = resolvedAttachmentUrl ?? (resolvePublicUrl(rawUrl) ?? rawUrl);
       const href = persistedNumericId
-        ? (fallbackHref || buildMessengerAttachmentFileUrl(String(message.id)))
+        ? buildMessengerAttachmentFileUrl(String(message.id))
         : fallbackHref;
       const caption = String(message.content ?? '').trim();
       const durRaw = payload.durationSec ?? payload.duration_sec;

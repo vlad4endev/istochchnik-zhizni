@@ -38,7 +38,6 @@ export type SongListQuery = {
   tempoMax?: number;
   key?: string;
   tags?: string[];
-  isPublished?: boolean;
 };
 
 function buildSongQuery(params?: SongListQuery): string {
@@ -49,7 +48,6 @@ function buildSongQuery(params?: SongListQuery): string {
   if (params.tempoMax != null) sp.set('tempoMax', String(params.tempoMax));
   if (params.key?.trim()) sp.set('key', params.key.trim());
   if (params.tags?.length) sp.set('tags', params.tags.join(','));
-  if (params.isPublished !== undefined) sp.set('isPublished', String(params.isPublished));
   const s = sp.toString();
   return s ? `?${s}` : '';
 }
@@ -119,6 +117,12 @@ export async function recordSongOpened(songId: number): Promise<void> {
 
 export async function deleteSong(id: number): Promise<void> {
   await apiClient.delete(`${SONGS}/${id}`);
+}
+
+/** Перевести импортированную песню в каталог (is_published = true). */
+export async function publishSong(id: number): Promise<SongListItem> {
+  const { data } = await apiClient.post<SongListItem>(`${SONGS}/${id}/publish`);
+  return data;
 }
 
 export async function updateSong(

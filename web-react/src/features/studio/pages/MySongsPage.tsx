@@ -1,80 +1,308 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { type CSSProperties, useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { LuPenLine } from 'react-icons/lu';
+import { LuCheck, LuPenLine, LuRocket, LuTrash2 } from 'react-icons/lu';
 
-import { emitAppToast } from '../../../lib/uiFeedback';
 import { SongListSkeleton } from '@/components/skeletons/SongListSkeleton';
-import { SEMANTIC_COLORS } from '@/lib/designTokens';
 import { useAuthStore } from '../../auth/authStore';
-import { fetchMyVersions } from '../api';
+import {
+  createDraft,
+  deleteDraft,
+  fetchDrafts,
+  fetchMyVersions,
+  fetchRecentSongs,
+  updateDraft,
+  type StudioDraft,
+} from '../api';
 import { studioEditSongPath, useStudioModuleSurface } from '../studioPaths';
-import { deleteSong, fetchSongsForModeration, type SongListItem, updateSong } from '../../songbook/api';
+import {
+  fetchSongsForModeration,
+  publishSong,
+  updateSong,
+  type SongListItem,
+} from '../../songbook/api';
 
-type MySongsTab = 'saved' | 'missingText' | 'imported';
-const IMPORTED_TAG = 'импортировано';
+type MySongsTab = 'saved' | 'drafts' | 'recent' | 'imported';
+
+const IMPORTED_TAG = 'импортированная';
 const MISSING_TEXT_TAG = 'нет_текста';
+
+function ImportedSongRow({ song }: { song: SongListItem }) {
+  const qc = useQueryClient();
+  const [open, setOpen] = useState(false);
+  const [title, setTitle] = useState(song.title);
+  const [content, setContent] = useState(song.content);
+  const [savedFlash, setSavedFlash] = useState(false);
+
+  useEffect(() => {
+    setTitle(song.title);
+    setContent(song.content);
+  }, [song.id, song.title, song.content]);
+
+  const isMissingText = (song.tags ?? []).includes(MISSING_TEXT_TAG) || !song.content?.trim();
+
+  const saveMut = useMutation({
+    mutationFn: () =>
+      updateSong(Number(song.id), { title: title.trim() || song.title, content }),
+    onSuccess: () => {
+      setSavedFlash(true);
+      window.setTimeout(() => setSavedFlash(false), 1800);
+      void qc.invalidateQueries({ queryKey: ['studio', 'imported-songs'] });
+      void qc.invalidateQueries({ queryKey: ['song', Number(song.id)] });
+    },
+  });
+
+  const publishMut = useMutation({
+    mutationFn: () => publishSong(Number(song.id)),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['studio', 'imported-songs'] });
+      void qc.invalidateQueries({ queryKey: ['songs'] });
+      void qc.invalidateQueries({ queryKey: ['song', Number(song.id)] });
+    },
+  });
+
+  return (
+    <li className="rounded-xl border border-stone-200 bg-white px-4 py-3 shadow-sm">
+      <div className="flex items-start justify-between gap-3">
+        <button
+          type="button"
+          onClick={() => setOpen(!open)}
+          className="min-w-0 flex-1 text-left"
+        >
+          <p className="truncate text-sm font-semibold text-stone-900 hover:text-sky-700">
+            {song.song_number != null ? `${song.song_number}. ` : ''}
+            {song.title || 'Без названия'}
+          </p>
+          <div className="mt-1 flex flex-wrap items-center gap-2">
+            {isMissingText ? (
+              <span className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-900">
+                нет текста
+              </span>
+            ) : (
+              <span className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-900">
+                готова
+              </span>
+            )}
+            <span className="text-xs text-stone-500">не в каталоге</span>
+          </div>
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            if (!isMissingText && !content.trim()) {
+              window.alert('Сначала добавьте текст песни.');
+              return;
+            }
+            if (isMissingText && !window.confirm('Опубликовать без текста? Песня попадёт в каталог.')) {
+              return;
+            }
+            publishMut.mutate();
+          }}
+          disabled={publishMut.isPending}
+          className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-sky-600 px-3 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-sky-500 disabled:opacity-50"
+          aria-label="Опубликовать в каталог"
+          title="Опубликовать в каталог"
+        >
+          <LuRocket className="h-3.5 w-3.5" aria-hidden />
+          {publishMut.isPending ? 'Публикую…' : 'Опубликовать'}
+        </button>
+      </div>
+
+      {open ? (
+        <div className="mt-3 space-y-3 border-t border-stone-100 pt-3">
+          <input
+            className="w-full rounded-lg border border-stone-200 bg-stone-50 px-3 py-2.5 text-sm text-stone-900 outline-none placeholder:text-stone-400 focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="Название"
+          />
+          <textarea
+            className="min-h-[180px] w-full resize-y rounded-lg border border-stone-200 bg-stone-50 px-3 py-2 font-mono text-[13px] leading-5 text-stone-900 outline-none placeholder:text-stone-400 focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
+            value={content}
+            onChange={(e) => setContent(e.target.value)}
+            placeholder="ChordPro / текст песни…"
+          />
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => saveMut.mutate()}
+              disabled={saveMut.isPending}
+              className="inline-flex items-center gap-1 rounded-lg bg-stone-900 px-3 py-2 text-xs font-semibold text-white transition hover:bg-stone-800 disabled:opacity-50"
+            >
+              {saveMut.isPending ? 'Сохраняю…' : 'Сохранить'}
+            </button>
+            {savedFlash ? (
+              <span className="inline-flex items-center gap-1 text-xs text-emerald-700">
+                <LuCheck className="h-3 w-3" aria-hidden /> Сохранено
+              </span>
+            ) : null}
+            {saveMut.isError ? (
+              <span className="text-xs text-red-600">Не удалось сохранить — проверьте права.</span>
+            ) : null}
+            {publishMut.isError ? (
+              <span className="text-xs text-red-600">
+                Не удалось опубликовать — проверьте права.
+              </span>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+    </li>
+  );
+}
+
+function DraftRow({
+  draft,
+  onDeleted,
+}: {
+  draft: StudioDraft;
+  onDeleted: () => void;
+}) {
+  const qc = useQueryClient();
+  const [open, setOpen] = useState(false);
+  const [title, setTitle] = useState(draft.title);
+  const [content, setContent] = useState(draft.content);
+
+  const save = useMutation({
+    mutationFn: () => updateDraft(Number(draft.id), { title, content }),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['studio', 'drafts'] }),
+  });
+
+  return (
+    <li className="rounded-xl border border-stone-200 bg-white px-4 py-3 shadow-sm">
+      <div className="flex items-start justify-between gap-3">
+        <button
+          type="button"
+          onClick={() => setOpen(!open)}
+          className="min-w-0 flex-1 text-left text-sm font-medium text-stone-900 hover:text-sky-700"
+        >
+          {draft.title || 'Без названия'}
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            if (window.confirm('Удалить черновик?')) onDeleted();
+          }}
+          className="inline-flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-lg text-stone-400 hover:bg-red-50 hover:text-red-600"
+          aria-label="Удалить черновик"
+        >
+          <LuTrash2 className="h-4 w-4" />
+        </button>
+      </div>
+      <p className="mt-1 text-xs text-stone-500">{new Date(draft.updated_at).toLocaleString()}</p>
+      {open ? (
+        <div className="mt-3 space-y-3 border-t border-stone-100 pt-3">
+          <input
+            className="w-full rounded-lg border border-stone-200 bg-stone-50 px-3 py-2.5 text-sm text-stone-900 outline-none ring-0 placeholder:text-stone-400 focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="Название"
+          />
+          <textarea
+            className="min-h-[100px] w-full resize-y rounded-lg border border-stone-200 bg-stone-50 px-3 py-2 font-mono text-sm text-stone-900 outline-none placeholder:text-stone-400 focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
+            value={content}
+            onChange={(e) => setContent(e.target.value)}
+            placeholder="ChordPro…"
+          />
+          <button
+            type="button"
+            onClick={() => save.mutate()}
+            disabled={save.isPending}
+            className="text-sm font-semibold text-sky-700 hover:text-sky-800 disabled:opacity-50"
+          >
+            Сохранить
+          </button>
+        </div>
+      ) : null}
+    </li>
+  );
+}
 
 export function MySongsPage() {
   const surface = useStudioModuleSurface();
   const qc = useQueryClient();
-  const [sp, setSp] = useSearchParams();
   const role = useAuthStore((s) => s.role);
-  const isAdmin = (role ?? 'member').toLowerCase() === 'admin';
+  void role;
 
   const q = useQuery({ queryKey: ['studio', 'versions'], queryFn: fetchMyVersions });
-  const missingQ = useQuery({
-    queryKey: ['studio', 'missing-text-songs'],
-    queryFn: () => fetchSongsForModeration({ tags: ['нет_текста'], isPublished: false }),
-    // backend также разрешает участникам музыкального служения (как и импорт)
-    enabled: true,
+  const draftsQ = useQuery({ queryKey: ['studio', 'drafts'], queryFn: fetchDrafts });
+  const recentQ = useQuery({
+    queryKey: ['studio', 'recent-songs'],
+    queryFn: () => fetchRecentSongs(8),
   });
   const importedQ = useQuery({
     queryKey: ['studio', 'imported-songs'],
-    queryFn: () => fetchSongsForModeration({ isPublished: false }),
+    queryFn: () => fetchSongsForModeration({ tags: [IMPORTED_TAG] }),
+    // backend также разрешает участникам музыкального служения (как и импорт)
     enabled: true,
   });
 
-  const [tab, setTab] = useState<MySongsTab>(() => {
-    const t = sp.get('tab');
-    if (t === 'missingText' || t === 'imported') return t;
+  const [importedSearch, setImportedSearch] = useState('');
+  const importedFiltered = useMemo(() => {
+    const list = (importedQ.data ?? []) as SongListItem[];
+    const q = importedSearch.trim().toLowerCase();
+    if (!q) return list;
+    return list.filter(
+      (s) =>
+        s.title.toLowerCase().includes(q) ||
+        String(s.song_number ?? '').includes(q),
+    );
+  }, [importedQ.data, importedSearch]);
+
+  const [searchParams, setSearchParams] = useSearchParams();
+  const initialTab: MySongsTab = ((): MySongsTab => {
+    const t = searchParams.get('tab');
+    if (t === 'drafts' || t === 'recent' || t === 'imported' || t === 'saved') return t;
     return 'saved';
-  });
+  })();
+  const [tab, setTab] = useState<MySongsTab>(initialTab);
+  useEffect(() => {
+    const t = searchParams.get('tab');
+    if (t && t !== tab && (t === 'drafts' || t === 'recent' || t === 'imported' || t === 'saved')) {
+      setTab(t);
+    }
+  }, [searchParams, tab]);
+  useEffect(() => {
+    const current = searchParams.get('tab');
+    if (current === tab) return;
+    const next = new URLSearchParams(searchParams);
+    if (tab === 'saved') next.delete('tab');
+    else next.set('tab', tab);
+    setSearchParams(next, { replace: true });
+  }, [tab, searchParams, setSearchParams]);
+  const [draftTitle, setDraftTitle] = useState('');
+  const [draftContent, setDraftContent] = useState('');
   const [savedSearch, setSavedSearch] = useState('');
   const [savedKeyFilter, setSavedKeyFilter] = useState('');
-  const [selectedImportedSongIds, setSelectedImportedSongIds] = useState<number[]>([]);
-  const publishImportedMut = useMutation({
-    mutationFn: async (song: SongListItem) => {
-      await updateSong(Number(song.id), {
-        is_published: true,
-        tags: (song.tags ?? []).filter((tag) => tag !== IMPORTED_TAG),
-      });
-    },
+
+  const createMut = useMutation({
+    mutationFn: () => createDraft(draftTitle || 'Без названия', draftContent),
     onSuccess: () => {
-      emitAppToast({ kind: 'success', message: 'Песня опубликована и попала в каталог' });
-      void qc.invalidateQueries({ queryKey: ['songs'] });
-      void qc.invalidateQueries({ queryKey: ['song'] });
-      void qc.invalidateQueries({ queryKey: ['studio', 'imported-songs'] });
-      void qc.invalidateQueries({ queryKey: ['studio', 'missing-text-songs'] });
+      setDraftTitle('');
+      setDraftContent('');
+      void qc.invalidateQueries({ queryKey: ['studio', 'drafts'] });
     },
-    onError: () => emitAppToast('Не удалось опубликовать песню'),
   });
-  const massDeleteImportedMut = useMutation({
-    mutationFn: async (songIds: number[]) => {
-      for (const songId of songIds) {
-        await deleteSong(songId);
-      }
-    },
-    onSuccess: () => {
-      setSelectedImportedSongIds([]);
-      emitAppToast({ kind: 'success', message: 'Выбранные импортированные песни удалены' });
-      void qc.invalidateQueries({ queryKey: ['songs'] });
-      void qc.invalidateQueries({ queryKey: ['song'] });
-      void qc.invalidateQueries({ queryKey: ['studio', 'imported-songs'] });
-      void qc.invalidateQueries({ queryKey: ['studio', 'missing-text-songs'] });
-    },
-    onError: () => emitAppToast('Не удалось удалить выбранные песни'),
+
+  const delDraftMut = useMutation({
+    mutationFn: (id: number) => deleteDraft(id),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['studio', 'drafts'] }),
   });
+
+  useEffect(() => {
+    const recent = recentQ.data ?? [];
+    const showRecentTab = recent.length > 0;
+    if (tab === 'recent' && !showRecentTab && !recentQ.isLoading) {
+      setTab('saved');
+    }
+  }, [tab, recentQ.data, recentQ.isLoading]);
+
+  if (q.isLoading) {
+    return <SongListSkeleton />;
+  }
+  if (q.isError) {
+    return <p className="text-sm text-red-600">Не удалось загрузить список.</p>;
+  }
 
   const rows = q.data ?? [];
   const filteredRows = rows.filter((v) => {
@@ -83,85 +311,16 @@ export function MySongsPage() {
     const okKey = savedKeyFilter.trim().length === 0 || (v.custom_key ?? '').toLowerCase() === savedKeyFilter.trim().toLowerCase();
     return okText && okKey;
   });
-  const showMissingTab = true;
-  const importedRows = (importedQ.data ?? []).filter((song) => !((song.tags ?? []).includes('__archived')));
+  const recent = recentQ.data ?? [];
+  const drafts = draftsQ.data ?? [];
+  const showRecentTab = recent.length > 0;
+  const importedCount = (importedQ.data ?? []).length;
   const showImportedTab = true;
-  const selectedImportedCount = selectedImportedSongIds.length;
-
-  useEffect(() => {
-    const allowed = new Set(importedRows.map((song) => Number(song.id)));
-    setSelectedImportedSongIds((prev) => prev.filter((songId) => allowed.has(songId)));
-  }, [importedRows]);
-
-  useEffect(() => {
-    const next = new URLSearchParams(sp);
-    if (tab === 'saved') next.delete('tab');
-    else next.set('tab', tab);
-    if (next.toString() !== sp.toString()) {
-      setSp(next, { replace: true });
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab]);
-
-  if (q.isLoading) {
-    return <SongListSkeleton />;
-  }
-  if (q.isError) {
-    return (
-      <p className="text-sm" style={{ color: SEMANTIC_COLORS.accent }}>
-        Не удалось загрузить список.
-      </p>
-    );
-  }
-
-  const isImportedSelected = (songId: number): boolean => selectedImportedSongIds.includes(songId);
-  const toggleImportedSelection = (songId: number): void => {
-    setSelectedImportedSongIds((prev) =>
-      prev.includes(songId) ? prev.filter((id) => id !== songId) : [...prev, songId],
-    );
-  };
-  const toggleSelectAllImported = (): void => {
-    const allIds = importedRows.map((song) => Number(song.id));
-    setSelectedImportedSongIds((prev) => (prev.length === allIds.length ? [] : allIds));
-  };
-  const runMassDeleteImported = (): void => {
-    if (!isAdmin) return;
-    if (selectedImportedSongIds.length === 0) return;
-    if (!window.confirm(`Удалить выбранные песни (${selectedImportedSongIds.length}) из каталога? Действие необратимо.`)) return;
-    massDeleteImportedMut.mutate(selectedImportedSongIds);
-  };
-  const importSourceBadge = (song: SongListItem): { text: string; className: string } => {
-    const tags = song.tags ?? [];
-    if (tags.includes(IMPORTED_TAG)) {
-      return {
-        text: 'новый импорт',
-        className: 'border-sky-200 bg-sky-50 text-sky-900 dark:border-sky-500/40 dark:bg-sky-500/15 dark:text-sky-200',
-      };
-    }
-    return {
-      text: 'старый импорт',
-      className: 'border-violet-200 bg-violet-50 text-violet-900 dark:border-violet-500/40 dark:bg-violet-500/15 dark:text-violet-200',
-    };
-  };
 
   const pageCard =
     surface === 'songbook'
-      ? 'rounded-2xl border border-[var(--ms-border)] bg-[var(--ms-surface-elevated)] p-4 shadow-sm md:p-6'
+      ? 'rounded-2xl border border-stone-200 bg-white p-4 shadow-sm md:p-6'
       : '';
-
-  const semanticVars: Record<`--${string}`, string> = {
-    '--ms-surface': `var(--surface, ${SEMANTIC_COLORS.surface})`,
-    '--ms-surface-elevated': `var(--surface-elevated, ${SEMANTIC_COLORS.surfaceElevated})`,
-    '--ms-text': `var(--text, ${SEMANTIC_COLORS.text})`,
-    '--ms-text-secondary': `var(--text-secondary, ${SEMANTIC_COLORS.textSecondary})`,
-    '--ms-text-muted': `var(--text-muted, ${SEMANTIC_COLORS.textMuted})`,
-    '--ms-primary': `var(--primary, ${SEMANTIC_COLORS.primary})`,
-    '--ms-primary-dark': `var(--primary-dark, ${SEMANTIC_COLORS.primaryDark})`,
-    '--ms-on-primary': 'var(--text-on-primary, rgb(255 255 255))',
-    '--ms-border': 'var(--border, rgba(0, 0, 0, 0.08))',
-    '--ms-bg-elevated': 'var(--bg-elevated, rgba(0, 0, 0, 0.04))',
-    '--ms-error': SEMANTIC_COLORS.accent,
-  };
 
   const tabBtn = (id: MySongsTab, label: string, hint: string) => (
     <button
@@ -173,9 +332,7 @@ export function MySongsPage() {
       onClick={() => setTab(id)}
       className={[
         'min-h-[44px] flex-1 rounded-xl px-2 py-2 text-center text-xs font-semibold transition-colors sm:text-sm',
-        tab === id
-          ? 'bg-[var(--ms-primary)] text-[var(--ms-on-primary)] shadow-sm'
-          : 'text-[var(--ms-text-secondary)] hover:bg-[var(--ms-bg-elevated)] hover:text-[var(--ms-text)]',
+        tab === id ? 'bg-stone-900 text-white shadow-sm' : 'text-stone-600 hover:bg-stone-100 hover:text-stone-900',
       ].join(' ')}
     >
       {label}
@@ -183,12 +340,12 @@ export function MySongsPage() {
   );
 
   return (
-    <div style={semanticVars as CSSProperties} className={['mx-auto max-w-3xl space-y-6', pageCard].filter(Boolean).join(' ')}>
-      <header className="space-y-3 border-b border-[var(--ms-border)] pb-5">
+    <div className={['mx-auto max-w-3xl space-y-6', pageCard].filter(Boolean).join(' ')}>
+      <header className="space-y-3 border-b border-stone-200 pb-5">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-[var(--ms-text)]">Мои версии</h1>
-          <p className="mt-1 max-w-xl text-sm leading-relaxed text-[var(--ms-text-secondary)]">
-            Работа с песнями каталога, заготовками без текста и импортированными песнями.
+          <h1 className="text-2xl font-bold tracking-tight text-stone-900">Мои версии</h1>
+          <p className="mt-1 max-w-xl text-sm leading-relaxed text-stone-600">
+            Три зоны: правки к песням каталога, свободные черновики и быстрый возврат к недавним песням.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -200,13 +357,20 @@ export function MySongsPage() {
           </Link>
         </div>
         <div
-          className="flex w-full gap-1 rounded-2xl bg-[var(--ms-bg-elevated)] p-1"
+          className="flex w-full gap-1 rounded-2xl bg-stone-100 p-1"
           role="tablist"
           aria-label="Разделы «Мои версии»"
         >
           {tabBtn('saved', 'Каталог', 'Сохранённые студийные версии песен из общего списка')}
-          {showMissingTab ? tabBtn('missingText', 'Без текста', 'Заготовки песен без слов (тег: нет_текста)') : null}
-          {showImportedTab ? tabBtn('imported', 'Импортированные', 'Черновики, созданные импортом из таблицы') : null}
+          {showRecentTab ? tabBtn('recent', 'Недавние', 'Песни, которые вы недавно открывали в песеннике') : null}
+          {tabBtn('drafts', 'Черновики', 'Тексты без привязки к песне из каталога')}
+          {showImportedTab
+            ? tabBtn(
+                'imported',
+                importedCount > 0 ? `Импортированные · ${importedCount}` : 'Импортированные',
+                'Песни, импортированные из таблицы. После «Опубликовать» переходят в каталог.',
+              )
+            : null}
         </div>
       </header>
 
@@ -216,97 +380,72 @@ export function MySongsPage() {
         aria-label={
           tab === 'saved'
             ? 'Каталог'
-            : tab === 'missingText'
-                ? 'Без текста'
-                : tab === 'imported'
-                  ? 'Импортированные'
-                  : 'Каталог'
+            : tab === 'recent'
+              ? 'Недавние'
+              : tab === 'imported'
+                ? 'Импортированные'
+                : 'Черновики'
         }
       >
-        {tab === 'saved' ? (
-          <section className="space-y-3">
-            <p className="text-sm text-[var(--ms-text-secondary)]">
-              Это ваши сохранённые правки к песням из общего каталога. Оригинал в песеннике не меняется.
-            </p>
-            <div className="grid gap-2 rounded-xl border border-[var(--ms-border)] bg-[var(--ms-bg-elevated)] p-3 sm:grid-cols-2">
-              <input
-                value={savedSearch}
-                onChange={(e) => setSavedSearch(e.target.value)}
-                placeholder="Поиск по названию"
-                className="min-h-[42px] rounded-lg border border-[var(--ms-border)] bg-[var(--ms-surface-elevated)] px-3 text-sm text-[var(--ms-text)] outline-none placeholder:text-[var(--ms-text-muted)]"
-              />
-              <input
-                value={savedKeyFilter}
-                onChange={(e) => setSavedKeyFilter(e.target.value)}
-                placeholder="Фильтр по тональности"
-                className="min-h-[42px] rounded-lg border border-[var(--ms-border)] bg-[var(--ms-surface-elevated)] px-3 text-sm text-[var(--ms-text)] outline-none placeholder:text-[var(--ms-text-muted)]"
-              />
-            </div>
-            {rows.length === 0 ? (
-              <div className="space-y-3 rounded-xl border border-dashed border-[var(--ms-border)] bg-[var(--ms-bg-elevated)] px-4 py-6 text-sm text-[var(--ms-text-secondary)]">
-                <p>Пока нет сохранённых версий. Откройте песню в песеннике и выберите «В студию».</p>
-                <Link to="/songbook" className="inline-flex font-semibold text-sky-700 hover:text-sky-800">
-                  Перейти в песенник →
-                </Link>
+        {tab === 'drafts' ? (
+          <section className="space-y-4">
+            <div className="rounded-xl border border-stone-200 bg-stone-50/80 p-4">
+              <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-stone-500">Новый черновик</p>
+              <div className="space-y-2">
+                <input
+                  className="w-full rounded-lg border border-stone-200 bg-white px-3 py-2.5 text-sm text-stone-900 outline-none placeholder:text-stone-400 focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
+                  placeholder="Название"
+                  value={draftTitle}
+                  onChange={(e) => setDraftTitle(e.target.value)}
+                />
+                <textarea
+                  className="min-h-[88px] w-full resize-y rounded-lg border border-stone-200 bg-white px-3 py-2 font-mono text-sm text-stone-900 outline-none placeholder:text-stone-400 focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
+                  placeholder="Текст, ChordPro…"
+                  value={draftContent}
+                  onChange={(e) => setDraftContent(e.target.value)}
+                />
               </div>
+              <button
+                type="button"
+                onClick={() => createMut.mutate()}
+                disabled={createMut.isPending}
+                className="mt-3 rounded-lg bg-stone-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-stone-800 disabled:opacity-50"
+              >
+                Сохранить черновик
+              </button>
+            </div>
+            {drafts.length > 0 ? (
+              <ul className="flex flex-col gap-2">
+                {drafts.map((d) => (
+                  <DraftRow key={d.id} draft={d} onDeleted={() => delDraftMut.mutate(Number(d.id))} />
+                ))}
+              </ul>
             ) : (
-              <>
-                {filteredRows.length === 0 ? (
-                  <p className="text-sm text-[var(--ms-text-muted)]">По выбранным фильтрам ничего не найдено.</p>
-                ) : (
-                  <ul className="flex flex-col gap-2">
-                    {filteredRows.map((v) => (
-                      <li key={v.id}>
-                        <Link
-                          to={studioEditSongPath(surface, Number(v.song_id))}
-                          className="flex min-h-[52px] items-center justify-between gap-3 rounded-xl border border-[var(--ms-border)] bg-[var(--ms-surface-elevated)] px-4 py-3 shadow-sm transition hover:bg-[var(--ms-bg-elevated)]"
-                        >
-                          <div className="min-w-0">
-                            <p className="truncate font-medium text-[var(--ms-text)]">{v.song_title}</p>
-                            <p className="mt-0.5 text-xs text-[var(--ms-text-muted)]">
-                              {v.custom_key ?? '—'} · {new Date(v.updated_at).toLocaleString()}
-                            </p>
-                          </div>
-                          <LuPenLine className="h-5 w-5 shrink-0 text-[var(--ms-text-muted)]" aria-hidden />
-                        </Link>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </>
+              <p className="text-sm text-stone-500">Список черновиков пуст — создайте первый формой выше.</p>
             )}
           </section>
         ) : null}
 
-        {tab === 'missingText' ? (
+        {tab === 'recent' ? (
           <section className="space-y-3">
-            <p className="text-sm text-[var(--ms-text-secondary)]">
-              Это заготовки, которые не отображаются в песеннике. Откройте редактор и добавьте слова/аккорды.
+            <p className="text-sm text-stone-600">
+              Открывайте карточку в песеннике или сразу переходите в редактор своей версии.
             </p>
-            {missingQ.isLoading ? (
+            {recentQ.isLoading ? (
               <SongListSkeleton />
-            ) : missingQ.isError ? (
-              <p className="text-sm text-[var(--ms-error)]">Не удалось загрузить список заготовок.</p>
-            ) : (missingQ.data ?? []).length === 0 ? (
-              <p className="text-sm text-[var(--ms-text-muted)]">Заготовок без текста нет.</p>
             ) : (
               <ul className="flex flex-col gap-2">
-                {(missingQ.data ?? []).map((s: SongListItem) => (
+                {recent.map((s) => (
                   <li
                     key={s.id}
-                    className="flex min-h-[48px] items-center gap-3 rounded-xl border border-[var(--ms-border)] bg-[var(--ms-surface-elevated)] px-4 py-3 shadow-sm"
+                    className="flex min-h-[48px] items-center gap-3 rounded-xl border border-stone-200 bg-white px-4 py-3 shadow-sm"
                   >
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate font-medium text-[var(--ms-text)]">
-                        {s.song_number ?? '—'}. {s.title}
-                      </p>
-                      <div className="mt-1 flex flex-wrap items-center gap-2">
-                        <span className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/15 dark:text-amber-200">
-                          нет текста
-                        </span>
-                        <span className="text-xs text-[var(--ms-text-muted)]">не опубликовано</span>
-                      </div>
-                    </div>
+                    <Link
+                      to={`/songbook/${s.id}`}
+                      className="min-w-0 flex-1 truncate font-medium text-stone-900 hover:text-sky-700"
+                    >
+                      {s.title}
+                    </Link>
                     <Link
                       to={studioEditSongPath(surface, Number(s.id))}
                       className="inline-flex shrink-0 items-center gap-1 text-sm font-semibold text-sky-700 hover:text-sky-800"
@@ -320,92 +459,92 @@ export function MySongsPage() {
             )}
           </section>
         ) : null}
+
+        {tab === 'saved' ? (
+          <section className="space-y-3">
+            <p className="text-sm text-stone-600">
+              Это ваши сохранённые правки к песням из общего каталога. Оригинал в песеннике не меняется.
+            </p>
+            <div className="grid gap-2 rounded-xl border border-stone-200 bg-stone-50 p-3 sm:grid-cols-2">
+              <input
+                value={savedSearch}
+                onChange={(e) => setSavedSearch(e.target.value)}
+                placeholder="Поиск по названию"
+                className="min-h-[42px] rounded-lg border border-stone-200 bg-white px-3 text-sm outline-none"
+              />
+              <input
+                value={savedKeyFilter}
+                onChange={(e) => setSavedKeyFilter(e.target.value)}
+                placeholder="Фильтр по тональности"
+                className="min-h-[42px] rounded-lg border border-stone-200 bg-white px-3 text-sm outline-none"
+              />
+            </div>
+            {rows.length === 0 ? (
+              <div className="space-y-3 rounded-xl border border-dashed border-stone-300 bg-stone-50 px-4 py-6 text-sm text-stone-600">
+                <p>Пока нет сохранённых версий. Откройте песню в песеннике и выберите «В студию».</p>
+                <Link to="/songbook" className="inline-flex font-semibold text-sky-700 hover:text-sky-800">
+                  Перейти в песенник →
+                </Link>
+              </div>
+            ) : (
+              <>
+                {filteredRows.length === 0 ? (
+                  <p className="text-sm text-stone-500">По выбранным фильтрам ничего не найдено.</p>
+                ) : (
+                  <ul className="flex flex-col gap-2">
+                    {filteredRows.map((v) => (
+                      <li key={v.id}>
+                        <Link
+                          to={studioEditSongPath(surface, Number(v.song_id))}
+                          className="flex min-h-[52px] items-center justify-between gap-3 rounded-xl border border-stone-200 bg-white px-4 py-3 shadow-sm transition hover:border-stone-300 hover:bg-stone-50"
+                        >
+                          <div className="min-w-0">
+                            <p className="truncate font-medium text-stone-900">{v.song_title}</p>
+                            <p className="mt-0.5 text-xs text-stone-500">
+                              {v.custom_key ?? '—'} · {new Date(v.updated_at).toLocaleString()}
+                            </p>
+                          </div>
+                          <LuPenLine className="h-5 w-5 shrink-0 text-stone-400" aria-hidden />
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </>
+            )}
+          </section>
+        ) : null}
+
         {tab === 'imported' ? (
           <section className="space-y-3">
-            <p className="text-sm text-[var(--ms-text-secondary)]">
-              Здесь отображаются импортированные непубликованные песни (включая ранее импортированные). Отредактируйте и нажмите
-              «Опубликовать», чтобы песня попала в общий песенник.
-            </p>
-            {isAdmin && importedRows.length > 0 ? (
-              <div className="flex flex-wrap items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2 dark:border-red-500/40 dark:bg-red-500/10">
-                <button
-                  type="button"
-                  onClick={toggleSelectAllImported}
-                  className="inline-flex min-h-[36px] items-center rounded-lg border border-[var(--ms-border)] bg-[var(--ms-surface-elevated)] px-3 text-xs font-semibold text-[var(--ms-text-secondary)] hover:bg-[var(--ms-bg-elevated)]"
-                >
-                  {selectedImportedCount === importedRows.length ? 'Снять выбор' : 'Выбрать все'}
-                </button>
-                <button
-                  type="button"
-                  onClick={runMassDeleteImported}
-                  disabled={selectedImportedCount === 0 || massDeleteImportedMut.isPending}
-                  className="inline-flex min-h-[36px] items-center rounded-lg bg-red-600 px-3 text-xs font-semibold text-white hover:bg-red-500 disabled:opacity-50"
-                >
-                  {massDeleteImportedMut.isPending ? 'Удаляем…' : `Удалить выбранные (${selectedImportedCount})`}
-                </button>
-              </div>
-            ) : null}
+            <div className="rounded-xl border border-sky-200 bg-sky-50/60 p-3 text-sm text-sky-900">
+              <p className="font-semibold">Импортированные песни — “песочница” перед каталогом</p>
+              <p className="mt-1 text-xs leading-relaxed text-sky-900/80">
+                Здесь все песни, загруженные через таблицу. Откройте песню, поправьте название и текст, затем
+                нажмите <span className="font-semibold">«Опубликовать»</span> — она появится в общем песеннике.
+              </p>
+            </div>
+            <input
+              value={importedSearch}
+              onChange={(e) => setImportedSearch(e.target.value)}
+              placeholder="Поиск по номеру или названию"
+              className="min-h-[42px] w-full rounded-lg border border-stone-200 bg-white px-3 text-sm outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
+            />
             {importedQ.isLoading ? (
               <SongListSkeleton />
             ) : importedQ.isError ? (
-              <p className="text-sm text-[var(--ms-error)]">Не удалось загрузить импортированные песни.</p>
-            ) : importedRows.length === 0 ? (
-              <p className="text-sm text-[var(--ms-text-muted)]">Нет импортированных черновиков.</p>
+              <p className="text-sm text-red-600">Не удалось загрузить импортированные песни.</p>
+            ) : importedFiltered.length === 0 ? (
+              <p className="text-sm text-stone-500">
+                {importedCount === 0
+                  ? 'Импортированных песен пока нет. Загрузите таблицу в «Добавить песню → XLSX».'
+                  : 'Ничего не найдено по запросу.'}
+              </p>
             ) : (
               <ul className="flex flex-col gap-2">
-                {importedRows.map((s: SongListItem) => {
-                  const sourceBadge = importSourceBadge(s);
-                  const isMissingText = (s.tags ?? []).includes(MISSING_TEXT_TAG);
-                  return (
-                    <li
-                      key={s.id}
-                      className="flex min-h-[48px] items-center gap-3 rounded-xl border border-[var(--ms-border)] bg-[var(--ms-surface-elevated)] px-4 py-3 shadow-sm"
-                    >
-                      {isAdmin ? (
-                        <label className="inline-flex min-h-[40px] min-w-[40px] items-center justify-center">
-                          <input
-                            type="checkbox"
-                            checked={isImportedSelected(Number(s.id))}
-                            onChange={() => toggleImportedSelection(Number(s.id))}
-                          />
-                        </label>
-                      ) : null}
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate font-medium text-[var(--ms-text)]">
-                          {s.song_number ?? '—'}. {s.title}
-                        </p>
-                        <div className="mt-1 flex flex-wrap items-center gap-2">
-                          <span
-                            className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold ${sourceBadge.className}`}
-                          >
-                            {sourceBadge.text}
-                          </span>
-                          <span className="text-xs text-[var(--ms-text-muted)]">черновик</span>
-                          {isMissingText ? (
-                            <span className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/15 dark:text-amber-200">
-                              нет текста
-                            </span>
-                          ) : null}
-                        </div>
-                      </div>
-                      <Link
-                        to={studioEditSongPath(surface, Number(s.id))}
-                        className="inline-flex shrink-0 items-center gap-1 text-sm font-semibold text-sky-700 hover:text-sky-800"
-                      >
-                        <LuPenLine className="h-4 w-4" aria-hidden />
-                        Редактор
-                      </Link>
-                      <button
-                        type="button"
-                        onClick={() => publishImportedMut.mutate(s)}
-                        disabled={publishImportedMut.isPending}
-                        className="inline-flex min-h-[40px] shrink-0 items-center rounded-lg bg-[var(--ms-primary)] px-3 text-sm font-semibold text-[var(--ms-on-primary)] hover:bg-[var(--ms-primary-dark)] disabled:opacity-50"
-                      >
-                        Опубликовать
-                      </button>
-                    </li>
-                  );
-                })}
+                {importedFiltered.map((s) => (
+                  <ImportedSongRow key={s.id} song={s} />
+                ))}
               </ul>
             )}
           </section>

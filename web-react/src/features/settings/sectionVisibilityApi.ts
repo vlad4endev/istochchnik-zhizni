@@ -11,7 +11,15 @@ export const APP_SECTION_IDS = [
 ] as const;
 export type AppSectionId = (typeof APP_SECTION_IDS)[number];
 
-export const APP_ROLE_IDS = ['member', 'minister', 'pastor', 'musician', 'editor', 'admin'] as const;
+export const APP_ROLE_IDS = [
+  'parishioner',
+  'member',
+  'minister',
+  'pastor',
+  'musician',
+  'editor',
+  'admin',
+] as const;
 export type AppRole = (typeof APP_ROLE_IDS)[number];
 
 export interface SectionVisibilityRule {
@@ -36,6 +44,7 @@ export function appRoleLabel(role: AppRole): string {
   if (role === 'pastor') return 'Пастор';
   if (role === 'editor') return 'Редактор';
   if (role === 'musician') return 'Музыкант';
+  if (role === 'parishioner') return 'Прихожанин';
   return 'Участник';
 }
 
@@ -56,7 +65,8 @@ export function normalizeAppRole(raw: string | null | undefined): AppRole {
     value === 'minister' ||
     value === 'pastor' ||
     value === 'editor' ||
-    value === 'musician'
+    value === 'musician' ||
+    value === 'parishioner'
   ) {
     return value;
   }
@@ -96,5 +106,9 @@ export function canRoleAccessSection(
   );
   const rule = settings.sections[sectionId];
   if (!rule || !rule.enabled) return false;
-  return roles.some((role) => rule.roles.includes(role));
+  return roles.some(
+    (role) =>
+      rule.roles.includes(role) ||
+      (role === 'parishioner' && rule.roles.includes('member')),
+  );
 }

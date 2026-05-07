@@ -61,7 +61,7 @@ const COORDINATOR_DASHBOARD_NOTES_DELETE =
 
 /** Web Push / FCM: мутации привязаны к member_id из сессии (requireAuthSession в роутере). */
 const MEMBER_NOTIFICATIONS_POST =
-  /^\/api\/notifications\/(?:subscribe|unsubscribe|save-token)\/?$/;
+  /^\/api\/notifications\/(?:subscribe|unsubscribe|save-token|deliveries\/\d+\/open|deliveries\/\d+\/dismiss|deliveries\/open-all|deliveries\/local-reminder)\/?$/;
 
 /** Профиль / лента: мутации только своего контента (проверка в контроллере по сессии). */
 function isMemberProfileMutation(method: string, path: string): boolean {
@@ -140,6 +140,26 @@ function isStandardParticipantMutation(
   path: string,
   authUserId: number | undefined
 ): boolean {
+  /** Прихожанин: только чаты и базовые настройки сессии / push — без ленты профиля и избранного песен. */
+  if (role === 'parishioner') {
+    if (path.startsWith('/api/messenger/')) {
+      return true;
+    }
+    if (
+      (method === 'PATCH' || method === 'POST') &&
+      (path === '/api/auth/me' || path === '/api/auth/me/')
+    ) {
+      return true;
+    }
+    if (method === 'POST' && path === '/api/auth/me/avatar') {
+      return true;
+    }
+    if (method === 'POST' && MEMBER_NOTIFICATIONS_POST.test(path)) {
+      return true;
+    }
+    return false;
+  }
+
   if (role !== 'member' && role !== 'pastor' && role !== 'musician' && role !== 'editor') {
     return false;
   }

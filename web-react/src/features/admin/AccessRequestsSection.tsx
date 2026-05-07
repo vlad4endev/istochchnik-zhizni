@@ -37,7 +37,15 @@ export function AccessRequestsSection() {
   });
 
   const approveMut = useMutation({
-    mutationFn: ({ id, note }: { id: number; note?: string }) => approveAccessRequest(id, note),
+    mutationFn: ({
+      id,
+      note,
+      app_role,
+    }: {
+      id: number;
+      note?: string;
+      app_role?: 'parishioner';
+    }) => approveAccessRequest(id, note, app_role ? { app_role } : undefined),
     onSuccess: () => void qc.invalidateQueries({ queryKey: Q_ACCESS }),
   });
 
@@ -108,6 +116,13 @@ export function AccessRequestsSection() {
               onApprove={() =>
                 approveMut.mutate({ id: r.id, note: (noteById[r.id] ?? '').trim() || undefined })
               }
+              onApproveParishioner={() =>
+                approveMut.mutate({
+                  id: r.id,
+                  note: (noteById[r.id] ?? '').trim() || undefined,
+                  app_role: 'parishioner',
+                })
+              }
               onReject={() =>
                 rejectMut.mutate({ id: r.id, note: (noteById[r.id] ?? '').trim() || undefined })
               }
@@ -131,9 +146,10 @@ function AccessRequestRow(props: {
   onNoteChange: (v: string) => void;
   busy: boolean;
   onApprove: () => void;
+  onApproveParishioner: () => void;
   onReject: () => void;
 }) {
-  const { item, note, onNoteChange, busy, onApprove, onReject } = props;
+  const { item, note, onNoteChange, busy, onApprove, onApproveParishioner, onReject } = props;
   const initials = `${item.first_name?.trim().charAt(0) ?? ''}${item.last_name?.trim().charAt(0) ?? ''}`.toUpperCase() || '??';
 
   return (
@@ -162,7 +178,7 @@ function AccessRequestRow(props: {
           </span>
           <p className="mt-1 text-xs text-[var(--text-muted)]">{formatWhen(item.created_at)}</p>
         </div>
-        <div className="flex items-center gap-1.5">
+        <div className="flex flex-wrap items-center gap-1.5">
           <button
             type="button"
             disabled={busy}
@@ -171,6 +187,16 @@ function AccessRequestRow(props: {
           >
             Принять
           </button>
+          {item.request_type !== 'password_reset' ? (
+            <button
+              type="button"
+              disabled={busy}
+              onClick={onApproveParishioner}
+              className="rounded-md bg-sky-600 px-3.5 py-1.5 text-sm font-medium text-white transition hover:bg-sky-700 disabled:opacity-50"
+            >
+              Прихожанин
+            </button>
+          ) : null}
           <button
             type="button"
             disabled={busy}

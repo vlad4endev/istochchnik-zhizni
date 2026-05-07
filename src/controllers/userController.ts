@@ -350,7 +350,8 @@ export async function createUserHandler(req: Request, res: Response): Promise<vo
 
   if (req.body.app_role !== undefined && !isValidAppRole(req.body.app_role)) {
     res.status(400).json({
-      error: 'Field "app_role" must be "member", "minister", "pastor", "musician", "editor", or "admin"',
+      error:
+        'Field "app_role" must be "parishioner", "member", "minister", "pastor", "musician", "editor", or "admin"',
     });
     return;
   }
@@ -614,7 +615,8 @@ export async function updateUserHandler(req: Request, res: Response): Promise<vo
 
   if (req.body.app_role !== undefined && !isValidAppRole(req.body.app_role)) {
     res.status(400).json({
-      error: 'Field "app_role" must be "member", "minister", "pastor", "musician", "editor", or "admin"',
+      error:
+        'Field "app_role" must be "parishioner", "member", "minister", "pastor", "musician", "editor", or "admin"',
     });
     return;
   }
@@ -754,7 +756,8 @@ export async function setUserAppRoleHandler(req: Request, res: Response): Promis
     for (const role of appRolesRaw) {
       if (!isValidAppRole(role)) {
         res.status(400).json({
-          error: 'Field "app_roles" must contain only "member", "minister", "pastor", "musician", "editor", or "admin"',
+          error:
+            'Field "app_roles" must contain only "parishioner", "member", "minister", "pastor", "musician", "editor", or "admin"',
         });
         return;
       }
@@ -767,7 +770,7 @@ export async function setUserAppRoleHandler(req: Request, res: Response): Promis
   if (parsedRoles.length === 0) {
     res.status(400).json({
       error:
-        'Передайте "app_role" или непустой массив "app_roles" со значениями "member", "minister", "pastor", "musician", "editor", "admin"',
+        'Передайте "app_role" или непустой массив "app_roles" со значениями "parishioner", "member", "minister", "pastor", "musician", "editor", "admin"',
     });
     return;
   }

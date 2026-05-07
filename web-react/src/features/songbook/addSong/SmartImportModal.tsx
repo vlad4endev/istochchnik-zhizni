@@ -32,13 +32,8 @@ type Props = {
   open: boolean;
   onClose: () => void;
   onApply: (payload: { raw: string; chordPro: string }) => void;
-  onMassImportDone?: (result: {
-    success: number;
-    failed: number;
-    skipped: number;
-    placeholders?: number;
-    errors: Array<{ song_number: number; title: string; error: string }>;
-  }) => void;
+  /** Колбэк после успешного завершения массового импорта таблицы (XLSX). */
+  onMassImportDone?: (result: { success: number; failed: number; skipped: number; placeholders?: number }) => void;
   initialRaw?: string;
   /** С какой вкладки открыть окно (после сброса при открытии). */
   initialTab?: SmartImportSourceTab;
@@ -96,8 +91,6 @@ export function SmartImportModal({
   const [xlsxMassResult, setXlsxMassResult] = useState<{ success: number; failed: number; skipped: number; placeholders?: number; errors: Array<{ song_number: number; title: string; error: string }> } | null>(
     null,
   );
-  const [xlsxMassSummaryOpen, setXlsxMassSummaryOpen] = useState(false);
-  const [xlsxMassSummaryHandledJobId, setXlsxMassSummaryHandledJobId] = useState<string | null>(null);
   const xlsxMassLogRef = useRef<Array<{ ts: number; kind: string; message: string }>>([]);
   const xlsxEsRef = useRef<EventSource | null>(null);
   const xlsxPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -132,8 +125,6 @@ export function SmartImportModal({
     setXlsxMassJobId(null);
     setXlsxMassProgress(null);
     setXlsxMassResult(null);
-    setXlsxMassSummaryOpen(false);
-    setXlsxMassSummaryHandledJobId(null);
     xlsxMassLogRef.current = [];
     xlsxEsRef.current?.close();
     xlsxEsRef.current = null;
@@ -239,6 +230,14 @@ export function SmartImportModal({
       stopXlsxPolling();
     };
   }, [xlsxMassJobId]);
+
+  const massDoneFiredRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!xlsxMassResult || !xlsxMassJobId) return;
+    if (massDoneFiredRef.current === xlsxMassJobId) return;
+    massDoneFiredRef.current = xlsxMassJobId;
+    onMassImportDone?.(xlsxMassResult);
+  }, [xlsxMassResult, xlsxMassJobId, onMassImportDone]);
 
   const panel = isStudio
     ? 'border-zinc-600 bg-zinc-900 text-zinc-100'
@@ -516,20 +515,6 @@ export function SmartImportModal({
     return list.filter((s) => `${s.song_number} ${s.title} ${s.table_of_contents}`.toLowerCase().includes(q)).length;
   }, [xlsxSongs, xlsxSearch]);
 
-  const xlsxMassPercent = useMemo(() => {
-    if (!xlsxMassProgress || xlsxMassProgress.total <= 0) return 0;
-    const p = Math.round((xlsxMassProgress.current / xlsxMassProgress.total) * 100);
-    return Math.max(0, Math.min(100, p));
-  }, [xlsxMassProgress]);
-
-  useEffect(() => {
-    if (!xlsxMassJobId || !xlsxMassResult) return;
-    if (xlsxMassSummaryHandledJobId === xlsxMassJobId) return;
-    if (xlsxMassResult.success <= 0) return;
-    setXlsxMassSummaryOpen(true);
-    setXlsxMassSummaryHandledJobId(xlsxMassJobId);
-  }, [xlsxMassJobId, xlsxMassResult, xlsxMassSummaryHandledJobId]);
-
   // IMPORTANT: all hooks must run before conditional return
   if (!open) return null;
 
@@ -686,46 +671,9 @@ export function SmartImportModal({
       onClick={onClose}
     >
       <div
-        className={`relative max-h-[92dvh] w-full max-w-2xl overflow-y-auto rounded-2xl border p-4 shadow-2xl sm:p-6 ${panel}`}
+        className={`max-h-[92dvh] w-full max-w-2xl overflow-y-auto rounded-2xl border p-4 shadow-2xl sm:p-6 ${panel}`}
         onClick={(e) => e.stopPropagation()}
       >
-        {xlsxMassSummaryOpen && xlsxMassResult ? (
-          <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/55 p-4">
-            <div
-              className={`w-full max-w-md rounded-2xl border p-5 shadow-2xl ${
-                isStudio ? 'border-zinc-700 bg-zinc-900 text-zinc-100' : 'border-stone-200 bg-white text-stone-900'
-              }`}
-            >
-              <h3 className="text-lg font-bold">Импорт завершен</h3>
-              <p className={`mt-2 text-sm ${muted}`}>
-                Успешно: <strong>{xlsxMassResult.success}</strong>, ошибок: <strong>{xlsxMassResult.failed}</strong>, пропущено:{' '}
-                <strong>{xlsxMassResult.skipped}</strong>
-                {typeof xlsxMassResult.placeholders === 'number' ? (
-                  <>
-                    {', '}без текста: <strong>{xlsxMassResult.placeholders}</strong>
-                  </>
-                ) : null}
-                .
-              </p>
-              <p className={`mt-2 text-xs ${muted}`}>
-                Нажмите ОК, чтобы перейти в раздел «Импортированные».
-              </p>
-              <div className="mt-4 flex justify-end">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setXlsxMassSummaryOpen(false);
-                    onClose();
-                    onMassImportDone?.(xlsxMassResult);
-                  }}
-                  className={`inline-flex min-h-[42px] items-center rounded-lg px-4 text-sm font-semibold ${btnPrimary}`}
-                >
-                  ОК
-                </button>
-              </div>
-            </div>
-          </div>
-        ) : null}
         <div className="mb-4 flex items-start justify-between gap-3">
           <div>
             <h2 id="smart-import-title" className="text-lg font-bold leading-tight">
@@ -1055,21 +1003,10 @@ export function SmartImportModal({
                       </p>
                     ) : null}
                     {xlsxMassProgress ? (
-                      <div className="space-y-2">
-                        <p className={`text-xs ${muted}`}>
-                          {xlsxMassPercent}% · {xlsxMassProgress.current}/{xlsxMassProgress.total} — {xlsxMassProgress.song_title} (
-                          {xlsxMassProgress.status}
-                          {xlsxMassProgress.message ? `: ${xlsxMassProgress.message}` : ''})
-                        </p>
-                        <div className={`h-2 w-full overflow-hidden rounded-full ${isStudio ? 'bg-zinc-800' : 'bg-stone-200'}`}>
-                          <div
-                            className={`h-full rounded-full transition-all duration-500 ease-out ${
-                              isStudio ? 'bg-sky-500 animate-pulse' : 'bg-sky-600 animate-pulse'
-                            }`}
-                            style={{ width: `${xlsxMassPercent}%` }}
-                          />
-                        </div>
-                      </div>
+                      <p className={`text-xs ${muted}`}>
+                        {xlsxMassProgress.current}/{xlsxMassProgress.total} — {xlsxMassProgress.song_title} ({xlsxMassProgress.status}
+                        {xlsxMassProgress.message ? `: ${xlsxMassProgress.message}` : ''})
+                      </p>
                     ) : null}
                     {xlsxMassResult ? (
                       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -1079,8 +1016,7 @@ export function SmartImportModal({
                           {typeof xlsxMassResult.placeholders === 'number' ? (
                             <>
                               {' '}
-                              Заготовок без текста: <strong>{xlsxMassResult.placeholders}</strong> (правьте их во вкладке
-                              «Импортированные», затем публикуйте).
+                              Заготовок без текста: <strong>{xlsxMassResult.placeholders}</strong> (они скрыты в песеннике).
                             </>
                           ) : null}
                         </p>

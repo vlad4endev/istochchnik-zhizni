@@ -21,7 +21,7 @@ CREATE TABLE IF NOT EXISTS members (
   account_provider VARCHAR(100),
   account_id VARCHAR(255),
   is_active BOOLEAN NOT NULL DEFAULT TRUE,
-  app_role VARCHAR(16) NOT NULL DEFAULT 'member' CHECK (app_role IN ('member', 'minister', 'pastor', 'musician', 'editor', 'admin')),
+  app_role VARCHAR(16) NOT NULL DEFAULT 'member' CHECK (app_role IN ('member', 'parishioner', 'minister', 'pastor', 'musician', 'editor', 'admin')),
   app_roles TEXT[] NOT NULL DEFAULT ARRAY['member'],
   public_key TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -276,7 +276,7 @@ ALTER TABLE members ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEF
 ALTER TABLE members ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
 UPDATE members
 SET app_role = 'member'
-WHERE app_role IS NULL OR app_role NOT IN ('member', 'minister', 'pastor', 'musician', 'editor', 'admin');
+WHERE app_role IS NULL OR app_role NOT IN ('member', 'parishioner', 'minister', 'pastor', 'musician', 'editor', 'admin');
 UPDATE members
 SET app_roles = ARRAY[app_role]
 WHERE app_roles IS NULL OR cardinality(app_roles) = 0;
@@ -285,7 +285,7 @@ ALTER TABLE members ALTER COLUMN app_roles SET NOT NULL;
 ALTER TABLE members ALTER COLUMN app_role SET DEFAULT 'member';
 ALTER TABLE members ALTER COLUMN app_role SET NOT NULL;
 ALTER TABLE members DROP CONSTRAINT IF EXISTS members_app_role_check;
-ALTER TABLE members ADD CONSTRAINT members_app_role_check CHECK (app_role IN ('member', 'minister', 'pastor', 'musician', 'editor', 'admin'));
+ALTER TABLE members ADD CONSTRAINT members_app_role_check CHECK (app_role IN ('member', 'parishioner', 'minister', 'pastor', 'musician', 'editor', 'admin'));
 
 ALTER TABLE members ADD COLUMN IF NOT EXISTS is_collection_coordinator BOOLEAN NOT NULL DEFAULT FALSE;
 

@@ -1,5 +1,12 @@
-/** Роли приложения: member — пользователь; minister — служитель; pastor — пастор; musician — студия и добавление песен в песенник; editor — модерация каталога; admin — полный доступ. */
-export type AppRole = 'member' | 'minister' | 'pastor' | 'musician' | 'editor' | 'admin';
+/** Роли приложения: parishioner — прихожанин (гость); member — пользователь; minister — служитель; pastor — пастор; musician — студия и добавление песен в песенник; editor — модерация каталога; admin — полный доступ. */
+export type AppRole =
+  | 'parishioner'
+  | 'member'
+  | 'minister'
+  | 'pastor'
+  | 'musician'
+  | 'editor'
+  | 'admin';
 
 export function normalizeAppRole(raw: unknown): AppRole {
   if (typeof raw !== 'string') {
@@ -11,10 +18,12 @@ export function normalizeAppRole(raw: unknown): AppRole {
   if (n === 'pastor') return 'pastor';
   if (n === 'editor') return 'editor';
   if (n === 'musician') return 'musician';
+  if (n === 'parishioner') return 'parishioner';
   return 'member';
 }
 
 const ROLE_RANK: Record<AppRole, number> = {
+  parishioner: -1,
   member: 0,
   minister: 1,
   pastor: 2,
@@ -75,6 +84,7 @@ export function canDeleteCatalogSong(role: AppRole): boolean {
 
 export function isValidAppRoleString(value: unknown): value is AppRole {
   return (
+    value === 'parishioner' ||
     value === 'member' ||
     value === 'minister' ||
     value === 'pastor' ||

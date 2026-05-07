@@ -13,10 +13,11 @@ import {
   createSong,
   deleteSong,
   getSongById,
-  getSongByIdForModeration,
+  getSongImportStatus,
   getVersionFlags,
   listCatalogSongsForModeration,
   listPublishedSongs,
+  publishImportedSong,
   recordSongOpened,
   removeFavorite,
   updateSong,
@@ -69,14 +70,6 @@ function parseSongListFilters(req: Request): SongListFilters {
   if (tagsRaw && tagsRaw.trim()) {
     filters.tags = tagsRaw.split(',').map((s) => s.trim()).filter(Boolean);
   }
-  const isPublishedRaw =
-    typeof q.isPublished === 'string'
-      ? q.isPublished
-      : Array.isArray(q.isPublished)
-        ? q.isPublished[0]
-        : '';
-  if (isPublishedRaw === 'true') filters.isPublished = true;
-  if (isPublishedRaw === 'false') filters.isPublished = false;
   return filters;
 }
 
@@ -136,14 +129,7 @@ export async function getSong(req: Request, res: Response): Promise<void> {
       return;
     }
     const r = req as AuthReq;
-    let song = await getSongById(id, r.authUserId ?? null);
-    if (!song && r.authUserId) {
-      const allowModerationView =
-        canModerateCatalog(roleOf(r)) || (await hasMusicMinistryDirection(r.authUserId));
-      if (allowModerationView) {
-        song = await getSongByIdForModeration(id, r.authUserId);
-      }
-    }
+    const song = await getSongById(id, r.authUserId ?? null);
     if (!song) {
       res.status(404).json({ error: 'Не найдено' });
       return;
@@ -354,14 +340,28 @@ export async function updateSongHandler(req: Request, res: Response): Promise<vo
       res.status(401).json({ error: 'Требуется вход' });
       return;
     }
-    if (!canModerateCatalog(roleOf(r))) {
-      res.status(403).json({ error: 'Недостаточно прав' });
-      return;
-    }
     const id = Number(req.params.id);
     if (!Number.isInteger(id) || id <= 0) {
       res.status(400).json({ error: 'Invalid id' });
       return;
+    }
+    const isModerator = canModerateCatalog(roleOf(r));
+    let allowImportedEditor = false;
+    if (!isModerator) {
+      const status = await getSongImportStatus(id);
+      if (!status?.exists) {
+        res.status(404).json({ error: 'Не найдено' });
+        return;
+      }
+      // Музыкальное служение может править только импортированные/не опубликованные песни.
+      if (status.isImported && !status.isPublished) {
+        const ok = await hasMusicMinistryDirection(r.authUserId);
+        if (ok) allowImportedEditor = true;
+      }
+      if (!allowImportedEditor) {
+        res.status(403).json({ error: 'Недостаточно прав' });
+        return;
+      }
     }
     const body = req.body as {
       title?: string;
@@ -380,7 +380,8 @@ export async function updateSongHandler(req: Request, res: Response): Promise<vo
       tempo: body.tempo,
       time_signature: body.time_signature,
       ...(tags !== undefined ? { tags } : {}),
-      is_published: body.is_published,
+      // Импортирующий редактор не может сам опубликовать через PATCH — только через /publish.
+      ...(isModerator ? { is_published: body.is_published } : {}),
     });
     if (!updated) {
       res.status(404).json({ error: 'Не найдено' });
@@ -390,6 +391,42 @@ export async function updateSongHandler(req: Request, res: Response): Promise<vo
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: 'Ошибка' });
+  }
+}
+
+export async function publishSongHandler(req: Request, res: Response): Promise<void> {
+  try {
+    const r = req as AuthReq;
+    if (!r.authUserId) {
+      res.status(401).json({ error: 'Требуется вход' });
+      return;
+    }
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) {
+      res.status(400).json({ error: 'Invalid id' });
+      return;
+    }
+    const status = await getSongImportStatus(id);
+    if (!status?.exists) {
+      res.status(404).json({ error: 'Не найдено' });
+      return;
+    }
+    if (!canModerateCatalog(roleOf(r))) {
+      const ok = await hasMusicMinistryDirection(r.authUserId);
+      if (!ok || !status.isImported) {
+        res.status(403).json({ error: 'Недостаточно прав' });
+        return;
+      }
+    }
+    const updated = await publishImportedSong(id);
+    if (!updated) {
+      res.status(404).json({ error: 'Не найдено' });
+      return;
+    }
+    res.json(updated);
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Не удалось опубликовать песню' });
   }
 }
 

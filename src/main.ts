@@ -6,8 +6,6 @@ import http from 'node:http';
 import fs from 'node:fs';
 import express from 'express';
 import cors from 'cors';
-import helmet from 'helmet';
-import rateLimit from 'express-rate-limit';
 import dotenv from 'dotenv';
 import path from 'node:path';
 import type { Request as ExpressRequest } from 'express';
@@ -33,7 +31,6 @@ import settingsRoutes from './routes/settingsRoutes';
 import messengerRoutes from './routes/messengerRoutes';
 import servicePlannerRoutes from './routes/servicePlannerRoutes';
 import analyticsRoutes from './routes/analyticsRoutes';
-import callsRoutes from './routes/callsRoutes';
 import { analyticsMiddleware } from './middleware/analyticsMiddleware';
 import { diagnosticsRouter } from './diagnostics/routes/diagnostics.router';
 import {
@@ -43,7 +40,6 @@ import {
 } from './realtime/wsHub';
 import { initPushCronJobs } from './cron/pushJobs';
 import { initTelegramDispatchJob } from './cron/telegramDispatchJob';
-import { initAppLogCleanupJob } from './cron/appLogCleanupJob';
 import { ensureUploadsDirs, getUploadsRoot } from './config/uploadsRoot';
 import { ensureAccessRequestsMessengerChannel } from './services/messengerService';
 import { writeAppLog } from './services/appLogService';
@@ -213,9 +209,6 @@ app.use((req, res, next) => {
 app.use(express.json());
 app.use(resolveAuthSession);
 app.use(analyticsMiddleware);
-app.use(helmet());
-app.use('/api/auth', rateLimit({ windowMs: 15 * 60 * 1000, max: 20 }));
-app.use('/api/messages', rateLimit({ windowMs: 1 * 60 * 1000, max: 60 }));
 
 // Журналируем API-запросы (длительность, статус, пользователь) для админки "Журнал".
 app.use((req, res, next) => {
@@ -314,7 +307,6 @@ app.use('/api/studio', studioRoutes);
 app.use('/api/calendar', calendarRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/messenger', messengerRoutes);
-app.use('/api/calls', callsRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api', servicePlannerRoutes);
 app.use('/api', routes);
@@ -444,7 +436,6 @@ async function start(): Promise<void> {
   
   initPushCronJobs();
   initTelegramDispatchJob();
-  initAppLogCleanupJob();
   startAnalyticsMaintenance();
   
   server.listen(Number(PORT), () => {

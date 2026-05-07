@@ -182,7 +182,9 @@ export async function syncMembersFromTelegramProfiles(): Promise<SyncTelegramPro
 
 export async function setMemberAppRoles(
   id: number,
-  app_roles: Array<'member' | 'minister' | 'pastor' | 'musician' | 'editor' | 'admin'>,
+  app_roles: Array<
+    'parishioner' | 'member' | 'minister' | 'pastor' | 'musician' | 'editor' | 'admin'
+  >,
 ): Promise<AppUser> {
   const { data } = await apiClient.patch<AppUser>(`${USERS}/${id}/app-role`, { app_roles });
   return data;
@@ -466,9 +468,14 @@ export async function fetchAccessRequests(
   return data;
 }
 
-export async function approveAccessRequest(id: number, review_note?: string): Promise<void> {
+export async function approveAccessRequest(
+  id: number,
+  review_note?: string,
+  opts?: { app_role?: 'parishioner' },
+): Promise<void> {
   await apiClient.post(`/api/auth/access-requests/${id}/approve`, {
     review_note: review_note?.trim() || undefined,
+    ...(opts?.app_role === 'parishioner' ? { app_role: 'parishioner' } : {}),
   });
 }
 

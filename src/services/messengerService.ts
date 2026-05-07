@@ -1288,12 +1288,22 @@ export async function getPrivateChatProfile(
 
 // ─── Messages ─────────────────────────────────────────────────
 
-/** Клиент может слать `@[Имя](id)` или уже нормализованный `@[id]`. */
+const MENTION_ID_WRAP = '\u2060';
+
+/** Клиент: «@Имя» + невидимые U+2060 вокруг id, либо старый `@[Имя](id)`, либо уже `@[id]`. */
 function normalizeFriendlyMentionsToCanonical(content: string): string {
-  return content.replace(/@\[([^\]]+)\]\((\d+)\)/g, (_m, _label, id) => {
+  let s = content.replace(
+    new RegExp(`@([^${MENTION_ID_WRAP}\n]+?)${MENTION_ID_WRAP}(\\d+)${MENTION_ID_WRAP}`, 'g'),
+    (_m, _name, id) => {
+      const digits = String(id).replace(/\D/g, '');
+      return digits ? `@[${digits}]` : '';
+    },
+  );
+  s = s.replace(/@\[([^\]]+)\]\((\d+)\)/g, (_m, _label, id) => {
     const digits = String(id).replace(/\D/g, '');
     return digits ? `@[${digits}]` : '';
   });
+  return s;
 }
 
 /** После нормализации остаётся только `@[memberId]`. */
