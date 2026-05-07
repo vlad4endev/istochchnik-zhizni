@@ -15,6 +15,11 @@ import { resolveMessengerConversationDeepLink } from '../config/messengerPublic'
 import { getPrayerCycleSnapshotForDate } from './prayerCycleService';
 import { sendPushNotification } from './pushService';
 import { rewriteStorageUrlsInRecord, rewriteSupabaseStorageUrlForClient } from '../lib/supabaseStorage';
+import {
+  decryptMessageText,
+  encryptMessageText,
+  isMessageEncryptionEnabled,
+} from '../lib/messageCrypto';
 
 const MARK_READ_DEDUP_WINDOW_MS = 5_000;
 const recentMarkReadCalls = new Map<string, number>();
@@ -173,8 +178,10 @@ function mapParticipantUiExtras(r: {
 }
 
 function lastMessageListPreviewContent(rawContent: unknown, payloadType: unknown): string {
-  const s = typeof rawContent === 'string' ? rawContent.trim() : '';
-  if (s) return rawContent as string;
+  const resolvedContent =
+    typeof rawContent === 'string' ? decryptMessageText(rawContent) : '';
+  const s = resolvedContent.trim();
+  if (s) return resolvedContent;
   const pt = String(payloadType ?? '').trim();
   if (pt === 'audio') return '🎤 Голосовое сообщение';
   if (pt === 'video_note') return '🎥 Видеосообщение';
@@ -1418,7 +1425,7 @@ async function fetchReplyPreviewForMessage(
   if (!row) return null;
   return {
     id: bigint(row.id),
-    content: row.content,
+    content: decryptMessageText(String(row.content ?? '')),
     sender_name: row.sender_name?.trim() || null,
     is_deleted: row.is_deleted,
   };
@@ -1547,6 +1554,7 @@ export type PersistMessageResult = {
  */
 export async function persistPreparedMessage(prep: PreparedMessageSend): Promise<PersistMessageResult> {
   const { conversationId, senderId, contentStored, replyToMessageId, clientMsgId, pt, payloadJson } = prep;
+  const contentForDb = encryptMessageText(contentStored);
 
   await dbQuery(`UPDATE conversations SET updated_at = NOW() WHERE id = $1`, [conversationId]);
 
@@ -1598,7 +1606,7 @@ export async function persistPreparedMessage(prep: PreparedMessageSend): Promise
     [
       conversationId,
       senderId,
-      contentStored,
+      contentForDb,
       replyToMessageId,
       clientMsgId,
       pt,
@@ -1949,14 +1957,17 @@ export async function editMessage(
       ...(valid.length ? { mention_member_ids: valid } : {}),
     };
     const payloadJson = JSON.stringify(pl);
+    const contentForDb = encryptMessageText(normalized);
     const result = await dbQuery(
       `UPDATE messages
        SET content = $1, payload = $2::jsonb, updated_at = NOW()
        WHERE id = $3 AND sender_id = $4 AND is_deleted = FALSE
        RETURNING content, updated_at`,
-      [normalized, payloadJson, messageId, senderId],
+      [contentForDb, payloadJson, messageId, senderId],
     );
-    return result.rows[0] ?? null;
+    const rowUpdated = result.rows[0] as { content: string; updated_at: string } | undefined;
+    if (!rowUpdated) return null;
+    return { ...rowUpdated, content: decryptMessageText(String(rowUpdated.content ?? '')) };
   }
 
   const pl0 = normalizePayload(row.payload);
@@ -1964,15 +1975,18 @@ export async function editMessage(
   if (valid.length) pl.mention_member_ids = valid;
   else delete pl.mention_member_ids;
   const payloadJson = JSON.stringify(pl);
+  const contentForDb = encryptMessageText(normalized);
 
   const result = await dbQuery(
     `UPDATE messages
      SET content = $1, payload = $2::jsonb, updated_at = NOW()
      WHERE id = $3 AND sender_id = $4 AND is_deleted = FALSE
      RETURNING content, updated_at`,
-    [normalized, payloadJson, messageId, senderId],
+    [contentForDb, payloadJson, messageId, senderId],
   );
-  return result.rows[0] ?? null;
+  const rowUpdated = result.rows[0] as { content: string; updated_at: string } | undefined;
+  if (!rowUpdated) return null;
+  return { ...rowUpdated, content: decryptMessageText(String(rowUpdated.content ?? '')) };
 }
 
 /**
@@ -2614,6 +2628,7 @@ export async function postRegistrationAccessRequestMessengerNotification(input: 
   if (!convId) return;
 
   const content = `Новая заявка: ${input.fullName}`.trim();
+  const contentForDb = encryptMessageText(content);
   const payload: MessagePayload = {
     access_request_id: input.accessRequestId,
     kind: 'registration',
@@ -2629,7 +2644,7 @@ export async function postRegistrationAccessRequestMessengerNotification(input: 
     `INSERT INTO messages (conversation_id, sender_id, content, payload_type, payload)
      VALUES ($1::bigint, NULL, $2, 'access_request'::message_payload_type, $3::jsonb)
      RETURNING id`,
-    [convId, content, JSON.stringify(payload)],
+    [convId, contentForDb, JSON.stringify(payload)],
   );
   const rawId = (ins.rows[0] as { id?: unknown } | undefined)?.id;
   if (rawId == null) return;
@@ -2744,12 +2759,15 @@ function mapMessageWithSender(r: Record<string, unknown>): MessageWithSender {
   ) as MessagePayload;
   const pt = normalizePayloadType(r.payload_type);
 
+  const contentResolved = decryptMessageText(asString(r.content));
+  const replyContentResolved = decryptMessageText(asString(r.rp_content));
+
   const base: MessageWithSender = {
     id: bigint(r.id),
     conversation_id: bigint(r.conversation_id),
     sender_id: asNumberOrNull(r.sender_id),
     client_msg_id: asNullableString(r.client_msg_id),
-    content: asString(r.content),
+    content: contentResolved,
     payload_type: pt,
     payload: payloadNorm,
     interaction_count: Number(r.interaction_count ?? 0),
@@ -2766,7 +2784,7 @@ function mapMessageWithSender(r: Record<string, unknown>): MessageWithSender {
     reply_preview: r.rp_id
       ? {
           id: bigint(r.rp_id),
-          content: asString(r.rp_content),
+          content: replyContentResolved,
           sender_name: asNullableString(r.rp_sender_name)?.trim() || null,
           is_deleted: asBoolean(r.rp_is_deleted),
         }
@@ -2796,6 +2814,73 @@ export async function searchMessages(
   memberId: number,
   limit: number = 50,
 ): Promise<MessageWithSender[]> {
+  const normalizedQuery = searchQuery.trim().toLowerCase();
+  if (isMessageEncryptionEnabled()) {
+    const candidateLimit = Math.min(Math.max(limit * 12, 300), 1500);
+    const result = await dbQuery(
+      `
+      SELECT
+        msg.*,
+        m.name        AS sender_name,
+        m.first_name  AS sender_first_name,
+        m.last_name   AS sender_last_name,
+        rm.id         AS rp_id,
+        rm.content    AS rp_content,
+        rm.is_deleted AS rp_is_deleted,
+        COALESCE(rm_s.first_name, '') || ' ' || COALESCE(rm_s.last_name, '') AS rp_sender_name,
+        (
+          SELECT COALESCE(json_agg(json_build_object(
+            'emoji', r.emoji,
+            'count', r.cnt,
+            'reacted_by_me', r.my_react
+          )), '[]'::json)
+          FROM (
+            SELECT
+              mr.emoji,
+              COUNT(*)::int AS cnt,
+              BOOL_OR(mr.member_id = $2) AS my_react
+            FROM message_reactions mr
+            WHERE mr.message_id = msg.id
+            GROUP BY mr.emoji
+          ) r
+        ) AS reactions_json,
+        (
+          SELECT COALESCE(json_agg(sub.c ORDER BY sub.i), '[]'::json)
+          FROM (
+            SELECT gs.i AS i,
+              COALESCE((
+                SELECT COUNT(*)::int FROM message_poll_votes v
+                WHERE v.message_id = msg.id AND v.option_index = gs.i
+              ), 0) AS c
+            FROM generate_series(
+              0,
+              GREATEST(0, jsonb_array_length(COALESCE(msg.payload->'options', '[]'::jsonb)) - 1)
+            ) AS gs(i)
+          ) sub
+        ) AS poll_tallies_json,
+        (
+          SELECT COALESCE(json_agg(v.option_index ORDER BY v.option_index), '[]'::json)
+          FROM message_poll_votes v
+          WHERE v.message_id = msg.id AND v.member_id = $2
+        ) AS poll_my_options_json
+      FROM messages msg
+      LEFT JOIN members m ON m.id = msg.sender_id
+      LEFT JOIN messages rm ON rm.id = msg.reply_to_message_id
+      LEFT JOIN members rm_s ON rm_s.id = rm.sender_id
+      WHERE msg.conversation_id = $1
+        AND msg.is_deleted = FALSE
+      ORDER BY msg.created_at DESC
+      LIMIT $3
+      `,
+      [conversationId, memberId, candidateLimit],
+    );
+
+    return result.rows
+      .map((r) => mapMessageWithSender(r))
+      .filter((msg) => msg.content.toLowerCase().includes(normalizedQuery))
+      .slice(0, limit);
+  }
+
   const searchTerm = `%${searchQuery.trim()}%`;
 
   const result = await dbQuery(
@@ -2871,6 +2956,61 @@ export async function searchAllMessages(
   memberId: number,
   limit: number = 30,
 ): Promise<Array<ReturnType<typeof mapMessageWithSender> & { conversationTitle: string }>> {
+  const normalizedQuery = searchQuery.trim().toLowerCase();
+  if (isMessageEncryptionEnabled()) {
+    const candidateLimit = Math.min(Math.max(limit * 18, 400), 2000);
+    const result = await dbQuery(
+      `
+      SELECT
+        msg.*,
+        m.name        AS sender_name,
+        m.first_name  AS sender_first_name,
+        m.last_name   AS sender_last_name,
+        COALESCE(c.title, 'Чат') AS conv_title,
+        rm.id         AS rp_id,
+        rm.content    AS rp_content,
+        rm.is_deleted AS rp_is_deleted,
+        COALESCE(rm_s.first_name, '') || ' ' || COALESCE(rm_s.last_name, '') AS rp_sender_name,
+        (
+          SELECT COALESCE(json_agg(json_build_object(
+            'emoji', r.emoji,
+            'count', r.cnt,
+            'reacted_by_me', r.my_react
+          )), '[]'::json)
+          FROM (
+            SELECT
+              mr.emoji,
+              COUNT(*)::int AS cnt,
+              BOOL_OR(mr.member_id = $2) AS my_react
+            FROM message_reactions mr
+            WHERE mr.message_id = msg.id
+            GROUP BY mr.emoji
+          ) r
+        ) AS reactions_json,
+        '[]'::json AS poll_tallies_json,
+        '[]'::json AS poll_my_options_json
+      FROM messages msg
+      JOIN conversation_members cm ON cm.conversation_id = msg.conversation_id AND cm.member_id = $2
+      JOIN conversations c ON c.id = msg.conversation_id
+      LEFT JOIN members m ON m.id = msg.sender_id
+      LEFT JOIN messages rm ON rm.id = msg.reply_to_message_id
+      LEFT JOIN members rm_s ON rm_s.id = rm.sender_id
+      WHERE msg.is_deleted = FALSE
+      ORDER BY msg.created_at DESC
+      LIMIT $1
+      `,
+      [candidateLimit, memberId],
+    );
+
+    return result.rows
+      .map((r) => ({
+        ...mapMessageWithSender(r),
+        conversationTitle: r.conv_title || 'Чат',
+      }))
+      .filter((msg) => msg.content.toLowerCase().includes(normalizedQuery))
+      .slice(0, limit);
+  }
+
   const searchTerm = `%${searchQuery.trim()}%`;
 
   const result = await dbQuery(
