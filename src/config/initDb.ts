@@ -1772,6 +1772,28 @@ CREATE TABLE IF NOT EXISTS member_event_reads (
 );
 CREATE INDEX IF NOT EXISTS idx_member_event_reads_event_id ON member_event_reads (event_id);
 
+-- Журнал доставок уведомлений для клиентского бейджа/открытий/смахиваний.
+CREATE TABLE IF NOT EXISTS member_notification_deliveries (
+  id BIGSERIAL PRIMARY KEY,
+  member_id INTEGER NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+  source VARCHAR(32) NOT NULL DEFAULT 'push',
+  tag TEXT,
+  title TEXT NOT NULL,
+  body TEXT NOT NULL,
+  payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  opened_at TIMESTAMPTZ,
+  dismissed_at TIMESTAMPTZ
+);
+ALTER TABLE member_notification_deliveries ADD COLUMN IF NOT EXISTS opened_at TIMESTAMPTZ;
+ALTER TABLE member_notification_deliveries ADD COLUMN IF NOT EXISTS dismissed_at TIMESTAMPTZ;
+CREATE INDEX IF NOT EXISTS idx_member_notification_deliveries_member_created
+  ON member_notification_deliveries (member_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_member_notification_deliveries_member_opened
+  ON member_notification_deliveries (member_id, opened_at);
+CREATE INDEX IF NOT EXISTS idx_member_notification_deliveries_member_dismissed
+  ON member_notification_deliveries (member_id, dismissed_at);
+
 INSERT INTO songs (title, slug, content, default_key, tempo, time_signature, is_published)
 SELECT 'Демо: пример песни', 'demo-primer-pesni',
        '{title: Пример}' || chr(10) || '[C]Строка с аккордами' || chr(10) || 'Текст куплета',
