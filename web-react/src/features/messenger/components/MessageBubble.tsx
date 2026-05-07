@@ -13,6 +13,7 @@ import {
   getPrimaryAttachmentUrl,
   inferMessengerPayloadType,
   isMessengerVideoAttachment,
+  isMessengerWebmLikeVideo,
   readMessengerVideoDurationSec,
 } from '../payloadMedia';
 import { apiErrorMessage, approveAccessRequest, rejectAccessRequest } from '../../admin/api';
@@ -1075,20 +1076,26 @@ function MessageBubbleInner({
   const videoNoteMedia = useMemo(() => {
     if (!isVideoNoteLayout) return null;
     const videoMime = String(payload.mimeType ?? payload.mimetype ?? '').trim().toLowerCase();
-    const rawPath = attachmentRawUrl.split('?')[0].toLowerCase();
-    const isWebmLike = videoMime.startsWith('video/webm') || rawPath.endsWith('.webm');
-    const mp4Fallback = persistedNumericId && isWebmLike
-      ? buildMessengerAttachmentFileUrl(String(message.id), { transcode: 'mp4' })
-      : null;
+    const isWebmLike = isMessengerWebmLikeVideo(attachmentRawUrl, videoMime);
+    const mp4Proxy =
+      persistedNumericId && isWebmLike
+        ? buildMessengerAttachmentFileUrl(String(message.id), { transcode: 'mp4' })
+        : null;
     const raw = attachmentRawUrl;
     const fallback = raw ? (resolvePublicUrl(raw) ?? raw) : '';
-    const proxied = persistedNumericId
-      ? buildMessengerAttachmentFileUrl(String(message.id))
-      : null;
-    // Не форсим transcode как primary: он тяжелый и может быть недоступен.
-    const primary = proxied || resolvedAttachmentUrl || fallback || null;
-    const fallbackMp4 = mp4Fallback && mp4Fallback !== primary ? mp4Fallback : null;
-    return { primary, fallbackMp4 };
+    const proxied = persistedNumericId ? buildMessengerAttachmentFileUrl(String(message.id)) : null;
+    const originalChain = proxied || resolvedAttachmentUrl || fallback || null;
+    const wantsMp4First = Boolean(mp4Proxy);
+    let primary: string | null;
+    let fallbackSrc: string | null;
+    if (wantsMp4First && mp4Proxy) {
+      primary = mp4Proxy;
+      fallbackSrc = originalChain && originalChain !== mp4Proxy ? originalChain : null;
+    } else {
+      primary = originalChain;
+      fallbackSrc = mp4Proxy && mp4Proxy !== primary ? mp4Proxy : null;
+    }
+    return { primary, fallbackSrc };
   }, [isVideoNoteLayout, payload.mimeType, payload.mimetype, attachmentRawUrl, resolvedAttachmentUrl, persistedNumericId, message.id]);
 
   const videoNoteDurationSec = useMemo(() => {
@@ -1146,11 +1153,19 @@ function MessageBubbleInner({
       const mediaType: MediaItem['type'] = isMessengerVideoAttachment(img as Record<string, unknown>, rawUrl)
         ? 'video'
         : 'photo';
+      let playbackSrc = src;
+      if (
+        mediaType === 'video' &&
+        persistedNumericId &&
+        isMessengerWebmLikeVideo(rawUrl, mime)
+      ) {
+        playbackSrc = buildMessengerAttachmentFileUrl(String(message.id), { slot: idx, transcode: 'mp4' });
+      }
       indexBySource[idx] = items.length;
       items.push({
         id: `${message.id}-${idx}`,
         type: mediaType,
-        src,
+        src: playbackSrc,
         thumb: mediaType === 'photo' ? src : undefined,
         caption,
         sender: viewerSender,
@@ -1159,7 +1174,7 @@ function MessageBubbleInner({
     });
 
     return { items, indexBySource };
-  }, [albumImages, message.content, message.id, resolvedAlbumUrls, viewerDate, viewerSender]);
+  }, [albumImages, message.content, message.id, persistedNumericId, resolvedAlbumUrls, viewerDate, viewerSender]);
 
   const renderContent = () => {
     if (payloadType === 'video_note') return null;
@@ -1233,6 +1248,13 @@ function MessageBubbleInner({
                 const mime = String(img.mimeType ?? img.mimetype ?? '').trim().toLowerCase();
                 const name = String(img.name ?? img.filename ?? '').trim().toLowerCase();
                 const urlPath = rawUrl.split('?')[0].toLowerCase();
+                const isAlbumVideo = isMessengerVideoAttachment(img as Record<string, unknown>, rawUrl);
+                const albumVideoSrc =
+                  isAlbumVideo &&
+                  persistedNumericId &&
+                  isMessengerWebmLikeVideo(rawUrl, mime)
+                    ? buildMessengerAttachmentFileUrl(String(message.id), { slot: idx, transcode: 'mp4' })
+                    : slideSrc;
                 const isHeicLike =
                   mime === 'image/heic' ||
                   mime === 'image/heif' ||
@@ -1294,7 +1316,7 @@ function MessageBubbleInner({
                   if (albumSlotFailed[idx]) {
                     return (
                       <div
-                        key={`${slideSrc}-${idx}-video-failed`}
+                        key={`${albumVideoSrc}-${idx}-video-failed`}
                         className={[
                           'flex min-h-[84px] items-center gap-2 rounded-xl px-2 py-2 text-xs font-semibold',
                           isMine ? 'bg-white/10 text-white/75' : 'bg-[var(--surface)] text-[var(--text-secondary)]',
@@ -1308,7 +1330,7 @@ function MessageBubbleInner({
                   const videoDur = readMessengerVideoDurationSec(img as Record<string, unknown>);
                   return (
                     <button
-                      key={`${slideSrc}-${idx}-video`}
+                      key={`${albumVideoSrc}-${idx}-video`}
                       type="button"
                       onClick={() => {
                         const { items, indexBySource } = buildAlbumViewer();
@@ -1330,7 +1352,7 @@ function MessageBubbleInner({
                         />
                       ) : null}
                       <ChatVideoAttachmentPreview
-                        src={slideSrc}
+                        src={albumVideoSrc}
                         isMine={isMine}
                         durationHintSec={videoDur}
                         videoClassName={[
@@ -1413,6 +1435,10 @@ function MessageBubbleInner({
       const src = attachmentProxyHref || resolvedAttachmentUrl || (resolvePublicUrl(rawUrl) ?? rawUrl);
       const caption = String(message.content ?? '').trim();
       const attachmentMime = String(payload.mimeType ?? payload.mimetype ?? '').trim().toLowerCase();
+      const singleVideoPlaybackSrc =
+        persistedNumericId && isMessengerWebmLikeVideo(rawUrl, attachmentMime)
+          ? buildMessengerAttachmentFileUrl(String(message.id), { transcode: 'mp4' })
+          : src;
       const attachmentName = String(payload.name ?? payload.filename ?? '').trim().toLowerCase();
       const urlPath = rawUrl.split('?')[0].toLowerCase();
       const isHeicLike =
@@ -1513,7 +1539,7 @@ function MessageBubbleInner({
                     {
                       id: message.id,
                       type: isSingleVideo ? 'video' : 'photo',
-                      src,
+                      src: isSingleVideo ? singleVideoPlaybackSrc : src,
                       thumb: isSingleVideo ? undefined : src,
                       caption,
                       sender: viewerSender,
@@ -1531,7 +1557,7 @@ function MessageBubbleInner({
             >
               {isSingleVideo ? (
                 <ChatVideoAttachmentPreview
-                  src={src}
+                  src={singleVideoPlaybackSrc}
                   isMine={isMine}
                   durationHintSec={singleVideoDur}
                   videoClassName={[
@@ -1608,6 +1634,10 @@ function MessageBubbleInner({
       const sizeRaw = Number(payload.size ?? 0);
       const sizeLabel = Number.isFinite(sizeRaw) && sizeRaw > 0 ? formatBytes(sizeRaw) : null;
       const mimeHint = String(payload.mimeType ?? payload.mimetype ?? '').trim();
+      const fileVideoPlaybackHref =
+        persistedNumericId && isMessengerWebmLikeVideo(rawUrl, mimeHint)
+          ? buildMessengerAttachmentFileUrl(String(message.id), { transcode: 'mp4' })
+          : openHref;
       const docMeta = messengerDocumentPresentation(name, mimeHint);
       const subtitleParts = [docMeta.typeLabel];
       if (sizeLabel) subtitleParts.push(sizeLabel);
@@ -1649,7 +1679,7 @@ function MessageBubbleInner({
                         {
                           id: message.id,
                           type: 'video',
-                          src: openHref,
+                          src: fileVideoPlaybackHref,
                           caption,
                           sender: viewerSender,
                           date: viewerDate,
@@ -1665,7 +1695,7 @@ function MessageBubbleInner({
                   aria-label="Открыть видео"
                 >
                   <ChatVideoAttachmentPreview
-                    src={openHref}
+                    src={fileVideoPlaybackHref}
                     isMine={isMine}
                     durationHintSec={fileVideoDur}
                     videoClassName={[
@@ -2178,8 +2208,7 @@ function MessageBubbleInner({
           <>
             <VideoNoteAttachment
               videoSrc={videoNoteMedia?.primary ?? null}
-              videoFallbackSrc={videoNoteMedia?.fallbackMp4 ?? null}
-              primaryMimeType={String(payload.mimeType ?? payload.mimetype ?? '').trim().toLowerCase() || undefined}
+              videoFallbackSrc={videoNoteMedia?.fallbackSrc ?? null}
               isMine={isMine}
               durationHintSec={videoNoteDurationSec}
               metaOverlay={<div className="msg-videonote-bubble-meta">{bubbleMeta}</div>}

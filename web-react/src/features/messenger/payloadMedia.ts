@@ -41,6 +41,24 @@ export function formatMessengerVideoDuration(sec: number): string {
   return `${m}:${String(s).padStart(2, '0')}`;
 }
 
+/**
+ * Записанное в чат видео часто приходит как WebM (VP8/VP9). Декодирование WebM не гарантировано
+ * (Safari, iOS, часть встраиваемых Chromium). Для показа в ленте надёжнее H.264 с API (`transcode=mp4`).
+ */
+export function isMessengerWebmLikeVideo(pathOrUrl: string, mimeHint?: string): boolean {
+  const mimeMain = String(mimeHint ?? '')
+    .trim()
+    .toLowerCase()
+    .split(';')[0]
+    .trim();
+  const path = pathOrUrl.split(/[?#]/)[0].toLowerCase();
+  return (
+    mimeMain.startsWith('video/webm') ||
+    mimeMain.startsWith('audio/webm') ||
+    path.endsWith('.webm')
+  );
+}
+
 /** URL вложения из вложенных структур (варианты API / групповых ответов). */
 export function pickUrlFromNestedPayload(p: Record<string, unknown>): string {
   for (const key of ['media', 'attachment', 'file', 'content'] as const) {

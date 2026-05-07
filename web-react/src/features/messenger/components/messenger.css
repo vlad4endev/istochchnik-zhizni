@@ -2876,6 +2876,10 @@ html[data-chat-open='1'] .tg-main--visible .tg-chat-window .tg-input-container.t
   width: min(240px, 78vw);
   height: min(240px, 78vw);
   cursor: pointer;
+  touch-action: manipulation;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
   -webkit-tap-highlight-color: transparent;
 }
 
@@ -2897,6 +2901,7 @@ html.dark .msg-videonote-circle--placeholder {
   height: 100%;
   object-fit: cover;
   display: block;
+  background: #0f0f12;
 }
 
 .msg-videonote-play-veil {

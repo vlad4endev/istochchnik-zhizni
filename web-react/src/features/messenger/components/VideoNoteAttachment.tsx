@@ -7,14 +7,12 @@ import { LuPause, LuPlay } from 'react-icons/lu';
 export function VideoNoteAttachment({
   videoSrc,
   videoFallbackSrc,
-  primaryMimeType,
   isMine,
   durationHintSec,
   metaOverlay,
 }: {
   videoSrc: string | null;
   videoFallbackSrc?: string | null;
-  primaryMimeType?: string;
   isMine: boolean;
   /** Длительность с сервера/оптимистичного payload (сек), пока нет metadata у видео. */
   durationHintSec?: number;
@@ -22,18 +20,53 @@ export function VideoNoteAttachment({
   metaOverlay: ReactNode;
 }) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const usedFallbackRef = useRef(false);
   const [playing, setPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
   const [activeSrc, setActiveSrc] = useState<string | null>(videoSrc);
   const [usedFallback, setUsedFallback] = useState(false);
-  const primaryMime = String(primaryMimeType ?? '').trim().toLowerCase();
+
+  useEffect(() => {
+    usedFallbackRef.current = usedFallback;
+  }, [usedFallback]);
 
   useEffect(() => {
     setActiveSrc(videoSrc);
     setUsedFallback(false);
+    usedFallbackRef.current = false;
     setProgress(0);
     setPlaying(false);
   }, [videoSrc, videoFallbackSrc]);
+
+  /** Если WebM «молча» не декодируется (пустой круг), переключаемся на MP4 с сервера. */
+  useEffect(() => {
+    if (!videoFallbackSrc || activeSrc === videoFallbackSrc) return;
+    const primaryLooksWebm =
+      typeof activeSrc === 'string' &&
+      activeSrc.length > 0 &&
+      !activeSrc.includes('transcode=mp4');
+    if (!primaryLooksWebm) return;
+
+    let cancelled = false;
+    const t = window.setTimeout(() => {
+      if (cancelled || usedFallbackRef.current) return;
+      const el = videoRef.current;
+      if (!el) return;
+      const noDecode =
+        el.readyState < HTMLMediaElement.HAVE_CURRENT_DATA ||
+        (el.videoWidth === 0 && el.videoHeight === 0);
+      if (noDecode) {
+        usedFallbackRef.current = true;
+        setUsedFallback(true);
+        setActiveSrc(videoFallbackSrc);
+      }
+    }, 3000);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(t);
+    };
+  }, [activeSrc, videoFallbackSrc]);
 
   useEffect(() => {
     const el = videoRef.current;
@@ -59,7 +92,7 @@ export function VideoNoteAttachment({
       el.removeEventListener('pause', onPause);
       el.removeEventListener('ended', onEnded);
     };
-  }, [videoSrc]);
+  }, [activeSrc]);
 
   const toggle = useCallback(
     (e: React.MouseEvent) => {
@@ -70,7 +103,8 @@ export function VideoNoteAttachment({
       if (playing) el.pause();
       else {
         const trySwitchToFallback = () => {
-          if (!usedFallback && videoFallbackSrc && videoFallbackSrc !== activeSrc) {
+          if (!usedFallbackRef.current && videoFallbackSrc && videoFallbackSrc !== activeSrc) {
+            usedFallbackRef.current = true;
             setUsedFallback(true);
             setActiveSrc(videoFallbackSrc);
             return true;
@@ -85,7 +119,7 @@ export function VideoNoteAttachment({
         });
       }
     },
-    [activeSrc, playing, usedFallback, videoFallbackSrc],
+    [activeSrc, playing, videoFallbackSrc],
   );
 
   if (!activeSrc) {
@@ -121,22 +155,32 @@ export function VideoNoteAttachment({
           src={activeSrc}
           className="msg-videonote-video"
           playsInline
-          preload="auto"
+          preload="metadata"
+          controls={false}
+          disablePictureInPicture
           muted={false}
-          onError={() => {
-            if (!usedFallback && videoFallbackSrc && videoFallbackSrc !== activeSrc) {
+          onLoadedMetadata={(e) => {
+            const el = e.currentTarget;
+            if (
+              !usedFallbackRef.current &&
+              videoFallbackSrc &&
+              videoFallbackSrc !== activeSrc &&
+              el.videoWidth === 0 &&
+              el.videoHeight === 0
+            ) {
+              usedFallbackRef.current = true;
               setUsedFallback(true);
               setActiveSrc(videoFallbackSrc);
             }
           }}
-        >
-          {activeSrc === videoSrc && videoSrc ? (
-            <source src={videoSrc} type={primaryMime || undefined} />
-          ) : null}
-          {videoFallbackSrc && videoFallbackSrc !== videoSrc ? (
-            <source src={videoFallbackSrc} type="video/mp4" />
-          ) : null}
-        </video>
+          onError={() => {
+            if (!usedFallbackRef.current && videoFallbackSrc && videoFallbackSrc !== activeSrc) {
+              usedFallbackRef.current = true;
+              setUsedFallback(true);
+              setActiveSrc(videoFallbackSrc);
+            }
+          }}
+        />
         {!playing ? (
           <span className="msg-videonote-play-veil" aria-hidden>
             <span className="msg-videonote-play-btn">

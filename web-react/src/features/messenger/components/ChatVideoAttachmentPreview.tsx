@@ -1,4 +1,4 @@
-import { useCallback, useState, type SyntheticEvent } from 'react';
+import { useCallback, useEffect, useState, type SyntheticEvent } from 'react';
 import { LuPlay } from 'react-icons/lu';
 
 import { formatMessengerVideoDuration } from '../payloadMedia';
@@ -23,6 +23,10 @@ export function ChatVideoAttachmentPreview({
 }) {
   const [metaDuration, setMetaDuration] = useState<number | null>(null);
 
+  useEffect(() => {
+    setMetaDuration(null);
+  }, [src]);
+
   const onMeta = useCallback((e: SyntheticEvent<HTMLVideoElement>) => {
     const d = e.currentTarget.duration;
     if (Number.isFinite(d) && d > 0 && d !== Number.POSITIVE_INFINITY) setMetaDuration(d);
@@ -43,6 +47,8 @@ export function ChatVideoAttachmentPreview({
         muted
         playsInline
         preload="metadata"
+        controls={false}
+        disablePictureInPicture
         className={videoClassName}
         onLoadedData={onLoaded}
         onLoadedMetadata={onMeta}
