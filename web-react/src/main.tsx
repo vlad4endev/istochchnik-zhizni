@@ -26,6 +26,51 @@ import '@mantine/notifications/styles.css';
 import './index.css';
 import './styles/mobile.css';
 
+const CLIENT_BUILD_VERSION = '2026-05-07-dashboard-rollback-1';
+const CLIENT_BUILD_VERSION_KEY = 'app:client-build-version';
+const CLIENT_BUILD_RELOAD_KEY = 'app:client-build-reload-once';
+
+async function forceClientRefreshOnVersionChange(): Promise<void> {
+  if (typeof window === 'undefined') return;
+  let previousVersion = '';
+  try {
+    previousVersion = localStorage.getItem(CLIENT_BUILD_VERSION_KEY) ?? '';
+    localStorage.setItem(CLIENT_BUILD_VERSION_KEY, CLIENT_BUILD_VERSION);
+  } catch {
+    return;
+  }
+
+  if (!previousVersion || previousVersion === CLIENT_BUILD_VERSION) return;
+
+  try {
+    const alreadyReloaded = sessionStorage.getItem(CLIENT_BUILD_RELOAD_KEY);
+    if (alreadyReloaded === CLIENT_BUILD_VERSION) return;
+    sessionStorage.setItem(CLIENT_BUILD_RELOAD_KEY, CLIENT_BUILD_VERSION);
+  } catch {
+    // ignore storage failures and continue best-effort cleanup
+  }
+
+  try {
+    if ('serviceWorker' in navigator) {
+      const registration = await navigator.serviceWorker.getRegistration();
+      await registration?.unregister();
+    }
+  } catch {
+    // ignore service worker errors
+  }
+
+  try {
+    if ('caches' in window) {
+      const keys = await caches.keys();
+      await Promise.all(keys.map((key) => caches.delete(key)));
+    }
+  } catch {
+    // ignore cache cleanup errors
+  }
+
+  window.location.reload();
+}
+
 if (import.meta.env.DEV) {
   void import('@welldone-software/why-did-you-render')
     .then(({ default: whyDidYouRender }) => {
@@ -43,6 +88,7 @@ applyNativeShellViewportLock();
 window.addEventListener('load', () => applyNativeShellViewportLock());
 initPwaStandaloneHtmlHint();
 initAppearance();
+void forceClientRefreshOnVersionChange();
 void client.ping().catch((error: unknown) => {
   console.warn('Appwrite ping failed:', error);
 });
