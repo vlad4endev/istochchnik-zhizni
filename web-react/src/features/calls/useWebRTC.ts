@@ -3,12 +3,37 @@ import { useCallback, useEffect, useRef } from 'react';
 
 import { sendRealtimeJson, subscribeRealtimeMessages } from '../../lib/realtimeWsClient';
 
-const ICE_SERVERS: RTCConfiguration = {
-  iceServers: [
-    { urls: 'stun:stun.l.google.com:19302' },
-    { urls: 'stun:stun1.l.google.com:19302' },
-  ],
-};
+const FALLBACK_ICE_SERVERS: RTCIceServer[] = [{ urls: 'stun:stun.l.google.com:19302' }];
+let cachedIceServers: RTCIceServer[] | null = null;
+let cachedIceServersAt = 0;
+
+async function fetchIceServers(): Promise<RTCIceServer[]> {
+  const now = Date.now();
+  if (cachedIceServers && now - cachedIceServersAt < 60 * 60 * 1000) {
+    return cachedIceServers;
+  }
+
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), 4000);
+  try {
+    const res = await fetch('/api/calls/ice-servers', {
+      credentials: 'include',
+      signal: controller.signal,
+    });
+    if (!res.ok) throw new Error('Failed to fetch ICE servers');
+    const data = (await res.json()) as { iceServers?: unknown };
+    const iceServers = Array.isArray(data.iceServers)
+      ? (data.iceServers as RTCIceServer[])
+      : FALLBACK_ICE_SERVERS;
+    cachedIceServers = iceServers.length > 0 ? iceServers : FALLBACK_ICE_SERVERS;
+    cachedIceServersAt = Date.now();
+    return cachedIceServers;
+  } catch {
+    return FALLBACK_ICE_SERVERS;
+  } finally {
+    window.clearTimeout(timeoutId);
+  }
+}
 
 export interface UseWebRTCOptions {
   callId: string;
@@ -86,51 +111,62 @@ export function useWebRTC({
   const start = useCallback(async (): Promise<MediaStream | null> => {
     if (!callId || startedRef.current) return null;
     startedRef.current = true;
+    let stream: MediaStream | null = null;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        audio: true,
+        video: callType === 'video' ? { width: 1280, height: 720 } : false,
+      });
+      localStreamRef.current = stream;
 
-    const stream = await navigator.mediaDevices.getUserMedia({
-      audio: true,
-      video: callType === 'video' ? { width: 1280, height: 720 } : false,
-    });
-    localStreamRef.current = stream;
+      const iceServers = await fetchIceServers();
+      const peer = new SimplePeer({
+        initiator: isInitiator,
+        stream,
+        trickle: true,
+        config: {
+          iceServers,
+          iceCandidatePoolSize: 10,
+        },
+      });
 
-    const peer = new SimplePeer({
-      initiator: isInitiator,
-      stream,
-      trickle: true,
-      config: ICE_SERVERS,
-    });
+      peer.on('signal', (data: Parameters<SimplePeer.Instance['signal']>[0]) => {
+        sendRealtimeJson({ type: 'call:signal', callId, data });
+      });
 
-    peer.on('signal', (data: Parameters<SimplePeer.Instance['signal']>[0]) => {
-      sendRealtimeJson({ type: 'call:signal', callId, data });
-    });
+      peer.on('stream', (remote: MediaStream) => {
+        onRemoteStreamRef.current?.(remote);
+      });
 
-    peer.on('stream', (remote: MediaStream) => {
-      onRemoteStreamRef.current?.(remote);
-    });
+      peer.on('close', () => {
+        onCallEndedRef.current?.();
+      });
 
-    peer.on('close', () => {
-      onCallEndedRef.current?.();
-    });
+      peer.on('error', (err: Error) => {
+        console.error('[webrtc]', err);
+      });
 
-    peer.on('error', (err: Error) => {
-      console.error('[webrtc]', err);
-    });
+      const pc = (peer as unknown as { _pc?: RTCPeerConnection })._pc;
+      if (pc) {
+        const emitState = () => {
+          onIceStateChangeRef.current?.(pc.iceConnectionState);
+        };
+        pc.addEventListener('iceconnectionstatechange', emitState);
+        iceListenerCleanupRef.current = () => {
+          pc.removeEventListener('iceconnectionstatechange', emitState);
+        };
+        emitState();
+      }
 
-    const pc = (peer as unknown as { _pc?: RTCPeerConnection })._pc;
-    if (pc) {
-      const emitState = () => {
-        onIceStateChangeRef.current?.(pc.iceConnectionState);
-      };
-      pc.addEventListener('iceconnectionstatechange', emitState);
-      iceListenerCleanupRef.current = () => {
-        pc.removeEventListener('iceconnectionstatechange', emitState);
-      };
-      emitState();
+      peerRef.current = peer;
+      flushPending(peer);
+      return stream;
+    } catch (error) {
+      startedRef.current = false;
+      stream?.getTracks().forEach((t) => t.stop());
+      localStreamRef.current = null;
+      throw error;
     }
-
-    peerRef.current = peer;
-    flushPending(peer);
-    return stream;
   }, [callId, isInitiator, callType, flushPending]);
 
   useEffect(() => {

@@ -33,6 +33,7 @@ import settingsRoutes from './routes/settingsRoutes';
 import messengerRoutes from './routes/messengerRoutes';
 import servicePlannerRoutes from './routes/servicePlannerRoutes';
 import analyticsRoutes from './routes/analyticsRoutes';
+import callsRoutes from './routes/callsRoutes';
 import { analyticsMiddleware } from './middleware/analyticsMiddleware';
 import { diagnosticsRouter } from './diagnostics/routes/diagnostics.router';
 import {
@@ -313,6 +314,7 @@ app.use('/api/studio', studioRoutes);
 app.use('/api/calendar', calendarRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/messenger', messengerRoutes);
+app.use('/api/calls', callsRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api', servicePlannerRoutes);
 app.use('/api', routes);
