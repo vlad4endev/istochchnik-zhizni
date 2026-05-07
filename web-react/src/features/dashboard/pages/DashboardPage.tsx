@@ -8,9 +8,11 @@ import {
   LuArrowRight,
   LuCalendarDays,
   LuChurch,
+  LuExternalLink,
   LuHeart,
   LuPlay,
   LuSettings,
+  LuStar,
   LuUser,
 } from 'react-icons/lu';
 
@@ -215,6 +217,27 @@ function parseServiceDateTime(plan: Pick<ServicePlanListItem, 'service_date' | '
   return Number.isNaN(dt.getTime()) ? null : dt;
 }
 
+function preacherInitials(name: string): string {
+  const parts = name
+    .trim()
+    .split(/\s+/)
+    .filter((x) => x.length > 0)
+    .slice(0, 2);
+  if (parts.length === 0) return 'П';
+  return parts.map((x) => x[0]?.toUpperCase() ?? '').join('');
+}
+
+function buildBibleVerseUrl(scripture: string): string {
+  const q = scripture.trim();
+  return `https://www.bible.com/ru/search/bible?q=${encodeURIComponent(q)}`;
+}
+
+function preacherNameTwoLines(name: string): string {
+  const parts = name.trim().split(/\s+/).filter((x) => x.length > 0);
+  if (parts.length <= 1) return name;
+  return `${parts[0]}\n${parts.slice(1).join(' ')}`;
+}
+
 type SermonPlanPhase = 'upcoming' | 'live' | 'feedback' | 'closed';
 
 function computeSermonPlanPhase(
@@ -303,7 +326,7 @@ function UpcomingPreacherCard({
   preacherAvatarUrl,
   topic,
   scripture,
-  startsAtLabel,
+  dateLabel,
   canRate,
   onOpenComments,
 }: {
@@ -311,42 +334,57 @@ function UpcomingPreacherCard({
   preacherAvatarUrl: string | null;
   topic: string;
   scripture: string;
-  startsAtLabel: string;
+  dateLabel: string;
   canRate: boolean;
   onOpenComments: () => void;
 }) {
+  const initials = preacherInitials(preacherName);
+  const scriptureUrl = buildBibleVerseUrl(scripture);
+  const preacherNameDisplay = preacherNameTwoLines(preacherName);
   return (
-    <section className="overflow-hidden rounded-2xl border border-[#BFD7FF] bg-gradient-to-br from-[#EEF5FF] to-[#E3EEFF] p-4 shadow-[var(--shadow-card)]">
-      <p className="text-[11px] font-semibold tracking-[0.02em] text-[#2F4DA4]">Ближайшая проповедь</p>
-      <div className="mt-3 flex items-start gap-3">
-        <div className="h-12 w-12 shrink-0 overflow-hidden rounded-xl border border-[#BFD7FF] bg-white">
+    <section className="w-full max-w-[420px] overflow-hidden rounded-2xl border-[0.5px] border-[#c9d7e6] bg-white shadow-[var(--shadow-card)]">
+      <div className="flex items-end gap-4 bg-[#0C447C] px-5 pt-5">
+        <div className="min-w-0 flex-1 pb-4">
+          <p className="text-[10px] uppercase tracking-[0.1em] text-[#85B7EB]">Проповедь</p>
+          <p className="mt-2 whitespace-pre-line text-[43px] font-medium leading-[1.05] text-white max-sm:text-[36px]">
+            {preacherNameDisplay}
+          </p>
+        </div>
+        <div className="h-[110px] w-[90px] shrink-0 overflow-hidden rounded-t-[10px] bg-[#185FA5]">
           {preacherAvatarUrl ? (
             <img src={preacherAvatarUrl} alt="" className="h-full w-full object-cover" />
           ) : (
-            <div className="grid h-full w-full place-items-center text-[#4A5FD5]">
-              <LuUser className="h-5 w-5" strokeWidth={2} aria-hidden />
+            <div className="grid h-full w-full place-items-center text-[30px] font-medium text-[#B5D4F4]">
+              {initials}
             </div>
           )}
         </div>
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-[15px] font-extrabold text-[#1A2560]">{preacherName}</p>
-          <p className="mt-0.5 text-xs font-semibold text-[#4A5FD5]">{startsAtLabel}</p>
-        </div>
       </div>
-      <div className="mt-3 space-y-2">
-        <div className="rounded-xl border border-[#D7E5FF] bg-white/80 px-3 py-2">
-          <p className="text-[10px] font-bold uppercase tracking-[0.04em] text-[#6A7FC5]">Тема</p>
-          <p className="mt-1 text-sm font-semibold leading-snug text-[#1A2560]">{topic}</p>
+      <div className="flex flex-col gap-3 bg-[#2F2F2F] px-5 py-4">
+        <div className="flex items-center gap-2">
+          <span className="h-1.5 w-1.5 rounded-full bg-[#378ADD]" aria-hidden />
+          <span className="text-xs font-medium text-[#C5CCD3]">{dateLabel}</span>
         </div>
-        <div className="rounded-xl border border-[#D7E5FF] bg-white/80 px-3 py-2">
-          <p className="text-[10px] font-bold uppercase tracking-[0.04em] text-[#6A7FC5]">Стих из Библии</p>
-          <p className="mt-1 text-sm font-semibold leading-snug text-[#1A2560]">{scripture}</p>
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="inline-flex min-h-[30px] items-center gap-1.5 rounded-full border border-[#97C459] bg-[#EAF3DE] px-3 py-1 text-xs font-medium text-[#27500A]">
+            <LuStar className="h-3.5 w-3.5" aria-hidden />
+            <span>{topic}</span>
+          </div>
+          <a
+            href={scriptureUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex min-h-[30px] items-center gap-1.5 rounded-full border border-[#B5D4F4] bg-[#E6F1FB] px-3 py-1 text-xs font-medium text-[#185FA5] transition hover:bg-[#B5D4F4]"
+          >
+            <span>{scripture}</span>
+            <LuExternalLink className="h-3.5 w-3.5" aria-hidden />
+          </a>
         </div>
         {canRate ? (
           <button
             type="button"
             onClick={onOpenComments}
-            className="inline-flex min-h-[42px] items-center justify-center rounded-xl bg-[#2F4DA4] px-4 text-sm font-extrabold text-white hover:bg-[#273f88]"
+            className="inline-flex min-h-[40px] items-center justify-center rounded-xl bg-[#2F4DA4] px-4 text-sm font-extrabold text-white hover:bg-[#273f88]"
           >
             Оценить и оставить комментарий
           </button>
@@ -681,16 +719,10 @@ function DashboardMain() {
     if (display) return display;
     return 'Проповедник';
   }, [preacherProfileQ.data?.profile]);
-  const nearestSermonStartsAtLabel = useMemo(() => {
-    if (!nearestPlan?.startsAt) return '';
-    if (nearestPlan.phase === 'upcoming') {
-      return `Собрание ${format(nearestPlan.startsAt, 'd MMMM, HH:mm', { locale: ru })}`;
-    }
-    if (nearestPlan.phase === 'live') {
-      return `Идёт до ${format(nearestPlan.endsAt, 'HH:mm', { locale: ru })}`;
-    }
-    return `Отзывы до ${format(nearestPlan.feedbackEndsAt, 'HH:mm', { locale: ru })}`;
-  }, [nearestPlan]);
+  const nearestSermonDateLabel = useMemo(
+    () => (nearestPlan?.startsAt ? format(nearestPlan.startsAt, 'd MMMM yyyy', { locale: ru }) : ''),
+    [nearestPlan?.startsAt],
+  );
   const canRateSermon = nearestPlan?.phase === 'feedback';
   const showNearestPreacherWidget = nearestSermonData != null && nearestPlan != null;
   const birthdaysThisWeek: BirthdayWeekItem[] = useMemo(() => {
@@ -961,7 +993,7 @@ function DashboardMain() {
                   preacherAvatarUrl={preacherAvatarUrl}
                   topic={nearestSermonData!.topic}
                   scripture={nearestSermonData!.scripture}
-                  startsAtLabel={nearestSermonStartsAtLabel}
+                  dateLabel={nearestSermonDateLabel}
                   canRate={canRateSermon}
                   onOpenComments={() => navigate(`/service-plan/sermon-comments/${nearestSermonData!.shareToken}`)}
                 />
@@ -1253,7 +1285,7 @@ function DashboardMain() {
                 preacherAvatarUrl={preacherAvatarUrl}
                 topic={nearestSermonData!.topic}
                 scripture={nearestSermonData!.scripture}
-                startsAtLabel={nearestSermonStartsAtLabel}
+                dateLabel={nearestSermonDateLabel}
                 canRate={canRateSermon}
                 onOpenComments={() => navigate(`/service-plan/sermon-comments/${nearestSermonData!.shareToken}`)}
               />
