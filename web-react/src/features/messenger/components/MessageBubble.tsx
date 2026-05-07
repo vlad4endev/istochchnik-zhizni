@@ -2067,6 +2067,7 @@ function MessageBubbleInner({
             <VideoNoteAttachment
               videoSrc={videoNoteMedia?.primary ?? null}
               videoFallbackSrc={videoNoteMedia?.fallbackMp4 ?? null}
+              primaryMimeType={String(payload.mimeType ?? payload.mimetype ?? '').trim().toLowerCase() || undefined}
               isMine={isMine}
               durationHintSec={videoNoteDurationSec}
               metaOverlay={<div className="msg-videonote-bubble-meta">{bubbleMeta}</div>}

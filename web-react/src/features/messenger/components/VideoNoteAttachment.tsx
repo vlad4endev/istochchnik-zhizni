@@ -7,12 +7,14 @@ import { LuPause, LuPlay } from 'react-icons/lu';
 export function VideoNoteAttachment({
   videoSrc,
   videoFallbackSrc,
+  primaryMimeType,
   isMine,
   durationHintSec,
   metaOverlay,
 }: {
   videoSrc: string | null;
   videoFallbackSrc?: string | null;
+  primaryMimeType?: string;
   isMine: boolean;
   /** Длительность с сервера/оптимистичного payload (сек), пока нет metadata у видео. */
   durationHintSec?: number;
@@ -24,6 +26,7 @@ export function VideoNoteAttachment({
   const [progress, setProgress] = useState(0);
   const [activeSrc, setActiveSrc] = useState<string | null>(videoSrc);
   const [usedFallback, setUsedFallback] = useState(false);
+  const primaryMime = String(primaryMimeType ?? '').trim().toLowerCase();
 
   useEffect(() => {
     setActiveSrc(videoSrc);
@@ -66,13 +69,23 @@ export function VideoNoteAttachment({
       if (!el || !activeSrc) return;
       if (playing) el.pause();
       else {
+        const trySwitchToFallback = () => {
+          if (!usedFallback && videoFallbackSrc && videoFallbackSrc !== activeSrc) {
+            setUsedFallback(true);
+            setActiveSrc(videoFallbackSrc);
+            return true;
+          }
+          return false;
+        };
         if (el.duration && Number.isFinite(el.duration) && el.currentTime >= el.duration - 0.05) {
           el.currentTime = 0;
         }
-        void el.play().catch(() => {});
+        void el.play().catch(() => {
+          if (trySwitchToFallback()) return;
+        });
       }
     },
-    [activeSrc, playing],
+    [activeSrc, playing, usedFallback, videoFallbackSrc],
   );
 
   if (!activeSrc) {
@@ -108,7 +121,7 @@ export function VideoNoteAttachment({
           src={activeSrc}
           className="msg-videonote-video"
           playsInline
-          preload="metadata"
+          preload="auto"
           muted={false}
           onError={() => {
             if (!usedFallback && videoFallbackSrc && videoFallbackSrc !== activeSrc) {
@@ -116,7 +129,14 @@ export function VideoNoteAttachment({
               setActiveSrc(videoFallbackSrc);
             }
           }}
-        />
+        >
+          {activeSrc === videoSrc && videoSrc ? (
+            <source src={videoSrc} type={primaryMime || undefined} />
+          ) : null}
+          {videoFallbackSrc && videoFallbackSrc !== videoSrc ? (
+            <source src={videoFallbackSrc} type="video/mp4" />
+          ) : null}
+        </video>
         {!playing ? (
           <span className="msg-videonote-play-veil" aria-hidden>
             <span className="msg-videonote-play-btn">
