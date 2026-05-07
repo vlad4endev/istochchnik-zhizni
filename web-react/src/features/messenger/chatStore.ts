@@ -2101,6 +2101,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
     try {
       const count = await api.fetchUnreadCount();
       set({ totalUnread: count });
+      // refreshUnread updates only aggregate badge; while messenger screen is open
+      // we also sync per-chat unread_count values in the conversation list.
+      if (isMessengerRouteActive()) {
+        await get().loadConversations({ force: true });
+      }
     } catch {
       /* ignore */
     }
@@ -2219,6 +2224,12 @@ function classifyConversation(conv: ConversationListItem): Exclude<ChatTab, 'all
   if (conv.type === 'private') return 'personal';
   if (conv.type === 'channel') return 'notifications';
   return 'services';
+}
+
+function isMessengerRouteActive(): boolean {
+  if (typeof window === 'undefined') return false;
+  const path = String(window.location?.pathname ?? '');
+  return path === '/messenger' || path.startsWith('/messenger/');
 }
 
 function truncateMessageForToast(content: string): string {

@@ -5,6 +5,7 @@ import {
   getUnreadNotificationDeliveryCount,
   insertMemberNotificationDelivery,
   markAllNotificationDeliveriesOpened,
+  markNotificationDeliveryDismissed,
   markNotificationDeliveryOpened,
 } from '../services/notificationDeliveryService';
 import { removeSubscription, saveSubscription } from '../services/pushService';
@@ -180,6 +181,30 @@ router.post('/deliveries/:id/open', requireAuthSession, async (req: Request, res
     res.json({ ok });
   } catch (e) {
     console.error('[notifications] delivery open error:', e);
+    res.status(500).json({ error: 'Failed to update' });
+  }
+});
+
+/**
+ * POST /api/notifications/deliveries/:id/dismiss
+ * Помечает доставку закрытой без открытия (смахнули/закрыли уведомление).
+ */
+router.post('/deliveries/:id/dismiss', requireAuthSession, async (req: Request, res: Response) => {
+  const memberId = (req as AuthReq).authUserId;
+  if (!memberId) {
+    res.status(401).json({ error: 'Unauthorized' });
+    return;
+  }
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id) || id <= 0) {
+    res.status(400).json({ error: 'Invalid id' });
+    return;
+  }
+  try {
+    const ok = await markNotificationDeliveryDismissed(id, memberId);
+    res.json({ ok });
+  } catch (e) {
+    console.error('[notifications] delivery dismiss error:', e);
     res.status(500).json({ error: 'Failed to update' });
   }
 });

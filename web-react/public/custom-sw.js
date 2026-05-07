@@ -118,13 +118,31 @@ function markDeliveryOpenedById(deliveryIdRaw) {
   }).catch(function () {});
 }
 
+function markDeliveryDismissedById(deliveryIdRaw) {
+  const deliveryId =
+    typeof deliveryIdRaw === 'string'
+      ? deliveryIdRaw.trim()
+      : deliveryIdRaw != null
+        ? String(deliveryIdRaw).trim()
+        : '';
+  if (!(deliveryId && /^\d+$/.test(deliveryId))) {
+    return Promise.resolve();
+  }
+  return fetch(new URL('/api/notifications/deliveries/' + deliveryId + '/dismiss', self.location.origin).href, {
+    method: 'POST',
+    credentials: 'include',
+    mode: 'same-origin',
+  }).catch(function () {});
+}
+
 self.addEventListener('notificationclick', function (event) {
   event.notification.close();
   const markDeliveryOpened = markDeliveryOpenedById(event.notification?.data?.deliveryId);
+  const markDeliveryDismissed = markDeliveryDismissedById(event.notification?.data?.deliveryId);
 
-  // Handle explicit 'dismiss' action — всё равно снимаем запись с бейджа
+  // Explicit dismiss action: закрыли без открытия приложения.
   if (event.action === 'dismiss') {
-    event.waitUntil(markDeliveryOpened);
+    event.waitUntil(markDeliveryDismissed);
     return;
   }
 
@@ -162,7 +180,7 @@ self.addEventListener('notificationclick', function (event) {
 });
 
 self.addEventListener('notificationclose', function (event) {
-  event.waitUntil(markDeliveryOpenedById(event.notification?.data?.deliveryId));
+  event.waitUntil(markDeliveryDismissedById(event.notification?.data?.deliveryId));
 });
 
 // Handle browser rotating VAPID/subscription keys silently

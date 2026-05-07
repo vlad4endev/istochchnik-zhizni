@@ -7,6 +7,7 @@ import {
   patchBroadcast,
   updateBroadcastEmbed,
 } from '../controllers/broadcastController';
+import { getUnreadEvents, postEventRead } from '../controllers/eventsController';
 import { getPodcastEpisodes, getPodcastSettings, patchPodcastSettings } from '../controllers/resourcesController';
 import { requireAuthSession } from '../middleware/authSession';
 import { requireBroadcastManager } from '../middleware/requireBroadcastManager';
@@ -49,6 +50,9 @@ router.patch('/resources/podcasts/settings', requireAuthSession, patchPodcastSet
 router.get('/profile/by-username/:username', getProfileByUsername);
 router.get('/profile/:id', getProfile);
 router.patch('/profile/settings', requireAuthSession, patchProfileSettings);
+
+router.get('/events/unread-count', requireAuthSession, getUnreadEvents);
+router.post('/events/:id/read', requireAuthSession, postEventRead);
 
 // Create post supports JSON or multipart uploads (field: media)
 router.post('/posts', requireAuthSession, profilePostUploadIfMultipart, postCreatePost);

@@ -1,24 +1,6 @@
 import { query } from '../config/db';
-
-/** Дублирует логику messengerService.getTotalUnreadCount — держите синхронно при изменении SQL. */
-async function getChatUnreadTotal(memberId: number): Promise<number> {
-  const result = await query(
-    `
-    SELECT COALESCE(SUM(cnt), 0)::int AS total
-    FROM (
-      SELECT COUNT(*) AS cnt
-      FROM conversation_participants cp
-      JOIN messages m ON m.conversation_id = cp.conversation_id
-      WHERE cp.member_id = $1
-        AND cp.left_at IS NULL
-        AND m.id > COALESCE(cp.last_read_message_id, 0)
-        AND m.sender_id IS DISTINCT FROM cp.member_id
-    ) sub
-    `,
-    [memberId],
-  );
-  return Number(result.rows[0]?.total ?? 0);
-}
+import { getUnreadEventsCount } from './eventsService';
+import { getUnreadMessagesCount } from '../lib/unreadHelpers';
 
 export async function getUnreadNotificationDeliveryCount(memberId: number): Promise<number> {
   const result = await query(
@@ -27,6 +9,7 @@ export async function getUnreadNotificationDeliveryCount(memberId: number): Prom
     FROM member_notification_deliveries
     WHERE member_id = $1
       AND opened_at IS NULL
+      AND dismissed_at IS NULL
       AND created_at > NOW() - INTERVAL '90 days'
     `,
     [memberId],
@@ -36,11 +19,12 @@ export async function getUnreadNotificationDeliveryCount(memberId: number): Prom
 
 /** Сумма для бейджа приложения: чаты + неоткрытые push/напоминания из журнала. */
 export async function getCombinedAppBadgeCount(memberId: number): Promise<number> {
-  const [chat, deliveries] = await Promise.all([
-    getChatUnreadTotal(memberId),
+  const [chat, deliveries, unreadEvents] = await Promise.all([
+    getUnreadMessagesCount(memberId),
     getUnreadNotificationDeliveryCount(memberId),
+    getUnreadEventsCount(memberId),
   ]);
-  return Math.min(99, chat + deliveries);
+  return Math.min(99, chat + deliveries + unreadEvents);
 }
 
 export async function insertMemberNotificationDelivery(input: {
@@ -77,8 +61,26 @@ export async function markNotificationDeliveryOpened(
   const result = await query(
     `
     UPDATE member_notification_deliveries
-    SET opened_at = NOW()
+    SET opened_at = NOW(), dismissed_at = NULL
     WHERE id = $1 AND member_id = $2 AND opened_at IS NULL
+    `,
+    [deliveryId, memberId],
+  );
+  return Number(result.rowCount ?? 0) > 0;
+}
+
+export async function markNotificationDeliveryDismissed(
+  deliveryId: number,
+  memberId: number,
+): Promise<boolean> {
+  const result = await query(
+    `
+    UPDATE member_notification_deliveries
+    SET dismissed_at = NOW()
+    WHERE id = $1
+      AND member_id = $2
+      AND opened_at IS NULL
+      AND dismissed_at IS NULL
     `,
     [deliveryId, memberId],
   );
@@ -92,6 +94,7 @@ export async function markAllNotificationDeliveriesOpened(memberId: number): Pro
     SET opened_at = NOW()
     WHERE member_id = $1
       AND opened_at IS NULL
+      AND dismissed_at IS NULL
       AND created_at > NOW() - INTERVAL '90 days'
     `,
     [memberId],

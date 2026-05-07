@@ -99,8 +99,12 @@ function notify(
         void apiClient.post(`/api/notifications/deliveries/${deliveryId}/open`).catch(() => {});
         window.dispatchEvent(new CustomEvent('app:notification-deliveries-changed'));
       };
+      const markDismissed = () => {
+        void apiClient.post(`/api/notifications/deliveries/${deliveryId}/dismiss`).catch(() => {});
+        window.dispatchEvent(new CustomEvent('app:notification-deliveries-changed'));
+      };
       notification.onclick = markOpened;
-      notification.onclose = markOpened;
+      notification.onclose = markDismissed;
     }
     return true;
   } catch {

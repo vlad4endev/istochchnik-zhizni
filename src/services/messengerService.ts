@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 
 import { query as dbQuery } from '../config/db';
+import { getUnreadMessagesCount } from '../lib/unreadHelpers';
 import type {
   ConversationListItem,
   ConversationType,
@@ -238,11 +239,7 @@ export async function listConversations(memberId: number): Promise<ConversationL
       ) AS lm_sender_name,
       -- unread count
       COALESCE(
-        (SELECT COUNT(*)::int FROM messages m2
-         WHERE m2.conversation_id = c.id
-           AND m2.id > COALESCE(cp.last_read_message_id, 0)
-           AND m2.sender_id IS DISTINCT FROM $1
-           AND m2.payload_type::text NOT IN ('access_request', 'system', 'notification')),
+        urc.cnt,
         0
       ) AS unread_count,
       -- other member for private chats
@@ -266,6 +263,15 @@ export async function listConversations(memberId: number): Promise<ConversationL
       LIMIT 1
     ) lm ON TRUE
     LEFT JOIN members lm_sender ON lm_sender.id = lm.sender_id
+    -- unread count via lateral join (same filter as total unread badge)
+    LEFT JOIN LATERAL (
+      SELECT COUNT(*)::int AS cnt
+      FROM messages m2
+      WHERE m2.conversation_id = c.id
+        AND m2.id > COALESCE(cp.last_read_message_id, 0)
+        AND m2.sender_id IS DISTINCT FROM $1
+        AND m2.payload_type::text NOT IN ('access_request', 'system', 'notification')
+    ) urc ON TRUE
     -- other member for private chats
     LEFT JOIN LATERAL (
       SELECT om2.id, om2.name, om2.first_name, om2.last_name, om2.avatar_url, om2.last_seen_at, om2.app_role, om2.app_roles, om2.public_key
@@ -2297,23 +2303,7 @@ export async function markRead(
  * Get total unread count across all conversations for a member.
  */
 export async function getTotalUnreadCount(memberId: number): Promise<number> {
-  const result = await dbQuery(
-    `
-    SELECT COALESCE(SUM(cnt), 0)::int AS total
-    FROM (
-      SELECT COUNT(*) AS cnt
-      FROM conversation_participants cp
-      JOIN messages m ON m.conversation_id = cp.conversation_id
-      WHERE cp.member_id = $1
-        AND cp.left_at IS NULL
-        AND m.id > COALESCE(cp.last_read_message_id, 0)
-        AND m.sender_id IS DISTINCT FROM cp.member_id
-        AND m.payload_type::text NOT IN ('access_request', 'system', 'notification')
-    ) sub
-    `,
-    [memberId],
-  );
-  return Number(result.rows[0]?.total ?? 0);
+  return getUnreadMessagesCount(memberId);
 }
 
 // ─── Reactions ────────────────────────────────────────────────

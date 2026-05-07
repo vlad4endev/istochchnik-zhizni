@@ -808,3 +808,42 @@ export async function deleteAllChurchEvents(): Promise<number> {
   const result = await query(`DELETE FROM ${schema.tableRef}`);
   return result.rowCount ?? 0;
 }
+
+export async function markEventRead(memberId: number, eventId: number): Promise<boolean> {
+  const schema = await ensureChurchEventsSchema();
+  const exists = await query(
+    `SELECT 1
+     FROM ${schema.tableRef}
+     WHERE id = $1 AND is_active = TRUE
+     LIMIT 1`,
+    [eventId],
+  );
+  if (exists.rows.length === 0) {
+    return false;
+  }
+  await query(
+    `INSERT INTO member_event_reads (member_id, event_id)
+     VALUES ($1, $2)
+     ON CONFLICT (member_id, event_id) DO UPDATE
+       SET opened_at = NOW()`,
+    [memberId, eventId],
+  );
+  return true;
+}
+
+export async function getUnreadEventsCount(memberId: number): Promise<number> {
+  const schema = await ensureChurchEventsSchema();
+  const result = await query(
+    `SELECT COUNT(*)::int AS n
+     FROM ${schema.tableRef} e
+     WHERE e.is_active = TRUE
+       AND NOT EXISTS (
+         SELECT 1
+         FROM member_event_reads mer
+         WHERE mer.member_id = $1
+           AND mer.event_id = e.id
+       )`,
+    [memberId],
+  );
+  return Number(result.rows[0]?.n ?? 0);
+}

@@ -199,6 +199,16 @@ export async function getActiveEvents(): Promise<ChurchEventItem[]> {
   return Array.isArray(data) ? data : [];
 }
 
+export async function markEventRead(eventId: number): Promise<void> {
+  await apiClient.post(`/api/events/${encodeURIComponent(String(eventId))}/read`);
+}
+
+export async function fetchUnreadEventsCount(): Promise<number> {
+  const { data } = await apiClient.get<{ count?: number }>('/api/events/unread-count');
+  const n = Number(data?.count);
+  return Number.isFinite(n) && n > 0 ? n : 0;
+}
+
 export async function getWeekBirthdays(): Promise<BirthdayWeekResponse> {
   const { data } = await apiClient.get<unknown>('/api/calendar/birthdays/week');
   if (!isRecord(data)) {

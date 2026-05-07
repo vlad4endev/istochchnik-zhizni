@@ -34,8 +34,10 @@ import {
   createChurchEvent,
   deleteAllChurchEvents,
   deleteChurchEvent,
+  getUnreadEventsCount,
   listActiveEvents,
   listAllEventsAdmin,
+  markEventRead,
   updateChurchEvent,
 } from '../services/eventsService';
 import { notifyRealtime } from '../realtime/notify';
@@ -189,6 +191,47 @@ export async function getActiveEvents(_req: Request, res: Response): Promise<voi
     res.json(items);
   } catch (err) {
     console.error('getActiveEvents error', err);
+    res.status(500).json({ error: 'Database error' });
+  }
+}
+
+export async function postEventRead(req: Request, res: Response): Promise<void> {
+  const authReq = req as AuthReq & { authUserId?: number };
+  const memberId = authReq.authUserId;
+  if (!memberId) {
+    res.status(401).json({ error: 'Authentication required' });
+    return;
+  }
+  const id = parseId(req.params.id);
+  if (!id) {
+    res.status(400).json({ error: 'Invalid event id' });
+    return;
+  }
+  try {
+    const ok = await markEventRead(memberId, id);
+    if (!ok) {
+      res.status(404).json({ error: 'Event not found' });
+      return;
+    }
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('postEventRead error', err);
+    res.status(500).json({ error: 'Database error' });
+  }
+}
+
+export async function getUnreadEvents(req: Request, res: Response): Promise<void> {
+  const authReq = req as AuthReq & { authUserId?: number };
+  const memberId = authReq.authUserId;
+  if (!memberId) {
+    res.status(401).json({ error: 'Authentication required' });
+    return;
+  }
+  try {
+    const count = await getUnreadEventsCount(memberId);
+    res.json({ count });
+  } catch (err) {
+    console.error('getUnreadEvents error', err);
     res.status(500).json({ error: 'Database error' });
   }
 }
