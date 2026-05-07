@@ -469,6 +469,11 @@ export function LoginPage() {
   const subtitle = isRegisterMode
     ? 'Заполните данные для регистрации'
     : 'Введите номер телефона и пароль';
+  const handlePrimarySubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (submitting) return;
+    void (isRegisterMode ? submitRegister() : submitLogin());
+  };
 
   const inputClass =
     'min-h-[48px] w-full rounded-xl border border-stone-200 bg-[var(--surface-elevated)] px-3.5 py-3 text-base text-stone-900 outline-none ring-primary/30 placeholder:text-stone-400 focus:border-primary focus:ring-2 sm:min-h-0 sm:py-2.5 sm:text-[15px]';
@@ -556,7 +561,7 @@ export function LoginPage() {
               </div>
             </div>
 
-            <div className="mt-4 flex flex-col gap-3">
+            <form className="mt-4 flex flex-col gap-3" onSubmit={handlePrimarySubmit}>
               {isRegisterMode && (
                 <>
                   <label className="block">
@@ -794,7 +799,7 @@ export function LoginPage() {
                   )}
                 </div>
               )}
-            </div>
+            </form>
 
             {statusText && (
               <div

@@ -37,7 +37,7 @@ import { loadErrorDescription } from '../prayerPageUtils';
 export function userCanViewNextWeekPrayerPlan(me: MeResponse | undefined): boolean {
   if (!me) return false;
   const role = me.app_role?.trim().toLowerCase();
-  if (role === 'admin' || role === 'pastor') return true;
+  if (role === 'admin') return true;
   return apiBoolean(me.is_collection_coordinator);
 }
 

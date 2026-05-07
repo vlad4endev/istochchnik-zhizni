@@ -601,8 +601,8 @@ function DashboardMain() {
     refetchInterval: 60_000,
   });
   const needsNextWeekPlan =
-    apiBoolean(meQ.data?.is_collection_coordinator) || isAdmin || isPastor;
-  const needsCurrentWeekPlan = isAdmin || isPastor;
+    apiBoolean(meQ.data?.is_collection_coordinator) || isAdmin;
+  const needsCurrentWeekPlan = isAdmin;
 
   const collectionClaimsQ = useQuery({
     queryKey: ['calendar', 'cycle', 'collection-claims', 'next', 'dashboard'],
@@ -845,7 +845,7 @@ function DashboardMain() {
   }, [collectionClaimsQ.data?.members, weekMembersQ.data, me?.id]);
 
   const coordinatorProgressStats = useMemo(() => {
-    if (isAdmin || isPastor) {
+    if (isAdmin) {
       return {
         total: adminNextWeekRosterStats.withMember,
         filled: adminNextWeekRosterStats.filled,
@@ -856,7 +856,6 @@ function DashboardMain() {
     return { total, filled };
   }, [
     isAdmin,
-    isPastor,
     adminNextWeekRosterStats.withMember,
     adminNextWeekRosterStats.filled,
     coordinatorAssignedRows.length,
@@ -879,7 +878,7 @@ function DashboardMain() {
 
   const showPrayerPlanOnDashboard =
     userCanViewNextWeekPrayerPlan(meQ.data) &&
-    (isAdmin || isPastor || isCollectionCoordinator);
+    (isAdmin || isCollectionCoordinator);
 
   const showInitialSkeleton =
     meQ.isPending &&
@@ -1523,16 +1522,14 @@ function DashboardMain() {
               <p className="text-[11px] font-semibold tracking-[0.02em] text-[#6B2D3E]">
                 Координаторам сбора
               </p>
-              {isAdmin || isPastor ? (
+              {isAdmin ? (
                 <>
                   {(() => {
-                    const leaderUnfilledRows = isAdmin ? adminUnfilledCycleRows : unfilledWeekRowsAdmin;
+                    const leaderUnfilledRows = adminUnfilledCycleRows;
                     return leaderUnfilledRows.length > 0 ? (
                       <div className="mt-3">
                         <p className="text-sm font-semibold text-stone-800">
-                          {isAdmin
-                            ? 'На текущей неделе не заполнена молитвенная нужда (только участники цикла):'
-                            : 'На текущей неделе не заполнена молитвенная нужда:'}
+                          На текущей неделе не заполнена молитвенная нужда (только участники цикла):
                         </p>
                         <ul className="mt-2 max-h-[min(40vh,320px)] space-y-2 overflow-y-auto pr-0.5">
                           {leaderUnfilledRows.map((row) => (
@@ -1551,91 +1548,87 @@ function DashboardMain() {
                       </div>
                     ) : (
                       <p className="mt-2 text-sm text-stone-600">
-                        {isAdmin
-                          ? 'На текущей неделе у всех участников цикла нужды заполнены.'
-                          : 'На текущей неделе пустых нужд в плане не осталось.'}
+                        На текущей неделе у всех участников цикла нужды заполнены.
                       </p>
                     );
                   })()}
 
-                  {isAdmin ? (
-                    <details className="group mt-4 rounded-2xl border border-stone-200/70 bg-white/70 p-1 shadow-sm">
-                      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 rounded-[10px] px-3 py-2 text-sm font-extrabold text-stone-900 marker:hidden [&::-webkit-details-marker]:hidden">
-                        <span className="min-w-0">
-                          Список на следующую неделю
-                          <span className="mt-0.5 block text-xs font-semibold text-stone-500">
-                            {weekMembersQ.isFetching && !weekMembersQ.data
-                              ? 'Загружаем…'
-                              : adminNextWeekRosterStats.withMember > 0
-                                ? `${adminNextWeekRosterStats.filled} из ${adminNextWeekRosterStats.withMember} заполнено`
-                                : 'пока нет данных'}
+                  <details className="group mt-4 rounded-2xl border border-stone-200/70 bg-white/70 p-1 shadow-sm">
+                    <summary className="flex cursor-pointer list-none items-center justify-between gap-3 rounded-[10px] px-3 py-2 text-sm font-extrabold text-stone-900 marker:hidden [&::-webkit-details-marker]:hidden">
+                      <span className="min-w-0">
+                        Список на следующую неделю
+                        <span className="mt-0.5 block text-xs font-semibold text-stone-500">
+                          {weekMembersQ.isFetching && !weekMembersQ.data
+                            ? 'Загружаем…'
+                            : adminNextWeekRosterStats.withMember > 0
+                              ? `${adminNextWeekRosterStats.filled} из ${adminNextWeekRosterStats.withMember} заполнено`
+                              : 'пока нет данных'}
+                        </span>
+                        {adminNextWeekRosterStats.withMember > 0 ? (
+                          <span className="mt-2 block h-1.5 w-full overflow-hidden rounded bg-[#E8E0DC]">
+                            <span
+                              className="block h-full rounded bg-[#6B2D3E] transition-[width] duration-300 ease-out"
+                              style={{ width: `${adminNextWeekProgress}%` }}
+                            />
                           </span>
-                          {adminNextWeekRosterStats.withMember > 0 ? (
-                            <span className="mt-2 block h-1.5 w-full overflow-hidden rounded bg-[#E8E0DC]">
-                              <span
-                                className="block h-full rounded bg-[#6B2D3E] transition-[width] duration-300 ease-out"
-                                style={{ width: `${adminNextWeekProgress}%` }}
-                              />
-                            </span>
-                          ) : null}
-                        </span>
-                        <span className="shrink-0 rounded-full border border-stone-200/80 bg-white px-2 py-1 text-[11px] font-bold tracking-[0.02em] text-stone-600 group-open:hidden">
-                          Показать
-                        </span>
-                        <span className="hidden shrink-0 rounded-full border border-stone-200/80 bg-white px-2 py-1 text-[11px] font-bold tracking-[0.02em] text-stone-600 group-open:inline">
-                          Скрыть
-                        </span>
-                      </summary>
-                      <div className="px-2 pb-2 pt-1">
-                        {weekMembersQ.isError ? (
-                          <p className="text-sm text-red-700">Не удалось загрузить план недели. Обновите страницу.</p>
-                        ) : adminNextWeekRosterRows.length === 0 ? (
-                          <p className="text-sm text-stone-600">Пока нет строк плана на следующую неделю.</p>
-                        ) : (
-                          <ul className="max-h-[min(52vh,520px)] space-y-2 overflow-y-auto pr-0.5">
-                            {adminNextWeekRosterRows.map((row) => {
-                              const m = row.member;
-                              const need = (m?.prayer_request ?? '').trim();
-                              const filled = need.length > 0;
-                              const inCycle = m ? m.in_prayer_cycle !== false : false;
-                              return (
-                                <li
-                                  key={`roster-${row.date}-${m?.id ?? 'none'}`}
-                                  className="rounded-[10px] border border-stone-200/70 bg-white/85 px-3 py-2 text-sm"
-                                >
-                                  <div className="flex flex-wrap items-start justify-between gap-2">
-                                    <div className="min-w-0">
-                                      <p className="font-extrabold text-stone-900">
-                                        {m ? memberFirstLastLine(m) : '—'}
-                                      </p>
-                                      <p className="mt-0.5 text-xs font-semibold text-stone-500">{formatWeekDayChip(row.date)}</p>
-                                    </div>
-                                    <div className="shrink-0 text-right">
-                                      <p className="text-[11px] font-bold tracking-[0.02em] text-stone-500">
-                                        {m ? (inCycle ? 'в цикле' : 'вне цикла') : '—'}
-                                      </p>
-                                      <p
-                                        className={`mt-1 text-[11px] font-bold tracking-[0.02em] ${
-                                          filled ? 'text-emerald-700' : 'text-amber-800'
-                                        }`}
-                                      >
-                                        {filled ? 'нужда есть' : 'нужды нет'}
-                                      </p>
-                                    </div>
-                                  </div>
-                                  {filled ? (
-                                    <p className="mt-2 text-xs font-medium leading-snug text-stone-700">
-                                      {truncatePrayerNeedPreview(need, 140)}
+                        ) : null}
+                      </span>
+                      <span className="shrink-0 rounded-full border border-stone-200/80 bg-white px-2 py-1 text-[11px] font-bold tracking-[0.02em] text-stone-600 group-open:hidden">
+                        Показать
+                      </span>
+                      <span className="hidden shrink-0 rounded-full border border-stone-200/80 bg-white px-2 py-1 text-[11px] font-bold tracking-[0.02em] text-stone-600 group-open:inline">
+                        Скрыть
+                      </span>
+                    </summary>
+                    <div className="px-2 pb-2 pt-1">
+                      {weekMembersQ.isError ? (
+                        <p className="text-sm text-red-700">Не удалось загрузить план недели. Обновите страницу.</p>
+                      ) : adminNextWeekRosterRows.length === 0 ? (
+                        <p className="text-sm text-stone-600">Пока нет строк плана на следующую неделю.</p>
+                      ) : (
+                        <ul className="max-h-[min(52vh,520px)] space-y-2 overflow-y-auto pr-0.5">
+                          {adminNextWeekRosterRows.map((row) => {
+                            const m = row.member;
+                            const need = (m?.prayer_request ?? '').trim();
+                            const filled = need.length > 0;
+                            const inCycle = m ? m.in_prayer_cycle !== false : false;
+                            return (
+                              <li
+                                key={`roster-${row.date}-${m?.id ?? 'none'}`}
+                                className="rounded-[10px] border border-stone-200/70 bg-white/85 px-3 py-2 text-sm"
+                              >
+                                <div className="flex flex-wrap items-start justify-between gap-2">
+                                  <div className="min-w-0">
+                                    <p className="font-extrabold text-stone-900">
+                                      {m ? memberFirstLastLine(m) : '—'}
                                     </p>
-                                  ) : null}
-                                </li>
-                              );
-                            })}
-                          </ul>
-                        )}
-                      </div>
-                    </details>
-                  ) : null}
+                                    <p className="mt-0.5 text-xs font-semibold text-stone-500">{formatWeekDayChip(row.date)}</p>
+                                  </div>
+                                  <div className="shrink-0 text-right">
+                                    <p className="text-[11px] font-bold tracking-[0.02em] text-stone-500">
+                                      {m ? (inCycle ? 'в цикле' : 'вне цикла') : '—'}
+                                    </p>
+                                    <p
+                                      className={`mt-1 text-[11px] font-bold tracking-[0.02em] ${
+                                        filled ? 'text-emerald-700' : 'text-amber-800'
+                                      }`}
+                                    >
+                                      {filled ? 'нужда есть' : 'нужды нет'}
+                                    </p>
+                                  </div>
+                                </div>
+                                {filled ? (
+                                  <p className="mt-2 text-xs font-medium leading-snug text-stone-700">
+                                    {truncatePrayerNeedPreview(need, 140)}
+                                  </p>
+                                ) : null}
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      )}
+                    </div>
+                  </details>
                 </>
               ) : (
                 <div className="mt-3">

@@ -1085,6 +1085,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
         ...s.messagesByConv,
         [convId]: [...(s.messagesByConv[convId] || []), optimistic],
       },
+      conversations: moveConversationToTop(s.conversations, convId, (c) => ({
+        ...c,
+        last_message: listPreviewFromMessage(optimistic),
+        updated_at: optimistic.created_at,
+      })),
     }));
 
     scheduleServerAckTimer(get, convId, tempId, clientMsgId);
@@ -1108,6 +1113,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
             }),
           ),
         },
+        conversations: moveConversationToTop(s.conversations, convId, (c) => ({
+          ...c,
+          last_message: listPreviewFromMessage(real),
+          updated_at: real.created_at,
+        })),
         replyToMessage: null,
       }));
       saveSnapshot(get());
@@ -1191,6 +1201,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
             }),
           ),
         },
+        conversations: moveConversationToTop(s.conversations, conversationId, (c) => ({
+          ...c,
+          last_message: listPreviewFromMessage(real),
+          updated_at: real.created_at,
+        })),
       }));
       // Remove from outbox if present.
       const q = inMemoryOutbox.find((x) => x.tempId === tempId) || null;

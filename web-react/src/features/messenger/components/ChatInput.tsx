@@ -385,7 +385,8 @@ export function ChatInput({
         const status = await api.fetchUploadsHealth();
         if (!cancelled) setUploadsHealthy(status.ok === true);
       } catch {
-        if (!cancelled) setUploadsHealthy(false);
+        // Не блокируем отправку на временной сетевой ошибке health-check:
+        // реальная загрузка может быть доступна.
       } finally {
         if (!cancelled) setUploadsHealthChecking(false);
       }

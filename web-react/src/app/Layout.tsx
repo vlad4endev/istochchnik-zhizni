@@ -626,6 +626,7 @@ export function Layout() {
 
   const markAllDeliveriesOpened = useCallback(async () => {
     if (!token) return;
+    if (registrationStatus !== 'active') return;
     try {
       await apiClient.post('/api/notifications/deliveries/open-all');
       void queryClient.invalidateQueries({ queryKey: UNREAD_DELIVERIES_QK });
@@ -633,7 +634,7 @@ export function Layout() {
     } catch {
       /* ignore */
     }
-  }, [token, queryClient]);
+  }, [token, registrationStatus, queryClient]);
 
   async function handleLogout() {
     if (!window.confirm('Завершить текущую сессию?')) {
@@ -702,6 +703,7 @@ export function Layout() {
 
   useEffect(() => {
     if (!token) return;
+    if (registrationStatus !== 'active') return;
     void markAllDeliveriesOpened();
     const onVis = () => {
       if (document.visibilityState !== 'visible') return;
@@ -710,7 +712,7 @@ export function Layout() {
     };
     document.addEventListener('visibilitychange', onVis);
     return () => document.removeEventListener('visibilitychange', onVis);
-  }, [token, refreshUnread, markAllDeliveriesOpened]);
+  }, [token, registrationStatus, refreshUnread, markAllDeliveriesOpened]);
 
   useEffect(() => {
     const onDeliveries = () => {
