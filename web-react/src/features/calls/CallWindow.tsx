@@ -2,7 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { LuMic, LuMicOff, LuMonitor, LuPhoneOff, LuVideo, LuVideoOff } from 'react-icons/lu';
 
 import { resolvePublicUrl } from '../../lib/resolvePublicUrl';
-import { subscribeRealtimeMessages } from '../../lib/realtimeWsClient';
+import { sendRealtimeJson, subscribeRealtimeMessages } from '../../lib/realtimeWsClient';
+import { emitAppToast } from '../../lib/uiFeedback';
 
 import { useCallStore, type ActiveCallState } from './callStore';
 import { useWebRTC } from './useWebRTC';
@@ -27,12 +28,54 @@ function CallWindowInner({ activeCall }: { activeCall: ActiveCallState }) {
   const setPeerMuted = useCallStore((s) => s.setPeerMuted);
 
   const [duration, setDuration] = useState(0);
+  const [connectionState, setConnectionState] = useState<
+    'connecting' | 'connected' | 'reconnecting' | 'failed'
+  >('connecting');
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
   const localVideoRef = useRef<HTMLVideoElement>(null);
+  const reconnectFailTimerRef = useRef<number | null>(null);
+  const connectionStateRef = useRef(connectionState);
+  const iceFailureHandledRef = useRef(false);
+
+  useEffect(() => {
+    connectionStateRef.current = connectionState;
+  }, [connectionState]);
+
+  useEffect(() => {
+    setConnectionState('connecting');
+    connectionStateRef.current = 'connecting';
+    iceFailureHandledRef.current = false;
+    if (reconnectFailTimerRef.current != null) {
+      window.clearTimeout(reconnectFailTimerRef.current);
+      reconnectFailTimerRef.current = null;
+    }
+  }, [activeCall.callId]);
+
+  useEffect(() => {
+    return () => {
+      if (reconnectFailTimerRef.current != null) {
+        window.clearTimeout(reconnectFailTimerRef.current);
+        reconnectFailTimerRef.current = null;
+      }
+    };
+  }, []);
 
   const onCallEnded = useCallback(() => {
     closeCall();
   }, [closeCall]);
+
+  const markIceFailedAndClose = useCallback(
+    (message: string) => {
+      if (iceFailureHandledRef.current) return;
+      iceFailureHandledRef.current = true;
+      setConnectionState('failed');
+      connectionStateRef.current = 'failed';
+      emitAppToast(message, 'error');
+      sendRealtimeJson({ type: 'call:end', callId: activeCall.callId, reason: 'ice_failed' });
+      closeCall();
+    },
+    [activeCall.callId, closeCall],
+  );
 
   const { start, toggleAudio, toggleVideo, startScreenShare, stopScreenShare, endCall, cleanupLocal, localStreamRef } =
     useWebRTC({
@@ -45,6 +88,48 @@ function CallWindowInner({ activeCall }: { activeCall: ActiveCallState }) {
         setStatus('active');
       },
       onCallEnded,
+      onIceStateChange: (state) => {
+        if (state === 'connected' || state === 'completed') {
+          if (reconnectFailTimerRef.current != null) {
+            window.clearTimeout(reconnectFailTimerRef.current);
+            reconnectFailTimerRef.current = null;
+          }
+          setConnectionState('connected');
+          connectionStateRef.current = 'connected';
+          return;
+        }
+
+        if (state === 'disconnected') {
+          setConnectionState('reconnecting');
+          connectionStateRef.current = 'reconnecting';
+          if (reconnectFailTimerRef.current != null) {
+            window.clearTimeout(reconnectFailTimerRef.current);
+          }
+          reconnectFailTimerRef.current = window.setTimeout(() => {
+            reconnectFailTimerRef.current = null;
+            if (connectionStateRef.current !== 'connected') {
+              setConnectionState('failed');
+              connectionStateRef.current = 'failed';
+              emitAppToast('Соединение прервано', 'error');
+            }
+          }, 3000);
+          return;
+        }
+
+        if (state === 'failed') {
+          if (reconnectFailTimerRef.current != null) {
+            window.clearTimeout(reconnectFailTimerRef.current);
+            reconnectFailTimerRef.current = null;
+          }
+          markIceFailedAndClose('Не удалось установить соединение. Попробуйте снова.');
+          return;
+        }
+
+        if (state === 'checking' || state === 'new') {
+          setConnectionState('connecting');
+          connectionStateRef.current = 'connecting';
+        }
+      },
     });
 
   const { callId, isInitiator, callType } = activeCall;
@@ -114,6 +199,46 @@ function CallWindowInner({ activeCall }: { activeCall: ActiveCallState }) {
     setDuration(0);
   }, [activeCall.callId]);
 
+  useEffect(() => {
+    let wakeLock: WakeLockSentinel | null = null;
+
+    const releaseWakeLock = async () => {
+      if (!wakeLock) return;
+      try {
+        await wakeLock.release();
+      } catch {
+        /* ignore */
+      } finally {
+        wakeLock = null;
+      }
+    };
+
+    const acquireWakeLock = async () => {
+      if (!('wakeLock' in navigator) || typeof navigator.wakeLock?.request !== 'function') return;
+      await releaseWakeLock();
+      try {
+        wakeLock = await navigator.wakeLock.request('screen');
+      } catch {
+        /* wake lock is optional */
+      }
+    };
+
+    void acquireWakeLock();
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        void acquireWakeLock();
+      }
+    };
+
+    document.addEventListener('visibilitychange', onVisibilityChange);
+
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      void releaseWakeLock();
+    };
+  }, []);
+
   const peerAvatarSrc = activeCall.peerAvatar ? resolvePublicUrl(activeCall.peerAvatar) : undefined;
 
   const handleEnd = () => {
@@ -145,6 +270,13 @@ function CallWindowInner({ activeCall }: { activeCall: ActiveCallState }) {
 
   return (
     <div className="call-window">
+      {connectionState !== 'connected' ? (
+        <div className={`call-connection-banner call-connection-${connectionState}`}>
+          {connectionState === 'connecting' ? 'Устанавливаем соединение...' : null}
+          {connectionState === 'reconnecting' ? 'Переподключение...' : null}
+          {connectionState === 'failed' ? 'Соединение потеряно' : null}
+        </div>
+      ) : null}
       {activeCall.callType === 'video' ? (
         <div className="remote-video-wrap">
           <video ref={remoteVideoRef} autoPlay playsInline className="remote-video" />

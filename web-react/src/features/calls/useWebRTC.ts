@@ -16,6 +16,7 @@ export interface UseWebRTCOptions {
   callType: 'audio' | 'video';
   onRemoteStream: (stream: MediaStream) => void;
   onCallEnded: () => void;
+  onIceStateChange?: (state: RTCIceConnectionState) => void;
 }
 
 export function useWebRTC({
@@ -24,16 +25,20 @@ export function useWebRTC({
   callType,
   onRemoteStream,
   onCallEnded,
+  onIceStateChange,
 }: UseWebRTCOptions) {
   const peerRef = useRef<SimplePeer.Instance | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
   const screenStreamRef = useRef<MediaStream | null>(null);
+  const iceListenerCleanupRef = useRef<(() => void) | null>(null);
   const pendingSignalsRef = useRef<unknown[]>([]);
   const startedRef = useRef(false);
   const onRemoteStreamRef = useRef(onRemoteStream);
   onRemoteStreamRef.current = onRemoteStream;
   const onCallEndedRef = useRef(onCallEnded);
   onCallEndedRef.current = onCallEnded;
+  const onIceStateChangeRef = useRef(onIceStateChange);
+  onIceStateChangeRef.current = onIceStateChange;
 
   const flushPending = useCallback((peer: SimplePeer.Instance) => {
     const q = pendingSignalsRef.current;
@@ -48,6 +53,12 @@ export function useWebRTC({
   }, []);
 
   const cleanupLocal = useCallback(() => {
+    try {
+      iceListenerCleanupRef.current?.();
+    } catch {
+      /* ignore */
+    }
+    iceListenerCleanupRef.current = null;
     try {
       peerRef.current?.destroy();
     } catch {
@@ -104,6 +115,18 @@ export function useWebRTC({
     peer.on('error', (err: Error) => {
       console.error('[webrtc]', err);
     });
+
+    const pc = (peer as unknown as { _pc?: RTCPeerConnection })._pc;
+    if (pc) {
+      const emitState = () => {
+        onIceStateChangeRef.current?.(pc.iceConnectionState);
+      };
+      pc.addEventListener('iceconnectionstatechange', emitState);
+      iceListenerCleanupRef.current = () => {
+        pc.removeEventListener('iceconnectionstatechange', emitState);
+      };
+      emitState();
+    }
 
     peerRef.current = peer;
     flushPending(peer);
