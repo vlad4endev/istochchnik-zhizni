@@ -21,7 +21,7 @@ ENV VITE_MESSENGER_ORIGIN=$VITE_MESSENGER_ORIGIN
 COPY web-react/package.json web-react/package-lock.json ./web-react/
 RUN GLIB_CFLAGS="$(pkg-config --cflags glib-2.0)" \
   && cd web-react \
-  && CPPFLAGS="$GLIB_CFLAGS" CFLAGS="$GLIB_CFLAGS" CXXFLAGS="$GLIB_CFLAGS" npm ci
+  && CPPFLAGS="$GLIB_CFLAGS" CFLAGS="$GLIB_CFLAGS" CXXFLAGS="$GLIB_CFLAGS" SHARP_FORCE_GLOBAL_LIBVIPS=1 npm ci
 
 COPY web-react ./web-react/
 RUN cd web-react && npm run build
