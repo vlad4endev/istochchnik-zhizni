@@ -360,12 +360,15 @@ export async function fetchMessageAttachmentUrl(
  */
 export function buildMessengerAttachmentFileUrl(
   messageId: string,
-  opts?: { download?: boolean; slot?: number },
+  opts?: { download?: boolean; slot?: number; transcode?: 'mp4' },
 ): string {
   const qs = new URLSearchParams();
   if (opts?.download) qs.set('download', '1');
   if (opts?.slot != null && Number.isFinite(opts.slot)) {
     qs.set('slot', String(Math.floor(opts.slot)));
+  }
+  if (opts?.transcode === 'mp4') {
+    qs.set('transcode', 'mp4');
   }
   const suffix = qs.toString() ? `?${qs.toString()}` : '';
   return `${BASE}/messages/${encodeURIComponent(messageId)}/attachment-file${suffix}`;

@@ -33,7 +33,7 @@ export function VideoNoteAttachment({
     const onPause = () => setPlaying(false);
     const onEnded = () => {
       setPlaying(false);
-      setProgress(0);
+      setProgress(1);
     };
     el.addEventListener('timeupdate', onTime);
     el.addEventListener('play', onPlay);
@@ -54,7 +54,12 @@ export function VideoNoteAttachment({
       const el = videoRef.current;
       if (!el || !videoSrc) return;
       if (playing) el.pause();
-      else void el.play().catch(() => {});
+      else {
+        if (el.duration && Number.isFinite(el.duration) && el.currentTime >= el.duration - 0.05) {
+          el.currentTime = 0;
+        }
+        void el.play().catch(() => {});
+      }
     },
     [videoSrc, playing],
   );
@@ -93,7 +98,6 @@ export function VideoNoteAttachment({
           className="msg-videonote-video"
           playsInline
           preload="metadata"
-          loop
           muted={false}
         />
         {!playing ? (

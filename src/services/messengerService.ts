@@ -2362,6 +2362,16 @@ export async function getMessageConversationId(messageId: string): Promise<strin
   return raw != null ? bigint(raw) : null;
 }
 
+export async function getMessageSenderId(messageId: string): Promise<number | null> {
+  const result = await dbQuery(
+    `SELECT sender_id FROM messages WHERE id = $1 LIMIT 1`,
+    [messageId],
+  );
+  const raw = result.rows[0]?.sender_id;
+  const senderId = Number(raw);
+  return Number.isFinite(senderId) && senderId > 0 ? senderId : null;
+}
+
 export async function getMessageAttachmentForMember(
   messageId: string,
   memberId: number,

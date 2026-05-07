@@ -1052,14 +1052,21 @@ function MessageBubbleInner({
   const persistedNumericId = /^\d+$/.test(String(message.id));
   const videoNoteHref = useMemo(() => {
     if (!isVideoNoteLayout) return null;
+    const videoMime = String(payload.mimeType ?? payload.mimetype ?? '').trim().toLowerCase();
+    const rawPath = attachmentRawUrl.split('?')[0].toLowerCase();
+    const isWebmLike = videoMime.startsWith('video/webm') || rawPath.endsWith('.webm');
+    const mp4Fallback = persistedNumericId && isWebmLike
+      ? buildMessengerAttachmentFileUrl(String(message.id), { transcode: 'mp4' })
+      : null;
     const raw = attachmentRawUrl;
     const fallback = raw ? (resolvePublicUrl(raw) ?? raw) : '';
     const proxied = persistedNumericId
       ? buildMessengerAttachmentFileUrl(String(message.id))
       : null;
-    const href = proxied ?? resolvedAttachmentUrl ?? fallback;
+    // Для mobile playback приоритет у signed/storage URL (поддержка range/streaming), proxy — fallback.
+    const href = mp4Fallback || resolvedAttachmentUrl || fallback || proxied;
     return href || null;
-  }, [isVideoNoteLayout, attachmentRawUrl, resolvedAttachmentUrl, persistedNumericId, message.id]);
+  }, [isVideoNoteLayout, payload.mimeType, payload.mimetype, attachmentRawUrl, resolvedAttachmentUrl, persistedNumericId, message.id]);
 
   const videoNoteDurationSec = useMemo(() => {
     if (!isVideoNoteLayout) return undefined;
@@ -1527,7 +1534,7 @@ function MessageBubbleInner({
       const rawUrl = attachmentRawUrl;
       const fallbackHref = resolvedAttachmentUrl ?? (resolvePublicUrl(rawUrl) ?? rawUrl);
       const href = persistedNumericId
-        ? buildMessengerAttachmentFileUrl(String(message.id))
+        ? (fallbackHref || buildMessengerAttachmentFileUrl(String(message.id)))
         : fallbackHref;
       const caption = String(message.content ?? '').trim();
       const durRaw = payload.durationSec ?? payload.duration_sec;
@@ -2066,7 +2073,7 @@ function MessageBubbleInner({
               <div
                 className={[
                   'msg-videonote-caption mt-2 max-w-[min(85vw,280px)] text-sm leading-relaxed',
-                  isMine ? 'text-primary' : 'text-[var(--text)]',
+                  'text-[var(--text)]',
                 ].join(' ')}
               >
                 <MentionRichText text={videoNoteCaption} namesById={participantLabelById} isMine={isMine} />

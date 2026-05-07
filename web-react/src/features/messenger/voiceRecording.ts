@@ -20,10 +20,12 @@ export function voiceBlobFileName(mimeType: string): string {
   return `voice-${Date.now()}.webm`;
 }
 
-/** Кружок: webm vp8/vp9 + opus (или fallback без codecs). */
+/** Кружок: предпочитаем mp4 (лучше поддержка iOS), затем webm. */
 export function videoNoteRecorderOptions(): MediaRecorderOptions | undefined {
   if (typeof MediaRecorder === 'undefined') return undefined;
   const candidates = [
+    'video/mp4;codecs=avc1.42E01E,mp4a.40.2',
+    'video/mp4',
     'video/webm;codecs=vp9,opus',
     'video/webm;codecs=vp8,opus',
     'video/webm',

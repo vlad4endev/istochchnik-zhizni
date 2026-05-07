@@ -63,6 +63,13 @@ type PendingAttachment = {
   uploaded?: api.UploadedFile | null;
 };
 
+type UploadingState = {
+  name: string;
+  size: number;
+  kind: 'file' | 'audio' | 'video_note';
+  previewUrl?: string | null;
+};
+
 const IMAGE_NAME_EXT_RE = /\.(jpe?g|png|webp|gif|heic|heif)$/i;
 const VIDEO_NAME_EXT_RE = /\.(mp4|m4v|mov|webm|mkv|avi|mpeg|mpg|3gp|ogv)$/i;
 const MAX_CHAT_IMAGE_BYTES = 20 * 1024 * 1024;
@@ -225,7 +232,7 @@ export function ChatInput({
   const [content, setContent] = useState('');
   const [pending, setPending] = useState<PendingAttachment | null>(null);
   const [pendingImages, setPendingImages] = useState<PendingAttachment[]>([]);
-  const [uploading, setUploading] = useState<{ name: string; size: number } | null>(null);
+  const [uploading, setUploading] = useState<UploadingState | null>(null);
   const [uploadPct, setUploadPct] = useState<number>(0);
   const [uploadErr, setUploadErr] = useState<string | null>(null);
   const [uploadsHealthy, setUploadsHealthy] = useState(true);
@@ -307,6 +314,15 @@ export function ChatInput({
   const contentForVoiceRef = useRef('');
   const sendOrMicBtnRef = useRef<HTMLButtonElement | null>(null);
   const suppressVoiceSendClickRef = useRef(false);
+
+  const setUploadingState = useCallback((next: UploadingState | null) => {
+    setUploading((prev) => {
+      if (prev?.previewUrl && prev.previewUrl !== next?.previewUrl) {
+        URL.revokeObjectURL(prev.previewUrl);
+      }
+      return next;
+    });
+  }, []);
 
   const focusComposer = useCallback(() => {
     requestAnimationFrame(() => {
@@ -634,7 +650,7 @@ export function ChatInput({
           const item = pendingImages[i];
           let uploaded = item.uploaded ?? null;
           if (!uploaded) {
-            setUploading({ name: item.file.name, size: item.file.size });
+            setUploadingState({ name: item.file.name, size: item.file.size, kind: 'file' });
             const ctrl = new AbortController();
             uploadAbortRef.current = ctrl;
             const fileToUpload = item.isImage
@@ -691,7 +707,7 @@ export function ChatInput({
           toastMessengerUploadError(e);
         }
       } finally {
-        setUploading(null);
+        setUploadingState(null);
         setUploadPct(0);
         uploadAbortRef.current = null;
         if (fileInputRef.current) fileInputRef.current.value = '';
@@ -709,7 +725,7 @@ export function ChatInput({
       try {
         let uploaded = pending.uploaded ?? null;
         if (!uploaded) {
-          setUploading({ name: pending.file.name, size: pending.file.size });
+          setUploadingState({ name: pending.file.name, size: pending.file.size, kind: 'file' });
           const ctrl = new AbortController();
           uploadAbortRef.current = ctrl;
           const fileToUpload = pending.isImage
@@ -753,7 +769,7 @@ export function ChatInput({
           toastMessengerUploadError(e);
         }
       } finally {
-        setUploading(null);
+        setUploadingState(null);
         setUploadPct(0);
         uploadAbortRef.current = null;
         if (fileInputRef.current) fileInputRef.current.value = '';
@@ -1338,7 +1354,13 @@ export function ChatInput({
     setUploadErr(null);
     setUploadPct(0);
     try {
-      setUploading({ name: file.name, size: file.size });
+      const uploadPreviewUrl = payloadType === 'video_note' ? URL.createObjectURL(blob) : null;
+      setUploadingState({
+        name: file.name,
+        size: file.size,
+        kind: payloadType,
+        previewUrl: uploadPreviewUrl,
+      });
       const ctrl = new AbortController();
       uploadAbortRef.current = ctrl;
       const uploaded = await api.uploadFile(file, {
@@ -1375,7 +1397,7 @@ export function ChatInput({
         toastMessengerUploadError(e);
       }
     } finally {
-      setUploading(null);
+      setUploadingState(null);
       setUploadPct(0);
       uploadAbortRef.current = null;
     }
@@ -1776,23 +1798,54 @@ export function ChatInput({
 
       {uploading ? (
         <div className="mb-2 flex items-center justify-between gap-3 rounded-2xl border border-gray-100 bg-[var(--surface-elevated)] px-4 py-3 shadow-sm">
-          <div className="min-w-0">
-            <p className="truncate text-sm font-semibold text-[var(--text)]">Загрузка файла…</p>
-            <p className="mt-0.5 truncate text-xs text-[var(--text-secondary)]">
-              {uploading.name}{uploadPct ? ` · ${uploadPct}%` : ''}
-            </p>
-            <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-[var(--surface)]">
-              <div
-                className="h-full rounded-full bg-primary transition-[width] duration-200"
-                style={{ width: `${Math.max(2, uploadPct)}%` }}
-              />
+          <div className="min-w-0 flex flex-1 items-center gap-3">
+            {uploading.kind === 'video_note' ? (
+              <span
+                className="tg-videonote-upload-ring"
+                style={{
+                  background: `conic-gradient(var(--tg-primary, #7d3640) ${Math.max(2, uploadPct)}%, rgba(125, 54, 64, 0.18) ${Math.max(2, uploadPct)}% 100%)`,
+                }}
+                aria-hidden
+              >
+                <span className="tg-videonote-upload-ring__inner">
+                  {uploading.previewUrl ? (
+                    <video
+                      src={uploading.previewUrl}
+                      className="tg-videonote-upload-ring__video"
+                      playsInline
+                      autoPlay
+                      muted
+                    />
+                  ) : (
+                    <LuVideo className="h-5 w-5 text-white/85" />
+                  )}
+                </span>
+              </span>
+            ) : null}
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-semibold text-[var(--text)]">
+                {uploading.kind === 'video_note'
+                  ? 'Отправка видеосообщения…'
+                  : uploading.kind === 'audio'
+                    ? 'Отправка голосового…'
+                    : 'Загрузка файла…'}
+              </p>
+              <p className="mt-0.5 truncate text-xs text-[var(--text-secondary)]">
+                {uploading.name}{uploadPct ? ` · ${uploadPct}%` : ''}
+              </p>
+              <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-[var(--surface)]">
+                <div
+                  className="h-full rounded-full bg-primary transition-[width] duration-200"
+                  style={{ width: `${Math.max(2, uploadPct)}%` }}
+                />
+              </div>
             </div>
           </div>
           <button
             type="button"
             onClick={() => {
               uploadAbortRef.current?.abort();
-              setUploading(null);
+              setUploadingState(null);
               setUploadPct(0);
               if (fileInputRef.current) fileInputRef.current.value = '';
             }}

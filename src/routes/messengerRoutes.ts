@@ -2,7 +2,9 @@ import { Router, type Request, type Response, type NextFunction } from 'express'
 import multer from 'multer';
 import { randomUUID } from 'node:crypto';
 import fsp from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
+import { spawn } from 'node:child_process';
 import { resolveMessengerConversationDeepLink } from '../config/messengerPublic';
 import { getUploadsRoot } from '../config/uploadsRoot';
 import { requireAuthSession } from '../middleware/authSession';
@@ -37,6 +39,69 @@ function messengerAttachmentContentDisposition(download: boolean, rawName: strin
   const ascii = base.replace(/[^\x20-\x7E]/g, '_').replace(/["\\\r\n]/g, '_').slice(0, 160);
   const star = encodeURIComponent(base);
   return `${kind}; filename="${ascii}"; filename*=UTF-8''${star}`;
+}
+
+function withMp4Extension(fileName: string): string {
+  const base = String(fileName || '').trim();
+  if (!base) return 'video-note.mp4';
+  const idx = base.lastIndexOf('.');
+  if (idx <= 0) return `${base}.mp4`;
+  return `${base.slice(0, idx)}.mp4`;
+}
+
+async function transcodeWebmBufferToMp4(input: Buffer): Promise<Buffer | null> {
+  const token = randomUUID();
+  const inPath = path.join(os.tmpdir(), `messenger-vn-${token}.webm`);
+  const outPath = path.join(os.tmpdir(), `messenger-vn-${token}.mp4`);
+  try {
+    await fsp.writeFile(inPath, input);
+    await new Promise<void>((resolve, reject) => {
+      const ff = spawn(
+        'ffmpeg',
+        [
+          '-y',
+          '-hide_banner',
+          '-loglevel',
+          'error',
+          '-i',
+          inPath,
+          '-c:v',
+          'libx264',
+          '-preset',
+          'veryfast',
+          '-pix_fmt',
+          'yuv420p',
+          '-movflags',
+          '+faststart',
+          '-c:a',
+          'aac',
+          '-b:a',
+          '128k',
+          outPath,
+        ],
+        { stdio: ['ignore', 'pipe', 'pipe'] },
+      );
+      let errText = '';
+      ff.stderr?.on('data', (d) => {
+        errText += String(d);
+      });
+      ff.on('error', (e) => reject(e));
+      ff.on('close', (code) => {
+        if (code === 0) {
+          resolve();
+          return;
+        }
+        reject(new Error(errText.trim() || `ffmpeg exit code ${String(code)}`));
+      });
+    });
+    return await fsp.readFile(outPath);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.warn('[messenger] webm->mp4 transcode skipped:', msg);
+    return null;
+  } finally {
+    await Promise.allSettled([fsp.unlink(inPath), fsp.unlink(outPath)]);
+  }
 }
 
 async function loadMessengerAttachmentBytesForProxy(
@@ -1384,6 +1449,8 @@ router.get('/messages/:id/attachment-file', async (req: Request, res: Response) 
   }
   const dlRaw = String(req.query.download ?? '').trim().toLowerCase();
   const forceDownload = dlRaw === '1' || dlRaw === 'true' || dlRaw === 'yes';
+  const transcodeRaw = String(req.query.transcode ?? '').trim().toLowerCase();
+  const wantsMp4Transcode = transcodeRaw === 'mp4';
   try {
     const slotRaw = req.query.slot;
     let slot: number | undefined;
@@ -1396,12 +1463,30 @@ router.get('/messages/:id/attachment-file', async (req: Request, res: Response) 
       res.status(404).json({ error: 'Attachment not found' });
       return;
     }
-    const { buffer, contentType } = await loadMessengerAttachmentBytesForProxy(item);
+    const origType = (item.mimeType || '').trim().toLowerCase();
+    const origName = (item.fileName || '').trim().toLowerCase();
+    const isWebmLike = origType.startsWith('video/webm') || origName.endsWith('.webm');
+    let { buffer, contentType } = await loadMessengerAttachmentBytesForProxy(item);
+    let fileName = item.fileName;
+
+    if (wantsMp4Transcode && isWebmLike) {
+      const mp4 = await transcodeWebmBufferToMp4(buffer);
+      if (mp4) {
+        if (mp4.length <= MESSENGER_ATTACHMENT_PROXY_MAX_BYTES) {
+          buffer = mp4;
+          contentType = 'video/mp4';
+          fileName = withMp4Extension(fileName);
+        } else {
+          console.warn('[messenger] transcoded mp4 is too large for proxy response');
+        }
+      }
+    }
+
     res.setHeader('Content-Type', contentType);
     res.setHeader('Content-Length', String(buffer.length));
     res.setHeader(
       'Content-Disposition',
-      messengerAttachmentContentDisposition(forceDownload, item.fileName),
+      messengerAttachmentContentDisposition(forceDownload, fileName),
     );
     res.setHeader('Cache-Control', 'private, no-store');
     res.send(buffer);
@@ -1578,6 +1663,34 @@ router.post('/messages/:id/reactions', async (req: Request, res: Response) => {
           memberId: userId,
           action: 'add',
         });
+
+        void (async () => {
+          try {
+            const ownerId = await svc.getMessageSenderId(msgId);
+            if (!ownerId || Number(ownerId) === Number(userId)) return;
+            if (await svc.isConversationMutedForMember(ck, ownerId)) return;
+
+            const reactorName = await getMemberDisplayName(userId);
+            await sendPushNotification(ownerId, {
+              title: 'Новая реакция на ваше сообщение',
+              body: `${reactorName} поставил(а) реакцию ${emoji}`,
+              senderName: reactorName,
+              conversationId: ck,
+              messageId: String(msgId),
+              url: resolveMessengerConversationDeepLink(ck),
+              tag: `chat-${ck}`,
+              renotify: true,
+              badge: '/assets/pwa-64x64.png',
+              icon: '/assets/pwa-192x192.png',
+              actions: [
+                { action: 'reply', title: 'Открыть чат' },
+                { action: 'dismiss', title: 'Закрыть' },
+              ],
+            });
+          } catch (e) {
+            console.warn('[messenger] reaction push failed (best-effort):', e);
+          }
+        })();
       }
     }
     res.json({ ok: true });

@@ -2790,7 +2790,6 @@ html[data-chat-open='1'] .tg-main--visible .tg-chat-window .tg-input-container.t
   height: 100%;
   object-fit: cover;
   display: block;
-  transform: scaleX(-1);
 }
 
 .tg-videonote-capture__rail {
@@ -2834,6 +2833,34 @@ html[data-chat-open='1'] .tg-main--visible .tg-chat-window .tg-input-container.t
   font-weight: 600;
   line-height: 1.35;
   color: rgba(255, 255, 255, 0.48);
+}
+
+.tg-videonote-upload-ring {
+  display: inline-grid;
+  place-items: center;
+  width: 3.15rem;
+  height: 3.15rem;
+  border-radius: 999px;
+  flex-shrink: 0;
+  padding: 3px;
+}
+
+.tg-videonote-upload-ring__inner {
+  width: 100%;
+  height: 100%;
+  border-radius: 999px;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  background: #141416;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12);
+}
+
+.tg-videonote-upload-ring__video {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
 }
 
 /* Сообщение: видеокружок в ленте (Telegram — только круг, без «карточки») */
