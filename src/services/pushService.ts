@@ -69,17 +69,69 @@ interface PushSubWithMemberRow extends PushSubRow {
   member_id: number;
 }
 
-export async function saveSubscription(memberId: number, sub: PushSubscriptionData, userAgent?: string): Promise<void> {
-  await query(
-    `INSERT INTO push_subscriptions (member_id, endpoint, keys_p256dh, keys_auth, user_agent, last_used_at)
-     VALUES ($1, $2, $3, $4, $5, NOW())
-     ON CONFLICT (endpoint) DO UPDATE 
-     SET member_id = EXCLUDED.member_id, 
-         keys_p256dh = EXCLUDED.keys_p256dh, 
-         keys_auth = EXCLUDED.keys_auth,
-         user_agent = COALESCE(EXCLUDED.user_agent, push_subscriptions.user_agent)`,
-    [memberId, sub.endpoint, sub.keys.p256dh, sub.keys.auth, userAgent || null]
+type SaveSubscriptionRow = {
+  member_id: number;
+  keys_p256dh: string;
+  keys_auth: string;
+  user_agent: string | null;
+};
+
+export type SaveSubscriptionResult = 'created' | 'updated' | 'noop';
+
+export async function saveSubscription(
+  memberId: number,
+  sub: PushSubscriptionData,
+  userAgent?: string,
+): Promise<SaveSubscriptionResult> {
+  const endpoint = String(sub.endpoint ?? '').trim();
+  const p256dh = String(sub.keys?.p256dh ?? '').trim();
+  const auth = String(sub.keys?.auth ?? '').trim();
+  const normalizedUserAgent =
+    typeof userAgent === 'string' && userAgent.trim().length > 0 ? userAgent.trim() : null;
+
+  const existing = await query(
+    `SELECT member_id, keys_p256dh, keys_auth, user_agent
+     FROM push_subscriptions
+     WHERE endpoint = $1
+     LIMIT 1`,
+    [endpoint],
   );
+  const row = (existing.rows[0] as SaveSubscriptionRow | undefined) ?? null;
+
+  if (!row) {
+    await query(
+      `INSERT INTO push_subscriptions (member_id, endpoint, keys_p256dh, keys_auth, user_agent, last_used_at)
+       VALUES ($1, $2, $3, $4, $5, NOW())`,
+      [memberId, endpoint, p256dh, auth, normalizedUserAgent],
+    );
+    return 'created';
+  }
+
+  const sameMember = row.member_id === memberId;
+  const sameKeys = row.keys_p256dh === p256dh && row.keys_auth === auth;
+  const sameUserAgent =
+    normalizedUserAgent == null || row.user_agent === normalizedUserAgent;
+  if (sameMember && sameKeys && sameUserAgent) {
+    await query(
+      `UPDATE push_subscriptions
+       SET last_used_at = NOW()
+       WHERE endpoint = $1`,
+      [endpoint],
+    );
+    return 'noop';
+  }
+
+  await query(
+    `UPDATE push_subscriptions
+     SET member_id = $1,
+         keys_p256dh = $2,
+         keys_auth = $3,
+         user_agent = COALESCE($4, push_subscriptions.user_agent),
+         last_used_at = NOW()
+     WHERE endpoint = $5`,
+    [memberId, p256dh, auth, normalizedUserAgent, endpoint],
+  );
+  return 'updated';
 }
 
 export async function removeSubscription(memberId: number, endpoint: string): Promise<void> {

@@ -68,14 +68,16 @@ router.post('/subscribe', requireAuthSession, async (req: Request, res: Response
       },
     };
     const userAgent = req.headers['user-agent'] || req.body?.userAgent;
-    await saveSubscription(memberId, normalized, userAgent);
-    try {
-      const host = new URL(normalized.endpoint).host;
-      console.log('[notifications] web push subscribe ok', { memberId, pushHost: host });
-    } catch {
-      console.log('[notifications] web push subscribe ok', { memberId });
+    const saveResult = await saveSubscription(memberId, normalized, userAgent);
+    if (saveResult !== 'noop') {
+      try {
+        const host = new URL(normalized.endpoint).host;
+        console.log('[notifications] web push subscribe ok', { memberId, pushHost: host, status: saveResult });
+      } catch {
+        console.log('[notifications] web push subscribe ok', { memberId, status: saveResult });
+      }
     }
-    res.status(201).json({ ok: true });
+    res.status(saveResult === 'created' ? 201 : 200).json({ ok: true, status: saveResult });
   } catch (e) {
     console.error('[notifications] subscribe error:', e);
     res.status(500).json({ error: 'Failed to save subscription' });
