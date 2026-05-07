@@ -530,6 +530,7 @@ export async function patchProfileHandler(req: Request, res: Response): Promise<
   }
 
   const MAX_PRAYER_REQUEST_CHARS = 8000;
+  const MAX_PUBLIC_KEY_CHARS = 16384;
   if (body.prayer_request !== undefined) {
     if (typeof body.prayer_request !== 'string') {
       res.status(400).json({ error: 'Field "prayer_request" must be a string' });
@@ -538,6 +539,18 @@ export async function patchProfileHandler(req: Request, res: Response): Promise<
     if (body.prayer_request.length > MAX_PRAYER_REQUEST_CHARS) {
       res.status(400).json({
         error: `Field "prayer_request" must be at most ${MAX_PRAYER_REQUEST_CHARS} characters`,
+      });
+      return;
+    }
+  }
+  if (body.public_key !== undefined) {
+    if (typeof body.public_key !== 'string') {
+      res.status(400).json({ error: 'Field "public_key" must be a string' });
+      return;
+    }
+    if (body.public_key.length > MAX_PUBLIC_KEY_CHARS) {
+      res.status(400).json({
+        error: `Field "public_key" must be at most ${MAX_PUBLIC_KEY_CHARS} characters`,
       });
       return;
     }
@@ -552,6 +565,7 @@ export async function patchProfileHandler(req: Request, res: Response): Promise<
     birth_date?: string;
     email?: string;
     prayer_request?: string;
+    public_key?: string;
   } = {};
 
   if (hasFirst && hasLast) {
@@ -587,6 +601,9 @@ export async function patchProfileHandler(req: Request, res: Response): Promise<
   }
   if (typeof body.prayer_request === 'string') {
     patch.prayer_request = body.prayer_request;
+  }
+  if (typeof body.public_key === 'string') {
+    patch.public_key = body.public_key.trim();
   }
 
   if (Object.keys(patch).length === 0) {

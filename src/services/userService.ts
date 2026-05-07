@@ -23,6 +23,7 @@ export interface AppUser {
   first_name: string | null;
   last_name: string | null;
   name: string;
+  public_key?: string | null;
   phone_number: string | null;
   telegram_chat_id: string | null;
   telegram_delivery_blocked: boolean;
@@ -87,6 +88,7 @@ export interface UpdateUserInput {
   is_collection_coordinator?: boolean;
   in_prayer_cycle?: boolean;
   password_reset_required?: boolean;
+  public_key?: string;
 }
 
 export interface LinkAccountInput {
@@ -691,6 +693,11 @@ export async function updateUser(id: number, input: UpdateUserInput): Promise<Ap
   if (typeof input.account_id === 'string') {
     updates.push(`account_id = $${values.length + 1}`);
     values.push(normalizeOptionalString(input.account_id));
+  }
+
+  if (typeof input.public_key === 'string') {
+    updates.push(`public_key = $${values.length + 1}`);
+    values.push(normalizeOptionalString(input.public_key));
   }
 
   if (typeof input.is_active === 'boolean') {

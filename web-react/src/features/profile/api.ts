@@ -20,6 +20,7 @@ export interface MeResponse {
   last_name: string | null;
   name: string;
   avatar_url?: string | null;
+  public_key?: string | null;
   phone_number: string | null;
   ministry_role: string | null;
   ministry_direction: string | null;
@@ -51,6 +52,7 @@ export interface PatchProfileBody {
   birth_date?: string | null;
   email?: string;
   prayer_request?: string;
+  public_key?: string;
 }
 
 export interface PrayerHistoryItem {

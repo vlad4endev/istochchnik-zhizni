@@ -53,6 +53,8 @@ export interface MessageRow {
   sender_id: number | null;
   client_msg_id?: string | null;
   content: string;
+  encrypted_payload?: string | null;
+  is_e2ee?: boolean;
   payload_type: MessagePayloadType;
   payload: MessagePayload;
   interaction_count: number;
@@ -112,6 +114,7 @@ export interface ConversationListItem {
     /** Глобальная роль в приложении; для звонков — только к `admin`. */
     app_role?: string | null;
     app_roles?: string[] | null;
+    public_key?: string | null;
   } | null;
   /** Персонально для текущего пользователя (из conversation_participants). */
   my_muted?: boolean;
@@ -152,6 +155,7 @@ export interface ConversationMember {
   first_name: string | null;
   last_name: string | null;
   avatar_url?: string | null;
+  public_key?: string | null;
   previous_prayer_requests?: Array<{
     cycle_index: number;
     prayer_request: string;

@@ -43,6 +43,7 @@ export interface AuthUser {
   last_name: string | null;
   name: string;
   avatar_url: string | null;
+  public_key?: string | null;
   phone_number: string | null;
   ministry_role: string | null;
   ministry_direction: string | null;
@@ -141,6 +142,7 @@ type MemberRow = {
   last_name: string | null;
   name: string;
   avatar_url?: string | null;
+  public_key?: string | null;
   phone_number: string | null;
   ministry_role?: string | null;
   ministry_direction?: string | null;
@@ -318,6 +320,7 @@ function mapAuthUser(row: MemberRow): AuthUser {
     last_name: row.last_name,
     name: row.name,
     avatar_url: (row.avatar_url ?? null) as string | null,
+    public_key: (row.public_key ?? null) as string | null,
     phone_number: row.phone_number,
     ministry_role: (row.ministry_role ?? null) as string | null,
     ministry_direction: (row.ministry_direction ?? null) as string | null,
@@ -1355,6 +1358,7 @@ export async function getAuthUserById(userId: number): Promise<AuthUser | null> 
       m.last_name,
       m.name,
       m.avatar_url,
+      m.public_key,
       m.phone_number,
       m.ministry_role,
       m.ministry_direction,
@@ -1415,6 +1419,7 @@ export async function updateAuthUserProfile(
     birth_date?: string;
     email?: string;
     prayer_request?: string;
+    public_key?: string;
   }
 ): Promise<AuthUser | null> {
   const updated = await updateUser(userId, input);

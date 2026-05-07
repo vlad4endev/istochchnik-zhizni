@@ -191,6 +191,20 @@ function lastMessageListPreviewContent(rawContent: unknown, payloadType: unknown
   return typeof rawContent === 'string' ? rawContent : '';
 }
 
+function resolveE2EEFieldsFromPayload(payload: MessagePayload): { isE2EE: boolean; encryptedPayload: string | null } {
+  const source = payload as Record<string, unknown>;
+  const encryptedCandidate =
+    typeof source.encrypted_payload === 'string'
+      ? source.encrypted_payload
+      : typeof source.encryptedPayload === 'string'
+        ? source.encryptedPayload
+        : '';
+  const encryptedPayload = encryptedCandidate.trim() || null;
+  const isE2EERaw = source.is_e2ee ?? source.isE2EE;
+  const isE2EE = Boolean(isE2EERaw) || Boolean(encryptedPayload);
+  return { isE2EE, encryptedPayload };
+}
+
 /**
  * List conversations the member participates in, sorted by last activity.
  * Includes last message preview and unread count.
@@ -239,7 +253,8 @@ export async function listConversations(memberId: number): Promise<ConversationL
       om.avatar_url  AS om_avatar_url,
       om.last_seen_at AS om_last_seen_at,
       om.app_role    AS om_app_role,
-      om.app_roles   AS om_app_roles
+      om.app_roles   AS om_app_roles,
+      om.public_key  AS om_public_key
     FROM conversation_participants cp
     JOIN conversations c ON c.id = cp.conversation_id
     -- last message via lateral
@@ -253,7 +268,7 @@ export async function listConversations(memberId: number): Promise<ConversationL
     LEFT JOIN members lm_sender ON lm_sender.id = lm.sender_id
     -- other member for private chats
     LEFT JOIN LATERAL (
-      SELECT om2.id, om2.name, om2.first_name, om2.last_name, om2.avatar_url, om2.last_seen_at, om2.app_role, om2.app_roles
+      SELECT om2.id, om2.name, om2.first_name, om2.last_name, om2.avatar_url, om2.last_seen_at, om2.app_role, om2.app_roles, om2.public_key
       FROM conversation_participants op
       JOIN members om2 ON om2.id = op.member_id
       WHERE op.conversation_id = c.id
@@ -326,6 +341,7 @@ export async function listConversations(memberId: number): Promise<ConversationL
             app_roles: Array.isArray(r.om_app_roles)
               ? (r.om_app_roles as unknown[]).map((x) => String(x))
               : null,
+            public_key: r.om_public_key != null ? String(r.om_public_key) : null,
           }
         : null,
       ...mapParticipantUiExtras({
@@ -492,7 +508,8 @@ export async function listConversationMembers(conversationId: string): Promise<C
         m.name,
         m.first_name,
         m.last_name,
-        m.avatar_url
+        m.avatar_url,
+        m.public_key
      FROM conversation_participants cp
      JOIN members m ON m.id = cp.member_id
      WHERE cp.conversation_id = $1
@@ -510,7 +527,8 @@ export async function listConversationMembers(conversationId: string): Promise<C
         m.name,
         m.first_name,
         m.last_name,
-        m.avatar_url
+        m.avatar_url,
+        m.public_key
      FROM conversation_participants cp
      JOIN members m ON m.id = cp.member_id
      WHERE cp.conversation_id = $1
@@ -525,7 +543,8 @@ export async function listConversationMembers(conversationId: string): Promise<C
         m.name,
         m.first_name,
         m.last_name,
-        m.avatar_url
+        m.avatar_url,
+        m.public_key
      FROM conversation_participants cp
      JOIN members m ON m.id = cp.member_id
      WHERE cp.conversation_id = $1
@@ -562,6 +581,7 @@ export async function listConversationMembers(conversationId: string): Promise<C
         first_name: r.first_name ?? null,
         last_name: r.last_name ?? null,
         avatar_url: r.avatar_url ?? null,
+        public_key: r.public_key ?? null,
       }));
       const seenIds = new Set<number>();
       const baseMembers = baseMembersRaw.filter((row) => {
@@ -725,7 +745,8 @@ export async function getConversationListItem(
       om.avatar_url  AS om_avatar_url,
       om.last_seen_at AS om_last_seen_at,
       om.app_role    AS om_app_role,
-      om.app_roles   AS om_app_roles
+      om.app_roles   AS om_app_roles,
+      om.public_key  AS om_public_key
     FROM conversation_participants cp
     JOIN conversations c ON c.id = cp.conversation_id
     LEFT JOIN LATERAL (
@@ -737,7 +758,7 @@ export async function getConversationListItem(
     ) lm ON TRUE
     LEFT JOIN members lm_sender ON lm_sender.id = lm.sender_id
     LEFT JOIN LATERAL (
-      SELECT om2.id, om2.name, om2.first_name, om2.last_name, om2.avatar_url, om2.last_seen_at, om2.app_role, om2.app_roles
+      SELECT om2.id, om2.name, om2.first_name, om2.last_name, om2.avatar_url, om2.last_seen_at, om2.app_role, om2.app_roles, om2.public_key
       FROM conversation_participants op
       JOIN members om2 ON om2.id = op.member_id
       WHERE op.conversation_id = c.id
@@ -810,6 +831,7 @@ export async function getConversationListItem(
           app_roles: Array.isArray(r.om_app_roles)
             ? (r.om_app_roles as unknown[]).map((x) => String(x))
             : null,
+        public_key: r.om_public_key != null ? String(r.om_public_key) : null,
         }
       : null,
     ...mapParticipantUiExtras({
@@ -1440,6 +1462,8 @@ export type PreparedMessageSend = {
   clientMsgId: string | null;
   pt: MessagePayloadType;
   payloadJson: string;
+  isE2EE: boolean;
+  encryptedPayload: string | null;
   pendingMessage: MessageWithSender;
 };
 
@@ -1483,6 +1507,7 @@ export async function prepareMessageForSend(
   pl = rewriteStorageUrlsInRecord(pl as Record<string, unknown>) as MessagePayload;
 
   const payloadJson = JSON.stringify(pl);
+  const { isE2EE, encryptedPayload } = resolveE2EEFieldsFromPayload(pl);
   const replyNorm = replyToMessageId || null;
   const clientNorm = clientMsgId || null;
 
@@ -1500,6 +1525,8 @@ export async function prepareMessageForSend(
     sender_id: senderId,
     client_msg_id: clientNorm,
     content: contentStored,
+    encrypted_payload: encryptedPayload,
+    is_e2ee: isE2EE,
     payload_type: pt,
     payload: pl,
     interaction_count: 0,
@@ -1531,6 +1558,8 @@ export async function prepareMessageForSend(
     clientMsgId: clientNorm,
     pt,
     payloadJson,
+    isE2EE,
+    encryptedPayload,
     pendingMessage,
   };
 }
@@ -1553,7 +1582,7 @@ export type PersistMessageResult = {
  * DO UPDATE — идентификатор текущей транзакции (ненулевой).
  */
 export async function persistPreparedMessage(prep: PreparedMessageSend): Promise<PersistMessageResult> {
-  const { conversationId, senderId, contentStored, replyToMessageId, clientMsgId, pt, payloadJson } = prep;
+  const { conversationId, senderId, contentStored, replyToMessageId, clientMsgId, pt, payloadJson, isE2EE, encryptedPayload } = prep;
   const contentForDb = encryptMessageText(contentStored);
 
   await dbQuery(`UPDATE conversations SET updated_at = NOW() WHERE id = $1`, [conversationId]);
@@ -1561,13 +1590,15 @@ export async function persistPreparedMessage(prep: PreparedMessageSend): Promise
   const result = await dbQuery(
     `
     WITH inserted AS (
-      INSERT INTO messages (conversation_id, sender_id, content, reply_to_message_id, client_msg_id, payload_type, payload)
-      VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb)
+      INSERT INTO messages (conversation_id, sender_id, content, reply_to_message_id, client_msg_id, payload_type, payload, is_e2ee, encrypted_payload)
+      VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9)
       ON CONFLICT (conversation_id, sender_id, client_msg_id) WHERE client_msg_id IS NOT NULL
       DO UPDATE SET
         content = EXCLUDED.content,
         payload_type = EXCLUDED.payload_type,
-        payload = EXCLUDED.payload
+        payload = EXCLUDED.payload,
+        is_e2ee = EXCLUDED.is_e2ee,
+        encrypted_payload = EXCLUDED.encrypted_payload
       RETURNING *, (xmax = 0) AS is_new
     )
     SELECT
@@ -1596,7 +1627,7 @@ export async function persistPreparedMessage(prep: PreparedMessageSend): Promise
       (
         SELECT COALESCE(json_agg(v.option_index ORDER BY v.option_index), '[]'::json)
         FROM message_poll_votes v
-        WHERE v.message_id = ins.id AND v.member_id = $8
+        WHERE v.message_id = ins.id AND v.member_id = $10
       ) AS poll_my_options_json
     FROM inserted ins
     LEFT JOIN members m ON m.id = ins.sender_id
@@ -1611,6 +1642,8 @@ export async function persistPreparedMessage(prep: PreparedMessageSend): Promise
       clientMsgId,
       pt,
       payloadJson,
+      isE2EE,
+      encryptedPayload,
       senderId,
     ],
   );
@@ -1960,7 +1993,7 @@ export async function editMessage(
     const contentForDb = encryptMessageText(normalized);
     const result = await dbQuery(
       `UPDATE messages
-       SET content = $1, payload = $2::jsonb, updated_at = NOW()
+       SET content = $1, payload = $2::jsonb, is_e2ee = FALSE, encrypted_payload = NULL, updated_at = NOW()
        WHERE id = $3 AND sender_id = $4 AND is_deleted = FALSE
        RETURNING content, updated_at`,
       [contentForDb, payloadJson, messageId, senderId],
@@ -1979,7 +2012,7 @@ export async function editMessage(
 
   const result = await dbQuery(
     `UPDATE messages
-     SET content = $1, payload = $2::jsonb, updated_at = NOW()
+     SET content = $1, payload = $2::jsonb, is_e2ee = FALSE, encrypted_payload = NULL, updated_at = NOW()
      WHERE id = $3 AND sender_id = $4 AND is_deleted = FALSE
      RETURNING content, updated_at`,
     [contentForDb, payloadJson, messageId, senderId],
@@ -2768,6 +2801,8 @@ function mapMessageWithSender(r: Record<string, unknown>): MessageWithSender {
     sender_id: asNumberOrNull(r.sender_id),
     client_msg_id: asNullableString(r.client_msg_id),
     content: contentResolved,
+    encrypted_payload: asNullableString(r.encrypted_payload),
+    is_e2ee: asBoolean(r.is_e2ee),
     payload_type: pt,
     payload: payloadNorm,
     interaction_count: Number(r.interaction_count ?? 0),

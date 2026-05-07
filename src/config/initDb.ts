@@ -23,6 +23,7 @@ CREATE TABLE IF NOT EXISTS members (
   is_active BOOLEAN NOT NULL DEFAULT TRUE,
   app_role VARCHAR(16) NOT NULL DEFAULT 'member' CHECK (app_role IN ('member', 'minister', 'pastor', 'musician', 'editor', 'admin')),
   app_roles TEXT[] NOT NULL DEFAULT ARRAY['member'],
+  public_key TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -1296,6 +1297,8 @@ CREATE TABLE IF NOT EXISTS messages (
   sender_id INTEGER REFERENCES members(id) ON DELETE SET NULL,
   client_msg_id TEXT,
   content TEXT NOT NULL DEFAULT '',
+  encrypted_payload TEXT,
+  is_e2ee BOOLEAN NOT NULL DEFAULT FALSE,
   payload_type message_payload_type NOT NULL DEFAULT 'text',
   payload JSONB NOT NULL DEFAULT '{}'::jsonb,
   interaction_count INTEGER NOT NULL DEFAULT 0,
@@ -1354,6 +1357,7 @@ CREATE TABLE IF NOT EXISTS message_interactions (
 
 -- Upgrades for DBs created before avatar_url
 ALTER TABLE members ADD COLUMN IF NOT EXISTS avatar_url TEXT;
+ALTER TABLE members ADD COLUMN IF NOT EXISTS public_key TEXT;
 
 -- Upgrades for older messenger DBs (columns added after initial rollout)
 -- These are safe no-ops on fresh DBs, and prevent 42703 errors (missing columns) on old ones.
@@ -1440,6 +1444,8 @@ ALTER TABLE messages
   ADD COLUMN IF NOT EXISTS reply_to_message_id BIGINT REFERENCES messages(id) ON DELETE SET NULL;
 ALTER TABLE messages ADD COLUMN IF NOT EXISTS payload JSONB NOT NULL DEFAULT '{}'::jsonb;
 ALTER TABLE messages ADD COLUMN IF NOT EXISTS interaction_count INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE messages ADD COLUMN IF NOT EXISTS encrypted_payload TEXT;
+ALTER TABLE messages ADD COLUMN IF NOT EXISTS is_e2ee BOOLEAN NOT NULL DEFAULT FALSE;
 
 -- Дубликаты (conversation_id, sender_id, client_msg_id) ломают UNIQUE INDEX ниже
 UPDATE messages m

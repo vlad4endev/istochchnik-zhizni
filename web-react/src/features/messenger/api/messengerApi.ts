@@ -80,6 +80,7 @@ export interface ConversationListItem {
     /** Глобальная роль; звонок в шапке — только если собеседник администратор приложения. */
     app_role?: string | null;
     app_roles?: string[] | null;
+    public_key?: string | null;
   } | null;
   my_muted?: boolean;
   my_muted_until?: string | null;
@@ -172,6 +173,8 @@ export interface MessageWithSender {
   is_read?: boolean;
   client_msg_id?: string | null;
   content: string;
+  encrypted_payload?: string | null;
+  is_e2ee?: boolean;
   /** Редкий вариант API: тип сообщения на верхнем уровне (вместо payload_type). */
   type?: MessagePayloadType | string;
   /** Прямая ссылка на изображение (альтернатива payload.url). */
@@ -213,6 +216,7 @@ export interface Participant {
   name: string;
   first_name: string | null;
   last_name: string | null;
+  public_key?: string | null;
 }
 
 export interface SearchMember {
