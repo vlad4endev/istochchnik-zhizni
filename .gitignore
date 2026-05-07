@@ -8,6 +8,7 @@ dist
 .DS_Store
 coverage/
 *.tsbuildinfo
+backups/
 supabase/.temp/
 istochchnik-zhizni/
 
