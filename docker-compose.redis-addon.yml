@@ -19,11 +19,9 @@ services:
       timeout: 3s
       retries: 5
 
-  # Явно указываем и db, и redis: при merge compose не всегда объединяет depends_on из разных файлов.
+  # Для стека без локального db: добавляем только зависимость от redis.
   api:
     depends_on:
-      db:
-        condition: service_healthy
       redis:
         condition: service_healthy
     environment:
