@@ -11,6 +11,30 @@ log() {
   echo "[go:update] $*"
 }
 
+run_init_db_safe() {
+  local output
+  local status
+
+  set +e
+  output="$(docker compose "${COMPOSE_ARGS[@]}" exec -T api node dist/cli/runInitDb.js 2>&1)"
+  status=$?
+  set -e
+
+  if [[ $status -eq 0 ]]; then
+    printf '%s\n' "$output"
+    return 0
+  fi
+
+  printf '%s\n' "$output"
+  if [[ "$output" == *"must be owner of table"* ]] || [[ "$output" == *"code: '42501'"* ]]; then
+    log "initDb пропущен: у роли API нет прав владельца для ALTER TABLE (код 42501)."
+    log "Это не блокирует запуск API/Web, но миграции должен выполнить владелец БД."
+    return 0
+  fi
+
+  return "$status"
+}
+
 env_flag_true() {
   local key="$1"
   local val="${!key:-}"
@@ -75,7 +99,7 @@ log "Пересобираю и перезапускаю сервисы"
 docker compose "${COMPOSE_ARGS[@]}" up -d --build --force-recreate
 
 log "Выполняю initDb внутри API-контейнера"
-docker compose "${COMPOSE_ARGS[@]}" exec -T api node dist/cli/runInitDb.js
+run_init_db_safe
 
 log "Ожидаю готовность сервисов"
 wait_service_healthy api 120
