@@ -1049,13 +1049,17 @@ function MessageBubbleInner({
     !message.is_pinned;
 
   const isVideoNoteLayout = payloadType === 'video_note' && !isDeleted;
+  const persistedNumericId = /^\d+$/.test(String(message.id));
   const videoNoteHref = useMemo(() => {
     if (!isVideoNoteLayout) return null;
     const raw = attachmentRawUrl;
     const fallback = raw ? (resolvePublicUrl(raw) ?? raw) : '';
-    const href = resolvedAttachmentUrl ?? fallback;
+    const proxied = persistedNumericId
+      ? buildMessengerAttachmentFileUrl(String(message.id))
+      : null;
+    const href = proxied ?? resolvedAttachmentUrl ?? fallback;
     return href || null;
-  }, [isVideoNoteLayout, attachmentRawUrl, resolvedAttachmentUrl]);
+  }, [isVideoNoteLayout, attachmentRawUrl, resolvedAttachmentUrl, persistedNumericId, message.id]);
 
   const videoNoteDurationSec = useMemo(() => {
     if (!isVideoNoteLayout) return undefined;
@@ -1521,7 +1525,10 @@ function MessageBubbleInner({
 
     if (payloadType === 'audio') {
       const rawUrl = attachmentRawUrl;
-      const href = resolvedAttachmentUrl ?? (resolvePublicUrl(rawUrl) ?? rawUrl);
+      const fallbackHref = resolvedAttachmentUrl ?? (resolvePublicUrl(rawUrl) ?? rawUrl);
+      const href = persistedNumericId
+        ? buildMessengerAttachmentFileUrl(String(message.id))
+        : fallbackHref;
       const caption = String(message.content ?? '').trim();
       const durRaw = payload.durationSec ?? payload.duration_sec;
       const durationHint = typeof durRaw === 'number' && Number.isFinite(durRaw) ? durRaw : Number(durRaw);
@@ -1544,7 +1551,6 @@ function MessageBubbleInner({
     if (payloadType === 'file') {
       const rawUrl = attachmentRawUrl;
       const fallbackHref = resolvedAttachmentUrl ?? (resolvePublicUrl(rawUrl) ?? rawUrl);
-      const persistedNumericId = /^\d+$/.test(String(message.id));
       const openHref = persistedNumericId
         ? buildMessengerAttachmentFileUrl(String(message.id))
         : fallbackHref;
