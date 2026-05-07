@@ -44,6 +44,12 @@ function getDiffDays(targetDate: string, startDate: string): number {
 }
 
 async function getByIndex<T>(table: string, index: number, orderColumn = 'id'): Promise<T | null> {
+  const allowedTables = new Set(['global_themes', 'ministries', 'backsliders']);
+  const allowedOrderColumns = new Set(['id']);
+  if (!allowedTables.has(table) || !allowedOrderColumns.has(orderColumn)) {
+    // SECURITY FIX: явный whitelist для динамических SQL-идентификаторов (как в calendarService.getByIndex).
+    throw new Error('Invalid table or order column');
+  }
   const result = await query(
     `SELECT * FROM ${table} ORDER BY ${orderColumn} LIMIT 1 OFFSET $1`,
     [index]

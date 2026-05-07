@@ -7,10 +7,13 @@ import { collectServerDiagnostics } from '../analyzers/serverAnalyzer';
 import { resolveSafeScanDir, scanProject } from '../analyzers/projectScanner';
 import { FullDiagnosticsReport, ProjectAuditResult } from '../types';
 import { pool } from '../../config/db';
+import { requireAuthSession } from '../../middleware/authSession';
+import { requireAdmin } from '../../middleware/requireAdmin';
 import { listAppLogs } from '../../services/appLogService';
 import { isSupabaseStorageConfigured } from '../../lib/supabaseStorage';
 
 export const diagnosticsRouter = Router();
+diagnosticsRouter.use(requireAuthSession, requireAdmin);
 
 function extractJson(raw: string): unknown {
   const objectMatch = raw.match(/\{[\s\S]*\}/);

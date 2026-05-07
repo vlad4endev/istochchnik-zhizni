@@ -49,6 +49,8 @@ function getCookieDomain(): string | undefined {
 }
 
 function isSecureCookie(): boolean {
+  // SameSite=None требует Secure (спецификация браузеров).
+  if (sameSite() === 'None') return true;
   if (process.env.AUTH_COOKIE_SECURE === 'true') return true;
   if (process.env.AUTH_COOKIE_SECURE === 'false') return false;
   return process.env.NODE_ENV === 'production';

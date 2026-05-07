@@ -100,7 +100,7 @@ function getOrCreateSessionId(req: Request, res: Response): string {
   const existing = cookies[SESSION_COOKIE_NAME];
   if (existing && existing.length >= 24) return existing.slice(0, 64);
   const generated = crypto.randomBytes(32).toString('hex');
-  const cookie = `${SESSION_COOKIE_NAME}=${generated}; Path=/; Max-Age=2592000; SameSite=Lax`;
+  const cookie = `${SESSION_COOKIE_NAME}=${generated}; Path=/; Max-Age=2592000; SameSite=Lax; HttpOnly`;
   const prev = res.getHeader('Set-Cookie');
   if (!prev) {
     res.setHeader('Set-Cookie', cookie);

@@ -242,7 +242,6 @@ export function checkChatPermission(action: Action) {
       const pgHint = typeof errObj?.hint === 'string' ? errObj.hint : undefined;
       const pgColumn = typeof errObj?.column === 'string' ? errObj.column : undefined;
       const message = e instanceof Error ? e.message : String(e);
-      const cause = message.length > 400 ? `${message.slice(0, 400)}…` : message;
 
       // SQL/runtime issues are system errors and must not be mapped to 403.
       console.error(e);
@@ -271,15 +270,7 @@ export function checkChatPermission(action: Action) {
       if (e instanceof Error && e.stack) {
         console.error('[messenger] checkChatPermission stack:', e.stack);
       }
-      res.status(500).json({
-        error: 'Failed to authorize chat action',
-        step,
-        cause,
-        ...(pgCode ? { dbCode: pgCode } : {}),
-        ...(pgDetail ? { dbDetail: pgDetail.slice(0, 500) } : {}),
-        ...(pgHint ? { dbHint: pgHint.slice(0, 300) } : {}),
-        ...(pgColumn ? { dbColumn: pgColumn } : {}),
-      });
+      res.status(500).json({ error: 'Failed to authorize chat action' });
       return;
     }
   };

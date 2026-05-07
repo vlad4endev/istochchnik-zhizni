@@ -578,7 +578,7 @@ router.post('/upload', messengerUploadMiddleware, async (req: Request, res: Resp
         });
         return;
       }
-      res.status(502).json({ error: 'Storage upload failed', code: 'supabase_upload', details: msg });
+      res.status(502).json({ error: 'Storage upload failed', code: 'supabase_upload' });
       return;
     }
     if (!url) {
@@ -1313,10 +1313,7 @@ router.post(
 
       // Helpful for DB errors without leaking request body contents.
       console.error('[messenger] sendMessage error:', { message, code, detail, hint });
-      res.status(500).json({
-        error: 'Failed to send message',
-        ...(code ? { dbCode: code } : {}),
-      });
+      res.status(500).json({ error: 'Failed to send message' });
     }
   },
 );
