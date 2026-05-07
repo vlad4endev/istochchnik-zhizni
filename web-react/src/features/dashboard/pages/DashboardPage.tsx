@@ -52,6 +52,7 @@ import { useAuthStore } from '../../auth/authStore';
 import { useProfileDraftStore } from '../../profile/profileDraftStore';
 import { useCoordinatorNoteEditorRequestStore } from '../coordinatorNoteEditorRequestStore';
 import { LimitedRegistrationDashboard } from '../components/LimitedRegistrationDashboard';
+import MemberDashboardPage from '../components/DashboardPage.jsx';
 import { DashboardSkeleton } from '@/components/skeletons/DashboardSkeleton';
 import { keys } from '@/lib/queryKeys';
 import { fetchServicePlan, fetchServicePlans, type ServicePlanDetails, type ServicePlanListItem } from '../../servicePlanner/api';
@@ -1775,11 +1776,16 @@ function DashboardMain() {
 export function DashboardPage() {
   const registrationStatus = useAuthStore((s) => s.registrationStatus ?? 'active');
   const firstName = useAuthStore((s) => s.firstName);
+  const role = useAuthStore((s) => s.role);
 
   if (registrationStatus === 'pending_review' || registrationStatus === 'rejected') {
     return (
       <LimitedRegistrationDashboard registrationStatus={registrationStatus} firstName={firstName} />
     );
+  }
+
+  if (role !== 'admin') {
+    return <MemberDashboardPage />;
   }
 
   return <DashboardMain />;
