@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState, type SyntheticEvent } from 'react';
 import { LuPlay } from 'react-icons/lu';
 
+import { useAuthenticatedApiBlobSrc } from '../../../lib/useAuthenticatedApiBlobSrc';
+
 import { formatMessengerVideoDuration } from '../payloadMedia';
 
 /**
@@ -40,10 +42,13 @@ export function ChatVideoAttachmentPreview({
         : null;
   const durationLabel = durSec != null ? formatMessengerVideoDuration(durSec) : null;
 
+  /** Bearer-сессия: прямой `src` даёт 401; cookie-сессия обходится через bypass в хуке. */
+  const streamSrc = useAuthenticatedApiBlobSrc(src);
+
   return (
     <>
       <video
-        src={src}
+        src={streamSrc ?? undefined}
         muted
         playsInline
         preload="metadata"

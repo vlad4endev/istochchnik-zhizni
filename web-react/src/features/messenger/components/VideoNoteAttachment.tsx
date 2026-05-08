@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { LuPause, LuPlay } from 'react-icons/lu';
 
+import { useAuthenticatedApiBlobSrc } from '../../../lib/useAuthenticatedApiBlobSrc';
+
 /**
  * Видеокружок как в Telegram: без рамки «карточки», тап — плей/пауза, мета (время, галочки) в оверлее.
  */
@@ -37,6 +39,12 @@ export function VideoNoteAttachment({
     setProgress(0);
     setPlaying(false);
   }, [videoSrc, videoFallbackSrc]);
+
+  const streamSrc = useAuthenticatedApiBlobSrc(activeSrc);
+  const awaitingAttachmentBlob =
+    typeof activeSrc === 'string' &&
+    activeSrc.includes('/attachment-file') &&
+    streamSrc == null;
 
   /** Если WebM «молча» не декодируется (пустой круг), переключаемся на MP4 с сервера. */
   useEffect(() => {
@@ -92,14 +100,14 @@ export function VideoNoteAttachment({
       el.removeEventListener('pause', onPause);
       el.removeEventListener('ended', onEnded);
     };
-  }, [activeSrc]);
+  }, [streamSrc]);
 
   const toggle = useCallback(
     (e: React.MouseEvent) => {
       e.preventDefault();
       e.stopPropagation();
       const el = videoRef.current;
-      if (!el || !activeSrc) return;
+      if (!el || !streamSrc) return;
       if (playing) el.pause();
       else {
         const trySwitchToFallback = () => {
@@ -119,10 +127,10 @@ export function VideoNoteAttachment({
         });
       }
     },
-    [activeSrc, playing, videoFallbackSrc],
+    [streamSrc, playing, videoFallbackSrc, activeSrc],
   );
 
-  if (!activeSrc) {
+  if (!activeSrc || awaitingAttachmentBlob) {
     return (
       <div
         className="msg-videonote-circle msg-videonote-circle--placeholder"
@@ -152,7 +160,7 @@ export function VideoNoteAttachment({
       >
         <video
           ref={videoRef}
-          src={activeSrc}
+          src={streamSrc ?? undefined}
           className="msg-videonote-video"
           playsInline
           preload="metadata"

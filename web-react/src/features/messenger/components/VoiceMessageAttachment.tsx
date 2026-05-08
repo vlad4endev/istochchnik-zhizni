@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { LuPause, LuPlay } from 'react-icons/lu';
 
+import { useAuthenticatedApiBlobSrc } from '../../../lib/useAuthenticatedApiBlobSrc';
+
 function formatVoiceTime(sec: number): string {
   if (!Number.isFinite(sec) || sec < 0) return '0:00';
   const s = Math.floor(sec);
@@ -19,6 +21,7 @@ export function VoiceMessageAttachment({
   /** Секунды, переданные с клиента при отправке (пока нет метаданных у &lt;audio&gt;). */
   durationHintSec?: number;
 }) {
+  const streamSrc = useAuthenticatedApiBlobSrc(audioSrc);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [playing, setPlaying] = useState(false);
   const [duration, setDuration] = useState(() =>
@@ -62,24 +65,37 @@ export function VoiceMessageAttachment({
       el.removeEventListener('pause', onPause);
       el.removeEventListener('ended', onEnded);
     };
-  }, [audioSrc]);
+  }, [streamSrc]);
 
   const toggle = useCallback(
     (e: React.MouseEvent) => {
       e.preventDefault();
       e.stopPropagation();
       const el = audioRef.current;
-      if (!el || !audioSrc) return;
+      if (!el || !streamSrc) return;
       if (playing) el.pause();
       else void el.play().catch(() => {});
     },
-    [audioSrc, playing],
+    [streamSrc, playing],
   );
+
+  const awaitingAttachmentBlob =
+    typeof audioSrc === 'string' &&
+    audioSrc.includes('/attachment-file') &&
+    streamSrc == null;
 
   if (!audioSrc) {
     return (
       <span className={['text-sm font-medium', isMine ? 'text-white/75' : 'text-[var(--text-secondary)]'].join(' ')}>
         Голосовое недоступно
+      </span>
+    );
+  }
+
+  if (awaitingAttachmentBlob) {
+    return (
+      <span className={['text-sm font-medium', isMine ? 'text-white/75' : 'text-[var(--text-secondary)]'].join(' ')}>
+        Загрузка…
       </span>
     );
   }
@@ -92,7 +108,7 @@ export function VoiceMessageAttachment({
 
   return (
     <div className="flex min-w-[200px] max-w-[min(85vw,280px)] items-center gap-2.5">
-      <audio ref={audioRef} src={audioSrc} preload="metadata" className="hidden" />
+      <audio ref={audioRef} src={streamSrc ?? undefined} preload="metadata" className="hidden" />
       <button
         type="button"
         onClick={toggle}

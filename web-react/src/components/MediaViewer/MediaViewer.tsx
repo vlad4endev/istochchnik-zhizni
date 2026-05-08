@@ -12,6 +12,7 @@ import { ActionIcon, Avatar, Box, Group, Image, Modal, Stack, Text, Tooltip } fr
 import { useMediaQuery } from '@mantine/hooks';
 import { IconChevronLeft, IconChevronRight, IconDownload, IconShare, IconX } from '@tabler/icons-react';
 
+import { useAuthenticatedApiBlobSrc } from '../../lib/useAuthenticatedApiBlobSrc';
 import { MediaStrip } from './MediaStrip';
 import classes from './MediaViewer.module.css';
 import { useMediaViewer } from './useMediaViewer';
@@ -291,6 +292,10 @@ export function MediaViewer() {
     };
   }, [open, isMobile, item?.id, item?.type, closeViewer, navigate]);
 
+  const attachmentVideoSrc = useAuthenticatedApiBlobSrc(
+    open && item?.type === 'video' ? item.src : null,
+  );
+
   if (!open || !item) return null;
 
   const dismissActive = dismissDragY > 0;
@@ -443,7 +448,7 @@ export function MediaViewer() {
         ) : (
           <video
             ref={videoRef}
-            src={item.src}
+            src={attachmentVideoSrc ?? undefined}
             controls
             style={{ maxHeight: mediaMaxHeight, maxWidth: '100%', borderRadius: 6 }}
           />

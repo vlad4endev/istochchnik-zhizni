@@ -40,6 +40,8 @@ export function useAppUpdate() {
         const isSwScriptFetchError =
           message.includes('when fetching the script') ||
           message.includes('An unknown error occurred when fetching the script') ||
+          message.includes('bad HTTP response code') ||
+          message.includes('504') ||
           (message.includes('ServiceWorker') && message.includes('fetch'));
         if (isSwScriptFetchError) {
           // Don't spam console when CDN/origin temporarily returns 5xx for sw.js.

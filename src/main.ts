@@ -425,7 +425,7 @@ async function start(): Promise<void> {
   }
   if (shouldWarnMissingSupabaseStoragePublicUrl()) {
     console.warn(
-      '[WARN] SUPABASE_STORAGE_PUBLIC_URL не задан, а SUPABASE_URL по HTTP — в браузере возможен mixed content. Задайте публичный HTTPS-ориджин Storage (обычно https://<ref>.supabase.co), см. .env.example.',
+      '[WARN] SUPABASE_STORAGE_PUBLIC_URL / PUBLIC_WEB_ORIGIN не заданы, а SUPABASE_URL по HTTP — в JSON могут уходить http://… ссылки на Storage (mixed content в браузере). Укажите HTTPS-ориджин SPA: переменная PUBLIC_WEB_ORIGIN или SUPABASE_STORAGE_PUBLIC_URL (облако: https://<ref>.supabase.co; self-hosted: тот же домен, где nginx proxy /storage/v1/ на Kong). См. .env.example.',
     );
   }
 

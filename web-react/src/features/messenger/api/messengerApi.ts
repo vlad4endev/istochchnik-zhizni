@@ -355,7 +355,8 @@ export async function fetchMessageAttachmentUrl(
 }
 
 /**
- * Same-origin URL для открытия/скачивания вложения (сессия в cookie).
+ * Same-origin URL для открытия/скачивания вложения (cookie и/или Bearer читает API).
+ * Для `<video>` / `<audio>` используйте `useAuthenticatedApiBlobSrc` — без него Bearer не уходит.
  * Обходит CORS Supabase при сохранении файла и даёт стабильное «Открыть» в новой вкладке.
  */
 export function buildMessengerAttachmentFileUrl(

@@ -70,13 +70,22 @@ function canonicalUploadPath(pathname: string): string {
  */
 function rewritePrivateSupabaseStorageUrl(v: string): string {
   const raw = String(import.meta.env.VITE_SUPABASE_STORAGE_PUBLIC_URL ?? '').trim();
-  if (!raw) return v;
   try {
     const u = new URL(v);
     if (!u.pathname.includes('/storage/v1/')) return v;
     if (!isNonPublicHttpHost(u.hostname)) return v;
-    const pub = new URL(raw.includes('://') ? raw : `https://${raw}`);
-    return `${pub.origin}${u.pathname}${u.search}${u.hash}`;
+    if (raw) {
+      const pub = new URL(raw.includes('://') ? raw : `https://${raw}`);
+      return `${pub.origin}${u.pathname}${u.search}${u.hash}`;
+    }
+    /**
+     * Без VITE_*: Docker/LAN URL в БД (http://172.17…/storage/v1/…) блокируется как mixed content.
+     * Тот же путь на origin SPA обычно проксируется nginx (`^~ /storage/v1/` → Kong), см. docker/nginx-web.unified.conf.
+     */
+    if (typeof window !== 'undefined' && window.location.protocol === 'https:') {
+      return `${window.location.origin}${u.pathname}${u.search}${u.hash}`;
+    }
+    return v;
   } catch {
     return v;
   }

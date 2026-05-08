@@ -39,19 +39,25 @@ function isLikelyInternalStorageHost(hostname: string): boolean {
   return false;
 }
 
-/**
- * Публичный HTTPS-ориджин Storage для браузера (обычно `https://<ref>.supabase.co`).
- * Задайте, если `SUPABASE_URL` у API — внутренний (Docker/LAN), иначе в ответах попадут http://IP:port
- * и HTTPS-сайт заблокирует картинки (mixed content).
- */
-export function getSupabaseStoragePublicOrigin(): string | null {
-  const raw = process.env.SUPABASE_STORAGE_PUBLIC_URL?.trim();
-  if (!raw) return null;
+function parseHttpsOriginConfigured(raw?: string): string | null {
+  const t = raw?.trim();
+  if (!t) return null;
   try {
-    return trimTrailingSlashes(new URL(raw).origin);
+    return trimTrailingSlashes(new URL(t.includes('://') ? t : `https://${t}`).origin);
   } catch {
     return null;
   }
+}
+
+/**
+ * Публичный HTTPS-ориджин для ссылок на Storage в JSON (браузер).
+ * Приоритет: `SUPABASE_STORAGE_PUBLIC_URL`, иначе `PUBLIC_WEB_ORIGIN` (удобно один раз указать домен SPA).
+ */
+export function getSupabaseStoragePublicOrigin(): string | null {
+  return (
+    parseHttpsOriginConfigured(process.env.SUPABASE_STORAGE_PUBLIC_URL) ??
+    parseHttpsOriginConfigured(process.env.PUBLIC_WEB_ORIGIN)
+  );
 }
 
 /** Префиксы URL, которые нужно заменить на публичный ориджин: SUPABASE_URL + опционально LAN/stage. */
@@ -83,7 +89,7 @@ function internalStorageUrlPrefixes(): string[] {
 
 /**
  * Подмена ориджина в URL Storage API (`/storage/v1/...`) для клиентов за HTTPS.
- * Без `SUPABASE_STORAGE_PUBLIC_URL` возвращает строку как есть.
+ * Без настроенного публичного ориджина (`SUPABASE_STORAGE_PUBLIC_URL` или `PUBLIC_WEB_ORIGIN`) возвращает строку как есть.
  *
  * 1) Сначала заменяем известные внутренние префиксы (SUPABASE_URL, LEGACY_ORIGINS).
  * 2) Затем любой URL с путём `/storage/v1/` переносим на публичный origin+protocol

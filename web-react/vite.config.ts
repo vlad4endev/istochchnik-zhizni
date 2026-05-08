@@ -198,6 +198,10 @@ export default defineConfig(({ mode }) => {
             '**/pwa-512x512.png',
             '**/maskable-icon-192x192.png',
             '**/maskable-icon-512x512.png',
+            /** Уже в `includeAssets`; иначе дубль с записью из манифеста → Workbox conflicting-entries. */
+            '**/apple-touch-icon-180x180.png',
+            /** `includeAssets`; тот же конфликт с `*.ico` в glob. */
+            '**/favicon.ico',
           ],
           skipWaiting: false,
           clientsClaim: true,
@@ -214,6 +218,11 @@ export default defineConfig(({ mode }) => {
            */
           importScripts: ['custom-sw.js'],
           runtimeCaching: [
+            {
+              /** Вложения с Authorization / cookie; не кэшировать в SW (чужие сессии/частные данные). */
+              urlPattern: /\/api\/messenger\/messages\/[^/]+\/attachment-file(?:\?.*)?$/,
+              handler: 'NetworkOnly',
+            },
             {
               urlPattern: /\/api\//,
               handler: 'NetworkFirst',
