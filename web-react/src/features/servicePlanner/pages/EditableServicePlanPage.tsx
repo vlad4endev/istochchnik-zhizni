@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { isAxiosError } from 'axios';
-import { addMinutes, format, parse } from 'date-fns';
+import { addMinutes, format } from 'date-fns';
 import {
   FaBookBible,
   FaBullhorn,
@@ -38,6 +37,8 @@ import {
   type EditableServicePlanPayload,
   type EditableServicePlanMetaPayload,
 } from '../api';
+import { asPlainContentJson, safeServicePlanTimelineStart } from '../planPayloadNormalize';
+import { isSharePlanRateLimitError, sharePlanQueryRetry, sharePlanQueryRetryDelay } from '../sharePlanQueryHelpers';
 
 type EditableBlock = EditableServicePlanPayload['blocks'][number];
 type EditableMember = EditableServicePlanMetaPayload['members'][number];
@@ -84,12 +85,12 @@ const BLOCK_MARK_ICON_BY_KEY = Object.fromEntries(
   BLOCK_MARK_ICON_OPTIONS.map((x) => [x.key, x]),
 ) as Record<string, (typeof BLOCK_MARK_ICON_OPTIONS)[number]>;
 
-function isSeparator(content: Record<string, unknown>): boolean {
-  return content.is_separator === true;
+function isSeparator(content: unknown): boolean {
+  return asPlainContentJson(content).is_separator === true;
 }
 
-function isHiddenFromPublic(content: Record<string, unknown>): boolean {
-  return content.hide_in_public === true;
+function isHiddenFromPublic(content: unknown): boolean {
+  return asPlainContentJson(content).hide_in_public === true;
 }
 
 function getCategoryIcon(block: EditableBlock): { Icon: IconType; wrapClass: string; iconClass: string } | null {
@@ -121,10 +122,6 @@ function getBlockLogoUrl(block: EditableBlock): string | null {
     return value;
   }
   return null;
-}
-
-function parseStartClock(dateIso: string, time: string): Date {
-  return parse(`${dateIso} ${time}`, 'yyyy-MM-dd HH:mm', new Date());
 }
 
 function birthdayRows(content: Record<string, unknown>): string[] {
@@ -174,9 +171,10 @@ function scheduleRows(content: Record<string, unknown>): string[] {
     .filter((x): x is string => Boolean(x));
 }
 
-function blockNote(content: Record<string, unknown>): string {
-  if (typeof content.notes === 'string') return content.notes;
-  if (typeof content.text === 'string') return content.text;
+function blockNote(content: unknown): string {
+  const cj = asPlainContentJson(content);
+  if (typeof cj.notes === 'string') return cj.notes;
+  if (typeof cj.text === 'string') return cj.text;
   return '';
 }
 
@@ -246,9 +244,11 @@ function isSermonBlockType(block: { block_type_code: string | null; block_type_n
   return block.block_type_code === 'sermon' || normalizeText(block.block_type_name ?? '').includes('проповед');
 }
 
-function sermonTopicText(content: Record<string, unknown>): string {
-  const raw = content.sermon_topic;
-  return typeof raw === 'string' ? raw.trim() : '';
+function isSongPlannerBlockType(meta: { kind: string; code: string } | null): boolean {
+  if (!meta) return false;
+  const code = String(meta.code ?? '').trim().toLowerCase();
+  if (code === 'song') return true;
+  return (meta.kind ?? 'custom') === 'song';
 }
 
 /** Служебные / уже обрабатываемые поля — не выводим как «доп. поля» и не показываем в UI. */
@@ -288,7 +288,7 @@ const GENERIC_STRING_LABELS: Record<string, string> = {
 type ExtraDisplayRow = { label: string; value: string };
 
 function getBlockExtraDisplayRows(b: EditableBlock): ExtraDisplayRow[] {
-  const cj = b.content_json;
+  const cj = asPlainContentJson(b.content_json);
   const rows: ExtraDisplayRow[] = [];
   if (isSermonBlockType(b)) {
     const topic = typeof cj.sermon_topic === 'string' ? cj.sermon_topic.trim() : '';
@@ -311,7 +311,7 @@ function getBlockExtraDisplayRows(b: EditableBlock): ExtraDisplayRow[] {
 
 /** В форме редактирования: направление и прочие строки без дублирования полей стиха/проповеди/заметки. */
 function getEditFormAuxiliaryRows(b: EditableBlock): ExtraDisplayRow[] {
-  const cj = b.content_json;
+  const cj = asPlainContentJson(b.content_json);
   const rows: ExtraDisplayRow[] = [];
   const direction = typeof cj.direction === 'string' ? cj.direction.trim() : '';
   if (direction) rows.push({ label: 'Направление', value: direction });
@@ -386,10 +386,6 @@ function autosizeTextarea(el: HTMLTextAreaElement | null): void {
   el.style.height = `${el.scrollHeight}px`;
 }
 
-function isRateLimitError(error: unknown): boolean {
-  return isAxiosError(error) && error.response?.status === 429;
-}
-
 export function EditableServicePlanPage() {
   useScrollInputIntoView();
   const { token } = useParams<{ token: string }>();
@@ -397,6 +393,8 @@ export function EditableServicePlanPage() {
   const [draftBlocks, setDraftBlocks] = useState<EditableBlock[]>([]);
   const [editingBlockId, setEditingBlockId] = useState<number | null>(null);
   const noteTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+  /** Локально изменённые блоки без успешного «Сохранить» — не перезатирать при polling с сервера. */
+  const dirtyShareBlockIdsRef = useRef<Set<number>>(new Set());
 
   const planQ = useQuery({
     queryKey: ['editable-service-plan', token],
@@ -404,15 +402,15 @@ export function EditableServicePlanPage() {
     enabled: Boolean(token && token.length > 20),
     refetchInterval: editingBlockId == null ? 2500 : false,
     refetchIntervalInBackground: true,
-    retry: (failureCount, error) => isRateLimitError(error) && failureCount < 3,
-    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** (attemptIndex - 1), 4000),
+    retry: sharePlanQueryRetry,
+    retryDelay: sharePlanQueryRetryDelay,
   });
   const metaQ = useQuery({
     queryKey: ['editable-service-plan-meta', token],
     queryFn: () => fetchEditableServicePlanMeta(token ?? ''),
     enabled: Boolean(token && token.length > 20),
-    retry: (failureCount, error) => isRateLimitError(error) && failureCount < 3,
-    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** (attemptIndex - 1), 4000),
+    retry: sharePlanQueryRetry,
+    retryDelay: sharePlanQueryRetryDelay,
   });
   const planPreacherId = planQ.data?.plan.preacher_member_id ?? null;
   const planPreacherName = planQ.data?.plan.preacher_name ?? null;
@@ -425,27 +423,29 @@ export function EditableServicePlanPage() {
       ? (metaQ.data?.members ?? []).find((m) => m.id === preacherId) ?? null
       : null;
     const preacherLabel = preacherRaw ? userLabel(preacherRaw) : (planQ.data.plan.preacher_name ?? '').trim();
-    setDraftBlocks(
-      planQ.data.blocks
+    const dirtyIds = dirtyShareBlockIdsRef.current;
+    setDraftBlocks((prevLocal) => {
+      const prevMap = new Map(prevLocal.map((bl) => [bl.id, bl]));
+      const serverBlocks = planQ.data.blocks
         .slice()
         .sort((a, b) => a.order_index - b.order_index)
         .map((block) => {
           if (!isSermonBlockType(block)) return block;
-          const preacherName = preacherLabel || 'Проповедник';
-          const topic = sermonTopicText(block.content_json);
           return {
             ...block,
             assigned_member_id: preacherId,
             assigned_member_name: preacherLabel || null,
-            title: topic ? `${preacherName} - ${topic}` : preacherName,
           };
-        }),
-    );
+        });
+      return serverBlocks.map((incoming) =>
+        dirtyIds.has(incoming.id) ? (prevMap.get(incoming.id) ?? incoming) : incoming,
+      );
+    });
   }, [planQ.data, metaQ.data, editingBlockId]);
 
   const rows = useMemo(() => {
     if (!planQ.data) return [];
-    let cursor = parseStartClock(planQ.data.plan.service_date, planQ.data.plan.start_time);
+    let cursor = safeServicePlanTimelineStart(planQ.data.plan);
     return draftBlocks.map((b) => {
       const startsAt = format(cursor, 'HH:mm');
       const separator = isSeparator(b.content_json);
@@ -465,18 +465,22 @@ export function EditableServicePlanPage() {
     autosizeTextarea(noteTextareaRef.current);
   }, [editingBlockId, editingBlockNote]);
 
+  const persistVisibilityMut = useMutation({
+    mutationFn: async ({ blockId, contentJson }: { blockId: number; contentJson: Record<string, unknown> }) => {
+      if (!token) return;
+      await patchEditableServicePlanBlockByToken(token, blockId, { content_json: contentJson });
+    },
+  });
+
   const saveBlockMut = useMutation({
     mutationFn: async (block: EditableBlock) => {
       if (!token) return;
       const isSermon = isSermonBlockType(block);
-      const preacherName = (planPreacherName ?? '').trim() || 'Проповедник';
-      const topic = sermonTopicText(block.content_json);
       const normalizedBlock = isSermon
         ? {
             ...block,
             assigned_member_id: planPreacherId,
             assigned_member_name: planPreacherName,
-            title: topic ? `${preacherName} - ${topic}` : preacherName,
           }
         : block;
       await patchEditableServicePlanBlockByToken(token, block.id, {
@@ -494,6 +498,7 @@ export function EditableServicePlanPage() {
     try {
       const savedBlock = await saveBlockMut.mutateAsync(block);
       if (savedBlock) {
+        dirtyShareBlockIdsRef.current.delete(savedBlock.id);
         setDraftBlocks((prev) => prev.map((x) => (x.id === savedBlock.id ? savedBlock : x)));
       }
       emitAppToast({ kind: 'success', message: 'Изменения сохранены' });
@@ -522,8 +527,8 @@ export function EditableServicePlanPage() {
       </div>
     );
   }
-  const planRateLimited = isRateLimitError(planQ.error);
-  const metaRateLimited = isRateLimitError(metaQ.error);
+  const planRateLimited = isSharePlanRateLimitError(planQ.error);
+  const metaRateLimited = isSharePlanRateLimitError(metaQ.error);
   if ((planRateLimited || metaRateLimited) && (!planQ.data || !metaQ.data)) {
     return (
       <div className="mx-auto flex min-h-[40dvh] max-w-xl flex-col items-center justify-center gap-3 px-4 text-center">
@@ -561,7 +566,7 @@ export function EditableServicePlanPage() {
   const musicianDirectionCandidates = members.filter((u) => hasMinistryDirection(u, 'Музыкальное служение'));
   const prayerCandidates = members.filter((u) => isPrayerCandidate(u));
   const editingBlockTypeMeta = blockTypes.find((t) => t.id === editingBlock?.block_type_id) ?? null;
-  const isEditingSongBlock = (editingBlockTypeMeta?.kind ?? 'custom') === 'song';
+  const isEditingSongBlock = isSongPlannerBlockType(editingBlockTypeMeta);
   const isEditingPoemBlock =
     editingBlockTypeMeta?.code === 'poem' || normalizeText(editingBlockTypeMeta?.name ?? '').includes('стих');
   const isEditingSermonBlock =
@@ -697,21 +702,47 @@ export function EditableServicePlanPage() {
                         <button
                           type="button"
                           onClick={() => {
+                            const nextHidden = !hiddenFromPublic;
+                            const nextJson: Record<string, unknown> = {
+                              ...(b.content_json as Record<string, unknown>),
+                              hide_in_public: nextHidden,
+                            };
+                            const rollbackJson = b.content_json;
                             setDraftBlocks((prev) =>
                               prev.map((x) =>
-                                x.id === b.id
-                                  ? {
-                                      ...x,
-                                      content_json: { ...x.content_json, hide_in_public: !hiddenFromPublic },
-                                    }
-                                  : x,
+                                x.id === b.id ? { ...x, content_json: nextJson } : x,
                               ),
                             );
                             if (!hiddenFromPublic && editingBlockId === b.id) setEditingBlockId(null);
+                            persistVisibilityMut.mutate(
+                              { blockId: b.id, contentJson: nextJson },
+                              {
+                                onSuccess: async () => {
+                                  await Promise.all([
+                                    qc.invalidateQueries({ queryKey: ['editable-service-plan', token] }),
+                                    qc.invalidateQueries({ queryKey: ['editable-service-plan-meta', token] }),
+                                    qc.invalidateQueries({ queryKey: ['public', 'service-plan', token] }),
+                                  ]);
+                                },
+                                onError: () => {
+                                  setDraftBlocks((prev) =>
+                                    prev.map((x) =>
+                                      x.id === b.id ? { ...x, content_json: rollbackJson } : x,
+                                    ),
+                                  );
+                                  emitAppToast({
+                                    kind: 'error',
+                                    message:
+                                      'Не удалось сохранить видимость. Проверьте связь или нажмите «Сохранить блок».',
+                                  });
+                                },
+                              },
+                            );
                           }}
+                          disabled={persistVisibilityMut.isPending}
                           aria-label={hiddenFromPublic ? 'Показать в публикации' : 'Скрыть из публикации'}
                           title={hiddenFromPublic ? 'Показать в публикации' : 'Скрыть из публикации'}
-                          className={`inline-flex h-9 w-9 items-center justify-center rounded-lg border text-stone-700 hover:border-primary hover:text-primary ${
+                          className={`inline-flex h-9 w-9 items-center justify-center rounded-lg border text-stone-700 hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-60 ${
                             hiddenFromPublic ? 'border-stone-400 bg-stone-200/80' : 'border-stone-300'
                           }`}
                         >
@@ -756,15 +787,16 @@ export function EditableServicePlanPage() {
                         min={1}
                         max={180}
                         value={editingBlock.duration_minutes}
-                        onChange={(e) =>
+                        onChange={(e) => {
+                          dirtyShareBlockIdsRef.current.add(editingBlock.id);
                           setDraftBlocks((prev) =>
                             prev.map((x) =>
                               x.id === editingBlock.id
                                 ? { ...x, duration_minutes: Math.max(1, Number(e.target.value) || 1) }
                                 : x,
                             ),
-                          )
-                        }
+                          );
+                        }}
                         className="min-h-11 w-full min-w-0 max-w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-base text-stone-900 touch-manipulation sm:min-h-0 sm:px-2 sm:py-1.5 sm:text-sm"
                         inputMode="numeric"
                       />
@@ -776,12 +808,13 @@ export function EditableServicePlanPage() {
                       </label>
                       <input
                         id={`block-title-${editingBlock.id}`}
-                        value={editingBlock.title}
-                        onChange={(e) =>
+                        value={editingBlock.title ?? ''}
+                        onChange={(e) => {
+                          dirtyShareBlockIdsRef.current.add(editingBlock.id);
                           setDraftBlocks((prev) =>
                             prev.map((x) => (x.id === editingBlock.id ? { ...x, title: e.target.value } : x)),
-                          )
-                        }
+                          );
+                        }}
                         className="min-h-11 w-full min-w-0 max-w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-base text-stone-900 placeholder:text-stone-500 touch-manipulation sm:min-h-0 sm:px-2 sm:py-1.5 sm:text-sm"
                         placeholder="Заголовок блока"
                         autoComplete="off"
@@ -797,6 +830,7 @@ export function EditableServicePlanPage() {
                           value={isEditingSermonBlock ? (planPreacherId ?? '') : (editingBlock.assigned_member_id ?? '')}
                           onChange={(e) => {
                             if (isEditingSermonBlock) return;
+                            dirtyShareBlockIdsRef.current.add(editingBlock.id);
                             const memberId = e.target.value ? Number(e.target.value) : null;
                             const member = memberId ? members.find((u) => u.id === memberId) : null;
                             setDraftBlocks((prev) =>
@@ -860,29 +894,48 @@ export function EditableServicePlanPage() {
                         </label>
                         <select
                           id={`block-song-${editingBlock.id}`}
-                          value={editingBlock.song_id ?? ''}
+                          value={
+                            editingBlock.song_id != null && Number.isFinite(Number(editingBlock.song_id))
+                              ? String(editingBlock.song_id)
+                              : ''
+                          }
                           onChange={(e) => {
-                            const songId = e.target.value ? Number(e.target.value) : null;
-                            const song = songId ? songs.find((s) => s.id === songId) : null;
+                            dirtyShareBlockIdsRef.current.add(editingBlock.id);
+                            const raw = e.target.value;
+                            const songId = raw ? Number(raw) : null;
                             setDraftBlocks((prev) =>
-                              prev.map((x) =>
-                                x.id === editingBlock.id
-                                  ? {
-                                      ...x,
-                                      song_id: songId,
-                                      song_title: song?.title ?? null,
-                                      song_key: song?.default_key ?? null,
-                                      title: song ? songBlockTitle(song) : x.title,
-                                    }
-                                  : x,
-                              ),
+                              prev.map((x) => {
+                                if (x.id !== editingBlock.id) return x;
+                                const picked =
+                                  songId != null && Number.isInteger(songId) && songId > 0
+                                    ? songs.find((s) => s.id === songId)
+                                    : null;
+                                const keepOrphanMeta = songId != null && songId === x.song_id && !picked;
+                                return {
+                                  ...x,
+                                  song_id: songId,
+                                  song_title: picked?.title ?? (keepOrphanMeta ? x.song_title : null),
+                                  song_key: picked?.default_key ?? (keepOrphanMeta ? x.song_key : null),
+                                  title: picked ? songBlockTitle(picked) : x.title,
+                                };
+                              }),
                             );
                           }}
                           className="min-h-11 w-full min-w-0 max-w-full rounded-lg border border-stone-300 bg-white px-2 py-2 text-base text-stone-900 touch-manipulation sm:min-h-0 sm:py-1.5 sm:text-sm"
                         >
                           <option value="">Песня не назначена</option>
+                          {editingBlock.song_id != null &&
+                          !songs.some((s) => s.id === editingBlock.song_id) ? (
+                            <option value={String(editingBlock.song_id)}>
+                              {editingBlock.song_title
+                                ? `${editingBlock.song_title}${
+                                    editingBlock.song_key ? ` [${editingBlock.song_key}]` : ''
+                                  }`
+                                : `Песня #${editingBlock.song_id} (нет в списке)`}
+                            </option>
+                          ) : null}
                           {songs.map((s) => (
-                            <option key={s.id} value={s.id}>
+                            <option key={s.id} value={String(s.id)}>
                               {s.default_key ? `${s.title} [${s.default_key}]` : s.title}
                             </option>
                           ))}
@@ -904,15 +957,16 @@ export function EditableServicePlanPage() {
                             <input
                               id={`poem-author-${editingBlock.id}`}
                               value={String((editingBlock.content_json?.poem_author as string | undefined) ?? '')}
-                              onChange={(e) =>
+                              onChange={(e) => {
+                                dirtyShareBlockIdsRef.current.add(editingBlock.id);
                                 setDraftBlocks((prev) =>
                                   prev.map((x) =>
                                     x.id === editingBlock.id
                                       ? { ...x, content_json: { ...x.content_json, poem_author: e.target.value } }
                                       : x,
                                   ),
-                                )
-                              }
+                                );
+                              }}
                               className="min-h-11 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-base text-stone-900 placeholder:text-stone-500 touch-manipulation sm:min-h-0 sm:px-2.5 sm:py-1.5 sm:text-sm"
                               placeholder="Автор стиха"
                             />
@@ -924,15 +978,16 @@ export function EditableServicePlanPage() {
                             <input
                               id={`poem-theme-${editingBlock.id}`}
                               value={String((editingBlock.content_json?.poem_theme as string | undefined) ?? '')}
-                              onChange={(e) =>
+                              onChange={(e) => {
+                                dirtyShareBlockIdsRef.current.add(editingBlock.id);
                                 setDraftBlocks((prev) =>
                                   prev.map((x) =>
                                     x.id === editingBlock.id
                                       ? { ...x, content_json: { ...x.content_json, poem_theme: e.target.value } }
                                       : x,
                                   ),
-                                )
-                              }
+                                );
+                              }}
                               className="min-h-11 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-base text-stone-900 placeholder:text-stone-500 touch-manipulation sm:min-h-0 sm:px-2.5 sm:py-1.5 sm:text-sm"
                               placeholder="Тема стиха"
                             />
@@ -951,7 +1006,8 @@ export function EditableServicePlanPage() {
                             <input
                               id={`sermon-topic-${editingBlock.id}`}
                               value={String((editingBlock.content_json?.sermon_topic as string | undefined) ?? '')}
-                              onChange={(e) =>
+                              onChange={(e) => {
+                                dirtyShareBlockIdsRef.current.add(editingBlock.id);
                                 setDraftBlocks((prev) =>
                                   prev.map((x) => {
                                     if (x.id !== editingBlock.id) return x;
@@ -966,8 +1022,8 @@ export function EditableServicePlanPage() {
                                       content_json: { ...x.content_json, sermon_topic: nextTopic },
                                     };
                                   }),
-                                )
-                              }
+                                );
+                              }}
                               className="min-h-11 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-base text-stone-900 placeholder:text-stone-500 touch-manipulation sm:min-h-0 sm:px-2.5 sm:py-1.5 sm:text-sm"
                               placeholder="Тема проповеди"
                             />
@@ -979,15 +1035,16 @@ export function EditableServicePlanPage() {
                             <input
                               id={`sermon-scripture-${editingBlock.id}`}
                               value={String((editingBlock.content_json?.sermon_scripture as string | undefined) ?? '')}
-                              onChange={(e) =>
+                              onChange={(e) => {
+                                dirtyShareBlockIdsRef.current.add(editingBlock.id);
                                 setDraftBlocks((prev) =>
                                   prev.map((x) =>
                                     x.id === editingBlock.id
                                       ? { ...x, content_json: { ...x.content_json, sermon_scripture: e.target.value } }
                                       : x,
                                   ),
-                                )
-                              }
+                                );
+                              }}
                               className="min-h-11 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-base text-stone-900 placeholder:text-stone-500 touch-manipulation sm:min-h-0 sm:px-2.5 sm:py-1.5 sm:text-sm"
                               placeholder="Стихи из Библии"
                             />
@@ -1008,6 +1065,7 @@ export function EditableServicePlanPage() {
                         }}
                         value={editingBlockNote}
                         onChange={(e) => {
+                          dirtyShareBlockIdsRef.current.add(editingBlock.id);
                           autosizeTextarea(e.currentTarget);
                           setDraftBlocks((prev) =>
                             prev.map((x) => {
@@ -1045,6 +1103,10 @@ export function EditableServicePlanPage() {
                         </ul>
                       </div>
                     ) : null}
+                    <p className="text-[11px] leading-snug text-stone-500 sm:col-span-2">
+                      Изменения заголовка, времени, ответственного, песни и заметки применяются после нажатия «Сохранить
+                      блок». Иконка «глаз» у карточки сохраняет видимость сразу.
+                    </p>
                     <div className="save-bar save-bar--standalone mt-1 flex w-full min-w-0 justify-center sm:col-span-2 sm:mt-0 sm:justify-end">
                       <button
                         type="button"

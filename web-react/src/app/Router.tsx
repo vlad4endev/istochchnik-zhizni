@@ -8,6 +8,7 @@ import { OfflinePage } from '../pages/Offline';
 import { Layout } from './Layout';
 import { ModuleErrorBoundary } from './ModuleErrorBoundary';
 import { ProfileRouteBoundary } from './ProfileRouteBoundary';
+import { ServicePlanTokenRouteShell } from './ServicePlanTokenRouteShell';
 import { usePageTracking } from '../hooks/usePageTracking';
 import {
   BlockParishionerGuest,
@@ -186,17 +187,17 @@ export function AppRouter() {
       <Route
         path="/service-plan/share/:token"
         element={
-          <Suspense fallback={<RouteFallback />}>
+          <ServicePlanTokenRouteShell moduleName="публичную программу собрания">
             <PublicServicePlanPage />
-          </Suspense>
+          </ServicePlanTokenRouteShell>
         }
       />
       <Route
         path="/service-plan/edit/:token"
         element={
-          <Suspense fallback={<RouteFallback />}>
+          <ServicePlanTokenRouteShell moduleName="редактор программы по ссылке">
             <EditableServicePlanPage />
-          </Suspense>
+          </ServicePlanTokenRouteShell>
         }
       />
       <Route element={<RequireAuth />}>

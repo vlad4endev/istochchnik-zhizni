@@ -264,10 +264,19 @@ export function MySongsPage() {
   }, [searchParams, tab]);
   useEffect(() => {
     const current = searchParams.get('tab');
+    // Вкладка «Сохранённые» ↔ нет query `tab`; иначе `null === 'saved'` и бесконечные replace.
+    if (tab === 'saved') {
+      if (!current) return;
+      if (current === 'saved') {
+        const next = new URLSearchParams(searchParams);
+        next.delete('tab');
+        setSearchParams(next, { replace: true });
+      }
+      return;
+    }
     if (current === tab) return;
     const next = new URLSearchParams(searchParams);
-    if (tab === 'saved') next.delete('tab');
-    else next.set('tab', tab);
+    next.set('tab', tab);
     setSearchParams(next, { replace: true });
   }, [tab, searchParams, setSearchParams]);
   const [draftTitle, setDraftTitle] = useState('');

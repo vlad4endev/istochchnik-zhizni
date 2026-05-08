@@ -38,8 +38,9 @@ export function useAppUpdate() {
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error ?? '');
         const isSwScriptFetchError =
-          message.includes('Failed to update a ServiceWorker') &&
-          message.includes('when fetching the script');
+          message.includes('when fetching the script') ||
+          message.includes('An unknown error occurred when fetching the script') ||
+          (message.includes('ServiceWorker') && message.includes('fetch'));
         if (isSwScriptFetchError) {
           // Don't spam console when CDN/origin temporarily returns 5xx for sw.js.
           swFetchFailureCooldownUntil = Date.now() + 5 * 60 * 1000;

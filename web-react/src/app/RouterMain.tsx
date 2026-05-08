@@ -13,6 +13,7 @@ import {
   RouteFallback,
 } from './routeGuards';
 import { ModuleErrorBoundary } from './ModuleErrorBoundary';
+import { ServicePlanTokenRouteShell } from './ServicePlanTokenRouteShell';
 
 const SongbookPage = lazy(async () => {
   const m = await import('../features/songbook/pages/SongbookPage');
@@ -73,17 +74,17 @@ export function AppRouterMain() {
       <Route
         path="/service-plan/share/:token"
         element={
-          <Suspense fallback={<RouteFallback />}>
+          <ServicePlanTokenRouteShell moduleName="публичную программу собрания">
             <PublicServicePlanPage />
-          </Suspense>
+          </ServicePlanTokenRouteShell>
         }
       />
       <Route
         path="/service-plan/edit/:token"
         element={
-          <Suspense fallback={<RouteFallback />}>
+          <ServicePlanTokenRouteShell moduleName="редактор программы по ссылке">
             <EditableServicePlanPage />
-          </Suspense>
+          </ServicePlanTokenRouteShell>
         }
       />
       <Route element={<RequireAuth />}>

@@ -21,18 +21,26 @@ function getSessionId(): string {
 }
 
 export async function trackPageView(data: PageViewPayload): Promise<void> {
-  await apiClient.post('/api/analytics/track/page-view', {
-    ...data,
-    session_id: data.session_id ?? getSessionId(),
-  });
+  try {
+    await apiClient.post('/api/analytics/track/page-view', {
+      ...data,
+      session_id: data.session_id ?? getSessionId(),
+    });
+  } catch {
+    // Не блокируем UI: лимиты (429), офлайн, отключённая аналитика.
+  }
 }
 
 export async function trackEvent(eventType: string, metadata?: object, pageKey?: string): Promise<void> {
-  await apiClient.post('/api/analytics/track/event', {
-    event_type: eventType,
-    page_key: pageKey ?? null,
-    metadata: metadata ?? {},
-  });
+  try {
+    await apiClient.post('/api/analytics/track/event', {
+      event_type: eventType,
+      page_key: pageKey ?? null,
+      metadata: metadata ?? {},
+    });
+  } catch {
+    // То же для событий.
+  }
 }
 
 export async function fetchAnalyticsOverview(period: string): Promise<any> {

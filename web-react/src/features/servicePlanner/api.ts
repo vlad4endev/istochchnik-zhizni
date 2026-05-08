@@ -1,6 +1,8 @@
 import { apiClient } from '../../lib/apiClient';
 import type { AppUser } from '../admin/types';
 
+import { asPlainContentJson, normalizeEditableServicePlanMeta, normalizeEditableServicePlanPayload, normalizePublicServicePlanPayload } from './planPayloadNormalize';
+
 export type ServiceBlockType = {
   id: number;
   code: string;
@@ -304,21 +306,21 @@ export async function fetchPublicServicePlan(token: string): Promise<PublicServi
   const { data } = await apiClient.get<PublicServicePlanPayload>(
     `/api/public/service-plans/${encodeURIComponent(token)}`,
   );
-  return data;
+  return normalizePublicServicePlanPayload(data);
 }
 
 export async function fetchEditableServicePlan(token: string): Promise<EditableServicePlanPayload> {
   const { data } = await apiClient.get<EditableServicePlanPayload>(
     `/api/public/service-plans-edit/${encodeURIComponent(token)}`,
   );
-  return data;
+  return normalizeEditableServicePlanPayload(data);
 }
 
 export async function fetchEditableServicePlanMeta(token: string): Promise<EditableServicePlanMetaPayload> {
   const { data } = await apiClient.get<EditableServicePlanMetaPayload>(
     `/api/public/service-plans-edit/${encodeURIComponent(token)}/meta`,
   );
-  return data;
+  return normalizeEditableServicePlanMeta(data);
 }
 
 export async function patchEditableServicePlanBlockByToken(
@@ -333,8 +335,12 @@ export async function patchEditableServicePlanBlockByToken(
     content_json: Record<string, unknown>;
   }>,
 ): Promise<void> {
+  const payload = { ...body };
+  if (payload.content_json !== undefined) {
+    payload.content_json = asPlainContentJson(payload.content_json);
+  }
   await apiClient.patch(
     `/api/public/service-plans-edit/${encodeURIComponent(token)}/blocks/${blockId}`,
-    body,
+    payload,
   );
 }

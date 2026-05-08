@@ -14,6 +14,7 @@ import {
   RouteFallback,
 } from './routeGuards';
 import { ModuleErrorBoundary } from './ModuleErrorBoundary';
+import { ServicePlanTokenRouteShell } from './ServicePlanTokenRouteShell';
 
 const StudioLayout = lazy(async () => {
   const m = await import('../features/studio/StudioLayout');
@@ -90,17 +91,17 @@ export function AppRouterStudio() {
       <Route
         path="/service-plan/share/:token"
         element={
-          <Suspense fallback={<RouteFallback />}>
+          <ServicePlanTokenRouteShell moduleName="публичную программу собрания">
             <PublicServicePlanPage />
-          </Suspense>
+          </ServicePlanTokenRouteShell>
         }
       />
       <Route
         path="/service-plan/edit/:token"
         element={
-          <Suspense fallback={<RouteFallback />}>
+          <ServicePlanTokenRouteShell moduleName="редактор программы по ссылке">
             <EditableServicePlanPage />
-          </Suspense>
+          </ServicePlanTokenRouteShell>
         }
       />
       <Route element={<RequireAuth />}>

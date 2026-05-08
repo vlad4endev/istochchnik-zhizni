@@ -1095,7 +1095,11 @@ export async function getEditablePlanMetaByToken(
   );
   if ((canEditRes.rowCount ?? 0) === 0) return null;
 
-  const [blockTypesRes, membersRes, songsRes] = await Promise.all([
+  const planRow = canEditRes.rows[0] as DbRecord;
+  const planId = Number(planRow.id);
+  if (!Number.isFinite(planId) || planId <= 0) return null;
+
+  const [blockTypesRes, membersRes, publishedSongsRes, planSongIdsRes] = await Promise.all([
     query(
       `select id, code, name, kind
        from public.block_types
@@ -1114,12 +1118,52 @@ export async function getEditablePlanMetaByToken(
        where coalesce(is_active, true) = true
        order by coalesce(first_name, ''), coalesce(last_name, ''), coalesce(name, '')`,
     ),
+    /** Только метаданные: без content/lyrics — listPublishedSongs тянет SELECT * и раздувает ответ и память. */
     query(
       `select id, title, default_key
        from public.songs
+       where coalesce(is_published, true) = true
        order by title asc`,
     ),
+    query(
+      `select distinct b.song_id as id
+       from public.service_blocks b
+       where b.service_plan_id = $1 and b.song_id is not null`,
+      [planId],
+    ),
   ]);
+
+  const publishedMeta = publishedSongsRes.rows.map((r) => {
+    const x = r as DbRecord;
+    return {
+      id: Number(x.id),
+      title: String(x.title ?? ''),
+      default_key: x.default_key == null ? null : String(x.default_key),
+    };
+  });
+  const publishedIds = new Set(publishedMeta.map((s) => s.id));
+  const extraSongIds = planSongIdsRes.rows
+    .map((r) => Number((r as DbRecord).id))
+    .filter((id) => Number.isInteger(id) && id > 0 && !publishedIds.has(id));
+
+  let songMeta = publishedMeta;
+  if (extraSongIds.length > 0) {
+    const extrasRes = await query(
+      `select id, title, default_key from public.songs where id = any($1::bigint[])`,
+      [extraSongIds],
+    );
+    const extraRows = extrasRes.rows.map((r) => {
+      const x = r as DbRecord;
+      return {
+        id: Number(x.id),
+        title: String(x.title ?? ''),
+        default_key: x.default_key == null ? null : String(x.default_key),
+      };
+    });
+    songMeta = [...publishedMeta, ...extraRows];
+  }
+
+  songMeta.sort((a, b) => a.title.localeCompare(b.title, 'ru', { sensitivity: 'base', numeric: true }));
 
   return {
     block_types: blockTypesRes.rows.map((r) => {
@@ -1143,14 +1187,7 @@ export async function getEditablePlanMetaByToken(
         app_role: String(x.app_role ?? 'member'),
       };
     }),
-    songs: songsRes.rows.map((r) => {
-      const x = r as DbRecord;
-      return {
-        id: Number(x.id),
-        title: String(x.title ?? ''),
-        default_key: x.default_key == null ? null : String(x.default_key),
-      };
-    }),
+    songs: songMeta,
   };
 }
 

@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { addMinutes, format, parse } from 'date-fns';
+import { addMinutes, format } from 'date-fns';
 import { Link, useParams } from 'react-router-dom';
 import {
   FaBookBible,
@@ -23,6 +23,8 @@ import {
   type PublicServicePlanPayload,
 } from '../api';
 import { meaningfulNoteLinesFromRaw } from '../plannerNoteText';
+import { safeServicePlanTimelineStart } from '../planPayloadNormalize';
+import { sharePlanQueryRetry, sharePlanQueryRetryDelay } from '../sharePlanQueryHelpers';
 import { EditableServicePlanPage } from './EditableServicePlanPage';
 
 type PublicPlanBlock = PublicServicePlanPayload['blocks'][number];
@@ -42,6 +44,7 @@ type PublicBlockView = {
 };
 
 function derivePublicBlockView(b: PublicPlanBlock): PublicBlockView {
+  try {
   const notesRaw = typeof b.content_json.notes === 'string' ? b.content_json.notes.trim() : '';
   const textRaw = typeof b.content_json.text === 'string' ? b.content_json.text.trim() : '';
   const rawForNote = notesRaw || textRaw;
@@ -125,6 +128,22 @@ function derivePublicBlockView(b: PublicPlanBlock): PublicBlockView {
     showSongLine,
     songLine,
   };
+  } catch {
+    const titleFallback = stripLeadingBlockIndex(String(b.title ?? '').trim()) || 'Блок';
+    return {
+      compactMobile: true,
+      noteToShow: '',
+      poemSubline: '',
+      birthdays: false,
+      birthdaysList: [],
+      scheduleList: [],
+      sermon: false,
+      sermonScripture: '',
+      headingDisplay: titleFallback,
+      showSongLine: false,
+      songLine: '',
+    };
+  }
 }
 
 const ICON_BY_CODE: Record<string, { Icon: IconType; wrapClass: string; iconClass: string }> = {
@@ -167,10 +186,6 @@ function getBlockLogoUrl(content: Record<string, unknown>): string | null {
     return value;
   }
   return null;
-}
-
-function parseStartClock(dateIso: string, time: string): Date {
-  return parse(`${dateIso} ${time}`, 'yyyy-MM-dd HH:mm', new Date());
 }
 
 function normalizeText(value: string): string {
@@ -254,12 +269,15 @@ export function PublicServicePlanPage() {
     queryKey: ['public', 'service-plan', token],
     queryFn: () => fetchPublicServicePlan(token ?? ''),
     enabled: Boolean(token && token.length > 20),
+    retry: sharePlanQueryRetry,
+    retryDelay: sharePlanQueryRetryDelay,
+    staleTime: 15_000,
   });
 
   const rows = useMemo(() => {
     if (!q.data) return [];
     const { plan, blocks } = q.data;
-    let cursor = parseStartClock(plan.service_date, plan.start_time);
+    let cursor = safeServicePlanTimelineStart(plan);
     return blocks
       .slice()
       .sort((a, b) => a.order_index - b.order_index)
