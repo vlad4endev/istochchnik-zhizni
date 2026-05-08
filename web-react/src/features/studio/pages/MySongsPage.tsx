@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { LuCheck, LuPenLine, LuRocket, LuTrash2 } from 'react-icons/lu';
 
@@ -23,6 +23,12 @@ import {
 } from '../../songbook/api';
 
 type MySongsTab = 'saved' | 'drafts' | 'recent' | 'imported';
+
+function parseMySongsTab(searchParams: URLSearchParams): MySongsTab {
+  const t = searchParams.get('tab');
+  if (t === 'drafts' || t === 'recent' || t === 'imported' || t === 'saved') return t;
+  return 'saved';
+}
 
 const IMPORTED_TAG = 'импортированная';
 const MISSING_TEXT_TAG = 'нет_текста';
@@ -250,35 +256,27 @@ export function MySongsPage() {
   }, [importedQ.data, importedSearch]);
 
   const [searchParams, setSearchParams] = useSearchParams();
-  const initialTab: MySongsTab = ((): MySongsTab => {
-    const t = searchParams.get('tab');
-    if (t === 'drafts' || t === 'recent' || t === 'imported' || t === 'saved') return t;
-    return 'saved';
-  })();
-  const [tab, setTab] = useState<MySongsTab>(initialTab);
-  useEffect(() => {
-    const t = searchParams.get('tab');
-    if (t && t !== tab && (t === 'drafts' || t === 'recent' || t === 'imported' || t === 'saved')) {
-      setTab(t);
-    }
-  }, [searchParams, tab]);
-  useEffect(() => {
-    const current = searchParams.get('tab');
-    // Вкладка «Сохранённые» ↔ нет query `tab`; иначе `null === 'saved'` и бесконечные replace.
-    if (tab === 'saved') {
-      if (!current) return;
-      if (current === 'saved') {
-        const next = new URLSearchParams(searchParams);
-        next.delete('tab');
-        setSearchParams(next, { replace: true });
-      }
-      return;
-    }
-    if (current === tab) return;
-    const next = new URLSearchParams(searchParams);
-    next.set('tab', tab);
-    setSearchParams(next, { replace: true });
-  }, [tab, searchParams, setSearchParams]);
+  /** Одна правда: вкладка из `?tab=` — без отдельного useState, чтобы не сбрасывать «Импортированные». */
+  const tab = useMemo(() => parseMySongsTab(searchParams), [searchParams]);
+
+  const setTab = useCallback(
+    (next: MySongsTab) => {
+      setSearchParams(
+        (prev) => {
+          const p = new URLSearchParams(prev);
+          if (next === 'saved') {
+            p.delete('tab');
+          } else {
+            p.set('tab', next);
+          }
+          return p;
+        },
+        { replace: true },
+      );
+    },
+    [setSearchParams],
+  );
+
   const [draftTitle, setDraftTitle] = useState('');
   const [draftContent, setDraftContent] = useState('');
   const [savedSearch, setSavedSearch] = useState('');
@@ -304,7 +302,7 @@ export function MySongsPage() {
     if (tab === 'recent' && !showRecentTab && !recentQ.isLoading) {
       setTab('saved');
     }
-  }, [tab, recentQ.data, recentQ.isLoading]);
+  }, [tab, recentQ.data, recentQ.isLoading, setTab]);
 
   if (q.isLoading) {
     return <SongListSkeleton />;

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 
 import { trackPageView } from '../api/analyticsApi';
@@ -17,32 +17,46 @@ function resolvePageKey(pathname: string): string {
   return 'other';
 }
 
+type PageSnapshot = { pathname: string; fullUrl: string };
+
+/**
+ * Трекинг SPA: один «переход» = смена `pathname` (не query/hash).
+ * Иначе каждый ?tab= в студии и др. даёт POST и упирается в rate limit (429).
+ */
 export function usePageTracking(): void {
   const location = useLocation();
   const startRef = useRef<number>(Date.now());
-  const prevPathRef = useRef<string | null>(null);
+  const snapshotRef = useRef<PageSnapshot | null>(null);
   const flushedRef = useRef<boolean>(false);
 
-  const currentUrl = useMemo(
-    () => `${window.location.pathname}${window.location.search}${window.location.hash}`,
-    [location.pathname, location.search, location.hash],
-  );
+  /** Только обновление полного URL при смене query/hash на том же маршруте. */
+  useEffect(() => {
+    const fullUrl = `${location.pathname}${location.search}${location.hash}`;
+    const prev = snapshotRef.current;
+    if (prev && prev.pathname === location.pathname) {
+      snapshotRef.current = { pathname: location.pathname, fullUrl };
+    }
+  }, [location.pathname, location.search, location.hash]);
 
   useEffect(() => {
-    const sendCurrent = (path: string) => {
+    const pathname = location.pathname;
+    const fullUrl = `${location.pathname}${location.search}${location.hash}`;
+
+    const sendCurrent = (pathForKey: string, pageUrl: string) => {
       const duration = Math.max(1, Math.round((Date.now() - startRef.current) / 1000));
       void trackPageView({
-        page_key: resolvePageKey(path.split('?')[0].split('#')[0] || '/'),
-        page_url: `${window.location.origin}${path}`,
+        page_key: resolvePageKey(pathForKey.split('?')[0].split('#')[0] || '/'),
+        page_url: pageUrl,
         referrer: document.referrer || null,
         duration_seconds: duration,
       });
     };
-    const sendWithBeacon = (path: string) => {
+
+    const sendWithBeacon = (pathForKey: string, pageUrlFull: string) => {
       const durationMs = Math.max(0, Date.now() - startRef.current);
       const payload = JSON.stringify({
-        page_key: resolvePageKey(path.split('?')[0].split('#')[0] || '/'),
-        page_url: `${window.location.origin}${path}`,
+        page_key: resolvePageKey(pathForKey.split('?')[0].split('#')[0] || '/'),
+        page_url: pageUrlFull,
         referrer: document.referrer || null,
         duration_ms: durationMs,
       });
@@ -50,28 +64,31 @@ export function usePageTracking(): void {
       if (typeof navigator !== 'undefined' && typeof navigator.sendBeacon === 'function') {
         navigator.sendBeacon('/api/analytics/track/page-view', blob);
       } else {
-        sendCurrent(path);
+        sendCurrent(pathForKey, pageUrlFull);
       }
     };
 
-    const previousPath = prevPathRef.current;
-    if (previousPath && previousPath !== currentUrl && !flushedRef.current) {
-      sendCurrent(previousPath);
+    const snap = snapshotRef.current;
+
+    if (snap && snap.pathname !== pathname && !flushedRef.current) {
+      sendCurrent(snap.pathname, `${window.location.origin}${snap.fullUrl}`);
     }
 
+    snapshotRef.current = { pathname, fullUrl };
     startRef.current = Date.now();
-    prevPathRef.current = currentUrl;
     flushedRef.current = false;
 
     const onVisibility = () => {
-      if (document.visibilityState === 'hidden' && !flushedRef.current && prevPathRef.current) {
-        sendWithBeacon(prevPathRef.current);
+      if (document.visibilityState === 'hidden' && !flushedRef.current && snapshotRef.current) {
+        const s = snapshotRef.current;
+        sendWithBeacon(s.pathname, `${window.location.origin}${s.fullUrl}`);
         flushedRef.current = true;
       }
     };
     const flushOnLeave = () => {
-      if (!flushedRef.current && prevPathRef.current) {
-        sendWithBeacon(prevPathRef.current);
+      if (!flushedRef.current && snapshotRef.current) {
+        const s = snapshotRef.current;
+        sendWithBeacon(s.pathname, `${window.location.origin}${s.fullUrl}`);
         flushedRef.current = true;
       }
     };
@@ -85,5 +102,5 @@ export function usePageTracking(): void {
       window.removeEventListener('pagehide', flushOnLeave);
       window.removeEventListener('beforeunload', flushOnLeave);
     };
-  }, [currentUrl]);
+  }, [location.pathname]);
 }

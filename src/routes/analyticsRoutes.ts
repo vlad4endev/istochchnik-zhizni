@@ -18,9 +18,17 @@ import {
 type AuthReq = Request & { authUserId?: number };
 
 const router = Router();
+
+const trackPageViewMaxPerMin = ((): number => {
+  const raw = String(process.env.ANALYTICS_TRACK_PAGE_VIEW_MAX_PER_MIN ?? '').trim();
+  const n = raw ? Number.parseInt(raw, 10) : 300;
+  if (!Number.isFinite(n) || n < 30) return 300;
+  return Math.min(n, 2000);
+})();
+
 const trackPageViewRateLimit = createIpRateLimiter({
   windowMs: 60_000,
-  maxRequests: 60,
+  maxRequests: trackPageViewMaxPerMin,
   keyPrefix: 'analytics-track-page',
   message: 'Too many page tracking requests',
 });
