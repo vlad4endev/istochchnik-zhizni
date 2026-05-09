@@ -13,6 +13,7 @@ import {
   RequireStudioAccess,
   RouteFallback,
 } from './routeGuards';
+import { LegacyStudioEditRedirect } from './LegacyStudioEditRedirect';
 import { ModuleErrorBoundary } from './ModuleErrorBoundary';
 import { ServicePlanTokenRouteShell } from './ServicePlanTokenRouteShell';
 
@@ -46,9 +47,9 @@ const StudioInstrumentsPage = lazy(async () => {
   return { default: m.InstrumentsPage };
 });
 
-const StudioEditPage = lazy(async () => {
-  const m = await import('../features/studio/pages/StudioEditPage');
-  return { default: m.StudioEditPage };
+const StudioEditor = lazy(async () => {
+  const m = await import('../features/songbook/studio/StudioEditor');
+  return { default: m.StudioEditor };
 });
 
 const AddSongPage = lazy(async () => {
@@ -107,6 +108,18 @@ export function AppRouterStudio() {
       <Route element={<RequireAuth />}>
         <Route path="/pending-review" element={<PendingReviewPage />} />
         <Route
+          path="/songbook/studio/edit/:songId"
+          element={
+            <RequireFullMember>
+              <RequireStudioAccess>
+                <Suspense fallback={<RouteFallback />}>
+                  <StudioEditor />
+                </Suspense>
+              </RequireStudioAccess>
+            </RequireFullMember>
+          }
+        />
+        <Route
           path="studio"
           element={
             <RequireFullMember>
@@ -160,14 +173,7 @@ export function AppRouterStudio() {
               </Suspense>
             }
           />
-          <Route
-            path="edit/:songId"
-            element={
-              <Suspense fallback={<RouteFallback />}>
-                <StudioEditPage />
-              </Suspense>
-            }
-          />
+          <Route path="edit/:songId" element={<LegacyStudioEditRedirect />} />
           <Route
             path="add-song"
             element={

@@ -19,6 +19,7 @@ import {
 
 import { useAuthStore } from '../../auth/authStore';
 import { canDeleteSongFromCatalog, canModerateSongCatalog } from '../../auth/studioAccess';
+import { decodeHtmlEntities } from '../../../lib/decodeHtmlEntities';
 import { emitAppToast } from '../../../lib/uiFeedback';
 import { useScrollInputIntoView } from '@/hooks/useScrollInputIntoView';
 import { SkeletonBox } from '@/components/ui/SkeletonBox';
@@ -240,14 +241,14 @@ export function StudioEditor() {
       draft = null;
     }
 
-    const fromChordText = (t: string) => chordProToBlocks(t);
+    const fromChordText = (t: string) => chordProToBlocks(decodeHtmlEntities(t));
 
     const normalizeDraftBlocks = (rawBlocks: SongBlock[]): SongBlock[] => {
       if (!Array.isArray(rawBlocks) || rawBlocks.length === 0) return [createSongBlock('verse', '')];
       return rawBlocks.map((b) =>
         createSongBlock(
           ['intro', 'verse', 'prechorus', 'chorus', 'bridge', 'solo', 'outro'].includes(b.type) ? b.type : 'verse',
-          typeof b.content === 'string' ? b.content : '',
+          typeof b.content === 'string' ? decodeHtmlEntities(b.content) : '',
           typeof b.sectionHint === 'string' && b.sectionHint.trim() ? b.sectionHint.trim() : undefined,
           typeof b.id === 'string' && b.id.length > 0 ? b.id : undefined,
         ),
@@ -273,8 +274,11 @@ export function StudioEditor() {
     } catch {
       setShowWelcome(false);
     }
+    const baselineChordPro = blocksToChordPro(
+      chordProToBlocks(decodeHtmlEntities(v?.custom_content ?? s.content ?? '')),
+    );
     lastSavedSnapshotRef.current = JSON.stringify({
-      content: blocksToChordPro(chordProToBlocks(v?.custom_content ?? s.content ?? '')),
+      content: baselineChordPro,
       key: v?.custom_key ?? s.default_key ?? '',
     });
   }, [songQ.data, verQ.data]);
@@ -555,7 +559,7 @@ export function StudioEditor() {
 
   const handleSmartImport = ({ raw, chordPro }: { raw: string; chordPro: string }) => {
     setRawPaste(raw);
-    setBlocks(chordProToBlocks(chordPro));
+    setBlocks(chordProToBlocks(decodeHtmlEntities(chordPro)));
     const source = chordPro || raw;
     const chords = extractChordsFromText(source);
     const guess = chords.length > 0 ? guessKeyFromChords(chords) : null;

@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { AxiosError } from 'axios';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { LuCheck, LuPenLine, LuRocket, LuTrash2 } from 'react-icons/lu';
+import { LuPenLine, LuRocket, LuTrash2 } from 'react-icons/lu';
 
 import { SongListSkeleton } from '@/components/skeletons/SongListSkeleton';
 import { useAuthStore } from '../../auth/authStore';
@@ -17,7 +17,7 @@ import {
   type StudioDraft,
 } from '../api';
 import { studioEditSongPath, useStudioModuleSurface } from '../studioPaths';
-import { publishSong, updateSong, type SongListItem } from '../../songbook/api';
+import { publishSong, type SongListItem } from '../../songbook/api';
 
 type MySongsTab = 'saved' | 'drafts' | 'recent' | 'imported';
 
@@ -31,28 +31,8 @@ const MISSING_TEXT_TAG = 'нет_текста';
 
 function ImportedSongRow({ song }: { song: SongListItem }) {
   const qc = useQueryClient();
-  const [open, setOpen] = useState(false);
-  const [title, setTitle] = useState(song.title);
-  const [content, setContent] = useState(song.content);
-  const [savedFlash, setSavedFlash] = useState(false);
-
-  useEffect(() => {
-    setTitle(song.title);
-    setContent(song.content);
-  }, [song.id, song.title, song.content]);
 
   const isMissingText = (song.tags ?? []).includes(MISSING_TEXT_TAG) || !song.content?.trim();
-
-  const saveMut = useMutation({
-    mutationFn: () =>
-      updateSong(Number(song.id), { title: title.trim() || song.title, content }),
-    onSuccess: () => {
-      setSavedFlash(true);
-      window.setTimeout(() => setSavedFlash(false), 1800);
-      void qc.invalidateQueries({ queryKey: ['studio', 'imported-songs'] });
-      void qc.invalidateQueries({ queryKey: ['song', Number(song.id)] });
-    },
-  });
 
   const publishMut = useMutation({
     mutationFn: () => publishSong(Number(song.id)),
@@ -63,35 +43,46 @@ function ImportedSongRow({ song }: { song: SongListItem }) {
     },
   });
 
+  const editHref = studioEditSongPath(Number(song.id));
+
   return (
     <li className="rounded-xl border border-stone-200 bg-white px-4 py-3 shadow-sm">
       <div className="flex items-start justify-between gap-3">
-        <button
-          type="button"
-          onClick={() => setOpen(!open)}
-          className="min-w-0 flex-1 text-left"
-        >
-          <p className="truncate text-sm font-semibold text-stone-900 hover:text-sky-700">
-            {song.song_number != null ? `${song.song_number}. ` : ''}
-            {song.title || 'Без названия'}
-          </p>
-          <div className="mt-1 flex flex-wrap items-center gap-2">
-            {isMissingText ? (
-              <span className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-900">
-                нет текста
-              </span>
-            ) : (
-              <span className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-900">
-                готова
-              </span>
-            )}
-            <span className="text-xs text-stone-500">не в каталоге</span>
-          </div>
-        </button>
+        <div className="flex min-w-0 flex-1 items-start gap-2 sm:gap-3">
+          <Link
+            to={editHref}
+            className="min-w-0 flex-1 rounded-lg text-left outline-none ring-sky-400 focus-visible:ring-2"
+          >
+            <p className="truncate text-sm font-semibold text-stone-900 hover:text-sky-700">
+              {song.song_number != null ? `${song.song_number}. ` : ''}
+              {song.title || 'Без названия'}
+            </p>
+            <div className="mt-1 flex flex-wrap items-center gap-2">
+              {isMissingText ? (
+                <span className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-900">
+                  нет текста
+                </span>
+              ) : (
+                <span className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-900">
+                  готова
+                </span>
+              )}
+              <span className="text-xs text-stone-500">не в каталоге</span>
+            </div>
+          </Link>
+          <Link
+            to={editHref}
+            className="inline-flex shrink-0 items-center gap-1 text-sm font-semibold text-sky-700 hover:text-sky-800"
+          >
+            <LuPenLine className="h-4 w-4" aria-hidden />
+            Редактор
+          </Link>
+        </div>
         <button
           type="button"
           onClick={() => {
-            if (!isMissingText && !content.trim()) {
+            const body = (song.content ?? '').trim();
+            if (!isMissingText && !body) {
               window.alert('Сначала добавьте текст песни.');
               return;
             }
@@ -109,45 +100,8 @@ function ImportedSongRow({ song }: { song: SongListItem }) {
           {publishMut.isPending ? 'Публикую…' : 'Опубликовать'}
         </button>
       </div>
-
-      {open ? (
-        <div className="mt-3 space-y-3 border-t border-stone-100 pt-3">
-          <input
-            className="w-full rounded-lg border border-stone-200 bg-stone-50 px-3 py-2.5 text-sm text-stone-900 outline-none placeholder:text-stone-400 focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="Название"
-          />
-          <textarea
-            className="min-h-[180px] w-full resize-y rounded-lg border border-stone-200 bg-stone-50 px-3 py-2 font-mono text-[13px] leading-5 text-stone-900 outline-none placeholder:text-stone-400 focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
-            value={content}
-            onChange={(e) => setContent(e.target.value)}
-            placeholder="ChordPro / текст песни…"
-          />
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={() => saveMut.mutate()}
-              disabled={saveMut.isPending}
-              className="inline-flex items-center gap-1 rounded-lg bg-stone-900 px-3 py-2 text-xs font-semibold text-white transition hover:bg-stone-800 disabled:opacity-50"
-            >
-              {saveMut.isPending ? 'Сохраняю…' : 'Сохранить'}
-            </button>
-            {savedFlash ? (
-              <span className="inline-flex items-center gap-1 text-xs text-emerald-700">
-                <LuCheck className="h-3 w-3" aria-hidden /> Сохранено
-              </span>
-            ) : null}
-            {saveMut.isError ? (
-              <span className="text-xs text-red-600">Не удалось сохранить — проверьте права.</span>
-            ) : null}
-            {publishMut.isError ? (
-              <span className="text-xs text-red-600">
-                Не удалось опубликовать — проверьте права.
-              </span>
-            ) : null}
-          </div>
-        </div>
+      {publishMut.isError ? (
+        <p className="mt-2 text-xs text-red-600">Не удалось опубликовать — проверьте права.</p>
       ) : null}
     </li>
   );
@@ -460,7 +414,7 @@ export function MySongsPage() {
                       {s.title}
                     </Link>
                     <Link
-                      to={studioEditSongPath(surface, Number(s.id))}
+                      to={studioEditSongPath(Number(s.id))}
                       className="inline-flex shrink-0 items-center gap-1 text-sm font-semibold text-sky-700 hover:text-sky-800"
                     >
                       <LuPenLine className="h-4 w-4" aria-hidden />
@@ -508,7 +462,7 @@ export function MySongsPage() {
                     {filteredRows.map((v) => (
                       <li key={v.id}>
                         <Link
-                          to={studioEditSongPath(surface, Number(v.song_id))}
+                          to={studioEditSongPath(Number(v.song_id))}
                           className="flex min-h-[52px] items-center justify-between gap-3 rounded-xl border border-stone-200 bg-white px-4 py-3 shadow-sm transition hover:border-stone-300 hover:bg-stone-50"
                         >
                           <div className="min-w-0">

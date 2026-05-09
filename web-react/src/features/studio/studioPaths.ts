@@ -10,8 +10,9 @@ export function studioMySongsPath(surface: StudioModuleSurface): string {
   return surface === 'songbook' ? '/songbook/studio' : '/studio/my-songs';
 }
 
-export function studioEditSongPath(surface: StudioModuleSurface, songId: number): string {
-  return surface === 'songbook' ? `/songbook/studio/edit/${songId}` : `/studio/edit/${songId}`;
+/** Единый URL редактора студии (внутри раздела песенника). */
+export function studioEditSongPath(songId: number): string {
+  return `/songbook/studio/edit/${songId}`;
 }
 
 export function studioSetlistsIndexPath(surface: StudioModuleSurface): string {

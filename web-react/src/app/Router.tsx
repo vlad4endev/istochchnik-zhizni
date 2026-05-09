@@ -22,6 +22,7 @@ import {
   RequireStudioAccess,
   RouteFallback,
 } from './routeGuards';
+import { LegacyStudioEditRedirect } from './LegacyStudioEditRedirect';
 
 /** Отдельные чанки: настройки (`/profile`) и публичная лента (`/profile/:username`) не тянут друг друга. */
 const LazyProfilePage = lazy(async () => {
@@ -116,11 +117,6 @@ const StudioPerformPage = lazy(async () => {
 const StudioInstrumentsPage = lazy(async () => {
   const m = await import('../features/studio/pages/InstrumentsPage');
   return { default: m.InstrumentsPage };
-});
-
-const StudioEditPage = lazy(async () => {
-  const m = await import('../features/studio/pages/StudioEditPage');
-  return { default: m.StudioEditPage };
 });
 
 const SongbookPage = lazy(async () => {
@@ -267,14 +263,7 @@ export function AppRouter() {
               </Suspense>
             }
           />
-          <Route
-            path="edit/:songId"
-            element={
-              <Suspense fallback={<RouteFallback />}>
-                <StudioEditPage />
-              </Suspense>
-            }
-          />
+          <Route path="edit/:songId" element={<LegacyStudioEditRedirect />} />
           <Route
             path="add-song"
             element={
