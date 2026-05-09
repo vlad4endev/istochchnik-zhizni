@@ -2068,10 +2068,10 @@ html.dark .msg-quick-reaction:hover {
   html[data-messenger-open="1"],
   html[data-messenger-open="1"] body,
   html[data-messenger-open="1"] #root {
-    height: 100svh;
-    height: 100dvh;
-    /* PWA: высота из nativeShellViewport — стабильнее при скрытии адресной строки iOS */
+    /* Одна высота из nativeShellViewport — иначе при клавиатуре 100dvh «выше» видимой области и видна полоса фона. */
+    height: var(--app-viewport-height, 100dvh);
     min-height: var(--app-viewport-height, 100dvh);
+    max-height: var(--app-viewport-height, 100dvh);
     overflow: hidden !important;
     overscroll-behavior: none;
   }
@@ -2084,10 +2084,14 @@ html.dark .msg-quick-reaction:hover {
     padding-bottom: 0 !important;
   }
 
+  /* Не фиксировать высоту по 100dvh — при клавиатуре dvh/layout часто остаётся «полным», появляется белая полоса.
+     Высота синхронизируется в nativeShellViewport.ts → --app-viewport-height (visual viewport / innerHeight). */
   html[data-chat-open="1"],
   html[data-chat-open="1"] body,
   html[data-chat-open="1"] #root {
-    min-height: 100dvh !important;
+    height: var(--app-viewport-height, 100dvh) !important;
+    min-height: var(--app-viewport-height, 100dvh) !important;
+    max-height: var(--app-viewport-height, 100dvh) !important;
     overflow: hidden !important;
     overscroll-behavior: none;
   }
@@ -2289,9 +2293,8 @@ html.dark .msg-quick-reaction:hover {
       top: 0;
       bottom: 0;
       width: auto;
-      height: 100svh;
-      height: 100dvh;
-      max-height: 100dvh;
+      height: var(--app-viewport-height, 100dvh);
+      max-height: var(--app-viewport-height, 100dvh);
       transform: none !important;
       overflow: hidden;
       box-sizing: border-box;
@@ -2381,9 +2384,9 @@ html.dark .msg-quick-reaction:hover {
       top: 0;
       bottom: 0;
       width: auto;
-      height: 100dvh;
-      min-height: -webkit-fill-available;
-      max-height: 100dvh;
+      height: var(--app-viewport-height, 100dvh);
+      min-height: 0;
+      max-height: var(--app-viewport-height, 100dvh);
       transform: none !important;
       overflow: hidden;
       overflow-x: clip;

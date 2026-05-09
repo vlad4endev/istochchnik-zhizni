@@ -392,6 +392,10 @@ export function EditableServicePlanPage() {
   const qc = useQueryClient();
   const [draftBlocks, setDraftBlocks] = useState<EditableBlock[]>([]);
   const [editingBlockId, setEditingBlockId] = useState<number | null>(null);
+  const editingBlockIdRef = useRef<number | null>(null);
+  useEffect(() => {
+    editingBlockIdRef.current = editingBlockId;
+  }, [editingBlockId]);
   const noteTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   /** Локально изменённые блоки без успешного «Сохранить» — не перезатирать при polling с сервера. */
   const dirtyShareBlockIdsRef = useRef<Set<number>>(new Set());
@@ -402,6 +406,7 @@ export function EditableServicePlanPage() {
     enabled: Boolean(token && token.length > 20),
     refetchInterval: editingBlockId == null ? 2500 : false,
     refetchIntervalInBackground: true,
+    refetchOnWindowFocus: editingBlockId == null,
     retry: sharePlanQueryRetry,
     retryDelay: sharePlanQueryRetryDelay,
   });
@@ -409,6 +414,7 @@ export function EditableServicePlanPage() {
     queryKey: ['editable-service-plan-meta', token],
     queryFn: () => fetchEditableServicePlanMeta(token ?? ''),
     enabled: Boolean(token && token.length > 20),
+    refetchOnWindowFocus: editingBlockId == null,
     retry: sharePlanQueryRetry,
     retryDelay: sharePlanQueryRetryDelay,
   });
@@ -417,7 +423,7 @@ export function EditableServicePlanPage() {
 
   useEffect(() => {
     if (!planQ.data) return;
-    if (editingBlockId != null) return;
+    if (editingBlockIdRef.current != null) return;
     const preacherId = planQ.data.plan.preacher_member_id ?? null;
     const preacherRaw = preacherId
       ? (metaQ.data?.members ?? []).find((m) => m.id === preacherId) ?? null
@@ -521,7 +527,7 @@ export function EditableServicePlanPage() {
   }
   if (planQ.isLoading || metaQ.isLoading) {
     return (
-      <div className="flex min-h-[40dvh] items-center justify-center gap-2 text-stone-500">
+      <div className="flex min-h-[calc(var(--app-viewport-height,100dvh)*0.4)] items-center justify-center gap-2 text-stone-500">
         <LuLoaderCircle className="h-4 w-4 animate-spin" />
         Загружаю программу...
       </div>
@@ -531,7 +537,7 @@ export function EditableServicePlanPage() {
   const metaRateLimited = isSharePlanRateLimitError(metaQ.error);
   if ((planRateLimited || metaRateLimited) && (!planQ.data || !metaQ.data)) {
     return (
-      <div className="mx-auto flex min-h-[40dvh] max-w-xl flex-col items-center justify-center gap-3 px-4 text-center">
+      <div className="mx-auto flex min-h-[calc(var(--app-viewport-height,100dvh)*0.4)] max-w-xl flex-col items-center justify-center gap-3 px-4 text-center">
         <p className="text-base font-semibold text-stone-800">
           Слишком много запросов, попробуйте через несколько секунд.
         </p>
@@ -582,7 +588,7 @@ export function EditableServicePlanPage() {
         : members;
 
   return (
-    <div className="share-plan-scroll-root w-full overflow-y-auto overflow-x-hidden overscroll-y-contain bg-[var(--surface)] [max-height:var(--app-viewport-height,100dvh)] max-md:[scroll-padding-bottom:calc(var(--app-bottom-nav-total-height)+5.5rem)]">
+    <div className="share-plan-scroll-root min-h-0 w-full overflow-y-auto overflow-x-hidden overscroll-y-contain bg-[var(--surface)] [max-height:var(--app-viewport-height,100dvh)] max-md:[scroll-padding-bottom:calc(var(--app-bottom-nav-total-height)+5.5rem)]">
       <div className="mx-auto max-w-3xl space-y-4 px-3 py-5 sm:space-y-6 sm:px-4 sm:py-8">
         <header className="rounded-2xl border border-stone-200 bg-white p-3 shadow-sm sm:p-4">
           <h1 className="text-xl font-extrabold text-stone-900 sm:text-2xl">План собрания на {dateText}</h1>

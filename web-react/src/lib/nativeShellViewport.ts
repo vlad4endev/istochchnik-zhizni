@@ -12,13 +12,14 @@ function syncViewportState() {
   const layoutHeight = window.innerHeight || 0;
   const visualHeight = vv?.height ?? layoutHeight;
   const offsetTop = vv?.offsetTop ?? 0;
-  const visibleBottom = Math.round(visualHeight + Math.max(0, offsetTop));
-  const keyboardInset = Math.max(0, Math.round(layoutHeight - visibleBottom));
+  /** Нижний «второй» слой (клавиатура / системные полосы): layout минус видимый прямоугольник. */
+  const keyboardInset = Math.max(0, Math.round(layoutHeight - offsetTop - visualHeight));
   const keyboardOpen = keyboardInset >= 110;
   /**
    * Обычно — layout (`innerHeight`). При открытой клавиатуре и старом/битом `interactive-widget=resizes-visual`
    * layout остаётся полноэкранным, а visual viewport сжат — берём min, чтобы оболочка не была выше видимой области.
    */
+  const visibleBottom = Math.round(offsetTop + visualHeight);
   const viewportHeight = keyboardOpen
     ? Math.max(0, Math.min(layoutHeight, visibleBottom))
     : Math.max(0, Math.round(layoutHeight));
@@ -52,6 +53,21 @@ function attachViewportWatchers() {
   vv?.addEventListener('scroll', syncViewportState);
   window.addEventListener('resize', syncViewportState);
   window.addEventListener('orientationchange', syncViewportState);
+  /** Часть WebView/Android отдаёт visual viewport с задержкой; фокус на поле — типичный триггер клавиатуры. */
+  document.addEventListener(
+    'focusin',
+    () => {
+      queueMicrotask(syncViewportState);
+    },
+    true,
+  );
+  document.addEventListener(
+    'focusout',
+    () => {
+      queueMicrotask(syncViewportState);
+    },
+    true,
+  );
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') syncViewportState();
   });

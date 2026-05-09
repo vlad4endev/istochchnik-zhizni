@@ -297,6 +297,11 @@ export function ServicePlannerPage() {
   const [editingTemplateBlockId, setEditingTemplateBlockId] = useState<number | null>(null);
   const [recurrenceRuleInput, setRecurrenceRuleInput] = useState<string>('{"frequency":"weekly","byWeekday":0}');
   const [editingBlockId, setEditingBlockId] = useState<number | null>(null);
+  /** Актуальный id блока в модалке — эффект синхронизации с planQ не подписан на editingBlockId и иначе затирал бы черновик при refetch. */
+  const editingBlockIdRef = useRef<number | null>(null);
+  useEffect(() => {
+    editingBlockIdRef.current = editingBlockId;
+  }, [editingBlockId]);
   const [shareCopied, setShareCopied] = useState(false);
   const [showArchivedPlans, setShowArchivedPlans] = useState(false);
   const [isPlanSettingsOpenMobile, setIsPlanSettingsOpenMobile] = useState(false);
@@ -432,6 +437,8 @@ export function ServicePlannerPage() {
     queryKey: ['service-planner', 'plan', activePlanId],
     queryFn: () => fetchServicePlan(activePlanId as number),
     enabled: activePlanId != null,
+    /** Пока открыта модалка блока — не подтягивать план с сервера при фокусе окна (иначе гонка с локальным черновиком). */
+    refetchOnWindowFocus: editingBlockId == null && editingTemplateBlockId == null,
   });
 
   const sharedEditPlanId = useMemo(() => {
@@ -492,11 +499,20 @@ export function ServicePlannerPage() {
       suppressNextAutosaveRef.current = true;
       setDraft((prev) => {
         if (!prev || prev.id !== normalized.id) return normalized;
+        const editId = editingBlockIdRef.current;
         const normalizedIds = new Set(normalized.blocks.map((b) => b.id));
         const extras = prev.blocks.filter((b) => !normalizedIds.has(b.id) && !pendingDeletes.has(b.id));
-        if (extras.length === 0) return normalized;
-        const merged = [...normalized.blocks, ...extras].sort((a, b) => a.order_index - b.order_index);
-        return { ...normalized, blocks: merged };
+        let blocks = normalized.blocks.map((b) => {
+          if (editId != null && b.id === editId) {
+            const local = prev.blocks.find((x) => x.id === editId);
+            return local ?? b;
+          }
+          return b;
+        });
+        if (extras.length > 0) {
+          blocks = [...blocks, ...extras].sort((a, b) => a.order_index - b.order_index);
+        }
+        return { ...normalized, blocks };
       });
       if (planQ.data.template_id) {
         setActiveTemplateId(planQ.data.template_id);
@@ -2125,7 +2141,7 @@ export function ServicePlannerPage() {
 
         {editingTemplateBlock ? createPortal(
           <div className="fixed inset-0 z-[9999] isolate flex items-end justify-center overflow-hidden overscroll-y-contain bg-black/35 p-2 sm:items-center sm:p-3">
-            <div className="flex max-md:h-[88dvh] max-md:max-h-[88dvh] max-md:rounded-b-none max-md:rounded-t-[1.25rem] min-h-0 w-full max-w-xl flex-col overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-2xl sm:h-auto sm:max-h-[min(90dvh,calc(100dvh-2rem))] sm:rounded-2xl">
+            <div className="flex max-md:[height:calc(var(--app-viewport-height,100dvh)*0.88)] max-md:[max-height:calc(var(--app-viewport-height,100dvh)*0.88)] max-md:rounded-b-none max-md:rounded-t-[1.25rem] min-h-0 w-full max-w-xl flex-col overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-2xl sm:h-auto sm:max-h-[min(90dvh,calc(var(--app-viewport-height,100dvh)-2rem))] sm:rounded-2xl">
               <div className="mx-auto mb-2 mt-1 h-1 w-10 shrink-0 rounded-full bg-stone-300 sm:hidden" aria-hidden />
               <div className="flex shrink-0 items-center justify-between gap-2 border-b border-stone-100 px-3 py-3 sm:px-4">
                 <h3 className="text-base font-extrabold text-stone-900">Редактирование блока шаблона</h3>
@@ -3214,7 +3230,7 @@ export function ServicePlannerPage() {
         </div>
       ) : null}
 
-      <div className="fixed inset-x-0 bottom-[var(--app-bottom-nav-total-height)] z-[60] border-t border-stone-200 bg-white/95 px-3 py-2 backdrop-blur md:hidden [padding-bottom:max(0.5rem,var(--app-safe-bottom))]">
+      <div className="service-planner-mobile-save fixed inset-x-0 bottom-[var(--app-bottom-nav-total-height)] z-[60] border-t border-stone-200 bg-white/95 px-3 py-2 backdrop-blur md:hidden [padding-bottom:max(0.5rem,var(--app-safe-bottom))]">
         <button
           type="button"
           onClick={() => {
@@ -3236,7 +3252,7 @@ export function ServicePlannerPage() {
           onClick={() => setEditingBlockId(null)}
         >
           <div
-            className="flex max-md:h-[88dvh] max-md:max-h-[88dvh] max-md:rounded-b-none max-md:rounded-t-[1.25rem] min-h-0 w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-2xl sm:h-auto sm:max-h-[min(92dvh,calc(100dvh-2rem))] sm:rounded-2xl"
+            className="flex max-md:[height:calc(var(--app-viewport-height,100dvh)*0.88)] max-md:[max-height:calc(var(--app-viewport-height,100dvh)*0.88)] max-md:rounded-b-none max-md:rounded-t-[1.25rem] min-h-0 w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-2xl sm:h-auto sm:max-h-[min(92dvh,calc(var(--app-viewport-height,100dvh)-2rem))] sm:rounded-2xl"
             role="dialog"
             aria-modal="true"
             aria-labelledby={`${blockEditFieldsUid}-modal-title`}
