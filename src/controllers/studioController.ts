@@ -2,7 +2,7 @@ import type { Request, Response } from 'express';
 
 import { canAccessStudio, canModerateCatalog, normalizeAppRole, type AppRole } from '../types/appRole';
 import { query } from '../config/db';
-import { listImportedSandboxSongsForStudio, listRecentSongs } from '../services/songService';
+import { getSongById, listImportedSandboxSongsForStudio, listRecentSongs } from '../services/songService';
 import {
   addSetlistItem,
   createDraft,
@@ -283,6 +283,48 @@ export async function importedSongsList(req: Request, res: Response): Promise<vo
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: 'Не удалось загрузить импортированные песни' });
+  }
+}
+
+/** GET /api/studio/catalog-song/:songId — карточка песни для редактора (обязательный вход + доступ к студии). */
+export async function catalogSongGet(req: Request, res: Response): Promise<void> {
+  try {
+    const r = req as AuthReq;
+    if (!(await ensureStudio(r, res))) return;
+    const songId = Number(req.params.songId);
+    if (!Number.isInteger(songId) || songId <= 0) {
+      res.status(400).json({ error: 'Invalid songId' });
+      return;
+    }
+
+    let restrictImportedSandboxToCreatorId: number | undefined;
+    if (!canModerateCatalog(roleOf(r))) {
+      const ok = await hasMusicMinistryDirection(r.authUserId!);
+      if (!ok) {
+        restrictImportedSandboxToCreatorId = r.authUserId;
+      }
+    }
+
+    const visibility = {
+      canModerateCatalog: canModerateCatalog(roleOf(r)),
+      restrictImportedSandboxToCreatorId,
+    };
+
+    let song = await getSongById(songId, r.authUserId!, visibility);
+    if (!song) {
+      const imported = await listImportedSandboxSongsForStudio(r.authUserId!, restrictImportedSandboxToCreatorId);
+      const hit = imported.find((x) => Number(x.id) === songId);
+      if (hit) {
+        res.json(hit);
+        return;
+      }
+      res.status(404).json({ error: 'Не найдено' });
+      return;
+    }
+    res.json(song);
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Ошибка' });
   }
 }
 

@@ -135,6 +135,15 @@ export async function listSongsForModeration(req: Request, res: Response): Promi
   }
 }
 
+/** Как GET /api/studio/imported-songs: не музыкальное служение без модерации видит только свою песочницу. */
+async function resolveImportedSandboxCreatorRestriction(r: AuthReq): Promise<number | undefined> {
+  if (!r.authUserId) return undefined;
+  if (canModerateCatalog(roleOf(r))) return undefined;
+  const ok = await hasMusicMinistryDirection(r.authUserId);
+  if (ok) return undefined;
+  return r.authUserId;
+}
+
 export async function getSong(req: Request, res: Response): Promise<void> {
   try {
     const id = Number(req.params.id);
@@ -143,7 +152,15 @@ export async function getSong(req: Request, res: Response): Promise<void> {
       return;
     }
     const r = req as AuthReq;
-    const song = await getSongById(id, r.authUserId ?? null);
+    let song;
+    if (r.authUserId != null) {
+      song = await getSongById(id, r.authUserId, {
+        canModerateCatalog: canModerateCatalog(roleOf(r)),
+        restrictImportedSandboxToCreatorId: await resolveImportedSandboxCreatorRestriction(r),
+      });
+    } else {
+      song = await getSongById(id, null);
+    }
     if (!song) {
       res.status(404).json({ error: 'Не найдено' });
       return;

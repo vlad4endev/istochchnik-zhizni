@@ -24,14 +24,14 @@ import { emitAppToast } from '../../../lib/uiFeedback';
 import { useScrollInputIntoView } from '@/hooks/useScrollInputIntoView';
 import { SkeletonBox } from '@/components/ui/SkeletonBox';
 import { keys } from '@/lib/queryKeys';
-import { deleteSong, fetchSong, updateSong } from '../api';
+import { deleteSong, updateSong } from '../api';
 import { convertToChordPro } from '../addSong/chordProConversion';
 import { extractChordsFromText, guessKeyFromChords } from '../addSong/keyDetection';
 import { SmartImportModal, type SmartImportSourceTab } from '../addSong/SmartImportModal';
 import { LyricsWithChords } from '../components/LyricsWithChords';
 import { quickChordsForKey } from '../addSong/quickChords';
 import { extractCommonChords } from '../chordProEngine';
-import { aiChordPlacement, fetchVersionForSong, saveVersion } from '../../studio/api';
+import { aiChordPlacement, fetchStudioCatalogSong, fetchVersionForSong, saveVersion } from '../../studio/api';
 import { studioMySongsPath, getStudioModuleSurface } from '../../studio/studioPaths';
 import { useSongbookChrome } from '../SongbookChromeContext';
 
@@ -167,6 +167,8 @@ export function StudioEditor() {
   const navigate = useNavigate();
   const location = useLocation();
   const surface = getStudioModuleSurface(location.pathname);
+  /** Чтобы после гидрации сессии запрос повторился с тем же cookie/Bearer и не оставался 404 для черновиков. */
+  const authEpoch = useAuthStore((s) => `${s.memberId ?? ''}:${s.role}`);
   const role = useAuthStore((s) => s.role);
   const canDeleteCatalog = canDeleteSongFromCatalog(role);
   const canEditCatalogMeta = canModerateSongCatalog(role);
@@ -190,13 +192,13 @@ export function StudioEditor() {
   const [undoNow, setUndoNow] = useState(() => Date.now());
 
   const songQ = useQuery({
-    queryKey: ['song', id],
-    queryFn: () => fetchSong(id),
+    queryKey: ['song', id, authEpoch],
+    queryFn: () => fetchStudioCatalogSong(id),
     enabled: Number.isInteger(id) && id > 0,
   });
 
   const verQ = useQuery({
-    queryKey: ['studio', 'version', id],
+    queryKey: ['studio', 'version', id, authEpoch],
     queryFn: async () => {
       try {
         return await fetchVersionForSong(id);
@@ -319,13 +321,16 @@ export function StudioEditor() {
   const saveMut = useMutation({
     mutationFn: () =>
       saveVersion(id, { custom_content: blocksToChordPro(blocks), custom_key: key || null }),
-    onSuccess: () => {
+    onSuccess: (savedVersion) => {
       try {
         localStorage.removeItem(`studio:autosave:song:${id}`);
       } catch {
         // noop
       }
+      /** Иначе кэш `['studio', 'version', id]` не сбрасывался — эффект снова брал только каталог `s.content` и откатывал текст. */
+      qc.setQueryData(['studio', 'version', id, authEpoch], savedVersion);
       void qc.invalidateQueries({ queryKey: ['studio', 'versions'] });
+      void qc.invalidateQueries({ queryKey: ['studio', 'version', id] });
       void qc.invalidateQueries({ queryKey: ['songs'] });
       void qc.invalidateQueries({ queryKey: ['song', id] });
       lastSavedSnapshotRef.current = JSON.stringify({

@@ -62,6 +62,12 @@ export async function fetchImportedSandboxSongs(): Promise<SongListItem[]> {
   return data;
 }
 
+/** Одна песня для редактора студии (те же правила, что список импорта + общий каталог). Требует сессию. */
+export async function fetchStudioCatalogSong(songId: number): Promise<SongListItem> {
+  const { data } = await apiClient.get<SongListItem>(`${STUDIO}/catalog-song/${songId}`);
+  return data;
+}
+
 export async function fetchVersionForSong(songId: number) {
   try {
     const { data } = await apiClient.get(`${STUDIO}/versions/song/${songId}`);
