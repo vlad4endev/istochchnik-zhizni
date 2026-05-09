@@ -167,6 +167,8 @@ export function StudioEditor() {
   const navigate = useNavigate();
   const location = useLocation();
   const surface = getStudioModuleSurface(location.pathname);
+  /** Чтобы после гидрации сессии запрос повторился с тем же cookie/Bearer и не оставался 404 для черновиков. */
+  const authEpoch = useAuthStore((s) => `${s.memberId ?? ''}:${s.role}`);
   const role = useAuthStore((s) => s.role);
   const canDeleteCatalog = canDeleteSongFromCatalog(role);
   const canEditCatalogMeta = canModerateSongCatalog(role);
@@ -190,13 +192,13 @@ export function StudioEditor() {
   const [undoNow, setUndoNow] = useState(() => Date.now());
 
   const songQ = useQuery({
-    queryKey: ['song', id],
+    queryKey: ['song', id, authEpoch],
     queryFn: () => fetchSong(id),
     enabled: Number.isInteger(id) && id > 0,
   });
 
   const verQ = useQuery({
-    queryKey: ['studio', 'version', id],
+    queryKey: ['studio', 'version', id, authEpoch],
     queryFn: async () => {
       try {
         return await fetchVersionForSong(id);

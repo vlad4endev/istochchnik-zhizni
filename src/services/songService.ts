@@ -28,6 +28,14 @@ const TAG_MISSING_TEXT = 'нет_текста';
 
 const IMPORT_SANDBOX_TAGS: readonly string[] = [TAG_IMPORTED, TAG_IMPORTED_LEGACY];
 
+/** Фрагмент SQL: теги импорта с любым регистром + те же слова, что в IMPORT_SANDBOX_TAGS. */
+function sqlImportedSandboxTagsMatch(): string {
+  return `EXISTS (
+    SELECT 1 FROM unnest(COALESCE(s.tags, '{}'::text[])) AS _imp(tag)
+    WHERE lower(_imp.tag::text) IN ('импортированная', 'импортировано')
+  )`;
+}
+
 function songHasImportedSandboxTag(tags: string[]): boolean {
   return tags.some((t) => IMPORT_SANDBOX_TAGS.includes(String(t)));
 }
@@ -198,10 +206,10 @@ async function listImportedSandboxSongsQuery(
   includeImportedAt: boolean,
 ): Promise<SongListItem[]> {
   const params: unknown[] = [];
-  params.push([...IMPORT_SANDBOX_TAGS]);
+  const tagSql = sqlImportedSandboxTagsMatch();
   const whereSql = includeImportedAt
-    ? `NOT s.is_published AND (s.tags && $1::text[] OR s.imported_at IS NOT NULL)`
-    : `NOT s.is_published AND s.tags && $1::text[]`;
+    ? `NOT s.is_published AND (${tagSql} OR s.imported_at IS NOT NULL)`
+    : `NOT s.is_published AND (${tagSql})`;
   let fullWhere = whereSql;
   if (restrictToCreatorId != null) {
     params.push(restrictToCreatorId);
@@ -294,12 +302,11 @@ export async function getSongById(
 
   const canMod = visibility.canModerateCatalog;
   const restrict = visibility.restrictImportedSandboxToCreatorId;
-  const tagArr = [...IMPORT_SANDBOX_TAGS];
 
   const buildSql = (includeImportedAt: boolean) => {
     const sandboxMatch = includeImportedAt
-      ? `(s.tags && $5::text[] OR s.imported_at IS NOT NULL)`
-      : `(s.tags && $5::text[])`;
+      ? `(${sqlImportedSandboxTagsMatch()} OR s.imported_at IS NOT NULL)`
+      : `(${sqlImportedSandboxTagsMatch()})`;
     return `
       SELECT s.*,
              (sv.id IS NOT NULL) AS has_studio_version,
@@ -315,12 +322,12 @@ export async function getSongById(
           OR (
             NOT s.is_published
             AND ${sandboxMatch}
-            AND ($6::int IS NULL OR s.created_by_member_id = $6)
+            AND ($5::int IS NULL OR s.created_by_member_id = $5)
           )
         )`;
   };
 
-  const params = [id, memberId, memberId, canMod, tagArr, restrict ?? null];
+  const params = [id, memberId, memberId, canMod, restrict ?? null];
 
   try {
     const result = await query(buildSql(true), params);
