@@ -1,8 +1,8 @@
 import type { Request, Response } from 'express';
 
-import { canAccessStudio, normalizeAppRole, type AppRole } from '../types/appRole';
+import { canAccessStudio, canModerateCatalog, normalizeAppRole, type AppRole } from '../types/appRole';
 import { query } from '../config/db';
-import { listRecentSongs } from '../services/songService';
+import { listImportedSandboxSongsForStudio, listRecentSongs } from '../services/songService';
 import {
   addSetlistItem,
   createDraft,
@@ -27,6 +27,10 @@ import {
 import { AiAgentError, improveChordPlacementWithAi } from '../services/studioAiChordService';
 
 type AuthReq = Request & { authUserId?: number; authUserRole?: AppRole };
+
+function roleOf(req: AuthReq): AppRole {
+  return normalizeAppRole(req.authUserRole);
+}
 
 function normalizeMinistryDirection(value: unknown): string {
   return String(value ?? '').trim().toLowerCase().replace(/ё/g, 'е');
@@ -257,6 +261,28 @@ export async function recentSongsList(req: Request, res: Response): Promise<void
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: 'Ошибка' });
+  }
+}
+
+/** GET /api/studio/imported-songs — черновики импорта (тег и/или imported_at), без query-string кириллицы. */
+export async function importedSongsList(req: Request, res: Response): Promise<void> {
+  try {
+    const r = req as AuthReq;
+    if (!(await ensureStudio(r, res))) return;
+
+    let restrictToCreatorId: number | undefined;
+    if (!canModerateCatalog(roleOf(r))) {
+      const ok = await hasMusicMinistryDirection(r.authUserId!);
+      if (!ok) {
+        restrictToCreatorId = r.authUserId;
+      }
+    }
+
+    const songs = await listImportedSandboxSongsForStudio(r.authUserId!, restrictToCreatorId);
+    res.json(songs);
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Не удалось загрузить импортированные песни' });
   }
 }
 

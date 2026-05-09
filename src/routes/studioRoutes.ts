@@ -8,6 +8,7 @@ import {
   forkVersion,
   getMyVersions,
   getVersionForSong,
+  importedSongsList,
   instrumentsGet,
   instrumentsPatch,
   performanceGet,
@@ -31,6 +32,7 @@ const router = Router();
 router.use(requireAuthSession);
 
 router.get('/recent-songs', recentSongsList);
+router.get('/imported-songs', importedSongsList);
 router.get('/versions', getMyVersions);
 router.get('/versions/song/:songId', getVersionForSong);
 router.put('/versions/:songId', putVersion);

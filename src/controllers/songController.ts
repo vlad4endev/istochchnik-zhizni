@@ -49,6 +49,14 @@ async function hasMusicMinistryDirection(memberId: number): Promise<boolean> {
     .some((s) => s === target || s.includes(target));
 }
 
+/** Запрос только списка импортированных заготовок (студия), без других тегов — можно ограничить создателем. */
+function isImportedSandboxOnlyFilter(filters: SongListFilters): boolean {
+  const tags = filters.tags ?? [];
+  if (tags.length !== 1) return false;
+  const t = tags[0].trim().toLowerCase().replace(/ё/g, 'е');
+  return t === 'импортированная'.replace(/ё/g, 'е');
+}
+
 function parseSongListFilters(req: Request): SongListFilters {
   const q = req.query as Record<string, string | string[] | undefined>;
   const filters: SongListFilters = {};
@@ -105,15 +113,21 @@ export async function listSongsForModeration(req: Request, res: Response): Promi
       res.status(401).json({ error: 'Требуется вход' });
       return;
     }
+    const filters = parseSongListFilters(req);
+    let restrictToCreatorId: number | undefined;
     if (!canModerateCatalog(roleOf(r))) {
       const ok = await hasMusicMinistryDirection(r.authUserId);
       if (!ok) {
-        res.status(403).json({ error: 'Недостаточно прав' });
-        return;
+        if (!isImportedSandboxOnlyFilter(filters)) {
+          res.status(403).json({ error: 'Недостаточно прав' });
+          return;
+        }
+        restrictToCreatorId = r.authUserId;
       }
     }
-    const filters = parseSongListFilters(req);
-    const songs = await listCatalogSongsForModeration(r.authUserId ?? null, filters);
+    const songs = await listCatalogSongsForModeration(r.authUserId ?? null, filters, {
+      restrictToCreatorId,
+    });
     res.json(songs);
   } catch (e) {
     console.error(e);

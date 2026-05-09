@@ -56,6 +56,12 @@ export async function fetchMyVersions(): Promise<StudioVersionListItem[]> {
   return data;
 }
 
+/** Импортированные заготовки (песочница до публикации в каталог). */
+export async function fetchImportedSandboxSongs(): Promise<SongListItem[]> {
+  const { data } = await apiClient.get<SongListItem[]>(`${STUDIO}/imported-songs`);
+  return data;
+}
+
 export async function fetchVersionForSong(songId: number) {
   try {
     const { data } = await apiClient.get(`${STUDIO}/versions/song/${songId}`);

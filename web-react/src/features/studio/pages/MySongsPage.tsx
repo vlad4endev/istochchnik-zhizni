@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import type { AxiosError } from 'axios';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { LuCheck, LuPenLine, LuRocket, LuTrash2 } from 'react-icons/lu';
@@ -9,18 +10,14 @@ import {
   createDraft,
   deleteDraft,
   fetchDrafts,
+  fetchImportedSandboxSongs,
   fetchMyVersions,
   fetchRecentSongs,
   updateDraft,
   type StudioDraft,
 } from '../api';
 import { studioEditSongPath, useStudioModuleSurface } from '../studioPaths';
-import {
-  fetchSongsForModeration,
-  publishSong,
-  updateSong,
-  type SongListItem,
-} from '../../songbook/api';
+import { publishSong, updateSong, type SongListItem } from '../../songbook/api';
 
 type MySongsTab = 'saved' | 'drafts' | 'recent' | 'imported';
 
@@ -30,7 +27,6 @@ function parseMySongsTab(searchParams: URLSearchParams): MySongsTab {
   return 'saved';
 }
 
-const IMPORTED_TAG = 'импортированная';
 const MISSING_TEXT_TAG = 'нет_текста';
 
 function ImportedSongRow({ song }: { song: SongListItem }) {
@@ -238,8 +234,7 @@ export function MySongsPage() {
   });
   const importedQ = useQuery({
     queryKey: ['studio', 'imported-songs'],
-    queryFn: () => fetchSongsForModeration({ tags: [IMPORTED_TAG] }),
-    // backend также разрешает участникам музыкального служения (как и импорт)
+    queryFn: () => fetchImportedSandboxSongs(),
     enabled: true,
   });
 
@@ -254,6 +249,17 @@ export function MySongsPage() {
         String(s.song_number ?? '').includes(q),
     );
   }, [importedQ.data, importedSearch]);
+
+  const importedErrorSuffix = useMemo(() => {
+    if (!importedQ.isError || !importedQ.error) return '';
+    const ax = importedQ.error as AxiosError<{ error?: string }>;
+    const st = ax.response?.status;
+    const data = ax.response?.data;
+    const msg =
+      typeof data === 'object' && data !== null && typeof data.error === 'string' ? data.error : '';
+    const hint = [st ? `HTTP ${st}` : '', msg].filter(Boolean).join(': ');
+    return hint ? ` (${hint})` : '';
+  }, [importedQ.isError, importedQ.error]);
 
   const [searchParams, setSearchParams] = useSearchParams();
   /** Одна правда: вкладка из `?tab=` — без отдельного useState, чтобы не сбрасывать «Импортированные». */
@@ -540,11 +546,13 @@ export function MySongsPage() {
             {importedQ.isLoading ? (
               <SongListSkeleton />
             ) : importedQ.isError ? (
-              <p className="text-sm text-red-600">Не удалось загрузить импортированные песни.</p>
+              <p className="text-sm text-red-600">
+                Не удалось загрузить импортированные песни.{importedErrorSuffix}
+              </p>
             ) : importedFiltered.length === 0 ? (
               <p className="text-sm text-stone-500">
                 {importedCount === 0
-                  ? 'Импортированных песен пока нет. Загрузите таблицу в «Добавить песню → XLSX».'
+                  ? 'Здесь только неопубликованные заготовки с импорта (с тегом «импортированная» или датой импорта). Уже в каталоге песни здесь не показываются. Загрузите таблицу в «Добавить песню → XLSX», если нужно добавить новые.'
                   : 'Ничего не найдено по запросу.'}
               </p>
             ) : (

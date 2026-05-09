@@ -21,6 +21,9 @@ export interface SongListItem extends SongRow {
   is_favorite?: boolean;
 }
 
+const TAG_IMPORTED = 'импортированная';
+const TAG_MISSING_TEXT = 'нет_текста';
+
 function mapSong(r: Record<string, unknown>): SongRow {
   const rawTags = r.tags;
   let tags: string[] = [];
@@ -67,7 +70,7 @@ export interface SongListFilters {
 async function listSongsInternal(
   memberId: number | null,
   filters: SongListFilters | undefined,
-  options: { includeUnpublished: boolean },
+  options: { includeUnpublished: boolean; restrictToCreatorId?: number },
 ): Promise<SongListItem[]> {
   const f = filters ?? {};
   const search = (f.q ?? '').trim();
@@ -78,6 +81,11 @@ async function listSongsInternal(
 
   const conditions: string[] = options.includeUnpublished ? [] : ['s.is_published = TRUE'];
   const params: unknown[] = [];
+
+  if (options.restrictToCreatorId != null) {
+    params.push(options.restrictToCreatorId);
+    conditions.push(`s.created_by_member_id = $${params.length}`);
+  }
 
   if (search.length > 0) {
     params.push(search);
@@ -145,9 +153,59 @@ export async function listPublishedSongs(
 
 export async function listCatalogSongsForModeration(
   memberId: number | null,
-  filters?: SongListFilters
+  filters?: SongListFilters,
+  moderationOptions?: { restrictToCreatorId?: number },
 ): Promise<SongListItem[]> {
-  return listSongsInternal(memberId, filters, { includeUnpublished: true });
+  return listSongsInternal(memberId, filters, {
+    includeUnpublished: true,
+    restrictToCreatorId: moderationOptions?.restrictToCreatorId,
+  });
+}
+
+/**
+ * Песни «песочницы» импорта для студии: не опубликованы и (тег импорта ИЛИ пометка imported_at).
+ * Не зависит от query-string с кириллицей на `/moderation`.
+ */
+export async function listImportedSandboxSongsForStudio(
+  memberIdForJoins: number,
+  restrictToCreatorId?: number,
+): Promise<SongListItem[]> {
+  const params: unknown[] = [];
+  params.push([TAG_IMPORTED]);
+  let whereSql = `
+    NOT s.is_published
+    AND (
+      s.tags && $1::text[]
+      OR s.imported_at IS NOT NULL
+    )
+  `;
+  if (restrictToCreatorId != null) {
+    params.push(restrictToCreatorId);
+    whereSql += ` AND s.created_by_member_id = $${params.length}`;
+  }
+
+  const mid1 = params.length + 1;
+  const mid2 = params.length + 2;
+  const result = await query(
+    `SELECT s.*,
+            (sv.id IS NOT NULL) AS has_studio_version,
+            (f.song_id IS NOT NULL) AS is_favorite
+     FROM songs s
+     LEFT JOIN studio_versions sv ON sv.song_id = s.id AND sv.member_id = $${mid1}
+     LEFT JOIN song_favorites f ON f.song_id = s.id AND f.member_id = $${mid2}
+     WHERE ${whereSql}
+     ORDER BY COALESCE(s.song_number, 2147483647) ASC, s.title ASC`,
+    [...params, memberIdForJoins, memberIdForJoins],
+  );
+
+  return result.rows.map((row) => {
+    const base = mapSong(row as Record<string, unknown>);
+    return {
+      ...base,
+      has_studio_version: Boolean((row as { has_studio_version?: boolean }).has_studio_version),
+      is_favorite: Boolean((row as { is_favorite?: boolean }).is_favorite),
+    };
+  });
 }
 
 export async function getSongById(
@@ -290,9 +348,6 @@ export async function deleteSong(id: number): Promise<boolean> {
   const result = await query(`DELETE FROM songs WHERE id = $1`, [id]);
   return (result.rowCount ?? 0) > 0;
 }
-
-const TAG_IMPORTED = 'импортированная';
-const TAG_MISSING_TEXT = 'нет_текста';
 
 /** Песня в режиме “Импортированные”: not published AND has tag `импортированная`. */
 export async function getSongImportStatus(
