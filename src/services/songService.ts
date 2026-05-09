@@ -246,9 +246,26 @@ export async function listImportedSandboxSongsForStudio(
   }
 }
 
+/** Права на просмотр одной песни (совпадает с логикой GET /api/studio/imported-songs). */
+export type GetSongVisibilityOpts = {
+  canModerateCatalog: boolean;
+  /** Если задано — неопубликованная песочница импорта только с этим created_by_member_id. */
+  restrictImportedSandboxToCreatorId?: number;
+};
+
+function mapSongRowWithJoins(row: Record<string, unknown>): SongListItem {
+  const base = mapSong(row);
+  return {
+    ...base,
+    has_studio_version: Boolean((row as { has_studio_version?: boolean }).has_studio_version),
+    is_favorite: Boolean((row as { is_favorite?: boolean }).is_favorite),
+  };
+}
+
 export async function getSongById(
   id: number,
-  memberId: number | null
+  memberId: number | null,
+  visibility?: GetSongVisibilityOpts,
 ): Promise<SongListItem | null> {
   if (memberId == null) {
     const result = await query(
@@ -259,24 +276,66 @@ export async function getSongById(
     return row ? mapSong(row) : null;
   }
 
-  const result = await query(
-    `SELECT s.*,
-            (sv.id IS NOT NULL) AS has_studio_version,
-            (f.song_id IS NOT NULL) AS is_favorite
-     FROM songs s
-     LEFT JOIN studio_versions sv ON sv.song_id = s.id AND sv.member_id = $2
-     LEFT JOIN song_favorites f ON f.song_id = s.id AND f.member_id = $2
-     WHERE s.id = $1 AND s.is_published = TRUE`,
-    [id, memberId]
-  );
-  const row = result.rows[0] as Record<string, unknown> | undefined;
-  if (!row) return null;
-  const base = mapSong(row);
-  return {
-    ...base,
-    has_studio_version: Boolean((row as { has_studio_version?: boolean }).has_studio_version),
-    is_favorite: Boolean((row as { is_favorite?: boolean }).is_favorite),
+  if (!visibility) {
+    const result = await query(
+      `SELECT s.*,
+              (sv.id IS NOT NULL) AS has_studio_version,
+              (f.song_id IS NOT NULL) AS is_favorite
+       FROM songs s
+       LEFT JOIN studio_versions sv ON sv.song_id = s.id AND sv.member_id = $2
+       LEFT JOIN song_favorites f ON f.song_id = s.id AND f.member_id = $2
+       WHERE s.id = $1 AND s.is_published = TRUE`,
+      [id, memberId]
+    );
+    const row = result.rows[0] as Record<string, unknown> | undefined;
+    if (!row) return null;
+    return mapSongRowWithJoins(row);
+  }
+
+  const canMod = visibility.canModerateCatalog;
+  const restrict = visibility.restrictImportedSandboxToCreatorId;
+  const tagArr = [...IMPORT_SANDBOX_TAGS];
+
+  const buildSql = (includeImportedAt: boolean) => {
+    const sandboxMatch = includeImportedAt
+      ? `(s.tags && $5::text[] OR s.imported_at IS NOT NULL)`
+      : `(s.tags && $5::text[])`;
+    return `
+      SELECT s.*,
+             (sv.id IS NOT NULL) AS has_studio_version,
+             (f.song_id IS NOT NULL) AS is_favorite
+      FROM songs s
+      LEFT JOIN studio_versions sv ON sv.song_id = s.id AND sv.member_id = $2
+      LEFT JOIN song_favorites f ON f.song_id = s.id AND f.member_id = $3
+      WHERE s.id = $1
+        AND (
+          s.is_published = TRUE
+          OR $4::boolean IS TRUE
+          OR s.created_by_member_id = $2
+          OR (
+            NOT s.is_published
+            AND ${sandboxMatch}
+            AND ($6::int IS NULL OR s.created_by_member_id = $6)
+          )
+        )`;
   };
+
+  const params = [id, memberId, memberId, canMod, tagArr, restrict ?? null];
+
+  try {
+    const result = await query(buildSql(true), params);
+    const row = result.rows[0] as Record<string, unknown> | undefined;
+    if (!row) return null;
+    return mapSongRowWithJoins(row);
+  } catch (err) {
+    if (isMissingImportedAtColumnError(err)) {
+      const result = await query(buildSql(false), params);
+      const row = result.rows[0] as Record<string, unknown> | undefined;
+      if (!row) return null;
+      return mapSongRowWithJoins(row);
+    }
+    throw err;
+  }
 }
 
 export interface CreateSongInput {
