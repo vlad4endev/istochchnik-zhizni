@@ -162,26 +162,42 @@ export async function listCatalogSongsForModeration(
   });
 }
 
-/**
- * Песни «песочницы» импорта для студии: не опубликованы и (тег импорта ИЛИ пометка imported_at).
- * Не зависит от query-string с кириллицей на `/moderation`.
- */
-export async function listImportedSandboxSongsForStudio(
+function mapImportedSandboxRows(rows: Record<string, unknown>[]): SongListItem[] {
+  return rows.map((row) => {
+    const base = mapSong(row);
+    return {
+      ...base,
+      has_studio_version: Boolean((row as { has_studio_version?: boolean }).has_studio_version),
+      is_favorite: Boolean((row as { is_favorite?: boolean }).is_favorite),
+    };
+  });
+}
+
+/** PG undefined_column или текст ошибки про отсутствующую колонку `imported_at`. */
+function isMissingImportedAtColumnError(err: unknown): boolean {
+  if (typeof err !== 'object' || err === null) return false;
+  const e = err as { code?: string; message?: string };
+  const msg = String(e.message ?? '');
+  if (/imported_at/i.test(msg) && (/does not exist/i.test(msg) || /не существует/i.test(msg))) {
+    return true;
+  }
+  return e.code === '42703' && /imported_at/i.test(msg);
+}
+
+async function listImportedSandboxSongsQuery(
   memberIdForJoins: number,
-  restrictToCreatorId?: number,
+  restrictToCreatorId: number | undefined,
+  includeImportedAt: boolean,
 ): Promise<SongListItem[]> {
   const params: unknown[] = [];
   params.push([TAG_IMPORTED]);
-  let whereSql = `
-    NOT s.is_published
-    AND (
-      s.tags && $1::text[]
-      OR s.imported_at IS NOT NULL
-    )
-  `;
+  const whereSql = includeImportedAt
+    ? `NOT s.is_published AND (s.tags && $1::text[] OR s.imported_at IS NOT NULL)`
+    : `NOT s.is_published AND s.tags && $1::text[]`;
+  let fullWhere = whereSql;
   if (restrictToCreatorId != null) {
     params.push(restrictToCreatorId);
-    whereSql += ` AND s.created_by_member_id = $${params.length}`;
+    fullWhere += ` AND s.created_by_member_id = $${params.length}`;
   }
 
   const mid1 = params.length + 1;
@@ -193,19 +209,33 @@ export async function listImportedSandboxSongsForStudio(
      FROM songs s
      LEFT JOIN studio_versions sv ON sv.song_id = s.id AND sv.member_id = $${mid1}
      LEFT JOIN song_favorites f ON f.song_id = s.id AND f.member_id = $${mid2}
-     WHERE ${whereSql}
+     WHERE ${fullWhere}
      ORDER BY COALESCE(s.song_number, 2147483647) ASC, s.title ASC`,
     [...params, memberIdForJoins, memberIdForJoins],
   );
 
-  return result.rows.map((row) => {
-    const base = mapSong(row as Record<string, unknown>);
-    return {
-      ...base,
-      has_studio_version: Boolean((row as { has_studio_version?: boolean }).has_studio_version),
-      is_favorite: Boolean((row as { is_favorite?: boolean }).is_favorite),
-    };
-  });
+  return mapImportedSandboxRows(result.rows as Record<string, unknown>[]);
+}
+
+/**
+ * Песни «песочницы» импорта для студии: не опубликованы и (тег импорта ИЛИ пометка imported_at).
+ * Не зависит от query-string с кириллицей на `/moderation`.
+ */
+export async function listImportedSandboxSongsForStudio(
+  memberIdForJoins: number,
+  restrictToCreatorId?: number,
+): Promise<SongListItem[]> {
+  try {
+    return await listImportedSandboxSongsQuery(memberIdForJoins, restrictToCreatorId, true);
+  } catch (err) {
+    if (isMissingImportedAtColumnError(err)) {
+      console.warn(
+        '[songService] listImportedSandboxSongsForStudio: imported_at missing, falling back to tag-only filter',
+      );
+      return await listImportedSandboxSongsQuery(memberIdForJoins, restrictToCreatorId, false);
+    }
+    throw err;
+  }
 }
 
 export async function getSongById(

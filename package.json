@@ -41,6 +41,7 @@
     "lint:fix": "npx eslint src --ext .ts --fix",
     "format": "npx prettier --write \"src/**/*.ts\"",
     "db:init": "npx ts-node scripts/runInitDb.ts",
+    "db:apply:song-import": "npx ts-node --transpile-only scripts/applySongImportMigrations.ts",
     "analytics:dedupe": "npx ts-node scripts/cleanupAnalyticsDuplicates.ts",
     "analytics:dedupe:apply": "npx ts-node scripts/cleanupAnalyticsDuplicates.ts --apply",
     "test:import": "npx ts-node scripts/testImportParsers.ts",
