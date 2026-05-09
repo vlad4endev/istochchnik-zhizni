@@ -6,6 +6,8 @@ import { smartImportTextToChordPro } from './smartImportToChordPro';
 
 const TAG_MISSING_TEXT = 'нет_текста';
 export const TAG_IMPORTED = 'импортированная';
+/** Совпадает с частью строк в БД из внешних импортов. */
+const TAG_IMPORTED_LEGACY = 'импортировано';
 
 function looksLikeChordsLink(url: string): boolean {
   // Heuristic: in the source xlsx usually "with chords" is stored in url_chords column.
@@ -140,7 +142,9 @@ export async function importSongsFromXlsxRows(
 
       if (existing.rows[0]?.id) {
         const existingTags = (existing.rows[0].tags ?? []) as unknown as string[];
-        const isStillImported = Array.isArray(existingTags) && existingTags.includes(TAG_IMPORTED);
+        const isStillImported =
+          Array.isArray(existingTags) &&
+          (existingTags.includes(TAG_IMPORTED) || existingTags.includes(TAG_IMPORTED_LEGACY));
         if (!isStillImported) {
           // Песня уже в каталоге (опубликована/редактируется вручную) — не трогаем.
           await client.query('COMMIT');

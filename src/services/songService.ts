@@ -22,7 +22,15 @@ export interface SongListItem extends SongRow {
 }
 
 const TAG_IMPORTED = 'импортированная';
+/** Легаси-тег из сторонних импортов / старых скриптов (совпадает с вашими строками в БД). */
+const TAG_IMPORTED_LEGACY = 'импортировано';
 const TAG_MISSING_TEXT = 'нет_текста';
+
+const IMPORT_SANDBOX_TAGS: readonly string[] = [TAG_IMPORTED, TAG_IMPORTED_LEGACY];
+
+function songHasImportedSandboxTag(tags: string[]): boolean {
+  return tags.some((t) => IMPORT_SANDBOX_TAGS.includes(String(t)));
+}
 
 function mapSong(r: Record<string, unknown>): SongRow {
   const rawTags = r.tags;
@@ -190,7 +198,7 @@ async function listImportedSandboxSongsQuery(
   includeImportedAt: boolean,
 ): Promise<SongListItem[]> {
   const params: unknown[] = [];
-  params.push([TAG_IMPORTED]);
+  params.push([...IMPORT_SANDBOX_TAGS]);
   const whereSql = includeImportedAt
     ? `NOT s.is_published AND (s.tags && $1::text[] OR s.imported_at IS NOT NULL)`
     : `NOT s.is_published AND s.tags && $1::text[]`;
@@ -379,7 +387,7 @@ export async function deleteSong(id: number): Promise<boolean> {
   return (result.rowCount ?? 0) > 0;
 }
 
-/** Песня в режиме “Импортированные”: not published AND has tag `импортированная`. */
+/** Песня в режиме «Импортированные»: не опубликована и есть тег импорта (канонический или легаси). */
 export async function getSongImportStatus(
   id: number,
 ): Promise<{ exists: boolean; isImported: boolean; isPublished: boolean } | null> {
@@ -389,7 +397,7 @@ export async function getSongImportStatus(
   const tags = Array.isArray(row.tags) ? row.tags.map((t) => String(t)) : [];
   return {
     exists: true,
-    isImported: tags.includes(TAG_IMPORTED),
+    isImported: songHasImportedSandboxTag(tags),
     isPublished: Boolean(row.is_published),
   };
 }
@@ -400,13 +408,13 @@ export async function publishImportedSong(id: number): Promise<SongRow | null> {
     `UPDATE songs
      SET is_published = TRUE,
          tags = COALESCE(
-           (SELECT array_agg(t) FROM unnest(tags) AS t WHERE t NOT IN ($2, $3)),
+           (SELECT array_agg(t) FROM unnest(tags) AS t WHERE t NOT IN ($2, $3, $4)),
            '{}'::text[]
          ),
          updated_at = NOW()
      WHERE id = $1
      RETURNING *`,
-    [id, TAG_IMPORTED, TAG_MISSING_TEXT],
+    [id, TAG_IMPORTED, TAG_IMPORTED_LEGACY, TAG_MISSING_TEXT],
   );
   return result.rows[0] ? mapSong(result.rows[0] as Record<string, unknown>) : null;
 }

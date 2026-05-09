@@ -54,7 +54,7 @@ function isImportedSandboxOnlyFilter(filters: SongListFilters): boolean {
   const tags = filters.tags ?? [];
   if (tags.length !== 1) return false;
   const t = tags[0].trim().toLowerCase().replace(/ё/g, 'е');
-  return t === 'импортированная'.replace(/ё/g, 'е');
+  return t === 'импортированная'.replace(/ё/g, 'е') || t === 'импортировано'.replace(/ё/g, 'е');
 }
 
 function parseSongListFilters(req: Request): SongListFilters {
