@@ -319,6 +319,7 @@ export async function getSongById(
           s.is_published = TRUE
           OR $4::boolean IS TRUE
           OR s.created_by_member_id = $2
+          OR (sv.id IS NOT NULL)
           OR (
             NOT s.is_published
             AND ${sandboxMatch}

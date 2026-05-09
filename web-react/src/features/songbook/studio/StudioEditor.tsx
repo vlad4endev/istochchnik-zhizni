@@ -24,14 +24,14 @@ import { emitAppToast } from '../../../lib/uiFeedback';
 import { useScrollInputIntoView } from '@/hooks/useScrollInputIntoView';
 import { SkeletonBox } from '@/components/ui/SkeletonBox';
 import { keys } from '@/lib/queryKeys';
-import { deleteSong, fetchSong, updateSong } from '../api';
+import { deleteSong, updateSong } from '../api';
 import { convertToChordPro } from '../addSong/chordProConversion';
 import { extractChordsFromText, guessKeyFromChords } from '../addSong/keyDetection';
 import { SmartImportModal, type SmartImportSourceTab } from '../addSong/SmartImportModal';
 import { LyricsWithChords } from '../components/LyricsWithChords';
 import { quickChordsForKey } from '../addSong/quickChords';
 import { extractCommonChords } from '../chordProEngine';
-import { aiChordPlacement, fetchVersionForSong, saveVersion } from '../../studio/api';
+import { aiChordPlacement, fetchStudioCatalogSong, fetchVersionForSong, saveVersion } from '../../studio/api';
 import { studioMySongsPath, getStudioModuleSurface } from '../../studio/studioPaths';
 import { useSongbookChrome } from '../SongbookChromeContext';
 
@@ -193,7 +193,7 @@ export function StudioEditor() {
 
   const songQ = useQuery({
     queryKey: ['song', id, authEpoch],
-    queryFn: () => fetchSong(id),
+    queryFn: () => fetchStudioCatalogSong(id),
     enabled: Number.isInteger(id) && id > 0,
   });
 
@@ -321,13 +321,16 @@ export function StudioEditor() {
   const saveMut = useMutation({
     mutationFn: () =>
       saveVersion(id, { custom_content: blocksToChordPro(blocks), custom_key: key || null }),
-    onSuccess: () => {
+    onSuccess: (savedVersion) => {
       try {
         localStorage.removeItem(`studio:autosave:song:${id}`);
       } catch {
         // noop
       }
+      /** Иначе кэш `['studio', 'version', id]` не сбрасывался — эффект снова брал только каталог `s.content` и откатывал текст. */
+      qc.setQueryData(['studio', 'version', id, authEpoch], savedVersion);
       void qc.invalidateQueries({ queryKey: ['studio', 'versions'] });
+      void qc.invalidateQueries({ queryKey: ['studio', 'version', id] });
       void qc.invalidateQueries({ queryKey: ['songs'] });
       void qc.invalidateQueries({ queryKey: ['song', id] });
       lastSavedSnapshotRef.current = JSON.stringify({
