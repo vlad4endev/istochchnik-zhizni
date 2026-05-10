@@ -854,11 +854,11 @@ export function Layout() {
         <ConnectivityBanner />
       </div>
       <div className="relative flex min-h-0 w-full min-w-0 flex-1 flex-col">
-      {/* Планшет/десктоп: фиксированный сайдбар (не в потоке, не растягивается по ширине main). На узких — нижняя навигация. */}
+      {/* Десктоп (lg+): фиксированный сайдбар. До lg — нижняя навигация (как мобильная сетка дашборда). */}
       <aside
         className={[
-          /* md+: сайдбар; телефон — только нижний таббар */
-          'hidden shrink-0 flex-col overflow-hidden border-r border-stone-200/80 bg-[var(--surface-elevated)] shadow-[4px_0_16px_rgba(0,0,0,0.06)] md:fixed md:bottom-0 md:left-0 md:top-0 md:z-30 md:flex [padding-bottom:env(safe-area-inset-bottom,0px)] [padding-top:env(safe-area-inset-top,0px)]',
+          /* lg+: сайдбар; до lg — только нижний таббар */
+          'hidden shrink-0 flex-col overflow-hidden border-r border-stone-200/80 bg-[var(--surface-elevated)] shadow-[4px_0_16px_rgba(0,0,0,0.06)] lg:fixed lg:bottom-0 lg:left-0 lg:top-0 lg:z-30 lg:flex [padding-bottom:env(safe-area-inset-bottom,0px)] [padding-top:env(safe-area-inset-top,0px)]',
           navCollapsed ? 'w-[88px] max-w-[88px]' : 'w-[260px] max-w-[260px] xl:w-[272px] xl:max-w-[272px]',
         ].join(' ')}
       >
@@ -1048,7 +1048,7 @@ export function Layout() {
         className={[
           'app-main-content flex min-h-0 min-w-0 w-full max-w-full flex-1 flex-col overflow-x-clip max-lg:overflow-y-auto lg:overflow-y-visible outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--a11y-focus-ring,var(--primary))] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)]',
           'page-content',
-          'max-md:pb-[var(--app-bottom-nav-total-height)] md:pb-0',
+          'max-lg:pb-[var(--app-bottom-nav-total-height)] lg:pb-0',
         ].join(' ')}
       >
         <div key={location.pathname} className="page-enter flex min-h-0 w-full max-w-full flex-1 flex-col">
@@ -1061,7 +1061,7 @@ export function Layout() {
       {/* Телефон: нижняя навигация (иконка + подпись, как в нативных приложениях) */}
       <nav
         className={[
-          'app-bottom-nav bottom-nav fixed bottom-0 left-0 right-0 z-[100] isolate flex flex-col border-t border-black/[0.07] bg-[color-mix(in_srgb,var(--surface-elevated)_94%,transparent)] pb-[var(--app-bottom-nav-safe-pad)] shadow-[0_-1px_0_rgba(0,0,0,0.05),0_-10px_40px_rgba(28,25,23,0.08)] backdrop-blur-xl backdrop-saturate-150 supports-[backdrop-filter]:bg-[color-mix(in_srgb,var(--surface-elevated)_88%,transparent)] md:hidden transition-opacity duration-150 ease-out dark:border-white/[0.08] dark:shadow-[0_-1px_0_rgba(255,255,255,0.06),0_-12px_40px_rgba(0,0,0,0.35)] [padding-left:max(0.5rem,env(safe-area-inset-left,0px))] [padding-right:max(0.5rem,env(safe-area-inset-right,0px))]',
+          'app-bottom-nav bottom-nav fixed bottom-0 left-0 right-0 z-[100] isolate flex flex-col border-t border-black/[0.07] bg-[color-mix(in_srgb,var(--surface-elevated)_94%,transparent)] pb-[var(--app-bottom-nav-safe-pad)] shadow-[0_-1px_0_rgba(0,0,0,0.05),0_-10px_40px_rgba(28,25,23,0.08)] backdrop-blur-xl backdrop-saturate-150 supports-[backdrop-filter]:bg-[color-mix(in_srgb,var(--surface-elevated)_88%,transparent)] lg:hidden transition-opacity duration-150 ease-out dark:border-white/[0.08] dark:shadow-[0_-1px_0_rgba(255,255,255,0.06),0_-12px_40px_rgba(0,0,0,0.35)] [padding-left:max(0.5rem,env(safe-area-inset-left,0px))] [padding-right:max(0.5rem,env(safe-area-inset-right,0px))]',
           mainChromeVisible ? 'opacity-100' : 'pointer-events-none opacity-0',
         ].join(' ')}
         aria-label="Основная навигация"

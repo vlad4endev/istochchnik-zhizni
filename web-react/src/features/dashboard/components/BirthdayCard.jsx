@@ -16,7 +16,7 @@ export default function BirthdayCard({ birthdays = [] }) {
         <p className="mt-3 text-sm text-stone-500">Ближайших дней рождения нет</p>
       ) : (
         <>
-          <div className="mt-3 hidden flex-col gap-2 md:flex">
+          <div className="mt-3 hidden flex-col gap-2 lg:flex">
             {birthdays.map((birthday) => (
               <div key={birthday.id} className="flex items-center justify-between rounded-xl border border-stone-200 bg-stone-50 px-3 py-2">
                 <div className="min-w-0">
@@ -30,7 +30,7 @@ export default function BirthdayCard({ birthdays = [] }) {
             ))}
           </div>
 
-          <div className="scrollbar-hide -mx-1 mt-3 overflow-x-auto px-1 md:hidden">
+          <div className="scrollbar-hide -mx-1 mt-3 overflow-x-auto px-1 lg:hidden">
             <div className="flex w-max gap-2">
               {birthdays.map((birthday) => (
                 <div key={birthday.id} className="shrink-0 rounded-full border border-stone-200 bg-stone-50 px-3 py-2">

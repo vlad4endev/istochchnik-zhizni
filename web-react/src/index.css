@@ -613,7 +613,8 @@ nav.app-bottom-nav {
   transition: none;
 }
 
-@media (min-width: 768px) {
+/* Совпадает с сайдбаром в Layout.tsx: левый отступ только когда колонка меню видна (`lg:flex`). */
+@media (min-width: 1024px) {
   .app-main-content {
     margin-left: var(--sidebar-width, 88px);
     width: calc(100% - var(--sidebar-width, 88px));

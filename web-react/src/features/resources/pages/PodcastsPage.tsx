@@ -517,7 +517,7 @@ export function PodcastsPage() {
 
       {/* Sticky player: keeps playing while browsing (mobile-first). */}
       {activeEpisode ? (
-        <div className="fixed inset-x-3 bottom-[calc(var(--app-bottom-nav-total-height)+0.5rem)] z-[60] md:inset-x-6 md:bottom-6">
+        <div className="fixed inset-x-3 bottom-[calc(var(--app-bottom-nav-total-height)+0.5rem)] z-[60] lg:inset-x-6 lg:bottom-6">
           <div className="rounded-3xl border border-stone-200/80 bg-white/90 p-4 shadow-[0_16px_60px_rgba(0,0,0,0.18)] backdrop-blur-xl">
             <div className="flex items-start gap-3">
               <div className="h-12 w-12 shrink-0 overflow-hidden rounded-2xl bg-stone-100 ring-1 ring-stone-200/70">

@@ -874,7 +874,7 @@ export function ChatWindow({
       <header className="chat-header sticky top-0 z-[100] w-full min-w-0 shrink-0 border-b border-gray-200/60 bg-[var(--surface-elevated)]">
         <div className="mx-auto flex min-h-[52px] w-full min-w-0 max-w-full items-center gap-1 px-1 py-1.5 sm:gap-2 sm:px-2 sm:py-2">
           {/* Слева: «Назад» — только мобилка; на ПК список чатов всегда слева. */}
-          <div className="flex shrink-0 items-center md:hidden">
+          <div className="flex shrink-0 items-center lg:hidden">
             <button
               type="button"
               onClick={onBack}

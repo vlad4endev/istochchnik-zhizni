@@ -16,6 +16,7 @@ import { PWAUpdatePrompt } from './components/PWAUpdatePrompt';
 import { TopLoader } from './components/ui/TopLoader';
 import { AccessibilityProvider } from './lib/accessibility/AccessibilityProvider';
 import { getAppVariant } from './lib/appVariant';
+import { SessionKeepAlive } from './hooks/SessionKeepAlive';
 import { useAppUpdate } from './hooks/useAppUpdate';
 import { usePwaStore, type BeforeInstallPromptEvent } from './stores/pwaStore';
 import { initAppearance, useAppearanceStore } from './stores/useAppearanceStore';
@@ -165,6 +166,7 @@ createRoot(document.getElementById('root')!).render(
           <TopLoader />
           <BrowserRouter>
             <AccessibilityProvider>
+              <SessionKeepAlive />
               <RootRouter />
               <MediaViewer />
             </AccessibilityProvider>

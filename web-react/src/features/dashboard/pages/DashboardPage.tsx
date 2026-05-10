@@ -976,7 +976,7 @@ function DashboardMain() {
               <SectionHeroToolbarEnd>
                 <Link
                   to="/profile"
-                  className="tap-highlight-transparent flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-white/25 bg-white/15 text-white shadow-sm transition hover:bg-white/25 active:scale-[0.98] md:hidden"
+                  className="tap-highlight-transparent flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-white/25 bg-white/15 text-white shadow-sm transition hover:bg-white/25 active:scale-[0.98] lg:hidden"
                   aria-label="Настройки профиля"
                   title="Настройки"
                 >
@@ -987,7 +987,7 @@ function DashboardMain() {
           </header>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto [webkit-overflow-scrolling:touch] max-lg:pb-0 lg:pb-[max(2rem,env(safe-area-inset-bottom,0px))]">
+        <div className="dashboard-scroll-pane min-h-0 flex-1 overflow-y-auto [webkit-overflow-scrolling:touch] max-lg:pb-[72px] lg:pb-[max(2rem,env(safe-area-inset-bottom,0px))]">
         <div className="hidden lg:block">
           <div className="grid grid-flow-row-dense grid-cols-12 gap-4 px-0 py-4 xl:gap-5">
             {showNearestPreacherWidget ? (
@@ -1286,9 +1286,9 @@ function DashboardMain() {
           </div>
         </div>
 
-        <div className="dashboard-grid grid grid-cols-1 gap-3.5 sm:grid-cols-2 sm:gap-4 xl:grid-cols-12 lg:hidden">
+        <div className="dashboard-grid grid grid-cols-1 gap-3.5 min-[769px]:grid-cols-2 min-[769px]:gap-4 lg:hidden [&>*]:min-w-0 [&>*]:max-lg:w-full">
           {birthdaysThisWeek.length > 0 ? (
-            <section className="overflow-hidden rounded-2xl border border-[#F9C0D0] bg-gradient-to-br from-[#FFF0F3] to-[#FFE4EC] p-4 shadow-[var(--shadow-card)] sm:col-span-2 sm:p-5 xl:col-span-12">
+            <section className="overflow-hidden rounded-2xl border border-[#F9C0D0] bg-gradient-to-br from-[#FFF0F3] to-[#FFE4EC] p-4 shadow-[var(--shadow-card)] min-[769px]:col-span-2 sm:p-5">
               <p className="text-[11px] font-semibold tracking-[0.02em] text-[#C23D57]">
                 Предстоящие дни рождения на этой неделе
               </p>
@@ -1308,7 +1308,7 @@ function DashboardMain() {
           ) : null}
 
           {showNearestPreacherWidget ? (
-            <div className="sm:col-span-2 xl:col-span-12">
+            <div className="min-[769px]:col-span-2">
               <UpcomingPreacherCard
                 preacherName={preacherName}
                 preacherAvatarUrl={preacherAvatarUrl}
@@ -1321,7 +1321,7 @@ function DashboardMain() {
             </div>
           ) : null}
 
-          <div className="flex flex-col gap-3 xl:col-span-4">
+          <div className="flex min-w-0 w-full flex-col gap-3">
             <button
               type="button"
               onClick={() =>
@@ -1425,7 +1425,7 @@ function DashboardMain() {
             <button
               type="button"
               onClick={() => navigate('/prayer')}
-              className="tap-highlight-transparent touch-manipulation group min-h-[146px] overflow-hidden rounded-2xl border border-[#BFC9F7] bg-gradient-to-br from-[#EEF2FF] to-[#E5EAFF] p-4 text-left shadow-[var(--shadow-card)] transition hover:-translate-y-0.5 hover:shadow-[var(--shadow)] sm:min-h-[152px] sm:p-5 xl:col-span-8"
+              className="tap-highlight-transparent touch-manipulation group min-h-[146px] overflow-hidden rounded-2xl border border-[#BFC9F7] bg-gradient-to-br from-[#EEF2FF] to-[#E5EAFF] p-4 text-left shadow-[var(--shadow-card)] transition hover:-translate-y-0.5 hover:shadow-[var(--shadow)] sm:min-h-[152px] sm:p-5 min-[769px]:col-span-2"
             >
               <p className="text-[11px] font-semibold tracking-[0.02em] text-[#3042A8]">Молимся сегодня</p>
               <div className="mt-4 flex items-start gap-3">
@@ -1443,7 +1443,7 @@ function DashboardMain() {
           ) : null}
 
           {showBroadcastWidget ? (
-            <div className="sm:col-span-2 xl:col-span-6">
+            <div className="min-[769px]:col-span-2">
               <BroadcastCompactCard
                 broadcast={activeBroadcast}
                 timerText={broadcastTimerText}
@@ -1454,7 +1454,7 @@ function DashboardMain() {
             </div>
           ) : null}
 
-          <section className="overflow-hidden rounded-2xl border border-stone-200/70 bg-white p-4 shadow-[var(--shadow-card)] sm:col-span-2 sm:p-5 xl:col-span-6">
+          <section className="overflow-hidden rounded-2xl border border-stone-200/70 bg-white p-4 shadow-[var(--shadow-card)] min-[769px]:col-span-2 sm:p-5">
             <div className="flex flex-col items-start justify-between gap-2 sm:flex-row sm:items-center">
               <p className="text-[11px] font-semibold tracking-[0.02em] text-[#0E7E6A]">Медиа</p>
               <button
@@ -1509,7 +1509,7 @@ function DashboardMain() {
           <button
             type="button"
             onClick={() => setEventOpen(true)}
-            className="tap-highlight-transparent touch-manipulation group min-h-[132px] overflow-hidden rounded-2xl border border-[#A8E4C0] bg-gradient-to-br from-[#EDFBF3] to-[#D9F5E6] p-4 text-left shadow-[var(--shadow-card)] transition hover:-translate-y-0.5 hover:shadow-[var(--shadow)] sm:col-span-2 sm:min-h-[140px] sm:p-5 xl:col-span-12"
+            className="tap-highlight-transparent touch-manipulation group min-h-[132px] overflow-hidden rounded-2xl border border-[#A8E4C0] bg-gradient-to-br from-[#EDFBF3] to-[#D9F5E6] p-4 text-left shadow-[var(--shadow-card)] transition hover:-translate-y-0.5 hover:shadow-[var(--shadow)] min-[769px]:col-span-2 sm:min-h-[140px] sm:p-5"
           >
             <p className="text-[11px] font-semibold tracking-[0.02em] text-[#0F6636]">События</p>
             <div className="mt-4 flex items-start gap-3">
@@ -1525,7 +1525,7 @@ function DashboardMain() {
           </button>
 
           {showPrayerPlanOnDashboard ? (
-            <section className="rounded-2xl border border-[#E8E0DC] bg-[#F8F5F3] p-4 shadow-[var(--shadow-card)] sm:col-span-2 xl:col-span-12">
+            <section className="rounded-2xl border border-[#E8E0DC] bg-[#F8F5F3] p-4 shadow-[var(--shadow-card)] min-[769px]:col-span-2">
               <p className="text-[11px] font-semibold tracking-[0.02em] text-[#6B2D3E]">
                 Координаторам сбора
               </p>

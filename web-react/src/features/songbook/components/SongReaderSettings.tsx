@@ -138,7 +138,7 @@ export function SongReaderSettings({
             if (endY - startY > 70) setOpen(false);
           }}
         >
-          <div className="mx-auto mb-2 h-1.5 w-12 rounded-full bg-stone-300 md:hidden" aria-hidden />
+          <div className="mx-auto mb-2 h-1.5 w-12 rounded-full bg-stone-300 lg:hidden" aria-hidden />
           <div className="mb-3 flex items-center justify-between">
             <p className={`text-xs font-semibold uppercase tracking-widest ${stageMode ? 'text-stone-500' : 'text-stone-500'}`}>
               Настройки

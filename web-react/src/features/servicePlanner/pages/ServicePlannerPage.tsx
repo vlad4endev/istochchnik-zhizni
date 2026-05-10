@@ -1899,7 +1899,7 @@ export function ServicePlannerPage() {
                                     </button>
                                   </div>
                                   <div
-                                    className="absolute right-0 top-1/2 flex -translate-y-1/2 md:hidden"
+                                    className="absolute right-0 top-1/2 flex -translate-y-1/2 lg:hidden"
                                     data-planner-mobile-menu-root
                                     onPointerDown={(e) => isNarrowViewport && e.stopPropagation()}
                                   >
@@ -1975,7 +1975,7 @@ export function ServicePlannerPage() {
                                     <LuGripVertical className="h-4 w-4" />
                                   </button>
                                   <div
-                                    className="relative shrink-0 md:hidden"
+                                    className="relative shrink-0 lg:hidden"
                                     data-planner-mobile-template-order-root
                                     onPointerDown={(e) => isNarrowViewport && e.stopPropagation()}
                                   >
@@ -2011,7 +2011,7 @@ export function ServicePlannerPage() {
                                     </p>
                                   </div>
                                   <div
-                                    className="relative shrink-0 md:hidden"
+                                    className="relative shrink-0 lg:hidden"
                                     data-planner-mobile-menu-root
                                     onPointerDown={(e) => isNarrowViewport && e.stopPropagation()}
                                   >
@@ -2331,7 +2331,7 @@ export function ServicePlannerPage() {
     <>
       {planStickyBackVisible ? (
         <div
-          className="fixed inset-x-0 top-0 z-[45] flex items-center border-b border-stone-200/90 bg-white/90 px-2 py-1.5 pl-[max(0.5rem,env(safe-area-inset-left))] pt-[max(0.35rem,env(safe-area-inset-top))] pr-[max(0.5rem,env(safe-area-inset-right))] backdrop-blur-md md:hidden"
+          className="fixed inset-x-0 top-0 z-[45] flex items-center border-b border-stone-200/90 bg-white/90 px-2 py-1.5 pl-[max(0.5rem,env(safe-area-inset-left))] pt-[max(0.35rem,env(safe-area-inset-top))] pr-[max(0.5rem,env(safe-area-inset-right))] backdrop-blur-md lg:hidden"
           role="navigation"
           aria-label="Быстрый возврат"
         >
@@ -2345,7 +2345,7 @@ export function ServicePlannerPage() {
           </button>
         </div>
       ) : null}
-      <section className="mx-auto flex w-full max-w-4xl flex-col gap-3 px-3 py-4 max-md:pb-[calc(var(--app-bottom-nav-total-height)+6.5rem)] sm:px-4 md:px-6">
+      <section className="mx-auto flex w-full max-w-4xl flex-col gap-3 px-3 py-4 max-lg:pb-[calc(var(--app-bottom-nav-total-height)+6.5rem)] sm:px-4 md:px-6">
       <header className="rounded-2xl border border-stone-200 bg-white p-4 shadow-sm">
         <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-2">
           <div className="flex min-w-0 items-center gap-2">
@@ -2546,7 +2546,7 @@ export function ServicePlannerPage() {
           <button
             type="button"
             onClick={() => setIsPlanSettingsOpenMobile((v) => !v)}
-            className="inline-flex min-h-[36px] items-center justify-center gap-1 rounded-lg border border-stone-300 px-2.5 py-1.5 text-xs font-semibold text-stone-700 md:hidden"
+            className="inline-flex min-h-[36px] items-center justify-center gap-1 rounded-lg border border-stone-300 px-2.5 py-1.5 text-xs font-semibold text-stone-700 lg:hidden"
           >
             {isPlanSettingsOpenMobile ? (
               <>
@@ -2788,7 +2788,7 @@ export function ServicePlannerPage() {
                                 </button>
                               </div>
                               <div
-                                className="absolute right-0 top-1/2 flex -translate-y-1/2 md:hidden"
+                                className="absolute right-0 top-1/2 flex -translate-y-1/2 lg:hidden"
                                 data-planner-mobile-menu-root
                                 onPointerDown={(e) => isNarrowViewport && e.stopPropagation()}
                               >
@@ -2868,7 +2868,7 @@ export function ServicePlannerPage() {
                               {block.startsAt}
                             </span>
                             <div
-                              className="relative shrink-0 md:hidden"
+                              className="relative shrink-0 lg:hidden"
                               data-planner-mobile-time-root
                               onPointerDown={(e) => isNarrowViewport && e.stopPropagation()}
                             >
@@ -3031,7 +3031,7 @@ export function ServicePlannerPage() {
 
                             <div className="ml-auto flex shrink-0 items-start gap-0.5">
                               <div
-                                className="relative md:hidden"
+                                className="relative lg:hidden"
                                 data-planner-mobile-menu-root
                                 onPointerDown={(e) => isNarrowViewport && e.stopPropagation()}
                               >
@@ -3230,7 +3230,7 @@ export function ServicePlannerPage() {
         </div>
       ) : null}
 
-      <div className="service-planner-mobile-save fixed inset-x-0 bottom-[var(--app-bottom-nav-total-height)] z-[60] border-t border-stone-200 bg-white/95 px-3 py-2 backdrop-blur md:hidden [padding-bottom:max(0.5rem,var(--app-safe-bottom))]">
+      <div className="service-planner-mobile-save fixed inset-x-0 bottom-[var(--app-bottom-nav-total-height)] z-[60] border-t border-stone-200 bg-white/95 px-3 py-2 backdrop-blur lg:hidden [padding-bottom:max(0.5rem,var(--app-safe-bottom))]">
         <button
           type="button"
           onClick={() => {

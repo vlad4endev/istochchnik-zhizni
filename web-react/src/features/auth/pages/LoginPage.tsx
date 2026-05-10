@@ -136,8 +136,8 @@ export function LoginPage() {
   async function submitLogin() {
     const p = phone.trim();
     const pw = password;
-    if (!p || !pw) {
-      setStatusText('Введите номер телефона и пароль');
+    if (!p) {
+      setStatusText('Введите номер телефона');
       setStatusIsError(true);
       return;
     }
@@ -164,7 +164,11 @@ export function LoginPage() {
       }
 
       if (response.status === 401) {
-        setStatusText('Неверный телефон или пароль.');
+        setStatusText(
+          !pw.trim()
+            ? 'Введите пароль для входа или проверьте номер. Только номер подходит, если администратор сбросил пароль — тогда откроется форма нового пароля.'
+            : 'Неверный телефон или пароль.',
+        );
         setStatusIsError(true);
         return;
       }
@@ -504,7 +508,7 @@ export function LoginPage() {
   const title = isRegisterMode ? 'Создание аккаунта' : 'Вход в систему';
   const subtitle = isRegisterMode
     ? 'Заполните данные для регистрации'
-    : 'Введите номер телефона и пароль';
+    : 'Укажите телефон. Если администратор сбросил пароль, достаточно номера — откроется форма нового пароля. Иначе введите и пароль.';
   const handlePrimarySubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (submitting) return;
@@ -639,7 +643,14 @@ export function LoginPage() {
               </label>
 
               <label className="block">
-                <span className="mb-1 block text-xs font-semibold text-stone-600">Пароль</span>
+                <span className="mb-1 block text-xs font-semibold text-stone-600">
+                  Пароль
+                  {!isRegisterMode && (
+                    <span className="ml-1 font-normal text-stone-500">
+                      (необязательно, если пароль сбросил администратор)
+                    </span>
+                  )}
+                </span>
                 <div className="relative">
                   <input
                     className={`${inputClass} pr-11`}

@@ -32,7 +32,7 @@ export default function EventsFeed({ events }) {
 
   return (
     <>
-      <div className="hidden grid-cols-3 gap-4 md:grid">
+      <div className="hidden grid-cols-3 gap-4 lg:grid">
         <FeedCard
           icon={LuPlay}
           title={events?.stream?.title || 'Эфир'}
@@ -56,7 +56,7 @@ export default function EventsFeed({ events }) {
         />
       </div>
 
-      <div className="scrollbar-hide -mx-1 overflow-x-auto px-1 md:hidden">
+      <div className="scrollbar-hide -mx-1 overflow-x-auto px-1 lg:hidden">
         <div className="flex w-max gap-3">
           <FeedCard
             icon={LuPlay}

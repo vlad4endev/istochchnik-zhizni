@@ -81,7 +81,7 @@ export function LyricsWithChords({
       text={text}
       transposeSemitones={transposeSemitones}
       chordLayoutMode={chordLayoutMode}
-      className={className}
+      className={['songbook-reader', className].filter(Boolean).join(' ')}
       fontSizePx={fontSizePx}
       chordsVisible={chordsVisible}
       chordTone={chordTone}

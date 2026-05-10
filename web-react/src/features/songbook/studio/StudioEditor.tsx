@@ -52,6 +52,33 @@ import {
   hasAnyChordsInBlock,
 } from './chordPattern';
 
+/**
+ * Текст студии над каталогом; если в `studio_versions.custom_content` лежит пустая строка,
+ * оператор `??` не подставляет каталог — в редакторе получались «пустые слова» при полном `songs.content`.
+ */
+function effectiveLyricsSource(studioContent: string | null | undefined, catalogContent: string | undefined): string {
+  const catalog = catalogContent ?? '';
+  if (studioContent == null) return catalog;
+  const studio = String(studioContent);
+  if (studio.trim().length === 0) return catalog;
+  return studio;
+}
+
+/** Черновик из localStorage не должен перетирать текст с сервера «пустой разметкой» после автосохранения до загрузки песни. */
+function studioBlocksHaveBody(blocks: SongBlock[]): boolean {
+  return blocks.some((b) => typeof b.content === 'string' && b.content.replace(/\s+/gu, '').length > 0);
+}
+
+/** Live preview: без этого у `.lyric-line` не подхватываются стили; в тёмной сцене `var(--text)` тёмный на тёмном фоне. */
+function studioPreviewLyricsClassName(darkUi: boolean): string {
+  return [
+    'break-words',
+    darkUi
+      ? 'text-slate-100 [&_.lyric-line]:!text-slate-100 [&_.section-label]:!text-slate-200'
+      : 'text-stone-900',
+  ].join(' ');
+}
+
 const KEY_ROOTS = ['C', 'D', 'E', 'F', 'G', 'A', 'B'] as const;
 const CHORD_STRIP = ['C', 'D', 'E', 'F', 'G', 'A', 'B', 'Am', 'Dm', 'Em', 'G', 'C7'];
 const ARCHIVE_TAG = '__archived';
@@ -229,7 +256,7 @@ export function StudioEditor() {
   useEffect(() => {
     const s = songQ.data;
     const v = verQ.data as { custom_content?: string | null; custom_key?: string | null } | null;
-    if (!s) return;
+    if (!s || Number(s.id) !== id) return;
     const draftKey = `studio:autosave:song:${id}`;
     let draft: {
       blocks?: SongBlock[];
@@ -257,12 +284,25 @@ export function StudioEditor() {
       );
     };
 
+    const serverChordSource = effectiveLyricsSource(v?.custom_content, s.content);
+    const applyServerBlocks = () => setBlocks(fromChordText(serverChordSource));
+
     if (Array.isArray(draft?.blocks) && draft.blocks.length > 0) {
-      setBlocks(normalizeDraftBlocks(draft.blocks));
-    } else if (typeof draft?.content === 'string') {
+      const normalized = normalizeDraftBlocks(draft.blocks);
+      if (studioBlocksHaveBody(normalized)) {
+        setBlocks(normalized);
+      } else {
+        try {
+          localStorage.removeItem(draftKey);
+        } catch {
+          /* ignore */
+        }
+        applyServerBlocks();
+      }
+    } else if (typeof draft?.content === 'string' && draft.content.trim().length > 0) {
       setBlocks(fromChordText(draft.content));
     } else {
-      setBlocks(fromChordText(v?.custom_content ?? s.content ?? ''));
+      applyServerBlocks();
     }
 
     setKey(typeof draft?.key === 'string' ? draft.key : (v?.custom_key ?? s.default_key ?? ''));
@@ -276,14 +316,12 @@ export function StudioEditor() {
     } catch {
       setShowWelcome(false);
     }
-    const baselineChordPro = blocksToChordPro(
-      chordProToBlocks(decodeHtmlEntities(v?.custom_content ?? s.content ?? '')),
-    );
+    const baselineChordPro = blocksToChordPro(chordProToBlocks(decodeHtmlEntities(serverChordSource)));
     lastSavedSnapshotRef.current = JSON.stringify({
       content: baselineChordPro,
       key: v?.custom_key ?? s.default_key ?? '',
     });
-  }, [songQ.data, verQ.data]);
+  }, [songQ.data, verQ.data, id]);
 
   useEffect(() => {
     if (!Number.isInteger(id) || id <= 0) return;
@@ -897,7 +935,7 @@ export function StudioEditor() {
 
   return (
     <div
-      className={`mx-auto flex w-full max-w-[1520px] flex-col gap-4 px-2 sm:px-3 md:px-4 max-md:pb-[calc(5.75rem+env(safe-area-inset-bottom,0px))] ${shell.page}`}
+      className={`mx-auto flex w-full max-w-[1520px] flex-col gap-4 px-2 sm:px-3 md:px-4 max-lg:pb-[calc(5.75rem+env(safe-area-inset-bottom,0px))] ${shell.page}`}
     >
       <SmartImportModal
         open={importOpen}
@@ -1595,7 +1633,7 @@ export function StudioEditor() {
                     transposeSemitones={0}
                     chordTone={darkUi ? 'dark' : 'light'}
                     fontSizePx={16}
-                    className={`break-words ${darkUi ? 'text-slate-100' : 'text-stone-900'}`}
+                    className={studioPreviewLyricsClassName(darkUi)}
                   />
                 </div>
               ))}
@@ -1624,7 +1662,7 @@ export function StudioEditor() {
                   transposeSemitones={0}
                   chordTone={darkUi ? 'dark' : 'light'}
                   fontSizePx={16}
-                  className={`break-words ${darkUi ? 'text-slate-100' : 'text-stone-900'}`}
+                  className={studioPreviewLyricsClassName(darkUi)}
                 />
               </div>
             ))}
@@ -1663,7 +1701,7 @@ export function StudioEditor() {
 
       {chordAutoUndo && undoSecondsLeft > 0 ? (
         <div
-          className={`fixed bottom-[calc(var(--app-bottom-nav-total-height)+0.5rem)] left-1/2 z-[120] w-[min(92vw,520px)] -translate-x-1/2 rounded-xl border px-3 py-2 shadow-xl md:bottom-6 ${
+          className={`fixed bottom-[calc(var(--app-bottom-nav-total-height)+0.5rem)] left-1/2 z-[120] w-[min(92vw,520px)] -translate-x-1/2 rounded-xl border px-3 py-2 shadow-xl lg:bottom-6 ${
             darkUi ? 'border-amber-600/60 bg-slate-900 text-slate-100' : 'border-amber-200 bg-white text-stone-900'
           }`}
         >
@@ -1688,7 +1726,7 @@ export function StudioEditor() {
 
       <div
         className={[
-          'studio-editor-mobile-dock fixed inset-x-0 bottom-0 z-50 border-t pb-[max(0.5rem,env(safe-area-inset-bottom,0px))] md:hidden',
+          'studio-editor-mobile-dock fixed inset-x-0 bottom-0 z-50 border-t pb-[max(0.5rem,env(safe-area-inset-bottom,0px))] lg:hidden',
           darkUi ? 'border-slate-800 bg-slate-950/95' : 'border-slate-200 bg-white/95',
         ].join(' ')}
       >
@@ -1730,7 +1768,7 @@ export function StudioEditor() {
       </div>
 
       {showPreviewPane ? (
-        <div className="fixed inset-0 z-[70] flex min-h-0 flex-col bg-black/45 px-3 pb-24 pt-20 md:hidden">
+        <div className="fixed inset-0 z-[70] flex min-h-0 flex-col bg-black/45 px-3 pb-24 pt-20 lg:hidden">
           <div
             className={`min-h-0 max-h-full flex-1 overflow-y-auto overscroll-contain rounded-2xl border p-4 ${
               darkUi ? 'border-slate-700 bg-slate-950 text-slate-100' : 'border-stone-200 bg-white text-stone-900'
@@ -1755,7 +1793,7 @@ export function StudioEditor() {
                     transposeSemitones={0}
                     chordTone={darkUi ? 'dark' : 'light'}
                     fontSizePx={16}
-                    className={`break-words ${darkUi ? 'text-slate-100' : 'text-stone-900'}`}
+                    className={studioPreviewLyricsClassName(darkUi)}
                   />
                 </div>
               ))}

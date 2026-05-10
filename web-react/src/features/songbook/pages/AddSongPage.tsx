@@ -422,7 +422,7 @@ export function AddSongPage() {
 
       {step === 2 && (
         <section className="space-y-4">
-          <div className={`grid grid-cols-2 gap-1 rounded-xl p-1 md:hidden ${isStudio ? 'bg-zinc-900/80' : 'bg-stone-100'}`}>
+          <div className={`grid grid-cols-2 gap-1 rounded-xl p-1 lg:hidden ${isStudio ? 'bg-zinc-900/80' : 'bg-stone-100'}`}>
             <button
               type="button"
               onClick={() => setMobileEditorPane('editor')}
@@ -757,7 +757,7 @@ export function AddSongPage() {
         </section>
       )}
 
-      <div className={`fixed inset-x-0 bottom-0 z-50 border-t p-2 md:hidden ${isStudio ? 'border-zinc-700 bg-zinc-950/95' : 'border-stone-200 bg-white/95'}`}>
+      <div className={`fixed inset-x-0 bottom-0 z-50 border-t p-2 lg:hidden ${isStudio ? 'border-zinc-700 bg-zinc-950/95' : 'border-stone-200 bg-white/95'}`}>
         <div className="mx-auto flex max-w-6xl items-center gap-2">
           {step === 1 ? (
             <>

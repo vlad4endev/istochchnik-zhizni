@@ -45,15 +45,15 @@ export default function DashboardPage() {
           <EventsFeed events={data.events} />
         </div>
 
-        <div className="hidden gap-4 md:grid lg:hidden md:grid-cols-2">
+        <div className="hidden min-[768px]:grid grid-cols-2 gap-4 lg:hidden [&>*]:min-w-0">
           <div>{hasSermon ? <SermonWidget {...data.sermon} /> : <ProfileCard user={data.profile} />}</div>
-          <div className={hasSermon ? '' : 'md:col-start-2'}>
+          <div className={hasSermon ? '' : 'col-start-2'}>
             <ProfileCard user={data.profile} />
           </div>
           <BirthdayCard birthdays={data.birthdays} />
           <PrayerCard prayers={data.prayers} unreadCount={data.unreadCount} />
-          {hasAnnouncement ? <div className="md:col-span-2"><AnnouncementBanner announcement={data.announcement} /></div> : null}
-          <div className="md:col-span-2">
+          {hasAnnouncement ? <div className="col-span-2"><AnnouncementBanner announcement={data.announcement} /></div> : null}
+          <div className="col-span-2">
             <EventsFeed events={data.events} />
           </div>
         </div>

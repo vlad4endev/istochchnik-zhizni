@@ -12,10 +12,10 @@ import { sendPasswordResetTelegramMessage } from './telegramService';
 
 const scrypt = promisify(scryptCallback);
 const MIN_PASSWORD_LENGTH = 8;
-const DEFAULT_ACCESS_TTL_MINUTES = 15;
+const DEFAULT_ACCESS_TTL_MINUTES = 60;
 const MIN_ACCESS_TTL_MINUTES = 1;
 const MAX_ACCESS_TTL_MINUTES = 24 * 60;
-const DEFAULT_REFRESH_TTL_DAYS = 7;
+const DEFAULT_REFRESH_TTL_DAYS = 90;
 const MIN_REFRESH_TTL_DAYS = 1;
 const MAX_REFRESH_TTL_DAYS = 365;
 const DEFAULT_MAX_ACTIVE_SESSIONS_PER_USER = 3;
@@ -1196,9 +1196,6 @@ export async function loginUser(phoneInput: string, password: string): Promise<L
   const phoneDigits = normalizePhoneDigits(phoneInput.trim());
   const phoneVariants = getPhoneDigitsVariants(phoneDigits);
   ensureValidPhone(phoneInput);
-  if (password.trim().length > 0) {
-    ensureValidPassword(password);
-  }
 
   const result = await query(
     `SELECT
@@ -1231,7 +1228,7 @@ export async function loginUser(phoneInput: string, password: string): Promise<L
   }
 
   const row = result.rows[0] as (MemberRow & { password_hash: string | null }) | undefined;
-  if (!row?.password_hash) {
+  if (!row) {
     return null;
   }
 
@@ -1242,6 +1239,7 @@ export async function loginUser(phoneInput: string, password: string): Promise<L
     return null;
   }
 
+  // Must run before `!password_hash` check: admin reset clears the hash and sets this flag.
   if (row.password_reset_required) {
     return {
       status: 'password_reset_required',
@@ -1249,9 +1247,15 @@ export async function loginUser(phoneInput: string, password: string): Promise<L
     };
   }
 
-  if (!password.trim() || !row.password_hash) {
+  if (!row.password_hash) {
     return null;
   }
+
+  if (!password.trim()) {
+    return null;
+  }
+
+  ensureValidPassword(password);
 
   const isPasswordValid = await verifyPassword(password, row.password_hash);
   if (!isPasswordValid) {
@@ -1365,49 +1369,129 @@ export async function revokeRefreshToken(token: string): Promise<void> {
   );
 }
 
-export async function rotateAccessByRefreshToken(
-  refreshToken: string
-): Promise<{ token: string; expiresAt: string; refreshToken: string; refreshExpiresAt: string } | null> {
-  const normalizedToken = refreshToken.trim();
-  if (!normalizedToken) {
-    return null;
-  }
-  const tokenHash = createHash('sha256').update(normalizedToken).digest('hex');
-  const sessionResult = await query(
-    `SELECT rs.member_id
-     FROM auth_refresh_sessions rs
-     JOIN members m ON m.id = rs.member_id
-     WHERE rs.token_hash = $1
-       AND rs.expires_at > NOW()
-       AND rs.revoked_at IS NULL
-       AND (
-         m.is_active = TRUE
-         OR m.registration_status = 'rejected'
-       )
-     LIMIT 1`,
-    [tokenHash]
-  );
-  const row = sessionResult.rows[0] as { member_id: number } | undefined;
-  if (!row?.member_id) {
-    return null;
-  }
+type RefreshRotationResult = {
+  token: string;
+  expiresAt: string;
+  refreshToken: string;
+  refreshExpiresAt: string;
+};
 
+/** Повтор тем же refresh сразу после ротации (две вкладки / повтор запроса). */
+const REFRESH_ROTATION_GRACE_MS = 60_000;
+const MAX_REFRESH_GRACE_MAP_SIZE = 5000;
+
+const refreshRotationGraceByHash = new Map<string, { payload: RefreshRotationResult; until: number }>();
+
+/** Параллельные POST /refresh с одним cookie — один расчёт, общий результат. */
+const pendingRefreshByHash = new Map<string, Promise<RefreshRotationResult | null>>();
+
+function pruneRefreshRotationGrace(): void {
+  const now = Date.now();
+  for (const [k, v] of refreshRotationGraceByHash) {
+    if (now > v.until) {
+      refreshRotationGraceByHash.delete(k);
+    }
+  }
+  if (refreshRotationGraceByHash.size > MAX_REFRESH_GRACE_MAP_SIZE) {
+    const target = Math.floor(MAX_REFRESH_GRACE_MAP_SIZE * 0.7);
+    let removed = 0;
+    for (const k of refreshRotationGraceByHash.keys()) {
+      refreshRotationGraceByHash.delete(k);
+      removed += 1;
+      if (refreshRotationGraceByHash.size <= target) {
+        break;
+      }
+    }
+  }
+}
+
+function takeRefreshRotationGrace(tokenHash: string): RefreshRotationResult | null {
+  pruneRefreshRotationGrace();
+  const row = refreshRotationGraceByHash.get(tokenHash);
+  if (!row) {
+    return null;
+  }
+  if (Date.now() > row.until) {
+    refreshRotationGraceByHash.delete(tokenHash);
+    return null;
+  }
+  return row.payload;
+}
+
+function rememberRefreshRotationGrace(tokenHash: string, payload: RefreshRotationResult): void {
+  pruneRefreshRotationGrace();
+  refreshRotationGraceByHash.set(tokenHash, {
+    payload,
+    until: Date.now() + REFRESH_ROTATION_GRACE_MS,
+  });
+}
+
+async function rotateAccessByRefreshTokenOnce(
+  tokenHash: string,
+  memberId: number
+): Promise<RefreshRotationResult> {
   await query(
     `UPDATE auth_refresh_sessions
      SET revoked_at = NOW()
      WHERE token_hash = $1`,
     [tokenHash]
   );
-  const { token, expiresAt } = await createSessionForUser(row.member_id);
+  const { token, expiresAt } = await createSessionForUser(memberId);
   const { refreshToken: nextRefreshToken, expiresAt: refreshExpiresAt } = await issueRefreshSessionForUser(
-    row.member_id
+    memberId
   );
-  return {
+  const result: RefreshRotationResult = {
     token,
     expiresAt,
     refreshToken: nextRefreshToken,
     refreshExpiresAt,
   };
+  rememberRefreshRotationGrace(tokenHash, result);
+  return result;
+}
+
+export async function rotateAccessByRefreshToken(
+  refreshToken: string
+): Promise<RefreshRotationResult | null> {
+  const normalizedToken = refreshToken.trim();
+  if (!normalizedToken) {
+    return null;
+  }
+  const tokenHash = createHash('sha256').update(normalizedToken).digest('hex');
+
+  const grace = takeRefreshRotationGrace(tokenHash);
+  if (grace) {
+    return grace;
+  }
+
+  let inflight = pendingRefreshByHash.get(tokenHash);
+  if (!inflight) {
+    inflight = (async (): Promise<RefreshRotationResult | null> => {
+      const sessionResult = await query(
+        `SELECT rs.member_id
+         FROM auth_refresh_sessions rs
+         JOIN members m ON m.id = rs.member_id
+         WHERE rs.token_hash = $1
+           AND rs.expires_at > NOW()
+           AND rs.revoked_at IS NULL
+           AND (
+             m.is_active = TRUE
+             OR m.registration_status = 'rejected'
+           )
+         LIMIT 1`,
+        [tokenHash]
+      );
+      const row = sessionResult.rows[0] as { member_id: number } | undefined;
+      if (!row?.member_id) {
+        return takeRefreshRotationGrace(tokenHash);
+      }
+      return rotateAccessByRefreshTokenOnce(tokenHash, row.member_id);
+    })().finally(() => {
+      pendingRefreshByHash.delete(tokenHash);
+    });
+    pendingRefreshByHash.set(tokenHash, inflight);
+  }
+  return inflight;
 }
 
 export async function getAuthUserById(userId: number): Promise<AuthUser | null> {

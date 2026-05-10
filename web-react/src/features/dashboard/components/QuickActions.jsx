@@ -11,7 +11,7 @@ const actions = [
 export default function QuickActions() {
   return (
     <>
-      <div className="hidden md:flex md:flex-wrap md:gap-3">
+      <div className="hidden lg:flex lg:flex-wrap lg:gap-3">
         {actions.map((action) => (
           <Link
             key={action.label}
@@ -24,7 +24,7 @@ export default function QuickActions() {
         ))}
       </div>
 
-      <div className="scrollbar-hide -mx-1 overflow-x-auto px-1 md:hidden">
+      <div className="scrollbar-hide -mx-1 overflow-x-auto px-1 lg:hidden">
         <div className="flex w-max gap-2">
           {actions.map((action) => (
             <Link

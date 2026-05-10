@@ -1,7 +1,8 @@
-import axios, { type AxiosError, type InternalAxiosRequestConfig, isCancel } from 'axios';
+import axios, { type AxiosError, type AxiosHeaders, type InternalAxiosRequestConfig, isCancel } from 'axios';
 
 import { useAuthStore } from '../features/auth/authStore';
 
+import { performAuthRefresh } from './authRefresh';
 import { isCookieOnlySessionToken } from './authSessionConstants';
 import { resolveAxiosBaseURL } from './config';
 import { emitAppToast } from './uiFeedback';
@@ -41,33 +42,22 @@ type RetryableAxiosConfig = InternalAxiosRequestConfig & {
   _retryAfterRefresh?: boolean;
 };
 
-let refreshInFlight: Promise<string | null> | null = null;
-
-async function refreshAccessToken(): Promise<string | null> {
-  if (!refreshInFlight) {
-    refreshInFlight = (async () => {
-      const baseURL = resolveAxiosBaseURL() ?? '';
-      const response = await axios.post(
-        `${baseURL}/api/auth/refresh`,
-        null,
-        {
-          timeout: 25_000,
-          withCredentials: true,
-          validateStatus: (s) => s !== undefined && s < 500,
-        }
-      );
-      if (response.status !== 200) {
-        return null;
-      }
-      const data = response.data as { accessToken?: unknown; token?: unknown } | undefined;
-      const nextTokenRaw = data?.accessToken ?? data?.token;
-      const nextToken = typeof nextTokenRaw === 'string' ? nextTokenRaw.trim() : '';
-      return nextToken || null;
-    })().finally(() => {
-      refreshInFlight = null;
-    });
+/** После refresh Access из стора новый; убираем старый Bearer из повторяемого config. */
+function stripStaleAuthorization(config: InternalAxiosRequestConfig): void {
+  const h = config.headers;
+  if (!h) return;
+  if (typeof (h as AxiosHeaders).delete === 'function') {
+    (h as AxiosHeaders).delete('Authorization');
+    (h as AxiosHeaders).delete('authorization');
+  } else {
+    delete (h as Record<string, unknown>).Authorization;
+    delete (h as Record<string, unknown>).authorization;
   }
-  return refreshInFlight;
+  const common = (config.headers as { common?: Record<string, unknown> }).common;
+  if (common) {
+    delete common.Authorization;
+    delete common.authorization;
+  }
 }
 
 export const apiClient = axios.create({
@@ -115,21 +105,20 @@ apiClient.interceptors.response.use(
       if (!shouldSkip401Handling(url) && retryCfg && !retryCfg._retryAfterRefresh) {
         retryCfg._retryAfterRefresh = true;
         try {
-          const nextToken = await refreshAccessToken();
+          const nextToken = await performAuthRefresh();
           if (nextToken) {
             const auth = useAuthStore.getState();
-            if (auth.token) {
-              auth.setSession({
-                token: nextToken,
-                firstName: auth.firstName,
-                lastName: auth.lastName,
-                role: auth.role,
-                roles: auth.roles,
-                registrationStatus: auth.registrationStatus,
-                username: auth.username,
-                memberId: auth.memberId,
-              });
-            }
+            auth.setSession({
+              token: nextToken,
+              firstName: auth.firstName,
+              lastName: auth.lastName,
+              role: auth.role,
+              roles: auth.roles,
+              registrationStatus: auth.registrationStatus,
+              username: auth.username,
+              memberId: auth.memberId,
+            });
+            stripStaleAuthorization(retryCfg);
             return apiClient.request(retryCfg);
           }
         } catch {
