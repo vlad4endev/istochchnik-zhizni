@@ -2618,13 +2618,16 @@ function CalendarPrayerCycleRoster() {
     return [...rows].sort(compareMembersByPrayerCycleOrder);
   }, [data, addSearch]);
 
-  /** Только Draggable-строки внутри Droppable; refetch не отключает перетаскивание. */
+  /**
+   * Режим перетаскивания: снимок очереди с API + без фильтра поиска.
+   * Не требуем, чтобы каждый id из ростера уже был в кэше списка пользователей — иначе DnD
+   * часто отключался из‑за гонки загрузки и выглядело как «ничего не поменялось».
+   */
   const rosterDnDEnabled =
     Boolean(data?.length) &&
     !listSearch.trim() &&
     Boolean(rosterSnapQ.data?.roster?.length) &&
-    !rosterSnapQ.isLoading &&
-    (rosterSnapQ.data?.roster ?? []).every((e) => (data ?? []).some((u) => u.id === e.id));
+    !rosterSnapQ.isLoading;
 
   const inactiveOnlyInCycle = useMemo(() => {
     const list = data ?? [];
@@ -2736,7 +2739,7 @@ function CalendarPrayerCycleRoster() {
 
       <div className="grid lg:grid-cols-2 lg:divide-x lg:divide-stone-200">
         <div className="p-4 sm:p-5">
-          <h4 className="text-xs font-extrabold uppercase tracking-wide text-stone-500">Сейчас в цикле</h4>
+          <h4 className="text-xs font-extrabold uppercase tracking-wide text-stone-500">Очередь членов</h4>
           <p className="mt-1 text-xs text-stone-500">
             Неактивные с флагом в календарь не попадают, пока карточку не активируют.
           </p>
@@ -2749,6 +2752,11 @@ function CalendarPrayerCycleRoster() {
             placeholder="Имя, телефон…"
             autoComplete="off"
           />
+          {listSearch.trim() ? (
+            <p className="mt-2 text-xs text-amber-800/90">
+              Перетаскивание очереди недоступно при поиске — очистите поле, чтобы снова изменить порядок.
+            </p>
+          ) : null}
           <div className="mt-3 max-h-[min(28rem,55dvh)] overflow-auto rounded-xl border border-stone-200/80">
             {inCycleRows.length === 0 ? (
               <p className="py-8 text-center text-sm text-stone-500">
@@ -2756,6 +2764,8 @@ function CalendarPrayerCycleRoster() {
                   ? 'Никого не найдено.'
                   : 'Список пуст — добавьте людей справа.'}
               </p>
+            ) : rosterSnapQ.isLoading && !rosterSnapQ.data ? (
+              <p className="py-10 text-center text-sm text-stone-500">Загрузка порядка очереди цикла…</p>
             ) : rosterDnDEnabled && rosterSnapQ.data ? (
               <DragDropContext onDragEnd={handleRosterDragEnd}>
                 <div className="min-w-full bg-white/95 text-left text-[13px] leading-snug text-stone-800">
@@ -2779,14 +2789,21 @@ function CalendarPrayerCycleRoster() {
                         className="divide-y divide-stone-100"
                       >
                         {rosterSnapQ.data.roster.map((e, qIdx) => {
-                          const u = data!.find((x) => x.id === e.id)!;
-                          const isFormulaToday = rosterSnapQ.data!.today_member_id === u.id;
-                          const canAnchor = u.is_active && activeCycleMemberIds.has(u.id);
+                          const u = (data ?? []).find((x) => x.id === e.id);
+                          const rosterLabel =
+                            u != null
+                              ? memberRosterName(u)
+                              : [e.last_name, e.first_name].filter(Boolean).join(' ').trim() ||
+                                e.name ||
+                                `Участник №${e.id}`;
+                          const isFormulaToday = rosterSnapQ.data!.today_member_id === e.id;
+                          const activeForFormula = u?.is_active ?? e.is_active;
+                          const canAnchor = Boolean(activeForFormula && activeCycleMemberIds.has(e.id));
                           const zebra = qIdx % 2 === 0 ? 'bg-white' : 'bg-stone-50/80';
                           return (
                             <Draggable
-                              key={u.id}
-                              draggableId={`pc-roster-${u.id}`}
+                              key={e.id}
+                              draggableId={`pc-roster-${e.id}`}
                               index={qIdx}
                               isDragDisabled={
                                 saveOrderMut.isPending || patchMut.isPending || anchorQueueMut.isPending
@@ -2811,7 +2828,7 @@ function CalendarPrayerCycleRoster() {
                                     {...dragProvided.dragHandleProps}
                                     className="mt-0.5 flex h-9 w-9 shrink-0 cursor-grab items-center justify-center rounded-md border border-transparent text-stone-400 transition hover:border-stone-200 hover:bg-stone-100 hover:text-stone-700 active:cursor-grabbing"
                                     title="Потяните, чтобы изменить порядок в цикле"
-                                    aria-label={`Переместить ${memberRosterName(u)}`}
+                                    aria-label={`Переместить ${rosterLabel}`}
                                   >
                                     <LuGripVertical className="h-4 w-4" aria-hidden />
                                   </button>
@@ -2819,19 +2836,22 @@ function CalendarPrayerCycleRoster() {
                                     {qIdx + 1}
                                   </div>
                                   <div className="min-w-0 flex-[1.2] basis-[50%] sm:basis-auto">
-                                    <span className="font-semibold text-stone-900">{memberRosterName(u)}</span>
+                                    <span className="font-semibold text-stone-900">{rosterLabel}</span>
+                                    {!u ? (
+                                      <span className="ml-2 text-xs font-normal text-amber-700">обновите список</span>
+                                    ) : null}
                                     {isFormulaToday ? (
                                       <span className="ml-2 inline-block rounded-full bg-primary/12 px-2 py-0.5 text-[10px] font-bold text-primary">
                                         сегодня
                                       </span>
                                     ) : null}
-                                    <p className="mt-0.5 text-xs text-stone-500 sm:hidden">{u.phone_number ?? '—'}</p>
+                                    <p className="mt-0.5 text-xs text-stone-500 sm:hidden">{u?.phone_number ?? '—'}</p>
                                   </div>
                                   <div className="hidden w-[7.5rem] shrink-0 text-stone-600 sm:block">
-                                    {u.phone_number ?? '—'}
+                                    {u?.phone_number ?? '—'}
                                   </div>
                                   <div className="w-[5.75rem] shrink-0">
-                                    {u.is_active ? (
+                                    {activeForFormula ? (
                                       <span className="inline-block rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-800">
                                         В очереди
                                       </span>
@@ -2852,15 +2872,15 @@ function CalendarPrayerCycleRoster() {
                                         !canAnchor
                                       }
                                       title={
-                                        !u.is_active
+                                        !activeForFormula
                                           ? 'Сначала активируйте карточку'
-                                          : !activeCycleMemberIds.has(u.id)
+                                          : !activeCycleMemberIds.has(e.id)
                                             ? 'Нет в расчёте очереди'
                                             : undefined
                                       }
                                       onClick={() => {
                                         setBanner(null);
-                                        anchorQueueMut.mutate(u.id);
+                                        anchorQueueMut.mutate(e.id);
                                       }}
                                     >
                                       Первым сегодня
@@ -2873,7 +2893,7 @@ function CalendarPrayerCycleRoster() {
                                       }
                                       onClick={() => {
                                         setBanner(null);
-                                        patchMut.mutate({ id: u.id, in_prayer_cycle: false });
+                                        patchMut.mutate({ id: e.id, in_prayer_cycle: false });
                                       }}
                                     >
                                       Убрать
