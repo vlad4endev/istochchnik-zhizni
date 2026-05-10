@@ -191,12 +191,11 @@ html[data-pwa-standalone='1'] {
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
   background-color: var(--surface);
-  /* Нижний inset задаёт nativeShellViewport (проба env(safe-area-inset-bottom)); таббар без двойного паддинга */
-  --app-bottom-nav-safe-pad: 0px;
-}
-
-html[data-pwa-standalone='1'] .app-bottom-nav {
-  padding-bottom: 0 !important;
+  /*
+   * Раньше здесь было 0 + padding-bottom:0 на таббаре — в standalone контент и иконки таббара уезжали под home indicator,
+   * а main-padding (--app-bottom-nav-total-height) был занижен. Safe area входит и в высоту таббара, и в отступ main.
+   */
+  --app-bottom-nav-safe-pad: env(safe-area-inset-bottom, 0px);
 }
 
 @media (display-mode: standalone) {
@@ -204,7 +203,16 @@ html[data-pwa-standalone='1'] .app-bottom-nav {
     -webkit-text-size-adjust: 100%;
     text-size-adjust: 100%;
     background-color: var(--surface);
+    --app-bottom-nav-safe-pad: env(safe-area-inset-bottom, 0px);
   }
+}
+
+/*
+ * Один скролл-контейнер внутри приложения: иначе в WKWebView PWA цепляются и #root, и main — рвётся вёрстка/инерция.
+ * Страницы без Layout (логин и т.п.) задают свой overflow-y-auto на корне.
+ */
+html[data-pwa-standalone='1'] #root {
+  overflow-y: hidden;
 }
 
 body {
