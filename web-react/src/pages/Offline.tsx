@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 
 export function OfflinePage() {
   return (
-    <Center mih="100dvh" p="md">
+    <Center mih="var(--viewport-height, 100dvh)" p="md">
       <Stack align="center" gap="md" maw={400}>
         <Title order={2}>Нет подключения</Title>
         <Text c="dimmed" ta="center">

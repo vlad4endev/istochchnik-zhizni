@@ -159,7 +159,14 @@ export function MessengerPage() {
   }, [activeId, runTransitionWindow, setActive]);
 
   return (
-    <div className="tg-messenger-page messenger-layout flex h-full min-h-0 flex-1 flex-col bg-white">
+    <div
+      className="tg-messenger-page messenger-layout flex min-h-0 flex-1 flex-col overflow-hidden bg-white"
+      style={{
+        height: 'var(--viewport-height, 100dvh)',
+        maxHeight: 'var(--viewport-height, 100dvh)',
+        position: 'relative',
+      }}
+    >
       <div
         className={`tg-messenger min-h-0 flex-1 bg-white tg-density--${density} ${isTransitioning ? 'transitioning' : ''}`}
         ref={messengerRef}

@@ -1752,7 +1752,7 @@ function DashboardMain() {
       {eventOpen && typeof document !== 'undefined'
         ? createPortal(
             <div
-              className="dashboard-backdrop fixed inset-0 z-[150] flex min-h-[100dvh] items-center justify-center bg-black/45 p-4 [padding-left:max(0.75rem,env(safe-area-inset-left,0px))] [padding-right:max(0.75rem,env(safe-area-inset-right,0px))]"
+              className="dashboard-backdrop fixed inset-0 z-[150] flex min-h-screen items-center justify-center bg-black/45 p-4 [padding-left:max(0.75rem,env(safe-area-inset-left,0px))] [padding-right:max(0.75rem,env(safe-area-inset-right,0px))]"
               onClick={() => setEventOpen(false)}
               role="dialog"
               aria-modal="true"

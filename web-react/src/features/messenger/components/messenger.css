@@ -86,7 +86,7 @@
 @media (min-width: 769px) {
   .messenger-layout {
     display: flex;
-    height: 100dvh;
+    height: var(--viewport-height, 100dvh);
     overflow: hidden;
   }
 

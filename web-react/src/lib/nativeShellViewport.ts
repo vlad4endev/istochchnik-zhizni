@@ -4,7 +4,7 @@ const LOCKED_VIEWPORT =
 
 let viewportWatchAttached = false;
 
-function syncViewportState() {
+export function syncViewportHeightVars() {
   if (typeof window === 'undefined' || typeof document === 'undefined') return;
   const root = document.documentElement;
   const vv = window.visualViewport;
@@ -19,6 +19,8 @@ function syncViewportState() {
   /** Высота видимой области (iOS PWA: совпадает с клавиатурой; `innerHeight`/`100dvh` часто остаются «полными»). */
   const viewportHeightPx = Math.max(0, Math.round(visualHeight));
   root.style.setProperty('--viewport-height', `${viewportHeightPx}px`);
+  /** Старый паттерн `calc(var(--vh, 1vh) * 100)` / совместимость с гайдами — то же значение в px, что и `--viewport-height`. */
+  root.style.setProperty('--vh', `${viewportHeightPx}px`);
   root.style.setProperty('--visual-viewport-height', `${viewportHeightPx}px`);
   root.style.setProperty('--visual-viewport-offset', `${Math.round(offsetTop)}px`);
   root.style.setProperty('--app-keyboard-inset', `${keyboardInset}px`);
@@ -43,29 +45,29 @@ function attachViewportWatchers() {
   viewportWatchAttached = true;
 
   const vv = window.visualViewport;
-  vv?.addEventListener('resize', syncViewportState);
-  vv?.addEventListener('scroll', syncViewportState);
-  window.addEventListener('resize', syncViewportState);
-  window.addEventListener('orientationchange', syncViewportState);
+  vv?.addEventListener('resize', syncViewportHeightVars);
+  vv?.addEventListener('scroll', syncViewportHeightVars);
+  window.addEventListener('resize', syncViewportHeightVars);
+  window.addEventListener('orientationchange', syncViewportHeightVars);
   /** Часть WebView/Android отдаёт visual viewport с задержкой; фокус на поле — типичный триггер клавиатуры. */
   document.addEventListener(
     'focusin',
     () => {
-      queueMicrotask(syncViewportState);
+      queueMicrotask(syncViewportHeightVars);
     },
     true,
   );
   document.addEventListener(
     'focusout',
     () => {
-      queueMicrotask(syncViewportState);
+      queueMicrotask(syncViewportHeightVars);
     },
     true,
   );
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') syncViewportState();
+    if (document.visibilityState === 'visible') syncViewportHeightVars();
   });
-  syncViewportState();
+  syncViewportHeightVars();
 }
 
 /**

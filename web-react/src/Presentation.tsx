@@ -533,7 +533,7 @@ export function Presentation() {
   return (
     <div
       ref={containerRef}
-      className="relative min-h-[100dvh] w-full overflow-hidden bg-[var(--surface)] text-[var(--text)]"
+      className="relative min-h-screen w-full overflow-hidden bg-[var(--surface)] text-[var(--text)]"
       onTouchStart={(event) => {
         touchStartX.current = event.touches[0]?.clientX ?? null;
       }}
@@ -553,7 +553,7 @@ export function Presentation() {
         <motion.div className="h-full bg-primary" animate={{ width: `${progress}%` }} transition={{ duration: 0.32 }} />
       </div>
 
-      <div className="mx-auto flex min-h-[100dvh] w-full max-w-[1200px] flex-col px-4 pb-7 pt-8 sm:px-6">
+      <div className="mx-auto flex min-h-screen w-full max-w-[1200px] flex-col px-4 pb-7 pt-8 sm:px-6">
         <header className="mb-4 flex items-center justify-between gap-3">
           <div>
             <p className="text-xs font-extrabold uppercase tracking-[0.14em] text-stone-500">{current.kicker}</p>

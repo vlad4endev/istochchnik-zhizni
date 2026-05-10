@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+
+import { useViewportHeight } from './hooks/useViewportHeight';
 import { LuBookOpen, LuHeart, LuMapPin, LuWrench } from 'react-icons/lu';
 import { fetchPrayerByDate } from './api/prayer';
 import { memberRosterName } from './lib/memberRosterName';
@@ -22,6 +24,8 @@ function todayIsoUtc(): string {
 }
 
 export function App() {
+  useViewportHeight();
+
   const [date, setDate] = useState(todayIsoUtc);
   const [data, setData] = useState<DayPrayerData | null>(null);
   const [loading, setLoading] = useState(false);
@@ -145,7 +149,7 @@ export function App() {
       </main>
 
       <style>{`
-        .app { min-height: 100dvh; display: flex; flex-direction: column; }
+        .app { min-height: var(--viewport-height, 100dvh); display: flex; flex-direction: column; }
         .header {
           background: var(--primary);
           color: var(--text-on-primary);

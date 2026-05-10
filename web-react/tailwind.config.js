@@ -4,11 +4,18 @@ export default {
   content: ['./index.html', './src/**/*.{js,ts,jsx,tsx}'],
   theme: {
     extend: {
+      /** `h-screen` / `min-h-screen` / `max-h-screen` → visual viewport на iOS PWA (см. nativeShellViewport.ts). */
       height: {
+        screen: 'var(--viewport-height, 100dvh)',
         dvh: '100dvh',
       },
       /** Для `min-h-dvh` / корректной высоты PWA на iOS/Android (100dvh ≠ height.dvh в Tailwind по умолчанию). */
       minHeight: {
+        screen: 'var(--viewport-height, 100dvh)',
+        dvh: '100dvh',
+      },
+      maxHeight: {
+        screen: 'var(--viewport-height, 100dvh)',
         dvh: '100dvh',
       },
       screens: {

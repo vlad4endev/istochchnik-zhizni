@@ -51,6 +51,7 @@ textarea {
   --app-bottom-nav-total-height: calc(var(--app-bottom-nav-main-gutter) + env(safe-area-inset-bottom, 0px));
   /* До первого кадра JS — fallback; nativeShellViewport перезаписывает px из visualViewport. */
   --viewport-height: 100dvh;
+  --vh: 100dvh;
   --app-keyboard-inset: 0px;
 }
 
@@ -150,6 +151,7 @@ html[data-color-theme='blue'] {
 html {
   width: 100%;
   height: 100%;
+  height: -webkit-fill-available;
   min-height: 100%;
   min-height: -webkit-fill-available;
   min-height: 100dvh;
@@ -214,7 +216,6 @@ body {
   margin: 0;
   width: 100%;
   height: 100%;
-  min-height: 100%;
   min-height: -webkit-fill-available;
   min-height: 100dvh;
   display: flex;
