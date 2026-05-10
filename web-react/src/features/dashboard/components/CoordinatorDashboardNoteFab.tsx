@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import axios from 'axios';
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { LuCross, LuHandshake, LuMegaphone, LuPlus } from 'react-icons/lu';
 
 import { apiBoolean } from '../../../lib/apiBoolean';
@@ -115,6 +116,9 @@ export function CoordinatorDashboardNoteFab() {
     return () => window.removeEventListener('keydown', onKey);
   }, [modalKind, saveMut.isPending, deleteMut.isPending]);
 
+  const [portalReady, setPortalReady] = useState(false);
+  useEffect(() => setPortalReady(true), []);
+
   if (!can) return null;
 
   function openModalFromMenu(kind: DashboardCoordinatorNoteKind) {
@@ -139,7 +143,9 @@ export function CoordinatorDashboardNoteFab() {
 
   const busy = saveMut.isPending || deleteMut.isPending;
 
-  return (
+  if (!portalReady || typeof document === 'undefined') return null;
+
+  return createPortal(
     <>
       <div
         ref={fabRef}
@@ -298,6 +304,7 @@ export function CoordinatorDashboardNoteFab() {
           </div>
         </div>
       ) : null}
-    </>
+    </>,
+    document.body,
   );
 }
