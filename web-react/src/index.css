@@ -190,10 +190,16 @@ html[data-a11y-large-cursor='true'] body summary {
 /* PWA: вертикальный скролл; pinch-zoom может быть включён через viewport-meta (см. nativeShellViewport). */
 html.app-native-shell {
   touch-action: pan-x pan-y;
-  /* iOS: убираем лишний «зазор» справа от scrollbar-gutter. Высота — из visualViewport → --viewport-height. */
   scrollbar-gutter: auto;
-  /* Не фиксируем height/max-height на html — в iOS standalone это давало нулевой/сломаный layout при гонках JS. */
-  min-height: var(--viewport-height, 100dvh);
+  /*
+   * height + max-height: JS (nativeShellViewport) пишет inline-стиль напрямую, поэтому CSS-значение здесь —
+   * только fallback до первого JS-кадра. Важно: НЕ overflow:hidden — обрежет тосты/модалки вне #root.
+   */
+  height: var(--viewport-height, 100dvh);
+  max-height: var(--viewport-height, 100dvh);
+  /* min-height убираем — иначе html «распухает» снизу когда var() ещё не задан (0px) */
+  min-height: 0;
+  overflow: hidden;
 }
 
 /* PWA с экрана «Домой» / iOS navigator.standalone — фон до края, без скачка кегля при повороте */
@@ -246,11 +252,15 @@ body {
   border-radius: var(--mantine-radius-md, 0.5rem);
 }
 
-/* После правил `body { … min-height: 100dvh }`: иначе 100dvh на iOS > видимой области и под `.app-bottom-nav` остаётся полоска фона.
-   `--viewport-height` задаётся в nativeShellViewport.ts (= visualViewport.height, с защитой от 0). */
+/* body в PWA: JS пишет inline height+maxHeight напрямую (nativeShellViewport.ts).
+   CSS здесь — страховка и направление отображения. overflow:hidden убирает второй scroll-контейнер
+   (html→body→#root → три вложенных), iOS скроллил «не тот» слой. */
 html.app-native-shell body {
   touch-action: pan-x pan-y;
-  min-height: var(--viewport-height, 100dvh);
+  height: var(--viewport-height, 100dvh);
+  max-height: var(--viewport-height, 100dvh);
+  min-height: 0;
+  overflow: hidden;
 }
 
 html.dark body {

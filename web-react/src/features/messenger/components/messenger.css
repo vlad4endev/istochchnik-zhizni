@@ -864,9 +864,7 @@
 
 .tg-chat-window__composer {
   flex-shrink: 0;
-  /* iOS PWA: не fixed — sticky внутри колонки чата остаётся в видимом visual viewport при клавиатуре */
-  position: sticky;
-  bottom: 0;
+  position: relative;
   align-self: stretch;
   z-index: 20;
 }
@@ -2415,8 +2413,9 @@ html.dark .msg-quick-reaction:hover {
 
     html[data-chat-open="1"] .tg-main--visible .tg-chat-window > .tg-chat-window__composer,
     html[data-chat-open="1"] .tg-chat-window > .tg-chat-window__composer {
-      position: sticky;
-      bottom: 0;
+      /* position:sticky внутри display:grid + overflow:hidden не работает на iOS — заменено на relative.
+         Composer уже находится в последней строке grid-template-rows (auto), поэтому всегда внизу. */
+      position: relative;
       z-index: 40;
       padding-left: 0.75rem;
       padding-right: 0.75rem;

@@ -40,13 +40,27 @@ export function syncViewportHeightVars() {
     chosen = Math.round(window.screen.height);
   }
   const viewportHeightPx = Math.max(120, chosen > 0 ? chosen : 568);
-  root.style.setProperty('--viewport-height', `${viewportHeightPx}px`);
-  /** Старый паттерн `calc(var(--vh, 1vh) * 100)` / совместимость с гайдами — то же значение в px, что и `--viewport-height`. */
-  root.style.setProperty('--vh', `${viewportHeightPx}px`);
-  root.style.setProperty('--visual-viewport-height', `${viewportHeightPx}px`);
+  const vhPx = `${viewportHeightPx}px`;
+
+  root.style.setProperty('--viewport-height', vhPx);
+  /** Старый паттерн `calc(var(--vh, 1vh) * 100)` / совместимость с гайдами. */
+  root.style.setProperty('--vh', vhPx);
+  root.style.setProperty('--visual-viewport-height', vhPx);
   root.style.setProperty('--visual-viewport-offset', `${Math.round(offsetTop)}px`);
   root.style.setProperty('--app-keyboard-inset', `${keyboardInset}px`);
   root.classList.toggle('app-keyboard-open', keyboardOpen);
+
+  /**
+   * КРИТИЧНО для iOS PWA: CSS-переменные на html/body работают только как min/max-height,
+   * но браузер продолжает раздувать body по height:100% от html (738px при клавиатуре).
+   * Inline-стиль имеет наивысший приоритет и фактически «замораживает» высоту.
+   */
+  root.style.height = vhPx;
+  root.style.maxHeight = vhPx;
+  if (document.body) {
+    document.body.style.height = vhPx;
+    document.body.style.maxHeight = vhPx;
+  }
 
   /** iOS safe-area: env() в отдельном элементе → числовое значение для --app-safe-bottom (fix полоски/отступов в PWA). */
   try {
