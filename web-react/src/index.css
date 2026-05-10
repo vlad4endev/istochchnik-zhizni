@@ -154,6 +154,7 @@ html {
   height: -webkit-fill-available;
   min-height: 100%;
   min-height: -webkit-fill-available;
+  min-height: 100dvh;
   overflow-x: hidden;
   scrollbar-gutter: stable;
   /* Не даём WebKit самовольно раздувать текст поверх нашего масштаба из панели доступности */
@@ -191,10 +192,8 @@ html.app-native-shell {
   touch-action: pan-x pan-y;
   /* iOS: убираем лишний «зазор» справа от scrollbar-gutter. Высота — из visualViewport → --viewport-height. */
   scrollbar-gutter: auto;
-  /* Одна высота на всю цепочку html→body→#root — иначе под клавиатурой остаётся «хвост» фона (белая полоса). */
-  height: var(--viewport-height, 100dvh);
+  /* Не фиксируем height/max-height на html — в iOS standalone это давало нулевой/сломаный layout при гонках JS. */
   min-height: var(--viewport-height, 100dvh);
-  max-height: var(--viewport-height, 100dvh);
 }
 
 /* PWA с экрана «Домой» / iOS navigator.standalone — фон до края, без скачка кегля при повороте */
@@ -219,6 +218,7 @@ body {
   width: 100%;
   height: 100%;
   min-height: -webkit-fill-available;
+  min-height: 100dvh;
   display: flex;
   flex-direction: column;
   overflow-x: hidden;
@@ -246,13 +246,11 @@ body {
   border-radius: var(--mantine-radius-md, 0.5rem);
 }
 
-/* `--viewport-height` задаётся в nativeShellViewport.ts (min(innerHeight, visualViewport.height)). */
+/* После правил `body { … min-height: 100dvh }`: иначе 100dvh на iOS > видимой области и под `.app-bottom-nav` остаётся полоска фона.
+   `--viewport-height` задаётся в nativeShellViewport.ts (= visualViewport.height, с защитой от 0). */
 html.app-native-shell body {
   touch-action: pan-x pan-y;
-  box-sizing: border-box;
-  height: 100%;
-  max-height: 100%;
-  min-height: 0;
+  min-height: var(--viewport-height, 100dvh);
 }
 
 html.dark body {

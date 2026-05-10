@@ -3,7 +3,6 @@ const LOCKED_VIEWPORT =
   'width=device-width, initial-scale=1, minimum-scale=1, viewport-fit=cover, interactive-widget=resizes-content';
 
 let viewportWatchAttached = false;
-let viewportMetaObserverAttached = false;
 let syncAfterPaintRaf = 0;
 
 /** После изменения layout/visual viewport WebKit иногда отдаёт координаты кадром позже — повторяем sync на следующем paint. */
@@ -17,23 +16,6 @@ function scheduleSyncViewportHeightVars() {
   });
 }
 
-function attachViewportMetaObserver() {
-  if (viewportMetaObserverAttached || typeof document === 'undefined' || typeof MutationObserver === 'undefined') {
-    return;
-  }
-  const meta = document.querySelector('meta[name="viewport"]');
-  if (!meta) return;
-  viewportMetaObserverAttached = true;
-  const obs = new MutationObserver(() => {
-    const cur = meta.getAttribute('content') ?? '';
-    if (cur !== LOCKED_VIEWPORT) {
-      meta.setAttribute('content', LOCKED_VIEWPORT);
-      scheduleSyncViewportHeightVars();
-    }
-  });
-  obs.observe(meta, { attributes: true, attributeFilter: ['content'] });
-}
-
 export function syncViewportHeightVars() {
   if (typeof window === 'undefined' || typeof document === 'undefined') return;
   const root = document.documentElement;
@@ -44,14 +26,20 @@ export function syncViewportHeightVars() {
   const offsetTop = vv?.offsetTop ?? 0;
   /** Нижний «второй» слой (клавиатура / системные полосы): layout минус видимый прямоугольник. */
   const keyboardInset = Math.max(0, Math.round(layoutHeight - offsetTop - visualHeight));
-  /** Чуть ниже порога — часть клавиатур / overlay даёт inset 80–100px. */
-  const keyboardOpen = keyboardInset >= 72;
+  const keyboardOpen = keyboardInset >= 110;
 
   /**
-   * Видимая высота: `visualViewport.height` при overlay-клавиатуре; при `interactive-widget=resizes-content`
-   * layout и visual часто совпадают — берём min(inner, visual), чтобы не «раздувать» оболочку, если один источник ещё старый.
+   * Видимая область: в первую очередь `visualViewport` (iOS PWA + клавиатура).
+   * Не используем `min(inner, visual)`: в редких кадрах WebKit отдаёт 0 — PWA схлопывается в ноль.
+   * Нижняя граница, чтобы никогда не писать `--viewport-height: 0px` в оболочку.
    */
-  const viewportHeightPx = Math.max(0, Math.round(Math.min(layoutHeight, visualHeight)));
+  const fromVisual = Math.round(visualHeight);
+  const fromLayout = Math.round(layoutHeight);
+  let chosen = fromVisual > 0 ? fromVisual : fromLayout > 0 ? fromLayout : 0;
+  if (chosen <= 0 && typeof window.screen?.height === 'number' && window.screen.height > 0) {
+    chosen = Math.round(window.screen.height);
+  }
+  const viewportHeightPx = Math.max(120, chosen > 0 ? chosen : 568);
   root.style.setProperty('--viewport-height', `${viewportHeightPx}px`);
   /** Старый паттерн `calc(var(--vh, 1vh) * 100)` / совместимость с гайдами — то же значение в px, что и `--viewport-height`. */
   root.style.setProperty('--vh', `${viewportHeightPx}px`);
@@ -77,8 +65,6 @@ export function syncViewportHeightVars() {
 function attachViewportWatchers() {
   if (viewportWatchAttached || typeof window === 'undefined' || typeof document === 'undefined') return;
   viewportWatchAttached = true;
-
-  attachViewportMetaObserver();
 
   const vv = window.visualViewport;
   vv?.addEventListener('resize', scheduleSyncViewportHeightVars);
@@ -116,7 +102,6 @@ export function applyNativeShellViewportLock(): boolean {
   if (meta) {
     meta.setAttribute('content', LOCKED_VIEWPORT);
   }
-  attachViewportMetaObserver();
   document.documentElement.classList.add('app-native-shell');
   attachViewportWatchers();
   return true;
