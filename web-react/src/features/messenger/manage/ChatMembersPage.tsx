@@ -405,7 +405,7 @@ function MemberActionsMenu({
       onClose={onClose}
       zIndexClassName="z-[4200]"
       backdropClassName="bg-black/30 dark:bg-black/45"
-      contentClassName="rounded-t-3xl p-4 dark:border-t"
+      contentClassName="rounded-3xl p-4 dark:border-t"
     >
         <p className="mb-2 text-center text-sm font-semibold text-[var(--text-secondary)]">{displayName}</p>
         <button type="button" onClick={() => { void onDirectMessage(); onClose(); }} className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left hover:bg-[var(--surface)]">

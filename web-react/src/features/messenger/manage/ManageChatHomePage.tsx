@@ -474,7 +474,7 @@ function InlineEditorModal({
       onClose={onClose}
       zIndexClassName="z-[4300]"
       backdropClassName="bg-black/35"
-      contentClassName="rounded-t-3xl p-4"
+      contentClassName="rounded-3xl p-4"
     >
         <div className="mb-3 flex items-center justify-between">
           <p className="text-base font-semibold text-[var(--text)]">{title}</p>

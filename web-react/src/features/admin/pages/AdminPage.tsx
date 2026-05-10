@@ -2517,18 +2517,29 @@ function reorderArray<T>(list: readonly T[], from: number, to: number): T[] {
 
 /**
  * Очередь молитвенного цикла: флаг `in_prayer_cycle` (как в карточке пользователя).
- * Две колонки: текущий состав и добавление из активных вне цикла.
+ * Добавление вне цикла — модальное окно «Не в очереди».
  */
 function CalendarPrayerCycleRoster() {
   const qc = useQueryClient();
   const rosterAnchorYmd = format(new Date(), 'yyyy-MM-dd');
+  const notInQueueTitleId = useId();
   const { data, isLoading, error, isFetching } = useQuery({
     queryKey: Q_MEMBERS,
     queryFn: fetchAdminMembers,
   });
   const [listSearch, setListSearch] = useState('');
   const [addSearch, setAddSearch] = useState('');
+  const [notInQueueOpen, setNotInQueueOpen] = useState(false);
   const [banner, setBanner] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
+
+  useEffect(() => {
+    if (!notInQueueOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setNotInQueueOpen(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [notInQueueOpen]);
 
   const rosterSnapQ = useQuery({
     queryKey: ['admin', 'prayer-cycle-roster', rosterAnchorYmd] as const,
@@ -2617,6 +2628,11 @@ function CalendarPrayerCycleRoster() {
     }
     return [...rows].sort(compareMembersByPrayerCycleOrder);
   }, [data, addSearch]);
+
+  const notInQueueTotal = useMemo(() => {
+    const list = data ?? [];
+    return list.filter((u) => u.is_active && !u.in_prayer_cycle).length;
+  }, [data]);
 
   /**
    * Режим перетаскивания: снимок очереди с API + без фильтра поиска.
@@ -2711,14 +2727,6 @@ function CalendarPrayerCycleRoster() {
         {isFetching ? <span className="text-xs text-stone-400">Обновление…</span> : null}
       </div>
 
-      <p className="border-b border-stone-100 px-4 py-3 text-sm leading-relaxed text-stone-600">
-        В приложении «Молитва» по дням показываются только <strong>активные</strong> члены церкви с флагом «в цикле» (как
-        в карточке в разделе «Пользователи»). Без поиска слева показывается <strong>очередь цикла</strong> (по умолчанию
-        А–Я; если для этого цикла сохраняли порядок — он). Зажмите <strong>иконку ⋮⋮</strong> у строки и перетащите — порядок
-        сохраняется только для <strong>текущего молитвенного цикла</strong>; на новом цикле снова сортировка по фамилии.
-        «Первым сегодня» сдвигает дату старта так, чтобы выбранный человек пришёлся на сегодня по этой очереди.
-      </p>
-
       {rosterSnapQ.isError ? (
         <p className="border-b border-amber-100 bg-amber-50/80 px-4 py-2 text-sm text-red-700">
           {apiErrorMessage(rosterSnapQ.error, 'Не удалось загрузить порядок цикла.')}
@@ -2737,32 +2745,47 @@ function CalendarPrayerCycleRoster() {
         </p>
       ) : null}
 
-      <div className="grid lg:grid-cols-2 lg:divide-x lg:divide-stone-200">
-        <div className="p-4 sm:p-5">
-          <h4 className="text-xs font-extrabold uppercase tracking-wide text-stone-500">Очередь членов</h4>
-          <p className="mt-1 text-xs text-stone-500">
-            Неактивные с флагом в календарь не попадают, пока карточку не активируют.
-          </p>
-          <label className="mt-3 block text-xs font-semibold text-stone-600">Поиск</label>
-          <input
-            type="search"
-            className={`${fieldClass()} mt-1`}
-            value={listSearch}
-            onChange={(e) => setListSearch(e.target.value)}
-            placeholder="Имя, телефон…"
-            autoComplete="off"
-          />
-          {listSearch.trim() ? (
-            <p className="mt-2 text-xs text-amber-800/90">
-              Перетаскивание очереди недоступно при поиске — очистите поле, чтобы снова изменить порядок.
+      <div className="p-4 sm:p-5 lg:p-6">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+          <div className="min-w-0 flex-1">
+            <h3 className="text-base font-semibold text-stone-900">Очередь членов</h3>
+            <p className="mt-1 text-xs text-stone-500">
+              Неактивные с флагом «в цикле» перечислены в конце списка, пока карточку не активируют.
             </p>
-          ) : null}
-          <div className="mt-3 max-h-[min(28rem,55dvh)] overflow-auto rounded-xl border border-stone-200/80">
+          </div>
+          <button
+            type="button"
+            className={btnSecondary('shrink-0 self-start sm:self-center')}
+            onClick={() => setNotInQueueOpen(true)}
+          >
+            Не в очереди
+            {notInQueueTotal > 0 ? (
+              <span className="ml-1.5 inline-flex min-w-[1.5rem] justify-center tabular-nums text-stone-500">
+                ({notInQueueTotal})
+              </span>
+            ) : null}
+          </button>
+        </div>
+        <label className="mt-4 block text-xs font-semibold text-stone-600">Поиск по очереди</label>
+        <input
+          type="search"
+          className={`${fieldClass()} mt-1`}
+          value={listSearch}
+          onChange={(e) => setListSearch(e.target.value)}
+          placeholder="Имя, телефон…"
+          autoComplete="off"
+        />
+        {listSearch.trim() ? (
+          <p className="mt-2 text-xs text-amber-800/90">
+            Перетаскивание очереди недоступно при поиске — очистите поле, чтобы снова изменить порядок.
+          </p>
+        ) : null}
+        <div className="mt-3 max-h-[min(70vh,52rem)] overflow-auto rounded-xl border border-stone-200/80">
             {inCycleRows.length === 0 ? (
               <p className="py-8 text-center text-sm text-stone-500">
                 {listSearch.trim()
                   ? 'Никого не найдено.'
-                  : 'Список пуст — добавьте людей справа.'}
+                  : 'Список пуст — добавьте людей через кнопку «Не в очереди».'}
               </p>
             ) : rosterSnapQ.isLoading && !rosterSnapQ.data ? (
               <p className="py-10 text-center text-sm text-stone-500">Загрузка порядка очереди цикла…</p>
@@ -3078,67 +3101,98 @@ function CalendarPrayerCycleRoster() {
           </div>
         </div>
 
-        <div className="bg-stone-50/50 p-4 sm:p-5 lg:min-h-[12rem]">
-          <h4 className="text-xs font-extrabold uppercase tracking-wide text-stone-500">Не в очереди</h4>
-          <p className="mt-1 text-xs text-stone-500">
-            Активные без флага «в цикле» — добавьте в очередь слева. Сортировка по фамилии А–Я.
-          </p>
-          <label className="mt-3 block text-xs font-semibold text-stone-600">Поиск</label>
-          <input
-            type="search"
-            className={`${fieldClass()} mt-1`}
-            value={addSearch}
-            onChange={(e) => setAddSearch(e.target.value)}
-            placeholder="Имя или телефон…"
-            autoComplete="off"
-          />
-          <div className="mt-3 max-h-[min(28rem,55dvh)] overflow-auto rounded-xl border border-stone-200/80 bg-white/90">
-            {candidates.length === 0 ? (
-              <p className="py-8 text-center text-sm text-stone-500">
-                {addSearch.trim()
-                  ? 'Никого не найдено.'
-                  : 'Все активные уже в цикле или нет карточек.'}
-              </p>
-            ) : (
-              <table className="min-w-full border-collapse text-left text-[13px] leading-snug">
-                <thead>
-                  <tr className="sticky top-0 z-[2] border-b border-stone-200 bg-stone-50/98 text-[11px] font-semibold uppercase tracking-wide text-stone-600 backdrop-blur-sm">
-                    <th className="w-12 px-2 py-3 text-center text-stone-400">#</th>
-                    <th className="min-w-[10rem] px-3 py-3">Член церкви</th>
-                    <th className="hidden px-3 py-3 sm:table-cell">Телефон</th>
-                    <th className="w-[1%] whitespace-nowrap px-3 py-3 text-right">Действие</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-stone-100 bg-white/95">
-                  {candidates.map((u, idx) => (
-                    <tr key={u.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-stone-50/75'}>
-                      <td className="px-2 py-3 text-center tabular-nums text-stone-400">{idx + 1}</td>
-                      <td className="px-3 py-3">
-                        <span className="font-semibold text-stone-900">{memberRosterName(u)}</span>
-                        <p className="mt-0.5 text-xs text-stone-500 sm:hidden">{u.phone_number ?? '—'}</p>
-                      </td>
-                      <td className="hidden px-3 py-3 text-stone-600 sm:table-cell">{u.phone_number ?? '—'}</td>
-                      <td className="px-3 py-3 text-right align-middle">
-                        <button
-                          type="button"
-                          className={btnPrimary('text-xs whitespace-nowrap')}
-                          disabled={patchMut.isPending}
-                          onClick={() => {
-                            setBanner(null);
-                            patchMut.mutate({ id: u.id, in_prayer_cycle: true });
-                          }}
-                        >
-                          В цикл
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
+      {notInQueueOpen ? (
+        <div
+          className="fixed inset-0 z-[120] flex items-center justify-center bg-black/45 p-4"
+          role="presentation"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) setNotInQueueOpen(false);
+          }}
+        >
+          <div
+            className="flex max-h-[90dvh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={notInQueueTitleId}
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            <div className="sticky top-0 z-10 flex shrink-0 items-start justify-between gap-3 border-b border-stone-100 bg-white px-5 py-4">
+              <div className="min-w-0">
+                <h3 id={notInQueueTitleId} className="text-[18px] font-medium tracking-tight text-stone-900">
+                  Не в очереди
+                </h3>
+                <p className="mt-0.5 text-xs text-stone-500">
+                  Активные без флага «в цикле». «В цикл» добавляет участника в очередь выше.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setNotInQueueOpen(false)}
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-stone-200 text-stone-500 transition hover:bg-stone-100 hover:text-stone-800"
+                aria-label="Закрыть"
+              >
+                <LuX className="h-4 w-4" strokeWidth={2} aria-hidden />
+              </button>
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-5 pt-4">
+              <label className="block text-xs font-semibold text-stone-600">Поиск</label>
+              <input
+                type="search"
+                className={`${fieldClass()} mt-1`}
+                value={addSearch}
+                onChange={(e) => setAddSearch(e.target.value)}
+                placeholder="Имя или телефон…"
+                autoComplete="off"
+              />
+              <div className="mt-4 max-h-[min(55vh,28rem)] overflow-auto rounded-xl border border-stone-200/80 bg-white/95">
+                {candidates.length === 0 ? (
+                  <p className="py-8 text-center text-sm text-stone-500">
+                    {addSearch.trim()
+                      ? 'Никого не найдено.'
+                      : 'Все активные уже в цикле или нет карточек.'}
+                  </p>
+                ) : (
+                  <table className="min-w-full border-collapse text-left text-[13px] leading-snug">
+                    <thead>
+                      <tr className="sticky top-0 z-[2] border-b border-stone-200 bg-stone-50/98 text-[11px] font-semibold uppercase tracking-wide text-stone-600 backdrop-blur-sm">
+                        <th className="w-12 px-2 py-3 text-center text-stone-400">#</th>
+                        <th className="min-w-[10rem] px-3 py-3">Член церкви</th>
+                        <th className="hidden px-3 py-3 sm:table-cell">Телефон</th>
+                        <th className="w-[1%] whitespace-nowrap px-3 py-3 text-right">Действие</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-stone-100 bg-white/95">
+                      {candidates.map((u, idx) => (
+                        <tr key={u.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-stone-50/75'}>
+                          <td className="px-2 py-3 text-center tabular-nums text-stone-400">{idx + 1}</td>
+                          <td className="px-3 py-3">
+                            <span className="font-semibold text-stone-900">{memberRosterName(u)}</span>
+                            <p className="mt-0.5 text-xs text-stone-500 sm:hidden">{u.phone_number ?? '—'}</p>
+                          </td>
+                          <td className="hidden px-3 py-3 text-stone-600 sm:table-cell">{u.phone_number ?? '—'}</td>
+                          <td className="px-3 py-3 text-right align-middle">
+                            <button
+                              type="button"
+                              className={btnPrimary('text-xs whitespace-nowrap')}
+                              disabled={patchMut.isPending}
+                              onClick={() => {
+                                setBanner(null);
+                                patchMut.mutate({ id: u.id, in_prayer_cycle: true });
+                              }}
+                            >
+                              В цикл
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            </div>
           </div>
         </div>
-      </div>
+      ) : null}
     </div>
   );
 }
@@ -3258,7 +3312,9 @@ function CalendarSection() {
         <div className="mb-4 flex items-center justify-between gap-3">
           <div className="min-w-0">
             <h3 className="text-base font-semibold text-stone-900">Очередь членов</h3>
-            <p className="mt-1 text-sm text-stone-600">Перетаскивайте строки для порядка и фиксируйте «первым сегодня».</p>
+            <p className="mt-1 text-sm text-stone-600">
+              Одна таблица очереди; добавление участников — кнопка «Не в очереди». Иконка ⋮⋮ меняет порядок в текущем цикле.
+            </p>
           </div>
           <button
             type="button"
