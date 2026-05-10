@@ -3,6 +3,36 @@ const LOCKED_VIEWPORT =
   'width=device-width, initial-scale=1, minimum-scale=1, viewport-fit=cover, interactive-widget=resizes-content';
 
 let viewportWatchAttached = false;
+let viewportMetaObserverAttached = false;
+let syncAfterPaintRaf = 0;
+
+/** После изменения layout/visual viewport WebKit иногда отдаёт координаты кадром позже — повторяем sync на следующем paint. */
+function scheduleSyncViewportHeightVars() {
+  syncViewportHeightVars();
+  if (typeof window === 'undefined') return;
+  if (syncAfterPaintRaf) cancelAnimationFrame(syncAfterPaintRaf);
+  syncAfterPaintRaf = window.requestAnimationFrame(() => {
+    syncAfterPaintRaf = 0;
+    syncViewportHeightVars();
+  });
+}
+
+function attachViewportMetaObserver() {
+  if (viewportMetaObserverAttached || typeof document === 'undefined' || typeof MutationObserver === 'undefined') {
+    return;
+  }
+  const meta = document.querySelector('meta[name="viewport"]');
+  if (!meta) return;
+  viewportMetaObserverAttached = true;
+  const obs = new MutationObserver(() => {
+    const cur = meta.getAttribute('content') ?? '';
+    if (cur !== LOCKED_VIEWPORT) {
+      meta.setAttribute('content', LOCKED_VIEWPORT);
+      scheduleSyncViewportHeightVars();
+    }
+  });
+  obs.observe(meta, { attributes: true, attributeFilter: ['content'] });
+}
 
 export function syncViewportHeightVars() {
   if (typeof window === 'undefined' || typeof document === 'undefined') return;
@@ -14,10 +44,14 @@ export function syncViewportHeightVars() {
   const offsetTop = vv?.offsetTop ?? 0;
   /** Нижний «второй» слой (клавиатура / системные полосы): layout минус видимый прямоугольник. */
   const keyboardInset = Math.max(0, Math.round(layoutHeight - offsetTop - visualHeight));
-  const keyboardOpen = keyboardInset >= 110;
+  /** Чуть ниже порога — часть клавиатур / overlay даёт inset 80–100px. */
+  const keyboardOpen = keyboardInset >= 72;
 
-  /** Высота видимой области (iOS PWA: совпадает с клавиатурой; `innerHeight`/`100dvh` часто остаются «полными»). */
-  const viewportHeightPx = Math.max(0, Math.round(visualHeight));
+  /**
+   * Видимая высота: `visualViewport.height` при overlay-клавиатуре; при `interactive-widget=resizes-content`
+   * layout и visual часто совпадают — берём min(inner, visual), чтобы не «раздувать» оболочку, если один источник ещё старый.
+   */
+  const viewportHeightPx = Math.max(0, Math.round(Math.min(layoutHeight, visualHeight)));
   root.style.setProperty('--viewport-height', `${viewportHeightPx}px`);
   /** Старый паттерн `calc(var(--vh, 1vh) * 100)` / совместимость с гайдами — то же значение в px, что и `--viewport-height`. */
   root.style.setProperty('--vh', `${viewportHeightPx}px`);
@@ -44,30 +78,32 @@ function attachViewportWatchers() {
   if (viewportWatchAttached || typeof window === 'undefined' || typeof document === 'undefined') return;
   viewportWatchAttached = true;
 
+  attachViewportMetaObserver();
+
   const vv = window.visualViewport;
-  vv?.addEventListener('resize', syncViewportHeightVars);
-  vv?.addEventListener('scroll', syncViewportHeightVars);
-  window.addEventListener('resize', syncViewportHeightVars);
-  window.addEventListener('orientationchange', syncViewportHeightVars);
+  vv?.addEventListener('resize', scheduleSyncViewportHeightVars);
+  vv?.addEventListener('scroll', scheduleSyncViewportHeightVars);
+  window.addEventListener('resize', scheduleSyncViewportHeightVars);
+  window.addEventListener('orientationchange', scheduleSyncViewportHeightVars);
   /** Часть WebView/Android отдаёт visual viewport с задержкой; фокус на поле — типичный триггер клавиатуры. */
   document.addEventListener(
     'focusin',
     () => {
-      queueMicrotask(syncViewportHeightVars);
+      queueMicrotask(scheduleSyncViewportHeightVars);
     },
     true,
   );
   document.addEventListener(
     'focusout',
     () => {
-      queueMicrotask(syncViewportHeightVars);
+      queueMicrotask(scheduleSyncViewportHeightVars);
     },
     true,
   );
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') syncViewportHeightVars();
+    if (document.visibilityState === 'visible') scheduleSyncViewportHeightVars();
   });
-  syncViewportHeightVars();
+  scheduleSyncViewportHeightVars();
 }
 
 /**
@@ -80,6 +116,7 @@ export function applyNativeShellViewportLock(): boolean {
   if (meta) {
     meta.setAttribute('content', LOCKED_VIEWPORT);
   }
+  attachViewportMetaObserver();
   document.documentElement.classList.add('app-native-shell');
   attachViewportWatchers();
   return true;
