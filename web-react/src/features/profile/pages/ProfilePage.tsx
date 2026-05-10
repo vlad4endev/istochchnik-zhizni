@@ -1,14 +1,16 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   LuBookOpen,
+  LuCamera,
+  LuChevronLeft,
   LuHeart,
-  LuImagePlus,
   LuLayoutGrid,
   LuLogOut,
   LuPencil,
   LuSave,
   LuSend,
+  LuSettings,
   LuShield,
   LuUser,
   LuX,
@@ -30,14 +32,19 @@ import {
   type PrayerHistoryItem,
 } from '../api';
 import { fetchDirectionTemplates, type MinistryDirectionTemplate } from '../../admin/api';
-import { fetchProfileByMemberId, patchPublicProfileSettings } from '../publicProfileApi';
+import {
+  fetchProfileByMemberId,
+  patchPublicProfileSettings,
+  type ProfileFeedResponse,
+} from '../publicProfileApi';
 import { fetchMyPreacherSermonHistory, type PreacherSermonHistoryRow } from '../../servicePlanner/sermonFeedbackApi';
 import { ProfileAccessibilitySection } from '../components/ProfileAccessibilitySection';
 import { SkeletonBox } from '@/components/ui/SkeletonBox';
+import { pluralizeRu } from '../../../lib/pluralizeRu';
 import { memberNameFirstLast } from '../memberDisplayName';
 
 import profileShell from '../profileShell.module.css';
-import pfStyles from './ProfilePage.module.css';
+import ig from './PublicProfilePage.module.css';
 
 /* ── Helpers ─────────────────────────────────────────────── */
 
@@ -86,7 +93,8 @@ const LABEL = 'text-[11px] font-extrabold uppercase tracking-[0.14em] text-[colo
 const INPUT =
   'mt-1.5 min-h-[48px] w-full rounded-2xl border border-[color:var(--profile-card-ring)] bg-[color:var(--profile-surface-elevated)] px-4 py-3 text-[15px] font-semibold text-[color:var(--profile-text-heading)] outline-none transition placeholder:text-[color:var(--profile-text-faint)] focus:border-[color:var(--profile-primary)] focus:ring-2 focus:ring-[color:color-mix(in_srgb,var(--profile-primary)_20%,transparent)]';
 
-const profilePageRoot = `${profileShell.profileRoot} min-h-full`;
+/** Та же оболочка, что у публичного профиля: компактная шапка, без «веб-баннера», нативный скролл. */
+const profileRootCn = `${profileShell.profileRoot} ${ig.igPage} min-h-full [touch-action:manipulation]`;
 
 /* ═══════════════════════════════════════════════════════════
    ProfilePage
@@ -96,6 +104,7 @@ export function ProfilePage() {
   const messengerWebOrigin = resolveMessengerWebOrigin();
   const logout = useAuthStore((s) => s.logout);
   const applyServerProfile = useAuthStore((s) => s.applyServerProfile);
+  const avatarInputRef = useRef<HTMLInputElement | null>(null);
 
   /* ── Profile state ── */
   const [user, setUser] = useState<MeResponse | null>(null);
@@ -133,6 +142,8 @@ export function ProfilePage() {
   const [publicDraft, setPublicDraft] = useState({ display_name: '', bio: '' });
   const [publicLoading, setPublicLoading] = useState(false);
   const [savingPublic, setSavingPublic] = useState(false);
+  /** Ответ ленты — для счётчика публикаций в шапке (как в Instagram). */
+  const [feedSnapshot, setFeedSnapshot] = useState<ProfileFeedResponse | null>(null);
 
   /* ── Password ── */
   const [pwdCurrent, setPwdCurrent] = useState('');
@@ -215,13 +226,17 @@ export function ProfilePage() {
     void fetchProfileByMemberId(user.id)
       .then((feed) => {
         if (cancelled) return;
+        setFeedSnapshot(feed);
         setPublicDraft({
           display_name: feed.profile.display_name?.trim() ?? '',
           bio: feed.profile.bio?.trim() ?? '',
         });
       })
       .catch(() => {
-        if (!cancelled) setPublicDraft({ display_name: '', bio: '' });
+        if (!cancelled) {
+          setFeedSnapshot(null);
+          setPublicDraft({ display_name: '', bio: '' });
+        }
       })
       .finally(() => {
         if (!cancelled) setPublicLoading(false);
@@ -381,6 +396,29 @@ export function ProfilePage() {
   const name = user ? memberNameFirstLast(user) || 'Профиль' : 'Профиль';
   const avatarUrl = resolvePublicUrl(user?.avatar_url ?? null);
 
+  const usernameTrim = (user?.username ?? '').trim();
+  const isPlaceholderUsername =
+    usernameTrim.length > 0 && /^member-\d+$/i.test(usernameTrim);
+
+  const headerHandleLine = useMemo(() => {
+    if (!usernameTrim || isPlaceholderUsername) return null;
+    const at = `@${usernameTrim}`;
+    const n = name.trim();
+    if (n.toLowerCase() === at.toLowerCase() || n.toLowerCase() === usernameTrim.toLowerCase()) {
+      return null;
+    }
+    return at;
+  }, [usernameTrim, isPlaceholderUsername, name]);
+
+  const postsCount = feedSnapshot?.posts.length ?? 0;
+  const postsLabel = pluralizeRu(postsCount, ['публикация', 'публикации', 'публикаций']);
+
+  const publicFeedLink = useMemo(() => {
+    if (!user) return '/profile';
+    const slug = usernameTrim || (user.id != null ? `member-${user.id}` : '');
+    return slug ? `/profile/${encodeURIComponent(slug)}` : '/profile';
+  }, [user, usernameTrim]);
+
   const joinedLabel = useMemo(() => {
     if (!user?.created_at) return null;
     const d = new Date(user.created_at);
@@ -392,12 +430,31 @@ export function ProfilePage() {
 
   if (loading) {
     return (
-      <div className={profilePageRoot} data-profile-root>
-        <div className={`${pfStyles.pfSkelBanner} animate-pulse`} />
-        <div className="mx-auto -mt-16 flex max-w-xl flex-col items-center gap-4 px-4">
-          <div className={`${pfStyles.pfSkelAvatar} animate-pulse`} />
-          <div className={`${pfStyles.pfSkelLine} ${pfStyles.pfSkelLineMd} mx-auto animate-pulse`} />
-          <div className={`${pfStyles.pfSkelLine} ${pfStyles.pfSkelLineSm} animate-pulse`} />
+      <div className={profileRootCn} data-profile-root>
+        <div className={ig.igTopBar} aria-hidden>
+          <div className={ig.igTopBarSkelBtn} />
+          <div className={ig.igTopBarSkelTitleWrap}>
+            <div className={ig.igTopBarSkelTitle} />
+          </div>
+          <div className={ig.igTopBarSkelBtn} />
+        </div>
+        <div className={ig.igHeader}>
+          <div className={ig.igHeaderInner}>
+            <div className={ig.igSkelRow}>
+              <div className={ig.igSkelAvatar} aria-hidden />
+              <div className={ig.igSkelMeta}>
+                <div className={`${ig.igSkelLine} ${ig.igSkelLineLg}`} />
+                <div className={`${ig.igSkelLine} ${ig.igSkelLineSm}`} />
+              </div>
+            </div>
+          </div>
+        </div>
+        <div className={ig.igFeedSection}>
+          <div className="mx-auto flex max-w-xl flex-col gap-4 px-4 pb-8 pt-4 sm:px-5">
+            <div className="h-36 animate-pulse rounded-2xl bg-[color:var(--profile-media-placeholder-mid)]" />
+            <div className="h-48 animate-pulse rounded-2xl bg-[color:var(--profile-media-placeholder-mid)]" />
+            <div className="h-32 animate-pulse rounded-2xl bg-[color:var(--profile-media-placeholder)]" />
+          </div>
         </div>
       </div>
     );
@@ -405,14 +462,17 @@ export function ProfilePage() {
 
   if (error) {
     return (
-      <div className={`${profilePageRoot} px-4 pt-20`} data-profile-root>
-        <div className="mx-auto max-w-md rounded-3xl bg-[color:var(--profile-card-bg)] p-8 text-center ring-1 ring-[color:var(--profile-card-ring)]">
-          <p className="text-sm font-semibold text-red-600">{error}</p>
-          <button
-            type="button"
-            onClick={() => void loadProfile()}
-            className="mt-5 min-h-[44px] rounded-2xl bg-[color:var(--profile-primary)] px-6 py-2.5 text-sm font-extrabold text-white shadow-[0_10px_30px_color-mix(in_srgb,var(--profile-primary)_25%,transparent)]"
-          >
+      <div className={profileRootCn} data-profile-root>
+        <div className={ig.igTopBar}>
+          <Link to="/dashboard" className={ig.igTopBarIconBtn} aria-label="На главную" title="На главную">
+            <LuChevronLeft className="h-6 w-6" strokeWidth={2.25} aria-hidden />
+          </Link>
+          <span className={ig.igTopBarTitle}>Моя страница</span>
+          <span className={ig.igTopBarRightPad} aria-hidden />
+        </div>
+        <div className={ig.igError}>
+          <p>{error}</p>
+          <button type="button" onClick={() => void loadProfile()} className={ig.igErrorLink}>
             Повторить
           </button>
         </div>
@@ -425,115 +485,150 @@ export function ProfilePage() {
      ═══════════════════════════════════════════════════════════ */
 
   return (
-    <div className={profilePageRoot} data-profile-root>
-
-      {/* ═══════════════════════════════════════════════════════
-          1. HEADER — gradient banner + avatar + name
-         ═══════════════════════════════════════════════════════ */}
-      <div className="relative">
-        {/* Gradient banner */}
-        <div className="relative h-44 overflow-hidden bg-gradient-to-br from-[var(--profile-gradient-from)] via-[color:var(--profile-primary)] to-[var(--profile-gradient-to)] sm:h-52 md:h-56">
-          <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_50%_at_20%_-20%,rgba(255,255,255,0.13),transparent)]" />
-          <div className="absolute inset-0 bg-[radial-gradient(ellipse_60%_60%_at_90%_120%,rgba(255,255,255,0.08),transparent)]" />
-          <div className="absolute -right-10 -top-10 h-40 w-40 rounded-full bg-white/[0.04]" />
-          <div className="absolute -bottom-6 left-1/4 h-24 w-24 rounded-full bg-white/[0.03]" />
+    <div className={profileRootCn} data-profile-root>
+      <div className={ig.igTopBar}>
+        <Link to="/dashboard" className={ig.igTopBarIconBtn} aria-label="На главную" title="На главную">
+          <LuChevronLeft className="h-6 w-6" strokeWidth={2.25} aria-hidden />
+        </Link>
+        <span className={ig.igTopBarTitle}>Моя страница</span>
+        <div className="flex shrink-0 items-center gap-0.5 pr-0.5">
+          <Link
+            to={publicFeedLink}
+            className={ig.igTopBarIconBtn}
+            aria-label="Открыть ленту профиля"
+            title="Лента профиля"
+          >
+            <LuLayoutGrid className="h-5 w-5" strokeWidth={2} aria-hidden />
+          </Link>
+          <Link to="/settings" className={ig.igTopBarIconBtn} aria-label="Настройки приложения" title="Настройки">
+            <LuSettings className="h-5 w-5" strokeWidth={2} aria-hidden />
+          </Link>
         </div>
+      </div>
 
-        {/* Avatar + name overlay */}
-        <div className="relative mx-auto -mt-16 flex max-w-xl flex-col items-center px-4 text-center sm:-mt-[4.5rem]">
-          {/* Avatar with upload */}
-          <div className="relative">
-            <div className="flex h-[7.5rem] w-[7.5rem] items-center justify-center overflow-hidden rounded-full border-4 border-white bg-[color:var(--profile-surface)] shadow-[0_8px_30px_rgba(125,54,64,0.18)] sm:h-[8.5rem] sm:w-[8.5rem]">
-              {avatarUrl ? (
-                <img src={avatarUrl} alt="Аватар" className="h-full w-full object-cover" />
-              ) : (
-                <LuUser
-                  className="h-14 w-14 text-[color:color-mix(in_srgb,var(--profile-primary)_40%,transparent)] sm:h-16 sm:w-16"
-                  strokeWidth={1.4}
-                  aria-hidden
-                />
-              )}
-            </div>
-            <label className="absolute -bottom-1 -right-1 grid h-10 w-10 cursor-pointer place-items-center rounded-full bg-white text-[color:var(--profile-primary)] shadow-lg ring-1 ring-[color:var(--profile-card-ring)] transition hover:bg-[color:color-mix(in_srgb,var(--profile-surface-elevated)_85%,var(--profile-surface))]">
-              <LuImagePlus className="h-[18px] w-[18px]" aria-hidden />
-              <span className="sr-only">Загрузить аватар</span>
+      <header className={ig.igHeader}>
+        <div className={ig.igHeaderInner}>
+          <div className={ig.igProfileMainRow}>
+            <div className={ig.igAvatarBlock}>
+              <div className={ig.igAvatarRing}>
+                <div className={ig.igAvatar}>
+                  {avatarUrl ? (
+                    <img src={avatarUrl} alt="" />
+                  ) : (
+                    <div className={ig.igAvatarPh}>
+                      <LuUser className={ig.igAvatarPhIcon} strokeWidth={1.25} aria-hidden />
+                    </div>
+                  )}
+                </div>
+              </div>
               <input
+                ref={avatarInputRef}
                 type="file"
                 accept="image/*"
-                className="hidden"
+                className={ig.igHiddenFile}
                 disabled={avatarUploading}
                 onChange={(e) => void onPickAvatar(e.target.files?.[0] ?? null)}
               />
-            </label>
+              <button
+                type="button"
+                className={ig.igAvatarCam}
+                aria-label="Загрузить фото профиля"
+                disabled={avatarUploading}
+                onClick={() => avatarInputRef.current?.click()}
+              >
+                <LuCamera className="h-5 w-5" strokeWidth={2} aria-hidden />
+              </button>
+            </div>
+
+            <div className={ig.igProfileRight}>
+              <h1 className={ig.igDisplayNameTitle}>{name}</h1>
+              {headerHandleLine ? <p className={ig.igHandleSub}>{headerHandleLine}</p> : null}
+
+              <div className={ig.igStatColumns} role="group" aria-label="Статистика профиля">
+                <div className={ig.igStatCell}>
+                  <span className={ig.igStatCellNum}>{postsCount}</span>
+                  <span className={ig.igStatCellLabel}>{postsLabel}</span>
+                </div>
+                <div className={ig.igStatCellMuted}>
+                  <span className={ig.igStatCellNum}>0</span>
+                  <span className={ig.igStatCellLabel}>подписчики</span>
+                </div>
+                <div className={ig.igStatCellMuted}>
+                  <span className={ig.igStatCellNum}>0</span>
+                  <span className={ig.igStatCellLabel}>подписки</span>
+                </div>
+              </div>
+
+              <p className={ig.igPrivacyInline}>
+                <span className={ig.igPrivacyDot} aria-hidden />
+                {roleLabel(user?.app_role ?? 'member')}
+                {joinedLabel ? ` · ${joinedLabel}` : null}
+              </p>
+            </div>
           </div>
 
           {avatarUploading && (
-            <p className="mt-2 text-xs font-semibold text-[color:var(--profile-text-muted)] animate-pulse">Загружаем фото…</p>
+            <p className="mt-2 text-xs font-semibold text-[color:var(--profile-text-muted)] animate-pulse">
+              Загружаем фото…
+            </p>
           )}
 
-          {/* Name + Role */}
-          <h1 className="mt-3.5 text-[1.6rem] font-extrabold leading-tight tracking-tight text-[color:var(--profile-text-heading)] sm:text-[1.85rem]">
-            {name}
-          </h1>
-
-          <div className="mt-2 flex flex-wrap items-center justify-center gap-2">
-            <span className="inline-flex items-center rounded-full bg-[color:color-mix(in_srgb,var(--profile-text-heading)_5%,transparent)] px-3 py-1 text-xs font-semibold text-[color:var(--profile-text-soft)]">
-              {roleLabel(user?.app_role ?? 'member')}
-            </span>
-            {joinedLabel && (
-              <span className="inline-flex items-center rounded-full bg-[color:color-mix(in_srgb,var(--profile-primary)_10%,transparent)] px-3 py-1 text-xs font-semibold text-[color:var(--profile-primary)]">
-                с {joinedLabel}
-              </span>
-            )}
+          <div className={ig.igBioSection}>
+            <div className={ig.igBioBlock}>
+              {publicLoading ? (
+                <p className={ig.igBioEmpty}>Загружаем описание…</p>
+              ) : publicDraft.bio.trim() ? (
+                <>
+                  <span className={ig.igBioLabel}>О себе в ленте</span>
+                  <p className={ig.igBioText}>{publicDraft.bio.trim()}</p>
+                </>
+              ) : (
+                <>
+                  <span className={ig.igBioLabel}>О себе в ленте</span>
+                  <p className={ig.igBioEmpty}>
+                    Добавьте текст ниже в блоке «Публичная страница» — так вас увидят в ленте.
+                  </p>
+                </>
+              )}
+            </div>
           </div>
 
-          {/* Action buttons */}
-          <div className="mt-4 flex flex-wrap items-center justify-center gap-3">
-            <Link
-              to={user?.id != null ? `/profile/member-${user.id}` : '/profile'}
-              className="inline-flex items-center gap-2.5 rounded-full bg-white px-6 py-2.5 text-sm font-bold text-[color:var(--profile-text-body)] shadow-md ring-1 ring-[color:var(--profile-card-ring)] transition-all hover:bg-[color:color-mix(in_srgb,var(--profile-surface-elevated)_90%,var(--profile-surface))] active:scale-[0.97]"
-            >
-              <LuLayoutGrid className="h-4 w-4" aria-hidden />
-              Лента профиля
+          <div className={ig.igPrimaryActions}>
+            <Link to={publicFeedLink} className={ig.igBtnEditProfile}>
+              Открыть ленту профиля
             </Link>
-            {messengerWebOrigin ? (
-              <a
-                href={`${messengerWebOrigin}/messenger`}
-                className="inline-flex items-center gap-2.5 rounded-full bg-[color:var(--profile-primary)] px-7 py-2.5 text-sm font-bold text-white shadow-[0_8px_24px_color-mix(in_srgb,var(--profile-primary)_20%,transparent)] transition-all hover:bg-[color:var(--profile-primary-dark)] active:scale-[0.97]"
-              >
-                <LuSend className="h-4 w-4 -rotate-12" aria-hidden />
-                Написать сообщение
-              </a>
-            ) : (
-              <Link
-                to="/messenger"
-                className="inline-flex items-center gap-2.5 rounded-full bg-[color:var(--profile-primary)] px-7 py-2.5 text-sm font-bold text-white shadow-[0_8px_24px_color-mix(in_srgb,var(--profile-primary)_20%,transparent)] transition-all hover:bg-[color:var(--profile-primary-dark)] active:scale-[0.97]"
-              >
-                <LuSend className="h-4 w-4 -rotate-12" aria-hidden />
-                Написать сообщение
-              </Link>
-            )}
-            <button
-              type="button"
-              onClick={() => void logout()}
-              className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-[color:color-mix(in_srgb,var(--profile-card-bg)_90%,transparent)] text-[color:var(--profile-text-soft)] ring-1 ring-[color:var(--profile-card-ring)] transition hover:bg-[color:var(--profile-border-light)]"
-              aria-label="Выйти"
-              title="Выйти из аккаунта"
-            >
-              <LuLogOut className="h-[18px] w-[18px]" aria-hidden />
-            </button>
+            <div className={ig.igActions}>
+              {messengerWebOrigin ? (
+                <a href={`${messengerWebOrigin}/messenger`} className={ig.igBtnSecondary}>
+                  <LuSend className="h-4 w-4 -rotate-12" aria-hidden />
+                  Сообщение
+                </a>
+              ) : (
+                <Link to="/messenger" className={ig.igBtnSecondary}>
+                  <LuSend className="h-4 w-4 -rotate-12" aria-hidden />
+                  Сообщение
+                </Link>
+              )}
+              <button type="button" className={ig.igBtnSecondary} onClick={() => void logout()}>
+                <LuLogOut className="h-4 w-4" aria-hidden />
+                Выйти
+              </button>
+            </div>
           </div>
 
           {msg && (
-            <p className={`mt-3 text-sm font-semibold ${msg.kind === 'ok' ? 'text-emerald-700' : 'text-red-600'}`}>
+            <p
+              className={`mt-3 text-center text-sm font-semibold sm:text-left ${msg.kind === 'ok' ? 'text-emerald-700' : 'text-red-600'}`}
+            >
               {msg.text}
             </p>
           )}
         </div>
-      </div>
+      </header>
 
-      {/* ── All content sections ── */}
-      <div className="mx-auto mt-8 flex max-w-xl flex-col gap-7 px-4 sm:mt-10 sm:gap-9 sm:px-5">
+      {/* ── Все секции настроек (как список под шапкой профиля) ── */}
+      <div className={ig.igFeedSection}>
+        <div className="mx-auto flex max-w-xl flex-col gap-5 px-4 pb-10 pt-1 sm:gap-6 sm:px-5">
 
         {/* ═══════════════════════════════════════════════════
             2. СЕЙЧАС В ФОКУСЕ — glassmorphism card
@@ -925,6 +1020,7 @@ export function ProfilePage() {
         <p className="text-center text-[11px] font-semibold text-[color:var(--profile-text-faint)]">
           Версия: {__WEB_REACT_BUILD_STAMP__}
         </p>
+        </div>
       </div>
     </div>
   );
