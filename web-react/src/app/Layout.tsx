@@ -1061,7 +1061,7 @@ export function Layout() {
       {/* Телефон: нижняя навигация (иконка + подпись, как в нативных приложениях) */}
       <nav
         className={[
-          'app-bottom-nav bottom-nav fixed bottom-0 left-0 right-0 z-[100] isolate flex w-full min-w-0 max-w-full flex-col border-t border-black/[0.07] bg-[color-mix(in_srgb,var(--surface-elevated)_94%,transparent)] pb-[var(--app-bottom-nav-safe-pad)] shadow-[0_-1px_0_rgba(0,0,0,0.05),0_-10px_40px_rgba(28,25,23,0.08)] backdrop-blur-xl backdrop-saturate-150 supports-[backdrop-filter]:bg-[color-mix(in_srgb,var(--surface-elevated)_88%,transparent)] lg:hidden transition-opacity duration-150 ease-out dark:border-white/[0.08] dark:shadow-[0_-1px_0_rgba(255,255,255,0.06),0_-12px_40px_rgba(0,0,0,0.35)] [padding-left:max(0.5rem,env(safe-area-inset-left,0px))] [padding-right:max(0.5rem,env(safe-area-inset-right,0px))]',
+          'app-bottom-nav bottom-nav fixed bottom-0 left-0 right-0 z-[100] isolate flex w-full min-w-0 max-w-full flex-col border-t border-black/[0.07] bg-[color-mix(in_srgb,var(--surface-elevated)_94%,transparent)] pb-[max(0px,env(safe-area-inset-bottom,0px))] shadow-[0_-1px_0_rgba(0,0,0,0.05),0_-10px_40px_rgba(28,25,23,0.08)] backdrop-blur-xl backdrop-saturate-150 supports-[backdrop-filter]:bg-[color-mix(in_srgb,var(--surface-elevated)_88%,transparent)] lg:hidden transition-opacity duration-150 ease-out dark:border-white/[0.08] dark:shadow-[0_-1px_0_rgba(255,255,255,0.06),0_-12px_40px_rgba(0,0,0,0.35)] [padding-left:max(0.5rem,env(safe-area-inset-left,0px))] [padding-right:max(0.5rem,env(safe-area-inset-right,0px))]',
           mainChromeVisible ? 'opacity-100' : 'pointer-events-none opacity-0',
         ].join(' ')}
         aria-label="Основная навигация"

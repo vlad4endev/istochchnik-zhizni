@@ -194,10 +194,22 @@ function memberFirstLastLine(m: Member): string {
   return s || m.name.trim() || '—';
 }
 
+/** PostgreSQL `TIMESTAMP` без `T` не парсится в Safari — нормализуем для полей «Началась» / «Окончание». */
+function parseBroadcastStartsAt(value: string | null): Date | null {
+  if (!value) return null;
+  const v = value.trim();
+  if (!v) return null;
+  let normalized = v;
+  if (!v.includes('T') && /^\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}/.test(v)) {
+    normalized = v.replace(/^(\d{4}-\d{2}-\d{2})\s+/, '$1T');
+  }
+  const d = new Date(normalized);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
 function formatBroadcastDateTime(value: string | null): string {
-  if (!value) return '—';
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return '—';
+  const d = parseBroadcastStartsAt(value);
+  if (!d) return '—';
   return format(d, 'dd.MM.yyyy HH:mm');
 }
 
@@ -459,21 +471,21 @@ function BroadcastCompactCard({
 
       <div className="h-px bg-stone-200" />
 
-      <div className="flex min-w-0 items-start justify-between gap-3 px-3 py-2 text-xs">
+      <div className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-x-3 px-3 py-2 text-xs max-lg:gap-x-3 lg:flex lg:items-start lg:justify-between lg:gap-3">
         <span className="shrink-0 font-semibold text-stone-500">{dateLabel}</span>
-        <span className="min-w-0 break-words text-right font-semibold text-stone-800">
+        <span className="min-w-0 truncate text-right font-semibold tabular-nums text-stone-800">
           {formatBroadcastDateTime(broadcast?.starts_at ?? null)}
         </span>
       </div>
       {endsAtFormatted ? (
-        <div className="flex min-w-0 items-start justify-between gap-3 px-3 pb-1 text-xs">
+        <div className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-x-3 px-3 pb-1 text-xs max-lg:gap-x-3 lg:flex lg:items-start lg:justify-between lg:gap-3">
           <span className="shrink-0 font-semibold text-stone-500">Окончание</span>
-          <span className="min-w-0 break-words text-right font-semibold text-stone-800">{endsAtFormatted}</span>
+          <span className="min-w-0 truncate text-right font-semibold tabular-nums text-stone-800">{endsAtFormatted}</span>
         </div>
       ) : null}
-      <div className="flex min-w-0 flex-col gap-1 px-3 pb-3 pt-0.5 text-xs sm:flex-row sm:items-start sm:justify-between sm:gap-3">
+      <div className="flex min-w-0 flex-col gap-1 px-3 pb-3 pt-0.5 text-xs max-lg:min-w-0 lg:flex-row lg:items-start lg:justify-between lg:gap-3">
         <span className="shrink-0 font-semibold text-stone-500">Описание</span>
-        <span className="min-w-0 break-words font-medium text-stone-700 sm:max-w-[70%] sm:text-right">
+        <span className="min-w-0 font-medium text-stone-700 max-lg:truncate lg:max-w-[70%] lg:break-words lg:text-right">
           {description}
         </span>
       </div>
@@ -693,11 +705,10 @@ function DashboardMain() {
   const hasAnnouncement = announcementNote != null;
   const displayAnnouncement = hasAnnouncement && !isParishionerGuest;
   const broadcastEndsLabel = useMemo(() => {
-    if (!activeBroadcast?.starts_at) return null;
     if (broadcastUiMode !== 'pre' && broadcastUiMode !== 'onair') return null;
-    const t = new Date(activeBroadcast.starts_at).getTime();
-    if (!Number.isFinite(t)) return null;
-    return format(new Date(t + BROADCAST_SLOT_MS), 'dd.MM.yyyy HH:mm');
+    const start = parseBroadcastStartsAt(activeBroadcast?.starts_at ?? null);
+    if (!start) return null;
+    return format(new Date(start.getTime() + BROADCAST_SLOT_MS), 'dd.MM.yyyy HH:mm');
   }, [activeBroadcast?.starts_at, broadcastUiMode]);
 
   const latestEpisode = pickLatestEpisode(sermonsQ.data?.episodes ?? []);
@@ -995,7 +1006,7 @@ function DashboardMain() {
           </header>
         </div>
 
-        <div className="dashboard-scroll-pane min-h-0 flex-1 overflow-y-auto [webkit-overflow-scrolling:touch] max-lg:pb-[72px] lg:pb-[max(2rem,env(safe-area-inset-bottom,0px))]">
+        <div className="dashboard-scroll-pane min-h-0 flex-1 overflow-y-auto [webkit-overflow-scrolling:touch] max-lg:pb-[calc(3.5rem+0.5rem)] lg:pb-[max(2rem,env(safe-area-inset-bottom,0px))]">
         <div className="hidden lg:block">
           <div className="grid grid-flow-row-dense grid-cols-12 gap-4 px-0 py-4 xl:gap-5">
             {showNearestPreacherWidget ? (
@@ -1476,8 +1487,10 @@ function DashboardMain() {
             </div>
 
             {latestEpisode ? (
-              <div className="mt-4">
-                <p className="line-clamp-2 text-base font-extrabold text-stone-900">{latestEpisode.title}</p>
+              <div className="mt-4 min-w-0">
+                <p className="min-w-0 text-base font-extrabold text-stone-900 max-lg:truncate lg:line-clamp-2">
+                  {latestEpisode.title}
+                </p>
                 <div className="mt-3 flex flex-wrap items-center gap-2">
                   <button
                     type="button"

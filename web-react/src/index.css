@@ -35,15 +35,20 @@ textarea {
   --a11y-focus-ring: var(--primary);
   --sidebar-width: 88px;
   --app-safe-bottom: env(safe-area-inset-bottom, 0px);
-  /* Пользовательский режим: нижний safe-area у таб-бара отключён, чтобы убрать видимую полоску у края экрана. */
-  --app-bottom-nav-safe-pad: 0px;
+  /*
+   * Нижний safe-area для контента таб-бара (home indicator). Не смешивать с отступом main —
+   * иначе на iPhone PWA двойной зазор (~80–100px): main уже не должен дублировать env().
+   */
+  --app-bottom-nav-safe-pad: env(safe-area-inset-bottom, 0px);
   --app-safe-top: env(safe-area-inset-top, 0px);
-  /* Высота нижней панели (Layout.tsx): pt-1 + min-h ряда + padding nav под home indicator (один раз, без min-h на nav). */
   --app-bottom-nav-bar-height: 60px;
-  --app-bottom-nav-row-pad-y: 0.25rem; /* только pt-1 на обёртке ряда табов */
-  --app-bottom-nav-total-height: calc(
-    var(--app-bottom-nav-bar-height) + var(--app-bottom-nav-row-pad-y) + var(--app-bottom-nav-safe-pad)
+  --app-bottom-nav-row-pad-y: 0.25rem; /* pt-1.5 на обёртке ряда табов */
+  /* Только «тело» таб-бара — отступ main под фикс. панель без второго env(safe-area). */
+  --app-bottom-nav-main-gutter: calc(
+    var(--app-bottom-nav-bar-height) + var(--app-bottom-nav-row-pad-y)
   );
+  /* Полная высота панели с home indicator: FAB, fixed-бары, max-height модалок */
+  --app-bottom-nav-total-height: calc(var(--app-bottom-nav-main-gutter) + env(safe-area-inset-bottom, 0px));
   --app-viewport-height: 100dvh;
   --app-keyboard-inset: 0px;
 }
@@ -191,11 +196,6 @@ html[data-pwa-standalone='1'] {
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
   background-color: var(--surface);
-  /*
-   * Раньше здесь было 0 + padding-bottom:0 на таббаре — в standalone контент и иконки таббара уезжали под home indicator,
-   * а main-padding (--app-bottom-nav-total-height) был занижен. Safe area входит и в высоту таббара, и в отступ main.
-   */
-  --app-bottom-nav-safe-pad: env(safe-area-inset-bottom, 0px);
 }
 
 @media (display-mode: standalone) {
@@ -203,7 +203,6 @@ html[data-pwa-standalone='1'] {
     -webkit-text-size-adjust: 100%;
     text-size-adjust: 100%;
     background-color: var(--surface);
-    --app-bottom-nav-safe-pad: env(safe-area-inset-bottom, 0px);
   }
 }
 

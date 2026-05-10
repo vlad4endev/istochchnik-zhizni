@@ -1,14 +1,12 @@
 import { useEffect, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 
+import { getAppScrollRoot } from '@/lib/appScroll';
+
 const scrollPositions: Record<string, number> = {};
 
 function routeKey(pathname: string, search: string) {
   return `${pathname}${search}`;
-}
-
-function getAppScrollEl(): HTMLElement | null {
-  return document.getElementById('root');
 }
 
 export function ScrollRestoration() {
@@ -17,11 +15,11 @@ export function ScrollRestoration() {
 
   useEffect(() => {
     const saveScroll = () => {
-      const el = getAppScrollEl();
+      const el = getAppScrollRoot();
       const y = el ? el.scrollTop : window.scrollY;
       scrollPositions[prevKeyRef.current] = y;
     };
-    const el = getAppScrollEl();
+    const el = getAppScrollRoot();
     const target: HTMLElement | Window = el ?? window;
     target.addEventListener('scroll', saveScroll, { passive: true });
     return () => target.removeEventListener('scroll', saveScroll);
@@ -30,7 +28,7 @@ export function ScrollRestoration() {
   useEffect(() => {
     const currentKey = routeKey(pathname, search);
     const saved = scrollPositions[currentKey] ?? 0;
-    const el = getAppScrollEl();
+    const el = getAppScrollRoot();
     if (el) {
       el.scrollTo({ top: saved, behavior: 'auto' });
     } else {

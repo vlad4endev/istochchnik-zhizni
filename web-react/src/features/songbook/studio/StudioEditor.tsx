@@ -935,7 +935,7 @@ export function StudioEditor() {
 
   return (
     <div
-      className={`mx-auto flex w-full max-w-[1520px] flex-col gap-4 px-2 sm:px-3 md:px-4 max-lg:pb-[calc(5.75rem+env(safe-area-inset-bottom,0px))] ${shell.page}`}
+      className={`mx-auto flex w-full max-w-[1520px] flex-col gap-4 px-2 sm:px-3 md:px-4 max-lg:pb-[5.75rem] ${shell.page}`}
     >
       <SmartImportModal
         open={importOpen}

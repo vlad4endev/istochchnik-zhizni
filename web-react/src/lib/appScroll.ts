@@ -1,9 +1,18 @@
 /**
- * Вертикальный скролл приложения живёт в `#root` (см. index.css), не в `window`.
+ * Вертикальный скролл не в `window`: до брейкпоинта `lg` он в `<main id="main-content">`,
+ * на широких экранах — в `#root` (см. Layout.tsx и index.css).
  */
 
 export function getAppScrollRoot(): HTMLElement | null {
-  return document.getElementById('root');
+  if (typeof document === 'undefined') return null;
+  const wide =
+    typeof window !== 'undefined' &&
+    typeof window.matchMedia === 'function' &&
+    window.matchMedia('(min-width: 1024px)').matches;
+  if (wide) {
+    return document.getElementById('root');
+  }
+  return document.getElementById('main-content') ?? document.getElementById('root');
 }
 
 export function getAppScrollTop(): number {
