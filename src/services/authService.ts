@@ -18,9 +18,12 @@ const MAX_ACCESS_TTL_MINUTES = 24 * 60;
 const DEFAULT_REFRESH_TTL_DAYS = 90;
 const MIN_REFRESH_TTL_DAYS = 1;
 const MAX_REFRESH_TTL_DAYS = 365;
-const DEFAULT_MAX_ACTIVE_SESSIONS_PER_USER = 3;
-const MIN_ACTIVE_SESSIONS_PER_USER = 1;
-const MAX_ACTIVE_SESSIONS_PER_USER = 20;
+/** Ротации access-токена (много записей на одного пользователя) — не путать с числом устройств. */
+const DEFAULT_MAX_ACCESS_SESSIONS_PER_USER = 30;
+/** Активные refresh (по сути «сколько устройств может остаться в системе»). */
+const DEFAULT_MAX_REFRESH_SESSIONS_PER_USER = 15;
+const MIN_SESSION_SLOTS_PER_USER = 1;
+const MAX_SESSION_SLOTS_PER_USER = 100;
 const PHONE_DIGITS_MIN = 7;
 const PHONE_DIGITS_MAX = 20;
 const PASSWORD_RESET_CODE_TTL_SEC = 5 * 60;
@@ -305,22 +308,42 @@ function getRefreshTtlDays(): number {
   return Math.min(MAX_REFRESH_TTL_DAYS, Math.max(MIN_REFRESH_TTL_DAYS, integerValue));
 }
 
-function getMaxActiveSessionsPerUser(): number {
-  const rawValue = process.env.AUTH_MAX_ACTIVE_SESSIONS_PER_USER;
-  if (!rawValue) {
-    return DEFAULT_MAX_ACTIVE_SESSIONS_PER_USER;
+function envSessionLimit(key: string): string | undefined {
+  const v = process.env[key];
+  if (v === undefined || v === null) {
+    return undefined;
   }
+  const t = String(v).trim();
+  return t === '' ? undefined : t;
+}
 
-  const parsed = Number(rawValue);
+function clampSessionSlots(n: number): number {
+  return Math.min(MAX_SESSION_SLOTS_PER_USER, Math.max(MIN_SESSION_SLOTS_PER_USER, n));
+}
+
+function parseSessionSlots(raw: string | undefined, fallback: number): number {
+  if (!raw) {
+    return fallback;
+  }
+  const parsed = Number(raw);
   if (!Number.isFinite(parsed)) {
-    return DEFAULT_MAX_ACTIVE_SESSIONS_PER_USER;
+    return fallback;
   }
+  return clampSessionSlots(Math.floor(parsed));
+}
 
-  const integerValue = Math.floor(parsed);
-  return Math.min(
-    MAX_ACTIVE_SESSIONS_PER_USER,
-    Math.max(MIN_ACTIVE_SESSIONS_PER_USER, integerValue)
-  );
+function getMaxAccessSessionsPerUser(): number {
+  const raw =
+    envSessionLimit('AUTH_MAX_ACCESS_SESSIONS_PER_USER') ??
+    envSessionLimit('AUTH_MAX_ACTIVE_SESSIONS_PER_USER');
+  return parseSessionSlots(raw, DEFAULT_MAX_ACCESS_SESSIONS_PER_USER);
+}
+
+function getMaxRefreshSessionsPerUser(): number {
+  const raw =
+    envSessionLimit('AUTH_MAX_REFRESH_SESSIONS_PER_USER') ??
+    envSessionLimit('AUTH_MAX_ACTIVE_SESSIONS_PER_USER');
+  return parseSessionSlots(raw, DEFAULT_MAX_REFRESH_SESSIONS_PER_USER);
 }
 
 function mapAuthUser(row: MemberRow): AuthUser {
@@ -357,7 +380,7 @@ function mapAuthUser(row: MemberRow): AuthUser {
 async function createSessionForUser(userId: number): Promise<{ token: string; expiresAt: string }> {
   const { token, tokenHash } = createSessionToken();
   const accessTtlMinutes = getAccessTtlMinutes();
-  const maxActiveSessions = getMaxActiveSessionsPerUser();
+  const maxAccessSlots = getMaxAccessSessionsPerUser();
   const expiresAt = new Date(Date.now() + accessTtlMinutes * 60 * 1000);
 
   // Remove stale sessions first to keep per-user session limits accurate.
@@ -374,7 +397,7 @@ async function createSessionForUser(userId: number): Promise<{ token: string; ex
     [tokenHash, userId, expiresAt.toISOString()]
   );
 
-  // Keep recent sessions only (for multi-device sign-in).
+  // Лишние access-сессии (частые ротации); лимит выше, чем у refresh — чтобы не выбивать другие устройства.
   await query(
     `DELETE FROM auth_sessions
      WHERE member_id = $1
@@ -385,7 +408,7 @@ async function createSessionForUser(userId: number): Promise<{ token: string; ex
          ORDER BY created_at DESC, token_hash DESC
          OFFSET $2
        )`,
-    [userId, maxActiveSessions]
+    [userId, maxAccessSlots]
   );
 
   return { token, expiresAt: expiresAt.toISOString() };
@@ -403,7 +426,7 @@ export async function issueRefreshSessionForUser(
   const { token, tokenHash } = createRefreshToken();
   const refreshTtlDays = getRefreshTtlDays();
   const expiresAt = new Date(Date.now() + refreshTtlDays * 24 * 60 * 60 * 1000);
-  const maxActiveSessions = getMaxActiveSessionsPerUser();
+  const maxRefreshSlots = getMaxRefreshSessionsPerUser();
 
   await query(
     `DELETE FROM auth_refresh_sessions
@@ -429,7 +452,7 @@ export async function issueRefreshSessionForUser(
          ORDER BY created_at DESC, token_hash DESC
          OFFSET $2
        )`,
-    [userId, maxActiveSessions]
+    [userId, maxRefreshSlots]
   );
 
   return { refreshToken: token, expiresAt: expiresAt.toISOString() };

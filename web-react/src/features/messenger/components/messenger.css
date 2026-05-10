@@ -604,7 +604,7 @@
 
   .tg-search-panel {
     border-radius: 16px;
-    max-height: min(720px, 85vh);
+    max-height: min(720px, 85dvh);
     box-shadow: var(--tg-shadow), 0 24px 64px rgba(0, 0, 0, 0.12);
   }
 
@@ -864,6 +864,11 @@
 
 .tg-chat-window__composer {
   flex-shrink: 0;
+  /* iOS PWA: не fixed — sticky внутри колонки чата остаётся в видимом visual viewport при клавиатуре */
+  position: sticky;
+  bottom: 0;
+  align-self: stretch;
+  z-index: 20;
 }
 
 .tg-chat-window {
@@ -920,7 +925,7 @@
   justify-content: center;
   text-align: center;
   padding: 40px 20px;
-  min-height: min(320px, 50vh);
+  min-height: min(320px, 50dvh);
 }
 
 .tg-empty-chat-title {
@@ -1138,7 +1143,7 @@
   line-height: 1.5;
   min-height: 24px;
   /* ~9–10 строк как в Telegram, без «зажима» на десктопе */
-  max-height: min(42vh, 240px);
+  max-height: min(42dvh, 240px);
   padding: 6px 2px 6px 0;
   resize: none;
   overflow-y: auto;
@@ -1483,7 +1488,7 @@
 .tg-search-panel {
   width: 100%;
   max-width: 600px;
-  max-height: 80vh;
+  max-height: 80dvh;
   background: var(--tg-surface);
   border-radius: 12px 12px 0 0;
   display: flex;
@@ -2068,11 +2073,12 @@ html.dark .msg-quick-reaction:hover {
   html[data-messenger-open="1"],
   html[data-messenger-open="1"] body,
   html[data-messenger-open="1"] #root {
-    /* Одна высота из nativeShellViewport — иначе при клавиатуре 100dvh «выше» видимой области и видна полоса фона. */
-    height: var(--app-viewport-height, 100dvh);
-    min-height: var(--app-viewport-height, 100dvh);
-    max-height: var(--app-viewport-height, 100dvh);
-    overflow: hidden !important;
+    /* Одна высота из visualViewport — иначе при клавиатуре 100dvh «выше» видимой области и видна полоса фона. */
+    height: var(--viewport-height, 100dvh);
+    min-height: var(--viewport-height, 100dvh);
+    max-height: var(--viewport-height, 100dvh);
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
     overscroll-behavior: none;
   }
 
@@ -2085,14 +2091,15 @@ html.dark .msg-quick-reaction:hover {
   }
 
   /* Не фиксировать высоту по 100dvh — при клавиатуре dvh/layout часто остаётся «полным», появляется белая полоса.
-     Высота синхронизируется в nativeShellViewport.ts → --app-viewport-height (visual viewport / innerHeight). */
+     Высота: nativeShellViewport → --viewport-height (= visualViewport.height). */
   html[data-chat-open="1"],
   html[data-chat-open="1"] body,
   html[data-chat-open="1"] #root {
-    height: var(--app-viewport-height, 100dvh) !important;
-    min-height: var(--app-viewport-height, 100dvh) !important;
-    max-height: var(--app-viewport-height, 100dvh) !important;
-    overflow: hidden !important;
+    height: var(--viewport-height, 100dvh) !important;
+    min-height: var(--viewport-height, 100dvh) !important;
+    max-height: var(--viewport-height, 100dvh) !important;
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
     overscroll-behavior: none;
   }
 
@@ -2104,7 +2111,8 @@ html.dark .msg-quick-reaction:hover {
     padding-bottom: 0 !important;
     min-height: 0 !important;
     flex: 1 1 auto !important;
-    overflow: hidden !important;
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
   }
 
   html[data-chat-open="1"] {
@@ -2293,8 +2301,8 @@ html.dark .msg-quick-reaction:hover {
       top: 0;
       bottom: 0;
       width: auto;
-      height: var(--app-viewport-height, 100dvh);
-      max-height: var(--app-viewport-height, 100dvh);
+      height: var(--viewport-height, 100dvh);
+      max-height: var(--viewport-height, 100dvh);
       transform: none !important;
       overflow: hidden;
       box-sizing: border-box;
@@ -2384,9 +2392,9 @@ html.dark .msg-quick-reaction:hover {
       top: 0;
       bottom: 0;
       width: auto;
-      height: var(--app-viewport-height, 100dvh);
+      height: var(--viewport-height, 100dvh);
       min-height: 0;
-      max-height: var(--app-viewport-height, 100dvh);
+      max-height: var(--viewport-height, 100dvh);
       transform: none !important;
       overflow: hidden;
       overflow-x: clip;
@@ -2530,7 +2538,7 @@ html.dark .msg-quick-reaction:hover {
   .tg-input-textarea {
     padding: 6px 2px 6px 0;
     font-size: 16px;
-    max-height: min(38vh, 220px);
+    max-height: min(38dvh, 220px);
   }
 
   .tg-input-area {

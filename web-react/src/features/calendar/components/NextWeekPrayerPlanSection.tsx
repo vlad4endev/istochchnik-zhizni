@@ -596,7 +596,7 @@ function ModalFrame(props: {
   const { titleId, title, subtitle, onClose, children, size = 'default' } = props;
   const widthClass = size === 'wide' ? 'max-w-2xl' : 'max-w-md';
   const maxHClass =
-    size === 'wide' ? 'max-h-[min(92dvh,820px)] sm:max-h-[88vh]' : 'max-h-[min(88dvh,720px)] sm:max-h-[85vh]';
+    size === 'wide' ? 'max-h-[min(92dvh,820px)] sm:max-h-[88dvh]' : 'max-h-[min(88dvh,720px)] sm:max-h-[85dvh]';
 
   useEffect(() => {
     const prev = document.body.style.overflow;
@@ -616,7 +616,7 @@ function ModalFrame(props: {
 
   return (
     <div
-      className="fixed inset-0 z-[80] flex items-end justify-center bg-black/45 p-0 sm:items-center sm:p-4"
+      className="fixed inset-0 z-[80] flex items-center justify-center bg-black/45 p-4"
       role="presentation"
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onClose();
@@ -626,7 +626,7 @@ function ModalFrame(props: {
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className={`flex w-full flex-col rounded-t-2xl border border-stone-200/90 bg-[var(--surface)] shadow-2xl sm:rounded-2xl ${maxHClass} ${widthClass}`}
+        className={`flex w-full flex-col rounded-2xl border border-stone-200/90 bg-[var(--surface)] shadow-2xl ${maxHClass} ${widthClass}`}
       >
         <div className="flex shrink-0 items-center justify-between gap-2 border-b border-stone-200/80 px-3 py-2.5 sm:px-4">
           <div className="flex min-w-0 items-center gap-2">

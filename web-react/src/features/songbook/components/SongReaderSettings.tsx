@@ -122,7 +122,7 @@ export function SongReaderSettings({
       {isOpen ? (
         <div
           className={[
-            'fixed inset-x-0 bottom-0 z-50 max-h-[88dvh] overflow-y-auto rounded-t-3xl border p-4 md:absolute md:inset-x-auto md:bottom-auto md:right-0 md:top-[calc(100%+0.5rem)] md:w-[min(24rem,calc(100vw-1.25rem))] md:max-h-[72dvh] md:rounded-2xl',
+            'fixed left-1/2 top-1/2 z-50 w-[min(calc(100vw-1.5rem),36rem)] max-h-[88dvh] -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-2xl border p-4 md:absolute md:inset-x-auto md:bottom-auto md:left-auto md:right-0 md:top-[calc(100%+0.5rem)] md:w-[min(24rem,calc(100vw-1.25rem))] md:max-h-[72dvh] md:translate-x-0 md:translate-y-0',
             panelClass,
           ].join(' ')}
           role="dialog"
@@ -138,7 +138,6 @@ export function SongReaderSettings({
             if (endY - startY > 70) setOpen(false);
           }}
         >
-          <div className="mx-auto mb-2 h-1.5 w-12 rounded-full bg-stone-300 lg:hidden" aria-hidden />
           <div className="mb-3 flex items-center justify-between">
             <p className={`text-xs font-semibold uppercase tracking-widest ${stageMode ? 'text-stone-500' : 'text-stone-500'}`}>
               Настройки

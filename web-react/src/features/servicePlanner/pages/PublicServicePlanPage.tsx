@@ -296,7 +296,7 @@ export function PublicServicePlanPage() {
   }
   if (q.isLoading) {
     return (
-      <div className="min-h-0 w-full overflow-y-auto overflow-x-hidden overscroll-y-contain bg-[var(--surface)] [max-height:var(--app-viewport-height,100dvh)]">
+      <div className="min-h-0 w-full overflow-y-auto overflow-x-hidden overscroll-y-contain bg-[var(--surface)] [max-height:var(--viewport-height,100dvh)]">
         <div className="mx-auto max-w-3xl px-3 py-5 sm:px-4 sm:py-8">
           <SongListSkeleton />
         </div>
@@ -305,7 +305,7 @@ export function PublicServicePlanPage() {
   }
   if (q.isError || !q.data) {
     return (
-      <div className="min-h-0 w-full overflow-y-auto overflow-x-hidden overscroll-y-contain bg-[var(--surface)] [max-height:var(--app-viewport-height,100dvh)]">
+      <div className="min-h-0 w-full overflow-y-auto overflow-x-hidden overscroll-y-contain bg-[var(--surface)] [max-height:var(--viewport-height,100dvh)]">
         <div className="mx-auto max-w-2xl p-6">
           <p className="text-red-600">Программа не найдена или ссылка недействительна.</p>
         </div>
@@ -324,7 +324,7 @@ export function PublicServicePlanPage() {
   }).format(new Date(`${plan.service_date}T12:00:00`));
 
   return (
-    <div className="min-h-0 w-full overflow-y-auto overflow-x-hidden overscroll-y-contain bg-[var(--surface)] [max-height:var(--app-viewport-height,100dvh)]">
+    <div className="min-h-0 w-full overflow-y-auto overflow-x-hidden overscroll-y-contain bg-[var(--surface)] [max-height:var(--viewport-height,100dvh)]">
       <div className="mx-auto max-w-3xl space-y-4 px-3 py-5 sm:space-y-6 sm:px-4 sm:py-8">
         <p className="text-sm">
           <Link to="/login" className="text-sky-600 hover:underline">

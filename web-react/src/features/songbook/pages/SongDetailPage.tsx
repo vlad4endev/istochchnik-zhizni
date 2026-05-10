@@ -173,12 +173,11 @@ export function SongDetailPage() {
             onClick={() => setSettingsOpen(false)}
           />
           <div
-            className="fixed inset-x-0 bottom-0 z-[121] flex max-h-[min(85dvh,640px)] flex-col overflow-hidden rounded-t-[1.25rem] border border-[var(--sd-border)] bg-[var(--sd-surface)] shadow-2xl sm:left-1/2 sm:max-w-md sm:-translate-x-1/2"
+            className="fixed left-1/2 top-1/2 z-[121] flex w-[min(calc(100vw-1.5rem),28rem)] max-w-md max-h-[min(85dvh,640px)] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-2xl border border-[var(--sd-border)] bg-[var(--sd-surface)] shadow-2xl"
             role="dialog"
             aria-label="Настройки текста песни"
           >
-            <div className="flex shrink-0 flex-col items-center border-b border-[var(--sd-border)] bg-[var(--sd-surface-elevated)] px-4 pb-3 pt-2">
-              <div className="mb-2 h-1 w-10 rounded-full bg-[var(--sd-bg-hover)]" aria-hidden />
+            <div className="flex shrink-0 flex-col border-b border-[var(--sd-border)] bg-[var(--sd-surface-elevated)] px-4 pb-3 pt-3">
               <div className="flex w-full items-center justify-between gap-3">
                 <div className="min-w-0">
                   <p className="text-base font-semibold text-[var(--sd-text)]">Как показать текст</p>

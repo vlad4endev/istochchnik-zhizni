@@ -27,6 +27,8 @@ const MIN_RECONNECT_MS = 1000;
 const MAX_RECONNECT_MS = 30_000;
 let reconnectBackoffMs = MIN_RECONNECT_MS;
 let stableOpenTimer: ReturnType<typeof setTimeout> | undefined;
+/** Одноразовая подсказка при 1006 — типичная причина: реверс-прокси без WebSocket Upgrade. */
+let lastAbnormalCloseHintMs = 0;
 
 /** Активный чат — повторный `join` сразу после auth (вкладка / восстановление WS). */
 let activeMessengerConversationId: string | null = null;
@@ -378,6 +380,16 @@ function openSocket(): void {
       ws = null;
     }
     if (stopped || !authToken) return;
+    if (ev.code === 1006 && !ev.wasClean) {
+      const now = Date.now();
+      if (now - lastAbnormalCloseHintMs > 120_000) {
+        lastAbnormalCloseHintMs = now;
+        logWarn(
+          'разрыв до установки WS (1006): проверьте nginx — для /api нужны Upgrade и Connection (см. deploy/nginx-realtime-ws.snippet)',
+          { url: resolveRealtimeWebSocketUrl() },
+        );
+      }
+    }
     if (ev.code === 1008) {
       logWarn('auth rejected, refreshing token before reconnect');
       void refreshAccessToken()

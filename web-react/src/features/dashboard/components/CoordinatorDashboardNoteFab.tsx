@@ -198,7 +198,7 @@ export function CoordinatorDashboardNoteFab() {
 
       {modalKind ? (
         <div
-          className="fixed inset-0 z-[90] flex items-end justify-center bg-black/45 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom,0px))] sm:items-center sm:p-4"
+          className="fixed inset-0 z-[90] flex items-center justify-center bg-black/45 p-4"
           role="dialog"
           aria-modal="true"
           aria-labelledby={modalTitleId}

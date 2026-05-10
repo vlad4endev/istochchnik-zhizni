@@ -964,7 +964,7 @@ export function StudioEditor() {
             onClick={() => setToolsOpen(false)}
           />
           <div
-            className={`fixed inset-x-0 bottom-0 z-[101] max-h-[85dvh] overflow-y-auto overscroll-contain rounded-t-3xl p-5 sm:max-h-[90dvh] md:inset-auto md:right-6 md:top-20 md:max-h-[min(90dvh,calc(100dvh-5rem))] md:w-[min(400px,calc(100vw-3rem))] md:rounded-2xl ${shell.drawer}`}
+            className={`fixed left-1/2 top-1/2 z-[101] w-[min(calc(100vw-1.5rem),400px)] max-h-[85dvh] -translate-x-1/2 -translate-y-1/2 overflow-y-auto overscroll-contain rounded-2xl p-5 md:inset-auto md:left-auto md:right-6 md:top-20 md:h-auto md:max-h-[min(90dvh,calc(100dvh-5rem))] md:w-[min(400px,calc(100vw-3rem))] md:translate-x-0 md:translate-y-0 ${shell.drawer}`}
             role="dialog"
             aria-labelledby="studio-tools-title"
           >
@@ -1176,7 +1176,7 @@ export function StudioEditor() {
             onClick={() => setAutoChordModalOpen(false)}
           />
           <div
-            className={`fixed inset-x-0 bottom-0 z-[105] max-h-[85dvh] overflow-y-auto overscroll-contain rounded-t-3xl p-5 sm:max-h-[90dvh] md:inset-auto md:right-6 md:top-16 md:max-h-[min(90dvh,calc(100dvh-4rem))] md:w-[min(720px,calc(100vw-3rem))] md:rounded-2xl ${shell.drawer}`}
+            className={`fixed left-1/2 top-1/2 z-[105] w-[min(calc(100vw-1.5rem),720px)] max-h-[85dvh] -translate-x-1/2 -translate-y-1/2 overflow-y-auto overscroll-contain rounded-2xl p-5 md:inset-auto md:left-auto md:right-6 md:top-16 md:h-auto md:max-h-[min(90dvh,calc(100dvh-4rem))] md:w-[min(720px,calc(100vw-3rem))] md:translate-x-0 md:translate-y-0 ${shell.drawer}`}
             role="dialog"
             aria-labelledby="auto-chords-title"
           >
@@ -1615,7 +1615,7 @@ export function StudioEditor() {
         {showPreview ? (
           <aside
             className={[
-              'hidden rounded-2xl border p-4 xl:sticky xl:top-24 xl:flex xl:max-h-[calc(100vh-8rem)] xl:flex-col xl:overflow-y-auto',
+              'hidden rounded-2xl border p-4 xl:sticky xl:top-24 xl:flex xl:max-h-[calc(100dvh-8rem)] xl:flex-col xl:overflow-y-auto',
               darkUi ? 'border-slate-800 bg-slate-950/60' : 'border-stone-200 bg-white',
             ].join(' ')}
           >

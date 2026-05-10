@@ -664,7 +664,7 @@ export function SmartImportModal({
 
   return (
     <div
-      className="fixed inset-0 z-[80] flex items-end justify-center bg-black/55 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:items-center sm:p-4"
+      className="fixed inset-0 z-[80] flex items-center justify-center bg-black/55 p-4"
       role="dialog"
       aria-modal
       aria-labelledby="smart-import-title"

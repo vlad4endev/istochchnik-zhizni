@@ -1559,7 +1559,7 @@ function DashboardMain() {
                         <p className="text-sm font-semibold text-stone-800">
                           На текущей неделе не заполнена молитвенная нужда (только участники цикла):
                         </p>
-                        <ul className="mt-2 max-h-[min(40vh,320px)] space-y-2 overflow-y-auto pr-0.5">
+                        <ul className="mt-2 max-h-[min(40dvh,320px)] space-y-2 overflow-y-auto pr-0.5">
                           {leaderUnfilledRows.map((row) => (
                             <li
                               key={`${row.date}-${row.member.id}`}
@@ -1614,7 +1614,7 @@ function DashboardMain() {
                       ) : adminNextWeekRosterRows.length === 0 ? (
                         <p className="text-sm text-stone-600">Пока нет строк плана на следующую неделю.</p>
                       ) : (
-                        <ul className="max-h-[min(52vh,520px)] space-y-2 overflow-y-auto pr-0.5">
+                        <ul className="max-h-[min(52dvh,520px)] space-y-2 overflow-y-auto pr-0.5">
                           {adminNextWeekRosterRows.map((row) => {
                             const m = row.member;
                             const need = (m?.prayer_request ?? '').trim();
@@ -1752,13 +1752,13 @@ function DashboardMain() {
       {eventOpen && typeof document !== 'undefined'
         ? createPortal(
             <div
-              className="dashboard-backdrop fixed inset-0 z-[150] flex min-h-[100dvh] items-end justify-center bg-black/45 pt-3 pb-0 [padding-left:max(0.75rem,env(safe-area-inset-left,0px))] [padding-right:max(0.75rem,env(safe-area-inset-right,0px))] sm:min-h-0 sm:items-center sm:p-4"
+              className="dashboard-backdrop fixed inset-0 z-[150] flex min-h-[100dvh] items-center justify-center bg-black/45 p-4 [padding-left:max(0.75rem,env(safe-area-inset-left,0px))] [padding-right:max(0.75rem,env(safe-area-inset-right,0px))]"
               onClick={() => setEventOpen(false)}
               role="dialog"
               aria-modal="true"
             >
               <div
-                className="dashboard-sheet w-full max-w-lg max-h-[min(82vh,700px)] overflow-y-auto rounded-2xl border border-stone-200/80 bg-white px-4 pt-4 pb-[max(1rem,env(safe-area-inset-bottom,0px))] shadow-[0_24px_70px_rgba(0,0,0,0.2)] [webkit-overflow-scrolling:touch] sm:max-h-[88vh] sm:p-5"
+                className="dashboard-sheet w-full max-w-lg max-h-[min(82dvh,700px)] overflow-y-auto rounded-2xl border border-stone-200/80 bg-white px-4 pt-4 pb-[max(1rem,env(safe-area-inset-bottom,0px))] shadow-[0_24px_70px_rgba(0,0,0,0.2)] [webkit-overflow-scrolling:touch] sm:max-h-[88dvh] sm:p-5"
                 onClick={(e) => e.stopPropagation()}
               >
                 <p className="text-[11px] font-semibold tracking-[0.02em] text-[#0F6636]">Описание события</p>

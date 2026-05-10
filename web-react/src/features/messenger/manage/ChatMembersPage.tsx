@@ -489,7 +489,7 @@ function MemberPermissionsDialog({
       onClose={onClose}
       zIndexClassName="z-[4000]"
       align="center"
-      contentClassName="max-h-[85vh] max-w-md overflow-y-auto p-5"
+      contentClassName="max-h-[85dvh] max-w-md overflow-y-auto p-5"
     >
         <div className="flex items-center justify-between gap-2">
           <p className="text-lg font-extrabold text-[var(--text)]">Права участника</p>
@@ -671,7 +671,7 @@ function AddMemberDialog({
 
           {err ? <p className="mt-2 text-sm font-semibold text-red-600">{err}</p> : null}
 
-          <div className="mt-3 max-h-[60vh] overflow-y-auto">
+          <div className="mt-3 max-h-[60dvh] overflow-y-auto">
             {loading ? (
               <div className="space-y-2">
                 <SkeletonBox width="100%" height="56px" radius="16px" />

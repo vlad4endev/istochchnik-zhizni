@@ -47,7 +47,7 @@ export function MediaViewer() {
     ? hasMultipleItems
       ? 'calc(100dvh - 190px)'
       : 'calc(100dvh - 128px)'
-    : '82vh';
+    : '82dvh';
 
   useEffect(() => {
     scaleRef.current = scale;

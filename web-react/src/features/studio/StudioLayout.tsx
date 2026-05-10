@@ -103,7 +103,7 @@ export function StudioLayout() {
   ];
 
   return (
-    <div className="flex w-full flex-col overscroll-y-none bg-stone-50 text-stone-900 [max-height:var(--app-viewport-height,100dvh)] [min-height:var(--app-viewport-height,100dvh)] md:flex-row">
+    <div className="flex w-full flex-col overscroll-y-none bg-stone-50 text-stone-900 [max-height:var(--viewport-height,100dvh)] [min-height:var(--viewport-height,100dvh)] md:flex-row">
       <aside className="flex w-full shrink-0 flex-col border-b border-stone-200 bg-white px-2 py-3 shadow-sm md:w-64 md:border-b-0 md:border-r md:py-6 md:pl-5 md:pr-3">
         <div className="flex items-center gap-3 px-2 py-2 md:px-0">
           <button

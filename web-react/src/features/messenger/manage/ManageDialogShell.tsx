@@ -15,12 +15,12 @@ export function ManageDialogShell({
   zIndexClassName = 'z-[4000]',
   contentClassName = '',
   backdropClassName = 'bg-black/45 backdrop-blur-[2px] dark:bg-black/55 dark:backdrop-blur-sm',
-  align = 'bottom',
+  align = 'center',
 }: ManageDialogShellProps) {
   const alignClass =
-    align === 'center'
-      ? 'items-center justify-center p-3 sm:p-4'
-      : 'items-end justify-center px-3 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom,0px))] sm:p-4';
+    align === 'bottom'
+      ? 'items-end justify-center px-3 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom,0px))] sm:p-4'
+      : 'items-center justify-center p-3 sm:p-4';
 
   return (
     <div

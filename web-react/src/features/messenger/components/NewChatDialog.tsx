@@ -47,7 +47,7 @@ const DIALOG_STYLES = `
     width: 90%; max-width: 440px; background: var(--tg-surface);
     border-radius: 12px; box-shadow: 0 8px 32px rgba(0,0,0,0.2);
     display: flex; flex-direction: column;
-    max-height: min(85vh, calc(100% - 8px));
+    max-height: min(85dvh, calc(100% - 8px));
     overflow: hidden; animation: tgPop 0.2s ease-out;
     flex-shrink: 0;
   }
@@ -182,7 +182,7 @@ export function NewChatDialog({ onClose, onCreated }: NewChatDialogProps) {
     };
   }, []);
 
-  /** iOS/Android: при открытой клавиатуре `fixed + 100vh` оставляет «белую полосу» — совмещаем оверлей с visualViewport. */
+  /** iOS/Android: при открытой клавиатуре фикс. оверлей + «полный» layout viewport оставляют «белую полосу» — совмещаем с visualViewport. */
   const [vvRect, setVvRect] = useState<{
     top: number;
     left: number;

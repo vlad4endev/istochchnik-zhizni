@@ -41,7 +41,7 @@ export function PublicSetlistPage() {
   const { setlist, items } = q.data;
 
   return (
-    <div className="w-full overflow-y-auto overflow-x-hidden overscroll-y-contain bg-[var(--surface)] [max-height:var(--app-viewport-height,100dvh)] [min-height:var(--app-viewport-height,100dvh)]">
+    <div className="w-full overflow-y-auto overflow-x-hidden overscroll-y-contain bg-[var(--surface)] [max-height:var(--viewport-height,100dvh)] [min-height:var(--viewport-height,100dvh)]">
       <div className="mx-auto max-w-3xl space-y-8 px-4 py-8">
         <p className="text-sm">
           <Link to="/login" className="text-sky-600 hover:underline">

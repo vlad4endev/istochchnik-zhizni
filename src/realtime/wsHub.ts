@@ -274,6 +274,11 @@ export function attachRealtimeWebSocket(server: Server): void {
       return;
     }
 
+    // Некоторые прокси добавляют завершающий `/` или префикс — приводим к каноническому пути.
+    if (pathname.length > 1 && pathname.endsWith('/')) {
+      pathname = pathname.slice(0, -1);
+    }
+
     if (pathname !== '/api/realtime') {
       socket.destroy();
       return;

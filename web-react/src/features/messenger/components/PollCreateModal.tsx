@@ -221,14 +221,14 @@ export function PollCreateModal({ open, onClose, conversationId }: PollCreateMod
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[120000] flex items-end justify-center bg-black/50 p-0 sm:items-center sm:p-4"
+      className="fixed inset-0 z-[120000] flex items-center justify-center bg-black/50 p-4"
       role="dialog"
       aria-modal="true"
       aria-labelledby="poll-create-title"
       onClick={(e) => e.target === e.currentTarget && !sending && onClose()}
     >
       <div
-        className="flex max-h-[min(94vh,760px)] w-full max-w-[420px] flex-col overflow-hidden rounded-t-[14px] bg-[#f2f2f7] shadow-2xl sm:rounded-[14px]"
+        className="flex max-h-[min(94dvh,760px)] w-full max-w-[420px] flex-col overflow-hidden rounded-[14px] bg-[#f2f2f7] shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Telegram-like nav bar */}

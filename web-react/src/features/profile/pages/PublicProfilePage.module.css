@@ -1011,7 +1011,7 @@
 .fbMedia img,
 .fbMedia video {
   width: 100%;
-  max-height: min(70vh, 32rem);
+  max-height: min(70dvh, 32rem);
   object-fit: contain;
   background: var(--profile-media-placeholder);
   display: block;

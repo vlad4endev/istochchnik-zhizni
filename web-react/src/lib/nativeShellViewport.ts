@@ -15,17 +15,11 @@ function syncViewportState() {
   /** Нижний «второй» слой (клавиатура / системные полосы): layout минус видимый прямоугольник. */
   const keyboardInset = Math.max(0, Math.round(layoutHeight - offsetTop - visualHeight));
   const keyboardOpen = keyboardInset >= 110;
-  /**
-   * Обычно — layout (`innerHeight`). При открытой клавиатуре и старом/битом `interactive-widget=resizes-visual`
-   * layout остаётся полноэкранным, а visual viewport сжат — берём min, чтобы оболочка не была выше видимой области.
-   */
-  const visibleBottom = Math.round(offsetTop + visualHeight);
-  const viewportHeight = keyboardOpen
-    ? Math.max(0, Math.min(layoutHeight, visibleBottom))
-    : Math.max(0, Math.round(layoutHeight));
 
-  root.style.setProperty('--app-viewport-height', `${viewportHeight}px`);
-  root.style.setProperty('--visual-viewport-height', `${Math.max(0, Math.round(visualHeight))}px`);
+  /** Высота видимой области (iOS PWA: совпадает с клавиатурой; `innerHeight`/`100dvh` часто остаются «полными»). */
+  const viewportHeightPx = Math.max(0, Math.round(visualHeight));
+  root.style.setProperty('--viewport-height', `${viewportHeightPx}px`);
+  root.style.setProperty('--visual-viewport-height', `${viewportHeightPx}px`);
   root.style.setProperty('--visual-viewport-offset', `${Math.round(offsetTop)}px`);
   root.style.setProperty('--app-keyboard-inset', `${keyboardInset}px`);
   root.classList.toggle('app-keyboard-open', keyboardOpen);

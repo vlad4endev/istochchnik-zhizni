@@ -115,10 +115,10 @@ function useMatchMedia(query: string): boolean {
   return matches;
 }
 
-/** Только `NNpx` из :root (PWA: nativeShellViewport перезаписывает --app-viewport-height). `100dvh` не парсим. */
+/** Только `NNpx` из :root (PWA: nativeShellViewport перезаписывает --viewport-height). `100dvh` не парсим. */
 function readRootViewportHeightPx(): number | null {
   if (typeof document === 'undefined') return null;
-  const raw = getComputedStyle(document.documentElement).getPropertyValue('--app-viewport-height').trim();
+  const raw = getComputedStyle(document.documentElement).getPropertyValue('--viewport-height').trim();
   const m = /^([\d.]+)px$/i.exec(raw);
   if (!m) return null;
   const n = Number(m[1]);
@@ -2085,7 +2085,7 @@ export function ChatInput({
               ref={textareaRef}
               className={[
                 'tg-input-textarea tg-composer-textarea !min-h-[44px] min-w-0 flex-1 resize-none !self-stretch !bg-transparent',
-                '!max-h-[min(40vh,200px)] py-2.5 pl-3 text-[16px] !leading-[1.45] text-[var(--text)] placeholder:text-stone-400/90',
+                '!max-h-[min(40dvh,200px)] py-2.5 pl-3 text-[16px] !leading-[1.45] text-[var(--text)] placeholder:text-stone-400/90',
                 '!pb-2.5 outline-none transition-[height] duration-200 ease-out dark:placeholder:text-stone-500',
               ].join(' ')}
               placeholder="Сообщение"

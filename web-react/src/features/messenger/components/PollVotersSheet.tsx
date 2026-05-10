@@ -69,14 +69,14 @@ export function PollVotersSheet({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[120001] flex items-end justify-center bg-black/45 p-0 sm:items-center sm:p-4"
+      className="fixed inset-0 z-[120001] flex items-center justify-center bg-black/45 p-4"
       role="dialog"
       aria-modal="true"
       aria-labelledby="poll-voters-title"
       onClick={(e) => e.target === e.currentTarget && onClose()}
     >
       <div
-        className="flex max-h-[min(88vh,560px)] w-full max-w-md flex-col overflow-hidden rounded-t-[14px] bg-white shadow-2xl sm:rounded-[14px]"
+        className="flex max-h-[min(88dvh,560px)] w-full max-w-md flex-col overflow-hidden rounded-[14px] bg-white shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
         <header className="flex shrink-0 items-center gap-2 border-b border-black/[0.06] px-3 py-2.5">

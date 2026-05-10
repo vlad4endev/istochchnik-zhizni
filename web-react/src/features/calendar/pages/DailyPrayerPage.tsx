@@ -464,7 +464,7 @@ function TelegramPrayerDispatchModal(props: {
       role="presentation"
     >
       <div
-        className="mx-auto flex w-full max-w-3xl min-w-0 max-h-[min(92dvh,920px)] flex-col overflow-hidden rounded-t-2xl border border-stone-200/90 bg-white pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-[0_-8px_40px_rgba(0,0,0,0.12)] sm:max-h-[min(88vh,900px)] sm:rounded-2xl sm:border-stone-200 sm:pb-0 sm:shadow-2xl"
+        className="mx-auto flex w-full max-w-3xl min-w-0 max-h-[min(92dvh,920px)] flex-col overflow-hidden rounded-t-2xl border border-stone-200/90 bg-white pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-[0_-8px_40px_rgba(0,0,0,0.12)] sm:max-h-[min(88dvh,900px)] sm:rounded-2xl sm:border-stone-200 sm:pb-0 sm:shadow-2xl"
         role="dialog"
         aria-modal="true"
         aria-label="Настройка рассылки молитвы в Telegram"
@@ -517,7 +517,7 @@ function TelegramPrayerDispatchModal(props: {
                   <p className="mt-1 text-[12px] text-stone-600 sm:text-[13px]">Как на странице «Молитва» для выбранного дня.</p>
                   <textarea
                     readOnly
-                    className="tap-highlight-transparent mt-2 max-h-[min(38vh,220px)] min-h-[100px] w-full resize-y rounded-xl border border-stone-200 bg-white px-3 py-2.5 font-mono text-[12px] leading-relaxed text-stone-800 shadow-inner sm:max-h-64 sm:min-h-[128px] sm:text-[13px]"
+                    className="tap-highlight-transparent mt-2 max-h-[min(38dvh,220px)] min-h-[100px] w-full resize-y rounded-xl border border-stone-200 bg-white px-3 py-2.5 font-mono text-[12px] leading-relaxed text-stone-800 shadow-inner sm:max-h-64 sm:min-h-[128px] sm:text-[13px]"
                     value={previewQ.data.text}
                     aria-label="Предпросмотр текста рассылки молитвы"
                   />
@@ -616,7 +616,7 @@ function TelegramPrayerDispatchModal(props: {
                   <p className="mb-2 text-[11px] font-bold uppercase tracking-wide text-stone-500 sm:text-xs sm:font-semibold sm:normal-case sm:tracking-normal sm:text-stone-600">
                     Выбор пользователей
                   </p>
-                  <div className="max-h-[min(42vh,280px)] space-y-0.5 overflow-y-auto overscroll-y-contain sm:max-h-56">
+                  <div className="max-h-[min(42dvh,280px)] space-y-0.5 overflow-y-auto overscroll-y-contain sm:max-h-56">
                     {recipients.map((u: TelegramDispatchRecipient) => {
                       const checked = form.member_ids.includes(u.id);
                       return (

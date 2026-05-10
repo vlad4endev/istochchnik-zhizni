@@ -137,7 +137,7 @@ export function ChatMediaGallery({
             <img
               src={viewerSrc}
               alt=""
-              className="max-h-[min(78vh,900px)] max-w-full rounded-xl object-contain shadow-2xl"
+              className="max-h-[min(78dvh,900px)] max-w-full rounded-xl object-contain shadow-2xl"
               onClick={(e) => e.stopPropagation()}
             />
             {lightIdx != null && lightIdx < items.length - 1 ? (

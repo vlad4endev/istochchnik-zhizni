@@ -2140,9 +2140,8 @@ export function ServicePlannerPage() {
         )}
 
         {editingTemplateBlock ? createPortal(
-          <div className="fixed inset-0 z-[9999] isolate flex items-end justify-center overflow-hidden overscroll-y-contain bg-black/35 p-2 sm:items-center sm:p-3">
-            <div className="flex max-md:[height:calc(var(--app-viewport-height,100dvh)*0.88)] max-md:[max-height:calc(var(--app-viewport-height,100dvh)*0.88)] max-md:rounded-b-none max-md:rounded-t-[1.25rem] min-h-0 w-full max-w-xl flex-col overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-2xl sm:h-auto sm:max-h-[min(90dvh,calc(var(--app-viewport-height,100dvh)-2rem))] sm:rounded-2xl">
-              <div className="mx-auto mb-2 mt-1 h-1 w-10 shrink-0 rounded-full bg-stone-300 sm:hidden" aria-hidden />
+          <div className="fixed inset-0 z-[9999] isolate flex items-center justify-center overflow-hidden overscroll-y-contain bg-black/35 p-3">
+            <div className="flex min-h-0 w-full max-w-xl max-h-[min(92dvh,calc(var(--viewport-height,100dvh)-2rem))] flex-col overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-2xl sm:max-h-[min(90dvh,calc(var(--viewport-height,100dvh)-2rem))]">
               <div className="flex shrink-0 items-center justify-between gap-2 border-b border-stone-100 px-3 py-3 sm:px-4">
                 <h3 className="text-base font-extrabold text-stone-900">Редактирование блока шаблона</h3>
                 <button
@@ -3247,18 +3246,17 @@ export function ServicePlannerPage() {
 
       {editingBlock ? createPortal(
         <div
-          className="fixed inset-0 z-[9999] isolate flex items-end justify-center overflow-hidden overscroll-y-contain bg-black/35 p-2 sm:items-center sm:p-3"
+          className="fixed inset-0 z-[9999] isolate flex items-center justify-center overflow-hidden overscroll-y-contain bg-black/35 p-3"
           role="presentation"
           onClick={() => setEditingBlockId(null)}
         >
           <div
-            className="flex max-md:[height:calc(var(--app-viewport-height,100dvh)*0.88)] max-md:[max-height:calc(var(--app-viewport-height,100dvh)*0.88)] max-md:rounded-b-none max-md:rounded-t-[1.25rem] min-h-0 w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-2xl sm:h-auto sm:max-h-[min(92dvh,calc(var(--app-viewport-height,100dvh)-2rem))] sm:rounded-2xl"
+            className="flex min-h-0 w-full max-w-2xl max-h-[min(92dvh,calc(var(--viewport-height,100dvh)-2rem))] flex-col overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-2xl sm:max-h-[min(92dvh,calc(var(--viewport-height,100dvh)-2rem))]"
             role="dialog"
             aria-modal="true"
             aria-labelledby={`${blockEditFieldsUid}-modal-title`}
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="mx-auto mb-2 mt-1 h-1 w-10 shrink-0 rounded-full bg-stone-300 sm:hidden" aria-hidden />
             <div className="flex shrink-0 items-center justify-between gap-2 border-b border-stone-100 px-3 py-3 sm:px-4">
               <h3 id={`${blockEditFieldsUid}-modal-title`} className="text-base font-extrabold text-stone-900">
                 Редактирование блока

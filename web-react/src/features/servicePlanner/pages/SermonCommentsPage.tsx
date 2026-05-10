@@ -54,7 +54,7 @@ export function SermonCommentsPage() {
   const data = q.data;
 
   return (
-    <div className="w-full overflow-y-auto bg-[var(--surface)] [max-height:var(--app-viewport-height,100dvh)]">
+    <div className="w-full overflow-y-auto bg-[var(--surface)] [max-height:var(--viewport-height,100dvh)]">
       <div className="mx-auto max-w-3xl space-y-4 px-3 py-5 sm:px-4 sm:py-8">
         <p className="text-sm">
           <Link to="/dashboard" className="font-semibold text-sky-600 hover:underline">
