@@ -51,16 +51,10 @@ export function syncViewportHeightVars() {
   root.classList.toggle('app-keyboard-open', keyboardOpen);
 
   /**
-   * КРИТИЧНО для iOS PWA: CSS-переменные на html/body работают только как min/max-height,
-   * но браузер продолжает раздувать body по height:100% от html (738px при клавиатуре).
-   * Inline-стиль имеет наивысший приоритет и фактически «замораживает» высоту.
+   * Не задаём `html`/`body` через inline `height`/`max-height`: они перебивают `100dvh` в CSS
+   * и дают «белую дыру» на iOS при открытии клавиатуры (inline обновляется позже visualViewport).
+   * Высота layout — из `height: var(--viewport-height, 100dvh)` в глобальных стилях.
    */
-  root.style.height = vhPx;
-  root.style.maxHeight = vhPx;
-  if (document.body) {
-    document.body.style.height = vhPx;
-    document.body.style.maxHeight = vhPx;
-  }
 
   /** iOS safe-area: env() в отдельном элементе → числовое значение для --app-safe-bottom (fix полоски/отступов в PWA). */
   try {
