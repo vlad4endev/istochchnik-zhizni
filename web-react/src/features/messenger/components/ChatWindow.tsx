@@ -75,6 +75,9 @@ export function ChatWindow({
   const [chatHeadReady, setChatHeadReady] = useState(false);
 
   const scrollRef = useRef<HTMLDivElement>(null);
+  /** Для mobile CSS: `--tg-chat-composer-height` — отступ ленты под fixed-композер. */
+  const chatRootRef = useRef<HTMLDivElement>(null);
+  const composerRef = useRef<HTMLDivElement>(null);
   const restoredChatScrollRef = useRef(false);
   const nearBottomRef = useRef(true);
   const restoreScrollRef = useRef<{ scrollHeight: number; scrollTop: number } | null>(null);
@@ -134,6 +137,22 @@ export function ChatWindow({
 
   useEffect(() => {
     setCallHeaderMenuOpen(false);
+  }, [conversationId]);
+
+  useLayoutEffect(() => {
+    const root = chatRootRef.current;
+    const composer = composerRef.current;
+    if (!root || !composer || typeof ResizeObserver === 'undefined') return;
+
+    const applyComposerHeight = () => {
+      const h = Math.ceil(composer.getBoundingClientRect().height);
+      root.style.setProperty('--tg-chat-composer-height', `${Math.max(0, h)}px`);
+    };
+
+    applyComposerHeight();
+    const ro = new ResizeObserver(applyComposerHeight);
+    ro.observe(composer);
+    return () => ro.disconnect();
   }, [conversationId]);
 
   useEffect(() => {
@@ -869,7 +888,10 @@ export function ChatWindow({
   const showHeaderSkeleton = !isDraft && (conv?.type === 'group' || conv?.type === 'channel') && !chatHeadReady;
 
   return (
-    <div className="tg-chat-window box-border flex w-full max-w-full min-w-0 min-h-0 flex-1 flex-col overflow-hidden overflow-x-hidden">
+    <div
+      ref={chatRootRef}
+      className="tg-chat-window box-border flex w-full max-w-full min-w-0 min-h-0 flex-1 flex-col overflow-hidden overflow-x-hidden"
+    >
       {/* Safe-area только на корне (.tg-chat-window) в messenger.css для iOS — не дублировать здесь */}
       <header className="chat-header sticky top-0 z-[100] w-full min-w-0 shrink-0 border-b border-gray-200/60 bg-[var(--surface-elevated)]">
         <div className="mx-auto flex min-h-[52px] w-full min-w-0 max-w-full items-center gap-1 px-1 py-1.5 sm:gap-2 sm:px-2 sm:py-2">
@@ -1218,7 +1240,10 @@ export function ChatWindow({
         </div>
       </div>
 
-      <div className="tg-chat-window__composer message-input-bar z-20 w-full min-w-0 max-w-full shrink-0 border-t border-stone-200/70 bg-[var(--tg-bg)] px-3 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom,0px))]">
+      <div
+        ref={composerRef}
+        className="tg-chat-window__composer message-input-bar z-20 w-full min-w-0 max-w-full shrink-0 border-t border-stone-200/70 bg-[var(--tg-bg)] px-3 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom,0px))]"
+      >
         {isAccessRequestsChannel ? (
           <div className="pb-1 pt-0.5 text-center">
             <p className="mx-auto max-w-md px-2 text-[13px] leading-snug text-[var(--text-secondary)]">
