@@ -127,6 +127,27 @@ export interface AutomatedTestResult {
   durationMs: number;
   message: string;
   detail?: string;
+  /** Код ответа HTTP, если проверка делала запрос. */
+  httpStatus?: number;
+  /** Фрагмент тела ответа сервера (ошибки API, HTML и т.д.), для диагностики. */
+  responsePreview?: string;
+}
+
+/** Ответ ИИ по проваленным автотестам. */
+export interface AutoTestFailureAnalysisItem {
+  testId: string;
+  likelyRootCause: string;
+  evidence: string;
+  recommendedSteps: string[];
+  severity: 'blocking' | 'high' | 'medium' | 'low';
+}
+
+export interface AutoTestFailureAnalysisReport {
+  generatedAt: string;
+  executiveSummary: string;
+  items: AutoTestFailureAnalysisItem[];
+  fallback?: boolean;
+  errorHint?: string;
 }
 
 export interface AutomatedTestsReport {

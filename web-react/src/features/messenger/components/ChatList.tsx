@@ -13,6 +13,21 @@ interface ChatListProps {
   activeId: string | null;
 }
 
+/** Soft-hide obvious dev/test chats from the list (data unchanged). */
+function isHiddenTestConversation(conv: ConversationListItem): boolean {
+  let raw = '';
+  if (conv.type === 'private' && conv.other_member) {
+    const fn = conv.other_member.first_name || '';
+    const ln = conv.other_member.last_name || '';
+    raw = `${fn} ${ln}`.trim() || conv.other_member.name || '';
+  } else {
+    raw = conv.title || '';
+  }
+  const name = raw.trim().toLowerCase();
+  if (!name) return false;
+  return /^test\s/i.test(name) || name === 'test' || name === 'тест';
+}
+
 export function ChatList({ onSelect, activeId }: ChatListProps) {
   const conversations = useChatStore((s) => s.conversations || EMPTY_ARRAY);
   const conversationsLoading = useChatStore((s) => s.conversationsLoading);
@@ -24,6 +39,11 @@ export function ChatList({ onSelect, activeId }: ChatListProps) {
 
   const filtered = useMemo(() => getConversationsForActiveTab() || EMPTY_ARRAY, [getConversationsForActiveTab, conversations, activeTab]);
 
+  const visibleChats = useMemo(
+    () => filtered.filter((c) => !isHiddenTestConversation(c)),
+    [filtered],
+  );
+
   if (conversationsLoading && !conversationsLoaded) {
     return (
       <div className="tg-chatlist-root flex min-h-0 flex-1 flex-col bg-[var(--surface-elevated)]">
@@ -32,7 +52,11 @@ export function ChatList({ onSelect, activeId }: ChatListProps) {
             <SkeletonBox height="32px" radius="10px" />
           </div>
         </div>
-        <div className="min-h-0 flex-1 space-y-1 overflow-y-auto px-2 py-2 md:px-3" aria-busy="true" aria-label="Загрузка чатов">
+        <div
+          className="min-h-0 flex-1 space-y-1 overflow-y-auto px-2 py-2 pb-[max(0.75rem,env(safe-area-inset-bottom,0px))] md:px-3"
+          aria-busy="true"
+          aria-label="Загрузка чатов"
+        >
           {Array.from({ length: 6 }).map((_, i) => (
             <div key={i} className="flex items-center gap-3 rounded-xl px-2 py-2">
               <SkeletonBox width="44px" height="44px" radius="9999px" />
@@ -68,21 +92,21 @@ export function ChatList({ onSelect, activeId }: ChatListProps) {
         />
       </div>
 
-      <div className="tg-chatlist-scroll chats-scroll-area min-h-0 flex-1 overflow-y-auto bg-[var(--surface-elevated)] [scrollbar-gutter:stable]">
-        <ul className="min-h-full list-none bg-[var(--surface-elevated)]" role="list">
-          {filtered.map((conv: ConversationListItem, index: number) => (
+      <div className="tg-chatlist-scroll chats-scroll-area min-h-0 flex-1 overflow-y-auto bg-[var(--surface-elevated)] [scrollbar-gutter:stable] pb-[max(0.75rem,env(safe-area-inset-bottom,0px))]">
+        <ul className="min-h-full w-full list-none bg-[var(--surface-elevated)]" role="list">
+          {visibleChats.map((conv: ConversationListItem, index: number) => (
             <li key={conv.id}>
               <MemoChatListItem
                 conv={conv}
                 isActive={conv.id === activeId}
-                isLast={index === filtered.length - 1}
+                isLast={index === visibleChats.length - 1}
                 avatarPriority={index < 16 || conv.id === activeId}
                 onSelect={onSelect}
               />
             </li>
           ))}
         </ul>
-        {filtered.length === 0 ? (
+        {visibleChats.length === 0 ? (
           <div className="px-4 py-10 text-center">
             <p className="text-sm font-semibold text-[var(--text-secondary)]">Здесь пока пусто</p>
           </div>
@@ -115,35 +139,37 @@ function SmartTabs({
   ];
 
   return (
-    <div className="flex items-center gap-1 rounded-2xl border border-stone-200/70 bg-[var(--surface-elevated)] p-1 shadow-sm">
-      {tabs.map((t) => {
-        const isActive = t.id === activeTab;
-        return (
-          <button
-            key={t.id}
-            type="button"
-            onClick={() => onChange(t.id)}
-            className={[
-              'relative inline-flex min-h-[32px] flex-1 items-center justify-center gap-1.5 rounded-xl px-2 py-1.5 text-xs font-semibold transition-colors duration-200',
-              isActive
-                ? 'bg-[var(--text)] text-[var(--surface-elevated)] shadow-sm'
-                : 'text-[var(--text-secondary)] hover:bg-[var(--surface)] hover:text-[var(--text)]',
-            ].join(' ')}
-          >
-            <span className="truncate">{t.label}</span>
-            {t.unread > 0 ? (
-              <span
-                className={[
-                  'inline-flex min-w-[18px] items-center justify-center rounded-full px-1 py-px text-xs font-bold',
-                  isActive ? 'bg-white/20 text-white' : 'bg-primary/10 text-primary',
-                ].join(' ')}
-              >
-                {t.unread > 99 ? '99+' : t.unread}
-              </span>
-            ) : null}
-          </button>
-        );
-      })}
+    <div className="max-[768px]:-mx-1 max-[768px]:overflow-x-auto max-[768px]:overflow-y-visible max-[768px]:px-1 max-[768px]:scrollbar-hide min-[769px]:overflow-visible">
+      <div className="flex min-w-max items-center gap-1 rounded-2xl border border-stone-200/70 bg-[var(--surface-elevated)] p-1 shadow-sm min-[769px]:min-w-0 min-[769px]:w-full">
+        {tabs.map((t) => {
+          const isActive = t.id === activeTab;
+          return (
+            <button
+              key={t.id}
+              type="button"
+              onClick={() => onChange(t.id)}
+              className={[
+                'relative inline-flex min-h-[32px] shrink-0 items-center justify-center gap-1.5 rounded-xl px-2 py-1.5 text-[11px] font-semibold transition-colors duration-200 min-[769px]:min-w-0 min-[769px]:flex-1 min-[769px]:text-xs',
+                isActive
+                  ? 'bg-[var(--text)] text-[var(--surface-elevated)] shadow-sm'
+                  : 'text-[var(--text-secondary)] hover:bg-[var(--surface)] hover:text-[var(--text)]',
+              ].join(' ')}
+            >
+              <span className="whitespace-nowrap">{t.label}</span>
+              {t.unread > 0 ? (
+                <span
+                  className={[
+                    'inline-flex min-w-[18px] items-center justify-center rounded-full px-1 py-px text-xs font-bold',
+                    isActive ? 'bg-white/20 text-white' : 'bg-primary/10 text-primary',
+                  ].join(' ')}
+                >
+                  {t.unread > 99 ? '99+' : t.unread}
+                </span>
+              ) : null}
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }

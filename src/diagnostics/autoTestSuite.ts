@@ -4,6 +4,31 @@ import type { AutomatedTestResult, AutomatedTestsReport } from './types';
 
 type Tier = AutomatedTestResult['tier'];
 
+const RESPONSE_PREVIEW_MAX = 8000;
+
+function clipBody(text: string, max = RESPONSE_PREVIEW_MAX): string {
+  const normalized = text.replace(/\r\n/g, '\n');
+  if (normalized.length <= max) return normalized;
+  return `${normalized.slice(0, max)}\n… [обрезано ${normalized.length - max} символов]`;
+}
+
+type CaseOutcome = {
+  ok: boolean;
+  message: string;
+  detail?: string;
+  httpStatus?: number;
+  responsePreview?: string;
+};
+
+function httpFailure(response: { status: number; text: string }, headline: string): CaseOutcome {
+  return {
+    ok: false,
+    message: headline,
+    httpStatus: response.status,
+    responsePreview: clipBody(response.text),
+  };
+}
+
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -69,7 +94,7 @@ export async function runAutomatedTestSuite(baseUrl: string, req: Request): Prom
     name: string;
     category: string;
     tier: Tier;
-    fn: () => Promise<{ ok: boolean; message: string; detail?: string }>;
+    fn: () => Promise<CaseOutcome>;
     /** When true, omit from smoke strip chart */
     hideFromSmoke?: boolean;
   }): Promise<void> {
@@ -85,9 +110,12 @@ export async function runAutomatedTestSuite(baseUrl: string, req: Request): Prom
         durationMs: Date.now() - t0,
         message: out.message,
         detail: out.detail,
+        httpStatus: out.httpStatus,
+        responsePreview: out.responsePreview,
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
+      const stack = error instanceof Error ? error.stack : undefined;
       results.push({
         id: options.id,
         name: options.name,
@@ -96,6 +124,7 @@ export async function runAutomatedTestSuite(baseUrl: string, req: Request): Prom
         status: 'failed',
         durationMs: Date.now() - t0,
         message: `Исключение: ${message}`,
+        detail: stack ? clipBody(stack, 6000) : undefined,
       });
     }
   }
@@ -120,14 +149,24 @@ export async function runAutomatedTestSuite(baseUrl: string, req: Request): Prom
       const r = await fetchProbe(baseUrl, '/health');
       pushSmoke('/health', r.status === 200, r.status, r.durationMs);
       if (r.status !== 200) {
-        return { ok: false, message: `Ожидался 200, получен ${r.status}`, detail: r.text.slice(0, 200) };
+        return httpFailure(r, `Ожидался 200, получен ${r.status}`);
       }
       const json = parseJsonSafe(r.text) as Record<string, unknown> | null;
       if (!json || typeof json.status !== 'string') {
-        return { ok: false, message: 'Ответ не JSON или нет поля status', detail: r.text.slice(0, 200) };
+        return {
+          ok: false,
+          message: 'Ответ не JSON или нет поля status',
+          httpStatus: r.status,
+          responsePreview: clipBody(r.text),
+        };
       }
       if (json.status !== 'ok') {
-        return { ok: false, message: `status=${String(json.status)}`, detail: r.text.slice(0, 200) };
+        return {
+          ok: false,
+          message: `status=${String(json.status)}`,
+          httpStatus: r.status,
+          responsePreview: clipBody(r.text),
+        };
       }
       return { ok: true, message: `database: ${String(json.database ?? '—')}` };
     },
@@ -141,9 +180,16 @@ export async function runAutomatedTestSuite(baseUrl: string, req: Request): Prom
     fn: async () => {
       const r = await fetchProbe(baseUrl, '/');
       pushSmoke('/', r.status === 200, r.status, r.durationMs);
-      if (r.status !== 200) return { ok: false, message: `HTTP ${r.status}` };
+      if (r.status !== 200) return httpFailure(r, `HTTP ${r.status}`);
       const json = parseJsonSafe(r.text) as Record<string, unknown> | null;
-      if (!json?.message) return { ok: false, message: 'Нет поля message в JSON' };
+      if (!json?.message) {
+        return {
+          ok: false,
+          message: 'Нет поля message в JSON',
+          httpStatus: r.status,
+          responsePreview: clipBody(r.text),
+        };
+      }
       return { ok: true, message: String(json.message).slice(0, 80) };
     },
   });
@@ -156,9 +202,16 @@ export async function runAutomatedTestSuite(baseUrl: string, req: Request): Prom
     fn: async () => {
       const r = await fetchProbe(baseUrl, '/api/version');
       pushSmoke('/api/version', r.status === 200, r.status, r.durationMs);
-      if (r.status !== 200) return { ok: false, message: `HTTP ${r.status}` };
+      if (r.status !== 200) return httpFailure(r, `HTTP ${r.status}`);
       const json = parseJsonSafe(r.text) as Record<string, unknown> | null;
-      if (!json?.server_time) return { ok: false, message: 'Нет server_time' };
+      if (!json?.server_time) {
+        return {
+          ok: false,
+          message: 'Нет server_time',
+          httpStatus: r.status,
+          responsePreview: clipBody(r.text),
+        };
+      }
       return { ok: true, message: `node_env=${String(json.node_env ?? '—')}` };
     },
   });
@@ -172,7 +225,8 @@ export async function runAutomatedTestSuite(baseUrl: string, req: Request): Prom
       const r = await fetchProbe(baseUrl, '/api/resources/podcasts');
       const ok = r.status === 200 || r.status === 204;
       pushSmoke('/api/resources/podcasts', ok, r.status, r.durationMs, 'Публичный контент');
-      return { ok, message: ok ? `HTTP ${r.status}` : `Неожиданный статус ${r.status}` };
+      if (!ok) return httpFailure(r, `Неожиданный статус ${r.status}`);
+      return { ok: true, message: `HTTP ${r.status}` };
     },
   });
 
@@ -185,9 +239,16 @@ export async function runAutomatedTestSuite(baseUrl: string, req: Request): Prom
       const r = await fetchProbe(baseUrl, '/api/calendar/events');
       const ok = r.status === 200;
       pushSmoke('/api/calendar/events', ok, r.status, r.durationMs);
-      if (!ok) return { ok: false, message: `HTTP ${r.status}` };
+      if (!ok) return httpFailure(r, `HTTP ${r.status}`);
       const json = parseJsonSafe(r.text);
-      if (!Array.isArray(json)) return { ok: false, message: 'Ожидался JSON-массив' };
+      if (!Array.isArray(json)) {
+        return {
+          ok: false,
+          message: 'Ожидался JSON-массив',
+          httpStatus: r.status,
+          responsePreview: clipBody(r.text),
+        };
+      }
       return { ok: true, message: `событий: ${json.length}` };
     },
   });
@@ -202,10 +263,8 @@ export async function runAutomatedTestSuite(baseUrl: string, req: Request): Prom
     fn: async () => {
       const r = await fetchProbe(baseUrl, '/api/auth/me');
       pushSmoke('/api/auth/me (anon)', r.status === 401, r.status, r.durationMs, 'Должен быть закрыт');
-      return {
-        ok: r.status === 401,
-        message: r.status === 401 ? '401 Unauthorized' : `Получен ${r.status}, ожидался 401`,
-      };
+      if (r.status === 401) return { ok: true, message: '401 Unauthorized' };
+      return httpFailure(r, `Получен ${r.status}, ожидался 401`);
     },
   });
 
@@ -217,10 +276,8 @@ export async function runAutomatedTestSuite(baseUrl: string, req: Request): Prom
     fn: async () => {
       const r = await fetchProbe(baseUrl, '/api/analytics/overview');
       pushSmoke('/api/analytics/overview (anon)', r.status === 401, r.status, r.durationMs, 'Только для админов');
-      return {
-        ok: r.status === 401,
-        message: r.status === 401 ? 'Закрыто' : `HTTP ${r.status}`,
-      };
+      if (r.status === 401) return { ok: true, message: 'Закрыто' };
+      return httpFailure(r, `Ожидался 401 для неавторизованного запроса, получен ${r.status}`);
     },
   });
 
@@ -233,7 +290,8 @@ export async function runAutomatedTestSuite(baseUrl: string, req: Request): Prom
       const r = await fetchProbe(baseUrl, '/api/settings/logs/admin');
       const ok = r.status === 401 || r.status === 403;
       pushSmoke('/api/settings/logs/admin (anon)', ok, r.status, r.durationMs);
-      return { ok, message: ok ? `HTTP ${r.status}` : `Неожиданно открыто: ${r.status}` };
+      if (!ok) return httpFailure(r, `Неожиданно открыто: ${r.status}`);
+      return { ok: true, message: `HTTP ${r.status}` };
     },
   });
 
@@ -245,10 +303,8 @@ export async function runAutomatedTestSuite(baseUrl: string, req: Request): Prom
     fn: async () => {
       const r = await fetchProbe(baseUrl, '/api/diagnostics/health');
       pushSmoke('/api/diagnostics/health (anon)', r.status === 401, r.status, r.durationMs);
-      return {
-        ok: r.status === 401,
-        message: r.status === 401 ? 'Диагностика защищена' : `HTTP ${r.status}`,
-      };
+      if (r.status === 401) return { ok: true, message: 'Диагностика защищена' };
+      return httpFailure(r, `Ожидался 401, получен ${r.status}`);
     },
   });
 
@@ -261,10 +317,8 @@ export async function runAutomatedTestSuite(baseUrl: string, req: Request): Prom
       const r = await fetchProbe(baseUrl, '/api/sms/settings');
       const ok = r.status === 401 || r.status === 403;
       pushSmoke('/api/sms/settings (anon)', ok, r.status, r.durationMs);
-      return {
-        ok,
-        message: ok ? `HTTP ${r.status}` : `Неожиданный статус ${r.status}`,
-      };
+      if (!ok) return httpFailure(r, `Неожиданный статус ${r.status}`);
+      return { ok: true, message: `HTTP ${r.status}` };
     },
   });
 
@@ -280,10 +334,16 @@ export async function runAutomatedTestSuite(baseUrl: string, req: Request): Prom
       if (r.status === 200) {
         const json = parseJsonSafe(r.text) as Record<string, unknown> | null;
         const pk = json?.publicKey;
-        return {
-          ok: typeof pk === 'string' && pk.length > 0,
-          message: 'VAPID publicKey ок',
-        };
+        const valid = typeof pk === 'string' && pk.length > 0;
+        if (!valid) {
+          return {
+            ok: false,
+            message: 'Нет или пустой publicKey в JSON',
+            httpStatus: r.status,
+            responsePreview: clipBody(r.text),
+          };
+        }
+        return { ok: true, message: 'VAPID publicKey ок' };
       }
       return {
         ok: true,
@@ -343,6 +403,8 @@ export async function runAutomatedTestSuite(baseUrl: string, req: Request): Prom
           return {
             ok: false,
             message: `Сессия не принята (${r.status}). Откройте диагностику из браузера под учётной записью.`,
+            httpStatus: r.status,
+            responsePreview: clipBody(r.text),
           };
         }
         const json = parseJsonSafe(r.text);
@@ -372,10 +434,15 @@ export async function runAutomatedTestSuite(baseUrl: string, req: Request): Prom
         }
         const r = await fetchProbe(baseUrl, '/api/diagnostics/health', { headers: authForward });
         pushSmoke('/api/diagnostics/health (auth)', r.status === 200, r.status, r.durationMs);
-        if (r.status !== 200) return { ok: false, message: `HTTP ${r.status}` };
+        if (r.status !== 200) return httpFailure(r, `HTTP ${r.status}`);
         const json = parseJsonSafe(r.text) as Record<string, unknown> | null;
         if (!json?.status || json.status !== 'ok') {
-          return { ok: false, message: 'Неверное тело ответа diagnostics health' };
+          return {
+            ok: false,
+            message: 'Неверное тело ответа diagnostics health',
+            httpStatus: r.status,
+            responsePreview: clipBody(r.text),
+          };
         }
         return { ok: true, message: `version: ${String(json.version ?? '—')}` };
       },
@@ -392,10 +459,8 @@ export async function runAutomatedTestSuite(baseUrl: string, req: Request): Prom
         }
         const r = await fetchProbe(baseUrl, '/api/analytics/overview', { headers: authForward });
         pushSmoke('/api/analytics/overview (auth)', r.status === 200, r.status, r.durationMs);
-        return {
-          ok: r.status === 200,
-          message: r.status === 200 ? 'Аналитика отвечает' : `HTTP ${r.status}`,
-        };
+        if (r.status === 200) return { ok: true, message: 'Аналитика отвечает' };
+        return httpFailure(r, `Ожидался 200, получен ${r.status}`);
       },
     });
   } else {

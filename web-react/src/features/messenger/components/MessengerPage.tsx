@@ -166,7 +166,7 @@ export function MessengerPage() {
       >
       {/* Sidebar */}
       <aside
-        className={`tg-sidebar chat-list-panel ${mobileView === 'list' ? 'tg-sidebar--visible' : ''} ${mobileView === 'chat' ? 'tg-sidebar--hidden' : ''}`}
+        className={`tg-sidebar chat-list-panel h-full min-h-0 ${mobileView === 'list' ? 'tg-sidebar--visible' : ''} ${mobileView === 'chat' ? 'tg-sidebar--hidden' : ''}`}
       >
         <div className="tg-sidebar-header">
           <h1 className="tg-sidebar-title">Чаты</h1>

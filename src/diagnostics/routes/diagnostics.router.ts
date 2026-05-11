@@ -5,8 +5,9 @@ import Redis from 'ioredis';
 import { analyzeCodeWithClaude } from '../analyzers/codeAnalyzer';
 import { collectServerDiagnostics } from '../analyzers/serverAnalyzer';
 import { resolveSafeScanDir, scanProject } from '../analyzers/projectScanner';
+import { analyzeAutomatedTestFailures } from '../analyzers/autoTestFailureAnalyzer';
 import { runAutomatedTestSuite } from '../autoTestSuite';
-import { FullDiagnosticsReport, ProjectAuditResult } from '../types';
+import { FullDiagnosticsReport, ProjectAuditResult, type AutomatedTestsReport } from '../types';
 import { pool } from '../../config/db';
 import { requireAuthSession } from '../../middleware/authSession';
 import { requireAdmin } from '../../middleware/requireAdmin';
@@ -576,6 +577,22 @@ diagnosticsRouter.post('/auto-tests', async (req: Request, res: Response) => {
   } catch (error) {
     res.status(500).json({
       error: error instanceof Error ? error.message : 'Не удалось выполнить автотесты',
+    });
+  }
+});
+
+diagnosticsRouter.post('/auto-tests/analyze-failures', async (req: Request, res: Response) => {
+  const payload = req.body?.automatedTests as AutomatedTestsReport | undefined;
+  if (!payload || typeof payload !== 'object' || !Array.isArray(payload.results)) {
+    res.status(400).json({ error: 'Тело запроса должно содержать automatedTests с массивом results' });
+    return;
+  }
+  try {
+    const analysis = await analyzeAutomatedTestFailures(payload);
+    res.json(analysis);
+  } catch (error) {
+    res.status(500).json({
+      error: error instanceof Error ? error.message : 'Не удалось выполнить ИИ-анализ',
     });
   }
 });

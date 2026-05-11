@@ -182,6 +182,7 @@
   width: var(--tg-sidebar-width);
   max-width: 100%;
   min-height: 0;
+  height: 100%;
   background: var(--tg-surface);
   border-right: 1px solid var(--tg-border);
   display: flex;
@@ -351,6 +352,7 @@
   align-items: center;
   justify-content: space-between;
   min-height: 56px;
+  flex-shrink: 0;
   border-bottom: 1px solid var(--tg-border);
   background: linear-gradient(180deg, var(--tg-surface-elevated) 0%, var(--tg-surface) 100%);
 }
@@ -2376,10 +2378,12 @@ html.dark .msg-quick-reaction:hover {
       padding-top: max(12px, env(safe-area-inset-top, 0px));
     }
 
-    html[data-messenger-open="1"] .tg-sidebar > .flex {
+    html[data-messenger-open="1"] .tg-sidebar .tg-chatlist-root {
+      flex: 1 1 0%;
       min-height: 0;
-      flex: 1;
       overflow: hidden;
+      display: flex;
+      flex-direction: column;
     }
 
     html[data-chat-open="1"] .tg-main--visible .tg-chat-window {
@@ -2646,13 +2650,39 @@ html.dark .msg-quick-reaction:hover {
 
 /* PWA / нативная оболочка: при открытой клавиатуре в чате не дублировать нижний отступ main и не раздувать композер safe-area. */
 @media (max-width: 768px) {
+  /**
+   * Таббар скрыт (opacity), но для позиций fixed-слоёв мессенджера он всё ещё «зарезервирован»
+   * через --app-bottom-nav-h → полоска фона / неверная высота сайдбара при клавиатуре.
+   */
+  html.app-native-shell.app-keyboard-open[data-messenger-open='1'] {
+    --app-bottom-nav-h: 0px;
+    --app-bottom-nav-safe-pad: 0px;
+  }
+
+  /* Не даём скроллить сам document — только внутренние области (иначе «белая дыра» за клавиатурой). */
+  html.app-native-shell.app-keyboard-open[data-messenger-open='1'],
+  html.app-native-shell.app-keyboard-open[data-chat-open='1'] {
+    overflow-y: hidden !important;
+  }
+
   html.app-native-shell.app-keyboard-open[data-chat-open='1'] main.app-main-content.page-content {
     padding-bottom: 0 !important;
   }
 
-  html.app-native-shell.app-keyboard-open[data-chat-open='1'] .tg-main--visible .tg-chat-window > .tg-chat-window__composer,
-  html.app-native-shell.app-keyboard-open[data-chat-open='1'] .tg-chat-window > .tg-chat-window__composer {
-    padding-bottom: max(0px, var(--app-bottom-nav-safe-pad, 0px)) !important;
+  /* При клавиатуре visual viewport уже выше home indicator — env(safe-area) даёт лишний зазор над полем. */
+  html.app-native-shell.app-keyboard-open[data-chat-open='1'] .tg-main--visible .tg-chat-window > .tg-chat-window__composer.message-input-bar,
+  html.app-native-shell.app-keyboard-open[data-chat-open='1'] .tg-chat-window > .tg-chat-window__composer.message-input-bar {
+    padding-bottom: max(0.5rem, 12px) !important;
+  }
+
+  html.app-native-shell.app-keyboard-open[data-chat-open='1'] .tg-chat-window .tg-input-area-wrap {
+    padding-bottom: 8px !important;
+  }
+
+  /* Список чатов: без второго env(safe-area) поверх уже уменьшенного visual viewport. */
+  html.app-native-shell.app-keyboard-open[data-messenger-open='1'] .tg-chatlist-scroll,
+  html.app-native-shell.app-keyboard-open[data-messenger-open='1'] .tg-chatlist-root .overflow-y-auto {
+    padding-bottom: max(0.5rem, 12px) !important;
   }
 }
 

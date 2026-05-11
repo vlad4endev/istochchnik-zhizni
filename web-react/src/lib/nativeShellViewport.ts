@@ -26,7 +26,11 @@ export function syncViewportHeightVars() {
   const offsetTop = vv?.offsetTop ?? 0;
   /** Нижний «второй» слой (клавиатура / системные полосы): layout минус видимый прямоугольник. */
   const keyboardInset = Math.max(0, Math.round(layoutHeight - offsetTop - visualHeight));
-  const keyboardOpen = keyboardInset >= 110;
+  /**
+   * Раньше порог 110px — на части iPhone / компактной клавиатуре inset ~60–90px и класс не включался:
+   * таббар оставался «в потоке» отступов, safe-area дублировался, появлялись белые полосы.
+   */
+  const keyboardOpen = keyboardInset >= 48;
 
   /**
    * Видимая область: в первую очередь `visualViewport` (iOS PWA + клавиатура).

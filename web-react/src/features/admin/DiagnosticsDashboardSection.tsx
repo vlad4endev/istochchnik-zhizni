@@ -50,8 +50,24 @@ type AutomatedTestsPayload = {
     durationMs: number;
     message: string;
     detail?: string;
+    httpStatus?: number;
+    responsePreview?: string;
   }>;
   smokeEndpoints: Array<{ path: string; ok: boolean; status: number; durationMs: number; note?: string }>;
+};
+
+type FailureAnalysisPayload = {
+  generatedAt: string;
+  executiveSummary: string;
+  items: Array<{
+    testId: string;
+    likelyRootCause: string;
+    evidence: string;
+    recommendedSteps: string[];
+    severity: 'blocking' | 'high' | 'medium' | 'low';
+  }>;
+  fallback?: boolean;
+  errorHint?: string;
 };
 
 type FullReportPayload = {
@@ -141,11 +157,14 @@ export function DiagnosticsDashboardSection() {
   const [errorText, setErrorText] = useState<string | null>(null);
   const [report, setReport] = useState<FullReportPayload | null>(null);
   const [autoSuite, setAutoSuite] = useState<AutomatedTestsPayload | null>(null);
+  const [failureAnalysis, setFailureAnalysis] = useState<FailureAnalysisPayload | null>(null);
+  const [aiAnalyzeLoading, setAiAnalyzeLoading] = useState(false);
   const [description, setDescription] = useState('Полный аудит состояния проекта и инфраструктуры');
 
   async function runFullAnalysis(): Promise<void> {
     setIsLoading(true);
     setErrorText(null);
+    setFailureAnalysis(null);
     try {
       const full = await apiClient.post<FullReportPayload>('/api/diagnostics/full-report', { description });
       setReport(full.data);
@@ -160,6 +179,7 @@ export function DiagnosticsDashboardSection() {
   async function runAutoTestsOnly(): Promise<void> {
     setAutoLoading(true);
     setErrorText(null);
+    setFailureAnalysis(null);
     try {
       const res = await apiClient.post<AutomatedTestsPayload>('/api/diagnostics/auto-tests');
       setAutoSuite(res.data);
@@ -167,6 +187,22 @@ export function DiagnosticsDashboardSection() {
       setErrorText(error instanceof Error ? error.message : 'Не удалось выполнить автотесты');
     } finally {
       setAutoLoading(false);
+    }
+  }
+
+  async function runAiFailureAnalysis(): Promise<void> {
+    if (!autoSuite) return;
+    setAiAnalyzeLoading(true);
+    setErrorText(null);
+    try {
+      const res = await apiClient.post<FailureAnalysisPayload>('/api/diagnostics/auto-tests/analyze-failures', {
+        automatedTests: autoSuite,
+      });
+      setFailureAnalysis(res.data);
+    } catch (error) {
+      setErrorText(error instanceof Error ? error.message : 'Не удалось выполнить ИИ-анализ');
+    } finally {
+      setAiAnalyzeLoading(false);
     }
   }
 
@@ -201,6 +237,8 @@ export function DiagnosticsDashboardSection() {
     if (status === 'failed') return 'border-red-200 bg-red-50/90';
     return 'border-stone-200 bg-stone-50/80';
   }
+
+  const failedAutoCount = autoSuite?.results.filter((r) => r.status === 'failed').length ?? 0;
 
   return (
     <div className="space-y-5">
@@ -268,6 +306,28 @@ export function DiagnosticsDashboardSection() {
               </p>
             </div>
           </div>
+          <div className="mt-4 flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              className="rounded-lg border border-stone-300 bg-[var(--surface)] px-4 py-2 text-sm font-semibold text-[var(--text)] shadow-sm transition hover:bg-stone-50 disabled:opacity-50"
+              disabled={aiAnalyzeLoading || autoLoading || failedAutoCount === 0}
+              onClick={() => void runAiFailureAnalysis()}
+              title={
+                failedAutoCount === 0
+                  ? 'Нет проваленных тестов для разбора'
+                  : 'Отправить провалы в модель из настроек ИИ (Интеграции)'
+              }
+            >
+              {aiAnalyzeLoading ? 'ИИ анализирует…' : 'Анализ ошибок ИИ'}
+            </button>
+            {failedAutoCount > 0 ? (
+              <span className="text-xs text-[var(--text-secondary)]">
+                Будут переданы {failedAutoCount} провалов (сообщения, HTTP-коды и фрагменты ответов сервера).
+              </span>
+            ) : (
+              <span className="text-xs text-[var(--text-muted)]">ИИ-разбор доступен только при наличии проваленных тестов.</span>
+            )}
+          </div>
           <div className="mt-4 space-y-4">
             {Object.entries(suiteByCategory).map(([category, rows]) => (
               <div key={category}>
@@ -276,18 +336,33 @@ export function DiagnosticsDashboardSection() {
                   {rows.map((row) => (
                     <div
                       key={row.id}
-                      className={`flex flex-wrap items-start gap-2 rounded-xl border px-3 py-2 text-sm ${statusRowClass(row.status)}`}
+                      className={`rounded-xl border px-3 py-2.5 text-sm ${statusRowClass(row.status)}`}
                     >
-                      <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold uppercase ${tierBadgeClass(row.tier)}`}>
-                        {row.tier}
-                      </span>
-                      <span className="min-w-0 flex-1 font-medium text-[var(--text)]">{row.name}</span>
-                      <span className="shrink-0 text-xs font-semibold text-[var(--text-secondary)]">
-                        {row.status === 'passed' ? '✓' : row.status === 'failed' ? '✕' : '○'} {row.durationMs} ms
-                      </span>
-                      <p className="w-full text-xs text-[var(--text-secondary)]">{row.message}</p>
+                      <div className="flex flex-wrap items-start gap-2">
+                        <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold uppercase ${tierBadgeClass(row.tier)}`}>
+                          {row.tier}
+                        </span>
+                        <span className="min-w-0 flex-1 font-medium text-[var(--text)]">{row.name}</span>
+                        {typeof row.httpStatus === 'number' ? (
+                          <span className="shrink-0 rounded bg-stone-200/80 px-1.5 py-0.5 font-mono text-[10px] font-bold text-stone-800">
+                            HTTP {row.httpStatus}
+                          </span>
+                        ) : null}
+                        <span className="shrink-0 text-xs font-semibold text-[var(--text-secondary)]">
+                          {row.status === 'passed' ? '✓' : row.status === 'failed' ? '✕' : '○'} {row.durationMs} ms
+                        </span>
+                      </div>
+                      <p className="mt-2 text-xs font-medium text-[var(--text)]">{row.message}</p>
                       {row.detail ? (
-                        <p className="w-full text-xs text-stone-500">{row.detail}</p>
+                        <p className="mt-1 whitespace-pre-wrap break-words text-xs text-stone-600">{row.detail}</p>
+                      ) : null}
+                      {row.responsePreview ? (
+                        <div className="mt-2">
+                          <p className="text-[10px] font-bold uppercase tracking-wide text-stone-500">Фрагмент ответа сервера</p>
+                          <pre className="mt-1 max-h-64 overflow-auto rounded-lg border border-stone-200 bg-white/90 p-2 text-[11px] leading-snug text-stone-800">
+                            {row.responsePreview}
+                          </pre>
+                        </div>
                       ) : null}
                     </div>
                   ))}
@@ -295,6 +370,51 @@ export function DiagnosticsDashboardSection() {
               </div>
             ))}
           </div>
+          {failureAnalysis ? (
+            <div className="mt-6 rounded-xl border border-indigo-200/80 bg-indigo-50/40 p-4">
+              <h5 className="text-sm font-extrabold text-indigo-950">Разбор ИИ (провайдер из интеграции)</h5>
+              <p className="mt-1 text-xs text-indigo-900/80">{failureAnalysis.generatedAt}</p>
+              <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-indigo-950">{failureAnalysis.executiveSummary}</p>
+              {failureAnalysis.errorHint ? (
+                <p className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-2 py-1.5 text-xs text-amber-950">
+                  {failureAnalysis.errorHint}
+                </p>
+              ) : null}
+              {failureAnalysis.items.length > 0 ? (
+                <div className="mt-4 space-y-3">
+                  {failureAnalysis.items.map((item) => (
+                    <article key={item.testId} className="rounded-lg border border-indigo-100 bg-white/90 p-3">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-mono text-xs font-bold text-[var(--text)]">{item.testId}</span>
+                        <span
+                          className={
+                            item.severity === 'blocking'
+                              ? 'rounded bg-red-100 px-1.5 py-0.5 text-[10px] font-bold uppercase text-red-800'
+                              : item.severity === 'high'
+                                ? 'rounded bg-orange-100 px-1.5 py-0.5 text-[10px] font-bold uppercase text-orange-900'
+                                : 'rounded bg-stone-200 px-1.5 py-0.5 text-[10px] font-bold uppercase text-stone-700'
+                          }
+                        >
+                          {item.severity}
+                        </span>
+                      </div>
+                      <p className="mt-2 text-sm font-semibold text-[var(--text)]">{item.likelyRootCause}</p>
+                      {item.evidence ? (
+                        <p className="mt-1 text-xs text-[var(--text-secondary)]">{item.evidence}</p>
+                      ) : null}
+                      {item.recommendedSteps.length > 0 ? (
+                        <ul className="mt-2 list-disc space-y-0.5 pl-4 text-xs text-[var(--text-secondary)]">
+                          {item.recommendedSteps.map((step, stepIdx) => (
+                            <li key={`${item.testId}-${stepIdx}`}>{step}</li>
+                          ))}
+                        </ul>
+                      ) : null}
+                    </article>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
         </section>
       ) : null}
 
