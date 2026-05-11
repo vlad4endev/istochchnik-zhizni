@@ -15,13 +15,23 @@ let keyboardFocusKickTimers: number[] = [];
 function scheduleViewportSyncAfterInputFocus() {
   for (const t of keyboardFocusKickTimers) clearTimeout(t);
   keyboardFocusKickTimers = [];
-  const delays = [48, 120, 280];
+  const delays = [48, 120, 280, 450];
   for (const ms of delays) {
     keyboardFocusKickTimers.push(
       window.setTimeout(() => {
         scheduleSyncViewportHeightVars();
       }, ms),
     );
+  }
+}
+
+/** Снимаем inline-высоту с цепочки html→body→#root (режим мобильного чата). */
+function clearMobileMessengerViewportInline(root: HTMLElement) {
+  const props = ['height', 'max-height'] as const;
+  for (const p of props) {
+    root.style.removeProperty(p);
+    if (document.body) document.body.style.removeProperty(p);
+    document.getElementById('root')?.style.removeProperty(p);
   }
 }
 let dvhProbe: HTMLDivElement | null = null;
@@ -109,13 +119,28 @@ export function syncViewportHeightVars() {
   const fromVisual = Math.round(visualHeight);
   const fromDvhProbe = getDvhPx();
   const fromLayout = Math.round(layoutHeight);
+  const clientDocH =
+    typeof document !== 'undefined' ? Math.round(document.documentElement.clientHeight || 0) : 0;
+
+  const narrowMobileChat =
+    typeof window.matchMedia !== 'undefined' &&
+    window.matchMedia('(max-width: 768px)').matches &&
+    root.dataset.chatOpen === '1';
+
   /**
    * Высота оболочки = видимая полоса над клавиатурой.
-   * iOS: если vv отстаёт и раздувается выше innerHeight — доверяем innerHeight (уже сжат WebKit).
-   * Иначе min(visual, layout): при нормальной работе vv оба совпадают с видимой областью.
+   * Узкий экран + открытый чат: берём минимум из visual / inner / clientHeight — на мобиле хотя бы одна метрика
+   * уже отражает клавиатуру, иначе остаётся «пол экрана» пустоты.
+   * iOS: если vv отстаёт выше innerHeight — дополнительно clamp от innerHeight.
    */
   let chosen: number;
-  if (fromLayout > 0 && fromVisual > fromLayout + 4) {
+  if (narrowMobileChat) {
+    const pool = [fromVisual, fromLayout, clientDocH].filter((x) => x > 0);
+    chosen = pool.length > 0 ? Math.min(...pool) : 0;
+    if (fromLayout > 0 && fromVisual > fromLayout + 4) {
+      chosen = Math.min(chosen > 0 ? chosen : fromLayout, fromLayout);
+    }
+  } else if (fromLayout > 0 && fromVisual > fromLayout + 4) {
     chosen = fromLayout;
   } else if (fromVisual > 0 && fromLayout > 0) {
     chosen = Math.min(fromVisual, fromLayout);
@@ -135,6 +160,21 @@ export function syncViewportHeightVars() {
   const vhPx = `${viewportHeightPx}px`;
 
   root.style.setProperty('--viewport-height', vhPx);
+
+  /**
+   * Мобильный чат: одной CSS var мало — WebKit оставляет цепочку html/body/#root выше видимой области.
+   * Фиксируем ту же высоту inline (как px), при выходе из чата или на широком экране снимаем.
+   */
+  if (narrowMobileChat && viewportHeightPx > 0) {
+    root.style.setProperty('height', vhPx, 'important');
+    root.style.setProperty('max-height', vhPx, 'important');
+    document.body?.style.setProperty('height', vhPx, 'important');
+    document.body?.style.setProperty('max-height', vhPx, 'important');
+    document.getElementById('root')?.style.setProperty('height', vhPx, 'important');
+    document.getElementById('root')?.style.setProperty('max-height', vhPx, 'important');
+  } else {
+    clearMobileMessengerViewportInline(root);
+  }
   /** Старый паттерн `calc(var(--vh, 1vh) * 100)` / совместимость с гайдами. */
   root.style.setProperty('--vh', vhPx);
   root.style.setProperty('--visual-viewport-height', vhPx);

@@ -2115,6 +2115,13 @@ html.dark .msg-quick-reaction:hover {
     flex: 1 1 auto !important;
     overflow-x: hidden !important;
     overflow-y: hidden !important;
+    /* Не даём main стать выше видимой области — иначе под клавиатурой остаётся прокручиваемая «пустота». */
+    max-height: var(--viewport-height, 100dvh) !important;
+  }
+
+  html[data-chat-open="1"] .page-enter {
+    max-height: 100% !important;
+    min-height: 0 !important;
   }
 
   html[data-chat-open="1"] {
