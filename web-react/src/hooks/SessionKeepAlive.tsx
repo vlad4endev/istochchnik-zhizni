@@ -35,8 +35,8 @@ export function SessionKeepAlive(): null {
     if (!token) return;
 
     const runRefresh = (): void => {
-      void performAuthRefresh().then((next) => {
-        if (next) applyRefreshedAccessToken(next);
+      void performAuthRefresh().then((result) => {
+        if (result.status === 'refreshed') applyRefreshedAccessToken(result.token);
       });
     };
 

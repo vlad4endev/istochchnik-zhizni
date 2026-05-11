@@ -105,11 +105,11 @@ apiClient.interceptors.response.use(
       if (!shouldSkip401Handling(url) && retryCfg && !retryCfg._retryAfterRefresh) {
         retryCfg._retryAfterRefresh = true;
         try {
-          const nextToken = await performAuthRefresh();
-          if (nextToken) {
+          const refreshResult = await performAuthRefresh();
+          if (refreshResult.status === 'refreshed') {
             const auth = useAuthStore.getState();
             auth.setSession({
-              token: nextToken,
+              token: refreshResult.token,
               firstName: auth.firstName,
               lastName: auth.lastName,
               role: auth.role,
@@ -120,6 +120,10 @@ apiClient.interceptors.response.use(
             });
             stripStaleAuthorization(retryCfg);
             return apiClient.request(retryCfg);
+          }
+          if (refreshResult.status === 'unchanged') {
+            // 429 / сеть: не сбрасывать сессию; повтор с тем же токеном даст цикл при истёкшем access — просто пробрасываем 401.
+            return Promise.reject(error);
           }
         } catch {
           // fallthrough: clear session + notify below

@@ -8,7 +8,10 @@ export function useAppUpdate() {
     let swFetchFailureLogged = false;
 
     const onControllerChange = () => {
-      window.location.reload();
+      const jitterMs = Math.floor(Math.random() * 3000);
+      window.setTimeout(() => {
+        window.location.reload();
+      }, jitterMs);
     };
     navigator.serviceWorker.addEventListener('controllerchange', onControllerChange);
 

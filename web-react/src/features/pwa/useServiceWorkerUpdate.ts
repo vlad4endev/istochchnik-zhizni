@@ -96,7 +96,10 @@ export function useServiceWorkerUpdate(options?: { showPrompt?: boolean }) {
         if (reloadOnceRef.current) return;
         reloadOnceRef.current = true;
       }
-      window.location.reload();
+      const jitterMs = Math.floor(Math.random() * 3000);
+      window.setTimeout(() => {
+        window.location.reload();
+      }, jitterMs);
     };
 
     // Проверяем обновления каждые 60 секунд
