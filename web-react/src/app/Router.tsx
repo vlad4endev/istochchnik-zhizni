@@ -45,6 +45,11 @@ const DailyPrayerPage = lazy(async () => {
   return { default: m.DailyPrayerPage };
 });
 
+const EventsCalendarPage = lazy(async () => {
+  const m = await import('../features/calendar/pages/EventsCalendarPage');
+  return { default: m.EventsCalendarPage };
+});
+
 const BroadcastPage = lazy(async () => {
   const m = await import('../features/broadcast/pages/BroadcastPage');
   return { default: m.BroadcastPage };
@@ -286,6 +291,16 @@ export function AppRouter() {
               <RequireSectionAccess sectionId="dashboard">
                 <Suspense fallback={<RouteFallback />}>
                   <DashboardPage />
+                </Suspense>
+              </RequireSectionAccess>
+            }
+          />
+          <Route
+            path="events"
+            element={
+              <RequireSectionAccess sectionId="dashboard">
+                <Suspense fallback={<RouteFallback />}>
+                  <EventsCalendarPage />
                 </Suspense>
               </RequireSectionAccess>
             }

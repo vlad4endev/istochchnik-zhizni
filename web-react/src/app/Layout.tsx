@@ -6,6 +6,7 @@ import {
   LuChevronLeft,
   LuChevronRight,
   LuCalendarDays,
+  LuCalendarRange,
   LuChurch,
   LuDisc3,
   LuEllipsis,
@@ -74,6 +75,7 @@ type NavItem = {
 const NAV_ITEMS: NavItem[] = [
   /** Контурные Lucide — не путать с цветными эмодзи / Font Awesome «картинками». */
   { to: '/dashboard', label: 'Главная', Icon: LuLayoutDashboard, sectionId: 'dashboard' },
+  { to: '/events', label: 'События', Icon: LuCalendarRange, sectionId: 'dashboard' },
   { to: '/prayer', label: 'Молитва', Icon: LuChurch, sectionId: 'prayer' },
   { to: '/songbook', label: 'Песенник', Icon: LuMusic2, sectionId: 'songbook' },
   { to: '/service-planner', label: 'Служение', Icon: LuCalendarDays, sectionId: 'service_planner' },
@@ -365,6 +367,9 @@ function mobileBottomRouteActive(pathname: string, to: string): boolean {
   if (to === '/dashboard') {
     return pathname === '/dashboard' || pathname === '/dashboard/';
   }
+  if (to === '/events') {
+    return pathname === '/events' || pathname === '/events/';
+  }
   return pathname === to || pathname.startsWith(`${to}/`);
 }
 
@@ -599,7 +604,7 @@ export function Layout() {
 
   const items = useMemo(() => {
     if (isParishionerGuest) {
-      const parishionerPaths = new Set(['/dashboard', '/messenger', '/sermons']);
+      const parishionerPaths = new Set(['/dashboard', '/events', '/messenger', '/sermons']);
       return NAV_ITEMS.filter(
         (item) =>
           parishionerPaths.has(item.to) &&
@@ -634,7 +639,19 @@ export function Layout() {
     canSeeStudioNav,
   ]);
   const sidebarItems = items;
-  const mobileNavSplit = useMemo(() => splitMobileNavFourTabs(items), [items]);
+  /** На телефоне «Настройки» нет в NAV_ITEMS — добавляем в лист «Ещё», как в подвале сайдбара на lg+. */
+  const mobileNavSplit = useMemo(() => {
+    const split = splitMobileNavFourTabs(items);
+    if (registrationStatus !== 'active') return split;
+    if (split.overflow.some((i) => i.to === '/settings')) return split;
+    return {
+      primary: split.primary,
+      overflow: [
+        ...split.overflow,
+        { to: '/settings', label: 'Настройки', Icon: LuSettings } satisfies NavItem,
+      ],
+    };
+  }, [items, registrationStatus]);
   const isDashboardRoute =
     location.pathname === '/dashboard' || location.pathname === '/dashboard/';
 

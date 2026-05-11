@@ -1,3 +1,5 @@
+import { format } from 'date-fns';
+
 import type { ChurchEventItem } from './api';
 
 function parseOnceEventDateTime(item: ChurchEventItem): Date | null {
@@ -49,4 +51,52 @@ export function countUpcomingEventsInWindow(
     }
   }
   return n;
+}
+
+/** Одно вхождение события в календарной сетке (разовое или очередная неделя). */
+export type CalendarOccurrence = {
+  item: ChurchEventItem;
+  startsAt: Date;
+};
+
+function applyLocalTimeOnDay(dayMidnight: Date, hhmm: string): Date {
+  const raw = hhmm.trim() || '00:00';
+  const [h, m] = raw.split(':').map((x) => Number(x) || 0);
+  const d = new Date(dayMidnight);
+  d.setHours(h, m, 0, 0);
+  return d;
+}
+
+/**
+ * Если событие попадает на указанный календарный день (локальное время), возвращает дату-время начала.
+ * Для еженедельных событий сравнивается `weekly_day` с `Date#getDay()` (0 — вс, как в JS).
+ */
+export function occurrenceStartsAtOnLocalDay(day: Date, item: ChurchEventItem): Date | null {
+  if (item.is_active === false) return null;
+  const dayKey = format(day, 'yyyy-MM-dd');
+  const timeStr = (item.event_time ?? '00:00').trim() || '00:00';
+
+  if (item.recurrence_type === 'weekly') {
+    const weeklyDay = typeof item.weekly_day === 'number' ? item.weekly_day : 0;
+    if (day.getDay() !== weeklyDay) return null;
+    const base = new Date(day);
+    base.setHours(0, 0, 0, 0);
+    return applyLocalTimeOnDay(base, timeStr);
+  }
+
+  if (item.event_date !== dayKey) return null;
+  const ts = `${item.event_date}T${timeStr}:00`;
+  const parsed = new Date(ts);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+/** Все вхождения из списка на один день, по времени начала. */
+export function listOccurrencesOnLocalDay(day: Date, items: ChurchEventItem[]): CalendarOccurrence[] {
+  const out: CalendarOccurrence[] = [];
+  for (const item of items) {
+    const startsAt = occurrenceStartsAtOnLocalDay(day, item);
+    if (startsAt) out.push({ item, startsAt });
+  }
+  out.sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime());
+  return out;
 }
