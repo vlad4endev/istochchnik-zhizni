@@ -237,6 +237,20 @@ export async function listConversations(memberId: number): Promise<ConversationL
         NULLIF(TRIM(COALESCE(lm_sender.first_name, '') || ' ' || COALESCE(lm_sender.last_name, '')), ''),
         CASE WHEN lm.payload_type::text = 'access_request' THEN 'Заявки' ELSE NULL END
       ) AS lm_sender_name,
+      CASE
+        WHEN lm.id IS NULL THEN NULL
+        WHEN lm.sender_id IS DISTINCT FROM $1 THEN NULL
+        ELSE COALESCE(
+          (
+            SELECT COALESCE(MAX(COALESCE(cp2.last_read_message_id, 0)), 0) >= lm.id
+            FROM conversation_participants cp2
+            WHERE cp2.conversation_id = c.id
+              AND cp2.member_id IS DISTINCT FROM $1
+              AND cp2.left_at IS NULL
+          ),
+          FALSE
+        )
+      END AS lm_read_by_others,
       -- unread count
       COALESCE(
         urc.cnt,
@@ -329,6 +343,9 @@ export async function listConversations(memberId: number): Promise<ConversationL
             sender_name: r.lm_sender_name?.trim() || null,
             created_at: r.lm_created_at,
             is_deleted: r.lm_is_deleted,
+            ...(r.lm_sender_id != null && Number(r.lm_sender_id) === memberId
+              ? { read_by_others: Boolean(r.lm_read_by_others) }
+              : {}),
           }
         : null,
       unread_count: Number(r.unread_count),
@@ -734,6 +751,20 @@ export async function getConversationListItem(
         NULLIF(TRIM(COALESCE(lm_sender.first_name, '') || ' ' || COALESCE(lm_sender.last_name, '')), ''),
         CASE WHEN lm.payload_type::text = 'access_request' THEN 'Заявки' ELSE NULL END
       ) AS lm_sender_name,
+      CASE
+        WHEN lm.id IS NULL THEN NULL
+        WHEN lm.sender_id IS DISTINCT FROM $1 THEN NULL
+        ELSE COALESCE(
+          (
+            SELECT COALESCE(MAX(COALESCE(cp2.last_read_message_id, 0)), 0) >= lm.id
+            FROM conversation_participants cp2
+            WHERE cp2.conversation_id = c.id
+              AND cp2.member_id IS DISTINCT FROM $1
+              AND cp2.left_at IS NULL
+          ),
+          FALSE
+        )
+      END AS lm_read_by_others,
       -- unread count
       COALESCE(
         (SELECT COUNT(*)::int FROM messages m2
@@ -819,6 +850,9 @@ export async function getConversationListItem(
           sender_name: r.lm_sender_name?.trim() || null,
           created_at: r.lm_created_at,
           is_deleted: r.lm_is_deleted,
+          ...(r.lm_sender_id != null && Number(r.lm_sender_id) === memberId
+            ? { read_by_others: Boolean(r.lm_read_by_others) }
+            : {}),
         }
       : null,
     unread_count: Number(r.unread_count),

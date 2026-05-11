@@ -6,7 +6,7 @@ import { AppAvatar } from '../../../components/AppAvatar';
 import { SkeletonBox } from '@/components/ui/SkeletonBox';
 import { getAvatarColor, getAvatarInitial } from '../avatarUtils';
 import { LuPin, LuVolume2, LuVolumeX, LuFolderOpen, LuEraser, LuTrash2 } from 'react-icons/lu';
-import { IoCheckmarkDone } from 'react-icons/io5';
+import { IoCheckmark, IoCheckmarkDone } from 'react-icons/io5';
 
 interface ChatListProps {
   onSelect: (id: string) => void;
@@ -14,6 +14,18 @@ interface ChatListProps {
 }
 
 /** Soft-hide obvious dev/test chats from the list (data unchanged). */
+function maxOtherReadCursorId(cursorMap: Record<number, string> | undefined): string {
+  if (!cursorMap) return '0';
+  let max = 0n;
+  for (const v of Object.values(cursorMap)) {
+    if (typeof v === 'string' && /^\d+$/.test(v)) {
+      const b = BigInt(v);
+      if (b > max) max = b;
+    }
+  }
+  return max === 0n ? '0' : max.toString();
+}
+
 function isHiddenTestConversation(conv: ConversationListItem): boolean {
   let raw = '';
   if (conv.type === 'private' && conv.other_member) {
@@ -36,6 +48,7 @@ export function ChatList({ onSelect, activeId }: ChatListProps) {
   const setActiveTab = useChatStore((s) => s.setActiveTab);
   const getUnreadForTab = useChatStore((s) => s.getUnreadForTab);
   const getConversationsForActiveTab = useChatStore((s) => s.getConversationsForActiveTab);
+  const readCursorsByConv = useChatStore((s) => s.readCursorsByConv);
 
   const filtered = useMemo(() => getConversationsForActiveTab() || EMPTY_ARRAY, [getConversationsForActiveTab, conversations, activeTab]);
 
@@ -43,6 +56,14 @@ export function ChatList({ onSelect, activeId }: ChatListProps) {
     () => filtered.filter((c) => !isHiddenTestConversation(c)),
     [filtered],
   );
+
+  const othersReadMaxByConvId = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const c of visibleChats) {
+      map[c.id] = maxOtherReadCursorId(readCursorsByConv[c.id]);
+    }
+    return map;
+  }, [visibleChats, readCursorsByConv]);
 
   if (conversationsLoading && !conversationsLoaded) {
     return (
@@ -98,6 +119,7 @@ export function ChatList({ onSelect, activeId }: ChatListProps) {
             <li key={conv.id}>
               <MemoChatListItem
                 conv={conv}
+                othersReadMaxId={othersReadMaxByConvId[conv.id] ?? '0'}
                 isActive={conv.id === activeId}
                 isLast={index === visibleChats.length - 1}
                 avatarPriority={index < 16 || conv.id === activeId}
@@ -139,8 +161,11 @@ function SmartTabs({
   ];
 
   return (
-    <div className="max-[768px]:-mx-1 max-[768px]:overflow-x-auto max-[768px]:overflow-y-visible max-[768px]:px-1 max-[768px]:scrollbar-hide min-[769px]:overflow-visible">
-      <div className="flex min-w-max items-center gap-1 rounded-2xl border border-stone-200/70 bg-[var(--surface-elevated)] p-1 shadow-sm min-[769px]:min-w-0 min-[769px]:w-full">
+    <div className="isolate max-[768px]:-mx-1 max-[768px]:overflow-x-auto max-[768px]:overflow-y-visible max-[768px]:px-1 max-[768px]:scrollbar-hide min-[769px]:overflow-visible">
+      <div
+        className="flex min-w-max items-center gap-1 rounded-2xl border border-stone-200/70 bg-[var(--surface-elevated,#fafaf9)] p-1 shadow-sm [contain:layout] min-[769px]:min-w-0 min-[769px]:w-full"
+        style={{ WebkitFontSmoothing: 'subpixel-antialiased' }}
+      >
         {tabs.map((t) => {
           const isActive = t.id === activeTab;
           return (
@@ -149,10 +174,10 @@ function SmartTabs({
               type="button"
               onClick={() => onChange(t.id)}
               className={[
-                'relative inline-flex min-h-[32px] shrink-0 items-center justify-center gap-1.5 rounded-xl px-2 py-1.5 text-[11px] font-semibold transition-colors duration-200 min-[769px]:min-w-0 min-[769px]:flex-1 min-[769px]:text-xs',
+                'relative z-[1] inline-flex min-h-[32px] shrink-0 transform-gpu items-center justify-center gap-1.5 rounded-xl px-2 py-1.5 text-[11px] font-semibold subpixel-antialiased transition-colors duration-200 min-[769px]:min-w-0 min-[769px]:flex-1 min-[769px]:text-xs',
                 isActive
-                  ? 'bg-[var(--text)] text-[var(--surface-elevated)] shadow-sm'
-                  : 'text-[var(--text-secondary)] hover:bg-[var(--surface)] hover:text-[var(--text)]',
+                  ? 'bg-[var(--text,#1c1917)] text-[var(--surface-elevated,#fafaf9)] shadow-sm'
+                  : 'text-[var(--text-secondary,#57534e)] hover:bg-[var(--surface)] hover:text-[var(--text,#1c1917)]',
               ].join(' ')}
             >
               <span className="whitespace-nowrap">{t.label}</span>
@@ -179,6 +204,7 @@ const MOVE_CANCEL_PX = 14;
 
 function ChatListItem({
   conv,
+  othersReadMaxId,
   isActive,
   isLast,
   avatarPriority,
@@ -325,6 +351,18 @@ function ChatListItem({
       : 'Нет сообщений';
   const showUnreadBadge = conv.unread_count > 0 && !isActive;
   const showOutgoingChecks = lastFromMe && !showUnreadBadge && !isTyping;
+  const outgoingReadByOthers = (() => {
+    if (!lastMsg || !lastFromMe) return false;
+    if (lastMsg.read_by_others === true) return true;
+    const mid = String(lastMsg.id ?? '').trim();
+    const maxR = String(othersReadMaxId ?? '').trim();
+    if (!/^\d+$/.test(mid) || !/^\d+$/.test(maxR)) return false;
+    try {
+      return BigInt(mid) <= BigInt(maxR);
+    } catch {
+      return false;
+    }
+  })();
 
   const menu = menuPos ? (
     <ChatRowContextMenu
@@ -345,7 +383,7 @@ function ChatListItem({
       <button
         type="button"
         className={[
-          'tg-chat-row flex w-full touch-manipulation text-left transition-colors duration-150',
+          'tg-chat-row flex w-full touch-manipulation text-left subpixel-antialiased transition-colors duration-150',
           'active:bg-[var(--bg-hover,var(--surface))]',
           isActive ? 'bg-primary/[0.07]' : 'bg-[var(--surface-elevated)] hover:bg-[var(--surface)]',
         ].join(' ')}
@@ -433,10 +471,17 @@ function ChatListItem({
                   {conv.unread_count > 99 ? '99+' : conv.unread_count}
                 </span>
               ) : showOutgoingChecks ? (
-                <IoCheckmarkDone
-                  className="h-[18px] w-[18px] shrink-0 text-primary/70"
-                  aria-label="Исходящее сообщение"
-                />
+                outgoingReadByOthers ? (
+                  <IoCheckmarkDone
+                    className="h-[18px] w-[18px] shrink-0 text-sky-600"
+                    aria-label="Прочитано"
+                  />
+                ) : (
+                  <IoCheckmark
+                    className="h-[18px] w-[18px] shrink-0 text-primary/60"
+                    aria-label="Отправлено, ещё не прочитано"
+                  />
+                )
               ) : null}
             </div>
           </div>
@@ -449,6 +494,8 @@ function ChatListItem({
 
 type ChatListItemProps = {
   conv: ConversationListItem;
+  /** Макс. id сообщения, до которого другие участники отметили прочтение (для строки списка). */
+  othersReadMaxId: string;
   isActive: boolean;
   /** Последняя строка — без нижнего разделителя у текстовой колонки. */
   isLast: boolean;
@@ -460,6 +507,7 @@ type ChatListItemProps = {
 const MemoChatListItem = memo(ChatListItem, (prev, next) => {
   return (
     prev.conv === next.conv &&
+    prev.othersReadMaxId === next.othersReadMaxId &&
     prev.isActive === next.isActive &&
     prev.isLast === next.isLast &&
     prev.avatarPriority === next.avatarPriority &&

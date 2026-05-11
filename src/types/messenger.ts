@@ -100,6 +100,8 @@ export interface ConversationListItem {
     sender_name: string | null;
     created_at: string;
     is_deleted: boolean;
+    /** Исходящее от меня: собеседники прочитали до этого сообщения (по их last_read_message_id). */
+    read_by_others?: boolean;
   } | null;
   unread_count: number;
   /** For private (1:1) chats: the other participant */

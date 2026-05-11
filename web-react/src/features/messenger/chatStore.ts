@@ -599,7 +599,24 @@ function findConversationIdContainingMessage(
   return null;
 }
 
-function listPreviewFromMessage(tail: MessageWithSender): NonNullable<ConversationListItem['last_message']> {
+function maxOtherReadCursor(cursorMap: Record<number, string> | undefined): bigint {
+  if (!cursorMap) return 0n;
+  let max = 0n;
+  for (const v of Object.values(cursorMap)) {
+    if (typeof v === 'string' && /^\d+$/.test(v)) {
+      const b = BigInt(v);
+      if (b > max) max = b;
+    }
+  }
+  return max;
+}
+
+function listPreviewFromMessage(
+  get: () => ChatState,
+  convId: string,
+  tail: MessageWithSender,
+  opts?: { conversationsForPrev?: ConversationListItem[] },
+): NonNullable<ConversationListItem['last_message']> {
   const pt = tail.payload_type ?? inferMessengerPayloadType(tail);
   let preview = String(tail.content ?? '').trim();
   if (!preview) {
@@ -609,6 +626,24 @@ function listPreviewFromMessage(tail: MessageWithSender): NonNullable<Conversati
     else if (pt === 'file') preview = '📎 Файл';
     else if (pt === 'poll') preview = '📊 Опрос';
   }
+  const st = get();
+  const convList = opts?.conversationsForPrev ?? st.conversations;
+  const me = st.currentMemberId;
+  const isMine =
+    me != null && tail.sender_id != null && Number(tail.sender_id) === Number(me);
+  let read_by_others: boolean | undefined;
+  if (isMine) {
+    if (!/^\d+$/.test(String(tail.id))) {
+      read_by_others = false;
+    } else {
+      const maxR = maxOtherReadCursor(st.readCursorsByConv[String(convId)]);
+      const cursorRead = BigInt(String(tail.id)) <= maxR;
+      const prev = convList.find((c) => String(c.id) === String(convId))?.last_message;
+      const prevSameMsgRead =
+        prev != null && String(prev.id) === String(tail.id) && prev.read_by_others === true;
+      read_by_others = cursorRead || prevSameMsgRead;
+    }
+  }
   return {
     id: String(tail.id),
     content: preview,
@@ -616,6 +651,7 @@ function listPreviewFromMessage(tail: MessageWithSender): NonNullable<Conversati
     sender_name: tail.sender_name,
     created_at: tail.created_at,
     is_deleted: tail.is_deleted,
+    ...(read_by_others !== undefined ? { read_by_others } : {}),
   };
 }
 
@@ -639,6 +675,7 @@ function moveConversationToTop(
 
 /** Если правили/удалили текущее превью в списке чатов — обновить с учётом нового хвоста треда. */
 function syncConversationLastMessageAfterMutation(
+  get: () => ChatState,
   conversations: ConversationListItem[],
   convId: string,
   newMsgs: MessageWithSender[],
@@ -653,7 +690,9 @@ function syncConversationLastMessageAfterMutation(
   }
   const tail = newMsgs[newMsgs.length - 1];
   return conversations.map((c) =>
-    c.id === convId ? { ...c, last_message: listPreviewFromMessage(tail) } : c,
+    c.id === convId
+      ? { ...c, last_message: listPreviewFromMessage(get, convId, tail, { conversationsForPrev: conversations }) }
+      : c,
   );
 }
 
@@ -1087,7 +1126,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       },
       conversations: moveConversationToTop(s.conversations, convId, (c) => ({
         ...c,
-        last_message: listPreviewFromMessage(optimistic),
+        last_message: listPreviewFromMessage(get, convId, optimistic, { conversationsForPrev: s.conversations }),
         updated_at: optimistic.created_at,
       })),
     }));
@@ -1115,7 +1154,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         },
         conversations: moveConversationToTop(s.conversations, convId, (c) => ({
           ...c,
-          last_message: listPreviewFromMessage(real),
+          last_message: listPreviewFromMessage(get, convId, real, { conversationsForPrev: s.conversations }),
           updated_at: real.created_at,
         })),
         replyToMessage: null,
@@ -1203,7 +1242,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
         },
         conversations: moveConversationToTop(s.conversations, conversationId, (c) => ({
           ...c,
-          last_message: listPreviewFromMessage(real),
+          last_message: listPreviewFromMessage(get, conversationId, real, {
+            conversationsForPrev: s.conversations,
+          }),
           updated_at: real.created_at,
         })),
       }));
@@ -1316,6 +1357,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       return {
         messagesByConv: { ...s.messagesByConv, [convId]: nextMsgs },
         conversations: syncConversationLastMessageAfterMutation(
+          get,
           s.conversations,
           convId,
           nextMsgs,
@@ -1337,7 +1379,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
           return {
             messagesByConv: { ...s.messagesByConv, [convId]: restoredMsgs },
             conversations: syncConversationLastMessageAfterMutation(
-              s.conversations, convId, restoredMsgs, mid,
+              get, s.conversations, convId, restoredMsgs, mid,
             ),
           };
         });
@@ -1586,14 +1628,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       const nextUnreadForConv = shouldCountUnread ? prevUnreadForConv + 1 : prevUnreadForConv;
       const updatedConvs = moveConversationToTop(s.conversations, idKey, (c) => ({
         ...c,
-        last_message: {
-          id: serverMsgId,
-          content: msg.content,
-          sender_id: msg.sender_id,
-          sender_name: msg.sender_name,
-          created_at: msg.created_at,
-          is_deleted: msg.is_deleted,
-        },
+        last_message: listPreviewFromMessage(get, idKey, msg, { conversationsForPrev: s.conversations }),
         updated_at: msg.created_at,
         unread_count: nextUnreadForConv,
       }));
@@ -1754,6 +1789,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       return {
         messagesByConv: { ...s.messagesByConv, [idKey]: nextMsgs },
         conversations: syncConversationLastMessageAfterMutation(
+          get,
           s.conversations,
           idKey,
           nextMsgs,

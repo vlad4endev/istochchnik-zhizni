@@ -68,6 +68,8 @@ export interface ConversationListItem {
     sender_name: string | null;
     created_at: string;
     is_deleted: boolean;
+    /** Исходящее: другие участники дочитали до этого id (сервер + локальные курсоры). */
+    read_by_others?: boolean;
   } | null;
   unread_count: number;
   other_member: {
