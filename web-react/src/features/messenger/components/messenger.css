@@ -345,10 +345,14 @@
   color: var(--tg-primary);
 }
 
-.tg-sidebar-head {
-  flex-shrink: 0;
+.tg-sidebar-header {
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 56px;
   border-bottom: 1px solid var(--tg-border);
-  background: var(--tg-surface);
+  background: linear-gradient(180deg, var(--tg-surface-elevated) 0%, var(--tg-surface) 100%);
 }
 
 .tg-compose-btn-sm {
@@ -507,8 +511,9 @@
     pointer-events: auto !important;
   }
 
-  .tg-sidebar-head {
-    padding: 0;
+  .tg-sidebar-header {
+    padding: 14px 18px;
+    min-height: 58px;
   }
 
   .tg-main {
@@ -2364,11 +2369,11 @@ html.dark .msg-quick-reaction:hover {
       transform: translate3d(0, 0, 0);
     }
 
-    html[data-messenger-open="1"] .tg-sidebar-head {
+    html[data-messenger-open="1"] .tg-sidebar-header {
       position: sticky;
       top: 0;
       z-index: 40;
-      padding-top: max(0px, env(safe-area-inset-top, 0px));
+      padding-top: max(12px, env(safe-area-inset-top, 0px));
     }
 
     html[data-messenger-open="1"] .tg-sidebar > .flex {

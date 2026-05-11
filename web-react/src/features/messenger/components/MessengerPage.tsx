@@ -5,9 +5,7 @@ import { useMessengerWsContext } from '../MessengerWsContext';
 import { useSwipeGesture } from '../hooks/useSwipeGesture';
 import { ChatList } from './ChatList';
 import { LuPlus, LuMessageSquare, LuSlidersHorizontal } from 'react-icons/lu';
-import { PageHeader } from '@/components/layout/PageHeader';
 import { SkeletonBox } from '@/components/ui/SkeletonBox';
-import { sectionHeroStickyClassNested } from '@/lib/sectionHeroChrome';
 import { dispatchLayoutMainChrome } from '../../../app/layoutChrome';
 import './messenger.css';
 
@@ -170,11 +168,9 @@ export function MessengerPage() {
       <aside
         className={`tg-sidebar chat-list-panel ${mobileView === 'list' ? 'tg-sidebar--visible' : ''} ${mobileView === 'chat' ? 'tg-sidebar--hidden' : ''}`}
       >
-        <div className="tg-sidebar-head">
-          <div className={sectionHeroStickyClassNested}>
-            <PageHeader title="Чаты" />
-          </div>
-          <div className="tg-sidebar-toolbar flex items-center justify-end gap-2 border-b border-[var(--tg-border)] bg-[var(--tg-surface)] px-3 py-2">
+        <div className="tg-sidebar-header">
+          <h1 className="tg-sidebar-title">Мессенджер</h1>
+          <div className="flex items-center gap-2">
             <button
               type="button"
               className={`tg-density-toggle hidden md:inline-flex ${density === 'compact' ? 'tg-density-toggle--compact' : ''}`}
