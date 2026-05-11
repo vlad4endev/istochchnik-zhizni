@@ -1300,14 +1300,7 @@ function DashboardMain() {
                 displayAnnouncement ? 'col-span-4' : 'col-span-4',
               ].join(' ')}
             >
-              <button
-                type="button"
-                onClick={() => navigate('/sermons')}
-                className="absolute right-3 top-3 z-[1] inline-flex min-h-[28px] items-center justify-center rounded-[9px] border border-stone-200 bg-white px-2.5 text-[10px] font-extrabold tracking-[0.08em] text-stone-700 hover:bg-stone-50 sm:right-4 sm:top-4"
-              >
-                ВСЕ
-              </button>
-              <div className="flex items-center gap-2 pr-14">
+              <div className="flex items-center gap-2">
                 <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[9px] bg-[#0E7E6A] text-white">
                   <LuPlay className="h-4 w-4" strokeWidth={2} aria-hidden />
                 </span>
@@ -1605,14 +1598,7 @@ function DashboardMain() {
           ) : null}
 
           <section className="relative overflow-hidden rounded-2xl border border-stone-200/70 bg-white p-4 shadow-[var(--shadow-card)] min-[769px]:col-span-2 sm:p-5">
-            <button
-              type="button"
-              onClick={() => navigate('/sermons')}
-              className="tap-highlight-transparent touch-manipulation absolute right-3 top-3 z-[1] inline-flex min-h-[36px] min-w-[52px] items-center justify-center rounded-[10px] border border-stone-200 bg-white px-2.5 text-[10px] font-extrabold tracking-[0.08em] text-stone-700 hover:bg-stone-50 sm:right-4 sm:top-4"
-            >
-              ВСЕ
-            </button>
-            <div className="flex items-center gap-2 pr-16">
+            <div className="flex items-center gap-2">
               <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[#0E7E6A] text-white">
                 <LuPlay className="h-4 w-4" strokeWidth={2} aria-hidden />
               </span>

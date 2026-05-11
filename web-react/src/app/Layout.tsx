@@ -6,7 +6,6 @@ import {
   LuChevronLeft,
   LuChevronRight,
   LuCalendarDays,
-  LuCalendarRange,
   LuChurch,
   LuDisc3,
   LuEllipsis,
@@ -75,7 +74,6 @@ type NavItem = {
 const NAV_ITEMS: NavItem[] = [
   /** Контурные Lucide — не путать с цветными эмодзи / Font Awesome «картинками». */
   { to: '/dashboard', label: 'Главная', Icon: LuLayoutDashboard, sectionId: 'dashboard' },
-  { to: '/events', label: 'События', Icon: LuCalendarRange, sectionId: 'dashboard' },
   { to: '/prayer', label: 'Молитва', Icon: LuChurch, sectionId: 'prayer' },
   { to: '/songbook', label: 'Песенник', Icon: LuMusic2, sectionId: 'songbook' },
   { to: '/service-planner', label: 'Служение', Icon: LuCalendarDays, sectionId: 'service_planner' },
@@ -366,9 +364,6 @@ function navClassName(isActive: boolean, compact = false): string {
 function mobileBottomRouteActive(pathname: string, to: string): boolean {
   if (to === '/dashboard') {
     return pathname === '/dashboard' || pathname === '/dashboard/';
-  }
-  if (to === '/events') {
-    return pathname === '/events' || pathname === '/events/';
   }
   return pathname === to || pathname.startsWith(`${to}/`);
 }
