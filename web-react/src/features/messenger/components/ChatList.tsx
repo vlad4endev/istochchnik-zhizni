@@ -173,11 +173,19 @@ function SmartTabs({
               key={t.id}
               type="button"
               onClick={() => onChange(t.id)}
+              style={{ WebkitTapHighlightColor: 'transparent' }}
               className={[
-                'relative z-[1] inline-flex min-h-[32px] shrink-0 transform-gpu items-center justify-center gap-1.5 rounded-xl px-2 py-1.5 text-[11px] font-semibold subpixel-antialiased transition-colors duration-200 min-[769px]:min-w-0 min-[769px]:flex-1 min-[769px]:text-xs',
+                // Тач: без «серой» подсветки WebKit; :active не должен сбрасывать фон активной вкладки.
+                'relative z-[1] inline-flex min-h-[32px] shrink-0 touch-manipulation select-none items-center justify-center gap-1.5 rounded-xl px-2 py-1.5 text-[11px] font-semibold subpixel-antialiased [-webkit-tap-highlight-color:transparent] min-[769px]:min-w-0 min-[769px]:flex-1 min-[769px]:text-xs',
+                'min-[769px]:transition-colors min-[769px]:duration-200',
                 isActive
-                  ? 'bg-[var(--text,#1c1917)] text-[var(--surface-elevated,#fafaf9)] shadow-sm'
-                  : 'text-[var(--text-secondary,#57534e)] hover:bg-[var(--surface)] hover:text-[var(--text,#1c1917)]',
+                  ? 'bg-[var(--text,#1c1917)] text-[var(--surface-elevated,#fafaf9)] shadow-sm active:bg-[var(--text,#1c1917)] active:text-[var(--surface-elevated,#fafaf9)] active:shadow-sm'
+                  : [
+                      'text-[var(--text-secondary,#57534e)]',
+                      'active:bg-stone-200/80 active:text-[var(--text,#1c1917)]',
+                      // Hover только с мыши (≥769px): на телефоне липкий :hover ломает вид после тапа.
+                      'min-[769px]:hover:bg-[var(--surface)] min-[769px]:hover:text-[var(--text,#1c1917)]',
+                    ].join(' '),
               ].join(' ')}
             >
               <span className="whitespace-nowrap">{t.label}</span>
@@ -345,9 +353,11 @@ function ChatListItem({
     : lastMsg
       ? lastMsg.is_deleted
         ? 'Сообщение удалено'
-        : lastMsg.sender_name
-          ? `${lastMsg.sender_name.split(' ')[0]}: ${lastMsg.content}`
-          : lastMsg.content
+        : lastFromMe
+          ? lastMsg.content
+          : lastMsg.sender_name
+            ? `${lastMsg.sender_name.split(' ')[0]}: ${lastMsg.content}`
+            : lastMsg.content
       : 'Нет сообщений';
   const showUnreadBadge = conv.unread_count > 0 && !isActive;
   const showOutgoingChecks = lastFromMe && !showUnreadBadge && !isTyping;
