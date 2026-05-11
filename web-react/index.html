@@ -56,8 +56,7 @@
     <link rel="apple-touch-startup-image" href="/pwa/apple-splash-1242-2208.png" media="(device-width: 414px) and (device-height: 736px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" />
     <link rel="apple-touch-startup-image" href="/pwa/apple-splash-750-1334.png" media="(device-width: 375px) and (device-height: 667px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" />
     <link rel="apple-touch-startup-image" href="/pwa/apple-splash-640-1136.png" media="(device-width: 320px) and (device-height: 568px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" />
-    <!-- Progressier: только скрипт (push). Не подключать progressier.json как rel=manifest первым — на iOS первый manifest wins. -->
-    <script defer src="https://progressier.app/j7yZLwkCdnvJhlAZ1Gor/script.js"></script>
+    <!-- Progressier (push): подключается из main.tsx после первого кадра — не блокировать парсинг/сеть PWA. -->
   </head>
   <body style="margin:0;background:#f4f1ed">
     <!-- До загрузки CSS/React: не оставлять чисто белый фон (типичная жалоба в iOS PWA). -->

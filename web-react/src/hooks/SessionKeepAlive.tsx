@@ -69,10 +69,14 @@ export function SessionKeepAlive(): null {
     document.addEventListener('visibilitychange', onVisibility);
     window.addEventListener('online', onOnline);
 
-    /** Сразу после входа / восстановления стора — один тихий refresh (как при открытии нативного клиента). */
-    runRefresh();
+    /**
+     * Не дергать refresh в тот же тик, что и первый рендер PWA: на iOS после сворачивания
+     * конкурирует с загрузкой чанков / SW и даёт долгий «белый» кадр.
+     */
+    const bootRefreshTimer = window.setTimeout(runRefresh, 2_500);
 
     return () => {
+      window.clearTimeout(bootRefreshTimer);
       window.clearInterval(intervalId);
       document.removeEventListener('visibilitychange', onVisibility);
       window.removeEventListener('online', onOnline);

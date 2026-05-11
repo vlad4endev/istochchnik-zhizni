@@ -1417,10 +1417,8 @@ function pruneRefreshRotationGrace(): void {
   }
   if (refreshRotationGraceByHash.size > MAX_REFRESH_GRACE_MAP_SIZE) {
     const target = Math.floor(MAX_REFRESH_GRACE_MAP_SIZE * 0.7);
-    let removed = 0;
     for (const k of refreshRotationGraceByHash.keys()) {
       refreshRotationGraceByHash.delete(k);
-      removed += 1;
       if (refreshRotationGraceByHash.size <= target) {
         break;
       }

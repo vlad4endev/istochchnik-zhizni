@@ -36,7 +36,15 @@ export function useAppUpdate() {
       if (Date.now() < swFetchFailureCooldownUntil) return;
       try {
         const reg = await navigator.serviceWorker.getRegistration();
-        await reg?.update();
+        if (reg) {
+          /** iOS: `update()` иногда «висит» на сети минутами — не блокируем холодный старт. */
+          await Promise.race([
+            reg.update(),
+            new Promise<void>((resolve) => {
+              window.setTimeout(resolve, 10_000);
+            }),
+          ]);
+        }
         void forceSkipWaitingIfNeeded();
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error ?? '');

@@ -316,31 +316,38 @@ export const useAuthStore = create<AuthState>()(
           (typeof window !== 'undefined' && window.location?.origin ? window.location.origin : '');
         if (!origin) return;
         try {
-          const r = await fetch(`${origin}${AUTH_API_PREFIX}/me`, {
-            credentials: 'include',
-          });
-          if (r.status !== 200) return;
-          const user = (await r.json()) as {
-            id?: number;
-            first_name?: string | null;
-            last_name?: string | null;
-            app_role?: string;
-            app_roles?: string[];
-            registration_status?: string;
-            username?: string;
-          };
-          get().setSession({
-            token: COOKIE_ONLY_SESSION_TOKEN,
-            firstName: (user.first_name ?? '').trim(),
-            lastName: (user.last_name ?? '').trim(),
-            role: (user.app_role ?? 'member').trim() || 'member',
-            roles: Array.isArray(user.app_roles) ? user.app_roles : undefined,
-            registrationStatus: normalizeRegistrationStatus(user.registration_status),
-            username: (user.username ?? '').trim(),
-            memberId: typeof user.id === 'number' ? user.id : null,
-          });
+          const ctrl = new AbortController();
+          const t = window.setTimeout(() => ctrl.abort(), 12_000);
+          try {
+            const r = await fetch(`${origin}${AUTH_API_PREFIX}/me`, {
+              credentials: 'include',
+              signal: ctrl.signal,
+            });
+            if (r.status !== 200) return;
+            const user = (await r.json()) as {
+              id?: number;
+              first_name?: string | null;
+              last_name?: string | null;
+              app_role?: string;
+              app_roles?: string[];
+              registration_status?: string;
+              username?: string;
+            };
+            get().setSession({
+              token: COOKIE_ONLY_SESSION_TOKEN,
+              firstName: (user.first_name ?? '').trim(),
+              lastName: (user.last_name ?? '').trim(),
+              role: (user.app_role ?? 'member').trim() || 'member',
+              roles: Array.isArray(user.app_roles) ? user.app_roles : undefined,
+              registrationStatus: normalizeRegistrationStatus(user.registration_status),
+              username: (user.username ?? '').trim(),
+              memberId: typeof user.id === 'number' ? user.id : null,
+            });
+          } finally {
+            window.clearTimeout(t);
+          }
         } catch {
-          /* сеть / CORS */
+          /* сеть / CORS / abort */
         }
       },
     }),

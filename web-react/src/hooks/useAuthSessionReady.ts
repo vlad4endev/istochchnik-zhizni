@@ -24,11 +24,17 @@ export function useAuthSessionReady(): boolean {
   useEffect(() => {
     if (!hydrated) return;
     let cancelled = false;
+    /** iOS PWA: редкие зависания fetch без ответа — не держать UI на «загрузке» бесконечно. */
+    const failsafe = window.setTimeout(() => {
+      if (!cancelled) setCookieAttemptDone(true);
+    }, 20_000);
     void runCookieBootstrapOnce().finally(() => {
+      window.clearTimeout(failsafe);
       if (!cancelled) setCookieAttemptDone(true);
     });
     return () => {
       cancelled = true;
+      window.clearTimeout(failsafe);
     };
   }, [hydrated]);
 

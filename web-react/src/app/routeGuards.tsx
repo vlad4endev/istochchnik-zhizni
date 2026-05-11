@@ -86,7 +86,8 @@ export function RequireAuth() {
     if (ext) {
       const next = `${ext}/login`;
       window.location.replace(`${next}${encodedFrom}`);
-      return null;
+      /** Не оставлять пустой кадр до смены документа (на iOS PWA заметен как «белый экран»). */
+      return <HydrateSplash />;
     }
     return <Navigate to={`${LOGIN_PATH}${encodedFrom}`} replace state={{ from: fromPath }} />;
   }

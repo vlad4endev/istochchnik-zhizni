@@ -310,7 +310,7 @@ export async function catalogSongGet(req: Request, res: Response): Promise<void>
       restrictImportedSandboxToCreatorId,
     };
 
-    let song = await getSongById(songId, r.authUserId!, visibility);
+    const song = await getSongById(songId, r.authUserId!, visibility);
     if (!song) {
       const imported = await listImportedSandboxSongsForStudio(r.authUserId!, restrictImportedSandboxToCreatorId);
       const hit = imported.find((x) => Number(x.id) === songId);

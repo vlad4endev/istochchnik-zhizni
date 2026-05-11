@@ -33,6 +33,30 @@ const CLIENT_BUILD_VERSION = '2026-05-07-dashboard-rollback-1';
 const CLIENT_BUILD_VERSION_KEY = 'app:client-build-version';
 const CLIENT_BUILD_RELOAD_KEY = 'app:client-build-reload-once';
 
+/** Progressier: не в index.html — иначе на iOS PWA конкурирует с первым бандлом и SW. */
+const PROGRESSIER_SCRIPT_SRC = 'https://progressier.app/j7yZLwkCdnvJhlAZ1Gor/script.js';
+
+function scheduleProgressierAfterFirstPaint(): void {
+  const inject = (): void => {
+    if (document.querySelector('script[data-app-progressier="1"]')) return;
+    const s = document.createElement('script');
+    s.async = true;
+    s.dataset.appProgressier = '1';
+    s.src = PROGRESSIER_SCRIPT_SRC;
+    document.head.appendChild(s);
+  };
+  const whenIdle = (): void => {
+    if (typeof requestIdleCallback === 'function') {
+      requestIdleCallback(() => inject(), { timeout: 8000 });
+    } else {
+      window.setTimeout(inject, 4000);
+    }
+  };
+  window.requestAnimationFrame(() => {
+    window.requestAnimationFrame(whenIdle);
+  });
+}
+
 async function forceClientRefreshOnVersionChange(): Promise<void> {
   if (typeof window === 'undefined') return;
   let previousVersion = '';
@@ -56,7 +80,15 @@ async function forceClientRefreshOnVersionChange(): Promise<void> {
   try {
     if ('serviceWorker' in navigator) {
       const registration = await navigator.serviceWorker.getRegistration();
-      await registration?.unregister();
+      if (registration) {
+        /** iOS: unregister() без верхней границы может «висеть» минутами. */
+        await Promise.race([
+          registration.unregister(),
+          new Promise<void>((r) => {
+            window.setTimeout(r, 8000);
+          }),
+        ]);
+      }
     }
   } catch {
     // ignore service worker errors
@@ -65,7 +97,12 @@ async function forceClientRefreshOnVersionChange(): Promise<void> {
   try {
     if ('caches' in window) {
       const keys = await caches.keys();
-      await Promise.all(keys.map((key) => caches.delete(key)));
+      await Promise.race([
+        Promise.all(keys.map((key) => caches.delete(key))),
+        new Promise<void>((r) => {
+          window.setTimeout(r, 12_000);
+        }),
+      ]);
     }
   } catch {
     // ignore cache cleanup errors
@@ -92,7 +129,12 @@ window.addEventListener('load', () => applyNativeShellViewportLock());
 initPwaStandaloneHtmlHint();
 initAppearance();
 void forceClientRefreshOnVersionChange();
-void client.ping().catch((error: unknown) => {
+void Promise.race([
+  client.ping(),
+  new Promise<never>((_, reject) => {
+    window.setTimeout(() => reject(new Error('appwrite ping timeout')), 5000);
+  }),
+]).catch((error: unknown) => {
   console.warn('Appwrite ping failed:', error);
 });
 
@@ -133,7 +175,8 @@ const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       refetchOnWindowFocus: false,
-      refetchOnReconnect: true,
+      /** PWA iOS: при выходе из фона + «online» иначе лавина refetch бьёт API и тормозит первый кадр. */
+      refetchOnReconnect: false,
       retry: 1,
       retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 10_000),
       staleTime: 60_000,
@@ -191,6 +234,7 @@ if (!rootEl) {
       </AppErrorBoundary>
     </StrictMode>,
   );
+  scheduleProgressierAfterFirstPaint();
 }
 
 if ('storage' in navigator && 'persist' in navigator.storage) {
