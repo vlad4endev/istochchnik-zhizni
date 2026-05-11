@@ -1218,7 +1218,7 @@ export function ChatWindow({
         </div>
       </div>
 
-      <div className="tg-chat-window__composer message-input-bar sticky bottom-0 z-20 w-full min-w-0 max-w-full shrink-0 border-t border-stone-200/70 bg-[var(--tg-bg)] px-3 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom,0px))]">
+      <div className="tg-chat-window__composer message-input-bar z-20 w-full min-w-0 max-w-full shrink-0 border-t border-stone-200/70 bg-[var(--tg-bg)] px-3 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom,0px))]">
         {isAccessRequestsChannel ? (
           <div className="pb-1 pt-0.5 text-center">
             <p className="mx-auto max-w-md px-2 text-[13px] leading-snug text-[var(--text-secondary)]">

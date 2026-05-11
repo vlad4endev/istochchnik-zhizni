@@ -90,6 +90,20 @@ function isChatPhotoOrVideoFile(f: File): boolean {
   return isChatImageFile(f) || isChatVideoFile(f);
 }
 
+/** iOS PWA: обычный focus() скроллит предков с overflow — ломает fixed-окно чата; preventScroll оставляет скролл только в ленте. */
+function focusMessengerField(el: HTMLElement | null): void {
+  if (!el) return;
+  try {
+    el.focus({ preventScroll: true });
+  } catch {
+    try {
+      el.focus();
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
 type PopoverPos =
   | {
       bottomPx: number;
@@ -331,7 +345,7 @@ export function ChatInput({
 
   const focusComposer = useCallback(() => {
     requestAnimationFrame(() => {
-      textareaRef.current?.focus();
+      focusMessengerField(textareaRef.current);
     });
   }, []);
 
@@ -428,7 +442,7 @@ export function ChatInput({
     if (lastOpenedEditIdRef.current !== editing.id) {
       lastOpenedEditIdRef.current = editing.id;
       setContent(denormalizeMentionsForEditor(editing.content, participantLabelById));
-      textareaRef.current?.focus();
+      focusMessengerField(textareaRef.current);
     }
   }, [editing, participantLabelById]);
 
@@ -611,7 +625,7 @@ export function ChatInput({
     setContent(next);
     requestAnimationFrame(() => {
       try {
-        el.focus();
+        focusMessengerField(el);
         const caret = start + native.length;
         el.setSelectionRange(caret, caret);
         scheduleTextareaAutosize(el);
@@ -877,7 +891,7 @@ export function ChatInput({
           uploaded: null,
         })),
       );
-      textareaRef.current?.focus();
+      focusMessengerField(textareaRef.current);
       if (fileInputRef.current) fileInputRef.current.value = '';
       return;
     }
@@ -917,7 +931,7 @@ export function ChatInput({
       IMAGE_NAME_EXT_RE.test(String(file.name || '').trim());
     const previewUrl = isImage ? URL.createObjectURL(file) : null;
     setPending({ file, isImage, previewUrl, uploaded: null });
-    textareaRef.current?.focus();
+    focusMessengerField(textareaRef.current);
   };
 
   /** Вставка из буфера / drag-and-drop — та же ветка, что и выбор файла из меню. */
@@ -947,7 +961,7 @@ export function ChatInput({
     setMentionOpen(false);
     requestAnimationFrame(() => {
       try {
-        el.focus();
+        focusMessengerField(el);
         el.setSelectionRange(pos, pos);
         scheduleTextareaAutosize(el);
       } catch {
@@ -2175,7 +2189,7 @@ export function ChatInput({
                 if (hasSendAction) {
                   void handleSend();
                 } else {
-                  textareaRef.current?.focus();
+                  focusMessengerField(textareaRef.current);
                 }
               }}
               disabled={uploading != null || (!hasSendAction && (!canSendAttachments || !uploadsHealthy))}
