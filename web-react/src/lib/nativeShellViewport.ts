@@ -87,20 +87,20 @@ export function syncViewportHeightVars() {
   const fromDvhProbe = getDvhPx();
   const fromLayout = Math.round(layoutHeight);
   /**
-   * На iOS кадр с открытой клавиатурой иногда отдаёт visualViewport «полной» высоты, а layout / `100dvh`
-   * уже сжаты (`interactive-widget` или probe). Берём минимум в PWA — убираем белую полосу без ожидания следующего resize.
+   * iOS PWA: `100dvh` в probe часто не сжимается с клавиатурой; смешивание с dvh давало «лишнюю» высоту.
+   * Видимая высота всегда ≤ innerHeight; при открытой клавиатуре берём min(visual, layout) — совпадает
+   * с видимым прямоугольником, без пол экрана пустоты над клавиатурой.
    */
-  const preferMinVisualAndDvh =
-    root.classList.contains('app-native-shell') && fromVisual > 0 && fromDvhProbe > 0;
-  let chosen = preferMinVisualAndDvh
-    ? Math.min(fromVisual, fromDvhProbe)
-    : fromVisual > 0
-      ? fromVisual
-      : fromDvhProbe > 0
-        ? fromDvhProbe
-        : fromLayout > 0
-          ? fromLayout
-          : 0;
+  let chosen =
+    fromVisual > 0 && fromLayout > 0
+      ? Math.min(fromVisual, fromLayout)
+      : fromVisual > 0
+        ? fromVisual
+        : fromDvhProbe > 0
+          ? fromDvhProbe
+          : fromLayout > 0
+            ? fromLayout
+            : 0;
   if (chosen <= 0 && typeof window.screen?.height === 'number' && window.screen.height > 0) {
     chosen = Math.round(window.screen.height);
   }
