@@ -75,6 +75,8 @@ export function normalizeEditableServicePlanPayload(raw: EditableServicePlanPayl
       leader_name: plan.leader_name == null ? null : String(plan.leader_name),
       preacher_member_id: normalizeOptionalPositiveInt(plan.preacher_member_id),
       preacher_name: plan.preacher_name == null ? null : String(plan.preacher_name),
+      music_ministry_member_id: normalizeOptionalPositiveInt(plan.music_ministry_member_id),
+      music_ministry_name: plan.music_ministry_name == null ? null : String(plan.music_ministry_name),
     },
     blocks: blocks.map((b) => ({
       ...b,

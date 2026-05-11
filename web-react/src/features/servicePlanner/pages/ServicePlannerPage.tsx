@@ -204,6 +204,15 @@ function isPreacherCandidate(u: AppUser): boolean {
   return hasMinistryRole(u, 'Проповедник');
 }
 
+/** Кандидаты в ответственные за музыку: роль «Музыкант» или направление «Музыкальное служение». */
+function isMusicMinistryCandidate(u: AppUser): boolean {
+  if (u.app_role === 'musician') return true;
+  if (Array.isArray(u.app_roles) && u.app_roles.some((r) => String(r).toLowerCase() === 'musician')) {
+    return true;
+  }
+  return hasMinistryDirection(u, 'Музыкальное служение');
+}
+
 function userLabel(u: AppUser): string {
   const full = `${u.first_name ?? ''} ${u.last_name ?? ''}`.trim();
   return full || u.name || `Пользователь #${u.id}`;
@@ -472,30 +481,35 @@ export function ServicePlannerPage() {
           .filter((t) => t.code === 'sermon' || (t.name ?? '').toLowerCase().includes('проповед'))
           .map((t) => t.id),
       );
+      const songTypeIds = new Set(
+        (blockTypesQ.data ?? [])
+          .filter((t) => t.code === 'song' || t.kind === 'song')
+          .map((t) => t.id),
+      );
       const preacherId = planQ.data.preacher_member_id ?? null;
       const preacher = preacherId ? (membersQ.data ?? []).find((u) => u.id === preacherId) ?? null : null;
       const preacherName = preacher ? userLabel(preacher) : 'Проповедник';
+      const musicId = planQ.data.music_ministry_member_id ?? null;
       const pendingDeletes = pendingPlanBlockDeleteTimersRef.current;
-      const normalized =
-        sermonTypeIds.size === 0
-          ? {
-              ...planQ.data,
-              blocks: planQ.data.blocks.filter((b) => !pendingDeletes.has(b.id)),
-            }
-          : {
-              ...planQ.data,
-              blocks: planQ.data.blocks.map((b) => {
-                if (!sermonTypeIds.has(b.block_type_id)) return b;
-                const topicRaw = b.content_json?.sermon_topic;
-                const topic = typeof topicRaw === 'string' ? topicRaw.trim() : '';
-                return {
-                  ...b,
-                  assigned_member_id: preacherId,
-                  title: topic ? `${preacherName} - ${topic}` : preacherName,
-                };
-              })
-              .filter((b) => !pendingDeletes.has(b.id)),
+      const blocks = planQ.data.blocks
+        .filter((b) => !pendingDeletes.has(b.id))
+        .map((b) => {
+          let x = b;
+          if (sermonTypeIds.has(b.block_type_id)) {
+            const topicRaw = b.content_json?.sermon_topic;
+            const topic = typeof topicRaw === 'string' ? topicRaw.trim() : '';
+            x = {
+              ...x,
+              assigned_member_id: preacherId,
+              title: topic ? `${preacherName} - ${topic}` : preacherName,
             };
+          }
+          if (songTypeIds.has(b.block_type_id)) {
+            x = { ...x, assigned_member_id: musicId };
+          }
+          return x;
+        });
+      const normalized = { ...planQ.data, blocks };
       suppressNextAutosaveRef.current = true;
       setDraft((prev) => {
         if (!prev || prev.id !== normalized.id) return normalized;
@@ -590,8 +604,9 @@ export function ServicePlannerPage() {
   const updatePlanMut = useMutation({
     mutationFn: ({ id, body }: { id: number; body: Parameters<typeof patchServicePlan>[1] }) =>
       patchServicePlan(id, body),
-    onSuccess: async () => {
+    onSuccess: async (_data, variables) => {
       await qc.invalidateQueries({ queryKey: ['service-planner', 'plans'] });
+      await qc.invalidateQueries({ queryKey: ['service-planner', 'plan', variables.id] });
     },
   });
 
@@ -691,16 +706,24 @@ export function ServicePlannerPage() {
         start_time: draft.start_time,
         leader_member_id: draft.leader_member_id,
         preacher_member_id: draft.preacher_member_id,
+        music_ministry_member_id: draft.music_ministry_member_id,
         current_block_id: draft.current_block_id,
         status: draft.status,
       });
       const ordered = [...draft.blocks].sort((a, b) => a.order_index - b.order_index);
       for (const b of ordered) {
+        const meta = blockTypes.find((t) => t.id === b.block_type_id);
+        const isSongMeta = meta?.code === 'song' || meta?.kind === 'song';
+        const isSermonMeta =
+          meta?.code === 'sermon' || (meta?.name ?? '').toLowerCase().includes('проповед');
+        let assigned_member_id = b.assigned_member_id;
+        if (isSermonMeta) assigned_member_id = draft.preacher_member_id ?? null;
+        else if (isSongMeta) assigned_member_id = draft.music_ministry_member_id ?? null;
         await patchServiceBlock(b.id, {
           title: b.title,
           block_type_id: b.block_type_id,
           duration_minutes: b.duration_minutes,
-          assigned_member_id: b.assigned_member_id,
+          assigned_member_id,
           song_id: b.song_id,
           content_json: b.content_json,
         });
@@ -830,7 +853,7 @@ export function ServicePlannerPage() {
   const leaderCandidates = useMemo(() => users.filter((u) => hasMinistryRole(u, 'Ведущий')), [users]);
   const preacherCandidates = useMemo(() => users.filter((u) => isPreacherCandidate(u)), [users]);
   const musicianDirectionCandidates = useMemo(
-    () => users.filter((u) => hasMinistryDirection(u, 'Музыкальное служение')),
+    () => users.filter((u) => isMusicMinistryCandidate(u)),
     [users],
   );
 
@@ -876,6 +899,12 @@ export function ServicePlannerPage() {
     const meta = getBlockTypeMeta(block);
     if (!meta) return false;
     return meta.code === 'sermon' || (meta.name ?? '').toLowerCase().includes('проповед');
+  }
+
+  function isSongBlock(block: ServicePlanBlock): boolean {
+    const meta = getBlockTypeMeta(block);
+    if (!meta) return false;
+    return meta.code === 'song' || meta.kind === 'song';
   }
 
   function poemHeading(block: ServicePlanBlock): string {
@@ -968,6 +997,11 @@ export function ServicePlannerPage() {
     if (isSermonBlock(block)) {
       const preacher = sermonPreacher(block);
       return preacher ? userLabel(preacher) : null;
+    }
+    if (isSongBlock(block)) {
+      const id = draft.music_ministry_member_id;
+      const m = id ? usersById.get(id) : null;
+      return m ? userLabel(m) : null;
     }
     const assigned = block.assigned_member_id ? usersById.get(block.assigned_member_id) : null;
     return assigned ? userLabel(assigned) : null;

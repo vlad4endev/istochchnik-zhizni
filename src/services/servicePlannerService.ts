@@ -42,6 +42,8 @@ export type PlannerPlanListItem = {
   is_archived: boolean;
   leader_member_id: number | null;
   preacher_member_id: number | null;
+  /** Ответственный за музыкальное служение — протягивается в блоки типа «Песня». */
+  music_ministry_member_id: number | null;
   total_duration_minutes: number;
   current_block_id: number | null;
   share_token: string;
@@ -112,6 +114,8 @@ export type PublicEditablePlannerPlanPayload = {
     leader_name: string | null;
     preacher_member_id: number | null;
     preacher_name: string | null;
+    music_ministry_member_id: number | null;
+    music_ministry_name: string | null;
   };
   blocks: Array<{
     id: number;
@@ -257,6 +261,9 @@ async function ensurePlannerSchema(): Promise<void> {
         `alter table public.service_plans add column if not exists last_edited_by_member_id integer references public.members (id) on delete set null`,
       );
       await query(`alter table public.service_plans add column if not exists last_edited_at timestamptz`);
+      await query(
+        `alter table public.service_plans add column if not exists music_ministry_member_id integer references public.members (id) on delete set null`,
+      );
 
       await query(
         `create table if not exists public.service_blocks (
@@ -575,6 +582,8 @@ function mapPlanRow(row: DbRecord): PlannerPlanListItem {
     is_archived: Boolean(row.is_archived),
     leader_member_id: row.leader_member_id == null ? null : Number(row.leader_member_id),
     preacher_member_id: row.preacher_member_id == null ? null : Number(row.preacher_member_id),
+    music_ministry_member_id:
+      row.music_ministry_member_id == null ? null : Number(row.music_ministry_member_id),
     total_duration_minutes: Number(row.total_duration_minutes ?? 0),
     current_block_id: row.current_block_id == null ? null : Number(row.current_block_id),
     share_token: String(row.share_token ?? ''),
@@ -596,6 +605,20 @@ function mapBlockRow(row: DbRecord): PlannerBlock {
     song_id: row.song_id == null ? null : Number(row.song_id),
     content_json: asObject(row.content_json),
   };
+}
+
+/** После смены ответственного за музыку в настройках плана — выставить всем блокам с типом kind=song. */
+async function syncSongBlocksMusicMinistryMember(planId: number, memberId: number | null): Promise<void> {
+  await ensurePlannerSchema();
+  await query(
+    `update public.service_blocks b
+     set assigned_member_id = $2
+     from public.block_types bt
+     where b.service_plan_id = $1
+       and bt.id = b.block_type_id
+       and bt.kind = 'song'`,
+    [planId, memberId],
+  );
 }
 
 function mapTemplateBlockRow(row: DbRecord): PlannerTemplateBlock {
@@ -700,7 +723,7 @@ export async function listPlans(input: {
   const { rows } = await query(
     `select
        p.id, p.template_id, p.service_date::text as service_date, p.start_time, p.status, p.is_archived,
-       p.leader_member_id, p.preacher_member_id, p.total_duration_minutes, p.current_block_id,
+       p.leader_member_id, p.preacher_member_id, p.music_ministry_member_id, p.total_duration_minutes, p.current_block_id,
        p.share_token::text as share_token, p.edit_token::text as edit_token,
        t.name as template_name,
        coalesce(count(b.id), 0) as blocks_count
@@ -720,7 +743,7 @@ export async function getPlanDetails(planId: number): Promise<PlannerPlanDetails
   const planRes = await query(
     `select
        p.id, p.template_id, p.service_date::text as service_date, p.start_time, p.status, p.is_archived,
-       p.leader_member_id, p.preacher_member_id, p.total_duration_minutes, p.current_block_id,
+       p.leader_member_id, p.preacher_member_id, p.music_ministry_member_id, p.total_duration_minutes, p.current_block_id,
        p.share_token::text as share_token, p.edit_token::text as edit_token,
        p.notes, p.created_at::text as created_at, p.updated_at::text as updated_at,
        p.last_edited_by_member_id,
@@ -840,6 +863,7 @@ export async function memberCanJoinServicePlanPresenceSession(
        and (
          p.leader_member_id = $2
          or p.preacher_member_id = $2
+         or p.music_ministry_member_id = $2
          or exists (
            select 1
            from public.members m
@@ -979,13 +1003,16 @@ export async function getEditablePlanByToken(token: string): Promise<PublicEdita
        p.notes,
        p.edit_token::text as edit_token,
        p.preacher_member_id,
+       p.music_ministry_member_id,
        t.name as template_name,
        coalesce(nullif(trim(concat(coalesce(leader.first_name, ''), ' ', coalesce(leader.last_name, ''))), ''), leader.name) as leader_name,
-       coalesce(nullif(trim(concat(coalesce(preacher.first_name, ''), ' ', coalesce(preacher.last_name, ''))), ''), preacher.name) as preacher_name
+       coalesce(nullif(trim(concat(coalesce(preacher.first_name, ''), ' ', coalesce(preacher.last_name, ''))), ''), preacher.name) as preacher_name,
+       coalesce(nullif(trim(concat(coalesce(music.first_name, ''), ' ', coalesce(music.last_name, ''))), ''), music.name) as music_ministry_name
      from public.service_plans p
      left join public.service_templates t on t.id = p.template_id
      left join public.members leader on leader.id = p.leader_member_id
      left join public.members preacher on preacher.id = p.preacher_member_id
+     left join public.members music on music.id = p.music_ministry_member_id
      where p.status = 'draft'
        and (
          (p.edit_token = $1::uuid and p.edit_token_issued_at >= now() - ($2::int * interval '1 day'))
@@ -1042,6 +1069,9 @@ export async function getEditablePlanByToken(token: string): Promise<PublicEdita
       leader_name: row.leader_name == null ? null : String(row.leader_name),
       preacher_member_id: row.preacher_member_id == null ? null : Number(row.preacher_member_id),
       preacher_name: row.preacher_name == null ? null : String(row.preacher_name),
+      music_ministry_member_id:
+        row.music_ministry_member_id == null ? null : Number(row.music_ministry_member_id),
+      music_ministry_name: row.music_ministry_name == null ? null : String(row.music_ministry_name),
     },
     blocks: blocksRes.rows.map((r) => {
       const x = r as DbRecord;
@@ -1492,6 +1522,7 @@ export async function patchPlan(
     is_archived: boolean;
     leader_member_id: number | null;
     preacher_member_id: number | null;
+    music_ministry_member_id: number | null;
     current_block_id: number | null;
     notes: string | null;
   }>,
@@ -1509,18 +1540,27 @@ export async function patchPlan(
   if (patch.is_archived !== undefined) push('is_archived = ?', patch.is_archived);
   if (patch.leader_member_id !== undefined) push('leader_member_id = ?', patch.leader_member_id);
   if (patch.preacher_member_id !== undefined) push('preacher_member_id = ?', patch.preacher_member_id);
+  if (patch.music_ministry_member_id !== undefined) {
+    push('music_ministry_member_id = ?', patch.music_ministry_member_id);
+  }
   if (patch.current_block_id !== undefined) push('current_block_id = ?', patch.current_block_id);
   if (patch.notes !== undefined) push('notes = ?', patch.notes);
   if (set.length === 0) return true;
   set.push('updated_at = now()');
   values.push(planId);
+  const shouldSyncSongAssignees = patch.music_ministry_member_id !== undefined;
+  const nextMusicId = patch.music_ministry_member_id;
   const res = await query(
     `update public.service_plans
      set ${set.join(', ')}
      where id = $${values.length}`,
     values,
   );
-  return (res.rowCount ?? 0) > 0;
+  const ok = (res.rowCount ?? 0) > 0;
+  if (ok && shouldSyncSongAssignees) {
+    await syncSongBlocksMusicMinistryMember(planId, nextMusicId ?? null);
+  }
+  return ok;
 }
 
 export async function deletePlan(planId: number): Promise<boolean> {

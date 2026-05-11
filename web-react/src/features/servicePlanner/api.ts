@@ -45,6 +45,8 @@ export type ServicePlanListItem = {
   is_archived: boolean;
   leader_member_id: number | null;
   preacher_member_id: number | null;
+  /** Ответственный за музыкальное служение (блоки «Песня»). */
+  music_ministry_member_id: number | null;
   total_duration_minutes: number;
   current_block_id: number | null;
   share_token: string;
@@ -115,6 +117,8 @@ export type EditableServicePlanPayload = {
     leader_name: string | null;
     preacher_member_id: number | null;
     preacher_name: string | null;
+    music_ministry_member_id: number | null;
+    music_ministry_name: string | null;
   };
   blocks: Array<{
     id: number;
@@ -253,6 +257,7 @@ export async function patchServicePlan(
     is_archived: boolean;
     leader_member_id: number | null;
     preacher_member_id: number | null;
+    music_ministry_member_id: number | null;
     current_block_id: number | null;
     notes: string | null;
   }>,
