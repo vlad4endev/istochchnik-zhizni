@@ -525,21 +525,21 @@ type DashboardQuickAction = {
   to: string;
   label: string;
   Icon: IconType;
-  /** Tailwind `bg-gradient-to-br` остаётся базовым, сюда передаём from/via/to. */
-  gradient: string;
-  /** Базовая тень — соответствует цветовому акценту. */
-  shadow: string;
-  /** Тень при наведении/фокусе — даёт ощущение «парения». */
-  glow: string;
+  /** Подложка иконки — мягкий тон, как у карточек дашборда. */
+  chipBg: string;
+  /** Тонкое внутреннее кольцо вокруг подложки иконки. */
+  chipRing: string;
+  /** Цвет самой иконки — насыщенный, но не «кричащий». */
+  iconColor: string;
   hideForParishioner?: boolean;
 };
 
 /**
- * Палитра кнопок подобрана под уже существующие карточки дашборда,
- * чтобы быстрая навигация визуально жила в одном дизайне:
- *  - Расписание → зелёный, как карточка «Событие» (#1A9A55 / #0F6636);
- *  - Отправить нужду → индиго, как карточка «Молимся сегодня» (#4A5FD5 / #3042A8);
- *  - Проповеди → бирюзовый, как карточка «Медиа» (#0E7E6A).
+ * Палитра иконок подобрана под уже существующие карточки дашборда —
+ * без кричащих градиентов, в общей сдержанной гамме проекта:
+ *  - Расписание → зелёный, как карточка «Событие»;
+ *  - Отправить нужду → бордовый primary (#7d3640) — фирменный цвет;
+ *  - Проповеди → бирюзовый, как карточка «Медиа».
  */
 const DASHBOARD_QUICK_ACTIONS: DashboardQuickAction[] = [
   {
@@ -547,18 +547,18 @@ const DASHBOARD_QUICK_ACTIONS: DashboardQuickAction[] = [
     to: '/events',
     label: 'Расписание',
     Icon: LuCalendarRange,
-    gradient: 'from-[#22A862] via-[#1A9A55] to-[#0F6636]',
-    shadow: 'shadow-[0_6px_16px_rgba(26,154,85,0.28)]',
-    glow: 'hover:shadow-[0_10px_24px_rgba(26,154,85,0.4)]',
+    chipBg: 'bg-[#EBF7EF] dark:bg-[#1A9A55]/14',
+    chipRing: 'ring-[#1A9A55]/20 dark:ring-[#1A9A55]/30',
+    iconColor: 'text-[#0F6636] dark:text-[#5BD18E]',
   },
   {
     id: 'send-need',
     to: '/prayer',
     label: 'Отправить нужду',
     Icon: LuHandHeart,
-    gradient: 'from-[#5A6FDD] via-[#4A5FD5] to-[#3042A8]',
-    shadow: 'shadow-[0_6px_16px_rgba(74,95,213,0.30)]',
-    glow: 'hover:shadow-[0_10px_24px_rgba(74,95,213,0.42)]',
+    chipBg: 'bg-[#F6EBED] dark:bg-[#C0415A]/16',
+    chipRing: 'ring-[#7d3640]/18 dark:ring-[#C0415A]/30',
+    iconColor: 'text-[#7d3640] dark:text-[#E5879A]',
     hideForParishioner: true,
   },
   {
@@ -566,9 +566,9 @@ const DASHBOARD_QUICK_ACTIONS: DashboardQuickAction[] = [
     to: '/sermons',
     label: 'Проповеди',
     Icon: LuMic,
-    gradient: 'from-[#13A088] via-[#0E7E6A] to-[#0A5A4C]',
-    shadow: 'shadow-[0_6px_16px_rgba(14,126,106,0.28)]',
-    glow: 'hover:shadow-[0_10px_24px_rgba(14,126,106,0.4)]',
+    chipBg: 'bg-[#E6F4F1] dark:bg-[#0E7E6A]/16',
+    chipRing: 'ring-[#0E7E6A]/20 dark:ring-[#0E7E6A]/30',
+    iconColor: 'text-[#0A5A4C] dark:text-[#4FD0B6]',
   },
 ];
 
@@ -615,46 +615,47 @@ function DashboardQuickActionsStrip({
             type="button"
             onClick={() => onNavigate(action.to)}
             className={[
-              /* База: горизонтальная пилюля на всех размерах */
-              'group relative flex w-full min-w-0 items-center justify-center gap-1.5 overflow-hidden rounded-full bg-gradient-to-br text-white ring-1 ring-white/15',
+              /* База — нейтральная «капсула» под общую палитру проекта */
+              'group relative flex w-full min-w-0 items-center justify-center gap-1.5 overflow-hidden rounded-full',
+              'border border-stone-200/70 bg-[var(--surface-elevated)] text-[var(--text)] shadow-[var(--shadow-card)]',
+              'dark:border-white/[0.08] dark:bg-[var(--surface-elevated)]',
               /* Поведение */
-              'transition-[transform,box-shadow] duration-200 ease-out tap-highlight-transparent touch-manipulation outline-none',
-              'hover:-translate-y-0.5 focus-visible:-translate-y-0.5 focus-visible:ring-2 focus-visible:ring-white/70 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)]',
+              'transition-[transform,background-color,box-shadow,border-color] duration-200 ease-out tap-highlight-transparent touch-manipulation outline-none',
+              'hover:-translate-y-0.5 hover:bg-stone-50 hover:border-stone-300/80',
+              'dark:hover:bg-white/[0.04] dark:hover:border-white/[0.12]',
+              'focus-visible:-translate-y-0.5 focus-visible:ring-2 focus-visible:ring-[color:var(--a11y-focus-ring,var(--primary))] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)]',
               'active:translate-y-0 active:scale-[0.98] motion-reduce:transition-none motion-reduce:hover:translate-y-0 motion-reduce:active:scale-100',
-              /* Размер: компактный на мобильном, шире на десктопе */
+              /* Размер: один ряд на всех ширинах, плотная пилюля на мобильном */
               'min-h-[40px] px-2 py-1.5',
               'sm:min-h-[44px] sm:gap-2.5 sm:px-3.5 sm:py-2',
               'lg:min-h-[48px] lg:gap-3 lg:px-5 lg:py-2.5',
-              action.gradient,
-              action.shadow,
-              action.glow,
             ].join(' ')}
           >
-            {/* Глянцевый «свет» при наведении */}
-            <span
-              aria-hidden
-              className="pointer-events-none absolute inset-y-0 left-0 w-[55%] -translate-x-full skew-x-[-18deg] bg-gradient-to-r from-transparent via-white/30 to-transparent transition-transform duration-700 ease-out group-hover:translate-x-[220%] motion-reduce:hidden"
-            />
             <span
               className={[
-                'relative grid shrink-0 place-items-center rounded-full bg-white/20 ring-1 ring-white/25 backdrop-blur-sm transition-colors group-hover:bg-white/30',
+                'grid shrink-0 place-items-center rounded-full ring-1 ring-inset transition-colors',
                 'h-6 w-6 sm:h-8 sm:w-8 lg:h-9 lg:w-9',
+                action.chipBg,
+                action.chipRing,
               ].join(' ')}
             >
               <Icon
-                className="h-[13px] w-[13px] drop-shadow-[0_1px_1px_rgba(0,0,0,0.18)] sm:h-4 sm:w-4 lg:h-[18px] lg:w-[18px]"
+                className={[
+                  action.iconColor,
+                  'h-[13px] w-[13px] sm:h-4 sm:w-4 lg:h-[18px] lg:w-[18px]',
+                ].join(' ')}
                 strokeWidth={2.25}
                 aria-hidden
               />
             </span>
             <span
               className={[
-                'relative min-w-0 max-w-full font-bold leading-tight drop-shadow-[0_1px_1px_rgba(0,0,0,0.15)]',
-                /* Мобильный: 10–11 px, до 2 строк, ровный перенос длинных подписей */
-                'text-[10.5px] line-clamp-2 [overflow-wrap:anywhere]',
-                /* sm+: одной строкой, чуть крупнее */
-                'sm:whitespace-nowrap sm:text-[12.5px] sm:leading-none sm:line-clamp-none sm:[overflow-wrap:normal]',
-                'lg:text-sm',
+                'min-w-0 max-w-full font-semibold leading-tight tracking-tight',
+                /* Мобильный: 11 px, одна строка с многоточием на крайне узких экранах */
+                'truncate text-[11px]',
+                /* sm+: чуть крупнее */
+                'sm:text-[12.5px] sm:leading-none',
+                'lg:text-[13.5px]',
               ].join(' ')}
             >
               {action.label}
