@@ -1678,34 +1678,32 @@ export function ChatInput({
 
       {/* Swipe-to-reply preview */}
       {replyingTo ? (
-        <div className="mb-2 overflow-hidden rounded-2xl border border-gray-100 bg-[var(--surface-elevated)] shadow-sm">
-          <div className="flex items-start gap-3 p-3">
-            <div className="w-1 self-stretch rounded-full bg-blue-500" aria-hidden />
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-xs font-semibold text-[var(--text)]">
-                {replyingTo.sender_name || 'Сообщение'}
-              </p>
-              <p className="mt-0.5 truncate text-sm text-[var(--text-secondary)]">
-                {String(replyingTo.content || '').trim() || '—'}
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={() => setReplyingTo(null)}
-              className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[var(--text-secondary)] transition-colors duration-200 hover:bg-[var(--surface)]"
-              aria-label="Отменить ответ"
-              title="Отменить"
-            >
-              <LuX />
-            </button>
+        <div className="mb-1.5 flex items-start gap-2 border-b border-stone-200/45 pb-2 dark:border-white/12">
+          <div className="mt-0.5 w-0.5 shrink-0 self-stretch rounded-full bg-blue-500" aria-hidden />
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-[11px] font-semibold uppercase tracking-wide text-[var(--text-secondary)]">
+              {replyingTo.sender_name || 'Сообщение'}
+            </p>
+            <p className="mt-0.5 truncate text-sm text-[var(--text)]">
+              {String(replyingTo.content || '').trim() || '—'}
+            </p>
           </div>
+          <button
+            type="button"
+            onClick={() => setReplyingTo(null)}
+            className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[var(--text-secondary)] transition-colors duration-200 hover:bg-black/5 dark:hover:bg-white/10"
+            aria-label="Отменить ответ"
+            title="Отменить"
+          >
+            <LuX />
+          </button>
         </div>
       ) : null}
 
       {pendingImages.length > 0 ? (
-        <div className="mb-2 overflow-hidden rounded-2xl border border-gray-100 bg-[var(--surface-elevated)] shadow-sm">
-          <div className="flex items-start gap-3 p-3">
-            <div className="grid min-w-0 flex-1 grid-cols-3 gap-2">
+        <div className="mb-1.5 border-b border-stone-200/45 pb-2 dark:border-white/12">
+          <div className="flex items-start gap-2">
+            <div className="grid min-w-0 flex-1 grid-cols-3 gap-1.5 sm:grid-cols-4">
               {pendingImages.slice(0, 6).map((item, idx) => (
                 <button
                   key={`${item.file.name}-${idx}`}
@@ -1715,7 +1713,7 @@ export function ChatInput({
                     setPreviewSrc(item.previewUrl);
                     setPreviewMediaKind(item.isImage ? 'image' : 'video');
                   }}
-                  className="aspect-square overflow-hidden rounded-xl bg-[var(--surface)] ring-1 ring-gray-200/70"
+                  className="aspect-square overflow-hidden rounded-lg bg-black/5 dark:bg-white/10"
                   aria-label={item.isImage ? `Открыть фото ${idx + 1}` : `Открыть видео ${idx + 1}`}
                 >
                   {item.previewUrl ? (
@@ -1745,23 +1743,22 @@ export function ChatInput({
                 setPreviewMediaKind('image');
                 if (fileInputRef.current) fileInputRef.current.value = '';
               }}
-              className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[var(--text-secondary)] transition-colors duration-200 hover:bg-[var(--surface)]"
+              className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[var(--text-secondary)] transition-colors duration-200 hover:bg-black/5 dark:hover:bg-white/10"
               aria-label="Убрать вложения"
               title="Убрать вложения"
             >
               <LuX />
             </button>
           </div>
-          <div className="px-3 pb-3 text-xs text-[var(--text-secondary)]">
-            Выбрано медиа: {pendingImages.length} (фото до 20MB, видео до 1GB). Можно добавить подпись и отправить одним
-            сообщением.
-          </div>
+          <p className="mt-1.5 text-[11px] leading-snug text-[var(--text-secondary)]">
+            Выбрано: {pendingImages.length}. Подпись и отправка — ниже.
+          </p>
         </div>
       ) : pending ? (
-        <div className="mb-2 overflow-hidden rounded-2xl border border-gray-100 bg-[var(--surface-elevated)] shadow-sm">
-          <div className="flex items-start gap-3 p-3">
+        <div className="mb-1.5 border-b border-stone-200/45 pb-2 dark:border-white/12">
+          <div className="flex items-start gap-2">
             {pending.isImage && pending.previewUrl ? (
-              <div className="h-14 w-14 overflow-hidden rounded-xl bg-[var(--surface)] ring-1 ring-gray-200/70">
+              <div className="h-12 w-12 shrink-0 overflow-hidden rounded-lg bg-black/5 dark:bg-white/10">
                 <button
                   type="button"
                   onClick={() => {
@@ -1775,7 +1772,7 @@ export function ChatInput({
                 </button>
               </div>
             ) : (
-              <div className="grid h-14 w-14 place-items-center rounded-xl bg-[var(--surface)] text-[var(--text-secondary)] ring-1 ring-gray-200/70">
+              <div className="grid h-12 w-12 shrink-0 place-items-center rounded-lg bg-black/5 text-[var(--text-secondary)] dark:bg-white/10">
                 <LuPaperclip />
               </div>
             )}
@@ -1784,9 +1781,6 @@ export function ChatInput({
               <p className="truncate text-sm font-semibold text-[var(--text)]">{pending.file.name}</p>
               <p className="mt-0.5 text-xs text-[var(--text-secondary)]">
                 {pending.isImage ? 'Фото' : 'Файл'} · {formatBytes(pending.file.size)}
-              </p>
-              <p className="mt-1 text-xs text-[var(--text-muted)]">
-                Можно добавить подпись и нажать «Отправить»
               </p>
             </div>
 
@@ -1799,7 +1793,7 @@ export function ChatInput({
                 setPreviewMediaKind('image');
                 if (fileInputRef.current) fileInputRef.current.value = '';
               }}
-              className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[var(--text-secondary)] transition-colors duration-200 hover:bg-[var(--surface)]"
+              className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[var(--text-secondary)] transition-colors duration-200 hover:bg-black/5 dark:hover:bg-white/10"
               aria-label="Убрать вложение"
               title="Убрать вложение"
             >
@@ -1854,7 +1848,7 @@ export function ChatInput({
       ) : null}
 
       {uploading ? (
-        <div className="mb-2 flex items-center justify-between gap-3 rounded-2xl border border-gray-100 bg-[var(--surface-elevated)] px-4 py-3 shadow-sm">
+        <div className="mb-1.5 flex items-center justify-between gap-3 border-b border-stone-200/45 pb-2 dark:border-white/12">
           <div className="min-w-0 flex flex-1 items-center gap-3">
             {uploading.kind === 'video_note' ? (
               <span
@@ -1906,7 +1900,7 @@ export function ChatInput({
               setUploadPct(0);
               if (fileInputRef.current) fileInputRef.current.value = '';
             }}
-            className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[var(--text-secondary)] transition-colors duration-200 hover:bg-[var(--surface)]"
+            className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[var(--text-secondary)] transition-colors duration-200 hover:bg-black/5 dark:hover:bg-white/10"
             aria-label="Отменить"
             title="Отменить"
           >
@@ -2008,7 +2002,7 @@ export function ChatInput({
 
       <div className="relative w-full min-w-0">
         <div
-          className="tg-input-area tg-composer-pill-layout flex w-full min-w-0 gap-2 py-2"
+          className="tg-input-area tg-composer-pill-layout flex w-full min-w-0 gap-1.5 py-1 sm:gap-2 sm:py-1.5"
           onDragOver={(e) => {
             if (!canSendAttachments) return;
             e.preventDefault();
@@ -2072,11 +2066,10 @@ export function ChatInput({
               aria-haspopup="menu"
               title="Вложения"
               className={[
-                'flex h-11 w-11 shrink-0 items-center justify-center rounded-full border transition-colors',
-                'border-white/45 bg-white/35 text-stone-600 shadow-sm backdrop-blur-md',
-                'hover:bg-white/50 hover:text-stone-800 active:scale-[0.98]',
+                'flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition-colors',
+                'text-stone-600 hover:bg-black/[0.06] active:scale-[0.98]',
                 'disabled:pointer-events-none disabled:opacity-45',
-                'dark:border-white/15 dark:bg-white/10 dark:text-stone-200 dark:hover:bg-white/15',
+                'dark:text-stone-200 dark:hover:bg-white/10',
               ].join(' ')}
             >
               <LuPaperclip size={20} strokeWidth={2} aria-hidden />
@@ -2085,12 +2078,11 @@ export function ChatInput({
 
           <div
             className={[
-              'tg-input-container tg-composer-pill-layout tg-composer-pill-bubble relative flex min-h-[44px] min-w-0 flex-1 overflow-hidden !gap-0 !rounded-[22px] !border !p-0 !shadow-sm sm:!rounded-3xl',
-              'border-white/45 bg-white/40 backdrop-blur-xl',
-              'transition-[box-shadow,border-color,min-height] duration-200 ease-out',
-              'focus-within:border-[color:var(--tg-primary)]/50',
-              'focus-within:shadow-[0_0_0_1px_rgba(125,54,64,0.18)]',
-              'dark:border-white/12 dark:bg-black/25',
+              'tg-input-container tg-composer-pill-layout tg-composer-pill-bubble relative flex min-h-[44px] min-w-0 flex-1 overflow-hidden !gap-0 !rounded-2xl !border-0 !p-0 !shadow-none sm:!rounded-[22px]',
+              'bg-black/[0.04] backdrop-blur-[2px]',
+              'transition-[background-color,min-height] duration-200 ease-out',
+              'focus-within:bg-black/[0.07]',
+              'dark:bg-white/[0.06] dark:focus-within:bg-white/[0.09]',
             ].join(' ')}
           >
             {/*
