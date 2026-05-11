@@ -29,9 +29,7 @@ export default function DashboardPage() {
   return (
     <div className="dashboard-adaptive flex min-h-0 flex-1 flex-col bg-[var(--surface)]">
       <div className={sectionHeroStickyClassNested}>
-        <div className="mx-auto w-full max-w-7xl">
-          <PageHeader title="Главная" />
-        </div>
+        <PageHeader title="Главная" />
       </div>
 
       <div className="mx-auto w-full max-w-7xl px-3 py-3 sm:px-4 md:px-6 lg:px-8 xl:px-10">

@@ -930,11 +930,10 @@ function DashboardMain() {
 
   return (
     <div className="dashboard-adaptive flex min-h-0 flex-1 flex-col bg-[var(--surface)]">
+      <div className={sectionHeroStickyClassNested}>
+        <PageHeader title="Главная" />
+      </div>
       <div className="mx-auto flex min-h-0 w-full max-w-7xl flex-1 flex-col px-3 sm:px-4 shell:px-6 md:px-8 xl:px-10 2xl:max-w-[1480px]">
-        <div className={sectionHeroStickyClassNested}>
-          <PageHeader title="Главная" />
-        </div>
-
         <div className="dashboard-scroll-pane min-h-0 flex-1 overflow-y-auto [webkit-overflow-scrolling:touch] max-lg:pb-[calc(3.5rem+0.5rem)] lg:pb-[max(2rem,env(safe-area-inset-bottom,0px))]">
         <div className="hidden lg:block">
           <div className="grid grid-flow-row-dense grid-cols-12 gap-4 px-0 py-4 xl:gap-5">

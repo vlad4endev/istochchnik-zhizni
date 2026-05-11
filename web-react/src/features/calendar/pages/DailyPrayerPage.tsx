@@ -927,7 +927,7 @@ export function DailyPrayerPage() {
         <PageHeader title="Молитва" />
 
       {/* Чип даты */}
-      <div className="pt-3">
+      <div className="px-3 pt-3 sm:px-4 shell:px-6 md:px-6 lg:px-8 xl:px-10">
         <button
           type="button"
           onClick={() => setCalendarExpanded((e) => !e)}

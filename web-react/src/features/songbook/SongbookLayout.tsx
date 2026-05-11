@@ -13,7 +13,7 @@ function SongbookShell() {
         stageMode ? 'songbook-stage bg-[#030303] text-zinc-100' : 'bg-[var(--surface)] text-[var(--text)]',
       ].join(' ')}
     >
-      <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-3 pb-2 pt-1 md:px-4 md:pt-1.5">
+      <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden pb-2 pt-1">
         <Outlet />
       </div>
     </div>

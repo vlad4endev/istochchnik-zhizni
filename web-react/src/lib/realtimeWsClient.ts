@@ -23,9 +23,11 @@ let stopped = false;
 let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
 /** После обрыва: номер «волны» переподключения (для wasReconnected). */
 let reconnectGeneration = 0;
-const MIN_RECONNECT_MS = 1000;
+const BASE_RECONNECT_MS = 1000;
 const MAX_RECONNECT_MS = 30_000;
-let reconnectBackoffMs = MIN_RECONNECT_MS;
+/** Сколько подряд неудачных циклов переподключения (сброс при успешном open и при выходе PWA на передний план). */
+let reconnectAttempts = 0;
+const MAX_RECONNECT_ATTEMPTS = 10;
 let stableOpenTimer: ReturnType<typeof setTimeout> | undefined;
 /** Одноразовая подсказка при 1006 — типичная причина: реверс-прокси без WebSocket Upgrade. */
 let lastAbnormalCloseHintMs = 0;
@@ -72,7 +74,7 @@ function attachGlobalNetworkListeners(): void {
   window.addEventListener('online', () => {
     if (stopped || !authToken) return;
     if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) return;
-    reconnectBackoffMs = MIN_RECONNECT_MS;
+    reconnectAttempts = 0;
     clearTimers();
     reconnectGeneration = 0;
     openSocket();
@@ -90,11 +92,21 @@ function attachGlobalNetworkListeners(): void {
   });
 
   document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') {
+      if (reconnectTimer !== undefined) {
+        clearTimeout(reconnectTimer);
+        reconnectTimer = undefined;
+        logInfo('app backgrounded: отменено запланированное переподключение');
+      }
+      return;
+    }
     if (document.visibilityState !== 'visible') return;
     if (stopped || !authToken) return;
-    if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) return;
+    const disconnected = !ws || ws.readyState === WebSocket.CLOSED;
+    if (!disconnected) return;
     if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
-    reconnectBackoffMs = MIN_RECONNECT_MS;
+    logInfo('app foregrounded: переподключение после фона');
+    reconnectAttempts = 0;
     clearTimers();
     reconnectGeneration = 0;
     openSocket();
@@ -193,21 +205,35 @@ function dispatchOpen(detail: OpenDetail): void {
   }
 }
 
+/** Экспоненциальный backoff: 1s, 2s, 4s … до 30s + джиттер ±20%. */
+function getReconnectDelayMs(): number {
+  const delay = Math.min(BASE_RECONNECT_MS * Math.pow(2, reconnectAttempts), MAX_RECONNECT_MS);
+  const jitter = delay * 0.2 * (Math.random() * 2 - 1);
+  return Math.max(0, Math.floor(delay + jitter));
+}
+
 function scheduleReconnect(): void {
   if (stopped || !authToken) return;
   clearReconnectTimer();
   clearStableOpenTimer();
   clearAllSocketTimers();
+  if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
+    logInfo('reconnect: вкладка/ PWA в фоне — не подключаемся, ждём visible');
+    return;
+  }
   if (typeof navigator !== 'undefined' && navigator.onLine === false) {
     logInfo('reconnect: ждём online (offline)');
     return;
   }
-  const jitter = Math.random() * 500;
-  const delay = Math.min(reconnectBackoffMs + jitter, MAX_RECONNECT_MS + 500);
-  logInfo(`reconnect: через ${Math.round(delay)}ms (база backoff ${reconnectBackoffMs}ms)`);
-  reconnectBackoffMs = Math.min(reconnectBackoffMs * 2, MAX_RECONNECT_MS);
+  if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+    logWarn(`reconnect: достигнут лимит ${MAX_RECONNECT_ATTEMPTS} попыток — ждём передний план / сеть / новый вход`);
+    return;
+  }
+  const delay = getReconnectDelayMs();
+  logInfo(`reconnect: через ${delay}ms (попытка ${reconnectAttempts + 1}/${MAX_RECONNECT_ATTEMPTS})`);
   reconnectTimer = setTimeout(() => {
     reconnectTimer = undefined;
+    reconnectAttempts += 1;
     reconnectGeneration += 1;
     openSocket();
   }, delay);
@@ -287,6 +313,7 @@ function openSocket(): void {
   socketTimers.set(socket, timers);
 
   socket.onopen = () => {
+    reconnectAttempts = 0;
     const wasReconnected = reconnectGeneration > 0;
     logInfo('open', { wasReconnected });
     try {

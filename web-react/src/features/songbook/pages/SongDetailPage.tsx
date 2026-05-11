@@ -125,7 +125,7 @@ export function SongDetailPage() {
       <div className={`${sectionHeroStickyClass} z-30`}>
         <PageHeader title={s.title} />
       </div>
-      <div className="sticky top-0 z-20 border-b border-[var(--sd-border)] bg-[var(--sd-surface)]/92 px-3 py-2 backdrop-blur md:px-0">
+      <div className="sticky top-0 z-20 border-b border-[var(--sd-border)] bg-[var(--sd-surface)]/92 px-3 py-2 backdrop-blur md:px-4">
         <div className="flex min-h-[44px] items-center gap-2">
           <Link
             to="/songbook"
@@ -311,7 +311,7 @@ export function SongDetailPage() {
         </>
       ) : null}
 
-      <main className="min-h-0 flex-1 overflow-y-auto px-3 py-3 [webkit-overflow-scrolling:touch] md:px-0">
+      <main className="min-h-0 flex-1 overflow-y-auto px-3 py-3 [webkit-overflow-scrolling:touch] md:px-4">
         <LyricsWithChords
           text={effectiveContent}
           transposeSemitones={currentShift}

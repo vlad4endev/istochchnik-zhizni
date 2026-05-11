@@ -95,7 +95,7 @@ export function SongbookPage() {
         <div className={sectionHeroStickyClass}>
           <PageHeader title="Песенник" />
         </div>
-        <div className="flex-shrink-0 border-b border-[var(--sb-border)] bg-[var(--sb-surface)]/95 px-0 py-1.5 backdrop-blur">
+        <div className="flex-shrink-0 border-b border-[var(--sb-border)] bg-[var(--sb-surface)]/95 px-3 py-1.5 backdrop-blur md:px-4">
           <div className="flex items-center gap-2">
             <div className="relative min-w-0 flex-1">
               <LuSearch
@@ -145,7 +145,9 @@ export function SongbookPage() {
             </button>
           </div>
         </div>
-        <SongListSkeleton />
+        <div className="px-3 md:px-4">
+          <SongListSkeleton />
+        </div>
       </div>
     );
   }
@@ -155,7 +157,7 @@ export function SongbookPage() {
         <div className={sectionHeroStickyClass}>
           <PageHeader title="Песенник" />
         </div>
-        <div className="flex-shrink-0 border-b border-[var(--sb-border)] bg-[var(--sb-surface)]/95 px-0 py-1.5 backdrop-blur">
+        <div className="flex-shrink-0 border-b border-[var(--sb-border)] bg-[var(--sb-surface)]/95 px-3 py-1.5 backdrop-blur md:px-4">
           <div className="flex items-center gap-2">
             <div className="relative min-w-0 flex-1">
               <LuSearch
@@ -205,7 +207,7 @@ export function SongbookPage() {
             </button>
           </div>
         </div>
-        <p className="text-sm text-[var(--sb-error)]">Не удалось загрузить каталог.</p>
+        <p className="px-3 text-sm text-[var(--sb-error)] md:px-4">Не удалось загрузить каталог.</p>
       </div>
     );
   }
@@ -215,7 +217,7 @@ export function SongbookPage() {
       <div className={sectionHeroStickyClass}>
         <PageHeader title="Песенник" />
       </div>
-      <div className="flex-shrink-0 border-b border-[var(--sb-border)] bg-[var(--sb-surface)]/95 px-0 py-1.5 backdrop-blur">
+      <div className="flex-shrink-0 border-b border-[var(--sb-border)] bg-[var(--sb-surface)]/95 px-3 py-1.5 backdrop-blur md:px-4">
         <div className="flex items-center gap-2">
           <div className="relative min-w-0 flex-1">
             <LuSearch
@@ -267,7 +269,7 @@ export function SongbookPage() {
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto [webkit-overflow-scrolling:touch] pt-1">
+      <div className="min-h-0 flex-1 overflow-y-auto px-3 [webkit-overflow-scrolling:touch] pt-1 md:px-4">
       <ul className="overflow-hidden rounded-xl border border-[var(--sb-border)] bg-[var(--sb-surface-elevated)]">
         {rows.map((s, idx) => (
           <li key={s.id} className="border-b border-[var(--sb-border)] last:border-b-0">

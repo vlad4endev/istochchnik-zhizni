@@ -936,12 +936,13 @@ export function StudioEditor() {
   const s = songQ.data;
 
   return (
-    <div
-      className={`mx-auto flex w-full max-w-[1520px] flex-col gap-4 px-2 sm:px-3 md:px-4 max-lg:pb-[5.75rem] ${shell.page}`}
-    >
+    <>
       <div className={sectionHeroStickyClass}>
         <PageHeader title={s.title} />
       </div>
+      <div
+        className={`mx-auto flex w-full max-w-[1520px] flex-col gap-4 px-2 sm:px-3 md:px-4 max-lg:pb-[5.75rem] ${shell.page}`}
+      >
       <SmartImportModal
         open={importOpen}
         onClose={() => {
@@ -1803,6 +1804,7 @@ export function StudioEditor() {
           </div>
         </div>
       ) : null}
-    </div>
+      </div>
+    </>
   );
 }
