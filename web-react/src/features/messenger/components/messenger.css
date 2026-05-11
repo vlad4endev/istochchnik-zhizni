@@ -2298,19 +2298,38 @@ html.dark .msg-quick-reaction:hover {
       position: fixed !important;
       left: 0;
       right: 0;
-      top: max(0px, var(--visual-viewport-offset, 0px));
-      bottom: auto;
+      top: 0;
       width: auto;
-      height: var(--viewport-height, 100dvh);
-      max-height: var(--viewport-height, 100dvh);
+      height: var(--viewport-height, 100dvh) !important;
+      max-height: var(--viewport-height, 100dvh) !important;
+      min-height: var(--viewport-height, 100dvh) !important;
       transform: none !important;
       overflow: hidden;
       box-sizing: border-box;
-      display: grid;
-      grid-template-rows: auto minmax(0, 1fr) auto;
+      /* Grid внутри fixed + клавиатура на части WebKit даёт коллапс строк; column-flex стабильнее. */
+      display: flex !important;
+      flex-direction: column !important;
+      flex-wrap: nowrap !important;
+      align-items: stretch !important;
+      justify-content: flex-start !important;
       background: var(--tg-bg);
       padding-left: env(safe-area-inset-left, 0px);
       padding-right: env(safe-area-inset-right, 0px);
+    }
+
+    html[data-chat-open="1"] .tg-main--visible .tg-chat-window > header.chat-header {
+      flex: 0 0 auto;
+      position: relative !important;
+      top: auto !important;
+    }
+
+    html[data-chat-open="1"] .tg-main--visible .tg-chat-window > .tg-chat-window__body {
+      flex: 1 1 0% !important;
+      min-height: 0 !important;
+      max-height: none !important;
+      overflow: hidden !important;
+      display: flex !important;
+      flex-direction: column !important;
     }
 
     html[data-chat-open="1"] .tg-main--visible .tg-chat-window > .tg-chat-window__composer {
@@ -2391,35 +2410,45 @@ html.dark .msg-quick-reaction:hover {
       position: fixed !important;
       left: 0;
       right: 0;
-      top: max(0px, var(--visual-viewport-offset, 0px));
-      bottom: auto;
+      top: 0;
       width: auto;
-      height: var(--viewport-height, 100dvh);
-      min-height: 0;
-      max-height: var(--viewport-height, 100dvh);
+      height: var(--viewport-height, 100dvh) !important;
+      max-height: var(--viewport-height, 100dvh) !important;
+      min-height: var(--viewport-height, 100dvh) !important;
       transform: none !important;
       overflow: hidden;
       overflow-x: clip;
       box-sizing: border-box;
-      display: grid;
-      grid-template-rows: auto minmax(0, 1fr) auto;
+      display: flex !important;
+      flex-direction: column !important;
+      flex-wrap: nowrap !important;
+      align-items: stretch !important;
+      justify-content: flex-start !important;
       background: var(--tg-bg);
       padding-top: env(safe-area-inset-top, 0px);
       padding-left: env(safe-area-inset-left, 0px);
       padding-right: env(safe-area-inset-right, 0px);
     }
 
-    html[data-chat-open="1"] .tg-main--visible .tg-chat-window > header,
-    html[data-chat-open="1"] .tg-chat-window > header {
-      position: sticky;
-      top: 0;
+    html[data-chat-open="1"] .tg-main--visible .tg-chat-window > header.chat-header {
+      flex: 0 0 auto;
+      position: relative !important;
+      top: auto !important;
       z-index: 40;
+    }
+
+    html[data-chat-open="1"] .tg-main--visible .tg-chat-window > .tg-chat-window__body {
+      flex: 1 1 0% !important;
+      min-height: 0 !important;
+      max-height: none !important;
+      overflow: hidden !important;
+      display: flex !important;
+      flex-direction: column !important;
     }
 
     html[data-chat-open="1"] .tg-main--visible .tg-chat-window > .tg-chat-window__composer,
     html[data-chat-open="1"] .tg-chat-window > .tg-chat-window__composer {
-      /* position:sticky внутри display:grid + overflow:hidden не работает на iOS — заменено на relative.
-         Composer уже находится в последней строке grid-template-rows (auto), поэтому всегда внизу. */
+      /* Колонка flex: композер всегда внизу окна; не полагаемся на grid при клавиатуре (iPhone 13 Pro / WebKit). */
       position: relative;
       z-index: 40;
       padding-left: 0.75rem;
