@@ -28,8 +28,10 @@ const MAX_RECONNECT_MS = 30_000;
 /** Сколько подряд неудачных циклов переподключения (сброс при успешном open и при выходе PWA на передний план). */
 let reconnectAttempts = 0;
 const MAX_RECONNECT_ATTEMPTS = 10;
+/** Совпадает с `RECONNECT_COOLDOWN_AFTER_UNSTABLE_MS` на сервере при 1008 rate limit. */
+const SERVER_RECONNECT_PAUSE_MS = 30_000;
 let stableOpenTimer: ReturnType<typeof setTimeout> | undefined;
-/** Одноразовая подсказка при 1006 — типичная причина: реверс-прокси без WebSocket Upgrade. */
+/** Редкий лог при частых 1006 (не спамить консоль на фоне iOS). */
 let lastAbnormalCloseHintMs = 0;
 
 /** Активный чат — повторный `join` сразу после auth (вкладка / восстановление WS). */
@@ -96,7 +98,7 @@ function attachGlobalNetworkListeners(): void {
       if (reconnectTimer !== undefined) {
         clearTimeout(reconnectTimer);
         reconnectTimer = undefined;
-        logInfo('app backgrounded: отменено запланированное переподключение');
+        logInfo('фон: отменено отложенное переподключение');
       }
       return;
     }
@@ -105,7 +107,7 @@ function attachGlobalNetworkListeners(): void {
     const disconnected = !ws || ws.readyState === WebSocket.CLOSED;
     if (!disconnected) return;
     if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
-    logInfo('app foregrounded: переподключение после фона');
+    logInfo('передний план: восстановление WebSocket');
     reconnectAttempts = 0;
     clearTimers();
     reconnectGeneration = 0;
@@ -218,7 +220,7 @@ function scheduleReconnect(): void {
   clearStableOpenTimer();
   clearAllSocketTimers();
   if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
-    logInfo('reconnect: вкладка/ PWA в фоне — не подключаемся, ждём visible');
+    logInfo('reconnect: вкладка в фоне — ждём возврата на экран');
     return;
   }
   if (typeof navigator !== 'undefined' && navigator.onLine === false) {
@@ -289,7 +291,7 @@ async function refreshAccessToken(): Promise<void> {
 function openSocket(): void {
   if (stopped || !authToken) return;
   if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
-    logInfo('open: страница в фоне — сокет не открываем до visible');
+    logInfo('open: страница в фоне — подключение отложено');
     return;
   }
   // Первая строка: снимаем ВСЕ heartbeat старых экземпляров (reconnect-шторм,
@@ -363,12 +365,12 @@ function openSocket(): void {
       }, 35_000);
     }, 20_000);
 
-    // Сбрасываем backoff только после устойчивого соединения >10 секунд.
+    // Через 10 с без разрыва обнуляем «волну» reconnect — подписчики видят wasReconnected=false для новых действий.
     clearStableOpenTimer();
     stableOpenTimer = setTimeout(() => {
       if (ws === socket && socket.readyState === WebSocket.OPEN) {
         reconnectGeneration = 0;
-        logInfo('connection stable: reconnect generation reset');
+        logInfo('соединение стабильно: сброс счётчика переподключений');
       }
       stableOpenTimer = undefined;
     }, 10_000);
@@ -418,7 +420,7 @@ function openSocket(): void {
       if (now - lastAbnormalCloseHintMs > 120_000) {
         lastAbnormalCloseHintMs = now;
         logWarn(
-          'разрыв до установки WS (1006): проверьте nginx — для /api нужны Upgrade и Connection (см. deploy/nginx-realtime-ws.snippet)',
+          'код 1006 (нет закрытия от сервера): часто фон iOS/WebView или прокси без WebSocket Upgrade',
           { url: resolveRealtimeWebSocketUrl() },
         );
       }
@@ -426,7 +428,7 @@ function openSocket(): void {
     if (ev.code === 1008) {
       const reason = String(ev.reason ?? '');
       if (/too many reconnects|please wait/i.test(reason)) {
-        logWarn('сервер: пауза переподключений (rate limit), повтор через 30s');
+        logWarn(`сервер запросил паузу переподключений — повтор через ${SERVER_RECONNECT_PAUSE_MS / 1000} с`);
         reconnectAttempts = MAX_RECONNECT_ATTEMPTS;
         clearReconnectTimer();
         reconnectTimer = setTimeout(() => {
@@ -434,7 +436,7 @@ function openSocket(): void {
           reconnectAttempts = 0;
           reconnectGeneration += 1;
           openSocket();
-        }, 30_000);
+        }, SERVER_RECONNECT_PAUSE_MS);
         return;
       }
       logWarn('auth rejected, refreshing token before reconnect');

@@ -219,16 +219,13 @@ function recordAbnormalClose(memberId: number): void {
   }
 }
 
-function unstableRecentDisconnectCount(memberId: number): number {
+/** Больше порога разрывов 1006 за окно — новое подключение в течение cooldown отклоняем. */
+function isMemberUnstableForCooldown(memberId: number): boolean {
   const now = Date.now();
   const windowStart = now - UNSTABLE_CLOSE_WINDOW_MS;
   const prev = abnormalCloseByMember.get(memberId) ?? [];
-  return prev.filter((ts) => ts >= windowStart).length;
-}
-
-/** Больше порога разрывов 1006 за окно — новое подключение в течение cooldown отклоняем. */
-function isMemberUnstableForCooldown(memberId: number): boolean {
-  return unstableRecentDisconnectCount(memberId) > UNSTABLE_CLOSE_THRESHOLD;
+  const recent = prev.filter((ts) => ts >= windowStart).length;
+  return recent > UNSTABLE_CLOSE_THRESHOLD;
 }
 
 const authFailCleanupTimer = setInterval(() => {

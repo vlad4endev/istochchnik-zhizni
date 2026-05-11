@@ -934,7 +934,7 @@ function DashboardMain() {
         <PageHeader title="Главная" />
       </div>
       <div className="mx-auto flex min-h-0 w-full max-w-7xl flex-1 flex-col px-3 sm:px-4 shell:px-6 md:px-8 xl:px-10 2xl:max-w-[1480px]">
-        <div className="dashboard-scroll-pane min-h-0 flex-1 overflow-y-auto [webkit-overflow-scrolling:touch] max-lg:pb-[calc(3.5rem+0.5rem)] lg:pb-[max(2rem,env(safe-area-inset-bottom,0px))]">
+        <div className="dashboard-scroll-pane min-h-0 flex-1 overflow-y-auto [webkit-overflow-scrolling:touch] max-lg:pt-2 max-lg:pb-[calc(3.5rem+0.5rem)] lg:pb-[max(2rem,env(safe-area-inset-bottom,0px))]">
         <div className="hidden lg:block">
           <div className="grid grid-flow-row-dense grid-cols-12 gap-4 px-0 py-4 xl:gap-5">
             {showNearestPreacherWidget ? (
@@ -965,13 +965,13 @@ function DashboardMain() {
                 showNearestPreacherWidget ? 'col-span-3' : 'col-span-4',
               ].join(' ')}
             >
-              <div className="flex items-center gap-3.5 p-[16px]">
-                <div className="h-[52px] w-[52px] shrink-0 overflow-hidden rounded-full border-2 border-[#E8D8DC] bg-stone-100">
+              <div className="flex items-center gap-3 p-3 sm:p-[14px]">
+                <div className="h-10 w-10 shrink-0 overflow-hidden rounded-full border-2 border-[#E8D8DC] bg-stone-100">
                   {avatarUrl ? (
                     <img src={avatarUrl} alt="" className="h-full w-full object-cover" />
                   ) : (
                     <div className="grid h-full w-full place-items-center text-stone-500">
-                      <LuUser className="h-5 w-5" strokeWidth={2} aria-hidden />
+                      <LuUser className="h-4 w-4" strokeWidth={2} aria-hidden />
                     </div>
                   )}
                 </div>
@@ -1278,7 +1278,7 @@ function DashboardMain() {
                     : '/profile',
                 )
               }
-              className="tap-highlight-transparent touch-manipulation relative w-full overflow-hidden rounded-2xl border border-stone-200/70 bg-white/90 p-4 text-left shadow-[var(--shadow-card)] transition hover:-translate-y-0.5 hover:shadow-[var(--shadow)] sm:min-h-[132px] sm:p-4"
+              className="tap-highlight-transparent touch-manipulation relative w-full overflow-hidden rounded-2xl border border-stone-200/70 bg-white/90 p-3.5 text-left shadow-[var(--shadow-card)] transition hover:-translate-y-0.5 hover:shadow-[var(--shadow)] sm:min-h-[118px] sm:p-4"
             >
               <div className="pointer-events-none absolute right-0 top-0 h-20 w-20 rounded-full bg-primary/[0.06] blur-2xl" />
               <div className="relative flex items-start justify-between gap-2">
@@ -1292,13 +1292,13 @@ function DashboardMain() {
                   </span>
                 ) : null}
               </div>
-              <div className="relative mt-3 flex items-start gap-3">
-                <div className="h-14 w-14 shrink-0 overflow-hidden rounded-2xl bg-stone-100 ring-1 ring-stone-200/70">
+              <div className="relative mt-2.5 flex items-start gap-2.5">
+                <div className="h-10 w-10 shrink-0 overflow-hidden rounded-xl bg-stone-100 ring-1 ring-stone-200/70">
                   {avatarUrl ? (
                     <img src={avatarUrl} alt="" className="h-full w-full object-cover" />
                   ) : (
                     <div className="grid h-full w-full place-items-center text-stone-500">
-                      <LuUser className="h-6 w-6" strokeWidth={2} aria-hidden />
+                      <LuUser className="h-5 w-5" strokeWidth={2} aria-hidden />
                     </div>
                   )}
                 </div>
