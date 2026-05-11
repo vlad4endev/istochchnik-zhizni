@@ -16,8 +16,8 @@
     </script>
     <meta charset="UTF-8" />
     <!-- Без ручного pinch/double-tap zoom: размер — из ОС и панели доступности (CSS), не из зума страницы. -->
-    <!-- Не добавлять interactive-widget: на части iOS PWA нестабильный разбор viewport → «белый экран». См. nativeShellViewport.ts. -->
-    <meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1, viewport-fit=cover" />
+    <!-- interactive-widget=resizes-content: Android Chrome/WebView — layout viewport при клавиатуре; см. nativeShellViewport.ts LOCKED_VIEWPORT. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1, viewport-fit=cover, interactive-widget=resizes-content" />
     <meta name="color-scheme" content="light dark" />
     <meta name="application-name" content="Моя церковь" />
     <meta name="theme-color" content="#7d3640" media="(prefers-color-scheme: light)" />

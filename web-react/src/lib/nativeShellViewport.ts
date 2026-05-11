@@ -1,9 +1,55 @@
-/** Совпадает с web-react/index.html. Без `interactive-widget`: на части iOS/WebKit в PWA нестабильный разбор meta → пустой/битый вьюпорт и «белый экран». */
+/**
+ * Совпадает с web-react/index.html.
+ * `interactive-widget=resizes-content` (Chrome 108+, Android WebView): при клавиатуре layout viewport
+ * сжимается — лучше стык с `visualViewport` / полями ввода. Старые движки не знают ключа — игнорируют.
+ * Риск на редких iOS: если увидите «белый экран» при старте PWA — откатить только эту опцию.
+ */
 const LOCKED_VIEWPORT =
-  'width=device-width, initial-scale=1, minimum-scale=1, viewport-fit=cover';
+  'width=device-width, initial-scale=1, minimum-scale=1, viewport-fit=cover, interactive-widget=resizes-content';
 
 let viewportWatchAttached = false;
 let syncAfterPaintRaf = 0;
+let dvhProbe: HTMLDivElement | null = null;
+let safeAreaProbe: HTMLDivElement | null = null;
+let viewportProbeVersion = 0;
+let cachedDvhPx: number | null = null;
+let cachedDvhVersion = -1;
+let cachedSafeBottom = '0px';
+let cachedSafeBottomVersion = -1;
+
+function invalidateViewportProbeCaches() {
+  viewportProbeVersion += 1;
+}
+
+function getDvhPx(): number {
+  if (typeof document === 'undefined') return 0;
+  if (!dvhProbe) {
+    dvhProbe = document.createElement('div');
+    dvhProbe.style.cssText =
+      'position:fixed;left:-9999px;top:0;height:100dvh;pointer-events:none;visibility:hidden;';
+    document.documentElement.appendChild(dvhProbe);
+  }
+  if (cachedDvhPx == null || cachedDvhVersion !== viewportProbeVersion) {
+    cachedDvhPx = Math.round(dvhProbe.offsetHeight || 0);
+    cachedDvhVersion = viewportProbeVersion;
+  }
+  return cachedDvhPx;
+}
+
+function getSafeAreaBottomPx(): string {
+  if (typeof document === 'undefined') return '0px';
+  if (!safeAreaProbe) {
+    safeAreaProbe = document.createElement('div');
+    safeAreaProbe.style.cssText =
+      'position:fixed;left:-9999px;top:0;pointer-events:none;visibility:hidden;padding-bottom:env(safe-area-inset-bottom,0px)';
+    document.documentElement.appendChild(safeAreaProbe);
+  }
+  if (cachedSafeBottomVersion !== viewportProbeVersion) {
+    cachedSafeBottom = getComputedStyle(safeAreaProbe).paddingBottom || '0px';
+    cachedSafeBottomVersion = viewportProbeVersion;
+  }
+  return cachedSafeBottom;
+}
 
 /** После изменения layout/visual viewport WebKit иногда отдаёт координаты кадром позже — повторяем sync на следующем paint. */
 function scheduleSyncViewportHeightVars() {
@@ -38,8 +84,23 @@ export function syncViewportHeightVars() {
    * Нижняя граница, чтобы никогда не писать `--viewport-height: 0px` в оболочку.
    */
   const fromVisual = Math.round(visualHeight);
+  const fromDvhProbe = getDvhPx();
   const fromLayout = Math.round(layoutHeight);
-  let chosen = fromVisual > 0 ? fromVisual : fromLayout > 0 ? fromLayout : 0;
+  /**
+   * На iOS кадр с открытой клавиатурой иногда отдаёт visualViewport «полной» высоты, а layout / `100dvh`
+   * уже сжаты (`interactive-widget` или probe). Берём минимум в PWA — убираем белую полосу без ожидания следующего resize.
+   */
+  const preferMinVisualAndDvh =
+    root.classList.contains('app-native-shell') && fromVisual > 0 && fromDvhProbe > 0;
+  let chosen = preferMinVisualAndDvh
+    ? Math.min(fromVisual, fromDvhProbe)
+    : fromVisual > 0
+      ? fromVisual
+      : fromDvhProbe > 0
+        ? fromDvhProbe
+        : fromLayout > 0
+          ? fromLayout
+          : 0;
   if (chosen <= 0 && typeof window.screen?.height === 'number' && window.screen.height > 0) {
     chosen = Math.round(window.screen.height);
   }
@@ -61,17 +122,7 @@ export function syncViewportHeightVars() {
    */
 
   /** iOS safe-area: env() в отдельном элементе → числовое значение для --app-safe-bottom (fix полоски/отступов в PWA). */
-  try {
-    const probe = document.createElement('div');
-    probe.style.cssText =
-      'position:fixed;left:-9999px;top:0;visibility:hidden;padding-bottom:env(safe-area-inset-bottom,0px)';
-    document.documentElement.appendChild(probe);
-    const pb = getComputedStyle(probe).paddingBottom || '0px';
-    document.documentElement.removeChild(probe);
-    root.style.setProperty('--app-safe-bottom', pb);
-  } catch {
-    /* ignore */
-  }
+  root.style.setProperty('--app-safe-bottom', getSafeAreaBottomPx());
 }
 
 function attachViewportWatchers() {
@@ -79,14 +130,33 @@ function attachViewportWatchers() {
   viewportWatchAttached = true;
 
   const vv = window.visualViewport;
-  vv?.addEventListener('resize', scheduleSyncViewportHeightVars);
+  vv?.addEventListener('resize', () => {
+    invalidateViewportProbeCaches();
+    scheduleSyncViewportHeightVars();
+  });
   vv?.addEventListener('scroll', scheduleSyncViewportHeightVars);
-  window.addEventListener('resize', scheduleSyncViewportHeightVars);
-  window.addEventListener('orientationchange', scheduleSyncViewportHeightVars);
+  window.addEventListener('resize', () => {
+    invalidateViewportProbeCaches();
+    scheduleSyncViewportHeightVars();
+  });
+  window.addEventListener('orientationchange', () => {
+    invalidateViewportProbeCaches();
+    scheduleSyncViewportHeightVars();
+  });
   /** Часть WebView/Android отдаёт visual viewport с задержкой; фокус на поле — типичный триггер клавиатуры. */
   document.addEventListener(
     'focusin',
-    () => {
+    (e) => {
+      const target = e.target;
+      if (!(target instanceof HTMLElement)) return;
+      const tag = target.tagName;
+      const triggersKeyboard =
+        tag === 'INPUT' ||
+        tag === 'TEXTAREA' ||
+        tag === 'SELECT' ||
+        target.isContentEditable ||
+        target.getAttribute('contenteditable') === 'true';
+      if (!triggersKeyboard) return;
       queueMicrotask(scheduleSyncViewportHeightVars);
     },
     true,

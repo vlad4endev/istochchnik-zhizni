@@ -313,7 +313,6 @@ dd {
   display: flex;
   flex-direction: column;
   touch-action: pan-x pan-y;
-  -webkit-overflow-scrolling: touch;
 }
 
 /* PWA / нативная оболочка: как у body — не даём #root расти по 100dvh выше layout viewport (полоска снизу на iOS). */
