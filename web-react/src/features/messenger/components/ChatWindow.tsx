@@ -22,6 +22,7 @@ import { useCallStore } from '../../calls/callStore';
 import { requestCallNotificationsFromUserGesture } from '../../calls/incomingCallBackground';
 import { sendRealtimeJson } from '../../../lib/realtimeWsClient';
 import { emitAppToast } from '../../../lib/uiFeedback';
+import { useAuthStore } from '../../auth/authStore';
 import './messenger.css';
 
 const CALLS_FEATURE_ENABLED = import.meta.env.VITE_CALLS_ENABLED === 'true';
@@ -65,6 +66,7 @@ export function ChatWindow({
   const memberLastSeenAt = useChatStore((s) => s.memberLastSeenAt);
   const currentMemberId = useChatStore((s) => s.currentMemberId);
   const pinnedBump = useChatStore((s) => s.pinnedBumpByConv[conversationId] ?? 0);
+  const authToken = useAuthStore((s) => s.token);
 
   const [chatMeta, setChatMeta] = useState<api.ConversationMeta | null>(null);
   const [pinnedMessages, setPinnedMessages] = useState<api.MessageWithSender[]>([]);
@@ -339,11 +341,11 @@ export function ChatWindow({
     nearBottomRef.current = true;
     restoredChatScrollRef.current = false;
     restoreScrollRef.current = null;
-    if (!isDraft) {
+    if (!isDraft && authToken) {
       // При открытии чата всегда подтягиваем первую страницу (как в Telegram), без антидребезга 1.5s.
       void loadMessages(conversationId, false, { force: true });
     }
-  }, [conversationId, loadMessages]);
+  }, [conversationId, loadMessages, authToken, isDraft]);
 
   const lastNumericMessageId = useMemo(() => {
     for (let i = messages.length - 1; i >= 0; i -= 1) {
@@ -364,6 +366,7 @@ export function ChatWindow({
         clearTimeout(markAsReadTimerRef.current);
       }
       markAsReadTimerRef.current = setTimeout(() => {
+        if (!useAuthStore.getState().token) return;
         void markAsRead(convId);
       }, 400);
     },
@@ -659,12 +662,18 @@ export function ChatWindow({
       nearBottomRef.current = near;
       if (near) setShowNewBelow(false);
 
-      if (el.scrollTop < 72 && hasMore && !loading && !restoreScrollRef.current) {
+      if (
+        authToken &&
+        el.scrollTop < 72 &&
+        hasMore &&
+        !loading &&
+        !restoreScrollRef.current
+      ) {
         restoreScrollRef.current = { scrollHeight: el.scrollHeight, scrollTop: el.scrollTop };
         void loadMessages(conversationId, true);
       }
     });
-  }, [conversationId, hasMore, loading, loadMessages]);
+  }, [conversationId, hasMore, loading, loadMessages, authToken]);
 
   useLayoutEffect(() => {
     if (restoredChatScrollRef.current) return;

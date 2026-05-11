@@ -9,6 +9,21 @@ const LOCKED_VIEWPORT =
 
 let viewportWatchAttached = false;
 let syncAfterPaintRaf = 0;
+/** После focus на поле ввода WebKit обновляет vv с задержкой — несколько коротких повторов sync. */
+let keyboardFocusKickTimers: number[] = [];
+
+function scheduleViewportSyncAfterInputFocus() {
+  for (const t of keyboardFocusKickTimers) clearTimeout(t);
+  keyboardFocusKickTimers = [];
+  const delays = [48, 120, 280];
+  for (const ms of delays) {
+    keyboardFocusKickTimers.push(
+      window.setTimeout(() => {
+        scheduleSyncViewportHeightVars();
+      }, ms),
+    );
+  }
+}
 let dvhProbe: HTMLDivElement | null = null;
 let safeAreaProbe: HTMLDivElement | null = null;
 let viewportProbeVersion = 0;
@@ -71,7 +86,15 @@ export function syncViewportHeightVars() {
   const visualHeight = vv?.height ?? layoutHeight;
   const offsetTop = vv?.offsetTop ?? 0;
   /** Нижний «второй» слой (клавиатура / системные полосы): layout минус видимый прямоугольник. */
-  const keyboardInset = Math.max(0, Math.round(layoutHeight - offsetTop - visualHeight));
+  let keyboardInset = Math.max(0, Math.round(layoutHeight - offsetTop - visualHeight));
+  /**
+   * iOS PWA: на кадр-два `visualViewport.height` ещё «полный», а `window.innerHeight` уже сжат под клавиатуру.
+   * Тогда формула выше даёт inset≈0 и --viewport-height остаётся огромным → пол экрана пустоты.
+   * Добираем inset из разницы «устаревший vv vs актуальный layout».
+   */
+  if (vv && layoutHeight > 0 && visualHeight > layoutHeight + 2) {
+    keyboardInset = Math.max(keyboardInset, Math.round(visualHeight - layoutHeight));
+  }
   /**
    * Раньше порог 110px — на части iPhone / компактной клавиатуре inset ~60–90px и класс не включался:
    * таббар оставался «в потоке» отступов, safe-area дублировался, появлялись белые полосы.
@@ -87,20 +110,24 @@ export function syncViewportHeightVars() {
   const fromDvhProbe = getDvhPx();
   const fromLayout = Math.round(layoutHeight);
   /**
-   * iOS PWA: `100dvh` в probe часто не сжимается с клавиатурой; смешивание с dvh давало «лишнюю» высоту.
-   * Видимая высота всегда ≤ innerHeight; при открытой клавиатуре берём min(visual, layout) — совпадает
-   * с видимым прямоугольником, без пол экрана пустоты над клавиатурой.
+   * Высота оболочки = видимая полоса над клавиатурой.
+   * iOS: если vv отстаёт и раздувается выше innerHeight — доверяем innerHeight (уже сжат WebKit).
+   * Иначе min(visual, layout): при нормальной работе vv оба совпадают с видимой областью.
    */
-  let chosen =
-    fromVisual > 0 && fromLayout > 0
-      ? Math.min(fromVisual, fromLayout)
-      : fromVisual > 0
-        ? fromVisual
-        : fromDvhProbe > 0
-          ? fromDvhProbe
-          : fromLayout > 0
-            ? fromLayout
-            : 0;
+  let chosen: number;
+  if (fromLayout > 0 && fromVisual > fromLayout + 4) {
+    chosen = fromLayout;
+  } else if (fromVisual > 0 && fromLayout > 0) {
+    chosen = Math.min(fromVisual, fromLayout);
+  } else if (fromVisual > 0) {
+    chosen = fromVisual;
+  } else if (fromDvhProbe > 0) {
+    chosen = fromDvhProbe;
+  } else if (fromLayout > 0) {
+    chosen = fromLayout;
+  } else {
+    chosen = 0;
+  }
   if (chosen <= 0 && typeof window.screen?.height === 'number' && window.screen.height > 0) {
     chosen = Math.round(window.screen.height);
   }
@@ -158,12 +185,15 @@ function attachViewportWatchers() {
         target.getAttribute('contenteditable') === 'true';
       if (!triggersKeyboard) return;
       queueMicrotask(scheduleSyncViewportHeightVars);
+      scheduleViewportSyncAfterInputFocus();
     },
     true,
   );
   document.addEventListener(
     'focusout',
     () => {
+      for (const t of keyboardFocusKickTimers) clearTimeout(t);
+      keyboardFocusKickTimers = [];
       queueMicrotask(scheduleSyncViewportHeightVars);
     },
     true,

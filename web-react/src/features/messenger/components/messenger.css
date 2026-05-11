@@ -2432,13 +2432,6 @@ html.dark .msg-quick-reaction:hover {
       padding-right: env(safe-area-inset-right, 0px);
     }
 
-    /* Клавиатура: страховка, если --viewport-height один кадр «полный» — 100svh на iOS ближе к видимой высоте. */
-    html.app-keyboard-open[data-chat-open="1"] .tg-main--visible .tg-chat-window {
-      height: min(var(--viewport-height, 100dvh), 100svh) !important;
-      max-height: min(var(--viewport-height, 100dvh), 100svh) !important;
-      min-height: min(var(--viewport-height, 100dvh), 100svh) !important;
-    }
-
     html[data-chat-open="1"] .tg-main--visible .tg-chat-window > header.chat-header {
       flex: 0 0 auto;
       position: relative !important;
