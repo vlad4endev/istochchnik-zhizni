@@ -4,8 +4,8 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { LuArrowUpRight, LuCheck, LuHeadphones, LuHeart, LuPlay, LuRefreshCw, LuSearch, LuSettings, LuShare2, LuX } from 'react-icons/lu';
 
 import { fetchPodcastFeed, fetchPodcastSettings, patchPodcastSettings, type PodcastEpisode } from '../../../api/resources';
-import { SectionHeroToolbarEnd } from '@/components/SectionHeroToolbarEnd';
-import { sectionHeroHeaderClass, sectionHeroStickyClass } from '../../../lib/sectionHeroChrome';
+import { PageHeader } from '@/components/layout/PageHeader';
+import { sectionHeroStickyClass } from '../../../lib/sectionHeroChrome';
 import { useAuthStore } from '../../auth/authStore';
 
 function formatDuration(sec: number | null): string | null {
@@ -187,27 +187,7 @@ export function PodcastsPage() {
   return (
     <div className="min-h-full bg-[var(--surface)] max-lg:pb-0 lg:pb-8">
       <div className={sectionHeroStickyClass}>
-        <header className={sectionHeroHeaderClass}>
-          <div
-            className="pointer-events-none absolute -right-4 -top-20 h-48 w-48 rounded-full bg-white/[0.13] blur-3xl animate-prayer-header-breathe motion-reduce:animate-none"
-            aria-hidden
-          />
-          <div
-            className="pointer-events-none absolute -bottom-12 -left-10 h-40 w-40 rounded-full bg-black/18 blur-2xl"
-            aria-hidden
-          />
-          <div className="relative flex items-start justify-between gap-3">
-            <div className="min-w-0 flex-1">
-              <h1 className="text-xl font-extrabold leading-tight tracking-tight sm:text-2xl md:text-3xl lg:text-[1.65rem] xl:text-[26px] animate-prayer-fade-up motion-reduce:animate-none">
-                Проповеди
-              </h1>
-              <p className="mt-1 max-w-3xl text-sm text-white/85 md:text-base">
-                Аудио проповеди и удобное управление прослушиванием
-              </p>
-            </div>
-            <SectionHeroToolbarEnd />
-          </div>
-        </header>
+        <PageHeader title="Проповеди" />
       </div>
 
       <div className="px-3 py-6 sm:px-4 sm:py-8 md:px-6 lg:px-8 xl:px-10">

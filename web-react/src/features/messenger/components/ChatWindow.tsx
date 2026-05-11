@@ -22,6 +22,7 @@ import { useCallStore } from '../../calls/callStore';
 import { requestCallNotificationsFromUserGesture } from '../../calls/incomingCallBackground';
 import { sendRealtimeJson } from '../../../lib/realtimeWsClient';
 import { emitAppToast } from '../../../lib/uiFeedback';
+import { PageHeader } from '@/components/layout/PageHeader';
 import './messenger.css';
 
 const CALLS_FEATURE_ENABLED = import.meta.env.VITE_CALLS_ENABLED === 'true';
@@ -868,10 +869,13 @@ export function ChatWindow({
     interlocutorProfilePath != null ? 'Открыть страницу собеседника' : 'Сведения о чате';
   const showHeaderSkeleton = !isDraft && (conv?.type === 'group' || conv?.type === 'channel') && !chatHeadReady;
 
+  const titleBarLabel = showHeaderSkeleton ? 'Чат' : displayName;
+
   return (
     <div className="tg-chat-window box-border flex w-full max-w-full min-w-0 min-h-0 flex-1 flex-col overflow-hidden overflow-x-hidden">
       {/* Safe-area только на корне (.tg-chat-window) в messenger.css для iOS — не дублировать здесь */}
-      <header className="chat-header sticky top-0 z-[100] w-full min-w-0 shrink-0 border-b border-gray-200/60 bg-[var(--surface-elevated)]">
+      <div className="sticky top-0 z-[100] w-full min-w-0 shrink-0 border-b border-gray-200/60 bg-[var(--surface-elevated)]">
+        <PageHeader title={titleBarLabel} />
         <div className="mx-auto flex min-h-[52px] w-full min-w-0 max-w-full items-center gap-1 px-1 py-1.5 sm:gap-2 sm:px-2 sm:py-2">
           {/* Слева: «Назад» — только мобилка; на ПК список чатов всегда слева. */}
           <div className="flex shrink-0 items-center lg:hidden">
@@ -1070,7 +1074,7 @@ export function ChatWindow({
             )}
           </div>
         </div>
-      </header>
+      </div>
 
       <div className="tg-chat-window__body flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         {!isDraft && pinnedMessages.length > 0 ? (

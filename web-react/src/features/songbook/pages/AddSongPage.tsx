@@ -1,14 +1,6 @@
 import { useMutation } from '@tanstack/react-query';
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type RefObject } from 'react';
-import {
-  LuArrowLeft,
-  LuArrowRight,
-  LuLoader,
-  LuMusic,
-  LuSparkles,
-  LuUpload,
-  LuYoutube,
-} from 'react-icons/lu';
+import { LuArrowLeft, LuArrowRight, LuLoader, LuSparkles, LuUpload, LuYoutube } from 'react-icons/lu';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 
@@ -21,6 +13,8 @@ import { convertToChordPro } from '../addSong/chordProConversion';
 import { SmartImportModal, type SmartImportSourceTab } from '../addSong/SmartImportModal';
 import { extractChordsFromText, guessKeyFromChords } from '../addSong/keyDetection';
 import { quickChordsForKey } from '../addSong/quickChords';
+import { PageHeader } from '@/components/layout/PageHeader';
+import { sectionHeroStickyClass } from '@/lib/sectionHeroChrome';
 
 const KEY_ROOTS = ['C', 'C#', 'D', 'Eb', 'E', 'F', 'F#', 'G', 'Ab', 'A', 'Bb', 'B'] as const;
 
@@ -299,6 +293,9 @@ export function AddSongPage() {
 
   return (
     <div className={`mx-auto max-w-6xl space-y-6 ${theme.page}`}>
+      <div className={sectionHeroStickyClass}>
+        <PageHeader title="Новая песня" />
+      </div>
       <SmartImportModal
         open={importOpen}
         onClose={() => {
@@ -311,7 +308,7 @@ export function AddSongPage() {
         variant={isStudio ? 'studio' : 'default'}
       />
 
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center gap-3">
         <Link
           to={isStudio ? (location.pathname.startsWith('/songbook') ? '/songbook/studio' : '/studio/my-songs') : '/songbook'}
           className={`inline-flex items-center gap-2 text-sm ${theme.link}`}
@@ -319,10 +316,6 @@ export function AddSongPage() {
           <LuArrowLeft className="h-4 w-4" />
           {isStudio ? 'Студия' : 'Песенник'}
         </Link>
-        <h1 className={`flex items-center gap-2 text-xl font-bold ${theme.title}`}>
-          <LuMusic className={`h-6 w-6 ${isStudio ? 'text-sky-400' : 'text-primary'}`} />
-          Новая песня
-        </h1>
       </div>
 
       {/* Stepper */}

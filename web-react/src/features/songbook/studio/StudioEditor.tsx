@@ -33,6 +33,8 @@ import { quickChordsForKey } from '../addSong/quickChords';
 import { extractCommonChords } from '../chordProEngine';
 import { aiChordPlacement, fetchStudioCatalogSong, fetchVersionForSong, saveVersion } from '../../studio/api';
 import { studioMySongsPath, getStudioModuleSurface } from '../../studio/studioPaths';
+import { PageHeader } from '@/components/layout/PageHeader';
+import { sectionHeroStickyClass } from '@/lib/sectionHeroChrome';
 import { useSongbookChrome } from '../SongbookChromeContext';
 
 import { BlockWrapper } from './BlockWrapper';
@@ -937,6 +939,9 @@ export function StudioEditor() {
     <div
       className={`mx-auto flex w-full max-w-[1520px] flex-col gap-4 px-2 sm:px-3 md:px-4 max-lg:pb-[5.75rem] ${shell.page}`}
     >
+      <div className={sectionHeroStickyClass}>
+        <PageHeader title={s.title} />
+      </div>
       <SmartImportModal
         open={importOpen}
         onClose={() => {
@@ -1313,9 +1318,6 @@ export function StudioEditor() {
         >
           <LuArrowLeft className="h-5 w-5" />
         </Link>
-        <h1 className={`min-w-0 flex-1 text-lg font-semibold leading-tight sm:text-xl ${shell.title}`}>
-          {s.title}
-        </h1>
         <button
           type="button"
           onClick={() => {

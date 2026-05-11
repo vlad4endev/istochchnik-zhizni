@@ -4,7 +4,9 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { LuHeart, LuSearch, LuX } from 'react-icons/lu';
 
 import { emitAppToast } from '../../../lib/uiFeedback';
+import { PageHeader } from '@/components/layout/PageHeader';
 import { SongListSkeleton } from '@/components/skeletons/SongListSkeleton';
+import { sectionHeroStickyClass } from '@/lib/sectionHeroChrome';
 import { SEMANTIC_COLORS } from '@/lib/designTokens';
 import { keys } from '@/lib/queryKeys';
 import { deleteFavorite, fetchSongs, postFavorite, type SongListQuery } from '../api';
@@ -90,7 +92,10 @@ export function SongbookPage() {
   if (query.isLoading) {
     return (
       <div style={semanticVars as CSSProperties} className="mx-auto flex h-full min-h-0 max-w-3xl flex-col text-[var(--sb-text)]">
-        <header className="flex-shrink-0 border-b border-[var(--sb-border)] bg-[var(--sb-surface)]/95 px-0 py-1.5 backdrop-blur">
+        <div className={sectionHeroStickyClass}>
+          <PageHeader title="Песенник" />
+        </div>
+        <div className="flex-shrink-0 border-b border-[var(--sb-border)] bg-[var(--sb-surface)]/95 px-0 py-1.5 backdrop-blur">
           <div className="flex items-center gap-2">
             <div className="relative min-w-0 flex-1">
               <LuSearch
@@ -139,7 +144,7 @@ export function SongbookPage() {
               Избранное
             </button>
           </div>
-        </header>
+        </div>
         <SongListSkeleton />
       </div>
     );
@@ -147,7 +152,10 @@ export function SongbookPage() {
   if (query.isError) {
     return (
       <div style={semanticVars as CSSProperties} className="mx-auto flex h-full min-h-0 max-w-3xl flex-col gap-2 text-[var(--sb-text)]">
-        <header className="flex-shrink-0 border-b border-[var(--sb-border)] bg-[var(--sb-surface)]/95 px-0 py-1.5 backdrop-blur">
+        <div className={sectionHeroStickyClass}>
+          <PageHeader title="Песенник" />
+        </div>
+        <div className="flex-shrink-0 border-b border-[var(--sb-border)] bg-[var(--sb-surface)]/95 px-0 py-1.5 backdrop-blur">
           <div className="flex items-center gap-2">
             <div className="relative min-w-0 flex-1">
               <LuSearch
@@ -196,7 +204,7 @@ export function SongbookPage() {
               Избранное
             </button>
           </div>
-        </header>
+        </div>
         <p className="text-sm text-[var(--sb-error)]">Не удалось загрузить каталог.</p>
       </div>
     );
@@ -204,7 +212,10 @@ export function SongbookPage() {
 
   return (
     <div style={semanticVars as CSSProperties} className="mx-auto flex h-full min-h-0 max-w-3xl flex-col text-[var(--sb-text)]">
-      <header className="flex-shrink-0 border-b border-[var(--sb-border)] bg-[var(--sb-surface)]/95 px-0 py-1.5 backdrop-blur">
+      <div className={sectionHeroStickyClass}>
+        <PageHeader title="Песенник" />
+      </div>
+      <div className="flex-shrink-0 border-b border-[var(--sb-border)] bg-[var(--sb-surface)]/95 px-0 py-1.5 backdrop-blur">
         <div className="flex items-center gap-2">
           <div className="relative min-w-0 flex-1">
             <LuSearch
@@ -254,7 +265,7 @@ export function SongbookPage() {
             Избранное
           </button>
         </div>
-      </header>
+      </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto [webkit-overflow-scrolling:touch] pt-1">
       <ul className="overflow-hidden rounded-xl border border-[var(--sb-border)] bg-[var(--sb-surface-elevated)]">

@@ -1,6 +1,8 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { LuArrowLeft, LuCirclePlus, LuGuitar, LuListMusic, LuMusic2 } from 'react-icons/lu';
 
+import { PageHeader } from '@/components/layout/PageHeader';
+import { sectionHeroStickyClass } from '@/lib/sectionHeroChrome';
 import { useAuthStore } from '../auth/authStore';
 import { canModerateSongCatalog } from '../auth/studioAccess';
 
@@ -103,7 +105,11 @@ export function StudioLayout() {
   ];
 
   return (
-    <div className="flex w-full flex-col overscroll-y-none bg-stone-50 text-stone-900 [max-height:var(--viewport-height,100dvh)] [min-height:var(--viewport-height,100dvh)] md:flex-row">
+    <div className="flex w-full flex-col overscroll-y-none bg-stone-50 text-stone-900 [max-height:var(--viewport-height,100dvh)] [min-height:var(--viewport-height,100dvh)]">
+      <div className={sectionHeroStickyClass}>
+        <PageHeader title="Студия" />
+      </div>
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col md:flex-row">
       <aside className="flex w-full shrink-0 flex-col border-b border-stone-200 bg-white px-2 py-3 shadow-sm md:w-64 md:border-b-0 md:border-r md:py-6 md:pl-5 md:pr-3">
         <div className="flex items-center gap-3 px-2 py-2 md:px-0">
           <button
@@ -114,10 +120,6 @@ export function StudioLayout() {
           >
             <LuArrowLeft className="h-5 w-5" />
           </button>
-          <div className="min-w-0">
-            <p className="text-[10px] font-semibold uppercase tracking-widest text-stone-500">Студия</p>
-            <p className="truncate text-sm font-semibold text-stone-900">Работа с песнями</p>
-          </div>
         </div>
         <ol className="mt-2 hidden list-decimal space-y-1.5 px-6 text-[11px] leading-snug text-stone-500 md:block">
           <li>Версии и черновики — в «Мои версии».</li>
@@ -159,6 +161,7 @@ export function StudioLayout() {
       <main className="min-h-0 flex-1 overflow-auto px-3 pb-10 pt-4 md:px-10 md:pb-12 md:pt-8">
         <Outlet />
       </main>
+      </div>
     </div>
   );
 }

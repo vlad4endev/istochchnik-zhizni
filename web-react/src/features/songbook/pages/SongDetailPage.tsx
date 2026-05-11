@@ -3,7 +3,9 @@ import { type CSSProperties, useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { LuArrowLeft, LuMinus, LuPlus, LuSettings2, LuX } from 'react-icons/lu';
 
+import { PageHeader } from '@/components/layout/PageHeader';
 import { SongListSkeleton } from '@/components/skeletons/SongListSkeleton';
+import { sectionHeroStickyClass } from '@/lib/sectionHeroChrome';
 import { SEMANTIC_COLORS } from '@/lib/designTokens';
 import { keys } from '@/lib/queryKeys';
 import { useAuthStore } from '../../auth/authStore';
@@ -120,49 +122,47 @@ export function SongDetailPage() {
 
   return (
     <div style={semanticVars as CSSProperties} className="mx-auto flex h-full min-h-0 max-w-3xl flex-col text-[var(--sd-text)]">
-      <header className="sticky top-0 z-30 border-b border-[var(--sd-border)] bg-[var(--sd-surface)]/92 backdrop-blur">
-        <div className="px-3 py-2 md:px-0">
-          <div className="flex min-h-[44px] items-center gap-2">
-            <Link
-              to="/songbook"
-              className="inline-flex h-10 w-10 items-center justify-center rounded-xl text-[var(--sd-text-secondary)] hover:bg-[var(--sd-bg-elevated)]"
-              aria-label="Назад"
-            >
-              <LuArrowLeft className="h-5 w-5" />
-            </Link>
+      <div className={`${sectionHeroStickyClass} z-30`}>
+        <PageHeader title={s.title} />
+      </div>
+      <div className="sticky top-0 z-20 border-b border-[var(--sd-border)] bg-[var(--sd-surface)]/92 px-3 py-2 backdrop-blur md:px-0">
+        <div className="flex min-h-[44px] items-center gap-2">
+          <Link
+            to="/songbook"
+            className="inline-flex h-10 w-10 items-center justify-center rounded-xl text-[var(--sd-text-secondary)] hover:bg-[var(--sd-bg-elevated)]"
+            aria-label="Назад"
+          >
+            <LuArrowLeft className="h-5 w-5" />
+          </Link>
 
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2">
-                {numberLabel ? (
-                  <span className="shrink-0 text-xs font-semibold text-[var(--sd-text-muted)]">#{numberLabel}</span>
-                ) : null}
-                <h1 className="min-w-0 truncate text-sm font-semibold text-[var(--sd-text)]">{s.title}</h1>
-              </div>
-              <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
-                {keyBadge ? (
-                  <span className="inline-flex items-center rounded-full bg-[var(--sd-bg-elevated)] px-2 py-0.5 text-[10px] font-semibold text-[var(--sd-text-secondary)]">
-                    {keyBadge}
-                  </span>
-                ) : null}
-                {s.tempo != null ? (
-                  <span className="inline-flex items-center rounded-full bg-[var(--sd-bg-elevated)] px-2 py-0.5 text-[10px] font-semibold text-[var(--sd-text-secondary)]">
-                    {s.tempo} BPM
-                  </span>
-                ) : null}
-              </div>
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-1.5">
+              {numberLabel ? (
+                <span className="shrink-0 text-xs font-semibold text-[var(--sd-text-muted)]">#{numberLabel}</span>
+              ) : null}
+              {keyBadge ? (
+                <span className="inline-flex items-center rounded-full bg-[var(--sd-bg-elevated)] px-2 py-0.5 text-[10px] font-semibold text-[var(--sd-text-secondary)]">
+                  {keyBadge}
+                </span>
+              ) : null}
+              {s.tempo != null ? (
+                <span className="inline-flex items-center rounded-full bg-[var(--sd-bg-elevated)] px-2 py-0.5 text-[10px] font-semibold text-[var(--sd-text-secondary)]">
+                  {s.tempo} BPM
+                </span>
+              ) : null}
             </div>
-
-            <button
-              type="button"
-              onClick={() => setSettingsOpen(true)}
-              className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-[var(--sd-border)] bg-[var(--sd-surface-elevated)] text-[var(--sd-text-secondary)] hover:bg-[var(--sd-bg-elevated)]"
-              aria-label="Настройки"
-            >
-              <LuSettings2 className="h-5 w-5" />
-            </button>
           </div>
+
+          <button
+            type="button"
+            onClick={() => setSettingsOpen(true)}
+            className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-[var(--sd-border)] bg-[var(--sd-surface-elevated)] text-[var(--sd-text-secondary)] hover:bg-[var(--sd-bg-elevated)]"
+            aria-label="Настройки"
+          >
+            <LuSettings2 className="h-5 w-5" />
+          </button>
         </div>
-      </header>
+      </div>
 
       {settingsOpen ? (
         <>

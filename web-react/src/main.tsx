@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MantineProvider } from '@mantine/core';
 import { Notifications } from '@mantine/notifications';
+import { isAxiosError } from 'axios';
 import React, { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
@@ -55,6 +56,62 @@ function scheduleProgressierAfterFirstPaint(): void {
   window.requestAnimationFrame(() => {
     window.requestAnimationFrame(whenIdle);
   });
+}
+
+/**
+ * После деплоя старый SW может отдать index.html, а chunk — уже удалён с CDN → белый экран.
+ * Один автоматический reload за сессию при типичной ошибке динамического import() или script src.
+ */
+function registerPwaStaleDeployRecovery(): void {
+  const KEY = 'pwa:lazy-chunk-reload-once';
+
+  const tryReloadOnce = (reason: string, detail: string): void => {
+    try {
+      if (sessionStorage.getItem(KEY) === '1') return;
+      sessionStorage.setItem(KEY, '1');
+    } catch {
+      return;
+    }
+    console.warn(`[PWA] ${reason} Перезагрузка.`, detail);
+    window.location.reload();
+  };
+
+  window.addEventListener('unhandledrejection', (event: PromiseRejectionEvent) => {
+    const r = event.reason;
+    const msg = r instanceof Error ? r.message : String(r ?? '');
+    if (
+      !/dynamically imported module|Loading chunk \d+ failed|ChunkLoadError|Importing a module script failed/i.test(
+        msg,
+      )
+    ) {
+      return;
+    }
+    tryReloadOnce('Не удалось загрузить JS-модуль (часто после выкладки).', msg);
+  });
+
+  window.addEventListener(
+    'error',
+    (event: ErrorEvent) => {
+      const el = event.target;
+      if (!el || !(el instanceof HTMLScriptElement)) return;
+      const src = el.src || '';
+      if (!src || !/\/assets\/.*\.js/i.test(src)) return;
+      tryReloadOnce('Не удалось загрузить script (часто после выкладки).', src);
+    },
+    true,
+  );
+}
+
+/** Не дублировать POST и не усиливать 429; повтор только при сетевых/5xx сбоях. */
+function defaultQueryRetry(failureCount: number, error: unknown): boolean {
+  if (failureCount >= 1) return false;
+  if (isAxiosError(error)) {
+    const s = error.response?.status;
+    if (s === 429) return false;
+    if (s != null && s >= 400 && s < 500 && s !== 408) return false;
+    return true;
+  }
+  return true;
 }
 
 async function forceClientRefreshOnVersionChange(): Promise<void> {
@@ -177,10 +234,15 @@ const queryClient = new QueryClient({
       refetchOnWindowFocus: false,
       /** PWA iOS: при выходе из фона + «online» иначе лавина refetch бьёт API и тормозит первый кадр. */
       refetchOnReconnect: false,
-      retry: 1,
+      /** Офлайн: не крутить запросы вхолостую; при online снова активируются. */
+      networkMode: 'online',
+      retry: defaultQueryRetry,
       retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 10_000),
       staleTime: 60_000,
       gcTime: 300_000,
+    },
+    mutations: {
+      retry: 0,
     },
   },
 });
@@ -199,6 +261,8 @@ if (typeof window !== 'undefined') {
     pwaStore.setInstallable(false);
     pwaStore.setDeferredPrompt(null);
   });
+
+  registerPwaStaleDeployRecovery();
 }
 
 const rootEl = document.getElementById('root');

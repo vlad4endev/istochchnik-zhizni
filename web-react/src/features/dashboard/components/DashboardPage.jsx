@@ -1,4 +1,3 @@
-import DashboardHeader from './DashboardHeader';
 import QuickActions from './QuickActions';
 import SermonWidget from './SermonWidget';
 import ProfileCard from './ProfileCard';
@@ -7,6 +6,7 @@ import PrayerCard from './PrayerCard';
 import AnnouncementBanner from './AnnouncementBanner';
 import EventsFeed from './EventsFeed';
 import { useDashboardData } from '../hooks/useDashboardData';
+import { PageHeader } from '@/components/layout/PageHeader';
 import { sectionHeroStickyClassNested } from '@/lib/sectionHeroChrome';
 
 export default function DashboardPage() {
@@ -30,7 +30,7 @@ export default function DashboardPage() {
     <div className="dashboard-adaptive flex min-h-0 flex-1 flex-col bg-[var(--surface)]">
       <div className={sectionHeroStickyClassNested}>
         <div className="mx-auto w-full max-w-7xl">
-          <DashboardHeader user={data.profile} notificationsCount={data.unreadCount} />
+          <PageHeader title="Главная" />
         </div>
       </div>
 

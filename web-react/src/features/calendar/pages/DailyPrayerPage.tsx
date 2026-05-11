@@ -40,9 +40,9 @@ import {
   isApiUrlProbablyWrongForWeb,
   resolveAxiosBaseURL,
 } from '../../../lib/config';
-import { SectionHeroToolbarEnd } from '@/components/SectionHeroToolbarEnd';
+import { PageHeader } from '@/components/layout/PageHeader';
 import { PrayerSkeleton } from '@/components/skeletons/PrayerSkeleton';
-import { sectionHeroHeaderClass, sectionHeroStickyClass } from '../../../lib/sectionHeroChrome';
+import { sectionHeroStickyClass } from '../../../lib/sectionHeroChrome';
 import { memberRosterName } from '../../../lib/memberRosterName';
 import type { Backslider, DayPrayerData, GlobalTheme, Member, Ministry } from '../../../types';
 import { patchProfile } from '../../profile/api';
@@ -924,22 +924,7 @@ export function DailyPrayerPage() {
   return (
     <div className="prayer-page-bg flex min-h-0 flex-1 flex-col max-lg:pb-0 lg:pb-8">
       <div className={sectionHeroStickyClass}>
-      <header className={`${sectionHeroHeaderClass} prayer-hero`}>
-        <div
-          className="pointer-events-none absolute -right-4 -top-20 h-48 w-48 rounded-full bg-white/[0.13] blur-3xl animate-prayer-header-breathe motion-reduce:animate-none"
-          aria-hidden
-        />
-        <div
-          className="pointer-events-none absolute -bottom-12 -left-10 h-40 w-40 rounded-full bg-black/18 blur-2xl"
-          aria-hidden
-        />
-        <div className="relative flex items-center justify-between gap-3">
-          <h1 className="min-w-0 flex-1 text-xl font-extrabold leading-tight tracking-tight sm:text-2xl md:text-3xl lg:text-[1.65rem] xl:text-3xl animate-prayer-fade-up motion-reduce:animate-none">
-            Молитва
-          </h1>
-          <SectionHeroToolbarEnd />
-        </div>
-      </header>
+        <PageHeader title="Молитва" />
 
       {/* Чип даты */}
       <div className="pt-3">

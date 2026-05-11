@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { format, isBefore, parse, startOfDay, startOfWeek } from 'date-fns';
 import { ru } from 'date-fns/locale';
 import {
@@ -11,7 +11,6 @@ import {
   LuExternalLink,
   LuHeart,
   LuPlay,
-  LuSettings,
   LuStar,
   LuUser,
 } from 'react-icons/lu';
@@ -41,8 +40,8 @@ import { NextWeekPrayerPlanSection, userCanViewNextWeekPrayerPlan } from '../../
 import { useMe } from '@/hooks/useMe';
 import { fetchProfileByMemberId, fetchProfileByUsername } from '../../profile/publicProfileApi';
 import { memberNameFirstLast } from '../../profile/memberDisplayName';
-import { SectionHeroToolbarEnd } from '@/components/SectionHeroToolbarEnd';
-import { sectionHeroHeaderClass, sectionHeroStickyClassNested } from '../../../lib/sectionHeroChrome';
+import { PageHeader } from '@/components/layout/PageHeader';
+import { sectionHeroStickyClassNested } from '../../../lib/sectionHeroChrome';
 import { apiBoolean } from '../../../lib/apiBoolean';
 import { resolvePublicUrl } from '../../../lib/resolvePublicUrl';
 import { memberRosterName } from '../../../lib/memberRosterName';
@@ -176,10 +175,6 @@ function formatWeekDayChip(ymd: string): string {
   const d = parse(ymd, 'yyyy-MM-dd', new Date());
   if (Number.isNaN(d.getTime())) return ymd;
   return format(d, 'EEE d.MM', { locale: ru });
-}
-
-function formatDashboardDateLabel(now: Date): string {
-  return format(now, 'EEEE, d MMMM', { locale: ru });
 }
 
 function truncatePrayerNeedPreview(text: string, maxLen: number): string {
@@ -689,9 +684,6 @@ function DashboardMain() {
   const publicationsCount = pf?.posts?.length ?? 0;
   const publicationsLabel = pluralizeRu(publicationsCount, ['публикация', 'публикации', 'публикаций']);
   const bioText = pf?.profile.bio?.trim() ?? '';
-  const greetingName = (me?.first_name?.trim() || profileDisplayTitle || 'друг').split(' ')[0] ?? 'друг';
-  const dashboardDateLabel = formatDashboardDateLabel(now);
-
   const hasProfilePostDraft = useProfileDraftStore((s) => s.hasActivePostDraft);
 
   const memberToday = prayerQ.data?.members?.[0] ?? null;
@@ -760,13 +752,6 @@ function DashboardMain() {
       return !isBefore(d, todayStart);
     });
   }, [birthdaysQ.data, now]);
-  const birthdayBadgeText = useMemo(() => {
-    const first = birthdaysThisWeek[0];
-    if (!first) return null;
-    const chipDate = formatBirthdayChipDate(first.week_date);
-    return `🎂 ${first.name} — ${chipDate || 'скоро'}`;
-  }, [birthdaysThisWeek]);
-
   /**
    * Текущая календарная неделя: с сегодняшнего дня — без текста нужды + координатор по закреплениям этой же недели.
    * (Следующая неделя — отдельно: назначения и план в блоке ниже.)
@@ -947,63 +932,7 @@ function DashboardMain() {
     <div className="dashboard-adaptive flex min-h-0 flex-1 flex-col bg-[var(--surface)]">
       <div className="mx-auto flex min-h-0 w-full max-w-7xl flex-1 flex-col px-3 sm:px-4 shell:px-6 md:px-8 xl:px-10 2xl:max-w-[1480px]">
         <div className={sectionHeroStickyClassNested}>
-          <header
-            className={[
-              sectionHeroHeaderClass,
-              'rounded-[22px] bg-[#6B2D3E] px-4 pb-6 pt-5 shadow-[0_12px_34px_rgba(72,20,34,0.36)] lg:rounded-none lg:px-7 lg:py-[22px]',
-            ].join(' ')}
-          >
-            <div
-              className="pointer-events-none absolute -right-6 -top-6 h-[130px] w-[130px] rounded-full bg-white/[0.07] lg:-top-10 lg:right-[120px] lg:h-[180px] lg:w-[180px]"
-              aria-hidden
-            />
-            <div
-              className="pointer-events-none absolute -bottom-8 left-6 h-[90px] w-[90px] rounded-full bg-white/[0.04] lg:-bottom-[50px] lg:-right-[30px] lg:left-auto lg:h-[130px] lg:w-[130px]"
-              aria-hidden
-            />
-            <div className="relative flex min-w-0 items-center gap-3">
-              <div className="min-w-0 flex-1 animate-prayer-fade-up motion-reduce:animate-none">
-                <p className="text-[13px] font-medium text-white/65">Добро пожаловать</p>
-                <h1 className="mt-0.5 truncate text-[22px] font-semibold leading-tight tracking-tight text-white lg:text-[24px]">
-                  {greetingName}
-                </h1>
-                <p className="mt-1 text-xs font-medium text-white/50">{dashboardDateLabel}</p>
-              </div>
-              {birthdayBadgeText ? (
-                <div className="hidden max-w-[42%] shrink-0 truncate rounded-full border border-white/30 bg-white/15 px-3 py-1 text-xs font-semibold text-white/95 lg:block">
-                  {birthdayBadgeText}
-                </div>
-              ) : null}
-              <div className="hidden items-center gap-2 lg:flex">
-                <Link
-                  to="/profile"
-                  className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-white/15 text-white transition hover:bg-white/25"
-                  aria-label="Профиль"
-                  title="Профиль"
-                >
-                  <LuUser className="h-[18px] w-[18px]" strokeWidth={2} aria-hidden />
-                </Link>
-                <Link
-                  to="/profile"
-                  className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-white/15 text-white transition hover:bg-white/25"
-                  aria-label="Настройки"
-                  title="Настройки"
-                >
-                  <LuSettings className="h-[18px] w-[18px]" strokeWidth={2} aria-hidden />
-                </Link>
-              </div>
-              <SectionHeroToolbarEnd>
-                <Link
-                  to="/profile"
-                  className="tap-highlight-transparent flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-white/25 bg-white/15 text-white shadow-sm transition hover:bg-white/25 active:scale-[0.98] lg:hidden"
-                  aria-label="Настройки профиля"
-                  title="Настройки"
-                >
-                  <LuSettings className="h-5 w-5" strokeWidth={2} aria-hidden />
-                </Link>
-              </SectionHeroToolbarEnd>
-            </div>
-          </header>
+          <PageHeader title="Главная" />
         </div>
 
         <div className="dashboard-scroll-pane min-h-0 flex-1 overflow-y-auto [webkit-overflow-scrolling:touch] max-lg:pb-[calc(3.5rem+0.5rem)] lg:pb-[max(2rem,env(safe-area-inset-bottom,0px))]">

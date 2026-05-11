@@ -236,10 +236,7 @@ export function AnalyticsPage() {
 
   return (
     <div className="space-y-5 pb-6" style={{ color: 'var(--color-text-primary)' }}>
-      <SectionHeroChrome
-        title="Аналитика"
-        subtitle="Пользователи, трафик, устройства и retention по периодам."
-      />
+      <SectionHeroChrome title="Аналитика" />
       <div className="mx-auto max-w-[1500px] space-y-5 px-3 md:px-6">
         <div className={`flex flex-wrap items-center justify-end gap-2 rounded-xl p-4 ${SURFACE_CLASS}`}>
           {PERIOD_OPTIONS.map((item) => {

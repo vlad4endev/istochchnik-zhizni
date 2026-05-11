@@ -1,10 +1,10 @@
 import { useMemo, useState } from 'react';
 import { addMinutes, format, isValid, parse } from 'date-fns';
 import { DragDropContext, Draggable, Droppable, type DropResult } from '@hello-pangea/dnd';
-import { LuClock3, LuUsers } from 'react-icons/lu';
+import { LuUsers } from 'react-icons/lu';
 
-import { SectionHeroToolbarEnd } from '@/components/SectionHeroToolbarEnd';
-import { sectionHeroHeaderClass, sectionHeroStickyClass } from '../../../lib/sectionHeroChrome';
+import { PageHeader } from '@/components/layout/PageHeader';
+import { sectionHeroStickyClass } from '../../../lib/sectionHeroChrome';
 import type { ServiceItem, ServiceItemType, ServiceItemWithTime } from '../types';
 
 function parseStartTimeToDate(startTime: string): Date {
@@ -69,7 +69,6 @@ function Avatar({ name }: { name: string }) {
 }
 
 export function ServiceFlowComponent() {
-  const [serviceDate] = useState<Date>(() => new Date());
   const [startTime] = useState('10:00');
 
   const [items, setItems] = useState<ServiceItem[]>(() => [
@@ -82,10 +81,6 @@ export function ServiceFlowComponent() {
   ]);
 
   const timedItems = useMemo(() => calculateTimes(items, startTime), [items, startTime]);
-  const dateText = useMemo(
-    () => new Intl.DateTimeFormat('ru-RU', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }).format(serviceDate),
-    [serviceDate],
-  );
 
   function onDragEnd(result: DropResult) {
     if (!result.destination) return;
@@ -96,35 +91,7 @@ export function ServiceFlowComponent() {
   return (
     <div className="min-h-full bg-[var(--surface)] max-lg:pb-0 lg:pb-8">
       <div className={sectionHeroStickyClass}>
-        <header className={`${sectionHeroHeaderClass} prayer-hero`}>
-          <div
-            className="pointer-events-none absolute -right-4 -top-20 h-48 w-48 rounded-full bg-white/[0.13] blur-3xl animate-prayer-header-breathe motion-reduce:animate-none"
-            aria-hidden
-          />
-          <div
-            className="pointer-events-none absolute -bottom-12 -left-10 h-40 w-40 rounded-full bg-black/18 blur-2xl"
-            aria-hidden
-          />
-          <div className="relative flex items-start justify-between gap-3">
-            <div className="min-w-0 flex-1">
-              <h1 className="text-xl font-extrabold leading-tight tracking-tight sm:text-2xl md:text-3xl lg:text-[1.65rem] xl:text-3xl animate-prayer-fade-up motion-reduce:animate-none">
-                План служения
-              </h1>
-              <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm font-semibold text-white/90">
-                <span className="capitalize">{dateText}</span>
-                <span className="hidden text-white/55 sm:inline">•</span>
-                <span className="inline-flex items-center gap-2">
-                  <LuClock3 className="h-4 w-4" strokeWidth={2} aria-hidden />
-                  Начало: <span className="font-extrabold text-white">{startTime}</span>
-                </span>
-              </div>
-              <p className="mt-2 max-w-3xl text-sm text-white/85 md:text-base">
-                Перетаскивайте блоки — время начала пересчитается автоматически.
-              </p>
-            </div>
-            <SectionHeroToolbarEnd />
-          </div>
-        </header>
+        <PageHeader title="Служение" />
       </div>
 
       <div className="px-3 py-6 sm:px-4 sm:py-8 md:px-6 lg:px-8 xl:px-10">

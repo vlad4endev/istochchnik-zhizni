@@ -1513,11 +1513,7 @@ export function ServicePlannerPage() {
   if (screen === 'home') {
     return (
       <section className="mx-auto flex w-full max-w-5xl flex-col gap-4 px-3 py-4 pb-6 sm:px-4 sm:py-5 md:px-6">
-        <SectionHeroChrome
-          title="Планировщик служений"
-          subtitle="Все программы, ведущие и быстрый запуск нового плана."
-          stickyClassName={sectionHeroStickyClassNested}
-        />
+        <SectionHeroChrome title="Служение" stickyClassName={sectionHeroStickyClassNested} />
 
         <section className="grid gap-3 md:grid-cols-2">
           <div className="rounded-2xl border border-primary/30 bg-primary/5 p-4 shadow-sm">
