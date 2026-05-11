@@ -9,10 +9,12 @@ import {
   LuCalendarDays,
   LuChurch,
   LuExternalLink,
-  LuHeart,
+  LuHeadphones,
+  LuPause,
   LuPlay,
   LuStar,
   LuUser,
+  LuX,
 } from 'react-icons/lu';
 
 import { fetchActiveBroadcast, type BroadcastData } from '../../../api/broadcast';
@@ -74,6 +76,32 @@ function pickLatestEpisode(episodes: PodcastEpisode[]): PodcastEpisode | null {
     const bt = b.pubDate ? new Date(b.pubDate).getTime() : 0;
     return bt - at;
   })[0] ?? null;
+}
+
+function formatEpisodeDuration(sec: number | null): string | null {
+  if (sec == null || !Number.isFinite(sec) || sec <= 0) return null;
+  const s = Math.floor(sec);
+  const hh = Math.floor(s / 3600);
+  const mm = Math.floor((s % 3600) / 60);
+  const ss = s % 60;
+  if (hh > 0) return `${hh}:${String(mm).padStart(2, '0')}:${String(ss).padStart(2, '0')}`;
+  return `${mm}:${String(ss).padStart(2, '0')}`;
+}
+
+function formatEpisodePubDate(pubDate: string | null): string | null {
+  if (!pubDate) return null;
+  const d = new Date(pubDate);
+  if (Number.isNaN(d.getTime())) return null;
+  return new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' }).format(d);
+}
+
+function dashboardEpisodeSubtitle(ep: PodcastEpisode): string {
+  const parts: string[] = [];
+  const d = formatEpisodePubDate(ep.pubDate);
+  const t = formatEpisodeDuration(ep.duration);
+  if (d) parts.push(d);
+  if (t) parts.push(t);
+  return parts.join(' • ');
 }
 
 function sameDate(a: Date, b: Date): boolean {
@@ -505,9 +533,10 @@ function DashboardMain() {
     [now],
   );
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const shouldAutoplayDashboardSermonRef = useRef(false);
 
   const [activeAudioUrl, setActiveAudioUrl] = useState<string | null>(null);
-  const [activeAudioTitle, setActiveAudioTitle] = useState<string>('');
+  const [latestPlaybackPlaying, setLatestPlaybackPlaying] = useState(false);
   const [eventOpen, setEventOpen] = useState(false);
   const [announcementExpanded, setAnnouncementExpanded] = useState(false);
   const [broadcastNowMs, setBroadcastNowMs] = useState(() => Date.now());
@@ -556,17 +585,6 @@ function DashboardMain() {
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [eventOpen]);
-
-  const [favorites, setFavorites] = useState<Record<string, true>>(() => {
-    try {
-      const raw = localStorage.getItem('dashboard_sermon_favorites_v1');
-      if (!raw) return {};
-      const parsed = JSON.parse(raw) as Record<string, true>;
-      return parsed ?? {};
-    } catch {
-      return {};
-    }
-  });
 
   const meQ = useMe();
 
@@ -704,6 +722,10 @@ function DashboardMain() {
   }, [activeBroadcast?.starts_at, broadcastUiMode]);
 
   const latestEpisode = pickLatestEpisode(sermonsQ.data?.episodes ?? []);
+  const showDashboardSermonPlayer = Boolean(
+    latestEpisode && activeAudioUrl && activeAudioUrl === latestEpisode.audioUrl,
+  );
+  const sermonFeedTitle = sermonsQ.data?.feed?.title ?? 'Подкаст';
   const event = pickUpcomingEvent(now, eventsQ.data ?? []);
   const nearestPlan = useMemo(
     () => pickNearestPlan(upcomingPlansQ.data ?? [], now),
@@ -895,34 +917,67 @@ function DashboardMain() {
     !prayerQ.data &&
     !eventsQ.data;
 
-  function onToggleFavorite(id: string) {
-    setFavorites((prev) => {
-      const next = { ...prev };
-      if (next[id]) {
-        delete next[id];
-      } else {
-        next[id] = true;
-      }
-      try {
-        localStorage.setItem('dashboard_sermon_favorites_v1', JSON.stringify(next));
-      } catch {
-        /* ignore */
-      }
-      return next;
+  useEffect(() => {
+    if (!showDashboardSermonPlayer) {
+      setLatestPlaybackPlaying(false);
+      return;
+    }
+    const el = audioRef.current;
+    if (!el) return;
+    const sync = () => setLatestPlaybackPlaying(!el.paused);
+    sync();
+    el.addEventListener('play', sync);
+    el.addEventListener('pause', sync);
+    el.addEventListener('ended', sync);
+    return () => {
+      el.removeEventListener('play', sync);
+      el.removeEventListener('pause', sync);
+      el.removeEventListener('ended', sync);
+    };
+  }, [showDashboardSermonPlayer]);
+
+  useEffect(() => {
+    if (!showDashboardSermonPlayer || !shouldAutoplayDashboardSermonRef.current) return;
+    shouldAutoplayDashboardSermonRef.current = false;
+    queueMicrotask(() => {
+      const el = audioRef.current;
+      if (!el) return;
+      void el.play().catch(() => {
+        /* ignore autoplay / gesture timing */
+      });
     });
+  }, [showDashboardSermonPlayer]);
+
+  function closeDashboardSermonPlayer() {
+    audioRef.current?.pause();
+    setActiveAudioUrl(null);
   }
 
-  async function onPlayLatest() {
+  async function onPlayLatestClick() {
     if (!latestEpisode?.audioUrl) return;
-    setActiveAudioUrl(latestEpisode.audioUrl);
-    setActiveAudioTitle(latestEpisode.title);
-    await Promise.resolve();
-    try {
-      await audioRef.current?.play();
-    } catch {
-      /* ignore autoplay errors */
+    const same = activeAudioUrl === latestEpisode.audioUrl;
+    if (same && audioRef.current) {
+      if (audioRef.current.paused) {
+        try {
+          await audioRef.current.play();
+        } catch {
+          /* ignore */
+        }
+      } else {
+        audioRef.current.pause();
+      }
+      return;
     }
+    shouldAutoplayDashboardSermonRef.current = true;
+    setActiveAudioUrl(latestEpisode.audioUrl);
   }
+
+  const PlayWidgetIcon = showDashboardSermonPlayer && latestPlaybackPlaying ? LuPause : LuPlay;
+  const playWidgetLabel = showDashboardSermonPlayer
+    ? latestPlaybackPlaying
+      ? 'Пауза'
+      : 'Продолжить'
+    : 'Воспроизвести';
 
   if (showInitialSkeleton) {
     return <DashboardSkeleton />;
@@ -1079,26 +1134,23 @@ function DashboardMain() {
 
             <section
               className={[
-                'rounded-[14px] border border-stone-200 bg-white p-4 transition hover:-translate-y-0.5 hover:shadow-[0_4px_16px_rgba(107,45,62,0.1)]',
+                'relative rounded-[14px] border border-stone-200 bg-white p-4 transition hover:-translate-y-0.5 hover:shadow-[0_4px_16px_rgba(107,45,62,0.1)]',
                 displayAnnouncement ? 'order-11' : 'order-21',
                 displayAnnouncement ? 'col-span-4' : 'col-span-4',
               ].join(' ')}
             >
-              <div className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2">
-                  <span className="grid h-8 w-8 place-items-center rounded-[9px] bg-[#0E7E6A] text-white">
-                    <LuPlay className="h-4 w-4" strokeWidth={2} aria-hidden />
-                  </span>
-                  <p className="text-[11px] font-semibold tracking-[0.02em] text-[#0A5A4C]">Медиа</p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => navigate('/sermons')}
-                  className="inline-flex min-h-[30px] items-center gap-1 rounded-[9px] border border-stone-200 bg-white px-2 text-xs font-semibold text-stone-700 hover:bg-stone-50"
-                >
-                  Все
-                  <LuArrowRight className="h-3.5 w-3.5" aria-hidden />
-                </button>
+              <button
+                type="button"
+                onClick={() => navigate('/sermons')}
+                className="absolute right-3 top-3 z-[1] inline-flex min-h-[28px] items-center justify-center rounded-[9px] border border-stone-200 bg-white px-2.5 text-[10px] font-extrabold tracking-[0.08em] text-stone-700 hover:bg-stone-50 sm:right-4 sm:top-4"
+              >
+                ВСЕ
+              </button>
+              <div className="flex items-center gap-2 pr-14">
+                <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[9px] bg-[#0E7E6A] text-white">
+                  <LuPlay className="h-4 w-4" strokeWidth={2} aria-hidden />
+                </span>
+                <p className="text-[11px] font-semibold tracking-[0.02em] text-[#0A5A4C]">Медиа</p>
               </div>
               {latestEpisode ? (
                 <>
@@ -1106,24 +1158,12 @@ function DashboardMain() {
                   <div className="mt-3 flex flex-wrap gap-2">
                     <button
                       type="button"
-                      onClick={() => void onPlayLatest()}
+                      onClick={() => void onPlayLatestClick()}
                       className="inline-flex min-h-[40px] items-center gap-2 rounded-[9px] bg-[#0E7E6A] px-4 text-[13px] font-semibold text-white hover:bg-[#0C6E5D]"
+                      aria-label={playWidgetLabel}
                     >
-                      <LuPlay className="h-4 w-4" strokeWidth={2.25} aria-hidden />
-                      Воспроизвести
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => onToggleFavorite(latestEpisode.id)}
-                      className={[
-                        'inline-flex min-h-[40px] items-center gap-2 rounded-[9px] px-4 text-[13px] font-semibold transition',
-                        favorites[latestEpisode.id]
-                          ? 'bg-rose-50 text-rose-700 ring-1 ring-rose-200/70 hover:bg-rose-100'
-                          : 'border-[1.5px] border-[#0E7E6A] bg-white text-[#0E7E6A] hover:bg-[#ECF8F5]',
-                      ].join(' ')}
-                    >
-                      <LuHeart className="h-4 w-4" strokeWidth={2} aria-hidden />
-                      В избранное
+                      <PlayWidgetIcon className="h-4 w-4" strokeWidth={2.25} aria-hidden />
+                      {playWidgetLabel}
                     </button>
                   </div>
                 </>
@@ -1278,42 +1318,44 @@ function DashboardMain() {
                     : '/profile',
                 )
               }
-              className="tap-highlight-transparent touch-manipulation relative w-full overflow-hidden rounded-2xl border border-stone-200/70 bg-white/90 p-3.5 text-left shadow-[var(--shadow-card)] transition hover:-translate-y-0.5 hover:shadow-[var(--shadow)] sm:min-h-[118px] sm:p-4"
+              className="tap-highlight-transparent touch-manipulation relative w-full overflow-hidden rounded-2xl border border-stone-200/70 bg-white/90 p-4 text-left shadow-[var(--shadow-card)] transition hover:-translate-y-0.5 hover:shadow-[var(--shadow)] sm:p-4"
             >
               <div className="pointer-events-none absolute right-0 top-0 h-20 w-20 rounded-full bg-primary/[0.06] blur-2xl" />
-              <div className="relative flex items-start justify-between gap-2">
-                <p className="text-[11px] font-semibold tracking-[0.02em] text-[#6B2D3E]">Мой профиль</p>
-                {hasProfilePostDraft ? (
-                  <span
-                    className="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold tracking-[0.02em] text-amber-900"
-                    title="Есть черновик поста на странице"
-                  >
-                    Черновик
-                  </span>
-                ) : null}
-              </div>
-              <div className="relative mt-2.5 flex items-start gap-2.5">
-                <div className="h-10 w-10 shrink-0 overflow-hidden rounded-xl bg-stone-100 ring-1 ring-stone-200/70">
-                  {avatarUrl ? (
-                    <img src={avatarUrl} alt="" className="h-full w-full object-cover" />
-                  ) : (
-                    <div className="grid h-full w-full place-items-center text-stone-500">
-                      <LuUser className="h-5 w-5" strokeWidth={2} aria-hidden />
-                    </div>
-                  )}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-base font-extrabold leading-tight text-stone-900">{profileDisplayTitle}</p>
-                  {profileHandleLine ? (
-                    <p className="mt-0.5 truncate text-xs font-semibold text-stone-500">{profileHandleLine}</p>
+              <div className="relative flex flex-col gap-3">
+                <div className="flex min-h-[1.25rem] items-center justify-between gap-2">
+                  <p className="text-[11px] font-semibold tracking-[0.02em] text-[#6B2D3E]">Мой профиль</p>
+                  {hasProfilePostDraft ? (
+                    <span
+                      className="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold tracking-[0.02em] text-amber-900"
+                      title="Есть черновик поста на странице"
+                    >
+                      Черновик
+                    </span>
                   ) : null}
-                  <div className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-stone-100/90 px-2.5 py-1 text-xs font-bold text-stone-700">
-                    <span className="tabular-nums text-stone-900">{publicationsCount}</span>
-                    <span>{publicationsLabel}</span>
+                </div>
+                <div className="flex items-start gap-3">
+                  <div className="flex h-11 w-11 shrink-0 overflow-hidden rounded-xl bg-stone-100 ring-1 ring-stone-200/70">
+                    {avatarUrl ? (
+                      <img src={avatarUrl} alt="" className="h-full w-full object-cover" />
+                    ) : (
+                      <div className="grid h-full w-full place-items-center text-stone-500">
+                        <LuUser className="h-5 w-5" strokeWidth={2} aria-hidden />
+                      </div>
+                    )}
                   </div>
-                  <p className="mt-2 line-clamp-2 text-sm font-medium leading-snug text-stone-600">
-                    {bioText || 'Откройте страницу, чтобы заполнить описание.'}
-                  </p>
+                  <div className="min-w-0 flex-1 space-y-1.5">
+                    <p className="truncate text-[15px] font-bold leading-snug text-stone-900">{profileDisplayTitle}</p>
+                    {profileHandleLine ? (
+                      <p className="truncate text-xs font-medium text-stone-500">{profileHandleLine}</p>
+                    ) : null}
+                    <div className="inline-flex w-fit max-w-full items-center gap-1.5 rounded-full bg-stone-100/90 px-2 py-1 text-[11px] font-bold text-stone-700">
+                      <span className="tabular-nums text-stone-900">{publicationsCount}</span>
+                      <span>{publicationsLabel}</span>
+                    </div>
+                    <p className="line-clamp-2 text-xs leading-snug text-stone-600 sm:text-sm">
+                      {bioText || 'Откройте страницу, чтобы заполнить описание.'}
+                    </p>
+                  </div>
                 </div>
               </div>
             </button>
@@ -1401,17 +1443,19 @@ function DashboardMain() {
             </div>
           ) : null}
 
-          <section className="overflow-hidden rounded-2xl border border-stone-200/70 bg-white p-4 shadow-[var(--shadow-card)] min-[769px]:col-span-2 sm:p-5">
-            <div className="flex flex-col items-start justify-between gap-2 sm:flex-row sm:items-center">
+          <section className="relative overflow-hidden rounded-2xl border border-stone-200/70 bg-white p-4 shadow-[var(--shadow-card)] min-[769px]:col-span-2 sm:p-5">
+            <button
+              type="button"
+              onClick={() => navigate('/sermons')}
+              className="tap-highlight-transparent touch-manipulation absolute right-3 top-3 z-[1] inline-flex min-h-[36px] min-w-[52px] items-center justify-center rounded-[10px] border border-stone-200 bg-white px-2.5 text-[10px] font-extrabold tracking-[0.08em] text-stone-700 hover:bg-stone-50 sm:right-4 sm:top-4"
+            >
+              ВСЕ
+            </button>
+            <div className="flex items-center gap-2 pr-16">
+              <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[#0E7E6A] text-white">
+                <LuPlay className="h-4 w-4" strokeWidth={2} aria-hidden />
+              </span>
               <p className="text-[11px] font-semibold tracking-[0.02em] text-[#0E7E6A]">Медиа</p>
-              <button
-                type="button"
-                onClick={() => navigate('/sermons')}
-                className="tap-highlight-transparent touch-manipulation inline-flex min-h-[44px] items-center gap-2 rounded-[10px] border border-stone-200 bg-white px-3 text-xs font-extrabold text-stone-700 hover:bg-stone-50"
-              >
-                Все проповеди
-                <LuArrowRight className="h-4 w-4" strokeWidth={2} aria-hidden />
-              </button>
             </div>
 
             {latestEpisode ? (
@@ -1422,33 +1466,14 @@ function DashboardMain() {
                 <div className="mt-3 flex flex-wrap items-center gap-2">
                   <button
                     type="button"
-                    onClick={() => void onPlayLatest()}
+                    onClick={() => void onPlayLatestClick()}
                     className="tap-highlight-transparent touch-manipulation inline-flex min-h-[44px] w-full items-center justify-center gap-2 rounded-[12px] bg-[#0E7E6A] px-4 text-sm font-extrabold text-white hover:bg-[#0C6E5D] sm:w-auto"
+                    aria-label={playWidgetLabel}
                   >
-                    <LuPlay className="h-4 w-4" strokeWidth={2.25} aria-hidden />
-                    Воспроизвести
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => onToggleFavorite(latestEpisode.id)}
-                    className={[
-                      'tap-highlight-transparent touch-manipulation inline-flex min-h-[44px] w-full items-center justify-center gap-2 rounded-[12px] px-4 text-sm font-extrabold transition sm:w-auto',
-                      favorites[latestEpisode.id]
-                        ? 'bg-rose-50 text-rose-700 ring-1 ring-rose-200/70 hover:bg-rose-100'
-                        : 'border-[1.5px] border-[#0E7E6A] bg-white text-[#0E7E6A] hover:bg-[#ECF8F5]',
-                    ].join(' ')}
-                  >
-                    <LuHeart className="h-4 w-4" strokeWidth={2} aria-hidden />
-                    {favorites[latestEpisode.id] ? 'В избранном' : 'В избранное'}
+                    <PlayWidgetIcon className="h-4 w-4" strokeWidth={2.25} aria-hidden />
+                    {playWidgetLabel}
                   </button>
                 </div>
-
-                {activeAudioUrl ? (
-                  <div className="mt-3 rounded-2xl border border-stone-200/70 bg-white p-3">
-                    <p className="truncate text-xs font-semibold text-stone-500">{activeAudioTitle}</p>
-                    <audio ref={audioRef} controls src={activeAudioUrl} className="mt-2 w-full" />
-                  </div>
-                ) : null}
               </div>
             ) : (
               <p className="mt-4 text-sm font-semibold text-stone-500">Новая проповедь пока не найдена.</p>
@@ -1676,6 +1701,50 @@ function DashboardMain() {
         </div>
         </div>
       </div>
+
+      {showDashboardSermonPlayer && latestEpisode ? (
+        <div className="fixed inset-x-3 bottom-[calc(var(--app-bottom-nav-total-height)+0.5rem)] z-[60] lg:inset-x-6 lg:bottom-6">
+          <div className="rounded-3xl border border-stone-200/80 bg-white/90 p-4 shadow-[0_16px_60px_rgba(0,0,0,0.18)] backdrop-blur-xl">
+            <div className="flex items-start gap-3">
+              <div className="h-12 w-12 shrink-0 overflow-hidden rounded-2xl bg-stone-100 ring-1 ring-stone-200/70">
+                {latestEpisode.imageUrl ? (
+                  <img src={latestEpisode.imageUrl} alt="" className="h-full w-full object-cover" />
+                ) : (
+                  <div className="grid h-full w-full place-items-center text-stone-400">
+                    <LuHeadphones className="h-5 w-5" strokeWidth={1.8} aria-hidden />
+                  </div>
+                )}
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-[13px] font-extrabold text-stone-900">{latestEpisode.title}</p>
+                <p className="mt-0.5 truncate text-[11px] font-semibold text-stone-500">
+                  {dashboardEpisodeSubtitle(latestEpisode) || sermonFeedTitle}
+                </p>
+              </div>
+              <button
+                type="button"
+                className="inline-flex h-9 shrink-0 items-center justify-center rounded-2xl border border-stone-200 bg-white px-3 text-xs font-extrabold text-stone-700 hover:bg-stone-50"
+                onClick={() => closeDashboardSermonPlayer()}
+                aria-label="Закрыть плеер"
+              >
+                <LuX className="h-4 w-4" strokeWidth={2} aria-hidden />
+              </button>
+            </div>
+
+            <div className="mt-3">
+              <audio
+                ref={(el) => {
+                  audioRef.current = el;
+                }}
+                controls
+                preload="none"
+                className="w-full"
+                src={latestEpisode.audioUrl}
+              />
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {eventOpen && typeof document !== 'undefined'
         ? createPortal(

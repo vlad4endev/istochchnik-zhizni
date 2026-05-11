@@ -169,7 +169,7 @@ export function MessengerPage() {
         className={`tg-sidebar chat-list-panel ${mobileView === 'list' ? 'tg-sidebar--visible' : ''} ${mobileView === 'chat' ? 'tg-sidebar--hidden' : ''}`}
       >
         <div className="tg-sidebar-header">
-          <h1 className="tg-sidebar-title">Мессенджер</h1>
+          <h1 className="tg-sidebar-title">Чаты</h1>
           <div className="flex items-center gap-2">
             <button
               type="button"
