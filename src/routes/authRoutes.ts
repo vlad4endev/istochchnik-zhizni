@@ -69,6 +69,14 @@ const authLoginRateLimit = createIpRateLimiter({
   message: 'Too many login attempts. Please try again later.',
 });
 
+/** Отдельный лимит: refresh по cookie — не брутфорс; SPA держит несколько вкладок + SessionKeepAlive. */
+const authRefreshRateLimit = createIpRateLimiter({
+  windowMs: 15 * 60 * 1000,
+  maxRequests: 180,
+  message: 'Too many session refresh attempts. Please wait and try again.',
+  keyPrefix: 'auth-refresh',
+});
+
 const authResetRateLimit = createIpRateLimiter({
   windowMs: 15 * 60 * 1000,
   maxRequests: 8,
@@ -132,7 +140,7 @@ function avatarUploadMiddleware(req: Request, res: Response, next: NextFunction)
 
 router.post('/register', registerHandler);
 router.post('/login', authLoginRateLimit, loginHandler);
-router.post('/refresh', authLoginRateLimit, refreshHandler);
+router.post('/refresh', authRefreshRateLimit, refreshHandler);
 router.post('/forgot-password-request', authResetRateLimit, forgotPasswordRequestHandler);
 router.post('/password-reset/sms/request', authResetRateLimit, startPasswordResetSmsHandler);
 router.post('/password-reset/sms/verify', authResetRateLimit, verifyPasswordResetSmsHandler);

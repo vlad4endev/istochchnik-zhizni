@@ -5,6 +5,7 @@ import Redis from 'ioredis';
 import { analyzeCodeWithClaude } from '../analyzers/codeAnalyzer';
 import { collectServerDiagnostics } from '../analyzers/serverAnalyzer';
 import { resolveSafeScanDir, scanProject } from '../analyzers/projectScanner';
+import { runAutomatedTestSuite } from '../autoTestSuite';
 import { FullDiagnosticsReport, ProjectAuditResult } from '../types';
 import { pool } from '../../config/db';
 import { requireAuthSession } from '../../middleware/authSession';
@@ -270,44 +271,6 @@ async function checkSupabaseConnectivity(): Promise<{ configured: boolean; reach
   }
 }
 
-async function runSmokeEndpoints(baseUrl: string) {
-  const endpoints: Array<{ path: string; expectedStatuses: number[]; note?: string }> = [
-    { path: '/health', expectedStatuses: [200] },
-    { path: '/', expectedStatuses: [200] },
-    { path: '/api/version', expectedStatuses: [200] },
-    { path: '/api/diagnostics/health', expectedStatuses: [200] },
-    { path: '/api/resources/podcasts', expectedStatuses: [200, 204], note: 'Публичный контент endpoint' },
-    {
-      path: '/api/settings/logs/admin',
-      expectedStatuses: [401, 403],
-      note: 'Защищенный endpoint должен быть закрыт без сессии',
-    },
-  ];
-  const results: Array<{ path: string; ok: boolean; status: number; durationMs: number; note?: string }> = [];
-  for (const endpoint of endpoints) {
-    const started = Date.now();
-    try {
-      const response = await fetch(`${baseUrl}${endpoint.path}`);
-      results.push({
-        path: endpoint.path,
-        ok: endpoint.expectedStatuses.includes(response.status),
-        status: response.status,
-        durationMs: Date.now() - started,
-        note: endpoint.note,
-      });
-    } catch {
-      results.push({
-        path: endpoint.path,
-        ok: false,
-        status: 0,
-        durationMs: Date.now() - started,
-        note: endpoint.note,
-      });
-    }
-  }
-  return results;
-}
-
 type BaselineSnapshot = {
   generatedAt: string;
   httpDurationP95Ms: number;
@@ -346,6 +309,20 @@ async function runFullDiagnostics(description: string, req: Request): Promise<Fu
   const baseUrl = `${req.protocol}://${req.get('host')}`;
   const environment = buildEnvironmentSummary();
 
+  const automatedMeasured = await measure(async () => runAutomatedTestSuite(baseUrl, req));
+  const automatedTests = automatedMeasured.value;
+  checks.push({
+    name: 'Интеграционные автотесты',
+    status:
+      automatedTests.overall === 'failed'
+        ? 'failed'
+        : automatedTests.overall === 'degraded'
+          ? 'warning'
+          : 'passed',
+    details: `${automatedTests.summary.passed}/${automatedTests.summary.total} ок · критич.: ${automatedTests.results.filter((t) => t.tier === 'critical' && t.status === 'failed').length} провал.`,
+    durationMs: automatedMeasured.durationMs,
+  });
+
   const healthMeasured = await measure(async () => {
     if (!pool) {
       return { ok: true, details: 'DATABASE_URL не задан, БД-проверка пропущена' };
@@ -358,14 +335,6 @@ async function runFullDiagnostics(description: string, req: Request): Promise<Fu
     status: healthMeasured.value.ok ? 'passed' : 'failed',
     details: healthMeasured.value.details,
     durationMs: healthMeasured.durationMs,
-  });
-
-  const smokeMeasured = await measure(async () => runSmokeEndpoints(baseUrl));
-  checks.push({
-    name: 'Smoke endpoints',
-    status: smokeMeasured.value.every((item) => item.ok) ? 'passed' : 'failed',
-    details: smokeMeasured.value.map((item) => `${item.path}:${item.status || 'ERR'}`).join(', '),
-    durationMs: smokeMeasured.durationMs,
   });
 
   const serverMeasured = await measure(async () => collectServerDiagnostics());
@@ -439,6 +408,14 @@ async function runFullDiagnostics(description: string, req: Request): Promise<Fu
   const auditPayload = {
     description,
     checks,
+    automatedTestsSummary: {
+      overall: automatedTests.overall,
+      passed: automatedTests.summary.passed,
+      total: automatedTests.summary.total,
+      failedCases: automatedTests.results
+        .filter((t) => t.status === 'failed')
+        .map((t) => ({ id: t.id, name: t.name, tier: t.tier })),
+    },
     server: serverMeasured.value,
     project: scanMeasured.value,
     journal: journalMeasured.value,
@@ -465,7 +442,6 @@ async function runFullDiagnostics(description: string, req: Request): Promise<Fu
 
   const blockers: string[] = [];
   if (checks.some((item) => item.status === 'failed')) blockers.push('Есть проваленные обязательные проверки.');
-  if (!smokeMeasured.value.every((item) => item.ok)) blockers.push('Smoke тесты не пройдены полностью.');
   if (environment.missingCritical.length > 0) blockers.push(`Отсутствуют critical env: ${environment.missingCritical.join(', ')}`);
   if (regressionItems.length > 0) blockers.push('Обнаружена регрессия относительно прошлого запуска.');
 
@@ -483,9 +459,10 @@ async function runFullDiagnostics(description: string, req: Request): Promise<Fu
       checks,
     },
     environment,
+    automatedTests,
     smoke: {
       baseUrl,
-      endpoints: smokeMeasured.value,
+      endpoints: automatedTests.smokeEndpoints,
     },
     integrations: {
       redis: redisStatus,
@@ -587,6 +564,18 @@ diagnosticsRouter.post('/full-report', async (req: Request, res: Response) => {
   } catch (error) {
     res.status(500).json({
       error: error instanceof Error ? error.message : 'Не удалось сформировать полный отчет',
+    });
+  }
+});
+
+diagnosticsRouter.post('/auto-tests', async (req: Request, res: Response) => {
+  try {
+    const baseUrl = `${req.protocol}://${req.get('host')}`;
+    const report = await runAutomatedTestSuite(baseUrl, req);
+    res.json(report);
+  } catch (error) {
+    res.status(500).json({
+      error: error instanceof Error ? error.message : 'Не удалось выполнить автотесты',
     });
   }
 });

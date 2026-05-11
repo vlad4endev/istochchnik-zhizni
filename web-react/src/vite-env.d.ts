@@ -18,6 +18,8 @@ interface ImportMetaEnv {
    * @see docker/Dockerfile.web.main
    */
   readonly VITE_APP_VARIANT?: string;
+  /** `true` — подключить скрипт Progressier после первого кадра (push/PWA); на проде должен быть настроен домен и файл у них в дашборде. */
+  readonly VITE_PROGRESSIER_ENABLED?: string;
 }
 
 interface ImportMeta {

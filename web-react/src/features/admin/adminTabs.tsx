@@ -121,7 +121,7 @@ export const ADMIN_TABS: readonly AdminTabConfig[] = [
     Icon: LuChartColumnBig,
     short: 'Диагностика',
     description:
-      'Полный срез состояния API и проекта: health, серверные метрики, скан структуры и AI-аудит в одном дашборде.',
+      'Интеграционные автотесты (API, БД, безопасность) и полный срез: метрики, скан проекта, журнал и AI-аудит.',
   },
   {
     id: 'integrations',

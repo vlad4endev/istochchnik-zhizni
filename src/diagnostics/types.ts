@@ -116,6 +116,30 @@ export interface JournalAnalysisResult {
   recentErrors: Array<{ message: string; created_at: string; scope: string }>;
 }
 
+export type AutomatedTestTier = 'critical' | 'standard' | 'optional';
+
+export interface AutomatedTestResult {
+  id: string;
+  name: string;
+  category: string;
+  tier: AutomatedTestTier;
+  status: 'passed' | 'failed' | 'skipped';
+  durationMs: number;
+  message: string;
+  detail?: string;
+}
+
+export interface AutomatedTestsReport {
+  generatedAt: string;
+  baseUrl: string;
+  durationMs: number;
+  summary: { passed: number; failed: number; skipped: number; total: number };
+  overall: 'passed' | 'degraded' | 'failed';
+  authenticatedContext: boolean;
+  results: AutomatedTestResult[];
+  smokeEndpoints: Array<{ path: string; ok: boolean; status: number; durationMs: number; note?: string }>;
+}
+
 export interface FullDiagnosticsReport {
   generatedAt: string;
   readiness: {
@@ -126,6 +150,8 @@ export interface FullDiagnosticsReport {
     criticalEnv: Array<{ key: string; present: boolean }>;
     missingCritical: string[];
   };
+  /** Полный отчёт интеграционных автотестов (HTTP, БД, безопасность, сессия). */
+  automatedTests: AutomatedTestsReport;
   smoke: {
     baseUrl: string;
     endpoints: Array<{ path: string; ok: boolean; status: number; durationMs: number; note?: string }>;

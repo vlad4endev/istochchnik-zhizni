@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { apiClient } from '../../lib/apiClient';
 
 type ServerPayload = {
@@ -34,12 +34,33 @@ type AuditPayload = {
   issues: AuditIssue[];
 };
 
+type AutomatedTestsPayload = {
+  generatedAt: string;
+  baseUrl: string;
+  durationMs: number;
+  summary: { passed: number; failed: number; skipped: number; total: number };
+  overall: 'passed' | 'degraded' | 'failed';
+  authenticatedContext: boolean;
+  results: Array<{
+    id: string;
+    name: string;
+    category: string;
+    tier: 'critical' | 'standard' | 'optional';
+    status: 'passed' | 'failed' | 'skipped';
+    durationMs: number;
+    message: string;
+    detail?: string;
+  }>;
+  smokeEndpoints: Array<{ path: string; ok: boolean; status: number; durationMs: number; note?: string }>;
+};
+
 type FullReportPayload = {
   generatedAt: string;
   readiness: {
     overall: 'healthy' | 'degraded' | 'critical';
     checks: Array<{ name: string; status: 'passed' | 'warning' | 'failed'; details: string; durationMs: number }>;
   };
+  automatedTests: AutomatedTestsPayload;
   server: ServerPayload;
   project: ScanPayload;
   performance: {
@@ -102,10 +123,24 @@ function scoreClass(score: number): string {
   return 'text-red-700';
 }
 
+function suiteOverallClass(overall: AutomatedTestsPayload['overall']): string {
+  if (overall === 'passed') return 'text-emerald-700';
+  if (overall === 'degraded') return 'text-amber-700';
+  return 'text-red-600';
+}
+
+function tierBadgeClass(tier: AutomatedTestsPayload['results'][number]['tier']): string {
+  if (tier === 'critical') return 'bg-red-100 text-red-800';
+  if (tier === 'standard') return 'bg-stone-200 text-stone-800';
+  return 'bg-stone-100 text-stone-600';
+}
+
 export function DiagnosticsDashboardSection() {
   const [isLoading, setIsLoading] = useState(false);
+  const [autoLoading, setAutoLoading] = useState(false);
   const [errorText, setErrorText] = useState<string | null>(null);
   const [report, setReport] = useState<FullReportPayload | null>(null);
+  const [autoSuite, setAutoSuite] = useState<AutomatedTestsPayload | null>(null);
   const [description, setDescription] = useState('Полный аудит состояния проекта и инфраструктуры');
 
   async function runFullAnalysis(): Promise<void> {
@@ -114,11 +149,57 @@ export function DiagnosticsDashboardSection() {
     try {
       const full = await apiClient.post<FullReportPayload>('/api/diagnostics/full-report', { description });
       setReport(full.data);
+      setAutoSuite(full.data.automatedTests);
     } catch (error) {
       setErrorText(error instanceof Error ? error.message : 'Не удалось выполнить диагностику');
     } finally {
       setIsLoading(false);
     }
+  }
+
+  async function runAutoTestsOnly(): Promise<void> {
+    setAutoLoading(true);
+    setErrorText(null);
+    try {
+      const res = await apiClient.post<AutomatedTestsPayload>('/api/diagnostics/auto-tests');
+      setAutoSuite(res.data);
+    } catch (error) {
+      setErrorText(error instanceof Error ? error.message : 'Не удалось выполнить автотесты');
+    } finally {
+      setAutoLoading(false);
+    }
+  }
+
+  const suiteByCategory = useMemo(() => {
+    if (!autoSuite) return {} as Record<string, AutomatedTestsPayload['results']>;
+    const map: Record<string, AutomatedTestsPayload['results']> = {};
+    for (const row of autoSuite.results) {
+      if (!map[row.category]) map[row.category] = [];
+      map[row.category]!.push(row);
+    }
+    return map;
+  }, [autoSuite]);
+
+  const readinessDisplay = useMemo(() => {
+    if (report?.readiness?.overall) return report.readiness.overall;
+    if (!autoSuite) return null;
+    if (autoSuite.overall === 'passed') return 'healthy' as const;
+    if (autoSuite.overall === 'degraded') return 'degraded' as const;
+    return 'critical' as const;
+  }, [report, autoSuite]);
+
+  const stampDisplay = report?.generatedAt ?? autoSuite?.generatedAt ?? null;
+
+  const smokeSource = useMemo(() => {
+    if (report?.smoke) return report.smoke;
+    if (autoSuite) return { baseUrl: autoSuite.baseUrl, endpoints: autoSuite.smokeEndpoints };
+    return null;
+  }, [report, autoSuite]);
+
+  function statusRowClass(status: AutomatedTestsPayload['results'][number]['status']): string {
+    if (status === 'passed') return 'border-emerald-200 bg-emerald-50/80';
+    if (status === 'failed') return 'border-red-200 bg-red-50/90';
+    return 'border-stone-200 bg-stone-50/80';
   }
 
   return (
@@ -131,17 +212,27 @@ export function DiagnosticsDashboardSection() {
           <div className="min-w-0 flex-1">
             <h3 className="text-lg font-semibold">Диагностика проекта</h3>
             <p className="mt-1 text-sm text-white/80">
-              Собирает health, метрики сервера, сканирование структуры и AI-аудит в одном месте.
+              Интеграционные автотесты (HTTP, БД, безопасность) плюс полный отчёт: метрики, скан проекта и AI-аудит.
             </p>
           </div>
-          <button
-            type="button"
-            className="whitespace-nowrap rounded-lg border border-white/30 bg-white/15 px-5 py-2.5 text-sm font-semibold text-white backdrop-blur transition hover:bg-white/25 disabled:opacity-60"
-            onClick={() => void runFullAnalysis()}
-            disabled={isLoading}
-          >
-            {isLoading ? 'Собираем отчёт…' : 'Проверить и собрать отчёт'}
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              className="whitespace-nowrap rounded-lg border border-white/30 bg-white/15 px-4 py-2.5 text-sm font-semibold text-white backdrop-blur transition hover:bg-white/25 disabled:opacity-60"
+              onClick={() => void runAutoTestsOnly()}
+              disabled={autoLoading || isLoading}
+            >
+              {autoLoading ? 'Автотесты…' : 'Запустить автотесты'}
+            </button>
+            <button
+              type="button"
+              className="whitespace-nowrap rounded-lg border border-white/30 bg-white/15 px-5 py-2.5 text-sm font-semibold text-white backdrop-blur transition hover:bg-white/25 disabled:opacity-60"
+              onClick={() => void runFullAnalysis()}
+              disabled={isLoading || autoLoading}
+            >
+              {isLoading ? 'Собираем отчёт…' : 'Полный отчёт'}
+            </button>
+          </div>
         </div>
         <div className="mt-3">
           <input
@@ -158,22 +249,71 @@ export function DiagnosticsDashboardSection() {
         ) : null}
       </section>
 
+      {autoSuite ? (
+        <section className="rounded-2xl border border-stone-200/90 bg-[var(--surface-elevated)] p-5 shadow-[var(--shadow)]">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h4 className="text-sm font-extrabold text-[var(--text)]">Интеграционные автотесты</h4>
+              <p className="mt-1 text-xs text-[var(--text-secondary)]">
+                Серия проверок без браузера: публичные API, границы доступа, PostgreSQL, опционально — админ-маршруты с вашей
+                сессией ({autoSuite.authenticatedContext ? 'контекст администратора подтверждён' : 'расширенные проверки пропущены — выполните вход'}).
+              </p>
+            </div>
+            <div className="text-right">
+              <p className={`text-2xl font-bold leading-none ${suiteOverallClass(autoSuite.overall)}`}>
+                {autoSuite.overall === 'passed' ? 'OK' : autoSuite.overall === 'degraded' ? 'Внимание' : 'Ошибки'}
+              </p>
+              <p className="mt-1 text-xs text-[var(--text-muted)]">
+                {autoSuite.summary.passed}/{autoSuite.summary.total} успешно · {autoSuite.durationMs} ms
+              </p>
+            </div>
+          </div>
+          <div className="mt-4 space-y-4">
+            {Object.entries(suiteByCategory).map(([category, rows]) => (
+              <div key={category}>
+                <p className="mb-2 text-xs font-bold uppercase tracking-wide text-stone-500">{category}</p>
+                <div className="space-y-1.5">
+                  {rows.map((row) => (
+                    <div
+                      key={row.id}
+                      className={`flex flex-wrap items-start gap-2 rounded-xl border px-3 py-2 text-sm ${statusRowClass(row.status)}`}
+                    >
+                      <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold uppercase ${tierBadgeClass(row.tier)}`}>
+                        {row.tier}
+                      </span>
+                      <span className="min-w-0 flex-1 font-medium text-[var(--text)]">{row.name}</span>
+                      <span className="shrink-0 text-xs font-semibold text-[var(--text-secondary)]">
+                        {row.status === 'passed' ? '✓' : row.status === 'failed' ? '✕' : '○'} {row.durationMs} ms
+                      </span>
+                      <p className="w-full text-xs text-[var(--text-secondary)]">{row.message}</p>
+                      {row.detail ? (
+                        <p className="w-full text-xs text-stone-500">{row.detail}</p>
+                      ) : null}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
       <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <article className="rounded-[10px] border border-[#F0E9EA] bg-white p-4">
           <p className="mb-2 text-xs font-medium uppercase tracking-[0.5px] text-stone-400">Здоровье сервера</p>
           <p
             className={[
               'text-3xl font-bold leading-none',
-              report?.readiness?.overall === 'healthy'
+              readinessDisplay === 'healthy'
                 ? 'text-emerald-700'
-                : report?.readiness?.overall === 'critical'
+                : readinessDisplay === 'critical'
                   ? 'text-red-600'
                 : 'text-[var(--text)]',
             ].join(' ')}
           >
-            {report?.readiness?.overall ?? '—'}
+            {readinessDisplay ?? '—'}
           </p>
-          <p className="mt-1 text-xs text-[var(--text-muted)]">{report?.generatedAt ?? 'Нет данных'}</p>
+          <p className="mt-1 text-xs text-[var(--text-muted)]">{stampDisplay ?? 'Нет данных'}</p>
         </article>
         <article className="rounded-[10px] border border-[#F0E9EA] bg-white p-4">
           <p className="mb-2 text-xs font-medium uppercase tracking-[0.5px] text-stone-400">CPU / RAM / DISK</p>
@@ -198,14 +338,19 @@ export function DiagnosticsDashboardSection() {
         </article>
       </section>
 
-      {!report ? (
+      {!report && !autoSuite ? (
         <section className="flex min-h-[180px] flex-col items-center justify-center rounded-xl border border-stone-200 bg-[var(--surface-elevated)] text-center">
           <div className="text-3xl" aria-hidden>
             📊
           </div>
-          <p className="mt-3 text-sm text-[var(--text-secondary)]">Нажмите «Проверить и собрать отчёт» чтобы получить полный анализ</p>
+          <p className="mt-3 max-w-md text-sm text-[var(--text-secondary)]">
+            Запустите быстрые автотесты или полный отчёт — интеграционные проверки выполняются на сервере с теми же учётными данными,
+            что и этот запрос.
+          </p>
         </section>
-      ) : (
+      ) : null}
+
+      {report ? (
         <>
           <section className="rounded-xl border border-stone-200 bg-[var(--surface-elevated)] p-5">
             <h4 className="text-sm font-extrabold text-[var(--text)]">Валидация релиза (gate)</h4>
@@ -262,7 +407,9 @@ export function DiagnosticsDashboardSection() {
             </div>
           </section>
         </>
-      )}
+      ) : null}
+      {report || autoSuite ? (
+      <>
       {report ? (
       <>
       <section className="grid gap-4 xl:grid-cols-2">
@@ -346,13 +493,15 @@ export function DiagnosticsDashboardSection() {
           </div>
         </article>
       </section>
+      </>
+      ) : null}
 
       <section className="grid gap-4 xl:grid-cols-3">
         <article className="rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] p-5 shadow-[var(--shadow)]">
           <h4 className="text-sm font-extrabold text-[var(--text)]">Smoke API</h4>
-          <p className="mt-1 text-xs text-[var(--text-secondary)]">{report?.smoke?.baseUrl ?? '—'}</p>
+          <p className="mt-1 text-xs text-[var(--text-secondary)]">{smokeSource?.baseUrl ?? '—'}</p>
           <div className="mt-3 space-y-1.5">
-            {(report?.smoke?.endpoints ?? []).map((item) => (
+            {(smokeSource?.endpoints ?? []).map((item) => (
               <div key={item.path} className="rounded-lg border border-stone-200 bg-[var(--surface-elevated)] px-2.5 py-1.5 text-xs text-[var(--text)]">
                 {item.path}: {item.status || 'ERR'} · {item.durationMs} ms · {item.ok ? 'OK' : 'FAIL'}
                 {item.note ? <div className="text-xs text-[var(--text-secondary)]">{item.note}</div> : null}
@@ -360,6 +509,7 @@ export function DiagnosticsDashboardSection() {
             ))}
           </div>
         </article>
+        {report ? (
         <article className="rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] p-5 shadow-[var(--shadow)]">
           <h4 className="text-sm font-extrabold text-[var(--text)]">Интеграции</h4>
           <div className="mt-3 space-y-2 text-sm">
@@ -381,6 +531,13 @@ export function DiagnosticsDashboardSection() {
             </div>
           </div>
         </article>
+        ) : (
+        <article className="rounded-2xl border border-dashed border-stone-200 bg-[var(--surface-elevated)] p-5 text-sm text-[var(--text-secondary)] shadow-[var(--shadow)]">
+          <h4 className="text-sm font-extrabold text-[var(--text)]">Интеграции</h4>
+          <p className="mt-2">Доступно в полном отчёте.</p>
+        </article>
+        )}
+        {report ? (
         <article className="rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] p-5 shadow-[var(--shadow)]">
           <h4 className="text-sm font-extrabold text-[var(--text)]">Критичные ENV</h4>
           <div className="mt-3 flex flex-wrap gap-2">
@@ -403,13 +560,18 @@ export function DiagnosticsDashboardSection() {
             <p className="mt-3 text-xs text-emerald-700">Все критичные переменные присутствуют.</p>
           )}
         </article>
+        ) : (
+        <article className="rounded-2xl border border-dashed border-stone-200 bg-[var(--surface-elevated)] p-5 text-sm text-[var(--text-secondary)] shadow-[var(--shadow)]">
+          <h4 className="text-sm font-extrabold text-[var(--text)]">Критичные ENV</h4>
+          <p className="mt-2">Доступно в полном отчёте.</p>
+        </article>
+        )}
       </section>
 
+      {report ? (
       <section className="rounded-2xl border border-stone-200/80 bg-[var(--surface-elevated)] p-5 shadow-[var(--shadow)]">
         <h4 className="text-sm font-extrabold text-[var(--text)]">Регрессии относительно прошлого запуска</h4>
-        {!report ? (
-          <p className="mt-2 text-sm text-[var(--text-secondary)]">Нет данных.</p>
-        ) : report.regression.hasRegression ? (
+        {report.regression.hasRegression ? (
           <div className="mt-2">
             <p className="text-sm font-semibold text-red-700">Обнаружены регрессии</p>
             <ul className="mt-1 list-disc space-y-1 pl-5 text-sm text-red-800">
@@ -427,6 +589,7 @@ export function DiagnosticsDashboardSection() {
           <p className="mt-2 text-xs text-[var(--text-secondary)]">Это первый запуск — бейзлайн только что создан.</p>
         )}
       </section>
+      ) : null}
       </>
       ) : null}
     </div>

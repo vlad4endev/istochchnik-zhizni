@@ -3,8 +3,8 @@ import { useEffect, useRef } from 'react';
 import { useAuthStore } from '../features/auth/authStore';
 import { performAuthRefresh } from '../lib/authRefresh';
 
-/** Чаще access TTL на сервере (AUTH_ACCESS_TOKEN_TTL_MINUTES), чтобы не ждать 401. */
-const REFRESH_INTERVAL_MS = 4 * 60 * 1000;
+/** Чаще access TTL на сервере (AUTH_ACCESS_TOKEN_TTL_MINUTES), чтобы не ждать 401; без излишней частоты (лимиты API, несколько вкладок). */
+const REFRESH_INTERVAL_MS = 10 * 60 * 1000;
 /** Не чаще одного «ручного» продления при возврате в приложение / сеть (нагрузка на API). */
 const MIN_GAP_RESUME_REFRESH_MS = 12_000;
 

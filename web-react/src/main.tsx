@@ -34,10 +34,11 @@ const CLIENT_BUILD_VERSION = '2026-05-07-dashboard-rollback-1';
 const CLIENT_BUILD_VERSION_KEY = 'app:client-build-version';
 const CLIENT_BUILD_RELOAD_KEY = 'app:client-build-reload-once';
 
-/** Progressier: не в index.html — иначе на iOS PWA конкурирует с первым бандлом и SW. */
+/** Progressier: не в index.html — иначе на iOS PWA конкурирует с первым бандлом и SW. Включать только если в Progressier настроен домен и хостится их скрипт. */
 const PROGRESSIER_SCRIPT_SRC = 'https://progressier.app/j7yZLwkCdnvJhlAZ1Gor/script.js';
 
 function scheduleProgressierAfterFirstPaint(): void {
+  if (import.meta.env.VITE_PROGRESSIER_ENABLED !== 'true') return;
   const inject = (): void => {
     if (document.querySelector('script[data-app-progressier="1"]')) return;
     const s = document.createElement('script');
