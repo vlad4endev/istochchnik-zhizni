@@ -12,6 +12,7 @@ import { AppRouter } from './app/Router';
 import { AppRouterMain } from './app/RouterMain';
 import { AppRouterStudio } from './app/RouterStudio';
 import { MediaViewer } from './components/MediaViewer';
+import { AppErrorBoundary } from './components/AppErrorBoundary';
 import { PWAUpdatePrompt } from './components/PWAUpdatePrompt';
 import { TopLoader } from './components/ui/TopLoader';
 import { AccessibilityProvider } from './lib/accessibility/AccessibilityProvider';
@@ -157,32 +158,40 @@ if (typeof window !== 'undefined') {
   });
 }
 
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <MantineProvider
-      theme={theme}
-      defaultColorScheme="light"
-      colorSchemeManager={appearanceColorSchemeManager}
-    >
-      <Notifications position="top-right" />
-      <div className="flex min-h-0 w-full max-w-full flex-1 flex-col">
-        <QueryClientProvider client={queryClient}>
-          {import.meta.env.PROD ? <PWAUpdatePrompt /> : null}
-          <PwaUpdateListener />
-          <ViewportHeightBridge />
-          <TopLoader />
-          <BrowserRouter>
-            <AccessibilityProvider>
-              <SessionKeepAlive />
-              <RootRouter />
-              <MediaViewer />
-            </AccessibilityProvider>
-          </BrowserRouter>
-        </QueryClientProvider>
-      </div>
-    </MantineProvider>
-  </StrictMode>,
-);
+const rootEl = document.getElementById('root');
+if (!rootEl) {
+  document.body.innerHTML =
+    '<p style="font-family:system-ui;padding:16px">Не найден #root — проверьте сборку index.html.</p>';
+} else {
+  createRoot(rootEl).render(
+    <StrictMode>
+      <AppErrorBoundary>
+        <MantineProvider
+          theme={theme}
+          defaultColorScheme="light"
+          colorSchemeManager={appearanceColorSchemeManager}
+        >
+          <Notifications position="top-right" />
+          <div className="flex min-h-0 w-full max-w-full flex-1 flex-col">
+            <QueryClientProvider client={queryClient}>
+              {import.meta.env.PROD ? <PWAUpdatePrompt /> : null}
+              <PwaUpdateListener />
+              <ViewportHeightBridge />
+              <TopLoader />
+              <BrowserRouter>
+                <AccessibilityProvider>
+                  <SessionKeepAlive />
+                  <RootRouter />
+                  <MediaViewer />
+                </AccessibilityProvider>
+              </BrowserRouter>
+            </QueryClientProvider>
+          </div>
+        </MantineProvider>
+      </AppErrorBoundary>
+    </StrictMode>,
+  );
+}
 
 if ('storage' in navigator && 'persist' in navigator.storage) {
   void navigator.storage.persist();

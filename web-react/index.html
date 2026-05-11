@@ -3,17 +3,21 @@
   <head>
     <script>
       (function () {
-        const stored = localStorage.getItem('mantine-color-scheme-value');
-        const scheme =
-          stored ||
-          (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
-        document.documentElement.setAttribute('data-mantine-color-scheme', scheme);
+        try {
+          const stored = localStorage.getItem('mantine-color-scheme-value');
+          const scheme =
+            stored ||
+            (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+          document.documentElement.setAttribute('data-mantine-color-scheme', scheme);
+        } catch {
+          document.documentElement.setAttribute('data-mantine-color-scheme', 'light');
+        }
       })();
     </script>
     <meta charset="UTF-8" />
     <!-- Без ручного pinch/double-tap zoom: размер — из ОС и панели доступности (CSS), не из зума страницы. -->
-    <!-- Zoom разрешён; interactive-widget=resizes-content — при клавиатуре сжимается layout viewport, иначе iOS оставляет «высоту экрана» и появляется пустота над клавиатурой (синхронизируйте с nativeShellViewport.ts). -->
-    <meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1, viewport-fit=cover, interactive-widget=resizes-content" />
+    <!-- Не добавлять interactive-widget: на части iOS PWA нестабильный разбор viewport → «белый экран». См. nativeShellViewport.ts. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1, viewport-fit=cover" />
     <meta name="color-scheme" content="light dark" />
     <meta name="application-name" content="Моя церковь" />
     <meta name="theme-color" content="#7d3640" media="(prefers-color-scheme: light)" />
@@ -55,8 +59,9 @@
     <!-- Progressier: только скрипт (push). Не подключать progressier.json как rel=manifest первым — на iOS первый manifest wins. -->
     <script defer src="https://progressier.app/j7yZLwkCdnvJhlAZ1Gor/script.js"></script>
   </head>
-  <body>
-    <div id="root"></div>
+  <body style="margin:0;background:#f4f1ed">
+    <!-- До загрузки CSS/React: не оставлять чисто белый фон (типичная жалоба в iOS PWA). -->
+    <div id="root" style="min-height:100dvh;min-height:-webkit-fill-available"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

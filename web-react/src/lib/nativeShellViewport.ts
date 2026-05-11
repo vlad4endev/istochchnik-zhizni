@@ -1,6 +1,6 @@
-/** Совпадает с web-react/index.html: без запрета масштаба; resizes-content — клавиатура уменьшает layout viewport (без «дыры» между формой и клавиатурой на iOS). */
+/** Совпадает с web-react/index.html. Без `interactive-widget`: на части iOS/WebKit в PWA нестабильный разбор meta → пустой/битый вьюпорт и «белый экран». */
 const LOCKED_VIEWPORT =
-  'width=device-width, initial-scale=1, minimum-scale=1, viewport-fit=cover, interactive-widget=resizes-content';
+  'width=device-width, initial-scale=1, minimum-scale=1, viewport-fit=cover';
 
 let viewportWatchAttached = false;
 let syncAfterPaintRaf = 0;

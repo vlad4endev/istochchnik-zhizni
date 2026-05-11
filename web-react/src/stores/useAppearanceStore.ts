@@ -81,21 +81,27 @@ export function initAppearance(): void {
     /* ignore */
   }
 
-  const stored = localStorage.getItem('app-appearance');
-  if (!stored) {
-    useAppearanceStore.setState({ theme: 'light', fontSize: 'normal' });
-    applyTheme('light');
-    applyFontSize('normal');
-    return;
-  }
-
   try {
-    const parsed = JSON.parse(stored) as { state?: { theme?: Theme; fontSize?: FontSize } };
-    const theme = parsed.state?.theme ?? 'light';
-    const fontSize = parsed.state?.fontSize ?? 'normal';
-    useAppearanceStore.setState({ theme, fontSize });
-    applyTheme(theme);
-    applyFontSize(fontSize);
+    const stored = localStorage.getItem('app-appearance');
+    if (!stored) {
+      useAppearanceStore.setState({ theme: 'light', fontSize: 'normal' });
+      applyTheme('light');
+      applyFontSize('normal');
+      return;
+    }
+
+    try {
+      const parsed = JSON.parse(stored) as { state?: { theme?: Theme; fontSize?: FontSize } };
+      const theme = parsed.state?.theme ?? 'light';
+      const fontSize = parsed.state?.fontSize ?? 'normal';
+      useAppearanceStore.setState({ theme, fontSize });
+      applyTheme(theme);
+      applyFontSize(fontSize);
+    } catch {
+      useAppearanceStore.setState({ theme: 'light', fontSize: 'normal' });
+      applyTheme('light');
+      applyFontSize('normal');
+    }
   } catch {
     useAppearanceStore.setState({ theme: 'light', fontSize: 'normal' });
     applyTheme('light');
