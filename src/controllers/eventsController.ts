@@ -34,11 +34,15 @@ import {
   createChurchEvent,
   deleteAllChurchEvents,
   deleteChurchEvent,
+  deleteOccurrenceOverride,
+  getActiveEventRecurrenceType,
   getUnreadEventsCount,
   listActiveEvents,
   listAllEventsAdmin,
+  listOccurrenceOverridesForActiveEvents,
   markEventRead,
   updateChurchEvent,
+  upsertOccurrenceOverride,
 } from '../services/eventsService';
 import { notifyRealtime } from '../realtime/notify';
 import {
@@ -290,6 +294,52 @@ export async function postEvent(req: Request, res: Response): Promise<void> {
     return;
   }
 
+  let bodyActiveFrom: string | undefined;
+  if (req.body?.active_from !== undefined && req.body?.active_from !== null && req.body?.active_from !== '') {
+    if (typeof req.body.active_from !== 'string') {
+      res.status(400).json({ error: 'Field "active_from" must be YYYY-MM-DD' });
+      return;
+    }
+    const y = coerceEventDateToYmd(req.body.active_from);
+    if (!y) {
+      res.status(400).json({ error: 'Field "active_from" must be YYYY-MM-DD' });
+      return;
+    }
+    bodyActiveFrom = y;
+  }
+
+  let bodyActiveTo: string | null | undefined;
+  if (req.body?.active_to !== undefined) {
+    if (req.body.active_to === null || req.body.active_to === '') {
+      bodyActiveTo = null;
+    } else if (typeof req.body.active_to === 'string') {
+      const y = coerceEventDateToYmd(req.body.active_to);
+      if (!y) {
+        res.status(400).json({ error: 'Field "active_to" must be YYYY-MM-DD or empty' });
+        return;
+      }
+      bodyActiveTo = y;
+    } else {
+      res.status(400).json({ error: 'Field "active_to" must be string or null' });
+      return;
+    }
+  }
+
+  let skipSummerBreak = false;
+  if (req.body?.skip_summer_break !== undefined) {
+    if (typeof req.body.skip_summer_break !== 'boolean') {
+      res.status(400).json({ error: 'Field "skip_summer_break" must be boolean' });
+      return;
+    }
+    skipSummerBreak = req.body.skip_summer_break;
+  }
+
+  const effectiveFrom = bodyActiveFrom ?? eventYmd;
+  if (bodyActiveTo != null && bodyActiveTo.localeCompare(effectiveFrom) < 0) {
+    res.status(400).json({ error: 'active_to must be on or after active_from' });
+    return;
+  }
+
   try {
     const created = await createChurchEvent({
       title,
@@ -301,6 +351,9 @@ export async function postEvent(req: Request, res: Response): Promise<void> {
       is_active: typeof isActive === 'boolean' ? isActive : true,
       category: catParsed.value,
       poster_url: posterUrl || null,
+      active_from: bodyActiveFrom,
+      active_to: bodyActiveTo === undefined ? undefined : bodyActiveTo,
+      skip_summer_break: skipSummerBreak,
     });
     notifyRealtime(['calendar']);
     res.status(201).json(created);
@@ -380,6 +433,54 @@ export async function patchEvent(req: Request, res: Response): Promise<void> {
     }
   }
 
+  let patchActiveFrom: string | null | undefined;
+  if (body.active_from !== undefined) {
+    if (body.active_from === null || body.active_from === '') {
+      patchActiveFrom = null;
+    } else if (typeof body.active_from === 'string') {
+      const y = coerceEventDateToYmd(body.active_from);
+      if (!y) {
+        res.status(400).json({ error: 'Field "active_from" must be YYYY-MM-DD' });
+        return;
+      }
+      patchActiveFrom = y;
+    } else {
+      res.status(400).json({ error: 'Field "active_from" must be string or null' });
+      return;
+    }
+  }
+
+  let patchActiveTo: string | null | undefined;
+  if (body.active_to !== undefined) {
+    if (body.active_to === null || body.active_to === '') {
+      patchActiveTo = null;
+    } else if (typeof body.active_to === 'string') {
+      const y = coerceEventDateToYmd(body.active_to);
+      if (!y) {
+        res.status(400).json({ error: 'Field "active_to" must be YYYY-MM-DD' });
+        return;
+      }
+      patchActiveTo = y;
+    } else {
+      res.status(400).json({ error: 'Field "active_to" must be string or null' });
+      return;
+    }
+  }
+
+  let patchSkipSummer: boolean | undefined;
+  if (body.skip_summer_break !== undefined) {
+    if (typeof body.skip_summer_break !== 'boolean') {
+      res.status(400).json({ error: 'Field "skip_summer_break" must be boolean' });
+      return;
+    }
+    patchSkipSummer = body.skip_summer_break;
+  }
+
+  if (patchActiveFrom != null && patchActiveTo != null && patchActiveTo.localeCompare(patchActiveFrom) < 0) {
+    res.status(400).json({ error: 'active_to must be on or after active_from' });
+    return;
+  }
+
   try {
     const updated = await updateChurchEvent(id, {
       title: typeof body.title === 'string' ? body.title : undefined,
@@ -397,6 +498,9 @@ export async function patchEvent(req: Request, res: Response): Promise<void> {
       is_active: typeof body.is_active === 'boolean' ? body.is_active : undefined,
       category: patchCategory,
       poster_url: patchPosterUrl,
+      active_from: patchActiveFrom,
+      active_to: patchActiveTo,
+      skip_summer_break: patchSkipSummer,
     });
     if (!updated) {
       res.status(404).json({ error: 'Event not found' });
@@ -439,6 +543,138 @@ export async function deleteAllEvents(req: Request, res: Response): Promise<void
     res.json({ ok: true, deleted: deletedCount });
   } catch (err) {
     console.error('deleteAllEvents error', err);
+    res.status(500).json({ error: 'Database error' });
+  }
+}
+
+export async function getOccurrenceOverrides(_req: Request, res: Response): Promise<void> {
+  try {
+    const rows = await listOccurrenceOverridesForActiveEvents();
+    res.json(rows);
+  } catch (err) {
+    console.error('getOccurrenceOverrides error', err);
+    res.status(500).json({ error: 'Database error' });
+  }
+}
+
+export async function putOccurrenceOverride(req: Request, res: Response): Promise<void> {
+  if (!ensureAdmin(req, res)) return;
+  const eventId = parseId(req.params.id);
+  const ymd = coerceEventDateToYmd(req.params.ymd);
+  if (!eventId || !ymd) {
+    res.status(400).json({ error: 'Invalid event id or occurrence date (YYYY-MM-DD)' });
+    return;
+  }
+
+  const rt = await getActiveEventRecurrenceType(eventId);
+  if (!rt) {
+    res.status(404).json({ error: 'Event not found' });
+    return;
+  }
+  if (rt !== 'weekly') {
+    res.status(400).json({
+      error:
+        'Изменение одной даты доступно только для еженедельных событий. Для разового события отредактируйте карточку целиком.',
+    });
+    return;
+  }
+
+  const body = req.body as Record<string, unknown>;
+  if (typeof body.is_hidden !== 'boolean') {
+    res.status(400).json({ error: 'Field "is_hidden" must be boolean' });
+    return;
+  }
+
+  if (body.title !== undefined && body.title !== null && typeof body.title !== 'string') {
+    res.status(400).json({ error: 'Field "title" must be string or null' });
+    return;
+  }
+  const title =
+    body.title === undefined || body.title === null ? null : String(body.title).trim() || null;
+
+  if (
+    body.description !== undefined &&
+    body.description !== null &&
+    typeof body.description !== 'string'
+  ) {
+    res.status(400).json({ error: 'Field "description" must be string or null' });
+    return;
+  }
+  const description =
+    body.description === undefined || body.description === null ? null : String(body.description);
+
+  let eventTime: string | null = null;
+  if (body.event_time === undefined || body.event_time === null) {
+    eventTime = null;
+  } else if (typeof body.event_time === 'string') {
+    const t = normalizeEventTimeString(body.event_time);
+    if (!isValidTimeInput(t)) {
+      res.status(400).json({ error: 'Field "event_time" must be HH:mm or null' });
+      return;
+    }
+    eventTime = t;
+  } else {
+    res.status(400).json({ error: 'Field "event_time" must be string or null' });
+    return;
+  }
+
+  let posterUrl: string | null = null;
+  if (body.poster_url !== undefined) {
+    if (body.poster_url === null || body.poster_url === '') {
+      posterUrl = null;
+    } else if (typeof body.poster_url === 'string') {
+      posterUrl = body.poster_url.trim() || null;
+    } else {
+      res.status(400).json({ error: 'Field "poster_url" must be string or null' });
+      return;
+    }
+  }
+
+  try {
+    const saved = await upsertOccurrenceOverride(eventId, ymd, {
+      title,
+      description,
+      event_time: eventTime,
+      poster_url: posterUrl,
+      is_hidden: body.is_hidden,
+    });
+    notifyRealtime(['calendar']);
+    res.json(saved);
+  } catch (err) {
+    console.error('putOccurrenceOverride error', err);
+    res.status(500).json({ error: 'Database error', ...pgErrorMeta(err) });
+  }
+}
+
+export async function deleteOccurrenceOverrideHandler(req: Request, res: Response): Promise<void> {
+  if (!ensureAdmin(req, res)) return;
+  const eventId = parseId(req.params.id);
+  const ymd = coerceEventDateToYmd(req.params.ymd);
+  if (!eventId || !ymd) {
+    res.status(400).json({ error: 'Invalid event id or occurrence date' });
+    return;
+  }
+
+  const rt = await getActiveEventRecurrenceType(eventId);
+  if (!rt) {
+    res.status(404).json({ error: 'Event not found' });
+    return;
+  }
+  if (rt !== 'weekly') {
+    res.status(400).json({ error: 'Not a weekly event' });
+    return;
+  }
+
+  try {
+    const ok = await deleteOccurrenceOverride(eventId, ymd);
+    if (!ok) {
+      res.status(404).json({ error: 'No override for this date' });
+      return;
+    }
+    notifyRealtime(['calendar']);
+    res.status(204).send();
+  } catch (err) {
+    console.error('deleteOccurrenceOverrideHandler error', err);
     res.status(500).json({ error: 'Database error' });
   }
 }

@@ -393,6 +393,12 @@ ALTER TABLE church_events DROP CONSTRAINT IF EXISTS church_events_category_check
 -- Постер события (картинка для дашборда).
 ALTER TABLE church_events ADD COLUMN IF NOT EXISTS poster_url TEXT;
 
+-- Интервал показа в календаре и летнее «окно» для еженедельных событий.
+ALTER TABLE church_events ADD COLUMN IF NOT EXISTS active_from DATE;
+ALTER TABLE church_events ADD COLUMN IF NOT EXISTS active_to DATE;
+ALTER TABLE church_events ADD COLUMN IF NOT EXISTS skip_summer_break BOOLEAN NOT NULL DEFAULT FALSE;
+UPDATE church_events SET active_from = event_date::date WHERE active_from IS NULL AND event_date IS NOT NULL;
+
 CREATE TABLE IF NOT EXISTS cycle_collection_claims (
   cycle_index INTEGER NOT NULL,
   member_id INTEGER NOT NULL REFERENCES members(id) ON DELETE CASCADE,

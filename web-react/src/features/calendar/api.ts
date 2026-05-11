@@ -105,8 +105,71 @@ export interface ChurchEventItem {
   is_active: boolean;
   category?: string | null;
   poster_url?: string | null;
+  /** Начало периода показа (`YYYY-MM-DD`), по умолчанию как `event_date`. */
+  active_from?: string | null;
+  /** Конец периода показа; пусто — без ограничения. */
+  active_to?: string | null;
+  /** Еженедельное: скрыть июнь–август. */
+  skip_summer_break?: boolean;
   created_at: string;
   updated_at: string;
+}
+
+/** Переопределение полей для одной даты еженедельной серии. */
+export interface ChurchEventOccurrenceOverride {
+  id: number;
+  event_id: number;
+  occurrence_date: string;
+  title: string | null;
+  description: string | null;
+  event_time: string | null;
+  poster_url: string | null;
+  is_hidden: boolean;
+}
+
+function normalizeOccurrenceOverride(raw: unknown): ChurchEventOccurrenceOverride | null {
+  if (!isRecord(raw)) return null;
+  const id = typeof raw.id === 'number' ? raw.id : Number(raw.id);
+  const event_id = typeof raw.event_id === 'number' ? raw.event_id : Number(raw.event_id);
+  if (!Number.isFinite(id) || !Number.isFinite(event_id)) return null;
+  const occurrence_date =
+    typeof raw.occurrence_date === 'string' ? raw.occurrence_date.trim().slice(0, 10) : '';
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(occurrence_date)) return null;
+  const title =
+    raw.title === null || raw.title === undefined
+      ? null
+      : typeof raw.title === 'string'
+        ? raw.title.trim() || null
+        : null;
+  const description =
+    raw.description === null || raw.description === undefined
+      ? null
+      : typeof raw.description === 'string'
+        ? raw.description
+        : null;
+  const event_time =
+    raw.event_time === null || raw.event_time === undefined
+      ? null
+      : typeof raw.event_time === 'string'
+        ? raw.event_time.trim() || null
+        : null;
+  const poster_url =
+    raw.poster_url === null || raw.poster_url === undefined
+      ? null
+      : typeof raw.poster_url === 'string'
+        ? raw.poster_url.trim() || null
+        : null;
+  const is_hidden = Boolean(raw.is_hidden);
+  return {
+    id,
+    event_id,
+    occurrence_date,
+    title,
+    description,
+    event_time,
+    poster_url,
+    is_hidden,
+  };
 }
 
 export interface BirthdayWeekItem {
@@ -197,6 +260,42 @@ export async function deleteMemberPreviousPrayerNeed(id: number): Promise<void> 
 export async function getActiveEvents(): Promise<ChurchEventItem[]> {
   const { data } = await apiClient.get<ChurchEventItem[]>('/api/calendar/events');
   return Array.isArray(data) ? data : [];
+}
+
+export async function getOccurrenceOverrides(): Promise<ChurchEventOccurrenceOverride[]> {
+  const { data } = await apiClient.get<unknown>('/api/calendar/events/occurrence-overrides');
+  if (!Array.isArray(data)) return [];
+  const out: ChurchEventOccurrenceOverride[] = [];
+  for (const row of data) {
+    const o = normalizeOccurrenceOverride(row);
+    if (o) out.push(o);
+  }
+  return out;
+}
+
+export async function putOccurrenceOverride(
+  eventId: number,
+  occurrenceYmd: string,
+  body: {
+    title: string | null;
+    description: string | null;
+    event_time: string | null;
+    poster_url: string | null;
+    is_hidden: boolean;
+  },
+): Promise<ChurchEventOccurrenceOverride> {
+  const path = `/api/calendar/events/${encodeURIComponent(String(eventId))}/occurrences/${encodeURIComponent(occurrenceYmd)}`;
+  const { data } = await apiClient.put<unknown>(path, body);
+  const o = normalizeOccurrenceOverride(data);
+  if (!o) {
+    throw new Error('Некорректный ответ при сохранении правки даты');
+  }
+  return o;
+}
+
+export async function deleteOccurrenceOverrideForDate(eventId: number, occurrenceYmd: string): Promise<void> {
+  const path = `/api/calendar/events/${encodeURIComponent(String(eventId))}/occurrences/${encodeURIComponent(occurrenceYmd)}`;
+  await apiClient.delete(path);
 }
 
 export async function markEventRead(eventId: number): Promise<void> {

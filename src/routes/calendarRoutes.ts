@@ -42,11 +42,14 @@ import {
 import {
   deleteAllEvents,
   deleteEvent,
+  deleteOccurrenceOverrideHandler,
   getActiveEvents,
   getAdminEvents,
   getEventCategoryOptions,
+  getOccurrenceOverrides,
   patchEvent,
   postEvent,
+  putOccurrenceOverride,
   uploadEventPoster,
 } from '../controllers/eventsController';
 import { eventPosterUploadMiddleware } from '../middleware/eventPosterUpload';
@@ -77,12 +80,15 @@ router.get('/next-week/collection', getCycleCollectionClaims);
 router.patch('/next-week/collection', patchCycleCollectionClaims);
 router.get('/next-week/global', getNextWeekGlobal);
 router.get('/birthdays/week', getWeekBirthdays);
+router.get('/events/occurrence-overrides', getOccurrenceOverrides);
 router.get('/events', getActiveEvents);
 router.get('/events/category-options', getEventCategoryOptions);
 router.get('/events/admin', getAdminEvents);
 router.post('/events/poster', eventPosterUploadMiddleware, uploadEventPoster);
 router.post('/events', postEvent);
 router.delete('/events', deleteAllEvents);
+router.put('/events/:id/occurrences/:ymd', putOccurrenceOverride);
+router.delete('/events/:id/occurrences/:ymd', deleteOccurrenceOverrideHandler);
 router.patch('/events/:id', patchEvent);
 router.delete('/events/:id', deleteEvent);
 router.get('/bot-message/today', getTodayPrayerBotMessage);

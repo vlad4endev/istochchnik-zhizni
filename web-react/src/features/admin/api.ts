@@ -411,6 +411,9 @@ export async function createAdminEvent(body: {
   is_active?: boolean;
   category?: string;
   poster_url?: string | null;
+  active_from?: string | null;
+  active_to?: string | null;
+  skip_summer_break?: boolean;
 }): Promise<ChurchEventItem> {
   const { data } = await apiClient.post<ChurchEventItem>(`${CAL}/events`, body);
   return data;
@@ -428,6 +431,9 @@ export async function updateAdminEvent(
     is_active: boolean;
     category: string | null;
     poster_url: string | null;
+    active_from: string | null;
+    active_to: string | null;
+    skip_summer_break: boolean;
   }>,
 ): Promise<ChurchEventItem> {
   const { data } = await apiClient.patch<ChurchEventItem>(`${CAL}/events/${id}`, body);

@@ -13,6 +13,12 @@ export interface ChurchEvent {
   is_active: boolean;
   category?: string | null;
   poster_url?: string | null;
+  /** Первый день, когда событие может показываться в календаре (`YYYY-MM-DD`). */
+  active_from?: string | null;
+  /** Последний день показа; `null` — без ограничения. */
+  active_to?: string | null;
+  /** Для еженедельных: не показывать в июне–августе. */
+  skip_summer_break?: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -31,6 +37,10 @@ export interface CreateChurchEventInput {
   category?: string | null;
   /** URL постера, если в БД есть колонка `poster_url`. Иначе игнорируется. */
   poster_url?: string | null;
+  /** Интервал показа в календаре; `active_from` по умолчанию = `event_date`. */
+  active_from?: string | null;
+  active_to?: string | null;
+  skip_summer_break?: boolean;
 }
 
 type EventsSchemaState = {
@@ -68,6 +78,9 @@ const LEGACY_GAP_SKIP = new Set([
   'is_active',
   'category',
   'poster_url',
+  'active_from',
+  'active_to',
+  'skip_summer_break',
   'starts_at',
   'ends_at',
 ]);
@@ -212,6 +225,12 @@ function selectEventProjection(
   const descExpr = `NULLIF(BTRIM(description), '') AS description`;
   const catSql = schema.columnNames.has('category') ? ', category' : '';
   const posterSql = schema.columnNames.has('poster_url') ? ', poster_url' : '';
+  const scheduleSql = schema.columnNames.has('active_from')
+    ? `,
+      active_from::text AS active_from,
+      active_to::text AS active_to,
+      skip_summer_break`
+    : '';
   if (schema.hasFullRecurrenceShape) {
     return `
       id,
@@ -221,7 +240,7 @@ function selectEventProjection(
       to_char(event_time, 'HH24:MI') AS event_time,
       recurrence_type,
       weekly_day,
-      is_active${catSql}${posterSql},
+      is_active${catSql}${posterSql}${scheduleSql},
       created_at::text AS created_at,
       updated_at::text AS updated_at
     `;
@@ -235,7 +254,7 @@ function selectEventProjection(
       to_char(event_time, 'HH24:MI') AS event_time,
       recurrence_type,
       NULL::smallint AS weekly_day,
-      is_active${catSql}${posterSql},
+      is_active${catSql}${posterSql}${scheduleSql},
       created_at::text AS created_at,
       updated_at::text AS updated_at
     `;
@@ -248,7 +267,7 @@ function selectEventProjection(
       to_char(event_time, 'HH24:MI') AS event_time,
       'once'::text AS recurrence_type,
       NULL::smallint AS weekly_day,
-      is_active${catSql}${posterSql},
+      is_active${catSql}${posterSql}${scheduleSql},
       created_at::text AS created_at,
       updated_at::text AS updated_at
     `;
@@ -462,6 +481,54 @@ async function runChurchEventsDdlOnce(): Promise<void> {
         } catch (tsErr) {
           console.warn('[events] church_events ends_at backfill skipped:', tsErr);
         }
+        try {
+          await query(`
+            ALTER TABLE ${targetTableRef}
+              ADD COLUMN IF NOT EXISTS active_from DATE
+          `);
+          await query(`
+            ALTER TABLE ${targetTableRef}
+              ADD COLUMN IF NOT EXISTS active_to DATE
+          `);
+          await query(`
+            ALTER TABLE ${targetTableRef}
+              ADD COLUMN IF NOT EXISTS skip_summer_break BOOLEAN NOT NULL DEFAULT FALSE
+          `);
+          await query(`
+            UPDATE ${targetTableRef}
+            SET active_from = event_date::date
+            WHERE active_from IS NULL
+              AND event_date IS NOT NULL
+          `);
+        } catch (schedErr) {
+          console.warn('[events] church_events schedule columns skipped:', schedErr);
+        }
+
+        try {
+          const ovRef = `${targetTableRef.slice(0, targetTableRef.lastIndexOf('"church_events"'))}"church_event_occurrence_overrides"`;
+          await query(`
+            CREATE TABLE IF NOT EXISTS ${ovRef} (
+              id BIGSERIAL PRIMARY KEY,
+              event_id BIGINT NOT NULL REFERENCES ${targetTableRef}(id) ON DELETE CASCADE,
+              occurrence_date DATE NOT NULL,
+              title VARCHAR(255),
+              description TEXT,
+              event_time TIME,
+              poster_url TEXT,
+              is_hidden BOOLEAN NOT NULL DEFAULT FALSE,
+              created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+              updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+              UNIQUE (event_id, occurrence_date)
+            )
+          `);
+          await query(`
+            CREATE INDEX IF NOT EXISTS idx_church_ev_occurrence_date
+              ON ${ovRef} (occurrence_date)
+          `);
+        } catch (ovErr) {
+          console.warn('[events] church_event_occurrence_overrides table skipped:', ovErr);
+        }
+
         invalidateChurchEventsSchemaCache();
       } catch (err) {
         if (!isInsufficientPrivilegeError(err)) {
@@ -553,6 +620,27 @@ function assembleCreateInsert(
     pushParam('poster_url', raw || null);
   }
 
+  if (names.has('active_from')) {
+    const fromVal =
+      typeof input.active_from === 'string' && input.active_from.trim().length > 0
+        ? input.active_from.trim()
+        : input.event_date;
+    pushParam('active_from', fromVal, '::date');
+  }
+  if (names.has('active_to')) {
+    const raw = input.active_to;
+    const endVal =
+      raw === null || raw === undefined
+        ? null
+        : typeof raw === 'string' && raw.trim().length > 0
+          ? raw.trim()
+          : null;
+    pushParam('active_to', endVal, '::date');
+  }
+  if (names.has('skip_summer_break')) {
+    pushParam('skip_summer_break', input.skip_summer_break === true);
+  }
+
   const startAt = '($3::date + $4::time)';
   if (names.has('starts_at')) {
     pushSql('starts_at', startAt);
@@ -617,6 +705,18 @@ function rowToChurchEvent(row: unknown): ChurchEvent {
   }
   if (poster !== undefined) {
     out.poster_url = poster === null ? null : String(poster);
+  }
+  const evDate = String(r.event_date ?? '').slice(0, 10);
+  const af = r.active_from;
+  if (af !== undefined) {
+    out.active_from = af == null || af === '' ? evDate : String(af).slice(0, 10);
+  }
+  const at = r.active_to;
+  if (at !== undefined) {
+    out.active_to = at == null || at === '' ? null : String(at).slice(0, 10);
+  }
+  if (r.skip_summer_break !== undefined) {
+    out.skip_summer_break = Boolean(r.skip_summer_break);
   }
   return out;
 }
@@ -684,6 +784,9 @@ export async function updateChurchEvent(
     is_active: boolean;
     category: string | null;
     poster_url: string | null;
+    active_from: string | null;
+    active_to: string | null;
+    skip_summer_break: boolean;
   }>,
 ): Promise<ChurchEvent | null> {
   const schema = await ensureChurchEventsSchema();
@@ -743,6 +846,23 @@ export async function updateChurchEvent(
     const wantsClear = raw === null || String(raw).trim() === '';
     updates.push(`poster_url = $${i++}`);
     values.push(wantsClear ? null : String(raw).trim());
+  }
+
+  if (schema.columnNames.has('active_from') && input.active_from !== undefined) {
+    if (input.active_from === null) {
+      updates.push('active_from = event_date');
+    } else {
+      updates.push(`active_from = $${i++}::date`);
+      values.push(input.active_from);
+    }
+  }
+  if (schema.columnNames.has('active_to') && input.active_to !== undefined) {
+    updates.push(`active_to = $${i++}::date`);
+    values.push(input.active_to);
+  }
+  if (schema.columnNames.has('skip_summer_break') && input.skip_summer_break !== undefined) {
+    updates.push(`skip_summer_break = $${i++}`);
+    values.push(input.skip_summer_break);
   }
 
   if (
@@ -846,4 +966,162 @@ export async function getUnreadEventsCount(memberId: number): Promise<number> {
     [memberId],
   );
   return Number(result.rows[0]?.n ?? 0);
+}
+
+/** Переопределение полей события для одной календарной даты (еженедельные серии). */
+export type ChurchEventOccurrenceOverride = {
+  id: number;
+  event_id: number;
+  occurrence_date: string;
+  title: string | null;
+  description: string | null;
+  event_time: string | null;
+  poster_url: string | null;
+  is_hidden: boolean;
+};
+
+export type UpsertOccurrenceOverrideInput = {
+  title: string | null;
+  description: string | null;
+  event_time: string | null;
+  poster_url: string | null;
+  is_hidden: boolean;
+};
+
+function occurrenceOverridesTableRef(eventsTableRef: string): string {
+  const idx = eventsTableRef.lastIndexOf('"church_events"');
+  if (idx >= 0) {
+    return `${eventsTableRef.slice(0, idx)}"church_event_occurrence_overrides"`;
+  }
+  return '"public"."church_event_occurrence_overrides"';
+}
+
+function rowToOccurrenceOverride(row: unknown): ChurchEventOccurrenceOverride {
+  const r = row as Record<string, unknown>;
+  const idRaw = r.id;
+  const id =
+    typeof idRaw === 'bigint'
+      ? Number(idRaw)
+      : typeof idRaw === 'string'
+        ? Number(idRaw)
+        : Number(idRaw);
+  const evIdRaw = r.event_id;
+  const event_id =
+    typeof evIdRaw === 'bigint'
+      ? Number(evIdRaw)
+      : typeof evIdRaw === 'string'
+        ? Number(evIdRaw)
+        : Number(evIdRaw);
+  const od = r.occurrence_date;
+  let occurrence_date = '';
+  if (od instanceof Date) {
+    const y = od.getFullYear();
+    const m = String(od.getMonth() + 1).padStart(2, '0');
+    const d = String(od.getDate()).padStart(2, '0');
+    occurrence_date = `${y}-${m}-${d}`;
+  } else {
+    occurrence_date = String(od ?? '').slice(0, 10);
+  }
+  return {
+    id: Number.isFinite(id) ? id : 0,
+    event_id: Number.isFinite(event_id) ? event_id : 0,
+    occurrence_date,
+    title: r.title == null || r.title === '' ? null : String(r.title),
+    description: r.description == null ? null : String(r.description),
+    event_time: r.event_time == null || r.event_time === '' ? null : String(r.event_time),
+    poster_url: r.poster_url == null || r.poster_url === '' ? null : String(r.poster_url),
+    is_hidden: Boolean(r.is_hidden),
+  };
+}
+
+export async function listOccurrenceOverridesForActiveEvents(): Promise<ChurchEventOccurrenceOverride[]> {
+  const schema = await ensureChurchEventsSchema();
+  const ovRef = occurrenceOverridesTableRef(schema.tableRef);
+  const result = await query(
+    `SELECT o.id,
+            o.event_id,
+            o.occurrence_date::text AS occurrence_date,
+            NULLIF(BTRIM(o.title), '') AS title,
+            o.description,
+            to_char(o.event_time, 'HH24:MI') AS event_time,
+            o.poster_url,
+            o.is_hidden
+     FROM ${ovRef} o
+     INNER JOIN ${schema.tableRef} e ON e.id = o.event_id AND e.is_active = TRUE
+     ORDER BY o.occurrence_date ASC, o.event_id ASC`,
+  );
+  return result.rows.map(rowToOccurrenceOverride);
+}
+
+export async function eventIsActive(eventId: number): Promise<boolean> {
+  const schema = await ensureChurchEventsSchema();
+  const r = await query(
+    `SELECT 1 FROM ${schema.tableRef} WHERE id = $1 AND is_active = TRUE LIMIT 1`,
+    [eventId],
+  );
+  return r.rows.length > 0;
+}
+
+export async function upsertOccurrenceOverride(
+  eventId: number,
+  occurrenceYmd: string,
+  input: UpsertOccurrenceOverrideInput,
+): Promise<ChurchEventOccurrenceOverride> {
+  const schema = await ensureChurchEventsSchema();
+  const ovRef = occurrenceOverridesTableRef(schema.tableRef);
+  const title = input.title != null && input.title.trim() ? input.title.trim() : null;
+  const desc = input.description;
+  const tm = input.event_time != null && input.event_time.trim() ? input.event_time.trim() : null;
+  const poster =
+    input.poster_url != null && String(input.poster_url).trim() ? String(input.poster_url).trim() : null;
+
+  const result = await query(
+    `INSERT INTO ${ovRef} (event_id, occurrence_date, title, description, event_time, poster_url, is_hidden)
+     VALUES ($1, $2::date, $3, $4, $5::time, $6, $7)
+     ON CONFLICT (event_id, occurrence_date) DO UPDATE SET
+       title = EXCLUDED.title,
+       description = EXCLUDED.description,
+       event_time = EXCLUDED.event_time,
+       poster_url = EXCLUDED.poster_url,
+       is_hidden = EXCLUDED.is_hidden,
+       updated_at = NOW()
+     RETURNING id,
+               event_id,
+               occurrence_date::text AS occurrence_date,
+               NULLIF(BTRIM(title), '') AS title,
+               description,
+               to_char(event_time, 'HH24:MI') AS event_time,
+               poster_url,
+               is_hidden`,
+    [eventId, occurrenceYmd, title, desc, tm, poster, input.is_hidden],
+  );
+  const row = result.rows[0];
+  if (!row) {
+    throw new Error('occurrence override upsert returned no row');
+  }
+  return rowToOccurrenceOverride(row);
+}
+
+export async function deleteOccurrenceOverride(eventId: number, occurrenceYmd: string): Promise<boolean> {
+  const schema = await ensureChurchEventsSchema();
+  const ovRef = occurrenceOverridesTableRef(schema.tableRef);
+  const result = await query(
+    `DELETE FROM ${ovRef} WHERE event_id = $1 AND occurrence_date = $2::date RETURNING id`,
+    [eventId, occurrenceYmd],
+  );
+  return (result.rowCount ?? 0) > 0;
+}
+
+export async function getActiveEventRecurrenceType(id: number): Promise<'once' | 'weekly' | null> {
+  const schema = await ensureChurchEventsSchema();
+  const result = await query(
+    `SELECT recurrence_type::text AS rt
+     FROM ${schema.tableRef}
+     WHERE id = $1 AND is_active = TRUE
+     LIMIT 1`,
+    [id],
+  );
+  const row = result.rows[0] as { rt?: string } | undefined;
+  if (!row) return null;
+  return row.rt === 'weekly' ? 'weekly' : 'once';
 }

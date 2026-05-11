@@ -589,13 +589,19 @@ function DashboardQuickActionsStrip({
 
   if (items.length === 0) return null;
 
-  /** Сетка с равными колонками — кнопки всегда в один ряд, без горизонтального скролла. */
+  /**
+   * Сетка с равными колонками — кнопки всегда в один ряд.
+   * Используем произвольные значения Tailwind (`[grid-template-columns:…]`)
+   * вместо `grid-cols-3`, чтобы глобальное мобильное правило
+   * `.grid-cols-3 { grid-template-columns: 1fr !important; }` (styles/mobile.css)
+   * не схлопывало эти кнопки в столбик на телефонах.
+   */
   const gridColsClass =
     items.length === 1
-      ? 'grid-cols-1'
+      ? '[grid-template-columns:1fr]'
       : items.length === 2
-        ? 'grid-cols-2'
-        : 'grid-cols-3';
+        ? '[grid-template-columns:repeat(2,minmax(0,1fr))]'
+        : '[grid-template-columns:repeat(3,minmax(0,1fr))]';
 
   return (
     <nav

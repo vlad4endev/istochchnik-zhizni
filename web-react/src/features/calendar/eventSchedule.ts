@@ -1,6 +1,29 @@
 import { format } from 'date-fns';
 
-import type { ChurchEventItem } from './api';
+import type { ChurchEventItem, ChurchEventOccurrenceOverride } from './api';
+
+function effectiveActiveFromYmd(item: ChurchEventItem): string {
+  const raw = item.active_from?.trim();
+  if (raw && raw.length >= 10) return raw.slice(0, 10);
+  return item.event_date.slice(0, 10);
+}
+
+function dayWithinActiveRange(dayKey: string, item: ChurchEventItem): boolean {
+  const from = effectiveActiveFromYmd(item);
+  if (dayKey.localeCompare(from) < 0) return false;
+  const toRaw = item.active_to?.trim();
+  if (toRaw && toRaw.length >= 10) {
+    const to = toRaw.slice(0, 10);
+    if (dayKey.localeCompare(to) > 0) return false;
+  }
+  return true;
+}
+
+/** Июнь, июль, август — локальный месяц (перерыв «летнее время» для еженедельных). */
+function isNorthernSummerMonth(d: Date): boolean {
+  const m = d.getMonth();
+  return m === 5 || m === 6 || m === 7;
+}
 
 function parseOnceEventDateTime(item: ChurchEventItem): Date | null {
   const ts = `${item.event_date}T${item.event_time}:00`;
@@ -20,13 +43,39 @@ function nextWeeklyDate(now: Date, weeklyDay: number, hhmm: string): Date {
   return base;
 }
 
+function advanceWeeklyUntilVisible(dt: Date, item: ChurchEventItem, maxSteps = 64): Date | null {
+  let cur = new Date(dt);
+  for (let i = 0; i < maxSteps; i++) {
+    const key = format(cur, 'yyyy-MM-dd');
+    if (!dayWithinActiveRange(key, item)) {
+      const toRaw = item.active_to?.trim();
+      if (toRaw && toRaw.length >= 10 && key.localeCompare(toRaw.slice(0, 10)) > 0) {
+        return null;
+      }
+      cur.setDate(cur.getDate() + 7);
+      continue;
+    }
+    if (item.skip_summer_break && isNorthernSummerMonth(cur)) {
+      cur.setDate(cur.getDate() + 7);
+      continue;
+    }
+    return cur;
+  }
+  return null;
+}
+
 /** Ближайшее по времени вхождение события (разовое или еженедельное). */
 export function eventNextOccurrence(now: Date, item: ChurchEventItem): Date | null {
   if (item.recurrence_type === 'weekly') {
     const weeklyDay = typeof item.weekly_day === 'number' ? item.weekly_day : 0;
-    return nextWeeklyDate(now, weeklyDay, item.event_time);
+    const candidate = nextWeeklyDate(now, weeklyDay, item.event_time);
+    return advanceWeeklyUntilVisible(candidate, item);
   }
-  return parseOnceEventDateTime(item);
+  const once = parseOnceEventDateTime(item);
+  if (!once) return null;
+  const key = format(once, 'yyyy-MM-dd');
+  if (!dayWithinActiveRange(key, item)) return null;
+  return once;
 }
 
 /**
@@ -57,7 +106,26 @@ export function countUpcomingEventsInWindow(
 export type CalendarOccurrence = {
   item: ChurchEventItem;
   startsAt: Date;
+  /** Локальный календарный день вхождения, `yyyy-MM-dd`. */
+  occurrenceDateKey: string;
 };
+
+function mergeItemWithOccurrenceOverride(
+  item: ChurchEventItem,
+  ov: ChurchEventOccurrenceOverride,
+): ChurchEventItem {
+  return {
+    ...item,
+    title: ov.title != null && ov.title.trim() !== '' ? ov.title.trim() : item.title,
+    description: ov.description !== null ? ov.description : item.description,
+    event_time:
+      ov.event_time != null && ov.event_time.trim() !== '' ? ov.event_time.trim() : item.event_time,
+    poster_url:
+      ov.poster_url != null && String(ov.poster_url).trim() !== ''
+        ? String(ov.poster_url).trim()
+        : item.poster_url,
+  };
+}
 
 function applyLocalTimeOnDay(dayMidnight: Date, hhmm: string): Date {
   const raw = hhmm.trim() || '00:00';
@@ -74,11 +142,13 @@ function applyLocalTimeOnDay(dayMidnight: Date, hhmm: string): Date {
 export function occurrenceStartsAtOnLocalDay(day: Date, item: ChurchEventItem): Date | null {
   if (item.is_active === false) return null;
   const dayKey = format(day, 'yyyy-MM-dd');
+  if (!dayWithinActiveRange(dayKey, item)) return null;
   const timeStr = (item.event_time ?? '00:00').trim() || '00:00';
 
   if (item.recurrence_type === 'weekly') {
     const weeklyDay = typeof item.weekly_day === 'number' ? item.weekly_day : 0;
     if (day.getDay() !== weeklyDay) return null;
+    if (item.skip_summer_break && isNorthernSummerMonth(day)) return null;
     const base = new Date(day);
     base.setHours(0, 0, 0, 0);
     return applyLocalTimeOnDay(base, timeStr);
@@ -91,11 +161,27 @@ export function occurrenceStartsAtOnLocalDay(day: Date, item: ChurchEventItem): 
 }
 
 /** Все вхождения из списка на один день, по времени начала. */
-export function listOccurrencesOnLocalDay(day: Date, items: ChurchEventItem[]): CalendarOccurrence[] {
+export function listOccurrencesOnLocalDay(
+  day: Date,
+  items: ChurchEventItem[],
+  overrides?: ChurchEventOccurrenceOverride[],
+): CalendarOccurrence[] {
+  const dayKey = format(day, 'yyyy-MM-dd');
+  const byEventId = new Map<number, ChurchEventOccurrenceOverride>();
+  if (overrides?.length) {
+    for (const o of overrides) {
+      const od = o.occurrence_date.trim().slice(0, 10);
+      if (od === dayKey) byEventId.set(o.event_id, o);
+    }
+  }
+
   const out: CalendarOccurrence[] = [];
   for (const item of items) {
-    const startsAt = occurrenceStartsAtOnLocalDay(day, item);
-    if (startsAt) out.push({ item, startsAt });
+    const ov = item.recurrence_type === 'weekly' ? byEventId.get(item.id) : undefined;
+    if (ov?.is_hidden) continue;
+    const merged = ov ? mergeItemWithOccurrenceOverride(item, ov) : item;
+    const startsAt = occurrenceStartsAtOnLocalDay(day, merged);
+    if (startsAt) out.push({ item: merged, startsAt, occurrenceDateKey: dayKey });
   }
   out.sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime());
   return out;
