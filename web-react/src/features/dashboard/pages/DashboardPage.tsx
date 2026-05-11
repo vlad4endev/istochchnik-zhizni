@@ -534,24 +534,31 @@ type DashboardQuickAction = {
   hideForParishioner?: boolean;
 };
 
+/**
+ * Палитра кнопок подобрана под уже существующие карточки дашборда,
+ * чтобы быстрая навигация визуально жила в одном дизайне:
+ *  - Расписание → зелёный, как карточка «Событие» (#1A9A55 / #0F6636);
+ *  - Отправить нужду → индиго, как карточка «Молимся сегодня» (#4A5FD5 / #3042A8);
+ *  - Проповеди → бирюзовый, как карточка «Медиа» (#0E7E6A).
+ */
 const DASHBOARD_QUICK_ACTIONS: DashboardQuickAction[] = [
   {
     id: 'schedule',
     to: '/events',
     label: 'Расписание',
     Icon: LuCalendarRange,
-    gradient: 'from-[#6366F1] via-[#7C3AED] to-[#A855F7]',
-    shadow: 'shadow-[0_8px_22px_rgba(124,58,237,0.28)]',
-    glow: 'hover:shadow-[0_12px_30px_rgba(124,58,237,0.42)]',
+    gradient: 'from-[#22A862] via-[#1A9A55] to-[#0F6636]',
+    shadow: 'shadow-[0_6px_16px_rgba(26,154,85,0.28)]',
+    glow: 'hover:shadow-[0_10px_24px_rgba(26,154,85,0.4)]',
   },
   {
     id: 'send-need',
     to: '/prayer',
     label: 'Отправить нужду',
     Icon: LuHandHeart,
-    gradient: 'from-[#F43F5E] via-[#E11D48] to-[#9F1239]',
-    shadow: 'shadow-[0_8px_22px_rgba(225,29,72,0.28)]',
-    glow: 'hover:shadow-[0_12px_30px_rgba(225,29,72,0.42)]',
+    gradient: 'from-[#5A6FDD] via-[#4A5FD5] to-[#3042A8]',
+    shadow: 'shadow-[0_6px_16px_rgba(74,95,213,0.30)]',
+    glow: 'hover:shadow-[0_10px_24px_rgba(74,95,213,0.42)]',
     hideForParishioner: true,
   },
   {
@@ -559,9 +566,9 @@ const DASHBOARD_QUICK_ACTIONS: DashboardQuickAction[] = [
     to: '/sermons',
     label: 'Проповеди',
     Icon: LuMic,
-    gradient: 'from-[#0E7E6A] via-[#0F766E] to-[#0EA5A2]',
-    shadow: 'shadow-[0_8px_22px_rgba(15,118,110,0.28)]',
-    glow: 'hover:shadow-[0_12px_30px_rgba(15,118,110,0.42)]',
+    gradient: 'from-[#13A088] via-[#0E7E6A] to-[#0A5A4C]',
+    shadow: 'shadow-[0_6px_16px_rgba(14,126,106,0.28)]',
+    glow: 'hover:shadow-[0_10px_24px_rgba(14,126,106,0.4)]',
   },
 ];
 
@@ -582,8 +589,7 @@ function DashboardQuickActionsStrip({
 
   if (items.length === 0) return null;
 
-  /** Класс кладки: на мобильном — равная сетка из колонок (без горизонтального скролла);
-   *  с `sm` (≥640px) — переходим в пилюли, выровненные в ряд. */
+  /** Сетка с равными колонками — кнопки всегда в один ряд, без горизонтального скролла. */
   const gridColsClass =
     items.length === 1
       ? 'grid-cols-1'
@@ -595,9 +601,9 @@ function DashboardQuickActionsStrip({
     <nav
       aria-label="Быстрые переходы"
       className={[
-        'dashboard-quick-actions grid w-full min-w-0 items-stretch gap-2 pt-3 pb-1',
-        'sm:flex sm:flex-wrap sm:items-center sm:gap-2.5 sm:pt-4',
-        'lg:flex-nowrap lg:gap-3',
+        'dashboard-quick-actions grid w-full min-w-0 items-stretch gap-1.5 pt-3 pb-1',
+        'sm:gap-2.5 sm:pt-4',
+        'lg:gap-3',
         gridColsClass,
       ].join(' ')}
     >
@@ -609,15 +615,16 @@ function DashboardQuickActionsStrip({
             type="button"
             onClick={() => onNavigate(action.to)}
             className={[
-              /* База */
-              'group relative flex min-w-0 overflow-hidden bg-gradient-to-br text-white ring-1 ring-white/15 transition-[transform,box-shadow] duration-200 ease-out tap-highlight-transparent touch-manipulation outline-none',
-              /* Состояния */
-              'hover:-translate-y-0.5 focus-visible:-translate-y-0.5 focus-visible:ring-2 focus-visible:ring-white/70 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)] active:translate-y-0 active:scale-[0.98] motion-reduce:transition-none motion-reduce:hover:translate-y-0 motion-reduce:active:scale-100',
-              /* Мобильная компоновка (до sm): «капсула-карточка», иконка сверху, подпись снизу */
-              'h-full w-full flex-col items-center justify-center gap-1.5 rounded-2xl px-2 py-3 text-center min-h-[78px]',
-              /* sm+: классическая пилюля, иконка слева, подпись справа */
-              'sm:h-auto sm:w-auto sm:flex-1 sm:basis-0 sm:flex-row sm:items-center sm:justify-center sm:gap-2.5 sm:rounded-full sm:px-4 sm:py-2.5 sm:text-left sm:min-h-0',
-              'lg:gap-3 lg:px-5 lg:py-3',
+              /* База: горизонтальная пилюля на всех размерах */
+              'group relative flex w-full min-w-0 items-center justify-center gap-1.5 overflow-hidden rounded-full bg-gradient-to-br text-white ring-1 ring-white/15',
+              /* Поведение */
+              'transition-[transform,box-shadow] duration-200 ease-out tap-highlight-transparent touch-manipulation outline-none',
+              'hover:-translate-y-0.5 focus-visible:-translate-y-0.5 focus-visible:ring-2 focus-visible:ring-white/70 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)]',
+              'active:translate-y-0 active:scale-[0.98] motion-reduce:transition-none motion-reduce:hover:translate-y-0 motion-reduce:active:scale-100',
+              /* Размер: компактный на мобильном, шире на десктопе */
+              'min-h-[40px] px-2 py-1.5',
+              'sm:min-h-[44px] sm:gap-2.5 sm:px-3.5 sm:py-2',
+              'lg:min-h-[48px] lg:gap-3 lg:px-5 lg:py-2.5',
               action.gradient,
               action.shadow,
               action.glow,
@@ -631,22 +638,23 @@ function DashboardQuickActionsStrip({
             <span
               className={[
                 'relative grid shrink-0 place-items-center rounded-full bg-white/20 ring-1 ring-white/25 backdrop-blur-sm transition-colors group-hover:bg-white/30',
-                'h-9 w-9 sm:h-9 sm:w-9 lg:h-10 lg:w-10',
+                'h-6 w-6 sm:h-8 sm:w-8 lg:h-9 lg:w-9',
               ].join(' ')}
             >
               <Icon
-                className="h-[18px] w-[18px] drop-shadow-[0_1px_1px_rgba(0,0,0,0.18)] lg:h-5 lg:w-5"
+                className="h-[13px] w-[13px] drop-shadow-[0_1px_1px_rgba(0,0,0,0.18)] sm:h-4 sm:w-4 lg:h-[18px] lg:w-[18px]"
                 strokeWidth={2.25}
                 aria-hidden
               />
             </span>
             <span
               className={[
-                'relative min-w-0 max-w-full break-words font-bold leading-tight drop-shadow-[0_1px_1px_rgba(0,0,0,0.15)]',
-                /* Мобильный: компактный текст, до 2 строк */
-                'text-[11px] line-clamp-2',
+                'relative min-w-0 max-w-full font-bold leading-tight drop-shadow-[0_1px_1px_rgba(0,0,0,0.15)]',
+                /* Мобильный: 10–11 px, до 2 строк, ровный перенос длинных подписей */
+                'text-[10.5px] line-clamp-2 [overflow-wrap:anywhere]',
                 /* sm+: одной строкой, чуть крупнее */
-                'sm:whitespace-nowrap sm:text-[13px] sm:leading-none sm:line-clamp-none lg:text-sm',
+                'sm:whitespace-nowrap sm:text-[12.5px] sm:leading-none sm:line-clamp-none sm:[overflow-wrap:normal]',
+                'lg:text-sm',
               ].join(' ')}
             >
               {action.label}
