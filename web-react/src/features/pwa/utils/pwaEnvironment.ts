@@ -31,6 +31,12 @@ export function syncPwaStandaloneHtmlDataset(): void {
   document.documentElement.dataset.pwaStandalone = isInstalledPwa() ? '1' : '0';
 }
 
+/** Mark `<html data-apple-mobile="1">` for CSS (e.g. iOS-only messenger composer styling). */
+export function syncAppleMobileWebHtmlDataset(): void {
+  if (typeof document === 'undefined') return;
+  document.documentElement.dataset.appleMobile = isAppleMobileWeb() ? '1' : '0';
+}
+
 const DISPLAY_MODE_QUERIES = [
   '(display-mode: standalone)',
   '(display-mode: fullscreen)',
@@ -41,6 +47,7 @@ const DISPLAY_MODE_QUERIES = [
 export function initPwaStandaloneHtmlHint(): void {
   if (typeof window === 'undefined' || typeof document === 'undefined') return;
   syncPwaStandaloneHtmlDataset();
+  syncAppleMobileWebHtmlDataset();
   for (const q of DISPLAY_MODE_QUERIES) {
     try {
       const mql = window.matchMedia(q);

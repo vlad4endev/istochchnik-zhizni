@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react';
 import type { MutableRefObject } from 'react';
 import { createPortal } from 'react-dom';
 import { useChatStore, isDraftPrivateConversationId } from '../chatStore';
@@ -267,6 +267,15 @@ export function ChatInput({
   const [pollModalOpen, setPollModalOpen] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  /**
+   * iOS Safari: скрытый `<input type="file">` рядом с textarea попадает в «цепочку полей» над клавиатурой
+   * (стрелки + Done). Держим file input disabled и включаем только на один тик вокруг `.click()` —
+   * тогда WebKit обычно не считает его вторым полем при фокусе в поле сообщения.
+   */
+  useLayoutEffect(() => {
+    const el = fileInputRef.current;
+    if (el) el.disabled = true;
+  }, []);
   const attachMenuRef = useRef<HTMLDivElement>(null);
   const emojiRef = useRef<HTMLDivElement>(null);
   const attachBtnRef = useRef<HTMLButtonElement>(null);
@@ -847,7 +856,14 @@ export function ChatInput({
       kind === 'image'
         ? 'image/*,video/*'
         : 'application/pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt';
-    input.click();
+    try {
+      input.disabled = false;
+      input.click();
+    } finally {
+      window.setTimeout(() => {
+        input.disabled = true;
+      }, 64);
+    }
   };
 
   const handleFileSelected = async (files: FileList | null) => {
@@ -2035,6 +2051,9 @@ export function ChatInput({
             ref={fileInputRef}
             type="file"
             className="hidden"
+            tabIndex={-1}
+            aria-hidden={true}
+            autoComplete="off"
             accept="image/*,video/*"
             onChange={(e) => void handleFileSelected(e.target.files)}
           />
