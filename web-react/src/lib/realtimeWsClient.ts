@@ -288,6 +288,10 @@ async function refreshAccessToken(): Promise<void> {
 
 function openSocket(): void {
   if (stopped || !authToken) return;
+  if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
+    logInfo('open: страница в фоне — сокет не открываем до visible');
+    return;
+  }
   // Первая строка: снимаем ВСЕ heartbeat старых экземпляров (reconnect-шторм,
   // online+visibilitychange подряд) и отменяем запланированный реконнект.
   clearTimers();
@@ -363,9 +367,8 @@ function openSocket(): void {
     clearStableOpenTimer();
     stableOpenTimer = setTimeout(() => {
       if (ws === socket && socket.readyState === WebSocket.OPEN) {
-        reconnectBackoffMs = MIN_RECONNECT_MS;
         reconnectGeneration = 0;
-        logInfo('connection stable: reconnect backoff reset');
+        logInfo('connection stable: reconnect generation reset');
       }
       stableOpenTimer = undefined;
     }, 10_000);
@@ -407,6 +410,9 @@ function openSocket(): void {
       ws = null;
     }
     if (stopped || !authToken) return;
+    if (ev.code === 1000 || ev.code === 1001) {
+      return;
+    }
     if (ev.code === 1006 && !ev.wasClean) {
       const now = Date.now();
       if (now - lastAbnormalCloseHintMs > 120_000) {
@@ -418,6 +424,19 @@ function openSocket(): void {
       }
     }
     if (ev.code === 1008) {
+      const reason = String(ev.reason ?? '');
+      if (/too many reconnects|please wait/i.test(reason)) {
+        logWarn('сервер: пауза переподключений (rate limit), повтор через 30s');
+        reconnectAttempts = MAX_RECONNECT_ATTEMPTS;
+        clearReconnectTimer();
+        reconnectTimer = setTimeout(() => {
+          reconnectTimer = undefined;
+          reconnectAttempts = 0;
+          reconnectGeneration += 1;
+          openSocket();
+        }, 30_000);
+        return;
+      }
       logWarn('auth rejected, refreshing token before reconnect');
       void refreshAccessToken()
         .then(() => {
@@ -439,11 +458,11 @@ export function closeRealtimeWs(): void {
   stopped = true;
   authToken = null;
   lastReadyPayload = null;
-  reconnectBackoffMs = MIN_RECONNECT_MS;
+  reconnectAttempts = 0;
   reconnectGeneration = 0;
   clearTimers();
   try {
-    ws?.close();
+    ws?.close(1000);
   } catch {
     /* ignore */
   }
@@ -467,12 +486,12 @@ export function openRealtimeWs(token: string): void {
   authToken = next;
   clearTimers();
   try {
-    ws?.close();
+    ws?.close(1000);
   } catch {
     /* ignore */
   }
   ws = null;
-  reconnectBackoffMs = MIN_RECONNECT_MS;
+  reconnectAttempts = 0;
   reconnectGeneration = 0;
   openSocket();
 }

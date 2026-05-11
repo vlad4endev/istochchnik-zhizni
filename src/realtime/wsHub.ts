@@ -158,6 +158,9 @@ const authFailMap = new Map<string, AuthFailRecord>();
 const UNSTABLE_CLOSE_WINDOW_MS = 60_000;
 const UNSTABLE_CLOSE_THRESHOLD = 5;
 const abnormalCloseByMember = new Map<number, number[]>();
+/** Время последнего аномального (1006) разрыва — для ограничения повторных рукопожатий после «unstable». */
+const lastAbnormalDisconnectAtByMember = new Map<number, number>();
+const RECONNECT_COOLDOWN_AFTER_UNSTABLE_MS = 30_000;
 
 function getClientIp(req: IncomingMessage): string {
   const xff = req.headers['x-forwarded-for'];
@@ -200,6 +203,7 @@ function clearAuthFail(ip: string): void {
 
 function recordAbnormalClose(memberId: number): void {
   const now = Date.now();
+  lastAbnormalDisconnectAtByMember.set(memberId, now);
   const windowStart = now - UNSTABLE_CLOSE_WINDOW_MS;
   const prev = abnormalCloseByMember.get(memberId) ?? [];
   const next = prev.filter((ts) => ts >= windowStart);
@@ -213,6 +217,18 @@ function recordAbnormalClose(memberId: number): void {
       code: 1006,
     });
   }
+}
+
+function unstableRecentDisconnectCount(memberId: number): number {
+  const now = Date.now();
+  const windowStart = now - UNSTABLE_CLOSE_WINDOW_MS;
+  const prev = abnormalCloseByMember.get(memberId) ?? [];
+  return prev.filter((ts) => ts >= windowStart).length;
+}
+
+/** Больше порога разрывов 1006 за окно — новое подключение в течение cooldown отклоняем. */
+function isMemberUnstableForCooldown(memberId: number): boolean {
+  return unstableRecentDisconnectCount(memberId) > UNSTABLE_CLOSE_THRESHOLD;
 }
 
 const authFailCleanupTimer = setInterval(() => {
@@ -358,6 +374,21 @@ async function handleNewSocket(ws: WebSocket, ip: string, request: IncomingMessa
       clearAuthFail(ip);
       clearTimeout(timer);
       if (closed) return;
+
+      const nowTs = Date.now();
+      const lastAbnormal = lastAbnormalDisconnectAtByMember.get(sessionOk.userId);
+      if (
+        isMemberUnstableForCooldown(sessionOk.userId) &&
+        typeof lastAbnormal === 'number' &&
+        nowTs - lastAbnormal < RECONNECT_COOLDOWN_AFTER_UNSTABLE_MS
+      ) {
+        console.warn('[realtime] reconnect cooldown (unstable client)', {
+          memberId: sessionOk.userId,
+          waitMs: RECONNECT_COOLDOWN_AFTER_UNSTABLE_MS - (nowTs - lastAbnormal),
+        });
+        fail(1008, 'too many reconnects, please wait');
+        return;
+      }
 
       // Build the authenticated client
       const client: AuthenticatedClient = {
