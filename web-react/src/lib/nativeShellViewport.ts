@@ -172,6 +172,14 @@ export function syncViewportHeightVars() {
     document.body?.style.setProperty('max-height', vhPx, 'important');
     document.getElementById('root')?.style.setProperty('height', vhPx, 'important');
     document.getElementById('root')?.style.setProperty('max-height', vhPx, 'important');
+    /**
+     * iOS PWA: при focus в textarea/поле WebKit «прокручивает» документ, чтобы поднять поле над клавиатурой.
+     * overflow:hidden это не останавливает. Снимаем любой layout-scroll → чат остаётся в видимой области,
+     * пустая полоса под клавиатурой не появляется.
+     */
+    if (root.scrollTop !== 0) root.scrollTop = 0;
+    if (document.body && document.body.scrollTop !== 0) document.body.scrollTop = 0;
+    if (window.scrollX !== 0 || window.scrollY !== 0) window.scrollTo(0, 0);
   } else {
     clearMobileMessengerViewportInline(root);
   }

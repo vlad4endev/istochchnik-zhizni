@@ -2419,7 +2419,9 @@ html.dark .msg-quick-reaction:hover {
       position: fixed !important;
       left: 0;
       right: 0;
-      top: 0;
+      /* iOS PWA: при клавиатуре visualViewport «прокручен» сверху на offsetTop. Без этого top:0 = чат уходит выше видимой области, снизу остаётся пустая полоса. */
+      top: var(--visual-viewport-offset, 0px) !important;
+      bottom: auto !important;
       width: auto;
       height: var(--viewport-height, 100dvh) !important;
       max-height: var(--viewport-height, 100dvh) !important;
@@ -2434,7 +2436,8 @@ html.dark .msg-quick-reaction:hover {
       align-items: stretch !important;
       justify-content: flex-start !important;
       background: var(--tg-bg);
-      padding-top: env(safe-area-inset-top, 0px);
+      /* Safe-area top — только когда iOS не «прокрутил» документ (offsetTop = 0). Иначе он уже на месте, а notch вне видимой области. */
+      padding-top: max(0px, calc(env(safe-area-inset-top, 0px) - var(--visual-viewport-offset, 0px)));
       padding-left: env(safe-area-inset-left, 0px);
       padding-right: env(safe-area-inset-right, 0px);
     }
@@ -2462,7 +2465,11 @@ html.dark .msg-quick-reaction:hover {
       z-index: 40;
       padding-left: 0.75rem;
       padding-right: 0.75rem;
-      padding-bottom: max(0px, var(--app-bottom-nav-safe-pad, 0px));
+      /* Клавиатура открыта (offsetTop > 0): home indicator вне видимой области → без safe-area-bottom. */
+      padding-bottom: max(
+        0px,
+        calc(var(--app-bottom-nav-safe-pad, 0px) - var(--visual-viewport-offset, 0px))
+      );
       background: var(--tg-bg);
       display: flex !important;
       flex-direction: column !important;
