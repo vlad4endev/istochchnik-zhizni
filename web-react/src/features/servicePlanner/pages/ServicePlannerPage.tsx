@@ -2171,8 +2171,8 @@ export function ServicePlannerPage() {
         )}
 
         {editingTemplateBlock ? createPortal(
-          <div className="fixed inset-0 z-[9999] isolate flex items-center justify-center overflow-hidden overscroll-y-contain bg-black/35 p-3">
-            <div className="flex min-h-0 w-full max-w-xl max-h-[min(92dvh,calc(var(--viewport-height,100dvh)-2rem))] flex-col overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-2xl sm:max-h-[min(90dvh,calc(var(--viewport-height,100dvh)-2rem))]">
+          <div className="fixed inset-0 z-[9999] isolate flex items-end justify-center overflow-hidden overscroll-y-contain bg-black/35 p-3 sm:items-center">
+            <div className="flex h-[min(92dvh,calc(var(--viewport-height,100dvh)-1rem))] min-h-0 w-full max-w-xl flex-col overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-2xl sm:h-auto sm:max-h-[min(90dvh,calc(var(--viewport-height,100dvh)-2rem))]">
               <div className="flex shrink-0 items-center justify-between gap-2 border-b border-stone-100 px-3 py-3 sm:px-4">
                 <h3 className="text-base font-extrabold text-stone-900">Редактирование блока шаблона</h3>
                 <button
@@ -2184,7 +2184,7 @@ export function ServicePlannerPage() {
                 </button>
               </div>
 
-              <div className="overflow-y-auto overflow-x-hidden px-3 py-3 [-webkit-overflow-scrolling:touch] [touch-action:pan-y] max-md:min-h-0 max-md:flex-1 max-md:basis-0 sm:px-4">
+              <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-3 py-3 [-webkit-overflow-scrolling:touch] [touch-action:pan-y] sm:px-4">
                 <div className="grid gap-2 rounded-xl bg-stone-50 p-3 sm:grid-cols-2">
                 <input
                   value={isTemplateSeparatorBlock(editingTemplateBlock) ? templateSeparatorLabel(editingTemplateBlock) : editingTemplateBlock.title}
@@ -3303,12 +3303,12 @@ export function ServicePlannerPage() {
 
       {editingBlock ? createPortal(
         <div
-          className="fixed inset-0 z-[9999] isolate flex items-center justify-center overflow-hidden overscroll-y-contain bg-black/35 p-3"
+          className="fixed inset-0 z-[9999] isolate flex items-end justify-center overflow-hidden overscroll-y-contain bg-black/35 p-3 sm:items-center"
           role="presentation"
           onClick={() => setEditingBlockId(null)}
         >
           <div
-            className="flex min-h-0 w-full max-w-2xl max-h-[min(92dvh,calc(var(--viewport-height,100dvh)-2rem))] flex-col overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-2xl sm:max-h-[min(92dvh,calc(var(--viewport-height,100dvh)-2rem))]"
+            className="flex h-[min(92dvh,calc(var(--viewport-height,100dvh)-1rem))] min-h-0 w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-2xl sm:h-auto sm:max-h-[min(92dvh,calc(var(--viewport-height,100dvh)-2rem))]"
             role="dialog"
             aria-modal="true"
             aria-labelledby={`${blockEditFieldsUid}-modal-title`}
@@ -3337,7 +3337,7 @@ export function ServicePlannerPage() {
                 </button>
               </div>
             </div>
-            <div className="overflow-y-auto overflow-x-hidden px-3 py-3 [-webkit-overflow-scrolling:touch] [touch-action:pan-y] max-md:min-h-0 max-md:flex-1 max-md:basis-0 sm:px-4">
+            <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-3 py-3 [-webkit-overflow-scrolling:touch] [touch-action:pan-y] sm:px-4">
             <div className="grid min-w-0 gap-2 rounded-xl bg-stone-50 p-3 sm:grid-cols-2 [&_input]:w-full [&_input]:bg-white [&_input]:text-stone-900 [&_input]:placeholder:text-stone-400 [&_select]:w-full [&_select]:bg-white [&_select]:text-stone-900 [&_textarea]:w-full [&_textarea]:bg-white [&_textarea]:text-stone-900 [&_textarea]:placeholder:text-stone-400">
               <label className="flex flex-col gap-1 text-xs font-semibold text-stone-700 sm:col-span-2">
                 {isSeparatorBlock(editingBlock) ? 'Текст разделителя' : 'Название блока'}
