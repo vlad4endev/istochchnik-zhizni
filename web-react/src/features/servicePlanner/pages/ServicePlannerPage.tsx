@@ -314,9 +314,8 @@ export function ServicePlannerPage() {
   const [shareCopied, setShareCopied] = useState(false);
   const [showArchivedPlans, setShowArchivedPlans] = useState(false);
   const [isPlanSettingsOpenMobile, setIsPlanSettingsOpenMobile] = useState(false);
-  /** Мобильная панель: меню действий и показ времени блока */
+  /** Мобильная панель: меню действий */
   const [mobilePlanBlockMenuId, setMobilePlanBlockMenuId] = useState<number | null>(null);
-  const [mobilePlanTimeOpenId, setMobilePlanTimeOpenId] = useState<number | null>(null);
   const [mobileTemplateBlockMenuId, setMobileTemplateBlockMenuId] = useState<number | null>(null);
   const [mobileTemplateOrderOpenId, setMobileTemplateOrderOpenId] = useState<number | null>(null);
   /** Шапка плана: «⋯» с действиями шаблонов на узком экране */
@@ -538,7 +537,6 @@ export function ServicePlannerPage() {
     if (
       mobilePlanBlockMenuId == null &&
       mobileTemplateBlockMenuId == null &&
-      mobilePlanTimeOpenId == null &&
       mobileTemplateOrderOpenId == null
     ) {
       return undefined;
@@ -547,11 +545,9 @@ export function ServicePlannerPage() {
       const el = e.target;
       if (!(el instanceof Element)) return;
       if (el.closest('[data-planner-mobile-menu-root]')) return;
-      if (el.closest('[data-planner-mobile-time-root]')) return;
       if (el.closest('[data-planner-mobile-template-order-root]')) return;
       setMobilePlanBlockMenuId(null);
       setMobileTemplateBlockMenuId(null);
-      setMobilePlanTimeOpenId(null);
       setMobileTemplateOrderOpenId(null);
     };
     document.addEventListener('pointerdown', onPointerDown);
@@ -559,7 +555,6 @@ export function ServicePlannerPage() {
   }, [
     mobilePlanBlockMenuId,
     mobileTemplateBlockMenuId,
-    mobilePlanTimeOpenId,
     mobileTemplateOrderOpenId,
   ]);
 
@@ -1942,7 +1937,6 @@ export function ServicePlannerPage() {
                                       onClick={(e) => {
                                         e.stopPropagation();
                                         setMobilePlanBlockMenuId(null);
-                                        setMobilePlanTimeOpenId(null);
                                         setMobileTemplateOrderOpenId(null);
                                         setMobileTemplateBlockMenuId((id) => (id === b.id ? null : b.id));
                                       }}
@@ -2018,7 +2012,6 @@ export function ServicePlannerPage() {
                                       onClick={(e) => {
                                         e.stopPropagation();
                                         setMobilePlanBlockMenuId(null);
-                                        setMobilePlanTimeOpenId(null);
                                         setMobileTemplateBlockMenuId(null);
                                         setMobileTemplateOrderOpenId((id) => (id === b.id ? null : b.id));
                                       }}
@@ -2054,7 +2047,6 @@ export function ServicePlannerPage() {
                                       onClick={(e) => {
                                         e.stopPropagation();
                                         setMobilePlanBlockMenuId(null);
-                                        setMobilePlanTimeOpenId(null);
                                         setMobileTemplateOrderOpenId(null);
                                         setMobileTemplateBlockMenuId((id) => (id === b.id ? null : b.id));
                                       }}
@@ -2855,7 +2847,6 @@ export function ServicePlannerPage() {
                                   aria-expanded={mobilePlanBlockMenuId === block.id}
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    setMobilePlanTimeOpenId(null);
                                     setMobileTemplateBlockMenuId(null);
                                     setMobileTemplateOrderOpenId(null);
                                     setMobilePlanBlockMenuId((id) => (id === block.id ? null : block.id));
@@ -2923,32 +2914,9 @@ export function ServicePlannerPage() {
                             <span className="mt-0.5 hidden min-w-[2.75rem] shrink-0 items-center justify-center rounded-md bg-stone-100 px-1.5 py-0.5 text-center text-[11px] font-extrabold leading-none text-stone-900 sm:min-w-[3rem] sm:inline-flex sm:px-2 sm:py-1 sm:text-xs">
                               {block.startsAt}
                             </span>
-                            <div
-                              className="relative shrink-0 lg:hidden"
-                              data-planner-mobile-time-root
-                              onPointerDown={(e) => isNarrowViewport && e.stopPropagation()}
-                            >
-                              <button
-                                type="button"
-                                className="mt-0.5 inline-flex h-9 w-9 touch-manipulation items-center justify-center rounded-md border border-stone-200 text-stone-600 hover:bg-stone-50 sm:h-7 sm:w-7"
-                                aria-label={`Время начала: ${block.startsAt}`}
-                                aria-expanded={mobilePlanTimeOpenId === block.id}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setMobilePlanBlockMenuId(null);
-                                  setMobileTemplateBlockMenuId(null);
-                                  setMobileTemplateOrderOpenId(null);
-                                  setMobilePlanTimeOpenId((id) => (id === block.id ? null : block.id));
-                                }}
-                              >
-                                <LuClock3 className="h-4 w-4" />
-                              </button>
-                              {mobilePlanTimeOpenId === block.id ? (
-                                <div className="absolute left-0 top-full z-[130] mt-0.5 whitespace-nowrap rounded-md border border-stone-200 bg-white px-2 py-1 text-center text-[11px] font-extrabold text-stone-900 shadow-md max-md:bottom-full max-md:top-auto max-md:mb-0.5">
-                                  {block.startsAt}
-                                </div>
-                              ) : null}
-                            </div>
+                            <span className="mt-0.5 inline-flex min-w-[2.9rem] shrink-0 items-center justify-center rounded-md bg-stone-100 px-1.5 py-1 text-center text-[11px] font-extrabold leading-none text-stone-900 sm:hidden">
+                              {block.startsAt}
+                            </span>
 
                             {getBlockLogoUrl(block) ? (
                                 <img
@@ -3098,7 +3066,6 @@ export function ServicePlannerPage() {
                                   aria-expanded={mobilePlanBlockMenuId === block.id}
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    setMobilePlanTimeOpenId(null);
                                     setMobileTemplateBlockMenuId(null);
                                     setMobileTemplateOrderOpenId(null);
                                     setMobilePlanBlockMenuId((id) => (id === block.id ? null : block.id));
