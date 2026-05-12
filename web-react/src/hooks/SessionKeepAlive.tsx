@@ -2,16 +2,18 @@ import { useEffect, useRef } from 'react';
 
 import { useAuthStore } from '../features/auth/authStore';
 import { performAuthRefresh } from '../lib/authRefresh';
+import { COOKIE_ONLY_SESSION_TOKEN } from '../lib/authSessionConstants';
+import { computeProactiveRefreshIntervalMs, fetchAuthAccessTtlMinutes } from '../lib/authSessionHints';
 
-/** Чаще access TTL на сервере (AUTH_ACCESS_TOKEN_TTL_MINUTES), чтобы не ждать 401; без излишней частоты (лимиты API, несколько вкладок). */
-const REFRESH_INTERVAL_MS = 10 * 60 * 1000;
+/** Пока не пришёл `/api/auth/session-hints`, используем тот же расчёт, что для TTL=60 по умолчанию на сервере. */
+const FALLBACK_REFRESH_INTERVAL_MS = computeProactiveRefreshIntervalMs(60);
 /** Не чаще одного «ручного» продления при возврате в приложение / сеть (нагрузка на API). */
 const MIN_GAP_RESUME_REFRESH_MS = 12_000;
 
-function applyRefreshedAccessToken(nextToken: string): void {
+function applyRefreshedAccessToken(): void {
   const auth = useAuthStore.getState();
   auth.setSession({
-    token: nextToken,
+    token: COOKIE_ONLY_SESSION_TOKEN,
     firstName: auth.firstName,
     lastName: auth.lastName,
     role: auth.role,
@@ -23,8 +25,8 @@ function applyRefreshedAccessToken(nextToken: string): void {
 }
 
 /**
- * Поведение ближе к нативному приложению: долгоживущий refresh cookie на сервере + фоновое
- * продление access без выхода из аккаунта (таймер, возврат во вкладку / PWA, восстановление сети).
+ * Долгоживущий refresh cookie + фоновое продление access по TTL с сервера,
+ * плюс refresh при возврате во вкладку / PWA / сеть / bfcache / фокусе окна.
  */
 export function SessionKeepAlive(): null {
   const token = useAuthStore((s) => s.token);
@@ -36,14 +38,10 @@ export function SessionKeepAlive(): null {
 
     const runRefresh = (): void => {
       void performAuthRefresh().then((result) => {
-        if (result.status === 'refreshed') applyRefreshedAccessToken(result.token);
+        if (result.status === 'refreshed') applyRefreshedAccessToken();
       });
     };
 
-    /** Регулярное продление — без throttle (интервал уже редкий). */
-    const intervalId = window.setInterval(runRefresh, REFRESH_INTERVAL_MS);
-
-    /** Возврат в приложение / вкладку или после офлайна — с анти-дребезгом. */
     const maybeRefreshAfterResume = (): void => {
       const now = Date.now();
       if (now - lastExtraRefreshAt.current < MIN_GAP_RESUME_REFRESH_MS) return;
@@ -66,20 +64,44 @@ export function SessionKeepAlive(): null {
       maybeRefreshAfterResume();
     };
 
+    const onPageShow = (e: PageTransitionEvent): void => {
+      if (e.persisted) {
+        maybeRefreshAfterResume();
+      }
+    };
+
+    const onWindowFocus = (): void => {
+      maybeRefreshAfterResume();
+    };
+
     document.addEventListener('visibilitychange', onVisibility);
     window.addEventListener('online', onOnline);
+    window.addEventListener('pageshow', onPageShow);
+    window.addEventListener('focus', onWindowFocus);
 
-    /**
-     * Не дергать refresh в тот же тик, что и первый рендер PWA: на iOS после сворачивания
-     * конкурирует с загрузкой чанков / SW и даёт долгий «белый» кадр.
-     */
-    const bootRefreshTimer = window.setTimeout(runRefresh, 2_500);
+    let intervalId = window.setInterval(runRefresh, FALLBACK_REFRESH_INTERVAL_MS);
+    const hintCtrl = new AbortController();
+    let destroyed = false;
+
+    void fetchAuthAccessTtlMinutes(hintCtrl.signal).then((ttlMinutes) => {
+      if (destroyed) return;
+      const nextMs = computeProactiveRefreshIntervalMs(ttlMinutes);
+      window.clearInterval(intervalId);
+      intervalId = window.setInterval(runRefresh, nextMs);
+    });
+
+    /** После bootstrap уже есть refresh; короткая задержка снижает конкуренцию с чанками/SW на iOS PWA. */
+    const bootRefreshTimer = window.setTimeout(runRefresh, 1_200);
 
     return () => {
+      destroyed = true;
+      hintCtrl.abort();
       window.clearTimeout(bootRefreshTimer);
       window.clearInterval(intervalId);
       document.removeEventListener('visibilitychange', onVisibility);
       window.removeEventListener('online', onOnline);
+      window.removeEventListener('pageshow', onPageShow);
+      window.removeEventListener('focus', onWindowFocus);
     };
   }, [token]);
 

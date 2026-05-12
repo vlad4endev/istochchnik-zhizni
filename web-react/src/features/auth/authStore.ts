@@ -3,6 +3,7 @@ import { create } from 'zustand';
 import { createJSONStorage, persist, type StateStorage } from 'zustand/middleware';
 
 import { AUTH_API_PREFIX, resolveAxiosBaseURL } from '../../lib/config';
+import { performAuthRefresh } from '../../lib/authRefresh';
 import { COOKIE_ONLY_SESSION_TOKEN, isCookieOnlySessionToken } from '../../lib/authSessionConstants';
 
 /** Те же ключи, что в Flutter AuthTokenStore — можно читать сессию с того же origin. */
@@ -262,7 +263,7 @@ export const useAuthStore = create<AuthState>()(
           }
 
           get().setSession({
-            token,
+            token: COOKIE_ONLY_SESSION_TOKEN,
             firstName: (user.first_name ?? '').trim(),
             lastName: (user.last_name ?? '').trim(),
             role: (user.app_role ?? 'member').trim() || 'member',
@@ -309,40 +310,90 @@ export const useAuthStore = create<AuthState>()(
       },
 
       bootstrapSessionFromHttpCookie: async () => {
-        if (get().token) return;
         const base = resolveAxiosBaseURL();
         const origin =
           base ||
           (typeof window !== 'undefined' && window.location?.origin ? window.location.origin : '');
         if (!origin) return;
+
+        type MeUser = {
+          id?: number;
+          first_name?: string | null;
+          last_name?: string | null;
+          app_role?: string;
+          app_roles?: string[];
+          registration_status?: string;
+          username?: string;
+        };
+
+        const applyMeJson = (user: MeUser, sessionToken: string): void => {
+          get().setSession({
+            token: sessionToken,
+            firstName: (user.first_name ?? '').trim(),
+            lastName: (user.last_name ?? '').trim(),
+            role: (user.app_role ?? 'member').trim() || 'member',
+            roles: Array.isArray(user.app_roles) ? user.app_roles : undefined,
+            registrationStatus: normalizeRegistrationStatus(user.registration_status),
+            username: (user.username ?? '').trim(),
+            memberId: typeof user.id === 'number' ? user.id : null,
+          });
+        };
+
         try {
           const ctrl = new AbortController();
           const t = window.setTimeout(() => ctrl.abort(), 12_000);
           try {
+            const refreshResult = await performAuthRefresh();
+            if (refreshResult.status === 'refreshed') {
+              const nextToken = refreshResult.token;
+              const meRes = await fetch(`${origin}${AUTH_API_PREFIX}/me`, {
+                credentials: 'include',
+                signal: ctrl.signal,
+                headers: { Authorization: `Bearer ${nextToken}` },
+              });
+              if (meRes.status === 200) {
+                const user = (await meRes.json()) as MeUser;
+                applyMeJson(user, COOKIE_ONLY_SESSION_TOKEN);
+              } else {
+                const auth = get();
+                get().setSession({
+                  token: COOKIE_ONLY_SESSION_TOKEN,
+                  firstName: auth.firstName,
+                  lastName: auth.lastName,
+                  role: auth.role,
+                  roles: auth.roles,
+                  registrationStatus: auth.registrationStatus,
+                  username: auth.username,
+                  memberId: auth.memberId,
+                });
+              }
+              return;
+            }
+
+            const existing = get().token;
+            if (!existing || isCookieOnlySessionToken(existing)) {
+              const r = await fetch(`${origin}${AUTH_API_PREFIX}/me`, {
+                credentials: 'include',
+                signal: ctrl.signal,
+              });
+              if (r.status === 200) {
+                const user = (await r.json()) as MeUser;
+                applyMeJson(user, COOKIE_ONLY_SESSION_TOKEN);
+              } else if (r.status === 401 && isCookieOnlySessionToken(get().token)) {
+                get().clearSession();
+              }
+              return;
+            }
+
             const r = await fetch(`${origin}${AUTH_API_PREFIX}/me`, {
               credentials: 'include',
               signal: ctrl.signal,
+              headers: { Authorization: `Bearer ${existing}` },
             });
-            if (r.status !== 200) return;
-            const user = (await r.json()) as {
-              id?: number;
-              first_name?: string | null;
-              last_name?: string | null;
-              app_role?: string;
-              app_roles?: string[];
-              registration_status?: string;
-              username?: string;
-            };
-            get().setSession({
-              token: COOKIE_ONLY_SESSION_TOKEN,
-              firstName: (user.first_name ?? '').trim(),
-              lastName: (user.last_name ?? '').trim(),
-              role: (user.app_role ?? 'member').trim() || 'member',
-              roles: Array.isArray(user.app_roles) ? user.app_roles : undefined,
-              registrationStatus: normalizeRegistrationStatus(user.registration_status),
-              username: (user.username ?? '').trim(),
-              memberId: typeof user.id === 'number' ? user.id : null,
-            });
+            if (r.status === 200) {
+              const user = (await r.json()) as MeUser;
+              applyMeJson(user, existing);
+            }
           } finally {
             window.clearTimeout(t);
           }

@@ -7,7 +7,8 @@ const DEFAULT_REFRESH_TTL_DAYS = 90;
 const MIN_REFRESH_TTL_DAYS = 1;
 const MAX_REFRESH_TTL_DAYS = 365;
 
-function getAccessTtlMinutes(): number {
+/** Срок жизни access-сессии в минутах (совпадает с `AUTH_ACCESS_TOKEN_TTL_MINUTES` и Max-Age cookie). */
+export function getAuthAccessTtlMinutes(): number {
   const rawValue = process.env.AUTH_ACCESS_TOKEN_TTL_MINUTES;
   if (!rawValue) {
     return DEFAULT_ACCESS_TTL_MINUTES;
@@ -88,7 +89,7 @@ export function readAuthTokenFromCookies(req: { headers: { cookie?: string } }):
 }
 
 export function getAuthCookieMaxAgeSec(): number {
-  return getAccessTtlMinutes() * 60;
+  return getAuthAccessTtlMinutes() * 60;
 }
 
 export function readRefreshTokenFromCookies(req: { headers: { cookie?: string } }): string | null {

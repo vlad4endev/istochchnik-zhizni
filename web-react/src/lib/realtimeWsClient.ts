@@ -276,7 +276,7 @@ async function refreshAccessToken(): Promise<void> {
     username?: string;
   };
   useAuthStore.getState().setSession({
-    token: nextToken || COOKIE_ONLY_SESSION_TOKEN,
+    token: COOKIE_ONLY_SESSION_TOKEN,
     firstName: (user.first_name ?? '').trim(),
     lastName: (user.last_name ?? '').trim(),
     role: (user.app_role ?? 'member').trim() || 'member',

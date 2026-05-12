@@ -269,6 +269,24 @@ export async function runAutomatedTestSuite(baseUrl: string, req: Request): Prom
   });
 
   await runCase({
+    id: 'sec_auth_session_hints_public',
+    name: 'GET /api/auth/session-hints без сессии → 200',
+    category: 'Безопасность',
+    tier: 'standard',
+    hideFromSmoke: true,
+    fn: async () => {
+      const r = await fetchProbe(baseUrl, '/api/auth/session-hints');
+      pushSmoke('/api/auth/session-hints', r.status === 200, r.status, r.durationMs, 'Публичный TTL для SPA');
+      if (r.status !== 200) return httpFailure(r, `Ожидался 200, получен ${r.status}`);
+      const j = parseJsonSafe(r.text) as { accessTokenTtlMinutes?: unknown } | null;
+      if (!j || typeof j.accessTokenTtlMinutes !== 'number') {
+        return { ok: false, message: 'Некорректное тело: ожидается { accessTokenTtlMinutes: number }' };
+      }
+      return { ok: true, message: `access TTL ${j.accessTokenTtlMinutes} min` };
+    },
+  });
+
+  await runCase({
     id: 'sec_analytics_closed',
     name: 'GET /api/analytics/overview без сессии → 401',
     category: 'Безопасность',

@@ -195,7 +195,8 @@ CREATE TABLE IF NOT EXISTS auth_refresh_sessions (
   member_id INTEGER NOT NULL REFERENCES members(id) ON DELETE CASCADE,
   expires_at TIMESTAMPTZ NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  revoked_at TIMESTAMPTZ
+  revoked_at TIMESTAMPTZ,
+  last_used_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE TABLE IF NOT EXISTS access_requests (
@@ -455,6 +456,11 @@ CREATE INDEX IF NOT EXISTS auth_refresh_sessions_expires_at_idx
 
 CREATE INDEX IF NOT EXISTS auth_refresh_sessions_revoked_at_idx
   ON auth_refresh_sessions (revoked_at);
+
+ALTER TABLE auth_refresh_sessions ADD COLUMN IF NOT EXISTS last_used_at TIMESTAMPTZ;
+UPDATE auth_refresh_sessions SET last_used_at = created_at WHERE last_used_at IS NULL;
+ALTER TABLE auth_refresh_sessions ALTER COLUMN last_used_at SET DEFAULT NOW();
+ALTER TABLE auth_refresh_sessions ALTER COLUMN last_used_at SET NOT NULL;
 
 CREATE INDEX IF NOT EXISTS members_phone_digits_idx
   ON members ((regexp_replace(COALESCE(phone_number, ''), '\\D', '', 'g')));

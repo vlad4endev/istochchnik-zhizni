@@ -14,7 +14,6 @@ export function useSyncServerRole(): void {
   const hydrated = useAuthHydrated();
   const token = useAuthStore((s) => s.token);
   const applyServerProfile = useAuthStore((s) => s.applyServerProfile);
-  const clearSession = useAuthStore((s) => s.clearSession);
   const doneForToken = useRef<string | null>(null);
 
   useEffect(() => {
@@ -41,21 +40,13 @@ export function useSyncServerRole(): void {
           memberId: typeof me.id === 'number' ? me.id : null,
         });
         doneForToken.current = token;
-      } catch (e: unknown) {
-        if (cancelled) return;
-        const status =
-          typeof e === 'object' && e !== null && 'response' in e
-            ? (e as { response?: { status?: number } }).response?.status
-            : undefined;
-        if (status === 401) {
-          clearSession();
-          doneForToken.current = null;
-        }
+      } catch {
+        /* 401 и прочие ошибки обрабатывает apiClient (refresh / сброс сессии); здесь не чистим — избегаем ложного выхода при сети. */
       }
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [hydrated, token, applyServerProfile, clearSession]);
+  }, [hydrated, token, applyServerProfile]);
 }

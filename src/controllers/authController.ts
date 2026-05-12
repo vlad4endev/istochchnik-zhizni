@@ -5,6 +5,7 @@ import {
   appendClearRefreshCookie,
   appendSetAuthCookie,
   appendSetRefreshCookie,
+  getAuthAccessTtlMinutes,
   readRefreshTokenFromCookies,
 } from '../config/authCookie';
 import {
@@ -41,6 +42,7 @@ import {
   uploadBufferToPublicBucket,
   userMediaBucket,
 } from '../lib/supabaseStorage';
+import { writeAppLog } from '../services/appLogService';
 
 type AuthRequest = Request & {
   authUserId?: number;
@@ -70,6 +72,26 @@ const PHONE_DIGITS_MAX = 20;
 
 function readStringField(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
+}
+
+function readRememberMe(body: unknown): boolean {
+  if (!body || typeof body !== 'object') return true;
+  const v = (body as Record<string, unknown>).remember_me;
+  if (v === undefined || v === null) return true;
+  if (typeof v === 'boolean') return v;
+  if (typeof v === 'string') {
+    const s = v.trim().toLowerCase();
+    if (s === 'false' || s === '0') return false;
+  }
+  return true;
+}
+
+function authLogContext(req: Request): Record<string, unknown> {
+  const ua = String(req.get('user-agent') ?? '');
+  return {
+    ip: req.ip ?? '',
+    ua: ua.length > 500 ? ua.slice(0, 500) : ua,
+  };
 }
 
 function parseId(value: string): number | null {
@@ -262,8 +284,20 @@ export async function loginHandler(req: Request, res: Response): Promise<void> {
     }
     if (typeof result.token === 'string' && result.token.length > 0) {
       appendSetAuthCookie(res, result.token);
-      await appendRefreshCookieForUser(res, result.user.id);
+      if (readRememberMe(req.body)) {
+        await appendRefreshCookieForUser(res, result.user.id);
+      }
     }
+    void writeAppLog({
+      level: 'info',
+      scope: 'auth',
+      event: 'auth.login',
+      message: 'Вход выполнен',
+      user_id: result.user.id,
+      request_method: req.method,
+      request_path: (req.originalUrl ?? req.url ?? '').split('?')[0] || undefined,
+      context: authLogContext(req),
+    });
     res.json(result);
   } catch (error) {
     if (error instanceof Error && error.message === 'Ambiguous phone number') {
@@ -850,11 +884,27 @@ export async function logoutHandler(req: Request, res: Response): Promise<void> 
     }
     appendClearAuthCookie(res);
     appendClearRefreshCookie(res);
+    void writeAppLog({
+      level: 'info',
+      scope: 'auth',
+      event: 'auth.logout',
+      message: 'Выход',
+      user_id: authReq.authUserId,
+      request_method: req.method,
+      request_path: (req.originalUrl ?? req.url ?? '').split('?')[0] || undefined,
+      context: authLogContext(req),
+    });
     res.status(204).send();
   } catch (error) {
     console.error('Failed to logout user', error);
     res.status(500).json({ error: 'Database error' });
   }
+}
+
+/** Публичные подсказки для SPA: интервал фонового refresh под фактический TTL access на сервере. */
+export async function sessionHintsHandler(_req: Request, res: Response): Promise<void> {
+  res.setHeader('Cache-Control', 'private, max-age=120');
+  res.json({ accessTokenTtlMinutes: getAuthAccessTtlMinutes() });
 }
 
 export async function refreshHandler(req: Request, res: Response): Promise<void> {
@@ -873,6 +923,16 @@ export async function refreshHandler(req: Request, res: Response): Promise<void>
     }
     appendSetAuthCookie(res, rotated.token);
     appendSetRefreshCookie(res, rotated.refreshToken);
+    void writeAppLog({
+      level: 'info',
+      scope: 'auth',
+      event: 'auth.refresh',
+      message: 'Сессия продлена',
+      user_id: rotated.memberId,
+      request_method: req.method,
+      request_path: (req.originalUrl ?? req.url ?? '').split('?')[0] || undefined,
+      context: authLogContext(req),
+    });
     res.json({
       accessToken: rotated.token,
       token: rotated.token,

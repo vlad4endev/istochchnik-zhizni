@@ -3,7 +3,7 @@ import axios, { type AxiosError, type AxiosHeaders, type InternalAxiosRequestCon
 import { useAuthStore } from '../features/auth/authStore';
 
 import { performAuthRefresh } from './authRefresh';
-import { isCookieOnlySessionToken } from './authSessionConstants';
+import { COOKIE_ONLY_SESSION_TOKEN, isCookieOnlySessionToken } from './authSessionConstants';
 import { resolveAxiosBaseURL } from './config';
 import { emitAppToast } from './uiFeedback';
 
@@ -101,15 +101,19 @@ apiClient.interceptors.response.use(
     const bodyMsg = readResponseErrorMessage(error.response?.data);
 
     if (status === 401) {
+      if (shouldSkip401Handling(url)) {
+        return Promise.reject(error);
+      }
+
       const retryCfg = cfg as RetryableAxiosConfig | undefined;
-      if (!shouldSkip401Handling(url) && retryCfg && !retryCfg._retryAfterRefresh) {
+      if (retryCfg && !retryCfg._retryAfterRefresh) {
         retryCfg._retryAfterRefresh = true;
         try {
           const refreshResult = await performAuthRefresh();
           if (refreshResult.status === 'refreshed') {
             const auth = useAuthStore.getState();
             auth.setSession({
-              token: refreshResult.token,
+              token: COOKIE_ONLY_SESSION_TOKEN,
               firstName: auth.firstName,
               lastName: auth.lastName,
               role: auth.role,
@@ -122,21 +126,21 @@ apiClient.interceptors.response.use(
             return apiClient.request(retryCfg);
           }
           if (refreshResult.status === 'unchanged') {
-            // 429 / сеть: не сбрасывать сессию; повтор с тем же токеном даст цикл при истёкшем access — просто пробрасываем 401.
+            // 429 / сеть / 5xx на refresh: сессию не рвём — пользователь остаётся «внутри», следующий refresh или ручной повтор сработают.
             return Promise.reject(error);
           }
         } catch {
-          // fallthrough: clear session + notify below
+          return Promise.reject(error);
         }
       }
-      if (!shouldSkip401Handling(url)) {
-        try {
-          useAuthStore.getState().clearSession();
-        } catch {
-          /* store недоступен (SSR и т.п.) */
-        }
-        emitAppToast({ message: bodyMsg ?? 'Сессия недействительна или истекла. Войдите снова.', kind: 'error' });
+
+      try {
+        useAuthStore.getState().clearSession();
+      } catch {
+        /* store недоступен (SSR и т.п.) */
       }
+      emitAppToast({ message: bodyMsg ?? 'Сессия недействительна или истекла. Войдите снова.', kind: 'error' });
+      return Promise.reject(error);
     } else if (!error.response) {
       emitAppToast({
         message: 'Нет связи с сервером. Проверьте интернет и доступность API.',

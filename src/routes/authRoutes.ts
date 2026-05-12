@@ -12,6 +12,7 @@ import {
   meHandler,
   patchProfileHandler,
   refreshHandler,
+  sessionHintsHandler,
   uploadAvatarHandler,
   registerHandler,
   rejectAccessRequestHandler,
@@ -138,6 +139,7 @@ function avatarUploadMiddleware(req: Request, res: Response, next: NextFunction)
   });
 }
 
+router.get('/session-hints', sessionHintsHandler);
 router.post('/register', registerHandler);
 router.post('/login', authLoginRateLimit, loginHandler);
 router.post('/refresh', authRefreshRateLimit, refreshHandler);

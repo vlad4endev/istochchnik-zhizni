@@ -7,6 +7,7 @@ import type { AppRole } from '../types/appRole';
 import { normalizeAppRole, normalizeAppRoles } from '../types/appRole';
 import { findMemberIdConflictingName, updateUser } from './userService';
 import { postRegistrationAccessRequestMessengerNotification } from './messengerService';
+import { writeAppLog } from './appLogService';
 import { resolveSmsRuntimeConfig } from './smsSettingsService';
 import { sendPasswordResetTelegramMessage } from './telegramService';
 
@@ -436,8 +437,8 @@ export async function issueRefreshSessionForUser(
   );
 
   await query(
-    `INSERT INTO auth_refresh_sessions (token_hash, member_id, expires_at)
-     VALUES ($1, $2, $3)`,
+    `INSERT INTO auth_refresh_sessions (token_hash, member_id, expires_at, last_used_at)
+     VALUES ($1, $2, $3, NOW())`,
     [tokenHash, userId, expiresAt.toISOString()]
   );
 
@@ -1207,12 +1208,27 @@ export async function confirmPasswordResetViaSms(
   );
   await query(`DELETE FROM auth_sessions WHERE member_id = $1`, [member.id]);
   await query(
+    `UPDATE auth_refresh_sessions
+     SET revoked_at = NOW()
+     WHERE member_id = $1
+       AND revoked_at IS NULL`,
+    [member.id]
+  );
+  await query(
     `UPDATE password_reset_sms_codes
      SET consumed_at = NOW(),
          updated_at = NOW()
      WHERE id = $1`,
     [row.id]
   );
+  void writeAppLog({
+    level: 'info',
+    scope: 'auth',
+    event: 'auth.password_reset_sms',
+    message: 'Пароль сброшен по SMS',
+    user_id: member.id,
+    context: {},
+  });
 }
 
 export async function loginUser(phoneInput: string, password: string): Promise<LoginAttemptResult | null> {
@@ -1337,9 +1353,13 @@ export async function resolveSessionByToken(token: string): Promise<SessionPrinc
   const tokenHash = createHash('sha256').update(normalizedToken).digest('hex');
   const accessTtlMinutes = getAccessTtlMinutes();
   const refreshedExpiresAt = new Date(Date.now() + accessTtlMinutes * 60 * 1000);
+  const halfTtlMinutes = accessTtlMinutes * 0.5;
   const result = await query(
     `UPDATE auth_sessions s
-     SET expires_at = $2
+     SET expires_at = CASE
+       WHEN s.expires_at < NOW() + (($3::double precision) * INTERVAL '1 minute') THEN $2::timestamptz
+       ELSE s.expires_at
+     END
      FROM members m
      WHERE s.member_id = m.id
        AND s.token_hash = $1
@@ -1349,7 +1369,7 @@ export async function resolveSessionByToken(token: string): Promise<SessionPrinc
          OR m.registration_status = 'rejected'
        )
     RETURNING m.id AS member_pk, m.app_role, m.app_roles`,
-    [tokenHash, refreshedExpiresAt.toISOString()]
+    [tokenHash, refreshedExpiresAt.toISOString(), halfTtlMinutes]
   );
 
   const row = result.rows[0] as
@@ -1392,11 +1412,30 @@ export async function revokeRefreshToken(token: string): Promise<void> {
   );
 }
 
+/** Фоновая уборка: протухшие access, refresh и давно неиспользуемые refresh (idle). */
+export async function cleanupExpiredSessions(): Promise<{
+  deletedAccess: number;
+  deletedRefresh: number;
+}> {
+  const access = await query(`DELETE FROM auth_sessions WHERE expires_at < NOW() - INTERVAL '1 day'`);
+  const refresh = await query(
+    `DELETE FROM auth_refresh_sessions
+     WHERE (expires_at < NOW() - INTERVAL '1 day')
+        OR (revoked_at IS NOT NULL AND revoked_at < NOW() - INTERVAL '90 days')
+        OR (revoked_at IS NULL AND last_used_at < NOW() - INTERVAL '30 days')`,
+  );
+  return {
+    deletedAccess: access.rowCount ?? 0,
+    deletedRefresh: refresh.rowCount ?? 0,
+  };
+}
+
 type RefreshRotationResult = {
   token: string;
   expiresAt: string;
   refreshToken: string;
   refreshExpiresAt: string;
+  memberId: number;
 };
 
 /** Повтор тем же refresh сразу после ротации (две вкладки / повтор запроса). */
@@ -1453,6 +1492,13 @@ async function rotateAccessByRefreshTokenOnce(
 ): Promise<RefreshRotationResult> {
   await query(
     `UPDATE auth_refresh_sessions
+     SET last_used_at = NOW()
+     WHERE token_hash = $1
+       AND revoked_at IS NULL`,
+    [tokenHash]
+  );
+  await query(
+    `UPDATE auth_refresh_sessions
      SET revoked_at = NOW()
      WHERE token_hash = $1`,
     [tokenHash]
@@ -1466,6 +1512,7 @@ async function rotateAccessByRefreshTokenOnce(
     expiresAt,
     refreshToken: nextRefreshToken,
     refreshExpiresAt,
+    memberId,
   };
   rememberRefreshRotationGrace(tokenHash, result);
   return result;
@@ -1626,6 +1673,22 @@ export async function changeMemberPassword(
     newHash,
     userId,
   ]);
+  await query(`DELETE FROM auth_sessions WHERE member_id = $1`, [userId]);
+  await query(
+    `UPDATE auth_refresh_sessions
+     SET revoked_at = NOW()
+     WHERE member_id = $1
+       AND revoked_at IS NULL`,
+    [userId]
+  );
+  void writeAppLog({
+    level: 'info',
+    scope: 'auth',
+    event: 'auth.password_changed',
+    message: 'Пароль изменён',
+    user_id: userId,
+    context: {},
+  });
   return 'ok';
 }
 

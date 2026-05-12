@@ -43,6 +43,7 @@ import { initTelegramDispatchJob } from './cron/telegramDispatchJob';
 import { ensureUploadsDirs, getUploadsRoot } from './config/uploadsRoot';
 import { ensureAccessRequestsMessengerChannel } from './services/messengerService';
 import { writeAppLog } from './services/appLogService';
+import { cleanupExpiredSessions } from './services/authService';
 import { getEditablePlanByToken, getPublicPlanByToken } from './services/servicePlannerService';
 import { startAnalyticsMaintenance } from './services/analyticsService';
 import { shouldWarnMissingSupabaseStoragePublicUrl } from './lib/supabaseStorage';
@@ -437,6 +438,12 @@ async function start(): Promise<void> {
   initPushCronJobs();
   initTelegramDispatchJob();
   startAnalyticsMaintenance();
+
+  const SESSION_CLEANUP_INTERVAL_MS = 60 * 60 * 1000;
+  void cleanupExpiredSessions().catch((e) => console.warn('[auth] cleanupExpiredSessions (boot):', e));
+  setInterval(() => {
+    void cleanupExpiredSessions().catch((e) => console.warn('[auth] cleanupExpiredSessions:', e));
+  }, SESSION_CLEANUP_INTERVAL_MS);
   
   server.listen(Number(PORT), () => {
     console.log(`Server is running on http://localhost:${PORT}`);

@@ -852,7 +852,7 @@ export function ServicePlannerPage() {
     normalizedRole === 'admin' || (authMember ? hasAppRole(authMember, 'admin') : false);
   const leaderCandidates = useMemo(() => users.filter((u) => hasMinistryRole(u, 'Ведущий')), [users]);
   const preacherCandidates = useMemo(() => users.filter((u) => isPreacherCandidate(u)), [users]);
-  const musicianDirectionCandidates = useMemo(
+  const musicMinistryCandidates = useMemo(
     () => users.filter((u) => isMusicMinistryCandidate(u)),
     [users],
   );
@@ -2274,7 +2274,7 @@ export function ServicePlannerPage() {
                       <option value="">Ответственный по умолчанию</option>
                       {(
                         (blockTypes.find((t) => t.id === editingTemplateBlock.block_type_id)?.kind ?? 'custom') === 'song'
-                          ? musicianDirectionCandidates
+                          ? musicMinistryCandidates
                           : users
                       ).map((u) => (
                         <option key={u.id} value={u.id}>
@@ -2654,6 +2654,31 @@ export function ServicePlannerPage() {
               </option>
             ))}
           </select>
+          <select
+            value={draft.music_ministry_member_id ?? ''}
+            onChange={(e) => {
+              const musicId = e.target.value ? Number(e.target.value) : null;
+              setDraft((prev) => {
+                if (!prev) return prev;
+                return {
+                  ...prev,
+                  music_ministry_member_id: musicId,
+                  blocks: prev.blocks.map((b) => {
+                    if (!isSongBlock(b)) return b;
+                    return { ...b, assigned_member_id: musicId };
+                  }),
+                };
+              });
+            }}
+            className="w-full min-w-0 rounded-xl border border-stone-300 px-3 py-2 text-sm shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+          >
+            <option value="">Ответственный за музыкальное служение</option>
+            {musicMinistryCandidates.map((u) => (
+              <option key={u.id} value={u.id}>
+                {userLabel(u)}
+              </option>
+            ))}
+          </select>
           <div className="md:col-span-2 rounded-xl bg-stone-50 px-3 py-2 text-xs text-stone-600">
             <LuLink className="mr-1 inline h-3.5 w-3.5" /> /service-plan/share/{draft.share_token}
           </div>
@@ -2668,6 +2693,7 @@ export function ServicePlannerPage() {
                 start_time: draft.start_time,
                 leader_member_id: draft.leader_member_id,
                 preacher_member_id: draft.preacher_member_id,
+                music_ministry_member_id: draft.music_ministry_member_id,
               },
             })
           }
@@ -3430,6 +3456,9 @@ export function ServicePlannerPage() {
                           const preacherName = preacher ? userLabel(preacher) : 'Проповедник';
                           nextPatch.title = topic ? `${preacherName} - ${topic}` : preacherName;
                         }
+                        if ((typeMeta?.code ?? '').toLowerCase() === 'song' || typeMeta?.kind === 'song') {
+                          nextPatch.assigned_member_id = draft?.music_ministry_member_id ?? null;
+                        }
                         updateDraftBlock(editingBlock.id, nextPatch);
                       }}
                       className="rounded-lg border border-stone-300 px-2 py-1.5 text-sm font-normal"
@@ -3461,9 +3490,15 @@ export function ServicePlannerPage() {
                     Ответственный
                     <select
                       id={`${blockEditFieldsUid}-responsible`}
-                      value={isSermonBlock(editingBlock) ? (draft?.preacher_member_id ?? '') : (editingBlock.assigned_member_id ?? '')}
+                      value={
+                        isSermonBlock(editingBlock)
+                          ? (draft?.preacher_member_id ?? '')
+                          : isSongBlock(editingBlock)
+                            ? (draft?.music_ministry_member_id ?? '')
+                            : (editingBlock.assigned_member_id ?? '')
+                      }
                       onChange={(e) => {
-                        if (isSermonBlock(editingBlock)) return;
+                        if (isSermonBlock(editingBlock) || isSongBlock(editingBlock)) return;
                         const memberId = e.target.value ? Number(e.target.value) : null;
                         const nextPatch: Partial<ServicePlanBlock> = { assigned_member_id: memberId };
                         if (isPoemBlock(editingBlock)) {
@@ -3480,7 +3515,7 @@ export function ServicePlannerPage() {
                         updateDraftBlock(editingBlock.id, nextPatch);
                       }}
                       className="rounded-lg border border-stone-300 px-2 py-1.5 text-sm font-normal sm:col-span-2"
-                      disabled={isSermonBlock(editingBlock)}
+                      disabled={isSermonBlock(editingBlock) || isSongBlock(editingBlock)}
                     >
                     {isSermonBlock(editingBlock) ? (
                       <option value={draft?.preacher_member_id ?? ''}>
@@ -3491,15 +3526,21 @@ export function ServicePlannerPage() {
                             })()
                           : 'В настройках программы не выбран проповедник'}
                       </option>
+                    ) : isSongBlock(editingBlock) ? (
+                      <option value={draft?.music_ministry_member_id ?? ''}>
+                        {draft?.music_ministry_member_id
+                          ? (() => {
+                              const m = usersById.get(draft.music_ministry_member_id) ?? null;
+                              return m ? userLabel(m) : 'Музыкальное служение';
+                            })()
+                          : 'В настройках программы не выбран ответственный за музыку'}
+                      </option>
                     ) : (
                       <>
                         <option value="">
                           {isPoemBlock(editingBlock) ? 'Чтец не назначен' : 'Ответственный не назначен'}
                         </option>
-                        {((blockTypes.find((t) => t.id === editingBlock.block_type_id)?.kind ?? 'custom') === 'song'
-                          ? musicianDirectionCandidates
-                          : users
-                        ).map((u) => (
+                        {(users).map((u) => (
                           <option key={u.id} value={u.id}>
                             {userLabel(u)} ({roleLabel(u)})
                           </option>
@@ -3624,13 +3665,20 @@ export function ServicePlannerPage() {
               <button
                 type="button"
                 onClick={() => {
+                  const meta = blockTypes.find((t) => t.id === editingBlock.block_type_id);
+                  const isSongMeta = meta?.code === 'song' || meta?.kind === 'song';
+                  const isSermonMeta =
+                    meta?.code === 'sermon' || (meta?.name ?? '').toLowerCase().includes('проповед');
+                  let assigned_member_id = editingBlock.assigned_member_id;
+                  if (isSermonMeta) assigned_member_id = draft?.preacher_member_id ?? null;
+                  else if (isSongMeta) assigned_member_id = draft?.music_ministry_member_id ?? null;
                   void updateBlockMut.mutateAsync({
                     id: editingBlock.id,
                     body: {
                       title: editingBlock.title,
                       block_type_id: editingBlock.block_type_id,
                       duration_minutes: editingBlock.duration_minutes,
-                      assigned_member_id: editingBlock.assigned_member_id,
+                      assigned_member_id,
                       song_id: editingBlock.song_id,
                       content_json: editingBlock.content_json,
                     },
