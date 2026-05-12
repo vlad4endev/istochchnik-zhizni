@@ -421,9 +421,40 @@ function createRefreshToken(): { token: string; tokenHash: string } {
   return { token, tokenHash };
 }
 
+/** При SKIP_DB_INIT колонка может отсутствовать — один раз применяем DDL из миграции. */
+let ensureLastUsedAtColumnPromise: Promise<void> | null = null;
+
+function ensureAuthRefreshSessionsLastUsedAtColumn(): Promise<void> {
+  if (!ensureLastUsedAtColumnPromise) {
+    ensureLastUsedAtColumnPromise = (async (): Promise<void> => {
+      await query(
+        `ALTER TABLE auth_refresh_sessions ADD COLUMN IF NOT EXISTS last_used_at TIMESTAMPTZ`,
+      );
+      await query(
+        `UPDATE auth_refresh_sessions SET last_used_at = created_at WHERE last_used_at IS NULL`,
+      );
+      await query(
+        `ALTER TABLE auth_refresh_sessions ALTER COLUMN last_used_at SET DEFAULT NOW()`,
+      );
+      try {
+        await query(
+          `ALTER TABLE auth_refresh_sessions ALTER COLUMN last_used_at SET NOT NULL`,
+        );
+      } catch {
+        /* уже NOT NULL или гонка — не блокируем вход */
+      }
+    })().catch((err: unknown) => {
+      ensureLastUsedAtColumnPromise = null;
+      throw err;
+    });
+  }
+  return ensureLastUsedAtColumnPromise;
+}
+
 export async function issueRefreshSessionForUser(
   userId: number
 ): Promise<{ refreshToken: string; expiresAt: string }> {
+  await ensureAuthRefreshSessionsLastUsedAtColumn();
   const { token, tokenHash } = createRefreshToken();
   const refreshTtlDays = getRefreshTtlDays();
   const expiresAt = new Date(Date.now() + refreshTtlDays * 24 * 60 * 60 * 1000);
@@ -1417,6 +1448,7 @@ export async function cleanupExpiredSessions(): Promise<{
   deletedAccess: number;
   deletedRefresh: number;
 }> {
+  await ensureAuthRefreshSessionsLastUsedAtColumn();
   const access = await query(`DELETE FROM auth_sessions WHERE expires_at < NOW() - INTERVAL '1 day'`);
   const refresh = await query(
     `DELETE FROM auth_refresh_sessions
@@ -1490,6 +1522,7 @@ async function rotateAccessByRefreshTokenOnce(
   tokenHash: string,
   memberId: number
 ): Promise<RefreshRotationResult> {
+  await ensureAuthRefreshSessionsLastUsedAtColumn();
   await query(
     `UPDATE auth_refresh_sessions
      SET last_used_at = NOW()
