@@ -3,7 +3,7 @@ import axios, { type AxiosError, type AxiosHeaders, type InternalAxiosRequestCon
 import { useAuthStore } from '../features/auth/authStore';
 
 import { performAuthRefresh } from './authRefresh';
-import { COOKIE_ONLY_SESSION_TOKEN, isCookieOnlySessionToken } from './authSessionConstants';
+import { isCookieOnlySessionToken } from './authSessionConstants';
 import { resolveAxiosBaseURL } from './config';
 import { emitAppToast } from './uiFeedback';
 
@@ -113,7 +113,7 @@ apiClient.interceptors.response.use(
           if (refreshResult.status === 'refreshed') {
             const auth = useAuthStore.getState();
             auth.setSession({
-              token: COOKIE_ONLY_SESSION_TOKEN,
+              token: refreshResult.token,
               firstName: auth.firstName,
               lastName: auth.lastName,
               role: auth.role,

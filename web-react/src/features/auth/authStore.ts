@@ -262,8 +262,9 @@ export const useAuthStore = create<AuthState>()(
             return { ok: false, message: 'Неверный телефон или пароль.' };
           }
 
+          // В PWA (особенно iOS standalone) HttpOnly-cookies часто не переживают закрытие; access JWT в persist — чтобы сессия восстанавливалась.
           get().setSession({
-            token: COOKIE_ONLY_SESSION_TOKEN,
+            token,
             firstName: (user.first_name ?? '').trim(),
             lastName: (user.last_name ?? '').trim(),
             role: (user.app_role ?? 'member').trim() || 'member',
@@ -353,11 +354,11 @@ export const useAuthStore = create<AuthState>()(
               });
               if (meRes.status === 200) {
                 const user = (await meRes.json()) as MeUser;
-                applyMeJson(user, COOKIE_ONLY_SESSION_TOKEN);
+                applyMeJson(user, nextToken);
               } else {
                 const auth = get();
                 get().setSession({
-                  token: COOKIE_ONLY_SESSION_TOKEN,
+                  token: nextToken,
                   firstName: auth.firstName,
                   lastName: auth.lastName,
                   role: auth.role,

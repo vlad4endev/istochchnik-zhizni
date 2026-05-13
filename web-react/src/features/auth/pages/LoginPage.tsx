@@ -10,7 +10,6 @@ import { isApiUrlProbablyWrongForWeb } from '../../../lib/config';
 import { defaultPostLoginPath, pendingRegistrationLandingPath } from '../../../lib/appVariant';
 import { humanizeServerError, mapAxiosAuthError } from '../authErrors';
 import { normalizeRegistrationStatus, useAuthStore } from '../authStore';
-import { COOKIE_ONLY_SESSION_TOKEN } from '../../../lib/authSessionConstants';
 import { formatRuPhoneInput, phoneInputAllowedKeys } from '../utils/formatRuPhone';
 import { SkeletonBox } from '@/components/ui/SkeletonBox';
 
@@ -202,7 +201,7 @@ export function LoginPage() {
       }
 
       setSession({
-        token: COOKIE_ONLY_SESSION_TOKEN,
+        token: t,
         firstName: (user.first_name ?? '').trim(),
         lastName: (user.last_name ?? '').trim(),
         role: (user.app_role ?? 'member').trim() || 'member',
@@ -296,7 +295,7 @@ export function LoginPage() {
           return;
         }
         setSession({
-          token: COOKIE_ONLY_SESSION_TOKEN,
+          token: t,
           firstName: (user.first_name ?? '').trim(),
           lastName: (user.last_name ?? '').trim(),
           role: (user.app_role ?? 'member').trim() || 'member',
@@ -316,7 +315,7 @@ export function LoginPage() {
         const user = data.user;
         if (t && user) {
           setSession({
-            token: COOKIE_ONLY_SESSION_TOKEN,
+            token: t,
             firstName: (user.first_name ?? '').trim(),
             lastName: (user.last_name ?? '').trim(),
             role: (user.app_role ?? 'member').trim() || 'member',

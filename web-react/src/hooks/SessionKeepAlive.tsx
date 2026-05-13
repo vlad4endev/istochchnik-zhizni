@@ -2,7 +2,6 @@ import { useEffect, useRef } from 'react';
 
 import { useAuthStore } from '../features/auth/authStore';
 import { performAuthRefresh } from '../lib/authRefresh';
-import { COOKIE_ONLY_SESSION_TOKEN } from '../lib/authSessionConstants';
 import { computeProactiveRefreshIntervalMs, fetchAuthAccessTtlMinutes } from '../lib/authSessionHints';
 
 /** Пока не пришёл `/api/auth/session-hints`, используем тот же расчёт, что для TTL=60 по умолчанию на сервере. */
@@ -10,10 +9,10 @@ const FALLBACK_REFRESH_INTERVAL_MS = computeProactiveRefreshIntervalMs(60);
 /** Не чаще одного «ручного» продления при возврате в приложение / сеть (нагрузка на API). */
 const MIN_GAP_RESUME_REFRESH_MS = 12_000;
 
-function applyRefreshedAccessToken(): void {
+function applyRefreshedAccessToken(nextToken: string): void {
   const auth = useAuthStore.getState();
   auth.setSession({
-    token: COOKIE_ONLY_SESSION_TOKEN,
+    token: nextToken,
     firstName: auth.firstName,
     lastName: auth.lastName,
     role: auth.role,
@@ -38,7 +37,7 @@ export function SessionKeepAlive(): null {
 
     const runRefresh = (): void => {
       void performAuthRefresh().then((result) => {
-        if (result.status === 'refreshed') applyRefreshedAccessToken();
+        if (result.status === 'refreshed') applyRefreshedAccessToken(result.token);
       });
     };
 
