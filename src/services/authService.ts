@@ -10,6 +10,16 @@ import { postRegistrationAccessRequestMessengerNotification } from './messengerS
 import { writeAppLog } from './appLogService';
 import { resolveSmsRuntimeConfig } from './smsSettingsService';
 import { sendPasswordResetTelegramMessage } from './telegramService';
+import type { RefreshRotationRedisPayload } from './authSessionRedis';
+import {
+  markAccessTokenRevokedInRedis,
+  isAccessTokenRevokedInRedis,
+  rememberRefreshRotationGraceInRedis,
+  releaseRefreshRotationLock,
+  sleepMs,
+  takeRefreshRotationGraceFromRedis,
+  tryAcquireRefreshRotationLock,
+} from './authSessionRedis';
 
 const scrypt = promisify(scryptCallback);
 const MIN_PASSWORD_LENGTH = 8;
@@ -1382,6 +1392,9 @@ export async function resolveSessionByToken(token: string): Promise<SessionPrinc
   }
 
   const tokenHash = createHash('sha256').update(normalizedToken).digest('hex');
+  if (await isAccessTokenRevokedInRedis(tokenHash)) {
+    return null;
+  }
   const accessTtlMinutes = getAccessTtlMinutes();
   const refreshedExpiresAt = new Date(Date.now() + accessTtlMinutes * 60 * 1000);
   const halfTtlMinutes = accessTtlMinutes * 0.5;
@@ -1426,6 +1439,8 @@ export async function logoutByToken(token: string): Promise<void> {
   }
 
   const tokenHash = createHash('sha256').update(normalizedToken).digest('hex');
+  const revokeTtlSec = getAccessTtlMinutes() * 60 + 120;
+  await markAccessTokenRevokedInRedis(tokenHash, revokeTtlSec);
   await query('DELETE FROM auth_sessions WHERE token_hash = $1', [tokenHash]);
 }
 
@@ -1516,6 +1531,13 @@ function rememberRefreshRotationGrace(tokenHash: string, payload: RefreshRotatio
     payload,
     until: Date.now() + REFRESH_ROTATION_GRACE_MS,
   });
+  void rememberRefreshRotationGraceInRedis(tokenHash, {
+    token: payload.token,
+    expiresAt: payload.expiresAt,
+    refreshToken: payload.refreshToken,
+    refreshExpiresAt: payload.refreshExpiresAt,
+    memberId: payload.memberId,
+  });
 }
 
 async function rotateAccessByRefreshTokenOnce(
@@ -1551,6 +1573,16 @@ async function rotateAccessByRefreshTokenOnce(
   return result;
 }
 
+function mapRedisGraceToRotation(g: RefreshRotationRedisPayload): RefreshRotationResult {
+  return {
+    token: g.token,
+    expiresAt: g.expiresAt,
+    refreshToken: g.refreshToken,
+    refreshExpiresAt: g.refreshExpiresAt,
+    memberId: g.memberId,
+  };
+}
+
 export async function rotateAccessByRefreshToken(
   refreshToken: string
 ): Promise<RefreshRotationResult | null> {
@@ -1560,39 +1592,94 @@ export async function rotateAccessByRefreshToken(
   }
   const tokenHash = createHash('sha256').update(normalizedToken).digest('hex');
 
+  const graceRedis = await takeRefreshRotationGraceFromRedis(tokenHash);
+  if (graceRedis) {
+    return mapRedisGraceToRotation(graceRedis);
+  }
   const grace = takeRefreshRotationGrace(tokenHash);
   if (grace) {
     return grace;
   }
 
-  let inflight = pendingRefreshByHash.get(tokenHash);
-  if (!inflight) {
-    inflight = (async (): Promise<RefreshRotationResult | null> => {
-      const sessionResult = await query(
-        `SELECT rs.member_id
-         FROM auth_refresh_sessions rs
-         JOIN members m ON m.id = rs.member_id
-         WHERE rs.token_hash = $1
-           AND rs.expires_at > NOW()
-           AND rs.revoked_at IS NULL
-           AND (
-             m.is_active = TRUE
-             OR m.registration_status = 'rejected'
-           )
-         LIMIT 1`,
-        [tokenHash]
-      );
-      const row = sessionResult.rows[0] as { member_id: number } | undefined;
-      if (!row?.member_id) {
-        return takeRefreshRotationGrace(tokenHash);
-      }
-      return rotateAccessByRefreshTokenOnce(tokenHash, row.member_id);
-    })().finally(() => {
-      pendingRefreshByHash.delete(tokenHash);
-    });
-    pendingRefreshByHash.set(tokenHash, inflight);
+  const lockAttempt = await tryAcquireRefreshRotationLock(tokenHash);
+  if (lockAttempt === null) {
+    let inflight = pendingRefreshByHash.get(tokenHash);
+    if (!inflight) {
+      inflight = (async (): Promise<RefreshRotationResult | null> => {
+        const sessionResult = await query(
+          `SELECT rs.member_id
+           FROM auth_refresh_sessions rs
+           JOIN members m ON m.id = rs.member_id
+           WHERE rs.token_hash = $1
+             AND rs.expires_at > NOW()
+             AND rs.revoked_at IS NULL
+             AND (
+               m.is_active = TRUE
+               OR m.registration_status = 'rejected'
+             )
+           LIMIT 1`,
+          [tokenHash]
+        );
+        const row = sessionResult.rows[0] as { member_id: number } | undefined;
+        if (!row?.member_id) {
+          return takeRefreshRotationGrace(tokenHash);
+        }
+        return rotateAccessByRefreshTokenOnce(tokenHash, row.member_id);
+      })().finally(() => {
+        pendingRefreshByHash.delete(tokenHash);
+      });
+      pendingRefreshByHash.set(tokenHash, inflight);
+    }
+    return inflight;
   }
-  return inflight;
+
+  if (!lockAttempt) {
+    for (let i = 0; i < 200; i++) {
+      await sleepMs(50);
+      const gR = await takeRefreshRotationGraceFromRedis(tokenHash);
+      if (gR) {
+        return mapRedisGraceToRotation(gR);
+      }
+      const gM = takeRefreshRotationGrace(tokenHash);
+      if (gM) {
+        return gM;
+      }
+    }
+    const tailR = await takeRefreshRotationGraceFromRedis(tokenHash);
+    if (tailR) {
+      return mapRedisGraceToRotation(tailR);
+    }
+    const tailM = takeRefreshRotationGrace(tokenHash);
+    return tailM ?? null;
+  }
+
+  try {
+    const sessionResult = await query(
+      `SELECT rs.member_id
+       FROM auth_refresh_sessions rs
+       JOIN members m ON m.id = rs.member_id
+       WHERE rs.token_hash = $1
+         AND rs.expires_at > NOW()
+         AND rs.revoked_at IS NULL
+         AND (
+           m.is_active = TRUE
+           OR m.registration_status = 'rejected'
+         )
+       LIMIT 1`,
+      [tokenHash]
+    );
+    const row = sessionResult.rows[0] as { member_id: number } | undefined;
+    if (!row?.member_id) {
+      const ar = await takeRefreshRotationGraceFromRedis(tokenHash);
+      if (ar) {
+        return mapRedisGraceToRotation(ar);
+      }
+      return takeRefreshRotationGrace(tokenHash);
+    }
+    return rotateAccessByRefreshTokenOnce(tokenHash, row.member_id);
+  } finally {
+    await releaseRefreshRotationLock(tokenHash);
+  }
 }
 
 export async function getAuthUserById(userId: number): Promise<AuthUser | null> {

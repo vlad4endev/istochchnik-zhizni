@@ -5,6 +5,7 @@
 # В .env задайте (или положитесь на значения ниже для сервиса api):
 #   REDIS_REALTIME_ENABLED=true
 #   REDIS_URL=redis://redis:6379
+#   REDIS_AUTH_SESSION_ENABLED=true   # hot-path сессий (между инстансами API); по умолчанию включается при REDIS_URL
 
 services:
   redis:

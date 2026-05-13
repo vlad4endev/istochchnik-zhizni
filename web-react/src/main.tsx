@@ -19,6 +19,7 @@ import { TopLoader } from './components/ui/TopLoader';
 import { AccessibilityProvider } from './lib/accessibility/AccessibilityProvider';
 import { getAppVariant } from './lib/appVariant';
 import { SessionKeepAlive } from './hooks/SessionKeepAlive';
+import { initAuthCrossTabLocalStorageSync } from './features/auth/authStore';
 import { useViewportHeight } from './hooks/useViewportHeight';
 import { useAppUpdate } from './hooks/useAppUpdate';
 import { usePwaStore, type BeforeInstallPromptEvent } from './stores/pwaStore';
@@ -249,6 +250,7 @@ const queryClient = new QueryClient({
 });
 
 if (typeof window !== 'undefined') {
+  initAuthCrossTabLocalStorageSync();
   const pwaStore = usePwaStore.getState();
 
   window.addEventListener('beforeinstallprompt', (event) => {

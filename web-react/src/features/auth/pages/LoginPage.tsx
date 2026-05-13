@@ -148,7 +148,7 @@ export function LoginPage() {
     try {
       const response = await apiClient.post<LoginResponse>(
         '/api/auth/login',
-        { phone_number: p, password: pw },
+        { phone_number: p, password: pw, remember_me: true },
         { validateStatus: (s) => s != null && s < 600 },
       );
 

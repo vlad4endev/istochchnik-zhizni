@@ -45,38 +45,59 @@ export function performAuthRefresh(): Promise<AuthRefreshResult> {
   return refreshInFlight;
 }
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 async function doAuthRefresh(): Promise<AuthRefreshResult> {
   const baseURL = resolveAxiosBaseURL() ?? '';
-  let response;
-  try {
-    response = await axios.post(`${baseURL}/api/auth/refresh`, null, {
-      timeout: 25_000,
-      withCredentials: true,
-      validateStatus: () => true,
-    });
-  } catch {
-    return { status: 'unchanged' };
-  }
+  const maxAttempts = 3;
 
-  const status = response.status;
-  if (status === 200) {
-    const data = response.data as { accessToken?: unknown; token?: unknown } | undefined;
-    const nextTokenRaw = data?.accessToken ?? data?.token;
-    const nextToken = typeof nextTokenRaw === 'string' ? nextTokenRaw.trim() : '';
-    if (nextToken) {
-      return { status: 'refreshed', token: nextToken };
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    if (attempt > 0) {
+      await sleep(350 * attempt);
     }
-    return { status: 'unchanged' };
-  }
 
-  if (status === 401) {
-    return { status: 'unauthorized' };
-  }
+    let response;
+    try {
+      response = await axios.post(`${baseURL}/api/auth/refresh`, null, {
+        timeout: 25_000,
+        withCredentials: true,
+        validateStatus: () => true,
+      });
+    } catch {
+      if (attempt === maxAttempts - 1) {
+        return { status: 'unchanged' };
+      }
+      continue;
+    }
 
-  if (status === 429) {
-    const sec = parseRetryAfterSeconds(response.headers as Record<string, unknown>);
-    console.warn(`Auth refresh rate limited. Retry after ${sec}s`);
-    scheduleRateLimitedRetry(sec * 1000);
+    const status = response.status;
+    if (status === 200) {
+      const data = response.data as { accessToken?: unknown; token?: unknown } | undefined;
+      const nextTokenRaw = data?.accessToken ?? data?.token;
+      const nextToken = typeof nextTokenRaw === 'string' ? nextTokenRaw.trim() : '';
+      if (nextToken) {
+        return { status: 'refreshed', token: nextToken };
+      }
+      return { status: 'unchanged' };
+    }
+
+    if (status === 401) {
+      return { status: 'unauthorized' };
+    }
+
+    if (status === 429) {
+      const sec = parseRetryAfterSeconds(response.headers as Record<string, unknown>);
+      console.warn(`Auth refresh rate limited. Retry after ${sec}s`);
+      scheduleRateLimitedRetry(sec * 1000);
+      return { status: 'unchanged' };
+    }
+
+    if (status >= 500 && status < 600 && attempt < maxAttempts - 1) {
+      continue;
+    }
+
     return { status: 'unchanged' };
   }
 

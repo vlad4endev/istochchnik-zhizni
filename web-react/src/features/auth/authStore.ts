@@ -345,6 +345,10 @@ export const useAuthStore = create<AuthState>()(
           const t = window.setTimeout(() => ctrl.abort(), 12_000);
           try {
             const refreshResult = await performAuthRefresh();
+            if (refreshResult.status === 'unauthorized') {
+              get().clearSession();
+              return;
+            }
             if (refreshResult.status === 'refreshed') {
               const nextToken = refreshResult.token;
               const meRes = await fetch(`${origin}${AUTH_API_PREFIX}/me`, {
@@ -386,14 +390,32 @@ export const useAuthStore = create<AuthState>()(
               return;
             }
 
-            const r = await fetch(`${origin}${AUTH_API_PREFIX}/me`, {
+            let bearer = existing;
+            let r = await fetch(`${origin}${AUTH_API_PREFIX}/me`, {
               credentials: 'include',
               signal: ctrl.signal,
-              headers: { Authorization: `Bearer ${existing}` },
+              headers: { Authorization: `Bearer ${bearer}` },
             });
+            if (r.status === 401) {
+              const again = await performAuthRefresh();
+              if (again.status === 'unauthorized') {
+                get().clearSession();
+                return;
+              }
+              if (again.status === 'refreshed') {
+                bearer = again.token;
+                r = await fetch(`${origin}${AUTH_API_PREFIX}/me`, {
+                  credentials: 'include',
+                  signal: ctrl.signal,
+                  headers: { Authorization: `Bearer ${bearer}` },
+                });
+              }
+            }
             if (r.status === 200) {
               const user = (await r.json()) as MeUser;
-              applyMeJson(user, existing);
+              applyMeJson(user, bearer);
+            } else if (r.status === 401) {
+              get().clearSession();
             }
           } finally {
             window.clearTimeout(t);
@@ -429,6 +451,42 @@ export function isAppAdministratorSession(): boolean {
   } catch {
     return false;
   }
+}
+
+let authCrossTabStorageListenerInstalled = false;
+
+/**
+ * Другая вкладка обновила `auth_access_token` в localStorage (persist после refresh) —
+ * подтягиваем токен без повторного входа (как «одно приложение» на нескольких вкладках).
+ */
+export function initAuthCrossTabLocalStorageSync(): void {
+  if (typeof window === 'undefined' || authCrossTabStorageListenerInstalled) return;
+  authCrossTabStorageListenerInstalled = true;
+
+  const onStorage = (e: StorageEvent): void => {
+    if (e.storageArea !== localStorage || e.key !== LS_TOKEN) return;
+    const next = e.newValue;
+    const prev = useAuthStore.getState();
+    if (!next || next.trim() === '') {
+      if (prev.token) prev.clearSession();
+      return;
+    }
+    if (next === prev.token) return;
+
+    const read = (k: string) => (typeof localStorage !== 'undefined' ? localStorage.getItem(k) : null);
+    prev.setSession({
+      token: next.trim(),
+      firstName: (read(LS_FIRST) ?? prev.firstName ?? '').trim(),
+      lastName: (read(LS_LAST) ?? prev.lastName ?? '').trim(),
+      role: normalizeRole(read(LS_ROLE) ?? prev.role),
+      roles: prev.roles,
+      registrationStatus: normalizeRegistrationStatus(read(LS_REG) ?? prev.registrationStatus),
+      username: prev.username,
+      memberId: prev.memberId,
+    });
+  };
+
+  window.addEventListener('storage', onStorage);
 }
 
 authAxios.interceptors.request.use((config) => {

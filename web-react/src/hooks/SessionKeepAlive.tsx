@@ -7,7 +7,7 @@ import { computeProactiveRefreshIntervalMs, fetchAuthAccessTtlMinutes } from '..
 /** Пока не пришёл `/api/auth/session-hints`, используем тот же расчёт, что для TTL=60 по умолчанию на сервере. */
 const FALLBACK_REFRESH_INTERVAL_MS = computeProactiveRefreshIntervalMs(60);
 /** Не чаще одного «ручного» продления при возврате в приложение / сеть (нагрузка на API). */
-const MIN_GAP_RESUME_REFRESH_MS = 12_000;
+const MIN_GAP_RESUME_REFRESH_MS = 5_000;
 
 function applyRefreshedAccessToken(nextToken: string): void {
   const auth = useAuthStore.getState();
@@ -30,7 +30,6 @@ function applyRefreshedAccessToken(nextToken: string): void {
 export function SessionKeepAlive(): null {
   const token = useAuthStore((s) => s.token);
   const lastExtraRefreshAt = useRef(0);
-  const wasHidden = useRef(false);
 
   useEffect(() => {
     if (!token) return;
@@ -49,24 +48,17 @@ export function SessionKeepAlive(): null {
     };
 
     const onVisibility = (): void => {
-      if (document.visibilityState === 'hidden') {
-        wasHidden.current = true;
-        return;
-      }
-      if (wasHidden.current) {
-        wasHidden.current = false;
-        maybeRefreshAfterResume();
-      }
+      if (document.visibilityState === 'hidden') return;
+      /** PWA/мобильный: при холодном старте часто не было события `hidden` — всё равно тихо продлеваем сессию. */
+      maybeRefreshAfterResume();
     };
 
     const onOnline = (): void => {
       maybeRefreshAfterResume();
     };
 
-    const onPageShow = (e: PageTransitionEvent): void => {
-      if (e.persisted) {
-        maybeRefreshAfterResume();
-      }
+    const onPageShow = (_e: PageTransitionEvent): void => {
+      maybeRefreshAfterResume();
     };
 
     const onWindowFocus = (): void => {
@@ -90,7 +82,7 @@ export function SessionKeepAlive(): null {
     });
 
     /** После bootstrap уже есть refresh; короткая задержка снижает конкуренцию с чанками/SW на iOS PWA. */
-    const bootRefreshTimer = window.setTimeout(runRefresh, 1_200);
+    const bootRefreshTimer = window.setTimeout(runRefresh, 700);
 
     return () => {
       destroyed = true;
