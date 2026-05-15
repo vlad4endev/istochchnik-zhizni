@@ -401,12 +401,12 @@ ALTER TABLE church_events ADD COLUMN IF NOT EXISTS skip_summer_break BOOLEAN NOT
 UPDATE church_events SET active_from = event_date::date WHERE active_from IS NULL AND event_date IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS cycle_collection_claims (
+  id BIGSERIAL PRIMARY KEY,
   cycle_index INTEGER NOT NULL,
   member_id INTEGER NOT NULL REFERENCES members(id) ON DELETE CASCADE,
   claimed_by_member_id INTEGER NOT NULL REFERENCES members(id) ON DELETE CASCADE,
   week_start_date DATE,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  PRIMARY KEY (cycle_index, member_id)
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 ALTER TABLE cycle_collection_claims DROP CONSTRAINT IF EXISTS cycle_collection_claims_member_id_fkey;
@@ -418,14 +418,49 @@ ALTER TABLE cycle_collection_claims ADD CONSTRAINT cycle_collection_claims_claim
 -- Таблица могла быть создана раньше без week_start_date; IF NOT EXISTS в CREATE TABLE её не добавит.
 ALTER TABLE cycle_collection_claims ADD COLUMN IF NOT EXISTS week_start_date DATE;
 
+-- Старый PRIMARY KEY (cycle_index, member_id) мешал хранить разные недели в рамках одного индекса цикла.
+DO $cycle_claims_pk$
+DECLARE
+  pk_len int;
+BEGIN
+  SELECT array_length(c.conkey, 1) INTO pk_len
+  FROM pg_constraint c
+  WHERE c.conrelid = 'cycle_collection_claims'::regclass AND c.contype = 'p'
+  LIMIT 1;
+
+  IF pk_len = 2 THEN
+    ALTER TABLE cycle_collection_claims ADD COLUMN IF NOT EXISTS id BIGINT;
+    CREATE SEQUENCE IF NOT EXISTS cycle_collection_claims_id_seq;
+    PERFORM setval(
+      'cycle_collection_claims_id_seq',
+      GREATEST(COALESCE((SELECT MAX(id) FROM cycle_collection_claims), 0), 1),
+      true
+    );
+    UPDATE cycle_collection_claims SET id = nextval('cycle_collection_claims_id_seq') WHERE id IS NULL;
+    ALTER TABLE cycle_collection_claims ALTER COLUMN id SET DEFAULT nextval('cycle_collection_claims_id_seq');
+    ALTER TABLE cycle_collection_claims ALTER COLUMN id SET NOT NULL;
+    ALTER TABLE cycle_collection_claims DROP CONSTRAINT cycle_collection_claims_pkey;
+    ALTER TABLE cycle_collection_claims ADD CONSTRAINT cycle_collection_claims_pkey PRIMARY KEY (id);
+    ALTER SEQUENCE cycle_collection_claims_id_seq OWNED BY cycle_collection_claims.id;
+  END IF;
+END
+$cycle_claims_pk$;
+
 CREATE INDEX IF NOT EXISTS cycle_collection_claims_cycle_idx
   ON cycle_collection_claims (cycle_index);
 
 CREATE INDEX IF NOT EXISTS cycle_collection_claims_claimer_idx
   ON cycle_collection_claims (claimed_by_member_id);
 
+DROP INDEX IF EXISTS cycle_collection_claims_week_member_uidx;
+
 CREATE UNIQUE INDEX IF NOT EXISTS cycle_collection_claims_week_member_uidx
-  ON cycle_collection_claims (week_start_date, member_id);
+  ON cycle_collection_claims (week_start_date, member_id)
+  WHERE week_start_date IS NOT NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS cycle_collection_claims_cycle_member_legacy_uidx
+  ON cycle_collection_claims (cycle_index, member_id)
+  WHERE week_start_date IS NULL;
 
 CREATE INDEX IF NOT EXISTS cycle_collection_claims_week_start_idx
   ON cycle_collection_claims (week_start_date);

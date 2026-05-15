@@ -384,7 +384,7 @@ export class DistributionService {
         await query(
           `INSERT INTO cycle_collection_claims (cycle_index, member_id, claimed_by_member_id, week_start_date)
            VALUES ($1, $2, $3, $4::date)
-           ON CONFLICT (week_start_date, member_id)
+           ON CONFLICT (week_start_date, member_id) WHERE week_start_date IS NOT NULL
            DO UPDATE SET
              claimed_by_member_id = EXCLUDED.claimed_by_member_id,
              cycle_index = EXCLUDED.cycle_index`,

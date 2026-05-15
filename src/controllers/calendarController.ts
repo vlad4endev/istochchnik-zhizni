@@ -715,6 +715,23 @@ export async function postCuratorDistribution(req: Request, res: Response): Prom
       pushed_coordinators: pushedCoordinators,
     });
   } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg.includes('No available curators for distribution')) {
+      res.status(400).json({
+        error: 'Нет кураторов сбора: отметьте у участников роль «Координатор сбора» или добавьте активных кураторов.',
+      });
+      return;
+    }
+    if (msg.includes('Supabase is not configured')) {
+      res.status(503).json({
+        error: 'На сервере не настроены SUPABASE_URL и SUPABASE_SERVICE_ROLE_KEY — без них запись назначений в хранилище невозможна.',
+      });
+      return;
+    }
+    if (msg === 'No active prayer cycle for selected queue week') {
+      res.status(400).json({ error: 'Нет активного молитвенного цикла для выбранной недели.' });
+      return;
+    }
     console.error('Calendar curator distribution POST error:', err);
     res.status(500).json({ error: 'Не удалось выполнить распределение кураторов' });
   }
