@@ -4,6 +4,8 @@ import { resolveAxiosBaseURL } from './config';
 
 let refreshInFlight: Promise<AuthRefreshResult> | null = null;
 let rateLimitRetryTimeout: ReturnType<typeof setTimeout> | null = null;
+/** Не слать POST /refresh до этого времени (после 429 с Retry-After), чтобы таймер SessionKeepAlive не жёг квоту. */
+let refreshCooldownUntilMs = 0;
 
 export type AuthRefreshResult =
   | { status: 'refreshed'; token: string }
@@ -50,6 +52,11 @@ function sleep(ms: number): Promise<void> {
 }
 
 async function doAuthRefresh(): Promise<AuthRefreshResult> {
+  const now = Date.now();
+  if (now < refreshCooldownUntilMs) {
+    return { status: 'unchanged' };
+  }
+
   const baseURL = resolveAxiosBaseURL() ?? '';
   const maxAttempts = 3;
 
@@ -74,6 +81,7 @@ async function doAuthRefresh(): Promise<AuthRefreshResult> {
 
     const status = response.status;
     if (status === 200) {
+      refreshCooldownUntilMs = 0;
       const data = response.data as { accessToken?: unknown; token?: unknown } | undefined;
       const nextTokenRaw = data?.accessToken ?? data?.token;
       const nextToken = typeof nextTokenRaw === 'string' ? nextTokenRaw.trim() : '';
@@ -90,6 +98,7 @@ async function doAuthRefresh(): Promise<AuthRefreshResult> {
     if (status === 429) {
       const sec = parseRetryAfterSeconds(response.headers as Record<string, unknown>);
       console.warn(`Auth refresh rate limited. Retry after ${sec}s`);
+      refreshCooldownUntilMs = Date.now() + sec * 1000;
       scheduleRateLimitedRetry(sec * 1000);
       return { status: 'unchanged' };
     }

@@ -70,10 +70,14 @@ const authLoginRateLimit = createIpRateLimiter({
   message: 'Too many login attempts. Please try again later.',
 });
 
-/** Отдельный лимит: refresh по cookie — не брутфорс; SPA держит несколько вкладок + SessionKeepAlive. */
+/**
+ * Лимит по IP для POST /refresh (до проверки cookie).
+ * Refresh не подбирает пароль; зато за одним NAT сидят десятки учётных записей церкви + несколько вкладок SPA.
+ * Слишком низкий потолок давал массовые 429 и «заморозку» сессий (~Retry-After до конца окна).
+ */
 const authRefreshRateLimit = createIpRateLimiter({
   windowMs: 15 * 60 * 1000,
-  maxRequests: 180,
+  maxRequests: 2500,
   message: 'Too many session refresh attempts. Please wait and try again.',
   keyPrefix: 'auth-refresh',
 });
