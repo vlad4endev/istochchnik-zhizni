@@ -12,35 +12,42 @@ const COORDINATOR_MEMBER_ORDER_SQL = `LOWER(COALESCE(NULLIF(trim(m.first_name), 
 
 let weekScopeReady = false;
 
-export async function ensureCycleCollectionClaimsWeekScopeSchema(): Promise<void> {
-  if (weekScopeReady) return;
-  await query(`ALTER TABLE cycle_collection_claims ADD COLUMN IF NOT EXISTS week_start_date DATE`);
-  await query(`DO $cycle_claims_pk$
+/** Суррогатный PK(id): idempotent. Раньше вызывалась после if (weekScopeReady) — миграция никогда не выполнялась при «прогретом» флаге. */
+const MIGRATE_CYCLE_COLLECTION_CLAIMS_PK_SQL = `DO $cycle_claims_pk$
 DECLARE
   pk_len int;
 BEGIN
   SELECT array_length(c.conkey, 1) INTO pk_len
   FROM pg_constraint c
-  WHERE c.conrelid = 'cycle_collection_claims'::regclass AND c.contype = 'p'
+  WHERE c.conrelid = 'public.cycle_collection_claims'::regclass AND c.contype = 'p'
   LIMIT 1;
 
-  IF pk_len = 2 THEN
-    ALTER TABLE cycle_collection_claims ADD COLUMN IF NOT EXISTS id BIGINT;
+  IF COALESCE(pk_len, 0) = 2 THEN
+    ALTER TABLE public.cycle_collection_claims ADD COLUMN IF NOT EXISTS id BIGINT;
     CREATE SEQUENCE IF NOT EXISTS cycle_collection_claims_id_seq;
     PERFORM setval(
       'cycle_collection_claims_id_seq',
-      GREATEST(COALESCE((SELECT MAX(id) FROM cycle_collection_claims), 0), 1),
+      GREATEST(COALESCE((SELECT MAX(id) FROM public.cycle_collection_claims), 0), 1),
       true
     );
-    UPDATE cycle_collection_claims SET id = nextval('cycle_collection_claims_id_seq') WHERE id IS NULL;
-    ALTER TABLE cycle_collection_claims ALTER COLUMN id SET DEFAULT nextval('cycle_collection_claims_id_seq');
-    ALTER TABLE cycle_collection_claims ALTER COLUMN id SET NOT NULL;
-    ALTER TABLE cycle_collection_claims DROP CONSTRAINT cycle_collection_claims_pkey;
-    ALTER TABLE cycle_collection_claims ADD CONSTRAINT cycle_collection_claims_pkey PRIMARY KEY (id);
-    ALTER SEQUENCE cycle_collection_claims_id_seq OWNED BY cycle_collection_claims.id;
+    UPDATE public.cycle_collection_claims SET id = nextval('cycle_collection_claims_id_seq') WHERE id IS NULL;
+    ALTER TABLE public.cycle_collection_claims ALTER COLUMN id SET DEFAULT nextval('cycle_collection_claims_id_seq');
+    ALTER TABLE public.cycle_collection_claims ALTER COLUMN id SET NOT NULL;
+    ALTER TABLE public.cycle_collection_claims DROP CONSTRAINT cycle_collection_claims_pkey;
+    ALTER TABLE public.cycle_collection_claims ADD CONSTRAINT cycle_collection_claims_pkey PRIMARY KEY (id);
   END IF;
 END
-$cycle_claims_pk$`);
+$cycle_claims_pk$`;
+
+export async function migrateCycleCollectionClaimsSurrogatePkIfNeeded(): Promise<void> {
+  await query(MIGRATE_CYCLE_COLLECTION_CLAIMS_PK_SQL);
+}
+
+export async function ensureCycleCollectionClaimsWeekScopeSchema(): Promise<void> {
+  await migrateCycleCollectionClaimsSurrogatePkIfNeeded();
+
+  if (weekScopeReady) return;
+  await query(`ALTER TABLE cycle_collection_claims ADD COLUMN IF NOT EXISTS week_start_date DATE`);
   await query(`DROP INDEX IF EXISTS cycle_collection_claims_week_member_uidx`);
   await query(
     `CREATE UNIQUE INDEX IF NOT EXISTS cycle_collection_claims_week_member_uidx

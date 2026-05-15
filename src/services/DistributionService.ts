@@ -2,7 +2,10 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
 import { query } from '../config/db';
 import { getCalendarWeekStartDate, getMemberAssignmentsForWeek, type WeekPlanKind } from './calendarService';
-import { ensureCycleCollectionClaimsWeekScopeSchema } from './cycleCollectionClaimsService';
+import {
+  ensureCycleCollectionClaimsWeekScopeSchema,
+  migrateCycleCollectionClaimsSurrogatePkIfNeeded,
+} from './cycleCollectionClaimsService';
 import { getPrayerCycleSnapshotForDate } from './prayerCycleService';
 
 export type DistributionParticipant = {
@@ -367,6 +370,8 @@ export class DistributionService {
     assignments: ParticipantAssignment[],
     weekKind: WeekPlanKind,
   ): Promise<number> {
+    await migrateCycleCollectionClaimsSurrogatePkIfNeeded();
+
     if (assignments.length === 0) {
       return 0;
     }
