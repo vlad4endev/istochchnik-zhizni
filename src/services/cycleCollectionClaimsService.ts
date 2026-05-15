@@ -10,9 +10,7 @@ const COORDINATOR_MEMBER_ORDER_SQL = `LOWER(COALESCE(NULLIF(trim(m.first_name), 
   LOWER(COALESCE(NULLIF(trim(m.last_name), ''), NULLIF(trim(split_part(trim(m.name), ' ', 2)), ''), trim(m.name))) ASC,
   m.id ASC`;
 
-let weekScopeReady = false;
-
-/** Суррогатный PK(id): idempotent. Раньше вызывалась после if (weekScopeReady) — миграция никогда не выполнялась при «прогретом» флаге. */
+/** Миграция PK на id + частичные индексы для upsert по неделе (ensure всегда доводит индексы до существования). */
 const MIGRATE_CYCLE_COLLECTION_CLAIMS_PK_SQL = `DO $cycle_claims_pk$
 DECLARE
   pk_len int;
@@ -45,25 +43,22 @@ export async function migrateCycleCollectionClaimsSurrogatePkIfNeeded(): Promise
 
 export async function ensureCycleCollectionClaimsWeekScopeSchema(): Promise<void> {
   await migrateCycleCollectionClaimsSurrogatePkIfNeeded();
-
-  if (weekScopeReady) return;
   await query(`ALTER TABLE cycle_collection_claims ADD COLUMN IF NOT EXISTS week_start_date DATE`);
-  await query(`DROP INDEX IF EXISTS cycle_collection_claims_week_member_uidx`);
+
   await query(
     `CREATE UNIQUE INDEX IF NOT EXISTS cycle_collection_claims_week_member_uidx
-     ON cycle_collection_claims (week_start_date, member_id)
+     ON public.cycle_collection_claims (week_start_date, member_id)
      WHERE week_start_date IS NOT NULL`,
   );
   await query(
     `CREATE UNIQUE INDEX IF NOT EXISTS cycle_collection_claims_cycle_member_legacy_uidx
-     ON cycle_collection_claims (cycle_index, member_id)
+     ON public.cycle_collection_claims (cycle_index, member_id)
      WHERE week_start_date IS NULL`,
   );
   await query(
     `CREATE INDEX IF NOT EXISTS cycle_collection_claims_week_start_idx
-     ON cycle_collection_claims (week_start_date)`,
+     ON public.cycle_collection_claims (week_start_date)`,
   );
-  weekScopeReady = true;
 }
 
 export interface CycleCollectionClaimRow {
