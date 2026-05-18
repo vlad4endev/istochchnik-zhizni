@@ -62,7 +62,6 @@ export function ChatWindow({
   const conversations = useChatStore((s) => s.conversations);
   const draftPeer = useChatStore((s) => s.privateDraftPeer);
   const typingUsers = useChatStore((s) => s.typingByConv[conversationId] || EMPTY_ARRAY);
-  const onlineMembers = useChatStore((s) => s.onlineMembers);
   const memberLastSeenAt = useChatStore((s) => s.memberLastSeenAt);
   const currentMemberId = useChatStore((s) => s.currentMemberId);
   const pinnedBump = useChatStore((s) => s.pinnedBumpByConv[conversationId] ?? 0);
@@ -118,6 +117,30 @@ export function ChatWindow({
   const prevIsOnlineRef = useRef<boolean | null>(null);
 
   const conv = useMemo(() => conversations.find((c) => c.id === conversationId), [conversations, conversationId]);
+
+  const privatePeerMemberId = useMemo(() => {
+    if (isDraft && draftPeer) return draftPeer.id;
+    if (conv?.type === 'private' && conv.other_member) return conv.other_member.id;
+    return null;
+  }, [conv, draftPeer, isDraft]);
+
+  const isPrivatePeerOnline = useChatStore(
+    (s) => privatePeerMemberId != null && s.onlineMembers.has(privatePeerMemberId),
+  );
+
+  const onlineInGroupCount = useChatStore(
+    useCallback(
+      (s) => {
+        if (groupParticipantIds.length === 0) return 0;
+        let n = 0;
+        for (const id of groupParticipantIds) {
+          if (s.onlineMembers.has(id)) n += 1;
+        }
+        return n;
+      },
+      [groupParticipantIds],
+    ),
+  );
 
   const isAccessRequestsChannel = useMemo(
     () => isAccessRequestsMessengerChannel(chatMeta?.metadata ?? conv?.metadata),
@@ -288,7 +311,7 @@ export function ChatWindow({
       prevIsOnlineRef.current = null;
       return;
     }
-    const next = onlineMembers.has(conv.other_member.id);
+    const next = isPrivatePeerOnline;
     const prev = prevIsOnlineRef.current;
     if (prev === null) {
       prevIsOnlineRef.current = next;
@@ -300,7 +323,7 @@ export function ChatWindow({
     const ln = conv.other_member.last_name || '';
     const name = `${fn} ${ln}`.trim() || conv.other_member.name || 'Собеседник';
     setPresenceAnnouncement(next ? `${name} в сети` : `${name} оффлайн`);
-  }, [onlineMembers, conv]);
+  }, [isPrivatePeerOnline, conv]);
 
   const canPostMessages =
     !isAccessRequestsChannel && (isDraft || chatMeta?.my_effective_permissions?.can_send_messages !== false);
@@ -757,13 +780,6 @@ export function ChatWindow({
     return getAvatarColor(conv.id);
   }, [conv?.id, draftPeer, isDraft]);
 
-  const isOnline = conv?.type === 'private' && conv.other_member && onlineMembers.has(conv.other_member.id);
-
-  const onlineInGroupCount = useMemo(() => {
-    if (groupParticipantIds.length === 0) return 0;
-    return groupParticipantIds.filter((id) => onlineMembers.has(id)).length;
-  }, [groupParticipantIds, onlineMembers]);
-
   const headerSubtitle = useMemo(() => {
     if (typingUsers.length > 0) {
       return '';
@@ -771,7 +787,7 @@ export function ChatWindow({
     if (isDraft) return 'черновик · чат появится после 1 сообщения';
     if (!conv) return '';
     if (conv.type === 'private' && conv.other_member) {
-      if (isOnline) return 'в сети';
+      if (isPrivatePeerOnline) return 'в сети';
       const pid = conv.other_member.id;
       const iso = memberLastSeenAt[pid] ?? conv.other_member.last_seen_at ?? null;
       return formatMessengerLastSeen(iso);
@@ -791,7 +807,7 @@ export function ChatWindow({
       return conv.type === 'channel' ? 'канал' : 'группа';
     }
     return 'чат';
-  }, [chatHeadReady, conv, typingUsers, isOnline, isDraft, memberLastSeenAt, groupParticipantIds.length, onlineInGroupCount]);
+  }, [chatHeadReady, conv, typingUsers, isPrivatePeerOnline, isDraft, memberLastSeenAt, groupParticipantIds.length, onlineInGroupCount]);
 
   const initiateCall = useCallback(
     (callType: 'audio' | 'video') => {

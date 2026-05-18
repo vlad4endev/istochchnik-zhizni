@@ -11,15 +11,15 @@ import {
 import { emitAppToast } from '../../lib/uiFeedback';
 import { playAudio } from '../../utils/audio';
 import { extractMentionMemberIdsFromText, normalizeMentionsToCanonical } from './mentionUtils';
-import { getAvatarInitial } from './avatarUtils';
-import { sendRealtimeJson } from '../../lib/realtimeWsClient';
-import { isMessengerChatReadSurfaceOpen } from './messengerReadSurface';
 import { inferMessengerPayloadType } from './payloadMedia';
-
-function normalizeIncomingMessengerMessage(msg: MessageWithSender): MessageWithSender {
-  if (msg.payload_type) return msg;
-  return { ...msg, payload_type: inferMessengerPayloadType(msg) };
-}
+import {
+  applyNewMessage,
+  processMessengerWsBatch,
+  runWsBatchEffects,
+  type WsBatchEffect,
+  type WsBatchRuntime,
+  type WsInboundMessage,
+} from './chatStoreWsBatch';
 
 /** Личный чат до первого сообщения: нет строки в БД, пока пользователь не отправит сообщение. */
 export const DRAFT_PRIVATE_PREFIX = 'draft:';
@@ -44,6 +44,17 @@ const markReadCommittedByConv = new Map<string, bigint>();
 const pollVoteInFlightByMsg = new Set<string>();
 /** Один in-flight reaction-запрос на пару message+emoji. */
 const reactionInFlightByKey = new Set<string>();
+
+/** Throttle: `ready` replay при каждом subscribeRealtimeMessages не должен ддосить API. */
+let lastMessengerReadySyncAt = 0;
+let convFallbackRefreshTimer: ReturnType<typeof setTimeout> | null = null;
+let lastConvFallbackRefreshAt = 0;
+
+const wsTypingAutoStopTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
+function wsTypingTimerKey(convId: string, memberId: number): string {
+  return `${convId}:${memberId}`;
+}
 
 function debouncedMarkReadUpTo(
   convId: string,
@@ -95,7 +106,7 @@ interface TypingUser {
   timer: ReturnType<typeof setTimeout>;
 }
 
-interface ChatState {
+export interface ChatState {
   // --- Current user ---
   currentMemberId: number | null;
 
@@ -248,26 +259,15 @@ interface ChatState {
   leaveChat: (conversationId: string) => Promise<void>;
 
   refreshUnread: () => Promise<void>;
+
+  /** Один set() на пачку WS-событий (см. useMessengerWs flush). */
+  handleWsMessageBatch: (events: WsInboundMessage[]) => void;
 }
 
 export type ChatTab = 'all' | 'personal' | 'services' | 'notifications';
 
 export const EMPTY_ARRAY: any[] = [];
 export const EMPTY_OBJECT: any = {};
-
-/**
- * Учёт в бейдже непрочитанного: только явно непрочитанное и не от текущего пользователя.
- * Без `sender_id` не считаем (нет надёжного отличия «своё / чужое»).
- */
-function messageCountsAsUnreadForCurrentUser(
-  msg: Pick<MessageWithSender, 'is_read' | 'sender_id' | 'payload_type'>,
-  currentMemberId: number | null,
-): boolean {
-  if (currentMemberId == null) return false;
-  if (msg.sender_id != null && Number(msg.sender_id) === Number(currentMemberId)) return false;
-  if (msg.payload_type === 'access_request') return false;
-  return msg.is_read === false;
-}
 
 let onlineRetryBound = false;
 let retryInFlight = false;
@@ -1551,149 +1551,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
   // ─── WS event handlers ───────────────────────────────────
 
   handleNewMessage: (convId, incoming) => {
-    const msg = normalizeIncomingMessengerMessage(incoming);
-    const idKey = String(convId);
-    const serverMsgId = String(msg.id);
-    const state = get();
-    const existingNow = state.messagesByConv[idKey] || [];
-    const msgClientId = msg.client_msg_id ? String(msg.client_msg_id) : null;
-    const isOwnNow =
-      state.currentMemberId != null &&
-      msg.sender_id != null &&
-      Number(msg.sender_id) === Number(state.currentMemberId);
-    const isProvisionalLocalId = (mid: string) =>
-      mid.startsWith('temp-') || mid.startsWith('pending-');
-    const alreadyPresent =
-      existingNow.some((m) => String(m.id) === serverMsgId) ||
-      (msgClientId != null &&
-        existingNow.some(
-          (m) => isProvisionalLocalId(String(m.id)) && m.client_msg_id === msgClientId,
-        ));
-    const shouldAutoReadNow =
-      isMessengerChatReadSurfaceOpen() &&
-      state.activeConversationId === idKey &&
-      !isOwnNow &&
-      /^\d+$/.test(serverMsgId) &&
-      !alreadyPresent;
-    if (!isOwnNow && !alreadyPresent) {
-      playAudio('receive');
-    }
-    set((s) => {
-      const existing = s.messagesByConv[idKey] || [];
-      const isActiveConversation = s.activeConversationId === idKey;
-      const isOwnMessage =
-        s.currentMemberId != null &&
-        msg.sender_id != null &&
-        Number(msg.sender_id) === Number(s.currentMemberId);
-      const isPageVisible =
-        typeof document === 'undefined' ? true : document.visibilityState === 'visible';
-      const targetConversation = s.conversations.find((c) => c.id === idKey) || null;
-
-      // Already present by definitive server id.
-      if (existing.some((m) => String(m.id) === serverMsgId)) return s;
-
-      // temp- / pending- с тем же client_msg_id заменяем на новый этап (WS раньше БД).
-      const hasProvisionalTwin =
-        msgClientId != null &&
-        existing.some(
-          (m) => isProvisionalLocalId(String(m.id)) && m.client_msg_id === msgClientId,
-        );
-
-      // ⛔️ Защита от двойного инкремента `unread_count` / `totalUnread`:
-      // если сообщение уже присутствует в кэше — как финальная версия своего twin'а
-      // (provisional id) или как идентичная копия по `client_msg_id`, — значит
-      // счётчик непрочитанных был инкрементирован на предыдущем `msg:new`.
-      // Проверку делаем ДО вычисления `shouldCountUnread`.
-      const alreadyPresentByClientId =
-        msgClientId != null &&
-        existing.some((m) => m.client_msg_id === msgClientId);
-      const shouldCountUnread =
-        !hasProvisionalTwin &&
-        !alreadyPresentByClientId &&
-        messageCountsAsUnreadForCurrentUser(msg, s.currentMemberId) &&
-        (!isActiveConversation || !isPageVisible);
-
-      const merged = hasProvisionalTwin
-        ? existing.map((m) => {
-            if (!isProvisionalLocalId(String(m.id)) || m.client_msg_id !== msgClientId) return m;
-            const prevSt = m.status;
-            const nextStatus =
-              prevSt === 'delivered' ? ('delivered' as const) : ('sent' as const);
-            return { ...msg, status: nextStatus };
-          })
-        : [...existing, msg];
-      const newMsgs = dedupeMessages(merged);
-
-      const prevUnreadForConv = s.conversations.find((c) => c.id === idKey)?.unread_count ?? 0;
-      const nextUnreadForConv = shouldCountUnread ? prevUnreadForConv + 1 : prevUnreadForConv;
-      const updatedConvs = moveConversationToTop(s.conversations, idKey, (c) => ({
-        ...c,
-        last_message: listPreviewFromMessage(get, idKey, msg, { conversationsForPrev: s.conversations }),
-        updated_at: msg.created_at,
-        unread_count: nextUnreadForConv,
-      }));
-
-      const totalUnread = s.totalUnread + (nextUnreadForConv - prevUnreadForConv);
-
-      // Toast показываем только при реально «новом» сообщении — так же, как инкремент unread:
-      // если это финальная версия уже показанного provisional twin'а или повторная копия
-      // по `client_msg_id`, второй тост только спамит пользователя.
-      if (
-        !isActiveConversation &&
-        !isOwnMessage &&
-        !hasProvisionalTwin &&
-        !alreadyPresentByClientId
-      ) {
-        const toastMeta = getConversationToastMeta(targetConversation, msg);
-        emitAppToast({
-          kind: 'info',
-          title: toastMeta.title,
-          avatarUrl: toastMeta.avatarUrl,
-          avatarText: toastMeta.avatarText,
-          message: truncateMessageForToast(msg.is_deleted ? 'Сообщение удалено' : msg.content),
-          action: {
-            event: 'app:open-conversation',
-            detail: { conversationId: idKey },
-          },
-        });
-      }
-
-      return {
-        messagesByConv: { ...s.messagesByConv, [idKey]: newMsgs },
-        conversations: updatedConvs,
-        totalUnread,
-      };
-    });
-
-    // Сообщение пришло по WS, а строки чата ещё нет в списке (например, добавили в группу с другого устройства).
-    if (!get().conversations.some((c) => c.id === idKey)) {
-      void get().loadConversations({ force: true });
-    }
-
-    // Если чат открыт — синхронизируем read cursor с сервером (с дебаунсом: см. поток msg:new).
-    if (shouldAutoReadNow) {
-      debouncedMarkReadUpTo(idKey, serverMsgId, (c, m) => {
-        void get().markReadUpTo(c, m);
-      });
-    }
-
-    if (
-      !alreadyPresent &&
-      !isOwnNow &&
-      msgClientId &&
-      msg.sender_id != null &&
-      (serverMsgId.startsWith('pending-') || /^\d+$/.test(serverMsgId))
-    ) {
-      queueMicrotask(() => {
-        sendRealtimeJson({
-          type: 'msg:delivered_signal',
-          conversationId: idKey,
-          messageId: serverMsgId,
-          clientMsgId: msgClientId,
-          senderId: Number(msg.sender_id),
-        });
-      });
-    }
+    const effects: WsBatchEffect[] = [];
+    set((s) => applyNewMessage(s, String(convId), incoming, effects));
+    runWsBatchEffects(effects, createWsBatchRuntime(get, set));
   },
 
   handleMessageSendFailed: (convId, clientMsgId) => {
@@ -2255,7 +2115,73 @@ export const useChatStore = create<ChatState>((set, get) => ({
       /* ignore */
     }
   },
+
+  handleWsMessageBatch: (events) => {
+    processMessengerWsBatch(events, set, createWsBatchRuntime(get, set));
+  },
 }));
+
+type ChatStoreApi = ReturnType<typeof useChatStore.getState>;
+
+function createWsBatchRuntime(
+  get: () => ChatStoreApi,
+  set: (
+    partial:
+      | Partial<ChatState>
+      | ((state: ChatState) => Partial<ChatState> | ChatState),
+  ) => void,
+): WsBatchRuntime {
+  return {
+    get,
+    debouncedMarkReadUpTo,
+    clearServerAckTimer,
+    scheduleConversationsFallbackRefresh: (force) => {
+      const now = Date.now();
+      const minGapMs = 1500;
+      if (!force && now - lastConvFallbackRefreshAt < minGapMs) return;
+      if (convFallbackRefreshTimer != null) return;
+      convFallbackRefreshTimer = setTimeout(() => {
+        convFallbackRefreshTimer = null;
+        lastConvFallbackRefreshAt = Date.now();
+        void get().loadConversations({ force });
+      }, 120);
+    },
+    shouldSyncConversationsOnReady: () => Date.now() - lastMessengerReadySyncAt >= 2500,
+    markReadySyncDone: () => {
+      lastMessengerReadySyncAt = Date.now();
+    },
+    armTypingAutoStop: (convId, memberId, onStop) => {
+      const key = wsTypingTimerKey(convId, memberId);
+      const prev = wsTypingAutoStopTimers.get(key);
+      if (prev != null) clearTimeout(prev);
+      wsTypingAutoStopTimers.set(
+        key,
+        setTimeout(() => {
+          wsTypingAutoStopTimers.delete(key);
+          onStop();
+        }, 4000),
+      );
+    },
+    clearTypingTimer: (convId, memberId) => {
+      const key = wsTypingTimerKey(convId, memberId);
+      const prev = wsTypingAutoStopTimers.get(key);
+      if (prev != null) clearTimeout(prev);
+      wsTypingAutoStopTimers.delete(key);
+    },
+    hydrateCacheIfNewMember: (memberId, prevMemberId) => {
+      if (prevMemberId != null && prevMemberId !== memberId) {
+        clearAllTypingTimers(get().typingByConv);
+        stopOutboxPump();
+        inMemoryOutbox = [];
+        set({ typingByConv: {}, memberLastSeenAt: {} });
+      }
+      if (prevMemberId == null || prevMemberId !== memberId) {
+        hydrateFromCacheIntoStore(set, get);
+      }
+    },
+    saveSnapshot: () => saveSnapshot(get()),
+  };
+}
 
 // Auto-retry failed optimistic messages when network is back.
 if (typeof window !== 'undefined' && !onlineRetryBound) {
@@ -2283,47 +2209,3 @@ function isMessengerRouteActive(): boolean {
   return path === '/messenger' || path.startsWith('/messenger/');
 }
 
-function truncateMessageForToast(content: string): string {
-  const normalized = String(content || '').replace(/\s+/g, ' ').trim();
-  if (!normalized) return 'Новое сообщение';
-  return normalized.length > 90 ? `${normalized.slice(0, 87)}...` : normalized;
-}
-
-function getConversationToastMeta(
-  conversation: ConversationListItem | null,
-  msg: MessageWithSender,
-): { title: string; avatarUrl: string | null; avatarText: string } {
-  if (conversation) {
-    const title = getConversationTitle(conversation) || msg.sender_name || 'Новый чат';
-    const avatarUrl =
-      conversation.type === 'private'
-        ? (conversation.other_member?.avatar_url ?? null)
-        : (conversation.avatar_url ?? null);
-    return {
-      title,
-      avatarUrl,
-      avatarText: getAvatarFallback(title),
-    };
-  }
-
-  const sender = msg.sender_name || msg.sender_first_name || 'Новое сообщение';
-  return {
-    title: sender,
-    avatarUrl: null,
-    avatarText: getAvatarFallback(sender),
-  };
-}
-
-function getConversationTitle(conversation: ConversationListItem): string {
-  if (conversation.type === 'private' && conversation.other_member) {
-    const firstName = (conversation.other_member.first_name || '').trim();
-    const lastName = (conversation.other_member.last_name || '').trim();
-    const fullName = `${firstName} ${lastName}`.trim();
-    return fullName || conversation.other_member.name || 'Личный чат';
-  }
-  return conversation.title || 'Групповой чат';
-}
-
-function getAvatarFallback(title: string): string {
-  return getAvatarInitial(title);
-}

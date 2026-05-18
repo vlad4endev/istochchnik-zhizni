@@ -13,13 +13,17 @@ interface ChatListProps {
   activeId: string | null;
 }
 
-/** Soft-hide obvious dev/test chats from the list (data unchanged). */
-function maxOtherReadCursorId(cursorMap: Record<number, string> | undefined): string {
+/** Макс. id прочтения среди других участников (для галочек исходящего в строке списка). */
+function maxOtherReadCursorIdForRow(
+  cursorMap: Record<number, string> | undefined,
+  currentMemberId: number | null,
+): string {
   if (!cursorMap) return '0';
   let max = 0n;
-  for (const v of Object.values(cursorMap)) {
-    if (typeof v === 'string' && /^\d+$/.test(v)) {
-      const b = BigInt(v);
+  for (const [memberId, msgId] of Object.entries(cursorMap)) {
+    if (currentMemberId != null && Number(memberId) === Number(currentMemberId)) continue;
+    if (typeof msgId === 'string' && /^\d+$/.test(msgId)) {
+      const b = BigInt(msgId);
       if (b > max) max = b;
     }
   }
@@ -40,7 +44,11 @@ function isHiddenTestConversation(conv: ConversationListItem): boolean {
   return /^test\s/i.test(name) || name === 'test' || name === 'тест';
 }
 
-export function ChatList({ onSelect, activeId }: ChatListProps) {
+export const ChatList = memo(function ChatList({ onSelect, activeId }: ChatListProps) {
+  if (import.meta.env.DEV) {
+    // eslint-disable-next-line no-console
+    console.count('render:ChatList');
+  }
   const conversations = useChatStore((s) => s.conversations || EMPTY_ARRAY);
   const conversationsLoading = useChatStore((s) => s.conversationsLoading);
   const conversationsLoaded = useChatStore((s) => s.conversationsLoaded);
@@ -48,7 +56,6 @@ export function ChatList({ onSelect, activeId }: ChatListProps) {
   const setActiveTab = useChatStore((s) => s.setActiveTab);
   const getUnreadForTab = useChatStore((s) => s.getUnreadForTab);
   const getConversationsForActiveTab = useChatStore((s) => s.getConversationsForActiveTab);
-  const readCursorsByConv = useChatStore((s) => s.readCursorsByConv);
 
   const filtered = useMemo(() => getConversationsForActiveTab() || EMPTY_ARRAY, [getConversationsForActiveTab, conversations, activeTab]);
 
@@ -56,14 +63,6 @@ export function ChatList({ onSelect, activeId }: ChatListProps) {
     () => filtered.filter((c) => !isHiddenTestConversation(c)),
     [filtered],
   );
-
-  const othersReadMaxByConvId = useMemo(() => {
-    const map: Record<string, string> = {};
-    for (const c of visibleChats) {
-      map[c.id] = maxOtherReadCursorId(readCursorsByConv[c.id]);
-    }
-    return map;
-  }, [visibleChats, readCursorsByConv]);
 
   if (conversationsLoading && !conversationsLoaded) {
     return (
@@ -119,7 +118,6 @@ export function ChatList({ onSelect, activeId }: ChatListProps) {
             <li key={conv.id}>
               <MemoChatListItem
                 conv={conv}
-                othersReadMaxId={othersReadMaxByConvId[conv.id] ?? '0'}
                 isActive={conv.id === activeId}
                 isLast={index === visibleChats.length - 1}
                 avatarPriority={index < 16 || conv.id === activeId}
@@ -136,7 +134,7 @@ export function ChatList({ onSelect, activeId }: ChatListProps) {
       </div>
     </div>
   );
-}
+});
 
 function SmartTabs({
   activeTab,
@@ -210,9 +208,26 @@ function SmartTabs({
 const LONG_PRESS_MS = 520;
 const MOVE_CANCEL_PX = 14;
 
+/** Точечная подписка на presence одного участника — не тянет ререндер строки списка. */
+const PrivateChatOnlineIndicator = memo(function PrivateChatOnlineIndicator({
+  memberId,
+}: {
+  memberId: number;
+}) {
+  const isOnline = useChatStore((s) => s.onlineMembers.has(memberId));
+  return (
+    <span
+      className={[
+        'pointer-events-none absolute bottom-0 right-0 z-10 h-3 w-3 rounded-full border-[2px] border-[var(--surface-elevated)]',
+        isOnline ? 'bg-emerald-500' : 'bg-gray-300',
+      ].join(' ')}
+      aria-hidden
+    />
+  );
+});
+
 function ChatListItem({
   conv,
-  othersReadMaxId,
   isActive,
   isLast,
   avatarPriority,
@@ -222,11 +237,11 @@ function ChatListItem({
     onSelect(conv.id);
   }, [conv.id, onSelect]);
 
+  const othersReadMaxId = useChatStore((s) =>
+    maxOtherReadCursorIdForRow(s.readCursorsByConv[conv.id], s.currentMemberId),
+  );
+
   const typingUsers = useChatStore((s) => s.typingByConv[conv.id] || EMPTY_ARRAY);
-  const isOnline = useChatStore((s) => {
-    if (conv.type !== 'private' || !conv.other_member) return false;
-    return s.onlineMembers.has(conv.other_member.id);
-  });
   const currentMemberId = useChatStore((s) => s.currentMemberId);
   const patchChatMyUi = useChatStore((s) => s.patchChatMyUi);
   const clearChatHistory = useChatStore((s) => s.clearChatHistory);
@@ -427,14 +442,8 @@ function ChatListItem({
                 imgClassName="h-full w-full object-cover"
               />
             </div>
-            {conv.type === 'private' ? (
-              <span
-                className={[
-                  'pointer-events-none absolute bottom-0 right-0 z-10 h-3 w-3 rounded-full border-[2px] border-[var(--surface-elevated)]',
-                  isOnline ? 'bg-emerald-500' : 'bg-gray-300',
-                ].join(' ')}
-                aria-hidden
-              />
+            {conv.type === 'private' && conv.other_member ? (
+              <PrivateChatOnlineIndicator memberId={conv.other_member.id} />
             ) : null}
           </div>
         </div>
@@ -504,8 +513,6 @@ function ChatListItem({
 
 type ChatListItemProps = {
   conv: ConversationListItem;
-  /** Макс. id сообщения, до которого другие участники отметили прочтение (для строки списка). */
-  othersReadMaxId: string;
   isActive: boolean;
   /** Последняя строка — без нижнего разделителя у текстовой колонки. */
   isLast: boolean;
@@ -514,16 +521,10 @@ type ChatListItemProps = {
   onSelect: (id: string) => void;
 };
 
-const MemoChatListItem = memo(ChatListItem, (prev, next) => {
-  return (
-    prev.conv === next.conv &&
-    prev.othersReadMaxId === next.othersReadMaxId &&
-    prev.isActive === next.isActive &&
-    prev.isLast === next.isLast &&
-    prev.avatarPriority === next.avatarPriority &&
-    prev.onSelect === next.onSelect
-  );
-});
+const MemoChatListItem = memo(
+  ChatListItem,
+  (prev, next) => prev.conv === next.conv && prev.isActive === next.isActive,
+);
 
 
 function ChatRowContextMenu({
