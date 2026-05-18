@@ -21,7 +21,7 @@ export function getAuthAccessTtlMinutes(): number {
   return Math.min(MAX_ACCESS_TTL_MINUTES, Math.max(MIN_ACCESS_TTL_MINUTES, integerValue));
 }
 
-function getRefreshTtlDays(): number {
+export function getRefreshTtlDays(): number {
   const rawValue = process.env.AUTH_REFRESH_TOKEN_TTL_DAYS;
   if (!rawValue) {
     return DEFAULT_REFRESH_TTL_DAYS;

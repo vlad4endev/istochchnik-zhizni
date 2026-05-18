@@ -5,7 +5,7 @@ import Redis from 'ioredis';
 import { WebSocketServer, WebSocket } from 'ws';
 
 import { readAuthTokenFromCookies } from '../config/authCookie';
-import { resolveSessionByToken } from '../services/authService';
+import { resolveSessionByToken, type SessionPrincipal } from '../services/authService';
 import { isMemberInConversation, verifyMessageSenderInConversation } from '../services/messengerService';
 import { memberCanJoinServicePlanPresenceSession } from '../services/servicePlannerService';
 import type { WsMessengerEvent } from '../types/messenger';
@@ -355,11 +355,14 @@ async function handleNewSocket(ws: WebSocket, ip: string, request: IncomingMessa
         fail(1008, 'invalid auth');
         return;
       }
-      let sessionOk: Awaited<ReturnType<typeof resolveSessionByToken>> = null;
+      let sessionOk: SessionPrincipal | null = null;
       for (const token of candidateTokens) {
         // Browser can authenticate WS either by explicit Bearer-like token or HttpOnly cookie session.
-        sessionOk = await resolveSessionByToken(token);
-        if (sessionOk) break;
+        const resolution = await resolveSessionByToken(token);
+        if (resolution.principal) {
+          sessionOk = resolution.principal;
+          break;
+        }
       }
       if (!sessionOk) {
         clearTimeout(timer);

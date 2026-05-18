@@ -20,6 +20,12 @@ import {
   takeRefreshRotationGraceFromRedis,
   tryAcquireRefreshRotationLock,
 } from './authSessionRedis';
+import {
+  logSessionInvalidated,
+  type RefreshFailureReason,
+  type SessionAuditContext,
+  type SessionInvalidationReason,
+} from '../lib/sessionAuditLog';
 
 const scrypt = promisify(scryptCallback);
 const MIN_PASSWORD_LENGTH = 8;
@@ -148,6 +154,16 @@ export interface SessionPrincipal {
   roles: AuthRole[];
   tokenHash: string;
 }
+
+export type SessionResolutionFailureReason = 'expired' | 'revoked' | 'not_found';
+
+export type SessionResolution =
+  | { principal: SessionPrincipal }
+  | {
+      principal: null;
+      reason: SessionResolutionFailureReason;
+      memberId?: number | null;
+    };
 
 export interface AccessRequestItem {
   id: number;
@@ -409,7 +425,7 @@ async function createSessionForUser(userId: number): Promise<{ token: string; ex
   );
 
   // Лишние access-сессии (частые ротации); лимит выше, чем у refresh — чтобы не выбивать другие устройства.
-  await query(
+  const prunedAccess = await query(
     `DELETE FROM auth_sessions
      WHERE member_id = $1
        AND token_hash IN (
@@ -421,6 +437,9 @@ async function createSessionForUser(userId: number): Promise<{ token: string; ex
        )`,
     [userId, maxAccessSlots]
   );
+  if ((prunedAccess.rowCount ?? 0) > 0) {
+    logSessionInvalidated('limit_exceeded', userId);
+  }
 
   return { token, expiresAt: expiresAt.toISOString() };
 }
@@ -461,6 +480,20 @@ function ensureAuthRefreshSessionsLastUsedAtColumn(): Promise<void> {
   return ensureLastUsedAtColumnPromise;
 }
 
+/** Новая пара access+refresh (без refresh cookie — восстановление iOS PWA по Bearer access). */
+export async function reissueSessionForUser(
+  userId: number
+): Promise<{
+  token: string;
+  expiresAt: string;
+  refreshToken: string;
+  refreshExpiresAt: string;
+}> {
+  const { token, expiresAt } = await createSessionForUser(userId);
+  const { refreshToken, expiresAt: refreshExpiresAt } = await issueRefreshSessionForUser(userId);
+  return { token, expiresAt, refreshToken, refreshExpiresAt };
+}
+
 export async function issueRefreshSessionForUser(
   userId: number
 ): Promise<{ refreshToken: string; expiresAt: string }> {
@@ -483,7 +516,7 @@ export async function issueRefreshSessionForUser(
     [tokenHash, userId, expiresAt.toISOString()]
   );
 
-  await query(
+  const prunedRefresh = await query(
     `DELETE FROM auth_refresh_sessions
      WHERE member_id = $1
        AND token_hash IN (
@@ -496,8 +529,27 @@ export async function issueRefreshSessionForUser(
        )`,
     [userId, maxRefreshSlots]
   );
+  if ((prunedRefresh.rowCount ?? 0) > 0) {
+    logSessionInvalidated('limit_exceeded', userId);
+  }
 
   return { refreshToken: token, expiresAt: expiresAt.toISOString() };
+}
+
+async function invalidateMemberSessions(
+  memberId: number,
+  reason: SessionInvalidationReason,
+  audit?: SessionAuditContext,
+): Promise<void> {
+  await query(`DELETE FROM auth_sessions WHERE member_id = $1`, [memberId]);
+  await query(
+    `UPDATE auth_refresh_sessions
+     SET revoked_at = NOW()
+     WHERE member_id = $1
+       AND revoked_at IS NULL`,
+    [memberId],
+  );
+  logSessionInvalidated(reason, memberId, audit);
 }
 
 async function findMemberByIdentity(
@@ -1247,14 +1299,7 @@ export async function confirmPasswordResetViaSms(
      WHERE id = $2`,
     [newHash, member.id]
   );
-  await query(`DELETE FROM auth_sessions WHERE member_id = $1`, [member.id]);
-  await query(
-    `UPDATE auth_refresh_sessions
-     SET revoked_at = NOW()
-     WHERE member_id = $1
-       AND revoked_at IS NULL`,
-    [member.id]
-  );
+  await invalidateMemberSessions(member.id, 'password_changed');
   await query(
     `UPDATE password_reset_sms_codes
      SET consumed_at = NOW(),
@@ -1381,20 +1426,47 @@ export async function completePasswordSetupAfterAdminReset(
      WHERE id = $2`,
     [newHash, member.id]
   );
-  await query(`DELETE FROM auth_sessions WHERE member_id = $1`, [member.id]);
+  await invalidateMemberSessions(member.id, 'password_changed');
   return 'ok';
 }
 
-export async function resolveSessionByToken(token: string): Promise<SessionPrincipal | null> {
+type AccessSessionDiagRow = {
+  member_id: number;
+  expires_at: string;
+  eligible: boolean;
+};
+
+async function lookupAccessSessionDiag(tokenHash: string): Promise<AccessSessionDiagRow | null> {
+  const result = await query(
+    `SELECT s.member_id,
+            s.expires_at,
+            (m.is_active = TRUE OR m.registration_status = 'rejected') AS eligible
+     FROM auth_sessions s
+     JOIN members m ON m.id = s.member_id
+     WHERE s.token_hash = $1
+     LIMIT 1`,
+    [tokenHash],
+  );
+  const row = result.rows[0] as AccessSessionDiagRow | undefined;
+  return row ?? null;
+}
+
+export async function resolveSessionByToken(token: string): Promise<SessionResolution> {
   const normalizedToken = token.trim();
   if (!normalizedToken) {
-    return null;
+    return { principal: null, reason: 'not_found' };
   }
 
   const tokenHash = createHash('sha256').update(normalizedToken).digest('hex');
   if (await isAccessTokenRevokedInRedis(tokenHash)) {
-    return null;
+    const diag = await lookupAccessSessionDiag(tokenHash);
+    return {
+      principal: null,
+      reason: 'revoked',
+      memberId: diag?.member_id ?? null,
+    };
   }
+
   const accessTtlMinutes = getAccessTtlMinutes();
   const refreshedExpiresAt = new Date(Date.now() + accessTtlMinutes * 60 * 1000);
   const halfTtlMinutes = accessTtlMinutes * 0.5;
@@ -1413,35 +1485,101 @@ export async function resolveSessionByToken(token: string): Promise<SessionPrinc
          OR m.registration_status = 'rejected'
        )
     RETURNING m.id AS member_pk, m.app_role, m.app_roles`,
-    [tokenHash, refreshedExpiresAt.toISOString(), halfTtlMinutes]
+    [tokenHash, refreshedExpiresAt.toISOString(), halfTtlMinutes],
   );
 
   const row = result.rows[0] as
     | { member_pk: number; app_role: string; app_roles?: unknown }
     | undefined;
-  if (!row) {
-    return null;
+  if (row) {
+    const roles = normalizeAppRoles(row.app_roles, row.app_role);
+    return {
+      principal: {
+        userId: row.member_pk,
+        role: normalizeRole(row.app_role),
+        roles,
+        tokenHash,
+      },
+    };
   }
-  const roles = normalizeAppRoles(row.app_roles, row.app_role);
 
-  return {
-    userId: row.member_pk,
-    role: normalizeRole(row.app_role),
-    roles,
-    tokenHash,
-  };
+  const diag = await lookupAccessSessionDiag(tokenHash);
+  if (!diag) {
+    return { principal: null, reason: 'not_found' };
+  }
+  if (new Date(diag.expires_at).getTime() <= Date.now()) {
+    return { principal: null, reason: 'expired', memberId: diag.member_id };
+  }
+  if (!diag.eligible) {
+    return { principal: null, reason: 'not_found' };
+  }
+  return { principal: null, reason: 'not_found' };
 }
 
-export async function logoutByToken(token: string): Promise<void> {
+export async function logoutByToken(
+  token: string,
+  options?: { memberId?: number; audit?: SessionAuditContext },
+): Promise<void> {
   const normalizedToken = token.trim();
   if (!normalizedToken) {
     return;
   }
 
   const tokenHash = createHash('sha256').update(normalizedToken).digest('hex');
+  const sessionRow = await query(
+    `SELECT member_id FROM auth_sessions WHERE token_hash = $1 LIMIT 1`,
+    [tokenHash],
+  );
+  const resolvedMemberId =
+    options?.memberId ??
+    (sessionRow.rows[0] as { member_id: number } | undefined)?.member_id ??
+    null;
+
   const revokeTtlSec = getAccessTtlMinutes() * 60 + 120;
   await markAccessTokenRevokedInRedis(tokenHash, revokeTtlSec);
   await query('DELETE FROM auth_sessions WHERE token_hash = $1', [tokenHash]);
+  if (resolvedMemberId != null) {
+    logSessionInvalidated('manual_logout', resolvedMemberId, options?.audit);
+  }
+}
+
+export async function diagnoseRefreshTokenFailure(refreshToken: string): Promise<RefreshFailureReason> {
+  const normalizedToken = refreshToken.trim();
+  if (!normalizedToken) {
+    return 'token_not_found';
+  }
+  const tokenHash = createHash('sha256').update(normalizedToken).digest('hex');
+  const result = await query(
+    `SELECT expires_at, revoked_at, member_id
+     FROM auth_refresh_sessions
+     WHERE token_hash = $1
+     LIMIT 1`,
+    [tokenHash],
+  );
+  const row = result.rows[0] as
+    | { expires_at: string; revoked_at: string | null; member_id: number }
+    | undefined;
+  if (!row) {
+    return 'token_not_found';
+  }
+  if (row.revoked_at) {
+    return 'already_revoked';
+  }
+  if (new Date(row.expires_at).getTime() <= Date.now()) {
+    return 'expired';
+  }
+  const memberCheck = await query(
+    `SELECT id
+     FROM members
+     WHERE id = $1
+       AND (is_active = TRUE OR registration_status = 'rejected')
+     LIMIT 1`,
+    [row.member_id],
+  );
+  if (!memberCheck.rows[0]) {
+    return 'token_not_found';
+  }
+  return 'token_not_found';
 }
 
 export async function revokeRefreshToken(token: string): Promise<void> {
@@ -1769,7 +1907,8 @@ export async function updateAuthUserProfile(
 export async function changeMemberPassword(
   userId: number,
   currentPassword: string,
-  newPassword: string
+  newPassword: string,
+  audit?: SessionAuditContext,
 ): Promise<'ok' | 'wrong_password' | 'no_password' | 'weak_password'> {
   try {
     ensureValidPassword(newPassword);
@@ -1793,14 +1932,7 @@ export async function changeMemberPassword(
     newHash,
     userId,
   ]);
-  await query(`DELETE FROM auth_sessions WHERE member_id = $1`, [userId]);
-  await query(
-    `UPDATE auth_refresh_sessions
-     SET revoked_at = NOW()
-     WHERE member_id = $1
-       AND revoked_at IS NULL`,
-    [userId]
-  );
+  await invalidateMemberSessions(userId, 'password_changed', audit);
   void writeAppLog({
     level: 'info',
     scope: 'auth',

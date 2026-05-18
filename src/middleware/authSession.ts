@@ -45,11 +45,11 @@ export async function resolveAuthSession(
   }
 
   try {
-    const principal = await resolveSessionByToken(token);
-    if (principal) {
-      authReq.authUserId = principal.userId;
-      authReq.authUserRole = principal.role;
-      authReq.authUserRoles = principal.roles;
+    const resolution = await resolveSessionByToken(token);
+    if (resolution.principal) {
+      authReq.authUserId = resolution.principal.userId;
+      authReq.authUserRole = resolution.principal.role;
+      authReq.authUserRoles = resolution.principal.roles;
       authReq.authToken = token;
     }
   } catch (error) {

@@ -43,6 +43,7 @@ import { initTelegramDispatchJob } from './cron/telegramDispatchJob';
 import { ensureUploadsDirs, getUploadsRoot } from './config/uploadsRoot';
 import { ensureAccessRequestsMessengerChannel } from './services/messengerService';
 import { writeAppLog } from './services/appLogService';
+import { getAuthAccessTtlMinutes, getRefreshTtlDays } from './config/authCookie';
 import { cleanupExpiredSessions } from './services/authService';
 import { getEditablePlanByToken, getPublicPlanByToken } from './services/servicePlannerService';
 import { startAnalyticsMaintenance } from './services/analyticsService';
@@ -145,27 +146,59 @@ function renderSpaWithMeta(webDist: string, meta: SeoMeta, absoluteUrl: string):
  * - CORS_ALLOWED_ORIGINS=https://app.example.com,https://www.example.com
  * - CORS_ORIGIN=… (алиас, то же правило)
  * - JSON-массив: CORS_ALLOWED_ORIGINS=["https://a.com","https://b.com"]
+ * - CORS_CAPACITOR_ORIGINS=capacitor://localhost,… (всегда, в т.ч. production Capacitor)
  *
- * Пусто: пакет `cors` отражает любой Origin (удобно за nginx на одном хосте; в production лучше задать явно).
+ * В development дополнительно: capacitor://localhost, http://localhost (если не заданы в env).
  */
-function resolveAllowedOrigins(): string[] {
-  const raw = (process.env.CORS_ALLOWED_ORIGINS ?? process.env.CORS_ORIGIN ?? '').trim();
-  if (!raw) {
+function parseCommaSeparatedOrigins(raw: string | undefined): string[] {
+  if (!raw?.trim()) {
     return [];
+  }
+  return raw
+    .split(',')
+    .map((s) => normalizeOrigin(s.trim()))
+    .filter((o) => o && o !== '*');
+}
+
+function resolveAllowedOrigins(): string[] {
+  const capacitorOrigins = parseCommaSeparatedOrigins(process.env.CORS_CAPACITOR_ORIGINS);
+
+  const devOnlyOrigins =
+    process.env.NODE_ENV !== 'production'
+      ? ['capacitor://localhost', 'http://localhost']
+      : [];
+
+  const raw = (process.env.CORS_ALLOWED_ORIGINS ?? process.env.CORS_ORIGIN ?? '').trim();
+  const out = new Set<string>();
+
+  for (const o of [...capacitorOrigins, ...devOnlyOrigins]) {
+    if (o) {
+      out.add(o);
+    }
+  }
+
+  if (!raw) {
+    return Array.from(out);
   }
   if (raw.startsWith('[')) {
     try {
       const parsed = JSON.parse(raw) as unknown;
       if (Array.isArray(parsed)) {
-        return parsed
-          .map((v) => normalizeOrigin(String(v)))
-          .filter((s) => s.length > 0);
+        for (const v of parsed) {
+          const normalized = normalizeOrigin(String(v));
+          if (normalized && normalized !== '*') out.add(normalized);
+        }
+        return Array.from(out);
       }
     } catch {
       /* fall through: не JSON — разбираем как строку с запятыми */
     }
   }
-  return raw.split(',').map((s) => normalizeOrigin(s)).filter((s) => s.length > 0);
+  for (const s of raw.split(',')) {
+    const normalized = normalizeOrigin(s);
+    if (normalized && normalized !== '*') out.add(normalized);
+  }
+  return Array.from(out);
 }
 
 function corsOptions(): Parameters<typeof cors>[0] | undefined {
@@ -181,7 +214,10 @@ function corsOptions(): Parameters<typeof cors>[0] | undefined {
         credentials: true,
       };
     }
-    return { origin: true, credentials: true };
+    return {
+      origin: (origin, cb) => cb(origin ? new Error('Origin is not allowed by CORS policy') : null, !origin),
+      credentials: true,
+    };
   }
   return {
     origin: origins.length === 1 ? origins[0] : origins,
@@ -445,6 +481,13 @@ async function start(): Promise<void> {
     void cleanupExpiredSessions().catch((e) => console.warn('[auth] cleanupExpiredSessions:', e));
   }, SESSION_CLEANUP_INTERVAL_MS);
   
+  console.log('[Auth Config]', {
+    accessTtlMinutes: getAuthAccessTtlMinutes(),
+    refreshTtlDays: getRefreshTtlDays(),
+    maxAccessSessions: process.env.AUTH_MAX_ACCESS_SESSIONS_PER_USER,
+    maxRefreshSessions: process.env.AUTH_MAX_REFRESH_SESSIONS_PER_USER,
+  });
+
   server.listen(Number(PORT), () => {
     console.log(`Server is running on http://localhost:${PORT}`);
     console.log('[realtime] Notify WebSocket: /api/realtime (мессенджер — отдельный сервис)');
