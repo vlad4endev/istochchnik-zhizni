@@ -49,11 +49,13 @@ import { patchProfile } from '../../profile/api';
 import { useMe } from '@/hooks/useMe';
 import { keys } from '@/lib/queryKeys';
 import { useCoordinatorNoteEditorRequestStore } from '../../dashboard/coordinatorNoteEditorRequestStore';
+import { NextWeekPrayerPlanSection } from '../components/NextWeekPrayerPlanSection';
 import {
-  NextWeekPrayerPlanSection,
   userCanManageCoordinatorDashboardNotes,
+  userCanTelegramPrayerDispatch,
   userCanViewNextWeekPrayerPlan,
-} from '../components/NextWeekPrayerPlanSection';
+} from '../prayerAccess';
+import { fetchRolePermissionsPublic } from '../../settings/rolePermissionsApi';
 import {
   deleteDashboardCoordinatorNote,
   fetchDashboardCoordinatorNotes,
@@ -804,7 +806,12 @@ export function DailyPrayerPage() {
   const normalizedAppRole = me?.app_role?.trim().toLowerCase() ?? '';
   const canViewPrayerSectionViewersStats =
     normalizedAppRole === 'pastor' || normalizedAppRole === 'admin';
-  const isAdmin = normalizedAppRole === 'admin';
+
+  const rolePermissionsQ = useQuery({
+    queryKey: keys.rolePermissionsPublic,
+    queryFn: fetchRolePermissionsPublic,
+    staleTime: 120_000,
+  });
 
   const dateKey = formatCalendarDayKey(selected);
 
@@ -1036,14 +1043,16 @@ export function DailyPrayerPage() {
 
       <div className="min-h-0 flex-1 overflow-y-auto [webkit-overflow-scrolling:touch]">
       <div className="px-3 pt-4 sm:px-4 shell:px-6 md:px-6 lg:px-8 xl:px-10">
-        {userCanViewNextWeekPrayerPlan(me) ? (
+        {userCanViewNextWeekPrayerPlan(me, rolePermissionsQ.data) ? (
           <NextWeekPrayerPlanSection
             canView
             currentUserId={me?.id ?? null}
             currentUserRole={me?.app_role ?? null}
-            isAdmin={me?.app_role?.trim().toLowerCase() === 'admin'}
+            isAdmin={userCanTelegramPrayerDispatch(me)}
             afterWeekQueueButton={urgentPrayerStack}
-            onTelegramPrayerDispatch={isAdmin ? () => setTelegramDispatchModalOpen(true) : undefined}
+            onTelegramPrayerDispatch={
+              userCanTelegramPrayerDispatch(me) ? () => setTelegramDispatchModalOpen(true) : undefined
+            }
           />
         ) : urgentPrayerStack ? (
           <div className="mb-4">{urgentPrayerStack}</div>

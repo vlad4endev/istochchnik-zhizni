@@ -42,7 +42,9 @@ import {
   type BirthdayWeekItem,
   type ChurchEventItem,
 } from '../../calendar/api';
-import { NextWeekPrayerPlanSection, userCanViewNextWeekPrayerPlan } from '../../calendar/components/NextWeekPrayerPlanSection';
+import { NextWeekPrayerPlanSection } from '../../calendar/components/NextWeekPrayerPlanSection';
+import { userCanViewNextWeekPrayerPlan } from '../../calendar/prayerAccess';
+import { fetchRolePermissionsPublic } from '../../settings/rolePermissionsApi';
 import { useMe } from '@/hooks/useMe';
 import { fetchProfileByMemberId, fetchProfileByUsername } from '../../profile/publicProfileApi';
 import { memberNameFirstLast } from '../../profile/memberDisplayName';
@@ -744,6 +746,11 @@ function DashboardMain() {
   }, [eventOpen]);
 
   const meQ = useMe();
+  const rolePermissionsQ = useQuery({
+    queryKey: keys.rolePermissionsPublic,
+    queryFn: fetchRolePermissionsPublic,
+    staleTime: 120_000,
+  });
 
   const profileUsername = useAuthStore((s) => s.username ?? '');
   const profileMemberId = useAuthStore((s) => s.memberId);
@@ -1062,9 +1069,7 @@ function DashboardMain() {
     }
   }
 
-  const showPrayerPlanOnDashboard =
-    userCanViewNextWeekPrayerPlan(meQ.data) &&
-    (isAdmin || isCollectionCoordinator);
+  const showPrayerPlanOnDashboard = userCanViewNextWeekPrayerPlan(meQ.data, rolePermissionsQ.data);
 
   const showInitialSkeleton =
     meQ.isPending &&

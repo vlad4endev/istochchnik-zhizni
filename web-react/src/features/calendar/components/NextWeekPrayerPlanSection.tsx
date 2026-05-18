@@ -17,9 +17,7 @@ import {
 } from 'react-icons/lu';
 import { SiOpenai } from 'react-icons/si';
 
-import { apiBoolean } from '../../../lib/apiBoolean';
 import { memberRosterName } from '../../../lib/memberRosterName';
-import type { MeResponse } from '../../profile/api';
 import type { NextWeekMemberDay } from '../../../types';
 import type { CycleCollectionClaimRow, CycleCollectionClaimsSnapshot } from '../collectionTypes';
 import {
@@ -34,19 +32,7 @@ import {
 import { CoordinatorPreviousNeedsPanel } from './CoordinatorPreviousNeedsPanel';
 import { loadErrorDescription } from '../prayerPageUtils';
 
-export function userCanViewNextWeekPrayerPlan(me: MeResponse | undefined): boolean {
-  if (!me) return false;
-  const role = me.app_role?.trim().toLowerCase();
-  if (role === 'admin') return true;
-  return apiBoolean(me.is_collection_coordinator);
-}
-
-/** Редактирование / удаление срочных нужд и объявлений (только админ или координатор сбора). */
-export function userCanManageCoordinatorDashboardNotes(me: MeResponse | undefined): boolean {
-  if (!me) return false;
-  if (me.app_role?.trim().toLowerCase() === 'admin') return true;
-  return apiBoolean(me.is_collection_coordinator);
-}
+export { userCanManageCoordinatorDashboardNotes, userCanViewNextWeekPrayerPlan } from '../prayerAccess';
 
 type QuickListFilter =
   | 'all'

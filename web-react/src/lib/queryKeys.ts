@@ -16,6 +16,7 @@ export const keys = {
   notifications: ['notifications', 'settings'] as const,
   sectionVisibility: ['settings', 'sections', 'visibility'] as const,
   rolePermissions: ['admin', 'role-permissions'] as const,
+  rolePermissionsPublic: ['settings', 'role-permissions', 'public'] as const,
   calendarDay: (dateKey: string) => ['calendar', 'day', dateKey] as const,
   dashboardNotes: (dateKey: string) => ['calendar', 'dashboard-coordinator-notes', dateKey] as const,
   broadcastArchive: (limit: number) => ['broadcast', 'archive', limit] as const,
