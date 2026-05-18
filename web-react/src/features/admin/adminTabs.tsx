@@ -9,6 +9,7 @@ import {
   LuLink2,
   LuPalette,
   LuPanelsTopLeft,
+  LuShield,
   LuSend,
   LuSparkles,
   LuUsersRound,
@@ -23,6 +24,7 @@ export interface AdminTabConfig {
     | 'templates'
     | 'project'
     | 'sections'
+    | 'roles'
     | 'journal'
     | 'notifications'
     | 'telegram'
@@ -91,6 +93,14 @@ export const ADMIN_TABS: readonly AdminTabConfig[] = [
     Icon: LuPanelsTopLeft,
     short: 'Доступ',
     description: 'Управление видимостью разделов приложения для ролей пользователей.',
+  },
+  {
+    id: 'roles',
+    label: 'Права ролей',
+    navLabel: 'Роли',
+    Icon: LuShield,
+    short: 'RBAC',
+    description: 'Детальная настройка функций для каждой роли: разделы, студия, админка и др.',
   },
   {
     id: 'journal',

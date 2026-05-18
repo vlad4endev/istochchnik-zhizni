@@ -6,7 +6,10 @@ import {
   canDeleteCatalogSong,
   canModerateCatalog,
   normalizeAppRole,
+  normalizeAppRoles,
 } from '../types/appRole';
+import { roleHasPermission } from '../types/appPermissions';
+import { loadRolePermissionsSettings } from '../services/rolePermissionsSettingsService';
 import { query } from '../config/db';
 
 /**
@@ -242,14 +245,40 @@ export function enforceRoleAccess(req: Request, res: Response, next: NextFunctio
     return;
   }
 
+  const sessionRoles = normalizeAppRoles(allRoles.length > 0 ? allRoles : [role], role);
+
   if (isStudioApiPath(fullPath) && authId) {
-    if (canAccessStudio(role)) {
-      next();
-      return;
-    }
-    void hasMusicMinistryDirection(authId)
-      .then((ok) => {
-        if (ok) next();
+    void loadRolePermissionsSettings()
+      .then((perms) => {
+        if (roleHasPermission(perms, sessionRoles, 'studio.access') || canAccessStudio(role)) {
+          next();
+          return;
+        }
+        return hasMusicMinistryDirection(authId).then((ok) => {
+          if (ok) next();
+          else {
+            res.status(403).json({
+              error: 'Access denied. Роль "Пользователь" может только просматривать данные.',
+            });
+          }
+        });
+      })
+      .catch((e) => {
+        console.error('[roleAccess] studio permission lookup failed:', e);
+        res.status(500).json({ error: 'Не удалось проверить права доступа' });
+      });
+    return;
+  }
+
+  if (isSongCatalogModerateMutation(req.method, fullPath) && authId) {
+    void loadRolePermissionsSettings()
+      .then((perms) => {
+        const isCreate = req.method === 'POST';
+        const allowed = isCreate
+          ? roleHasPermission(perms, sessionRoles, 'studio.catalog_create')
+          : roleHasPermission(perms, sessionRoles, 'studio.catalog_edit');
+        const legacy = canModerateCatalog(role);
+        if (allowed || legacy) next();
         else {
           res.status(403).json({
             error: 'Access denied. Роль "Пользователь" может только просматривать данные.',
@@ -257,24 +286,45 @@ export function enforceRoleAccess(req: Request, res: Response, next: NextFunctio
         }
       })
       .catch((e) => {
-        console.error('[roleAccess] studio ministry_direction lookup failed:', e);
+        console.error('[roleAccess] catalog permission lookup failed:', e);
         res.status(500).json({ error: 'Не удалось проверить права доступа' });
       });
     return;
   }
 
-  if (isSongCatalogModerateMutation(req.method, fullPath) && authId && canModerateCatalog(role)) {
-    next();
+  if (isSongCatalogDeleteMutation(req.method, fullPath) && authId) {
+    void loadRolePermissionsSettings()
+      .then((perms) => {
+        if (roleHasPermission(perms, sessionRoles, 'studio.catalog_delete') || canDeleteCatalogSong(role)) {
+          next();
+        } else {
+          res.status(403).json({
+            error: 'Access denied. Роль "Пользователь" может только просматривать данные.',
+          });
+        }
+      })
+      .catch((e) => {
+        console.error('[roleAccess] catalog delete permission lookup failed:', e);
+        res.status(500).json({ error: 'Не удалось проверить права доступа' });
+      });
     return;
   }
 
-  if (isSongCatalogDeleteMutation(req.method, fullPath) && authId && canDeleteCatalogSong(role)) {
-    next();
-    return;
-  }
-
-  if (isServicePlannerMutation(req.method, fullPath) && authId && isPlannerManager) {
-    next();
+  if (isServicePlannerMutation(req.method, fullPath) && authId) {
+    void loadRolePermissionsSettings()
+      .then((perms) => {
+        if (roleHasPermission(perms, sessionRoles, 'planner.manage') || isPlannerManager) {
+          next();
+        } else {
+          res.status(403).json({
+            error: 'Access denied. Роль "Пользователь" может только просматривать данные.',
+          });
+        }
+      })
+      .catch((e) => {
+        console.error('[roleAccess] planner permission lookup failed:', e);
+        res.status(500).json({ error: 'Не удалось проверить права доступа' });
+      });
     return;
   }
 

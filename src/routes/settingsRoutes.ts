@@ -15,6 +15,12 @@ import {
   getSectionVisibilitySettingsPublic,
   patchSectionVisibilitySettingsHandler,
 } from '../controllers/sectionVisibilitySettingsController';
+import {
+  getRolePermissionsSettingsAdmin,
+  getRolePermissionsSettingsPublic,
+  patchRolePermissionsSettingsHandler,
+  resetRolePermissionsSettingsHandler,
+} from '../controllers/rolePermissionsSettingsController';
 
 const router = Router();
 
@@ -30,5 +36,9 @@ router.post('/ai/test', postAiTestHandler);
 router.get('/sections', getSectionVisibilitySettingsPublic);
 router.get('/sections/admin', getSectionVisibilitySettingsAdmin);
 router.patch('/sections', patchSectionVisibilitySettingsHandler);
+router.get('/role-permissions', getRolePermissionsSettingsPublic);
+router.get('/role-permissions/admin', getRolePermissionsSettingsAdmin);
+router.patch('/role-permissions', patchRolePermissionsSettingsHandler);
+router.post('/role-permissions/reset', resetRolePermissionsSettingsHandler);
 
 export default router;

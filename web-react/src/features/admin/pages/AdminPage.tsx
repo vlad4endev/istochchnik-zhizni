@@ -29,6 +29,8 @@ import { ADMIN_TABS, type AdminTabId } from '../adminTabs';
 import { AccessRequestsSection } from '../AccessRequestsSection';
 import { AiSettingsSection } from '../AiSettingsSection';
 import { AppSectionsAccessSection } from '../AppSectionsAccessSection';
+import { RolePermissionsManagerSection } from '../RolePermissionsManagerSection';
+import { MemberAppRolesPicker } from '../MemberAppRolesPicker';
 import { NotificationsSettingsSection } from '../NotificationsSettingsSection';
 import { ProjectJournalSection } from '../ProjectJournalSection';
 import { DiagnosticsDashboardSection } from '../DiagnosticsDashboardSection';
@@ -415,6 +417,7 @@ const SIDEBAR_GROUPS = [
     label: 'СИСТЕМА',
     items: [
       { id: 'sections' as AdminTabId },
+      { id: 'roles' as AdminTabId },
       { id: 'journal' as AdminTabId },
       { id: 'notifications' as AdminTabId },
       { id: 'telegram' as AdminTabId },
@@ -537,6 +540,7 @@ export function AdminPage() {
           {tab === 'templates' && <TemplatesSection />}
           {tab === 'project' && <ProjectSection />}
           {tab === 'sections' && <AppSectionsAccessSection />}
+          {tab === 'roles' && <RolePermissionsManagerSection />}
           {tab === 'journal' && <ProjectJournalSection />}
           {tab === 'notifications' && <NotificationsSettingsSection />}
           {tab === 'telegram' && <TelegramSection />}
@@ -2095,39 +2099,11 @@ function MembersSection({
                   Доступ и роль
                 </p>
                 <div className="space-y-2.5 sm:space-y-3">
-                  <div>
-                    <label className="mb-1 block text-xs font-semibold text-stone-600">Роль приложения</label>
-                    <span
-                      className="sr-only"
-                    >
-                      Роль приложения
-                    </span>
-                    <select
-                      className={fieldClass()}
-                      value={
-                        Array.isArray(editing.app_roles) && editing.app_roles.length > 0
-                          ? editing.app_roles[0]!
-                          : editing.app_role
-                      }
-                      disabled={roleMut.isPending}
-                      onChange={(e) => {
-                        setBanner(null);
-                        roleMut.mutate({
-                          id: editing.id,
-                          roles: [e.target.value as AppUser['app_role']],
-                        });
-                      }}
-                    >
-                      <option value="">—</option>
-                      <option value="parishioner">Прихожанин</option>
-                      <option value="member">Член церкви</option>
-                      <option value="minister">Служитель</option>
-                      <option value="pastor">Пастор</option>
-                      <option value="musician">Музыкант (студия)</option>
-                      <option value="editor">Редактор каталога</option>
-                      <option value="admin">Администратор</option>
-                    </select>
-                  </div>
+                  <MemberAppRolesPicker
+                    editing={editing}
+                    roleMut={roleMut}
+                    onBannerClear={() => setBanner(null)}
+                  />
                   <label className="flex cursor-pointer items-center justify-between gap-2 rounded-xl border border-stone-200 px-2.5 py-2 sm:px-3 sm:py-2.5">
                     <span className="min-w-0 flex-1 text-xs leading-snug text-stone-800 sm:text-sm">
                       Активен (может войти в приложение)
