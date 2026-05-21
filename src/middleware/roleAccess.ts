@@ -132,6 +132,12 @@ function isServicePlannerMutation(method: string, path: string): boolean {
   );
 }
 
+function isServicePlannerBlockMutation(method: string, path: string): boolean {
+  if (SAFE_METHODS.has(method)) return false;
+  const p = path.split('?')[0];
+  return p.startsWith('/api/service-blocks');
+}
+
 function fullUrlPath(req: Request): string {
   return (req.originalUrl || req.url || req.path || '').split('?')[0] || '';
 }
@@ -305,6 +311,28 @@ export function enforceRoleAccess(req: Request, res: Response, next: NextFunctio
       })
       .catch((e) => {
         console.error('[roleAccess] catalog delete permission lookup failed:', e);
+        res.status(500).json({ error: 'Не удалось проверить права доступа' });
+      });
+    return;
+  }
+
+  if (isServicePlannerBlockMutation(req.method, fullPath) && authId) {
+    void loadRolePermissionsSettings()
+      .then((perms) => {
+        const canEditBlocks =
+          roleHasPermission(perms, sessionRoles, 'section.service_planner') ||
+          roleHasPermission(perms, sessionRoles, 'planner.manage') ||
+          isPlannerManager;
+        if (canEditBlocks) {
+          next();
+        } else {
+          res.status(403).json({
+            error: 'Access denied. Роль "Пользователь" может только просматривать данные.',
+          });
+        }
+      })
+      .catch((e) => {
+        console.error('[roleAccess] planner block permission lookup failed:', e);
         res.status(500).json({ error: 'Не удалось проверить права доступа' });
       });
     return;

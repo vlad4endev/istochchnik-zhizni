@@ -28,6 +28,9 @@ import {
   listPreacherSermonHistory,
   upsertSermonFeedbackComment,
 } from '../services/sermonFeedbackService';
+import { normalizeAppRole, normalizeAppRoles, type AppRole } from '../types/appRole';
+import { roleHasPermission } from '../types/appPermissions';
+import { loadRolePermissionsSettings } from '../services/rolePermissionsSettingsService';
 
 function parseId(raw: unknown): number | null {
   const n = Number(raw);
@@ -47,19 +50,39 @@ function parseTimeHm(raw: unknown): string | null {
   return s;
 }
 
-function isPlannerManager(req: Request): boolean {
-  const role = String(req.authUserRole ?? 'member').toLowerCase();
-  if (role === 'admin' || role === 'minister') return true;
-  const roles = Array.isArray(req.authUserRoles) ? req.authUserRoles : [];
-  return roles.includes('admin') || roles.includes('minister');
+function plannerSessionRoles(req: Request): AppRole[] {
+  const rawRoles = Array.isArray(req.authUserRoles) ? req.authUserRoles : [];
+  return normalizeAppRoles(rawRoles, req.authUserRole);
 }
 
-function ensurePlannerManager(req: Request, res: Response): boolean {
-  if (!isPlannerManager(req)) {
-    res.status(403).json({ error: 'Недостаточно прав (только администратор или служитель)' });
-    return false;
-  }
-  return true;
+function isLegacyPlannerManager(req: Request): boolean {
+  const primaryRole = normalizeAppRole(req.authUserRole);
+  if (primaryRole === 'admin' || primaryRole === 'minister') return true;
+  return plannerSessionRoles(req).some((role) => role === 'admin' || role === 'minister');
+}
+
+async function hasPlannerManagePermission(req: Request): Promise<boolean> {
+  if (isLegacyPlannerManager(req)) return true;
+  const permissions = await loadRolePermissionsSettings();
+  return roleHasPermission(permissions, plannerSessionRoles(req), 'planner.manage');
+}
+
+async function hasPlannerSectionPermission(req: Request): Promise<boolean> {
+  const permissions = await loadRolePermissionsSettings();
+  return roleHasPermission(permissions, plannerSessionRoles(req), 'section.service_planner');
+}
+
+async function ensurePlannerManager(req: Request, res: Response): Promise<boolean> {
+  if (await hasPlannerManagePermission(req)) return true;
+  res.status(403).json({ error: 'Недостаточно прав на редактирование планировщика' });
+  return false;
+}
+
+async function ensurePlannerBlockEditor(req: Request, res: Response): Promise<boolean> {
+  if (await hasPlannerManagePermission(req)) return true;
+  if (await hasPlannerSectionPermission(req)) return true;
+  res.status(403).json({ error: 'Недостаточно прав на редактирование блоков' });
+  return false;
 }
 
 function hasMinistryRole(raw: unknown, roleName: string): boolean {
@@ -79,7 +102,7 @@ function hasElevatedPreacherRole(req: Request): boolean {
 }
 
 async function ensureTemplateManager(req: Request, res: Response): Promise<boolean> {
-  if (isPlannerManager(req)) return true;
+  if (await hasPlannerManagePermission(req)) return true;
   if (!req.authUserId) {
     res.status(401).json({ error: 'Требуется авторизация' });
     return false;
@@ -279,7 +302,7 @@ export async function getServiceBlockTypes(_req: Request, res: Response): Promis
 }
 
 export async function getServicePlannerMembers(req: Request, res: Response): Promise<void> {
-  if (!ensurePlannerManager(req, res)) return;
+  if (!(await ensurePlannerBlockEditor(req, res))) return;
   try {
     const users = await listUsers();
     res.json(users.filter((u) => u.is_active));
@@ -474,7 +497,7 @@ export async function getServicePlanById(req: Request, res: Response): Promise<v
 }
 
 export async function postServicePlan(req: Request, res: Response): Promise<void> {
-  if (!ensurePlannerManager(req, res)) return;
+  if (!(await ensurePlannerManager(req, res))) return;
   const body = parseJsonObject(req.body);
   const templateId = parseId(body.template_id);
   const date = parseDateYmd(body.service_date);
@@ -508,7 +531,7 @@ export async function postServicePlan(req: Request, res: Response): Promise<void
 }
 
 export async function patchServicePlanById(req: Request, res: Response): Promise<void> {
-  if (!ensurePlannerManager(req, res)) return;
+  if (!(await ensurePlannerManager(req, res))) return;
   const id = parseId(req.params.id);
   if (!id) {
     res.status(400).json({ error: 'Некорректный id плана' });
@@ -664,7 +687,7 @@ export async function patchServicePlanById(req: Request, res: Response): Promise
 }
 
 export async function patchServiceBlocksReorder(req: Request, res: Response): Promise<void> {
-  if (!ensurePlannerManager(req, res)) return;
+  if (!(await ensurePlannerBlockEditor(req, res))) return;
   const body = parseJsonObject(req.body);
   const servicePlanId = parseId(body.service_plan_id);
   const orderedBlockIdsRaw = Array.isArray(body.ordered_block_ids) ? body.ordered_block_ids : [];
@@ -699,7 +722,7 @@ export async function patchServiceBlocksReorder(req: Request, res: Response): Pr
 }
 
 export async function patchServiceBlockById(req: Request, res: Response): Promise<void> {
-  if (!ensurePlannerManager(req, res)) return;
+  if (!(await ensurePlannerBlockEditor(req, res))) return;
   const id = parseId(req.params.id);
   if (!id) {
     res.status(400).json({ error: 'Некорректный id блока' });
@@ -867,7 +890,7 @@ export async function runSermonFeedbackNotificationTick(_req: Request, res: Resp
 }
 
 export async function postServiceBlock(req: Request, res: Response): Promise<void> {
-  if (!ensurePlannerManager(req, res)) return;
+  if (!(await ensurePlannerBlockEditor(req, res))) return;
   const body = parseJsonObject(req.body);
   const servicePlanId = parseId(body.service_plan_id);
   const blockTypeId = parseId(body.block_type_id);
@@ -913,7 +936,7 @@ export async function postServiceBlock(req: Request, res: Response): Promise<voi
 }
 
 export async function deleteServiceBlockById(req: Request, res: Response): Promise<void> {
-  if (!ensurePlannerManager(req, res)) return;
+  if (!(await ensurePlannerBlockEditor(req, res))) return;
   const id = parseId(req.params.id);
   if (!id) {
     res.status(400).json({ error: 'Некорректный id блока' });
@@ -949,7 +972,7 @@ export async function deleteServiceBlockById(req: Request, res: Response): Promi
 }
 
 export async function deleteServicePlanById(req: Request, res: Response): Promise<void> {
-  if (!ensurePlannerManager(req, res)) return;
+  if (!(await ensurePlannerManager(req, res))) return;
   const id = parseId(req.params.id);
   if (!id) {
     res.status(400).json({ error: 'Некорректный id плана' });

@@ -696,15 +696,17 @@ export function ServicePlannerPage() {
   const saveProgramMut = useMutation({
     mutationFn: async () => {
       if (!draft) return;
-      await patchServicePlan(draft.id, {
-        service_date: draft.service_date,
-        start_time: draft.start_time,
-        leader_member_id: draft.leader_member_id,
-        preacher_member_id: draft.preacher_member_id,
-        music_ministry_member_id: draft.music_ministry_member_id,
-        current_block_id: draft.current_block_id,
-        status: draft.status,
-      });
+      if (canManagePlanSettings) {
+        await patchServicePlan(draft.id, {
+          service_date: draft.service_date,
+          start_time: draft.start_time,
+          leader_member_id: draft.leader_member_id,
+          preacher_member_id: draft.preacher_member_id,
+          music_ministry_member_id: draft.music_ministry_member_id,
+          current_block_id: draft.current_block_id,
+          status: draft.status,
+        });
+      }
       const ordered = [...draft.blocks].sort((a, b) => a.order_index - b.order_index);
       for (const b of ordered) {
         const meta = blockTypes.find((t) => t.id === b.block_type_id);
@@ -839,6 +841,8 @@ export function ServicePlannerPage() {
   const usersById = useMemo(() => new Map(users.map((u) => [u.id, u] as const)), [users]);
   const authMember = authMemberId ? usersById.get(authMemberId) ?? null : null;
   const isPlannerManagerByProfile = authMember ? hasAppRole(authMember, 'admin') || hasAppRole(authMember, 'minister') : false;
+  const canManagePlanSettings = isPlannerManagerBySession || isPlannerManagerByProfile;
+  const isBlocksOnlyEditor = !canManagePlanSettings;
   const canManageTemplates =
     isPlannerManagerBySession ||
     isPlannerManagerByProfile ||
@@ -2585,10 +2589,16 @@ export function ServicePlannerPage() {
         </div>
         <div className={isPlanSettingsOpenMobile ? 'block md:block' : 'hidden md:block'}>
         <p className="mb-2 text-xs text-stone-500">Укажите дату, время и ответственных служителей.</p>
+        {isBlocksOnlyEditor ? (
+          <div className="mb-2 rounded-xl border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-900">
+            У вас доступ только к редактированию блоков. Настройки плана доступны служителю или администратору.
+          </div>
+        ) : null}
         <div className="grid min-w-0 gap-2 md:grid-cols-2 [&_input]:min-w-0 [&_input]:w-full [&_input]:bg-white [&_input]:text-stone-900 [&_select]:min-w-0 [&_select]:w-full [&_select]:bg-white [&_select]:text-stone-900">
           <input
             type="date"
             value={draft.service_date}
+            disabled={isBlocksOnlyEditor}
             onChange={(e) => {
               const next = e.target.value;
               if (isIsoDate(next)) setDraft({ ...draft, service_date: next });
@@ -2598,11 +2608,13 @@ export function ServicePlannerPage() {
           <input
             type="time"
             value={draft.start_time}
+            disabled={isBlocksOnlyEditor}
             onChange={(e) => setDraft({ ...draft, start_time: e.target.value || '10:00' })}
             className="w-full min-w-0 rounded-xl border border-stone-300 px-3 py-2 text-sm shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
           />
           <select
             value={draft.leader_member_id ?? ''}
+            disabled={isBlocksOnlyEditor}
             onChange={(e) => setDraft({ ...draft, leader_member_id: e.target.value ? Number(e.target.value) : null })}
             className="w-full min-w-0 rounded-xl border border-stone-300 px-3 py-2 text-sm shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
           >
@@ -2615,6 +2627,7 @@ export function ServicePlannerPage() {
           </select>
           <select
             value={draft.preacher_member_id ?? ''}
+            disabled={isBlocksOnlyEditor}
             onChange={(e) => {
               const preacherId = e.target.value ? Number(e.target.value) : null;
               const preacher = preacherId ? usersById.get(preacherId) ?? null : null;
@@ -2648,6 +2661,7 @@ export function ServicePlannerPage() {
           </select>
           <select
             value={draft.music_ministry_member_id ?? ''}
+            disabled={isBlocksOnlyEditor}
             onChange={(e) => {
               const musicId = e.target.value ? Number(e.target.value) : null;
               setDraft((prev) => {
@@ -2677,6 +2691,7 @@ export function ServicePlannerPage() {
         </div>
         <button
           type="button"
+          disabled={isBlocksOnlyEditor}
           onClick={() =>
             void updatePlanMut.mutateAsync({
               id: draft.id,
@@ -2689,7 +2704,7 @@ export function ServicePlannerPage() {
               },
             })
           }
-          className="mt-3 inline-flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl bg-primary px-3 py-2 text-sm font-semibold text-white hover:bg-primary-dark"
+          className="mt-3 inline-flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl bg-primary px-3 py-2 text-sm font-semibold text-white hover:bg-primary-dark disabled:cursor-not-allowed disabled:opacity-60"
         >
           <LuSave className="h-4 w-4" />
           Сохранить настройки
@@ -2739,6 +2754,9 @@ export function ServicePlannerPage() {
           </div>
         </div>
         <div className="mt-2 hidden md:block">
+          {isBlocksOnlyEditor ? (
+            <p className="mb-2 text-xs text-stone-500">Сохраняются изменения в блоках (настройки плана недоступны).</p>
+          ) : null}
           <button
             type="button"
             onClick={() => {
@@ -2749,7 +2767,7 @@ export function ServicePlannerPage() {
             disabled={saveProgramMut.isPending}
           >
             <LuSave className="h-4 w-4" />
-            Сохранить сейчас
+            {isBlocksOnlyEditor ? 'Сохранить блоки' : 'Сохранить сейчас'}
           </button>
         </div>
       </section>
@@ -3254,6 +3272,9 @@ export function ServicePlannerPage() {
       ) : null}
 
       <div className="service-planner-mobile-save fixed inset-x-0 bottom-[var(--app-bottom-nav-total-height)] z-[60] border-t border-stone-200 bg-white/95 px-3 py-2 backdrop-blur lg:hidden [padding-bottom:max(0.5rem,var(--app-safe-bottom))]">
+        {isBlocksOnlyEditor ? (
+          <p className="mb-1 text-center text-[11px] font-medium text-stone-500">Режим: только редактирование блоков</p>
+        ) : null}
         <button
           type="button"
           onClick={() => {
@@ -3264,7 +3285,7 @@ export function ServicePlannerPage() {
           disabled={saveProgramMut.isPending}
         >
           <LuSave className="h-4 w-4" />
-          Сохранить сейчас
+          {isBlocksOnlyEditor ? 'Сохранить блоки' : 'Сохранить сейчас'}
         </button>
       </div>
 
