@@ -1,4 +1,5 @@
 import { query } from '../config/db';
+import { notifyRealtime } from '../realtime/notify';
 import { addUtcDaysToIsoDate, getDiffDays } from '../utils/isoDates';
 
 /** Участники с этим флагом входят в расчёт длины цикла и очереди «день за днём». */
@@ -108,6 +109,13 @@ export async function getCurrentCycleIndexForUpsert(): Promise<number> {
   return snap?.cycle_index ?? 0;
 }
 
+/**
+ * Нужда только из `member_prayer_by_cycle` для привязанного `cycle_index`.
+ * Без COALESCE с `members.prayer_request` — иначе после смены цикла в поле «текущего» цикла
+ * остаётся текст прошлого.
+ */
+export const CYCLE_PRAYER_REQUEST_SELECT_SQL = `NULLIF(TRIM(mpc.prayer_request), '')`;
+
 export async function upsertMemberPrayerForCycle(
   memberId: number,
   cycleIndex: number,
@@ -120,6 +128,55 @@ export async function upsertMemberPrayerForCycle(
      DO UPDATE SET prayer_request = EXCLUDED.prayer_request, updated_at = NOW()`,
     [memberId, cycleIndex, prayerRequest]
   );
+}
+
+async function clearLegacyMemberPrayerRequestAfterSnapshot(ciNow: number): Promise<void> {
+  await query(
+    `UPDATE members m
+        SET prayer_request = NULL,
+            updated_at = NOW()
+      WHERE NULLIF(TRIM(COALESCE(m.prayer_request, '')), '') IS NOT NULL
+        AND NOT EXISTS (
+          SELECT 1
+            FROM member_prayer_by_cycle mpc
+           WHERE mpc.member_id = m.id
+             AND mpc.cycle_index = $1
+             AND NULLIF(TRIM(mpc.prayer_request), '') IS NOT NULL
+        )`,
+    [ciNow],
+  );
+}
+
+/**
+ * Перенос нужд завершённых циклов в журнал и очистка устаревшего `members.prayer_request`,
+ * чтобы поле текущего цикла оставалось пустым до нового ввода.
+ */
+export async function snapshotPastCyclePrayersToHistory(): Promise<number> {
+  const ciNow = await getCurrentCycleIndexForUpsert();
+  const result = await query(
+    `INSERT INTO member_prayer_request_history (member_id, prayer_request, cycle_index, created_at)
+     SELECT mpc.member_id,
+            trim(mpc.prayer_request),
+            mpc.cycle_index,
+            mpc.updated_at
+       FROM member_prayer_by_cycle mpc
+       INNER JOIN members m ON m.id = mpc.member_id AND m.is_active = TRUE
+      WHERE mpc.cycle_index < $1
+        AND NULLIF(trim(mpc.prayer_request), '') IS NOT NULL
+        AND NOT EXISTS (
+          SELECT 1
+            FROM member_prayer_request_history h
+           WHERE h.member_id = mpc.member_id
+             AND h.cycle_index IS NOT DISTINCT FROM mpc.cycle_index
+        )`,
+    [ciNow],
+  );
+  const inserted = result.rowCount ?? 0;
+  await clearLegacyMemberPrayerRequestAfterSnapshot(ciNow);
+  if (inserted > 0) {
+    notifyRealtime(['members', 'calendar']);
+  }
+  return inserted;
 }
 
 /** Слияние: сначала порядок из сохранёнки (только актуальные id), затем остальные из alpha по А–Я. */

@@ -12,9 +12,13 @@ import {
   mergePrayerCycleRosterOrderIds,
   upsertMemberPrayerForCycle,
   upsertPrayerCycleRosterCustomOrder,
+  CYCLE_PRAYER_REQUEST_SELECT_SQL,
+  snapshotPastCyclePrayersToHistory,
   PRAYER_CYCLE_MEMBERS_WHERE_M,
   PRAYER_CYCLE_ROSTER_ORDER_SQL,
 } from './prayerCycleService';
+
+export { snapshotPastCyclePrayersToHistory };
 
 export interface AppUser {
   id: number;
@@ -284,7 +288,7 @@ export async function listUsers(): Promise<AppUser[]> {
       m.telegram_delivery_blocked_at,
       m.ministry_role,
       m.ministry_direction,
-      COALESCE(mpc.prayer_request, m.prayer_request) AS prayer_request,
+      ${CYCLE_PRAYER_REQUEST_SELECT_SQL} AS prayer_request,
       m.birth_date,
       m.email,
       m.account_provider,
@@ -322,7 +326,7 @@ export async function getUserById(id: number): Promise<AppUser | null> {
       m.telegram_delivery_blocked_at,
       m.ministry_role,
       m.ministry_direction,
-      COALESCE(mpc.prayer_request, m.prayer_request) AS prayer_request,
+      ${CYCLE_PRAYER_REQUEST_SELECT_SQL} AS prayer_request,
       m.birth_date,
       m.email,
       m.account_provider,
@@ -1327,29 +1331,6 @@ export async function deleteManualPreviousPrayerNeed(id: number): Promise<boolea
  * переносим финальный текст из `member_prayer_by_cycle` в журнал, если для пары (участник, цикл)
  * ещё нет ни одной строки в `member_prayer_request_history`. Дата записи — `updated_at` строки цикла.
  */
-export async function snapshotPastCyclePrayersToHistory(): Promise<number> {
-  const ciNow = await getCurrentCycleIndexForUpsert();
-  const result = await query(
-    `INSERT INTO member_prayer_request_history (member_id, prayer_request, cycle_index, created_at)
-     SELECT mpc.member_id,
-            trim(mpc.prayer_request),
-            mpc.cycle_index,
-            mpc.updated_at
-       FROM member_prayer_by_cycle mpc
-       INNER JOIN members m ON m.id = mpc.member_id AND m.is_active = TRUE
-      WHERE mpc.cycle_index < $1
-        AND NULLIF(trim(mpc.prayer_request), '') IS NOT NULL
-        AND NOT EXISTS (
-          SELECT 1
-            FROM member_prayer_request_history h
-           WHERE h.member_id = mpc.member_id
-             AND h.cycle_index IS NOT DISTINCT FROM mpc.cycle_index
-        )`,
-    [ciNow],
-  );
-  return result.rowCount ?? 0;
-}
-
 /** Ручная запись в журнал истории (админ). */
 export async function addPrayerRequestHistoryManual(
   memberId: number,

@@ -3,6 +3,7 @@ import { getDiffDays } from '../utils/isoDates';
 import { addCalendarDaysYmd, formatYmdInTimeZone, getZonedNow } from '../utils/zonedTime';
 import {
   computeCycleIndex,
+  CYCLE_PRAYER_REQUEST_SELECT_SQL,
   getCycleStartDate,
   getMergedPrayerCycleRosterMemberIdsForCycleIndex,
   getPrayerCycleSnapshotForDate,
@@ -10,6 +11,7 @@ import {
   PRAYER_CYCLE_MEMBERS_WHERE_M,
   toPublicCycleInfo,
   type PrayerCyclePublic,
+  snapshotPastCyclePrayersToHistory,
 } from './prayerCycleService';
 
 interface Member {
@@ -322,6 +324,7 @@ async function attachManualPreviousPrayerNeedsToMembers(members: Member[]): Prom
 }
 
 export async function getPrayerDataByDate(targetDate: string): Promise<PrayerDataByDate> {
+  await snapshotPastCyclePrayersToHistory();
   const cycleStartDate = await getCycleStartDate();
   const diffDays = getDiffDays(targetDate, cycleStartDate);
 
@@ -353,7 +356,7 @@ export async function getPrayerDataByDate(targetDate: string): Promise<PrayerDat
   const overridePromise = query(
     `SELECT m.id, m.name, m.first_name, m.last_name,
             m.in_prayer_cycle AS in_prayer_cycle,
-            COALESCE(mpc.prayer_request, m.prayer_request) AS prayer_request,
+            ${CYCLE_PRAYER_REQUEST_SELECT_SQL} AS prayer_request,
             mpc.updated_at::text AS prayer_need_updated_at
      FROM member_cycle_overrides o
      JOIN members m ON m.id = o.member_id
@@ -384,7 +387,7 @@ export async function getPrayerDataByDate(targetDate: string): Promise<PrayerDat
     const result = await query(
       `SELECT m.id, m.name, m.first_name, m.last_name,
               m.in_prayer_cycle AS in_prayer_cycle,
-              COALESCE(mpc.prayer_request, m.prayer_request) AS prayer_request,
+              ${CYCLE_PRAYER_REQUEST_SELECT_SQL} AS prayer_request,
               mpc.updated_at::text AS prayer_need_updated_at
        FROM members m
        LEFT JOIN member_prayer_by_cycle mpc
@@ -423,6 +426,7 @@ export function getCalendarWeekStartDate(kind: WeekPlanKind): string {
 }
 
 export async function getMemberAssignmentsForWeek(kind: WeekPlanKind): Promise<NextWeekMemberAssignment[]> {
+  await snapshotPastCyclePrayersToHistory();
   const dates = kind === 'next' ? getNextWeekDates() : getCurrentWeekDates();
   return getMemberAssignmentsForDates(dates);
 }
@@ -495,7 +499,7 @@ async function getMemberAssignmentsForDates(dates: string[]): Promise<NextWeekMe
     const r = await query(
       `SELECT m.id, m.name, m.first_name, m.last_name,
               m.in_prayer_cycle AS in_prayer_cycle,
-              COALESCE(mpc.prayer_request, m.prayer_request) AS prayer_request,
+              ${CYCLE_PRAYER_REQUEST_SELECT_SQL} AS prayer_request,
               mpc.updated_at::text AS prayer_need_updated_at
        FROM members m
        LEFT JOIN member_prayer_by_cycle mpc ON mpc.member_id = m.id AND mpc.cycle_index = $2
@@ -530,7 +534,7 @@ async function getMemberAssignmentsForDates(dates: string[]): Promise<NextWeekMe
 
     const pr = await query(
       `SELECT m.in_prayer_cycle AS in_prayer_cycle,
-              COALESCE(mpc.prayer_request, m.prayer_request) AS prayer_request,
+              ${CYCLE_PRAYER_REQUEST_SELECT_SQL} AS prayer_request,
               mpc.updated_at::text AS prayer_need_updated_at
        FROM members m
        LEFT JOIN member_prayer_by_cycle mpc ON mpc.member_id = m.id AND mpc.cycle_index = $2

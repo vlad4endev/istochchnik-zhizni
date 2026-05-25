@@ -1,6 +1,6 @@
 import cron from 'node-cron';
 import { notifyRealtime } from '../realtime/notify';
-import { snapshotPastCyclePrayersToHistory } from '../services/userService';
+import { snapshotPastCyclePrayersToHistory } from '../services/prayerCycleService';
 import { runNotificationRulesTick } from '../services/notificationRulesRunner';
 import { DistributionService } from '../services/DistributionService';
 import { sendPush } from '../services/pushService';

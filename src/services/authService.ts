@@ -1839,7 +1839,7 @@ export async function getAuthUserById(userId: number): Promise<AuthUser | null> 
       m.ministry_direction,
       m.birth_date,
       m.email,
-      COALESCE(mpc.prayer_request, m.prayer_request) AS prayer_request,
+      NULLIF(TRIM(mpc.prayer_request), '') AS prayer_request,
       m.app_role,
       m.app_roles,
       m.is_active,

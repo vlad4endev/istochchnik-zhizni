@@ -5,7 +5,6 @@ import { useId, useMemo, useState, type ReactNode, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import {
   LuCalendarClock,
-  LuCheck,
   LuChevronDown,
   LuClipboardList,
   LuLoader,
@@ -64,11 +63,8 @@ function NextWeekMembersPanel(props: {
   claimsPending: boolean;
   claimsError: boolean;
   currentUserId: number | null;
-  onToggle: (memberId: number, claim: boolean) => void;
   onAssignCurator: (memberId: number, coordinatorId: number | null) => void;
-  mutPending: boolean;
   assignCuratorPending: boolean;
-  canAssignCurators: boolean;
   onPrayerSaved: () => void;
   /** Админ: панель «предыдущие нужды» у всех строк; удобнее массовая работа. */
   isAdmin?: boolean;
@@ -85,11 +81,8 @@ function NextWeekMembersPanel(props: {
     claimsPending,
     claimsError,
     currentUserId,
-    onToggle,
     onAssignCurator,
-    mutPending,
     assignCuratorPending,
-    canAssignCurators,
     onPrayerSaved,
     isAdmin = false,
   } = props;
@@ -293,8 +286,6 @@ function NextWeekMembersPanel(props: {
                 const mid = row.member?.id;
                 const claimRow = claimsError ? undefined : mid != null ? claimByMemberId.get(mid) : undefined;
                 const mine = currentUserId != null && claimRow?.claimed_by?.id === currentUserId;
-                const canToggle = Boolean(claimRow && (claimRow.can_toggle || mine));
-                const disabled = (mutPending || assignCuratorPending) || !canToggle;
                 const claimedByLabel = claimRow?.claimed_by
                   ? mine
                     ? 'Вы'
@@ -306,7 +297,10 @@ function NextWeekMembersPanel(props: {
                       })
                   : null;
                 const hasNeed = Boolean(mem && needText(mem).length > 0);
+                const prevNeeds = mem?.previous_manual_prayer_needs ?? [];
                 const showPrevPanel = (mine || isAdmin) && mid != null && mem && !claimsError;
+                const openPrevByDefault =
+                  weekKind === 'next' && !hasNeed && prevNeeds.length > 0;
 
                 return (
                   <li
@@ -364,87 +358,38 @@ function NextWeekMembersPanel(props: {
                                 Свободно
                               </span>
                             )}
-                            {canAssignCurators ? (
-                              <label className="min-w-[10.5rem]">
-                                <span className="sr-only">Назначенный куратор</span>
-                                <select
-                                  value={claimRow.claimed_by?.id ?? ''}
-                                  disabled={assignCuratorPending}
-                                  onChange={(e) => {
-                                    const raw = e.target.value.trim();
-                                    if (!raw) {
-                                      onAssignCurator(mid, null);
-                                      return;
-                                    }
-                                    const selectedId = Number(raw);
-                                    if (Number.isInteger(selectedId) && selectedId > 0) {
-                                      onAssignCurator(mid, selectedId);
-                                    }
-                                  }}
-                                  className="min-h-[36px] w-full rounded-md border border-stone-200 bg-white px-2 py-1 text-[12px] font-semibold text-stone-800"
-                                  title="Назначить ответственного куратора"
-                                >
-                                  <option value="">Без куратора</option>
-                                  {(claimsSnapshot?.coordinators ?? []).map((c) => (
-                                    <option key={c.id} value={c.id}>
-                                      {memberRosterName({
-                                        id: c.id,
-                                        name: c.name,
-                                        first_name: c.first_name,
-                                        last_name: c.last_name,
-                                      })}
-                                    </option>
-                                  ))}
-                                </select>
-                              </label>
-                            ) : (
-                              <button
-                                type="button"
-                                disabled={disabled}
-                                aria-pressed={mine}
-                                aria-label={
-                                  mine
-                                    ? 'Снять отметку сбора нужд'
-                                    : claimRow.claimed_by
-                                      ? 'Недоступно: уже занято'
-                                      : 'Взять сбор нужд на себя'
-                                }
-                                onClick={() => {
-                                  if (disabled) return;
-                                  onToggle(mid, !mine);
+                            <label className="min-w-[10.5rem]">
+                              <span className="sr-only">Ответственный за сбор нужд</span>
+                              <select
+                                value={claimRow.claimed_by?.id ?? ''}
+                                disabled={assignCuratorPending}
+                                onChange={(e) => {
+                                  const raw = e.target.value.trim();
+                                  if (!raw) {
+                                    onAssignCurator(mid, null);
+                                    return;
+                                  }
+                                  const selectedId = Number(raw);
+                                  if (Number.isInteger(selectedId) && selectedId > 0) {
+                                    onAssignCurator(mid, selectedId);
+                                  }
                                 }}
-                                className={[
-                                  'relative inline-flex h-9 w-[52px] shrink-0 items-center rounded-full border transition',
-                                  'focus:outline-none focus:ring-2 focus:ring-primary/25 focus:ring-offset-1 focus:ring-offset-[var(--surface)]',
-                                  disabled
-                                    ? 'cursor-not-allowed border-stone-200 bg-stone-100 opacity-60'
-                                    : mine
-                                      ? 'border-primary/40 bg-primary/10 hover:bg-primary/15'
-                                      : 'border-stone-200 bg-white hover:border-stone-300 hover:bg-stone-50',
-                                ].join(' ')}
-                                title={
-                                  disabled
-                                    ? claimRow.claimed_by && !mine
-                                      ? 'Уже занято другим'
-                                      : 'Недоступно'
-                                    : mine
-                                      ? 'Снять: я не отвечаю'
-                                      : 'Я отвечаю за сбор'
-                                }
+                                className="min-h-[36px] w-full rounded-md border border-stone-200 bg-white px-2 py-1 text-[12px] font-semibold text-stone-800"
+                                title="Назначить ответственного за сбор"
                               >
-                                <span
-                                  className={[
-                                    'absolute left-0.5 flex h-7 w-7 items-center justify-center rounded-full shadow-sm transition-transform',
-                                    mine
-                                      ? 'translate-x-[22px] bg-primary text-white'
-                                      : 'translate-x-0 bg-stone-200 text-stone-600',
-                                  ].join(' ')}
-                                >
-                                  <LuCheck className={mine ? 'h-4 w-4' : 'h-4 w-4 opacity-0'} aria-hidden />
-                                </span>
-                                <span className="sr-only">{mine ? 'Выбрано' : 'Не выбрано'}</span>
-                              </button>
-                            )}
+                                <option value="">Без ответственного</option>
+                                {(claimsSnapshot?.coordinators ?? []).map((c) => (
+                                  <option key={c.id} value={c.id}>
+                                    {memberRosterName({
+                                      id: c.id,
+                                      name: c.name,
+                                      first_name: c.first_name,
+                                      last_name: c.last_name,
+                                    })}
+                                  </option>
+                                ))}
+                              </select>
+                            </label>
                           </>
                         ) : claimsError && mid != null ? (
                           <span className="text-[10px] font-medium text-amber-800">Отметки недоступны</span>
@@ -540,7 +485,10 @@ function NextWeekMembersPanel(props: {
                     ) : null}
 
                     {showPrevPanel ? (
-                      <details className="group border-t border-stone-100 bg-stone-50/60">
+                      <details
+                        className="group border-t border-stone-100 bg-stone-50/60"
+                        open={openPrevByDefault || undefined}
+                      >
                         <summary className="cursor-pointer list-none px-3 py-2 text-[12px] font-bold text-stone-600 marker:content-none [&::-webkit-details-marker]:hidden">
                           <span className="inline-flex w-full items-center justify-between gap-2">
                             Предыдущие нужды (справка)
@@ -554,7 +502,7 @@ function NextWeekMembersPanel(props: {
                           <CoordinatorPreviousNeedsPanel
                             memberId={mid}
                             memberLabel={name ?? ''}
-                            items={mem.previous_manual_prayer_needs ?? []}
+                            items={prevNeeds}
                             onChanged={onPrayerSaved}
                           />
                         </div>
@@ -658,16 +606,10 @@ type Props = {
 export function NextWeekPrayerPlanSection({
   canView,
   currentUserId,
-  currentUserRole = null,
   isAdmin = false,
   afterWeekQueueButton,
   onTelegramPrayerDispatch,
 }: Props) {
-  const canAssignCurators = useMemo(() => {
-    const role = (currentUserRole ?? '').trim().toLowerCase();
-    return role === 'pastor' || role === 'admin';
-  }, [currentUserRole]);
-
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const titleId = useId();
@@ -891,7 +833,6 @@ export function NextWeekPrayerPlanSection({
                 claimsPending={claimsPending}
                 claimsError={claimsError}
                 currentUserId={currentUserId}
-                onToggle={(memberId, claim) => mut.mutate({ memberId, claim })}
                 onAssignCurator={(memberId, coordinatorId) =>
                   mut.mutate({
                     memberId,
@@ -899,9 +840,7 @@ export function NextWeekPrayerPlanSection({
                     assignedCoordinatorId: coordinatorId ?? undefined,
                   })
                 }
-                mutPending={mut.isPending}
                 assignCuratorPending={mut.isPending}
-                canAssignCurators={canAssignCurators}
                 onPrayerSaved={invalidateAfterPrayerSave}
                 isAdmin={isAdmin}
               />

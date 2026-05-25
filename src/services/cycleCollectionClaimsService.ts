@@ -72,7 +72,7 @@ export interface CycleCollectionClaimRow {
     first_name: string | null;
     last_name: string | null;
   } | null;
-  /** Можно поставить/снять галочку (не занято другим или занято мной). */
+  /** @deprecated UI использует выбор куратора из списка; оставлено для совместимости API. */
   can_toggle: boolean;
 }
 
@@ -189,8 +189,7 @@ export async function getCycleCollectionClaimsSnapshot(
     }[]
   ).map((m) => {
     const claimed = claimByMember.get(m.id) ?? null;
-    const can_toggle =
-      canManage && (authIsAdmin || authIsPastor || claimed == null || claimed.id === authUserId);
+    const can_toggle = canManage;
     return {
       id: m.id,
       name: m.name,
@@ -229,7 +228,7 @@ export async function setCycleCollectionClaim(params: {
   authIsPastor: boolean;
   memberId: number;
   claim: boolean;
-  /** Для админа/пастора: назначить конкретного куратора. */
+  /** Назначить конкретного ответственного за сбор (все координаторы, админ и пастор). */
   assignedCoordinatorId?: number;
   /** Тот же week, что при GET snapshot — иначе отметка попадёт в цикл «сегодня». */
   weekKind?: WeekPlanKind;
@@ -256,8 +255,8 @@ export async function setCycleCollectionClaim(params: {
     typeof assignedCoordinatorId === 'number' && Number.isInteger(assignedCoordinatorId) && assignedCoordinatorId > 0
       ? assignedCoordinatorId
       : null;
-  const canAssignArbitraryCoordinator = authIsAdmin || authIsPastor;
-  if (targetCoordinatorId != null && !canAssignArbitraryCoordinator && targetCoordinatorId !== authUserId) {
+  const canAssignViaSelect = canManage;
+  if (targetCoordinatorId != null && !canAssignViaSelect && targetCoordinatorId !== authUserId) {
     throw new Error('not_allowed');
   }
   if (targetCoordinatorId != null) {
@@ -294,7 +293,7 @@ export async function setCycleCollectionClaim(params: {
 
   if (claim) {
     const ownerId = targetCoordinatorId ?? authUserId;
-    if (canAssignArbitraryCoordinator && targetCoordinatorId != null) {
+    if (canAssignViaSelect && targetCoordinatorId != null) {
       if (weekStartDate == null) {
         await query(
           `INSERT INTO cycle_collection_claims (cycle_index, member_id, claimed_by_member_id, week_start_date)
@@ -378,7 +377,7 @@ export async function setCycleCollectionClaim(params: {
       throw err;
     }
   } else {
-    if (canAssignArbitraryCoordinator) {
+    if (canAssignViaSelect) {
       const del =
         weekStartDate == null
           ? await query(

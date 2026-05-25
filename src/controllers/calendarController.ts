@@ -589,10 +589,6 @@ export async function patchCycleCollectionClaims(req: Request, res: Response): P
     const assignMode = assignedCoordinatorId != null;
     const authIsAdmin = authReq.authUserRole === 'admin';
     const authIsPastor = authReq.authUserRole === 'pastor';
-    if (assignMode && !authIsAdmin && !authIsPastor) {
-      res.status(403).json({ error: 'Назначать кураторов может только администратор или пастор' });
-      return;
-    }
     await setCycleCollectionClaim({
       authUserId: authReq.authUserId,
       authIsAdmin,
@@ -613,7 +609,11 @@ export async function patchCycleCollectionClaims(req: Request, res: Response): P
       const target = snapshotForPush.coordinators.find((c) => c.id === assignedCoordinatorId);
       const memberName = row?.name?.trim() || `Участник #${memberId}`;
       if (target) {
-        const actorLabel = authIsPastor ? 'Пастор' : 'Администратор';
+        const actorLabel = authIsPastor
+          ? 'Пастор'
+          : authIsAdmin
+            ? 'Администратор'
+            : 'Координатор сбора';
         const weekLabel = week === 'current' ? 'эту' : 'следующую';
         void sendPush(
           assignedCoordinatorId,
