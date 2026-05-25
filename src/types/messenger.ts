@@ -157,6 +157,8 @@ export interface ConversationMember {
   first_name: string | null;
   last_name: string | null;
   avatar_url?: string | null;
+  last_seen_at?: string | null;
+  is_online?: boolean;
   public_key?: string | null;
   previous_prayer_requests?: Array<{
     cycle_index: number;

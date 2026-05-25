@@ -227,6 +227,10 @@ export interface SearchMember {
   first_name: string | null;
   last_name: string | null;
   avatar_url?: string | null;
+  last_seen_at?: string | null;
+  is_online?: boolean;
+  registration_status?: 'active' | 'pending_review' | 'rejected';
+  has_registered?: boolean;
 }
 
 // ─── API calls ────────────────────────────────────────────────

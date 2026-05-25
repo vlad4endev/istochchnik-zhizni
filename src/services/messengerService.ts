@@ -532,6 +532,7 @@ export async function listConversationMembers(conversationId: string): Promise<C
         m.first_name,
         m.last_name,
         m.avatar_url,
+        m.last_seen_at,
         m.public_key
      FROM conversation_participants cp
      JOIN members m ON m.id = cp.member_id
@@ -551,6 +552,7 @@ export async function listConversationMembers(conversationId: string): Promise<C
         m.first_name,
         m.last_name,
         m.avatar_url,
+        m.last_seen_at,
         m.public_key
      FROM conversation_participants cp
      JOIN members m ON m.id = cp.member_id
@@ -567,6 +569,7 @@ export async function listConversationMembers(conversationId: string): Promise<C
         m.first_name,
         m.last_name,
         m.avatar_url,
+        m.last_seen_at,
         m.public_key
      FROM conversation_participants cp
      JOIN members m ON m.id = cp.member_id
@@ -604,6 +607,10 @@ export async function listConversationMembers(conversationId: string): Promise<C
         first_name: r.first_name ?? null,
         last_name: r.last_name ?? null,
         avatar_url: r.avatar_url ?? null,
+        last_seen_at:
+          r.last_seen_at != null
+            ? new Date(r.last_seen_at as string | Date).toISOString()
+            : null,
         public_key: r.public_key ?? null,
       }));
       const seenIds = new Set<number>();
@@ -2535,47 +2542,78 @@ export async function interactWithMessage(
 
 // ─── Search members for new chat ──────────────────────────────
 
+const MEMBER_SEARCH_SELECT = `
+  m.id,
+  m.name,
+  m.first_name,
+  m.last_name,
+  m.avatar_url,
+  m.last_seen_at,
+  COALESCE(m.registration_status, 'active') AS registration_status,
+  (m.password_hash IS NOT NULL) AS has_registered`;
+
+const MEMBER_SEARCH_ORDER = `
+  CASE COALESCE(m.registration_status, 'active')
+    WHEN 'active' THEN 0
+    WHEN 'pending_review' THEN 1
+    ELSE 2
+  END,
+  (m.password_hash IS NOT NULL) DESC,
+  m.name ASC`;
+
+function mapMemberSearchRow(r: Record<string, unknown>) {
+  return {
+    id: Number(r.id),
+    name: String(r.name ?? ''),
+    first_name: (r.first_name as string | null) ?? null,
+    last_name: (r.last_name as string | null) ?? null,
+    avatar_url: (r.avatar_url as string | null) ?? null,
+    last_seen_at:
+      r.last_seen_at != null ? new Date(r.last_seen_at as string | Date).toISOString() : null,
+    registration_status: String(r.registration_status ?? 'active'),
+    has_registered: Boolean(r.has_registered),
+  };
+}
+
 export async function searchMembers(
   searchTerm: string,
   excludeMemberId: number,
   limit: number = 20,
 ) {
   const result = await dbQuery(
-    `SELECT m.id, m.name, m.first_name, m.last_name, m.avatar_url
+    `SELECT ${MEMBER_SEARCH_SELECT}
      FROM members m
      WHERE m.is_active = TRUE
-       AND COALESCE(m.registration_status, 'active') = 'active'
        AND m.id != $1
        AND (
          LOWER(m.name) LIKE '%' || LOWER($2) || '%'
          OR LOWER(COALESCE(m.first_name, '')) LIKE '%' || LOWER($2) || '%'
          OR LOWER(COALESCE(m.last_name, '')) LIKE '%' || LOWER($2) || '%'
        )
-     ORDER BY m.name ASC
+     ORDER BY ${MEMBER_SEARCH_ORDER}
      LIMIT $3`,
     [excludeMemberId, searchTerm.trim(), limit],
   );
-  return result.rows;
+  return result.rows.map((row) => mapMemberSearchRow(row as Record<string, unknown>));
 }
 
 /**
- * List all registered members (for "new chat" list without search).
+ * List church members for picker (for "new chat" list without search).
  */
 export async function listRegisteredMembers(
   excludeMemberId: number,
   limit: number = 50,
 ) {
   const result = await dbQuery(
-    `SELECT m.id, m.name, m.first_name, m.last_name, m.avatar_url
+    `SELECT ${MEMBER_SEARCH_SELECT}
      FROM members m
      WHERE m.is_active = TRUE
-       AND COALESCE(m.registration_status, 'active') = 'active'
        AND m.id != $1
-     ORDER BY m.first_name ASC, m.last_name ASC
+     ORDER BY ${MEMBER_SEARCH_ORDER}
      LIMIT $2`,
     [excludeMemberId, limit],
   );
-  return result.rows;
+  return result.rows.map((row) => mapMemberSearchRow(row as Record<string, unknown>));
 }
 
 // ─── Канал «Заявки» (уведомления админам о регистрации) ───────

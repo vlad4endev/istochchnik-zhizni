@@ -16,6 +16,7 @@ import { AppAvatar } from '../../../components/AppAvatar';
 import { getAvatarColor } from '../avatarUtils';
 import { emitAppToast } from '../../../lib/uiFeedback';
 import { compressImageForMessengerUpload } from '../compressImageForUpload';
+import { canAddMemberToGroupChat, formatMemberSearchStatusLine } from '../memberPresenceLabel';
 
 interface NewChatDialogProps {
   onClose: () => void;
@@ -164,6 +165,15 @@ export function NewChatDialog({ onClose, onCreated }: NewChatDialogProps) {
   const handleConvCreated = useChatStore((s) => s.handleConvCreated);
   const handleConvUpdated = useChatStore((s) => s.handleConvUpdated);
   const loadConversations = useChatStore((s) => s.loadConversations);
+  const onlineMembers = useChatStore((s) => s.onlineMembers);
+
+  const memberStatusLine = useCallback(
+    (u: SearchMember) => {
+      const enriched = { ...u, is_online: onlineMembers.has(u.id) || Boolean(u.is_online) };
+      return formatMemberSearchStatusLine(enriched);
+    },
+    [onlineMembers],
+  );
 
   const clearAvatarDraft = useCallback(() => {
     setAvatarDraft((prev) => {
@@ -464,7 +474,7 @@ export function NewChatDialog({ onClose, onCreated }: NewChatDialogProps) {
                   </div>
                   <div className="tg-member-info">
                     <div className="tg-member-name">{u.first_name ? `${u.first_name} ${u.last_name || ''}` : u.name}</div>
-                    <div className="tg-member-status">Откроется как черновик · появится в списке после 1 сообщения</div>
+                    <div className="tg-member-status">{memberStatusLine(u)}</div>
                   </div>
                 </button>
               ))}
@@ -505,13 +515,14 @@ export function NewChatDialog({ onClose, onCreated }: NewChatDialogProps) {
                     sortedContacts.map((u) => {
                       const isSelf = currentMemberId != null && u.id === currentMemberId;
                       const picked = Boolean(groupPick[u.id]);
+                      const canPick = !isSelf && canAddMemberToGroupChat(u);
                       return (
                         <button
                           key={u.id}
                           type="button"
                           className="tg-member-item"
-                          onClick={() => !isSelf && toggleGroupMember(u)}
-                          style={{ opacity: isSelf ? 0.45 : 1, cursor: isSelf ? 'default' : 'pointer' }}
+                          onClick={() => canPick && toggleGroupMember(u)}
+                          style={{ opacity: isSelf || !canPick ? 0.45 : 1, cursor: canPick ? 'pointer' : 'default' }}
                         >
                           <div
                             className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-sm font-bold ring-2 ring-stone-200"
@@ -536,7 +547,9 @@ export function NewChatDialog({ onClose, onCreated }: NewChatDialogProps) {
                               {u.first_name ? `${u.first_name} ${u.last_name || ''}` : u.name}
                               {isSelf ? ' (вы)' : ''}
                             </div>
-                            <div className="tg-member-status">{picked ? 'Выбран(а)' : 'Нажмите, чтобы выбрать'}</div>
+                            <div className="tg-member-status">
+                              {picked ? 'Выбран(а)' : canPick ? 'Нажмите, чтобы выбрать' : memberStatusLine(u)}
+                            </div>
                           </div>
                         </button>
                       );

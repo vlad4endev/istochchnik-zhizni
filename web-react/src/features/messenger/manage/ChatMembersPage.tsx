@@ -9,6 +9,12 @@ import { AppAvatar } from '../../../components/AppAvatar';
 import { SkeletonBox } from '@/components/ui/SkeletonBox';
 import { getAvatarColor } from '../avatarUtils';
 import { formatMessengerLastSeen } from '../lastSeenUtils';
+import {
+  canAddMemberToGroupChat,
+  formatMemberSearchStatusLine,
+  memberSearchStatusTone,
+} from '../memberPresenceLabel';
+import { useChatStore } from '../chatStore';
 import { canAddParticipantsToGroup, canManageGroupMessenger, isAppAdministratorRole } from './messengerManageAccess';
 import { ManageDialogShell } from './ManageDialogShell';
 import { getAppScrollTop, setAppScrollTop } from '@/lib/appScroll';
@@ -95,15 +101,28 @@ export function ChatMembersPage() {
 
   const filtered = useMemo(() => {
     const term = q.trim().toLowerCase();
-    if (!term) return members;
-    return members.filter((m) => {
+    if (!term) return membersWithPresence;
+    return membersWithPresence.filter((m) => {
       const name = `${m.first_name ?? ''} ${m.last_name ?? ''} ${m.name ?? ''}`.toLowerCase();
       return name.includes(term);
     });
-  }, [members, q]);
+  }, [membersWithPresence, q]);
+  const onlineMembers = useChatStore((s) => s.onlineMembers);
+  const memberLastSeenAt = useChatStore((s) => s.memberLastSeenAt);
+
+  const membersWithPresence = useMemo(
+    () =>
+      members.map((m) => ({
+        ...m,
+        is_online: onlineMembers.has(m.member_id) || Boolean(m.is_online),
+        last_seen_at: memberLastSeenAt[m.member_id] ?? m.last_seen_at ?? null,
+      })),
+    [members, onlineMembers, memberLastSeenAt],
+  );
+
   const recentMembers = useMemo(
-    () => [...members].sort((a, b) => Date.parse(b.joined_at) - Date.parse(a.joined_at)).slice(0, 5),
-    [members],
+    () => [...membersWithPresence].sort((a, b) => Date.parse(b.joined_at) - Date.parse(a.joined_at)).slice(0, 5),
+    [membersWithPresence],
   );
 
   const eff = meta?.my_effective_permissions;
@@ -528,6 +547,19 @@ function MemberPermissionsDialog({
   );
 }
 
+function searchMemberStatusClass(tone: ReturnType<typeof memberSearchStatusTone>): string {
+  switch (tone) {
+    case 'online':
+      return 'text-emerald-600 dark:text-emerald-400';
+    case 'warn':
+      return 'text-amber-700 dark:text-amber-400';
+    case 'danger':
+      return 'text-red-600 dark:text-rose-400';
+    default:
+      return 'text-[var(--text-secondary)]';
+  }
+}
+
 function AddMemberDialog({
   chatId,
   existingMemberIds,
@@ -539,6 +571,7 @@ function AddMemberDialog({
   onClose: () => void;
   onAdded: () => void | Promise<void>;
 }) {
+  const onlineMembers = useChatStore((s) => s.onlineMembers);
   const [q, setQ] = useState('');
   const [results, setResults] = useState<api.SearchMember[]>([]);
   const [loading, setLoading] = useState(false);
@@ -621,16 +654,26 @@ function AddMemberDialog({
     return out;
   }, [results]);
 
-  /** Сначала тех, кого можно добавить, затем уже в чате (серые строки). */
+  const enrichSearchMember = (m: api.SearchMember): api.SearchMember => ({
+    ...m,
+    is_online: onlineMembers.has(m.id) || Boolean(m.is_online),
+  });
+
+  /** Сначала доступные к добавлению, затем ожидающие/без входа, в конце — уже в чате. */
   const orderedResults = useMemo(() => {
     const addable: api.SearchMember[] = [];
+    const waiting: api.SearchMember[] = [];
     const inChat: api.SearchMember[] = [];
     for (const m of dedupedResults) {
       const k = normalizeMemberId(m.id);
-      if (k && existing.has(k)) inChat.push(m);
-      else addable.push(m);
+      if (k && existing.has(k)) {
+        inChat.push(m);
+        continue;
+      }
+      if (canAddMemberToGroupChat(m)) addable.push(m);
+      else waiting.push(m);
     }
-    return [...addable, ...inChat];
+    return [...addable, ...waiting, ...inChat];
   }, [dedupedResults, existing]);
 
   const title = 'Добавить участника';
@@ -666,7 +709,8 @@ function AddMemberDialog({
             />
           </div>
           <p className="mt-2 text-xs font-semibold leading-snug text-[var(--text-muted)]">
-            В списке только пользователи с одобренной регистрацией. Уже в этом чате отображаются серым и не добавляются повторно.
+            Под именем — статус в приложении (в сети / был недавно) и регистрация. Добавить можно только с одобренным доступом к мессенджеру.
+            Уже в чате — серым.
           </p>
 
           {err ? <p className="mt-2 text-sm font-semibold text-red-600">{err}</p> : null}
@@ -680,17 +724,22 @@ function AddMemberDialog({
               </div>
             ) : orderedResults.length === 0 ? (
               <p className="py-6 text-center text-sm font-semibold text-[var(--text-secondary)]">
-                {q.trim() ? 'Никого не нашли' : 'Нет пользователей с активной регистрацией или начните вводить имя'}
+                {q.trim() ? 'Никого не нашли' : 'Начните вводить имя или дождитесь загрузки списка'}
               </p>
             ) : (
               <div className="space-y-2">
-                {orderedResults.map((m) => {
+                {orderedResults.map((raw) => {
+                  const m = enrichSearchMember(raw);
                   const idKey = normalizeMemberId(m.id);
                   const displayName =
                     (m.first_name ? `${m.first_name} ${m.last_name ?? ''}`.trim() : m.name) ||
                     `Участник ${m.id}`;
                   const isBusy = idKey != null && busyKey === idKey;
                   const alreadyInChat = idKey != null && existing.has(idKey);
+                  const canAdd = canAddMemberToGroupChat(m);
+                  const statusLine = formatMemberSearchStatusLine(m);
+                  const statusTone = memberSearchStatusTone(m);
+                  const statusClass = searchMemberStatusClass(statusTone);
 
                   if (alreadyInChat) {
                     return (
@@ -724,6 +773,37 @@ function AddMemberDialog({
                     );
                   }
 
+                  if (!canAdd) {
+                    return (
+                      <div
+                        key={idKey ?? m.id}
+                        role="listitem"
+                        className="flex w-full items-center justify-between gap-3 rounded-2xl bg-[var(--surface)] px-4 py-3 text-left ring-1 ring-stone-200/60 dark:ring-[var(--border)]"
+                      >
+                        <div className="flex min-w-0 flex-1 items-center gap-3">
+                          <div
+                            className="relative h-10 w-10 shrink-0 overflow-hidden rounded-full ring-1 ring-stone-200/80"
+                            style={{ background: getAvatarColor(String(m.id)) }}
+                          >
+                            <AppAvatar
+                              src={m.avatar_url ?? null}
+                              fallback={displayName.trim().charAt(0) || '?'}
+                              className="h-full w-full opacity-80"
+                              imgClassName="h-full w-full object-cover"
+                            />
+                          </div>
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-semibold text-[var(--text)]">{displayName}</p>
+                            <p className={`mt-0.5 truncate text-xs font-semibold ${statusClass}`}>{statusLine}</p>
+                          </div>
+                        </div>
+                        <span className="inline-flex shrink-0 rounded-full bg-amber-100 px-3 py-1 text-xs font-extrabold text-amber-900 dark:bg-amber-500/15 dark:text-amber-200">
+                          Нельзя добавить
+                        </span>
+                      </div>
+                    );
+                  }
+
                   return (
                     <button
                       key={idKey ?? m.id}
@@ -751,6 +831,12 @@ function AddMemberDialog({
                           className="relative h-10 w-10 shrink-0 overflow-hidden rounded-full ring-1 ring-stone-200/80"
                           style={{ background: getAvatarColor(String(m.id)) }}
                         >
+                          {m.is_online ? (
+                            <span
+                              className="absolute bottom-0 right-0 z-[1] h-3 w-3 rounded-full border-2 border-white bg-emerald-500 dark:border-[var(--bg-elevated)]"
+                              aria-hidden
+                            />
+                          ) : null}
                           <AppAvatar
                             src={m.avatar_url ?? null}
                             fallback={displayName.trim().charAt(0) || '?'}
@@ -760,7 +846,7 @@ function AddMemberDialog({
                         </div>
                         <div className="min-w-0">
                           <p className="truncate text-sm font-extrabold text-[var(--text)]">{displayName}</p>
-                          <p className="mt-0.5 text-xs font-semibold text-[var(--text-secondary)]">ID: {m.id}</p>
+                          <p className={`mt-0.5 truncate text-xs font-semibold ${statusClass}`}>{statusLine}</p>
                         </div>
                       </div>
                       <span className="inline-flex shrink-0 items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-xs font-extrabold text-primary">

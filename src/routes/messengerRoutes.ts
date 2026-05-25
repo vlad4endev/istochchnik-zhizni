@@ -12,7 +12,7 @@ import { attachConversationFromMessageIdParam, checkChatPermission } from '../mi
 import { ensureValidRequest, validateSendMessage } from '../middleware/messengerValidation';
 import { messengerUpload } from '../middleware/upload';
 import * as svc from '../services/messengerService';
-import { sendToRoomAll, sendToRoom, sendToMember, ensureMemberInRoom } from '../realtime/wsHub';
+import { sendToRoomAll, sendToRoom, sendToMember, ensureMemberInRoom, isMemberOnline } from '../realtime/wsHub';
 import { sendPushNotification } from '../services/pushService';
 import {
   buildMessengerChatObjectPath,
@@ -791,7 +791,12 @@ router.get('/conversations/:id/members', checkChatPermission('view'), async (req
   const convId = String(req.params.id);
   try {
     const members = await svc.listConversationMembers(convId);
-    res.json(members);
+    res.json(
+      members.map((m) => ({
+        ...m,
+        is_online: isMemberOnline(m.member_id),
+      })),
+    );
   } catch (e) {
     console.error('[messenger] listConversationMembers error:', e);
     res.status(500).json({ error: 'Failed to load members' });
@@ -1781,12 +1786,11 @@ router.get('/members/search', async (req: Request, res: Response) => {
   const q = (req.query.q as string || '').trim();
   try {
     if (q.length < 1) {
-      // Return all registered members when no search query
       const members = await svc.listRegisteredMembers(userId);
-      res.json(members);
+      res.json(members.map((m) => ({ ...m, is_online: isMemberOnline(m.id) })));
     } else {
       const members = await svc.searchMembers(q, userId);
-      res.json(members);
+      res.json(members.map((m) => ({ ...m, is_online: isMemberOnline(m.id) })));
     }
   } catch (e) {
     console.error('[messenger] searchMembers error:', e);
