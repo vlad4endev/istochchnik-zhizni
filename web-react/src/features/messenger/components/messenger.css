@@ -1,8 +1,5 @@
 /** Messenger — современная тёплая тема (бургунди + нейтрали) **/
 
-/* Roboto: стек Telegram/Android + ровная кириллица; на iOS/macOS первым остаётся system-ui (SF). */
-@import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;600;700&display=swap');
-
 :root {
   --tg-font-family:
     system-ui,
@@ -1006,14 +1003,30 @@
 }
 
 .tg-bubble {
-  padding: 8px 16px;
   border-radius: 16px;
-  font-size: 15px;
-  line-height: 1.6;
+  font-family: var(--tg-font-family);
+  font-size: 1rem;
+  font-weight: 400;
+  line-height: 1.5;
+  letter-spacing: normal;
   position: relative;
   word-wrap: break-word;
   z-index: 1;
   max-width: 100%;
+  font-variant-numeric: proportional-nums;
+  font-feature-settings: 'kern' 1, 'liga' 1;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* React-пузырь (MessageBubble): Tailwind-обёртка с классом .tg-bubble */
+.tg-messenger .message-bubble .tg-bubble {
+  font-family: var(--tg-font-family);
+  font-size: 1rem;
+  font-weight: 400;
+  line-height: 1.5;
+  letter-spacing: normal;
 }
 
 .tg-bubble--out {
@@ -1706,16 +1719,14 @@ html[data-mantine-color-scheme='dark'] .tg-input-banner {
   color: rgba(255, 255, 255, 0.88);
 }
 
-.msg-content {
+.msg-content,
+.tg-messenger .message-bubble .mention-rich-text {
   white-space: pre-wrap;
   overflow-wrap: break-word;
   word-wrap: break-word;
   word-break: normal;
   letter-spacing: normal;
-  font-family: var(--tg-font-family);
-  font-size: 0.9375rem;
-  font-weight: 400;
-  line-height: 1.5;
+  font: inherit;
   font-variant-numeric: proportional-nums;
   font-variant-emoji: emoji;
   font-feature-settings: 'kern' 1, 'liga' 1;
@@ -2702,10 +2713,9 @@ html.dark .msg-quick-reaction:hover {
     max-width: min(88%, 17.5rem);
   }
 
-  .tg-bubble {
-    padding: 8px 14px;
-    font-size: 15px;
-    line-height: 1.55;
+  .tg-messenger .message-bubble .tg-bubble {
+    font-size: 1rem;
+    line-height: 1.5;
   }
 
   .tg-input-area-wrap {
@@ -2774,9 +2784,8 @@ html.dark .msg-quick-reaction:hover {
     height: 19px;
   }
 
-  .tg-bubble {
-    padding: 7px 12px;
-    font-size: 15px;
+  .tg-messenger .message-bubble .tg-bubble {
+    font-size: 1rem;
   }
 
   .tg-input-textarea::placeholder {

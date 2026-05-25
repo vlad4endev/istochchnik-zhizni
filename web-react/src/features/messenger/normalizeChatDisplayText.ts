@@ -1,3 +1,7 @@
+/** Пробелы/разделители из Word, PDF, iOS (в т.ч. узкие и zero-width). */
+const GAP_BETWEEN_DIGITS =
+  /[\s\u00A0\u1680\u2000-\u200B\u202F\u205F\u3000\uFEFF]/u;
+
 /**
  * Приводит текст сообщений к читаемому виду: полуширинные цифры/знаки из Word/PDF
  * и лишние пробелы между цифрами («2 9 мая», «1 8 : 0 0» → «29 мая», «18:00»).
@@ -15,14 +19,18 @@ export function normalizeChatDisplayText(text: string): string {
     String.fromCharCode(ch.charCodeAt(0) - 0xff01 + 0x21),
   );
 
-  // Схлопываем пробелы между соседними цифрами (повторно для цепочек вроде «1 8 : 0 0»)
+  // Zero-width между символами (частый артефакт копирования)
+  s = s.replace(/[\u200B-\u200D\uFEFF]/g, '');
+
+  // Схлопываем любые «щели» между соседними цифрами (цепочки вроде «1 8 : 0 0»)
   let prev = '';
+  const digitGap = new RegExp(`(\\d)${GAP_BETWEEN_DIGITS.source}+(\\d)`, 'gu');
   while (prev !== s) {
     prev = s;
-    s = s.replace(/(\d)\s+(\d)/g, '$1$2');
+    s = s.replace(digitGap, '$1$2');
   }
 
-  // Время и диапазоны: «18 : 00» → «18:00», «10 - 12» без лишних пробелов у «:»
+  // Время: «18 : 00» → «18:00»
   s = s.replace(/(\d{1,2})\s*:\s*(\d{1,2})/g, '$1:$2');
 
   return s;

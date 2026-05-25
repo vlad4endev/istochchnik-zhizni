@@ -10,6 +10,10 @@ describe('normalizeChatDisplayText', () => {
     expect(normalizeChatDisplayText('２９ мая')).toBe('29 мая');
   });
 
+  it('collapses narrow no-break space and zero-width between digits', () => {
+    expect(normalizeChatDisplayText('2\u202f9\u200b мая')).toBe('29 мая');
+  });
+
   it('leaves mention markup untouched', () => {
     const raw = 'Привет @[Иван](12) в 1 0 : 0 0';
     expect(normalizeChatDisplayText(raw)).toBe('Привет @[Иван](12) в 10:00');

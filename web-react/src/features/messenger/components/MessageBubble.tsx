@@ -44,7 +44,7 @@ function MentionRichText({
   const displayText = useMemo(() => normalizeChatDisplayText(text), [text]);
   const parts = displayText.split(/(@\[[^\]]+\]\(\d+\)|@\[\d+\])/g);
   return (
-    <>
+    <span className="mention-rich-text">
       {parts.map((part, i) => {
         const mFriendly = part.match(/^@\[([^\]]+)\]\((\d+)\)$/);
         if (mFriendly) {
@@ -77,7 +77,7 @@ function MentionRichText({
           </span>
         );
       })}
-    </>
+    </span>
   );
 }
 
@@ -1964,9 +1964,9 @@ function MessageBubbleInner({
         : 'rounded-tl-[4px] rounded-tr-[18px] rounded-br-[18px] rounded-bl-[18px]';
 
   const bubbleClasses = isVideoNoteLayout
-    ? ['relative bg-transparent p-0 shadow-none ring-0', bubbleShapeClass].join(' ')
+    ? ['tg-bubble relative bg-transparent p-0 shadow-none ring-0', bubbleShapeClass].join(' ')
     : [
-        'relative px-3 py-2 sm:px-3.5 sm:py-2',
+        'tg-bubble relative px-3 py-2 sm:px-3.5 sm:py-2',
         bubbleShapeClass,
         systemBotAccessMessage
           ? 'bg-[var(--surface-elevated)] text-[var(--text)] shadow-[0_1px_0.5px_rgba(0,0,0,0.06)] ring-1 ring-stone-200/55'
