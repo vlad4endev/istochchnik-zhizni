@@ -2603,7 +2603,7 @@ export function ServicePlannerPage() {
             У вас доступ только к редактированию блоков. Настройки плана доступны служителю или администратору.
           </div>
         ) : null}
-        <div className="grid min-w-0 gap-2 md:grid-cols-2 [&_input]:min-w-0 [&_input]:w-full [&_input]:bg-white [&_input]:text-stone-900 [&_select]:min-w-0 [&_select]:w-full [&_select]:bg-white [&_select]:text-stone-900">
+        <div className="grid min-w-0 gap-2 md:grid-cols-2 [&_input:not([type=checkbox])]:min-w-0 [&_input:not([type=checkbox])]:w-full [&_input]:bg-white [&_input]:text-stone-900 [&_select]:min-w-0 [&_select]:w-full [&_select]:bg-white [&_select]:text-stone-900">
           <input
             type="date"
             value={draft.service_date}
@@ -3338,7 +3338,7 @@ export function ServicePlannerPage() {
               </div>
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-3 py-3 [-webkit-overflow-scrolling:touch] [touch-action:pan-y] sm:px-4">
-            <div className="grid min-w-0 gap-2 rounded-xl bg-stone-50 p-3 sm:grid-cols-2 [&_input]:w-full [&_input]:bg-white [&_input]:text-stone-900 [&_input]:placeholder:text-stone-400 [&_select]:w-full [&_select]:bg-white [&_select]:text-stone-900 [&_textarea]:w-full [&_textarea]:bg-white [&_textarea]:text-stone-900 [&_textarea]:placeholder:text-stone-400">
+            <div className="grid min-w-0 gap-2 rounded-xl bg-stone-50 p-3 sm:grid-cols-2 [&_input:not([type=checkbox])]:w-full [&_input]:bg-white [&_input]:text-stone-900 [&_input]:placeholder:text-stone-400 [&_select]:w-full [&_select]:bg-white [&_select]:text-stone-900 [&_textarea]:w-full [&_textarea]:bg-white [&_textarea]:text-stone-900 [&_textarea]:placeholder:text-stone-400">
               <label className="flex flex-col gap-1 text-xs font-semibold text-stone-700 sm:col-span-2">
                 {isSeparatorBlock(editingBlock) ? 'Текст разделителя' : 'Название блока'}
                 <input

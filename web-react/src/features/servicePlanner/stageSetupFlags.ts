@@ -1,21 +1,34 @@
 export const STAGE_SETUP_REMOVE_MIC_STANDS_KEY = 'remove_mic_stands';
 export const STAGE_SETUP_REMOVE_PULPITS_KEY = 'remove_pulpits';
 
+/** Маркер «убрать» в итоговой программе (печать, публичная ссылка). */
+export const STAGE_SETUP_PROGRAM_MARK = '❌';
+
+export type StageSetupDisplayLine = { text: string };
+
 export function isStageSetupFlagEnabled(value: unknown): boolean {
   return value === true || value === 1 || value === '1' || value === 'true';
 }
 
-/** Строки для итоговой программы (публичная ссылка, печать, превью). */
-export function stageSetupProgramLines(contentJson: Record<string, unknown> | null | undefined): string[] {
+export function stageSetupDisplayLines(
+  contentJson: Record<string, unknown> | null | undefined,
+): StageSetupDisplayLine[] {
   const cj = contentJson ?? {};
-  const lines: string[] = [];
+  const lines: StageSetupDisplayLine[] = [];
   if (isStageSetupFlagEnabled(cj[STAGE_SETUP_REMOVE_MIC_STANDS_KEY])) {
-    lines.push('Убираем микрофонные стойки');
+    lines.push({ text: 'Убираем микрофонные стойки' });
   }
   if (isStageSetupFlagEnabled(cj[STAGE_SETUP_REMOVE_PULPITS_KEY])) {
-    lines.push('Убираем пюпитры');
+    lines.push({ text: 'Убираем пюпитры' });
   }
   return lines;
+}
+
+/** Строки для печати и текстовых списков (с красным крестиком). */
+export function stageSetupProgramLines(contentJson: Record<string, unknown> | null | undefined): string[] {
+  return stageSetupDisplayLines(contentJson).map(
+    (line) => `${STAGE_SETUP_PROGRAM_MARK} ${line.text}`,
+  );
 }
 
 export function readStageSetupFlags(contentJson: Record<string, unknown> | null | undefined): {
