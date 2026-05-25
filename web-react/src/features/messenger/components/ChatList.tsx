@@ -5,6 +5,7 @@ import type { ConversationListItem, PatchMyConversationUiBody } from '../api/mes
 import { AppAvatar } from '../../../components/AppAvatar';
 import { SkeletonBox } from '@/components/ui/SkeletonBox';
 import { getAvatarColor, getAvatarInitial } from '../avatarUtils';
+import { normalizeChatDisplayText } from '../normalizeChatDisplayText';
 import { LuPin, LuVolume2, LuVolumeX, LuFolderOpen, LuEraser, LuTrash2 } from 'react-icons/lu';
 import { IoCheckmark, IoCheckmarkDone } from 'react-icons/io5';
 
@@ -359,6 +360,9 @@ function ChatListItem({
     lastMsg?.sender_id != null &&
     currentMemberId != null &&
     Number(lastMsg.sender_id) === Number(currentMemberId);
+  const previewContent = lastMsg?.content
+    ? normalizeChatDisplayText(String(lastMsg.content))
+    : '';
   const previewLine = isTyping
     ? (() => {
         const names = typingUsers.map((u) => u.memberName.split(' ')[0]).filter(Boolean);
@@ -369,10 +373,10 @@ function ChatListItem({
       ? lastMsg.is_deleted
         ? 'Сообщение удалено'
         : lastFromMe
-          ? lastMsg.content
+          ? previewContent
           : lastMsg.sender_name
-            ? `${lastMsg.sender_name.split(' ')[0]}: ${lastMsg.content}`
-            : lastMsg.content
+            ? `${lastMsg.sender_name.split(' ')[0]}: ${previewContent}`
+            : previewContent
       : 'Нет сообщений';
   const showUnreadBadge = conv.unread_count > 0 && !isActive;
   const showOutgoingChecks = lastFromMe && !showUnreadBadge && !isTyping;

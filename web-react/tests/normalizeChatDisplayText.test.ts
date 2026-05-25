@@ -1,0 +1,17 @@
+import { describe, expect, it } from 'vitest';
+import { normalizeChatDisplayText } from '../src/features/messenger/normalizeChatDisplayText';
+
+describe('normalizeChatDisplayText', () => {
+  it('collapses spaces between digits in dates and times', () => {
+    expect(normalizeChatDisplayText('2 9 мая, 1 8 : 0 0')).toBe('29 мая, 18:00');
+  });
+
+  it('converts fullwidth digits to ASCII', () => {
+    expect(normalizeChatDisplayText('２９ мая')).toBe('29 мая');
+  });
+
+  it('leaves mention markup untouched', () => {
+    const raw = 'Привет @[Иван](12) в 1 0 : 0 0';
+    expect(normalizeChatDisplayText(raw)).toBe('Привет @[Иван](12) в 10:00');
+  });
+});

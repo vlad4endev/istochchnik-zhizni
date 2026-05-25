@@ -1,8 +1,18 @@
 /** Messenger — современная тёплая тема (бургунди + нейтрали) **/
 
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,400..700;1,400..700&display=swap');
+/* Roboto: стек Telegram/Android + ровная кириллица; на iOS/macOS первым остаётся system-ui (SF). */
+@import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;600;700&display=swap');
 
 :root {
+  --tg-font-family:
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    Roboto,
+    'Helvetica Neue',
+    Arial,
+    sans-serif;
   /* 100vw шире колонки main (игнорирует сайдбар приложения) → переполнение и «плавание» при md:pl-* */
   --tg-sidebar-width: min(400px, 100%);
   /* ПК: макс. ширина колонки переписки (центрирование на ультрашироких) */
@@ -65,8 +75,10 @@
   background: var(--tg-surface);
   overflow: hidden;
   position: relative;
-  font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  font-family: var(--tg-font-family);
   font-feature-settings: 'kern' 1, 'liga' 1;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 .tg-main {
@@ -1698,10 +1710,34 @@ html[data-mantine-color-scheme='dark'] .tg-input-banner {
   white-space: pre-wrap;
   overflow-wrap: break-word;
   word-wrap: break-word;
-  word-break: break-word;
+  word-break: normal;
+  letter-spacing: normal;
+  font-family: var(--tg-font-family);
+  font-size: 0.9375rem;
+  font-weight: 400;
+  line-height: 1.5;
+  font-variant-numeric: proportional-nums;
   font-variant-emoji: emoji;
-  -webkit-font-feature-settings: 'liga' 1, 'kern' 1;
-  font-feature-settings: 'liga' 1, 'kern' 1;
+  font-feature-settings: 'kern' 1, 'liga' 1;
+  font-optical-sizing: auto;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.msg-content .tabular-nums,
+.tg-date-divider span,
+.chatlist-time {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'kern' 1, 'tnum' 1;
+}
+
+.chatlist-name,
+.chatlist-preview,
+.tg-header-name,
+.tg-header-status {
+  font-family: var(--tg-font-family);
+  letter-spacing: normal;
 }
 
 .msg-edited {

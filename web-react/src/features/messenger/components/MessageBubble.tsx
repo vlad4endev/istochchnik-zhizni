@@ -1,4 +1,5 @@
 import { memo, useState, useRef, useMemo, useEffect, useCallback, type ReactNode } from 'react';
+import { normalizeChatDisplayText } from '../normalizeChatDisplayText';
 import { useQueryClient } from '@tanstack/react-query';
 import { useChatStore } from '../chatStore';
 import {
@@ -40,7 +41,8 @@ function MentionRichText({
   namesById?: Record<number, string>;
   isMine: boolean;
 }) {
-  const parts = text.split(/(@\[[^\]]+\]\(\d+\)|@\[\d+\])/g);
+  const displayText = useMemo(() => normalizeChatDisplayText(text), [text]);
+  const parts = displayText.split(/(@\[[^\]]+\]\(\d+\)|@\[\d+\])/g);
   return (
     <>
       {parts.map((part, i) => {
@@ -2199,7 +2201,9 @@ function MessageBubbleInner({
               </span>
             </div>
             <div className="msg-reply-text">
-              {message.reply_preview.is_deleted ? 'Сообщение удалено' : message.reply_preview.content}
+              {message.reply_preview.is_deleted
+                ? 'Сообщение удалено'
+                : normalizeChatDisplayText(String(message.reply_preview.content ?? ''))}
             </div>
           </button>
         )}
@@ -2235,14 +2239,14 @@ function MessageBubbleInner({
           </>
         ) : useInlineTextMeta ? (
           <div className="flex min-w-0 flex-row flex-wrap items-end gap-x-2 gap-y-0.5">
-            <div className="msg-content min-w-0 flex-1 whitespace-pre-wrap break-words text-sm leading-relaxed sm:text-base">
+            <div className="msg-content min-w-0 flex-1">
               {renderContent()}
             </div>
             <div className="ml-auto">{bubbleMeta}</div>
           </div>
         ) : (
           <>
-            <div className="msg-content whitespace-pre-wrap break-words text-sm leading-relaxed sm:text-base">{renderContent()}</div>
+            <div className="msg-content">{renderContent()}</div>
             {message.is_pinned ? (
               <div
                 className={['mt-1 text-xs font-bold uppercase tracking-wide', isMine ? 'text-white/60' : 'text-amber-600'].join(' ')}
