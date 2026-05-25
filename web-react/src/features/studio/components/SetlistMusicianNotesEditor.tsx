@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { LuPlus, LuSave, LuTrash2 } from 'react-icons/lu';
 
+import { IntegerTextInput } from '@/components/IntegerTextInput';
 import { emitAppToast } from '../../../lib/uiFeedback';
 import { patchSetlistItemMusicianNotes, type SetlistItemRow } from '../api';
 import { emptyMusicianNotes, notesFromItem, type MusicianNotesV1 } from '../performNotes';
@@ -99,15 +100,15 @@ export function SetlistMusicianNotesEditor({ setlistId, item }: Props) {
             <div key={idx} className="flex flex-wrap items-start gap-2 rounded-lg bg-stone-50 p-2">
               <label className="flex shrink-0 flex-col text-[10px] font-medium text-stone-500">
                 Стр.
-                <input
-                  type="number"
+                <IntegerTextInput
+                  syncKey={`line-note-${idx}`}
+                  value={row.line + 1}
                   min={1}
                   max={Math.max(1, lineCount)}
-                  value={row.line + 1}
-                  onChange={(e) => {
-                    const v = Number(e.target.value);
+                  maxDigits={4}
+                  onChange={(displayLine) => {
                     const next = [...lines];
-                    next[idx] = { ...row, line: Number.isInteger(v) && v >= 1 ? v - 1 : 0 };
+                    next[idx] = { ...row, line: displayLine - 1 };
                     setLines(next);
                   }}
                   className="mt-0.5 w-14 rounded border border-stone-200 px-1 py-1 text-sm"
@@ -153,15 +154,15 @@ export function SetlistMusicianNotesEditor({ setlistId, item }: Props) {
               <div className="flex flex-wrap items-center gap-2">
                 <label className="text-[10px] font-medium text-stone-600">
                   С строки
-                  <input
-                    type="number"
+                  <IntegerTextInput
+                    syncKey={`block-from-${idx}`}
+                    value={row.from + 1}
                     min={1}
                     max={Math.max(1, lineCount)}
-                    value={row.from + 1}
-                    onChange={(e) => {
-                      const v = Number(e.target.value);
+                    maxDigits={4}
+                    onChange={(displayFrom) => {
                       const next = [...blocks];
-                      const from = Number.isInteger(v) && v >= 1 ? v - 1 : 0;
+                      const from = displayFrom - 1;
                       next[idx] = { ...row, from, to: Math.max(from, row.to) };
                       setBlocks(next);
                     }}
@@ -170,15 +171,15 @@ export function SetlistMusicianNotesEditor({ setlistId, item }: Props) {
                 </label>
                 <label className="text-[10px] font-medium text-stone-600">
                   по
-                  <input
-                    type="number"
-                    min={1}
-                    max={Math.max(1, lineCount)}
+                  <IntegerTextInput
+                    syncKey={`block-to-${idx}`}
                     value={row.to + 1}
-                    onChange={(e) => {
-                      const v = Number(e.target.value);
+                    min={row.from + 1}
+                    max={Math.max(1, lineCount)}
+                    maxDigits={4}
+                    onChange={(displayTo) => {
                       const next = [...blocks];
-                      const to = Number.isInteger(v) && v >= 1 ? v - 1 : row.from;
+                      const to = displayTo - 1;
                       next[idx] = { ...row, to: Math.max(row.from, to) };
                       setBlocks(next);
                     }}

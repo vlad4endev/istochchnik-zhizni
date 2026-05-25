@@ -2,6 +2,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
 import { LuBot, LuCheck, LuKeyRound, LuServer } from 'react-icons/lu';
 
+import { DecimalTextInput } from '@/components/DecimalTextInput';
+import { IntegerTextInput } from '@/components/IntegerTextInput';
 import {
   apiErrorMessage,
   fetchAiSettingsAdmin,
@@ -430,26 +432,26 @@ export function AiSettingsSection() {
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
               <label className="mb-1 block text-xs font-semibold text-stone-600">Temperature</label>
-              <input
+              <DecimalTextInput
+                syncKey="ai-temperature"
                 className={fieldClass()}
-                type="number"
+                value={form.temperature}
                 min={0}
                 max={2}
-                step={0.1}
-                value={form.temperature}
-                onChange={(e) => setForm((s) => ({ ...s, temperature: Number(e.target.value) }))}
+                maxFractionDigits={1}
+                onChange={(temperature) => setForm((s) => ({ ...s, temperature }))}
               />
             </div>
             <div>
               <label className="mb-1 block text-xs font-semibold text-stone-600">Max tokens</label>
-              <input
+              <IntegerTextInput
+                syncKey="ai-max-tokens"
                 className={fieldClass()}
-                type="number"
+                value={form.max_tokens}
                 min={64}
                 max={128000}
-                step={64}
-                value={form.max_tokens}
-                onChange={(e) => setForm((s) => ({ ...s, max_tokens: Number(e.target.value) }))}
+                maxDigits={6}
+                onChange={(max_tokens) => setForm((s) => ({ ...s, max_tokens }))}
               />
             </div>
             <div className="sm:col-span-2">

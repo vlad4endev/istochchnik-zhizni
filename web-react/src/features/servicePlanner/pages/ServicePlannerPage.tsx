@@ -77,6 +77,9 @@ import {
 import { useServicePlanEditorsPresence } from '../useServicePlanEditorsPresence';
 import { emitAppToast } from '@/lib/uiFeedback';
 import { useScrollInputIntoView } from '@/hooks/useScrollInputIntoView';
+import { BlockStageSetupFields, BlockStageSetupPreview } from '../components/BlockStageSetupFields';
+import { DurationMinutesInput } from '../components/DurationMinutesInput';
+import { stageSetupProgramLines } from '../stageSetupFlags';
 
 function planEditorInitials(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);
@@ -1102,6 +1105,9 @@ export function ServicePlannerPage() {
       }
       if (isSermonBlock(block) && sermonScripture(block)) {
         details.push(`Писание: ${sermonScripture(block)}`);
+      }
+      for (const line of stageSetupProgramLines(block.content_json)) {
+        details.push(line);
       }
       const note = getBlockNotePreview(block);
       if (note) details.push(`Заметка: ${note}`);
@@ -2218,15 +2224,11 @@ export function ServicePlannerPage() {
                         </option>
                       ))}
                     </select>
-                    <input
-                      type="number"
-                      min={1}
-                      max={180}
+                    <DurationMinutesInput
+                      syncKey={editingTemplateBlock.id}
                       value={editingTemplateBlock.duration_minutes}
-                      onChange={(e) =>
-                        updateTemplateBlock(editingTemplateBlock.id, {
-                          duration_minutes: Math.max(1, Number(e.target.value) || 1),
-                        })
+                      onChange={(duration_minutes) =>
+                        updateTemplateBlock(editingTemplateBlock.id, { duration_minutes })
                       }
                       className="rounded-lg border border-stone-300 px-2 py-1.5 text-sm"
                     />
@@ -2278,6 +2280,13 @@ export function ServicePlannerPage() {
                         </option>
                       ))}
                     </select>
+                    <BlockStageSetupFields
+                      className="sm:col-span-2"
+                      contentJson={(editingTemplateBlock.default_content_json ?? {}) as Record<string, unknown>}
+                      onChange={(default_content_json) =>
+                        updateTemplateBlock(editingTemplateBlock.id, { default_content_json })
+                      }
+                    />
                     <textarea
                       value={String((editingTemplateBlock.default_content_json?.text as string | undefined) ?? '')}
                       onChange={(e) =>
@@ -3054,6 +3063,9 @@ export function ServicePlannerPage() {
                                   Писание: {sermonScripture(block)}
                                 </p>
                               ) : null}
+                              {!isSeparatorBlock(block) ? (
+                                <BlockStageSetupPreview contentJson={block.content_json} />
+                              ) : null}
                               {!isSeparatorBlock(block) &&
                               (getResponsibleLabel(block) || getDirectionLabel(block)) ? (
                                 <p className="text-[11px] leading-snug text-stone-500 sm:text-xs">
@@ -3460,16 +3472,12 @@ export function ServicePlannerPage() {
                   </label>
                   <label className="flex flex-col gap-1 text-xs font-semibold text-stone-700">
                     Длительность, мин
-                    <input
+                    <DurationMinutesInput
                       id={`${blockEditFieldsUid}-duration`}
-                      type="number"
-                      min={1}
-                      max={180}
+                      syncKey={editingBlock.id}
                       value={editingBlock.duration_minutes}
-                      onChange={(e) =>
-                        updateDraftBlock(editingBlock.id, {
-                          duration_minutes: Math.max(1, Number(e.target.value) || 1),
-                        })
+                      onChange={(duration_minutes) =>
+                        updateDraftBlock(editingBlock.id, { duration_minutes })
                       }
                       className="rounded-lg border border-stone-300 px-2 py-1.5 text-sm font-normal"
                     />
@@ -3620,6 +3628,11 @@ export function ServicePlannerPage() {
                       Этот блок автоматически показывает участников, у которых день рождения на неделе даты служения.
                     </p>
                   ) : null}
+                  <BlockStageSetupFields
+                    className="sm:col-span-2"
+                    contentJson={editingBlock.content_json ?? {}}
+                    onChange={(content_json) => updateDraftBlock(editingBlock.id, { content_json })}
+                  />
                   <label className="flex flex-col gap-1 text-xs font-semibold text-stone-700 sm:col-span-2">
                     Заметки
                     <textarea

@@ -22,7 +22,9 @@ import {
   fetchPublicServicePlan,
   type PublicServicePlanPayload,
 } from '../api';
+import { BlockStageSetupPreview } from '../components/BlockStageSetupFields';
 import { meaningfulNoteLinesFromRaw } from '../plannerNoteText';
+import { stageSetupProgramLines } from '../stageSetupFlags';
 import { safeServicePlanTimelineStart } from '../planPayloadNormalize';
 import { sharePlanQueryRetry, sharePlanQueryRetryDelay } from '../sharePlanQueryHelpers';
 import { EditableServicePlanPage } from './EditableServicePlanPage';
@@ -41,6 +43,7 @@ type PublicBlockView = {
   headingDisplay: string;
   showSongLine: boolean;
   songLine: string;
+  stageSetupLines: string[];
 };
 
 function derivePublicBlockView(b: PublicPlanBlock): PublicBlockView {
@@ -106,6 +109,8 @@ function derivePublicBlockView(b: PublicPlanBlock): PublicBlockView {
   if (scheduleList.length > 0) extraSections += 1;
   if (showSongLine) extraSections += 1;
   if (noteToShow) extraSections += 1;
+  const stageSetupLines = stageSetupProgramLines(b.content_json);
+  if (stageSetupLines.length > 0) extraSections += 1;
 
   const longNote = noteToShow.length > 200;
   const manyScheduleLines = scheduleList.length > 4;
@@ -127,6 +132,7 @@ function derivePublicBlockView(b: PublicPlanBlock): PublicBlockView {
     headingDisplay,
     showSongLine,
     songLine,
+    stageSetupLines,
   };
   } catch {
     const titleFallback = stripLeadingBlockIndex(String(b.title ?? '').trim()) || 'Блок';
@@ -142,6 +148,7 @@ function derivePublicBlockView(b: PublicPlanBlock): PublicBlockView {
       headingDisplay: titleFallback,
       showSongLine: false,
       songLine: '',
+      stageSetupLines: [],
     };
   }
 }
@@ -489,6 +496,9 @@ export function PublicServicePlanPage() {
                       <p className="mt-0 text-sm font-semibold leading-snug text-stone-700 sm:mt-1 sm:text-base">
                         {m.songLine}
                       </p>
+                    ) : null}
+                    {m.stageSetupLines.length > 0 ? (
+                      <BlockStageSetupPreview contentJson={b.content_json} className="sm:mt-0.5" />
                     ) : null}
                     {m.noteToShow ? (
                       <p className="mt-0 whitespace-pre-wrap text-sm leading-relaxed text-stone-700 sm:mt-1 sm:text-base">

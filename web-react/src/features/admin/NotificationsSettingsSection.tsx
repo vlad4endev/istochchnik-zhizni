@@ -6,6 +6,7 @@ import {
   patchNotificationSettings,
 } from '../notifications/notificationSettingsApi';
 import type { NotificationImportance, NotificationRepeat, NotificationRule } from '../notifications/notificationSettingsTypes';
+import { IntegerTextInput } from '@/components/IntegerTextInput';
 import { apiErrorMessage } from './api';
 
 const Q_NOTIF = ['admin', 'notifications', 'settings'] as const;
@@ -257,13 +258,14 @@ export function NotificationsSettingsSection() {
             {rule.repeat === 'month' ? (
               <div className="mt-3">
                 <label className="mb-1 block text-xs font-semibold text-stone-600">Число месяца (1–31)</label>
-                <input
-                  type="number"
-                  min={1}
-                  max={31}
+                <IntegerTextInput
+                  syncKey={`${rule.id}-monthDay`}
                   className={fieldClass()}
                   value={rule.monthDay}
-                  onChange={(e) => updateRule(rule.id, { monthDay: Number(e.target.value) })}
+                  min={1}
+                  max={31}
+                  maxDigits={2}
+                  onChange={(monthDay) => updateRule(rule.id, { monthDay })}
                 />
               </div>
             ) : null}
@@ -272,24 +274,26 @@ export function NotificationsSettingsSection() {
               <div className="mt-3 grid gap-3 sm:grid-cols-2">
                 <div>
                   <label className="mb-1 block text-xs font-semibold text-stone-600">Месяц (1–12)</label>
-                  <input
-                    type="number"
-                    min={1}
-                    max={12}
+                  <IntegerTextInput
+                    syncKey={`${rule.id}-yearMonth`}
                     className={fieldClass()}
                     value={rule.yearMonth}
-                    onChange={(e) => updateRule(rule.id, { yearMonth: Number(e.target.value) })}
+                    min={1}
+                    max={12}
+                    maxDigits={2}
+                    onChange={(yearMonth) => updateRule(rule.id, { yearMonth })}
                   />
                 </div>
                 <div>
                   <label className="mb-1 block text-xs font-semibold text-stone-600">Число (1–31)</label>
-                  <input
-                    type="number"
-                    min={1}
-                    max={31}
+                  <IntegerTextInput
+                    syncKey={`${rule.id}-yearDay`}
                     className={fieldClass()}
                     value={rule.yearDay}
-                    onChange={(e) => updateRule(rule.id, { yearDay: Number(e.target.value) })}
+                    min={1}
+                    max={31}
+                    maxDigits={2}
+                    onChange={(yearDay) => updateRule(rule.id, { yearDay })}
                   />
                 </div>
               </div>

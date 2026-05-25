@@ -619,10 +619,11 @@ export function AddSongPage() {
                 {!autoSongNumber ? (
                   <div className="space-y-1">
                     <input
-                      type="number"
-                      min={1}
+                      type="text"
+                      inputMode="numeric"
+                      autoComplete="off"
                       value={songNumber}
-                      onChange={(e) => setSongNumber(e.target.value)}
+                      onChange={(e) => setSongNumber(e.target.value.replace(/\D/g, ''))}
                       className={`min-h-[46px] w-28 rounded-xl border px-3 py-2 text-sm ${theme.input}`}
                       placeholder="№"
                     />
@@ -639,9 +640,11 @@ export function AddSongPage() {
               <span className={`text-xs font-bold uppercase ${theme.muted}`}>BPM</span>
               <input
                 ref={tempoRef}
-                type="number"
+                type="text"
+                inputMode="numeric"
+                autoComplete="off"
                 value={tempo}
-                onChange={(e) => setTempo(e.target.value)}
+                onChange={(e) => setTempo(e.target.value.replace(/\D/g, ''))}
                 onKeyDown={(e) => onEnterFocusNext(e, timeSigRef)}
                 className={`mt-1 min-h-[48px] w-full rounded-xl border px-3 py-2 text-sm ${theme.input}`}
                 placeholder="120"

@@ -28,6 +28,9 @@ import type { IconType } from 'react-icons';
 import { Navigate, useParams } from 'react-router-dom';
 import { emitAppToast } from '@/lib/uiFeedback';
 import { useScrollInputIntoView } from '@/hooks/useScrollInputIntoView';
+import { BlockStageSetupFields, BlockStageSetupPreview } from '../components/BlockStageSetupFields';
+import { DurationMinutesInput } from '../components/DurationMinutesInput';
+import { STAGE_SETUP_REMOVE_MIC_STANDS_KEY, STAGE_SETUP_REMOVE_PULPITS_KEY } from '../stageSetupFlags';
 
 import { meaningfulNoteLinesFromRaw } from '../plannerNoteText';
 import {
@@ -263,6 +266,8 @@ const CONTENT_JSON_EXCLUDED_FOR_GENERIC: Set<string> = new Set([
   'direction',
   'notes',
   'text',
+  STAGE_SETUP_REMOVE_MIC_STANDS_KEY,
+  STAGE_SETUP_REMOVE_PULPITS_KEY,
 ]);
 
 function isInternalContentStringKey(key: string): boolean {
@@ -727,6 +732,7 @@ export function EditableServicePlanPage() {
                           </div>
                         ) : null}
                         {isPoemBlockType(b) ? <PoemInlineDetails contentJson={b.content_json} /> : null}
+                        <BlockStageSetupPreview contentJson={b.content_json} />
                         <BlockExtraInfoPanel rows={getBlockExtraDisplayRows(b)} variant="card" />
                       </div>
                       <div className="flex shrink-0 items-center gap-1">
@@ -812,24 +818,19 @@ export function EditableServicePlanPage() {
                       <label className="mb-1 block text-xs font-medium text-stone-600" htmlFor={`block-duration-${editingBlock.id}`}>
                         Длительность, мин
                       </label>
-                      <input
+                      <DurationMinutesInput
                         id={`block-duration-${editingBlock.id}`}
-                        type="number"
-                        min={1}
-                        max={180}
+                        syncKey={editingBlock.id}
                         value={editingBlock.duration_minutes}
-                        onChange={(e) => {
+                        onChange={(duration_minutes) => {
                           dirtyShareBlockIdsRef.current.add(editingBlock.id);
                           setDraftBlocks((prev) =>
                             prev.map((x) =>
-                              x.id === editingBlock.id
-                                ? { ...x, duration_minutes: Math.max(1, Number(e.target.value) || 1) }
-                                : x,
+                              x.id === editingBlock.id ? { ...x, duration_minutes } : x,
                             ),
                           );
                         }}
                         className="min-h-11 w-full min-w-0 max-w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-base text-stone-900 touch-manipulation sm:min-h-0 sm:px-2 sm:py-1.5 sm:text-sm"
-                        inputMode="numeric"
                       />
                     </div>
                     </div>
@@ -1102,6 +1103,16 @@ export function EditableServicePlanPage() {
                       </div>
                     ) : null}
                     <BlockExtraInfoPanel rows={getEditFormAuxiliaryRows(editingBlock)} variant="edit" />
+                    <BlockStageSetupFields
+                      className="col-span-1 w-full min-w-0 sm:col-span-2"
+                      contentJson={(editingBlock.content_json ?? {}) as Record<string, unknown>}
+                      onChange={(content_json) => {
+                        dirtyShareBlockIdsRef.current.add(editingBlock.id);
+                        setDraftBlocks((prev) =>
+                          prev.map((x) => (x.id === editingBlock.id ? { ...x, content_json } : x)),
+                        );
+                      }}
+                    />
                     <div className="col-span-1 w-full min-w-0 sm:col-span-2">
                       <label className="mb-1 block text-xs font-medium text-stone-600" htmlFor={`block-note-${editingBlock.id}`}>
                         Заметка
