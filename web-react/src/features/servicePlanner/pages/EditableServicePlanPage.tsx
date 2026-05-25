@@ -30,7 +30,11 @@ import { emitAppToast } from '@/lib/uiFeedback';
 import { useScrollInputIntoView } from '@/hooks/useScrollInputIntoView';
 import { BlockStageSetupFields, BlockStageSetupPreview } from '../components/BlockStageSetupFields';
 import { DurationMinutesInput } from '../components/DurationMinutesInput';
-import { STAGE_SETUP_REMOVE_MIC_STANDS_KEY, STAGE_SETUP_REMOVE_PULPITS_KEY } from '../stageSetupFlags';
+import {
+  STAGE_SETUP_PLACE_EQUIPMENT_KEY,
+  STAGE_SETUP_REMOVE_MIC_STANDS_KEY,
+  STAGE_SETUP_REMOVE_PULPITS_KEY,
+} from '../stageSetupFlags';
 
 import { meaningfulNoteLinesFromRaw } from '../plannerNoteText';
 import {
@@ -268,6 +272,7 @@ const CONTENT_JSON_EXCLUDED_FOR_GENERIC: Set<string> = new Set([
   'text',
   STAGE_SETUP_REMOVE_MIC_STANDS_KEY,
   STAGE_SETUP_REMOVE_PULPITS_KEY,
+  STAGE_SETUP_PLACE_EQUIPMENT_KEY,
 ]);
 
 function isInternalContentStringKey(key: string): boolean {

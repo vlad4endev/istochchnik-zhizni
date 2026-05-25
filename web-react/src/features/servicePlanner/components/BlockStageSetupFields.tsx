@@ -1,8 +1,11 @@
 import {
-  patchStageSetupFlags,
+  patchStageSetupPlaceEquipment,
+  patchStageSetupRemoveEquipment,
   readStageSetupFlags,
-  STAGE_SETUP_PROGRAM_MARK,
+  STAGE_SETUP_PROGRAM_MARK_PLACE,
+  STAGE_SETUP_PROGRAM_MARK_REMOVE,
   stageSetupDisplayLines,
+  type StageSetupDisplayLine,
 } from '../stageSetupFlags';
 
 type Props = {
@@ -14,19 +17,22 @@ type Props = {
 const checkboxClass =
   'mt-0.5 h-4 w-4 min-h-4 min-w-4 max-w-4 shrink-0 rounded border-stone-300 accent-primary';
 
-function StageSetupMark({ className = '' }: { className?: string }) {
+function ProgramMark({ line, className = '' }: { line: StageSetupDisplayLine; className?: string }) {
+  const mark = line.mark === 'place' ? STAGE_SETUP_PROGRAM_MARK_PLACE : STAGE_SETUP_PROGRAM_MARK_REMOVE;
   return (
     <span
-      className={`inline-block shrink-0 font-bold leading-none text-red-600 ${className}`.trim()}
+      className={`inline-block shrink-0 leading-none ${
+        line.mark === 'place' ? 'text-stone-700' : 'font-bold text-red-600'
+      } ${className}`.trim()}
       aria-hidden
     >
-      {STAGE_SETUP_PROGRAM_MARK}
+      {mark}
     </span>
   );
 }
 
 export function BlockStageSetupFields({ contentJson, onChange, className = '' }: Props) {
-  const { removeMicStands, removePulpits } = readStageSetupFlags(contentJson);
+  const { removeEquipment, placeEquipment } = readStageSetupFlags(contentJson);
 
   return (
     <div
@@ -36,36 +42,58 @@ export function BlockStageSetupFields({ contentJson, onChange, className = '' }:
         Сцена перед блоком
       </p>
       <p className="mt-0.5 text-[11px] leading-snug text-stone-500">
-        В программе отмеченные пункты показываются с{' '}
-        <StageSetupMark className="text-[13px]" /> .
+        Можно выбрать только один вариант — он появится в итоговой программе.
       </p>
-      <div className="mt-1.5 space-y-2">
+      <div className="mt-1.5 space-y-2.5">
         <label className="flex w-full min-w-0 cursor-pointer items-start gap-2.5 text-sm leading-snug text-stone-800">
           <input
             type="checkbox"
             className={checkboxClass}
-            checked={removeMicStands}
+            checked={removeEquipment}
             onChange={(e) =>
-              onChange(patchStageSetupFlags(contentJson, { removeMicStands: e.target.checked }))
+              onChange(patchStageSetupRemoveEquipment(contentJson, e.target.checked))
             }
           />
-          <span className="flex min-w-0 flex-1 items-start gap-1.5">
-            {removeMicStands ? <StageSetupMark className="mt-0.5 text-base" /> : null}
-            <span className="min-w-0 flex-1">Убираем микрофонные стойки</span>
+          <span className="min-w-0 flex-1">
+            <span className="block">Убираем микрофонные стойки и пюпитры</span>
+            {removeEquipment ? (
+              <span className="mt-1 block space-y-0.5 text-[11px] leading-snug text-stone-600">
+                <span className="flex items-start gap-1">
+                  <ProgramMark
+                    line={{ mark: 'remove', text: 'Убираем микрофонные стойки' }}
+                    className="text-[11px]"
+                  />
+                  <span>Убираем микрофонные стойки</span>
+                </span>
+                <span className="flex items-start gap-1">
+                  <ProgramMark line={{ mark: 'remove', text: 'Убираем пюпитры' }} className="text-[11px]" />
+                  <span>Убираем пюпитры</span>
+                </span>
+              </span>
+            ) : null}
           </span>
         </label>
         <label className="flex w-full min-w-0 cursor-pointer items-start gap-2.5 text-sm leading-snug text-stone-800">
           <input
             type="checkbox"
             className={checkboxClass}
-            checked={removePulpits}
+            checked={placeEquipment}
             onChange={(e) =>
-              onChange(patchStageSetupFlags(contentJson, { removePulpits: e.target.checked }))
+              onChange(patchStageSetupPlaceEquipment(contentJson, e.target.checked))
             }
           />
           <span className="flex min-w-0 flex-1 items-start gap-1.5">
-            {removePulpits ? <StageSetupMark className="mt-0.5 text-base" /> : null}
-            <span className="min-w-0 flex-1">Убираем пюпитры</span>
+            {placeEquipment ? (
+              <ProgramMark
+                line={{ mark: 'place', text: 'Выставляем микрофоны и пюпитры' }}
+                className="mt-0.5 text-base"
+              />
+            ) : (
+              <span className="mt-0.5 text-base leading-none text-stone-400" aria-hidden>
+                {STAGE_SETUP_PROGRAM_MARK_PLACE}
+              </span>
+            )}
+            <span className="min-w-0 flex-1">Выставляем микрофоны и пюпитры</span>
           </span>
         </label>
       </div>
@@ -85,11 +113,11 @@ export function BlockStageSetupPreview({
   if (lines.length === 0) return null;
   return (
     <ul
-      className={`mt-1 space-y-1 text-xs leading-snug text-stone-700 sm:text-sm ${className}`.trim()}
+      className={`mt-0.5 space-y-0.5 text-[11px] leading-snug text-stone-600 sm:text-xs ${className}`.trim()}
     >
       {lines.map((line) => (
-        <li key={line.text} className="flex items-start gap-1.5 font-semibold">
-          <StageSetupMark className="mt-px text-sm sm:text-base" />
+        <li key={line.text} className="flex items-start gap-1">
+          <ProgramMark line={line} className="text-[11px] sm:text-xs" />
           <span className="min-w-0 flex-1">{line.text}</span>
         </li>
       ))}
