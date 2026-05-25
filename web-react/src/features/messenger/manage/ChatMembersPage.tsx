@@ -99,14 +99,6 @@ export function ChatMembersPage() {
     };
   }, [chatId]);
 
-  const filtered = useMemo(() => {
-    const term = q.trim().toLowerCase();
-    if (!term) return membersWithPresence;
-    return membersWithPresence.filter((m) => {
-      const name = `${m.first_name ?? ''} ${m.last_name ?? ''} ${m.name ?? ''}`.toLowerCase();
-      return name.includes(term);
-    });
-  }, [membersWithPresence, q]);
   const onlineMembers = useChatStore((s) => s.onlineMembers);
   const memberLastSeenAt = useChatStore((s) => s.memberLastSeenAt);
 
@@ -119,6 +111,15 @@ export function ChatMembersPage() {
       })),
     [members, onlineMembers, memberLastSeenAt],
   );
+
+  const filtered = useMemo(() => {
+    const term = q.trim().toLowerCase();
+    if (!term) return membersWithPresence;
+    return membersWithPresence.filter((m) => {
+      const name = `${m.first_name ?? ''} ${m.last_name ?? ''} ${m.name ?? ''}`.toLowerCase();
+      return name.includes(term);
+    });
+  }, [membersWithPresence, q]);
 
   const recentMembers = useMemo(
     () => [...membersWithPresence].sort((a, b) => Date.parse(b.joined_at) - Date.parse(a.joined_at)).slice(0, 5),
