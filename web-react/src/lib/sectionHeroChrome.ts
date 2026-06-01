@@ -4,7 +4,7 @@
  * под шапкой появляются горизонтальные артефакты.
  */
 const sectionHeroStickyBase =
-  'section-hero-sticky [position:-webkit-sticky] sticky top-0 z-20 w-full max-w-full self-start flex-shrink-0 overflow-hidden rounded-b-[20px] bg-primary isolate';
+  'section-hero-sticky [position:-webkit-sticky] sticky top-0 z-20 w-full max-w-full self-start flex-shrink-0 overflow-hidden rounded-b-[20px] bg-primary';
 
 /** Липкая полоса — без горизонтального inset, чтобы `PageHeader` был во всю ширину экрана */
 export const sectionHeroStickyClass = sectionHeroStickyBase;
