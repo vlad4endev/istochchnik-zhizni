@@ -300,6 +300,23 @@ dd {
   position: sticky;
 }
 
+/* Android WebView: сбой композитинга sticky + blur под скруглённой шапкой (дашборд и др.). */
+@supports not (-webkit-touch-callout: none) {
+  @media (max-width: 1023px) {
+    .section-hero-sticky {
+      -webkit-backdrop-filter: none !important;
+      backdrop-filter: none !important;
+      background-color: var(--primary) !important;
+      box-shadow: none !important;
+    }
+
+    .dashboard-adaptive .dashboard-scroll-pane {
+      -webkit-transform: translateZ(0);
+      transform: translateZ(0);
+    }
+  }
+}
+
 /* Скролл: в основном приложении ведёт `<main>` (Layout); #root с overflow-y:auto оставлен для редких веток без
    ограниченной высоты (логин и т.п.). Двойной зазор у таб-бара на чатах убран в messenger.css (не дублировать
    padding-bottom main и inset слоёв). */
