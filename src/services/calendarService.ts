@@ -184,10 +184,28 @@ function parsePreviousNeedId(raw: unknown): number {
   return NaN;
 }
 
-/** Ручные заметки координаторов + записи из журнала истории (как в профиле участника). */
-async function attachManualPreviousPrayerNeedsToMembers(members: Member[]): Promise<void> {
+/**
+ * Ручные заметки координаторов + записи из журнала истории (как в профиле участника).
+ * @param cycleIndexByMemberId — цикл назначения участника на эту неделю/день; журнал и «сироты» mpc
+ *   с `cycle_index >=` этого значения не показываем (иначе текст текущего цикла дублируется в справке).
+ */
+async function attachManualPreviousPrayerNeedsToMembers(
+  members: Member[],
+  cycleIndexByMemberId: Map<number, number>,
+): Promise<void> {
   const ids = members.map((m) => m.id).filter((id) => Number.isFinite(id));
   if (ids.length === 0) return;
+
+  function journalRowAllowed(memberId: number, cycleIndex: number | null): boolean {
+    const assignmentCycle = cycleIndexByMemberId.get(memberId);
+    if (assignmentCycle === undefined) {
+      return true;
+    }
+    if (cycleIndex == null || !Number.isFinite(cycleIndex)) {
+      return true;
+    }
+    return cycleIndex < assignmentCycle;
+  }
 
   const byManual = new Map<number, PreviousNeedItem[]>();
   try {
@@ -245,11 +263,12 @@ async function attachManualPreviousPrayerNeedsToMembers(members: Member[]): Prom
   const byJournal = new Map<number, PreviousNeedItem[]>();
   try {
     const hist = await query(
-      `SELECT member_id, id, note, created_at FROM (
+      `SELECT member_id, id, note, created_at, cycle_index FROM (
          SELECT h.member_id,
                 h.id::bigint AS id,
                 trim(h.prayer_request) AS note,
-                h.created_at::text AS created_at
+                h.created_at::text AS created_at,
+                h.cycle_index
            FROM member_prayer_request_history h
           WHERE h.member_id = ANY($1::int[])
             AND NULLIF(trim(h.prayer_request), '') IS NOT NULL
@@ -257,7 +276,8 @@ async function attachManualPreviousPrayerNeedsToMembers(members: Member[]): Prom
          SELECT mpc.member_id,
                 (-(mpc.cycle_index + 1))::bigint AS id,
                 trim(mpc.prayer_request) AS note,
-                mpc.updated_at::text AS created_at
+                mpc.updated_at::text AS created_at,
+                mpc.cycle_index
            FROM member_prayer_by_cycle mpc
           WHERE mpc.member_id = ANY($1::int[])
             AND NULLIF(trim(mpc.prayer_request), '') IS NOT NULL
@@ -278,10 +298,21 @@ async function attachManualPreviousPrayerNeedsToMembers(members: Member[]): Prom
       id: unknown;
       note: unknown;
       created_at: unknown;
+      cycle_index: unknown;
     }>) {
       const mid = Number(row.member_id);
       const nid = parsePreviousNeedId(row.id);
       if (!Number.isFinite(mid) || !Number.isFinite(nid)) continue;
+      const cycleRaw = row.cycle_index;
+      const cycleIndex =
+        cycleRaw == null
+          ? null
+          : typeof cycleRaw === 'number'
+            ? cycleRaw
+            : Number(cycleRaw);
+      if (!journalRowAllowed(mid, Number.isFinite(cycleIndex) ? cycleIndex : null)) {
+        continue;
+      }
       const note = String(row.note ?? '').trim();
       if (!note) continue;
       const r = (rankByMember.get(mid) ?? 0) + 1;
@@ -513,17 +544,19 @@ async function getMemberAssignmentsForDates(dates: string[]): Promise<NextWeekMe
   }
 
   const out: NextWeekMemberAssignment[] = [];
+  const cycleIndexByMemberId = new Map<number, number>();
 
   for (const date of dates) {
-    const overrideMember = overrideByDate.get(date);
-    if (overrideMember) {
-      out.push({ date, member: overrideMember });
-      continue;
-    }
-
     const diffDays = getDiffDays(date, cycleStartDate);
     const index = ((diffDays % totalMembers) + totalMembers) % totalMembers;
     const cIdx = computeCycleIndex(diffDays, totalMembers);
+
+    const overrideMember = overrideByDate.get(date);
+    if (overrideMember) {
+      cycleIndexByMemberId.set(overrideMember.id, cIdx);
+      out.push({ date, member: overrideMember });
+      continue;
+    }
     const mergedIds = await mergedForCycle(cIdx);
     const baseId = mergedIds[index];
     const base = baseId != null ? memberById.get(baseId) : undefined;
@@ -551,6 +584,7 @@ async function getMemberAssignmentsForDates(dates: string[]): Promise<NextWeekMe
     const prayerRequest = row?.prayer_request ?? null;
     const updatedAt = row?.prayer_need_updated_at ?? null;
     const inCycle = row?.in_prayer_cycle ?? base.in_prayer_cycle;
+    cycleIndexByMemberId.set(base.id, cIdx);
     out.push({
       date,
       member: {
@@ -566,7 +600,7 @@ async function getMemberAssignmentsForDates(dates: string[]): Promise<NextWeekMe
   }
 
   const membersOnly = out.map((r) => r.member).filter((m): m is Member => m != null);
-  await attachManualPreviousPrayerNeedsToMembers(membersOnly);
+  await attachManualPreviousPrayerNeedsToMembers(membersOnly, cycleIndexByMemberId);
 
   return out;
 }

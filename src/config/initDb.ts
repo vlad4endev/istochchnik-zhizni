@@ -656,7 +656,7 @@ BEGIN
   SELECT (jsonb_set(
     to_jsonb(m),
     '{prayer_request}',
-    to_jsonb(COALESCE(mpc.prayer_request, m.prayer_request))
+    to_jsonb(NULLIF(TRIM(mpc.prayer_request), ''))
   ))::json
   INTO v_member_json
   FROM member_cycle_overrides o
@@ -681,7 +681,7 @@ BEGIN
   SELECT (jsonb_set(
     to_jsonb(m),
     '{prayer_request}',
-    to_jsonb(COALESCE(mpc.prayer_request, m.prayer_request))
+    to_jsonb(NULLIF(TRIM(mpc.prayer_request), ''))
   ))::json
   INTO v_member_json
   FROM members m

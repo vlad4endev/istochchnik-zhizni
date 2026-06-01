@@ -172,6 +172,7 @@ export async function snapshotPastCyclePrayersToHistory(): Promise<number> {
     [ciNow],
   );
   const inserted = result.rowCount ?? 0;
+  await query(`DELETE FROM member_prayer_by_cycle WHERE cycle_index < $1`, [ciNow]);
   await clearLegacyMemberPrayerRequestAfterSnapshot(ciNow);
   if (inserted > 0) {
     notifyRealtime(['members', 'calendar']);

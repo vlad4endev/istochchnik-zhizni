@@ -406,7 +406,7 @@ function NextWeekMembersPanel(props: {
                               setExpandedDate(null);
                             } else {
                               setExpandedDate(row.date);
-                              setPrayerDraft(mem.prayer_request ?? '');
+                              setPrayerDraft(hasNeed ? (mem.prayer_request ?? '') : '');
                             }
                           }}
                           className="flex w-full items-center justify-between gap-2 rounded-lg py-1 text-left text-[13px] font-bold text-stone-800 hover:bg-stone-50/80"
