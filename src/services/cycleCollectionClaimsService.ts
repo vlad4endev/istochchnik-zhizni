@@ -1,9 +1,11 @@
 import { query } from '../config/db';
+import { notifyRealtime } from '../realtime/notify';
 import { getCalendarWeekStartDate, type WeekPlanKind } from './calendarService';
 import {
   getMergedPrayerCycleRosterMemberIdsForCycleIndex,
   getPrayerCycleSnapshotForDate,
   PRAYER_CYCLE_MEMBERS_WHERE_M,
+  removeMemberFromPrayerCycleCustomOrders,
 } from './prayerCycleService';
 
 const COORDINATOR_MEMBER_ORDER_SQL = `LOWER(COALESCE(NULLIF(trim(m.first_name), ''), split_part(trim(m.name), ' ', 1))) ASC,
@@ -88,6 +90,242 @@ export interface CycleCollectionClaimsSnapshot {
   members: CycleCollectionClaimRow[];
 }
 
+export type CollectionClaimReassignment = {
+  weekKind: WeekPlanKind | 'legacy';
+  memberId: number;
+  coordinatorId: number;
+};
+
+type WeekClaimRemoval = {
+  memberId: number;
+  coordinatorId: number;
+  rosterIndex: number;
+};
+
+/** Следующий участник очереди без куратора: обход вперёд от позиции удалённого, затем с начала. */
+export function findNextUnassignedRosterMember(
+  rosterIds: readonly number[],
+  claimedMemberIds: ReadonlySet<number>,
+  removedRosterIndex: number,
+): number | null {
+  if (rosterIds.length === 0) {
+    return null;
+  }
+  const start = removedRosterIndex >= 0 ? removedRosterIndex : -1;
+  for (let step = 1; step <= rosterIds.length; step += 1) {
+    const idx = (start + step) % rosterIds.length;
+    const candidateId = rosterIds[idx];
+    if (!claimedMemberIds.has(candidateId)) {
+      return candidateId;
+    }
+  }
+  return null;
+}
+
+async function reconcileCollectionClaimsForWeekScope(input: {
+  weekStartDate: string | null;
+  cycleIndex: number;
+  weekKind: WeekPlanKind | 'legacy';
+  /** Приоритет при сортировке снятий (участник, убранный из цикла). */
+  priorityDepartedMemberId?: number;
+}): Promise<CollectionClaimReassignment[]> {
+  const { weekStartDate, cycleIndex, weekKind, priorityDepartedMemberId } = input;
+  const rosterIds = await getMergedPrayerCycleRosterMemberIdsForCycleIndex(cycleIndex);
+  const rosterSet = new Set(rosterIds);
+
+  const claimsResult =
+    weekStartDate == null
+      ? await query(
+          `SELECT member_id, claimed_by_member_id
+           FROM cycle_collection_claims
+           WHERE cycle_index = $1 AND week_start_date IS NULL`,
+          [cycleIndex],
+        )
+      : await query(
+          `SELECT member_id, claimed_by_member_id
+           FROM cycle_collection_claims
+           WHERE week_start_date = $1::date`,
+          [weekStartDate],
+        );
+
+  const claimByMember = new Map<number, number>();
+  const staleRemovals: WeekClaimRemoval[] = [];
+
+  for (const row of claimsResult.rows as { member_id: number; claimed_by_member_id: number }[]) {
+    const memberId = Number(row.member_id);
+    const coordinatorId = Number(row.claimed_by_member_id);
+    if (!Number.isFinite(memberId) || !Number.isFinite(coordinatorId)) {
+      continue;
+    }
+    if (rosterSet.has(memberId)) {
+      claimByMember.set(memberId, coordinatorId);
+      continue;
+    }
+    staleRemovals.push({
+      memberId,
+      coordinatorId,
+      rosterIndex: rosterIds.indexOf(memberId),
+    });
+  }
+
+  if (staleRemovals.length === 0) {
+    return [];
+  }
+
+  staleRemovals.sort((a, b) => {
+    if (priorityDepartedMemberId != null) {
+      if (a.memberId === priorityDepartedMemberId) return -1;
+      if (b.memberId === priorityDepartedMemberId) return 1;
+    }
+    const aIdx = a.rosterIndex;
+    const bIdx = b.rosterIndex;
+    if (aIdx >= 0 && bIdx >= 0) return aIdx - bIdx;
+    if (aIdx >= 0) return -1;
+    if (bIdx >= 0) return 1;
+    return a.memberId - b.memberId;
+  });
+
+  const reassignments: CollectionClaimReassignment[] = [];
+  const claimedSet = new Set(claimByMember.keys());
+
+  await query('BEGIN');
+  try {
+    for (const removal of staleRemovals) {
+      if (weekStartDate == null) {
+        await query(
+          `DELETE FROM cycle_collection_claims
+           WHERE cycle_index = $1 AND member_id = $2 AND week_start_date IS NULL`,
+          [cycleIndex, removal.memberId],
+        );
+      } else {
+        await query(
+          `DELETE FROM cycle_collection_claims
+           WHERE week_start_date = $1::date AND member_id = $2`,
+          [weekStartDate, removal.memberId],
+        );
+      }
+
+      const nextMemberId = findNextUnassignedRosterMember(rosterIds, claimedSet, removal.rosterIndex);
+      if (nextMemberId == null) {
+        continue;
+      }
+
+      if (weekStartDate == null) {
+        await query(
+          `INSERT INTO cycle_collection_claims (cycle_index, member_id, claimed_by_member_id, week_start_date)
+           VALUES ($1, $2, $3, NULL)
+           ON CONFLICT (cycle_index, member_id) WHERE week_start_date IS NULL
+           DO UPDATE SET claimed_by_member_id = EXCLUDED.claimed_by_member_id`,
+          [cycleIndex, nextMemberId, removal.coordinatorId],
+        );
+      } else {
+        await query(
+          `INSERT INTO cycle_collection_claims (cycle_index, member_id, claimed_by_member_id, week_start_date)
+           VALUES ($1, $2, $3, $4::date)
+           ON CONFLICT (week_start_date, member_id) WHERE week_start_date IS NOT NULL
+           DO UPDATE SET
+             claimed_by_member_id = EXCLUDED.claimed_by_member_id,
+             cycle_index = EXCLUDED.cycle_index`,
+          [cycleIndex, nextMemberId, removal.coordinatorId, weekStartDate],
+        );
+      }
+
+      claimByMember.set(nextMemberId, removal.coordinatorId);
+      claimedSet.add(nextMemberId);
+      reassignments.push({
+        weekKind,
+        memberId: nextMemberId,
+        coordinatorId: removal.coordinatorId,
+      });
+    }
+    await query('COMMIT');
+  } catch (err) {
+    await query('ROLLBACK');
+    throw err;
+  }
+
+  return reassignments;
+}
+
+/** Убрать «висячие» назначения (участник не в очереди цикла) и сдвинуть кураторов на следующих без назначения. */
+export async function pruneAndShiftStaleCollectionClaims(
+  weekKind?: WeekPlanKind,
+): Promise<CollectionClaimReassignment[]> {
+  await ensureCycleCollectionClaimsWeekScopeSchema();
+  const scopes: Array<{ weekStartDate: string | null; cycleIndex: number; weekKind: WeekPlanKind | 'legacy' }> =
+    [];
+
+  if (weekKind === undefined) {
+    const today = new Date().toISOString().slice(0, 10);
+    const snap = await getPrayerCycleSnapshotForDate(today);
+    if (snap) {
+      scopes.push({ weekStartDate: null, cycleIndex: snap.cycle_index, weekKind: 'legacy' });
+    }
+    for (const kind of ['current', 'next'] as const) {
+      const weekStartDate = getCalendarWeekStartDate(kind);
+      const snap = await getPrayerCycleSnapshotForDate(weekStartDate);
+      if (snap) {
+        scopes.push({ weekStartDate, cycleIndex: snap.cycle_index, weekKind: kind });
+      }
+    }
+  } else {
+    const weekStartDate = getCalendarWeekStartDate(weekKind);
+    const snap = await getPrayerCycleSnapshotForDate(weekStartDate);
+    if (snap) {
+      scopes.push({ weekStartDate, cycleIndex: snap.cycle_index, weekKind: weekKind });
+    }
+  }
+
+  const all: CollectionClaimReassignment[] = [];
+  for (const scope of scopes) {
+    const part = await reconcileCollectionClaimsForWeekScope(scope);
+    all.push(...part);
+  }
+  return all;
+}
+
+/** После выхода участника из молитвенного цикла: снять назначения сбора и переназначить кураторов по очереди. */
+export async function reconcileCollectionClaimsAfterMemberLeftPrayerCycle(
+  memberId: number,
+): Promise<CollectionClaimReassignment[]> {
+  await ensureCycleCollectionClaimsWeekScopeSchema();
+  await removeMemberFromPrayerCycleCustomOrders(memberId);
+
+  const reassignments: CollectionClaimReassignment[] = [];
+  for (const kind of ['current', 'next'] as const) {
+    const weekStartDate = getCalendarWeekStartDate(kind);
+    const snap = await getPrayerCycleSnapshotForDate(weekStartDate);
+    if (!snap) {
+      continue;
+    }
+    const part = await reconcileCollectionClaimsForWeekScope({
+      weekStartDate,
+      cycleIndex: snap.cycle_index,
+      weekKind: kind,
+      priorityDepartedMemberId: memberId,
+    });
+    reassignments.push(...part);
+  }
+
+  const today = new Date().toISOString().slice(0, 10);
+  const legacySnap = await getPrayerCycleSnapshotForDate(today);
+  if (legacySnap) {
+    const part = await reconcileCollectionClaimsForWeekScope({
+      weekStartDate: null,
+      cycleIndex: legacySnap.cycle_index,
+      weekKind: 'legacy',
+      priorityDepartedMemberId: memberId,
+    });
+    reassignments.push(...part);
+  }
+
+  if (reassignments.length > 0) {
+    notifyRealtime(['calendar']);
+  }
+
+  return reassignments;
+}
+
 export async function getCycleCollectionClaimsSnapshot(
   authUserId: number | null,
   authIsAdmin: boolean,
@@ -96,6 +334,7 @@ export async function getCycleCollectionClaimsSnapshot(
   weekKind?: WeekPlanKind
 ): Promise<CycleCollectionClaimsSnapshot> {
   await ensureCycleCollectionClaimsWeekScopeSchema();
+  await pruneAndShiftStaleCollectionClaims(weekKind);
   const refDate =
     weekKind === undefined ? new Date().toISOString().slice(0, 10) : getCalendarWeekStartDate(weekKind);
   const snap = await getPrayerCycleSnapshotForDate(refDate);

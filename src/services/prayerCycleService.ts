@@ -247,3 +247,14 @@ export async function getMergedPrayerCycleRosterMemberIdsForCycleIndex(
   const custom = await getPrayerCycleCustomOrderMemberIds(cycleIndex);
   return mergePrayerCycleRosterOrderIds(alphaIds, custom);
 }
+
+/** Убрать участника из сохранённого порядка очереди во всех циклах. */
+export async function removeMemberFromPrayerCycleCustomOrders(memberId: number): Promise<void> {
+  await query(
+    `UPDATE prayer_cycle_roster_custom_order
+     SET member_ids = array_remove(member_ids, $1::int),
+         updated_at = NOW()
+     WHERE $1::int = ANY(member_ids)`,
+    [memberId],
+  );
+}

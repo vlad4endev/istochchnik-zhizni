@@ -3,6 +3,7 @@ import type { AppRole } from '../types/appRole';
 import { mergeAppRoles, normalizeAppRole, normalizeAppRoles, pickPrimaryAppRole } from '../types/appRole';
 import { addUtcDaysToIsoDate, getDiffDays } from '../utils/isoDates';
 import { getPrayerDataByDate } from './calendarService';
+import { reconcileCollectionClaimsAfterMemberLeftPrayerCycle } from './cycleCollectionClaimsService';
 import {
   getCurrentCycleIndexForUpsert,
   getCycleStartDate,
@@ -597,12 +598,21 @@ export async function bulkCreateUsers(items: CreateUserInput[]): Promise<BulkCre
 export async function updateUser(id: number, input: UpdateUserInput): Promise<AppUser | null> {
   let previousPrayerRequest: string | null = null;
   const hasPrayerRequestUpdate = typeof input.prayer_request === 'string';
-  if (hasPrayerRequestUpdate) {
+  const mayLeavePrayerCycle =
+    (typeof input.in_prayer_cycle === 'boolean' && input.in_prayer_cycle === false) ||
+    (typeof input.is_active === 'boolean' && input.is_active === false);
+  let existingBeforeCycleChange: AppUser | null = null;
+  if (hasPrayerRequestUpdate || mayLeavePrayerCycle) {
     const existing = await getUserById(id);
     if (!existing) {
       return null;
     }
-    previousPrayerRequest = (existing.prayer_request ?? '').trim() || null;
+    if (hasPrayerRequestUpdate) {
+      previousPrayerRequest = (existing.prayer_request ?? '').trim() || null;
+    }
+    if (mayLeavePrayerCycle) {
+      existingBeforeCycleChange = existing;
+    }
   }
 
   if (typeof input.first_name === 'string' || typeof input.last_name === 'string') {
@@ -797,6 +807,14 @@ export async function updateUser(id: number, input: UpdateUserInput): Promise<Ap
     // «Предыдущее» — как в UI: COALESCE(mpc, members); «следующее» — то же, что пишем в mpc.
     if (nextForHistory.length > 0 && nextForHistory !== prevPrayerRequest) {
       await appendPrayerRequestHistory(id, nextForHistory, ci);
+    }
+  }
+
+  if (existingBeforeCycleChange?.in_prayer_cycle && existingBeforeCycleChange.is_active) {
+    const leftCycle =
+      input.in_prayer_cycle === false || (typeof input.is_active === 'boolean' && input.is_active === false);
+    if (leftCycle) {
+      await reconcileCollectionClaimsAfterMemberLeftPrayerCycle(id);
     }
   }
 

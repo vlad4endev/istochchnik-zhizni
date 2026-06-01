@@ -8,11 +8,13 @@ import {
   LuArrowRight,
   LuCalendarDays,
   LuCalendarRange,
+  LuCheck,
   LuChurch,
   LuExternalLink,
   LuHandHeart,
   LuHeadphones,
   LuMic,
+  LuMinus,
   LuPause,
   LuPlay,
   LuStar,
@@ -73,6 +75,10 @@ type DashboardEvent = {
 
 function formatTodayLabel(now: Date): string {
   return `Сегодня ${format(now, 'EEEE, d MMMM', { locale: ru })}`;
+}
+
+function isPrayerNeedFilled(member: Member): boolean {
+  return (member.prayer_request ?? '').trim().length > 0;
 }
 
 function pickLatestEpisode(episodes: PodcastEpisode[]): PodcastEpisode | null {
@@ -383,8 +389,8 @@ function UpcomingPreacherCard({
   const scriptureUrl = buildBibleVerseUrl(scripture);
   const preacherNameDisplay = preacherNameTwoLines(preacherName);
   return (
-    <section className="w-full min-w-0 max-w-full overflow-hidden rounded-2xl border border-[#E8E0DC] bg-white shadow-[var(--shadow-card)] sm:max-w-[420px] lg:max-w-none">
-      <div className="flex min-w-0 items-end gap-3 bg-gradient-to-br from-[#6B2D3E] to-[#7F364D] px-4 pt-4 sm:gap-4 sm:px-5 sm:pt-5">
+    <section className="dashboard-sermon-card w-full min-w-0 max-w-full overflow-hidden rounded-2xl border border-[#E8E0DC] bg-white max-lg:shadow-none sm:max-w-[420px] lg:max-w-none lg:shadow-[var(--shadow-card)]">
+      <div className="dashboard-sermon-card__hero flex min-w-0 items-end gap-3 bg-[#6B2D3E] px-4 pt-4 sm:gap-4 sm:px-5 sm:pt-5 lg:bg-gradient-to-br lg:from-[#6B2D3E] lg:to-[#7F364D]">
         <div className="min-w-0 flex-1 pb-3 sm:pb-4">
           <p className="text-[10px] uppercase tracking-[0.1em] text-[#EAC7D2]">Проповедь</p>
           <p className="mt-2 whitespace-pre-line break-words text-[28px] font-semibold leading-[1.08] text-white sm:text-[34px] lg:text-[38px]">
@@ -393,7 +399,7 @@ function UpcomingPreacherCard({
         </div>
         <div className="h-[84px] w-[70px] shrink-0 overflow-hidden rounded-t-[10px] bg-[#915066] sm:h-[98px] sm:w-[82px] lg:h-[108px] lg:w-[90px]">
           {preacherAvatarUrl ? (
-            <img src={preacherAvatarUrl} alt="" className="h-full w-full object-cover" />
+            <img src={preacherAvatarUrl} alt="" decoding="async" className="h-full w-full object-cover" />
           ) : (
             <div className="grid h-full w-full place-items-center text-[24px] font-semibold text-[#F0D9E1] sm:text-[28px]">
               {initials}
@@ -625,7 +631,7 @@ function DashboardQuickActionsStrip({
             className={[
               /* База — нейтральная «капсула» под общую палитру проекта */
               'group relative flex w-full min-w-0 items-center justify-center gap-1.5 overflow-hidden rounded-full',
-              'border border-stone-200/70 bg-[var(--surface-elevated)] text-[var(--text)] shadow-[var(--shadow-card)]',
+              'border border-stone-200/70 bg-[var(--surface-elevated)] text-[var(--text)] max-lg:shadow-none lg:shadow-[var(--shadow-card)]',
               'dark:border-white/[0.08] dark:bg-[var(--surface-elevated)]',
               /* Поведение */
               'transition-[transform,background-color,box-shadow,border-color] duration-200 ease-out tap-highlight-transparent touch-manipulation outline-none',
@@ -999,30 +1005,7 @@ function DashboardMain() {
       Math.min(100, (adminNextWeekRosterStats.filled / adminNextWeekRosterStats.withMember) * 100),
     );
   }, [adminNextWeekRosterStats]);
-  /**
-   * Следующая неделя: среди участников, закреплённых за координатором, у кого ещё пустая нужда
-   * (по дням плана следующей недели — то же окно, что и «назначены»).
-   */
-  const coordinatorUnfilledRows = useMemo(() => {
-    const meId = me?.id ?? null;
-    if (meId == null) return [];
-    const claims = collectionClaimsQ.data?.members ?? [];
-    const claimedMemberIds = new Set(
-      claims.filter((c) => c.claimed_by?.id === meId).map((c) => c.id),
-    );
-    const rows: Array<{ date: string; member: Member }> = [];
-    for (const row of weekMembersQ.data ?? []) {
-      if (!row.member) continue;
-      if (row.date < todayDateKey) continue;
-      if (!claimedMemberIds.has(row.member.id)) continue;
-      if ((row.member.prayer_request ?? '').trim().length > 0) continue;
-      rows.push({ date: row.date, member: row.member });
-    }
-    rows.sort((a, b) => a.date.localeCompare(b.date));
-    return rows;
-  }, [weekMembersQ.data, collectionClaimsQ.data?.members, me?.id, todayDateKey]);
-
-  /** Все участники, закреплённые за текущим куратором на эту неделю (не только с пустой нуждой). */
+  /** Все участники, закреплённые за текущим куратором на следующую неделю. */
   const coordinatorAssignedRows = useMemo(() => {
     const meId = me?.id ?? null;
     if (meId == null) return [];
@@ -1045,14 +1028,13 @@ function DashboardMain() {
       };
     }
     const total = coordinatorAssignedRows.length;
-    const filled = Math.max(0, total - coordinatorUnfilledRows.length);
+    const filled = coordinatorAssignedRows.filter((r) => isPrayerNeedFilled(r.member)).length;
     return { total, filled };
   }, [
     isAdmin,
     adminNextWeekRosterStats.withMember,
     adminNextWeekRosterStats.filled,
-    coordinatorAssignedRows.length,
-    coordinatorUnfilledRows.length,
+    coordinatorAssignedRows,
   ]);
 
   const isCollectionCoordinator = apiBoolean(me?.is_collection_coordinator);
@@ -1146,7 +1128,7 @@ function DashboardMain() {
   }
 
   return (
-    <div className="dashboard-adaptive flex min-h-0 flex-1 flex-col bg-[var(--surface)]">
+    <div className="dashboard-adaptive flex min-h-0 flex-1 flex-col overflow-hidden bg-[var(--surface)]">
       <div className={sectionHeroStickyClassNested}>
         <PageHeader title="Главная" />
       </div>
@@ -1387,15 +1369,41 @@ function DashboardMain() {
                     </div>
                   </div>
 
-                  {(isAdmin || isPastor ? unfilledWeekRowsAdmin : coordinatorUnfilledRows).slice(0, 6).map((row) => (
-                    <div
-                      key={`desk-coordinator-${row.date}-${row.member.id}`}
-                      className="rounded-[10px] border border-[#E8E0DC] bg-white px-3 py-2.5"
-                    >
-                      <p className="truncate text-[13px] font-semibold text-[#1a1a1a]">{memberFirstLastLine(row.member)}</p>
-                      <p className="mt-1 text-[11px] text-[#888]">{formatWeekDayChip(row.date)}</p>
-                    </div>
-                  ))}
+                  {(isAdmin || isPastor ? unfilledWeekRowsAdmin : coordinatorAssignedRows)
+                    .slice(0, 6)
+                    .map((row) => {
+                      const filled = isAdmin || isPastor ? false : isPrayerNeedFilled(row.member);
+                      return (
+                        <div
+                          key={`desk-coordinator-${row.date}-${row.member.id}`}
+                          className="flex items-start justify-between gap-2 rounded-[10px] border border-[#E8E0DC] bg-white px-3 py-2.5"
+                        >
+                          <div className="min-w-0">
+                            <p className="truncate text-[13px] font-semibold text-[#1a1a1a]">
+                              {memberFirstLastLine(row.member)}
+                            </p>
+                            <p className="mt-1 text-[11px] text-[#888]">{formatWeekDayChip(row.date)}</p>
+                          </div>
+                          {isAdmin || isPastor ? null : filled ? (
+                            <span
+                              className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-emerald-100 text-emerald-700"
+                              title="Нужда заполнена"
+                              aria-label="Нужда заполнена"
+                            >
+                              <LuCheck className="h-3.5 w-3.5" strokeWidth={2.5} aria-hidden />
+                            </span>
+                          ) : (
+                            <span
+                              className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-red-100 text-red-700"
+                              title="Нужда не заполнена"
+                              aria-label="Нужда не заполнена"
+                            >
+                              <LuMinus className="h-3.5 w-3.5" strokeWidth={2.5} aria-hidden />
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })}
                 </div>
                 <div className="mt-4">
                   {isAdmin ? (
@@ -1479,7 +1487,7 @@ function DashboardMain() {
               }
               className="tap-highlight-transparent touch-manipulation relative w-full overflow-hidden rounded-2xl border border-stone-200/70 bg-white/90 p-4 text-left shadow-[var(--shadow-card)] transition hover:-translate-y-0.5 hover:shadow-[var(--shadow)] sm:p-4"
             >
-              <div className="pointer-events-none absolute right-0 top-0 h-20 w-20 rounded-full bg-primary/[0.06] blur-2xl" />
+              <div className="pointer-events-none absolute right-0 top-0 hidden h-20 w-20 rounded-full bg-primary/[0.06] blur-2xl lg:block" />
               <div className="relative flex flex-col gap-3">
                 <div className="flex min-h-[1.25rem] items-center justify-between gap-2">
                   <p className="text-[11px] font-semibold tracking-[0.02em] text-[#6B2D3E]">Мой профиль</p>
@@ -1768,44 +1776,45 @@ function DashboardMain() {
                   {coordinatorAssignedRows.length > 0 ? (
                     <>
                       <p className="text-sm font-semibold text-stone-800">
-                        Вам назначены участники на следующую неделю:
+                        Ваши участники на следующую неделю:
                       </p>
                       <ul className="mt-2 space-y-1.5">
-                        {coordinatorAssignedRows.map((row) => (
-                          <li
-                            key={`assigned-${row.date}-${row.member.id}`}
-                            className="flex flex-wrap items-center justify-between gap-2 rounded-[10px] border border-[#E8E0DC] bg-white px-3 py-2 text-sm"
-                          >
-                            <span className="font-bold text-stone-900">{memberFirstLastLine(row.member)}</span>
-                            <span className="text-xs font-semibold text-stone-600">{formatWeekDayChip(row.date)}</span>
-                          </li>
-                        ))}
+                        {coordinatorAssignedRows.map((row) => {
+                          const filled = isPrayerNeedFilled(row.member);
+                          return (
+                            <li
+                              key={`assigned-${row.date}-${row.member.id}`}
+                              className="flex flex-wrap items-center justify-between gap-2 rounded-[10px] border border-[#E8E0DC] bg-white px-3 py-2 text-sm"
+                            >
+                              <span className="font-bold text-stone-900">{memberFirstLastLine(row.member)}</span>
+                              <span className="flex items-center gap-2">
+                                <span className="text-xs font-semibold text-stone-600">{formatWeekDayChip(row.date)}</span>
+                                {filled ? (
+                                  <span
+                                    className="grid h-6 w-6 place-items-center rounded-full bg-emerald-100 text-emerald-700"
+                                    title="Нужда заполнена"
+                                    aria-label="Нужда заполнена"
+                                  >
+                                    <LuCheck className="h-3.5 w-3.5" strokeWidth={2.5} aria-hidden />
+                                  </span>
+                                ) : (
+                                  <span
+                                    className="grid h-6 w-6 place-items-center rounded-full bg-red-100 text-red-700"
+                                    title="Нужда не заполнена"
+                                    aria-label="Нужда не заполнена"
+                                  >
+                                    <LuMinus className="h-3.5 w-3.5" strokeWidth={2.5} aria-hidden />
+                                  </span>
+                                )}
+                              </span>
+                            </li>
+                          );
+                        })}
                       </ul>
                     </>
                   ) : (
                     <p className="text-sm text-stone-600">
                       На следующую неделю за вами пока нет закреплённых участников.
-                    </p>
-                  )}
-
-                  <p className="mt-4 text-sm font-semibold text-stone-800">
-                    Среди назначенных вам на следующую неделю пока нет текста нужды:
-                  </p>
-                  {coordinatorUnfilledRows.length > 0 ? (
-                    <ul className="mt-2 space-y-1.5">
-                      {coordinatorUnfilledRows.map((row) => (
-                        <li
-                          key={`${row.date}-${row.member.id}`}
-                          className="flex flex-wrap items-center justify-between gap-2 rounded-[10px] border border-[#E8E0DC] bg-white px-3 py-2 text-sm"
-                        >
-                          <span className="font-bold text-stone-900">{memberFirstLastLine(row.member)}</span>
-                          <span className="text-xs font-semibold text-stone-600">{formatWeekDayChip(row.date)}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  ) : (
-                    <p className="mt-2 text-sm text-stone-600">
-                      У всех ваших участников на следующую неделю нужды уже заполнены.
                     </p>
                   )}
                   <button
