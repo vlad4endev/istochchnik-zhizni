@@ -932,9 +932,10 @@ export function DailyPrayerPage() {
     <div className="prayer-page-bg flex min-h-0 flex-1 flex-col max-lg:pb-0 lg:pb-8">
       <div className={sectionHeroStickyClass}>
         <PageHeader title="Молитва" />
+      </div>
 
-      {/* Чип даты */}
-      <div className="px-3 pt-3 sm:px-4 shell:px-6 md:px-6 lg:px-8 xl:px-10">
+      {/* Чип даты и календарь — под шапкой, не внутри липкой primary-полосы */}
+      <div className="z-10 w-full shrink-0 bg-[var(--surface)] px-3 pt-3 sm:px-4 shell:px-6 md:px-6 lg:px-8 xl:px-10">
         <button
           type="button"
           onClick={() => setCalendarExpanded((e) => !e)}
@@ -961,7 +962,6 @@ export function DailyPrayerPage() {
             Обновляем данные…
           </p>
         ) : null}
-      </div>
 
       {/* Раскрывающийся календарь */}
       <div
