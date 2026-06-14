@@ -1,6 +1,7 @@
 import { query } from '../config/db';
 import {
   APP_PERMISSION_IDS,
+  MUSICIAN_STUDIO_PERMISSIONS,
   type AppPermissionId,
   defaultRolePermissionsSettings,
   normalizeRolePermissionsSettings,
@@ -112,6 +113,13 @@ export async function patchRolePermissionsSettings(
       if (typeof value !== 'boolean') continue;
       const permId = key as AppPermissionId;
       if (roleId === 'admin' && (permId === 'admin.panel' || permId === 'admin.users_manage') && !value) {
+        continue;
+      }
+      if (
+        roleId === 'musician' &&
+        (MUSICIAN_STUDIO_PERMISSIONS as readonly string[]).includes(permId) &&
+        !value
+      ) {
         continue;
       }
       map[permId] = value;

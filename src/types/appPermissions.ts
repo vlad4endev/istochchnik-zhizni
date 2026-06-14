@@ -90,6 +90,16 @@ export type AppPermissionId = (typeof APP_PERMISSION_DEFS)[number]['id'];
 
 export const APP_PERMISSION_IDS: readonly AppPermissionId[] = APP_PERMISSION_DEFS.map((d) => d.id);
 
+/** Минимальный набор прав «Музыкант» для студии и каталога песен (нельзя отключить в админке). */
+export const MUSICIAN_STUDIO_PERMISSIONS: readonly AppPermissionId[] = [
+  'section.songbook',
+  'section.studio',
+  'studio.access',
+  'studio.catalog_create',
+  'studio.catalog_edit',
+  'studio.catalog_delete',
+] as const;
+
 export type RolePermissionMap = Record<AppPermissionId, boolean>;
 
 export type RolePermissionsByRole = Record<AppRole, RolePermissionMap>;
@@ -143,13 +153,13 @@ export function defaultRolePermissionsSettings(): RolePermissionsSettingsDocumen
   }
 
   grant(roles.minister, ['planner.manage', 'broadcast.manage', 'calendar.dashboard_notes']);
-  grant(roles.musician, [
-    'studio.access',
+  grant(roles.musician, [...MUSICIAN_STUDIO_PERMISSIONS]);
+  grant(roles.editor, [
+    'section.songbook',
     'studio.catalog_create',
     'studio.catalog_edit',
     'studio.catalog_delete',
   ]);
-  grant(roles.editor, ['studio.catalog_create', 'studio.catalog_edit', 'studio.catalog_delete']);
 
   grant(roles.parishioner, ['section.messenger', 'content.posts_create']);
 
@@ -191,6 +201,9 @@ export function normalizeRolePermissionsSettings(raw: unknown): RolePermissionsS
     }
     if (roleId === 'admin') {
       grant(base, ['admin.panel', 'admin.users_manage']);
+    }
+    if (roleId === 'musician') {
+      grant(base, [...MUSICIAN_STUDIO_PERMISSIONS]);
     }
     out[roleId] = base;
   }

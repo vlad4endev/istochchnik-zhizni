@@ -1,10 +1,10 @@
 import type { Request, Response } from 'express';
 
 import {
-  canDeleteCatalogSong,
-  canModerateCatalog,
-  normalizeAppRole,
+  sessionCanDeleteCatalogSong,
+  sessionCanModerateCatalog,
   type AppRole,
+  type SessionRoleSource,
 } from '../types/appRole';
 import type { SongListFilters } from '../services/songService';
 import { query as dbQuery } from '../config/db';
@@ -27,11 +27,7 @@ import pdfParse from 'pdf-parse';
 import { safeFetchUrlForSongImport } from '../utils/safeUrlTextFetch';
 import { AiAgentError, chatCompletion } from '../ai';
 
-type AuthReq = Request & { authUserId?: number; authUserRole?: AppRole };
-
-function roleOf(req: AuthReq): AppRole {
-  return normalizeAppRole(req.authUserRole);
-}
+type AuthReq = Request & SessionRoleSource & { authUserId?: number; authUserRole?: AppRole };
 
 function normalizeMinistryDirection(value: unknown): string {
   return String(value ?? '').trim().toLowerCase().replace(/ё/g, 'е');
@@ -115,7 +111,7 @@ export async function listSongsForModeration(req: Request, res: Response): Promi
     }
     const filters = parseSongListFilters(req);
     let restrictToCreatorId: number | undefined;
-    if (!canModerateCatalog(roleOf(r))) {
+    if (!sessionCanModerateCatalog(r)) {
       const ok = await hasMusicMinistryDirection(r.authUserId);
       if (!ok) {
         if (!isImportedSandboxOnlyFilter(filters)) {
@@ -138,7 +134,7 @@ export async function listSongsForModeration(req: Request, res: Response): Promi
 /** Как GET /api/studio/imported-songs: не музыкальное служение без модерации видит только свою песочницу. */
 async function resolveImportedSandboxCreatorRestriction(r: AuthReq): Promise<number | undefined> {
   if (!r.authUserId) return undefined;
-  if (canModerateCatalog(roleOf(r))) return undefined;
+  if (sessionCanModerateCatalog(r)) return undefined;
   const ok = await hasMusicMinistryDirection(r.authUserId);
   if (ok) return undefined;
   return r.authUserId;
@@ -155,7 +151,7 @@ export async function getSong(req: Request, res: Response): Promise<void> {
     let song;
     if (r.authUserId != null) {
       song = await getSongById(id, r.authUserId, {
-        canModerateCatalog: canModerateCatalog(roleOf(r)),
+        canModerateCatalog: sessionCanModerateCatalog(r),
         restrictImportedSandboxToCreatorId: await resolveImportedSandboxCreatorRestriction(r),
       });
     } else {
@@ -262,7 +258,7 @@ export async function createSongHandler(req: Request, res: Response): Promise<vo
       res.status(401).json({ error: 'Требуется вход' });
       return;
     }
-    if (!canModerateCatalog(roleOf(r))) {
+    if (!sessionCanModerateCatalog(r)) {
       res.status(403).json({ error: 'Недостаточно прав для редактирования каталога' });
       return;
     }
@@ -354,7 +350,8 @@ export async function createSongHandler(req: Request, res: Response): Promise<vo
       tempo: body.tempo ?? null,
       time_signature: body.time_signature ?? null,
       ...(tags !== undefined ? { tags } : {}),
-      is_published: body.is_published,
+      // Общий каталог: новая песня сразу видна всем в песеннике.
+      is_published: true,
       created_by_member_id: r.authUserId,
     });
     res.status(201).json(song);
@@ -376,7 +373,7 @@ export async function updateSongHandler(req: Request, res: Response): Promise<vo
       res.status(400).json({ error: 'Invalid id' });
       return;
     }
-    const isModerator = canModerateCatalog(roleOf(r));
+    const isModerator = sessionCanModerateCatalog(r);
     let allowImportedEditor = false;
     if (!isModerator) {
       const status = await getSongImportStatus(id);
@@ -442,7 +439,7 @@ export async function publishSongHandler(req: Request, res: Response): Promise<v
       res.status(404).json({ error: 'Не найдено' });
       return;
     }
-    if (!canModerateCatalog(roleOf(r))) {
+    if (!sessionCanModerateCatalog(r)) {
       const ok = await hasMusicMinistryDirection(r.authUserId);
       if (!ok || !status.isImported) {
         res.status(403).json({ error: 'Недостаточно прав' });
@@ -468,7 +465,7 @@ export async function deleteSongHandler(req: Request, res: Response): Promise<vo
       res.status(401).json({ error: 'Требуется вход' });
       return;
     }
-    if (!canDeleteCatalogSong(roleOf(r))) {
+    if (!sessionCanDeleteCatalogSong(r)) {
       res.status(403).json({ error: 'Недостаточно прав' });
       return;
     }
@@ -497,7 +494,7 @@ export async function importUrlText(req: Request, res: Response): Promise<void> 
       res.status(401).json({ error: 'Требуется вход' });
       return;
     }
-    if (!canModerateCatalog(roleOf(r))) {
+    if (!sessionCanModerateCatalog(r)) {
       res.status(403).json({ error: 'Недостаточно прав' });
       return;
     }
@@ -551,7 +548,7 @@ export async function youtubeOembed(req: Request, res: Response): Promise<void> 
       res.status(401).json({ error: 'Требуется вход' });
       return;
     }
-    if (!canModerateCatalog(roleOf(r))) {
+    if (!sessionCanModerateCatalog(r)) {
       res.status(403).json({ error: 'Недостаточно прав' });
       return;
     }
@@ -596,7 +593,7 @@ export async function aiSplitBlocksHandler(req: Request, res: Response): Promise
     res.status(401).json({ error: 'Требуется вход' });
     return;
   }
-  if (!canModerateCatalog(roleOf(r))) {
+  if (!sessionCanModerateCatalog(r)) {
     res.status(403).json({ error: 'Недостаточно прав для редактирования каталога' });
     return;
   }

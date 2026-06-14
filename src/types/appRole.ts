@@ -1,4 +1,4 @@
-/** Роли приложения: parishioner — прихожанин (гость); member — пользователь; minister — служитель; pastor — пастор; musician — студия и добавление песен в песенник; editor — модерация каталога; admin — полный доступ. */
+/** Роли приложения: parishioner — прихожанин (гость); member — пользователь; minister — служитель; pastor — пастор; musician — полный доступ к студии и каталогу песен; editor — модерация каталога; admin — полный доступ. */
 export type AppRole =
   | 'parishioner'
   | 'member'
@@ -80,6 +80,27 @@ export function canModerateCatalog(role: AppRole): boolean {
 /** Удаление песни из общего каталога — музыканты студии, редакторы и админ. */
 export function canDeleteCatalogSong(role: AppRole): boolean {
   return role === 'musician' || role === 'editor' || role === 'admin';
+}
+
+export type SessionRoleSource = {
+  authUserRole?: unknown;
+  authUserRoles?: unknown;
+};
+
+export function rolesOfSession(source: SessionRoleSource): AppRole[] {
+  return normalizeAppRoles(source.authUserRoles, source.authUserRole);
+}
+
+export function sessionCanAccessStudio(source: SessionRoleSource): boolean {
+  return rolesOfSession(source).some((role) => canAccessStudio(role));
+}
+
+export function sessionCanModerateCatalog(source: SessionRoleSource): boolean {
+  return rolesOfSession(source).some((role) => canModerateCatalog(role));
+}
+
+export function sessionCanDeleteCatalogSong(source: SessionRoleSource): boolean {
+  return rolesOfSession(source).some((role) => canDeleteCatalogSong(role));
 }
 
 export function isValidAppRoleString(value: unknown): value is AppRole {

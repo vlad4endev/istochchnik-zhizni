@@ -2,11 +2,11 @@ import { NextFunction, Request, Response } from 'express';
 
 import type { AppRole } from '../types/appRole';
 import {
-  canAccessStudio,
-  canDeleteCatalogSong,
-  canModerateCatalog,
   normalizeAppRole,
   normalizeAppRoles,
+  sessionCanAccessStudio,
+  sessionCanDeleteCatalogSong,
+  sessionCanModerateCatalog,
 } from '../types/appRole';
 import { roleHasPermission } from '../types/appPermissions';
 import { loadRolePermissionsSettings } from '../services/rolePermissionsSettingsService';
@@ -256,7 +256,7 @@ export function enforceRoleAccess(req: Request, res: Response, next: NextFunctio
   if (isStudioApiPath(fullPath) && authId) {
     void loadRolePermissionsSettings()
       .then((perms) => {
-        if (roleHasPermission(perms, sessionRoles, 'studio.access') || canAccessStudio(role)) {
+        if (roleHasPermission(perms, sessionRoles, 'studio.access') || sessionCanAccessStudio(roleReq)) {
           next();
           return;
         }
@@ -283,7 +283,7 @@ export function enforceRoleAccess(req: Request, res: Response, next: NextFunctio
         const allowed = isCreate
           ? roleHasPermission(perms, sessionRoles, 'studio.catalog_create')
           : roleHasPermission(perms, sessionRoles, 'studio.catalog_edit');
-        const legacy = canModerateCatalog(role);
+        const legacy = sessionCanModerateCatalog(roleReq);
         if (allowed || legacy) next();
         else {
           res.status(403).json({
@@ -301,7 +301,7 @@ export function enforceRoleAccess(req: Request, res: Response, next: NextFunctio
   if (isSongCatalogDeleteMutation(req.method, fullPath) && authId) {
     void loadRolePermissionsSettings()
       .then((perms) => {
-        if (roleHasPermission(perms, sessionRoles, 'studio.catalog_delete') || canDeleteCatalogSong(role)) {
+        if (roleHasPermission(perms, sessionRoles, 'studio.catalog_delete') || sessionCanDeleteCatalogSong(roleReq)) {
           next();
         } else {
           res.status(403).json({

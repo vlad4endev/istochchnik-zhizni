@@ -74,6 +74,19 @@ export function roleHasPermission(
 /** Заблокированные права администратора (нельзя отключить в UI). */
 export const ADMIN_LOCKED_PERMISSIONS = ['admin.panel', 'admin.users_manage'] as const;
 
+/** Права студии/песенника для роли «Музыкант» (нельзя отключить в UI). */
+export const MUSICIAN_LOCKED_PERMISSIONS = [
+  'section.songbook',
+  'section.studio',
+  'studio.access',
+  'studio.catalog_create',
+  'studio.catalog_edit',
+  'studio.catalog_delete',
+] as const;
+
 export function isPermissionLocked(role: AppRole, permissionId: AppPermissionId): boolean {
-  return role === 'admin' && (ADMIN_LOCKED_PERMISSIONS as readonly string[]).includes(permissionId);
+  if (role === 'admin' && (ADMIN_LOCKED_PERMISSIONS as readonly string[]).includes(permissionId)) {
+    return true;
+  }
+  return role === 'musician' && (MUSICIAN_LOCKED_PERMISSIONS as readonly string[]).includes(permissionId);
 }

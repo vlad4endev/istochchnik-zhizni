@@ -584,7 +584,7 @@ export function Layout() {
   const isAdmin = (role ?? 'member').toLowerCase() === 'admin';
   const meQ = useMe(Boolean(token));
   const canSeeBroadcastNav = isAdmin || normalizeMinistryDirection(meQ.data?.ministry_direction) === 'медиа служения';
-  const canSeeStudioNav = canAccessStudio(role, meQ.data?.ministry_direction);
+  const canSeeStudioNav = canAccessStudio(role, meQ.data?.ministry_direction, roles);
   const registrationStatus = useAuthStore((s) => s.registrationStatus ?? 'active');
   const profileUsername = useAuthStore((s) => s.username ?? '');
   const profileMemberId = useAuthStore((s) => s.memberId);

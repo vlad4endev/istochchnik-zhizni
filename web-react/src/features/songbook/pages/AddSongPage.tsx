@@ -5,7 +5,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 
 import { useAuthStore } from '../../auth/authStore';
-import { canModerateSongCatalog } from '../../auth/studioAccess';
+import { canModerateSongCatalogSession } from '../../auth/studioAccess';
 import { createSong, fetchYoutubeOembed } from '../api';
 import { LyricsWithChords } from '../components/LyricsWithChords';
 import { SectionInsertToolbar } from '../components/SectionInsertToolbar';
@@ -31,6 +31,7 @@ export function AddSongPage() {
   const isStudio =
     location.pathname.startsWith('/studio/') || location.pathname.startsWith('/songbook/studio');
   const role = useAuthStore((s) => s.role);
+  const roles = useAuthStore((s) => s.roles ?? [s.role]);
   const editorRef = useRef<HTMLTextAreaElement>(null);
   const selRef = useRef({ start: 0, end: 0 });
   const titleRef = useRef<HTMLInputElement>(null);
@@ -239,7 +240,7 @@ export function AddSongPage() {
     },
   });
 
-  if (!canModerateSongCatalog(role)) {
+  if (!canModerateSongCatalogSession(role, roles)) {
     return (
       <div className={`mx-auto max-w-lg p-6 ${isStudio ? 'text-zinc-300' : 'text-stone-600'}`}>
         <p>Добавление песен в песенник доступно музыкантам студии и редакторам каталога.</p>

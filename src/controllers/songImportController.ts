@@ -1,17 +1,13 @@
 import type { Request, Response } from 'express';
 import multer from 'multer';
 
-import { canModerateCatalog, normalizeAppRole, type AppRole } from '../types/appRole';
+import { sessionCanModerateCatalog, type AppRole, type SessionRoleSource } from '../types/appRole';
 import { query } from '../config/db';
 import { importSongsFromXlsxRows } from '../import/importManager';
 import { parseXlsxBuffer } from '../import/xlsxParser';
 import type { ImportProgress, ImportResult } from '../import/types';
 
-type AuthReq = Request & { authUserId?: number; authUserRole?: AppRole };
-
-function roleOf(req: AuthReq): AppRole {
-  return normalizeAppRole(req.authUserRole);
-}
+type AuthReq = Request & SessionRoleSource & { authUserId?: number; authUserRole?: AppRole };
 
 function normalizeMinistryDirection(value: unknown): string {
   return String(value ?? '').trim().toLowerCase().replace(/ё/g, 'е');
@@ -38,7 +34,7 @@ async function ensureCatalogModerator(
     res.status(401).json({ error: 'Требуется вход' });
     return { ok: false };
   }
-  if (!canModerateCatalog(roleOf(r))) {
+  if (!sessionCanModerateCatalog(r)) {
     try {
       const ok = await hasMusicMinistryDirection(r.authUserId);
       if (!ok) {

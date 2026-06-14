@@ -4,7 +4,7 @@ import { LuArrowLeft, LuCirclePlus, LuGuitar, LuListMusic, LuMusic2 } from 'reac
 import { PageHeader } from '@/components/layout/PageHeader';
 import { sectionHeroStickyClass } from '@/lib/sectionHeroChrome';
 import { useAuthStore } from '../auth/authStore';
-import { canModerateSongCatalog } from '../auth/studioAccess';
+import { canModerateSongCatalogSession } from '../auth/studioAccess';
 
 type NavItem = {
   to: string;
@@ -45,7 +45,8 @@ function itemClass(isActive: boolean, tone: NavItem['tone']) {
 export function StudioLayout() {
   const navigate = useNavigate();
   const role = useAuthStore((s) => s.role);
-  const showAddSong = canModerateSongCatalog(role);
+  const roles = useAuthStore((s) => s.roles ?? [s.role]);
+  const showAddSong = canModerateSongCatalogSession(role, roles);
 
   const groups: NavGroup[] = [
     ...(showAddSong

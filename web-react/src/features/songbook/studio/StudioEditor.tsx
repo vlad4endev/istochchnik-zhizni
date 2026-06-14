@@ -18,7 +18,7 @@ import {
 } from 'react-icons/lu';
 
 import { useAuthStore } from '../../auth/authStore';
-import { canDeleteSongFromCatalog, canModerateSongCatalog } from '../../auth/studioAccess';
+import { canDeleteSongFromCatalogSession, canModerateSongCatalogSession } from '../../auth/studioAccess';
 import { decodeHtmlEntities } from '../../../lib/decodeHtmlEntities';
 import { emitAppToast } from '../../../lib/uiFeedback';
 import { useScrollInputIntoView } from '@/hooks/useScrollInputIntoView';
@@ -199,8 +199,9 @@ export function StudioEditor() {
   /** Чтобы после гидрации сессии запрос повторился с тем же cookie/Bearer и не оставался 404 для черновиков. */
   const authEpoch = useAuthStore((s) => `${s.memberId ?? ''}:${s.role}`);
   const role = useAuthStore((s) => s.role);
-  const canDeleteCatalog = canDeleteSongFromCatalog(role);
-  const canEditCatalogMeta = canModerateSongCatalog(role);
+  const roles = useAuthStore((s) => s.roles ?? [s.role]);
+  const canDeleteCatalog = canDeleteSongFromCatalogSession(role, roles);
+  const canEditCatalogMeta = canModerateSongCatalogSession(role, roles);
   const { stageMode } = useSongbookChrome();
 
   const textareaByBlockRef = useRef<Map<string, HTMLTextAreaElement>>(new Map());
@@ -1089,7 +1090,7 @@ export function StudioEditor() {
                   </button>
                 ) : (
                   <p className={`text-[11px] ${shell.muted}`}>
-                    Изменять BPM/размер/теги могут только редактор и админ.
+                    Изменять BPM/размер/теги могут музыканты, редакторы и администраторы.
                   </p>
                 )}
               </div>

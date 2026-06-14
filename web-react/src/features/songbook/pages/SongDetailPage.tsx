@@ -57,9 +57,10 @@ export function SongDetailPage() {
   const { id } = useParams<{ id: string }>();
   const songId = Number(id);
   const role = useAuthStore((s) => s.role);
+  const roles = useAuthStore((s) => s.roles ?? [s.role]);
   const token = useAuthStore((s) => s.token);
   const meQ = useMe(Boolean(token));
-  const studioOk = canAccessStudio(role, meQ.data?.ministry_direction);
+  const studioOk = canAccessStudio(role, meQ.data?.ministry_direction, roles);
   const { stageMode, setStageMode } = useSongbookChrome();
   const [transpose, setTranspose] = useState(0);
   const [showChords, setShowChords] = useState(true);

@@ -1,6 +1,11 @@
 import type { Request, Response } from 'express';
 
-import { canAccessStudio, canModerateCatalog, normalizeAppRole, type AppRole } from '../types/appRole';
+import {
+  sessionCanAccessStudio,
+  sessionCanModerateCatalog,
+  type AppRole,
+  type SessionRoleSource,
+} from '../types/appRole';
 import { query } from '../config/db';
 import { getSongById, listImportedSandboxSongsForStudio, listRecentSongs } from '../services/songService';
 import {
@@ -26,11 +31,7 @@ import {
 } from '../services/studioService';
 import { AiAgentError, improveChordPlacementWithAi } from '../services/studioAiChordService';
 
-type AuthReq = Request & { authUserId?: number; authUserRole?: AppRole };
-
-function roleOf(req: AuthReq): AppRole {
-  return normalizeAppRole(req.authUserRole);
-}
+type AuthReq = Request & SessionRoleSource & { authUserId?: number; authUserRole?: AppRole };
 
 function normalizeMinistryDirection(value: unknown): string {
   return String(value ?? '').trim().toLowerCase().replace(/ё/g, 'е');
@@ -53,7 +54,7 @@ async function ensureStudio(req: AuthReq, res: Response): Promise<boolean> {
     res.status(401).json({ error: 'Требуется вход' });
     return false;
   }
-  if (!canAccessStudio(normalizeAppRole(req.authUserRole))) {
+  if (!sessionCanAccessStudio(req)) {
     try {
       const ok = await hasMusicMinistryDirection(req.authUserId);
       if (!ok) {
@@ -271,7 +272,7 @@ export async function importedSongsList(req: Request, res: Response): Promise<vo
     if (!(await ensureStudio(r, res))) return;
 
     let restrictToCreatorId: number | undefined;
-    if (!canModerateCatalog(roleOf(r))) {
+    if (!sessionCanModerateCatalog(r)) {
       const ok = await hasMusicMinistryDirection(r.authUserId!);
       if (!ok) {
         restrictToCreatorId = r.authUserId;
@@ -298,7 +299,7 @@ export async function catalogSongGet(req: Request, res: Response): Promise<void>
     }
 
     let restrictImportedSandboxToCreatorId: number | undefined;
-    if (!canModerateCatalog(roleOf(r))) {
+    if (!sessionCanModerateCatalog(r)) {
       const ok = await hasMusicMinistryDirection(r.authUserId!);
       if (!ok) {
         restrictImportedSandboxToCreatorId = r.authUserId;
@@ -306,7 +307,7 @@ export async function catalogSongGet(req: Request, res: Response): Promise<void>
     }
 
     const visibility = {
-      canModerateCatalog: canModerateCatalog(roleOf(r)),
+      canModerateCatalog: sessionCanModerateCatalog(r),
       restrictImportedSandboxToCreatorId,
     };
 
