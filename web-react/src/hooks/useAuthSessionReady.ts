@@ -11,15 +11,14 @@ function isIosPwaStandalone(): boolean {
     return (
       typeof window !== 'undefined' &&
       /iPhone|iPad|iPod/i.test(navigator.userAgent) &&
-      (('standalone' in navigator && (navigator as { standalone?: boolean }).standalone === true) ||
+      (('standalone' in navigator &&
+        (navigator as unknown as { standalone?: boolean }).standalone === true) ||
         window.matchMedia('(display-mode: standalone)').matches)
     );
   } catch {
     return false;
   }
 }
-
-const FAILSAFE_TIMEOUT_MS = isIosPwaStandalone() ? 3_000 : 20_000;
 
 function runCookieBootstrapOnce(): Promise<void> {
   if (!cookieBootstrapOnce) {
@@ -39,10 +38,11 @@ export function useAuthSessionReady(): boolean {
   useEffect(() => {
     if (!hydrated) return;
     let cancelled = false;
+    const failsafeMs = isIosPwaStandalone() ? 3_000 : 20_000;
     /** iOS PWA: редкие зависания fetch без ответа — не держать UI на «загрузке» бесконечно. */
     const failsafe = window.setTimeout(() => {
       if (!cancelled) setCookieAttemptDone(true);
-    }, FAILSAFE_TIMEOUT_MS);
+    }, failsafeMs);
     void runCookieBootstrapOnce().finally(() => {
       window.clearTimeout(failsafe);
       if (!cancelled) setCookieAttemptDone(true);
