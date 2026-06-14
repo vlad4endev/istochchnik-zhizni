@@ -6,6 +6,21 @@ import { useAuthHydrated } from './useAuthHydrated';
 
 let cookieBootstrapOnce: Promise<void> | null = null;
 
+function isIosPwaStandalone(): boolean {
+  try {
+    return (
+      typeof window !== 'undefined' &&
+      /iPhone|iPad|iPod/i.test(navigator.userAgent) &&
+      (('standalone' in navigator && (navigator as { standalone?: boolean }).standalone === true) ||
+        window.matchMedia('(display-mode: standalone)').matches)
+    );
+  } catch {
+    return false;
+  }
+}
+
+const FAILSAFE_TIMEOUT_MS = isIosPwaStandalone() ? 3_000 : 20_000;
+
 function runCookieBootstrapOnce(): Promise<void> {
   if (!cookieBootstrapOnce) {
     cookieBootstrapOnce = useAuthStore.getState().bootstrapSessionFromHttpCookie();
@@ -27,7 +42,7 @@ export function useAuthSessionReady(): boolean {
     /** iOS PWA: редкие зависания fetch без ответа — не держать UI на «загрузке» бесконечно. */
     const failsafe = window.setTimeout(() => {
       if (!cancelled) setCookieAttemptDone(true);
-    }, 20_000);
+    }, FAILSAFE_TIMEOUT_MS);
     void runCookieBootstrapOnce().finally(() => {
       window.clearTimeout(failsafe);
       if (!cancelled) setCookieAttemptDone(true);

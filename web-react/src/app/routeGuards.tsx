@@ -60,7 +60,10 @@ export function RouteFallback(): ReactNode {
 
 export function HydrateSplash(): ReactNode {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-[var(--surface)] text-stone-500">
+    <div
+      className="flex min-h-screen items-center justify-center text-stone-500"
+      style={{ background: '#f4f1ed' }}
+    >
       <div className="w-full max-w-sm space-y-2.5 px-4">
         <SkeletonBox width="36%" height="14px" />
         <SkeletonBox width="100%" height="44px" radius="12px" />
