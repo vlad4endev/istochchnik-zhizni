@@ -1152,7 +1152,13 @@ export async function getEditablePlanMetaByToken(
     query(
       `select id, title, default_key
        from public.songs
-       where coalesce(is_published, true) = true
+       where (
+         coalesce(is_published, true) = true
+         or (
+           btrim(coalesce(content, '')) <> ''
+           and not (coalesce(tags, '{}'::text[]) @> array['нет_текста']::text[])
+         )
+       )
        order by title asc`,
     ),
     query(

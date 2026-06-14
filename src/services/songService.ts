@@ -25,8 +25,28 @@ const TAG_IMPORTED = 'импортированная';
 /** Легаси-тег из сторонних импортов / старых скриптов (совпадает с вашими строками в БД). */
 const TAG_IMPORTED_LEGACY = 'импортировано';
 const TAG_MISSING_TEXT = 'нет_текста';
+const ARCHIVE_TAG = '__archived';
 
 const IMPORT_SANDBOX_TAGS: readonly string[] = [TAG_IMPORTED, TAG_IMPORTED_LEGACY];
+
+/** Песня с текстом попадает в общий песенник, даже если флаг is_published ещё false (старый импорт / черновик). */
+export function isCatalogContentEligible(content: string, tags: string[]): boolean {
+  if (!content.trim()) return false;
+  if (tags.includes(TAG_MISSING_TEXT)) return false;
+  if (tags.includes(ARCHIVE_TAG)) return false;
+  return true;
+}
+
+function sqlCatalogVisibleCondition(alias = 's'): string {
+  return `(
+    ${alias}.is_published = TRUE
+    OR (
+      btrim(coalesce(${alias}.content, '')) <> ''
+      AND NOT (coalesce(${alias}.tags, ARRAY[]::text[]) @> ARRAY['${TAG_MISSING_TEXT}']::text[])
+      AND NOT (coalesce(${alias}.tags, ARRAY[]::text[]) @> ARRAY['${ARCHIVE_TAG}']::text[])
+    )
+  )`;
+}
 
 /** Фрагмент SQL: теги импорта с любым регистром + те же слова, что в IMPORT_SANDBOX_TAGS. */
 function sqlImportedSandboxTagsMatch(): string {
@@ -95,7 +115,7 @@ async function listSongsInternal(
   const hasTempoMax = f.tempoMax != null && Number.isFinite(f.tempoMax);
   const tagList = (f.tags ?? []).map((t) => t.trim()).filter(Boolean);
 
-  const conditions: string[] = options.includeUnpublished ? [] : ['s.is_published = TRUE'];
+  const conditions: string[] = options.includeUnpublished ? [] : [sqlCatalogVisibleCondition('s')];
   const params: unknown[] = [];
 
   if (search.length > 0) {
@@ -198,9 +218,14 @@ async function listImportedSandboxSongsQuery(
   includeImportedAt: boolean,
 ): Promise<SongListItem[]> {
   const tagSql = sqlImportedSandboxTagsMatch();
+  /** Только настоящая песочница: без текста или заготовка «нет_текста». С текстом — в общем песеннике. */
+  const sandboxOnlySql = `(
+    btrim(coalesce(s.content, '')) = ''
+    OR coalesce(s.tags, ARRAY[]::text[]) @> ARRAY['${TAG_MISSING_TEXT}']::text[]
+  )`;
   const whereSql = includeImportedAt
-    ? `NOT s.is_published AND (${tagSql} OR s.imported_at IS NOT NULL)`
-    : `NOT s.is_published AND (${tagSql})`;
+    ? `NOT s.is_published AND (${tagSql} OR s.imported_at IS NOT NULL) AND ${sandboxOnlySql}`
+    : `NOT s.is_published AND (${tagSql}) AND ${sandboxOnlySql}`;
 
   const mid1 = 1;
   const mid2 = 2;
@@ -262,7 +287,7 @@ export async function getSongById(
 ): Promise<SongListItem | null> {
   if (memberId == null) {
     const result = await query(
-      `SELECT * FROM songs WHERE id = $1 AND is_published = TRUE`,
+      `SELECT * FROM songs WHERE id = $1 AND ${sqlCatalogVisibleCondition()}`,
       [id]
     );
     const row = result.rows[0] as Record<string, unknown> | undefined;
@@ -277,7 +302,7 @@ export async function getSongById(
        FROM songs s
        LEFT JOIN studio_versions sv ON sv.song_id = s.id AND sv.member_id = $2
        LEFT JOIN song_favorites f ON f.song_id = s.id AND f.member_id = $2
-       WHERE s.id = $1 AND s.is_published = TRUE`,
+       WHERE s.id = $1 AND ${sqlCatalogVisibleCondition('s')}`,
       [id, memberId]
     );
     const row = result.rows[0] as Record<string, unknown> | undefined;
@@ -287,6 +312,7 @@ export async function getSongById(
 
   const canMod = visibility.canModerateCatalog;
   const canStudio = Boolean(visibility.canAccessStudioCatalog);
+  const catalogVisible = sqlCatalogVisibleCondition('s');
 
   const buildSql = () => `
       SELECT s.*,
@@ -297,7 +323,7 @@ export async function getSongById(
       LEFT JOIN song_favorites f ON f.song_id = s.id AND f.member_id = $3
       WHERE s.id = $1
         AND (
-          s.is_published = TRUE
+          ${catalogVisible}
           OR $4::boolean IS TRUE
           OR $5::boolean IS TRUE
           OR (sv.id IS NOT NULL)
@@ -392,13 +418,28 @@ export async function updateSong(id: number, input: UpdateSongInput): Promise<So
     vals.push(v);
   };
 
+  let existingTags: string[] | undefined;
+  if (input.content !== undefined && input.tags === undefined) {
+    const existing = await query(`SELECT tags FROM songs WHERE id = $1`, [id]);
+    const row = existing.rows[0] as { tags?: string[] } | undefined;
+    existingTags = Array.isArray(row?.tags) ? row.tags.map((t) => String(t)) : [];
+  }
+
   if (input.title !== undefined) push('title', input.title.trim());
   if (input.content !== undefined) push('content', input.content);
   if (input.default_key !== undefined) push('default_key', input.default_key);
   if (input.tempo !== undefined) push('tempo', input.tempo);
   if (input.time_signature !== undefined) push('time_signature', input.time_signature);
   if (input.tags !== undefined) push('tags', input.tags);
-  if (input.is_published !== undefined) push('is_published', input.is_published);
+
+  let publishFlag = input.is_published;
+  if (input.content !== undefined && publishFlag !== false) {
+    const tags = input.tags ?? existingTags ?? [];
+    if (isCatalogContentEligible(input.content, tags)) {
+      publishFlag = true;
+    }
+  }
+  if (publishFlag !== undefined) push('is_published', publishFlag);
 
   if (fields.length === 0) {
     const r = await query(`SELECT * FROM songs WHERE id = $1`, [id]);
@@ -496,7 +537,7 @@ export async function listRecentSongs(memberId: number, limit = 10): Promise<Son
             (sv.id IS NOT NULL) AS has_studio_version,
             (f.song_id IS NOT NULL) AS is_favorite
      FROM studio_song_recents r
-     JOIN songs s ON s.id = r.song_id AND s.is_published = TRUE
+     JOIN songs s ON s.id = r.song_id AND ${sqlCatalogVisibleCondition('s')}
      LEFT JOIN studio_versions sv ON sv.song_id = s.id AND sv.member_id = $1
      LEFT JOIN song_favorites f ON f.song_id = s.id AND f.member_id = $1
      WHERE r.member_id = $1

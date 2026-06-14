@@ -1719,6 +1719,15 @@ CREATE INDEX IF NOT EXISTS songs_tags_gin ON songs USING GIN (tags);
 CREATE INDEX IF NOT EXISTS songs_fts_idx ON songs USING GIN (
   to_tsvector('simple', coalesce(title, '') || ' ' || coalesce(content, ''))
 );
+ALTER TABLE songs ADD COLUMN IF NOT EXISTS imported_at TIMESTAMPTZ;
+-- Песни с текстом — в общем песеннике для всех (исправление старых импортов с is_published = false).
+UPDATE songs s
+SET is_published = TRUE,
+    updated_at = NOW()
+WHERE NOT s.is_published
+  AND btrim(coalesce(s.content, '')) <> ''
+  AND NOT (coalesce(s.tags, '{}'::text[]) @> ARRAY['нет_текста']::text[])
+  AND NOT (coalesce(s.tags, '{}'::text[]) @> ARRAY['__archived']::text[]);
 
 CREATE TABLE IF NOT EXISTS studio_versions (
   id BIGSERIAL PRIMARY KEY,
