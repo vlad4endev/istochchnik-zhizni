@@ -1,5 +1,5 @@
 # Multi-stage: deps → build (tsc) → prod-deps → runtime (только dist + production node_modules)
-FROM node:20-alpine AS deps
+FROM public.ecr.aws/docker/library/node:20-alpine AS deps
 WORKDIR /app
 
 COPY package.json package-lock.json ./
@@ -12,13 +12,13 @@ COPY tsconfig.json ./
 COPY src ./src
 RUN npm run build && test -f dist/config/initDb.js
 
-FROM node:20-alpine AS prod-deps
+FROM public.ecr.aws/docker/library/node:20-alpine AS prod-deps
 WORKDIR /app
 
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev && npm cache clean --force
 
-FROM node:20-alpine AS runtime
+FROM public.ecr.aws/docker/library/node:20-alpine AS runtime
 WORKDIR /app
 
 ENV NODE_ENV=production
