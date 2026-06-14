@@ -1720,7 +1720,7 @@ CREATE INDEX IF NOT EXISTS songs_fts_idx ON songs USING GIN (
   to_tsvector('simple', coalesce(title, '') || ' ' || coalesce(content, ''))
 );
 ALTER TABLE songs ADD COLUMN IF NOT EXISTS imported_at TIMESTAMPTZ;
--- Песни с текстом — в общем песеннике для всех (исправление старых импортов с is_published = false).
+-- Каталог: готовые песни попадают в песенник (is_published). Старые импорты с текстом — в каталог.
 UPDATE songs s
 SET is_published = TRUE,
     updated_at = NOW()
