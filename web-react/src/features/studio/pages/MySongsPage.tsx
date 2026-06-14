@@ -310,9 +310,14 @@ export function MySongsPage() {
     <div className={['mx-auto max-w-3xl space-y-6', pageCard].filter(Boolean).join(' ')}>
       <header className="space-y-3 border-b border-stone-200 pb-5">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-stone-900">Мои версии</h1>
+          <h1 className="text-2xl font-bold tracking-tight text-stone-900">Студия · мои песни</h1>
           <p className="mt-1 max-w-xl text-sm leading-relaxed text-stone-600">
-            Три зоны: правки к песням каталога, свободные черновики и быстрый возврат к недавним песням.
+            Личные версии и черновики — только у вас. Раздел «Импортированные» видят все, у кого есть доступ к
+            студии. Общий каталог для всех — в{' '}
+            <Link to="/songbook" className="font-semibold text-sky-700 hover:text-sky-800">
+              песеннике
+            </Link>
+            .
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -328,14 +333,14 @@ export function MySongsPage() {
           role="tablist"
           aria-label="Разделы «Мои версии»"
         >
-          {tabBtn('saved', 'Каталог', 'Сохранённые студийные версии песен из общего списка')}
+          {tabBtn('saved', 'Мои версии', 'Ваши личные правки к песням из песенника')}
           {showRecentTab ? tabBtn('recent', 'Недавние', 'Песни, которые вы недавно открывали в песеннике') : null}
           {tabBtn('drafts', 'Черновики', 'Тексты без привязки к песне из каталога')}
           {showImportedTab
             ? tabBtn(
                 'imported',
                 importedCount > 0 ? `Импортированные · ${importedCount}` : 'Импортированные',
-                'Песни, импортированные из таблицы. После «Опубликовать» переходят в каталог.',
+                'Песочница студии: видят все с доступом к студии. После «Опубликовать» песня попадает в общий песенник.',
               )
             : null}
         </div>
@@ -346,7 +351,7 @@ export function MySongsPage() {
         role="tabpanel"
         aria-label={
           tab === 'saved'
-            ? 'Каталог'
+            ? 'Мои версии'
             : tab === 'recent'
               ? 'Недавние'
               : tab === 'imported'
@@ -485,11 +490,14 @@ export function MySongsPage() {
         {tab === 'imported' ? (
           <section className="space-y-3">
             <div className="rounded-xl border border-sky-200 bg-sky-50/60 p-3 text-sm text-sky-900">
-              <p className="font-semibold">Импортированные песни — “песочница” перед каталогом</p>
+              <p className="font-semibold">Импортированные — только для студии</p>
               <p className="mt-1 text-xs leading-relaxed text-sky-900/80">
-                Здесь остаются только заготовки без текста или ещё не опубликованные. Песни с текстом после
-                импорта сразу попадают в общий песенник; при необходимости нажмите{' '}
-                <span className="font-semibold">«Опубликовать»</span> для черновиков без текста.
+                Этот список видят все музыканты с доступом к студии (песни всех авторов). После кнопки{' '}
+                <span className="font-semibold">«Опубликовать»</span> песня попадает в общий{' '}
+                <Link to="/songbook" className="font-semibold underline hover:text-sky-950">
+                  песенник
+                </Link>{' '}
+                для всех.
               </p>
             </div>
             <input

@@ -7,7 +7,11 @@ import {
   type SessionRoleSource,
 } from '../types/appRole';
 import { query } from '../config/db';
-import { getSongById, listImportedSandboxSongsForStudio, listRecentSongs } from '../services/songService';
+import {
+  getSongById,
+  listImportedSandboxSongsForStudio,
+  listRecentSongs,
+} from '../services/songService';
 import {
   addSetlistItem,
   createDraft,
@@ -265,7 +269,7 @@ export async function recentSongsList(req: Request, res: Response): Promise<void
   }
 }
 
-/** GET /api/studio/imported-songs — черновики импорта (общая песочница для всей студии). */
+/** GET /api/studio/imported-songs — песочница импорта (только доступ к студии; все авторы, не фильтр по создателю). */
 export async function importedSongsList(req: Request, res: Response): Promise<void> {
   try {
     const r = req as AuthReq;

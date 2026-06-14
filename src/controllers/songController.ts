@@ -87,6 +87,7 @@ export async function listSongs(req: Request, res: Response): Promise<void> {
     const r = req as AuthReq;
     const memberId = r.authUserId ?? null;
     const filters = parseSongListFilters(req);
+    /** Общий песенник: все опубликованные песни всех авторов (без фильтра created_by). */
     const songs = await listPublishedSongs(memberId, filters);
     res.json(songs);
   } catch (e) {
@@ -424,7 +425,7 @@ export async function publishSongHandler(req: Request, res: Response): Promise<v
     }
     if (!sessionCanModerateCatalog(r)) {
       const ok = await hasMusicMinistryDirection(r.authUserId);
-      if (!ok || !status.isImported) {
+      if (!ok) {
         res.status(403).json({ error: 'Недостаточно прав' });
         return;
       }

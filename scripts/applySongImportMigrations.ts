@@ -15,6 +15,9 @@ const ROOT = join(__dirname, '..');
 const FILES = [
   'supabase/migrations/20260506190000_song_import_external_fields.sql',
   'supabase/migrations/20260508120000_backfill_songs_imported_at.sql',
+  'supabase/migrations/20260614120000_publish_imported_songs_with_content.sql',
+  'supabase/migrations/20260615120000_promote_studio_versions_to_catalog.sql',
+  'supabase/migrations/20260616120000_publish_all_ready_catalog_songs.sql',
 ] as const;
 
 function buildClient(): pg.Client {

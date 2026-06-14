@@ -164,6 +164,7 @@ async function listSongsInternal(
   });
 }
 
+/** Общий песенник: все опубликованные песни каталога, без фильтра по автору. */
 export async function listPublishedSongs(
   memberId: number | null,
   filters?: SongListFilters
@@ -401,28 +402,13 @@ export async function updateSong(id: number, input: UpdateSongInput): Promise<So
     vals.push(v);
   };
 
-  let existingTags: string[] | undefined;
-  if (input.content !== undefined && input.tags === undefined) {
-    const existing = await query(`SELECT tags FROM songs WHERE id = $1`, [id]);
-    const row = existing.rows[0] as { tags?: string[] } | undefined;
-    existingTags = Array.isArray(row?.tags) ? row.tags.map((t) => String(t)) : [];
-  }
-
   if (input.title !== undefined) push('title', input.title.trim());
   if (input.content !== undefined) push('content', input.content);
   if (input.default_key !== undefined) push('default_key', input.default_key);
   if (input.tempo !== undefined) push('tempo', input.tempo);
   if (input.time_signature !== undefined) push('time_signature', input.time_signature);
   if (input.tags !== undefined) push('tags', input.tags);
-
-  let publishFlag = input.is_published;
-  if (input.content !== undefined && publishFlag !== false) {
-    const tags = input.tags ?? existingTags ?? [];
-    if (isCatalogReady(input.content, tags)) {
-      publishFlag = true;
-    }
-  }
-  if (publishFlag !== undefined) push('is_published', publishFlag);
+  if (input.is_published !== undefined) push('is_published', input.is_published);
 
   if (fields.length === 0) {
     const r = await query(`SELECT * FROM songs WHERE id = $1`, [id]);
@@ -458,22 +444,108 @@ export async function getSongImportStatus(
   };
 }
 
-/** Публикация импортированной песни: is_published = true, убираем технические теги. */
-export async function publishImportedSong(id: number): Promise<SongRow | null> {
+function stripImportSandboxTags(tags: string[]): string[] {
+  return tags.filter(
+    (t) => t !== TAG_IMPORTED && t !== TAG_IMPORTED_LEGACY && t !== TAG_MISSING_TEXT,
+  );
+}
+
+/** Лучший текст из студийных версий, если в каталоге пусто (часто сохраняли только «Сохранить песню» в студии). */
+export async function findBestStudioContentForCatalog(
+  songId: number,
+): Promise<{ content: string; custom_key: string | null } | null> {
+  const result = await query(
+    `SELECT custom_content, custom_key
+     FROM studio_versions
+     WHERE song_id = $1
+       AND btrim(coalesce(custom_content, '')) <> ''
+     ORDER BY length(custom_content) DESC, updated_at DESC
+     LIMIT 1`,
+    [songId],
+  );
+  const row = result.rows[0] as { custom_content?: string; custom_key?: string | null } | undefined;
+  if (!row?.custom_content?.trim()) return null;
+  return {
+    content: String(row.custom_content).trimEnd(),
+    custom_key: row.custom_key != null ? String(row.custom_key) : null,
+  };
+}
+
+/**
+ * Перенос готовой песни в общий каталог (песенник) — для любого автора.
+ * Уже опубликованные не трогаем (личная студийная версия).
+ */
+export async function promoteReadySongToCatalog(
+  songId: number,
+  content: string,
+  customKey?: string | null,
+): Promise<SongRow | null> {
+  const trimmed = content.trim();
+  if (!trimmed) return null;
+
+  const r = await query(`SELECT tags, is_published FROM songs WHERE id = $1`, [songId]);
+  const row = r.rows[0] as { tags?: string[]; is_published?: boolean } | undefined;
+  if (!row || row.is_published) return null;
+
+  const tags = Array.isArray(row.tags) ? row.tags.map((t) => String(t)) : [];
+  if (!isCatalogReady(trimmed, tags)) return null;
+
+  const cleanTags = stripImportSandboxTags(tags);
+
   const result = await query(
     `UPDATE songs
-     SET is_published = TRUE,
-         tags = COALESCE(
-           (SELECT array_agg(t) FROM unnest(tags) AS t WHERE t NOT IN ($2, $3, $4)),
-           '{}'::text[]
-         ),
+     SET content = $2,
+         default_key = COALESCE($3, default_key),
+         is_published = TRUE,
+         tags = $4::text[],
          updated_at = NOW()
      WHERE id = $1
+       AND NOT is_published
      RETURNING *`,
-    [id, TAG_IMPORTED, TAG_IMPORTED_LEGACY, TAG_MISSING_TEXT],
+    [songId, trimmed, customKey ?? null, cleanTags],
   );
   return result.rows[0] ? mapSong(result.rows[0] as Record<string, unknown>) : null;
 }
+
+/** @deprecated Используйте promoteReadySongToCatalog */
+export const promoteImportedSandboxToCatalog = promoteReadySongToCatalog;
+
+/** Публикация в общий каталог: is_published = true, убираем технические теги импорта. */
+export async function publishSongToCatalog(id: number): Promise<SongRow | null> {
+  const existing = await query(
+    `SELECT content, tags FROM songs WHERE id = $1 LIMIT 1`,
+    [id],
+  );
+  const row = existing.rows[0] as { content?: string; tags?: string[] } | undefined;
+  let content = String(row?.content ?? '').trim();
+  let customKey: string | null = null;
+  if (!content) {
+    const fromStudio = await findBestStudioContentForCatalog(id);
+    if (fromStudio) {
+      content = fromStudio.content;
+      customKey = fromStudio.custom_key;
+    }
+  }
+
+  const tags = Array.isArray(row?.tags) ? row.tags.map((t) => String(t)) : [];
+  const cleanTags = stripImportSandboxTags(tags);
+
+  const result = await query(
+    `UPDATE songs
+     SET is_published = TRUE,
+         content = CASE WHEN btrim(coalesce(content, '')) = '' AND $2::text <> '' THEN $2 ELSE content END,
+         default_key = COALESCE($3, default_key),
+         tags = $4::text[],
+         updated_at = NOW()
+     WHERE id = $1
+     RETURNING *`,
+    [id, content, customKey, cleanTags],
+  );
+  return result.rows[0] ? mapSong(result.rows[0] as Record<string, unknown>) : null;
+}
+
+/** @deprecated Используйте publishSongToCatalog */
+export const publishImportedSong = publishSongToCatalog;
 
 export async function getVersionFlags(
   memberId: number,

@@ -374,6 +374,7 @@ export function StudioEditor() {
       void qc.invalidateQueries({ queryKey: ['studio', 'version', id] });
       void qc.invalidateQueries({ queryKey: ['songs'] });
       void qc.invalidateQueries({ queryKey: ['song', id] });
+      void qc.invalidateQueries({ queryKey: ['studio', 'imported-songs'] });
       lastSavedSnapshotRef.current = JSON.stringify({
         content: blocksToChordPro(blocks),
         key,

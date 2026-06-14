@@ -136,7 +136,7 @@ export async function importSongsFromXlsxRows(
       const content = smartImportTextToChordPro(sourceText).trimEnd() || sourceText;
       const isPlaceholder = !content.trim();
       const importedTags = isPlaceholder ? [TAG_IMPORTED, TAG_MISSING_TEXT] : [TAG_IMPORTED];
-      /** С текстом — сразу в общий песенник; без текста — песочница до ручной публикации. */
+      /** Импорт — в песочницу студии; в общий песенник — через «Опубликовать» или импорт с текстом (готово). */
       const publishInCatalog = !isPlaceholder;
       if (isPlaceholder) placeholders += 1;
 
