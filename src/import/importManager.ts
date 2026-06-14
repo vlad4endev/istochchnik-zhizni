@@ -136,6 +136,8 @@ export async function importSongsFromXlsxRows(
       const content = smartImportTextToChordPro(sourceText).trimEnd() || sourceText;
       const isPlaceholder = !content.trim();
       const importedTags = isPlaceholder ? [TAG_IMPORTED, TAG_MISSING_TEXT] : [TAG_IMPORTED];
+      /** С текстом — сразу в общий песенник; без текста — песочница до ручной публикации. */
+      const publishInCatalog = !isPlaceholder;
       if (isPlaceholder) placeholders += 1;
 
       let songId: number;
@@ -158,24 +160,25 @@ export async function importSongsFromXlsxRows(
            SET title = $2,
                content = $3,
                tags = (SELECT ARRAY(SELECT DISTINCT unnest(songs.tags || $4::text[]))),
-               is_published = FALSE,
+               is_published = $5,
                imported_at = COALESCE(imported_at, NOW()),
                updated_at = NOW()
            WHERE song_number = $1`,
-          [row.song_number, row.title, content, importedTags],
+          [row.song_number, row.title, content, importedTags, publishInCatalog],
         );
       } else {
         const ins = await client.query<{ id: string }>(
           `INSERT INTO songs (
              song_number, title, slug, content, tags, is_published, created_by_member_id, imported_at
            )
-           VALUES ($1,$2,gen_random_uuid()::text,$3,$4,FALSE,$5,NOW())
+           VALUES ($1,$2,gen_random_uuid()::text,$3,$4,$5,$6,NOW())
            RETURNING id`,
           [
             row.song_number,
             row.title,
             content,
             importedTags,
+            publishInCatalog,
             options.createdByMemberId,
           ],
         );

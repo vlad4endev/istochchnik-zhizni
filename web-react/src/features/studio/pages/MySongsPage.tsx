@@ -487,8 +487,9 @@ export function MySongsPage() {
             <div className="rounded-xl border border-sky-200 bg-sky-50/60 p-3 text-sm text-sky-900">
               <p className="font-semibold">Импортированные песни — “песочница” перед каталогом</p>
               <p className="mt-1 text-xs leading-relaxed text-sky-900/80">
-                Здесь все песни, загруженные через таблицу. Откройте песню, поправьте название и текст, затем
-                нажмите <span className="font-semibold">«Опубликовать»</span> — она появится в общем песеннике.
+                Здесь остаются только заготовки без текста или ещё не опубликованные. Песни с текстом после
+                импорта сразу попадают в общий песенник; при необходимости нажмите{' '}
+                <span className="font-semibold">«Опубликовать»</span> для черновиков без текста.
               </p>
             </div>
             <input
