@@ -265,21 +265,13 @@ export async function recentSongsList(req: Request, res: Response): Promise<void
   }
 }
 
-/** GET /api/studio/imported-songs — черновики импорта (тег и/или imported_at), без query-string кириллицы. */
+/** GET /api/studio/imported-songs — черновики импорта (общая песочница для всей студии). */
 export async function importedSongsList(req: Request, res: Response): Promise<void> {
   try {
     const r = req as AuthReq;
     if (!(await ensureStudio(r, res))) return;
 
-    let restrictToCreatorId: number | undefined;
-    if (!sessionCanModerateCatalog(r)) {
-      const ok = await hasMusicMinistryDirection(r.authUserId!);
-      if (!ok) {
-        restrictToCreatorId = r.authUserId;
-      }
-    }
-
-    const songs = await listImportedSandboxSongsForStudio(r.authUserId!, restrictToCreatorId);
+    const songs = await listImportedSandboxSongsForStudio(r.authUserId!);
     res.json(songs);
   } catch (e) {
     console.error(e);
@@ -298,22 +290,19 @@ export async function catalogSongGet(req: Request, res: Response): Promise<void>
       return;
     }
 
-    let restrictImportedSandboxToCreatorId: number | undefined;
-    if (!sessionCanModerateCatalog(r)) {
-      const ok = await hasMusicMinistryDirection(r.authUserId!);
-      if (!ok) {
-        restrictImportedSandboxToCreatorId = r.authUserId;
-      }
-    }
+    const studioCatalog =
+      sessionCanModerateCatalog(r) ||
+      sessionCanAccessStudio(r) ||
+      (await hasMusicMinistryDirection(r.authUserId!));
 
     const visibility = {
       canModerateCatalog: sessionCanModerateCatalog(r),
-      restrictImportedSandboxToCreatorId,
+      canAccessStudioCatalog: studioCatalog,
     };
 
     const song = await getSongById(songId, r.authUserId!, visibility);
     if (!song) {
-      const imported = await listImportedSandboxSongsForStudio(r.authUserId!, restrictImportedSandboxToCreatorId);
+      const imported = await listImportedSandboxSongsForStudio(r.authUserId!);
       const hit = imported.find((x) => Number(x.id) === songId);
       if (hit) {
         res.json(hit);

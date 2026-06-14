@@ -1,6 +1,7 @@
 import type { Request, Response } from 'express';
 
 import {
+  sessionCanAccessStudio,
   sessionCanDeleteCatalogSong,
   sessionCanModerateCatalog,
   type AppRole,
@@ -43,14 +44,6 @@ async function hasMusicMinistryDirection(memberId: number): Promise<boolean> {
     .split(/[;,]/)
     .map((s) => normalizeMinistryDirection(s))
     .some((s) => s === target || s.includes(target));
-}
-
-/** Запрос только списка импортированных заготовок (студия), без других тегов — можно ограничить создателем. */
-function isImportedSandboxOnlyFilter(filters: SongListFilters): boolean {
-  const tags = filters.tags ?? [];
-  if (tags.length !== 1) return false;
-  const t = tags[0].trim().toLowerCase().replace(/ё/g, 'е');
-  return t === 'импортированная'.replace(/ё/g, 'е') || t === 'импортировано'.replace(/ё/g, 'е');
 }
 
 function parseSongListFilters(req: Request): SongListFilters {
@@ -102,6 +95,13 @@ export async function listSongs(req: Request, res: Response): Promise<void> {
   }
 }
 
+/** Студия / муз. служение / модераторы — общий каталог, не только автор. */
+async function canAccessStudioCatalog(r: AuthReq): Promise<boolean> {
+  if (sessionCanModerateCatalog(r) || sessionCanAccessStudio(r)) return true;
+  if (!r.authUserId) return false;
+  return hasMusicMinistryDirection(r.authUserId);
+}
+
 export async function listSongsForModeration(req: Request, res: Response): Promise<void> {
   try {
     const r = req as AuthReq;
@@ -109,35 +109,17 @@ export async function listSongsForModeration(req: Request, res: Response): Promi
       res.status(401).json({ error: 'Требуется вход' });
       return;
     }
-    const filters = parseSongListFilters(req);
-    let restrictToCreatorId: number | undefined;
-    if (!sessionCanModerateCatalog(r)) {
-      const ok = await hasMusicMinistryDirection(r.authUserId);
-      if (!ok) {
-        if (!isImportedSandboxOnlyFilter(filters)) {
-          res.status(403).json({ error: 'Недостаточно прав' });
-          return;
-        }
-        restrictToCreatorId = r.authUserId;
-      }
+    if (!(await canAccessStudioCatalog(r))) {
+      res.status(403).json({ error: 'Недостаточно прав' });
+      return;
     }
-    const songs = await listCatalogSongsForModeration(r.authUserId ?? null, filters, {
-      restrictToCreatorId,
-    });
+    const filters = parseSongListFilters(req);
+    const songs = await listCatalogSongsForModeration(r.authUserId ?? null, filters);
     res.json(songs);
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: 'Не удалось загрузить каталог для модерации' });
   }
-}
-
-/** Как GET /api/studio/imported-songs: не музыкальное служение без модерации видит только свою песочницу. */
-async function resolveImportedSandboxCreatorRestriction(r: AuthReq): Promise<number | undefined> {
-  if (!r.authUserId) return undefined;
-  if (sessionCanModerateCatalog(r)) return undefined;
-  const ok = await hasMusicMinistryDirection(r.authUserId);
-  if (ok) return undefined;
-  return r.authUserId;
 }
 
 export async function getSong(req: Request, res: Response): Promise<void> {
@@ -150,9 +132,10 @@ export async function getSong(req: Request, res: Response): Promise<void> {
     const r = req as AuthReq;
     let song;
     if (r.authUserId != null) {
+      const studioCatalog = await canAccessStudioCatalog(r);
       song = await getSongById(id, r.authUserId, {
         canModerateCatalog: sessionCanModerateCatalog(r),
-        restrictImportedSandboxToCreatorId: await resolveImportedSandboxCreatorRestriction(r),
+        canAccessStudioCatalog: studioCatalog,
       });
     } else {
       song = await getSongById(id, null);

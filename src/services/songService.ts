@@ -86,7 +86,7 @@ export interface SongListFilters {
 async function listSongsInternal(
   memberId: number | null,
   filters: SongListFilters | undefined,
-  options: { includeUnpublished: boolean; restrictToCreatorId?: number },
+  options: { includeUnpublished: boolean },
 ): Promise<SongListItem[]> {
   const f = filters ?? {};
   const search = (f.q ?? '').trim();
@@ -97,11 +97,6 @@ async function listSongsInternal(
 
   const conditions: string[] = options.includeUnpublished ? [] : ['s.is_published = TRUE'];
   const params: unknown[] = [];
-
-  if (options.restrictToCreatorId != null) {
-    params.push(options.restrictToCreatorId);
-    conditions.push(`s.created_by_member_id = $${params.length}`);
-  }
 
   if (search.length > 0) {
     params.push(search);
@@ -170,11 +165,9 @@ export async function listPublishedSongs(
 export async function listCatalogSongsForModeration(
   memberId: number | null,
   filters?: SongListFilters,
-  moderationOptions?: { restrictToCreatorId?: number },
 ): Promise<SongListItem[]> {
   return listSongsInternal(memberId, filters, {
     includeUnpublished: true,
-    restrictToCreatorId: moderationOptions?.restrictToCreatorId,
   });
 }
 
@@ -202,22 +195,15 @@ function isMissingImportedAtColumnError(err: unknown): boolean {
 
 async function listImportedSandboxSongsQuery(
   memberIdForJoins: number,
-  restrictToCreatorId: number | undefined,
   includeImportedAt: boolean,
 ): Promise<SongListItem[]> {
-  const params: unknown[] = [];
   const tagSql = sqlImportedSandboxTagsMatch();
   const whereSql = includeImportedAt
     ? `NOT s.is_published AND (${tagSql} OR s.imported_at IS NOT NULL)`
     : `NOT s.is_published AND (${tagSql})`;
-  let fullWhere = whereSql;
-  if (restrictToCreatorId != null) {
-    params.push(restrictToCreatorId);
-    fullWhere += ` AND s.created_by_member_id = $${params.length}`;
-  }
 
-  const mid1 = params.length + 1;
-  const mid2 = params.length + 2;
+  const mid1 = 1;
+  const mid2 = 2;
   const result = await query(
     `SELECT s.*,
             (sv.id IS NOT NULL) AS has_studio_version,
@@ -225,9 +211,9 @@ async function listImportedSandboxSongsQuery(
      FROM songs s
      LEFT JOIN studio_versions sv ON sv.song_id = s.id AND sv.member_id = $${mid1}
      LEFT JOIN song_favorites f ON f.song_id = s.id AND f.member_id = $${mid2}
-     WHERE ${fullWhere}
+     WHERE ${whereSql}
      ORDER BY COALESCE(s.song_number, 2147483647) ASC, s.title ASC`,
-    [...params, memberIdForJoins, memberIdForJoins],
+    [memberIdForJoins, memberIdForJoins],
   );
 
   return mapImportedSandboxRows(result.rows as Record<string, unknown>[]);
@@ -239,26 +225,25 @@ async function listImportedSandboxSongsQuery(
  */
 export async function listImportedSandboxSongsForStudio(
   memberIdForJoins: number,
-  restrictToCreatorId?: number,
 ): Promise<SongListItem[]> {
   try {
-    return await listImportedSandboxSongsQuery(memberIdForJoins, restrictToCreatorId, true);
+    return await listImportedSandboxSongsQuery(memberIdForJoins, true);
   } catch (err) {
     if (isMissingImportedAtColumnError(err)) {
       console.warn(
         '[songService] listImportedSandboxSongsForStudio: imported_at missing, falling back to tag-only filter',
       );
-      return await listImportedSandboxSongsQuery(memberIdForJoins, restrictToCreatorId, false);
+      return await listImportedSandboxSongsQuery(memberIdForJoins, false);
     }
     throw err;
   }
 }
 
-/** Права на просмотр одной песни (совпадает с логикой GET /api/studio/imported-songs). */
+/** Права на просмотр одной песни (студия / модерация каталога). */
 export type GetSongVisibilityOpts = {
   canModerateCatalog: boolean;
-  /** Если задано — неопубликованная песочница импорта только с этим created_by_member_id. */
-  restrictImportedSandboxToCreatorId?: number;
+  /** Музыканты и муз. служение — общая песочница и черновики, не только автор. */
+  canAccessStudioCatalog?: boolean;
 };
 
 function mapSongRowWithJoins(row: Record<string, unknown>): SongListItem {
@@ -301,13 +286,9 @@ export async function getSongById(
   }
 
   const canMod = visibility.canModerateCatalog;
-  const restrict = visibility.restrictImportedSandboxToCreatorId;
+  const canStudio = Boolean(visibility.canAccessStudioCatalog);
 
-  const buildSql = (includeImportedAt: boolean) => {
-    const sandboxMatch = includeImportedAt
-      ? `(${sqlImportedSandboxTagsMatch()} OR s.imported_at IS NOT NULL)`
-      : `(${sqlImportedSandboxTagsMatch()})`;
-    return `
+  const buildSql = () => `
       SELECT s.*,
              (sv.id IS NOT NULL) AS has_studio_version,
              (f.song_id IS NOT NULL) AS is_favorite
@@ -318,32 +299,16 @@ export async function getSongById(
         AND (
           s.is_published = TRUE
           OR $4::boolean IS TRUE
-          OR s.created_by_member_id = $2
+          OR $5::boolean IS TRUE
           OR (sv.id IS NOT NULL)
-          OR (
-            NOT s.is_published
-            AND ${sandboxMatch}
-            AND ($5::int IS NULL OR s.created_by_member_id = $5)
-          )
         )`;
-  };
 
-  const params = [id, memberId, memberId, canMod, restrict ?? null];
+  const params = [id, memberId, memberId, canMod, canStudio];
 
-  try {
-    const result = await query(buildSql(true), params);
-    const row = result.rows[0] as Record<string, unknown> | undefined;
-    if (!row) return null;
-    return mapSongRowWithJoins(row);
-  } catch (err) {
-    if (isMissingImportedAtColumnError(err)) {
-      const result = await query(buildSql(false), params);
-      const row = result.rows[0] as Record<string, unknown> | undefined;
-      if (!row) return null;
-      return mapSongRowWithJoins(row);
-    }
-    throw err;
-  }
+  const result = await query(buildSql(), params);
+  const row = result.rows[0] as Record<string, unknown> | undefined;
+  if (!row) return null;
+  return mapSongRowWithJoins(row);
 }
 
 export interface CreateSongInput {
