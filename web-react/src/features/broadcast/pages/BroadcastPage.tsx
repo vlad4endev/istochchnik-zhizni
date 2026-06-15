@@ -14,6 +14,11 @@ import {
   formatBroadcastMainTimer,
   getBroadcastUiMode,
 } from '../../../utils/broadcastDisplay';
+import {
+  formatBroadcastStartsAtForApi,
+  parseBroadcastStartsAt,
+  splitBroadcastStartsAt,
+} from '../../../utils/broadcastStartsAt';
 import { emitAppToast } from '../../../lib/uiFeedback';
 import { useMe } from '@/hooks/useMe';
 import { keys } from '@/lib/queryKeys';
@@ -22,18 +27,6 @@ import { SkeletonBox } from '@/components/ui/SkeletonBox';
 function btnPrimary(c = '') { return `flex h-10 items-center justify-center rounded-xl bg-primary px-4 text-sm font-bold text-white shadow hover:border-transparent hover:!bg-[#e34254] disabled:pointer-events-none disabled:opacity-50 transition-colors ${c}`; }
 function btnSecondary(c = '') { return `flex h-10 items-center justify-center rounded-xl border border-stone-200 bg-white px-4 text-sm font-bold text-stone-700 hover:bg-stone-50 disabled:pointer-events-none disabled:opacity-50 transition-colors ${c}`; }
 function fieldClass() { return 'w-full rounded-xl border border-stone-200 bg-stone-50 px-3 py-2 text-sm text-stone-900 outline-none focus:border-primary focus:bg-white transition-colors'; }
-
-function splitStartDateTime(startsAt: string | null): { date: string; time: string } {
-  if (!startsAt) return { date: '', time: '' };
-  const dt = new Date(startsAt);
-  if (Number.isNaN(dt.getTime())) return { date: '', time: '' };
-  const y = dt.getFullYear();
-  const m = `${dt.getMonth() + 1}`.padStart(2, '0');
-  const d = `${dt.getDate()}`.padStart(2, '0');
-  const h = `${dt.getHours()}`.padStart(2, '0');
-  const min = `${dt.getMinutes()}`.padStart(2, '0');
-  return { date: `${y}-${m}-${d}`, time: `${h}:${min}` };
-}
 
 function platformIcon(platform: string): string {
   if (platform === 'youtube') return '▶️';
@@ -90,7 +83,7 @@ export function BroadcastPage() {
 
   useEffect(() => {
     setPlayerUrl(getEmbedUrl(activeBroadcast?.stream_url ?? '') ?? null);
-    const { date, time } = splitStartDateTime(activeBroadcast?.starts_at ?? null);
+    const { date, time } = splitBroadcastStartsAt(activeBroadcast?.starts_at ?? null);
     setDatePart(date);
     setTimePart(time);
     setFormState({
@@ -114,8 +107,8 @@ export function BroadcastPage() {
   const broadcastEndsLabel = useMemo(() => {
     if (!activeBroadcast?.starts_at) return null;
     if (broadcastUiMode !== 'pre' && broadcastUiMode !== 'onair') return null;
-    const t = new Date(activeBroadcast.starts_at).getTime();
-    if (!Number.isFinite(t)) return null;
+    const t = parseBroadcastStartsAt(activeBroadcast.starts_at)?.getTime();
+    if (t == null || !Number.isFinite(t)) return null;
     return format(new Date(t + BROADCAST_SLOT_MS), 'dd.MM.yyyy HH:mm', { locale: ru });
   }, [activeBroadcast?.starts_at, broadcastUiMode]);
 
@@ -138,7 +131,7 @@ export function BroadcastPage() {
 
   const activeStartsAtIso = useMemo(() => {
     if (!datePart || !timePart) return null;
-    return new Date(`${datePart}T${timePart}:00`).toISOString();
+    return formatBroadcastStartsAtForApi(datePart, timePart);
   }, [datePart, timePart]);
 
   const onSave = () => {
@@ -250,8 +243,8 @@ export function BroadcastPage() {
                 <p className="text-sm font-semibold text-stone-700">
                   {countdownPhrase
                     ?? (activeBroadcast?.starts_at
-                      && Number.isFinite(new Date(activeBroadcast.starts_at).getTime())
-                      && broadcastTickMs >= new Date(activeBroadcast.starts_at).getTime()
+                      && Number.isFinite(parseBroadcastStartsAt(activeBroadcast.starts_at)?.getTime() ?? NaN)
+                      && broadcastTickMs >= (parseBroadcastStartsAt(activeBroadcast.starts_at)?.getTime() ?? 0)
                       ? 'Время начала наступило — вставьте ссылку на трансляцию в настройках.'
                       : 'До начала: время уточняется')}
                 </p>

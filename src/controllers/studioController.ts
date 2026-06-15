@@ -12,7 +12,9 @@ import {
   listImportedSandboxSongsForStudio,
   listRecentSongs,
   countMemberSongsHiddenFromPublicCatalog,
+  countSongsHiddenFromPublicCatalog,
   syncMemberSongsToPublicCatalog,
+  syncAllSongsToPublicCatalog,
 } from '../services/songService';
 import {
   addSetlistItem,
@@ -291,7 +293,11 @@ export async function publicCatalogSyncStatus(req: Request, res: Response): Prom
     const r = req as AuthReq;
     if (!(await ensureStudio(r, res))) return;
     const hidden = await countMemberSongsHiddenFromPublicCatalog(r.authUserId!);
-    res.json({ hidden });
+    const payload: { hidden: number; hiddenInProject?: number } = { hidden };
+    if (sessionCanModerateCatalog(r)) {
+      payload.hiddenInProject = await countSongsHiddenFromPublicCatalog();
+    }
+    res.json(payload);
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: 'Ошибка' });
@@ -303,7 +309,12 @@ export async function syncToPublicCatalog(req: Request, res: Response): Promise<
   try {
     const r = req as AuthReq;
     if (!(await ensureStudio(r, res))) return;
-    const result = await syncMemberSongsToPublicCatalog(r.authUserId!);
+    const body = req.body as { scope?: string } | undefined;
+    const scope = String(body?.scope ?? req.query.scope ?? 'mine');
+    const result =
+      scope === 'project' && sessionCanModerateCatalog(r)
+        ? await syncAllSongsToPublicCatalog()
+        : await syncMemberSongsToPublicCatalog(r.authUserId!);
     res.json(result);
   } catch (e) {
     console.error(e);

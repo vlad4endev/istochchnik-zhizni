@@ -1,15 +1,27 @@
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { LuPenLine, LuSearch, LuX } from 'react-icons/lu';
 
 import { SongListSkeleton } from '@/components/skeletons/SongListSkeleton';
 import { keys } from '@/lib/queryKeys';
+import { emitAppToast } from '../../../lib/uiFeedback';
+import { useAuthStore } from '../../auth/authStore';
+import { canModerateSongCatalogSession } from '../../auth/studioAccess';
 import { fetchSongs, type SongListQuery } from '../../songbook/api';
+import {
+  fetchPublicCatalogSyncStatus,
+  syncStudioToPublicCatalog,
+} from '../api';
 import { studioEditSongPath, useStudioModuleSurface } from '../studioPaths';
 
 export function CatalogPage() {
   const surface = useStudioModuleSurface();
+  const qc = useQueryClient();
+  const role = useAuthStore((s) => s.role);
+  const roles = useAuthStore((s) => s.roles ?? [s.role]);
+  const canModerate = canModerateSongCatalogSession(role, roles);
+
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState(search);
 
@@ -31,7 +43,31 @@ export function CatalogPage() {
     staleTime: 5 * 60_000,
   });
 
+  const syncStatusQ = useQuery({
+    queryKey: ['studio', 'public-catalog-sync-status'],
+    queryFn: fetchPublicCatalogSyncStatus,
+  });
+
+  const syncProjectMut = useMutation({
+    mutationFn: () => syncStudioToPublicCatalog('project'),
+    onSuccess: (result) => {
+      void qc.invalidateQueries({ queryKey: ['songs'] });
+      void qc.invalidateQueries({ queryKey: keys.songs });
+      void qc.invalidateQueries({ queryKey: ['studio', 'public-catalog-sync-status'] });
+      const total = result.published + result.contentSynced;
+      emitAppToast({
+        kind: 'success',
+        message:
+          total > 0
+            ? `В общий каталог добавлено: ${total} песен`
+            : 'Все готовые песни уже в каталоге',
+      });
+    },
+    onError: () => emitAppToast('Не удалось опубликовать песни в каталог'),
+  });
+
   const rows = query.data ?? [];
+  const hiddenInProject = syncStatusQ.data?.hiddenInProject ?? 0;
   const pageCard =
     surface === 'songbook'
       ? 'rounded-2xl border border-stone-200 bg-white p-4 shadow-sm md:p-6'
@@ -40,7 +76,7 @@ export function CatalogPage() {
   return (
     <div className={['mx-auto max-w-3xl space-y-5', pageCard].filter(Boolean).join(' ')}>
       <header className="space-y-2 border-b border-[var(--studio-editor-border)] pb-5">
-        <h1 className="text-2xl font-bold tracking-tight text-[var(--studio-editor-text)]">Каталог</h1>
+        <h1 className="studio-page-heading text-2xl font-bold tracking-tight text-[var(--studio-editor-text)]">Каталог</h1>
         <p className="max-w-xl text-sm leading-relaxed text-[var(--studio-editor-mute)]">
           Все опубликованные песни проекта — от всех участников. Личные черновики и неопубликованные правки — в разделе{' '}
           <Link to={surface === 'songbook' ? '/songbook/studio' : '/studio/my-songs'} className="studio-link">
@@ -49,6 +85,24 @@ export function CatalogPage() {
           .
         </p>
       </header>
+
+      {canModerate && hiddenInProject > 0 ? (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+          <p className="font-semibold">В базе есть песни, которых нет в каталоге</p>
+          <p className="mt-1 text-xs leading-relaxed text-amber-900/90">
+            {hiddenInProject} песен с текстом ещё не опубликованы (флаг is_published или текст только в студийных версиях).
+            Опубликуйте их для всего проекта.
+          </p>
+          <button
+            type="button"
+            onClick={() => syncProjectMut.mutate()}
+            disabled={syncProjectMut.isPending}
+            className="mt-3 inline-flex min-h-[44px] items-center rounded-xl bg-sky-600 px-4 text-sm font-semibold text-white hover:bg-sky-500 disabled:opacity-50"
+          >
+            {syncProjectMut.isPending ? 'Публикуем…' : 'Опубликовать все готовые песни'}
+          </button>
+        </div>
+      ) : null}
 
       <div className="relative">
         <LuSearch
@@ -90,7 +144,7 @@ export function CatalogPage() {
           <ul className="overflow-hidden rounded-xl border border-[var(--studio-editor-border)] bg-[var(--studio-editor-block)]">
             {rows.map((s, idx) => (
               <li key={s.id} className="border-b border-[var(--studio-editor-border)] last:border-b-0">
-                <div className="flex min-h-[52px] items-center gap-2 px-3 py-2">
+                <div className="studio-list-row flex min-h-[52px] items-center gap-2 px-3 py-2">
                   <Link
                     to={studioEditSongPath(Number(s.id))}
                     className="flex min-w-0 flex-1 items-center gap-2.5"
@@ -109,7 +163,7 @@ export function CatalogPage() {
                   ) : null}
                   <Link
                     to={studioEditSongPath(Number(s.id))}
-                    className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-[var(--studio-editor-mute)] hover:bg-[var(--studio-nav-active-bg)]/40 hover:text-[var(--studio-editor-accent)]"
+                    className="studio-touch-target inline-flex shrink-0 items-center justify-center rounded-lg text-[var(--studio-editor-mute)] hover:bg-[var(--studio-nav-active-bg)]/40 hover:text-[var(--studio-editor-accent)]"
                     aria-label="Открыть в редакторе"
                     title="Открыть в редакторе"
                   >
@@ -123,7 +177,9 @@ export function CatalogPage() {
             <p className="rounded-xl border border-[var(--studio-editor-border)] bg-[var(--studio-editor-block)] py-10 text-center text-sm text-[var(--studio-editor-mute)]">
               {debouncedSearch.trim()
                 ? 'Ничего не найдено.'
-                : 'В каталоге пока нет опубликованных песен.'}
+                : canModerate && hiddenInProject > 0
+                  ? 'Каталог пуст: нажмите «Опубликовать все готовые песни» выше.'
+                  : 'В каталоге пока нет опубликованных песен.'}
             </p>
           ) : null}
         </>

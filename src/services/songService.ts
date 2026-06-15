@@ -688,6 +688,145 @@ export async function syncMemberSongsToPublicCatalog(memberId: number): Promise<
   return { published, contentSynced, songIds };
 }
 
+/** Сколько песен во всём проекте ещё не в общем каталоге (любой автор). */
+export async function countSongsHiddenFromPublicCatalog(): Promise<number> {
+  const r = await query(
+    `SELECT COUNT(*)::int AS c
+     FROM songs s
+     WHERE NOT (COALESCE(s.tags, '{}'::text[]) @> ARRAY['__archived']::text[])
+       AND (
+         (
+           NOT s.is_published
+           AND (
+             (
+               btrim(coalesce(s.content, '')) <> ''
+               AND NOT (COALESCE(s.tags, '{}'::text[]) @> ARRAY['нет_текста']::text[])
+             )
+             OR EXISTS (
+               SELECT 1 FROM studio_versions sv
+               WHERE sv.song_id = s.id
+                 AND btrim(coalesce(sv.custom_content, '')) <> ''
+             )
+           )
+         )
+         OR (
+           s.is_published = TRUE
+           AND btrim(coalesce(s.content, '')) = ''
+           AND EXISTS (
+             SELECT 1 FROM studio_versions sv
+             WHERE sv.song_id = s.id
+               AND btrim(coalesce(sv.custom_content, '')) <> ''
+           )
+         )
+       )`,
+  );
+  return Number((r.rows[0] as { c?: number } | undefined)?.c ?? 0);
+}
+
+/**
+ * Массовая публикация готовых песен всех авторов в общий каталог.
+ * — текст в songs.content;
+ * — текст только в studio_versions (любой участник);
+ * — уже опубликованные с пустым content.
+ */
+export async function syncAllSongsToPublicCatalog(): Promise<CatalogSyncResult> {
+  const songIds: number[] = [];
+  let published = 0;
+
+  const pubWithContent = await query(
+    `UPDATE songs s
+     SET is_published = TRUE,
+         tags = COALESCE(
+           (
+             SELECT array_agg(t)
+             FROM unnest(COALESCE(s.tags, '{}'::text[])) AS t
+             WHERE t NOT IN ('импортированная', 'импортировано', 'нет_текста')
+           ),
+           '{}'::text[]
+         ),
+         updated_at = NOW()
+     WHERE NOT s.is_published
+       AND btrim(coalesce(s.content, '')) <> ''
+       AND NOT (COALESCE(s.tags, '{}'::text[]) @> ARRAY['нет_текста']::text[])
+       AND NOT (COALESCE(s.tags, '{}'::text[]) @> ARRAY['__archived']::text[])
+     RETURNING id`,
+  );
+  for (const row of pubWithContent.rows as { id: string }[]) {
+    songIds.push(Number(row.id));
+  }
+  published += pubWithContent.rowCount ?? 0;
+
+  const fromStudio = await query(
+    `UPDATE songs s
+     SET content = sub.content,
+         default_key = COALESCE(sub.custom_key, s.default_key),
+         is_published = TRUE,
+         tags = COALESCE(
+           (
+             SELECT array_agg(t)
+             FROM unnest(COALESCE(s.tags, '{}'::text[])) AS t
+             WHERE t NOT IN ('импортированная', 'импортировано', 'нет_текста')
+           ),
+           '{}'::text[]
+         ),
+         updated_at = NOW()
+     FROM (
+       SELECT DISTINCT ON (sv.song_id)
+         sv.song_id,
+         sv.custom_content AS content,
+         sv.custom_key
+       FROM studio_versions sv
+       WHERE btrim(coalesce(sv.custom_content, '')) <> ''
+       ORDER BY sv.song_id, length(sv.custom_content) DESC, sv.updated_at DESC
+     ) sub
+     WHERE s.id = sub.song_id
+       AND NOT s.is_published
+       AND btrim(coalesce(s.content, '')) = ''
+       AND NOT (COALESCE(s.tags, '{}'::text[]) @> ARRAY['__archived']::text[])
+     RETURNING s.id`,
+  );
+  for (const row of fromStudio.rows as { id: string }[]) {
+    const sid = Number(row.id);
+    if (!songIds.includes(sid)) songIds.push(sid);
+  }
+  published += fromStudio.rowCount ?? 0;
+
+  const syncContent = await query(
+    `UPDATE songs s
+     SET content = sub.content,
+         default_key = COALESCE(sub.custom_key, s.default_key),
+         tags = COALESCE(
+           (
+             SELECT array_agg(t)
+             FROM unnest(COALESCE(s.tags, '{}'::text[])) AS t
+             WHERE t NOT IN ('импортированная', 'импортировано', 'нет_текста')
+           ),
+           '{}'::text[]
+         ),
+         updated_at = NOW()
+     FROM (
+       SELECT DISTINCT ON (sv.song_id)
+         sv.song_id,
+         sv.custom_content AS content,
+         sv.custom_key
+       FROM studio_versions sv
+       WHERE btrim(coalesce(sv.custom_content, '')) <> ''
+       ORDER BY sv.song_id, length(sv.custom_content) DESC, sv.updated_at DESC
+     ) sub
+     WHERE s.id = sub.song_id
+       AND s.is_published = TRUE
+       AND btrim(coalesce(s.content, '')) = ''
+     RETURNING s.id`,
+  );
+  const contentSynced = syncContent.rowCount ?? 0;
+  for (const row of syncContent.rows as { id: string }[]) {
+    const sid = Number(row.id);
+    if (!songIds.includes(sid)) songIds.push(sid);
+  }
+
+  return { published, contentSynced, songIds };
+}
+
 export async function getVersionFlags(
   memberId: number,
   songIds: number[]

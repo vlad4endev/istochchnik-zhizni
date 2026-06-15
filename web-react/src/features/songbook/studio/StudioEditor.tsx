@@ -25,7 +25,7 @@ import { emitAppToast } from '../../../lib/uiFeedback';
 import { useScrollInputIntoView } from '@/hooks/useScrollInputIntoView';
 import { SkeletonBox } from '@/components/ui/SkeletonBox';
 import { keys } from '@/lib/queryKeys';
-import { deleteSong, publishSong, updateSong } from '../api';
+import { deleteSong, updateSong } from '../api';
 import { convertToChordPro } from '../addSong/chordProConversion';
 import { extractChordsFromText, guessKeyFromChords } from '../addSong/keyDetection';
 import { SmartImportModal, type SmartImportSourceTab } from '../addSong/SmartImportModal';
@@ -35,6 +35,7 @@ import { extractCommonChords } from '../chordProEngine';
 import { aiChordPlacement, fetchStudioCatalogSong, fetchVersionForSong, saveVersion } from '../../studio/api';
 import { usePublishSong } from '../../studio/usePublishSong';
 import { studioMySongsPath, getStudioModuleSurface } from '../../studio/studioPaths';
+import { useStudioAppChrome } from '../../studio/useStudioAppChrome';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { useSongbookChrome } from '../SongbookChromeContext';
 
@@ -276,6 +277,7 @@ function studioTypeTone(type: SongBlockType, darkUi: boolean, active = false): s
  */
 export function StudioEditor() {
   useScrollInputIntoView();
+  useStudioAppChrome(true);
   const { songId } = useParams<{ songId: string }>();
   const id = Number(songId);
   const qc = useQueryClient();
@@ -505,7 +507,12 @@ export function StudioEditor() {
     }
   }, [buildCatalogMetaSnapshot]);
 
-  const saveAll = useCallback(async () => {
+  const publishMut = usePublishSong();
+  const lastSaveTargetRef = useRef<'draft' | 'catalog'>('draft');
+
+  const saveAll = useCallback(
+    async (target: 'draft' | 'catalog') => {
+    lastSaveTargetRef.current = target;
     const content = blocksToChordPro(blocks);
     try {
       writeLocalDraft(id, content, key);
@@ -516,22 +523,37 @@ export function StudioEditor() {
     setIsSaving(true);
     setSaveError(false);
     try {
-      const wasUnpublished = !songQ.data?.is_published;
       const savedVersion = await saveVersion(id, { custom_content: content, custom_key: key || null });
 
       if (canEditCatalogMeta && catalogMetaChanged()) {
         await persistCatalogMeta();
       }
 
-      let publishedToCatalog = false;
-      if (wasUnpublished && content.trim()) {
-        try {
-          await publishSong(id);
+      if (target === 'catalog') {
+        if (!content.trim()) {
+          const ok = window.confirm('Опубликовать без текста? Песня попадёт в общий каталог.');
+          if (!ok) {
+            emitAppToast({ kind: 'success', message: 'Сохранено в черновик — видно только вам ✓' });
+          } else {
+            await publishMut.mutateAsync({
+              songId: id,
+              content,
+              customKey: key || null,
+              saveVersionFirst: false,
+            });
+            setSongStatus('published');
+          }
+        } else {
+          await publishMut.mutateAsync({
+            songId: id,
+            content,
+            customKey: key || null,
+            saveVersionFirst: false,
+          });
           setSongStatus('published');
-          publishedToCatalog = true;
-        } catch {
-          // Личная версия сохранена; публикация — кнопкой «Опубликовать в каталог».
         }
+      } else {
+        emitAppToast({ kind: 'success', message: 'Сохранено в черновик — видно только вам ✓' });
       }
 
       clearLocalDraft(id);
@@ -552,20 +574,20 @@ export function StudioEditor() {
       });
       setLastSavedAt(Date.now());
       setSaveError(false);
-      emitAppToast({
-        kind: 'success',
-        message: publishedToCatalog
-          ? 'Песня сохранена и опубликована в общем песеннике ✓'
-          : 'Песня сохранена ✓',
-      });
     } catch (err: unknown) {
       setSaveError(true);
-      const msg = err instanceof Error && err.message ? err.message : 'Не удалось сохранить песню';
+      const msg =
+        err instanceof Error && err.message
+          ? err.message
+          : target === 'catalog'
+            ? 'Не удалось сохранить в общий каталог'
+            : 'Не удалось сохранить песню';
       emitAppToast({ kind: 'error', message: msg });
     } finally {
       setIsSaving(false);
     }
-  }, [
+  },
+    [
     authEpoch,
     blocks,
     buildCatalogMetaSnapshot,
@@ -574,8 +596,8 @@ export function StudioEditor() {
     id,
     key,
     persistCatalogMeta,
+    publishMut,
     qc,
-    songQ.data?.is_published,
   ]);
 
   const aiChordPlacementMut = useMutation({
@@ -613,28 +635,6 @@ export function StudioEditor() {
     },
     onError: () => emitAppToast('Не удалось удалить песню'),
   });
-
-  const publishMut = usePublishSong();
-
-  const handlePublishToCatalog = useCallback(async () => {
-    const content = blocksToChordPro(blocks);
-    if (!content.trim()) {
-      const ok = window.confirm('Опубликовать без текста? Песня попадёт в общий каталог.');
-      if (!ok) return;
-    }
-    try {
-      await publishMut.mutateAsync({
-        songId: id,
-        content,
-        customKey: key || null,
-        saveVersionFirst: true,
-      });
-      setSongStatus('published');
-      void qc.invalidateQueries({ queryKey: ['song', id, authEpoch] });
-    } catch {
-      // toast from hook
-    }
-  }, [authEpoch, blocks, id, key, publishMut, qc]);
 
   const saveCatalogMetaMut = useMutation({
     mutationFn: () => persistCatalogMeta(),
@@ -1191,13 +1191,13 @@ export function StudioEditor() {
   return (
     <>
       <div
-        className={`sticky top-0 z-[var(--z-sticky)] ${shell.toolbar}`}
+        className={`sticky top-0 z-[var(--z-sticky)] max-lg:hidden ${shell.toolbar}`}
         style={{ boxShadow: 'var(--studio-toolbar-shadow)' }}
       >
         <PageHeader title={s.title} />
       </div>
       <div
-        className={`mx-auto flex w-full max-w-[1520px] flex-col gap-4 px-2 sm:px-3 md:px-4 max-lg:pb-[5.75rem] ${shell.page}`}
+        className={`mx-auto flex w-full max-w-[1520px] flex-col gap-4 px-2 sm:px-3 md:px-4 max-lg:pb-[var(--studio-mobile-dock-height)] ${shell.page}`}
       >
       <SmartImportModal
         open={importOpen}
@@ -1537,7 +1537,7 @@ export function StudioEditor() {
         </>
       ) : null}
 
-      <div className="flex flex-wrap items-center gap-2 gap-y-3">
+      <div className="flex flex-wrap items-center gap-2 gap-y-3 max-lg:sticky max-lg:top-0 max-lg:z-[calc(var(--z-sticky)-1)] max-lg:-mx-2 max-lg:border-b max-lg:border-[var(--studio-editor-border)] max-lg:bg-[var(--studio-toolbar-bg)] max-lg:px-2 max-lg:py-2 max-lg:backdrop-blur-sm" style={{ paddingTop: 'max(0px, env(safe-area-inset-top, 0px))' }}>
         <Link
           to={backTo}
           onClick={(e) => {
@@ -1549,6 +1549,7 @@ export function StudioEditor() {
         >
           <LuArrowLeft className="h-5 w-5" />
         </Link>
+        <p className="min-w-0 flex-1 truncate text-sm font-semibold text-[var(--studio-editor-text)] lg:hidden">{s.title}</p>
         <button
           type="button"
           onClick={() => {
@@ -1576,7 +1577,7 @@ export function StudioEditor() {
           aria-label="AI-разбор аккордов"
         >
           <LuWand className="h-4 w-4" />
-          <span>{aiChordPlacementMut.isPending ? 'AI…' : 'AI-разбор'}</span>
+          <span className="hidden sm:inline">{aiChordPlacementMut.isPending ? 'AI…' : 'AI-разбор'}</span>
         </button>
         {canDeleteCatalog ? (
           <button
@@ -1598,32 +1599,35 @@ export function StudioEditor() {
             <span className="sm:hidden">Удалить</span>
           </button>
         ) : null}
-        {!s.is_published ? (
-          <button
-            type="button"
-            onClick={() => void handlePublishToCatalog()}
-            disabled={publishMut.isPending || isSaving}
-            className="studio-btn-primary inline-flex min-h-[44px] items-center gap-1.5 rounded-xl px-4 text-sm font-semibold shadow-sm transition disabled:opacity-50"
-            aria-label="Опубликовать в каталог"
-          >
-            <LuRocket className="h-4 w-4 shrink-0" aria-hidden />
-            {publishMut.isPending ? 'Публикую…' : 'Опубликовать в каталог'}
-          </button>
-        ) : (
+        {s.is_published ? (
           <span
             className="studio-btn-success inline-flex min-h-[44px] cursor-default items-center gap-1.5 rounded-xl px-3 text-sm font-semibold opacity-90"
             aria-disabled
           >
             <span aria-hidden>✓</span> В каталоге
           </span>
+        ) : (
+          <span className={`inline-flex min-h-[44px] items-center rounded-xl border px-3 text-xs font-medium ${shell.muted} border-[var(--studio-editor-border)]`}>
+            Пока только у вас
+          </span>
         )}
         <button
           type="button"
-          onClick={() => void saveAll()}
-          disabled={isSaving}
-          className={`${shell.primary} disabled:opacity-50`}
+          onClick={() => void saveAll('draft')}
+          disabled={isSaving || publishMut.isPending}
+          className={`inline-flex min-h-[44px] items-center gap-1.5 rounded-xl border px-3 text-sm font-semibold disabled:opacity-50 ${shell.iconBtn}`}
         >
-          Сохранить песню
+          <LuSave className="h-4 w-4 shrink-0" aria-hidden />
+          В черновик
+        </button>
+        <button
+          type="button"
+          onClick={() => void saveAll('catalog')}
+          disabled={isSaving || publishMut.isPending}
+          className="studio-btn-primary inline-flex min-h-[44px] items-center gap-1.5 rounded-xl px-4 text-sm font-semibold shadow-sm transition disabled:opacity-50"
+        >
+          <LuRocket className="h-4 w-4 shrink-0" aria-hidden />
+          {isSaving || publishMut.isPending ? 'Сохраняем…' : 'В каталог'}
         </button>
       </div>
 
@@ -1652,7 +1656,7 @@ export function StudioEditor() {
             Ошибка
             <button
               type="button"
-              onClick={() => void saveAll()}
+              onClick={() => void saveAll(lastSaveTargetRef.current)}
               className="font-semibold underline underline-offset-2"
             >
               Повторить
@@ -1668,7 +1672,7 @@ export function StudioEditor() {
       </div>
 
       <p className={`text-xs ${shell.muted}`}>
-        Ваш текст ниже — оригинал в каталоге не меняется, пока вы не сохраните и не удалите песню целиком.
+        «В черновик» — личная версия, видна только вам. «В каталог» — общий песенник для всех участников.
       </p>
 
       {draftRecovery ? (
@@ -1970,7 +1974,7 @@ export function StudioEditor() {
 
       {chordAutoUndo && undoSecondsLeft > 0 ? (
         <div
-          className="fixed bottom-[calc(var(--app-bottom-nav-total-height)+0.5rem)] left-1/2 z-[var(--z-toast)] w-[min(92vw,520px)] -translate-x-1/2 rounded-xl border border-[var(--studio-editor-border)] bg-[var(--studio-editor-block)] px-3 py-2 text-[var(--studio-editor-text)] shadow-xl lg:bottom-6"
+          className="fixed bottom-[calc(var(--studio-mobile-dock-height)+0.5rem)] left-1/2 z-[var(--z-toast)] w-[min(92vw,520px)] -translate-x-1/2 rounded-xl border border-[var(--studio-editor-border)] bg-[var(--studio-editor-block)] px-3 py-2 text-[var(--studio-editor-text)] shadow-xl max-lg:bottom-[calc(var(--studio-mobile-dock-height)+0.5rem)] lg:bottom-6"
         >
           <div className="flex items-center justify-between gap-3">
             <p className="text-sm">
@@ -2009,11 +2013,19 @@ export function StudioEditor() {
           </button>
           <button
             type="button"
-            disabled={!hasUnsavedChanges || isSaving}
-            onClick={() => void saveAll()}
-            className={`min-h-[44px] flex-1 rounded-xl text-sm font-semibold studio-btn-success disabled:opacity-70`}
+            disabled={!hasUnsavedChanges || isSaving || publishMut.isPending}
+            onClick={() => void saveAll('draft')}
+            className="min-h-[44px] rounded-xl border border-[var(--studio-editor-border)] bg-[var(--studio-editor-block)] px-3 text-sm font-semibold text-[var(--studio-editor-text)] disabled:opacity-70"
           >
-            {isSaving ? 'Сохраняем…' : 'Сохранить песню'}
+            Черновик
+          </button>
+          <button
+            type="button"
+            disabled={!hasUnsavedChanges || isSaving || publishMut.isPending}
+            onClick={() => void saveAll('catalog')}
+            className="min-h-[44px] flex-1 rounded-xl text-sm font-semibold studio-btn-success disabled:opacity-70"
+          >
+            {isSaving || publishMut.isPending ? 'Сохраняем…' : 'В каталог'}
           </button>
           <button
             type="button"

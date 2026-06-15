@@ -31,6 +31,7 @@ import {
   shouldShowBroadcastWidget,
   type BroadcastUiMode,
 } from '../../../utils/broadcastDisplay';
+import { parseBroadcastStartsAt } from '../../../utils/broadcastStartsAt';
 import { fetchPodcastFeed, type PodcastEpisode } from '../../../api/resources';
 import {
   deleteDashboardCoordinatorNote,
@@ -227,19 +228,6 @@ function truncatePrayerNeedPreview(text: string, maxLen: number): string {
 function memberFirstLastLine(m: Member): string {
   const s = memberRosterName(m).trim();
   return s || m.name.trim() || '—';
-}
-
-/** PostgreSQL `TIMESTAMP` без `T` не парсится в Safari — нормализуем для полей «Началась» / «Окончание». */
-function parseBroadcastStartsAt(value: string | null): Date | null {
-  if (!value) return null;
-  const v = value.trim();
-  if (!v) return null;
-  let normalized = v;
-  if (!v.includes('T') && /^\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}/.test(v)) {
-    normalized = v.replace(/^(\d{4}-\d{2}-\d{2})\s+/, '$1T');
-  }
-  const d = new Date(normalized);
-  return Number.isNaN(d.getTime()) ? null : d;
 }
 
 function formatBroadcastDateTime(value: string | null): string {

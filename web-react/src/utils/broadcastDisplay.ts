@@ -1,4 +1,5 @@
 import type { BroadcastData } from '../api/broadcast';
+import { parseBroadcastStartsAt } from './broadcastStartsAt';
 
 /** Длительность слота эфира от времени начала (настройки): ровно 2 часа. */
 export const BROADCAST_SLOT_MS = 2 * 60 * 60 * 1000;
@@ -15,7 +16,7 @@ export type BroadcastUiMode = 'hidden' | 'pre' | 'onair' | 'post';
 export function getBroadcastUiMode(nowMs: number, b: BroadcastData | null): BroadcastUiMode {
   if (!b || b.status === 'finished') return 'hidden';
 
-  const startsAtMs = b.starts_at ? new Date(b.starts_at).getTime() : NaN;
+  const startsAtMs = parseBroadcastStartsAt(b.starts_at)?.getTime() ?? NaN;
   const hasStart = Number.isFinite(startsAtMs);
   const hasStream = broadcastHasStreamUrl(b);
   const endMs = hasStart ? startsAtMs + BROADCAST_SLOT_MS : Number.POSITIVE_INFINITY;
@@ -41,14 +42,14 @@ export function shouldShowBroadcastWidget(nowMs: number, b: BroadcastData | null
   if (mode === 'onair') return true;
   if (mode !== 'pre') return false;
   if (!b?.starts_at) return false;
-  const startsAtMs = new Date(b.starts_at).getTime();
+  const startsAtMs = parseBroadcastStartsAt(b.starts_at)?.getTime() ?? NaN;
   if (!Number.isFinite(startsAtMs)) return false;
   return nowMs >= startsAtMs - BROADCAST_SLOT_MS;
 }
 
 export function formatBroadcastMainTimer(nowMs: number, b: BroadcastData | null): string {
   if (!b?.starts_at || b.status === 'finished') return '—';
-  const startsAtMs = new Date(b.starts_at).getTime();
+  const startsAtMs = parseBroadcastStartsAt(b.starts_at)?.getTime() ?? NaN;
   if (!Number.isFinite(startsAtMs)) return '—';
 
   const mode = getBroadcastUiMode(nowMs, b);
@@ -67,7 +68,7 @@ export function formatBroadcastMainTimer(nowMs: number, b: BroadcastData | null)
 
 export function formatBroadcastCountdownPhrase(nowMs: number, startsAt: string | null): string | null {
   if (!startsAt) return null;
-  const startsAtMs = new Date(startsAt).getTime();
+  const startsAtMs = parseBroadcastStartsAt(startsAt)?.getTime() ?? NaN;
   if (!Number.isFinite(startsAtMs)) return null;
   const diffMs = startsAtMs - nowMs;
   if (diffMs <= 0) return null;

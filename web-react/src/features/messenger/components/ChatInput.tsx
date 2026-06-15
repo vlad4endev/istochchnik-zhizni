@@ -129,6 +129,18 @@ function useMatchMedia(query: string): boolean {
   return matches;
 }
 
+/** Клик внутри popover / shadow DOM (emoji-mart): обычный Node.contains() не видит узлы в shadow root. */
+function isDomEventInside(event: Event, ...roots: Array<HTMLElement | null>): boolean {
+  const path = typeof event.composedPath === 'function' ? event.composedPath() : [];
+  const target = event.target;
+  for (const root of roots) {
+    if (!root) continue;
+    if (target instanceof Node && root.contains(target)) return true;
+    if (path.length > 0 && path.includes(root)) return true;
+  }
+  return false;
+}
+
 /** Только `NNpx` из :root (PWA: nativeShellViewport перезаписывает --viewport-height). `100dvh` не парсим. */
 function readRootViewportHeightPx(): number | null {
   if (typeof document === 'undefined') return null;
@@ -282,6 +294,8 @@ export function ChatInput({
   const emojiBtnRef = useRef<HTMLButtonElement>(null);
   const attachPopoverRef = useRef<HTMLDivElement>(null);
   const emojiPopoverRef = useRef<HTMLDivElement>(null);
+  /** Игнорировать один кадр outside-click после открытия (ghost click / тот же жест на touch). */
+  const emojiOutsideGraceRef = useRef(false);
   const [attachPos, setAttachPos] = useState<PopoverPos>(null);
   const [emojiPos, setEmojiPos] = useState<PopoverPos>(null);
   /** ≤768px: панель эмодзи на всю ширину, крупные ячейки (как Telegram на телефоне). */
@@ -492,17 +506,15 @@ export function ChatInput({
   useEffect(() => {
     if (!attachMenuOpen) return;
     const onDoc = (e: MouseEvent | TouchEvent) => {
-      const el = attachMenuRef.current;
-      const pop = attachPopoverRef.current;
-      if (e.target instanceof Node) {
-        if (el && el.contains(e.target)) return;
-        if (pop && pop.contains(e.target)) return;
-      }
+      if (isDomEventInside(e, attachMenuRef.current, attachPopoverRef.current)) return;
       setAttachMenuOpen(false);
     };
-    document.addEventListener('mousedown', onDoc, { passive: true });
-    document.addEventListener('touchstart', onDoc, { passive: true });
+    const id = window.setTimeout(() => {
+      document.addEventListener('mousedown', onDoc, { passive: true });
+      document.addEventListener('touchstart', onDoc, { passive: true });
+    }, 0);
     return () => {
+      window.clearTimeout(id);
       document.removeEventListener('mousedown', onDoc);
       document.removeEventListener('touchstart', onDoc);
     };
@@ -526,17 +538,16 @@ export function ChatInput({
   useEffect(() => {
     if (!emojiOpen) return;
     const onDoc = (e: MouseEvent | TouchEvent) => {
-      const el = emojiRef.current;
-      const pop = emojiPopoverRef.current;
-      if (e.target instanceof Node) {
-        if (el && el.contains(e.target)) return;
-        if (pop && pop.contains(e.target)) return;
-      }
+      if (emojiOutsideGraceRef.current) return;
+      if (isDomEventInside(e, emojiRef.current, emojiBtnRef.current, emojiPopoverRef.current)) return;
       setEmojiOpen(false);
     };
-    document.addEventListener('mousedown', onDoc, { passive: true });
-    document.addEventListener('touchstart', onDoc, { passive: true });
+    const id = window.setTimeout(() => {
+      document.addEventListener('mousedown', onDoc, { passive: true });
+      document.addEventListener('touchstart', onDoc, { passive: true });
+    }, 0);
     return () => {
+      window.clearTimeout(id);
       document.removeEventListener('mousedown', onDoc);
       document.removeEventListener('touchstart', onDoc);
     };
@@ -2166,9 +2177,19 @@ export function ChatInput({
                   'border-transparent text-stone-500 hover:border-white/35 hover:bg-white/35 hover:text-stone-800',
                   'dark:text-stone-300 dark:hover:bg-white/10 dark:hover:text-white',
                 ].join(' ')}
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                }}
                 onClick={() => {
                   haptic(8);
+                  setAttachMenuOpen(false);
+                  emojiOutsideGraceRef.current = true;
                   setEmojiOpen((v) => !v);
+                  window.requestAnimationFrame(() => {
+                    window.requestAnimationFrame(() => {
+                      emojiOutsideGraceRef.current = false;
+                    });
+                  });
                 }}
                 aria-label="Эмодзи"
                 aria-expanded={emojiOpen}

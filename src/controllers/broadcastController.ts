@@ -1,6 +1,10 @@
 import type { Request, Response } from 'express';
 import { pool } from '../config/db';
 import { notifyRealtime } from '../realtime/notify';
+import {
+  BROADCAST_STARTS_AT_SELECT,
+  normalizeBroadcastStartsAtForDb,
+} from '../utils/broadcastStartsAt';
 
 type BroadcastStatus = 'scheduled' | 'live' | 'finished';
 type BroadcastPlatform = 'youtube' | 'rutube' | 'vk' | 'other';
@@ -83,7 +87,7 @@ export async function getActiveBroadcast(_req: Request, res: Response): Promise<
   try {
     await ensureBroadcastSchema();
     const { rows } = await pool.query(
-      `SELECT id, title, description, starts_at, platform, stream_url, notify_members, is_public, status, notification_sent
+      `SELECT id, title, description, ${BROADCAST_STARTS_AT_SELECT}, platform, stream_url, notify_members, is_public, status, notification_sent
          FROM broadcasts
         WHERE status IN ('live', 'scheduled')
           AND (status = 'live' OR starts_at IS NULL OR starts_at >= (NOW() - INTERVAL '6 hours'))
@@ -109,7 +113,7 @@ export async function listBroadcasts(req: Request, res: Response): Promise<void>
     const limit = Number.isFinite(rawLimit) ? Math.min(Math.max(rawLimit, 1), 50) : 10;
     if (status) {
       const { rows } = await pool.query(
-        `SELECT id, title, description, starts_at, platform, stream_url, notify_members, is_public, status, notification_sent
+        `SELECT id, title, description, ${BROADCAST_STARTS_AT_SELECT}, platform, stream_url, notify_members, is_public, status, notification_sent
            FROM broadcasts
           WHERE status = $1
           ORDER BY starts_at DESC NULLS LAST, id DESC
@@ -120,7 +124,7 @@ export async function listBroadcasts(req: Request, res: Response): Promise<void>
       return;
     }
     const { rows } = await pool.query(
-      `SELECT id, title, description, starts_at, platform, stream_url, notify_members, is_public, status, notification_sent
+      `SELECT id, title, description, ${BROADCAST_STARTS_AT_SELECT}, platform, stream_url, notify_members, is_public, status, notification_sent
          FROM broadcasts
         ORDER BY starts_at DESC NULLS LAST, id DESC
         LIMIT $1`,
@@ -143,7 +147,7 @@ export async function createBroadcast(req: Request, res: Response): Promise<void
     const body = (req.body ?? {}) as BroadcastPayload;
     const title = normalizeText(body.title);
     const description = normalizeText(body.description);
-    const startsAt = normalizeText(body.starts_at);
+    const startsAt = normalizeBroadcastStartsAtForDb(body.starts_at);
     const streamUrl = normalizeText(body.stream_url);
     const platform = normalizePlatform(body.platform, 'youtube');
     const notifyMembers = normalizeBool(body.notify_members, true);
@@ -152,7 +156,7 @@ export async function createBroadcast(req: Request, res: Response): Promise<void
     const { rows } = await pool.query(
       `INSERT INTO broadcasts (title, description, starts_at, platform, stream_url, notify_members, is_public, status)
        VALUES ($1, $2, $3::timestamp, $4, $5, $6, $7, $8)
-       RETURNING id, title, description, starts_at, platform, stream_url, notify_members, is_public, status, notification_sent`,
+       RETURNING id, title, description, ${BROADCAST_STARTS_AT_SELECT}, platform, stream_url, notify_members, is_public, status, notification_sent`,
       [title, description, startsAt, platform, streamUrl, notifyMembers, isPublic, status],
     );
     notifyRealtime(['broadcast']);
@@ -176,7 +180,7 @@ export async function patchBroadcast(req: Request, res: Response): Promise<void>
       return;
     }
     const currentResult = await pool.query(
-      `SELECT id, title, description, starts_at, platform, stream_url, notify_members, is_public, status, notification_sent
+      `SELECT id, title, description, ${BROADCAST_STARTS_AT_SELECT}, platform, stream_url, notify_members, is_public, status, notification_sent
          FROM broadcasts
         WHERE id = $1
         LIMIT 1`,
@@ -190,7 +194,8 @@ export async function patchBroadcast(req: Request, res: Response): Promise<void>
     const body = (req.body ?? {}) as BroadcastPayload;
     const title = body.title === undefined ? current.title : normalizeText(body.title);
     const description = body.description === undefined ? current.description : normalizeText(body.description);
-    const startsAt = body.starts_at === undefined ? current.starts_at : normalizeText(body.starts_at);
+    const startsAt =
+      body.starts_at === undefined ? current.starts_at : normalizeBroadcastStartsAtForDb(body.starts_at);
     const streamUrl = body.stream_url === undefined ? current.stream_url : normalizeText(body.stream_url);
     const platform = body.platform === undefined ? current.platform : normalizePlatform(body.platform, current.platform);
     const notifyMembers = body.notify_members === undefined ? Boolean(current.notify_members) : normalizeBool(body.notify_members, Boolean(current.notify_members));
@@ -209,7 +214,7 @@ export async function patchBroadcast(req: Request, res: Response): Promise<void>
               status = $8,
               updated_at = NOW()
         WHERE id = $9
-      RETURNING id, title, description, starts_at, platform, stream_url, notify_members, is_public, status, notification_sent`,
+      RETURNING id, title, description, ${BROADCAST_STARTS_AT_SELECT}, platform, stream_url, notify_members, is_public, status, notification_sent`,
       [title, description, startsAt, platform, streamUrl, notifyMembers, isPublic, status, broadcastId],
     );
     notifyRealtime(['broadcast']);

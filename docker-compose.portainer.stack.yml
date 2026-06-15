@@ -82,6 +82,7 @@ services:
         VITE_API_URL: ${VITE_API_URL:-}
         VITE_API_BASE_URL: ${VITE_API_BASE_URL:-}
         VITE_SUPABASE_STORAGE_PUBLIC_URL: ${VITE_SUPABASE_STORAGE_PUBLIC_URL:-${PUBLIC_WEB_ORIGIN:-${VITE_PWA_ORIGIN:-}}}
+        GITHUB_SHA: ${GITHUB_SHA:-}
     container_name: istochnik-web
     restart: unless-stopped
     depends_on:

@@ -65,6 +65,7 @@ services:
         VITE_MESSENGER_ORIGIN: ${VITE_MESSENGER_ORIGIN:-}
         # Сборка: подмена http://kong…/storage в бандле; приоритет VITE_* → PUBLIC_WEB_ORIGIN → PWA origin
         VITE_SUPABASE_STORAGE_PUBLIC_URL: ${VITE_SUPABASE_STORAGE_PUBLIC_URL:-${PUBLIC_WEB_ORIGIN:-${VITE_PWA_ORIGIN:-}}}
+        GITHUB_SHA: ${GITHUB_SHA:-}
     container_name: istochnik-web
     restart: unless-stopped
     ports:

@@ -13,8 +13,9 @@ fi
 # Только localhost на хосте, если в .env не задано иначе (см. API_PUBLISH в docker-compose.yml).
 export API_PUBLISH="${API_PUBLISH:-127.0.0.1}"
 export COMPOSE_FILE=docker-compose.yml:docker-compose.prod.overlay.yml
+export GITHUB_SHA="$(git rev-parse --short HEAD)"
 
-echo "[deploy-production] docker compose up -d --build ..."
+echo "[deploy-production] docker compose up -d --build (GITHUB_SHA=${GITHUB_SHA}) ..."
 docker compose up -d --build
 docker compose ps
 
