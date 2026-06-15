@@ -89,7 +89,7 @@ export function SongRenderer({
   fontSizePx = 18,
   chordsVisible = true,
   chordTone = 'light',
-  chordLayoutMode = 'mono',
+  chordLayoutMode = 'measured',
   parseSectionTitle,
   preprocessText,
   transposeChordSymbol = identityTranspose,

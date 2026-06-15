@@ -70,7 +70,7 @@ type Props = {
 export function LyricsWithChords({
   text,
   transposeSemitones,
-  chordLayoutMode = 'mono',
+  chordLayoutMode = 'measured',
   className = '',
   fontSizePx = 18,
   chordsVisible = true,

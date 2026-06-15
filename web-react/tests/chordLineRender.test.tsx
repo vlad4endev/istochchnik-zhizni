@@ -6,37 +6,56 @@ import { parseChordLine } from '../src/features/songbook/utils/chordSegments';
 import { buildChordLine, resolveOverlaps } from '../src/components/shared/SongRenderer/SongLine';
 
 describe('ChordLine render regression', () => {
-  it('renders monospaced chord row and lyric row', () => {
+  it('renders measured chord columns above lyric graphemes', () => {
+    const line = parseChordLine('[Am]Когда [C]качаются');
+    const html = renderToStaticMarkup(
+      <ChordLine line={line} chordsVisible layoutMode="measured" chordTone="light" />,
+    );
+
+    expect(html).toContain('lyric-chord-line');
+    expect(html).toContain('chord-slot');
+    expect(html).toContain('lyric-grapheme');
+    expect(html).toContain('Am');
+    expect(html).toContain('C');
+    expect(html).toContain('К');
+    expect(html).toContain('>к<');
+    expect(html).toContain('>я<');
+  });
+
+  it('renders monospaced chord row and lyric row in mono mode', () => {
     const line = parseChordLine('[Am]Когда [C]качаются');
     const html = renderToStaticMarkup(
       <ChordLine line={line} chordsVisible layoutMode="mono" chordTone="light" />,
     );
 
     expect(html).toContain('<pre class="chord-line');
-    expect(html).toContain('<pre class="lyric-line');
+    expect(html).toContain('lyric-line--mono');
     expect(html).toContain('Am');
     expect(html).toContain('C');
     expect(html).toContain('Когда качаются');
   });
 
-  it('hides chord line entirely when chords are disabled', () => {
+  it('hides chord layer when chords are disabled', () => {
     const line = parseChordLine('[Am]Когда [C]качаются');
     const html = renderToStaticMarkup(
-      <ChordLine line={line} chordsVisible={false} layoutMode="mono" chordTone="light" />,
+      <ChordLine line={line} chordsVisible={false} layoutMode="measured" chordTone="light" />,
     );
 
-    expect(html).not.toContain('chord-line');
+    expect(html).not.toContain('chord-slot');
     expect(html).toContain('Когда качаются');
   });
 
-  it('renders empty-text chord lines as single chord row with gaps', () => {
+  it('renders empty-text chord lines as a chord row', () => {
     const line = parseChordLine('[Em][C][D]');
     const html = renderToStaticMarkup(
-      <ChordLine line={line} chordsVisible layoutMode="mono" chordTone="light" />,
+      <ChordLine line={line} chordsVisible layoutMode="measured" chordTone="light" />,
     );
 
-    expect(html).toContain('Em  C  D');
-    expect(html).not.toContain('lyric-line');
+    expect(html).toContain('chord-line-only');
+    expect(html).toContain('Em');
+    expect(html).toContain('C');
+    expect(html).toContain('D');
+    expect(html).not.toContain('lyric-grapheme');
   });
 });
 

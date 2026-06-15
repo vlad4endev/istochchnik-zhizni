@@ -1333,6 +1333,41 @@ button {
   color: var(--text);
 }
 
+.songbook-reader .lyric-line--mono {
+  font-family: 'Courier New', monospace;
+  font-size: 0.75rem;
+  line-height: 1.3;
+}
+
+.songbook-reader .lyric-chord-line {
+  line-height: 1.55;
+  color: var(--text);
+}
+
+.songbook-reader .lyric-grapheme {
+  font-family:
+    system-ui,
+    -apple-system,
+    'Segoe UI',
+    sans-serif;
+  font-size: 0.9375rem;
+  font-weight: 400;
+  line-height: 1.55;
+}
+
+.songbook-reader .chord-slot {
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.songbook-reader .chord-line-only .chord-token {
+  font-family: 'Courier New', monospace;
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
 .songbook-reader .line-pair {
   margin-bottom: 0.5rem;
 }
@@ -1376,6 +1411,11 @@ button {
 }
 
 html.dark .songbook-reader .chord-line {
+  color: #fbbf24;
+}
+
+html.dark .songbook-reader .chord-slot,
+html.dark .songbook-reader .chord-line-only .chord-token {
   color: #fbbf24;
 }
 

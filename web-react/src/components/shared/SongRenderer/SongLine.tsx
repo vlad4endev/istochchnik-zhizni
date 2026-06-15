@@ -1,4 +1,5 @@
-import type { ParsedChordLine } from './chordParser';
+import type { ChordAnchor, ParsedChordLine } from './chordParser';
+import { splitGraphemeClusters } from './chordParser';
 
 type SongLineProps = {
   line: ParsedChordLine;
@@ -8,112 +9,144 @@ type SongLineProps = {
   className?: string;
 };
 
-function splitGraphemeClusters(input: string, locale = 'ru'): string[] {
-  const source = typeof input === 'string' ? input : '';
-  if (source.length === 0) return [];
-  try {
-    const IntlAny = Intl as typeof Intl & {
-      Segmenter?: new (loc: string, opts: { granularity: 'grapheme' }) => {
-        segment: (s: string) => Iterable<{ segment: string }>;
-      };
-    };
-    const Segmenter = IntlAny.Segmenter;
-    if (typeof Segmenter === 'function') {
-      const iter = new Segmenter(locale, { granularity: 'grapheme' }).segment(source);
-      return Array.from(iter, (s) => s.segment);
-    }
-  } catch {
-    // fallback below
+export function resolveOverlaps(chords: ChordAnchor[]): ChordAnchor[] {
+  const sorted = [...chords].sort((a, b) => a.position - b.position);
+  const result: ChordAnchor[] = [];
+  let lastEnd = -1;
+
+  for (const chord of sorted) {
+    const start = Math.max(chord.position, lastEnd + 1);
+    result.push({ ...chord, position: start });
+    lastEnd = start + chord.chord.length;
   }
-  return Array.from(source);
+
+  return result;
 }
 
-type ChordAnchorForLayout = {
-  position: number;
-  chord: string;
-};
+export function buildChordLine(text: string, chords: ChordAnchor[]): string {
+  const graphemes = splitGraphemeClusters(text);
+  const normalized = resolveOverlaps(chords);
+  if (graphemes.length === 0) {
+    return buildFromAnchors(normalized);
+  }
 
-export function resolveOverlaps(chords: ChordAnchorForLayout[]): ChordAnchorForLayout[] {
-  if (!Array.isArray(chords) || chords.length === 0) return [];
-  const sorted = chords
-    .map((item) => ({
-      position: Number.isFinite(item.position) ? Math.max(0, Math.floor(item.position)) : 0,
-      chord: typeof item.chord === 'string' ? item.chord : '',
-    }))
-    .filter((item) => item.chord.length > 0)
-    .sort((a, b) => a.position - b.position);
-
-  for (let i = 1; i < sorted.length; i += 1) {
-    const prev = sorted[i - 1];
-    const curr = sorted[i];
-    const minPos = prev.position + splitGraphemeClusters(prev.chord).length + 1;
-    if (curr.position < minPos) {
-      curr.position = minPos;
+  const cells: string[] = graphemes.map(() => ' ');
+  for (const chord of normalized) {
+    const start = Math.max(0, Math.min(chord.position, cells.length));
+    for (let i = 0; i < chord.chord.length; i += 1) {
+      const idx = start + i;
+      if (idx >= cells.length) cells.push(chord.chord[i] ?? ' ');
+      else cells[idx] = chord.chord[i] ?? ' ';
     }
   }
-  return sorted;
+
+  return cells.join('').trimEnd();
 }
 
-export function buildChordLine(text: string, chords: ChordAnchorForLayout[]): string | null {
-  const normalizedText = typeof text === 'string' ? text : '';
-  const normalizedChords = resolveOverlaps(chords);
-  if (normalizedChords.length === 0) return null;
-
-  if (splitGraphemeClusters(normalizedText).length === 0) {
-    return normalizedChords.map((item) => item.chord).join('  ');
-  }
-
-  const chordTail = normalizedChords.reduce((max, item) => {
-    return Math.max(max, item.position + splitGraphemeClusters(item.chord).length);
-  }, 0);
-  const textLength = splitGraphemeClusters(normalizedText).length;
-  const lineLength = Math.max(textLength, chordTail) + 10;
-  const chars = new Array(lineLength).fill(' ');
-
-  normalizedChords.forEach(({ position, chord }) => {
-    const chordParts = splitGraphemeClusters(chord);
-    for (let i = 0; i < chordParts.length; i += 1) {
-      const idx = position + i;
-      if (idx < chars.length) {
-        chars[idx] = chordParts[i] ?? ' ';
-      }
+function buildFromAnchors(chords: ChordAnchor[]): string {
+  if (chords.length === 0) return '';
+  const cells: string[] = [];
+  for (const chord of chords) {
+    const start = Math.max(0, chord.position);
+    while (cells.length < start) cells.push(' ');
+    for (let i = 0; i < chord.chord.length; i += 1) {
+      const idx = start + i;
+      if (idx >= cells.length) cells.push(chord.chord[i] ?? ' ');
+      else cells[idx] = chord.chord[i] ?? ' ';
     }
-  });
+  }
+  return cells.join('').trimEnd();
+}
 
-  return chars.join('').trimEnd();
+function groupChordsByPosition(chords: ChordAnchor[]): Map<number, string[]> {
+  const map = new Map<number, string[]>();
+  for (const chord of chords) {
+    const list = map.get(chord.position) ?? [];
+    list.push(chord.chord);
+    map.set(chord.position, list);
+  }
+  return map;
 }
 
 export function SongLine({ line, chordsVisible, chordTone, layoutMode, className = '' }: SongLineProps) {
   const text = typeof line.text === 'string' ? line.text : '';
-  const chordLine = buildChordLine(text, line.chords);
-  const showChordLine = chordsVisible && chordLine;
-  const hasText = splitGraphemeClusters(text).length > 0;
+  const graphemes = splitGraphemeClusters(text);
+  const normalizedChords = resolveOverlaps(line.chords ?? []);
   const chordToneClass = chordTone === 'dark' ? 'text-amber-300' : 'text-[#2563EB]';
   const rootClassName = ['line-pair w-full min-w-0', className].filter(Boolean).join(' ');
 
-  if (!hasText && !showChordLine) {
+  const hasText = graphemes.length > 0;
+  const hasChords = normalizedChords.length > 0;
+
+  if (!hasText && !hasChords) {
     return <div className="song-line-gap h-4 w-full" data-layout-mode={layoutMode} />;
   }
 
+  if (!chordsVisible) {
+    return (
+      <div className={rootClassName} data-layout-mode={layoutMode}>
+        <p className="lyric-line m-0 overflow-visible p-0 whitespace-pre-wrap">{text}</p>
+      </div>
+    );
+  }
+
+  if (!hasText && hasChords) {
+    return (
+      <div className={rootClassName} data-layout-mode={layoutMode}>
+        <div className={`chord-line-only m-0 flex flex-wrap gap-x-4 gap-y-1 p-0 ${chordToneClass}`}>
+          {normalizedChords.map((chord, index) => (
+            <span key={`${chord.position}-${index}`} className="chord-token whitespace-nowrap font-semibold">
+              {chord.chord}
+            </span>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (layoutMode === 'mono') {
+    const chordLine = buildChordLine(text, normalizedChords);
+    return (
+      <div className={rootClassName} data-layout-mode={layoutMode}>
+        {chordLine.trim() !== '' && (
+          <pre
+            className={['chord-line m-0 overflow-visible p-0 whitespace-pre', chordToneClass].join(' ')}
+          >
+            {chordLine}
+          </pre>
+        )}
+        <pre className="lyric-line lyric-line--mono m-0 overflow-visible p-0 whitespace-pre-wrap">{text}</pre>
+      </div>
+    );
+  }
+
+  const chordsByPosition = groupChordsByPosition(normalizedChords);
+
   return (
     <div className={rootClassName} data-layout-mode={layoutMode}>
-      {showChordLine ? (
-        <pre
-          className={[
-            'chord-line m-0 overflow-visible p-0 whitespace-pre',
-            chordToneClass,
-          ].join(' ')}
-        >
-          {chordLine}
-        </pre>
-      ) : null}
-      {hasText ? (
-        <pre
-          className="lyric-line m-0 overflow-visible p-0 whitespace-pre-wrap"
-        >
-          {text}
-        </pre>
-      ) : null}
+      <div className="lyric-chord-line">
+        {graphemes.map((grapheme, index) => {
+          const labels = chordsByPosition.get(index) ?? [];
+          const hasLabel = labels.length > 0;
+          return (
+            <span
+              key={index}
+              className="lyric-chord-column inline-flex flex-col items-start align-bottom leading-none"
+            >
+              <span
+                className={[
+                  'chord-slot mb-[2px] min-h-[1.15em] whitespace-nowrap font-semibold leading-none',
+                  hasLabel ? chordToneClass : 'invisible select-none',
+                ].join(' ')}
+                aria-hidden={!hasLabel}
+              >
+                {hasLabel ? labels.join(' ') : '\u00a0'}
+              </span>
+              <span className="lyric-grapheme whitespace-pre">{grapheme === ' ' ? '\u00a0' : grapheme}</span>
+            </span>
+          );
+        })}
+      </div>
     </div>
   );
 }

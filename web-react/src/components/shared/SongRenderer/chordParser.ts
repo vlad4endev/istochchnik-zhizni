@@ -8,7 +8,7 @@ export type ParsedChordLine = {
   chords: ChordAnchor[];
 };
 
-function splitGraphemeClusters(input: string, locale = 'ru'): string[] {
+export function splitGraphemeClusters(input: string, locale = 'ru'): string[] {
   const source = typeof input === 'string' ? input : '';
   if (source.length === 0) return [];
   try {
