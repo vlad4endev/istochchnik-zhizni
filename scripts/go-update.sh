@@ -95,11 +95,30 @@ if [[ -f "$REDIS_ADDON_FILE" ]] && env_flag_true "REDIS_REALTIME_ENABLED"; then
   log "Redis включен: добавляю overlay $REDIS_ADDON_FILE"
 fi
 
-log "Пересобираю и перезапускаю сервисы"
+export GITHUB_SHA="$(git rev-parse --short HEAD)"
+log "Пересобираю и перезапускаю сервисы (GITHUB_SHA=${GITHUB_SHA})"
 docker compose "${COMPOSE_ARGS[@]}" up -d --build --force-recreate
 
 log "Выполняю initDb внутри API-контейнера"
 run_init_db_safe
+
+log "Миграции расписания медиа-служения (media_roles, media_assignments)"
+set +e
+docker compose "${COMPOSE_ARGS[@]}" exec -T api node dist/cli/applyMediaScheduleMigrations.js 2>&1
+media_schedule_migrate_status=$?
+set -e
+if [[ $media_schedule_migrate_status -ne 0 ]]; then
+  log "applyMediaScheduleMigrations: код $media_schedule_migrate_status (пересоберите api или выполните миграцию владельцем БД)"
+fi
+
+log "Миграции каталога песен (backfill is_published / studio_versions)"
+set +e
+docker compose "${COMPOSE_ARGS[@]}" exec -T api node dist/cli/applySongImportMigrations.js 2>&1
+song_migrate_status=$?
+set -e
+if [[ $song_migrate_status -ne 0 ]]; then
+  log "applySongImportMigrations: код $song_migrate_status (если образ старый — пересоберите api)"
+fi
 
 log "Ожидаю готовность сервисов"
 wait_service_healthy api 120
