@@ -8,7 +8,6 @@ import { PendingReviewPage } from '../features/auth/pages/PendingReviewPage';
 import {
   LOGIN_PATH,
   RequireAuth,
-  RequireCatalogModerator,
   RequireFullMember,
   RequireStudioAccess,
   RouteFallback,
@@ -177,13 +176,11 @@ export function AppRouterStudio() {
           <Route
             path="add-song"
             element={
-              <RequireCatalogModerator>
-                <ModuleErrorBoundary moduleName="добавление песни">
-                  <Suspense fallback={<RouteFallback />}>
-                    <AddSongPage />
-                  </Suspense>
-                </ModuleErrorBoundary>
-              </RequireCatalogModerator>
+              <ModuleErrorBoundary moduleName="добавление песни">
+                <Suspense fallback={<RouteFallback />}>
+                  <AddSongPage />
+                </Suspense>
+              </ModuleErrorBoundary>
             }
           />
         </Route>

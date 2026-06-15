@@ -7,16 +7,14 @@ import { LuPenLine, LuRocket, LuTrash2 } from 'react-icons/lu';
 import { SongListSkeleton } from '@/components/skeletons/SongListSkeleton';
 import { useAuthStore } from '../../auth/authStore';
 import {
-  createDraft,
   deleteDraft,
   fetchDrafts,
   fetchImportedSandboxSongs,
   fetchMyVersions,
   fetchRecentSongs,
-  updateDraft,
   type StudioDraft,
 } from '../api';
-import { studioEditSongPath, useStudioModuleSurface } from '../studioPaths';
+import { studioAddSongPath, studioEditSongPath, useStudioModuleSurface } from '../studioPaths';
 import { publishSong, type SongListItem } from '../../songbook/api';
 
 type MySongsTab = 'saved' | 'drafts' | 'recent' | 'imported';
@@ -109,67 +107,42 @@ function ImportedSongRow({ song }: { song: SongListItem }) {
 
 function DraftRow({
   draft,
+  composeHref,
   onDeleted,
 }: {
   draft: StudioDraft;
+  composeHref: string;
   onDeleted: () => void;
 }) {
-  const qc = useQueryClient();
-  const [open, setOpen] = useState(false);
-  const [title, setTitle] = useState(draft.title);
-  const [content, setContent] = useState(draft.content);
-
-  const save = useMutation({
-    mutationFn: () => updateDraft(Number(draft.id), { title, content }),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ['studio', 'drafts'] }),
-  });
-
   return (
     <li className="rounded-xl border border-stone-200 bg-white px-4 py-3 shadow-sm">
       <div className="flex items-start justify-between gap-3">
-        <button
-          type="button"
-          onClick={() => setOpen(!open)}
-          className="min-w-0 flex-1 text-left text-sm font-medium text-stone-900 hover:text-sky-700"
-        >
-          {draft.title || 'Без названия'}
-        </button>
-        <button
-          type="button"
-          onClick={() => {
-            if (window.confirm('Удалить черновик?')) onDeleted();
-          }}
-          className="inline-flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-lg text-stone-400 hover:bg-red-50 hover:text-red-600"
-          aria-label="Удалить черновик"
-        >
-          <LuTrash2 className="h-4 w-4" />
-        </button>
-      </div>
-      <p className="mt-1 text-xs text-stone-500">{new Date(draft.updated_at).toLocaleString()}</p>
-      {open ? (
-        <div className="mt-3 space-y-3 border-t border-stone-100 pt-3">
-          <input
-            className="w-full rounded-lg border border-stone-200 bg-stone-50 px-3 py-2.5 text-sm text-stone-900 outline-none ring-0 placeholder:text-stone-400 focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="Название"
-          />
-          <textarea
-            className="min-h-[100px] w-full resize-y rounded-lg border border-stone-200 bg-stone-50 px-3 py-2 font-mono text-sm text-stone-900 outline-none placeholder:text-stone-400 focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
-            value={content}
-            onChange={(e) => setContent(e.target.value)}
-            placeholder="ChordPro…"
-          />
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-medium text-stone-900">{draft.title || 'Без названия'}</p>
+          <p className="mt-1 text-xs text-stone-500">{new Date(draft.updated_at).toLocaleString()}</p>
+        </div>
+        <div className="flex shrink-0 items-center gap-1">
+          <Link
+            to={composeHref}
+            state={{ draft: { id: Number(draft.id), title: draft.title, content: draft.content } }}
+            className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg text-sky-700 hover:bg-sky-50"
+            aria-label="Открыть в редакторе"
+            title="Открыть в редакторе"
+          >
+            <LuPenLine className="h-4 w-4" />
+          </Link>
           <button
             type="button"
-            onClick={() => save.mutate()}
-            disabled={save.isPending}
-            className="text-sm font-semibold text-sky-700 hover:text-sky-800 disabled:opacity-50"
+            onClick={() => {
+              if (window.confirm('Удалить черновик?')) onDeleted();
+            }}
+            className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg text-stone-400 hover:bg-red-50 hover:text-red-600"
+            aria-label="Удалить черновик"
           >
-            Сохранить
+            <LuTrash2 className="h-4 w-4" />
           </button>
         </div>
-      ) : null}
+      </div>
     </li>
   );
 }
@@ -237,19 +210,9 @@ export function MySongsPage() {
     [setSearchParams],
   );
 
-  const [draftTitle, setDraftTitle] = useState('');
-  const [draftContent, setDraftContent] = useState('');
   const [savedSearch, setSavedSearch] = useState('');
   const [savedKeyFilter, setSavedKeyFilter] = useState('');
-
-  const createMut = useMutation({
-    mutationFn: () => createDraft(draftTitle || 'Без названия', draftContent),
-    onSuccess: () => {
-      setDraftTitle('');
-      setDraftContent('');
-      void qc.invalidateQueries({ queryKey: ['studio', 'drafts'] });
-    },
-  });
+  const composeHref = studioAddSongPath(surface);
 
   const delDraftMut = useMutation({
     mutationFn: (id: number) => deleteDraft(id),
@@ -322,10 +285,10 @@ export function MySongsPage() {
         </div>
         <div className="flex flex-wrap gap-2">
           <Link
-            to="/studio/add-song"
+            to={composeHref}
             className="inline-flex min-h-[44px] items-center rounded-xl bg-sky-600 px-4 text-sm font-semibold text-white hover:bg-sky-500"
           >
-            + Добавить песню
+            + Новая песня
           </Link>
         </div>
         <div
@@ -361,39 +324,27 @@ export function MySongsPage() {
       >
         {tab === 'drafts' ? (
           <section className="space-y-4">
-            <div className="rounded-xl border border-stone-200 bg-stone-50/80 p-4">
-              <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-stone-500">Новый черновик</p>
-              <div className="space-y-2">
-                <input
-                  className="w-full rounded-lg border border-stone-200 bg-white px-3 py-2.5 text-sm text-stone-900 outline-none placeholder:text-stone-400 focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
-                  placeholder="Название"
-                  value={draftTitle}
-                  onChange={(e) => setDraftTitle(e.target.value)}
-                />
-                <textarea
-                  className="min-h-[88px] w-full resize-y rounded-lg border border-stone-200 bg-white px-3 py-2 font-mono text-sm text-stone-900 outline-none placeholder:text-stone-400 focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
-                  placeholder="Текст, ChordPro…"
-                  value={draftContent}
-                  onChange={(e) => setDraftContent(e.target.value)}
-                />
-              </div>
-              <button
-                type="button"
-                onClick={() => createMut.mutate()}
-                disabled={createMut.isPending}
-                className="mt-3 rounded-lg bg-stone-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-stone-800 disabled:opacity-50"
+            <div className="rounded-xl border border-dashed border-stone-300 bg-stone-50 px-4 py-5 text-sm text-stone-600">
+              <p className="font-semibold text-stone-900">Единый редактор песен</p>
+              <p className="mt-1 leading-relaxed">
+                Импорт из текста, PDF и ссылок, превью с аккордами, быстрые аккорды и метаданные — в одном мастере.
+                Черновик можно сохранить на любом шаге.
+              </p>
+              <Link
+                to={composeHref}
+                className="mt-3 inline-flex min-h-[44px] items-center rounded-xl bg-stone-900 px-4 text-sm font-semibold text-white hover:bg-stone-800"
               >
-                Сохранить черновик
-              </button>
+                Создать песню или черновик
+              </Link>
             </div>
             {drafts.length > 0 ? (
               <ul className="flex flex-col gap-2">
                 {drafts.map((d) => (
-                  <DraftRow key={d.id} draft={d} onDeleted={() => delDraftMut.mutate(Number(d.id))} />
+                  <DraftRow key={d.id} draft={d} composeHref={composeHref} onDeleted={() => delDraftMut.mutate(Number(d.id))} />
                 ))}
               </ul>
             ) : (
-              <p className="text-sm text-stone-500">Список черновиков пуст — создайте первый формой выше.</p>
+              <p className="text-sm text-stone-500">Список черновиков пуст — начните с кнопки выше.</p>
             )}
           </section>
         ) : null}

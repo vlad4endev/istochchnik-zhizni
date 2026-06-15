@@ -1,11 +1,17 @@
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type RefObject } from 'react';
-import { LuArrowLeft, LuArrowRight, LuLoader, LuSparkles, LuUpload, LuYoutube } from 'react-icons/lu';
+import { LuArrowLeft, LuArrowRight, LuLoader, LuSave, LuSparkles, LuUpload, LuYoutube } from 'react-icons/lu';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 
 import { useAuthStore } from '../../auth/authStore';
 import { canModerateSongCatalogSession } from '../../auth/studioAccess';
+import { createDraft, updateDraft } from '../../studio/api';
+import {
+  getStudioModuleSurface,
+  studioMySongsDraftsPath,
+  studioMySongsPath,
+} from '../../studio/studioPaths';
 import { createSong, fetchYoutubeOembed } from '../api';
 import { LyricsWithChords } from '../components/LyricsWithChords';
 import { SectionInsertToolbar } from '../components/SectionInsertToolbar';
@@ -25,13 +31,21 @@ function parseKeyForApi(guessLabel: string): string {
   return first ?? t;
 }
 
+type DraftNavState = {
+  draft?: { id: number; title: string; content: string };
+};
+
 export function AddSongPage() {
   const navigate = useNavigate();
   const location = useLocation();
+  const qc = useQueryClient();
+  const surface = getStudioModuleSurface(location.pathname);
   const isStudio =
     location.pathname.startsWith('/studio/') || location.pathname.startsWith('/songbook/studio');
   const role = useAuthStore((s) => s.role);
   const roles = useAuthStore((s) => s.roles ?? [s.role]);
+  const canPublishCatalog = canModerateSongCatalogSession(role, roles);
+  const [editingDraftId, setEditingDraftId] = useState<number | null>(null);
   const editorRef = useRef<HTMLTextAreaElement>(null);
   const selRef = useRef({ start: 0, end: 0 });
   const titleRef = useRef<HTMLInputElement>(null);
@@ -62,6 +76,18 @@ export function AddSongPage() {
   const [mobileEditorPane, setMobileEditorPane] = useState<'editor' | 'preview'>('editor');
 
   const applyConvert = useCallback((src: string) => convertToChordPro(src), []);
+
+  useEffect(() => {
+    const draft = (location.state as DraftNavState | null)?.draft;
+    if (!draft) return;
+    setEditingDraftId(draft.id);
+    setTitle(draft.title);
+    setContent(draft.content);
+    if (draft.content.trim()) {
+      setStep(2);
+      importAutoOpened.current = true;
+    }
+  }, [location.state]);
 
   useEffect(() => {
     if (step !== 1 || importAutoOpened.current) return;
@@ -240,19 +266,33 @@ export function AddSongPage() {
     },
   });
 
-  if (!canModerateSongCatalogSession(role, roles)) {
-    return (
-      <div className={`mx-auto max-w-lg p-6 ${isStudio ? 'text-zinc-300' : 'text-stone-600'}`}>
-        <p>Добавление песен в песенник доступно музыкантам студии и редакторам каталога.</p>
-        <Link
-          to={isStudio ? (location.pathname.startsWith('/songbook') ? '/songbook/studio' : '/studio/my-songs') : '/songbook'}
-          className={`mt-4 inline-block ${isStudio ? 'text-sky-400' : 'text-sky-600'}`}
-        >
-          ← Назад
-        </Link>
-      </div>
-    );
-  }
+  const resolveDraftContent = () => {
+    const body = content.trim() ? content : applyConvert(rawPaste);
+    return body.trim();
+  };
+
+  const draftMut = useMutation({
+    mutationFn: async () => {
+      const draftTitle = title.trim() || 'Без названия';
+      const draftContent = resolveDraftContent();
+      if (!draftContent) {
+        throw new Error('empty');
+      }
+      if (editingDraftId) {
+        return updateDraft(editingDraftId, { title: draftTitle, content: draftContent });
+      }
+      return createDraft(draftTitle, draftContent);
+    },
+    onSuccess: (draft) => {
+      void qc.invalidateQueries({ queryKey: ['studio', 'drafts'] });
+      if (!editingDraftId && draft?.id) {
+        setEditingDraftId(Number(draft.id));
+      }
+      if (isStudio) {
+        void navigate(studioMySongsDraftsPath(surface));
+      }
+    },
+  });
 
   const quick = quickChordsForKey(quickRoot, quickMode);
 
@@ -279,12 +319,11 @@ export function AddSongPage() {
     !autoSongNumber &&
     (!!songNumber.trim() ? !Number.isInteger(Number(songNumber)) || Number(songNumber) <= 0 : true);
   const hasImportedText = Boolean((content.trim() || rawPaste.trim()).length > 0);
-  const canSaveSong = Boolean(title.trim()) && !createMut.isPending && !manualSongNumberInvalid;
-  const backPath = isStudio
-    ? location.pathname.startsWith('/songbook')
-      ? '/songbook/studio'
-      : '/studio/my-songs'
-    : '/songbook';
+  const hasDraftBody = Boolean(resolveDraftContent().length > 0);
+  const canSaveSong = canPublishCatalog && Boolean(title.trim()) && !createMut.isPending && !manualSongNumberInvalid;
+  const canSaveDraft = hasDraftBody && !draftMut.isPending;
+  const backPath = isStudio ? studioMySongsPath(surface) : '/songbook';
+  const pageTitle = editingDraftId ? 'Редактирование черновика' : 'Новая песня';
 
   const onEnterFocusNext = (e: KeyboardEvent<HTMLInputElement>, next: RefObject<HTMLInputElement>) => {
     if (e.key !== 'Enter') return;
@@ -295,7 +334,7 @@ export function AddSongPage() {
   return (
     <div className={`mx-auto max-w-6xl space-y-6 px-3 md:px-4 ${theme.page}`}>
       <div className={sectionHeroStickyClass}>
-        <PageHeader title="Новая песня" />
+        <PageHeader title={pageTitle} />
       </div>
       <SmartImportModal
         open={importOpen}
@@ -311,7 +350,7 @@ export function AddSongPage() {
 
       <div className="flex flex-wrap items-center gap-3">
         <Link
-          to={isStudio ? (location.pathname.startsWith('/songbook') ? '/songbook/studio' : '/studio/my-songs') : '/songbook'}
+          to={backPath}
           className={`inline-flex items-center gap-2 text-sm ${theme.link}`}
         >
           <LuArrowLeft className="h-4 w-4" />
@@ -565,26 +604,44 @@ export function AddSongPage() {
               <LuArrowLeft className="h-4 w-4" />
               Назад
             </button>
-            <button
-              type="button"
-              onClick={goNext}
-              className={`inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-semibold ${theme.primaryBtn}`}
-            >
-              Далее
-              <LuArrowRight className="h-4 w-4" />
-            </button>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                disabled={!canSaveDraft}
+                onClick={() => draftMut.mutate()}
+                className={`inline-flex items-center gap-2 rounded-xl border px-4 py-2 text-sm font-semibold disabled:opacity-50 ${theme.btnOutline}`}
+              >
+                {draftMut.isPending ? <LuLoader className="h-4 w-4 animate-spin" /> : <LuSave className="h-4 w-4" />}
+                {editingDraftId ? 'Обновить черновик' : 'Сохранить черновик'}
+              </button>
+              <button
+                type="button"
+                onClick={goNext}
+                className={`inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-semibold ${theme.primaryBtn}`}
+              >
+                {canPublishCatalog ? 'Далее' : 'Готово'}
+                {canPublishCatalog ? <LuArrowRight className="h-4 w-4" /> : null}
+              </button>
+            </div>
           </div>
+          {draftMut.isError ? (
+            <p className={`text-sm ${isStudio ? 'text-red-400' : 'text-red-600'}`}>
+              Не удалось сохранить черновик — добавьте текст песни.
+            </p>
+          ) : null}
         </section>
       )}
 
       {step === 3 && (
         <section className="space-y-4">
           <p className={`text-sm ${theme.muted}`}>
-            Заполните минимум название и тональность. Остальное можно добавить позже.
+            {canPublishCatalog
+              ? 'Заполните минимум название и тональность. Остальное можно добавить позже.'
+              : 'Укажите название и сохраните черновик — публикация в общий каталог доступна редакторам.'}
           </p>
           <div className="grid gap-4 sm:grid-cols-2">
-            <label className="block">
-              <span className={`text-xs font-bold uppercase ${theme.muted}`}>Название *</span>
+            <label className="block sm:col-span-2">
+              <span className={`text-xs font-bold uppercase ${theme.muted}`}>Название{canPublishCatalog ? ' *' : ''}</span>
               <input
                 ref={titleRef}
                 value={title}
@@ -595,6 +652,8 @@ export function AddSongPage() {
                 placeholder="Название песни"
               />
             </label>
+            {canPublishCatalog ? (
+              <>
             <label className="block">
               <span className={`text-xs font-bold uppercase ${theme.muted}`}>Тональность</span>
               <input
@@ -686,49 +745,56 @@ export function AddSongPage() {
                 ))}
               </div>
             </label>
+              </>
+            ) : null}
           </div>
 
-          <div className={`rounded-xl border p-4 ${theme.card}`}>
-            <p className={`mb-2 flex items-center gap-2 text-xs font-bold uppercase ${theme.muted}`}>
-              <LuYoutube className="h-4 w-4 text-red-600" />
-              YouTube (опционально)
-            </p>
-            <div className="flex flex-wrap gap-2">
-              <input
-                ref={youtubeRef}
-                value={youtubeUrl}
-                onChange={(e) => setYoutubeUrl(e.target.value)}
-                onKeyDown={(e) => onEnterFocusNext(e, tagsRef)}
-                className={`min-h-[48px] min-w-[200px] flex-1 rounded-xl border px-3 py-2 text-sm ${theme.input}`}
-                placeholder="https://www.youtube.com/watch?v=…"
-              />
-              <button
-                type="button"
-                onClick={() => void onFetchYoutube()}
-                className={`rounded-xl border px-4 py-2 text-sm ${theme.btnOutline}`}
-              >
-                Подставить название
-              </button>
-            </div>
-            <p className={`mt-2 text-xs ${theme.muted}`}>
-              Заголовок подтягивается через oEmbed (без API-ключа). При необходимости отредактируйте вручную.
-            </p>
-          </div>
+          {canPublishCatalog ? (
+            <>
+              <div className={`rounded-xl border p-4 ${theme.card}`}>
+                <p className={`mb-2 flex items-center gap-2 text-xs font-bold uppercase ${theme.muted}`}>
+                  <LuYoutube className="h-4 w-4 text-red-600" />
+                  YouTube (опционально)
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  <input
+                    ref={youtubeRef}
+                    value={youtubeUrl}
+                    onChange={(e) => setYoutubeUrl(e.target.value)}
+                    onKeyDown={(e) => onEnterFocusNext(e, tagsRef)}
+                    className={`min-h-[48px] min-w-[200px] flex-1 rounded-xl border px-3 py-2 text-sm ${theme.input}`}
+                    placeholder="https://www.youtube.com/watch?v=…"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => void onFetchYoutube()}
+                    className={`rounded-xl border px-4 py-2 text-sm ${theme.btnOutline}`}
+                  >
+                    Подставить название
+                  </button>
+                </div>
+                <p className={`mt-2 text-xs ${theme.muted}`}>
+                  Заголовок подтягивается через oEmbed (без API-ключа). При необходимости отредактируйте вручную.
+                </p>
+              </div>
 
-          <label className="block">
-            <span className={`text-xs font-bold uppercase ${theme.muted}`}>Теги (через запятую)</span>
-            <input
-              ref={tagsRef}
-              value={tags}
-              onChange={(e) => setTags(e.target.value)}
-              className={`mt-1 min-h-[48px] w-full rounded-xl border px-3 py-2 text-sm ${theme.input}`}
-              placeholder="worship, fast"
-            />
-          </label>
+              <label className="block">
+                <span className={`text-xs font-bold uppercase ${theme.muted}`}>Теги (через запятую)</span>
+                <input
+                  ref={tagsRef}
+                  value={tags}
+                  onChange={(e) => setTags(e.target.value)}
+                  className={`mt-1 min-h-[48px] w-full rounded-xl border px-3 py-2 text-sm ${theme.input}`}
+                  placeholder="worship, fast"
+                />
+              </label>
+            </>
+          ) : null}
 
-          {createMut.isError && (
+          {(createMut.isError || draftMut.isError) && (
             <p className={`text-sm ${isStudio ? 'text-red-400' : 'text-red-600'}`}>
-              Не удалось сохранить. Проверьте поля и права.
+              {createMut.isError ? 'Не удалось сохранить в каталог. Проверьте поля и права.' : null}
+              {draftMut.isError ? 'Не удалось сохранить черновик — добавьте текст песни.' : null}
             </p>
           )}
 
@@ -741,6 +807,17 @@ export function AddSongPage() {
               <LuArrowLeft className="h-4 w-4" />
               Назад
             </button>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                disabled={!canSaveDraft}
+                onClick={() => draftMut.mutate()}
+                className={`inline-flex items-center gap-2 rounded-xl border px-4 py-2 text-sm font-semibold disabled:opacity-50 ${theme.btnOutline}`}
+              >
+                {draftMut.isPending ? <LuLoader className="h-4 w-4 animate-spin" /> : <LuSave className="h-4 w-4" />}
+                {editingDraftId ? 'Обновить черновик' : 'Сохранить черновик'}
+              </button>
+              {canPublishCatalog ? (
             <button
               type="button"
               disabled={!canSaveSong}
@@ -750,6 +827,8 @@ export function AddSongPage() {
               {createMut.isPending ? <LuLoader className="h-4 w-4 animate-spin" /> : null}
               Сохранить в каталог
             </button>
+              ) : null}
+            </div>
           </div>
         </section>
       )}
@@ -787,10 +866,18 @@ export function AddSongPage() {
               </button>
               <button
                 type="button"
+                disabled={!canSaveDraft}
+                onClick={() => draftMut.mutate()}
+                className={`min-h-[44px] rounded-xl border px-3 text-xs font-semibold disabled:opacity-50 ${theme.btnOutline}`}
+              >
+                Черновик
+              </button>
+              <button
+                type="button"
                 onClick={goNext}
                 className={`min-h-[44px] flex-1 rounded-xl text-sm font-semibold ${theme.primaryBtn}`}
               >
-                Далее
+                {canPublishCatalog ? 'Далее' : 'Готово'}
               </button>
             </>
           ) : null}
@@ -806,12 +893,31 @@ export function AddSongPage() {
               </button>
               <button
                 type="button"
+                disabled={!canSaveDraft}
+                onClick={() => draftMut.mutate()}
+                className={`min-h-[44px] rounded-xl border px-3 text-xs font-semibold disabled:opacity-50 ${theme.btnOutline}`}
+              >
+                Черновик
+              </button>
+              {canPublishCatalog ? (
+              <button
+                type="button"
                 disabled={!canSaveSong}
                 onClick={() => createMut.mutate({})}
                 className={`min-h-[44px] flex-1 rounded-xl text-sm font-semibold disabled:opacity-50 ${theme.saveBtn}`}
               >
-                {createMut.isPending ? 'Сохраняем…' : 'Сохранить в каталог'}
+                {createMut.isPending ? 'Сохраняем…' : 'В каталог'}
               </button>
+              ) : (
+              <button
+                type="button"
+                disabled={!canSaveDraft}
+                onClick={() => draftMut.mutate()}
+                className={`min-h-[44px] flex-1 rounded-xl text-sm font-semibold disabled:opacity-50 ${theme.saveBtn}`}
+              >
+                {draftMut.isPending ? 'Сохраняем…' : 'Сохранить'}
+              </button>
+              )}
             </>
           ) : null}
         </div>

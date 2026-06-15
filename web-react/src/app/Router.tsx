@@ -272,13 +272,11 @@ export function AppRouter() {
           <Route
             path="add-song"
             element={
-              <RequireCatalogModerator>
-                <ModuleErrorBoundary moduleName="добавление песни">
-                  <Suspense fallback={<RouteFallback />}>
-                    <AddSongPage />
-                  </Suspense>
-                </ModuleErrorBoundary>
-              </RequireCatalogModerator>
+              <ModuleErrorBoundary moduleName="добавление песни">
+                <Suspense fallback={<RouteFallback />}>
+                  <AddSongPage />
+                </Suspense>
+              </ModuleErrorBoundary>
             }
           />
         </Route>
@@ -444,6 +442,18 @@ export function AppRouter() {
                 <Suspense fallback={<RouteFallback />}>
                   <StudioMySongsPage />
                 </Suspense>
+              </RequireStudioAccess>
+            }
+          />
+          <Route
+            path="studio/new"
+            element={
+              <RequireStudioAccess>
+                <ModuleErrorBoundary moduleName="добавление песни">
+                  <Suspense fallback={<RouteFallback />}>
+                    <AddSongPage />
+                  </Suspense>
+                </ModuleErrorBoundary>
               </RequireStudioAccess>
             }
           />

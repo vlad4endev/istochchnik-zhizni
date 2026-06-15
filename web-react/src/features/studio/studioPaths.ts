@@ -10,6 +10,15 @@ export function studioMySongsPath(surface: StudioModuleSurface): string {
   return surface === 'songbook' ? '/songbook/studio' : '/studio/my-songs';
 }
 
+export function studioMySongsDraftsPath(surface: StudioModuleSurface): string {
+  return `${studioMySongsPath(surface)}?tab=drafts`;
+}
+
+/** Единый экран создания песни / черновика в студии. */
+export function studioAddSongPath(surface: StudioModuleSurface): string {
+  return surface === 'songbook' ? '/songbook/studio/new' : '/studio/add-song';
+}
+
 /** Единый URL редактора студии (внутри раздела песенника). */
 export function studioEditSongPath(songId: number): string {
   return `/songbook/studio/edit/${songId}`;
