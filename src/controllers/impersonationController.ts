@@ -90,6 +90,12 @@ export async function startImpersonationHandler(req: Request, res: Response): Pr
       res.status(400).json({ error: 'Нельзя войти в свой аккаунт' });
       return;
     }
+    if (message === 'impersonation_not_configured') {
+      res.status(503).json({
+        error: 'Функция просмотра аккаунта ещё не настроена на сервере (нет таблиц БД). Примените миграцию или перезапустите API с initDb.',
+      });
+      return;
+    }
     console.error('[impersonation] start failed:', error);
     res.status(500).json({ error: 'Не удалось начать просмотр аккаунта' });
   }

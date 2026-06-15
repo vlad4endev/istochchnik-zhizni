@@ -199,6 +199,25 @@ CREATE TABLE IF NOT EXISTS auth_refresh_sessions (
   last_used_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+CREATE TABLE IF NOT EXISTS audit_impersonation (
+  id          BIGSERIAL PRIMARY KEY,
+  admin_id    BIGINT NOT NULL REFERENCES members(id),
+  target_id   BIGINT NOT NULL REFERENCES members(id),
+  started_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  ended_at    TIMESTAMPTZ,
+  ip_address  TEXT,
+  user_agent  TEXT
+);
+
+CREATE TABLE IF NOT EXISTS auth_impersonation_active (
+  access_token_hash CHAR(64) PRIMARY KEY,
+  admin_id          BIGINT NOT NULL REFERENCES members(id),
+  target_id         BIGINT NOT NULL REFERENCES members(id),
+  audit_id          BIGINT REFERENCES audit_impersonation(id) ON DELETE SET NULL,
+  expires_at        TIMESTAMPTZ NOT NULL,
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 CREATE TABLE IF NOT EXISTS access_requests (
   id BIGSERIAL PRIMARY KEY,
   first_name VARCHAR(120) NOT NULL,
@@ -490,6 +509,24 @@ CREATE INDEX IF NOT EXISTS auth_refresh_sessions_expires_at_idx
 
 CREATE INDEX IF NOT EXISTS auth_refresh_sessions_revoked_at_idx
   ON auth_refresh_sessions (revoked_at);
+
+CREATE INDEX IF NOT EXISTS audit_impersonation_admin_id_idx
+  ON audit_impersonation (admin_id);
+
+CREATE INDEX IF NOT EXISTS audit_impersonation_target_id_idx
+  ON audit_impersonation (target_id);
+
+CREATE INDEX IF NOT EXISTS audit_impersonation_started_at_idx
+  ON audit_impersonation (started_at);
+
+CREATE INDEX IF NOT EXISTS auth_impersonation_active_admin_id_idx
+  ON auth_impersonation_active (admin_id);
+
+CREATE INDEX IF NOT EXISTS auth_impersonation_active_target_id_idx
+  ON auth_impersonation_active (target_id);
+
+CREATE INDEX IF NOT EXISTS auth_impersonation_active_expires_at_idx
+  ON auth_impersonation_active (expires_at);
 
 ALTER TABLE auth_refresh_sessions ADD COLUMN IF NOT EXISTS last_used_at TIMESTAMPTZ;
 UPDATE auth_refresh_sessions SET last_used_at = created_at WHERE last_used_at IS NULL;

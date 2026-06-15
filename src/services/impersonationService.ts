@@ -1,10 +1,42 @@
 import { createHash } from 'crypto';
+import type { QueryResult } from 'pg';
 import { query } from '../config/db';
 import type { AppRole } from '../types/appRole';
 import { normalizeAppRole, normalizeAppRoles } from '../types/appRole';
 
 const IMPERSONATION_TTL_MS = 2 * 60 * 60 * 1000;
 const MAX_STARTS_PER_HOUR = 10;
+
+let warnedMissingImpersonationTables = false;
+
+function isUndefinedTableError(err: unknown): boolean {
+  if (!err || typeof err !== 'object') return false;
+  const code = (err as { code?: unknown }).code;
+  return code === '42P01';
+}
+
+function warnMissingImpersonationTablesOnce(): void {
+  if (warnedMissingImpersonationTables) return;
+  warnedMissingImpersonationTables = true;
+  console.warn(
+    '[impersonation] Tables audit_impersonation / auth_impersonation_active are missing — impersonation disabled until migration or initDb runs.',
+  );
+}
+
+async function impersonationQuery(
+  text: string,
+  params?: unknown[],
+): Promise<QueryResult | null> {
+  try {
+    return await query(text, params);
+  } catch (err) {
+    if (isUndefinedTableError(err)) {
+      warnMissingImpersonationTablesOnce();
+      return null;
+    }
+    throw err;
+  }
+}
 
 export type ImpersonationTargetMember = {
   id: number;
@@ -81,13 +113,14 @@ export async function memberHasAdminPrivileges(memberId: number): Promise<boolea
 }
 
 export async function countImpersonationStartsInLastHour(adminId: number): Promise<number> {
-  const result = await query(
+  const result = await impersonationQuery(
     `SELECT COUNT(*)::int AS cnt
      FROM audit_impersonation
      WHERE admin_id = $1
        AND started_at > NOW() - INTERVAL '1 hour'`,
     [adminId],
   );
+  if (!result) return 0;
   return Number((result.rows[0] as { cnt?: number } | undefined)?.cnt ?? 0);
 }
 
@@ -95,13 +128,14 @@ export async function getActiveImpersonationByToken(
   accessToken: string,
 ): Promise<ActiveImpersonationRow | null> {
   const tokenHash = hashAccessToken(accessToken);
-  const result = await query(
+  const result = await impersonationQuery(
     `SELECT access_token_hash, admin_id, target_id, audit_id, expires_at
      FROM auth_impersonation_active
      WHERE access_token_hash = $1
      LIMIT 1`,
     [tokenHash],
   );
+  if (!result) return null;
   const row = result.rows[0] as ActiveImpersonationRow | undefined;
   return row ?? null;
 }
@@ -130,9 +164,15 @@ export async function exitImpersonationByToken(accessToken: string): Promise<boo
   if (!active) {
     return false;
   }
-  await query(`DELETE FROM auth_impersonation_active WHERE access_token_hash = $1`, [tokenHash]);
+  const deleted = await impersonationQuery(
+    `DELETE FROM auth_impersonation_active WHERE access_token_hash = $1`,
+    [tokenHash],
+  );
+  if (!deleted) {
+    return false;
+  }
   if (active.audit_id != null) {
-    await query(
+    await impersonationQuery(
       `UPDATE audit_impersonation
        SET ended_at = COALESCE(ended_at, NOW())
        WHERE id = $1`,
@@ -175,19 +215,25 @@ export async function startImpersonation(input: {
   const expiresAt = new Date(Date.now() + IMPERSONATION_TTL_MS).toISOString();
   const tokenHash = hashAccessToken(input.accessToken);
 
-  const auditInsert = await query(
+  const auditInsert = await impersonationQuery(
     `INSERT INTO audit_impersonation (admin_id, target_id, ip_address, user_agent)
      VALUES ($1, $2, $3, $4)
      RETURNING id`,
     [input.adminId, input.targetMemberId, input.ipAddress, input.userAgent],
   );
+  if (!auditInsert?.rows[0]) {
+    throw new Error('impersonation_not_configured');
+  }
   const auditId = Number((auditInsert.rows[0] as { id: number }).id);
 
-  await query(
+  const inserted = await impersonationQuery(
     `INSERT INTO auth_impersonation_active (access_token_hash, admin_id, target_id, audit_id, expires_at)
      VALUES ($1, $2, $3, $4, $5)`,
     [tokenHash, input.adminId, input.targetMemberId, auditId, expiresAt],
   );
+  if (!inserted) {
+    throw new Error('impersonation_not_configured');
+  }
 
   return { targetMember: target, expiresAt };
 }
