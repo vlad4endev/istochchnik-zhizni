@@ -39,6 +39,7 @@ import { useSongbookChrome } from '../SongbookChromeContext';
 
 import { BlockWrapper } from './BlockWrapper';
 import {
+  assertRoundtrip,
   blocksToChordPro,
   chordProToBlocks,
   createSongBlock,
@@ -54,16 +55,100 @@ import {
   hasAnyChordsInBlock,
 } from './chordPattern';
 
+type SaveStatus = 'saved' | 'saving' | 'unsaved' | 'error' | 'offline';
+
+type StudioLocalDraft = {
+  content: string;
+  key?: string;
+  savedAt: number;
+  blocks?: SongBlock[];
+  updatedAt?: number;
+};
+
+type DraftRecoveryOffer = {
+  content: string;
+  key: string;
+  savedAt: number;
+};
+
+function studioDraftKey(songId: number): string {
+  return `studio:draft:${songId}`;
+}
+
+function legacyAutosaveKey(songId: number): string {
+  return `studio:autosave:song:${songId}`;
+}
+
+function readLocalDraft(songId: number): { content: string; key?: string; savedAt: number } | null {
+  for (const storageKey of [studioDraftKey(songId), legacyAutosaveKey(songId)]) {
+    try {
+      const raw = localStorage.getItem(storageKey);
+      if (!raw) continue;
+      const parsed = JSON.parse(raw) as StudioLocalDraft;
+      if (typeof parsed.content === 'string') {
+        return {
+          content: parsed.content,
+          key: typeof parsed.key === 'string' ? parsed.key : undefined,
+          savedAt:
+            typeof parsed.savedAt === 'number'
+              ? parsed.savedAt
+              : typeof parsed.updatedAt === 'number'
+                ? parsed.updatedAt
+                : Date.now(),
+        };
+      }
+      if (Array.isArray(parsed.blocks) && parsed.blocks.length > 0) {
+        const normalized = parsed.blocks.map((b) =>
+          createSongBlock(
+            ['intro', 'verse', 'prechorus', 'chorus', 'bridge', 'solo', 'outro'].includes(b.type) ? b.type : 'verse',
+            typeof b.content === 'string' ? decodeHtmlEntities(b.content) : '',
+            typeof b.sectionHint === 'string' && b.sectionHint.trim() ? b.sectionHint.trim() : undefined,
+            typeof b.id === 'string' && b.id.length > 0 ? b.id : undefined,
+          ),
+        );
+        if (!studioBlocksHaveBody(normalized)) continue;
+        return {
+          content: blocksToChordPro(normalized),
+          key: typeof parsed.key === 'string' ? parsed.key : undefined,
+          savedAt:
+            typeof parsed.savedAt === 'number'
+              ? parsed.savedAt
+              : typeof parsed.updatedAt === 'number'
+                ? parsed.updatedAt
+                : Date.now(),
+        };
+      }
+    } catch {
+      // try next key
+    }
+  }
+  return null;
+}
+
+function writeLocalDraft(songId: number, content: string, draftKey: string): void {
+  localStorage.setItem(
+    studioDraftKey(songId),
+    JSON.stringify({ content, key: draftKey, savedAt: Date.now() }),
+  );
+}
+
+function clearLocalDraft(songId: number): void {
+  try {
+    localStorage.removeItem(studioDraftKey(songId));
+    localStorage.removeItem(legacyAutosaveKey(songId));
+  } catch {
+    // ignore storage errors
+  }
+}
+
 /**
- * Текст студии над каталогом; если в `studio_versions.custom_content` лежит пустая строка,
- * оператор `??` не подставляет каталог — в редакторе получались «пустые слова» при полном `songs.content`.
+ * Текст студии над каталогом: null/undefined — версии ещё нет; пустая строка — намеренно очищено.
  */
 function effectiveLyricsSource(studioContent: string | null | undefined, catalogContent: string | undefined): string {
-  const catalog = catalogContent ?? '';
-  if (studioContent == null) return catalog;
-  const studio = String(studioContent);
-  if (studio.trim().length === 0) return catalog;
-  return studio;
+  if (studioContent !== null && studioContent !== undefined) {
+    return String(studioContent);
+  }
+  return catalogContent ?? '';
 }
 
 /** Черновик из localStorage не должен перетирать текст с сервера «пустой разметкой» после автосохранения до загрузки песни. */
@@ -251,64 +336,73 @@ export function StudioEditor() {
   const [activeBlockId, setActiveBlockId] = useState<string | null>(null);
   const [draftSavedAt, setDraftSavedAt] = useState<number | null>(null);
   const [showWelcome, setShowWelcome] = useState(false);
+  const [draftRecovery, setDraftRecovery] = useState<DraftRecoveryOffer | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState(false);
+  const [lastSavedAt, setLastSavedAt] = useState<number | null>(null);
+  const [isOnline, setIsOnline] = useState(
+    () => typeof navigator !== 'undefined' && typeof navigator.onLine === 'boolean' && navigator.onLine,
+  );
   const autosaveIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const lastSavedSnapshotRef = useRef('');
+  const hydratedForSongIdRef = useRef<number | null>(null);
+  const blocksRef = useRef(blocks);
+  const keyRef = useRef(key);
   const blockCardRef = useRef<Map<string, HTMLDivElement>>(new Map());
   const undoTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  blocksRef.current = blocks;
+  keyRef.current = key;
+
+  useEffect(() => {
+    hydratedForSongIdRef.current = null;
+    setDraftRecovery(null);
+    setSaveError(false);
+    setLastSavedAt(null);
+  }, [id]);
+
+  useEffect(() => {
+    const onOnline = () => setIsOnline(true);
+    const onOffline = () => setIsOnline(false);
+    window.addEventListener('online', onOnline);
+    window.addEventListener('offline', onOffline);
+    return () => {
+      window.removeEventListener('online', onOnline);
+      window.removeEventListener('offline', onOffline);
+    };
+  }, []);
+
   useEffect(() => {
     const s = songQ.data;
-    const v = verQ.data as { custom_content?: string | null; custom_key?: string | null } | null;
+    const v = verQ.data as { custom_content?: string | null; custom_key?: string | null; updated_at?: string } | null;
+    if (!Number.isInteger(id) || id <= 0) return;
+    if (!songQ.isFetched || !verQ.isFetched) return;
     if (!s || Number(s.id) !== id) return;
-    const draftKey = `studio:autosave:song:${id}`;
-    let draft: {
-      blocks?: SongBlock[];
-      content?: string;
-      key?: string;
-    } | null = null;
-    try {
-      const raw = localStorage.getItem(draftKey);
-      draft = raw ? (JSON.parse(raw) as { blocks?: SongBlock[]; content?: string; key?: string }) : null;
-    } catch {
-      draft = null;
-    }
+    if (hydratedForSongIdRef.current === id) return;
+
+    hydratedForSongIdRef.current = id;
 
     const fromChordText = (t: string) => chordProToBlocks(decodeHtmlEntities(t));
 
-    const normalizeDraftBlocks = (rawBlocks: SongBlock[]): SongBlock[] => {
-      if (!Array.isArray(rawBlocks) || rawBlocks.length === 0) return [createSongBlock('verse', '')];
-      return rawBlocks.map((b) =>
-        createSongBlock(
-          ['intro', 'verse', 'prechorus', 'chorus', 'bridge', 'solo', 'outro'].includes(b.type) ? b.type : 'verse',
-          typeof b.content === 'string' ? decodeHtmlEntities(b.content) : '',
-          typeof b.sectionHint === 'string' && b.sectionHint.trim() ? b.sectionHint.trim() : undefined,
-          typeof b.id === 'string' && b.id.length > 0 ? b.id : undefined,
-        ),
-      );
-    };
-
     const serverChordSource = effectiveLyricsSource(v?.custom_content, s.content);
-    const applyServerBlocks = () => setBlocks(fromChordText(serverChordSource));
+    const serverBlocks = fromChordText(serverChordSource);
+    setBlocks(serverBlocks);
 
-    if (Array.isArray(draft?.blocks) && draft.blocks.length > 0) {
-      const normalized = normalizeDraftBlocks(draft.blocks);
-      if (studioBlocksHaveBody(normalized)) {
-        setBlocks(normalized);
-      } else {
-        try {
-          localStorage.removeItem(draftKey);
-        } catch {
-          /* ignore */
-        }
-        applyServerBlocks();
-      }
-    } else if (typeof draft?.content === 'string' && draft.content.trim().length > 0) {
-      setBlocks(fromChordText(draft.content));
-    } else {
-      applyServerBlocks();
+    const draft = readLocalDraft(id);
+    const serverUpdatedAt = v?.updated_at ? new Date(v.updated_at).getTime() : 0;
+    if (draft && draft.content.trim().length > 0 && draft.savedAt > serverUpdatedAt) {
+      setDraftRecovery({
+        content: draft.content,
+        key: draft.key ?? '',
+        savedAt: draft.savedAt,
+      });
+    } else if (draft) {
+      clearLocalDraft(id);
+      setDraftRecovery(null);
     }
 
-    setKey(typeof draft?.key === 'string' ? draft.key : (v?.custom_key ?? s.default_key ?? ''));
+    const resolvedKey = v?.custom_key ?? s.default_key ?? '';
+    setKey(resolvedKey);
     setCatalogTempo(s.tempo == null ? '' : String(s.tempo));
     setCatalogTimeSignature(s.time_signature ?? '');
     const initialTags = Array.isArray(s.tags) ? s.tags : [];
@@ -320,21 +414,27 @@ export function StudioEditor() {
       setShowWelcome(false);
     }
     const baselineChordPro = blocksToChordPro(chordProToBlocks(decodeHtmlEntities(serverChordSource)));
+    const catalogSnapshot = JSON.stringify({
+      tempo: s.tempo == null ? '' : String(s.tempo),
+      timeSignature: s.time_signature ?? '',
+      tags: initialTags.filter((t) => t !== ARCHIVE_TAG).join(', '),
+      songStatus: detectSongStatus(Boolean(s.is_published), initialTags),
+    });
     lastSavedSnapshotRef.current = JSON.stringify({
       content: baselineChordPro,
-      key: v?.custom_key ?? s.default_key ?? '',
+      key: resolvedKey,
+      catalog: catalogSnapshot,
     });
-  }, [songQ.data, verQ.data, id]);
+    setSaveError(false);
+  }, [id, songQ.isFetched, verQ.isFetched, songQ.data, verQ.data]);
 
   useEffect(() => {
     if (!Number.isInteger(id) || id <= 0) return;
     if (autosaveIntervalRef.current) clearInterval(autosaveIntervalRef.current);
     autosaveIntervalRef.current = setInterval(() => {
       try {
-        localStorage.setItem(
-          `studio:autosave:song:${id}`,
-          JSON.stringify({ blocks, key, updatedAt: Date.now() }),
-        );
+        const content = blocksToChordPro(blocksRef.current);
+        writeLocalDraft(id, content, keyRef.current);
         setDraftSavedAt(Date.now());
       } catch {
         // ignore storage quota/availability errors
@@ -343,8 +443,14 @@ export function StudioEditor() {
 
     return () => {
       if (autosaveIntervalRef.current) clearInterval(autosaveIntervalRef.current);
+      try {
+        const content = blocksToChordPro(blocksRef.current);
+        writeLocalDraft(id, content, keyRef.current);
+      } catch {
+        // ignore
+      }
     };
-  }, [id, blocks, key]);
+  }, [id]);
 
   useEffect(
     () => () => {
@@ -359,29 +465,98 @@ export function StudioEditor() {
     return () => clearInterval(timer);
   }, [chordAutoUndo]);
 
-  const saveMut = useMutation({
-    mutationFn: () =>
-      saveVersion(id, { custom_content: blocksToChordPro(blocks), custom_key: key || null }),
-    onSuccess: (savedVersion) => {
-      try {
-        localStorage.removeItem(`studio:autosave:song:${id}`);
-      } catch {
-        // noop
+  const persistCatalogMeta = useCallback(async () => {
+    if (!canEditCatalogMeta) return;
+    const tempoNum = catalogTempo.trim().length === 0 ? null : Number(catalogTempo);
+    if (tempoNum != null && (!Number.isFinite(tempoNum) || tempoNum <= 0 || tempoNum > 400)) {
+      throw new Error('BPM должен быть числом от 1 до 400');
+    }
+    const tags = catalogTags
+      .split(',')
+      .map((t) => t.trim())
+      .filter(Boolean);
+    const isPublished = songStatus === 'published';
+    await updateSong(id, {
+      tempo: tempoNum,
+      time_signature: catalogTimeSignature.trim() || null,
+      tags: withArchiveTag(tags, songStatus),
+      is_published: isPublished,
+    });
+  }, [canEditCatalogMeta, catalogTempo, catalogTimeSignature, catalogTags, songStatus, id]);
+
+  const buildCatalogMetaSnapshot = useCallback(
+    () =>
+      JSON.stringify({
+        tempo: catalogTempo.trim(),
+        timeSignature: catalogTimeSignature.trim(),
+        tags: catalogTags.trim(),
+        songStatus,
+      }),
+    [catalogTempo, catalogTimeSignature, catalogTags, songStatus],
+  );
+
+  const catalogMetaChanged = useCallback(() => {
+    try {
+      const saved = JSON.parse(lastSavedSnapshotRef.current) as { catalog?: string };
+      return buildCatalogMetaSnapshot() !== saved.catalog;
+    } catch {
+      return true;
+    }
+  }, [buildCatalogMetaSnapshot]);
+
+  const saveAll = useCallback(async () => {
+    const content = blocksToChordPro(blocks);
+    try {
+      writeLocalDraft(id, content, key);
+    } catch {
+      // local backup best-effort
+    }
+
+    setIsSaving(true);
+    setSaveError(false);
+    try {
+      const savedVersion = await saveVersion(id, { custom_content: content, custom_key: key || null });
+
+      if (canEditCatalogMeta && catalogMetaChanged()) {
+        await persistCatalogMeta();
       }
-      /** Иначе кэш `['studio', 'version', id]` не сбрасывался — эффект снова брал только каталог `s.content` и откатывал текст. */
+
+      clearLocalDraft(id);
+      setDraftRecovery(null);
+      setDraftSavedAt(null);
+
       qc.setQueryData(['studio', 'version', id, authEpoch], savedVersion);
       void qc.invalidateQueries({ queryKey: ['studio', 'versions'] });
-      void qc.invalidateQueries({ queryKey: ['studio', 'version', id] });
       void qc.invalidateQueries({ queryKey: ['songs'] });
       void qc.invalidateQueries({ queryKey: ['song', id] });
       void qc.invalidateQueries({ queryKey: ['studio', 'imported-songs'] });
+
       lastSavedSnapshotRef.current = JSON.stringify({
-        content: blocksToChordPro(blocks),
+        content,
         key,
+        catalog: buildCatalogMetaSnapshot(),
       });
+      setLastSavedAt(Date.now());
+      setSaveError(false);
       emitAppToast({ kind: 'success', message: 'Песня сохранена ✓' });
-    },
-  });
+    } catch (err: unknown) {
+      setSaveError(true);
+      const msg = err instanceof Error && err.message ? err.message : 'Не удалось сохранить песню';
+      emitAppToast({ kind: 'error', message: msg });
+    } finally {
+      setIsSaving(false);
+    }
+  }, [
+    authEpoch,
+    blocks,
+    buildCatalogMetaSnapshot,
+    canEditCatalogMeta,
+    catalogMetaChanged,
+    id,
+    key,
+    persistCatalogMeta,
+    qc,
+  ]);
 
   const aiChordPlacementMut = useMutation({
     mutationFn: (content: string) => aiChordPlacement(content),
@@ -420,27 +595,25 @@ export function StudioEditor() {
   });
 
   const saveCatalogMetaMut = useMutation({
-    mutationFn: async () => {
-      if (!canEditCatalogMeta) {
-        throw new Error('Нет прав на изменение метаданных каталога');
-      }
-      const tempoNum = catalogTempo.trim().length === 0 ? null : Number(catalogTempo);
-      if (tempoNum != null && (!Number.isFinite(tempoNum) || tempoNum <= 0 || tempoNum > 400)) {
-        throw new Error('BPM должен быть числом от 1 до 400');
-      }
-      const tags = catalogTags
-        .split(',')
-        .map((t) => t.trim())
-        .filter(Boolean);
-      const isPublished = songStatus === 'published';
-      await updateSong(id, {
-        tempo: tempoNum,
-        time_signature: catalogTimeSignature.trim() || null,
-        tags: withArchiveTag(tags, songStatus),
-        is_published: isPublished,
-      });
-    },
+    mutationFn: () => persistCatalogMeta(),
     onSuccess: () => {
+      try {
+        const saved = JSON.parse(lastSavedSnapshotRef.current) as {
+          content?: string;
+          key?: string;
+        };
+        lastSavedSnapshotRef.current = JSON.stringify({
+          content: saved.content ?? blocksToChordPro(blocks),
+          key: saved.key ?? key,
+          catalog: buildCatalogMetaSnapshot(),
+        });
+      } catch {
+        lastSavedSnapshotRef.current = JSON.stringify({
+          content: blocksToChordPro(blocks),
+          key,
+          catalog: buildCatalogMetaSnapshot(),
+        });
+      }
       void qc.invalidateQueries({ queryKey: ['song', id] });
       void qc.invalidateQueries({ queryKey: ['songs'] });
       emitAppToast({ kind: 'success', message: 'Метаданные каталога сохранены' });
@@ -801,10 +974,37 @@ export function StudioEditor() {
       JSON.stringify({
         content: joinedChordPro,
         key,
+        catalog: buildCatalogMetaSnapshot(),
       }),
-    [joinedChordPro, key],
+    [joinedChordPro, key, buildCatalogMetaSnapshot],
   );
   const hasUnsavedChanges = currentSnapshot !== lastSavedSnapshotRef.current;
+  const saveStatus: SaveStatus = useMemo(() => {
+    if (!isOnline) return 'offline';
+    if (isSaving) return 'saving';
+    if (saveError) return 'error';
+    if (hasUnsavedChanges) return 'unsaved';
+    return 'saved';
+  }, [isOnline, isSaving, saveError, hasUnsavedChanges]);
+
+  useEffect(() => {
+    assertRoundtrip(joinedChordPro);
+  }, [joinedChordPro]);
+
+  const formatSaveStatusTime = (ts: number) =>
+    new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+  const restoreDraftRecovery = () => {
+    if (!draftRecovery) return;
+    setBlocks(chordProToBlocks(decodeHtmlEntities(draftRecovery.content)));
+    if (draftRecovery.key) setKey(draftRecovery.key);
+    setDraftRecovery(null);
+  };
+
+  const dismissDraftRecovery = () => {
+    clearLocalDraft(id);
+    setDraftRecovery(null);
+  };
   const backTo = studioMySongsPath(surface);
   const showEditorPane = mobilePane === 'editor';
   const showPreviewPane = showPreview && mobilePane === 'preview';
@@ -892,10 +1092,10 @@ export function StudioEditor() {
   useBeforeUnload(
     useCallback(
       (event) => {
-        if (!hasUnsavedChanges) return;
+        if (saveStatus !== 'unsaved' && saveStatus !== 'error') return;
         event.preventDefault();
       },
-      [hasUnsavedChanges],
+      [saveStatus],
     ),
   );
 
@@ -914,8 +1114,8 @@ export function StudioEditor() {
   }, [autoChordModalOpen, autoChordDonorId, blocks]);
 
   const confirmLeaveIfDirty = () => {
-    if (!hasUnsavedChanges) return true;
-    return window.confirm('Есть несохранённые изменения. Сохранить перед выходом?');
+    if (saveStatus !== 'unsaved' && saveStatus !== 'error') return true;
+    return window.confirm('Есть несохранённые изменения. Выйти без сохранения?');
   };
 
   if (!Number.isInteger(id) || id <= 0) {
@@ -1380,21 +1580,90 @@ export function StudioEditor() {
         ) : null}
         <button
           type="button"
-          onClick={() => saveMut.mutate()}
-          disabled={saveMut.isPending}
+          onClick={() => void saveAll()}
+          disabled={isSaving}
           className={`${shell.primary} disabled:opacity-50`}
         >
           Сохранить песню
         </button>
       </div>
 
-      <p className={`text-xs ${hasUnsavedChanges ? 'text-amber-500' : shell.muted}`}>
-        {hasUnsavedChanges ? 'Есть несохранённые изменения' : 'Все изменения сохранены'}
-      </p>
+      <div className="flex flex-wrap items-center gap-2 text-xs">
+        {saveStatus === 'saved' ? (
+          <span className={`inline-flex items-center gap-1.5 ${shell.muted}`}>
+            <span className="inline-block h-2 w-2 rounded-full bg-emerald-500" aria-hidden />
+            Сохранено{lastSavedAt ? ` ${formatSaveStatusTime(lastSavedAt)}` : ''}
+          </span>
+        ) : null}
+        {saveStatus === 'unsaved' ? (
+          <span className="inline-flex items-center gap-1.5 text-amber-600">
+            <span className="inline-block h-2 w-2 rounded-full bg-amber-500" aria-hidden />
+            Не сохранено
+          </span>
+        ) : null}
+        {saveStatus === 'saving' ? (
+          <span className={`inline-flex items-center gap-1.5 ${shell.muted}`}>
+            <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-slate-400" aria-hidden />
+            Сохранение…
+          </span>
+        ) : null}
+        {saveStatus === 'error' ? (
+          <span className="inline-flex items-center gap-2 text-red-600">
+            <span className="inline-block h-2 w-2 rounded-full bg-red-500" aria-hidden />
+            Ошибка
+            <button
+              type="button"
+              onClick={() => void saveAll()}
+              className="font-semibold underline underline-offset-2"
+            >
+              Повторить
+            </button>
+          </span>
+        ) : null}
+        {saveStatus === 'offline' ? (
+          <span className="inline-flex items-center gap-1.5 text-amber-700">
+            <span className="inline-block h-2 w-2 rounded-full bg-amber-500" aria-hidden />
+            Нет соединения · правки сохранены локально
+          </span>
+        ) : null}
+      </div>
 
       <p className={`text-xs ${shell.muted}`}>
         Ваш текст ниже — оригинал в каталоге не меняется, пока вы не сохраните и не удалите песню целиком.
       </p>
+
+      {draftRecovery ? (
+        <div
+          className={`rounded-xl border p-3 text-sm ${
+            darkUi ? 'border-amber-800/70 bg-amber-950/30 text-amber-100' : 'border-amber-200 bg-amber-50 text-amber-950'
+          }`}
+          role="status"
+        >
+          <p>
+            Найден несохранённый черновик от {formatSaveStatusTime(draftRecovery.savedAt)}. Восстановить?
+          </p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={restoreDraftRecovery}
+              className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${
+                darkUi ? 'bg-amber-600 text-white hover:bg-amber-500' : 'bg-amber-700 text-white hover:bg-amber-800'
+              }`}
+            >
+              Восстановить
+            </button>
+            <button
+              type="button"
+              onClick={dismissDraftRecovery}
+              className={`rounded-lg border px-3 py-1.5 text-xs font-semibold ${
+                darkUi ? 'border-amber-700 text-amber-100 hover:bg-amber-950/50' : 'border-amber-300 text-amber-900 hover:bg-amber-100'
+              }`}
+            >
+              Удалить
+            </button>
+          </div>
+        </div>
+      ) : null}
 
       {showWelcome ? (
         <div
@@ -1747,8 +2016,8 @@ export function StudioEditor() {
           </button>
           <button
             type="button"
-            disabled={!hasUnsavedChanges || saveMut.isPending}
-            onClick={() => saveMut.mutate()}
+            disabled={!hasUnsavedChanges || isSaving}
+            onClick={() => void saveAll()}
             className={`min-h-[44px] flex-1 rounded-xl text-sm font-semibold ${
               hasUnsavedChanges
                 ? darkUi
@@ -1759,7 +2028,7 @@ export function StudioEditor() {
                   : 'bg-stone-200 text-stone-500'
             } disabled:opacity-70`}
           >
-            {saveMut.isPending ? 'Сохраняем…' : 'Сохранить песню'}
+            {isSaving ? 'Сохраняем…' : 'Сохранить песню'}
           </button>
           <button
             type="button"

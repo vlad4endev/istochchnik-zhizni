@@ -198,3 +198,13 @@ export function splitPasteByDoubleNewlines(text: string): string[] {
     .map((p) => p.replace(/^\s+|\s+$/gu, ''))
     .filter((p) => p.length > 0);
 }
+
+/** Dev-only: логирует расхождение ChordPro ↔ блоки (потеря данных при roundtrip). */
+export function assertRoundtrip(content: string): void {
+  if (process.env.NODE_ENV !== 'development') return;
+  const blocks = chordProToBlocks(content);
+  const rebuilt = blocksToChordPro(blocks);
+  if (content.trim() !== rebuilt.trim()) {
+    console.error('ROUNDTRIP FAIL:', { original: content, rebuilt });
+  }
+}

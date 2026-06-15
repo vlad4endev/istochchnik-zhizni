@@ -486,7 +486,8 @@ async function fetchSetlistItemRows(setlistId: number): Promise<SetlistItemRow[]
     const customKey = r.custom_key != null ? String(r.custom_key) : null;
     const customContent = r.custom_content != null ? String(r.custom_content) : null;
     const effectiveKey = customKey ?? song.default_key;
-    const effectiveContent = (customContent && customContent.trim() ? customContent : song.content) ?? '';
+    const effectiveContent =
+      customContent !== null && customContent !== undefined ? customContent : (song.content ?? '');
     const preview = effectiveContent.slice(0, 200);
     const rawNotes = r.musician_notes;
     return {
