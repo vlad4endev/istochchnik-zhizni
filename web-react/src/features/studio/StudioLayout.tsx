@@ -1,71 +1,69 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
-import { LuArrowLeft, LuCirclePlus, LuGuitar, LuListMusic, LuMusic2 } from 'react-icons/lu';
+import { LuArrowLeft, LuBookOpen, LuCirclePlus, LuGuitar, LuListMusic, LuMusic2 } from 'react-icons/lu';
 
-import { PageHeader } from '@/components/layout/PageHeader';
-import { sectionHeroStickyClass } from '@/lib/sectionHeroChrome';
 import { useAuthStore } from '../auth/authStore';
 import { canModerateSongCatalogSession } from '../auth/studioAccess';
 
 type NavItem = {
   to: string;
   label: string;
+  shortLabel: string;
   hint: string;
   Icon: typeof LuMusic2;
-  tone?: 'default' | 'catalog' | 'muted';
 };
 
 type NavGroup = { id: string; title: string; items: NavItem[] };
 
-const navBase =
-  'flex min-h-[44px] items-center gap-2 rounded-xl px-3 py-2.5 text-sm font-medium whitespace-nowrap transition-colors';
+const sidebarLinkBase =
+  'flex min-h-[44px] items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors';
 
-function itemClass(isActive: boolean, tone: NavItem['tone']) {
-  if (tone === 'catalog') {
-    return [
-      navBase,
-      isActive
-        ? 'bg-sky-600 text-white shadow-sm'
-        : 'border border-sky-200 bg-sky-50 text-sky-900 hover:bg-sky-100',
-    ].join(' ');
-  }
-  if (tone === 'muted') {
-    return [
-      navBase,
-      isActive
-        ? 'bg-stone-800 text-white shadow-sm'
-        : 'text-stone-500 hover:bg-stone-100 hover:text-stone-800',
-    ].join(' ');
-  }
-  return [
-    navBase,
-    isActive ? 'bg-stone-900 text-white shadow-sm' : 'text-stone-600 hover:bg-stone-100 hover:text-stone-900',
-  ].join(' ');
+function sidebarLinkClass(isActive: boolean): string {
+  return isActive
+    ? [
+        sidebarLinkBase,
+        'bg-[var(--studio-nav-active-bg)] font-semibold text-[var(--studio-nav-active-text)]',
+      ].join(' ')
+    : [
+        sidebarLinkBase,
+        'text-[var(--studio-nav-text)] hover:bg-[var(--studio-nav-active-bg)]/60',
+      ].join(' ');
 }
 
-export function StudioLayout() {
-  const navigate = useNavigate();
-  const role = useAuthStore((s) => s.role);
-  const roles = useAuthStore((s) => s.roles ?? [s.role]);
-  const showAddSong = canModerateSongCatalogSession(role, roles);
+const mobileNavLinkBase =
+  'flex min-h-[44px] flex-1 flex-col items-center justify-center gap-0.5 rounded-lg px-1 py-1 text-[10px] font-medium transition-colors sm:text-xs';
 
-  const groups: NavGroup[] = [
-    ...(showAddSong
-      ? [
-          {
-            id: 'catalog',
-            title: 'Каталог',
-            items: [
+function mobileNavLinkClass(isActive: boolean): string {
+  return isActive
+    ? `${mobileNavLinkBase} font-semibold text-[var(--studio-nav-active-text)]`
+    : `${mobileNavLinkBase} text-[var(--studio-nav-text-mute)]`;
+}
+
+function buildNavGroups(showAddSong: boolean): NavGroup[] {
+  return [
+    {
+      id: 'catalog',
+      title: 'Каталог',
+      items: [
+        {
+          to: '/studio/catalog',
+          label: 'Каталог',
+          shortLabel: 'Каталог',
+          hint: 'Все опубликованные песни всех участников',
+          Icon: LuBookOpen,
+        },
+        ...(showAddSong
+          ? [
               {
                 to: '/studio/add-song',
                 label: 'Новая песня',
-                hint: 'Добавить песню в общий песенник',
+                shortLabel: 'Добавить',
+                hint: 'Добавить песню в общий каталог',
                 Icon: LuCirclePlus,
-                tone: 'catalog' as const,
               },
-            ],
-          },
-        ]
-      : []),
+            ]
+          : []),
+      ],
+    },
     {
       id: 'songs',
       title: 'Тексты и версии',
@@ -73,6 +71,7 @@ export function StudioLayout() {
         {
           to: '/studio/my-songs',
           label: 'Мои версии',
+          shortLabel: 'Мои',
           hint: 'Черновики, недавние песни и сохранённые правки к каталогу',
           Icon: LuMusic2,
         },
@@ -85,6 +84,7 @@ export function StudioLayout() {
         {
           to: '/studio/setlists',
           label: 'Сетлисты',
+          shortLabel: 'Сетлисты',
           hint: 'Порядок песен, PDF, режим выступления, ссылка для группы',
           Icon: LuListMusic,
         },
@@ -97,72 +97,142 @@ export function StudioLayout() {
         {
           to: '/studio/instruments',
           label: 'Инструменты',
+          shortLabel: 'JSON',
           hint: 'Расширенные настройки в JSON (редко нужно)',
           Icon: LuGuitar,
-          tone: 'muted' as const,
         },
       ],
     },
   ];
+}
+
+function flattenMobileNavItems(groups: NavGroup[]): NavItem[] {
+  return groups.flatMap((g) => g.items);
+}
+
+type StudioSidebarProps = {
+  groups: NavGroup[];
+  onBack: () => void;
+};
+
+function StudioSidebar({ groups, onBack }: StudioSidebarProps) {
+  return (
+    <aside
+      className="hidden h-screen w-14 shrink-0 flex-col overflow-y-auto border-r border-[var(--studio-nav-border)] bg-[var(--studio-nav-bg)] md:flex lg:w-56"
+      aria-label="Навигация студии"
+    >
+      <div className="hidden px-4 py-4 lg:block">
+        <p className="text-base font-bold text-[var(--studio-editor-text)]">Студия</p>
+        <p className="mt-1 text-xs text-[var(--studio-nav-text-mute)]">Тексты, версии и сетлисты</p>
+      </div>
+      <div className="flex items-center justify-center px-2 py-3 lg:justify-start lg:px-4">
+        <button
+          type="button"
+          onClick={onBack}
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[var(--studio-nav-border)] text-[var(--studio-nav-text)] transition hover:bg-[var(--studio-nav-active-bg)]"
+          aria-label="Назад в приложение"
+        >
+          <LuArrowLeft className="h-5 w-5" />
+        </button>
+      </div>
+      <ol className="mt-1 hidden list-decimal space-y-1.5 px-6 text-[11px] leading-snug text-[var(--studio-nav-text-mute)] lg:block">
+        <li>Общий каталог для всех — в «Каталог».</li>
+        <li>Личные правки и черновики — в «Мои версии».</li>
+        <li>Программа служения — в «Сетлисты».</li>
+      </ol>
+      <nav className="mt-2 flex flex-1 flex-col gap-4 px-2 pb-6 lg:px-3" aria-label="Разделы студии">
+        {groups.map((group, gi) => (
+          <div
+            key={group.id}
+            className={gi > 0 ? 'border-t border-[var(--studio-nav-border)] pt-4' : ''}
+          >
+            <p className="mb-1 hidden px-1 text-[10px] font-semibold uppercase tracking-wide text-[var(--studio-nav-text-mute)] lg:block">
+              {group.title}
+            </p>
+            <div className="flex flex-col gap-1">
+              {group.items.map(({ to, label, hint, Icon }) => (
+                <NavLink
+                  key={to}
+                  to={to}
+                  title={hint}
+                  className={({ isActive }) => sidebarLinkClass(isActive)}
+                >
+                  <Icon className="h-4 w-4 shrink-0 text-current" aria-hidden />
+                  <span className="hidden truncate lg:inline">{label}</span>
+                </NavLink>
+              ))}
+            </div>
+          </div>
+        ))}
+      </nav>
+    </aside>
+  );
+}
+
+function StudioTopBar({ onBack }: { onBack: () => void }) {
+  return (
+    <header
+      className="flex shrink-0 items-center gap-3 border-b border-[var(--studio-toolbar-border)] bg-[var(--studio-toolbar-bg)] px-3 py-2 md:hidden"
+      style={{
+        boxShadow: 'var(--studio-toolbar-shadow)',
+        paddingTop: 'max(0.5rem, env(safe-area-inset-top))',
+      }}
+    >
+      <button
+        type="button"
+        onClick={onBack}
+        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[var(--studio-nav-border)] text-[var(--studio-nav-text)]"
+        aria-label="Назад в приложение"
+      >
+        <LuArrowLeft className="h-5 w-5" />
+      </button>
+      <h1 className="min-w-0 flex-1 truncate text-base font-bold text-[var(--studio-editor-text)]">Студия</h1>
+    </header>
+  );
+}
+
+function StudioMobileNav({ items }: { items: NavItem[] }) {
+  return (
+    <nav
+      className="studio-mobile-nav fixed bottom-0 left-0 right-0 z-[var(--z-sticky)] flex h-16 items-stretch gap-1 border-t border-[var(--studio-dock-border)] bg-[var(--studio-dock-bg)] px-1 md:hidden"
+      style={{
+        boxShadow: 'var(--studio-dock-shadow)',
+        paddingBottom: 'env(safe-area-inset-bottom)',
+      }}
+      aria-label="Разделы студии"
+    >
+      {items.map(({ to, shortLabel, hint, Icon }) => (
+        <NavLink key={to} to={to} title={hint} className={({ isActive }) => mobileNavLinkClass(isActive)}>
+          <Icon className="h-5 w-5 shrink-0" aria-hidden />
+          <span className="max-w-full truncate">{shortLabel}</span>
+        </NavLink>
+      ))}
+    </nav>
+  );
+}
+
+export function StudioLayout() {
+  const navigate = useNavigate();
+  const role = useAuthStore((s) => s.role);
+  const roles = useAuthStore((s) => s.roles ?? [s.role]);
+  const showAddSong = canModerateSongCatalogSession(role, roles);
+
+  const groups = buildNavGroups(showAddSong);
+  const mobileItems = flattenMobileNavItems(groups);
 
   return (
-    <div className="flex w-full flex-col overscroll-y-none bg-stone-50 text-stone-900 [max-height:var(--viewport-height,100dvh)] [min-height:var(--viewport-height,100dvh)]">
-      <div className={sectionHeroStickyClass}>
-        <PageHeader title="Студия" />
+    <div
+      className="studio-layout flex w-full flex-col overscroll-y-none bg-[var(--studio-editor-bg)] text-[var(--studio-editor-text)]"
+      style={{ height: 'var(--viewport-height, 100dvh)' }}
+    >
+      <StudioTopBar onBack={() => navigate('/dashboard')} />
+      <div className="studio-body flex min-h-0 min-w-0 flex-1 flex-row">
+        <StudioSidebar groups={groups} onBack={() => navigate('/dashboard')} />
+        <main className="studio-main studio-content-with-nav min-h-0 min-w-0 flex-1 overflow-y-auto px-3 pb-16 pt-4 md:px-10 md:pb-0 md:pt-8">
+          <Outlet />
+        </main>
       </div>
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col md:flex-row">
-      <aside className="flex w-full shrink-0 flex-col border-b border-stone-200 bg-white px-2 py-3 shadow-sm md:w-64 md:border-b-0 md:border-r md:py-6 md:pl-5 md:pr-3">
-        <div className="flex items-center gap-3 px-2 py-2 md:px-0">
-          <button
-            type="button"
-            onClick={() => navigate('/dashboard')}
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-stone-200 bg-stone-50 text-stone-600 transition hover:border-stone-300 hover:bg-white hover:text-stone-900"
-            aria-label="Назад в приложение"
-          >
-            <LuArrowLeft className="h-5 w-5" />
-          </button>
-        </div>
-        <ol className="mt-2 hidden list-decimal space-y-1.5 px-6 text-[11px] leading-snug text-stone-500 md:block">
-          <li>Версии и черновики — в «Мои версии».</li>
-          <li>Программа служения — в «Сетлисты».</li>
-        </ol>
-
-        <nav
-          className="mt-3 flex flex-row gap-3 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] md:mt-5 md:flex-col md:gap-0 md:overflow-visible md:pb-0 [&::-webkit-scrollbar]:hidden"
-          aria-label="Разделы студии"
-        >
-          {groups.map((group, gi) => (
-            <div
-              key={group.id}
-              className={[
-                'flex min-w-[9.5rem] shrink-0 flex-col gap-1 md:min-w-0',
-                gi > 0 ? 'border-l border-stone-200 pl-3 md:border-l-0 md:border-t md:pl-0 md:pt-4 md:mt-1' : '',
-              ].join(' ')}
-            >
-              <p className="px-1 pb-0.5 text-[10px] font-semibold uppercase tracking-wide text-stone-400 md:pb-1">
-                {group.title}
-              </p>
-              <div className="flex flex-row gap-1 md:flex-col">
-                {group.items.map(({ to, label, hint, Icon, tone }) => (
-                  <NavLink
-                    key={to}
-                    to={to}
-                    title={hint}
-                    className={({ isActive }) => itemClass(isActive, tone ?? 'default')}
-                  >
-                    <Icon className="h-4 w-4 shrink-0 text-current" aria-hidden />
-                    {label}
-                  </NavLink>
-                ))}
-              </div>
-            </div>
-          ))}
-        </nav>
-      </aside>
-      <main className="min-h-0 flex-1 overflow-auto px-3 pb-10 pt-4 md:px-10 md:pb-12 md:pt-8">
-        <Outlet />
-      </main>
-      </div>
+      <StudioMobileNav items={mobileItems} />
     </div>
   );
 }

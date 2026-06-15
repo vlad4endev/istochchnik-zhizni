@@ -156,7 +156,7 @@ export function RequireCatalogModerator({ children }: { children: ReactNode }) {
   const roles = useAuthStore((s) => s.roles ?? [s.role]);
   const location = useLocation();
   if (!canModerateSongCatalogSession(role, roles)) {
-    const fallback = location.pathname.startsWith('/studio/') ? '/studio/my-songs' : '/songbook';
+    const fallback = location.pathname.startsWith('/studio/') ? '/studio/catalog' : '/songbook';
     return <Navigate to={fallback} replace />;
   }
   return <>{children}</>;

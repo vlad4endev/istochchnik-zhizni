@@ -17,7 +17,7 @@ import {
   type StudioDraft,
   type StudioVersionListItem,
 } from '../api';
-import { studioAddSongPath, studioEditSongPath, useStudioModuleSurface } from '../studioPaths';
+import { studioAddSongPath, studioCatalogPath, studioEditSongPath, useStudioModuleSurface } from '../studioPaths';
 import { type SongListItem } from '../../songbook/api';
 import { usePublishSong } from '../usePublishSong';
 import { emitAppToast } from '../../../lib/uiFeedback';
@@ -358,10 +358,9 @@ export function MySongsPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-[var(--studio-editor-text)]">Студия · мои песни</h1>
           <p className="mt-1 max-w-xl text-sm leading-relaxed text-[var(--studio-editor-mute)]">
-            Личные версии и черновики — только у вас. Раздел «Импортированные» видят все, у кого есть доступ к
-            студии. Общий каталог для всех — в{' '}
-            <Link to="/songbook" className="font-semibold text-[var(--studio-editor-accent)] hover:text-[var(--studio-editor-accent)]">
-              песеннике
+            Личные версии и черновики — только у вас. Все опубликованные песни всех участников — в разделе{' '}
+            <Link to={studioCatalogPath(surface)} className="font-semibold text-[var(--studio-editor-accent)] hover:text-[var(--studio-editor-accent)]">
+              Каталог
             </Link>
             .
           </p>

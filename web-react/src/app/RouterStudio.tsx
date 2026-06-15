@@ -26,6 +26,11 @@ const StudioMySongsPage = lazy(async () => {
   return { default: m.MySongsPage };
 });
 
+const StudioCatalogPage = lazy(async () => {
+  const m = await import('../features/studio/pages/CatalogPage');
+  return { default: m.CatalogPage };
+});
+
 const StudioSetlistsPage = lazy(async () => {
   const m = await import('../features/studio/pages/SetlistsPage');
   return { default: m.SetlistsPage };
@@ -130,7 +135,15 @@ export function AppRouterStudio() {
             </RequireFullMember>
           }
         >
-          <Route index element={<Navigate to="my-songs" replace />} />
+          <Route index element={<Navigate to="catalog" replace />} />
+          <Route
+            path="catalog"
+            element={
+              <Suspense fallback={<RouteFallback />}>
+                <StudioCatalogPage />
+              </Suspense>
+            }
+          />
           <Route
             path="my-songs"
             element={
@@ -184,8 +197,8 @@ export function AppRouterStudio() {
             }
           />
         </Route>
-        <Route index element={<Navigate to="/studio/my-songs" replace />} />
-        <Route path="*" element={<Navigate to="/studio/my-songs" replace />} />
+        <Route index element={<Navigate to="/studio/catalog" replace />} />
+        <Route path="*" element={<Navigate to="/studio/catalog" replace />} />
       </Route>
     </Routes>
   );

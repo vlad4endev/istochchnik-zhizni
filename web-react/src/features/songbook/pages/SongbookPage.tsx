@@ -131,7 +131,7 @@ export function SongbookPage() {
                 tab === 'catalog' ? 'bg-[var(--sb-primary)] text-[var(--sb-on-primary)]' : 'text-[var(--sb-text-secondary)]',
               ].join(' ')}
             >
-              Сборник
+              Каталог
             </button>
             <button
               type="button"
@@ -193,7 +193,7 @@ export function SongbookPage() {
                 tab === 'catalog' ? 'bg-[var(--sb-primary)] text-[var(--sb-on-primary)]' : 'text-[var(--sb-text-secondary)]',
               ].join(' ')}
             >
-              Сборник
+              Каталог
             </button>
             <button
               type="button"
@@ -254,7 +254,7 @@ export function SongbookPage() {
               tab === 'catalog' ? 'bg-[var(--sb-primary)] text-[var(--sb-on-primary)]' : 'text-[var(--sb-text-secondary)]',
             ].join(' ')}
           >
-            Сборник
+            Каталог
           </button>
           <button
             type="button"

@@ -10,6 +10,10 @@ export function studioMySongsPath(surface: StudioModuleSurface): string {
   return surface === 'songbook' ? '/songbook/studio' : '/studio/my-songs';
 }
 
+export function studioCatalogPath(surface: StudioModuleSurface): string {
+  return surface === 'songbook' ? '/songbook' : '/studio/catalog';
+}
+
 export function studioMySongsDraftsPath(surface: StudioModuleSurface): string {
   return `${studioMySongsPath(surface)}?tab=drafts`;
 }
