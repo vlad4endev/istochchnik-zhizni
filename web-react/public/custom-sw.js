@@ -55,11 +55,19 @@ self.addEventListener('push', function (event) {
     badge: data.badge || '/assets/pwa-192x192.png',
     tag: data.tag || undefined,
     renotify: parseJsonStr(data.renotify, false),
-    actions: parseJsonStr(data.actions, []),
+    actions:
+      data.type === 'media_assignment'
+        ? [
+            { action: 'confirm', title: '✓ Подтвердить' },
+            { action: 'decline', title: '✗ Отказать' },
+          ]
+        : parseJsonStr(data.actions, []),
     data: {
       url: data.url || '/',
       conversationId: data.conversationId != null ? data.conversationId : null,
       deliveryId: data.deliveryId != null && data.deliveryId !== '' ? String(data.deliveryId) : null,
+      assignmentId: data.assignmentId != null && data.assignmentId !== '' ? String(data.assignmentId) : null,
+      pushType: data.type || null,
     },
     vibrate: [200, 100, 200],
   };
@@ -144,6 +152,23 @@ self.addEventListener('notificationclick', function (event) {
   if (event.action === 'dismiss') {
     event.waitUntil(markDeliveryDismissed);
     return;
+  }
+
+  if (event.action === 'confirm' || event.action === 'decline') {
+    const assignmentId = event.notification?.data?.assignmentId;
+    const status = event.action === 'confirm' ? 'confirmed' : 'declined';
+    if (assignmentId) {
+      event.waitUntil(
+        fetch(new URL('/api/media-schedule/assignments/' + assignmentId + '/status', self.location.origin).href, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status }),
+          credentials: 'include',
+          mode: 'same-origin',
+        }).catch(function () {}),
+      );
+      return;
+    }
   }
 
   const safeUrl = event.notification?.data?.url || '/';

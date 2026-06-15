@@ -5,6 +5,7 @@ import { runNotificationRulesTick } from '../services/notificationRulesRunner';
 import { DistributionService } from '../services/DistributionService';
 import { sendPush } from '../services/pushService';
 import { dispatchDueSermonFeedbackNotifications } from '../services/sermonFeedbackService';
+import { sendMediaScheduleReminders } from '../services/mediaScheduleService';
 
 type CuratorWeekKind = 'current' | 'next';
 
@@ -129,6 +130,25 @@ export function initPushCronJobs() {
       }
     },
     { timezone: process.env.CURATOR_DISTRIBUTION_TZ?.trim() || 'Europe/Moscow' },
+  );
+
+  /** Раз в сутки в 18:00 МСК: напоминания медиа-команде о службе завтра. */
+  cron.schedule(
+    process.env.MEDIA_SCHEDULE_REMINDER_CRON ?? '0 18 * * *',
+    async () => {
+      if (process.env.DISABLE_MEDIA_SCHEDULE_REMINDER_CRON === 'true') {
+        return;
+      }
+      try {
+        const sent = await sendMediaScheduleReminders();
+        if (sent > 0) {
+          console.log(`[CRON] media schedule reminders sent: ${sent}`);
+        }
+      } catch (e) {
+        console.error('[CRON] media schedule reminders', e);
+      }
+    },
+    { timezone: process.env.MEDIA_SCHEDULE_REMINDER_TZ?.trim() || 'Europe/Moscow' },
   );
 
   /** Раз в 10 минут: по истечении 5 часов после собрания отправляем проповеднику комментарии к проповеди. */

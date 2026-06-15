@@ -174,6 +174,16 @@ const ServicePlannerPage = lazy(async () => {
   return { default: m.ServicePlannerPage };
 });
 
+const MediaSchedulePage = lazy(async () => {
+  const m = await import('../features/mediaSchedule/pages/MediaSchedulePage');
+  return { default: m.MediaSchedulePage };
+});
+
+const MyMediaSchedulePage = lazy(async () => {
+  const m = await import('../features/mediaSchedule/pages/MySchedulePage');
+  return { default: m.MySchedulePage };
+});
+
 export function AppRouter() {
   usePageTracking();
   return (
@@ -400,6 +410,30 @@ export function AppRouter() {
                     <ServicePlannerPage />
                   </Suspense>
                 </RequireSectionAccess>
+              </RequireFullMember>
+            </BlockParishionerGuest>
+          }
+        />
+        <Route
+          path="media-schedule"
+          element={
+            <BlockParishionerGuest>
+              <RequireFullMember>
+                <Suspense fallback={<RouteFallback />}>
+                  <MediaSchedulePage />
+                </Suspense>
+              </RequireFullMember>
+            </BlockParishionerGuest>
+          }
+        />
+        <Route
+          path="media-schedule/my"
+          element={
+            <BlockParishionerGuest>
+              <RequireFullMember>
+                <Suspense fallback={<RouteFallback />}>
+                  <MyMediaSchedulePage />
+                </Suspense>
               </RequireFullMember>
             </BlockParishionerGuest>
           }

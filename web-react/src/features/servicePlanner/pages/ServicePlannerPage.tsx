@@ -68,6 +68,7 @@ import {
   type ServicePlanDetails,
   type ServiceTemplateDetails,
 } from '../api';
+import { MediaTeamBlock } from '../../mediaSchedule/components/MediaTeamBlock';
 import { meaningfulNoteLinesFromRaw } from '../plannerNoteText';
 import {
   estimateServicePlanPrintBaseFontPx,
@@ -2721,6 +2722,10 @@ export function ServicePlannerPage() {
         </button>
         </div>
       </section>
+
+      {draft ? (
+        <MediaTeamBlock planId={draft.id} canManage={isPlannerManagerBySession} />
+      ) : null}
 
       <section className="rounded-2xl border border-stone-200 bg-white p-3 shadow-sm">
         <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-stone-500">Составление программы</p>

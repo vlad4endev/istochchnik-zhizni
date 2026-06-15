@@ -39,6 +39,8 @@ import {
 } from '../api';
 import { CreateChurchEventModal } from '../components/CreateChurchEventModal';
 import { listOccurrencesOnLocalDay, type CalendarOccurrence } from '../eventSchedule';
+import { MediaTeamBlock } from '../../mediaSchedule/components/MediaTeamBlock';
+import { resolveMediaPlanForChurchEvent } from '../../mediaSchedule/api';
 import { keys } from '@/lib/queryKeys';
 import { resolvePublicUrl } from '@/lib/resolvePublicUrl';
 
@@ -175,6 +177,11 @@ function EventDetailSheet({
   const [posterUrl, setPosterUrl] = useState('');
   const [hideOnDate, setHideOnDate] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
+
+  const planIdQ = useQuery({
+    queryKey: ['media-schedule', 'resolve-plan', item.id, occurrenceDateKey],
+    queryFn: () => resolveMediaPlanForChurchEvent(item.id, occurrenceDateKey),
+  });
 
   const openEdit = useCallback(() => {
     setTitle((item.title ?? '').trim());
@@ -375,6 +382,11 @@ function EventDetailSheet({
               </div>
             ) : null}
             <p className="mt-4 text-sm font-medium leading-relaxed text-stone-700">{descriptionText}</p>
+            {planIdQ.data ? (
+              <div className="mt-4">
+                <MediaTeamBlock planId={planIdQ.data} canManage={isAdmin} compact />
+              </div>
+            ) : null}
             <div className="mt-6 flex flex-wrap justify-end gap-2">
               {isAdmin ? (
                 <button

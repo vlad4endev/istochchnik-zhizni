@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { IconType } from 'react-icons';
 import {
+  LuCalendarClock,
   LuChevronLeft,
   LuChevronRight,
   LuCalendarDays,
@@ -77,6 +78,7 @@ const NAV_ITEMS: NavItem[] = [
   { to: '/prayer', label: 'Молитва', Icon: LuChurch, sectionId: 'prayer' },
   { to: '/songbook', label: 'Песенник', Icon: LuMusic2, sectionId: 'songbook' },
   { to: '/service-planner', label: 'Служение', Icon: LuCalendarDays, sectionId: 'service_planner' },
+  { to: '/media-schedule', label: 'Расписание', Icon: LuCalendarClock },
   { to: '/studio', label: 'Студия', Icon: LuDisc3, studioOnly: true, sectionId: 'studio' },
   { to: '/sermons', label: 'Проповеди', Icon: LuMic, sectionId: 'sermons' },
   { to: '/messenger', label: 'Чаты', Icon: LuMessageCircle, sectionId: 'messenger' },
@@ -599,7 +601,7 @@ export function Layout() {
 
   const items = useMemo(() => {
     if (isParishionerGuest) {
-      const parishionerPaths = new Set(['/dashboard', '/events', '/messenger', '/sermons']);
+      const parishionerPaths = new Set(['/dashboard', '/events', '/messenger', '/sermons', '/media-schedule']);
       return NAV_ITEMS.filter(
         (item) =>
           parishionerPaths.has(item.to) &&
