@@ -7,6 +7,7 @@ import axios from 'axios';
 import { useAuthStore } from '../../auth/authStore';
 import { canModerateSongCatalogSession } from '../../auth/studioAccess';
 import { createDraft, updateDraft } from '../../studio/api';
+import { useStudioAppChrome } from '../../studio/useStudioAppChrome';
 import {
   getStudioModuleSurface,
   studioMySongsDraftsPath,
@@ -325,12 +326,16 @@ export function AddSongPage() {
   };
 
   const embeddedInStudio = location.pathname.startsWith('/studio/');
+  const hideAppNav = !embeddedInStudio;
+  useStudioAppChrome(hideAppNav);
 
   return (
     <div
       className={[
         'mx-auto max-w-6xl space-y-5',
-        embeddedInStudio ? 'px-0 pb-[calc(4.5rem+env(safe-area-inset-bottom))] md:pb-6' : 'space-y-6 px-3 pb-[calc(4.5rem+env(safe-area-inset-bottom))] md:px-4 md:pb-6',
+        embeddedInStudio
+          ? 'px-0 pb-[var(--studio-mobile-dock-height)] md:pb-6'
+          : 'space-y-6 px-3 pb-[var(--studio-mobile-dock-height)] md:px-4 md:pb-6',
         theme.page,
       ].join(' ')}
     >
@@ -840,7 +845,7 @@ export function AddSongPage() {
       )}
 
       <div
-        className={`fixed inset-x-0 bottom-0 z-[var(--z-sticky)] border-t p-2 lg:hidden ${theme.dock}`}
+        className={`studio-mobile-dock studio-editor-mobile-dock fixed inset-x-0 bottom-0 z-[var(--z-sticky)] border-t p-2 lg:hidden ${theme.dock}`}
         style={{
           boxShadow: 'var(--studio-dock-shadow)',
           paddingBottom: 'max(0.5rem, env(safe-area-inset-bottom))',

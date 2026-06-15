@@ -1,5 +1,5 @@
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { LuArrowLeft, LuBookOpen, LuCirclePlus, LuGuitar, LuListMusic, LuMusic2 } from 'react-icons/lu';
+import { LuArrowLeft, LuBookOpen, LuCirclePlus, LuEllipsis, LuGuitar, LuListMusic, LuMusic2 } from 'react-icons/lu';
 
 import { useAuthStore } from '../auth/authStore';
 import { canModerateSongCatalogSession } from '../auth/studioAccess';
@@ -10,6 +10,7 @@ type NavItem = {
   shortLabel: string;
   hint: string;
   Icon: typeof LuMusic2;
+  mobilePrimary?: boolean;
 };
 
 type NavGroup = { id: string; title: string; items: NavItem[] };
@@ -30,7 +31,7 @@ function sidebarLinkClass(isActive: boolean): string {
 }
 
 const mobileNavLinkBase =
-  'flex min-h-[44px] flex-1 flex-col items-center justify-center gap-0.5 rounded-lg px-1 py-1 text-[10px] font-medium transition-colors sm:text-xs';
+  'flex min-h-[44px] flex-1 flex-col items-center justify-center gap-0.5 rounded-lg px-1 py-1 text-[11px] font-medium transition-colors';
 
 function mobileNavLinkClass(isActive: boolean): string {
   return isActive
@@ -50,6 +51,7 @@ function buildNavGroups(showAddSong: boolean): NavGroup[] {
           shortLabel: 'Каталог',
           hint: 'Все опубликованные песни всех участников',
           Icon: LuBookOpen,
+          mobilePrimary: true,
         },
         ...(showAddSong
           ? [
@@ -59,6 +61,7 @@ function buildNavGroups(showAddSong: boolean): NavGroup[] {
                 shortLabel: 'Добавить',
                 hint: 'Добавить песню в общий каталог',
                 Icon: LuCirclePlus,
+                mobilePrimary: true,
               },
             ]
           : []),
@@ -74,6 +77,7 @@ function buildNavGroups(showAddSong: boolean): NavGroup[] {
           shortLabel: 'Мои',
           hint: 'Черновики, недавние песни и сохранённые правки к каталогу',
           Icon: LuMusic2,
+          mobilePrimary: true,
         },
       ],
     },
@@ -87,6 +91,7 @@ function buildNavGroups(showAddSong: boolean): NavGroup[] {
           shortLabel: 'Сетлисты',
           hint: 'Порядок песен, PDF, режим выступления, ссылка для группы',
           Icon: LuListMusic,
+          mobilePrimary: true,
         },
       ],
     },
@@ -100,6 +105,7 @@ function buildNavGroups(showAddSong: boolean): NavGroup[] {
           shortLabel: 'JSON',
           hint: 'Расширенные настройки в JSON (редко нужно)',
           Icon: LuGuitar,
+          mobilePrimary: false,
         },
       ],
     },
@@ -107,7 +113,17 @@ function buildNavGroups(showAddSong: boolean): NavGroup[] {
 }
 
 function flattenMobileNavItems(groups: NavGroup[]): NavItem[] {
-  return groups.flatMap((g) => g.items);
+  return groups.flatMap((g) => g.items.filter((item) => item.mobilePrimary !== false));
+}
+
+function studioRouteTitle(pathname: string): string {
+  if (pathname.startsWith('/studio/add-song')) return 'Новая песня';
+  if (pathname.startsWith('/studio/catalog')) return 'Каталог';
+  if (pathname.startsWith('/studio/my-songs')) return 'Мои версии';
+  if (pathname.includes('/perform')) return 'Выступление';
+  if (pathname.startsWith('/studio/setlists')) return 'Сетлисты';
+  if (pathname.startsWith('/studio/instruments')) return 'Инструменты';
+  return 'Студия';
 }
 
 type StudioSidebarProps = {
@@ -164,24 +180,42 @@ function StudioSidebar({ groups, onBack }: StudioSidebarProps) {
   );
 }
 
-function StudioTopBar({ onBack }: { onBack: () => void }) {
+function StudioTopBar({
+  title,
+  onBack,
+  showMoreLink,
+}: {
+  title: string;
+  onBack: () => void;
+  showMoreLink: boolean;
+}) {
   return (
     <header
-      className="flex shrink-0 items-center gap-3 border-b border-[var(--studio-toolbar-border)] bg-[var(--studio-toolbar-bg)] px-3 py-2 md:hidden"
+      className="flex shrink-0 items-center gap-2 border-b border-[var(--studio-toolbar-border)] bg-[var(--studio-toolbar-bg)] px-3 py-2 md:hidden"
       style={{
         boxShadow: 'var(--studio-toolbar-shadow)',
-        paddingTop: 'max(0.5rem, env(safe-area-inset-top))',
+        paddingTop: 'max(0.5rem, env(safe-area-inset-top, 0px))',
       }}
     >
       <button
         type="button"
         onClick={onBack}
-        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[var(--studio-nav-border)] text-[var(--studio-nav-text)]"
+        className="studio-touch-target flex shrink-0 items-center justify-center rounded-xl border border-[var(--studio-nav-border)] text-[var(--studio-nav-text)]"
         aria-label="Назад в приложение"
       >
         <LuArrowLeft className="h-5 w-5" />
       </button>
-      <h1 className="min-w-0 flex-1 truncate text-base font-bold text-[var(--studio-editor-text)]">Студия</h1>
+      <h1 className="min-w-0 flex-1 truncate text-base font-bold text-[var(--studio-editor-text)]">{title}</h1>
+      {showMoreLink ? (
+        <NavLink
+          to="/studio/instruments"
+          className="studio-touch-target flex shrink-0 items-center justify-center rounded-xl border border-[var(--studio-nav-border)] text-[var(--studio-nav-text)]"
+          aria-label="Дополнительно"
+          title="Инструменты (JSON)"
+        >
+          <LuEllipsis className="h-5 w-5" />
+        </NavLink>
+      ) : null}
     </header>
   );
 }
@@ -189,17 +223,14 @@ function StudioTopBar({ onBack }: { onBack: () => void }) {
 function StudioMobileNav({ items }: { items: NavItem[] }) {
   return (
     <nav
-      className="studio-mobile-nav fixed bottom-0 left-0 right-0 z-[var(--z-sticky)] flex h-16 items-stretch gap-1 border-t border-[var(--studio-dock-border)] bg-[var(--studio-dock-bg)] px-1 md:hidden"
-      style={{
-        boxShadow: 'var(--studio-dock-shadow)',
-        paddingBottom: 'env(safe-area-inset-bottom)',
-      }}
+      className="studio-mobile-nav fixed bottom-0 left-0 right-0 z-[var(--z-sticky)] flex items-stretch gap-0.5 border-t border-[var(--studio-dock-border)] bg-[var(--studio-dock-bg)] md:hidden"
+      style={{ boxShadow: 'var(--studio-dock-shadow)' }}
       aria-label="Разделы студии"
     >
       {items.map(({ to, shortLabel, hint, Icon }) => (
         <NavLink key={to} to={to} title={hint} className={({ isActive }) => mobileNavLinkClass(isActive)}>
           <Icon className="h-5 w-5 shrink-0" aria-hidden />
-          <span className="max-w-full truncate">{shortLabel}</span>
+          <span className="max-w-full truncate px-0.5">{shortLabel}</span>
         </NavLink>
       ))}
     </nav>
@@ -208,7 +239,9 @@ function StudioMobileNav({ items }: { items: NavItem[] }) {
 
 /** Страницы с собственным нижним dock — без дублирующей мобильной навигации студии. */
 function isFullBleedStudioRoute(pathname: string): boolean {
-  return pathname.startsWith('/studio/add-song');
+  return (
+    pathname.startsWith('/studio/add-song') || /\/studio\/setlists\/\d+\/perform/.test(pathname)
+  );
 }
 
 export function StudioLayout() {
@@ -221,19 +254,26 @@ export function StudioLayout() {
   const groups = buildNavGroups(showAddSong);
   const mobileItems = flattenMobileNavItems(groups);
   const fullBleed = isFullBleedStudioRoute(location.pathname);
+  const pageTitle = studioRouteTitle(location.pathname);
 
   return (
     <div
       className="studio-layout flex w-full flex-col overscroll-y-none bg-[var(--studio-editor-bg)] text-[var(--studio-editor-text)]"
       style={{ height: 'var(--viewport-height, 100dvh)' }}
     >
-      {!fullBleed ? <StudioTopBar onBack={() => navigate('/dashboard')} /> : null}
+      {!fullBleed ? (
+        <StudioTopBar
+          title={pageTitle}
+          onBack={() => navigate('/dashboard')}
+          showMoreLink={location.pathname !== '/studio/instruments'}
+        />
+      ) : null}
       <div className="studio-body flex min-h-0 min-w-0 flex-1 flex-row">
         <StudioSidebar groups={groups} onBack={() => navigate('/dashboard')} />
         <main
           className={[
-            'studio-main min-h-0 min-w-0 flex-1 overflow-y-auto px-3 pt-4 md:px-8 md:pt-6 lg:px-10',
-            fullBleed ? 'pb-0' : 'studio-content-with-nav pb-16 md:pb-0',
+            'studio-main min-h-0 min-w-0 flex-1 overflow-y-auto px-4 pt-3 md:px-8 md:pt-6 lg:px-10',
+            fullBleed ? 'pb-0' : 'studio-content-with-nav md:pb-0',
           ].join(' ')}
         >
           <Outlet />

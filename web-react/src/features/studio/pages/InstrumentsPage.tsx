@@ -35,15 +35,14 @@ export function InstrumentsPage() {
 
   return (
     <div className="mx-auto max-w-xl space-y-5">
-      <header className="space-y-2 border-b border-[var(--border)] pb-5">
-        <h1 className="text-xl font-bold text-[var(--text)]">Инструменты</h1>
-        <p className="text-sm leading-relaxed text-[var(--text-secondary)]">
-          Расширенные настройки в формате JSON (транспонирование по умолчанию, MIDI и т.д.). Обычно этот раздел
-          не нужен — меняйте только если знаете, зачем.
+      <header className="space-y-2 border-b border-[var(--studio-editor-border)] pb-5">
+        <h1 className="studio-page-heading text-xl font-bold text-[var(--studio-editor-text)] md:text-2xl">Инструменты</h1>
+        <p className="text-sm leading-relaxed text-[var(--studio-editor-mute)]">
+          Расширенные настройки в формате JSON. Обычно этот раздел не нужен.
         </p>
       </header>
       <textarea
-        className="min-h-[220px] w-full rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-3 font-mono text-xs text-[var(--text)] outline-none placeholder:text-[var(--text-muted)] focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
+        className="studio-input min-h-[min(50dvh,320px)] font-mono text-sm"
         value={jsonText}
         onChange={(e) => setJsonText(e.target.value)}
         spellCheck={false}
@@ -60,7 +59,7 @@ export function InstrumentsPage() {
           save.mutate();
         }}
         disabled={save.isPending}
-        className="rounded-lg bg-[var(--primary)] px-4 py-2.5 text-sm font-semibold text-[var(--text-on-primary)] hover:bg-[var(--primary-dark)] disabled:opacity-50"
+        className="studio-btn-primary min-h-[44px] w-full rounded-xl sm:w-auto"
       >
         Сохранить
       </button>

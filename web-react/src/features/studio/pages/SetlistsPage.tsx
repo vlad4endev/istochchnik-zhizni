@@ -32,7 +32,9 @@ export function SetlistsPage() {
     onSuccess: () => void qc.invalidateQueries({ queryKey: ['studio', 'setlists'] }),
   });
 
-  if (q.isLoading) return <SongListSkeleton />;
+  if (q.isLoading) return <SongListSkeleton variant="studio" />;
+
+  const inStudioShell = surface !== 'songbook';
 
   const pageCard =
     surface === 'songbook'
@@ -40,13 +42,11 @@ export function SetlistsPage() {
       : '';
 
   return (
-    <div className={['mx-auto max-w-2xl space-y-8', pageCard].filter(Boolean).join(' ')}>
-      <header className="space-y-2 border-b border-[var(--border)] pb-5">
-        <h1 className="text-xl font-bold text-[var(--text)]">Сетлисты</h1>
-        <p className="text-sm leading-relaxed text-[var(--text-secondary)]">
-          <span className="font-medium text-[var(--text)]">Шаг 1.</span> создайте программу здесь.{' '}
-          <span className="font-medium text-[var(--text)]">Шаг 2.</span> на следующей странице добавьте песни из
-          песенника, при необходимости включите «моя версия», затем откройте выступление или PDF.
+    <div className={['mx-auto max-w-2xl space-y-6 md:space-y-8', pageCard].filter(Boolean).join(' ')}>
+      <header className={`space-y-2 border-b pb-5 ${inStudioShell ? 'border-[var(--studio-editor-border)]' : 'border-[var(--border)]'}`}>
+        <h1 className={`studio-page-heading text-xl font-bold md:text-2xl ${inStudioShell ? 'text-[var(--studio-editor-text)]' : 'text-[var(--text)]'}`}>Сетлисты</h1>
+        <p className={`text-sm leading-relaxed ${inStudioShell ? 'text-[var(--studio-editor-mute)]' : 'text-[var(--text-secondary)]'}`}>
+          Создайте программу, добавьте песни, затем откройте выступление или PDF.
         </p>
       </header>
 
@@ -56,16 +56,16 @@ export function SetlistsPage() {
         </h2>
       <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-4">
         <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">Форма</p>
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+        <div className="flex flex-col gap-2">
           <input
-            className="flex-1 rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] px-3 py-2 text-sm text-[var(--text)] outline-none placeholder:text-[var(--text-muted)] focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
+            className={inStudioShell ? 'studio-input' : 'flex-1 rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] px-3 py-2 text-sm text-[var(--text)] outline-none placeholder:text-[var(--text-muted)] focus:border-sky-400 focus:ring-2 focus:ring-sky-100'}
             placeholder="Название, напр. Воскресенье утро"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
           />
           <input
             type="date"
-            className="rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] px-3 py-2 text-sm text-[var(--text)] outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
+            className={inStudioShell ? 'studio-input' : 'rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] px-3 py-2 text-sm text-[var(--text)] outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100'}
             value={eventDate}
             onChange={(e) => setEventDate(e.target.value)}
           />
@@ -73,7 +73,7 @@ export function SetlistsPage() {
             type="button"
             onClick={() => createMut.mutate()}
             disabled={createMut.isPending}
-            className="rounded-lg bg-[var(--primary)] px-4 py-2 text-sm font-semibold text-[var(--text-on-primary)] hover:bg-[var(--primary-dark)] disabled:opacity-50"
+            className={`min-h-[44px] w-full rounded-xl text-sm font-semibold disabled:opacity-50 sm:w-auto ${inStudioShell ? 'studio-btn-primary' : 'rounded-lg bg-[var(--primary)] px-4 py-2 text-[var(--text-on-primary)] hover:bg-[var(--primary-dark)]'}`}
           >
             Создать и открыть
           </button>
@@ -94,7 +94,7 @@ export function SetlistsPage() {
         {(q.data ?? []).map((s) => (
           <li
             key={s.id}
-            className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface-elevated)] px-4 py-3 shadow-sm"
+            className={`studio-list-row flex flex-col gap-3 rounded-xl border px-4 py-3 shadow-sm sm:flex-row sm:items-center sm:justify-between ${inStudioShell ? 'border-[var(--studio-editor-border)] bg-[var(--studio-editor-block)]' : 'border-[var(--border)] bg-[var(--surface-elevated)]'}`}
           >
             <div className="min-w-0">
               <Link
@@ -103,12 +103,19 @@ export function SetlistsPage() {
               >
                 {s.title}
               </Link>
-              {s.event_date ? <p className="text-xs text-[var(--text-muted)]">{s.event_date}</p> : null}
+              <div className="mt-0.5 flex flex-wrap items-center gap-2">
+                {s.event_date ? <p className="text-xs text-[var(--text-muted)]">{s.event_date}</p> : null}
+                {s.source_service_plan_id != null ? (
+                  <span className="inline-flex rounded-full bg-sky-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-sky-800 dark:bg-sky-950/50 dark:text-sky-200">
+                    Планировщик
+                  </span>
+                ) : null}
+              </div>
             </div>
-            <div className="flex shrink-0 items-center gap-3 text-sm">
+            <div className="flex shrink-0 items-center gap-2 text-sm">
               <Link
                 to={studioSetlistPerformPath(surface, Number(s.id))}
-                className="font-medium text-emerald-700 hover:text-emerald-800"
+                className={`inline-flex min-h-[40px] items-center rounded-lg px-3 text-xs font-semibold ${inStudioShell ? 'studio-btn-primary' : 'font-medium text-emerald-700 hover:text-emerald-800'}`}
               >
                 Выступление
               </Link>
@@ -117,7 +124,7 @@ export function SetlistsPage() {
                 onClick={() => {
                   if (window.confirm('Удалить сетлист?')) delMut.mutate(Number(s.id));
                 }}
-                className="text-xs font-medium text-red-600 hover:text-red-700"
+                className="studio-touch-target rounded-lg px-3 text-sm font-medium text-red-600 hover:bg-red-50"
               >
                 Удалить
               </button>

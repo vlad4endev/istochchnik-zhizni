@@ -40,7 +40,7 @@ function ImportedSongRow({ song }: { song: SongListItem }) {
   const editHref = studioEditSongPath(Number(song.id));
 
   return (
-    <li className="rounded-xl border border-[var(--studio-editor-border)] bg-[var(--studio-editor-block)] px-4 py-3 shadow-sm">
+    <li className="studio-list-row rounded-xl border border-[var(--studio-editor-border)] bg-[var(--studio-editor-block)] px-4 py-3 shadow-sm">
       <div className="flex items-start justify-between gap-3">
         <div className="flex min-w-0 flex-1 items-start gap-2 sm:gap-3">
           <Link
@@ -110,7 +110,7 @@ function SavedVersionRow({ version }: { version: StudioVersionListItem }) {
   const editHref = studioEditSongPath(Number(version.song_id));
 
   return (
-    <li className="rounded-xl border border-[var(--studio-editor-border)] bg-[var(--studio-editor-block)] px-4 py-3 shadow-sm">
+    <li className="studio-list-row rounded-xl border border-[var(--studio-editor-border)] bg-[var(--studio-editor-block)] px-4 py-3 shadow-sm">
       <div className="flex min-h-[52px] items-center justify-between gap-3">
         <Link to={editHref} className="min-w-0 flex-1">
           <p className="truncate font-medium text-[var(--studio-editor-text)] hover:text-[var(--studio-editor-accent)]">{version.song_title}</p>
@@ -171,7 +171,7 @@ function DraftRow({
   onDeleted: () => void;
 }) {
   return (
-    <li className="rounded-xl border border-[var(--studio-editor-border)] bg-[var(--studio-editor-block)] px-4 py-3 shadow-sm">
+    <li className="studio-list-row rounded-xl border border-[var(--studio-editor-border)] bg-[var(--studio-editor-block)] px-4 py-3 shadow-sm">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-medium text-[var(--studio-editor-text)]">{draft.title || 'Без названия'}</p>
@@ -364,7 +364,7 @@ export function MySongsPage() {
       <header className="space-y-4 border-b border-[var(--studio-editor-border)] pb-5">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h1 className="text-2xl font-bold tracking-tight text-[var(--studio-editor-text)]">Мои версии</h1>
+            <h1 className="studio-page-heading text-2xl font-bold tracking-tight text-[var(--studio-editor-text)]">Мои версии</h1>
             <p className="mt-1 max-w-lg text-sm leading-relaxed text-[var(--studio-editor-mute)]">
               Личные правки и черновики. Опубликованный каталог — в разделе{' '}
               <Link to={studioCatalogPath(surface)} className="studio-link">
@@ -381,7 +381,7 @@ export function MySongsPage() {
           </Link>
         </div>
         <div
-          className="flex w-full gap-1 rounded-2xl bg-[var(--studio-editor-bg)] p-1 ring-1 ring-[var(--studio-editor-border)]"
+          className="studio-tabs-scroll flex w-full gap-1 rounded-2xl bg-[var(--studio-editor-bg)] p-1 ring-1 ring-[var(--studio-editor-border)] md:flex md:flex-wrap"
           role="tablist"
           aria-label="Разделы «Мои версии»"
         >
