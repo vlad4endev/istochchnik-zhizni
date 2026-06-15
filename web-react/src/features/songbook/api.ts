@@ -181,12 +181,13 @@ export type SongPhotoAiResult = {
   chordPro: string;
 };
 
-/** Распознать песню с фото через OpenRouter Gemini 3.1. */
+/** Распознать песню с фото через интеграцию ИИ (vision-модель). */
 export async function aiRecognizeSongPhoto(file: File): Promise<SongPhotoAiResult> {
   const fd = new FormData();
   fd.set('photo', file);
   const { data } = await apiClient.post<SongPhotoAiResult>(`${SONGS}/ai/recognize-photo`, fd, {
     headers: { 'Content-Type': 'multipart/form-data' },
+    timeout: 180_000,
   });
   return data;
 }

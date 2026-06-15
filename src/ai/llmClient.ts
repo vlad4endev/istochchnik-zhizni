@@ -38,12 +38,48 @@ export interface ChatCompletionOptions {
   section?: string;
   /** Не подставлять системный промпт из админки */
   skipSystemPrompt?: boolean;
+  /** OpenAI-совместимый JSON-режим ответа */
+  response_format?: { type: 'json_object' };
 }
 
 type OpenAiCompatResponse = {
-  choices?: { message?: { content?: string | null } }[];
+  choices?: {
+    message?: {
+      content?: string | null | Array<{ type?: string; text?: string }>;
+    };
+  }[];
   error?: { message?: string };
 };
+
+function extractMessageContent(
+  content: string | null | Array<{ type?: string; text?: string }> | undefined,
+): string | null {
+  if (typeof content === 'string') return content;
+  if (!Array.isArray(content)) return null;
+  const parts = content
+    .map((part) => (part?.type === 'text' && typeof part.text === 'string' ? part.text : ''))
+    .filter(Boolean);
+  return parts.length > 0 ? parts.join('\n') : null;
+}
+
+function buildLlmHeaders(baseUrl: string, apiKey: string): Record<string, string> {
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    Authorization: `Bearer ${apiKey}`,
+  };
+  if (baseUrl.includes('openrouter.ai')) {
+    const referer =
+      (typeof process.env.OPENROUTER_HTTP_REFERER === 'string' && process.env.OPENROUTER_HTTP_REFERER.trim()) ||
+      (typeof process.env.PUBLIC_APP_URL === 'string' && process.env.PUBLIC_APP_URL.trim()) ||
+      'https://istochik-zhizni.local';
+    const title =
+      (typeof process.env.OPENROUTER_APP_TITLE === 'string' && process.env.OPENROUTER_APP_TITLE.trim()) ||
+      'Istochnik Zhizni Songbook';
+    headers['HTTP-Referer'] = referer;
+    headers['X-Title'] = title;
+  }
+  return headers;
+}
 
 /**
  * Один запрос к OpenAI-совместимому API `/chat/completions`.
@@ -102,15 +138,13 @@ export async function chatCompletion(
   }
   const res = await fetch(url, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${apiKey}`,
-    },
+    headers: buildLlmHeaders(baseUrl, apiKey),
     body: JSON.stringify({
       model,
       messages: msgs,
       temperature,
       max_tokens,
+      ...(options.response_format ? { response_format: options.response_format } : {}),
     }),
   });
 
@@ -142,9 +176,11 @@ export async function chatCompletion(
     );
   }
 
-  const content = json.choices?.[0]?.message?.content;
-  if (typeof content !== 'string') {
-    throw new AiAgentError('В ответе нет choices[0].message.content', 'ai_bad_response');
+  const content = extractMessageContent(json.choices?.[0]?.message?.content);
+  if (!content) {
+    throw new AiAgentError('В ответе нет choices[0].message.content', 'ai_bad_response', {
+      bodySnippet: rawText.slice(0, 500),
+    });
   }
   return content;
 }

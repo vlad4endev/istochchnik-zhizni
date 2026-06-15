@@ -99,6 +99,13 @@ function isAnalyticsTrackingPost(method: string, path: string): boolean {
 }
 
 /** POST/PATCH каталога (создание и правка — музыканты студии, редакторы и админ). */
+function isSongAiAssistPost(method: string, path: string): boolean {
+  if (method !== 'POST') return false;
+  const p = path.split('?')[0];
+  return p === '/api/songs/ai/split-blocks' || p === '/api/songs/ai/recognize-photo';
+}
+
+/** POST/PATCH каталога (создание и правка — музыканты студии, редакторы и админ). */
 function isSongCatalogModerateMutation(method: string, path: string): boolean {
   if (SAFE_METHODS.has(method)) return false;
   const p = path.split('?')[0];
@@ -271,6 +278,27 @@ export function enforceRoleAccess(req: Request, res: Response, next: NextFunctio
       })
       .catch((e) => {
         console.error('[roleAccess] studio permission lookup failed:', e);
+        res.status(500).json({ error: 'Не удалось проверить права доступа' });
+      });
+    return;
+  }
+
+  if (isSongAiAssistPost(req.method, fullPath) && authId) {
+    void loadRolePermissionsSettings()
+      .then((perms) => {
+        const allowed =
+          roleHasPermission(perms, sessionRoles, 'studio.catalog_create') ||
+          roleHasPermission(perms, sessionRoles, 'studio.catalog_edit');
+        const legacy = sessionCanModerateCatalog(roleReq);
+        if (allowed || legacy) next();
+        else {
+          res.status(403).json({
+            error: 'Access denied. Роль "Пользователь" может только просматривать данные.',
+          });
+        }
+      })
+      .catch((e) => {
+        console.error('[roleAccess] song ai permission lookup failed:', e);
         res.status(500).json({ error: 'Не удалось проверить права доступа' });
       });
     return;

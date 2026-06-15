@@ -378,7 +378,15 @@ export function SmartImportModal({
       let msg = 'Не удалось распознать фото';
       if (axios.isAxiosError(err)) {
         const d = err.response?.data as { error?: string } | undefined;
-        if (d?.error) msg = d.error;
+        if (d?.error) {
+          msg = d.error;
+        } else if (err.code === 'ECONNABORTED') {
+          msg = 'ИИ не успел ответить за 3 минуты. Попробуйте фото меньшего размера или повторите позже.';
+        } else if (!err.response) {
+          msg = 'Нет ответа от сервера. Проверьте интернет и что API запущен.';
+        } else {
+          msg = `Ошибка сервера (${err.response.status}). Попробуйте ещё раз.`;
+        }
       } else if (err instanceof Error && err.message) {
         msg = err.message;
       }
@@ -908,8 +916,8 @@ export function SmartImportModal({
         {tab === 'photo' ? (
           <div id={`${baseId}-panel-photo`} role="tabpanel" aria-labelledby={`${baseId}-tab-photo`} className="space-y-4">
             <p className={`text-sm leading-relaxed ${muted}`}>
-              Загрузите фото листа с текстом и аккордами. ИИ (OpenRouter Gemini 3.1) распознает содержимое, разложит по
-              блокам и расставит аккорды в формате ChordPro для редактора.
+              Загрузите фото листа с текстом и аккордами. Используется интеграция ИИ из админки — модель распознает
+              текст, разложит по блокам и расставит аккорды в ChordPro.
             </p>
             <div
               className={`rounded-xl border-2 border-dashed p-4 ${dashedPanel}`}
