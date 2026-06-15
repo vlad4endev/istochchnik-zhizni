@@ -9,6 +9,7 @@ import {
   LuClock3,
   LuHistory,
   LuSlidersHorizontal,
+  LuRocket,
   LuSave,
   LuSparkles,
   LuTrash2,
@@ -24,7 +25,7 @@ import { emitAppToast } from '../../../lib/uiFeedback';
 import { useScrollInputIntoView } from '@/hooks/useScrollInputIntoView';
 import { SkeletonBox } from '@/components/ui/SkeletonBox';
 import { keys } from '@/lib/queryKeys';
-import { deleteSong, updateSong } from '../api';
+import { deleteSong, publishSong, updateSong } from '../api';
 import { convertToChordPro } from '../addSong/chordProConversion';
 import { extractChordsFromText, guessKeyFromChords } from '../addSong/keyDetection';
 import { SmartImportModal, type SmartImportSourceTab } from '../addSong/SmartImportModal';
@@ -32,9 +33,9 @@ import { LyricsWithChords } from '../components/LyricsWithChords';
 import { quickChordsForKey } from '../addSong/quickChords';
 import { extractCommonChords } from '../chordProEngine';
 import { aiChordPlacement, fetchStudioCatalogSong, fetchVersionForSong, saveVersion } from '../../studio/api';
+import { usePublishSong } from '../../studio/usePublishSong';
 import { studioMySongsPath, getStudioModuleSurface } from '../../studio/studioPaths';
 import { PageHeader } from '@/components/layout/PageHeader';
-import { sectionHeroStickyClass } from '@/lib/sectionHeroChrome';
 import { useSongbookChrome } from '../SongbookChromeContext';
 
 import { BlockWrapper } from './BlockWrapper';
@@ -515,10 +516,22 @@ export function StudioEditor() {
     setIsSaving(true);
     setSaveError(false);
     try {
+      const wasUnpublished = !songQ.data?.is_published;
       const savedVersion = await saveVersion(id, { custom_content: content, custom_key: key || null });
 
       if (canEditCatalogMeta && catalogMetaChanged()) {
         await persistCatalogMeta();
+      }
+
+      let publishedToCatalog = false;
+      if (wasUnpublished && content.trim()) {
+        try {
+          await publishSong(id);
+          setSongStatus('published');
+          publishedToCatalog = true;
+        } catch {
+          // Личная версия сохранена; публикация — кнопкой «Опубликовать в каталог».
+        }
       }
 
       clearLocalDraft(id);
@@ -530,6 +543,7 @@ export function StudioEditor() {
       void qc.invalidateQueries({ queryKey: ['songs'] });
       void qc.invalidateQueries({ queryKey: ['song', id] });
       void qc.invalidateQueries({ queryKey: ['studio', 'imported-songs'] });
+      void qc.invalidateQueries({ queryKey: ['studio', 'public-catalog-sync-status'] });
 
       lastSavedSnapshotRef.current = JSON.stringify({
         content,
@@ -538,7 +552,12 @@ export function StudioEditor() {
       });
       setLastSavedAt(Date.now());
       setSaveError(false);
-      emitAppToast({ kind: 'success', message: 'Песня сохранена ✓' });
+      emitAppToast({
+        kind: 'success',
+        message: publishedToCatalog
+          ? 'Песня сохранена и опубликована в общем песеннике ✓'
+          : 'Песня сохранена ✓',
+      });
     } catch (err: unknown) {
       setSaveError(true);
       const msg = err instanceof Error && err.message ? err.message : 'Не удалось сохранить песню';
@@ -556,6 +575,7 @@ export function StudioEditor() {
     key,
     persistCatalogMeta,
     qc,
+    songQ.data?.is_published,
   ]);
 
   const aiChordPlacementMut = useMutation({
@@ -593,6 +613,28 @@ export function StudioEditor() {
     },
     onError: () => emitAppToast('Не удалось удалить песню'),
   });
+
+  const publishMut = usePublishSong();
+
+  const handlePublishToCatalog = useCallback(async () => {
+    const content = blocksToChordPro(blocks);
+    if (!content.trim()) {
+      const ok = window.confirm('Опубликовать без текста? Песня попадёт в общий каталог.');
+      if (!ok) return;
+    }
+    try {
+      await publishMut.mutateAsync({
+        songId: id,
+        content,
+        customKey: key || null,
+        saveVersionFirst: true,
+      });
+      setSongStatus('published');
+      void qc.invalidateQueries({ queryKey: ['song', id, authEpoch] });
+    } catch {
+      // toast from hook
+    }
+  }, [authEpoch, blocks, id, key, publishMut, qc]);
 
   const saveCatalogMetaMut = useMutation({
     mutationFn: () => persistCatalogMeta(),
@@ -1056,35 +1098,27 @@ export function StudioEditor() {
   /** Тёмный интерфейс только в режиме сцены внутри песенника; обычный режим — светлый. */
   const darkUi = surface === 'songbook' && stageMode;
 
-  const shell = darkUi
-    ? {
-        page: 'text-slate-100',
-        link: 'text-slate-400 hover:text-white',
-        title: 'text-white',
-        muted: 'text-slate-500',
-        field:
-          'border-0 bg-slate-950/80 text-slate-100 ring-1 ring-slate-800 placeholder:text-slate-600 focus:ring-slate-600',
-        editor:
-          'border-0 bg-slate-950/50 text-slate-100 ring-1 ring-slate-800/80 placeholder:text-slate-600 focus:ring-slate-600',
-        drawer: 'bg-slate-900 text-slate-100 shadow-2xl ring-1 ring-slate-800',
-        iconBtn: 'rounded-xl text-slate-400 hover:bg-slate-800 hover:text-white',
-        primary: 'rounded-full bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-emerald-500',
-        chordBtn: 'rounded-lg bg-amber-100/95 text-sm font-semibold text-amber-950 hover:bg-amber-50',
-      }
-    : {
-        page: 'text-slate-900',
-        link: 'text-slate-600 hover:text-slate-900',
-        title: 'text-slate-900',
-        muted: 'text-slate-500',
-        field:
-          'border-0 bg-white text-slate-900 ring-1 ring-slate-200 placeholder:text-slate-400 focus:ring-slate-400/30',
-        editor:
-          'border-0 bg-slate-50 text-slate-900 ring-1 ring-slate-200/90 placeholder:text-slate-400 focus:ring-slate-400/25',
-        drawer: 'bg-white text-slate-900 shadow-2xl ring-1 ring-slate-200',
-        iconBtn: 'rounded-xl text-slate-500 hover:bg-slate-100 hover:text-slate-900',
-        primary: 'rounded-full bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white hover:bg-slate-800',
-        chordBtn: 'rounded-lg bg-amber-50 text-sm font-semibold text-amber-950 ring-1 ring-amber-200/80 hover:bg-amber-100',
-      };
+  const shell = {
+    page: 'bg-[var(--studio-editor-bg)] text-[var(--studio-editor-text)]',
+    link: 'text-[var(--studio-editor-mute)] hover:text-[var(--studio-editor-text)]',
+    title: 'text-[var(--studio-editor-text)]',
+    muted: 'text-[var(--studio-editor-mute)]',
+    accent: 'text-[var(--studio-editor-accent)]',
+    field:
+      'border-0 bg-[var(--studio-editor-block)] text-[var(--studio-editor-text)] ring-1 ring-[var(--studio-editor-border)] placeholder:text-[var(--studio-editor-mute)] focus:ring-[var(--studio-editor-accent)]/30',
+    editor:
+      'border-0 bg-[var(--studio-editor-block)] text-[var(--studio-editor-text)] ring-1 ring-[var(--studio-editor-border)] placeholder:text-[var(--studio-editor-mute)] focus:ring-[var(--studio-editor-accent)]/25',
+    drawer:
+      'bg-[var(--studio-editor-block)] text-[var(--studio-editor-text)] shadow-2xl ring-1 ring-[var(--studio-editor-border)]',
+    iconBtn:
+      'rounded-xl text-[var(--studio-editor-mute)] hover:bg-[var(--studio-nav-active-bg)] hover:text-[var(--studio-editor-text)]',
+    primary: 'studio-btn-primary rounded-full px-5 py-2.5 text-sm',
+    chordBtn:
+      'rounded-lg bg-amber-50 text-sm font-semibold text-amber-950 ring-1 ring-amber-200/80 hover:bg-amber-100',
+    toolbar:
+      'bg-[var(--studio-toolbar-bg)] border-b border-[var(--studio-toolbar-border)]',
+    dock: 'bg-[var(--studio-dock-bg)] border-t border-[var(--studio-dock-border)]',
+  };
 
   const isSongbookShell = surface === 'songbook';
   const importVariant = stageMode || !isSongbookShell ? 'studio' : 'default';
@@ -1139,7 +1173,10 @@ export function StudioEditor() {
 
   return (
     <>
-      <div className={sectionHeroStickyClass}>
+      <div
+        className={`sticky top-0 z-[var(--z-sticky)] ${shell.toolbar}`}
+        style={{ boxShadow: 'var(--studio-toolbar-shadow)' }}
+      >
         <PageHeader title={s.title} />
       </div>
       <div
@@ -1164,15 +1201,13 @@ export function StudioEditor() {
         <>
           <button
             type="button"
-            className={[
-              'fixed inset-0 z-[100] backdrop-blur-[2px]',
-              darkUi ? 'bg-slate-950/40' : 'bg-stone-900/25',
-            ].join(' ')}
+            className="fixed inset-0 z-[var(--z-modal-bg)] backdrop-blur-[2px]"
+            style={{ background: 'rgba(0, 0, 0, 0.25)' }}
             aria-label="Закрыть панель"
             onClick={() => setToolsOpen(false)}
           />
           <div
-            className={`fixed left-1/2 top-1/2 z-[101] w-[min(calc(100vw-1.5rem),400px)] max-h-[85dvh] -translate-x-1/2 -translate-y-1/2 overflow-y-auto overscroll-contain rounded-2xl p-5 md:inset-auto md:left-auto md:right-6 md:top-20 md:h-auto md:max-h-[min(90dvh,calc(100dvh-5rem))] md:w-[min(400px,calc(100vw-3rem))] md:translate-x-0 md:translate-y-0 ${shell.drawer}`}
+            className={`fixed left-1/2 top-1/2 z-[var(--z-modal)] w-[min(calc(100vw-1.5rem),400px)] max-h-[85dvh] -translate-x-1/2 -translate-y-1/2 overflow-y-auto overscroll-contain rounded-2xl p-5 md:inset-auto md:left-auto md:right-6 md:top-20 md:h-auto md:max-h-[min(90dvh,calc(100dvh-5rem))] md:w-[min(400px,calc(100vw-3rem))] md:translate-x-0 md:translate-y-0 ${shell.drawer}`}
             role="dialog"
             aria-labelledby="studio-tools-title"
           >
@@ -1280,11 +1315,7 @@ export function StudioEditor() {
                     type="button"
                     onClick={() => saveCatalogMetaMut.mutate()}
                     disabled={saveCatalogMetaMut.isPending}
-                    className={`inline-flex min-h-[42px] w-full items-center justify-center gap-2 rounded-lg text-sm font-semibold ${
-                      darkUi
-                        ? 'bg-slate-700 text-white hover:bg-slate-600'
-                        : 'bg-slate-900 text-white hover:bg-slate-800'
-                    } disabled:opacity-60`}
+                    className="studio-btn-primary inline-flex min-h-[42px] w-full items-center justify-center gap-2 disabled:opacity-60"
                   >
                     <LuSave className="h-4 w-4" />
                     Сохранить метаданные
@@ -1376,15 +1407,13 @@ export function StudioEditor() {
         <>
           <button
             type="button"
-            className={[
-              'fixed inset-0 z-[104] backdrop-blur-[2px]',
-              darkUi ? 'bg-slate-950/45' : 'bg-stone-900/30',
-            ].join(' ')}
+            className="fixed inset-0 z-[var(--z-modal-bg)] backdrop-blur-[2px]"
+            style={{ background: 'rgba(0, 0, 0, 0.25)' }}
             aria-label="Закрыть авторасстановку"
             onClick={() => setAutoChordModalOpen(false)}
           />
           <div
-            className={`fixed left-1/2 top-1/2 z-[105] w-[min(calc(100vw-1.5rem),720px)] max-h-[85dvh] -translate-x-1/2 -translate-y-1/2 overflow-y-auto overscroll-contain rounded-2xl p-5 md:inset-auto md:left-auto md:right-6 md:top-16 md:h-auto md:max-h-[min(90dvh,calc(100dvh-4rem))] md:w-[min(720px,calc(100vw-3rem))] md:translate-x-0 md:translate-y-0 ${shell.drawer}`}
+            className={`fixed left-1/2 top-1/2 z-[var(--z-modal)] w-[min(calc(100vw-1.5rem),720px)] max-h-[85dvh] -translate-x-1/2 -translate-y-1/2 overflow-y-auto overscroll-contain rounded-2xl p-5 md:inset-auto md:left-auto md:right-6 md:top-16 md:h-auto md:max-h-[min(90dvh,calc(100dvh-4rem))] md:w-[min(720px,calc(100vw-3rem))] md:translate-x-0 md:translate-y-0 ${shell.drawer}`}
             role="dialog"
             aria-labelledby="auto-chords-title"
           >
@@ -1578,6 +1607,28 @@ export function StudioEditor() {
             <span className="sm:hidden">Удалить</span>
           </button>
         ) : null}
+        {!s.is_published ? (
+          <button
+            type="button"
+            onClick={() => void handlePublishToCatalog()}
+            disabled={publishMut.isPending || isSaving}
+            className={`inline-flex min-h-[44px] items-center gap-1.5 rounded-xl bg-sky-600 px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-sky-500 disabled:opacity-50 ${
+              darkUi ? 'ring-1 ring-sky-500/40' : ''
+            }`}
+            aria-label="Опубликовать в каталог"
+          >
+            <LuRocket className="h-4 w-4 shrink-0" aria-hidden />
+            {publishMut.isPending ? 'Публикую…' : 'Опубликовать в каталог'}
+          </button>
+        ) : (
+          <span
+            className={`inline-flex min-h-[44px] items-center gap-1.5 rounded-xl px-3 text-sm font-semibold ${
+              darkUi ? 'bg-emerald-950/40 text-emerald-300' : 'bg-emerald-50 text-emerald-800'
+            }`}
+          >
+            <span aria-hidden>✓</span> В каталоге
+          </span>
+        )}
         <button
           type="button"
           onClick={() => void saveAll()}
@@ -1975,9 +2026,7 @@ export function StudioEditor() {
 
       {chordAutoUndo && undoSecondsLeft > 0 ? (
         <div
-          className={`fixed bottom-[calc(var(--app-bottom-nav-total-height)+0.5rem)] left-1/2 z-[120] w-[min(92vw,520px)] -translate-x-1/2 rounded-xl border px-3 py-2 shadow-xl lg:bottom-6 ${
-            darkUi ? 'border-amber-600/60 bg-slate-900 text-slate-100' : 'border-amber-200 bg-white text-stone-900'
-          }`}
+          className="fixed bottom-[calc(var(--app-bottom-nav-total-height)+0.5rem)] left-1/2 z-[var(--z-toast)] w-[min(92vw,520px)] -translate-x-1/2 rounded-xl border border-[var(--studio-editor-border)] bg-[var(--studio-editor-block)] px-3 py-2 text-[var(--studio-editor-text)] shadow-xl lg:bottom-6"
         >
           <div className="flex items-center justify-between gap-3">
             <p className="text-sm">
@@ -2000,9 +2049,13 @@ export function StudioEditor() {
 
       <div
         className={[
-          'studio-editor-mobile-dock fixed inset-x-0 bottom-0 z-50 border-t pb-[max(0.5rem,env(safe-area-inset-bottom,0px))] lg:hidden',
-          darkUi ? 'border-slate-800 bg-slate-950/95' : 'border-slate-200 bg-white/95',
+          'studio-editor-mobile-dock fixed inset-x-0 bottom-0 z-[var(--z-sticky)] lg:hidden',
+          shell.dock,
         ].join(' ')}
+        style={{
+          boxShadow: 'var(--studio-dock-shadow)',
+          paddingBottom: 'max(0.5rem, env(safe-area-inset-bottom))',
+        }}
       >
         <div className="mx-auto flex max-w-3xl items-center gap-2 px-3 py-2">
           <button
@@ -2018,15 +2071,7 @@ export function StudioEditor() {
             type="button"
             disabled={!hasUnsavedChanges || isSaving}
             onClick={() => void saveAll()}
-            className={`min-h-[44px] flex-1 rounded-xl text-sm font-semibold ${
-              hasUnsavedChanges
-                ? darkUi
-                  ? 'bg-emerald-600 text-white'
-                  : 'bg-slate-900 text-white'
-                : darkUi
-                  ? 'bg-slate-800 text-slate-400'
-                  : 'bg-stone-200 text-stone-500'
-            } disabled:opacity-70`}
+            className={`min-h-[44px] flex-1 rounded-xl text-sm font-semibold studio-btn-success disabled:opacity-70`}
           >
             {isSaving ? 'Сохраняем…' : 'Сохранить песню'}
           </button>
@@ -2042,7 +2087,10 @@ export function StudioEditor() {
       </div>
 
       {showPreviewPane ? (
-        <div className="fixed inset-0 z-[70] flex min-h-0 flex-col bg-black/45 px-3 pb-24 pt-20 lg:hidden">
+        <div
+          className="fixed inset-0 z-[var(--z-modal-bg)] flex min-h-0 flex-col px-3 pb-24 pt-20 lg:hidden"
+          style={{ background: 'rgba(0, 0, 0, 0.45)' }}
+        >
           <div
             className={`min-h-0 max-h-full flex-1 overflow-y-auto overscroll-contain rounded-2xl border p-4 ${
               darkUi ? 'border-slate-700 bg-slate-950 text-slate-100' : 'border-stone-200 bg-white text-stone-900'

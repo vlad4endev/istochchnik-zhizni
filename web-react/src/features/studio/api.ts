@@ -16,6 +16,7 @@ export interface StudioVersionListItem {
   updated_at: string;
   song_title: string;
   song_slug: string;
+  song_is_published: boolean;
 }
 
 export interface StudioDraft {
@@ -59,6 +60,24 @@ export async function fetchMyVersions(): Promise<StudioVersionListItem[]> {
 /** Импортированные заготовки (песочница до публикации в каталог). */
 export async function fetchImportedSandboxSongs(): Promise<SongListItem[]> {
   const { data } = await apiClient.get<SongListItem[]>(`${STUDIO}/imported-songs`);
+  return data;
+}
+
+export async function fetchPublicCatalogSyncStatus(): Promise<{ hidden: number }> {
+  const { data } = await apiClient.get<{ hidden: number }>(`${STUDIO}/public-catalog-sync-status`);
+  return data;
+}
+
+export async function syncStudioToPublicCatalog(): Promise<{
+  published: number;
+  contentSynced: number;
+  songIds: number[];
+}> {
+  const { data } = await apiClient.post<{
+    published: number;
+    contentSynced: number;
+    songIds: number[];
+  }>(`${STUDIO}/sync-to-public-catalog`);
   return data;
 }
 

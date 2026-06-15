@@ -10,6 +10,8 @@ import {
   getVersionForSong,
   catalogSongGet,
   importedSongsList,
+  publicCatalogSyncStatus,
+  syncToPublicCatalog,
   instrumentsGet,
   instrumentsPatch,
   performanceGet,
@@ -34,6 +36,8 @@ router.use(requireAuthSession);
 
 router.get('/recent-songs', recentSongsList);
 router.get('/imported-songs', importedSongsList);
+router.get('/public-catalog-sync-status', publicCatalogSyncStatus);
+router.post('/sync-to-public-catalog', syncToPublicCatalog);
 router.get('/catalog-song/:songId', catalogSongGet);
 router.get('/versions', getMyVersions);
 router.get('/versions/song/:songId', getVersionForSong);

@@ -11,6 +11,8 @@ import {
   getSongById,
   listImportedSandboxSongsForStudio,
   listRecentSongs,
+  countMemberSongsHiddenFromPublicCatalog,
+  syncMemberSongsToPublicCatalog,
 } from '../services/songService';
 import {
   addSetlistItem,
@@ -280,6 +282,32 @@ export async function importedSongsList(req: Request, res: Response): Promise<vo
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: 'Не удалось загрузить импортированные песни' });
+  }
+}
+
+/** GET /api/studio/public-catalog-sync-status — сколько песен ещё не в общем песеннике. */
+export async function publicCatalogSyncStatus(req: Request, res: Response): Promise<void> {
+  try {
+    const r = req as AuthReq;
+    if (!(await ensureStudio(r, res))) return;
+    const hidden = await countMemberSongsHiddenFromPublicCatalog(r.authUserId!);
+    res.json({ hidden });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Ошибка' });
+  }
+}
+
+/** POST /api/studio/sync-to-public-catalog — вынести готовые песни в общий песенник. */
+export async function syncToPublicCatalog(req: Request, res: Response): Promise<void> {
+  try {
+    const r = req as AuthReq;
+    if (!(await ensureStudio(r, res))) return;
+    const result = await syncMemberSongsToPublicCatalog(r.authUserId!);
+    res.json(result);
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Не удалось синхронизировать каталог' });
   }
 }
 

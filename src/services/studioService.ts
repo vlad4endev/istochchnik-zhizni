@@ -70,10 +70,10 @@ export async function upsertStudioVersion(
 }
 
 export async function listMyStudioVersions(memberId: number): Promise<
-  (StudioVersionRow & { song_title: string; song_slug: string })[]
+  (StudioVersionRow & { song_title: string; song_slug: string; song_is_published: boolean })[]
 > {
   const result = await query(
-    `SELECT sv.*, s.title AS song_title, s.slug AS song_slug
+    `SELECT sv.*, s.title AS song_title, s.slug AS song_slug, s.is_published AS song_is_published
      FROM studio_versions sv
      JOIN songs s ON s.id = sv.song_id
      WHERE sv.member_id = $1
@@ -91,6 +91,7 @@ export async function listMyStudioVersions(memberId: number): Promise<
       updated_at: String(r.updated_at),
       song_title: String(r.song_title),
       song_slug: String(r.song_slug),
+      song_is_published: Boolean(r.song_is_published),
     };
   });
 }

@@ -423,14 +423,27 @@ export async function publishSongHandler(req: Request, res: Response): Promise<v
       res.status(404).json({ error: 'Не найдено' });
       return;
     }
-    if (!sessionCanModerateCatalog(r)) {
-      const ok = await hasMusicMinistryDirection(r.authUserId);
-      if (!ok) {
-        res.status(403).json({ error: 'Недостаточно прав' });
-        return;
-      }
+
+    const ownerRes = await dbQuery(
+      `SELECT created_by_member_id FROM songs WHERE id = $1 LIMIT 1`,
+      [id],
+    );
+    const createdBy = (ownerRes.rows[0] as { created_by_member_id?: number | null } | undefined)
+      ?.created_by_member_id;
+    const isOwnSong =
+      createdBy != null && Number.isInteger(Number(createdBy)) && Number(createdBy) === r.authUserId;
+
+    const canPublish =
+      sessionCanModerateCatalog(r) ||
+      (await hasMusicMinistryDirection(r.authUserId)) ||
+      isOwnSong;
+
+    if (!canPublish) {
+      res.status(403).json({ error: 'Недостаточно прав' });
+      return;
     }
-    const updated = await publishImportedSong(id);
+
+    const updated = await publishImportedSong(id, r.authUserId);
     if (!updated) {
       res.status(404).json({ error: 'Не найдено' });
       return;
