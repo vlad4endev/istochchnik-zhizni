@@ -8,6 +8,7 @@ import { spawn } from 'node:child_process';
 import { resolveMessengerConversationDeepLink } from '../config/messengerPublic';
 import { getUploadsRoot } from '../config/uploadsRoot';
 import { requireAuthSession } from '../middleware/authSession';
+import { blockImpersonationForChats } from '../middleware/blockImpersonationForChats';
 import { attachConversationFromMessageIdParam, checkChatPermission } from '../middleware/chatPermission';
 import { ensureValidRequest, validateSendMessage } from '../middleware/messengerValidation';
 import { messengerUpload } from '../middleware/upload';
@@ -360,6 +361,8 @@ function normalizeOptionalBigintId(raw: unknown): string | null {
 }
 
 const router = Router();
+
+router.use(blockImpersonationForChats);
 
 /** Multer без обёртки отдаёт 500 при LIMIT_* / fileFilter — отвечаем JSON 400 как в authRoutes. */
 function messengerUploadMiddleware(req: Request, res: Response, next: NextFunction): void {

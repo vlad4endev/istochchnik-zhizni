@@ -1,6 +1,7 @@
 import { NextFunction, Request, Response } from 'express';
 import { readAuthTokenFromCookies } from '../config/authCookie';
 import { resolveSessionByToken } from '../services/authService';
+import { resolveImpersonationPrincipal } from '../services/impersonationService';
 import type { AppRole } from '../types/appRole';
 
 type AuthRequest = Request & {
@@ -8,6 +9,9 @@ type AuthRequest = Request & {
   authUserRole?: AppRole;
   authUserRoles?: AppRole[];
   authToken?: string;
+  realAdminId?: number;
+  isImpersonating?: boolean;
+  impersonationExpiresAt?: string;
 };
 
 function readBearerToken(req: Request): string | null {
@@ -51,6 +55,20 @@ export async function resolveAuthSession(
       authReq.authUserRole = resolution.principal.role;
       authReq.authUserRoles = resolution.principal.roles;
       authReq.authToken = token;
+
+      const impersonation = await resolveImpersonationPrincipal(
+        token,
+        resolution.principal.userId,
+        resolution.principal.role,
+        resolution.principal.roles,
+      );
+      if (impersonation?.isImpersonating) {
+        authReq.authUserId = impersonation.userId;
+        authReq.authUserRole = impersonation.role;
+        authReq.authUserRoles = impersonation.roles;
+        authReq.realAdminId = impersonation.realAdminId;
+        authReq.isImpersonating = true;
+      }
     }
   } catch (error) {
     console.error('Failed to resolve auth session', error);

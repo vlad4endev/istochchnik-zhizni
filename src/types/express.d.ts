@@ -23,5 +23,7 @@ declare module 'express-serve-static-core' {
       'parishioner' | 'member' | 'minister' | 'pastor' | 'musician' | 'editor' | 'admin'
     >;
     authToken?: string;
+    realAdminId?: number;
+    isImpersonating?: boolean;
   }
 }

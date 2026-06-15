@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import axios from 'axios';
 import {
   type FormEvent,
+  type MouseEvent,
   useEffect,
   useId,
   useMemo,
@@ -111,6 +112,8 @@ import type { AppUser } from '../types';
 import { fetchPrayerRequestHistory, type PrayerHistoryItem } from '../../profile/api';
 import { useMe } from '@/hooks/useMe';
 import { Link } from 'react-router-dom';
+import { useImpersonation } from '../hooks/useImpersonation';
+import { isAppAdministratorSession } from '../../auth/authStore';
 
 type UpcomingBirthday = {
   nextDate: Date;
@@ -181,6 +184,11 @@ function appRoleLabel(role: string): string {
     default:
       return 'Член церкви';
   }
+}
+
+function memberIsAdmin(u: AppUser): boolean {
+  if (u.app_role === 'admin') return true;
+  return Array.isArray(u.app_roles) && u.app_roles.includes('admin');
 }
 
 function appRoleBadgeClass(role: string): string {
@@ -629,6 +637,8 @@ function MembersSection({
   onAddUserClose: () => void;
 }) {
   const qc = useQueryClient();
+  const { startImpersonation, canStartImpersonation, isImpersonating } = useImpersonation();
+  const showImpersonateButton = canStartImpersonation && isAppAdministratorSession() && !isImpersonating;
   const { data, isLoading, error, isFetching } = useQuery({
     queryKey: Q_MEMBERS,
     queryFn: fetchAdminMembers,
@@ -1041,6 +1051,13 @@ function MembersSection({
       is_active: u.is_active,
       in_prayer_cycle: u.in_prayer_cycle,
     });
+  }
+
+  function handleImpersonate(u: AppUser, e: MouseEvent) {
+    e.stopPropagation();
+    const name = memberRosterName(u);
+    if (!window.confirm(`Войти в аккаунт ${name}? Чаты будут недоступны.`)) return;
+    void startImpersonation(u.id);
   }
 
   function onCreate(e: FormEvent) {
@@ -1688,6 +1705,16 @@ function MembersSection({
                     </span>
                   )}
                 </div>
+                {showImpersonateButton && !memberIsAdmin(u) ? (
+                  <button
+                    type="button"
+                    className="mt-3 rounded-lg border border-stone-200 bg-white px-3 py-1.5 text-xs font-semibold text-stone-700 hover:bg-stone-50"
+                    title="Войти в аккаунт"
+                    onClick={(e) => handleImpersonate(u, e)}
+                  >
+                    👁 Войти
+                  </button>
+                ) : null}
               </article>
             );
           })
@@ -1704,12 +1731,13 @@ function MembersSection({
                 <th className="whitespace-nowrap px-4 py-3">Телефон</th>
                 <th className="px-4 py-3">Роль</th>
                 <th className="px-4 py-3">Статус</th>
+                {showImpersonateButton ? <th className="px-4 py-3">Действия</th> : null}
               </tr>
             </thead>
             <tbody>
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={4} className="px-4 py-10 text-center text-stone-500">
+                  <td colSpan={showImpersonateButton ? 5 : 4} className="px-4 py-10 text-center text-stone-500">
                     {search.trim() || roleFilter ? 'Никого не найдено.' : 'Список пуст.'}
                   </td>
                 </tr>
@@ -1764,6 +1792,20 @@ function MembersSection({
                       <td className="px-4 py-2.5">
                         <MemberRegistrationBadge u={u} />
                       </td>
+                      {showImpersonateButton ? (
+                        <td className="px-4 py-2.5">
+                          {!memberIsAdmin(u) ? (
+                            <button
+                              type="button"
+                              className="rounded-lg border border-stone-200 bg-white px-2.5 py-1 text-xs font-semibold text-stone-700 hover:bg-stone-50"
+                              title="Войти в аккаунт"
+                              onClick={(e) => handleImpersonate(u, e)}
+                            >
+                              👁 Войти
+                            </button>
+                          ) : null}
+                        </td>
+                      ) : null}
                     </tr>
                   );
                 })

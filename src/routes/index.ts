@@ -10,6 +10,7 @@ import {
 import { getUnreadEvents, postEventRead } from '../controllers/eventsController';
 import { getPodcastEpisodes, getPodcastSettings, patchPodcastSettings } from '../controllers/resourcesController';
 import { requireAuthSession } from '../middleware/authSession';
+import { blockImpersonationForChats } from '../middleware/blockImpersonationForChats';
 import { requireBroadcastManager } from '../middleware/requireBroadcastManager';
 import {
   deleteLike,
@@ -66,7 +67,11 @@ router.post('/posts/:id/comment', requireAuthSession, postComment);
 type AuthReq = Request & { authUserId?: number };
 
 /** PATCH /api/messages/:id/interact { type? } */
-router.patch('/messages/:id/interact', requireAuthSession, async (req: Request, res: Response) => {
+router.patch(
+  '/messages/:id/interact',
+  requireAuthSession,
+  blockImpersonationForChats,
+  async (req: Request, res: Response) => {
   const userId = (req as AuthReq).authUserId!;
   const messageId = String(req.params.id);
   const type = String((req.body?.type ?? 'pray_click') as string);

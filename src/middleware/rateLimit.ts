@@ -116,6 +116,73 @@ async function getRedisClient(): Promise<Redis | null> {
   return redisStatus(redisClient) === 'ready' ? redisClient : null;
 }
 
+type MemberIdRateLimitOptions = RateLimitOptions & {
+  resolveMemberId: (req: Request) => number | null;
+};
+
+/** Лимит по id участника (например, adminId для impersonation). */
+export function createMemberIdRateLimiter(options: MemberIdRateLimitOptions) {
+  const windowMs = Math.max(1000, Math.floor(options.windowMs));
+  const maxRequests = Math.max(1, Math.floor(options.maxRequests));
+  const message = options.message ?? 'Too many requests';
+  const keyPrefix = options.keyPrefix ?? 'rate-limit-member';
+  const resolveMemberId = options.resolveMemberId;
+
+  return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    const memberId = resolveMemberId(req);
+    if (!memberId) {
+      res.status(401).json({ error: 'Authentication required' });
+      return;
+    }
+    const fullKey = `${keyPrefix}:member:${memberId}`;
+    const redis = await getRedisClient();
+    if (!redis) {
+      warnInMemoryFallback('Redis unavailable or not configured');
+      const mem = checkMemoryRateLimit(fullKey, windowMs, maxRequests);
+      if (!mem.ok) {
+        res.setHeader('Retry-After', String(mem.retryAfterSec));
+        res.status(429).json({ error: message });
+        return;
+      }
+      next();
+      return;
+    }
+
+    let count = 0;
+    let pttl = 0;
+    try {
+      const result = await redis
+        .multi()
+        .incr(fullKey)
+        .pexpire(fullKey, windowMs, 'NX')
+        .pttl(fullKey)
+        .exec();
+      count = Number(result?.[0]?.[1] ?? 0);
+      pttl = Number(result?.[2]?.[1] ?? 0);
+    } catch (err) {
+      console.warn('[rate-limit] Redis command failed:', err instanceof Error ? err.message : String(err));
+      warnInMemoryFallback('Redis command error');
+      const mem = checkMemoryRateLimit(fullKey, windowMs, maxRequests);
+      if (!mem.ok) {
+        res.setHeader('Retry-After', String(mem.retryAfterSec));
+        res.status(429).json({ error: message });
+        return;
+      }
+      next();
+      return;
+    }
+
+    if (count <= maxRequests) {
+      next();
+      return;
+    }
+
+    const retryAfterSec = Math.max(1, Math.ceil((pttl > 0 ? pttl : windowMs) / 1000));
+    res.setHeader('Retry-After', String(retryAfterSec));
+    res.status(429).json({ error: message });
+  };
+}
+
 export function createIpRateLimiter(options: RateLimitOptions) {
   const windowMs = Math.max(1000, Math.floor(options.windowMs));
   const maxRequests = Math.max(1, Math.floor(options.maxRequests));

@@ -5,10 +5,12 @@ import { ChatMembersPage } from '../manage/ChatMembersPage';
 import { ChatAdminsPage } from '../manage/ChatAdminsPage';
 import { ChatPermissionsPage } from '../manage/ChatPermissionsPage';
 import { ChatMediaPage } from '../manage/ChatMediaPage';
+import { ImpersonationChatBlocked } from '../components/ImpersonationChatBlocked';
 
 export function MessengerRoutes() {
   return (
-    <Routes>
+    <ImpersonationChatBlocked>
+      <Routes>
       <Route index element={<MessengerPage />} />
       <Route path="chat/:chatId/manage" element={<ManageChatHomePage />} />
       <Route path="chat/:chatId/manage/members" element={<ChatMembersPage />} />
@@ -16,7 +18,8 @@ export function MessengerRoutes() {
       <Route path="chat/:chatId/manage/permissions" element={<ChatPermissionsPage />} />
       <Route path="chat/:chatId/manage/media" element={<ChatMediaPage />} />
       <Route path="*" element={<Navigate to="/messenger" replace />} />
-    </Routes>
+      </Routes>
+    </ImpersonationChatBlocked>
   );
 }
 

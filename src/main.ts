@@ -31,6 +31,7 @@ import settingsRoutes from './routes/settingsRoutes';
 import messengerRoutes from './routes/messengerRoutes';
 import servicePlannerRoutes from './routes/servicePlannerRoutes';
 import analyticsRoutes from './routes/analyticsRoutes';
+import impersonationRoutes from './routes/impersonationRoutes';
 import { analyticsMiddleware } from './middleware/analyticsMiddleware';
 import { diagnosticsRouter } from './diagnostics/routes/diagnostics.router';
 import {
@@ -51,7 +52,11 @@ import { shouldWarnMissingSupabaseStoragePublicUrl } from './lib/supabaseStorage
 
 dotenv.config();
 
-type RequestWithAuthUser = ExpressRequest & { authUserId?: number };
+type RequestWithAuthUser = ExpressRequest & {
+  authUserId?: number;
+  realAdminId?: number;
+  isImpersonating?: boolean;
+};
 
 const app = express();
 const PORT = process.env.PORT || 40978;
@@ -259,19 +264,25 @@ app.use((req, res, next) => {
   res.on('finish', () => {
     const status = res.statusCode;
     const level = status >= 500 ? 'error' : status >= 400 ? 'warn' : 'info';
+    const authReq = req as RequestWithAuthUser;
+    const logContext: Record<string, unknown> = {
+      query: req.query,
+    };
+    if (authReq.isImpersonating && authReq.realAdminId != null) {
+      logContext.performedBy = authReq.realAdminId;
+      logContext.isImpersonated = true;
+    }
     void writeAppLog({
       level,
       scope: 'http',
       event: 'http.request',
       message: `${httpStatusText(status)}: ${req.method} ${targetPath} (статус ${status})`,
-      context: {
-        query: req.query,
-      },
+      context: logContext,
       request_method: req.method,
       request_path: targetPath,
       status_code: status,
       duration_ms: Date.now() - startedAt,
-      user_id: (req as RequestWithAuthUser).authUserId,
+      user_id: authReq.authUserId,
       ip: req.ip,
       user_agent: req.get('user-agent') ?? '',
     });
@@ -337,6 +348,7 @@ app.get('/health', async (_req, res) => {
 
 // /api/users — раньше общего /api, чтобы спец-маршруты (merge-duplicates, swap-all-…) не пересекались с будущими catch-all.
 app.use('/api/users', userRoutes);
+app.use('/api/admin', impersonationRoutes);
 app.use('/api/public', publicRoutes);
 app.use('/api/songs', songRoutes);
 app.use('/api/song-import', songImportRoutes);

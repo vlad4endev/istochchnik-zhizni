@@ -19,6 +19,7 @@ import { TopLoader } from './components/ui/TopLoader';
 import { AccessibilityProvider } from './lib/accessibility/AccessibilityProvider';
 import { getAppVariant } from './lib/appVariant';
 import { SessionKeepAlive } from './hooks/SessionKeepAlive';
+import { ImpersonationBanner } from './features/admin/components/ImpersonationBanner';
 import { initAuthCrossTabLocalStorageSync } from './features/auth/authStore';
 import { useViewportHeight } from './hooks/useViewportHeight';
 import { useAppUpdate } from './hooks/useAppUpdate';
@@ -290,6 +291,7 @@ if (!rootEl) {
               <TopLoader />
               <BrowserRouter>
                 <AccessibilityProvider>
+                  <ImpersonationBanner />
                   <SessionKeepAlive />
                   <RootRouter />
                   <MediaViewer />
