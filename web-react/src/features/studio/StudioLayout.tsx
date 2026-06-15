@@ -1,4 +1,4 @@
-import { NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { LuArrowLeft, LuBookOpen, LuCirclePlus, LuGuitar, LuListMusic, LuMusic2 } from 'react-icons/lu';
 
 import { useAuthStore } from '../auth/authStore';
@@ -21,11 +21,11 @@ function sidebarLinkClass(isActive: boolean): string {
   return isActive
     ? [
         sidebarLinkBase,
-        'bg-[var(--studio-nav-active-bg)] font-semibold text-[var(--studio-nav-active-text)]',
+        'studio-nav-link-active bg-[var(--studio-nav-active-bg)] font-semibold text-[var(--studio-nav-active-text)]',
       ].join(' ')
     : [
         sidebarLinkBase,
-        'text-[var(--studio-nav-text)] hover:bg-[var(--studio-nav-active-bg)]/60',
+        'border-l-[3px] border-transparent pl-[calc(0.75rem-3px)] text-[var(--studio-nav-text)] hover:bg-[var(--studio-nav-active-bg)]/60',
       ].join(' ');
 }
 
@@ -135,11 +135,6 @@ function StudioSidebar({ groups, onBack }: StudioSidebarProps) {
           <LuArrowLeft className="h-5 w-5" />
         </button>
       </div>
-      <ol className="mt-1 hidden list-decimal space-y-1.5 px-6 text-[11px] leading-snug text-[var(--studio-nav-text-mute)] lg:block">
-        <li>Общий каталог для всех — в «Каталог».</li>
-        <li>Личные правки и черновики — в «Мои версии».</li>
-        <li>Программа служения — в «Сетлисты».</li>
-      </ol>
       <nav className="mt-2 flex flex-1 flex-col gap-4 px-2 pb-6 lg:px-3" aria-label="Разделы студии">
         {groups.map((group, gi) => (
           <div
@@ -211,28 +206,40 @@ function StudioMobileNav({ items }: { items: NavItem[] }) {
   );
 }
 
+/** Страницы с собственным нижним dock — без дублирующей мобильной навигации студии. */
+function isFullBleedStudioRoute(pathname: string): boolean {
+  return pathname.startsWith('/studio/add-song');
+}
+
 export function StudioLayout() {
   const navigate = useNavigate();
+  const location = useLocation();
   const role = useAuthStore((s) => s.role);
   const roles = useAuthStore((s) => s.roles ?? [s.role]);
   const showAddSong = canModerateSongCatalogSession(role, roles);
 
   const groups = buildNavGroups(showAddSong);
   const mobileItems = flattenMobileNavItems(groups);
+  const fullBleed = isFullBleedStudioRoute(location.pathname);
 
   return (
     <div
       className="studio-layout flex w-full flex-col overscroll-y-none bg-[var(--studio-editor-bg)] text-[var(--studio-editor-text)]"
       style={{ height: 'var(--viewport-height, 100dvh)' }}
     >
-      <StudioTopBar onBack={() => navigate('/dashboard')} />
+      {!fullBleed ? <StudioTopBar onBack={() => navigate('/dashboard')} /> : null}
       <div className="studio-body flex min-h-0 min-w-0 flex-1 flex-row">
         <StudioSidebar groups={groups} onBack={() => navigate('/dashboard')} />
-        <main className="studio-main studio-content-with-nav min-h-0 min-w-0 flex-1 overflow-y-auto px-3 pb-16 pt-4 md:px-10 md:pb-0 md:pt-8">
+        <main
+          className={[
+            'studio-main min-h-0 min-w-0 flex-1 overflow-y-auto px-3 pt-4 md:px-8 md:pt-6 lg:px-10',
+            fullBleed ? 'pb-0' : 'studio-content-with-nav pb-16 md:pb-0',
+          ].join(' ')}
+        >
           <Outlet />
         </main>
       </div>
-      <StudioMobileNav items={mobileItems} />
+      {!fullBleed ? <StudioMobileNav items={mobileItems} /> : null}
     </div>
   );
 }

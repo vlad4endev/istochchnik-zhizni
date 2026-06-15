@@ -53,6 +53,64 @@ textarea {
   --viewport-height: 100dvh;
   --vh: 100dvh;
   --app-keyboard-inset: 0px;
+
+  /* === Студия: навигация/сайдбар === */
+  --studio-nav-bg: #ffffff;
+  --studio-nav-border: #e5e7eb;
+  --studio-nav-text: #374151;
+  --studio-nav-text-mute: #6b7280;
+  --studio-nav-active-bg: #f3f4f6;
+  --studio-nav-active-text: #7d3640;
+
+  /* === Студия: редактор === */
+  --studio-editor-bg: #f9fafb;
+  --studio-editor-block: #ffffff;
+  --studio-editor-border: #e5e7eb;
+  --studio-editor-text: #111827;
+  --studio-editor-mute: #6b7280;
+  --studio-editor-accent: #7d3640;
+
+  /* === Студия: тулбар === */
+  --studio-toolbar-bg: #ffffff;
+  --studio-toolbar-border: #e5e7eb;
+  --studio-toolbar-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+
+  /* === Студия: dock (мобильный) === */
+  --studio-dock-bg: #ffffff;
+  --studio-dock-border: #e5e7eb;
+  --studio-dock-shadow: 0 -2px 8px rgba(0, 0, 0, 0.08);
+
+  /* === Студия: callouts === */
+  --studio-callout-info-bg: #eff6ff;
+  --studio-callout-info-border: #bfdbfe;
+  --studio-callout-info-text: #1e3a5f;
+  --studio-callout-warn-bg: #fffbeb;
+  --studio-callout-warn-border: #fcd34d;
+  --studio-callout-warn-text: #78350f;
+  --studio-callout-success-bg: #ecfdf5;
+  --studio-callout-success-border: #6ee7b7;
+  --studio-callout-success-text: #064e3b;
+
+  /* === Кнопки === */
+  --btn-primary-bg: #7d3640;
+  --btn-primary-text: #ffffff;
+  --btn-primary-hover: #5c2830;
+  --btn-success-bg: #059669;
+  --btn-success-text: #ffffff;
+  --btn-danger-bg: #dc2626;
+  --btn-danger-text: #ffffff;
+  --btn-ghost-bg: transparent;
+  --btn-ghost-text: #374151;
+  --btn-ghost-hover: #f3f4f6;
+
+  /* === Z-index шкала (единая!) === */
+  --z-base: 1;
+  --z-dropdown: 100;
+  --z-sticky: 200;
+  --z-modal-bg: 300;
+  --z-modal: 400;
+  --z-toast: 500;
+  --z-perform: 600;
 }
 
 html.dark {
@@ -102,6 +160,58 @@ html[data-color-theme='dark'] {
   --shadow-card: 0 2px 14px rgba(0, 0, 0, 0.28);
   --nav-pill-shadow: 0 -8px 32px rgba(0, 0, 0, 0.4), 0 4px 16px rgba(0, 0, 0, 0.25);
   --a11y-focus-ring: #fbbf24;
+}
+
+html.dark,
+html[data-color-theme='dark'] {
+  /* === Студия: навигация/сайдбар === */
+  --studio-nav-bg: #1c1c1e;
+  --studio-nav-border: #2c2c2e;
+  --studio-nav-text: #e5e5ea;
+  --studio-nav-text-mute: #8e8e93;
+  --studio-nav-active-bg: #2c2c2e;
+  --studio-nav-active-text: #e57373;
+
+  /* === Студия: редактор === */
+  --studio-editor-bg: #111111;
+  --studio-editor-block: #1c1c1e;
+  --studio-editor-border: #2c2c2e;
+  --studio-editor-text: #f2f2f7;
+  --studio-editor-mute: #8e8e93;
+  --studio-editor-accent: #e57373;
+
+  /* === Студия: тулбар === */
+  --studio-toolbar-bg: #1c1c1e;
+  --studio-toolbar-border: #2c2c2e;
+  --studio-toolbar-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+
+  /* === Студия: dock === */
+  --studio-dock-bg: #1c1c1e;
+  --studio-dock-border: #2c2c2e;
+  --studio-dock-shadow: 0 -2px 8px rgba(0, 0, 0, 0.4);
+
+  /* === Студия: callouts === */
+  --studio-callout-info-bg: rgba(59, 130, 246, 0.12);
+  --studio-callout-info-border: rgba(96, 165, 250, 0.35);
+  --studio-callout-info-text: #bfdbfe;
+  --studio-callout-warn-bg: rgba(245, 158, 11, 0.12);
+  --studio-callout-warn-border: rgba(251, 191, 36, 0.35);
+  --studio-callout-warn-text: #fde68a;
+  --studio-callout-success-bg: rgba(16, 185, 129, 0.12);
+  --studio-callout-success-border: rgba(52, 211, 153, 0.35);
+  --studio-callout-success-text: #a7f3d0;
+
+  /* === Кнопки === */
+  --btn-primary-bg: #e57373;
+  --btn-primary-text: #1c1c1e;
+  --btn-primary-hover: #ef9a9a;
+  --btn-success-bg: #34d399;
+  --btn-success-text: #064e3b;
+  --btn-danger-bg: #f87171;
+  --btn-danger-text: #1c1c1e;
+  --btn-ghost-bg: transparent;
+  --btn-ghost-text: #e5e5ea;
+  --btn-ghost-hover: #2c2c2e;
 }
 
 html[data-color-theme='high-contrast'] {
@@ -814,6 +924,179 @@ nav.app-bottom-nav {
       animation: none !important;
     }
   }
+}
+
+/* === Студия: утилиты === */
+.studio-btn-primary {
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
+  border-radius: 0.5rem;
+  padding: 0.5rem 1rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.studio-btn-primary:hover:not(:disabled) {
+  background: var(--btn-primary-hover);
+}
+.studio-btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.studio-btn-success {
+  background: var(--btn-success-bg);
+  color: var(--btn-success-text);
+  border-radius: 0.5rem;
+  padding: 0.5rem 1rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.studio-btn-ghost {
+  background: var(--btn-ghost-bg);
+  color: var(--btn-ghost-text);
+  border-radius: 0.5rem;
+  padding: 0.5rem 1rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  border: 1px solid var(--studio-editor-border);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.studio-btn-ghost:hover:not(:disabled) {
+  background: var(--btn-ghost-hover);
+}
+
+.studio-link {
+  font-weight: 600;
+  color: var(--studio-editor-accent);
+  text-decoration: none;
+}
+.studio-link:hover {
+  text-decoration: underline;
+}
+
+.studio-input {
+  min-height: 2.75rem;
+  width: 100%;
+  border-radius: 0.75rem;
+  border: 1px solid var(--studio-editor-border);
+  background: var(--studio-editor-block);
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  color: var(--studio-editor-text);
+  outline: none;
+}
+.studio-input::placeholder {
+  color: var(--studio-editor-mute);
+}
+.studio-input:focus {
+  border-color: var(--studio-editor-accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--studio-editor-accent) 20%, transparent);
+}
+
+.studio-callout {
+  border-radius: 0.75rem;
+  border-width: 1px;
+  border-style: solid;
+  padding: 0.75rem 1rem;
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+.studio-callout-info {
+  border-color: var(--studio-callout-info-border);
+  background: var(--studio-callout-info-bg);
+  color: var(--studio-callout-info-text);
+}
+.studio-callout-warn {
+  border-color: var(--studio-callout-warn-border);
+  background: var(--studio-callout-warn-bg);
+  color: var(--studio-callout-warn-text);
+}
+.studio-callout-success {
+  border-color: var(--studio-callout-success-border);
+  background: var(--studio-callout-success-bg);
+  color: var(--studio-callout-success-text);
+}
+
+.studio-chip {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 0.5rem;
+  border: 1px solid var(--studio-editor-border);
+  background: var(--studio-editor-block);
+  padding: 0.375rem 0.625rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--studio-editor-text);
+  transition: background 0.15s;
+}
+.studio-chip:hover {
+  background: var(--studio-nav-active-bg);
+}
+
+.studio-nav-link-active {
+  border-left: 3px solid var(--studio-editor-accent);
+  padding-left: calc(0.75rem - 3px);
+}
+
+/* Перенести keyframes из PerformPage.tsx сюда */
+@keyframes bpm-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.6;
+  }
+}
+.bpm-pulse {
+  animation: bpm-pulse var(--bpm-duration, 0.5s) ease-in-out infinite;
+}
+
+/* === PWA: safe-area поддержка === */
+.studio-layout {
+  padding-top: env(safe-area-inset-top);
+}
+
+.studio-mobile-nav {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* === Скрытие dock при открытой клавиатуре (уже есть, проверь) === */
+.studio-editor-mobile-dock {
+  transition: transform 0.2s ease;
+}
+
+/* === Предотвращение двойного скролла === */
+.studio-main {
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* === Фикс белых/чёрных полос между секциями === */
+.studio-body {
+  min-height: 0;
+}
+
+/* === Мобильный отступ под bottom nav === */
+.studio-content-with-nav {
+  padding-bottom: calc(4rem + env(safe-area-inset-bottom));
+}
+
+/* === Плавное переключение темы === */
+*,
+*::before,
+*::after {
+  transition-property: background-color, border-color, color;
+  transition-duration: 0.15s;
+  transition-timing-function: ease;
 }
 
 /* react-icons (Lucide): SVG-контуры, не подменяются системными эмодзи */

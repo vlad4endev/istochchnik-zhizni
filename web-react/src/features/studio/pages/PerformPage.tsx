@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   LuChevronLeft,
@@ -136,7 +136,7 @@ export function PerformPage() {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex max-h-[var(--viewport-height,100dvh)] min-h-0 flex-col bg-[var(--surface)] text-[var(--text)]"
+      className="fixed inset-0 z-[var(--z-perform)] flex max-h-[var(--viewport-height,100dvh)] min-h-0 flex-col bg-[var(--surface)] text-[var(--text)]"
       onTouchStart={(e) => {
         touchStartX.current = e.touches[0]?.clientX ?? null;
       }}
@@ -165,10 +165,12 @@ export function PerformPage() {
             <p className="truncate text-sm font-semibold text-[var(--text)]">{current?.song.title}</p>
             {bpm ? (
               <span
-                className="inline-block h-2 w-2 shrink-0 rounded-full bg-emerald-500"
-                style={{
-                  animation: `perform-bpm-pulse ${60 / bpm}s ease-in-out infinite`,
-                }}
+                className="bpm-pulse inline-block h-2 w-2 shrink-0 rounded-full bg-emerald-500"
+                style={
+                  {
+                    '--bpm-duration': `${60 / bpm}s`,
+                  } as CSSProperties
+                }
                 title={`${bpm} BPM`}
               />
             ) : null}
@@ -203,7 +205,7 @@ export function PerformPage() {
           onClick={() => setAutoScroll((a) => !a)}
           className={`inline-flex items-center gap-1 rounded-lg px-3 py-1.5 font-semibold ${
             autoScroll
-              ? 'bg-emerald-600 text-white shadow-sm'
+              ? 'studio-btn-success shadow-sm'
               : 'border border-[var(--border)] bg-[var(--surface-elevated)] text-[var(--text-secondary)]'
           }`}
         >
@@ -258,13 +260,6 @@ export function PerformPage() {
           <LuChevronRight className="h-8 w-8" />
         </button>
       </footer>
-
-      <style>{`
-        @keyframes perform-bpm-pulse {
-          0%, 100% { opacity: 0.35; transform: scale(0.85); }
-          50% { opacity: 1; transform: scale(1.15); }
-        }
-      `}</style>
     </div>
   );
 }

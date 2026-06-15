@@ -27,6 +27,20 @@ export default {
           DEFAULT: '#7d3640',
           dark: '#5c2830',
         },
+        studio: {
+          'nav-bg': 'var(--studio-nav-bg)',
+          'nav-border': 'var(--studio-nav-border)',
+          'nav-text': 'var(--studio-nav-text)',
+          'nav-active': 'var(--studio-nav-active-bg)',
+          'editor-bg': 'var(--studio-editor-bg)',
+          'editor-block': 'var(--studio-editor-block)',
+          'editor-border': 'var(--studio-editor-border)',
+          'editor-text': 'var(--studio-editor-text)',
+          'toolbar-bg': 'var(--studio-toolbar-bg)',
+          'toolbar-border': 'var(--studio-toolbar-border)',
+          'dock-bg': 'var(--studio-dock-bg)',
+          'dock-border': 'var(--studio-dock-border)',
+        },
       },
       keyframes: {
         'prayer-fade-up': {

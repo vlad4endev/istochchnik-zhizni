@@ -151,7 +151,7 @@ export function SetlistDetailPage() {
         <div className="flex flex-wrap gap-2">
           <Link
             to={studioSetlistPerformPath(surface, setlistId)}
-            className="inline-flex min-h-[44px] items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-emerald-500"
+            className="inline-flex min-h-[44px] items-center gap-2 rounded-lg studio-btn-success shadow-sm"
           >
             <LuMic className="h-4 w-4 shrink-0" aria-hidden />
             Режим выступления
@@ -278,7 +278,7 @@ export function SetlistDetailPage() {
               type="button"
               onClick={() => addMut.mutate()}
               disabled={!pickSong || addMut.isPending || songsQ.isLoading || songs.length === 0}
-              className="min-h-[44px] rounded-lg bg-sky-600 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-500 disabled:opacity-50"
+              className="studio-btn-primary min-h-[44px] disabled:opacity-50"
             >
               Добавить
             </button>

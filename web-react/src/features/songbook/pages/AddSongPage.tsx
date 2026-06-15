@@ -103,41 +103,28 @@ export function AddSongPage() {
     }
   }, []);
 
-  const theme = isStudio
-    ? {
-        page: 'text-zinc-100',
-        link: 'text-zinc-400 hover:text-white',
-        title: 'text-white',
-        muted: 'text-zinc-400',
-        stepActive: 'bg-zinc-700 text-white',
-        stepDone: 'bg-zinc-800 text-zinc-200 hover:bg-zinc-700',
-        stepTodo: 'bg-zinc-900/80 text-zinc-500',
-        border: 'border-zinc-700',
-        input: 'border-zinc-600 bg-zinc-950 text-zinc-100 placeholder:text-zinc-500',
-        card: 'border-zinc-700 bg-zinc-900/60',
-        preview: 'border-zinc-700 bg-zinc-900/40',
-        amber: 'border-amber-900/50 bg-amber-950/40 text-amber-100',
-        btnOutline: 'border-zinc-600 text-zinc-200 hover:bg-zinc-800',
-        primaryBtn: 'bg-sky-600 text-white hover:bg-sky-500',
-        saveBtn: 'bg-sky-600 text-white hover:bg-sky-500',
-      }
-    : {
-        page: '',
-        link: 'text-stone-500 hover:text-stone-800',
-        title: 'text-stone-900',
-        muted: 'text-stone-600',
-        stepActive: 'bg-stone-900 text-white',
-        stepDone: 'bg-stone-200 text-stone-800 hover:bg-stone-300',
-        stepTodo: 'bg-stone-100 text-stone-400',
-        border: 'border-stone-200',
-        input: 'border-stone-200 bg-white text-stone-900 placeholder:text-stone-400',
-        card: 'border-stone-200 bg-white',
-        preview: 'border-stone-200 bg-stone-50',
-        amber: 'border-amber-100 bg-amber-50/80 text-amber-900',
-        btnOutline: 'border-stone-200 text-stone-800 hover:bg-stone-50',
-        primaryBtn: 'bg-primary text-white',
-        saveBtn: 'bg-stone-900 text-white hover:bg-stone-800',
-      };
+  const theme = {
+    page: 'bg-[var(--studio-editor-bg)] text-[var(--studio-editor-text)]',
+    link: 'text-[var(--studio-editor-mute)] hover:text-[var(--studio-editor-text)]',
+    title: 'text-[var(--studio-editor-text)]',
+    muted: 'text-[var(--studio-editor-mute)]',
+    stepActive:
+      'bg-[var(--studio-editor-accent)] text-white shadow-sm ring-2 ring-[var(--studio-editor-accent)]/30',
+    stepDone:
+      'bg-[var(--studio-editor-block)] text-[var(--studio-editor-text)] ring-1 ring-[var(--studio-editor-border)] hover:bg-[var(--studio-nav-active-bg)]',
+    stepTodo: 'bg-transparent text-[var(--studio-editor-mute)] ring-1 ring-[var(--studio-editor-border)]',
+    border: 'border-[var(--studio-editor-border)]',
+    input:
+      'border-[var(--studio-editor-border)] bg-[var(--studio-editor-block)] text-[var(--studio-editor-text)] placeholder:text-[var(--studio-editor-mute)] focus:border-[var(--studio-editor-accent)] focus:ring-2 focus:ring-[color-mix(in_srgb,var(--studio-editor-accent)_20%,transparent)]',
+    card: 'border-[var(--studio-editor-border)] bg-[var(--studio-editor-block)] shadow-sm',
+    preview: 'border-[var(--studio-editor-border)] bg-[var(--studio-editor-bg)]',
+    callout: 'studio-callout studio-callout-info',
+    btnOutline: 'studio-btn-ghost',
+    primaryBtn: 'studio-btn-primary',
+    saveBtn: 'studio-btn-primary',
+    toolbar: 'bg-[var(--studio-toolbar-bg)] border-[var(--studio-toolbar-border)]',
+    dock: 'bg-[var(--studio-dock-bg)] border-[var(--studio-dock-border)]',
+  };
 
   const syncEditorSelection = () => {
     const el = editorRef.current;
@@ -331,11 +318,29 @@ export function AddSongPage() {
     next.current?.focus();
   };
 
+  const embeddedInStudio = location.pathname.startsWith('/studio/');
+
   return (
-    <div className={`mx-auto max-w-6xl space-y-6 px-3 md:px-4 ${theme.page}`}>
-      <div className={sectionHeroStickyClass}>
-        <PageHeader title={pageTitle} />
-      </div>
+    <div
+      className={[
+        'mx-auto max-w-6xl space-y-5',
+        embeddedInStudio ? 'px-0 pb-[calc(4.5rem+env(safe-area-inset-bottom))] md:pb-6' : 'space-y-6 px-3 pb-[calc(4.5rem+env(safe-area-inset-bottom))] md:px-4 md:pb-6',
+        theme.page,
+      ].join(' ')}
+    >
+      {!embeddedInStudio ? (
+        <div className={sectionHeroStickyClass}>
+          <PageHeader title={pageTitle} />
+        </div>
+      ) : (
+        <header className="space-y-1 border-b border-[var(--studio-editor-border)] pb-4">
+          <Link to={backPath} className={`inline-flex items-center gap-1.5 text-sm ${theme.link}`}>
+            <LuArrowLeft className="h-4 w-4" />
+            Назад
+          </Link>
+          <h1 className={`text-xl font-bold tracking-tight md:text-2xl ${theme.title}`}>{pageTitle}</h1>
+        </header>
+      )}
       <SmartImportModal
         open={importOpen}
         onClose={() => {
@@ -348,32 +353,41 @@ export function AddSongPage() {
         variant={isStudio ? 'studio' : 'default'}
       />
 
-      <div className="flex flex-wrap items-center gap-3">
-        <Link
-          to={backPath}
-          className={`inline-flex items-center gap-2 text-sm ${theme.link}`}
-        >
-          <LuArrowLeft className="h-4 w-4" />
-          {isStudio ? 'Студия' : 'Песенник'}
-        </Link>
-      </div>
+      {!embeddedInStudio ? (
+        <div className="flex flex-wrap items-center gap-3">
+          <Link to={backPath} className={`inline-flex items-center gap-2 text-sm ${theme.link}`}>
+            <LuArrowLeft className="h-4 w-4" />
+            {isStudio ? 'Студия' : 'Песенник'}
+          </Link>
+        </div>
+      ) : null}
 
       {/* Stepper */}
-      <ol className="flex flex-nowrap gap-2 overflow-x-auto pb-1 md:flex-wrap md:overflow-visible">
+      <ol className="flex flex-nowrap gap-2 overflow-x-auto pb-1 md:flex-wrap md:overflow-visible" aria-label="Шаги создания песни">
         {(['Источник текста', 'Редактор и превью', 'Метаданные'] as const).map((label, i) => {
           const n = i + 1;
           const active = step === n;
+          const done = n < step;
           return (
-            <li key={label}>
+            <li key={label} className="shrink-0">
               <button
                 type="button"
                 onClick={() => n < step && setStep(n)}
                 disabled={n > step}
-                className={`whitespace-nowrap rounded-full px-4 py-2 text-sm font-medium transition-colors ${
-                  active ? theme.stepActive : n < step ? theme.stepDone : theme.stepTodo
+                aria-current={active ? 'step' : undefined}
+                className={`inline-flex items-center gap-2 whitespace-nowrap rounded-full px-4 py-2 text-sm font-medium transition-colors ${
+                  active ? theme.stepActive : done ? theme.stepDone : theme.stepTodo
                 }`}
               >
-                {n}. {label}
+                <span
+                  className={`inline-flex h-5 w-5 items-center justify-center rounded-full text-[11px] font-bold ${
+                    active ? 'bg-white/20' : done ? 'bg-[var(--studio-editor-accent)] text-white' : 'bg-[var(--studio-editor-bg)]'
+                  }`}
+                >
+                  {done ? '✓' : n}
+                </span>
+                <span className="hidden sm:inline">{label}</span>
+                <span className="sm:hidden">{n === 1 ? 'Импорт' : n === 2 ? 'Редактор' : 'Данные'}</span>
               </button>
             </li>
           );
@@ -381,7 +395,7 @@ export function AddSongPage() {
       </ol>
 
       {showWelcome ? (
-        <div className={`rounded-xl border p-3 text-sm ${isStudio ? 'border-sky-900/50 bg-sky-950/30 text-sky-100' : 'border-sky-200 bg-sky-50 text-sky-900'}`}>
+        <div className={theme.callout}>
           <p>Вставьте текст песни, расставьте аккорды в квадратных скобках [Am] прямо в тексте и разделите песню на блоки.</p>
           <button
             type="button"
@@ -455,18 +469,12 @@ export function AddSongPage() {
 
       {step === 2 && (
         <section className="space-y-4">
-          <div className={`grid grid-cols-2 gap-1 rounded-xl p-1 lg:hidden ${isStudio ? 'bg-zinc-900/80' : 'bg-stone-100'}`}>
+          <div className={`grid grid-cols-2 gap-1 rounded-xl p-1 lg:hidden bg-[var(--studio-editor-bg)]`}>
             <button
               type="button"
               onClick={() => setMobileEditorPane('editor')}
               className={`min-h-[40px] rounded-lg text-xs font-semibold ${
-                mobileEditorPane === 'editor'
-                  ? isStudio
-                    ? 'bg-zinc-700 text-white'
-                    : 'bg-white text-stone-900 shadow-sm'
-                  : isStudio
-                    ? 'text-zinc-400'
-                    : 'text-stone-600'
+                mobileEditorPane === 'editor' ? theme.stepActive + ' shadow-sm' : theme.muted
               }`}
             >
               Редактор
@@ -475,13 +483,7 @@ export function AddSongPage() {
               type="button"
               onClick={() => setMobileEditorPane('preview')}
               className={`min-h-[40px] rounded-lg text-xs font-semibold ${
-                mobileEditorPane === 'preview'
-                  ? isStudio
-                    ? 'bg-zinc-700 text-white'
-                    : 'bg-white text-stone-900 shadow-sm'
-                  : isStudio
-                    ? 'text-zinc-400'
-                    : 'text-stone-600'
+                mobileEditorPane === 'preview' ? theme.stepActive + ' shadow-sm' : theme.muted
               }`}
             >
               Превью
@@ -521,9 +523,15 @@ export function AddSongPage() {
             {keyHint && <span className={`text-xs ${theme.muted}`}>{keyHint}</span>}
           </div>
 
-          <div className="grid gap-4 lg:grid-cols-2">
-            <div className={mobileEditorPane === 'preview' ? 'hidden md:block' : ''}>
-              <p className={`mb-2 text-xs font-bold uppercase ${theme.muted}`}>Редактор</p>
+          <div className="grid gap-4 lg:grid-cols-2 lg:gap-6">
+            <div
+              className={[
+                'rounded-2xl border p-4 md:p-5',
+                theme.card,
+                mobileEditorPane === 'preview' ? 'hidden md:block' : '',
+              ].join(' ')}
+            >
+              <p className={`mb-3 text-xs font-bold uppercase tracking-wide ${theme.muted}`}>Редактор</p>
               <SectionInsertToolbar dark={isStudio} onInsert={insertSectionMarkerLine} className="mb-3" />
               <textarea
                 ref={editorRef}
@@ -533,33 +541,37 @@ export function AddSongPage() {
                 onKeyUp={syncEditorSelection}
                 onMouseUp={syncEditorSelection}
                 rows={18}
-                className={`w-full resize-y rounded-xl border p-4 font-mono text-sm ${theme.input}`}
+                className={`w-full resize-y rounded-xl border p-4 font-mono text-sm leading-relaxed outline-none ${theme.input}`}
                 placeholder={'# Куплет 1\n[Am]Когда качаются [C]фонарики [G]ночные\n\n# Припев\n[F]...'}
               />
             </div>
-            <div className={mobileEditorPane === 'editor' ? 'hidden md:block' : ''}>
-              <p className={`mb-2 text-xs font-bold uppercase ${theme.muted}`}>Превью</p>
+            <div
+              className={[
+                'rounded-2xl border p-4 md:p-5',
+                theme.card,
+                mobileEditorPane === 'editor' ? 'hidden md:block' : '',
+              ].join(' ')}
+            >
+              <p className={`mb-3 text-xs font-bold uppercase tracking-wide ${theme.muted}`}>Превью</p>
               <div className={`min-h-[12rem] rounded-xl border p-4 ${theme.preview}`}>
                 <LyricsWithChords
                   text={content}
                   transposeSemitones={0}
-                  className={`text-sm leading-relaxed ${isStudio ? 'text-zinc-100' : 'text-stone-900'}`}
+                  className="text-sm leading-relaxed text-[var(--studio-editor-text)]"
                 />
               </div>
             </div>
           </div>
 
-          <div className={`rounded-xl border p-4 ${theme.amber}`}>
-            <p className={`mb-2 text-xs font-bold uppercase ${isStudio ? 'text-amber-200' : 'text-amber-900'}`}>
-              Быстрые аккорды
-            </p>
-            <div className="mb-3 flex flex-wrap items-center gap-2">
-              <label className={`text-xs ${theme.muted}`}>
+          <div className={`rounded-2xl border p-4 md:p-5 ${theme.card}`}>
+            <p className={`mb-3 text-xs font-bold uppercase tracking-wide ${theme.muted}`}>Быстрые аккорды</p>
+            <div className="mb-3 flex flex-wrap items-center gap-3">
+              <label className={`flex items-center gap-2 text-sm ${theme.muted}`}>
                 Тоника
                 <select
                   value={quickRoot}
                   onChange={(e) => setQuickRoot(e.target.value)}
-                  className={`ml-2 rounded-lg border px-2 py-1 text-sm ${theme.input}`}
+                  className={`rounded-lg border px-2 py-1.5 text-sm ${theme.input}`}
                 >
                   {KEY_ROOTS.map((k) => (
                     <option key={k} value={k}>
@@ -571,7 +583,7 @@ export function AddSongPage() {
               <select
                 value={quickMode}
                 onChange={(e) => setQuickMode(e.target.value as 'major' | 'minor')}
-                className={`rounded-lg border px-2 py-1 text-sm ${theme.input}`}
+                className={`rounded-lg border px-2 py-1.5 text-sm ${theme.input}`}
               >
                 <option value="major">мажор</option>
                 <option value="minor">минор</option>
@@ -583,11 +595,7 @@ export function AddSongPage() {
                   key={ch}
                   type="button"
                   onClick={() => insertChord(ch)}
-                  className={
-                    isStudio
-                      ? 'rounded-lg bg-zinc-800 px-3 py-1.5 text-sm font-semibold text-amber-100 ring-1 ring-amber-800/80 hover:bg-zinc-700'
-                      : 'rounded-lg bg-white px-3 py-1.5 text-sm font-semibold text-amber-950 shadow-sm ring-1 ring-amber-200 hover:bg-amber-100'
-                  }
+                  className="studio-chip min-h-[36px] px-3 text-sm font-semibold"
                 >
                   {ch}
                 </button>
@@ -596,11 +604,7 @@ export function AddSongPage() {
           </div>
 
           <div className="hidden flex-wrap justify-between gap-2 md:flex">
-            <button
-              type="button"
-              onClick={goPrev}
-              className={`inline-flex items-center gap-2 rounded-xl border px-4 py-2 text-sm ${theme.btnOutline}`}
-            >
+            <button type="button" onClick={goPrev} className={`inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm ${theme.btnOutline}`}>
               <LuArrowLeft className="h-4 w-4" />
               Назад
             </button>
@@ -609,7 +613,7 @@ export function AddSongPage() {
                 type="button"
                 disabled={!canSaveDraft}
                 onClick={() => draftMut.mutate()}
-                className={`inline-flex items-center gap-2 rounded-xl border px-4 py-2 text-sm font-semibold disabled:opacity-50 ${theme.btnOutline}`}
+                className={`inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold disabled:opacity-50 ${theme.btnOutline}`}
               >
                 {draftMut.isPending ? <LuLoader className="h-4 w-4 animate-spin" /> : <LuSave className="h-4 w-4" />}
                 {editingDraftId ? 'Обновить черновик' : 'Сохранить черновик'}
@@ -625,7 +629,7 @@ export function AddSongPage() {
             </div>
           </div>
           {draftMut.isError ? (
-            <p className={`text-sm ${isStudio ? 'text-red-400' : 'text-red-600'}`}>
+            <p className="text-sm text-red-600">
               Не удалось сохранить черновик — добавьте текст песни.
             </p>
           ) : null}
@@ -688,7 +692,7 @@ export function AddSongPage() {
                       placeholder="№"
                     />
                     {manualSongNumberInvalid ? (
-                      <p className={`text-[11px] ${isStudio ? 'text-red-400' : 'text-red-600'}`}>
+                      <p className="text-[11px] text-red-600">
                         Укажите целый номер больше 0.
                       </p>
                     ) : null}
@@ -792,18 +796,14 @@ export function AddSongPage() {
           ) : null}
 
           {(createMut.isError || draftMut.isError) && (
-            <p className={`text-sm ${isStudio ? 'text-red-400' : 'text-red-600'}`}>
+            <p className="text-sm text-red-600">
               {createMut.isError ? 'Не удалось сохранить в каталог. Проверьте поля и права.' : null}
               {draftMut.isError ? 'Не удалось сохранить черновик — добавьте текст песни.' : null}
             </p>
           )}
 
           <div className="hidden flex-wrap justify-between gap-2 md:flex">
-            <button
-              type="button"
-              onClick={goPrev}
-              className={`inline-flex items-center gap-2 rounded-xl border px-4 py-2 text-sm ${theme.btnOutline}`}
-            >
+            <button type="button" onClick={goPrev} className={`inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm ${theme.btnOutline}`}>
               <LuArrowLeft className="h-4 w-4" />
               Назад
             </button>
@@ -812,7 +812,7 @@ export function AddSongPage() {
                 type="button"
                 disabled={!canSaveDraft}
                 onClick={() => draftMut.mutate()}
-                className={`inline-flex items-center gap-2 rounded-xl border px-4 py-2 text-sm font-semibold disabled:opacity-50 ${theme.btnOutline}`}
+                className={`inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold disabled:opacity-50 ${theme.btnOutline}`}
               >
                 {draftMut.isPending ? <LuLoader className="h-4 w-4 animate-spin" /> : <LuSave className="h-4 w-4" />}
                 {editingDraftId ? 'Обновить черновик' : 'Сохранить черновик'}
@@ -833,14 +833,20 @@ export function AddSongPage() {
         </section>
       )}
 
-      <div className={`fixed inset-x-0 bottom-0 z-50 border-t p-2 lg:hidden ${isStudio ? 'border-zinc-700 bg-zinc-950/95' : 'border-stone-200 bg-white/95'}`}>
-        <div className="mx-auto flex max-w-6xl items-center gap-2">
+      <div
+        className={`fixed inset-x-0 bottom-0 z-[var(--z-sticky)] border-t p-2 lg:hidden ${theme.dock}`}
+        style={{
+          boxShadow: 'var(--studio-dock-shadow)',
+          paddingBottom: 'max(0.5rem, env(safe-area-inset-bottom))',
+        }}
+      >
+        <div className="mx-auto flex max-w-6xl items-stretch gap-2">
           {step === 1 ? (
             <>
               <button
                 type="button"
                 onClick={() => void navigate(backPath)}
-                className={`min-h-[44px] rounded-xl border px-4 text-sm ${theme.btnOutline}`}
+                className={`min-h-[44px] shrink-0 rounded-xl px-4 text-sm font-medium ${theme.btnOutline}`}
               >
                 Назад
               </button>
@@ -860,7 +866,7 @@ export function AddSongPage() {
               <button
                 type="button"
                 onClick={goPrev}
-                className={`min-h-[44px] rounded-xl border px-4 text-sm ${theme.btnOutline}`}
+                className={`min-h-[44px] shrink-0 rounded-xl px-4 text-sm font-medium ${theme.btnOutline}`}
               >
                 Назад
               </button>
@@ -868,7 +874,7 @@ export function AddSongPage() {
                 type="button"
                 disabled={!canSaveDraft}
                 onClick={() => draftMut.mutate()}
-                className={`min-h-[44px] rounded-xl border px-3 text-xs font-semibold disabled:opacity-50 ${theme.btnOutline}`}
+                className={`min-h-[44px] shrink-0 rounded-xl px-3 text-xs font-semibold disabled:opacity-50 ${theme.btnOutline}`}
               >
                 Черновик
               </button>
@@ -887,7 +893,7 @@ export function AddSongPage() {
               <button
                 type="button"
                 onClick={goPrev}
-                className={`min-h-[44px] rounded-xl border px-4 text-sm ${theme.btnOutline}`}
+                className={`min-h-[44px] shrink-0 rounded-xl px-4 text-sm font-medium ${theme.btnOutline}`}
               >
                 Назад
               </button>
@@ -895,28 +901,28 @@ export function AddSongPage() {
                 type="button"
                 disabled={!canSaveDraft}
                 onClick={() => draftMut.mutate()}
-                className={`min-h-[44px] rounded-xl border px-3 text-xs font-semibold disabled:opacity-50 ${theme.btnOutline}`}
+                className={`min-h-[44px] shrink-0 rounded-xl px-3 text-xs font-semibold disabled:opacity-50 ${theme.btnOutline}`}
               >
                 Черновик
               </button>
               {canPublishCatalog ? (
-              <button
-                type="button"
-                disabled={!canSaveSong}
-                onClick={() => createMut.mutate({})}
-                className={`min-h-[44px] flex-1 rounded-xl text-sm font-semibold disabled:opacity-50 ${theme.saveBtn}`}
-              >
-                {createMut.isPending ? 'Сохраняем…' : 'В каталог'}
-              </button>
+                <button
+                  type="button"
+                  disabled={!canSaveSong}
+                  onClick={() => createMut.mutate({})}
+                  className={`min-h-[44px] flex-1 rounded-xl text-sm font-semibold disabled:opacity-50 ${theme.saveBtn}`}
+                >
+                  {createMut.isPending ? 'Сохраняем…' : 'В каталог'}
+                </button>
               ) : (
-              <button
-                type="button"
-                disabled={!canSaveDraft}
-                onClick={() => draftMut.mutate()}
-                className={`min-h-[44px] flex-1 rounded-xl text-sm font-semibold disabled:opacity-50 ${theme.saveBtn}`}
-              >
-                {draftMut.isPending ? 'Сохраняем…' : 'Сохранить'}
-              </button>
+                <button
+                  type="button"
+                  disabled={!canSaveDraft}
+                  onClick={() => draftMut.mutate()}
+                  className={`min-h-[44px] flex-1 rounded-xl text-sm font-semibold disabled:opacity-50 ${theme.saveBtn}`}
+                >
+                  {draftMut.isPending ? 'Сохраняем…' : 'Сохранить'}
+                </button>
               )}
             </>
           ) : null}

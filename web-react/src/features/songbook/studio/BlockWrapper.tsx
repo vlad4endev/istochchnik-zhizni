@@ -149,7 +149,7 @@ export function BlockWrapper({
           <button
             type="button"
             onClick={() => onDelete(block.id)}
-            className={`inline-flex h-9 w-9 items-center justify-center text-red-500 hover:bg-red-500/10 dark:hover:bg-red-500/20 ${iconBtn}`}
+            className={`inline-flex h-9 w-9 items-center justify-center text-red-500 hover:bg-red-500/10 ${iconBtn}`}
             aria-label="Удалить блок"
           >
             <LuTrash2 className="h-4 w-4" />
@@ -214,7 +214,7 @@ export function BlockWrapper({
           textareaRef?.(el);
         }}
         rows={3}
-        className={`w-full rounded-xl px-4 py-3 font-["JetBrains_Mono","Fira_Code","Courier_New",monospace] text-[16px] leading-[1.8] outline-none resize-none overflow-hidden ${shellEditor}`}
+        className={`w-full rounded-xl px-4 py-3 font-["JetBrains_Mono","Fira_Code","Courier_New",monospace] text-[16px] leading-[1.8] outline-none resize-none overflow-y-auto ${shellEditor}`}
         spellCheck={false}
         placeholder={'# Куплет 1\n[Am]Когда качаются [C]фонарики\n\n# Припев\n[F]Пой со мной'}
         aria-label={`Редактор блока ${BADGE[block.type]}`}

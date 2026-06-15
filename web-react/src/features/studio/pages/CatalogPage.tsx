@@ -43,7 +43,7 @@ export function CatalogPage() {
         <h1 className="text-2xl font-bold tracking-tight text-[var(--studio-editor-text)]">Каталог</h1>
         <p className="max-w-xl text-sm leading-relaxed text-[var(--studio-editor-mute)]">
           Все опубликованные песни проекта — от всех участников. Личные черновики и неопубликованные правки — в разделе{' '}
-          <Link to={surface === 'songbook' ? '/songbook/studio' : '/studio/my-songs'} className="font-semibold text-sky-600 hover:text-sky-700">
+          <Link to={surface === 'songbook' ? '/songbook/studio' : '/studio/my-songs'} className="studio-link">
             Мои версии
           </Link>
           .
@@ -61,7 +61,7 @@ export function CatalogPage() {
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Поиск по названию или тексту…"
           autoComplete="off"
-          className="w-full min-h-[44px] rounded-xl border border-[var(--studio-editor-border)] bg-[var(--studio-editor-block)] py-2 pl-9 pr-9 text-sm text-[var(--studio-editor-text)] outline-none placeholder:text-[var(--studio-editor-mute)] focus:border-sky-400"
+          className="studio-input pl-9 pr-9"
         />
         {search.trim() ? (
           <button
@@ -75,7 +75,7 @@ export function CatalogPage() {
         ) : null}
       </div>
 
-      {query.isLoading ? <SongListSkeleton /> : null}
+      {query.isLoading ? <SongListSkeleton variant="studio" /> : null}
       {query.isError ? (
         <p className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
           Не удалось загрузить каталог.

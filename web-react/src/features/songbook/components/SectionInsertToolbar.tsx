@@ -30,8 +30,8 @@ export function SectionInsertToolbar({
   className = '',
 }: Props) {
   const chip = dark
-    ? 'border-zinc-600 bg-zinc-800/90 text-zinc-100 hover:bg-zinc-700'
-    : 'border-stone-200 bg-stone-50 text-stone-800 hover:bg-stone-100';
+    ? 'studio-chip'
+    : 'border-stone-200 bg-stone-50 text-stone-800 hover:bg-stone-100 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-colors';
 
   const pick = (title: string) => {
     if (onPresetAsBlock) {
@@ -51,7 +51,11 @@ export function SectionInsertToolbar({
 
   return (
     <div className={['space-y-2', className].filter(Boolean).join(' ')}>
-      <p className={`text-xs font-semibold uppercase tracking-wide ${dark ? 'text-zinc-400' : 'text-stone-500'}`}>
+      <p
+        className={`text-xs font-semibold uppercase tracking-wide ${
+          dark ? 'text-[var(--studio-editor-mute)]' : 'text-stone-500'
+        }`}
+      >
         Блок песни
       </p>
       <div className="flex flex-wrap gap-1.5">
@@ -60,7 +64,7 @@ export function SectionInsertToolbar({
             key={label}
             type="button"
             onClick={() => pick(label)}
-            className={['rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-colors', chip].join(' ')}
+            className={dark ? chip : ['rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-colors', chip].join(' ')}
           >
             {label}
           </button>
@@ -71,7 +75,7 @@ export function SectionInsertToolbar({
           className={[
             'rounded-lg border border-dashed px-2.5 py-1.5 text-xs font-medium transition-colors',
             dark
-              ? 'border-zinc-500 text-zinc-300 hover:bg-zinc-800'
+              ? 'border-[var(--studio-editor-border)] text-[var(--studio-editor-mute)] hover:bg-[var(--studio-nav-active-bg)]'
               : 'border-stone-300 text-stone-600 hover:bg-stone-50',
           ].join(' ')}
         >

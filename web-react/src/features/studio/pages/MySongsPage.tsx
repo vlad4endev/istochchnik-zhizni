@@ -53,11 +53,11 @@ function ImportedSongRow({ song }: { song: SongListItem }) {
             </p>
             <div className="mt-1 flex flex-wrap items-center gap-2">
               {isMissingText ? (
-                <span className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-900">
+                <span className="inline-flex rounded-full border border-[var(--studio-callout-warn-border)] bg-[var(--studio-callout-warn-bg)] px-2 py-0.5 text-[11px] font-semibold text-[var(--studio-callout-warn-text)]">
                   нет текста
                 </span>
               ) : (
-                <span className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-900">
+                <span className="inline-flex rounded-full border border-[var(--studio-callout-success-border)] bg-[var(--studio-callout-success-bg)] px-2 py-0.5 text-[11px] font-semibold text-[var(--studio-callout-success-text)]">
                   готова
                 </span>
               )}
@@ -309,7 +309,7 @@ export function MySongsPage() {
   }, [tab, recentQ.data, recentQ.isLoading, setTab]);
 
   if (q.isLoading) {
-    return <SongListSkeleton />;
+    return <SongListSkeleton variant="studio" />;
   }
   if (q.isError) {
     return <p className="text-sm text-red-600">Не удалось загрузить список.</p>;
@@ -333,7 +333,7 @@ export function MySongsPage() {
       ? 'rounded-2xl border border-[var(--studio-editor-border)] bg-[var(--studio-editor-block)] p-4 shadow-sm md:p-6'
       : '';
 
-  const tabBtn = (id: MySongsTab, label: string, hint: string) => (
+  const tabBtn = (id: MySongsTab, label: string, hint: string, badge?: number) => (
     <button
       key={id}
       type="button"
@@ -342,67 +342,69 @@ export function MySongsPage() {
       title={hint}
       onClick={() => setTab(id)}
       className={[
-        'min-h-[44px] flex-1 rounded-xl px-2 py-2 text-center text-xs font-semibold transition-colors sm:text-sm',
+        'relative min-h-[44px] flex-1 rounded-xl px-2 py-2 text-center text-xs font-semibold transition-colors sm:text-sm',
         tab === id
-          ? 'bg-[var(--studio-nav-active-bg)] text-[var(--studio-nav-active-text)] shadow-sm'
-          : 'text-[var(--studio-nav-text)] hover:bg-[var(--studio-nav-active-bg)]/60 hover:text-[var(--studio-editor-text)]',
+          ? 'bg-[var(--studio-editor-block)] text-[var(--studio-editor-text)] shadow-sm ring-1 ring-[var(--studio-editor-border)]'
+          : 'text-[var(--studio-nav-text)] hover:bg-[var(--studio-editor-block)]/60 hover:text-[var(--studio-editor-text)]',
       ].join(' ')}
     >
-      {label}
+      <span className="inline-flex items-center justify-center gap-1.5">
+        {label}
+        {badge != null && badge > 0 ? (
+          <span className="rounded-full bg-[var(--studio-editor-accent)] px-1.5 py-0.5 text-[10px] font-bold leading-none text-white">
+            {badge}
+          </span>
+        ) : null}
+      </span>
     </button>
   );
 
   return (
-    <div className={['mx-auto max-w-3xl space-y-6', pageCard].filter(Boolean).join(' ')}>
-      <header className="space-y-3 border-b border-[var(--studio-editor-border)] pb-5">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-[var(--studio-editor-text)]">Студия · мои песни</h1>
-          <p className="mt-1 max-w-xl text-sm leading-relaxed text-[var(--studio-editor-mute)]">
-            Личные версии и черновики — только у вас. Все опубликованные песни всех участников — в разделе{' '}
-            <Link to={studioCatalogPath(surface)} className="font-semibold text-[var(--studio-editor-accent)] hover:text-[var(--studio-editor-accent)]">
-              Каталог
-            </Link>
-            .
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
+    <div className={['mx-auto max-w-3xl space-y-5', pageCard].filter(Boolean).join(' ')}>
+      <header className="space-y-4 border-b border-[var(--studio-editor-border)] pb-5">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight text-[var(--studio-editor-text)]">Мои версии</h1>
+            <p className="mt-1 max-w-lg text-sm leading-relaxed text-[var(--studio-editor-mute)]">
+              Личные правки и черновики. Опубликованный каталог — в разделе{' '}
+              <Link to={studioCatalogPath(surface)} className="studio-link">
+                Каталог
+              </Link>
+              .
+            </p>
+          </div>
           <Link
             to={composeHref}
-            className="studio-btn-primary inline-flex min-h-[44px] items-center rounded-xl"
+            className="studio-btn-primary inline-flex min-h-[44px] shrink-0 items-center rounded-xl px-4"
           >
             + Новая песня
           </Link>
         </div>
         <div
-          className="flex w-full gap-1 rounded-2xl bg-[var(--studio-nav-active-bg)]/40 p-1"
+          className="flex w-full gap-1 rounded-2xl bg-[var(--studio-editor-bg)] p-1 ring-1 ring-[var(--studio-editor-border)]"
           role="tablist"
           aria-label="Разделы «Мои версии»"
         >
-          {tabBtn('saved', 'Мои версии', 'Ваши личные правки к песням из песенника')}
-          {showRecentTab ? tabBtn('recent', 'Недавние', 'Песни, которые вы недавно открывали в песеннике') : null}
+          {tabBtn('saved', 'Версии', 'Ваши личные правки к песням из песенника')}
+          {showRecentTab ? tabBtn('recent', 'Недавние', 'Песни, которые вы недавно открывали') : null}
           {tabBtn('drafts', 'Черновики', 'Тексты без привязки к песне из каталога')}
           {showImportedTab
-            ? tabBtn(
-                'imported',
-                importedCount > 0 ? `Импортированные · ${importedCount}` : 'Импортированные',
-                'Песочница студии: видят все с доступом к студии. После «Опубликовать» песня попадает в общий песенник.',
-              )
+            ? tabBtn('imported', 'Импорт', 'Неопубликованные заготовки с импорта', importedCount)
             : null}
         </div>
       </header>
 
       {(syncStatusQ.data?.hidden ?? 0) > 0 ? (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
-          <p className="font-semibold">Общий песенник — это то, что видят все</p>
-          <p className="mt-1 text-xs leading-relaxed text-amber-900/90">
-            У вас {syncStatusQ.data?.hidden} песен с текстом, которые пока видны только вам в студии. Перенесите их
-            в общий каталог, чтобы они появились в разделе «Песенник» у всей церкви.
+        <div className="studio-callout studio-callout-warn">
+          <p className="font-semibold">Перенесите песни в общий песенник</p>
+          <p className="mt-1 text-xs leading-relaxed opacity-90">
+            {syncStatusQ.data?.hidden} песен с текстом видны только вам. После переноса они появятся у всей церкви.
           </p>
           <button
             type="button"
             onClick={() => syncCatalogMut.mutate()}
             disabled={syncCatalogMut.isPending}
-            className="studio-btn-primary mt-3 inline-flex min-h-[44px] items-center rounded-xl disabled:opacity-50"
+            className="studio-btn-primary mt-3 inline-flex min-h-[40px] items-center rounded-lg text-sm disabled:opacity-50"
           >
             {syncCatalogMut.isPending ? 'Переносим…' : 'Вынести в общий песенник'}
           </button>
@@ -455,7 +457,7 @@ export function MySongsPage() {
               Открывайте карточку в песеннике или сразу переходите в редактор своей версии.
             </p>
             {recentQ.isLoading ? (
-              <SongListSkeleton />
+              <SongListSkeleton variant="studio" />
             ) : (
               <ul className="flex flex-col gap-2">
                 {recent.map((s) => (
@@ -488,24 +490,24 @@ export function MySongsPage() {
             <p className="text-sm text-[var(--studio-editor-mute)]">
               Это ваши сохранённые правки к песням из общего каталога. Оригинал в песеннике не меняется.
             </p>
-            <div className="grid gap-2 rounded-xl border border-[var(--studio-editor-border)] bg-[var(--studio-editor-bg)] p-3 sm:grid-cols-2">
+            <div className="grid gap-2 sm:grid-cols-2">
               <input
                 value={savedSearch}
                 onChange={(e) => setSavedSearch(e.target.value)}
                 placeholder="Поиск по названию"
-                className="min-h-[42px] rounded-lg border border-[var(--studio-editor-border)] bg-[var(--studio-editor-block)] px-3 text-sm outline-none"
+                className="studio-input"
               />
               <input
                 value={savedKeyFilter}
                 onChange={(e) => setSavedKeyFilter(e.target.value)}
                 placeholder="Фильтр по тональности"
-                className="min-h-[42px] rounded-lg border border-[var(--studio-editor-border)] bg-[var(--studio-editor-block)] px-3 text-sm outline-none"
+                className="studio-input"
               />
             </div>
             {rows.length === 0 ? (
               <div className="space-y-3 rounded-xl border border-dashed border-[var(--studio-editor-border)] bg-[var(--studio-editor-bg)] px-4 py-6 text-sm text-[var(--studio-editor-mute)]">
                 <p>Пока нет сохранённых версий. Откройте песню в песеннике и выберите «В студию».</p>
-                <Link to="/songbook" className="inline-flex font-semibold text-[var(--studio-editor-accent)] hover:text-[var(--studio-editor-accent)]">
+                <Link to="/songbook" className="studio-link inline-flex">
                   Перейти в песенник →
                 </Link>
               </div>
@@ -527,25 +529,24 @@ export function MySongsPage() {
 
         {tab === 'imported' ? (
           <section className="space-y-3">
-            <div className="rounded-xl border border-sky-200 bg-sky-50/60 p-3 text-sm text-sky-900">
-              <p className="font-semibold">Импортированные — только для студии</p>
-              <p className="mt-1 text-xs leading-relaxed text-sky-900/80">
-                Этот список видят все музыканты с доступом к студии (песни всех авторов). После кнопки{' '}
-                <span className="font-semibold">«Опубликовать»</span> песня попадает в общий{' '}
-                <Link to="/songbook" className="font-semibold underline hover:text-sky-950">
-                  песенник
-                </Link>{' '}
-                для всех.
+            <div className="studio-callout studio-callout-info">
+              <p className="font-semibold">Импорт — только для студии</p>
+              <p className="mt-1 text-xs leading-relaxed opacity-90">
+                Список видят музыканты с доступом к студии. Кнопка «Опубликовать» добавляет песню в{' '}
+                <Link to="/songbook" className="studio-link underline">
+                  общий песенник
+                </Link>
+                .
               </p>
             </div>
             <input
               value={importedSearch}
               onChange={(e) => setImportedSearch(e.target.value)}
               placeholder="Поиск по номеру или названию"
-              className="min-h-[42px] w-full rounded-lg border border-[var(--studio-editor-border)] bg-[var(--studio-editor-block)] px-3 text-sm outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
+              className="studio-input"
             />
             {importedQ.isLoading ? (
-              <SongListSkeleton />
+              <SongListSkeleton variant="studio" />
             ) : importedQ.isError ? (
               <p className="text-sm text-red-600">
                 Не удалось загрузить импортированные песни.{importedErrorSuffix}

@@ -49,6 +49,7 @@ export function SmartImportModal({
   initialTab = 'text',
   variant = 'default',
 }: Props) {
+  const isStudio = variant === 'studio';
   const baseId = useId();
   const [tab, setTab] = useState<SmartImportSourceTab>('text');
   const [raw, setRaw] = useState(initialRaw);
@@ -94,8 +95,6 @@ export function SmartImportModal({
   const xlsxMassLogRef = useRef<Array<{ ts: number; kind: string; message: string }>>([]);
   const xlsxEsRef = useRef<EventSource | null>(null);
   const xlsxPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  const isStudio = variant === 'studio';
 
   useEffect(() => {
     if (!open) return;
@@ -239,21 +238,36 @@ export function SmartImportModal({
     onMassImportDone?.(xlsxMassResult);
   }, [xlsxMassResult, xlsxMassJobId, onMassImportDone]);
 
-  const panel = isStudio
-    ? 'border-zinc-600 bg-zinc-900 text-zinc-100'
-    : 'border-stone-200 bg-white text-stone-900';
-  const textarea = isStudio
-    ? 'border-zinc-700 bg-zinc-950 text-zinc-100 placeholder:text-zinc-500'
-    : 'border-stone-200 bg-white text-stone-900 placeholder:text-stone-400';
-  const muted = isStudio ? 'text-zinc-400' : 'text-stone-500';
-  const btnPrimary = isStudio
-    ? 'bg-sky-600 text-white hover:bg-sky-500'
-    : 'bg-stone-900 text-white hover:bg-stone-800';
-  const btnGhost = isStudio
-    ? 'border-zinc-600 text-zinc-200 hover:bg-zinc-800'
-    : 'border-stone-200 text-stone-800 hover:bg-stone-50';
-  const tabInactive = isStudio ? 'text-zinc-400 hover:bg-zinc-800/80' : 'text-stone-600 hover:bg-stone-100';
-  const tabActive = isStudio ? 'bg-zinc-800 text-white shadow-sm' : 'bg-white text-stone-900 shadow-sm';
+  const panel =
+    'border-[var(--border,var(--studio-editor-border))] bg-[var(--bg-elevated,var(--studio-editor-block))] text-[var(--text,var(--studio-editor-text))]';
+  const textarea =
+    'border-[var(--border,var(--studio-editor-border))] bg-[var(--studio-editor-block)] text-[var(--text,var(--studio-editor-text))] placeholder:text-[var(--text-muted,var(--studio-editor-mute))]';
+  const muted = 'text-[var(--text-muted,var(--studio-editor-mute))]';
+  const btnPrimary = 'studio-btn-primary';
+  const btnGhost = 'studio-btn-ghost';
+  const tabInactive =
+    'text-[var(--text-muted,var(--studio-editor-mute))] hover:bg-[var(--studio-nav-active-bg)]/60';
+  const tabActive =
+    'bg-[var(--studio-nav-active-bg)] text-[var(--studio-nav-active-text)] shadow-sm';
+  const tabBarBg = 'bg-[var(--studio-editor-bg)]';
+  const closeBtn = 'text-[var(--studio-editor-mute)] hover:bg-[var(--studio-nav-active-bg)]/60';
+  const dropIdle = 'border-[var(--studio-editor-border)]';
+  const dropActiveCls = isStudio
+    ? 'border-[var(--studio-editor-accent)] bg-[color-mix(in_srgb,var(--studio-editor-accent)_12%,transparent)]'
+    : 'border-sky-500 bg-sky-500/10';
+  const innerPanel = 'bg-[var(--studio-editor-bg)]';
+  const innerTabActive =
+    'rounded-lg px-3 py-2.5 text-sm font-semibold shadow bg-[var(--studio-editor-block)] text-[var(--studio-editor-text)]';
+  const dashedPanel = 'border-[var(--studio-editor-border)] bg-[var(--studio-editor-block)]';
+  const bodyText = 'text-[var(--studio-editor-text)]';
+  const listDivide = 'divide-y divide-[var(--studio-editor-border)]';
+  const listItemBg = 'bg-[var(--studio-editor-block)]';
+  const codeText = 'text-[var(--studio-editor-accent)]';
+  const footerBorder = 'border-[var(--studio-editor-border)]';
+  const borderedPanel = 'border-[var(--studio-editor-border)] bg-[var(--studio-editor-block)]';
+  const borderedPanelSoft = 'border-[var(--studio-editor-border)] bg-[var(--studio-editor-bg)]';
+  const infoSky = 'rounded-lg px-3 py-2 text-xs bg-sky-500/10 text-[var(--studio-editor-text)]';
+  const inputTransparent = `w-full bg-transparent text-sm outline-none ${bodyText} placeholder:text-[var(--studio-editor-mute)]`;
 
   const readTextFile = (f: File) => {
     const reader = new FileReader();
@@ -664,14 +678,15 @@ export function SmartImportModal({
 
   return (
     <div
-      className="fixed inset-0 z-[80] flex items-center justify-center bg-black/55 p-4"
+      className="fixed inset-0 z-[var(--z-modal-bg)] flex items-end justify-center p-0 sm:items-center sm:p-4"
+      style={{ background: isStudio ? 'rgba(17, 24, 39, 0.55)' : 'rgba(0, 0, 0, 0.5)' }}
       role="dialog"
       aria-modal
       aria-labelledby="smart-import-title"
       onClick={onClose}
     >
       <div
-        className={`max-h-[92dvh] w-full max-w-2xl overflow-y-auto rounded-2xl border p-4 shadow-2xl sm:p-6 ${panel}`}
+        className={`max-h-[92dvh] w-full overflow-y-auto rounded-t-2xl border p-4 shadow-2xl sm:max-w-2xl sm:rounded-2xl sm:p-6 ${panel}`}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-4 flex items-start justify-between gap-3">
@@ -688,7 +703,7 @@ export function SmartImportModal({
           <button
             type="button"
             onClick={onClose}
-            className={`shrink-0 rounded-lg p-2 ${isStudio ? 'text-zinc-400 hover:bg-zinc-800' : 'text-stone-500 hover:bg-stone-100'}`}
+            className={`shrink-0 rounded-lg p-2 ${closeBtn}`}
             aria-label="Закрыть"
           >
             <LuX className="h-5 w-5" />
@@ -696,7 +711,7 @@ export function SmartImportModal({
         </div>
 
         <div
-          className={`mb-4 flex gap-1 rounded-xl p-1 ${isStudio ? 'bg-zinc-950/80' : 'bg-stone-100'}`}
+          className={`mb-4 flex gap-1 rounded-xl p-1 ${tabBarBg}`}
           role="tablist"
           aria-label="Способ импорта"
         >
@@ -722,13 +737,7 @@ export function SmartImportModal({
             onDragOver={(e) => e.preventDefault()}
             onDrop={onDropFile}
             className={`rounded-xl border-2 border-dashed p-3 transition-colors ${
-              dropActive
-                ? isStudio
-                  ? 'border-sky-500 bg-sky-950/40'
-                  : 'border-sky-500 bg-sky-50'
-                : isStudio
-                  ? 'border-zinc-700'
-                  : 'border-stone-200'
+              dropActive ? dropActiveCls : dropIdle
             }`}
           >
             <textarea
@@ -768,13 +777,13 @@ export function SmartImportModal({
 
         {tab === 'pdf' ? (
           <div id={`${baseId}-panel-pdf`} role="tabpanel" aria-labelledby={`${baseId}-tab-pdf`} className="space-y-4">
-            <div className={`rounded-[10px] ${isStudio ? 'bg-zinc-950/70' : 'bg-stone-100'} p-1`}>
+            <div className={`rounded-[10px] ${innerPanel} p-1`}>
               <div className="grid grid-cols-2 gap-1">
                 <button
                   type="button"
                   className={
                     pdfFormat === 'pdf'
-                      ? `rounded-lg px-3 py-2.5 text-sm font-semibold shadow ${isStudio ? 'bg-zinc-800 text-white' : 'bg-white text-stone-900'}`
+                      ? innerTabActive
                       : `rounded-lg px-3 py-2.5 text-sm font-semibold ${muted}`
                   }
                   onClick={() => setPdfFormat('pdf')}
@@ -785,7 +794,7 @@ export function SmartImportModal({
                   type="button"
                   className={
                     pdfFormat === 'xlsx'
-                      ? `rounded-lg px-3 py-2.5 text-sm font-semibold shadow ${isStudio ? 'bg-zinc-800 text-white' : 'bg-white text-stone-900'}`
+                      ? innerTabActive
                       : `rounded-lg px-3 py-2.5 text-sm font-semibold ${muted}`
                   }
                   onClick={() => setPdfFormat('xlsx')}
@@ -801,9 +810,7 @@ export function SmartImportModal({
                   Перетащите PDF сюда или нажмите для выбора. Подойдёт PDF с выделяемым текстом (не скан без OCR).
                 </p>
             <div
-              className={`rounded-xl border-2 border-dashed p-4 ${
-                isStudio ? 'border-zinc-700 bg-zinc-950/60' : 'border-stone-200 bg-stone-50'
-              }`}
+              className={`rounded-xl border-2 border-dashed p-4 ${dashedPanel}`}
               onDragOver={(e) => e.preventDefault()}
               onDrop={(e) => {
                 e.preventDefault();
@@ -828,7 +835,7 @@ export function SmartImportModal({
                   Выбрать PDF
                 </button>
                 {pdfName ? (
-                  <span className={`text-sm ${isStudio ? 'text-zinc-300' : 'text-stone-700'}`}>{pdfName}</span>
+                  <span className={`text-sm ${bodyText}`}>{pdfName}</span>
                 ) : (
                   <span className={`text-sm ${muted}`}>Файл не выбран</span>
                 )}
@@ -841,9 +848,7 @@ export function SmartImportModal({
             ) : null}
             {pdfSafeModeInfo ? (
               <p
-                className={`rounded-lg px-3 py-2 text-xs ${
-                  isStudio ? 'bg-sky-950/40 text-sky-200' : 'bg-sky-50 text-sky-900'
-                }`}
+                className={infoSky}
               >
                 {pdfSafeModeInfo}
               </p>
@@ -859,8 +864,8 @@ export function SmartImportModal({
             </button>
 
             {pdfExtractedText.trim() ? (
-              <div className={`space-y-3 rounded-xl border p-3 ${isStudio ? 'border-zinc-700 bg-zinc-950/50' : 'border-stone-200 bg-white'}`}>
-                <p className={`text-sm font-medium ${isStudio ? 'text-zinc-100' : 'text-stone-900'}`}>
+              <div className={`space-y-3 rounded-xl border p-3 ${borderedPanel}`}>
+                <p className={`text-sm font-medium ${bodyText}`}>
                   Предпросмотр извлечённого текста
                 </p>
                 <textarea
@@ -874,7 +879,7 @@ export function SmartImportModal({
                   className={`w-full resize-y rounded-lg border p-3 font-mono text-sm ${textarea}`}
                 />
                 {pdfAnalysis ? (
-                  <div className={`space-y-2 rounded-lg p-2 text-xs ${isStudio ? 'bg-zinc-900 text-zinc-300' : 'bg-stone-50 text-stone-700'}`}>
+                  <div className={`space-y-2 rounded-lg p-2 text-xs ${borderedPanelSoft} ${muted}`}>
                     <p>
                       Мы нашли <strong>{pdfAnalysis.chordCount}</strong> аккордов и <strong>{pdfAnalysis.sectionCount}</strong>{' '}
                       блоков. Всё верно?
@@ -924,7 +929,7 @@ export function SmartImportModal({
                 <p className={`text-sm leading-relaxed ${muted}`}>
                   Загрузите таблицу песен `.xlsx`, найдите песню и импортируйте текст (с аккордами в приоритете).
                 </p>
-                <div className={`rounded-xl border p-4 ${isStudio ? 'border-zinc-700 bg-zinc-950/60' : 'border-stone-200 bg-stone-50'}`}>
+                <div className={`rounded-xl border p-4 ${borderedPanelSoft}`}>
                   <div className="flex flex-wrap items-center gap-2">
                     <button
                       type="button"
@@ -935,7 +940,7 @@ export function SmartImportModal({
                       Выбрать XLSX
                     </button>
                     {xlsxName ? (
-                      <span className={`text-sm ${isStudio ? 'text-zinc-300' : 'text-stone-700'}`}>{xlsxName}</span>
+                      <span className={`text-sm ${bodyText}`}>{xlsxName}</span>
                     ) : (
                       <span className={`text-sm ${muted}`}>Файл не выбран</span>
                     )}
@@ -954,7 +959,7 @@ export function SmartImportModal({
                           Скачать отчёт (JSON)
                         </button>
                       </div>
-                      <ul className={`rounded-xl border p-3 text-xs ${isStudio ? 'border-zinc-700 bg-zinc-950/40 text-zinc-200' : 'border-stone-200 bg-white text-stone-800'}`}>
+                      <ul className={`rounded-xl border p-3 text-xs ${borderedPanel} ${bodyText}`}>
                         {xlsxParseErrors.slice(0, 12).map((e, idx) => (
                           <li key={`${e.row}-${e.field}-${idx}`} className="py-1">
                             <strong>Строка {e.row}</strong>, поле <strong>{e.field}</strong>: {e.message}
@@ -969,9 +974,9 @@ export function SmartImportModal({
                       </ul>
                     </div>
                   ) : null}
-                  <div className={`mt-3 space-y-2 rounded-xl border p-3 ${isStudio ? 'border-zinc-700 bg-zinc-950/40' : 'border-stone-200 bg-white'}`}>
+                  <div className={`mt-3 space-y-2 rounded-xl border p-3 ${borderedPanel}`}>
                     <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                      <p className={`text-sm font-semibold ${isStudio ? 'text-zinc-100' : 'text-stone-900'}`}>
+                      <p className={`text-sm font-semibold ${bodyText}`}>
                         Массовый импорт в каталог
                       </p>
                       <div className="flex flex-col gap-2 sm:flex-row">
@@ -999,7 +1004,7 @@ export function SmartImportModal({
 
                     {xlsxMassJobId ? (
                       <p className={`text-xs ${muted}`}>
-                        Job: <span className={isStudio ? 'text-zinc-200' : 'text-stone-700'}>{xlsxMassJobId}</span>
+                        Job: <span className={bodyText}>{xlsxMassJobId}</span>
                       </p>
                     ) : null}
                     {xlsxMassProgress ? (
@@ -1034,22 +1039,22 @@ export function SmartImportModal({
 
                   {xlsxSongs.length > 0 ? (
                     <div className="mt-3 space-y-2">
-                      <div className={`flex items-center gap-2 rounded-xl border px-3 py-2 ${isStudio ? 'border-zinc-700 bg-zinc-950' : 'border-stone-200 bg-white'}`}>
+                      <div className={`flex items-center gap-2 rounded-xl border px-3 py-2 ${borderedPanel}`}>
                         <LuSearch className={`h-4 w-4 ${muted}`} />
                         <input
                           value={xlsxSearch}
                           onChange={(e) => setXlsxSearch(e.target.value)}
                           placeholder="Поиск по номеру или названию…"
-                          className={`w-full bg-transparent text-sm outline-none ${isStudio ? 'text-zinc-100 placeholder:text-zinc-500' : 'text-stone-900 placeholder:text-stone-400'}`}
+                          className={inputTransparent}
                         />
                       </div>
-                      <div className={`max-h-[360px] overflow-auto rounded-xl border ${isStudio ? 'border-zinc-700' : 'border-stone-200'}`}>
-                        <ul className={`${isStudio ? 'divide-y divide-zinc-800' : 'divide-y divide-stone-200'}`}>
+                      <div className={`max-h-[360px] overflow-auto rounded-xl border border-[var(--studio-editor-border)]`}>
+                        <ul className={listDivide}>
                           {filteredXlsxSongs.map((s) => (
-                            <li key={s.external_id} className={`p-3 ${isStudio ? 'bg-zinc-950/40' : 'bg-white'}`}>
+                            <li key={s.external_id} className={`p-3 ${listItemBg}`}>
                               <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                                 <div className="min-w-0">
-                                  <p className={`truncate text-sm font-semibold ${isStudio ? 'text-zinc-100' : 'text-stone-900'}`}>
+                                  <p className={`truncate text-sm font-semibold ${bodyText}`}>
                                     {s.song_number}. {s.title}
                                   </p>
                                   <p className={`truncate text-xs ${muted}`}>{s.table_of_contents}</p>
@@ -1103,8 +1108,8 @@ export function SmartImportModal({
         {tab === 'url' ? (
           <div id={`${baseId}-panel-url`} role="tabpanel" aria-labelledby={`${baseId}-tab-url`} className="space-y-4">
             <p className={`text-sm leading-relaxed ${muted}`}>
-              Укажите прямую ссылку на файл в интернете (например <code className={isStudio ? 'text-sky-300' : 'text-stone-700'}>https://…/pesnya.txt</code>
-              ) или ссылку на страницу Telegraph (<code className={isStudio ? 'text-sky-300' : 'text-stone-700'}>https://telegra.ph/…</code>). Загрузка идёт через сервер приложения:
+              Укажите прямую ссылку на файл в интернете (например <code className={codeText}>https://…/pesnya.txt</code>
+              ) или ссылку на страницу Telegraph (<code className={codeText}>https://telegra.ph/…</code>). Загрузка идёт через сервер приложения:
               доступны только публичные адреса (локальная сеть недоступна).
             </p>
             <input
@@ -1128,9 +1133,7 @@ export function SmartImportModal({
         ) : null}
 
         <div
-          className={`mt-5 flex flex-wrap items-center gap-2 border-t pt-4 sm:justify-between ${
-            isStudio ? 'border-zinc-800' : 'border-stone-200'
-          }`}
+          className={`mt-5 flex flex-wrap items-center gap-2 border-t pt-4 sm:justify-between ${footerBorder}`}
         >
           <p className={`w-full text-xs sm:w-auto ${muted}`}>
             Длина текста: {raw.length.toLocaleString('ru-RU')} симв.

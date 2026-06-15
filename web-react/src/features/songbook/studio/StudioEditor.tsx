@@ -1118,6 +1118,23 @@ export function StudioEditor() {
     toolbar:
       'bg-[var(--studio-toolbar-bg)] border-b border-[var(--studio-toolbar-border)]',
     dock: 'bg-[var(--studio-dock-bg)] border-t border-[var(--studio-dock-border)]',
+    border: 'border-[var(--studio-editor-border)]',
+    blockBg: 'bg-[var(--studio-editor-block)]',
+    blockSoft: 'bg-[var(--studio-editor-bg)]',
+    panel: 'border-[var(--studio-editor-border)] bg-[var(--studio-editor-block)]',
+    panelSoft: 'border-[var(--studio-editor-border)] bg-[var(--studio-editor-bg)]',
+    violetBtn:
+      'border-violet-200 bg-violet-50 text-violet-900 hover:bg-violet-100',
+    redBtn: 'border-red-200 bg-red-50 text-red-800 hover:bg-red-100',
+    amberAction: 'border-amber-200 bg-amber-50 text-amber-900 hover:bg-amber-100',
+    ghostOutline:
+      'border-[var(--studio-editor-border)] bg-[var(--studio-editor-block)] text-[var(--studio-editor-text)] hover:bg-[var(--studio-nav-active-bg)]/60',
+    dashedBtn:
+      'border-dashed border-[var(--studio-editor-border)] bg-[var(--studio-editor-bg)] text-[var(--studio-editor-text)] hover:bg-[var(--studio-nav-active-bg)]/40',
+    amberBanner: 'border-amber-200 bg-amber-50 text-amber-950',
+    skyBanner: 'border-sky-200 bg-sky-50 text-sky-900',
+    warnBanner: 'rounded-lg bg-amber-50 text-amber-900',
+    warnBannerOutline: 'rounded-lg border border-amber-300 text-amber-900 hover:bg-amber-100',
   };
 
   const isSongbookShell = surface === 'songbook';
@@ -1202,7 +1219,7 @@ export function StudioEditor() {
           <button
             type="button"
             className="fixed inset-0 z-[var(--z-modal-bg)] backdrop-blur-[2px]"
-            style={{ background: 'rgba(0, 0, 0, 0.25)' }}
+            style={{ background: 'rgba(0, 0, 0, 0.45)' }}
             aria-label="Закрыть панель"
             onClick={() => setToolsOpen(false)}
           />
@@ -1240,11 +1257,7 @@ export function StudioEditor() {
                   <button
                     type="button"
                     onClick={detectSongKey}
-                    className={`inline-flex min-h-[38px] items-center gap-2 rounded-lg border px-3 text-xs font-semibold ${
-                      darkUi
-                        ? 'border-violet-500/70 bg-violet-950/30 text-violet-100 hover:bg-violet-950/45'
-                        : 'border-violet-200 bg-violet-50 text-violet-900 hover:bg-violet-100'
-                    }`}
+                    className={`inline-flex min-h-[38px] items-center gap-2 rounded-lg border px-3 text-xs font-semibold ${shell.violetBtn}`}
                   >
                     <LuSparkles className="h-3.5 w-3.5" />
                     Автоопределить
@@ -1253,14 +1266,12 @@ export function StudioEditor() {
                 </div>
               </div>
               <p
-                className={`rounded-xl px-3 py-2 text-xs leading-relaxed ${shell.muted} ${
-                  darkUi ? 'bg-slate-950/30' : 'bg-stone-100'
-                }`}
+                className={`rounded-xl px-3 py-2 text-xs leading-relaxed ${shell.muted} ${shell.blockSoft}`}
               >
                 В каталоге: темп {s.tempo ?? '—'} BPM · размер {s.time_signature ?? '—'} (справочно)
               </p>
 
-              <div className="space-y-2 rounded-xl border border-slate-200/70 p-3">
+              <div className={`space-y-2 rounded-xl border p-3 ${shell.border}`}>
                 <p className={`text-xs font-semibold uppercase tracking-wide ${shell.muted}`}>
                   Метаданные каталога
                 </p>
@@ -1372,11 +1383,7 @@ export function StudioEditor() {
                   const src = rawPaste.trim() ? rawPaste : joinedChordPro;
                   setBlocks(chordProToBlocks(applyConvert(src)));
                 }}
-                className={
-                  darkUi
-                    ? 'inline-flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl bg-slate-800/90 px-4 text-sm font-semibold text-white hover:bg-slate-700'
-                    : 'inline-flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl bg-slate-100 px-4 text-sm font-semibold text-slate-900 ring-1 ring-slate-200 hover:bg-slate-200/80'
-                }
+                className="studio-btn-primary inline-flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl"
               >
                 <LuWand className="h-4 w-4" />
                 Конвертировать в ChordPro
@@ -1389,11 +1396,7 @@ export function StudioEditor() {
                   setImportInitialTab('pdf');
                   setImportOpen(true);
                 }}
-                className={
-                  darkUi
-                    ? 'inline-flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl border border-slate-600 px-4 text-sm font-semibold text-slate-100 hover:bg-slate-800/80'
-                    : 'inline-flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl border border-slate-200 px-4 text-sm font-semibold text-slate-800 hover:bg-slate-50'
-                }
+                className="studio-btn-ghost inline-flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl"
               >
                 <LuUpload className="h-4 w-4" />
                 Импорт из PDF…
@@ -1408,7 +1411,7 @@ export function StudioEditor() {
           <button
             type="button"
             className="fixed inset-0 z-[var(--z-modal-bg)] backdrop-blur-[2px]"
-            style={{ background: 'rgba(0, 0, 0, 0.25)' }}
+            style={{ background: 'rgba(0, 0, 0, 0.45)' }}
             aria-label="Закрыть авторасстановку"
             onClick={() => setAutoChordModalOpen(false)}
           />
@@ -1457,7 +1460,7 @@ export function StudioEditor() {
 
               <div className="space-y-2">
                 <p className={`text-xs font-semibold uppercase tracking-wide ${shell.muted}`}>Применить к</p>
-                <div className={`max-h-[220px] space-y-2 overflow-y-auto rounded-xl border p-3 ${darkUi ? 'border-slate-700' : 'border-stone-200'}`}>
+                <div className={`max-h-[220px] space-y-2 overflow-y-auto rounded-xl border p-3 ${shell.border}`}>
                   {autoChordTargets.map((target) => {
                     const idx = blocks.findIndex((b) => b.id === target.id);
                     const checked = autoChordTargetIds.includes(target.id);
@@ -1483,25 +1486,25 @@ export function StudioEditor() {
               </div>
 
               {selectedTargetsWithChordsCount > 0 ? (
-                <p className={`rounded-lg px-3 py-2 text-xs ${darkUi ? 'bg-amber-950/35 text-amber-100' : 'bg-amber-50 text-amber-900'}`}>
+                <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900">
                   ⚠️ Существующие аккорды будут заменены в {selectedTargetsWithChordsCount} блоках.
                 </p>
               ) : null}
 
               {selectedOtherTypeCount > 0 ? (
-                <p className={`rounded-lg px-3 py-2 text-xs ${darkUi ? 'bg-orange-950/35 text-orange-100' : 'bg-orange-50 text-orange-900'}`}>
+                <p className="rounded-lg bg-orange-50 px-3 py-2 text-xs text-orange-900">
                   ⚠️ Выбраны блоки другого типа: {selectedOtherTypeCount}. Проверьте превью перед применением.
                 </p>
               ) : null}
 
-              <div className={`rounded-xl border p-3 ${darkUi ? 'border-slate-700 bg-slate-950/40' : 'border-stone-200 bg-stone-50'}`}>
+              <div className={`rounded-xl border p-3 ${shell.panelSoft}`}>
                 <p className={`mb-2 text-xs font-semibold uppercase tracking-wide ${shell.muted}`}>Превью</p>
                 {autoChordPreview.length === 0 ? (
                   <p className={`text-xs ${shell.muted}`}>Выберите целевые блоки для предпросмотра.</p>
                 ) : (
                   <div className="space-y-2">
                     {autoChordPreview.map((item) => (
-                      <div key={`preview-${item.targetId}`} className={`rounded-lg border p-2 ${darkUi ? 'border-slate-700' : 'border-stone-200'}`}>
+                      <div key={`preview-${item.targetId}`} className={`rounded-lg border p-2 ${shell.border}`}>
                         <p className={`mb-1 text-[11px] font-semibold ${shell.muted}`}>До</p>
                         <pre className="m-0 whitespace-pre-wrap break-words text-xs">{item.beforeFirst || '—'}</pre>
                         <p className={`mb-1 mt-2 text-[11px] font-semibold ${shell.muted}`}>После</p>
@@ -1524,11 +1527,7 @@ export function StudioEditor() {
                   type="button"
                   onClick={applyAutoChordPattern}
                   disabled={autoChordTargetIds.length === 0}
-                  className={`min-h-[42px] rounded-lg px-4 text-sm font-semibold ${
-                    darkUi
-                      ? 'bg-emerald-600 text-white hover:bg-emerald-500'
-                      : 'bg-slate-900 text-white hover:bg-slate-800'
-                  } disabled:opacity-50`}
+                  className="studio-btn-success min-h-[42px] rounded-lg px-4 text-sm font-semibold disabled:opacity-50"
                 >
                   Применить к выбранным
                 </button>
@@ -1573,11 +1572,7 @@ export function StudioEditor() {
           type="button"
           onClick={runAiChordPlacement}
           disabled={aiChordPlacementMut.isPending}
-          className={`inline-flex min-h-[44px] items-center gap-1.5 rounded-xl border px-3 text-sm font-semibold disabled:opacity-60 ${
-            darkUi
-              ? 'border-violet-500/60 bg-violet-950/30 text-violet-100 hover:bg-violet-950/45'
-              : 'border-violet-200 bg-violet-50 text-violet-900 hover:bg-violet-100'
-          }`}
+          className={`inline-flex min-h-[44px] items-center gap-1.5 rounded-xl border px-3 text-sm font-semibold disabled:opacity-60 ${shell.violetBtn}`}
           aria-label="AI-разбор аккордов"
         >
           <LuWand className="h-4 w-4" />
@@ -1596,11 +1591,7 @@ export function StudioEditor() {
               }
             }}
             disabled={deleteCatalogMut.isPending}
-            className={`inline-flex min-h-[44px] items-center gap-1.5 rounded-xl border px-3 text-sm font-semibold disabled:opacity-50 ${
-              darkUi
-                ? 'border-red-900/50 bg-red-950/30 text-red-300 hover:bg-red-950/50'
-                : 'border-red-200 bg-red-50 text-red-800 hover:bg-red-100'
-            }`}
+            className={`inline-flex min-h-[44px] items-center gap-1.5 rounded-xl border px-3 text-sm font-semibold disabled:opacity-50 ${shell.redBtn}`}
           >
             <LuTrash2 className="h-4 w-4 shrink-0" aria-hidden />
             <span className="hidden sm:inline">Удалить из каталога</span>
@@ -1612,9 +1603,7 @@ export function StudioEditor() {
             type="button"
             onClick={() => void handlePublishToCatalog()}
             disabled={publishMut.isPending || isSaving}
-            className={`inline-flex min-h-[44px] items-center gap-1.5 rounded-xl bg-sky-600 px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-sky-500 disabled:opacity-50 ${
-              darkUi ? 'ring-1 ring-sky-500/40' : ''
-            }`}
+            className="studio-btn-primary inline-flex min-h-[44px] items-center gap-1.5 rounded-xl px-4 text-sm font-semibold shadow-sm transition disabled:opacity-50"
             aria-label="Опубликовать в каталог"
           >
             <LuRocket className="h-4 w-4 shrink-0" aria-hidden />
@@ -1622,9 +1611,8 @@ export function StudioEditor() {
           </button>
         ) : (
           <span
-            className={`inline-flex min-h-[44px] items-center gap-1.5 rounded-xl px-3 text-sm font-semibold ${
-              darkUi ? 'bg-emerald-950/40 text-emerald-300' : 'bg-emerald-50 text-emerald-800'
-            }`}
+            className="studio-btn-success inline-flex min-h-[44px] cursor-default items-center gap-1.5 rounded-xl px-3 text-sm font-semibold opacity-90"
+            aria-disabled
           >
             <span aria-hidden>✓</span> В каталоге
           </span>
@@ -1684,12 +1672,7 @@ export function StudioEditor() {
       </p>
 
       {draftRecovery ? (
-        <div
-          className={`rounded-xl border p-3 text-sm ${
-            darkUi ? 'border-amber-800/70 bg-amber-950/30 text-amber-100' : 'border-amber-200 bg-amber-50 text-amber-950'
-          }`}
-          role="status"
-        >
+        <div className={`rounded-xl border p-3 text-sm ${shell.amberBanner}`} role="status">
           <p>
             Найден несохранённый черновик от {formatSaveStatusTime(draftRecovery.savedAt)}. Восстановить?
           </p>
@@ -1697,18 +1680,14 @@ export function StudioEditor() {
             <button
               type="button"
               onClick={restoreDraftRecovery}
-              className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${
-                darkUi ? 'bg-amber-600 text-white hover:bg-amber-500' : 'bg-amber-700 text-white hover:bg-amber-800'
-              }`}
+              className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${shell.warnBanner}`}
             >
               Восстановить
             </button>
             <button
               type="button"
               onClick={dismissDraftRecovery}
-              className={`rounded-lg border px-3 py-1.5 text-xs font-semibold ${
-                darkUi ? 'border-amber-700 text-amber-100 hover:bg-amber-950/50' : 'border-amber-300 text-amber-900 hover:bg-amber-100'
-              }`}
+              className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${shell.warnBannerOutline}`}
             >
               Удалить
             </button>
@@ -1717,11 +1696,7 @@ export function StudioEditor() {
       ) : null}
 
       {showWelcome ? (
-        <div
-          className={`rounded-xl border p-3 text-sm ${
-            darkUi ? 'border-sky-900/70 bg-sky-950/30 text-sky-100' : 'border-sky-200 bg-sky-50 text-sky-900'
-          }`}
-        >
+        <div className={`rounded-xl border p-3 text-sm ${shell.skyBanner}`}>
           <p>
             Вставьте текст песни, расставьте аккорды в квадратных скобках вида <strong>[Am]</strong> прямо в тексте и
             разделите песню на блоки.
@@ -1743,22 +1718,14 @@ export function StudioEditor() {
         </div>
       ) : null}
 
-      <section
-        className={`rounded-2xl border px-4 py-4 sm:px-6 ${
-          darkUi ? 'border-slate-800 bg-slate-950/50' : 'border-stone-200 bg-white'
-        }`}
-      >
+      <section className={`rounded-2xl border px-4 py-4 sm:px-6 ${shell.panel}`}>
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <p className={`text-sm font-semibold uppercase tracking-[0.05em] ${shell.muted}`}>+ Добавить блок</p>
           <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
               onClick={runAutoChordPlacementForAll}
-              className={`inline-flex min-h-[40px] items-center gap-1 rounded-lg border px-3 text-sm font-semibold ${
-                darkUi
-                  ? 'border-amber-500/70 bg-amber-950/30 text-amber-100 hover:bg-amber-950/50'
-                  : 'border-amber-200 bg-amber-50 text-amber-900 hover:bg-amber-100'
-              }`}
+              className={`inline-flex min-h-[40px] items-center gap-1 rounded-lg border px-3 text-sm font-semibold ${shell.amberAction}`}
             >
               <LuSparkles className="h-4 w-4" />
               🎸 Автоподстановка
@@ -1766,18 +1733,14 @@ export function StudioEditor() {
             <button
               type="button"
               onClick={openAutoChordModal}
-              className={`inline-flex min-h-[40px] items-center gap-1 rounded-lg border px-3 text-sm font-semibold ${
-                darkUi ? 'border-slate-700 bg-slate-900 text-slate-200 hover:bg-slate-800' : 'border-stone-200 bg-white text-stone-800 hover:bg-stone-50'
-              }`}
+              className={`inline-flex min-h-[40px] items-center gap-1 rounded-lg border px-3 text-sm font-semibold ${shell.ghostOutline}`}
             >
               Точный выбор
             </button>
             <button
               type="button"
               onClick={() => setChordPickerOpen((v) => !v)}
-              className={`inline-flex min-h-[40px] items-center gap-1 rounded-lg border px-3 text-sm font-semibold ${
-                darkUi ? 'border-slate-700 bg-slate-900 text-slate-100' : 'border-stone-200 bg-stone-50 text-stone-900'
-              }`}
+              className={`inline-flex min-h-[40px] items-center gap-1 rounded-lg border px-3 text-sm font-semibold ${shell.ghostOutline}`}
             >
               + Аккорд
               <LuCircleHelp className="h-3.5 w-3.5 opacity-70" title="Вставляет [Am] в позицию курсора" />
@@ -1799,9 +1762,7 @@ export function StudioEditor() {
           <button
             type="button"
             onClick={addCustomBlock}
-            className={`inline-flex min-h-[44px] items-center justify-center gap-2 rounded-xl border border-dashed px-3 text-sm font-semibold transition-transform duration-200 hover:-translate-y-[1px] ${
-              darkUi ? 'border-slate-600 bg-slate-900 text-slate-200 hover:bg-slate-800' : 'border-stone-300 bg-stone-50 text-stone-800 hover:bg-stone-100'
-            }`}
+            className={`inline-flex min-h-[44px] items-center justify-center gap-2 rounded-xl px-3 text-sm font-semibold transition-transform duration-200 hover:-translate-y-[1px] ${shell.dashedBtn}`}
           >
             <span aria-hidden>➕</span>
             <span>Свой</span>
@@ -1838,11 +1799,7 @@ export function StudioEditor() {
         </button>
       </div>
 
-      <section
-        className={`rounded-2xl border p-3 xl:hidden ${
-          darkUi ? 'border-slate-800 bg-slate-950/35' : 'border-stone-200 bg-white'
-        }`}
-      >
+      <section className={`rounded-2xl border p-3 xl:hidden ${shell.panel}`}>
         <div className="flex items-center gap-2 overflow-x-auto [scrollbar-width:none]">
           {blocks.map((block, idx) => {
             const preset = STUDIO_BLOCK_PRESETS.find((x) => x.type === block.type);
@@ -1918,11 +1875,7 @@ export function StudioEditor() {
                           <button
                             type="button"
                             onClick={() => insertBlockAfter(i, 'verse')}
-                            className={`rounded-full border border-dashed px-3 py-1 text-xs font-semibold opacity-0 transition group-hover:opacity-100 ${
-                              darkUi
-                                ? 'border-slate-600 bg-slate-900/80 text-slate-300 hover:bg-slate-800'
-                                : 'border-stone-300 bg-white text-stone-600 hover:bg-stone-50'
-                            }`}
+                            className={`rounded-full border border-dashed px-3 py-1 text-xs font-semibold opacity-0 transition group-hover:opacity-100 ${shell.dashedBtn}`}
                           >
                             + Добавить блок здесь
                           </button>
@@ -1939,10 +1892,7 @@ export function StudioEditor() {
 
         {showPreview ? (
           <aside
-            className={[
-              'hidden rounded-2xl border p-4 xl:sticky xl:top-24 xl:flex xl:max-h-[calc(100dvh-8rem)] xl:flex-col xl:overflow-y-auto',
-              darkUi ? 'border-slate-800 bg-slate-950/60' : 'border-stone-200 bg-white',
-            ].join(' ')}
+            className={['hidden rounded-2xl border p-4 xl:sticky xl:top-24 xl:flex xl:max-h-[calc(100dvh-8rem)] xl:flex-col xl:overflow-y-auto', shell.panel].join(' ')}
           >
             <p className={`mb-3 shrink-0 text-xs font-semibold uppercase tracking-[0.05em] ${shell.muted}`}>
               Live preview · {activeBlock ? blockTypeLabel(activeBlock.type) : '—'}
@@ -1969,9 +1919,7 @@ export function StudioEditor() {
 
       {showPreview ? (
         <section
-          className={`hidden rounded-2xl border p-4 md:block xl:hidden ${
-            darkUi ? 'border-slate-800 bg-slate-950/60' : 'border-stone-200 bg-white'
-          }`}
+          className={`hidden rounded-2xl border p-4 md:block xl:hidden ${shell.panel}`}
         >
           <p className={`mb-3 text-xs font-semibold uppercase tracking-[0.05em] ${shell.muted}`}>
             Live preview · {activeBlock ? blockTypeLabel(activeBlock.type) : '—'}
@@ -1995,11 +1943,7 @@ export function StudioEditor() {
         </section>
       ) : null}
 
-      <section
-        className={`hidden rounded-2xl border p-3 xl:block ${
-          darkUi ? 'border-slate-800 bg-slate-950/35' : 'border-stone-200 bg-white'
-        }`}
-      >
+      <section className={`hidden rounded-2xl border p-3 xl:block ${shell.panel}`}>
         <p className={`mb-3 text-xs font-semibold uppercase tracking-[0.05em] ${shell.muted}`}>Структура песни</p>
         <div className="flex items-center gap-2 overflow-x-auto [scrollbar-width:none]">
           {blocks.map((block, idx) => {
@@ -2036,9 +1980,7 @@ export function StudioEditor() {
             <button
               type="button"
               onClick={undoAutoChordPattern}
-              className={`inline-flex min-h-[36px] items-center gap-1 rounded-lg px-3 text-sm font-semibold ${
-                darkUi ? 'bg-amber-500 text-slate-900 hover:bg-amber-400' : 'bg-amber-100 text-amber-900 hover:bg-amber-200'
-              }`}
+              className={`inline-flex min-h-[36px] items-center gap-1 rounded-lg px-3 text-sm font-semibold ${shell.warnBanner}`}
             >
               <LuHistory className="h-4 w-4" />
               Отменить
@@ -2061,9 +2003,7 @@ export function StudioEditor() {
           <button
             type="button"
             onClick={() => setMobilePane((prev) => (prev === 'preview' ? 'editor' : 'preview'))}
-            className={`min-h-[44px] rounded-xl px-4 text-sm font-semibold ${
-              darkUi ? 'bg-slate-800 text-slate-100' : 'bg-stone-100 text-stone-900'
-            }`}
+            className="min-h-[44px] rounded-xl bg-[var(--studio-editor-block)] px-4 text-sm font-semibold text-[var(--studio-editor-text)]"
           >
             {mobilePane === 'preview' ? 'Редактор' : 'Предпросмотр'}
           </button>
@@ -2092,9 +2032,7 @@ export function StudioEditor() {
           style={{ background: 'rgba(0, 0, 0, 0.45)' }}
         >
           <div
-            className={`min-h-0 max-h-full flex-1 overflow-y-auto overscroll-contain rounded-2xl border p-4 ${
-              darkUi ? 'border-slate-700 bg-slate-950 text-slate-100' : 'border-stone-200 bg-white text-stone-900'
-            }`}
+            className={`min-h-0 max-h-full flex-1 overflow-y-auto overscroll-contain rounded-2xl border p-4 ${shell.panel}`}
           >
             <div className="mb-3 flex items-center justify-between">
               <p className={`text-xs font-semibold uppercase tracking-[0.05em] ${shell.muted}`}>
