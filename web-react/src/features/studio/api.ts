@@ -34,6 +34,7 @@ export interface SetlistRow {
   event_date: string | null;
   is_public: boolean;
   share_token: string;
+  source_service_plan_id: number | null;
   created_at: string;
   updated_at: string;
 }
@@ -63,12 +64,17 @@ export async function fetchImportedSandboxSongs(): Promise<SongListItem[]> {
   return data;
 }
 
-export async function fetchPublicCatalogSyncStatus(): Promise<{ hidden: number }> {
-  const { data } = await apiClient.get<{ hidden: number }>(`${STUDIO}/public-catalog-sync-status`);
+export async function fetchPublicCatalogSyncStatus(): Promise<{
+  hidden: number;
+  hiddenInProject?: number;
+}> {
+  const { data } = await apiClient.get<{ hidden: number; hiddenInProject?: number }>(
+    `${STUDIO}/public-catalog-sync-status`,
+  );
   return data;
 }
 
-export async function syncStudioToPublicCatalog(): Promise<{
+export async function syncStudioToPublicCatalog(scope: 'mine' | 'project' = 'mine'): Promise<{
   published: number;
   contentSynced: number;
   songIds: number[];
@@ -77,7 +83,7 @@ export async function syncStudioToPublicCatalog(): Promise<{
     published: number;
     contentSynced: number;
     songIds: number[];
-  }>(`${STUDIO}/sync-to-public-catalog`);
+  }>(`${STUDIO}/sync-to-public-catalog`, { scope });
   return data;
 }
 

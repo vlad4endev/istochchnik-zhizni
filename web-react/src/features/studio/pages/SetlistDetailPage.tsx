@@ -1,11 +1,22 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import axios from 'axios';
-import { Link, useParams } from 'react-router-dom';
-import { useMemo, useState } from 'react';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
+import { useMemo, useState, useCallback } from 'react';
 
 import { emitAppToast } from '../../../lib/uiFeedback';
 import { studioSetlistPerformPath, studioSetlistsIndexPath, useStudioModuleSurface } from '../studioPaths';
-import { LuArrowDown, LuArrowUp, LuCopy, LuFileDown, LuChevronLeft, LuMic, LuSearch } from 'react-icons/lu';
+import {
+  LuArrowDown,
+  LuArrowUp,
+  LuCopy,
+  LuFileDown,
+  LuChevronLeft,
+  LuLink,
+  LuMic,
+  LuSearch,
+  LuShare2,
+  LuSparkles,
+} from 'react-icons/lu';
 import { SkeletonBox } from '@/components/ui/SkeletonBox';
 
 import { exportSetlistPdf } from '../../songbook/pdfExport';
@@ -24,9 +35,11 @@ import { SetlistMusicianNotesEditor } from '../components/SetlistMusicianNotesEd
 
 export function SetlistDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const [searchParams] = useSearchParams();
   const setlistId = Number(id);
   const qc = useQueryClient();
   const surface = useStudioModuleSurface();
+  const welcomeFromPlanner = searchParams.get('welcome') === 'planner';
 
   const itemsQ = useQuery({
     queryKey: ['studio', 'setlist', setlistId, 'items'],
@@ -107,24 +120,55 @@ export function SetlistDetailPage() {
     reorderMut.mutate(arr.map((x) => Number(x.id)));
   };
 
-  if (!Number.isInteger(setlistId) || setlistId <= 0) {
-    return <p className="text-red-600">Некорректный id</p>;
-  }
-
   const songs = songsQ.data ?? [];
   const filteredSongs = useMemo(() => {
     const q = songSearch.trim().toLowerCase();
     if (!q) return songs;
     return songs.filter((s) => s.title.toLowerCase().includes(q));
   }, [songs, songSearch]);
-  const songbookHome = '/songbook';
-  const hasVersionFor = (songId: string) =>
-    (versionsQ.data ?? []).some((v) => v.song_id === songId);
 
   const shareUrl =
     meta?.share_token && typeof window !== 'undefined'
       ? `${window.location.origin}/setlist-share/${meta.share_token}`
       : '';
+
+  const fromPlanner = welcomeFromPlanner || Boolean(meta?.source_service_plan_id);
+  const songCount = itemsQ.data?.length ?? 0;
+
+  const copyShareLink = useCallback(async () => {
+    if (!shareUrl) return;
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      emitAppToast({ kind: 'success', message: 'Ссылка скопирована — отправьте её команде' });
+    } catch {
+      emitAppToast('Не удалось скопировать ссылку');
+    }
+  }, [shareUrl]);
+
+  const shareWithTeam = useCallback(async () => {
+    if (!shareUrl || !meta) return;
+    if (typeof navigator.share === 'function') {
+      try {
+        await navigator.share({
+          title: meta.title,
+          text: `Сетлист служения: ${meta.title}`,
+          url: shareUrl,
+        });
+        return;
+      } catch (err) {
+        if (err instanceof DOMException && err.name === 'AbortError') return;
+      }
+    }
+    await copyShareLink();
+  }, [shareUrl, meta, copyShareLink]);
+
+  if (!Number.isInteger(setlistId) || setlistId <= 0) {
+    return <p className="text-red-600">Некорректный id</p>;
+  }
+
+  const songbookHome = '/songbook';
+  const hasVersionFor = (songId: string) =>
+    (versionsQ.data ?? []).some((v) => v.song_id === songId);
 
   const pageCard =
     surface === 'songbook'
@@ -141,11 +185,63 @@ export function SetlistDetailPage() {
         Все сетлисты
       </Link>
 
+      {fromPlanner && (
+        <section
+          className="overflow-hidden rounded-2xl border border-sky-200/80 bg-gradient-to-br from-sky-50 via-white to-emerald-50/60 p-5 shadow-sm dark:border-sky-900/50 dark:from-sky-950/40 dark:via-[var(--surface-elevated)] dark:to-emerald-950/20"
+          aria-labelledby="planner-setlist-welcome"
+        >
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div className="min-w-0 space-y-2">
+              <p className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-sky-700 dark:text-sky-300">
+                <LuSparkles className="h-3.5 w-3.5" aria-hidden />
+                Из планировщика служения
+              </p>
+              <h2 id="planner-setlist-welcome" className="text-lg font-bold text-[var(--text)]">
+                Сетлист собран автоматически
+              </h2>
+              <p className="text-sm leading-relaxed text-[var(--text-secondary)]">
+                {songCount > 0
+                  ? `В программе ${songCount} ${songCount === 1 ? 'песня' : songCount < 5 ? 'песни' : 'песен'} из каталога. Проверьте порядок, при необходимости добавьте заметки — и отправьте ссылку команде.`
+                  : 'Песни из опубликованной программы появятся здесь. Пока можно добавить их вручную из песенника.'}
+              </p>
+            </div>
+            {meta?.is_public && shareUrl ? (
+              <div className="flex shrink-0 flex-col gap-2 sm:items-end">
+                <button
+                  type="button"
+                  onClick={() => void shareWithTeam()}
+                  className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-xl bg-sky-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-sky-700"
+                >
+                  <LuShare2 className="h-4 w-4" aria-hidden />
+                  Отправить команде
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void copyShareLink()}
+                  className="inline-flex items-center gap-1.5 text-xs font-medium text-sky-700 hover:text-sky-800 dark:text-sky-300"
+                >
+                  <LuCopy className="h-3.5 w-3.5" aria-hidden />
+                  Копировать ссылку
+                </button>
+              </div>
+            ) : null}
+          </div>
+          {meta?.is_public && shareUrl && (
+            <div className="mt-4 flex items-center gap-2 rounded-xl border border-sky-100 bg-white/80 px-3 py-2 dark:border-sky-900/40 dark:bg-[var(--bg-elevated)]">
+              <LuLink className="h-4 w-4 shrink-0 text-sky-600" aria-hidden />
+              <code className="min-w-0 flex-1 truncate text-xs text-[var(--text-secondary)]">{shareUrl}</code>
+            </div>
+          )}
+        </section>
+      )}
+
       <div className="space-y-4 border-b border-[var(--border)] pb-5">
         <div className="min-w-0">
           <h1 className="text-xl font-bold text-[var(--text)]">{meta?.title ?? 'Сетлист'}</h1>
           <p className="mt-1 text-sm text-[var(--text-secondary)]">
-            Сначала соберите программу, затем используйте режим выступления или экспорт PDF.
+            {fromPlanner
+              ? 'Режим выступления и PDF — для репетиции и служения.'
+              : 'Сначала соберите программу, затем используйте режим выступления или экспорт PDF.'}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -185,7 +281,10 @@ export function SetlistDetailPage() {
           Сборка программы
         </h2>
 
-        <details className="rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)]" open={Boolean(meta?.is_public)}>
+        <details
+          className="rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)]"
+          open={Boolean(meta?.is_public) || fromPlanner}
+        >
           <summary className="cursor-pointer list-none px-4 py-3 text-sm font-medium text-[var(--text-secondary)] marker:hidden [&::-webkit-details-marker]:hidden">
             Публичная ссылка для группы
           </summary>
@@ -208,7 +307,7 @@ export function SetlistDetailPage() {
                 <button
                   type="button"
                   className="inline-flex items-center gap-1 rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] px-2 py-1.5 text-xs font-medium text-[var(--text-secondary)] hover:bg-[var(--bg-elevated)]"
-                  onClick={() => void navigator.clipboard.writeText(shareUrl)}
+                  onClick={() => void copyShareLink()}
                 >
                   <LuCopy className="h-3 w-3" />
                   Копировать

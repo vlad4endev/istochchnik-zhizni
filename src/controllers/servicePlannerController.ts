@@ -1,6 +1,7 @@
 import type { Request, Response } from 'express';
 import { query } from '../config/db';
 import { notifyRealtime } from '../realtime/notify';
+import { syncAndNotifySetlistFromPublishedPlan } from '../services/plannerSetlistService';
 import { sendPush } from '../services/pushService';
 import { listUsers } from '../services/userService';
 import {
@@ -231,11 +232,10 @@ async function syncBroadcastFromPublishedPlan(planId: number): Promise<void> {
        coalesce(nullif(trim(concat(coalesce(preacher.first_name, ''), ' ', coalesce(preacher.last_name, ''))), ''), preacher.name) as preacher_name
      from public.service_plans p
      left join public.members preacher on preacher.id = p.preacher_member_id
-     where p.status = 'published'
-       and coalesce(p.is_archived, false) = false
-       and (p.service_date::timestamp + p.start_time) >= (now() - interval '6 hours')
-     order by (p.service_date::timestamp + p.start_time) asc
-     limit 1`,
+     where p.id = $1
+       and p.status = 'published'
+       and coalesce(p.is_archived, false) = false`,
+    [planId],
   );
   const plan = planRes.rows[0] as
     | {
@@ -290,6 +290,17 @@ async function isPlanPublished(planId: number): Promise<boolean> {
   const res = await query(`select status from public.service_plans where id = $1 limit 1`, [planId]);
   const status = String((res.rows[0] as { status?: string } | undefined)?.status ?? 'draft');
   return status === 'published';
+}
+
+async function syncPlannerSetlistIfPublished(
+  planId: number,
+  opts?: { notifyOnPublish?: boolean },
+): Promise<void> {
+  try {
+    await syncAndNotifySetlistFromPublishedPlan(planId, opts);
+  } catch (e) {
+    console.error('[service-planner] syncPlannerSetlist:', e);
+  }
 }
 
 export async function getServiceBlockTypes(_req: Request, res: Response): Promise<void> {
@@ -678,6 +689,10 @@ export async function patchServicePlanById(req: Request, res: Response): Promise
         console.error('[service-planner] syncBroadcastFromPublishedPlan:', syncErr);
       }
     }
+    const justPublished = patch.status === 'published' && previousStatus !== 'published';
+    if (patch.status === 'published' || previousStatus === 'published') {
+      await syncPlannerSetlistIfPublished(id, { notifyOnPublish: justPublished });
+    }
     notifyServicePlannerRealtime();
     res.json({ ok: true });
   } catch (e) {
@@ -711,6 +726,7 @@ export async function patchServiceBlocksReorder(req: Request, res: Response): Pr
       } catch (syncErr) {
         console.error('[service-planner] syncBroadcastFromPublishedPlan (reorder):', syncErr);
       }
+      await syncPlannerSetlistIfPublished(servicePlanId);
     }
     notifyServicePlannerRealtime();
     res.json({ ok: true });
@@ -777,6 +793,7 @@ export async function patchServiceBlockById(req: Request, res: Response): Promis
       } catch (syncErr) {
         console.error('[service-planner] syncBroadcastFromPublishedPlan (patch block):', syncErr);
       }
+      await syncPlannerSetlistIfPublished(planId);
     }
     notifyServicePlannerRealtime();
     res.json({ ok: true });
@@ -926,6 +943,7 @@ export async function postServiceBlock(req: Request, res: Response): Promise<voi
       } catch (syncErr) {
         console.error('[service-planner] syncBroadcastFromPublishedPlan (create block):', syncErr);
       }
+      await syncPlannerSetlistIfPublished(servicePlanId);
     }
     notifyServicePlannerRealtime();
     res.status(201).json({ id });
@@ -962,6 +980,7 @@ export async function deleteServiceBlockById(req: Request, res: Response): Promi
       } catch (syncErr) {
         console.error('[service-planner] syncBroadcastFromPublishedPlan (delete block):', syncErr);
       }
+      await syncPlannerSetlistIfPublished(planId);
     }
     notifyServicePlannerRealtime();
     res.status(204).send();

@@ -1847,6 +1847,21 @@ UPDATE setlists SET share_token_issued_at = COALESCE(share_token_issued_at, crea
 ALTER TABLE setlists ALTER COLUMN share_token_issued_at SET DEFAULT NOW();
 ALTER TABLE setlists ALTER COLUMN share_token_issued_at SET NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_setlists_member ON setlists (member_id);
+ALTER TABLE setlists ADD COLUMN IF NOT EXISTS source_service_plan_id BIGINT;
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'setlists_source_service_plan_id_fkey'
+  ) THEN
+    ALTER TABLE setlists
+      ADD CONSTRAINT setlists_source_service_plan_id_fkey
+      FOREIGN KEY (source_service_plan_id) REFERENCES service_plans(id) ON DELETE SET NULL;
+  END IF;
+END $$;
+DROP INDEX IF EXISTS idx_setlists_source_service_plan_id;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_setlists_source_service_plan_member
+  ON setlists (source_service_plan_id, member_id)
+  WHERE source_service_plan_id IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS setlist_items (
   id BIGSERIAL PRIMARY KEY,

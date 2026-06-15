@@ -455,8 +455,8 @@ export function EditableServicePlanPage() {
           if (isSongPlannerBlockType(meta)) {
             next = {
               ...next,
-              assigned_member_id: musicId,
-              assigned_member_name: musicLabel || null,
+              assigned_member_id: musicId ?? block.assigned_member_id,
+              assigned_member_name: musicLabel || block.assigned_member_name || null,
             };
           }
           return next;
@@ -518,8 +518,11 @@ export function EditableServicePlanPage() {
         : isSong
           ? {
               ...block,
-              assigned_member_id: planMusicMinistryId,
-              assigned_member_name: musicLabelForSave,
+              assigned_member_id: planMusicMinistryId ?? block.assigned_member_id,
+              assigned_member_name:
+                planMusicMinistryId != null
+                  ? musicLabelForSave
+                  : block.assigned_member_name,
             }
           : block;
       await patchEditableServicePlanBlockByToken(token, block.id, {

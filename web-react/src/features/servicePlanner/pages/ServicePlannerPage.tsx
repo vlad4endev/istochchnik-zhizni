@@ -718,7 +718,8 @@ export function ServicePlannerPage() {
           meta?.code === 'sermon' || (meta?.name ?? '').toLowerCase().includes('проповед');
         let assigned_member_id = b.assigned_member_id;
         if (isSermonMeta) assigned_member_id = draft.preacher_member_id ?? null;
-        else if (isSongMeta) assigned_member_id = draft.music_ministry_member_id ?? null;
+        else if (isSongMeta)
+          assigned_member_id = draft.music_ministry_member_id ?? b.assigned_member_id ?? null;
         await patchServiceBlock(b.id, {
           title: b.title,
           block_type_id: b.block_type_id,
@@ -3672,7 +3673,9 @@ export function ServicePlannerPage() {
                     meta?.code === 'sermon' || (meta?.name ?? '').toLowerCase().includes('проповед');
                   let assigned_member_id = editingBlock.assigned_member_id;
                   if (isSermonMeta) assigned_member_id = draft?.preacher_member_id ?? null;
-                  else if (isSongMeta) assigned_member_id = draft?.music_ministry_member_id ?? null;
+                  else if (isSongMeta)
+                    assigned_member_id =
+                      draft?.music_ministry_member_id ?? editingBlock.assigned_member_id ?? null;
                   void updateBlockMut.mutateAsync({
                     id: editingBlock.id,
                     body: {

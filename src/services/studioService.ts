@@ -273,8 +273,24 @@ export interface SetlistRow {
   event_date: string | null;
   is_public: boolean;
   share_token: string;
+  source_service_plan_id: number | null;
   created_at: string;
   updated_at: string;
+}
+
+function mapSetlistRow(row: Record<string, unknown>): SetlistRow {
+  return {
+    id: String(row.id),
+    member_id: Number(row.member_id),
+    title: String(row.title),
+    event_date: row.event_date != null ? String(row.event_date).slice(0, 10) : null,
+    is_public: Boolean(row.is_public),
+    share_token: row.share_token != null ? String(row.share_token) : '',
+    source_service_plan_id:
+      row.source_service_plan_id == null ? null : Number(row.source_service_plan_id),
+    created_at: String(row.created_at),
+    updated_at: String(row.updated_at),
+  };
 }
 
 export async function listSetlists(memberId: number): Promise<SetlistRow[]> {
@@ -282,19 +298,7 @@ export async function listSetlists(memberId: number): Promise<SetlistRow[]> {
     `SELECT * FROM setlists WHERE member_id = $1 ORDER BY COALESCE(event_date, created_at::date) DESC, title ASC`,
     [memberId]
   );
-  return result.rows.map((row) => {
-    const r = row as Record<string, unknown>;
-    return {
-      id: String(r.id),
-      member_id: Number(r.member_id),
-      title: String(r.title),
-      event_date: r.event_date != null ? String(r.event_date).slice(0, 10) : null,
-      is_public: Boolean(r.is_public),
-      share_token: r.share_token != null ? String(r.share_token) : '',
-      created_at: String(r.created_at),
-      updated_at: String(r.updated_at),
-    };
-  });
+  return result.rows.map((row) => mapSetlistRow(row as Record<string, unknown>));
 }
 
 export async function createSetlist(
@@ -309,16 +313,7 @@ export async function createSetlist(
     [memberId, title.trim(), eventDate]
   );
   const r = result.rows[0] as Record<string, unknown>;
-  return {
-    id: String(r.id),
-    member_id: Number(r.member_id),
-    title: String(r.title),
-    event_date: r.event_date != null ? String(r.event_date).slice(0, 10) : null,
-    is_public: Boolean(r.is_public),
-    share_token: r.share_token != null ? String(r.share_token) : '',
-    created_at: String(r.created_at),
-    updated_at: String(r.updated_at),
-  };
+  return mapSetlistRow(r);
 }
 
 export async function updateSetlist(
@@ -348,16 +343,7 @@ export async function updateSetlist(
     ]);
     const row = r.rows[0] as Record<string, unknown> | undefined;
     if (!row) return null;
-    return {
-      id: String(row.id),
-      member_id: Number(row.member_id),
-      title: String(row.title),
-      event_date: row.event_date != null ? String(row.event_date).slice(0, 10) : null,
-      is_public: Boolean(row.is_public),
-      share_token: row.share_token != null ? String(row.share_token) : '',
-      created_at: String(row.created_at),
-      updated_at: String(row.updated_at),
-    };
+    return mapSetlistRow(row);
   }
   fields.push('updated_at = NOW()');
   vals.push(setlistId, memberId);
@@ -367,16 +353,7 @@ export async function updateSetlist(
   );
   const row = result.rows[0] as Record<string, unknown> | undefined;
   if (!row) return null;
-  return {
-    id: String(row.id),
-    member_id: Number(row.member_id),
-    title: String(row.title),
-    event_date: row.event_date != null ? String(row.event_date).slice(0, 10) : null,
-    is_public: Boolean(row.is_public),
-    share_token: row.share_token != null ? String(row.share_token) : '',
-    created_at: String(row.created_at),
-    updated_at: String(row.updated_at),
-  };
+  return mapSetlistRow(row);
 }
 
 export async function deleteSetlist(memberId: number, setlistId: number): Promise<boolean> {
@@ -629,16 +606,7 @@ export async function getPerformancePayload(
   ]);
   const row = sl.rows[0] as Record<string, unknown> | undefined;
   if (!row) return null;
-  const setlist: SetlistRow = {
-    id: String(row.id),
-    member_id: Number(row.member_id),
-    title: String(row.title),
-    event_date: row.event_date != null ? String(row.event_date).slice(0, 10) : null,
-    is_public: Boolean(row.is_public),
-    share_token: row.share_token != null ? String(row.share_token) : '',
-    created_at: String(row.created_at),
-    updated_at: String(row.updated_at),
-  };
+  const setlist = mapSetlistRow(row);
   const items = await listSetlistItems(memberId, setlistId);
   return { setlist, items };
 }
@@ -660,16 +628,7 @@ export async function getPublicSetlistByToken(
   const row = sl.rows[0] as Record<string, unknown> | undefined;
   if (!row) return null;
   const setlistId = Number(row.id);
-  const setlist: SetlistRow = {
-    id: String(row.id),
-    member_id: Number(row.member_id),
-    title: String(row.title),
-    event_date: row.event_date != null ? String(row.event_date).slice(0, 10) : null,
-    is_public: true,
-    share_token: String(row.share_token),
-    created_at: String(row.created_at),
-    updated_at: String(row.updated_at),
-  };
+  const setlist: SetlistRow = { ...mapSetlistRow(row), is_public: true };
   const itemsFull = await fetchSetlistItemRows(setlistId);
   const items: PublicSetlistItemRow[] = itemsFull.map(({ musician_notes, ...rest }) => {
     void musician_notes;
