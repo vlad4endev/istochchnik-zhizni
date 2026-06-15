@@ -2,6 +2,7 @@ import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import {
   LuFileSpreadsheet,
   LuFileText,
+  LuImage,
   LuLink2,
   LuLoader,
   LuPlay,
@@ -18,20 +19,23 @@ import axios from 'axios';
 import { apiClient } from '../../../lib/apiClient';
 import { extractTextFromPdfBufferWithMeta } from './extractTextFromPdf';
 import { analyzeImportedSongText, type ImportedTextAnalysis } from './analyzeImportedSongText';
+import { PhotoAiProgressPanel } from './PhotoAiProgressPanel';
+import { PHOTO_AI_PROGRESS_STEPS } from './photoAiProgress';
 import { smartImportTextToChordPro } from './smartImportToBlocks';
 import {
+  aiRecognizeSongPhoto,
   aiSplitSongIntoBlocks,
   fetchImportUrlText,
   parseSongImportXlsxFile,
   type XlsxImportParsedSong,
 } from '../api';
 
-export type SmartImportSourceTab = 'text' | 'pdf' | 'url';
+export type SmartImportSourceTab = 'text' | 'photo' | 'pdf' | 'url';
 
 type Props = {
   open: boolean;
   onClose: () => void;
-  onApply: (payload: { raw: string; chordPro: string }) => void;
+  onApply: (payload: { raw: string; chordPro: string; title?: string }) => void;
   /** Колбэк после успешного завершения массового импорта таблицы (XLSX). */
   onMassImportDone?: (result: { success: number; failed: number; skipped: number; placeholders?: number }) => void;
   initialRaw?: string;
@@ -70,10 +74,19 @@ export function SmartImportModal({
   const [aiProgressText, setAiProgressText] = useState<string | null>(null);
   const aiProgressTimersRef = useRef<number[]>([]);
   const fileTxtRef = useRef<HTMLInputElement>(null);
+  const filePhotoRef = useRef<HTMLInputElement>(null);
   const filePdfRef = useRef<HTMLInputElement>(null);
   const fileXlsxRef = useRef<HTMLInputElement>(null);
 
   const [pdfFormat, setPdfFormat] = useState<'pdf' | 'xlsx'>('pdf');
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [photoPreviewUrl, setPhotoPreviewUrl] = useState<string | null>(null);
+  const [photoBusy, setPhotoBusy] = useState(false);
+  const [photoError, setPhotoError] = useState<string | null>(null);
+  const [photoProgressPhase, setPhotoProgressPhase] = useState<'idle' | 'running' | 'done'>('idle');
+  const [photoProgressStep, setPhotoProgressStep] = useState(0);
+  const photoProgressTimersRef = useRef<number[]>([]);
+  const [photoResult, setPhotoResult] = useState<{ title: string | null; chordPro: string } | null>(null);
   const [xlsxBusy, setXlsxBusy] = useState(false);
   const [xlsxError, setXlsxError] = useState<string | null>(null);
   const [xlsxName, setXlsxName] = useState<string | null>(null);
@@ -112,6 +125,18 @@ export function SmartImportModal({
     setPdfSafeModeInfo(null);
     setPdfProgressText(null);
     setPdfFormat('pdf');
+    setPhotoFile(null);
+    if (photoPreviewUrl) URL.revokeObjectURL(photoPreviewUrl);
+    setPhotoPreviewUrl(null);
+    setPhotoBusy(false);
+    setPhotoError(null);
+    setPhotoProgressPhase('idle');
+    setPhotoProgressStep(0);
+    for (const id of photoProgressTimersRef.current) {
+      window.clearTimeout(id);
+    }
+    photoProgressTimersRef.current = [];
+    setPhotoResult(null);
     setXlsxBusy(false);
     setXlsxError(null);
     setXlsxName(null);
@@ -269,6 +294,26 @@ export function SmartImportModal({
   const infoSky = 'rounded-lg px-3 py-2 text-xs bg-sky-500/10 text-[var(--studio-editor-text)]';
   const inputTransparent = `w-full bg-transparent text-sm outline-none ${bodyText} placeholder:text-[var(--studio-editor-mute)]`;
 
+  const clearPhotoProgressTimers = () => {
+    for (const id of photoProgressTimersRef.current) {
+      window.clearTimeout(id);
+    }
+    photoProgressTimersRef.current = [];
+  };
+
+  const startPhotoProgressTimers = () => {
+    clearPhotoProgressTimers();
+    const maxStep = PHOTO_AI_PROGRESS_STEPS.length - 1;
+    const delaysMs = [2000, 4200, 6500, 9000];
+    delaysMs.forEach((delay, offset) => {
+      const nextStep = Math.min(offset + 1, maxStep);
+      const id = window.setTimeout(() => {
+        setPhotoProgressStep(nextStep);
+      }, delay);
+      photoProgressTimersRef.current.push(id);
+    });
+  };
+
   const readTextFile = (f: File) => {
     const reader = new FileReader();
     reader.onload = () => {
@@ -278,11 +323,94 @@ export function SmartImportModal({
     reader.readAsText(f, 'UTF-8');
   };
 
+  const assignPhotoFile = (f: File) => {
+    if (f.size > 10 * 1024 * 1024) {
+      setPhotoError('Фото больше 10 МБ.');
+      return;
+    }
+    if (!f.type.startsWith('image/') && !/\.(jpe?g|png|webp|heic|heif)$/i.test(f.name)) {
+      setPhotoError('Выберите изображение (JPEG, PNG, WebP).');
+      return;
+    }
+    setPhotoFile(f);
+    setPhotoError(null);
+    setPhotoResult(null);
+    setPhotoProgressPhase('idle');
+    setPhotoProgressStep(0);
+    clearPhotoProgressTimers();
+    if (photoPreviewUrl) URL.revokeObjectURL(photoPreviewUrl);
+    setPhotoPreviewUrl(URL.createObjectURL(f));
+    setTab('photo');
+  };
+
+  const onPickPhoto = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    e.target.value = '';
+    if (!f) return;
+    assignPhotoFile(f);
+  };
+
+  const runPhotoAi = async () => {
+    if (!photoFile) {
+      setPhotoError('Сначала загрузите фото.');
+      return;
+    }
+    setPhotoBusy(true);
+    setPhotoError(null);
+    setPhotoResult(null);
+    setPhotoProgressPhase('running');
+    setPhotoProgressStep(0);
+    setAiProgressText(null);
+    startPhotoProgressTimers();
+    try {
+      const result = await aiRecognizeSongPhoto(photoFile);
+      if (!result.chordPro?.trim()) {
+        setPhotoError('ИИ вернул пустой результат. Попробуйте другое фото.');
+        setPhotoProgressPhase('idle');
+        setPhotoProgressStep(0);
+        return;
+      }
+      setPhotoResult(result);
+      setRaw(result.chordPro);
+      setPhotoProgressStep(PHOTO_AI_PROGRESS_STEPS.length);
+      setPhotoProgressPhase('done');
+    } catch (err) {
+      let msg = 'Не удалось распознать фото';
+      if (axios.isAxiosError(err)) {
+        const d = err.response?.data as { error?: string } | undefined;
+        if (d?.error) msg = d.error;
+      } else if (err instanceof Error && err.message) {
+        msg = err.message;
+      }
+      setPhotoError(msg);
+      setPhotoProgressPhase('idle');
+      setPhotoProgressStep(0);
+    } finally {
+      setPhotoBusy(false);
+      clearPhotoProgressTimers();
+    }
+  };
+
+  const applyPhotoToForm = () => {
+    const chordPro = photoResult?.chordPro?.trim() || raw.trim();
+    if (!chordPro) return;
+    onApply({
+      raw: chordPro,
+      chordPro,
+      ...(photoResult?.title?.trim() ? { title: photoResult.title.trim() } : {}),
+    });
+    onClose();
+  };
+
   const onDropFile = (e: React.DragEvent) => {
     e.preventDefault();
     setDropActive(false);
     const f = e.dataTransfer.files[0];
     if (!f) return;
+    if (f.type.startsWith('image/') || /\.(jpe?g|png|webp|heic|heif)$/i.test(f.name)) {
+      assignPhotoFile(f);
+      return;
+    }
     if (/\.pdf$/i.test(f.name)) {
       setPdfName(f.name);
       setPdfError(null);
@@ -716,11 +844,13 @@ export function SmartImportModal({
           aria-label="Способ импорта"
         >
           {tabBtn('text', 'Текст', LuFileText)}
+          {tabBtn('photo', 'Фото', LuImage)}
           {tabBtn('pdf', 'PDF', LuUpload)}
           {tabBtn('url', 'Ссылка', LuLink2)}
         </div>
 
         <input ref={fileTxtRef} type="file" accept=".txt,.cho,.chopro,.chordpro,.cpm,.pro,text/plain" className="hidden" onChange={onPickTxt} />
+        <input ref={filePhotoRef} type="file" accept="image/*,.heic,.heif" className="hidden" onChange={onPickPhoto} />
         <input ref={filePdfRef} type="file" accept=".pdf,application/pdf" className="hidden" onChange={onPickPdf} />
         <input ref={fileXlsxRef} type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" className="hidden" onChange={onPickXlsx} />
 
@@ -772,6 +902,116 @@ export function SmartImportModal({
                 Можно перетащить файл сюда (.txt, .cho, .pdf → откроется вкладка PDF)
               </span>
             </div>
+          </div>
+        ) : null}
+
+        {tab === 'photo' ? (
+          <div id={`${baseId}-panel-photo`} role="tabpanel" aria-labelledby={`${baseId}-tab-photo`} className="space-y-4">
+            <p className={`text-sm leading-relaxed ${muted}`}>
+              Загрузите фото листа с текстом и аккордами. ИИ (OpenRouter Gemini 3.1) распознает содержимое, разложит по
+              блокам и расставит аккорды в формате ChordPro для редактора.
+            </p>
+            <div
+              className={`rounded-xl border-2 border-dashed p-4 ${dashedPanel}`}
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={(e) => {
+                e.preventDefault();
+                const f = e.dataTransfer.files?.[0];
+                if (f) assignPhotoFile(f);
+              }}
+            >
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => filePhotoRef.current?.click()}
+                  className={`inline-flex min-h-[44px] items-center gap-2 rounded-xl border px-4 py-2 text-sm font-semibold ${btnGhost}`}
+                >
+                  <LuUpload className="h-4 w-4" />
+                  Выбрать фото
+                </button>
+                {photoFile ? (
+                  <span className={`text-sm ${bodyText}`}>{photoFile.name}</span>
+                ) : (
+                  <span className={`text-sm ${muted}`}>Фото не выбрано</span>
+                )}
+              </div>
+              {photoPreviewUrl ? (
+                <div className="relative mt-3">
+                  <img
+                    src={photoPreviewUrl}
+                    alt="Предпросмотр загруженного фото"
+                    className={[
+                      'max-h-64 w-full rounded-lg border object-contain border-[var(--studio-editor-border)] transition-opacity duration-300',
+                      photoBusy ? 'opacity-40' : 'opacity-100',
+                    ].join(' ')}
+                  />
+                  {photoBusy ? (
+                    <div
+                      className="pointer-events-none absolute inset-0 flex items-center justify-center rounded-lg bg-[var(--studio-editor-bg)]/30"
+                      aria-hidden
+                    >
+                      <LuLoader className="h-8 w-8 animate-spin text-[var(--studio-editor-accent)]" />
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+              <p className={`mt-2 text-xs ${muted}`}>Можно перетащить изображение в эту область (до 10 МБ).</p>
+            </div>
+
+            <PhotoAiProgressPanel phase={photoProgressPhase} activeStep={photoProgressStep} />
+
+            {photoError ? <p className="text-sm text-red-500">{photoError}</p> : null}
+            <button
+              type="button"
+              disabled={photoBusy || !photoFile}
+              onClick={() => void runPhotoAi()}
+              className={`inline-flex min-h-[44px] items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold disabled:opacity-50 ${btnPrimary}`}
+            >
+              {photoBusy ? <LuLoader className="h-4 w-4 animate-spin" /> : <LuSparkles className="h-4 w-4" />}
+              Обработать ИИ
+            </button>
+
+            {photoResult?.chordPro?.trim() ? (
+              <div className={`space-y-3 rounded-xl border p-3 ${borderedPanel}`}>
+                <p className={`text-sm font-medium ${bodyText}`}>
+                  Результат распознавания
+                  {photoResult.title ? (
+                    <>
+                      {' '}
+                      — <span className={muted}>название: {photoResult.title}</span>
+                    </>
+                  ) : null}
+                </p>
+                <textarea
+                  value={photoResult.chordPro}
+                  onChange={(e) => {
+                    const next = e.target.value;
+                    setPhotoResult((prev) => (prev ? { ...prev, chordPro: next } : prev));
+                    setRaw(next);
+                  }}
+                  rows={10}
+                  className={`w-full resize-y rounded-lg border p-3 font-mono text-sm ${textarea}`}
+                />
+                <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+                  <button
+                    type="button"
+                    onClick={applyPhotoToForm}
+                    className={`inline-flex w-full min-h-[44px] items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold sm:w-auto ${btnPrimary}`}
+                  >
+                    Вставить в редактор
+                  </button>
+                  <button
+                    type="button"
+                    disabled={photoBusy || !photoFile}
+                    onClick={() => void runPhotoAi()}
+                    className={`inline-flex w-full min-h-[44px] items-center justify-center gap-2 rounded-xl border px-4 py-2 text-sm font-semibold disabled:opacity-50 sm:w-auto ${btnGhost}`}
+                  >
+                    <LuRefreshCcw className="h-4 w-4" />
+                    Повторить
+                  </button>
+                </div>
+              </div>
+            ) : null}
           </div>
         ) : null}
 

@@ -27,6 +27,7 @@ import pdfParse from 'pdf-parse';
 
 import { safeFetchUrlForSongImport } from '../utils/safeUrlTextFetch';
 import { AiAgentError, chatCompletion } from '../ai';
+import { recognizeSongFromPhoto } from '../services/songPhotoAiService';
 
 type AuthReq = Request & SessionRoleSource & { authUserId?: number; authUserRole?: AppRole };
 
@@ -674,5 +675,59 @@ export async function aiSplitBlocksHandler(req: Request, res: Response): Promise
     }
     console.error('[songs] ai split-blocks error', e);
     res.status(500).json({ error: 'Не удалось выполнить разметку через ИИ' });
+  }
+}
+
+function mapAiAgentErrorToHttp(e: AiAgentError): { status: number; body: Record<string, unknown> } {
+  const status =
+    e.code === 'ai_disabled'
+      ? 409
+      : e.code === 'ai_not_configured'
+        ? 400
+        : e.code === 'ai_http_error'
+          ? e.status && e.status >= 400 && e.status < 600
+            ? e.status
+            : 502
+          : 502;
+  return {
+    status,
+    body: {
+      error: e.message,
+      code: e.code,
+      details: e.bodySnippet ? { bodySnippet: e.bodySnippet } : undefined,
+    },
+  };
+}
+
+/** ИИ: распознать песню с фото (OpenRouter Gemini 3.1) → ChordPro с блоками. */
+export async function aiRecognizePhotoHandler(req: Request, res: Response): Promise<void> {
+  const r = req as AuthReq;
+  if (!r.authUserId) {
+    res.status(401).json({ error: 'Требуется вход' });
+    return;
+  }
+  if (!sessionCanModerateCatalog(r)) {
+    res.status(403).json({ error: 'Недостаточно прав для редактирования каталога' });
+    return;
+  }
+
+  const file = (req as Request & { file?: Express.Multer.File }).file;
+  if (!file?.buffer) {
+    res.status(400).json({ error: 'Загрузите фото с текстом песни' });
+    return;
+  }
+
+  try {
+    const result = await recognizeSongFromPhoto(file.buffer, file.mimetype || 'image/jpeg');
+    res.json(result);
+  } catch (e) {
+    if (e instanceof AiAgentError) {
+      const mapped = mapAiAgentErrorToHttp(e);
+      res.status(mapped.status).json(mapped.body);
+      return;
+    }
+    const msg = e instanceof Error ? e.message : 'Не удалось распознать фото';
+    console.error('[songs] ai recognize-photo error', e);
+    res.status(500).json({ error: msg });
   }
 }

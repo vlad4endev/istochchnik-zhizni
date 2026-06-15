@@ -57,6 +57,8 @@ export const AI_PRESET_CATALOG: readonly AiPresetCatalogEntry[] = [
       { id: 'anthropic/claude-3.5-sonnet', label: 'Anthropic: Claude 3.5 Sonnet' },
       { id: 'deepseek/deepseek-chat', label: 'DeepSeek: V3 Chat' },
       { id: 'google/gemini-2.0-flash-001', label: 'Google: Gemini 2.0 Flash' },
+      { id: 'google/gemini-3.1-pro-preview', label: 'Google: Gemini 3.1 Pro Preview' },
+      { id: 'google/gemini-3.1-flash-lite-preview', label: 'Google: Gemini 3.1 Flash Lite Preview' },
     ],
   },
 ];

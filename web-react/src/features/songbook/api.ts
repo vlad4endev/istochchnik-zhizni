@@ -176,6 +176,21 @@ export async function aiSplitSongIntoBlocks(text: string): Promise<{ chordPro: s
   return data;
 }
 
+export type SongPhotoAiResult = {
+  title: string | null;
+  chordPro: string;
+};
+
+/** Распознать песню с фото через OpenRouter Gemini 3.1. */
+export async function aiRecognizeSongPhoto(file: File): Promise<SongPhotoAiResult> {
+  const fd = new FormData();
+  fd.set('photo', file);
+  const { data } = await apiClient.post<SongPhotoAiResult>(`${SONGS}/ai/recognize-photo`, fd, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
+  return data;
+}
+
 export type XlsxImportParsedSong = {
   external_id: string;
   song_number: number;

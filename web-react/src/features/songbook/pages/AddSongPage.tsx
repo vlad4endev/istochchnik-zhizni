@@ -293,9 +293,15 @@ export function AddSongPage() {
     }
   };
 
-  const handleSmartImport = ({ raw, chordPro }: { raw: string; chordPro: string }) => {
+  const handleSmartImport = ({ raw, chordPro, title: importedTitle }: { raw: string; chordPro: string; title?: string }) => {
     setRawPaste(raw);
     setContent(chordPro);
+    if (importedTitle?.trim() && !title.trim()) {
+      setTitle(importedTitle.trim());
+    }
+    if (chordPro.trim()) {
+      setStep(2);
+    }
   };
 
   const goPrev = () => {

@@ -28,6 +28,10 @@ export class AiAgentError extends Error {
 export interface ChatCompletionOptions {
   /** Переопределить модель из настроек */
   model?: string;
+  /** Переопределить base_url (например OpenRouter для vision-модели) */
+  base_url?: string;
+  /** Переопределить API-ключ */
+  api_key?: string;
   temperature?: number;
   max_tokens?: number;
   /** Раздел приложения — из админки подставляется промпт для этой функции (иначе общий системный) */
@@ -54,18 +58,21 @@ export async function chatCompletion(
   if (!cfg.enabled) {
     throw new AiAgentError('Модуль ИИ отключён в настройках.', 'ai_disabled');
   }
-  if (!cfg.api_key) {
+
+  const model = options.model ?? cfg.default_model;
+  const baseUrl = (options.base_url ?? cfg.base_url).replace(/\/+$/, '');
+  const apiKey = options.api_key ?? cfg.api_key;
+  const temperature =
+    typeof options.temperature === 'number' ? options.temperature : cfg.temperature;
+  const max_tokens =
+    typeof options.max_tokens === 'number' ? options.max_tokens : cfg.max_tokens;
+
+  if (!apiKey) {
     throw new AiAgentError(
       'Не задан API-ключ (админка или AI_API_KEY / OPENAI_API_KEY).',
       'ai_not_configured',
     );
   }
-
-  const model = options.model ?? cfg.default_model;
-  const temperature =
-    typeof options.temperature === 'number' ? options.temperature : cfg.temperature;
-  const max_tokens =
-    typeof options.max_tokens === 'number' ? options.max_tokens : cfg.max_tokens;
 
   let msgs: ChatMessage[] = messages.slice();
   const systemFromSettings = options.skipSystemPrompt
@@ -75,14 +82,17 @@ export async function chatCompletion(
     msgs = [{ role: 'system', content: systemFromSettings }, ...msgs];
   }
 
-  const url = `${cfg.base_url}/chat/completions`;
+  const url = `${baseUrl}/chat/completions`;
   if (aiDebug) {
     const userChars = msgs
       .filter((m) => m.role === 'user')
-      .reduce((acc, m) => acc + m.content.length, 0);
+      .reduce((acc, m) => {
+        if (typeof m.content === 'string') return acc + m.content.length;
+        return acc + m.content.reduce((n, part) => n + (part.type === 'text' ? part.text.length : 0), 0);
+      }, 0);
     console.info('[ai] request', {
       section: options.section ?? null,
-      base_url: cfg.base_url,
+      base_url: baseUrl,
       model,
       message_count: msgs.length,
       user_chars: userChars,
@@ -94,7 +104,7 @@ export async function chatCompletion(
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${cfg.api_key}`,
+      Authorization: `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
       model,
