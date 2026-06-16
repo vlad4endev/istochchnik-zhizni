@@ -1,30 +1,29 @@
-import { canModerateSongCatalogSession } from '../auth/studioAccess';
 import type { AuthRole } from '../auth/authStore';
-import { hasMusicMinistryDirection, isMusicManager } from './ministryRoleMatch';
-import { isAdminAppRole } from '../schedules/ministryScheduleAccess';
+import { hasMusicMinistryDirection, isMusicLeader } from './ministryRoleMatch';
 
 export function canViewMusicSchedule(
-  role: AuthRole | undefined,
+  _role: AuthRole | undefined,
   ministryDirection: unknown,
-  roles?: Array<AuthRole | string | null | undefined>,
+  _roles?: Array<AuthRole | string | null | undefined>,
 ): boolean {
-  return canModerateSongCatalogSession(role, roles) || hasMusicMinistryDirection(ministryDirection);
+  return hasMusicMinistryDirection(ministryDirection);
 }
 
 export function canManageMusicSchedule(
+  _role: AuthRole | undefined,
+  ministryRole: unknown,
+  _roles?: Array<AuthRole | string | null | undefined>,
+): boolean {
+  return isMusicLeader(ministryRole);
+}
+
+/** Настройка ролей музыкального расписания — только музыкальный лидер. */
+export function canManageMusicRoles(
   role: AuthRole | undefined,
   ministryRole: unknown,
   roles?: Array<AuthRole | string | null | undefined>,
 ): boolean {
-  return isAdminAppRole(role, roles) || isMusicManager(ministryRole);
-}
-
-/** Настройка ролей музыкального расписания — только администратор. */
-export function canManageMusicRoles(
-  role: AuthRole | undefined,
-  roles?: Array<AuthRole | string | null | undefined>,
-): boolean {
-  return isAdminAppRole(role, roles);
+  return canManageMusicSchedule(role, ministryRole, roles);
 }
 
 export function assignmentStatusBorderColor(status: string): string {

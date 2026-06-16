@@ -27,11 +27,8 @@ export function memberHasMinistryRole(ministryRole: unknown, matchRole: unknown)
   });
 }
 
-export function isMusicManager(ministryRole: unknown): boolean {
-  return parseMinistryRoles(ministryRole).some((part) => {
-    const p = normalizeMinistryToken(part);
-    return p.includes('музыкальный менеджер') || p.includes('лидер поклонения');
-  });
+export function isMusicLeader(ministryRole: unknown): boolean {
+  return memberHasMinistryRole(ministryRole, 'Музыкальный лидер');
 }
 
 export function hasMusicMinistryDirection(ministryDirection: unknown): boolean {

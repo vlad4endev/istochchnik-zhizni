@@ -135,7 +135,7 @@ export function MusicSchedulePage() {
   const memberId = useAuthStore((s) => s.memberId);
   const meQ = useMe();
   const canManage = canManageMusicSchedule(role, meQ.data?.ministry_role, rolesAuth);
-  const canEditRoles = canManageMusicRoles(role, rolesAuth);
+  const canEditRoles = canManageMusicRoles(role, meQ.data?.ministry_role, rolesAuth);
 
   const [viewMode, setViewMode] = useState<MusicScheduleViewMode>('assemblies');
   const [cursor, setCursor] = useState(() => new Date());

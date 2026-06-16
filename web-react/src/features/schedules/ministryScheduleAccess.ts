@@ -6,7 +6,7 @@ import {
   memberHasMinistryRole,
   normalizeMinistryToken,
 } from '../mediaSchedule/ministryRoleMatch';
-import { hasMusicMinistryDirection, isMusicManager } from '../musicSchedule/ministryRoleMatch';
+import { hasMusicMinistryDirection, isMusicLeader } from '../musicSchedule/ministryRoleMatch';
 
 export type ScheduleMinistryKey = 'media' | 'music' | 'sunday';
 
@@ -75,11 +75,11 @@ export function canViewMediaSchedule(
 }
 
 export function canViewMusicSchedule(
-  role: AuthRole | undefined,
+  _role: AuthRole | undefined,
   ministryDirection: unknown,
-  roles?: Array<AuthRole | string | null | undefined>,
+  _roles?: Array<AuthRole | string | null | undefined>,
 ): boolean {
-  return canModerateSongCatalogSession(role, roles) || hasMusicMinistryDirection(ministryDirection);
+  return hasMusicMinistryDirection(ministryDirection);
 }
 
 export function canViewSundaySchedule(
@@ -132,11 +132,11 @@ export function canManageMediaSchedule(
 }
 
 export function canManageMusicSchedule(
-  role: AuthRole | undefined,
+  _role: AuthRole | undefined,
   ministryRole: unknown,
-  roles?: Array<AuthRole | string | null | undefined>,
+  _roles?: Array<AuthRole | string | null | undefined>,
 ): boolean {
-  return isAdminAppRole(role, roles) || isMusicManager(ministryRole);
+  return isMusicLeader(ministryRole);
 }
 
 export function canManageSundaySchedule(

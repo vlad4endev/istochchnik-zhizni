@@ -35,11 +35,8 @@ export function isMediaManager(ministryRole: unknown): boolean {
   });
 }
 
-export function isMusicManager(ministryRole: unknown): boolean {
-  return parseMinistryRoles(ministryRole).some((part) => {
-    const p = normalizeMinistryToken(part);
-    return p.includes('музыкальный менеджер') || p.includes('лидер поклонения');
-  });
+export function isMusicLeader(ministryRole: unknown): boolean {
+  return memberHasMinistryRole(ministryRole, 'Музыкальный лидер');
 }
 
 /** Направление служения «Медиа служение» (или другое с «медиа» в названии). */

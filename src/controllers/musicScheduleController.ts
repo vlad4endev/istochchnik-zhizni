@@ -23,7 +23,7 @@ import {
   updateRole,
   type AssignmentStatus,
 } from '../services/musicScheduleService';
-import { sessionCanModerateCatalog, rolesOfSession, type SessionRoleSource } from '../types/appRole';
+import type { SessionRoleSource } from '../types/appRole';
 import { canManageMusicSchedule as canManageMusicScheduleByProfile } from '../utils/ministryScheduleAccess';
 
 type AuthReq = Request & SessionRoleSource & { authUserId?: number };
@@ -31,23 +31,15 @@ type AuthReq = Request & SessionRoleSource & { authUserId?: number };
 async function canManageMusicSchedule(req: Request): Promise<boolean> {
   const r = req as AuthReq;
   if (!r.authUserId) return false;
-  const sessionRoles = rolesOfSession(r);
   const result = await query(`SELECT ministry_role FROM members WHERE id = $1 LIMIT 1`, [r.authUserId]);
   const row = result.rows[0] as { ministry_role?: string | null } | undefined;
   return canManageMusicScheduleByProfile({
-    app_role: r.authUserRole,
-    app_roles: sessionRoles,
     ministry_role: row?.ministry_role,
   });
 }
 
-function isAdminSession(req: Request): boolean {
-  return rolesOfSession(req as AuthReq).includes('admin');
-}
-
 async function canViewMusicSchedule(req: Request): Promise<boolean> {
   const r = req as AuthReq;
-  if (sessionCanModerateCatalog(r)) return true;
   if (!r.authUserId) return false;
   const result = await query(`SELECT ministry_direction FROM members WHERE id = $1 LIMIT 1`, [r.authUserId]);
   const row = result.rows[0] as { ministry_direction?: string | null } | undefined;
@@ -77,7 +69,7 @@ async function ensureManager(req: Request, res: Response): Promise<number | null
   const userId = await ensureAuth(req, res);
   if (userId == null) return null;
   if (!(await canManageMusicSchedule(req))) {
-    res.status(403).json({ error: 'Недостаточно прав для управления расписанием музыкального служения' });
+    res.status(403).json({ error: 'Редактирование доступно только музыкальному лидеру' });
     return null;
   }
   return userId;
@@ -298,12 +290,7 @@ export async function getRolesHandler(req: Request, res: Response): Promise<void
 }
 
 export async function createRoleHandler(req: Request, res: Response): Promise<void> {
-  const r = req as AuthReq;
-  if (!(await ensureAuth(req, res))) return;
-  if (!isAdminSession(req)) {
-    res.status(403).json({ error: 'Недостаточно прав для управления ролями' });
-    return;
-  }
+  if (!(await ensureManager(req, res))) return;
   try {
     const role = await createRole({
       name: String(req.body?.name ?? ''),
@@ -321,12 +308,7 @@ export async function createRoleHandler(req: Request, res: Response): Promise<vo
 }
 
 export async function updateRoleHandler(req: Request, res: Response): Promise<void> {
-  const r = req as AuthReq;
-  if (!(await ensureAuth(req, res))) return;
-  if (!isAdminSession(req)) {
-    res.status(403).json({ error: 'Недостаточно прав для управления ролями' });
-    return;
-  }
+  if (!(await ensureManager(req, res))) return;
   const id = parsePositiveInt(req.params.id);
   if (id == null) {
     res.status(400).json({ error: 'Некорректный id роли' });
@@ -349,12 +331,7 @@ export async function updateRoleHandler(req: Request, res: Response): Promise<vo
 }
 
 export async function deleteRoleHandler(req: Request, res: Response): Promise<void> {
-  const r = req as AuthReq;
-  if (!(await ensureAuth(req, res))) return;
-  if (!isAdminSession(req)) {
-    res.status(403).json({ error: 'Недостаточно прав для управления ролями' });
-    return;
-  }
+  if (!(await ensureManager(req, res))) return;
   const id = parsePositiveInt(req.params.id);
   if (id == null) {
     res.status(400).json({ error: 'Некорректный id роли' });
@@ -369,12 +346,7 @@ export async function deleteRoleHandler(req: Request, res: Response): Promise<vo
 }
 
 export async function reorderRolesHandler(req: Request, res: Response): Promise<void> {
-  const r = req as AuthReq;
-  if (!(await ensureAuth(req, res))) return;
-  if (!isAdminSession(req)) {
-    res.status(403).json({ error: 'Недостаточно прав для управления ролями' });
-    return;
-  }
+  if (!(await ensureManager(req, res))) return;
   const idsRaw = req.body?.ids;
   if (!Array.isArray(idsRaw)) {
     res.status(400).json({ error: 'Ожидается массив ids' });
