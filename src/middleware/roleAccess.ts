@@ -58,6 +58,7 @@ const MEMBER_ALLOWED_MEDIA_SCHEDULE_STATUS_PATCH =
 
 /** Назначения ведущего/проповедника — проверка pastor/admin в контроллере. */
 const SUNDAY_SCHEDULE_PLAN_PATCH = /^\/api\/sunday-schedule\/plans\/\d+\/?$/;
+const SUNDAY_SCHEDULE_DATE_PATCH = /^\/api\/sunday-schedule\/dates\/\d{4}-\d{2}-\d{2}\/?$/;
 
 function isMediaScheduleAssignmentStatusPatch(method: string, path: string): boolean {
   return method === 'PATCH' && MEMBER_ALLOWED_MEDIA_SCHEDULE_STATUS_PATCH.test(path);
@@ -65,6 +66,10 @@ function isMediaScheduleAssignmentStatusPatch(method: string, path: string): boo
 
 function isSundaySchedulePlanPatch(method: string, path: string): boolean {
   return method === 'PATCH' && SUNDAY_SCHEDULE_PLAN_PATCH.test(path);
+}
+
+function isSundayScheduleDatePatch(method: string, path: string): boolean {
+  return method === 'PATCH' && SUNDAY_SCHEDULE_DATE_PATCH.test(path);
 }
 
 /** То же для координаторов: POST улучшения текста нужды — проверка роли в контроллере. */
@@ -255,6 +260,11 @@ export function enforceRoleAccess(req: Request, res: Response, next: NextFunctio
   }
 
   if (isSundaySchedulePlanPatch(req.method, fullPath)) {
+    next();
+    return;
+  }
+
+  if (isSundayScheduleDatePatch(req.method, fullPath)) {
     next();
     return;
   }

@@ -4,6 +4,7 @@ import {
   getMySundaySchedule,
   getSundayScheduleMembers,
   getSundaySchedulePlans,
+  patchSundayScheduleDate,
   patchSundaySchedulePlan,
 } from '../controllers/sundayScheduleController';
 
@@ -13,5 +14,6 @@ router.get('/plans', requireAuthSession, getSundaySchedulePlans);
 router.get('/my', requireAuthSession, getMySundaySchedule);
 router.get('/members', requireAuthSession, getSundayScheduleMembers);
 router.patch('/plans/:id', requireAuthSession, patchSundaySchedulePlan);
+router.patch('/dates/:date', requireAuthSession, patchSundayScheduleDate);
 
 export default router;

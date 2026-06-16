@@ -17,6 +17,7 @@ export type SundaySchedulePlan = {
   leader_member_id: number | null;
   preacher_member_id: number | null;
   blocks_count: number;
+  has_program: boolean;
   leader: SundayScheduleMember | null;
   preacher: SundayScheduleMember | null;
 };
@@ -50,4 +51,28 @@ export async function patchSundaySchedulePlan(
   },
 ): Promise<void> {
   await apiClient.patch(`/api/sunday-schedule/plans/${planId}`, body);
+}
+
+export async function patchSundayScheduleDate(
+  serviceDate: string,
+  body: {
+    leader_member_id?: number | null;
+    preacher_member_id?: number | null;
+  },
+): Promise<void> {
+  await apiClient.patch(`/api/sunday-schedule/dates/${serviceDate}`, body);
+}
+
+export async function saveSundayScheduleAssignments(
+  plan: Pick<SundaySchedulePlan, 'id' | 'service_date'>,
+  body: {
+    leader_member_id?: number | null;
+    preacher_member_id?: number | null;
+  },
+): Promise<void> {
+  if (plan.id > 0) {
+    await patchSundaySchedulePlan(plan.id, body);
+    return;
+  }
+  await patchSundayScheduleDate(plan.service_date, body);
 }

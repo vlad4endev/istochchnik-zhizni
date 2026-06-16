@@ -55,6 +55,15 @@ import {
 } from '../mediaAccess';
 import { MinistryScheduleSwitcher } from '../../schedules/components/MinistryScheduleSwitcher';
 import type { MediaEvent, MediaScheduleViewMode } from '../types';
+import {
+  buildNavigableWeekStarts,
+  buildWeekEventColumns,
+  findNavigableWeekIndex,
+  formatWeekViewHeader,
+  getWeekDaysWithEvents,
+  snapCursorToNearestServiceWeek,
+  weekHasEvents,
+} from '../utils/mediaScheduleWeekView';
 
 const WEEKDAY_LABELS = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
 
@@ -154,8 +163,8 @@ export function MediaSchedulePage() {
   const weekStart = startOfWeek(cursor, { weekStartsOn: 1 });
   const weekEnd = endOfWeek(cursor, { weekStartsOn: 1 });
 
-  const rangeFrom = viewMode === 'month' ? gridStart : weekStart;
-  const rangeTo = viewMode === 'month' ? gridEnd : weekEnd;
+  const rangeFrom = viewMode === 'month' ? gridStart : startOfWeek(addMonths(cursor, -6), { weekStartsOn: 1 });
+  const rangeTo = viewMode === 'month' ? gridEnd : endOfWeek(addMonths(cursor, 6), { weekStartsOn: 1 });
 
   const eventsQ = useQuery({
     queryKey: ['media-schedule', 'events', ymd(rangeFrom), ymd(rangeTo)],
@@ -217,10 +226,31 @@ export function MediaSchedulePage() {
     [gridStart, gridEnd],
   );
 
-  const weekDays = useMemo(
-    () => eachDayOfInterval({ start: weekStart, end: weekEnd }),
-    [weekStart, weekEnd],
+  const navigableWeekStarts = useMemo(() => buildNavigableWeekStarts(events), [events]);
+
+  const weekDaysWithEvents = useMemo(
+    () => getWeekDaysWithEvents(events, weekStart, weekEnd),
+    [events, weekStart, weekEnd],
   );
+
+  const weekEventColumns = useMemo(
+    () => buildWeekEventColumns(eventsByDate, weekDaysWithEvents),
+    [eventsByDate, weekDaysWithEvents],
+  );
+
+  const navigableWeekIndex = useMemo(
+    () => findNavigableWeekIndex(navigableWeekStarts, cursor),
+    [navigableWeekStarts, cursor],
+  );
+
+  useEffect(() => {
+    if (viewMode !== 'week' || eventsQ.isLoading || events.length === 0) return;
+    if (weekHasEvents(events, weekStart, weekEnd)) return;
+    const snapped = snapCursorToNearestServiceWeek(cursor, navigableWeekStarts);
+    if (format(snapped, 'yyyy-MM-dd') !== format(weekStart, 'yyyy-MM-dd')) {
+      setCursor(snapped);
+    }
+  }, [viewMode, eventsQ.isLoading, events, weekStart, weekEnd, cursor, navigableWeekStarts]);
 
   const upcomingCount = useMemo(() => {
     const today = ymd(new Date());
@@ -262,7 +292,40 @@ export function MediaSchedulePage() {
   const headerLabel =
     viewMode === 'month'
       ? capitalizeRuMonthTitle(format(cursor, 'LLLL yyyy', { locale: ru }))
-      : `${format(weekStart, 'd', { locale: ru })}–${format(weekEnd, 'd MMMM yyyy', { locale: ru })}`;
+      : formatWeekViewHeader(weekDaysWithEvents, weekStart, weekEnd);
+
+  function goWeekPrev() {
+    if (navigableWeekStarts.length === 0) {
+      setCursor((d) => addWeeks(d, -1));
+      return;
+    }
+    if (navigableWeekIndex > 0) {
+      setCursor(navigableWeekStarts[navigableWeekIndex - 1]!);
+      return;
+    }
+    setCursor(navigableWeekStarts[0]!);
+  }
+
+  function goWeekNext() {
+    if (navigableWeekStarts.length === 0) {
+      setCursor((d) => addWeeks(d, 1));
+      return;
+    }
+    if (navigableWeekIndex >= 0 && navigableWeekIndex < navigableWeekStarts.length - 1) {
+      setCursor(navigableWeekStarts[navigableWeekIndex + 1]!);
+      return;
+    }
+    setCursor(navigableWeekStarts[navigableWeekStarts.length - 1]!);
+  }
+
+  function goWeekToday() {
+    const today = new Date();
+    if (navigableWeekStarts.length === 0) {
+      setCursor(today);
+      return;
+    }
+    setCursor(snapCursorToNearestServiceWeek(today, navigableWeekStarts));
+  }
 
   function openPlannerPicker() {
     setPlannerPickerOpen(true);
@@ -355,7 +418,13 @@ export function MediaSchedulePage() {
                 type="button"
                 role="tab"
                 aria-selected={viewMode === id}
-                onClick={() => setViewMode(id)}
+                onClick={() => {
+                  setViewMode(id);
+                  if (id === 'week' && events.length > 0) {
+                    const starts = buildNavigableWeekStarts(events);
+                    setCursor((current) => snapCursorToNearestServiceWeek(current, starts));
+                  }
+                }}
                 className={[
                   'tap-highlight-transparent min-h-[44px] flex-1 rounded-[10px] px-2 text-[13px] font-extrabold transition-colors sm:min-h-[40px] sm:px-3 sm:text-sm',
                   viewMode === id
@@ -375,23 +444,29 @@ export function MediaSchedulePage() {
             <div className="flex items-center justify-center gap-1.5 sm:shrink-0">
               <button
                 type="button"
-                onClick={() => setCursor((d) => (viewMode === 'month' ? addMonths(d, -1) : addWeeks(d, -1)))}
-                className="tap-highlight-transparent grid h-11 w-11 place-items-center rounded-xl border border-stone-200 bg-white text-stone-800 hover:bg-stone-50 active:bg-stone-100"
+                onClick={() => (viewMode === 'month' ? setCursor((d) => addMonths(d, -1)) : goWeekPrev())}
+                disabled={viewMode === 'week' && navigableWeekStarts.length > 0 && navigableWeekIndex <= 0}
+                className="tap-highlight-transparent grid h-11 w-11 place-items-center rounded-xl border border-stone-200 bg-white text-stone-800 hover:bg-stone-50 active:bg-stone-100 disabled:cursor-not-allowed disabled:opacity-40"
                 aria-label="Назад"
               >
                 <LuChevronLeft className="h-5 w-5" aria-hidden />
               </button>
               <button
                 type="button"
-                onClick={() => setCursor(new Date())}
+                onClick={() => (viewMode === 'month' ? setCursor(new Date()) : goWeekToday())}
                 className="tap-highlight-transparent min-h-[44px] flex-1 rounded-xl border border-primary/20 bg-gradient-to-br from-primary/5 to-primary/10 px-4 text-sm font-extrabold text-primary hover:brightness-[1.02] active:brightness-[0.98] sm:flex-initial sm:px-3"
               >
                 Сегодня
               </button>
               <button
                 type="button"
-                onClick={() => setCursor((d) => (viewMode === 'month' ? addMonths(d, 1) : addWeeks(d, 1)))}
-                className="tap-highlight-transparent grid h-11 w-11 place-items-center rounded-xl border border-stone-200 bg-white text-stone-800 hover:bg-stone-50 active:bg-stone-100"
+                onClick={() => (viewMode === 'month' ? setCursor((d) => addMonths(d, 1)) : goWeekNext())}
+                disabled={
+                  viewMode === 'week' &&
+                  navigableWeekStarts.length > 0 &&
+                  navigableWeekIndex >= navigableWeekStarts.length - 1
+                }
+                className="tap-highlight-transparent grid h-11 w-11 place-items-center rounded-xl border border-stone-200 bg-white text-stone-800 hover:bg-stone-50 active:bg-stone-100 disabled:cursor-not-allowed disabled:opacity-40"
                 aria-label="Вперёд"
               >
                 <LuChevronRight className="h-5 w-5" aria-hidden />
@@ -666,8 +741,27 @@ export function MediaSchedulePage() {
           </>
         ) : (
           <>
+            {weekDaysWithEvents.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-stone-200 bg-white px-4 py-14 text-center shadow-[var(--shadow-card)]">
+                <p className="text-sm font-extrabold text-stone-700">Нет служений в выбранном периоде</p>
+                <p className="mt-1 text-xs font-semibold text-stone-500">
+                  Переключите неделю или добавьте программу из планировщика
+                </p>
+                {canManage ? (
+                  <button
+                    type="button"
+                    onClick={openPlannerPicker}
+                    className="tap-highlight-transparent mt-4 inline-flex min-h-[44px] items-center gap-2 rounded-xl bg-primary px-4 text-sm font-extrabold text-white"
+                  >
+                    <LuPlus className="h-4 w-4" />
+                    Добавить служение
+                  </button>
+                ) : null}
+              </div>
+            ) : (
+              <>
             <section className="space-y-3 lg:hidden">
-              {weekDays.map((day) => {
+              {weekDaysWithEvents.map((day) => {
                 const key = ymd(day);
                 const dayEvents = eventsByDate.get(key) ?? [];
                 const today = isSameDay(day, new Date());
@@ -691,10 +785,7 @@ export function MediaSchedulePage() {
                         </span>
                       ) : null}
                     </div>
-                    {dayEvents.length === 0 ? (
-                      <p className="px-4 py-6 text-center text-sm font-semibold text-stone-400">Нет служений</p>
-                    ) : (
-                      <ul className="divide-y divide-stone-100">
+                    <ul className="divide-y divide-stone-100">
                         {dayEvents.map((ev) => {
                           const tone = EVENT_TONE_STYLES[eventToneIndex(ev.id)];
                           const coverage = assignmentCoverage(ev, activeRoles.length);
@@ -803,8 +894,7 @@ export function MediaSchedulePage() {
                             </li>
                           );
                         })}
-                      </ul>
-                    )}
+                    </ul>
                   </div>
                 );
               })}
@@ -818,44 +908,22 @@ export function MediaSchedulePage() {
                       <th className="sticky left-0 z-10 border-b border-stone-100 bg-stone-50/95 px-4 py-3 text-left text-[11px] font-extrabold uppercase tracking-wide text-stone-500">
                         Роль
                       </th>
-                      {weekDays.flatMap((day) => {
+                      {weekEventColumns.map(({ day, event: ev }) => {
                         const key = ymd(day);
-                        const dayEvents = eventsByDate.get(key) ?? [];
-                        if (dayEvents.length === 0) {
-                          const today = isToday(day);
-                          return (
-                            <th
-                              key={key}
-                              className={[
-                                'min-w-[110px] border-b border-stone-100 px-3 py-3 text-center',
-                                today ? 'bg-primary/5' : '',
-                              ].join(' ')}
-                            >
-                              <div className="text-[11px] font-extrabold uppercase tracking-wide text-stone-500">
-                                {format(day, 'EEE', { locale: ru })}
-                              </div>
-                              <div className={['text-sm font-extrabold', today ? 'text-primary' : 'text-stone-900'].join(' ')}>
-                                {format(day, 'd')}
-                              </div>
-                            </th>
-                          );
-                        }
-                        return dayEvents.map((ev) => {
-                          const tone = EVENT_TONE_STYLES[eventToneIndex(ev.id)];
-                          return (
-                            <th
-                              key={`${key}-${ev.id}`}
-                              className="min-w-[120px] border-b border-stone-100 px-3 py-3 text-center"
-                            >
-                              <div className="text-[11px] font-extrabold uppercase tracking-wide text-stone-500">
-                                {format(day, 'EEE d', { locale: ru })}
-                              </div>
-                              <div className={['mt-0.5 truncate text-xs font-extrabold', tone.title].join(' ')}>
-                                {ev.title}
-                              </div>
-                            </th>
-                          );
-                        });
+                        const tone = EVENT_TONE_STYLES[eventToneIndex(ev.id)];
+                        return (
+                          <th
+                            key={`${key}-${ev.id}`}
+                            className="min-w-[120px] border-b border-stone-100 px-3 py-3 text-center"
+                          >
+                            <div className="text-[11px] font-extrabold uppercase tracking-wide text-stone-500">
+                              {format(day, 'EEE d', { locale: ru })}
+                            </div>
+                            <div className={['mt-0.5 truncate text-xs font-extrabold', tone.title].join(' ')}>
+                              {ev.title}
+                            </div>
+                          </th>
+                        );
                       })}
                     </tr>
                   </thead>
@@ -871,69 +939,66 @@ export function MediaSchedulePage() {
                             <span className="text-xs font-extrabold text-stone-800">{roleRow.name}</span>
                           </div>
                         </td>
-                        {weekDays.flatMap((day) => {
+                        {weekEventColumns.map(({ day, event: ev }) => {
                           const key = ymd(day);
-                          const dayEvents = eventsByDate.get(key) ?? [];
-                          const cols = dayEvents.length > 0 ? dayEvents : [null];
-                          return cols.map((ev) => {
-                            const assignment = ev?.assignments.find((a) => a.role_id === roleRow.id) ?? null;
-                            const cellKey = ev ? `${key}-${ev.id}-${roleRow.id}` : `${key}-empty-${roleRow.id}`;
-                            const today = isToday(day);
-                            return (
-                              <td
-                                key={cellKey}
-                                className={[
-                                  'border-b border-stone-100 px-2 py-2 align-top',
-                                  today ? 'bg-primary/[0.02]' : '',
-                                ].join(' ')}
-                              >
-                                {assignment ? (
-                                  <button
-                                    type="button"
-                                    onClick={() =>
-                                      setContextMenu({ assignmentId: assignment.id, eventId: ev!.id })
+                          const assignment = ev.assignments.find((a) => a.role_id === roleRow.id) ?? null;
+                          const cellKey = `${key}-${ev.id}-${roleRow.id}`;
+                          const today = isToday(day);
+                          return (
+                            <td
+                              key={cellKey}
+                              className={[
+                                'border-b border-stone-100 px-2 py-2 align-top',
+                                today ? 'bg-primary/[0.02]' : '',
+                              ].join(' ')}
+                            >
+                              {assignment ? (
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setContextMenu({ assignmentId: assignment.id, eventId: ev.id })
+                                  }
+                                  className="flex w-full items-center gap-2 rounded-xl border bg-white px-2.5 py-2 text-left shadow-sm transition-all hover:shadow-md active:scale-[0.99]"
+                                  style={{
+                                    borderColor: assignmentStatusBorderColor(assignment.status),
+                                  }}
+                                >
+                                  <AppAvatar
+                                    src={assignment.member.avatar_url}
+                                    fallback={
+                                      <span className="text-[9px] font-bold text-white">
+                                        {assignment.member.name.slice(0, 1)}
+                                      </span>
                                     }
-                                    className="flex w-full items-center gap-2 rounded-xl border bg-white px-2.5 py-2 text-left shadow-sm transition-all hover:shadow-md active:scale-[0.99]"
-                                    style={{
-                                      borderColor: assignmentStatusBorderColor(assignment.status),
-                                    }}
-                                  >
-                                    <AppAvatar
-                                      src={assignment.member.avatar_url}
-                                      fallback={
-                                        <span className="text-[9px] font-bold text-white">
-                                          {assignment.member.name.slice(0, 1)}
-                                        </span>
-                                      }
-                                      initialsFallbackText={assignment.member.name}
-                                      className="grid h-7 w-7 shrink-0 place-items-center overflow-hidden rounded-full"
-                                    />
-                                    <div className="min-w-0">
-                                      <p className="truncate text-xs font-extrabold text-stone-900">
-                                        {assignment.member.name}
-                                      </p>
-                                      <p
-                                        className="text-[10px] font-semibold"
-                                        style={{ color: assignmentStatusBorderColor(assignment.status) }}
-                                      >
-                                        {assignmentStatusLabel(assignment.status)}
-                                      </p>
-                                    </div>
-                                  </button>
-                                ) : canManage && ev ? (
-                                  <button
-                                    type="button"
-                                    onClick={() => setAssignModal({ event: ev, roleId: roleRow.id })}
-                                    className="grid h-11 w-full place-items-center rounded-xl border border-dashed border-stone-200 text-stone-400 transition-colors hover:border-primary hover:bg-primary/5 hover:text-primary"
-                                  >
-                                    <LuPlus className="h-4 w-4" />
-                                  </button>
-                                ) : (
-                                  <span className="block py-3 text-center text-stone-300">—</span>
-                                )}
-                              </td>
-                            );
-                          });
+                                    initialsFallbackText={assignment.member.name}
+                                    className="grid h-7 w-7 shrink-0 place-items-center overflow-hidden rounded-full"
+                                  />
+                                  <div className="min-w-0">
+                                    <p className="truncate text-xs font-extrabold text-stone-900">
+                                      {assignment.member.name}
+                                    </p>
+                                    <p
+                                      className="text-[10px] font-semibold"
+                                      style={{ color: assignmentStatusBorderColor(assignment.status) }}
+                                    >
+                                      {assignmentStatusLabel(assignment.status)}
+                                    </p>
+                                  </div>
+                                </button>
+                              ) : canManage ? (
+                                <button
+                                  type="button"
+                                  onClick={() => setAssignModal({ event: ev, roleId: roleRow.id })}
+                                  className="grid h-11 w-full place-items-center rounded-xl border border-dashed border-stone-200 text-stone-400 transition-colors hover:border-primary hover:bg-primary/5 hover:text-primary"
+                                  aria-label={`Назначить на ${roleRow.name}`}
+                                >
+                                  <LuPlus className="h-4 w-4" />
+                                </button>
+                              ) : (
+                                <span className="block py-3 text-center text-stone-300">—</span>
+                              )}
+                            </td>
+                          );
                         })}
                       </tr>
                     ))}
@@ -955,6 +1020,8 @@ export function MediaSchedulePage() {
                 </span>
               </div>
             </section>
+              </>
+            )}
           </>
         )}
 

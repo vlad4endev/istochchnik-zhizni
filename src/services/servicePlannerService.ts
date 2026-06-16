@@ -1,6 +1,7 @@
 import { pool, query } from '../config/db';
 import { ensureMediaScheduleSchema } from './mediaScheduleMigrations';
 import { getAssignmentsForPlan } from './mediaScheduleService';
+import { ensureSundayScheduleSlotsSchema, getSundayScheduleSlot } from './sundayScheduleSlots';
 
 export type PlannerBlockType = {
   id: number;
@@ -1526,22 +1527,27 @@ export async function createPlan(input: {
     }
     const startTime = input.start_time?.trim() || toTimeHm(tpl.default_start_time);
 
+    await ensureSundayScheduleSlotsSchema();
+    const slot = await getSundayScheduleSlot(input.service_date);
+    const leaderMemberId = input.leader_member_id ?? slot?.leader_member_id ?? null;
+    const preacherMemberId = input.preacher_member_id ?? slot?.preacher_member_id ?? null;
+
     const planRes = await client.query(
       `insert into public.service_plans
        (template_id, service_date, start_time, status, leader_member_id, preacher_member_id, created_by_member_id)
        values ($1, $2::date, $3::time, 'draft', $4, $5, $6)
        on conflict (template_id, service_date) do update
          set start_time = excluded.start_time,
-            leader_member_id = excluded.leader_member_id,
-            preacher_member_id = excluded.preacher_member_id,
+            leader_member_id = coalesce(excluded.leader_member_id, service_plans.leader_member_id),
+            preacher_member_id = coalesce(excluded.preacher_member_id, service_plans.preacher_member_id),
              updated_at = now()
        returning id`,
       [
         input.template_id,
         input.service_date,
         startTime,
-        input.leader_member_id,
-        input.preacher_member_id,
+        leaderMemberId,
+        preacherMemberId,
         input.created_by_member_id,
       ],
     );
@@ -1577,8 +1583,8 @@ export async function createPlan(input: {
     }
 
     await client.query('commit');
-    if (input.preacher_member_id != null) {
-      await syncSermonBlocksPreacher(planId, input.preacher_member_id);
+    if (preacherMemberId != null) {
+      await syncSermonBlocksPreacher(planId, preacherMemberId);
     }
     return planId;
   } catch (e) {

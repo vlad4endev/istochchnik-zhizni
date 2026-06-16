@@ -33,7 +33,7 @@ import { useAuthStore } from '../../auth/authStore';
 import {
   fetchSundayScheduleMembers,
   fetchSundaySchedulePlans,
-  patchSundaySchedulePlan,
+  saveSundayScheduleAssignments,
   type SundaySchedulePlan,
 } from '../api/sundayScheduleApi';
 import { apiErrorMessage } from '../../mediaSchedule/api';
@@ -81,6 +81,22 @@ function leaderCandidates(members: Awaited<ReturnType<typeof fetchSundaySchedule
 
 function preacherCandidates(members: Awaited<ReturnType<typeof fetchSundayScheduleMembers>>) {
   return members.filter((m) => matchRole(m.ministry_role, 'Проповедник'));
+}
+
+function emptySundayPlan(serviceDate: string): SundaySchedulePlan {
+  return {
+    id: 0,
+    service_date: serviceDate,
+    start_time: '10:00',
+    status: 'draft',
+    template_name: null,
+    leader_member_id: null,
+    preacher_member_id: null,
+    blocks_count: 0,
+    has_program: false,
+    leader: null,
+    preacher: null,
+  };
 }
 
 export function SundaySchedulePage() {
@@ -148,8 +164,12 @@ export function SundaySchedulePage() {
   }, [month]);
 
   const patchMut = useMutation({
-    mutationFn: (body: { planId: number; leader_member_id?: number | null; preacher_member_id?: number | null }) =>
-      patchSundaySchedulePlan(body.planId, {
+    mutationFn: (body: {
+      plan: Pick<SundaySchedulePlan, 'id' | 'service_date'>;
+      leader_member_id?: number | null;
+      preacher_member_id?: number | null;
+    }) =>
+      saveSundayScheduleAssignments(body.plan, {
         leader_member_id: body.leader_member_id,
         preacher_member_id: body.preacher_member_id,
       }),
@@ -175,15 +195,35 @@ export function SundaySchedulePage() {
   );
 
   const monthSundayPlans = useMemo(() => {
-    return (plansQ.data ?? [])
+    const fromData = (plansQ.data ?? [])
       .filter((p) => isSameMonth(parseISO(p.service_date), month))
       .sort((a, b) => a.service_date.localeCompare(b.service_date));
-  }, [plansQ.data, month]);
+
+    if (!canManage) return fromData;
+
+    const sundays = eachDayOfInterval({ start: startOfMonth(month), end: endOfMonth(month) }).filter((day) =>
+      isSunday(day),
+    );
+    return sundays.map((day) => {
+      const key = ymd(day);
+      return plansByDate.get(key) ?? emptySundayPlan(key);
+    });
+  }, [plansQ.data, month, canManage, plansByDate]);
 
   function openPlan(plan: SundaySchedulePlan) {
     setSelectedPlan(plan);
     setLeaderId(plan.leader_member_id ?? '');
     setPreacherId(plan.preacher_member_id ?? '');
+  }
+
+  function openSundayDate(dateKey: string) {
+    const plan = plansByDate.get(dateKey);
+    if (plan) {
+      openPlan(plan);
+      return;
+    }
+    if (!canManage) return;
+    openPlan(emptySundayPlan(dateKey));
   }
 
   return (
@@ -249,15 +289,13 @@ export function SundaySchedulePage() {
         </div>
 
         {viewMode === 'table' ? (
-          <section className="overflow-hidden rounded-2xl border border-stone-200/80 bg-white p-3 shadow-[var(--shadow-card)] sm:p-4">
-            <SundayScheduleTableView
-              model={tableModel}
-              loading={tablePlansQ.isLoading || membersQ.isLoading}
-              onPrevPeriod={() => setTablePeriodStart((d) => addMonths(d, -1))}
-              onNextPeriod={() => setTablePeriodStart((d) => addMonths(d, 1))}
-              onTodayPeriod={() => setTablePeriodStart(startOfMonth(new Date()))}
-            />
-          </section>
+          <SundayScheduleTableView
+            model={tableModel}
+            loading={tablePlansQ.isLoading || membersQ.isLoading}
+            onPrevPeriod={() => setTablePeriodStart((d) => addMonths(d, -1))}
+            onNextPeriod={() => setTablePeriodStart((d) => addMonths(d, 1))}
+            onTodayPeriod={() => setTablePeriodStart(startOfMonth(new Date()))}
+          />
         ) : (
           <>
         <section className="overflow-hidden rounded-2xl border border-stone-200/80 bg-white shadow-[var(--shadow-card)] sm:p-0">
@@ -321,14 +359,14 @@ export function SundaySchedulePage() {
                   const dateKey = ymd(day);
                   const plan = plansByDate.get(dateKey) ?? null;
                   const hasAssignments = Boolean(plan?.leader || plan?.preacher);
-                  const clickable = sunday && plan;
+                  const clickable = sunday && (plan || canManage);
 
                   return (
                     <button
                       key={dateKey}
                       type="button"
                       disabled={!clickable}
-                      onClick={() => plan && openPlan(plan)}
+                      onClick={() => openSundayDate(dateKey)}
                       className={[
                         'tap-highlight-transparent touch-manipulation flex min-h-[68px] flex-col items-center justify-start gap-0.5 bg-white p-1 active:bg-stone-50',
                         !inMonth ? 'opacity-35' : '',
@@ -345,20 +383,26 @@ export function SundaySchedulePage() {
                       >
                         {format(day, 'd')}
                       </span>
-                      {sunday && plan ? (
+                      {sunday && (plan || canManage) ? (
                         <div className="flex w-full flex-col items-center gap-0.5 px-0.5">
                           <span
                             className={[
                               'h-1.5 w-1.5 rounded-full',
-                              hasAssignments ? 'bg-primary' : 'bg-amber-400',
+                              plan
+                                ? hasAssignments
+                                  ? 'bg-primary'
+                                  : plan.has_program
+                                    ? 'bg-amber-400'
+                                    : 'bg-stone-300'
+                                : 'bg-stone-200',
                             ].join(' ')}
                             aria-hidden
                           />
                           <p className="w-full truncate text-center text-[8px] font-bold leading-tight text-stone-700">
-                            {firstNameOnly(plan.leader?.name)}
+                            {plan ? firstNameOnly(plan.leader?.name) || (canManage ? '—' : '') : canManage ? '+' : ''}
                           </p>
                           <p className="w-full truncate text-center text-[8px] font-semibold leading-tight text-stone-500">
-                            {firstNameOnly(plan.preacher?.name)}
+                            {plan ? firstNameOnly(plan.preacher?.name) || (canManage ? '—' : '') : ''}
                           </p>
                         </div>
                       ) : (
@@ -383,17 +427,21 @@ export function SundaySchedulePage() {
                     <button
                       key={dateKey}
                       type="button"
-                      disabled={!sunday || !plan}
-                      onClick={() => plan && openPlan(plan)}
+                      disabled={!sunday || (!plan && !canManage)}
+                      onClick={() => openSundayDate(dateKey)}
                       className={[
                         'min-h-[88px] rounded-xl border p-2 text-left transition',
                         !inMonth ? 'opacity-40' : '',
                         sunday && plan
                           ? hasAssignments
                             ? 'border-primary/30 bg-primary/[0.04] hover:bg-primary/[0.08]'
-                            : 'border-amber-200 bg-amber-50/50 hover:bg-amber-50'
+                            : plan.has_program
+                              ? 'border-amber-200 bg-amber-50/50 hover:bg-amber-50'
+                              : 'border-stone-200 bg-stone-50/80 hover:bg-stone-50'
+                          : sunday && canManage
+                            ? 'border-dashed border-stone-300 bg-white hover:border-primary/30 hover:bg-primary/[0.03]'
                           : 'border-stone-100 bg-stone-50/50',
-                        !sunday || !plan ? 'cursor-default' : 'cursor-pointer',
+                        !sunday || (!plan && !canManage) ? 'cursor-default' : 'cursor-pointer',
                       ].join(' ')}
                     >
                       <div
@@ -404,14 +452,17 @@ export function SundaySchedulePage() {
                       >
                         {format(day, 'd')}
                       </div>
-                      {sunday && plan ? (
+                      {sunday && (plan || canManage) ? (
                         <div className="space-y-0.5 text-[11px] leading-tight">
                           <p className="truncate font-semibold text-stone-800">
-                            {plan.leader?.name ?? 'Ведущий: —'}
+                            {plan?.leader?.name ?? (canManage ? 'Ведущий: —' : 'Ведущий: —')}
                           </p>
                           <p className="truncate font-semibold text-stone-600">
-                            {plan.preacher?.name ?? 'Проповедник: —'}
+                            {plan?.preacher?.name ?? (canManage ? 'Проповедник: —' : 'Проповедник: —')}
                           </p>
+                          {canManage && !plan?.has_program ? (
+                            <p className="truncate text-[10px] font-semibold text-stone-400">Без программы</p>
+                          ) : null}
                         </div>
                       ) : null}
                     </button>
@@ -433,11 +484,9 @@ export function SundaySchedulePage() {
           </div>
 
           <p className="border-t border-stone-100 px-3 py-3 text-xs text-stone-500 sm:px-4">
-            Назначения доступны только для дат, на которые уже создан план служения в разделе{' '}
-            <Link to="/service-planner" className="font-semibold text-primary hover:underline">
-              Служение
-            </Link>
-            .
+            {canManage
+              ? 'Пастор и администратор могут назначать ведущего и проповедника на любое воскресенье. Когда программа будет создана в разделе «Служение», назначения подтянутся автоматически.'
+              : 'Назначения отображаются для дат, на которые запланировано воскресное служение.'}
           </p>
         </section>
 
@@ -448,13 +497,7 @@ export function SundaySchedulePage() {
           </h2>
           {monthSundayPlans.length === 0 ? (
             <div className="rounded-2xl border border-dashed border-stone-200 bg-white px-4 py-10 text-center shadow-[var(--shadow-card)]">
-              <p className="text-sm font-extrabold text-stone-700">Нет планов на этот месяц</p>
-              <p className="mt-1 text-xs text-stone-500">
-                Создайте план в разделе{' '}
-                <Link to="/service-planner" className="font-semibold text-primary hover:underline">
-                  Служение
-                </Link>
-              </p>
+              <p className="text-sm font-extrabold text-stone-700">Нет воскресений в этом месяце</p>
             </div>
           ) : (
             <ul className="space-y-2">
@@ -484,8 +527,9 @@ export function SundaySchedulePage() {
                           {format(dt, 'EEEE, d MMMM', { locale: ru })}
                         </p>
                         <p className="mt-0.5 font-extrabold text-stone-900">
-                          {plan.template_name ?? 'Воскресное служение'}
-                          {plan.start_time ? ` · ${plan.start_time}` : ''}
+                          {plan.has_program
+                            ? `${plan.template_name ?? 'Воскресное служение'}${plan.start_time ? ` · ${plan.start_time}` : ''}`
+                            : 'Назначения без программы'}
                         </p>
                         <div className="mt-2 space-y-1 text-xs font-semibold text-stone-600">
                           <p>Ведущий: {plan.leader?.name ?? '—'}</p>
@@ -526,8 +570,9 @@ export function SundaySchedulePage() {
                     {formatRuDateLong(selectedPlan.service_date)}
                   </h3>
                   <p className="mt-0.5 text-sm text-stone-500">
-                    {selectedPlan.template_name ?? 'План служения'}
-                    {selectedPlan.start_time ? ` · ${selectedPlan.start_time}` : ''}
+                    {selectedPlan.has_program
+                      ? `${selectedPlan.template_name ?? 'План служения'}${selectedPlan.start_time ? ` · ${selectedPlan.start_time}` : ''}`
+                      : 'Назначения сохранятся до создания программы служения'}
                   </p>
                 </div>
                 {isMobile ? (
@@ -613,7 +658,7 @@ export function SundaySchedulePage() {
                         disabled={patchMut.isPending}
                         onClick={() =>
                           patchMut.mutate({
-                            planId: selectedPlan.id,
+                            plan: selectedPlan,
                             leader_member_id: leaderId === '' ? null : leaderId,
                             preacher_member_id: preacherId === '' ? null : preacherId,
                           })
@@ -626,14 +671,16 @@ export function SundaySchedulePage() {
                     {patchMut.isError ? (
                       <p className="text-sm font-semibold text-rose-600">{apiErrorMessage(patchMut.error)}</p>
                     ) : null}
-                    <Link
-                      to="/service-planner"
-                      state={{ openPlanId: selectedPlan.id }}
-                      className="tap-highlight-transparent inline-flex min-h-[48px] w-full items-center justify-center gap-1.5 rounded-2xl border border-stone-200 px-4 text-sm font-bold text-stone-800 active:bg-stone-50"
-                    >
-                      <LuExternalLink className="h-4 w-4" />
-                      Программа
-                    </Link>
+                    {selectedPlan.has_program && selectedPlan.id > 0 ? (
+                      <Link
+                        to="/service-planner"
+                        state={{ openPlanId: selectedPlan.id }}
+                        className="tap-highlight-transparent inline-flex min-h-[48px] w-full items-center justify-center gap-1.5 rounded-2xl border border-stone-200 px-4 text-sm font-bold text-stone-800 active:bg-stone-50"
+                      >
+                        <LuExternalLink className="h-4 w-4" />
+                        Программа
+                      </Link>
+                    ) : null}
                     {!canManage ? (
                       <button
                         type="button"
@@ -652,7 +699,7 @@ export function SundaySchedulePage() {
                         disabled={patchMut.isPending}
                         onClick={() =>
                           patchMut.mutate({
-                            planId: selectedPlan.id,
+                            plan: selectedPlan,
                             leader_member_id: leaderId === '' ? null : leaderId,
                             preacher_member_id: preacherId === '' ? null : preacherId,
                           })
@@ -664,14 +711,16 @@ export function SundaySchedulePage() {
                     ) : (
                       <p className="text-sm text-stone-600">Редактирование доступно только пастору и администратору.</p>
                     )}
-                    <Link
-                      to="/service-planner"
-                      state={{ openPlanId: selectedPlan.id }}
-                      className="inline-flex min-h-[42px] items-center justify-center gap-1.5 rounded-xl border border-stone-200 px-4 text-sm font-bold text-stone-800 hover:bg-stone-50"
-                    >
-                      <LuExternalLink className="h-4 w-4" />
-                      Программа
-                    </Link>
+                    {selectedPlan.has_program && selectedPlan.id > 0 ? (
+                      <Link
+                        to="/service-planner"
+                        state={{ openPlanId: selectedPlan.id }}
+                        className="inline-flex min-h-[42px] items-center justify-center gap-1.5 rounded-xl border border-stone-200 px-4 text-sm font-bold text-stone-800 hover:bg-stone-50"
+                      >
+                        <LuExternalLink className="h-4 w-4" />
+                        Программа
+                      </Link>
+                    ) : null}
                     <button
                       type="button"
                       onClick={() => setSelectedPlan(null)}

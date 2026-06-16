@@ -6,6 +6,7 @@ import {
   listSundayScheduleMembers,
   listSundaySchedulePlans,
   patchSundayScheduleAssignments,
+  patchSundayScheduleByDate,
 } from '../services/sundayScheduleService';
 import { rolesOfSession, type SessionRoleSource } from '../types/appRole';
 import { sessionCanModerateCatalog } from '../types/appRole';
@@ -165,6 +166,42 @@ export async function patchSundaySchedulePlan(req: Request, res: Response): Prom
     res.status(204).send();
   } catch (e) {
     console.error('[sunday-schedule] patchSundaySchedulePlan:', e);
+    res.status(500).json({ error: 'Не удалось обновить назначения' });
+  }
+}
+
+export async function patchSundayScheduleDate(req: Request, res: Response): Promise<void> {
+  if (!(await ensureSundayScheduleManage(req, res))) return;
+  const serviceDate = parseDateYmd(req.params.date);
+  if (!serviceDate) {
+    res.status(400).json({ error: 'Некорректная дата (YYYY-MM-DD)' });
+    return;
+  }
+  const body = req.body as Record<string, unknown>;
+  const patch: {
+    leader_member_id?: number | null;
+    preacher_member_id?: number | null;
+  } = {};
+  if ('leader_member_id' in body) {
+    patch.leader_member_id = body.leader_member_id == null ? null : parseId(body.leader_member_id);
+  }
+  if ('preacher_member_id' in body) {
+    patch.preacher_member_id = body.preacher_member_id == null ? null : parseId(body.preacher_member_id);
+  }
+  if (!('leader_member_id' in body) && !('preacher_member_id' in body)) {
+    res.status(400).json({ error: 'Укажите leader_member_id и/или preacher_member_id' });
+    return;
+  }
+  try {
+    const ok = await patchSundayScheduleByDate(serviceDate, patch);
+    if (!ok) {
+      res.status(400).json({ error: 'Не удалось сохранить назначения' });
+      return;
+    }
+    notifyRealtime(['service-planner']);
+    res.status(204).send();
+  } catch (e) {
+    console.error('[sunday-schedule] patchSundayScheduleDate:', e);
     res.status(500).json({ error: 'Не удалось обновить назначения' });
   }
 }

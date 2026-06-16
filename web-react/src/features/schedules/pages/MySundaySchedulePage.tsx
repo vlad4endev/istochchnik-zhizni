@@ -197,7 +197,7 @@ export function MySundaySchedulePage() {
                               ) : null}
                             </div>
 
-                            <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                            <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
                               <div className="rounded-xl bg-stone-50 px-3 py-2.5">
                                 <p className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-stone-500">
                                   <LuUser className="h-3.5 w-3.5" />
