@@ -16,6 +16,11 @@ export type ServicePlanPrintRow =
       hiddenFromPublic: boolean;
     };
 
+export type ServicePlanPrintBroadcastAssignment = {
+  role_name: string;
+  member_name: string;
+};
+
 export type ServicePlanPrintPayload = {
   documentTitle: string;
   heading: string;
@@ -24,6 +29,7 @@ export type ServicePlanPrintPayload = {
   totalMinutes: number;
   leader: string | null;
   preacher: string | null;
+  broadcastAssignments: ServicePlanPrintBroadcastAssignment[];
   baseFontPx: number;
   rows: ServicePlanPrintRow[];
 };
@@ -41,8 +47,14 @@ function escapeHtml(s: string): string {
 }
 
 /** Подбор кегля под один лист A4 (2 колонки: время + блок). */
-export function resolveServicePlanPdfFontPx(rows: ServicePlanPrintRow[]): number {
+export function resolveServicePlanPdfFontPx(
+  rows: ServicePlanPrintRow[],
+  broadcastCount = 0,
+): number {
   let units = 4.2;
+  if (broadcastCount > 0) {
+    units += 1.15 + Math.min(broadcastCount, 14) * 0.34;
+  }
   for (const r of rows) {
     if (r.type === 'separator') {
       units += 1.05;
@@ -125,9 +137,42 @@ function buildSheetStyles(baseFontPx: number): string {
     .roles {
       font-size: var(--fs-sm);
       color: #292524;
-      margin: 0 0 14px;
+      margin: 0 0 10px;
       font-weight: 700;
       line-height: 1.35;
+    }
+    .broadcast {
+      margin: 0 0 12px;
+      padding: 8px 10px 9px;
+      background: #f5f5f4;
+      border-radius: 8px;
+      border: 1px solid #e7e5e4;
+    }
+    .broadcast-title {
+      font-size: var(--fs-xs);
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: #57534e;
+      margin-bottom: 6px;
+    }
+    .broadcast-list {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 4px 16px;
+    }
+    .broadcast-item {
+      font-size: var(--fs-xs);
+      line-height: 1.32;
+      min-width: 0;
+    }
+    .broadcast-role {
+      font-weight: 700;
+      color: #78716c;
+    }
+    .broadcast-name {
+      font-weight: 800;
+      color: #1c1917;
     }
     table {
       width: 100%;
@@ -200,6 +245,20 @@ function buildSheetStyles(baseFontPx: number): string {
   `;
 }
 
+function buildBroadcastHtml(assignments: ServicePlanPrintBroadcastAssignment[]): string {
+  if (assignments.length === 0) return '';
+  const items = assignments
+    .map(
+      (a) =>
+        `<div class="broadcast-item"><span class="broadcast-role">${escapeHtml(a.role_name)}</span> — <span class="broadcast-name">${escapeHtml(a.member_name)}</span></div>`,
+    )
+    .join('');
+  return `<div class="broadcast">
+    <div class="broadcast-title">Участники трансляции</div>
+    <div class="broadcast-list">${items}</div>
+  </div>`;
+}
+
 function buildPdfSheetHtml(payload: ServicePlanPrintPayload): string {
   const leaderLine =
     payload.leader || payload.preacher
@@ -217,6 +276,7 @@ function buildPdfSheetHtml(payload: ServicePlanPrintPayload): string {
         <h1>${escapeHtml(payload.heading)}</h1>
         <div class="meta">${escapeHtml(payload.dateLine)} · начало ${escapeHtml(payload.startTime)} · всего ${payload.totalMinutes} мин</div>
         ${leaderLine}
+        ${buildBroadcastHtml(payload.broadcastAssignments)}
         <table>
           <thead>
             <tr>

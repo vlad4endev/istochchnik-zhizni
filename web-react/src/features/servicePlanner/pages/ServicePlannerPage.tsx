@@ -69,6 +69,7 @@ import {
   type ServiceTemplateDetails,
 } from '../api';
 import { MediaTeamBlock } from '../../mediaSchedule/components/MediaTeamBlock';
+import { fetchMediaAssignmentsForPlan } from '../../mediaSchedule/api';
 import { meaningfulNoteLinesFromRaw } from '../plannerNoteText';
 import {
   downloadServicePlanPdf,
@@ -1099,7 +1100,6 @@ export function ServicePlannerPage() {
         hiddenFromPublic: isHiddenFromPublic(block),
       };
     });
-    const baseFontPx = resolveServicePlanPdfFontPx(rows);
     const dateLine = new Intl.DateTimeFormat('ru-RU', {
       weekday: 'long',
       day: 'numeric',
@@ -1111,6 +1111,22 @@ export function ServicePlannerPage() {
 
     setPdfExporting(true);
     try {
+      let broadcastAssignments: { role_name: string; member_name: string }[] = [];
+      try {
+        const mediaAssignments = await qc.fetchQuery({
+          queryKey: ['media-schedule', 'plan-assignments', draft.id],
+          queryFn: () => fetchMediaAssignmentsForPlan(draft.id),
+        });
+        broadcastAssignments = mediaAssignments.map((a) => ({
+          role_name: a.role.name,
+          member_name: a.member.name,
+        }));
+      } catch {
+        broadcastAssignments = [];
+      }
+
+      const pdfFontPx = resolveServicePlanPdfFontPx(rows, broadcastAssignments.length);
+
       await downloadServicePlanPdf(
         {
           documentTitle: `Программа служения ${draft.service_date}`,
@@ -1120,7 +1136,8 @@ export function ServicePlannerPage() {
           totalMinutes: totalDuration,
           leader: leader ? userLabel(leader) : null,
           preacher: preacher ? userLabel(preacher) : null,
-          baseFontPx,
+          broadcastAssignments,
+          baseFontPx: pdfFontPx,
           rows,
         },
         `programma-sluzheniya-${draft.service_date}.pdf`,
