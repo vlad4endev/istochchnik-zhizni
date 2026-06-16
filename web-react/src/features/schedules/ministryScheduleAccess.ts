@@ -79,8 +79,10 @@ export function canViewSundaySchedule(
   roles?: Array<AuthRole | string | null | undefined>,
 ): boolean {
   return (
+    isPastorAppRole(role, roles) ||
+    isAdminAppRole(role, roles) ||
     canModerateSongCatalogSession(role, roles) ||
-    hasAnyMinistryDirection(ministryDirection) ||
+    hasSundayMinistryDirection(ministryDirection) ||
     hasSundayMinistryRole(ministryRole)
   );
 }
@@ -92,10 +94,8 @@ export function canViewAnySchedule(
   roles?: Array<AuthRole | string | null | undefined>,
 ): boolean {
   return (
-    canModerateSongCatalogSession(role, roles) ||
-    hasAnyMinistryDirection(ministryDirection) ||
     canViewMediaSchedule(role, ministryDirection, roles) ||
-    hasSundayMinistryRole(ministryRole)
+    canViewSundaySchedule(role, ministryDirection, ministryRole, roles)
   );
 }
 

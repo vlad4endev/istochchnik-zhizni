@@ -41,12 +41,20 @@ function capitalizeRu(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
-function sundayDayNumbersInMonth(monthStart: Date): number[] {
+export function sundayDayNumbersInMonth(monthStart: Date): number[] {
   const start = startOfMonth(monthStart);
   const end = endOfMonth(monthStart);
   return eachDayOfInterval({ start, end })
     .filter((d) => isSunday(d))
     .map((d) => d.getDate());
+}
+
+export function sundayDatesYmdInMonth(monthStart: Date): string[] {
+  const start = startOfMonth(monthStart);
+  const end = endOfMonth(monthStart);
+  return eachDayOfInterval({ start, end })
+    .filter((d) => isSunday(d))
+    .map((d) => format(d, 'yyyy-MM-dd'));
 }
 
 function formatDayList(days: number[]): string {
@@ -67,6 +75,15 @@ function assignmentDaysForMember(
     )
     .map((p) => parseISO(p.service_date).getDate())
     .sort((a, b) => a - b);
+}
+
+export function memberAssignmentDaysInMonth(
+  plans: SundaySchedulePlan[],
+  memberId: number,
+  role: 'leader' | 'preacher',
+  monthStart: Date,
+): number[] {
+  return assignmentDaysForMember(plans, memberId, role, monthStart);
 }
 
 function buildPersonRows(

@@ -39,12 +39,19 @@ import {
 import { apiErrorMessage } from '../../mediaSchedule/api';
 import { MinistryScheduleSwitcher } from '../components/MinistryScheduleSwitcher';
 import { SundayScheduleTableView } from '../components/SundayScheduleTableView';
+import type { SundayScheduleTableCellEditRequest } from '../components/SundayScheduleTableView';
+import {
+  SundayScheduleTableCellEditor,
+  type SundayScheduleTableCellEdit,
+} from '../components/SundayScheduleTableCellEditor';
 import { UpcomingSundayServicesWidget } from '../components/UpcomingSundayServicesWidget';
 import { canManageSundaySchedule } from '../ministryScheduleAccess';
 import { firstNameOnly, upcomingSundayPlans } from '../utils/sundayScheduleDisplay';
 import {
   buildSundayScheduleTableModel,
+  sundayDatesYmdInMonth,
   tableRangeYmd,
+  threeMonthWindowStart,
 } from '../utils/sundayScheduleTableModel';
 import { memberHasMinistryRole as matchRole } from '../../mediaSchedule/ministryRoleMatch';
 
@@ -113,6 +120,7 @@ export function SundaySchedulePage() {
   const [selectedPlan, setSelectedPlan] = useState<SundaySchedulePlan | null>(null);
   const [leaderId, setLeaderId] = useState<number | ''>('');
   const [preacherId, setPreacherId] = useState<number | ''>('');
+  const [cellEdit, setCellEdit] = useState<SundayScheduleTableCellEdit | null>(null);
 
   const rangeFrom = useMemo(() => ymd(startOfWeek(startOfMonth(month), { weekStartsOn: 1 })), [month]);
   const rangeTo = useMemo(() => ymd(endOfWeek(endOfMonth(month), { weekStartsOn: 1 })), [month]);
@@ -141,6 +149,7 @@ export function SundaySchedulePage() {
   });
 
   const tableRange = useMemo(() => tableRangeYmd(tablePeriodStart), [tablePeriodStart]);
+  const tableMonthStarts = useMemo(() => threeMonthWindowStart(tablePeriodStart), [tablePeriodStart]);
 
   const tablePlansQ = useQuery({
     queryKey: ['sunday-schedule', 'table', tableRange.from, tableRange.to],
@@ -163,6 +172,14 @@ export function SundaySchedulePage() {
     return eachDayOfInterval({ start, end });
   }, [month]);
 
+  const tablePlansByDate = useMemo(() => {
+    const map = new Map<string, SundaySchedulePlan>();
+    for (const p of tablePlansQ.data ?? []) {
+      map.set(p.service_date, p);
+    }
+    return map;
+  }, [tablePlansQ.data]);
+
   const patchMut = useMutation({
     mutationFn: (body: {
       plan: Pick<SundaySchedulePlan, 'id' | 'service_date'>;
@@ -177,6 +194,56 @@ export function SundaySchedulePage() {
       void qc.invalidateQueries({ queryKey: ['sunday-schedule'] });
       void qc.invalidateQueries({ queryKey: ['service-planner'] });
       setSelectedPlan(null);
+    },
+  });
+
+  const saveTableCellMut = useMutation({
+    mutationFn: async (input: {
+      memberId: number;
+      role: 'leader' | 'preacher';
+      monthStart: Date;
+      selectedDayNumbers: number[];
+      previousDayNumbers: number[];
+    }) => {
+      const selectedSet = new Set(input.selectedDayNumbers);
+      const previousSet = new Set(input.previousDayNumbers);
+      const patches: Promise<void>[] = [];
+
+      for (const date of sundayDatesYmdInMonth(input.monthStart)) {
+        const day = parseISO(date).getDate();
+        const wasSelected = previousSet.has(day);
+        const isSelected = selectedSet.has(day);
+        if (wasSelected === isSelected) continue;
+
+        const plan = tablePlansByDate.get(date) ?? emptySundayPlan(date);
+
+        if (isSelected) {
+          patches.push(
+            saveSundayScheduleAssignments(plan, {
+              leader_member_id: input.role === 'leader' ? input.memberId : undefined,
+              preacher_member_id: input.role === 'preacher' ? input.memberId : undefined,
+            }),
+          );
+          continue;
+        }
+
+        if (input.role === 'leader' && plan.leader_member_id !== input.memberId) continue;
+        if (input.role === 'preacher' && plan.preacher_member_id !== input.memberId) continue;
+
+        patches.push(
+          saveSundayScheduleAssignments(plan, {
+            leader_member_id: input.role === 'leader' ? null : undefined,
+            preacher_member_id: input.role === 'preacher' ? null : undefined,
+          }),
+        );
+      }
+
+      await Promise.all(patches);
+    },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['sunday-schedule'] });
+      void qc.invalidateQueries({ queryKey: ['service-planner'] });
+      setCellEdit(null);
     },
   });
 
@@ -224,6 +291,28 @@ export function SundaySchedulePage() {
     }
     if (!canManage) return;
     openPlan(emptySundayPlan(dateKey));
+  }
+
+  function openTableCellEdit(request: SundayScheduleTableCellEditRequest) {
+    setCellEdit({
+      memberId: request.memberId,
+      memberName: request.memberName,
+      role: request.role,
+      monthStart: request.monthStart,
+      monthLabel: request.monthLabel,
+      initialDayNumbers: request.initialDayNumbers,
+    });
+  }
+
+  function saveTableCellEdit(selectedDayNumbers: number[]) {
+    if (!cellEdit) return;
+    saveTableCellMut.mutate({
+      memberId: cellEdit.memberId,
+      role: cellEdit.role,
+      monthStart: cellEdit.monthStart,
+      selectedDayNumbers,
+      previousDayNumbers: cellEdit.initialDayNumbers,
+    });
   }
 
   return (
@@ -292,9 +381,12 @@ export function SundaySchedulePage() {
           <SundayScheduleTableView
             model={tableModel}
             loading={tablePlansQ.isLoading || membersQ.isLoading}
+            canManage={canManage}
+            monthStarts={tableMonthStarts}
             onPrevPeriod={() => setTablePeriodStart((d) => addMonths(d, -1))}
             onNextPeriod={() => setTablePeriodStart((d) => addMonths(d, 1))}
             onTodayPeriod={() => setTablePeriodStart(startOfMonth(new Date()))}
+            onEditCell={canManage ? openTableCellEdit : undefined}
           />
         ) : (
           <>
@@ -734,6 +826,16 @@ export function SundaySchedulePage() {
             </div>
           </div>
         ) : null}
+
+        <SundayScheduleTableCellEditor
+          edit={cellEdit}
+          saving={saveTableCellMut.isPending}
+          errorMessage={saveTableCellMut.isError ? apiErrorMessage(saveTableCellMut.error) : null}
+          onClose={() => {
+            if (!saveTableCellMut.isPending) setCellEdit(null);
+          }}
+          onSave={saveTableCellEdit}
+        />
       </div>
     </div>
   );

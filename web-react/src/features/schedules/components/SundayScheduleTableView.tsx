@@ -7,38 +7,75 @@ import type {
   SundayScheduleTableSection,
 } from '../utils/sundayScheduleTableModel';
 
+export type SundayScheduleTableCellEditRequest = {
+  memberId: number;
+  memberName: string;
+  role: 'leader' | 'preacher';
+  monthIndex: number;
+  monthStart: Date;
+  monthLabel: string;
+  initialDayNumbers: number[];
+};
+
 type Props = {
   model: SundayScheduleTableModel | null;
   loading?: boolean;
+  canManage?: boolean;
+  monthStarts?: Date[];
   onPrevPeriod?: () => void;
   onNextPeriod?: () => void;
   onTodayPeriod?: () => void;
+  onEditCell?: (request: SundayScheduleTableCellEditRequest) => void;
 };
 
-function DayChips({ value, compact = false }: { value: string; compact?: boolean }) {
+function DayChips({
+  value,
+  compact = false,
+  interactive = false,
+  onClick,
+}: {
+  value: string;
+  compact?: boolean;
+  interactive?: boolean;
+  onClick?: () => void;
+}) {
   const days = value
     .split(',')
     .map((d) => d.trim())
     .filter(Boolean);
-  if (days.length === 0) {
-    return <span className="text-xs font-semibold text-stone-300">—</span>;
-  }
+  const content =
+    days.length === 0 ? (
+      <span className={interactive ? 'text-xs font-semibold text-stone-400' : 'text-xs font-semibold text-stone-300'}>
+        {interactive ? 'Выбрать' : '—'}
+      </span>
+    ) : (
+      <div className={['flex flex-wrap gap-1', compact ? 'justify-start' : 'justify-center'].join(' ')}>
+        {days.map((day) => (
+          <span
+            key={day}
+            className={[
+              'inline-flex items-center justify-center rounded-lg font-extrabold text-primary',
+              compact
+                ? 'min-h-[26px] min-w-[26px] bg-primary/10 px-1.5 py-0.5 text-[11px]'
+                : 'min-h-[28px] min-w-[28px] bg-primary/10 px-2 py-0.5 text-xs shadow-sm ring-1 ring-primary/10',
+            ].join(' ')}
+          >
+            {day}
+          </span>
+        ))}
+      </div>
+    );
+
+  if (!interactive || !onClick) return content;
+
   return (
-    <div className={['flex flex-wrap gap-1', compact ? 'justify-start' : 'justify-center'].join(' ')}>
-      {days.map((day) => (
-        <span
-          key={day}
-          className={[
-            'inline-flex items-center justify-center rounded-lg font-extrabold text-primary',
-            compact
-              ? 'min-h-[26px] min-w-[26px] bg-primary/10 px-1.5 py-0.5 text-[11px]'
-              : 'min-h-[28px] min-w-[28px] bg-primary/10 px-2 py-0.5 text-xs shadow-sm ring-1 ring-primary/10',
-          ].join(' ')}
-        >
-          {day}
-        </span>
-      ))}
-    </div>
+    <button
+      type="button"
+      onClick={onClick}
+      className="tap-highlight-transparent w-full rounded-xl border border-transparent p-1 text-left transition hover:border-primary/20 hover:bg-primary/[0.04] active:bg-primary/[0.06]"
+    >
+      {content}
+    </button>
   );
 }
 
@@ -103,10 +140,37 @@ function SectionIcon({ roleTitle }: { roleTitle: SundayScheduleTableSection['rol
 function MobileSection({
   section,
   months,
+  monthStarts,
+  canManage,
+  onEditCell,
 }: {
   section: SundayScheduleTableSection;
   months: SundayScheduleTableMonth[];
+  monthStarts: Date[];
+  canManage: boolean;
+  onEditCell?: (request: SundayScheduleTableCellEditRequest) => void;
 }) {
+  const role = section.roleTitle.startsWith('Ведущий') ? 'leader' : 'preacher';
+
+  function handleEdit(row: (typeof section.rows)[number], monthIndex: number) {
+    if (!canManage || !onEditCell) return;
+    const days = row.monthCells[monthIndex] ?? '';
+    const initialDayNumbers = days
+      .split(',')
+      .map((d) => d.trim())
+      .filter(Boolean)
+      .map((d) => Number(d))
+      .filter((n) => Number.isFinite(n));
+    onEditCell({
+      memberId: row.memberId,
+      memberName: row.name,
+      role,
+      monthIndex,
+      monthStart: monthStarts[monthIndex]!,
+      monthLabel: months[monthIndex]?.label ?? '',
+      initialDayNumbers,
+    });
+  }
   return (
     <section className="overflow-hidden rounded-2xl border border-stone-200/80 bg-white shadow-[var(--shadow-card)]">
       <div className="border-b border-primary/10 bg-gradient-to-r from-primary/[0.08] via-primary/[0.04] to-transparent px-4 py-3.5">
@@ -148,7 +212,12 @@ function MobileSection({
                   <p className="mb-1.5 truncate text-[10px] font-extrabold uppercase tracking-wide text-stone-500">
                     {month.label.slice(0, 3)}
                   </p>
-                  <DayChips value={row.monthCells[monthIndex] ?? ''} compact />
+                  <DayChips
+                    value={row.monthCells[monthIndex] ?? ''}
+                    compact
+                    interactive={canManage}
+                    onClick={() => handleEdit(row, monthIndex)}
+                  />
                 </div>
               ))}
             </div>
@@ -159,7 +228,42 @@ function MobileSection({
   );
 }
 
-function DesktopTable({ model }: { model: SundayScheduleTableModel }) {
+function DesktopTable({
+  model,
+  monthStarts,
+  canManage,
+  onEditCell,
+}: {
+  model: SundayScheduleTableModel;
+  monthStarts: Date[];
+  canManage: boolean;
+  onEditCell?: (request: SundayScheduleTableCellEditRequest) => void;
+}) {
+  function handleEdit(
+    section: SundayScheduleTableSection,
+    row: SundayScheduleTableSection['rows'][number],
+    monthIndex: number,
+  ) {
+    if (!canManage || !onEditCell) return;
+    const role = section.roleTitle.startsWith('Ведущий') ? 'leader' : 'preacher';
+    const days = row.monthCells[monthIndex] ?? '';
+    const initialDayNumbers = days
+      .split(',')
+      .map((d) => d.trim())
+      .filter(Boolean)
+      .map((d) => Number(d))
+      .filter((n) => Number.isFinite(n));
+    onEditCell({
+      memberId: row.memberId,
+      memberName: row.name,
+      role,
+      monthIndex,
+      monthStart: monthStarts[monthIndex]!,
+      monthLabel: model.months[monthIndex]?.label ?? '',
+      initialDayNumbers,
+    });
+  }
+
   return (
     <div className="overflow-hidden rounded-2xl border border-stone-200/80 bg-white shadow-sm">
       <div className="overflow-x-auto">
@@ -233,7 +337,11 @@ function DesktopTable({ model }: { model: SundayScheduleTableModel }) {
                         key={`${row.memberId}-${cellIndex}`}
                         className="border-b border-stone-100 px-3 py-3 align-middle"
                       >
-                        <DayChips value={cell} />
+                        <DayChips
+                          value={cell}
+                          interactive={canManage}
+                          onClick={() => handleEdit(section, row, cellIndex)}
+                        />
                       </td>
                     ))}
                   </tr>
@@ -250,9 +358,12 @@ function DesktopTable({ model }: { model: SundayScheduleTableModel }) {
 export function SundayScheduleTableView({
   model,
   loading = false,
+  canManage = false,
+  monthStarts = [],
   onPrevPeriod,
   onNextPeriod,
   onTodayPeriod,
+  onEditCell,
 }: Props) {
   if (loading) {
     return (
@@ -278,14 +389,32 @@ export function SundayScheduleTableView({
       </div>
 
       <div className="hidden lg:block">
-        <DesktopTable model={model} />
+        <DesktopTable
+          model={model}
+          monthStarts={monthStarts}
+          canManage={canManage}
+          onEditCell={onEditCell}
+        />
       </div>
 
       <div className="space-y-4 lg:hidden">
         {model.sections.map((section) => (
-          <MobileSection key={section.roleTitle} section={section} months={model.months} />
+          <MobileSection
+            key={section.roleTitle}
+            section={section}
+            months={model.months}
+            monthStarts={monthStarts}
+            canManage={canManage}
+            onEditCell={onEditCell}
+          />
         ))}
       </div>
+
+      {canManage ? (
+        <p className="text-xs font-semibold text-stone-500">
+          Нажмите на ячейку с датами (или «Выбрать»), чтобы назначить участника на воскресенья месяца.
+        </p>
+      ) : null}
     </div>
     </section>
   );

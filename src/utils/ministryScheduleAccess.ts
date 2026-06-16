@@ -45,6 +45,8 @@ export function listAccessibleScheduleMinistries(input: {
   ministry_direction?: unknown;
   ministry_role?: unknown;
   canModerateCatalog?: boolean;
+  app_role?: unknown;
+  app_roles?: unknown;
 }): ScheduleMinistryKey[] {
   const out: ScheduleMinistryKey[] = [];
   if (
@@ -55,9 +57,13 @@ export function listAccessibleScheduleMinistries(input: {
     out.push('media');
   }
   if (
-    input.canModerateCatalog ||
-    hasAnyMinistryDirection(input.ministry_direction) ||
-    hasSundayMinistryRole(input.ministry_role)
+    canViewSundaySchedule({
+      ministry_direction: input.ministry_direction,
+      ministry_role: input.ministry_role,
+      canModerateCatalog: input.canModerateCatalog,
+      app_role: input.app_role,
+      app_roles: input.app_roles,
+    })
   ) {
     out.push('sunday');
   }
@@ -68,9 +74,12 @@ export function canViewSundaySchedule(input: {
   ministry_direction?: unknown;
   ministry_role?: unknown;
   canModerateCatalog?: boolean;
+  app_role?: unknown;
+  app_roles?: unknown;
 }): boolean {
   if (input.canModerateCatalog) return true;
-  if (hasAnyMinistryDirection(input.ministry_direction)) return true;
+  if (canManageSundaySchedule({ app_role: input.app_role, app_roles: input.app_roles })) return true;
+  if (hasSundayMinistryDirection(input.ministry_direction)) return true;
   if (hasSundayMinistryRole(input.ministry_role)) return true;
   return false;
 }
@@ -79,12 +88,19 @@ export function canViewAnySchedule(input: {
   ministry_direction?: unknown;
   ministry_role?: unknown;
   canModerateCatalog?: boolean;
+  app_role?: unknown;
+  app_roles?: unknown;
 }): boolean {
   if (input.canModerateCatalog) return true;
-  if (hasAnyMinistryDirection(input.ministry_direction)) return true;
-  if (hasMediaMinistryDirection(input.ministry_direction)) return true;
-  if (hasSundayMinistryRole(input.ministry_role)) return true;
-  if (memberHasMinistryRole(input.ministry_role, 'Медиа менеджер')) return true;
+  if (
+    hasMediaMinistryDirection(input.ministry_direction) ||
+    memberHasMinistryRole(input.ministry_role, 'Медиа менеджер') ||
+    canManageSundaySchedule({ app_role: input.app_role, app_roles: input.app_roles }) ||
+    hasSundayMinistryDirection(input.ministry_direction) ||
+    hasSundayMinistryRole(input.ministry_role)
+  ) {
+    return true;
+  }
   return false;
 }
 

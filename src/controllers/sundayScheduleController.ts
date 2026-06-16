@@ -57,13 +57,15 @@ async function ensureSundayScheduleView(req: Request, res: Response): Promise<nu
   const userId = await ensureAuth(req, res);
   if (userId == null) return null;
   const r = req as AuthReq;
-  if (sessionCanModerateCatalog(r)) return userId;
+  const sessionRoles = rolesOfSession(r);
   const profile = await getMemberProfile(userId);
   if (
-    !profile ||
     !canViewSundaySchedule({
-      ministry_direction: profile.ministry_direction,
-      ministry_role: profile.ministry_role,
+      ministry_direction: profile?.ministry_direction,
+      ministry_role: profile?.ministry_role,
+      canModerateCatalog: sessionCanModerateCatalog(r),
+      app_role: r.authUserRole,
+      app_roles: sessionRoles,
     })
   ) {
     res.status(403).json({ error: 'Раздел доступен служителям с указанным направлением или ролью' });
