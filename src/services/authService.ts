@@ -1,6 +1,7 @@
 import { createHash, randomBytes, scrypt as scryptCallback, timingSafeEqual } from 'crypto';
 import { promisify } from 'util';
 import { query } from '../config/db';
+import { getPrayerCycleTodayYmd } from '../utils/prayerPlanTimeZone';
 import type { PrayerCyclePublic } from './prayerCycleService';
 import { getPrayerCycleSnapshotForDate, toPublicCycleInfo } from './prayerCycleService';
 import type { AppRole } from '../types/appRole';
@@ -1829,8 +1830,7 @@ export async function rotateAccessByRefreshToken(
 }
 
 export async function getAuthUserById(userId: number): Promise<AuthUser | null> {
-  const today = new Date().toISOString().slice(0, 10);
-  const snap = await getPrayerCycleSnapshotForDate(today);
+  const snap = await getPrayerCycleSnapshotForDate(getPrayerCycleTodayYmd());
   const ci = snap?.cycle_index ?? 0;
 
   const result = await query(

@@ -14,6 +14,7 @@ import {
   mergePrayerCycleRosterOrderIds,
   upsertMemberPrayerForCycle,
   upsertPrayerCycleRosterCustomOrder,
+  archiveMemberLegacyPrayerRequestColumn,
   CYCLE_PRAYER_REQUEST_SELECT_SQL,
   snapshotPastCyclePrayersToHistory,
   PRAYER_CYCLE_MEMBERS_WHERE_M,
@@ -561,11 +562,12 @@ export async function createUser(input: CreateUserInput): Promise<AppUser> {
   const prayerRequest = (created.prayer_request ?? '').trim();
   const ci = await getCurrentCycleIndexForUpsert();
   if (prayerRequest.length > 0) {
+    await archiveMemberLegacyPrayerRequestColumn(created.id, ci);
     await upsertMemberPrayerForCycle(created.id, ci, prayerRequest);
     await appendPrayerRequestHistory(created.id, prayerRequest, ci);
   }
 
-  return created;
+  return (await getUserById(created.id)) ?? created;
 }
 
 export interface BulkCreateUsersOutcome {
@@ -685,11 +687,6 @@ export async function updateUser(id: number, input: UpdateUserInput): Promise<Ap
     values.push(normalizeOptionalString(input.ministry_direction));
   }
 
-  if (typeof input.prayer_request === 'string') {
-    updates.push(`prayer_request = $${values.length + 1}`);
-    values.push(normalizeOptionalString(input.prayer_request));
-  }
-
   if (typeof input.birth_date === 'string') {
     updates.push(`birth_date = $${values.length + 1}`);
     values.push(normalizeOptionalString(input.birth_date));
@@ -754,6 +751,17 @@ export async function updateUser(id: number, input: UpdateUserInput): Promise<Ap
   }
 
   if (updates.length === 0) {
+    if (hasPrayerRequestUpdate) {
+      const normalizedStored = normalizeOptionalString(input.prayer_request);
+      const nextForHistory = (normalizedStored ?? '').trim();
+      const prevPrayerRequest = previousPrayerRequest ?? '';
+      const ci = await getCurrentCycleIndexForUpsert();
+      await archiveMemberLegacyPrayerRequestColumn(id, ci);
+      await upsertMemberPrayerForCycle(id, ci, normalizedStored);
+      if (nextForHistory.length > 0 && nextForHistory !== prevPrayerRequest) {
+        await appendPrayerRequestHistory(id, nextForHistory, ci);
+      }
+    }
     return getUserById(id);
   }
 
@@ -804,11 +812,12 @@ export async function updateUser(id: number, input: UpdateUserInput): Promise<Ap
     const nextForHistory = (normalizedStored ?? '').trim();
     const prevPrayerRequest = previousPrayerRequest ?? '';
     const ci = await getCurrentCycleIndexForUpsert();
+    await archiveMemberLegacyPrayerRequestColumn(id, ci);
     await upsertMemberPrayerForCycle(id, ci, normalizedStored);
-    // «Предыдущее» — как в UI: COALESCE(mpc, members); «следующее» — то же, что пишем в mpc.
     if (nextForHistory.length > 0 && nextForHistory !== prevPrayerRequest) {
       await appendPrayerRequestHistory(id, nextForHistory, ci);
     }
+    return getUserById(id);
   }
 
   if (existingBeforeCycleChange?.in_prayer_cycle && existingBeforeCycleChange.is_active) {

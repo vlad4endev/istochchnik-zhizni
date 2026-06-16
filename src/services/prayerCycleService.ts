@@ -2,10 +2,10 @@ import { query } from '../config/db';
 import { notifyRealtime } from '../realtime/notify';
 import {
   addUtcDaysToIsoDate,
-  getDiffDays,
   getMondayBasedDayIndex,
   getPrayerCyclePosition,
 } from '../utils/isoDates';
+import { getPrayerCycleTodayYmd } from '../utils/prayerPlanTimeZone';
 
 /** Участники с этим флагом входят в расчёт длины цикла и очереди «день за днём». */
 export const PRAYER_CYCLE_MEMBERS_WHERE = 'is_active = TRUE AND in_prayer_cycle = TRUE';
@@ -110,8 +110,7 @@ export function toPublicCycleInfo(s: PrayerCycleSnapshot): PrayerCyclePublic {
 }
 
 export async function getCurrentCycleIndexForUpsert(): Promise<number> {
-  const today = new Date().toISOString().slice(0, 10);
-  const snap = await getPrayerCycleSnapshotForDate(today);
+  const snap = await getPrayerCycleSnapshotForDate(getPrayerCycleTodayYmd());
   return snap?.cycle_index ?? 0;
 }
 
@@ -136,29 +135,86 @@ export async function upsertMemberPrayerForCycle(
   );
 }
 
-async function clearLegacyMemberPrayerRequestAfterSnapshot(ciNow: number): Promise<void> {
-  await query(
-    `UPDATE members m
-        SET prayer_request = NULL,
-            updated_at = NOW()
-      WHERE NULLIF(TRIM(COALESCE(m.prayer_request, '')), '') IS NOT NULL
+/** Перенос устаревшего `members.prayer_request` в журнал (без потери текста). */
+async function archiveLegacyMemberPrayerRequestsToHistory(ciNow: number): Promise<number> {
+  const archiveCycle = Math.max(ciNow - 1, 0);
+  const result = await query(
+    `INSERT INTO member_prayer_request_history (member_id, prayer_request, cycle_index, created_at)
+     SELECT m.id,
+            trim(m.prayer_request),
+            $2,
+            NOW()
+       FROM members m
+      WHERE NULLIF(trim(COALESCE(m.prayer_request, '')), '') IS NOT NULL
         AND NOT EXISTS (
           SELECT 1
-            FROM member_prayer_by_cycle mpc
-           WHERE mpc.member_id = m.id
-             AND mpc.cycle_index = $1
-             AND NULLIF(TRIM(mpc.prayer_request), '') IS NOT NULL
+            FROM member_prayer_request_history h
+           WHERE h.member_id = m.id
+             AND h.cycle_index IS NOT DISTINCT FROM $2
+             AND trim(h.prayer_request) = trim(m.prayer_request)
         )`,
-    [ciNow],
+    [ciNow, archiveCycle],
+  );
+  await query(
+    `UPDATE members
+        SET prayer_request = NULL,
+            updated_at = NOW()
+      WHERE NULLIF(trim(COALESCE(prayer_request, '')), '') IS NOT NULL`,
+  );
+  return result.rowCount ?? 0;
+}
+
+/** Перед записью в mpc: устаревший текст из members.prayer_request — в журнал, не в /dev/null. */
+export async function archiveMemberLegacyPrayerRequestColumn(
+  memberId: number,
+  cycleIndex: number,
+): Promise<void> {
+  const archiveCycle = Math.max(cycleIndex - 1, 0);
+  await query(
+    `INSERT INTO member_prayer_request_history (member_id, prayer_request, cycle_index, created_at)
+     SELECT m.id,
+            trim(m.prayer_request),
+            $2,
+            NOW()
+       FROM members m
+      WHERE m.id = $1
+        AND NULLIF(trim(COALESCE(m.prayer_request, '')), '') IS NOT NULL
+        AND NOT EXISTS (
+          SELECT 1
+            FROM member_prayer_request_history h
+           WHERE h.member_id = m.id
+             AND h.cycle_index IS NOT DISTINCT FROM $2
+             AND trim(h.prayer_request) = trim(m.prayer_request)
+        )`,
+    [memberId, archiveCycle],
+  );
+  await query(
+    `UPDATE members SET prayer_request = NULL, updated_at = NOW() WHERE id = $1`,
+    [memberId],
   );
 }
 
+const MPC_DELETE_ONLY_IF_ARCHIVED_SQL = `
+  AND (
+    NULLIF(trim(mpc.prayer_request), '') IS NULL
+    OR EXISTS (
+      SELECT 1
+        FROM member_prayer_request_history h
+       WHERE h.member_id = mpc.member_id
+         AND h.cycle_index IS NOT DISTINCT FROM mpc.cycle_index
+    )
+  )`;
+
 /**
- * Перенос нужд завершённых циклов в журнал и очистка устаревшего `members.prayer_request`,
- * чтобы поле текущего цикла оставалось пустым до нового ввода.
+ * Перенос нужд завершённых циклов в журнал; из member_prayer_by_cycle удаляем только уже
+ * заархивированные строки (текст остаётся в member_prayer_request_history).
  */
 export async function snapshotPastCyclePrayersToHistory(): Promise<number> {
-  const ciNow = await getCurrentCycleIndexForUpsert();
+  const todayYmd = getPrayerCycleTodayYmd();
+  const snap = await getPrayerCycleSnapshotForDate(todayYmd);
+  const ciNow = snap?.cycle_index ?? 0;
+  const rangeStart = snap?.start_date ?? todayYmd;
+
   const result = await query(
     `INSERT INTO member_prayer_request_history (member_id, prayer_request, cycle_index, created_at)
      SELECT mpc.member_id,
@@ -166,7 +222,6 @@ export async function snapshotPastCyclePrayersToHistory(): Promise<number> {
             mpc.cycle_index,
             mpc.updated_at
        FROM member_prayer_by_cycle mpc
-       INNER JOIN members m ON m.id = mpc.member_id AND m.is_active = TRUE
       WHERE mpc.cycle_index < $1
         AND NULLIF(trim(mpc.prayer_request), '') IS NOT NULL
         AND NOT EXISTS (
@@ -177,10 +232,43 @@ export async function snapshotPastCyclePrayersToHistory(): Promise<number> {
         )`,
     [ciNow],
   );
-  const inserted = result.rowCount ?? 0;
-  await query(`DELETE FROM member_prayer_by_cycle WHERE cycle_index < $1`, [ciNow]);
-  await clearLegacyMemberPrayerRequestAfterSnapshot(ciNow);
-  if (inserted > 0) {
+  let inserted = result.rowCount ?? 0;
+
+  const staleCurrent = await query(
+    `INSERT INTO member_prayer_request_history (member_id, prayer_request, cycle_index, created_at)
+     SELECT mpc.member_id,
+            trim(mpc.prayer_request),
+            mpc.cycle_index,
+            mpc.updated_at
+       FROM member_prayer_by_cycle mpc
+      WHERE mpc.cycle_index = $1
+        AND mpc.updated_at::date < $2::date
+        AND NULLIF(trim(mpc.prayer_request), '') IS NOT NULL
+        AND NOT EXISTS (
+          SELECT 1
+            FROM member_prayer_request_history h
+           WHERE h.member_id = mpc.member_id
+             AND h.cycle_index IS NOT DISTINCT FROM mpc.cycle_index
+        )`,
+    [ciNow, rangeStart],
+  );
+  inserted += staleCurrent.rowCount ?? 0;
+  inserted += await archiveLegacyMemberPrayerRequestsToHistory(ciNow);
+
+  const deletedPast = await query(
+    `DELETE FROM member_prayer_by_cycle mpc
+      WHERE mpc.cycle_index < $1
+      ${MPC_DELETE_ONLY_IF_ARCHIVED_SQL}`,
+    [ciNow],
+  );
+  const staleDeleted = await query(
+    `DELETE FROM member_prayer_by_cycle mpc
+      WHERE mpc.cycle_index = $1
+        AND mpc.updated_at::date < $2::date
+        ${MPC_DELETE_ONLY_IF_ARCHIVED_SQL}`,
+    [ciNow, rangeStart],
+  );
+  if (inserted > 0 || (deletedPast.rowCount ?? 0) > 0 || (staleDeleted.rowCount ?? 0) > 0) {
     notifyRealtime(['members', 'calendar']);
   }
   return inserted;

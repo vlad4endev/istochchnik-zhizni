@@ -1,6 +1,7 @@
 import { query } from '../config/db';
 import { getDiffDays, getPrayerCyclePosition } from '../utils/isoDates';
-import { addCalendarDaysYmd, formatYmdInTimeZone, getZonedNow } from '../utils/zonedTime';
+import { addCalendarDaysYmd, getZonedNow } from '../utils/zonedTime';
+import { getPrayerCycleTodayYmd, resolvePrayerPlanWeekTimeZone } from '../utils/prayerPlanTimeZone';
 import {
   computeCycleIndex,
   dayIndexInCycle,
@@ -114,24 +115,13 @@ export interface NextWeekMemberAssignment {
  * Таймзона для понедельник–воскресенье «эта / следующая неделя» (сбор нужд, план).
  * Совпадает с cron автораспределения; не UTC — иначе в понедельник 00:00 по Москве ещё «воскресенье» в UTC и недели съезжают.
  */
-function resolvePrayerPlanWeekTimeZone(): string {
-  const candidates = [process.env.PRAYER_PLAN_WEEK_TZ, process.env.CURATOR_DISTRIBUTION_TZ];
-  for (const raw of candidates) {
-    const tz = raw?.trim();
-    if (!tz) continue;
-    try {
-      Intl.DateTimeFormat(undefined, { timeZone: tz });
-      return tz;
-    } catch {
-      // ignore invalid TZ
-    }
-  }
-  return 'Europe/Moscow';
+function resolvePrayerPlanWeekTimeZoneLocal(): string {
+  return resolvePrayerPlanWeekTimeZone();
 }
 
 /** Семь дат пн–вс следующей календарной недели (пн следующей недели после «этой» в таймзоне церкви). */
 export function getNextWeekDates(): string[] {
-  const tz = resolvePrayerPlanWeekTimeZone();
+  const tz = resolvePrayerPlanWeekTimeZoneLocal();
   const current = getCurrentWeekDates();
   const nextMonday = addCalendarDaysYmd(tz, current[0], 7);
   return Array.from({ length: 7 }, (_, index) => addCalendarDaysYmd(tz, nextMonday, index));
@@ -139,7 +129,7 @@ export function getNextWeekDates(): string[] {
 
 /** Семь дат пн–вс текущей календарной недели (пн–вс, в которую попадает «сегодня» в таймзоне церкви). */
 export function getCurrentWeekDates(): string[] {
-  const tz = resolvePrayerPlanWeekTimeZone();
+  const tz = resolvePrayerPlanWeekTimeZoneLocal();
   const z = getZonedNow(tz, new Date());
   const todayYmd = `${z.year}-${String(z.month).padStart(2, '0')}-${String(z.day).padStart(2, '0')}`;
   const day = z.weekDay; // 0=Sun ... 6=Sat (как getUTCDay)
@@ -609,8 +599,7 @@ async function getMemberAssignmentsForDates(dates: string[]): Promise<NextWeekMe
 
 /** Календарный день «сегодня» для статистики раздела «Молитва» (как у недели плана молитв). */
 export function getPrayerSectionStatsDateYmd(): string {
-  const tz = resolvePrayerPlanWeekTimeZone();
-  return formatYmdInTimeZone(tz, new Date());
+  return getPrayerCycleTodayYmd();
 }
 
 /** Одна запись на пару (участник, день): повторные заходы в тот же день не увеличивают счётчик. */
