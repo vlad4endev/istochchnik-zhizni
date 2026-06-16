@@ -198,13 +198,22 @@ async function fetchPlanContext(planId: number): Promise<{
 
 async function notifyAssignment(
   memberId: number,
-  kind: 'assignment' | 'cancellation' | 'reminder',
-  ctx: { roleName: string; eventTitle: string; eventDate: string; startTime: string | null },
+  kind: 'assignment' | 'cancellation' | 'reminder' | 'declined_to_manager',
+  ctx: {
+    roleName: string;
+    eventTitle: string;
+    eventDate: string;
+    startTime: string | null;
+    memberName?: string;
+  },
   extra?: { assignmentId?: number; eventRefId?: number; roleId?: number },
 ): Promise<void> {
   const timePart = ctx.startTime ? ` · ${ctx.startTime}` : '';
   const datePart = `${ctx.eventTitle} · ${ctx.eventDate}${timePart}`;
-  const body = `${ctx.roleName} · ${datePart}`;
+  const body =
+    kind === 'declined_to_manager' && ctx.memberName
+      ? `${ctx.memberName} отказался(а) · ${ctx.roleName} · ${datePart}`
+      : `${ctx.roleName} · ${datePart}`;
 
   if (kind === 'assignment') {
     await sendPush(memberId, '📅 Вас назначили на служение', body, {
@@ -224,6 +233,18 @@ async function notifyAssignment(
   if (kind === 'cancellation') {
     await sendPush(memberId, 'Назначение отменено', body, {
       type: 'media_cancellation',
+    });
+    return;
+  }
+
+  if (kind === 'declined_to_manager') {
+    const planId = extra?.eventRefId;
+    await sendPush(memberId, '⚠️ Отказ от назначения', body, {
+      url: planId != null ? `/media-schedule?planId=${planId}` : '/media-schedule',
+      type: 'media_assignment_declined',
+      assignmentId: extra?.assignmentId != null ? String(extra.assignmentId) : '',
+      eventRefId: planId != null ? String(planId) : '',
+      roleId: extra?.roleId != null ? String(extra.roleId) : '',
     });
     return;
   }
@@ -484,6 +505,33 @@ export async function updateAssignmentStatus(
   if (!ASSIGNMENT_STATUSES.has(normalized)) {
     throw new Error('invalid_status');
   }
+
+  const existingResult = await query(
+    `SELECT
+       a.id,
+       a.event_ref_id,
+       a.member_id,
+       a.role_id,
+       a.status,
+       a.created_by,
+       m.name,
+       m.first_name,
+       m.last_name,
+       r.name AS role_name
+     FROM media_assignments a
+     JOIN members m ON m.id = a.member_id
+     JOIN media_roles r ON r.id = a.role_id
+     WHERE a.id = $1
+     LIMIT 1`,
+    [assignmentId],
+  );
+  const existingRow = existingResult.rows[0] as Record<string, unknown> | undefined;
+  if (!existingRow) {
+    throw new Error('not_found');
+  }
+
+  const previousStatus = String(existingRow.status ?? 'assigned') as AssignmentStatus;
+
   const result = await query(
     `UPDATE media_assignments SET status = $2 WHERE id = $1`,
     [assignmentId, normalized],
@@ -491,6 +539,38 @@ export async function updateAssignmentStatus(
   if ((result.rowCount ?? 0) === 0) {
     throw new Error('not_found');
   }
+
+  if (normalized !== 'declined' || previousStatus === 'declined') {
+    return;
+  }
+
+  const createdBy =
+    existingRow.created_by == null ? null : Number(existingRow.created_by);
+  const assigneeId = Number(existingRow.member_id);
+  if (createdBy == null || !Number.isFinite(createdBy) || createdBy === assigneeId) {
+    return;
+  }
+
+  const eventRefId = Number(existingRow.event_ref_id);
+  const planCtx = await fetchPlanContext(eventRefId);
+  if (!planCtx) return;
+
+  void notifyAssignment(
+    createdBy,
+    'declined_to_manager',
+    {
+      roleName: String(existingRow.role_name ?? ''),
+      eventTitle: planCtx.title,
+      eventDate: planCtx.event_date,
+      startTime: planCtx.start_time,
+      memberName: memberDisplayName(existingRow),
+    },
+    {
+      assignmentId,
+      eventRefId,
+      roleId: Number(existingRow.role_id),
+    },
+  ).catch((e) => console.warn('[media-schedule] decline manager push failed', e));
 }
 
 export async function getAssignmentById(assignmentId: number): Promise<MediaAssignment | null> {
