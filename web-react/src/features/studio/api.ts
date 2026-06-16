@@ -141,7 +141,19 @@ export async function fetchSetlists(): Promise<SetlistRow[]> {
 }
 
 export async function createSetlist(title: string, event_date: string | null): Promise<SetlistRow> {
-  const { data } = await apiClient.post<SetlistRow>(`${STUDIO}/setlists`, { title, event_date });
+  const normalizedDate =
+    event_date == null || event_date.trim() === ''
+      ? null
+      : /^\d{4}-\d{2}-\d{2}$/.test(event_date.trim())
+        ? event_date.trim()
+        : null;
+  if (event_date != null && event_date.trim() !== '' && normalizedDate === null) {
+    throw new Error('Некорректная дата события');
+  }
+  const { data } = await apiClient.post<SetlistRow>(`${STUDIO}/setlists`, {
+    title,
+    event_date: normalizedDate,
+  });
   return data;
 }
 
@@ -233,4 +245,9 @@ export async function aiChordPlacement(content: string): Promise<{
 }> {
   const { data } = await apiClient.post(`${STUDIO}/ai/chord-placement`, { content });
   return data as { content: string; changedLines: number; totalChords: number };
+}
+
+export async function aiSongCleanup(content: string): Promise<{ chordPro: string }> {
+  const { data } = await apiClient.post<{ chordPro: string }>(`${STUDIO}/ai/song-cleanup`, { content });
+  return data;
 }

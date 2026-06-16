@@ -32,7 +32,7 @@ import { SmartImportModal, type SmartImportSourceTab } from '../addSong/SmartImp
 import { LyricsWithChords } from '../components/LyricsWithChords';
 import { quickChordsForKey } from '../addSong/quickChords';
 import { extractCommonChords } from '../chordProEngine';
-import { aiChordPlacement, fetchStudioCatalogSong, fetchVersionForSong, saveVersion } from '../../studio/api';
+import { aiSongCleanup, fetchStudioCatalogSong, fetchVersionForSong, saveVersion } from '../../studio/api';
 import { usePublishSong } from '../../studio/usePublishSong';
 import { studioMySongsPath, getStudioModuleSurface } from '../../studio/studioPaths';
 import { useStudioAppChrome } from '../../studio/useStudioAppChrome';
@@ -600,26 +600,34 @@ export function StudioEditor() {
     qc,
   ]);
 
-  const aiChordPlacementMut = useMutation({
-    mutationFn: (content: string) => aiChordPlacement(content),
+  const aiSongCleanupMut = useMutation({
+    mutationFn: (content: string) => aiSongCleanup(content),
     onSuccess: (result) => {
-      const nextBlocks = chordProToBlocks(result.content);
-      const nextChordPro = blocksToChordPro(nextBlocks);
-      const prevChordPro = blocksToChordPro(blocks);
-      if (nextChordPro === prevChordPro || result.changedLines === 0) {
-        runLocalAutoFallback('AI не предложил изменений аккордов для этого текста');
+      const raw = decodeHtmlEntities(result.chordPro ?? '');
+      if (!raw.trim()) {
+        emitAppToast({ kind: 'error', message: 'ИИ вернул пустой результат' });
         return;
       }
-      setBlocks(nextBlocks);
+      const parsed = chordProToBlocks(raw).map((block) => ({
+        ...block,
+        content: convertToChordPro(block.content),
+      }));
+      const nextChordPro = blocksToChordPro(parsed);
+      const prevChordPro = blocksToChordPro(blocks);
+      if (nextChordPro === prevChordPro) {
+        emitAppToast('ИИ не нашёл изменений для этого текста');
+        return;
+      }
+      setBlocks(parsed);
       emitAppToast({
         kind: 'success',
-        message: `AI расставил аккорды: обновлено строк ${result.changedLines}, всего аккордов ${result.totalChords}`,
+        message: `Текст приведён в порядок: ${parsed.length} ${parsed.length === 1 ? 'секция' : parsed.length < 5 ? 'секции' : 'секций'}`,
       });
     },
     onError: (err: unknown) => {
       const apiMsg = axios.isAxiosError(err) ? (err.response?.data as { error?: string } | undefined)?.error : undefined;
-      const msg = apiMsg || (err instanceof Error && err.message ? err.message : 'AI не смог расставить аккорды');
-      runLocalAutoFallback(msg);
+      const msg = apiMsg || (err instanceof Error && err.message ? err.message : 'ИИ не смог привести текст в порядок');
+      emitAppToast({ kind: 'error', message: msg });
     },
   });
 
@@ -831,20 +839,20 @@ export function StudioEditor() {
     setKeyHint(`Авто: ${guess.label} (${guess.confidence})`);
   };
 
-  const runAiChordPlacement = () => {
+  const runAiSongCleanup = () => {
     const source = blocksToChordPro(blocks);
     if (!source.trim()) {
-      emitAppToast('Добавьте текст песни перед AI-разбором');
+      emitAppToast('Добавьте текст песни перед очисткой');
       return;
     }
     if (
       !window.confirm(
-        'AI проанализирует весь текст и переставит только аккорды (слова и структура строк останутся без изменений). Продолжить?',
+        'ИИ приведёт текст в порядок: уберёт лишнее (источники, примечания, ссылки), расставит аккорды в формате ChordPro и разложит по секциям. Слова песни сохранятся. Продолжить?',
       )
     ) {
       return;
     }
-    aiChordPlacementMut.mutate(source);
+    aiSongCleanupMut.mutate(source);
   };
 
   const detectSongKey = () => {
@@ -1571,13 +1579,13 @@ export function StudioEditor() {
         </button>
         <button
           type="button"
-          onClick={runAiChordPlacement}
-          disabled={aiChordPlacementMut.isPending}
+          onClick={runAiSongCleanup}
+          disabled={aiSongCleanupMut.isPending}
           className={`inline-flex min-h-[44px] items-center gap-1.5 rounded-xl border px-3 text-sm font-semibold disabled:opacity-60 ${shell.violetBtn}`}
-          aria-label="AI-разбор аккордов"
+          aria-label="Привести текст в порядок с помощью ИИ"
         >
-          <LuWand className="h-4 w-4" />
-          <span className="hidden sm:inline">{aiChordPlacementMut.isPending ? 'AI…' : 'AI-разбор'}</span>
+          <LuSparkles className="h-4 w-4" />
+          <span className="hidden sm:inline">{aiSongCleanupMut.isPending ? 'ИИ…' : 'Привести в порядок'}</span>
         </button>
         {canDeleteCatalog ? (
           <button

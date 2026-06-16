@@ -38,6 +38,7 @@ import {
   upsertStudioVersion,
 } from '../services/studioService';
 import { AiAgentError, improveChordPlacementWithAi } from '../services/studioAiChordService';
+import { cleanupSongWithAi } from '../services/studioAiCleanupService';
 
 type AuthReq = Request & SessionRoleSource & { authUserId?: number; authUserRole?: AppRole };
 
@@ -372,6 +373,17 @@ export async function setlistsList(req: Request, res: Response): Promise<void> {
   }
 }
 
+function isValidYmd(value: unknown): value is string {
+  if (typeof value !== 'string') return false;
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!m) return false;
+  const y = Number(m[1]);
+  const mo = Number(m[2]);
+  const d = Number(m[3]);
+  const dt = new Date(Date.UTC(y, mo - 1, d));
+  return dt.getUTCFullYear() === y && dt.getUTCMonth() === mo - 1 && dt.getUTCDate() === d;
+}
+
 export async function setlistsCreate(req: Request, res: Response): Promise<void> {
   try {
     const r = req as AuthReq;
@@ -382,10 +394,16 @@ export async function setlistsCreate(req: Request, res: Response): Promise<void>
       res.status(400).json({ error: 'title required' });
       return;
     }
-    const eventDate =
-      body.event_date === null || body.event_date === undefined
-        ? null
-        : String(body.event_date).slice(0, 10);
+    let eventDate: string | null = null;
+    if (body.event_date !== null && body.event_date !== undefined) {
+      const raw = String(body.event_date).trim();
+      const ymd = raw.slice(0, 10);
+      if (!isValidYmd(ymd)) {
+        res.status(400).json({ error: 'Field "event_date" must be YYYY-MM-DD' });
+        return;
+      }
+      eventDate = ymd;
+    }
     res.status(201).json(await createSetlist(r.authUserId!, title, eventDate));
   } catch (e) {
     console.error(e);
@@ -407,9 +425,23 @@ export async function setlistsUpdate(req: Request, res: Response): Promise<void>
       event_date?: string | null;
       is_public?: boolean;
     };
+    let nextEventDate: string | null | undefined = undefined;
+    if (body.event_date !== undefined) {
+      if (body.event_date === null) {
+        nextEventDate = null;
+      } else {
+        const raw = String(body.event_date).trim();
+        const ymd = raw.slice(0, 10);
+        if (!isValidYmd(ymd)) {
+          res.status(400).json({ error: 'Field "event_date" must be YYYY-MM-DD' });
+          return;
+        }
+        nextEventDate = ymd;
+      }
+    }
     const updated = await updateSetlist(r.authUserId!, id, {
       title: body.title,
-      event_date: body.event_date,
+      event_date: nextEventDate,
       is_public: body.is_public,
     });
     if (!updated) {
@@ -577,6 +609,34 @@ export async function performanceGet(req: Request, res: Response): Promise<void>
   }
 }
 
+function mapStudioAiError(e: unknown, fallback: string): { status: number; body: Record<string, unknown> } | null {
+  if (e instanceof AiAgentError) {
+    const status =
+      e.code === 'ai_disabled'
+        ? 409
+        : e.code === 'ai_not_configured'
+          ? 400
+          : e.code === 'ai_http_error'
+            ? e.status && e.status >= 400 && e.status < 600
+              ? e.status
+              : 502
+            : 502;
+    return {
+      status,
+      body: {
+        error: e.message,
+        code: e.code,
+        details: e.bodySnippet ? { bodySnippet: e.bodySnippet } : undefined,
+      },
+    };
+  }
+  if (e instanceof Error && e.message) {
+    const isValidation = /слишком большой|пустой ответ/i.test(e.message);
+    return { status: isValidation ? 400 : 422, body: { error: e.message } };
+  }
+  return { status: 422, body: { error: fallback } };
+}
+
 export async function postAiChordPlacement(req: Request, res: Response): Promise<void> {
   try {
     const r = req as AuthReq;
@@ -592,25 +652,37 @@ export async function postAiChordPlacement(req: Request, res: Response): Promise
     const out = await improveChordPlacementWithAi(content);
     res.json(out);
   } catch (e) {
-    if (e instanceof AiAgentError) {
-      const status =
-        e.code === 'ai_disabled'
-          ? 409
-          : e.code === 'ai_not_configured'
-            ? 400
-            : e.code === 'ai_http_error'
-              ? e.status && e.status >= 400 && e.status < 600
-                ? e.status
-                : 502
-              : 502;
-      res.status(status).json({
-        error: e.message,
-        code: e.code,
-        details: e.bodySnippet ? { bodySnippet: e.bodySnippet } : undefined,
-      });
+    const mapped = mapStudioAiError(e, 'Не удалось расставить аккорды');
+    if (mapped) {
+      res.status(mapped.status).json(mapped.body);
       return;
     }
-    const msg = e instanceof Error ? e.message : 'Не удалось расставить аккорды';
-    res.status(422).json({ error: msg });
+    res.status(422).json({ error: 'Не удалось расставить аккорды' });
+  }
+}
+
+/** ИИ: привести текст песни в порядок (аккорды, секции, убрать мусор и источники). */
+export async function postAiSongCleanup(req: Request, res: Response): Promise<void> {
+  try {
+    const r = req as AuthReq;
+    if (!(await ensureStudio(r, res))) return;
+
+    const body = req.body as { content?: unknown } | null;
+    const content = typeof body?.content === 'string' ? body.content : '';
+    if (!content.trim()) {
+      res.status(400).json({ error: 'Добавьте текст песни перед очисткой' });
+      return;
+    }
+
+    const out = await cleanupSongWithAi(content);
+    res.json(out);
+  } catch (e) {
+    const mapped = mapStudioAiError(e, 'Не удалось привести текст в порядок');
+    if (mapped) {
+      res.status(mapped.status).json(mapped.body);
+      return;
+    }
+    console.error('[studio] ai song-cleanup error', e);
+    res.status(500).json({ error: 'Не удалось привести текст в порядок' });
   }
 }
