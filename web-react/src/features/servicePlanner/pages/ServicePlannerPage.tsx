@@ -320,7 +320,7 @@ export function ServicePlannerPage() {
   const [autosaveStatus, setAutosaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [autosaveSavedAt, setAutosaveSavedAt] = useState<number | null>(null);
   const plannerModalOpen = editingTemplateBlockId != null || editingBlockId != null;
-  /** Совпадает с Tailwind `md:` — на мобильной весь блок — ручка перетаскивания */
+  /** Совпадает с Tailwind `md:` — узкий экран (отдельная вёрстка блоков и меню). */
   const [isNarrowViewport, setIsNarrowViewport] = useState(
     () => typeof window !== 'undefined' && window.matchMedia('(max-width: 767px)').matches,
   );
@@ -362,7 +362,7 @@ export function ServicePlannerPage() {
         setPlanStickyBackVisible(false);
         return;
       }
-      setPlanStickyBackVisible(getAppScrollTop() > 56);
+      setPlanStickyBackVisible(getAppScrollTop() > 120);
     };
     onScroll();
     const scrollEl = getAppScrollRoot() ?? window;
@@ -2400,9 +2400,9 @@ export function ServicePlannerPage() {
           </button>
         </div>
       ) : null}
-      <section className="mx-auto flex w-full max-w-4xl flex-col gap-3 px-3 py-4 max-lg:pb-[calc(var(--app-bottom-nav-total-height)+6.5rem)] sm:px-4 md:px-6">
-      <header className="rounded-2xl border border-stone-200 bg-white p-4 shadow-sm">
-        <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-2">
+      <section className="mx-auto flex w-full max-w-4xl flex-col gap-3 px-3 py-3 max-lg:pb-[calc(var(--app-bottom-nav-total-height)+4.75rem)] sm:px-4 sm:py-4 md:px-6">
+      <header className="rounded-2xl border border-stone-200 bg-white p-3 shadow-sm sm:p-4">
+        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-2">
           <div className="flex min-w-0 items-center gap-2">
             <button
               type="button"
@@ -2412,7 +2412,7 @@ export function ServicePlannerPage() {
             >
               <LuArrowLeft className="h-5 w-5" aria-hidden />
             </button>
-            <h1 className="min-w-0 text-xl font-extrabold leading-tight text-stone-900 sm:text-2xl">
+            <h1 className="min-w-0 text-lg font-extrabold leading-tight text-stone-900 sm:text-2xl">
               План служения
             </h1>
             {coEditingPeers.length > 0 ? (
@@ -2535,6 +2535,28 @@ export function ServicePlannerPage() {
                       >
                         Конструктор шаблона
                       </button>
+                      <button
+                        type="button"
+                        role="menuitem"
+                        className="flex w-full px-3 py-2 text-left text-xs font-semibold text-amber-800 hover:bg-amber-50"
+                        onClick={() => {
+                          setPlanHeaderMoreOpen(false);
+                          void toggleArchiveCurrentPlan();
+                        }}
+                      >
+                        {draft.is_archived ? 'Вернуть из архива' : 'В архив'}
+                      </button>
+                      <button
+                        type="button"
+                        role="menuitem"
+                        className="flex w-full px-3 py-2 text-left text-xs font-semibold text-rose-700 hover:bg-rose-50"
+                        onClick={() => {
+                          setPlanHeaderMoreOpen(false);
+                          void deleteCurrentPlan();
+                        }}
+                      >
+                        Удалить программу
+                      </button>
                     </div>
                   ) : null}
                 </div>
@@ -2546,33 +2568,37 @@ export function ServicePlannerPage() {
                   void handlePrintPlanSheet();
                 }}
                 disabled={pdfExporting}
-                className="inline-flex min-h-[36px] shrink-0 items-center gap-1 whitespace-nowrap rounded-lg border border-stone-300 px-2.5 py-1 text-[11px] font-semibold text-stone-800 hover:border-primary hover:text-primary disabled:cursor-wait disabled:opacity-60 sm:hidden"
+                className="inline-flex min-h-[36px] shrink-0 items-center gap-1 whitespace-nowrap rounded-lg border border-stone-300 px-2.5 py-1 text-xs font-semibold text-stone-800 hover:border-primary hover:text-primary disabled:cursor-wait disabled:opacity-60 sm:hidden"
                 title="Скачать программу в PDF"
               >
                 <LuDownload className="h-4 w-4 shrink-0" aria-hidden />
                 {pdfExporting ? 'PDF…' : 'PDF'}
               </button>
-              <button
-                type="button"
-                onClick={() => void toggleArchiveCurrentPlan()}
-                className="min-h-[36px] shrink-0 whitespace-nowrap rounded-lg border border-amber-300 px-2.5 py-1 text-[11px] font-semibold text-amber-800 hover:bg-amber-50"
-              >
-                {draft.is_archived ? 'Вернуть из архива' : 'В архив'}
-              </button>
-              <button
-                type="button"
-                onClick={() => void deleteCurrentPlan()}
-                className="min-h-[36px] shrink-0 whitespace-nowrap rounded-lg border border-rose-300 px-2.5 py-1 text-[11px] font-semibold text-rose-700 hover:bg-rose-50"
-              >
-                Удалить программу
-              </button>
+              {!canManageTemplates ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => void toggleArchiveCurrentPlan()}
+                    className="min-h-[36px] shrink-0 whitespace-nowrap rounded-lg border border-amber-300 px-2.5 py-1 text-xs font-semibold text-amber-800 hover:bg-amber-50"
+                  >
+                    {draft.is_archived ? 'Вернуть из архива' : 'В архив'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void deleteCurrentPlan()}
+                    className="min-h-[36px] shrink-0 whitespace-nowrap rounded-lg border border-rose-300 px-2.5 py-1 text-xs font-semibold text-rose-700 hover:bg-rose-50"
+                  >
+                    Удалить программу
+                  </button>
+                </>
+              ) : null}
             </div>
           </div>
         </div>
-        <div className="mt-1 flex flex-wrap items-center gap-3 text-sm text-stone-600">
+        <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-stone-600 max-lg:text-[13px]">
           <span className="capitalize">{dateText}</span>
           <span className="inline-flex items-center gap-1">
-            <LuClock3 className="h-4 w-4" /> {draft.start_time}
+            <LuClock3 className="h-4 w-4 shrink-0" /> {draft.start_time}
           </span>
           <span
             className={[
@@ -2590,14 +2616,14 @@ export function ServicePlannerPage() {
           </span>
         </div>
         {lastEditedLine ? (
-          <p className="mt-2 border-t border-stone-100 pt-2 text-xs leading-snug text-stone-500">
+          <p className="mt-2 hidden border-t border-stone-100 pt-2 text-xs leading-snug text-stone-500 sm:block">
             <span className="font-semibold text-stone-600">Последнее изменение: </span>
             {lastEditedLine}
           </p>
         ) : null}
       </header>
 
-      <section className="rounded-2xl border border-stone-200 bg-white p-3 shadow-sm">
+      <section className="max-lg:order-[30] rounded-2xl border border-stone-200 bg-white p-3 shadow-sm">
         <div className="mb-2 flex items-center justify-between gap-2">
           <p className="text-xs font-semibold uppercase tracking-wide text-stone-500">Настройки плана</p>
           <button
@@ -2720,7 +2746,6 @@ export function ServicePlannerPage() {
             <LuLink className="mr-1 inline h-3.5 w-3.5" /> /service-plan/share/{draft.share_token}
           </div>
         </div>
-        <MediaTeamBlock planId={draft.id} embedded />
         <button
           type="button"
           disabled={isBlocksOnlyEditor}
@@ -2744,8 +2769,8 @@ export function ServicePlannerPage() {
         </div>
       </section>
 
-      <section className="rounded-2xl border border-stone-200 bg-white p-3 shadow-sm">
-        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-stone-500">Составление программы</p>
+      <section className="max-lg:order-[20] rounded-2xl border border-stone-200 bg-white p-3 shadow-sm">
+        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-stone-500 max-lg:hidden">Составление программы</p>
         <div className="relative">
           {/* UX #5: маска справа намекает на горизонтальный скролл кнопок на узком экране */}
           <div className="flex gap-2 overflow-x-auto pb-1 [mask-image:linear-gradient(to_right,black_85%,transparent_100%)] md:grid md:grid-cols-4 md:overflow-visible md:pb-0 md:[mask-image:none]">
@@ -2795,7 +2820,7 @@ export function ServicePlannerPage() {
               setAutosaveStatus('saving');
               void saveProgramMut.mutateAsync();
             }}
-            className="inline-flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl border border-stone-300 bg-white px-3 py-2 text-sm font-semibold text-stone-800 enabled:hover:border-primary enabled:hover:text-primary disabled:cursor-not-allowed disabled:opacity-60"
+            className="hidden min-h-[44px] w-full items-center justify-center gap-2 rounded-xl border border-stone-300 bg-white px-3 py-2 text-sm font-semibold text-stone-800 enabled:hover:border-primary enabled:hover:text-primary disabled:cursor-not-allowed disabled:opacity-60 lg:inline-flex"
             disabled={saveProgramMut.isPending}
           >
             <LuSave className="h-4 w-4" />
@@ -2804,11 +2829,21 @@ export function ServicePlannerPage() {
         </div>
       </section>
 
-      <section className="rounded-2xl border border-stone-200 bg-white p-3 shadow-sm">
+      <section className="max-lg:order-[10] rounded-2xl border border-stone-200 bg-white p-2 shadow-sm max-lg:border-primary/20 max-lg:bg-primary/[0.02] sm:p-3">
+        <div className="mb-2 flex items-center justify-between gap-2 lg:hidden">
+          <p className="text-sm font-bold text-stone-900">Программа</p>
+          <span className="text-xs font-semibold text-stone-500">
+            {timedBlocks.length} блоков · {totalDuration} мин
+          </span>
+        </div>
         <DragDropContext onDragEnd={onDragEnd}>
           <Droppable droppableId="service-planner-blocks">
             {(provided) => (
-              <div ref={provided.innerRef} {...provided.droppableProps} className="space-y-1.5">
+              <div
+                ref={provided.innerRef}
+                {...provided.droppableProps}
+                className="space-y-2 max-lg:space-y-2.5 max-lg:[touch-action:pan-y]"
+              >
                 {timedBlocks.map((block, index) => {
                   const heading = isSeparatorBlock(block)
                     ? separatorLabel(block)
@@ -2829,15 +2864,14 @@ export function ServicePlannerPage() {
                         <article
                           ref={dragProvided.innerRef}
                           {...dragProvided.draggableProps}
-                          {...(isNarrowViewport ? dragProvided.dragHandleProps : {})}
                           className={[
                             isSeparatorBlock(block)
-                              ? 'rounded-xl border border-dashed border-stone-300 bg-stone-50 p-2 sm:p-2.5'
-                              : 'rounded-xl border border-stone-200 p-2 sm:p-2.5',
+                              ? 'rounded-xl border border-dashed border-stone-300 bg-stone-50 p-2.5 max-lg:p-3 sm:p-2.5'
+                              : 'rounded-xl border border-stone-200 p-2.5 max-lg:p-3 sm:p-2.5',
                             dragSnapshot.isDragging ? 'bg-stone-50 shadow' : 'bg-white',
                             draft.current_block_id === block.id ? 'ring-2 ring-primary/30' : '',
                             hiddenFromPublic ? 'border-stone-300 bg-stone-100/80 opacity-70' : '',
-                            isNarrowViewport ? 'max-md:cursor-grab max-md:active:cursor-grabbing' : '',
+                            'max-lg:[touch-action:pan-y]',
                           ].join(' ')}
                         >
                           {isSeparatorBlock(block) ? (
@@ -2886,10 +2920,17 @@ export function ServicePlannerPage() {
                                 </button>
                               </div>
                               <div
-                                className="absolute right-0 top-1/2 flex -translate-y-1/2 lg:hidden"
+                                className="absolute right-0 top-1/2 flex -translate-y-1/2 items-center gap-0.5 lg:hidden"
                                 data-planner-mobile-menu-root
-                                onPointerDown={(e) => isNarrowViewport && e.stopPropagation()}
                               >
+                                <button
+                                  type="button"
+                                  {...dragProvided.dragHandleProps}
+                                  className="inline-flex h-9 w-9 touch-manipulation cursor-grab items-center justify-center rounded-md border border-stone-200 text-stone-400 hover:text-stone-600 active:cursor-grabbing sm:h-7 sm:w-7"
+                                  aria-label="Перетащить блок"
+                                >
+                                  <LuGripVertical className="h-4 w-4" />
+                                </button>
                                 <button
                                   type="button"
                                   className="inline-flex h-9 w-9 touch-manipulation items-center justify-center rounded-md border border-stone-200 text-stone-600 hover:bg-stone-50 sm:h-7 sm:w-7"
@@ -2945,26 +2986,16 @@ export function ServicePlannerPage() {
                                       <LuTrash2 className="h-4 w-4 shrink-0" />
                                       Удалить
                                     </button>
-                                    {!isNarrowViewport ? (
-                                      <button
-                                        type="button"
-                                        {...dragProvided.dragHandleProps}
-                                        className="flex w-full cursor-grab items-center gap-2 px-3 py-2 text-left text-sm text-stone-600 hover:bg-stone-50 active:cursor-grabbing"
-                                      >
-                                        <LuGripVertical className="h-4 w-4 shrink-0" />
-                                        Перетащить
-                                      </button>
-                                    ) : null}
                                   </div>
                                 ) : null}
                               </div>
                             </div>
                           ) : (
-                          <div className="flex items-start gap-2 sm:gap-2.5">
+                          <div className="flex items-start gap-2.5 sm:gap-2.5">
                             <span className="mt-0.5 hidden min-w-[2.75rem] shrink-0 items-center justify-center rounded-md bg-stone-100 px-1.5 py-0.5 text-center text-[11px] font-extrabold leading-none text-stone-900 sm:min-w-[3rem] sm:inline-flex sm:px-2 sm:py-1 sm:text-xs">
                               {block.startsAt}
                             </span>
-                            <span className="mt-0.5 inline-flex min-w-[2.9rem] shrink-0 items-center justify-center rounded-md bg-stone-100 px-1.5 py-1 text-center text-[11px] font-extrabold leading-none text-stone-900 sm:hidden">
+                            <span className="mt-0.5 inline-flex min-w-[3.25rem] shrink-0 items-center justify-center rounded-md bg-primary/10 px-2 py-1.5 text-center text-xs font-extrabold leading-none text-stone-900 sm:hidden">
                               {block.startsAt}
                             </span>
 
@@ -3018,7 +3049,7 @@ export function ServicePlannerPage() {
                               <div className="flex flex-wrap items-center gap-1.5">
                                 <p
                                   className={[
-                                    'text-sm font-semibold leading-snug normal-case',
+                                    'text-sm font-semibold leading-snug normal-case max-lg:text-[15px] max-lg:leading-snug',
                                     blockTitle === 'Новый блок' && !isSeparatorBlock(block)
                                       ? 'text-stone-500 italic'
                                       : 'text-stone-900',
@@ -3042,12 +3073,12 @@ export function ServicePlannerPage() {
                                 ) : null}
                               </div>
                               {!isSeparatorBlock(block) ? (
-                                <p className="text-[11px] leading-snug text-stone-400 sm:text-xs">
-                                  {`${blockTypeLabel} • ${block.duration_minutes} мин`}
+                                <p className="text-xs leading-snug text-stone-500 max-lg:text-[13px] sm:text-xs">
+                                  {`${blockTypeLabel} · ${block.duration_minutes} мин`}
                                 </p>
                               ) : null}
                               {hiddenFromPublic ? (
-                                <p className="text-[11px] font-semibold leading-snug text-stone-500 sm:text-xs">
+                                <p className="text-xs font-semibold leading-snug text-stone-500 max-lg:text-[13px] sm:text-xs">
                                   Скрыт в опубликованной версии
                                 </p>
                               ) : null}
@@ -3103,10 +3134,17 @@ export function ServicePlannerPage() {
 
                             <div className="ml-auto flex shrink-0 items-start gap-0.5">
                               <div
-                                className="relative lg:hidden"
+                                className="relative flex items-center gap-0.5 lg:hidden"
                                 data-planner-mobile-menu-root
-                                onPointerDown={(e) => isNarrowViewport && e.stopPropagation()}
                               >
+                                <button
+                                  type="button"
+                                  {...dragProvided.dragHandleProps}
+                                  className="inline-flex h-9 w-9 touch-manipulation cursor-grab items-center justify-center rounded-md border border-stone-200 text-stone-400 hover:text-stone-600 active:cursor-grabbing sm:h-7 sm:w-7"
+                                  aria-label="Перетащить блок"
+                                >
+                                  <LuGripVertical className="h-4 w-4" />
+                                </button>
                                 <button
                                   type="button"
                                   className="inline-flex h-9 w-9 touch-manipulation items-center justify-center rounded-md border border-stone-200 text-stone-600 hover:bg-stone-50 sm:h-7 sm:w-7"
@@ -3162,16 +3200,6 @@ export function ServicePlannerPage() {
                                       <LuTrash2 className="h-4 w-4 shrink-0" />
                                       Удалить
                                     </button>
-                                    {!isNarrowViewport ? (
-                                      <button
-                                        type="button"
-                                        {...dragProvided.dragHandleProps}
-                                        className="flex w-full cursor-grab items-center gap-2 px-3 py-2 text-left text-sm text-stone-600 hover:bg-stone-50 active:cursor-grabbing"
-                                      >
-                                        <LuGripVertical className="h-4 w-4 shrink-0" />
-                                        Перетащить
-                                      </button>
-                                    ) : null}
                                   </div>
                                 ) : null}
                               </div>
@@ -3267,6 +3295,10 @@ export function ServicePlannerPage() {
         </p>
       </section>
 
+      <section className="max-lg:order-[40] rounded-2xl border border-stone-200 bg-white p-3 shadow-sm">
+        <MediaTeamBlock planId={draft.id} embedded />
+      </section>
+
       {(songsQ.isLoading || membersQ.isLoading) && (
         <div className="rounded-xl border border-stone-200 bg-white p-2 text-xs text-stone-500">
           <span className="inline-flex items-center gap-2">
@@ -3290,7 +3322,7 @@ export function ServicePlannerPage() {
         </div>
       )}
       {draft && screen === 'plan' ? (
-        <div className="text-[11px] font-semibold text-stone-500">
+        <div className="text-xs font-semibold text-stone-500 max-lg:hidden">
           {autosaveStatus === 'saving'
             ? 'Автосохранение…'
             : autosaveStatus === 'error'
