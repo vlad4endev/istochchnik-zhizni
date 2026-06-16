@@ -1,6 +1,11 @@
 import { query } from '../config/db';
 import { notifyRealtime } from '../realtime/notify';
-import { addUtcDaysToIsoDate, getDiffDays } from '../utils/isoDates';
+import {
+  addUtcDaysToIsoDate,
+  getDiffDays,
+  getMondayBasedDayIndex,
+  getPrayerCyclePosition,
+} from '../utils/isoDates';
 
 /** Участники с этим флагом входят в расчёт длины цикла и очереди «день за днём». */
 export const PRAYER_CYCLE_MEMBERS_WHERE = 'is_active = TRUE AND in_prayer_cycle = TRUE';
@@ -54,18 +59,18 @@ export async function getActiveMemberCount(): Promise<number> {
   return result.rows[0]?.c ?? 0;
 }
 
-export function computeCycleIndex(diffDays: number, memberCount: number): number {
+export function computeCycleIndex(cyclePosition: number, memberCount: number): number {
   if (memberCount <= 0) {
     return 0;
   }
-  return Math.floor(diffDays / memberCount);
+  return Math.floor(cyclePosition / memberCount);
 }
 
-export function dayIndexInCycle(diffDays: number, memberCount: number): number {
+export function dayIndexInCycle(cyclePosition: number, memberCount: number): number {
   if (memberCount <= 0) {
     return 0;
   }
-  return ((diffDays % memberCount) + memberCount) % memberCount;
+  return ((cyclePosition % memberCount) + memberCount) % memberCount;
 }
 
 export async function getPrayerCycleSnapshotForDate(targetDateIso: string): Promise<PrayerCycleSnapshot | null> {
@@ -75,11 +80,12 @@ export async function getPrayerCycleSnapshotForDate(targetDateIso: string): Prom
     return null;
   }
 
-  const diffDays = getDiffDays(targetDateIso, start);
-  const cycleIndex = computeCycleIndex(diffDays, memberCount);
-  const dayIndex = dayIndexInCycle(diffDays, memberCount);
-  const rangeStart = addUtcDaysToIsoDate(start, cycleIndex * memberCount);
-  const rangeEnd = addUtcDaysToIsoDate(start, (cycleIndex + 1) * memberCount - 1);
+  const cyclePosition = getPrayerCyclePosition(targetDateIso, start);
+  const cycleIndex = computeCycleIndex(cyclePosition, memberCount);
+  const dayIndex = dayIndexInCycle(cyclePosition, memberCount);
+  const cycleEpochMonday = addUtcDaysToIsoDate(start, -getMondayBasedDayIndex(start));
+  const rangeStart = addUtcDaysToIsoDate(cycleEpochMonday, cycleIndex * memberCount);
+  const rangeEnd = addUtcDaysToIsoDate(cycleEpochMonday, (cycleIndex + 1) * memberCount - 1);
 
   return {
     cycle_index: cycleIndex,
@@ -88,7 +94,7 @@ export async function getPrayerCycleSnapshotForDate(targetDateIso: string): Prom
     start_date: rangeStart,
     end_date: rangeEnd,
     day_index: dayIndex,
-    diff_days: diffDays,
+    diff_days: cyclePosition,
   };
 }
 

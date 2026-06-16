@@ -1,8 +1,9 @@
 import { query } from '../config/db';
-import { getDiffDays } from '../utils/isoDates';
+import { getDiffDays, getPrayerCyclePosition } from '../utils/isoDates';
 import { addCalendarDaysYmd, formatYmdInTimeZone, getZonedNow } from '../utils/zonedTime';
 import {
   computeCycleIndex,
+  dayIndexInCycle,
   CYCLE_PRAYER_REQUEST_SELECT_SQL,
   getCycleStartDate,
   getMergedPrayerCycleRosterMemberIdsForCycleIndex,
@@ -357,6 +358,7 @@ async function attachManualPreviousPrayerNeedsToMembers(
 export async function getPrayerDataByDate(targetDate: string): Promise<PrayerDataByDate> {
   await snapshotPastCyclePrayersToHistory();
   const cycleStartDate = await getCycleStartDate();
+  const cyclePosition = getPrayerCyclePosition(targetDate, cycleStartDate);
   const diffDays = getDiffDays(targetDate, cycleStartDate);
 
   const [membersCount, themesCount, ministriesCount, backslidersCount, cycleSnap] =
@@ -374,7 +376,7 @@ export async function getPrayerDataByDate(targetDate: string): Promise<PrayerDat
   const totalBacksliders = backslidersCount.rows[0]?.count ?? 0;
 
   const memberIndex =
-    totalMembers > 0 ? ((diffDays % totalMembers) + totalMembers) % totalMembers : 0;
+    totalMembers > 0 ? dayIndexInCycle(cyclePosition, totalMembers) : 0;
   const themeIndex = totalThemes > 0 ? ((diffDays % totalThemes) + totalThemes) % totalThemes : 0;
   const ministryIndex =
     totalMinistries > 0 ? ((diffDays % totalMinistries) + totalMinistries) % totalMinistries : 0;
@@ -382,7 +384,7 @@ export async function getPrayerDataByDate(targetDate: string): Promise<PrayerDat
     totalBacksliders > 0 ? ((diffDays % totalBacksliders) + totalBacksliders) % totalBacksliders : 0;
 
   const cycleIndexForDate =
-    totalMembers > 0 ? computeCycleIndex(diffDays, totalMembers) : 0;
+    totalMembers > 0 ? computeCycleIndex(cyclePosition, totalMembers) : 0;
 
   const overridePromise = query(
     `SELECT m.id, m.name, m.first_name, m.last_name,
@@ -439,7 +441,7 @@ export async function getPrayerDataByDate(targetDate: string): Promise<PrayerDat
 
   return {
     date: targetDate,
-    diffDays,
+    diffDays: cyclePosition,
     members,
     global_themes,
     ministries,
@@ -525,7 +527,7 @@ async function getMemberAssignmentsForDates(dates: string[]): Promise<NextWeekMe
     if (!targetDate || !Number.isFinite(memberId)) {
       continue;
     }
-    const diffD = getDiffDays(targetDate, cycleStartDate);
+    const diffD = getPrayerCyclePosition(targetDate, cycleStartDate);
     const cIdx = computeCycleIndex(diffD, totalMembers);
     const r = await query(
       `SELECT m.id, m.name, m.first_name, m.last_name,
@@ -547,9 +549,9 @@ async function getMemberAssignmentsForDates(dates: string[]): Promise<NextWeekMe
   const cycleIndexByMemberId = new Map<number, number>();
 
   for (const date of dates) {
-    const diffDays = getDiffDays(date, cycleStartDate);
-    const index = ((diffDays % totalMembers) + totalMembers) % totalMembers;
-    const cIdx = computeCycleIndex(diffDays, totalMembers);
+    const cyclePosition = getPrayerCyclePosition(date, cycleStartDate);
+    const index = dayIndexInCycle(cyclePosition, totalMembers);
+    const cIdx = computeCycleIndex(cyclePosition, totalMembers);
 
     const overrideMember = overrideByDate.get(date);
     if (overrideMember) {

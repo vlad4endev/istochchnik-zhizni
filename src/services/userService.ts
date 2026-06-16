@@ -1,10 +1,11 @@
 import { query } from '../config/db';
 import type { AppRole } from '../types/appRole';
 import { mergeAppRoles, normalizeAppRole, normalizeAppRoles, pickPrimaryAppRole } from '../types/appRole';
-import { addUtcDaysToIsoDate, getDiffDays } from '../utils/isoDates';
+import { addUtcDaysToIsoDate, getPrayerCyclePosition } from '../utils/isoDates';
 import { getPrayerDataByDate } from './calendarService';
 import { reconcileCollectionClaimsAfterMemberLeftPrayerCycle } from './cycleCollectionClaimsService';
 import {
+  dayIndexInCycle,
   getCurrentCycleIndexForUpsert,
   getCycleStartDate,
   getPrayerCycleSnapshotForDate,
@@ -968,7 +969,7 @@ export async function startPrayerCycle(dateInput: string): Promise<PrayerCycleSt
 export async function getPrayerCycleRosterSnapshot(anchorDateYmd: string): Promise<PrayerCycleRosterSnapshot> {
   const anchorDate = normalizeIsoDate(anchorDateYmd.trim());
   const startDate = await getCycleStartDate();
-  const diffDays = getDiffDays(anchorDate, startDate);
+  const cyclePosition = getPrayerCyclePosition(anchorDate, startDate);
   const rosterRes = await query(
     `SELECT m.id, m.first_name, m.last_name, m.name, m.is_active
      FROM members m
@@ -1011,7 +1012,7 @@ export async function getPrayerCycleRosterSnapshot(anchorDateYmd: string): Promi
     };
   });
   const n = roster.length;
-  const todayIndex = n > 0 ? ((diffDays % n) + n) % n : 0;
+  const todayIndex = n > 0 ? dayIndexInCycle(cyclePosition, n) : 0;
   const todayMemberId = n > 0 ? roster[todayIndex]?.id ?? null : null;
   return {
     anchor_date: anchorDate,
