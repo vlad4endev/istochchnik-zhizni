@@ -134,7 +134,13 @@ export function apiErrorMessage(err: unknown, fallback = 'Не удалось в
   if (err && typeof err === 'object' && 'response' in err) {
     const resp = (err as { response?: { data?: { error?: string } } }).response;
     const msg = resp?.data?.error;
-    if (typeof msg === 'string' && msg.trim()) return msg.trim();
+    if (typeof msg === 'string' && msg.trim()) {
+      const trimmed = msg.trim();
+      if (trimmed.includes('может только просматривать данные')) {
+        return 'Недостаточно прав для этого действия. Обновите приложение или обратитесь к координатору.';
+      }
+      return trimmed;
+    }
   }
   if (err instanceof Error && err.message.trim()) return err.message.trim();
   return fallback;

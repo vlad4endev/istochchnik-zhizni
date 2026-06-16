@@ -56,6 +56,17 @@ const MEMBER_ALLOWED_PATCH =
 const MEMBER_ALLOWED_MEDIA_SCHEDULE_STATUS_PATCH =
   /^\/api\/media-schedule\/assignments\/\d+\/status\/?$/;
 
+/** Назначения ведущего/проповедника — проверка pastor/admin в контроллере. */
+const SUNDAY_SCHEDULE_PLAN_PATCH = /^\/api\/sunday-schedule\/plans\/\d+\/?$/;
+
+function isMediaScheduleAssignmentStatusPatch(method: string, path: string): boolean {
+  return method === 'PATCH' && MEMBER_ALLOWED_MEDIA_SCHEDULE_STATUS_PATCH.test(path);
+}
+
+function isSundaySchedulePlanPatch(method: string, path: string): boolean {
+  return method === 'PATCH' && SUNDAY_SCHEDULE_PLAN_PATCH.test(path);
+}
+
 /** То же для координаторов: POST улучшения текста нужды — проверка роли в контроллере. */
 const MEMBER_ALLOWED_CALENDAR_POST =
   /^\/api\/calendar\/(?:prayer-need\/improve-text|prayer-section\/visit)\/?$/;
@@ -183,9 +194,15 @@ function isStandardParticipantMutation(
     if (isSongFavoriteMutation(method, path) && authUserId) {
       return true;
     }
+    if (isMediaScheduleAssignmentStatusPatch(method, path) && authUserId) {
+      return true;
+    }
     return false;
   }
 
+  if (isMediaScheduleAssignmentStatusPatch(method, path) && authUserId) {
+    return true;
+  }
   if (role !== 'member' && role !== 'pastor' && role !== 'musician' && role !== 'editor') {
     return false;
   }
@@ -232,7 +249,12 @@ export function enforceRoleAccess(req: Request, res: Response, next: NextFunctio
     return;
   }
 
-  if (req.method === 'PATCH' && MEMBER_ALLOWED_MEDIA_SCHEDULE_STATUS_PATCH.test(fullPath)) {
+  if (isMediaScheduleAssignmentStatusPatch(req.method, fullPath)) {
+    next();
+    return;
+  }
+
+  if (isSundaySchedulePlanPatch(req.method, fullPath)) {
     next();
     return;
   }

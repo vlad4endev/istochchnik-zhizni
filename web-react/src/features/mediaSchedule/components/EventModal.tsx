@@ -138,12 +138,12 @@ export function EventModal({
 
   return (
     <>
-      <div className="fixed inset-0 z-[75] flex items-end justify-center p-0 sm:items-center sm:p-4" role="presentation">
+      <div className="fixed inset-0 z-[110] flex items-end justify-center p-0 sm:items-center sm:p-4" role="presentation">
         <button type="button" aria-label="Закрыть" className="absolute inset-0 bg-black/45" onClick={onClose} />
         <div
           role="dialog"
           aria-modal="true"
-          className="relative z-[76] flex max-h-[min(92dvh,720px)] w-full max-w-xl flex-col overflow-hidden rounded-t-3xl border border-stone-200/80 bg-white shadow-2xl sm:max-h-[min(92dvh,720px)] sm:rounded-2xl"
+          className="relative z-[111] flex max-h-[min(calc(100dvh-1rem),720px)] w-full max-w-xl flex-col overflow-hidden rounded-t-3xl border border-stone-200/80 bg-white shadow-2xl sm:max-h-[min(92dvh,720px)] sm:rounded-2xl"
           onClick={(e) => e.stopPropagation()}
         >
           <div className="shrink-0 border-b border-stone-100 px-4 py-3 sm:py-4">
