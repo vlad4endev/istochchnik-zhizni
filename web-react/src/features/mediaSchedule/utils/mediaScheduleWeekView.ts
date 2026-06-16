@@ -1,5 +1,4 @@
 import {
-  endOfWeek,
   format,
   isSameMonth,
   parseISO,
