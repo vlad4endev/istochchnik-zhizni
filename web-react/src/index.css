@@ -1342,6 +1342,15 @@ button {
 .songbook-reader .lyric-chord-line {
   line-height: 1.55;
   color: var(--text);
+  overflow: visible;
+}
+
+.songbook-reader .lyric-chord-line--with-chords {
+  padding-top: 1.15em;
+}
+
+.songbook-reader .lyric-chord-column {
+  overflow: visible;
 }
 
 .songbook-reader .lyric-grapheme {

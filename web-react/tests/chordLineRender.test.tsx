@@ -20,6 +20,21 @@ describe('ChordLine render regression', () => {
     expect(html).toContain('К');
     expect(html).toContain('>к<');
     expect(html).toContain('>я<');
+    expect(html).toContain('absolute bottom-full');
+    expect(html).not.toContain('inline-flex flex-col');
+  });
+
+  it('keeps lyric graphemes in natural order without chord-driven column width', () => {
+    const line = parseChordLine('[G/B]утешен [Dm]Как');
+    const html = renderToStaticMarkup(
+      <ChordLine line={line} chordsVisible layoutMode="measured" chordTone="light" />,
+    );
+
+    expect(html).toContain('G/B');
+    expect(html).toContain('Dm');
+    expect(html).toContain('>у<');
+    expect(html).toContain('>К<');
+    expect(html).not.toContain('inline-flex flex-col');
   });
 
   it('renders monospaced chord row and lyric row in mono mode', () => {
