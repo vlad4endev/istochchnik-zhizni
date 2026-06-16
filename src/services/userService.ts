@@ -1,7 +1,7 @@
 import { query } from '../config/db';
 import type { AppRole } from '../types/appRole';
 import { mergeAppRoles, normalizeAppRole, normalizeAppRoles, pickPrimaryAppRole } from '../types/appRole';
-import { addUtcDaysToIsoDate, getPrayerCyclePosition } from '../utils/isoDates';
+import { addUtcDaysToIsoDate, computePrayerCycleAnchorStartDate, getPrayerCyclePosition } from '../utils/isoDates';
 import { getPrayerDataByDate } from './calendarService';
 import { reconcileCollectionClaimsAfterMemberLeftPrayerCycle } from './cycleCollectionClaimsService';
 import {
@@ -1049,7 +1049,7 @@ export async function anchorPrayerCycleMemberOnDate(
   if (rosterIndex < 0) {
     throw new Error('Member not in active prayer cycle');
   }
-  const newStartDate = addUtcDaysToIsoDate(anchorDate, -rosterIndex);
+  const newStartDate = computePrayerCycleAnchorStartDate(anchorDate, rosterIndex, mergedIds.length);
   await query(
     `INSERT INTO global_settings (id, start_date)
      VALUES (1, $1::date)

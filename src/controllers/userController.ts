@@ -1,4 +1,4 @@
-import { Request, Response } from 'express';
+import { getPrayerCycleTodayYmd } from '../utils/prayerPlanTimeZone';
 import {
   AppRole,
   createMinistryDirectionTemplate,
@@ -819,7 +819,7 @@ export async function getPrayerCycleRosterHandler(req: Request, res: Response): 
     return;
   }
   const dateRaw = typeof req.query.date === 'string' ? req.query.date.trim() : '';
-  const anchorYmd = dateRaw ? coerceToYmd(dateRaw) : new Date().toISOString().slice(0, 10);
+  const anchorYmd = dateRaw ? coerceToYmd(dateRaw) : getPrayerCycleTodayYmd();
   if (dateRaw && !anchorYmd) {
     res.status(400).json({ error: 'Query "date" must be YYYY-MM-DD' });
     return;

@@ -49,6 +49,37 @@ export function getPrayerCyclePosition(targetDate: string, startDate: string): n
   return getDiffDays(targetDate, startDate) + getMondayBasedDayIndex(startDate);
 }
 
+export function dayIndexInCycle(cyclePosition: number, memberCount: number): number {
+  if (memberCount <= 0) {
+    return 0;
+  }
+  return ((cyclePosition % memberCount) + memberCount) % memberCount;
+}
+
+/**
+ * start_date, при котором на anchorDate очередь приходится на rosterIndex (0..memberCount-1).
+ * Обратная операция к getPrayerCyclePosition после перехода на неделю с понедельника.
+ */
+export function computePrayerCycleAnchorStartDate(
+  anchorDate: string,
+  rosterIndex: number,
+  memberCount: number,
+): string {
+  if (memberCount <= 0) {
+    return anchorDate;
+  }
+  const targetIndex = dayIndexInCycle(rosterIndex, memberCount);
+  const maxDiff = memberCount * 7 + 7;
+  for (let diff = 0; diff <= maxDiff; diff++) {
+    const candidate = addUtcDaysToIsoDate(anchorDate, -diff);
+    const position = getPrayerCyclePosition(anchorDate, candidate);
+    if (dayIndexInCycle(position, memberCount) === targetIndex) {
+      return candidate;
+    }
+  }
+  return addUtcDaysToIsoDate(anchorDate, -targetIndex);
+}
+
 export function addUtcDaysToIsoDate(isoDate: string, deltaDays: number): string {
   const d = parseIsoDateToUtc(isoDate);
   d.setUTCDate(d.getUTCDate() + deltaDays);
