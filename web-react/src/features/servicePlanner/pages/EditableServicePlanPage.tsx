@@ -30,6 +30,7 @@ import { emitAppToast } from '@/lib/uiFeedback';
 import { useScrollInputIntoView } from '@/hooks/useScrollInputIntoView';
 import { BlockStageSetupFields, BlockStageSetupPreview } from '../components/BlockStageSetupFields';
 import { DurationMinutesInput } from '../components/DurationMinutesInput';
+import { ShareBroadcastTeamPanel } from '../components/ShareBroadcastTeamPanel';
 import {
   STAGE_SETUP_PLACE_EQUIPMENT_KEY,
   STAGE_SETUP_REMOVE_MIC_STANDS_KEY,
@@ -640,6 +641,7 @@ export function EditableServicePlanPage() {
               Музыка: {plan.music_ministry_name ?? 'Не назначена'}
             </span>
           </div>
+          <ShareBroadcastTeamPanel assignments={planQ.data.broadcast_assignments ?? []} />
         </header>
 
         <section className="space-y-2.5">

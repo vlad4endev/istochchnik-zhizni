@@ -1,4 +1,6 @@
 import { pool, query } from '../config/db';
+import { ensureMediaScheduleSchema } from './mediaScheduleMigrations';
+import { getAssignmentsForPlan } from './mediaScheduleService';
 
 export type PlannerBlockType = {
   id: number;
@@ -74,6 +76,12 @@ export type PlannerPlanDetails = PlannerPlanListItem & {
   blocks: PlannerBlock[];
 };
 
+export type PublicBroadcastAssignmentRow = {
+  role_name: string;
+  role_color: string;
+  member_name: string;
+};
+
 export type PublicPlannerPlanPayload = {
   plan: {
     id: number;
@@ -87,6 +95,7 @@ export type PublicPlannerPlanPayload = {
     leader_name: string | null;
     preacher_name: string | null;
   };
+  broadcast_assignments: PublicBroadcastAssignmentRow[];
   blocks: Array<{
     id: number;
     order_index: number;
@@ -117,6 +126,7 @@ export type PublicEditablePlannerPlanPayload = {
     music_ministry_member_id: number | null;
     music_ministry_name: string | null;
   };
+  broadcast_assignments: PublicBroadcastAssignmentRow[];
   blocks: Array<{
     id: number;
     block_type_id: number;
@@ -880,6 +890,21 @@ export async function memberCanJoinServicePlanPresenceSession(
   return res.rows.length > 0;
 }
 
+async function loadPublicBroadcastAssignments(planId: number): Promise<PublicBroadcastAssignmentRow[]> {
+  try {
+    await ensureMediaScheduleSchema();
+    const assignments = await getAssignmentsForPlan(planId);
+    return assignments.map((a) => ({
+      role_name: a.role.name,
+      role_color: a.role.color,
+      member_name: a.member.name,
+    }));
+  } catch (e) {
+    console.warn('[service-planner] broadcast_assignments for public plan failed', e);
+    return [];
+  }
+}
+
 export async function getPublicPlanByToken(token: string): Promise<PublicPlannerPlanPayload | null> {
   await ensurePlannerSchema();
   const normalizedToken = String(token ?? '').trim();
@@ -942,6 +967,7 @@ export async function getPublicPlanByToken(token: string): Promise<PublicPlanner
   const birthdayPayload = hasBirthdayBlocks ? await getWeekBirthdays(serviceDate) : null;
   const hasScheduleBlocks = blocksRes.rows.some((r) => isWeeklyScheduleBlock(r as DbRecord));
   const schedulePayload = hasScheduleBlocks ? await getNextWeekSchedule(serviceDate) : null;
+  const broadcast_assignments = await loadPublicBroadcastAssignments(Number(row.id));
 
   return {
     plan: {
@@ -956,6 +982,7 @@ export async function getPublicPlanByToken(token: string): Promise<PublicPlanner
       leader_name: row.leader_name == null ? null : String(row.leader_name),
       preacher_name: row.preacher_name == null ? null : String(row.preacher_name),
     },
+    broadcast_assignments,
     blocks: blocksRes.rows.map((r) => {
       const x = r as DbRecord;
       return {
@@ -1055,6 +1082,7 @@ export async function getEditablePlanByToken(token: string): Promise<PublicEdita
   const birthdayPayload = hasBirthdayBlocks ? await getWeekBirthdays(serviceDate) : null;
   const hasScheduleBlocks = blocksRes.rows.some((r) => isWeeklyScheduleBlock(r as DbRecord));
   const schedulePayload = hasScheduleBlocks ? await getNextWeekSchedule(serviceDate) : null;
+  const broadcast_assignments = await loadPublicBroadcastAssignments(Number(row.id));
 
   return {
     plan: {
@@ -1073,6 +1101,7 @@ export async function getEditablePlanByToken(token: string): Promise<PublicEdita
         row.music_ministry_member_id == null ? null : Number(row.music_ministry_member_id),
       music_ministry_name: row.music_ministry_name == null ? null : String(row.music_ministry_name),
     },
+    broadcast_assignments,
     blocks: blocksRes.rows.map((r) => {
       const x = r as DbRecord;
       return {

@@ -77,6 +77,12 @@ export type ServicePlanDetails = ServicePlanListItem & {
   blocks: ServicePlanBlock[];
 };
 
+export type PublicBroadcastAssignment = {
+  role_name: string;
+  role_color: string;
+  member_name: string;
+};
+
 export type PublicServicePlanPayload = {
   plan: {
     id: number;
@@ -90,6 +96,7 @@ export type PublicServicePlanPayload = {
     leader_name: string | null;
     preacher_name: string | null;
   };
+  broadcast_assignments: PublicBroadcastAssignment[];
   blocks: Array<{
     id: number;
     order_index: number;
@@ -120,6 +127,7 @@ export type EditableServicePlanPayload = {
     music_ministry_member_id: number | null;
     music_ministry_name: string | null;
   };
+  broadcast_assignments: PublicBroadcastAssignment[];
   blocks: Array<{
     id: number;
     block_type_id: number;

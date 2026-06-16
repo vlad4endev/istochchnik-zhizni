@@ -69,7 +69,6 @@ import {
   type ServiceTemplateDetails,
 } from '../api';
 import { MediaTeamBlock } from '../../mediaSchedule/components/MediaTeamBlock';
-import { canManageMediaSchedule } from '../../mediaSchedule/mediaAccess';
 import { meaningfulNoteLinesFromRaw } from '../plannerNoteText';
 import {
   estimateServicePlanPrintBaseFontPx,
@@ -79,7 +78,6 @@ import {
 import { useServicePlanEditorsPresence } from '../useServicePlanEditorsPresence';
 import { emitAppToast } from '@/lib/uiFeedback';
 import { useScrollInputIntoView } from '@/hooks/useScrollInputIntoView';
-import { useMe } from '@/hooks/useMe';
 import { BlockStageSetupFields, BlockStageSetupPreview } from '../components/BlockStageSetupFields';
 import { DurationMinutesInput } from '../components/DurationMinutesInput';
 import { stageSetupProgramLines } from '../stageSetupFlags';
@@ -298,12 +296,9 @@ export function ServicePlannerPage() {
   const qc = useQueryClient();
   const location = useLocation();
   const role = useAuthStore((s) => s.role);
-  const authRoles = useAuthStore((s) => s.roles);
   const authMemberId = useAuthStore((s) => s.memberId);
-  const meQ = useMe();
   const normalizedRole = (role ?? 'member').toLowerCase();
   const isPlannerManagerBySession = normalizedRole === 'admin' || normalizedRole === 'minister';
-  const canManageMedia = canManageMediaSchedule(role, meQ.data?.ministry_role, authRoles);
   const [screen, setScreen] = useState<'home' | 'plan' | 'template'>('home');
   const [createPlanDate, setCreatePlanDate] = useState(todayIso());
   const [isTemplateDraftNew, setIsTemplateDraftNew] = useState(false);
@@ -2705,6 +2700,7 @@ export function ServicePlannerPage() {
             <LuLink className="mr-1 inline h-3.5 w-3.5" /> /service-plan/share/{draft.share_token}
           </div>
         </div>
+        <MediaTeamBlock planId={draft.id} embedded />
         <button
           type="button"
           disabled={isBlocksOnlyEditor}
@@ -2727,10 +2723,6 @@ export function ServicePlannerPage() {
         </button>
         </div>
       </section>
-
-      {draft ? (
-        <MediaTeamBlock planId={draft.id} canManage={canManageMedia} />
-      ) : null}
 
       <section className="rounded-2xl border border-stone-200 bg-white p-3 shadow-sm">
         <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-stone-500">Составление программы</p>

@@ -1,6 +1,6 @@
 import { parse } from 'date-fns';
 
-import type { EditableServicePlanMetaPayload, EditableServicePlanPayload, PublicServicePlanPayload } from './api';
+import type { EditableServicePlanMetaPayload, EditableServicePlanPayload, PublicBroadcastAssignment, PublicServicePlanPayload } from './api';
 
 type PlannerBlockKind = EditableServicePlanMetaPayload['block_types'][number]['kind'];
 
@@ -23,6 +23,22 @@ export function asPlainContentJson(value: unknown): Record<string, unknown> {
   return {};
 }
 
+function normalizeBroadcastAssignments(raw: unknown): PublicBroadcastAssignment[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((row) => {
+      if (!row || typeof row !== 'object') return null;
+      const item = row as Record<string, unknown>;
+      const role_name = typeof item.role_name === 'string' ? item.role_name.trim() : '';
+      const member_name = typeof item.member_name === 'string' ? item.member_name.trim() : '';
+      if (!role_name || !member_name) return null;
+      const role_color =
+        typeof item.role_color === 'string' && item.role_color.trim() ? item.role_color.trim() : '#6366f1';
+      return { role_name, role_color, member_name };
+    })
+    .filter((x): x is PublicBroadcastAssignment => x != null);
+}
+
 export function normalizePublicServicePlanPayload(raw: PublicServicePlanPayload): PublicServicePlanPayload {
   const plan = raw?.plan ?? ({} as PublicServicePlanPayload['plan']);
   const blocks = Array.isArray(raw?.blocks) ? raw.blocks : [];
@@ -41,6 +57,7 @@ export function normalizePublicServicePlanPayload(raw: PublicServicePlanPayload)
       leader_name: plan.leader_name == null ? null : String(plan.leader_name),
       preacher_name: plan.preacher_name == null ? null : String(plan.preacher_name),
     },
+    broadcast_assignments: normalizeBroadcastAssignments(raw?.broadcast_assignments),
     blocks: blocks.map((b) => ({
       ...b,
       id: Number(b.id) || 0,
@@ -78,6 +95,7 @@ export function normalizeEditableServicePlanPayload(raw: EditableServicePlanPayl
       music_ministry_member_id: normalizeOptionalPositiveInt(plan.music_ministry_member_id),
       music_ministry_name: plan.music_ministry_name == null ? null : String(plan.music_ministry_name),
     },
+    broadcast_assignments: normalizeBroadcastAssignments(raw?.broadcast_assignments),
     blocks: blocks.map((b) => ({
       ...b,
       id: Number(b.id) || 0,

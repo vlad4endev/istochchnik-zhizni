@@ -14,9 +14,18 @@ type Props = {
   planId: number | null;
   canManage?: boolean;
   compact?: boolean;
+  /** Внутри «Настройки плана» — компактный блок только для просмотра */
+  embedded?: boolean;
+  title?: string;
 };
 
-export function MediaTeamBlock({ planId, canManage = false, compact = false }: Props) {
+export function MediaTeamBlock({
+  planId,
+  canManage = false,
+  compact = false,
+  embedded = false,
+  title,
+}: Props) {
   const eventQ = useQuery({
     queryKey: ['media-schedule', 'plan', planId],
     queryFn: () => fetchMediaEventByPlanId(planId!),
@@ -36,6 +45,46 @@ export function MediaTeamBlock({ planId, canManage = false, compact = false }: P
   const loading = eventQ.isLoading || assignmentsQ.isLoading;
   const assignments = assignmentsQ.data ?? eventQ.data?.assignments ?? [];
   const event = eventQ.data;
+  const showManageActions = canManage && !embedded;
+  const heading = title ?? (embedded ? 'Участники трансляции' : 'Медиа-команда');
+
+  const content = loading ? (
+    <div
+      className={[
+        'flex justify-center text-[var(--text-muted)]',
+        embedded ? 'py-2' : 'py-4',
+      ].join(' ')}
+    >
+      <LuLoaderCircle className={embedded ? 'h-4 w-4 animate-spin' : 'h-5 w-5 animate-spin'} />
+    </div>
+  ) : assignments.length === 0 ? (
+    <p className={embedded ? 'text-xs text-stone-500' : 'text-sm text-[var(--text-muted)]'}>
+      Назначений пока нет.
+      {showManageActions ? (
+        <>
+          {' '}
+          <Link to={`/media-schedule?planId=${planId}`} className="font-semibold text-primary">
+            Назначить команду
+          </Link>
+        </>
+      ) : null}
+    </p>
+  ) : (
+    <ul className={embedded ? 'space-y-1' : 'space-y-2'}>
+      {assignments.map((a) => (
+        <AssignmentRow key={a.id} assignment={a} embedded={embedded} />
+      ))}
+    </ul>
+  );
+
+  if (embedded) {
+    return (
+      <div className="mt-3 rounded-xl border border-stone-200 bg-stone-50 px-3 py-2.5">
+        <h3 className="mb-1.5 text-xs font-semibold text-stone-600">{heading}</h3>
+        {content}
+      </div>
+    );
+  }
 
   return (
     <section
@@ -45,8 +94,8 @@ export function MediaTeamBlock({ planId, canManage = false, compact = false }: P
       ].join(' ')}
     >
       <div className="mb-2 flex items-center justify-between gap-2">
-        <h3 className="text-sm font-bold text-[var(--text)]">Медиа-команда</h3>
-        {canManage ? (
+        <h3 className="text-sm font-bold text-[var(--text)]">{heading}</h3>
+        {showManageActions ? (
           <Link
             to={`/media-schedule?planId=${planId}`}
             className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-semibold text-primary hover:bg-primary/10"
@@ -57,29 +106,7 @@ export function MediaTeamBlock({ planId, canManage = false, compact = false }: P
         ) : null}
       </div>
 
-      {loading ? (
-        <div className="flex justify-center py-4 text-[var(--text-muted)]">
-          <LuLoaderCircle className="h-5 w-5 animate-spin" />
-        </div>
-      ) : assignments.length === 0 ? (
-        <p className="text-sm text-[var(--text-muted)]">
-          Назначений пока нет.
-          {canManage ? (
-            <>
-              {' '}
-              <Link to={`/media-schedule?planId=${planId}`} className="font-semibold text-primary">
-                Назначить команду
-              </Link>
-            </>
-          ) : null}
-        </p>
-      ) : (
-        <ul className="space-y-2">
-          {assignments.map((a) => (
-            <AssignmentRow key={a.id} assignment={a} />
-          ))}
-        </ul>
-      )}
+      {content}
 
       {event?.title && !compact ? (
         <p className="mt-2 text-[11px] text-[var(--text-muted)]">{event.title}</p>
@@ -88,7 +115,24 @@ export function MediaTeamBlock({ planId, canManage = false, compact = false }: P
   );
 }
 
-function AssignmentRow({ assignment }: { assignment: MediaAssignment }) {
+function AssignmentRow({ assignment, embedded = false }: { assignment: MediaAssignment; embedded?: boolean }) {
+  if (embedded) {
+    return (
+      <li className="flex min-w-0 items-center gap-1.5 text-xs leading-snug text-stone-700">
+        <span
+          className="h-1.5 w-1.5 shrink-0 rounded-full"
+          style={{ backgroundColor: assignment.role.color }}
+          aria-hidden
+        />
+        <span className="shrink-0 font-semibold text-stone-500">{assignment.role.name}</span>
+        <span className="shrink-0 text-stone-400" aria-hidden>
+          —
+        </span>
+        <span className="min-w-0 truncate font-medium">{assignment.member.name}</span>
+      </li>
+    );
+  }
+
   return (
     <li className="flex items-center gap-2 rounded-xl bg-[var(--surface-elevated)] px-2.5 py-2 ring-1 ring-[var(--border)]">
       <span

@@ -23,6 +23,7 @@ import {
   type PublicServicePlanPayload,
 } from '../api';
 import { BlockStageSetupPreview } from '../components/BlockStageSetupFields';
+import { ShareBroadcastTeamPanel } from '../components/ShareBroadcastTeamPanel';
 import { meaningfulNoteLinesFromRaw } from '../plannerNoteText';
 import { stageSetupProgramLines } from '../stageSetupFlags';
 import { safeServicePlanTimelineStart } from '../planPayloadNormalize';
@@ -324,6 +325,7 @@ export function PublicServicePlanPage() {
   if (plan.status === 'draft') {
     return <EditableServicePlanPage />;
   }
+  const broadcastAssignments = q.data.broadcast_assignments ?? [];
   const dateText = new Intl.DateTimeFormat('ru-RU', {
     day: 'numeric',
     month: 'long',
@@ -353,6 +355,7 @@ export function PublicServicePlanPage() {
               <span className="rounded-full bg-stone-100 px-2 py-0.5">Проповедник: {plan.preacher_name}</span>
             ) : null}
           </div>
+          <ShareBroadcastTeamPanel assignments={broadcastAssignments} />
         </header>
 
         <section className="space-y-2.5">
