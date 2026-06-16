@@ -42,6 +42,7 @@ import {
   updateMediaRole,
 } from '../api';
 import { EventModal } from '../components/EventModal';
+import { MediaSchedulePlanMobileCards } from '../components/MediaSchedulePlanMobileCards';
 import { MemberPickerModal } from '../components/MemberPickerModal';
 import { PlannerEventPickerModal } from '../components/PlannerEventPickerModal';
 import { RolesSettingsModal } from '../components/RolesSettingsModal';
@@ -55,6 +56,7 @@ import { MinistryScheduleSwitcher } from '../../schedules/components/MinistrySch
 import type { MediaEvent, MediaScheduleViewMode } from '../types';
 import {
   ASSEMBLY_PAGE_SIZE,
+  ASSEMBLY_PAGE_SIZE_MOBILE,
   buildServiceEventColumns,
   findAssemblyPageForDate,
   formatAssemblyViewHeader,
@@ -225,11 +227,13 @@ export function MediaSchedulePage() {
     [gridStart, gridEnd],
   );
 
+  const assemblyPageSize = isMobile ? ASSEMBLY_PAGE_SIZE_MOBILE : ASSEMBLY_PAGE_SIZE;
+
   const assemblyEventColumns = useMemo(() => buildServiceEventColumns(events), [events]);
 
   const assemblyPagination = useMemo(
-    () => paginateAssemblyColumns(assemblyEventColumns, assemblyPage, ASSEMBLY_PAGE_SIZE),
-    [assemblyEventColumns, assemblyPage],
+    () => paginateAssemblyColumns(assemblyEventColumns, assemblyPage, assemblyPageSize),
+    [assemblyEventColumns, assemblyPage, assemblyPageSize],
   );
 
   const visibleAssemblyColumns = assemblyPagination.page;
@@ -247,9 +251,14 @@ export function MediaSchedulePage() {
 
   useEffect(() => {
     if (viewMode !== 'assemblies' || eventsQ.isLoading || assemblyEventColumns.length === 0) return;
-    setAssemblyPage(findAssemblyPageForDate(assemblyEventColumns, new Date(), ASSEMBLY_PAGE_SIZE));
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- snap only when entering assemblies view
+    setAssemblyPage(findAssemblyPageForDate(assemblyEventColumns, new Date(), assemblyPageSize));
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- snap only when entering plan view
   }, [viewMode]);
+
+  useEffect(() => {
+    if (viewMode !== 'assemblies') return;
+    setAssemblyPage((p) => Math.min(p, Math.max(0, assemblyPagination.pageCount - 1)));
+  }, [assemblyPageSize, viewMode, assemblyPagination.pageCount]);
 
   const upcomingCount = useMemo(() => {
     const today = ymd(new Date());
@@ -306,7 +315,7 @@ export function MediaSchedulePage() {
   }
 
   function goAssemblyToday() {
-    setAssemblyPage(findAssemblyPageForDate(assemblyEventColumns, new Date(), ASSEMBLY_PAGE_SIZE));
+    setAssemblyPage(findAssemblyPageForDate(assemblyEventColumns, new Date(), assemblyPageSize));
   }
 
   function openPlannerPicker() {
@@ -404,7 +413,11 @@ export function MediaSchedulePage() {
                   setViewMode(id);
                   if (id === 'assemblies' && events.length > 0) {
                     setAssemblyPage(
-                      findAssemblyPageForDate(assemblyEventColumns, new Date(), ASSEMBLY_PAGE_SIZE),
+                      findAssemblyPageForDate(
+                        assemblyEventColumns,
+                        new Date(),
+                        isMobile ? ASSEMBLY_PAGE_SIZE_MOBILE : ASSEMBLY_PAGE_SIZE,
+                      ),
                     );
                   }
                 }}
@@ -742,9 +755,21 @@ export function MediaSchedulePage() {
                 ) : null}
               </div>
             ) : (
-              <section className="overflow-hidden rounded-2xl border border-stone-200/80 bg-white shadow-[var(--shadow-card)]">
-                <div className="overflow-x-auto">
-                  <table className="min-w-[640px] w-full border-collapse text-sm">
+              <section className="space-y-3 lg:space-y-0">
+                <MediaSchedulePlanMobileCards
+                  columns={visibleAssemblyColumns}
+                  activeRoles={activeRoles}
+                  canManage={canManage}
+                  eventToneIndex={eventToneIndex}
+                  toneStyles={EVENT_TONE_STYLES}
+                  onAssign={(event, roleId) => setAssignModal({ event, roleId })}
+                  onContextMenu={(assignmentId, eventId) => setContextMenu({ assignmentId, eventId })}
+                  onOpenEvent={openAssignmentModal}
+                />
+
+                <div className="hidden overflow-hidden rounded-2xl border border-stone-200/80 bg-white shadow-[var(--shadow-card)] lg:block">
+                  <div className="overflow-x-auto">
+                    <table className="min-w-[720px] w-full border-collapse text-sm">
                     <thead>
                       <tr className="bg-stone-50/90">
                         <th className="sticky left-0 z-10 border-b border-stone-100 bg-stone-50/95 px-3 py-3 text-left text-[11px] font-extrabold uppercase tracking-wide text-stone-500 sm:px-4">
@@ -819,11 +844,11 @@ export function MediaSchedulePage() {
                                       className="grid h-7 w-7 shrink-0 place-items-center overflow-hidden rounded-full"
                                     />
                                     <div className="min-w-0">
-                                      <p className="truncate text-[11px] font-extrabold text-stone-900 sm:text-xs">
+                                      <p className="truncate text-xs font-extrabold text-stone-900">
                                         {assignment.member.name}
                                       </p>
                                       <p
-                                        className="hidden text-[10px] font-semibold sm:block"
+                                        className="text-[10px] font-semibold"
                                         style={{ color: assignmentStatusBorderColor(assignment.status) }}
                                       >
                                         {assignmentStatusLabel(assignment.status)}
@@ -849,8 +874,37 @@ export function MediaSchedulePage() {
                       ))}
                     </tbody>
                   </table>
+                  </div>
+                  <div className="flex flex-wrap items-center justify-between gap-3 border-t border-stone-100 bg-stone-50/50 px-4 py-2.5">
+                    <div className="flex flex-wrap items-center gap-3 text-[11px] font-semibold text-stone-500">
+                      <span className="inline-flex items-center gap-1.5">
+                        <span className="h-2 w-2 rounded-full bg-[var(--btn-success-bg,#16a34a)]" />
+                        Подтверждено
+                      </span>
+                      <span className="inline-flex items-center gap-1.5">
+                        <span className="h-2 w-2 rounded-full bg-amber-500" />
+                        Ожидает
+                      </span>
+                      <span className="inline-flex items-center gap-1.5">
+                        <span className="h-2 w-2 rounded-full bg-rose-500" />
+                        Отказ
+                      </span>
+                    </div>
+                    {assemblyPagination.pageCount > 1 ? (
+                      <p className="text-[11px] font-bold text-stone-500">
+                        {assemblyPagination.pageIndex + 1} / {assemblyPagination.pageCount} · всего{' '}
+                        {assemblyPagination.total}
+                      </p>
+                    ) : null}
+                  </div>
+                  <p className="border-t border-stone-100 px-4 py-3 text-xs text-stone-500">
+                    Каждая колонка — отдельное собрание с программой. На экране до {ASSEMBLY_PAGE_SIZE} служений;
+                    листайте стрелками.
+                  </p>
                 </div>
-                <div className="flex flex-wrap items-center justify-between gap-3 border-t border-stone-100 bg-stone-50/50 px-3 py-2.5 sm:px-4">
+
+                <div className="rounded-2xl border border-stone-200/80 bg-white px-3 py-3 shadow-[var(--shadow-card)] lg:hidden">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
                   <div className="flex flex-wrap items-center gap-3 text-[11px] font-semibold text-stone-500">
                     <span className="inline-flex items-center gap-1.5">
                       <span className="h-2 w-2 rounded-full bg-[var(--btn-success-bg,#16a34a)]" />
@@ -870,10 +924,12 @@ export function MediaSchedulePage() {
                       {assemblyPagination.pageIndex + 1} / {assemblyPagination.pageCount} · всего {assemblyPagination.total}
                     </p>
                   ) : null}
+                  </div>
+                  <p className="mt-2 text-xs leading-relaxed text-stone-500">
+                    До {ASSEMBLY_PAGE_SIZE_MOBILE} служений на экране. Листайте стрелками выше — прокручивайте страницу
+                    вниз, горизонтальный скролл не нужен.
+                  </p>
                 </div>
-                <p className="border-t border-stone-100 px-3 py-3 text-xs text-stone-500 sm:px-4">
-                  Каждая колонка — отдельное собрание с программой. На экране до {ASSEMBLY_PAGE_SIZE} служений; листайте стрелками, чтобы увидеть следующие.
-                </p>
               </section>
             )}
           </>

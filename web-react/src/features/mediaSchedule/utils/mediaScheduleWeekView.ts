@@ -7,8 +7,11 @@ import { ru } from 'date-fns/locale';
 
 import type { MediaEvent } from '../types';
 
-/** Сколько собраний показывать колонками на одной странице. */
+/** Сколько служений показывать колонками на одной странице (десктоп). */
 export const ASSEMBLY_PAGE_SIZE = 5;
+
+/** На мобильных — меньше карточек на экран, без горизонтальной таблицы. */
+export const ASSEMBLY_PAGE_SIZE_MOBILE = 3;
 
 export type WeekEventColumn = {
   dateKey: string;
