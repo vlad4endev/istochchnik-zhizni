@@ -71,8 +71,8 @@ import {
 import { MediaTeamBlock } from '../../mediaSchedule/components/MediaTeamBlock';
 import { meaningfulNoteLinesFromRaw } from '../plannerNoteText';
 import {
-  estimateServicePlanPrintBaseFontPx,
-  openServicePlanA4PrintSheet,
+  downloadServicePlanPdf,
+  resolveServicePlanPdfFontPx,
   type ServicePlanPrintRow,
 } from '../servicePlanPrintSheet';
 import { useServicePlanEditorsPresence } from '../useServicePlanEditorsPresence';
@@ -308,6 +308,7 @@ export function ServicePlannerPage() {
   const [mobileTemplateOrderOpenId, setMobileTemplateOrderOpenId] = useState<number | null>(null);
   /** Шапка плана: «⋯» с действиями шаблонов на узком экране */
   const [planHeaderMoreOpen, setPlanHeaderMoreOpen] = useState(false);
+  const [pdfExporting, setPdfExporting] = useState(false);
   const autoArchivingPlanIdsRef = useRef<Set<number>>(new Set());
   /** Отложенное удаление блока программы: таймер API + снимок для отмены из toast */
   const pendingPlanBlockDeleteTimersRef = useRef<Map<number, number>>(new Map());
@@ -1044,8 +1045,8 @@ export function ServicePlannerPage() {
     return null;
   }
 
-  function handlePrintPlanSheet(): void {
-    if (!draft) return;
+  async function handlePrintPlanSheet(): Promise<void> {
+    if (!draft || pdfExporting) return;
     const rows: ServicePlanPrintRow[] = timedBlocks.map((block) => {
       if (isSeparatorBlock(block)) {
         return { type: 'separator', label: separatorLabel(block) };
@@ -1098,7 +1099,7 @@ export function ServicePlannerPage() {
         hiddenFromPublic: isHiddenFromPublic(block),
       };
     });
-    const baseFontPx = estimateServicePlanPrintBaseFontPx(rows);
+    const baseFontPx = resolveServicePlanPdfFontPx(rows);
     const dateLine = new Intl.DateTimeFormat('ru-RU', {
       weekday: 'long',
       day: 'numeric',
@@ -1107,22 +1108,34 @@ export function ServicePlannerPage() {
     }).format(new Date(`${draft.service_date}T12:00:00`));
     const leader = draft.leader_member_id ? usersById.get(draft.leader_member_id) ?? null : null;
     const preacher = draft.preacher_member_id ? usersById.get(draft.preacher_member_id) ?? null : null;
-    const ok = openServicePlanA4PrintSheet({
-      documentTitle: `Программа служения ${draft.service_date}`,
-      heading: 'Программа служения',
-      dateLine,
-      startTime: draft.start_time,
-      totalMinutes: totalDuration,
-      leader: leader ? userLabel(leader) : null,
-      preacher: preacher ? userLabel(preacher) : null,
-      baseFontPx,
-      rows,
-    });
-    if (!ok) {
+
+    setPdfExporting(true);
+    try {
+      await downloadServicePlanPdf(
+        {
+          documentTitle: `Программа служения ${draft.service_date}`,
+          heading: 'Программа служения',
+          dateLine,
+          startTime: draft.start_time,
+          totalMinutes: totalDuration,
+          leader: leader ? userLabel(leader) : null,
+          preacher: preacher ? userLabel(preacher) : null,
+          baseFontPx,
+          rows,
+        },
+        `programma-sluzheniya-${draft.service_date}.pdf`,
+      );
+      emitAppToast({
+        kind: 'success',
+        message: 'PDF сохранён на устройство',
+      });
+    } catch {
       emitAppToast({
         kind: 'error',
-        message: 'Не удалось открыть окно печати. Разрешите всплывающие окна для этого сайта.',
+        message: 'Не удалось сформировать PDF. Попробуйте ещё раз.',
       });
+    } finally {
+      setPdfExporting(false);
     }
   }
 
@@ -2420,12 +2433,13 @@ export function ServicePlannerPage() {
               ) : null}
               <button
                 type="button"
-                onClick={() => handlePrintPlanSheet()}
-                className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-lg border border-stone-300 bg-white px-2.5 py-1 text-[11px] font-semibold text-stone-800 hover:border-primary hover:text-primary sm:px-3 sm:py-1.5 sm:text-xs"
-                title="Откроется предпросмотр: затем «Печать / PDF»"
+                onClick={() => void handlePrintPlanSheet()}
+                disabled={pdfExporting}
+                className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-lg border border-stone-300 bg-white px-2.5 py-1 text-[11px] font-semibold text-stone-800 hover:border-primary hover:text-primary disabled:cursor-wait disabled:opacity-60 sm:px-3 sm:py-1.5 sm:text-xs"
+                title="Скачать программу в PDF"
               >
                 <LuDownload className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                PDF
+                {pdfExporting ? 'PDF…' : 'PDF'}
               </button>
               <button
                 type="button"
@@ -2495,13 +2509,14 @@ export function ServicePlannerPage() {
                 type="button"
                 onClick={() => {
                   setPlanHeaderMoreOpen(false);
-                  handlePrintPlanSheet();
+                  void handlePrintPlanSheet();
                 }}
-                className="inline-flex min-h-[36px] shrink-0 items-center gap-1 whitespace-nowrap rounded-lg border border-stone-300 px-2.5 py-1 text-[11px] font-semibold text-stone-800 hover:border-primary hover:text-primary sm:hidden"
-                title="Откроется предпросмотр: затем «Печать / PDF»"
+                disabled={pdfExporting}
+                className="inline-flex min-h-[36px] shrink-0 items-center gap-1 whitespace-nowrap rounded-lg border border-stone-300 px-2.5 py-1 text-[11px] font-semibold text-stone-800 hover:border-primary hover:text-primary disabled:cursor-wait disabled:opacity-60 sm:hidden"
+                title="Скачать программу в PDF"
               >
                 <LuDownload className="h-4 w-4 shrink-0" aria-hidden />
-                PDF
+                {pdfExporting ? 'PDF…' : 'PDF'}
               </button>
               <button
                 type="button"

@@ -1,4 +1,7 @@
-/** Печать программы служения на одном листе A4 (через диалог печати → «Сохранить как PDF»). */
+/** Экспорт программы служения в PDF (скачивание файла). */
+
+import html2canvas from 'html2canvas';
+import { jsPDF } from 'jspdf';
 
 export type ServicePlanPrintRow =
   | { type: 'separator'; label: string }
@@ -25,6 +28,10 @@ export type ServicePlanPrintPayload = {
   rows: ServicePlanPrintRow[];
 };
 
+const PDF_PAGE_WIDTH_PX = 794;
+const PDF_PAGE_HEIGHT_PX = 1123;
+const PDF_ROW_UNITS_PER_PAGE = 24;
+
 function escapeHtml(s: string): string {
   return s
     .replace(/&/g, '&amp;')
@@ -34,7 +41,7 @@ function escapeHtml(s: string): string {
     .replace(/'/g, '&#39;');
 }
 
-/** Грубая оценка «веса» строк для подбора кегля под один лист A4. */
+/** Грубая оценка «веса» строк для подбора кегля. */
 export function estimateServicePlanPrintBaseFontPx(rows: ServicePlanPrintRow[]): number {
   let units = 0;
   for (const r of rows) {
@@ -53,9 +60,44 @@ export function estimateServicePlanPrintBaseFontPx(rows: ServicePlanPrintRow[]):
   return Math.max(8, Math.min(13.5, px));
 }
 
-function buildPrintHtml(payload: ServicePlanPrintPayload): string {
-  const { baseFontPx } = payload;
-  const rowsHtml = payload.rows
+/** Стабильный кегль для PDF: читаемо, без сжатия в один лист. */
+export function resolveServicePlanPdfFontPx(rows: ServicePlanPrintRow[]): number {
+  const compact = estimateServicePlanPrintBaseFontPx(rows);
+  return Math.max(9.5, Math.min(11.5, compact));
+}
+
+function estimateRowUnits(row: ServicePlanPrintRow): number {
+  if (row.type === 'separator') return 1.35;
+  let units = 1.45;
+  units += Math.min(row.details.length, 8) * 0.42;
+  units += Math.max(0, Math.ceil(row.title.length / 46) - 1) * 0.48;
+  if (row.responsible && row.responsible.length > 26) units += 0.38;
+  return units;
+}
+
+function paginateRows(rows: ServicePlanPrintRow[]): ServicePlanPrintRow[][] {
+  const pages: ServicePlanPrintRow[][] = [];
+  let current: ServicePlanPrintRow[] = [];
+  let units = 0;
+
+  for (const row of rows) {
+    const rowUnits = estimateRowUnits(row);
+    if (current.length > 0 && units + rowUnits > PDF_ROW_UNITS_PER_PAGE) {
+      pages.push(current);
+      current = [row];
+      units = rowUnits;
+      continue;
+    }
+    current.push(row);
+    units += rowUnits;
+  }
+
+  if (current.length > 0) pages.push(current);
+  return pages.length > 0 ? pages : [[]];
+}
+
+function buildRowsHtml(rows: ServicePlanPrintRow[]): string {
+  return rows
     .map((r) => {
       if (r.type === 'separator') {
         return `<tr class="sep"><td colspan="4">${escapeHtml(r.label)}</td></tr>`;
@@ -80,72 +122,33 @@ function buildPrintHtml(payload: ServicePlanPrintPayload): string {
       </tr>`;
     })
     .join('');
+}
 
-  const leaderLine =
-    payload.leader || payload.preacher
-      ? `<div class="roles">${[payload.leader ? `Ведущий: ${escapeHtml(payload.leader)}` : '', payload.preacher ? `Проповедник: ${escapeHtml(payload.preacher)}` : '']
-          .filter(Boolean)
-          .join(' · ')}</div>`
-      : '';
+function buildSheetStyles(baseFontPx: number): string {
+  const fsSm = Math.max(8, baseFontPx - 1.5);
+  const fsXs = Math.max(7.5, baseFontPx - 2.5);
+  const fsH = Math.min(22, baseFontPx + 9);
 
-  return `<!DOCTYPE html>
-<html lang="ru">
-<head>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>${escapeHtml(payload.documentTitle)}</title>
-  <style>
+  return `
     :root {
       --fs: ${baseFontPx}px;
-      --fs-sm: ${Math.max(8, baseFontPx - 1.5)}px;
-      --fs-xs: ${Math.max(7.5, baseFontPx - 2.5)}px;
-      --fs-h: ${Math.min(22, baseFontPx + 9)}px;
+      --fs-sm: ${fsSm}px;
+      --fs-xs: ${fsXs}px;
+      --fs-h: ${fsH}px;
     }
-    @page { size: A4 portrait; margin: 6mm; }
     * { box-sizing: border-box; }
-    html, body { margin: 0; padding: 0; }
-    body {
-      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+    .pdf-sheet {
+      width: ${PDF_PAGE_WIDTH_PX}px;
+      min-height: ${PDF_PAGE_HEIGHT_PX}px;
+      padding: 28px 32px 24px;
+      background: #fff;
       color: #0c0a09;
-      -webkit-print-color-adjust: exact;
-      print-color-adjust: exact;
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
     }
-    .toolbar{
-      position: sticky;
-      top: 0;
-      z-index: 10;
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      padding: 10px 12px;
-      background: rgba(255,255,255,0.92);
-      border-bottom: 1px solid #e7e5e4;
-      backdrop-filter: blur(10px);
-      -webkit-backdrop-filter: blur(10px);
-    }
-    .toolbar button{
-      appearance: none;
-      border: 1px solid #d6d3d1;
-      background: #0c4a6e;
-      color: #fff;
-      border-radius: 10px;
-      padding: 8px 12px;
-      font-weight: 800;
-      font-size: 14px;
-      cursor: pointer;
-      white-space: nowrap;
-    }
-    .toolbar button:active{ transform: translateY(1px); }
-    .toolbar .hint{
-      font-size: 12px;
-      color: #57534e;
-      line-height: 1.2;
-    }
-    #sheet { padding: 0 1mm 2mm; max-width: 100%; }
     h1 {
       font-size: var(--fs-h);
       font-weight: 800;
-      margin: 0 0 2px;
+      margin: 0 0 4px;
       letter-spacing: -0.02em;
       line-height: 1.1;
     }
@@ -158,8 +161,14 @@ function buildPrintHtml(payload: ServicePlanPrintPayload): string {
     .roles {
       font-size: var(--fs-sm);
       color: #44403c;
-      margin: 4px 0 10px;
+      margin: 4px 0 12px;
       font-weight: 600;
+    }
+    .page-continue {
+      font-size: var(--fs-sm);
+      color: #78716c;
+      margin: 0 0 10px;
+      font-weight: 700;
     }
     table {
       width: 100%;
@@ -173,12 +182,12 @@ function buildPrintHtml(payload: ServicePlanPrintPayload): string {
       letter-spacing: 0.05em;
       color: #78716c;
       border-bottom: 2px solid #d6d3d1;
-      padding: 3px 5px 5px 0;
+      padding: 4px 6px 6px 0;
       font-weight: 800;
     }
     tbody td {
       vertical-align: top;
-      padding: 4px 5px 4px 0;
+      padding: 5px 6px 5px 0;
       border-bottom: 1px solid #f5f5f4;
     }
     .t-time {
@@ -210,101 +219,118 @@ function buildPrintHtml(payload: ServicePlanPrintPayload): string {
     tr.sep td {
       font-weight: 800;
       text-align: center;
-      padding: 6px 4px;
+      padding: 7px 4px;
       background: #f5f5f4;
       border-bottom: 1px solid #e7e5e4;
       font-size: calc(var(--fs) + 0.5px);
     }
     .footer {
-      margin-top: 8px;
+      margin-top: 12px;
       font-size: var(--fs-xs);
       color: #a8a29e;
       text-align: center;
     }
-    @media print {
-      body { background: #fff; }
-      #sheet { padding: 0; }
-      .toolbar { display: none; }
-    }
-  </style>
-</head>
-<body>
-  <div class="toolbar" role="toolbar" aria-label="Действия печати">
-    <button type="button" id="printBtn">Печать / PDF</button>
-    <span class="hint">Если нужен файл: в диалоге печати выберите «Сохранить как PDF».</span>
-  </div>
-  <div id="sheet">
-    <h1>${escapeHtml(payload.heading)}</h1>
-    <div class="meta">${escapeHtml(payload.dateLine)} · начало ${escapeHtml(payload.startTime)} · всего ${payload.totalMinutes} мин</div>
-    ${leaderLine}
-    <table>
-      <thead>
-        <tr>
-          <th class="t-time">Время</th>
-          <th class="t-title">Блок</th>
-          <th class="t-min">Мин</th>
-          <th class="t-who">Ответственный</th>
-        </tr>
-      </thead>
-      <tbody>${rowsHtml}</tbody>
-    </table>
-    <p class="footer">План служения · Источник жизни. В диалоге печати выберите принтер «Сохранить как PDF», если нужен файл.</p>
-  </div>
-  <script>
-    (function () {
-      function isMobile() {
-        try {
-          return /Android|iPhone|iPad|iPod|Mobi/i.test(navigator.userAgent || '');
-        } catch (e) {
-          return false;
-        }
-      }
-      function fitOnePage() {
-        var el = document.getElementById('sheet');
-        if (!el) return;
-        var a4hPx = (297 - 12) * (96 / 25.4);
-        var h = el.getBoundingClientRect().height;
-        var s = h > a4hPx * 0.94 ? (a4hPx * 0.94) / h : 1;
-        if (s < 0.68) s = 0.68;
-        if (s < 1) {
-          el.style.transform = 'scale(' + s + ')';
-          el.style.transformOrigin = 'top left';
-          el.style.width = (100 / s) + '%';
-        }
-      }
-      window.addEventListener('load', function () {
-        fitOnePage();
-        var btn = document.getElementById('printBtn');
-        if (btn) btn.addEventListener('click', function () { window.print(); });
-        // На десктопе можно сразу открыть печать. На мобилке часто блокируется — оставляем предпросмотр.
-        if (!isMobile()) setTimeout(function () { window.print(); }, 160);
-      });
-    })();
-  </script>
-</body>
-</html>`;
+  `;
+}
+
+type PdfPageOptions = {
+  showFullHeader: boolean;
+  showFooter: boolean;
+  pageNum: number;
+  totalPages: number;
+};
+
+function buildPdfPageHtml(payload: ServicePlanPrintPayload, rows: ServicePlanPrintRow[], opts: PdfPageOptions): string {
+  const leaderLine =
+    opts.showFullHeader && (payload.leader || payload.preacher)
+      ? `<div class="roles">${[
+          payload.leader ? `Ведущий: ${escapeHtml(payload.leader)}` : '',
+          payload.preacher ? `Проповедник: ${escapeHtml(payload.preacher)}` : '',
+        ]
+          .filter(Boolean)
+          .join(' · ')}</div>`
+      : '';
+
+  const header = opts.showFullHeader
+    ? `<h1>${escapeHtml(payload.heading)}</h1>
+       <div class="meta">${escapeHtml(payload.dateLine)} · начало ${escapeHtml(payload.startTime)} · всего ${payload.totalMinutes} мин</div>
+       ${leaderLine}`
+    : `<p class="page-continue">${escapeHtml(payload.heading)} · стр. ${opts.pageNum} из ${opts.totalPages}</p>`;
+
+  const footer = opts.showFooter
+    ? `<p class="footer">План служения · Источник жизни</p>`
+    : '';
+
+  return `<style>${buildSheetStyles(payload.baseFontPx)}</style>
+    <div class="pdf-sheet">
+      ${header}
+      <table>
+        <thead>
+          <tr>
+            <th class="t-time">Время</th>
+            <th class="t-title">Блок</th>
+            <th class="t-min">Мин</th>
+            <th class="t-who">Ответственный</th>
+          </tr>
+        </thead>
+        <tbody>${buildRowsHtml(rows)}</tbody>
+      </table>
+      ${footer}
+    </div>`;
 }
 
 /**
- * Открывает окно с таблицей программы и вызывает печать.
- * @returns false если браузер заблокировал всплывающее окно
+ * Формирует PDF и сразу скачивает файл (без всплывающих окон и диалога печати).
  */
-export function openServicePlanA4PrintSheet(payload: ServicePlanPrintPayload): boolean {
-  const w = window.open('about:blank', '_blank', 'noopener,noreferrer,width=900,height=1100');
-  if (!w) return false;
-  const html = buildPrintHtml(payload);
+export async function downloadServicePlanPdf(payload: ServicePlanPrintPayload, fileName: string): Promise<void> {
+  const pageChunks = paginateRows(payload.rows);
+  const host = document.createElement('div');
+  host.setAttribute('aria-hidden', 'true');
+  host.style.cssText = 'position:fixed;left:-14000px;top:0;pointer-events:none;opacity:0;z-index:-1;';
+  document.body.appendChild(host);
+
+  const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
+  const marginMm = 0;
+  const pageWidthMm = 210;
+
   try {
-    const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    w.location.replace(url);
-    // Даем вкладке загрузиться; после этого URL можно освобождать.
-    setTimeout(() => URL.revokeObjectURL(url), 60_000);
-  } catch {
-    // Fallback: старые браузеры / webview
-    const doc = w.document;
-    doc.open();
-    doc.write(html);
-    doc.close();
+    for (let i = 0; i < pageChunks.length; i++) {
+      const rows = pageChunks[i] ?? [];
+      host.innerHTML = buildPdfPageHtml(payload, rows, {
+        showFullHeader: i === 0,
+        showFooter: i === pageChunks.length - 1,
+        pageNum: i + 1,
+        totalPages: pageChunks.length,
+      });
+
+      const sheet = host.querySelector('.pdf-sheet');
+      if (!(sheet instanceof HTMLElement)) {
+        throw new Error('Не удалось собрать макет PDF');
+      }
+
+      sheet.style.minHeight = 'auto';
+      const captureHeight = Math.min(PDF_PAGE_HEIGHT_PX, Math.max(sheet.scrollHeight + 8, 240));
+
+      const canvas = await html2canvas(sheet, {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: '#ffffff',
+        logging: false,
+        width: PDF_PAGE_WIDTH_PX,
+        height: captureHeight,
+        windowWidth: PDF_PAGE_WIDTH_PX,
+        windowHeight: captureHeight,
+      });
+
+      const imgData = canvas.toDataURL('image/jpeg', 0.94);
+      if (i > 0) doc.addPage();
+      const imgHeightMm = (canvas.height * pageWidthMm) / canvas.width;
+      doc.addImage(imgData, 'JPEG', marginMm, marginMm, pageWidthMm, imgHeightMm);
+    }
+
+    const out = fileName.endsWith('.pdf') ? fileName : `${fileName}.pdf`;
+    doc.save(out);
+  } finally {
+    document.body.removeChild(host);
   }
-  return true;
 }
