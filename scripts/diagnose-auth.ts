@@ -1,7 +1,8 @@
 /**
- * Диагностика входа: статистика members и примеры телефонов.
- * npx ts-node scripts/diagnose-auth.ts
- * npx ts-node scripts/diagnose-auth.ts 79027330094
+ * Диагностика входа (только с хоста, где есть ts-node и src/).
+ *
+ * Локально:  npm run db:diagnose:auth
+ * В Docker:   docker compose exec -T api node dist/cli/diagnoseAuth.js [79027330094]
  */
 import dotenv from 'dotenv';
 import path from 'node:path';
