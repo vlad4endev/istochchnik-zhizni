@@ -2,13 +2,13 @@ import {
   format,
   isSameMonth,
   parseISO,
-  startOfWeek,
 } from 'date-fns';
 import { ru } from 'date-fns/locale';
 
 import type { MediaEvent } from '../types';
 
-const WEEK_STARTS_ON = 1 as const;
+/** Сколько собраний показывать колонками на одной странице. */
+export const ASSEMBLY_PAGE_SIZE = 5;
 
 export type WeekEventColumn = {
   dateKey: string;
@@ -16,58 +16,76 @@ export type WeekEventColumn = {
   event: MediaEvent;
 };
 
-function weekStartKey(d: Date): string {
-  return format(startOfWeek(d, { weekStartsOn: WEEK_STARTS_ON }), 'yyyy-MM-dd');
+export function sortMediaEventsChronologically(events: MediaEvent[]): MediaEvent[] {
+  return [...events].sort(
+    (a, b) =>
+      a.event_date.localeCompare(b.event_date) ||
+      (a.start_time ?? '').localeCompare(b.start_time ?? '') ||
+      a.id - b.id,
+  );
 }
 
-export function buildNavigableWeekStarts(events: MediaEvent[]): Date[] {
-  const seen = new Set<string>();
-  const starts: Date[] = [];
-  for (const ev of events) {
-    const day = parseISO(ev.event_date);
-    const key = weekStartKey(day);
-    if (seen.has(key)) continue;
-    seen.add(key);
-    starts.push(startOfWeek(day, { weekStartsOn: WEEK_STARTS_ON }));
+export function buildServiceEventColumns(events: MediaEvent[]): WeekEventColumn[] {
+  return sortMediaEventsChronologically(events).map((ev) => ({
+    dateKey: ev.event_date,
+    day: parseISO(ev.event_date),
+    event: ev,
+  }));
+}
+
+export function paginateAssemblyColumns(
+  columns: WeekEventColumn[],
+  pageIndex: number,
+  pageSize: number = ASSEMBLY_PAGE_SIZE,
+): {
+  page: WeekEventColumn[];
+  pageIndex: number;
+  pageCount: number;
+  total: number;
+} {
+  if (columns.length === 0) {
+    return { page: [], pageIndex: 0, pageCount: 0, total: 0 };
   }
-  starts.sort((a, b) => a.getTime() - b.getTime());
-  return starts;
+  const pageCount = Math.ceil(columns.length / pageSize);
+  const clampedIndex = Math.min(Math.max(0, pageIndex), pageCount - 1);
+  const start = clampedIndex * pageSize;
+  return {
+    page: columns.slice(start, start + pageSize),
+    pageIndex: clampedIndex,
+    pageCount,
+    total: columns.length,
+  };
 }
 
-export function findNavigableWeekIndex(weekStarts: Date[], cursor: Date): number {
-  const currentKey = weekStartKey(cursor);
-  const exact = weekStarts.findIndex((w) => format(w, 'yyyy-MM-dd') === currentKey);
-  if (exact >= 0) return exact;
-
-  const currentStart = startOfWeek(cursor, { weekStartsOn: WEEK_STARTS_ON }).getTime();
-  const futureIdx = weekStarts.findIndex((w) => w.getTime() >= currentStart);
-  if (futureIdx >= 0) return futureIdx;
-
-  return weekStarts.length > 0 ? weekStarts.length - 1 : -1;
+export function findAssemblyPageForDate(
+  columns: WeekEventColumn[],
+  date: Date,
+  pageSize: number = ASSEMBLY_PAGE_SIZE,
+): number {
+  if (columns.length === 0) return 0;
+  const target = format(date, 'yyyy-MM-dd');
+  let idx = columns.findIndex((c) => c.dateKey >= target);
+  if (idx < 0) idx = columns.length - 1;
+  return Math.floor(idx / pageSize);
 }
 
-export function snapCursorToNearestServiceWeek(cursor: Date, weekStarts: Date[]): Date {
-  if (weekStarts.length === 0) return cursor;
-  const idx = findNavigableWeekIndex(weekStarts, cursor);
-  return idx >= 0 ? weekStarts[idx]! : cursor;
-}
-
-export function getWeekDaysWithEvents(
-  events: MediaEvent[],
-  weekStart: Date,
-  weekEnd: Date,
-): Date[] {
-  const from = format(weekStart, 'yyyy-MM-dd');
-  const to = format(weekEnd, 'yyyy-MM-dd');
-  const dateKeys = new Set<string>();
-  for (const ev of events) {
-    if (ev.event_date >= from && ev.event_date <= to) dateKeys.add(ev.event_date);
+export function formatAssemblyViewHeader(columns: WeekEventColumn[], pageIndex: number, pageCount: number): string {
+  if (columns.length === 0) return 'Нет собраний с программой';
+  if (columns.length === 1) {
+    const day = columns[0]!.day;
+    return format(day, 'd MMMM yyyy, EEEE', { locale: ru });
   }
-  return Array.from(dateKeys)
-    .sort()
-    .map((d) => parseISO(d));
+  const first = columns[0]!.day;
+  const last = columns[columns.length - 1]!.day;
+  const range =
+    isSameMonth(first, last)
+      ? `${format(first, 'd', { locale: ru })}–${format(last, 'd MMMM yyyy', { locale: ru })}`
+      : `${format(first, 'd MMM', { locale: ru })} – ${format(last, 'd MMM yyyy', { locale: ru })}`;
+  if (pageCount <= 1) return range;
+  return `${range} · стр. ${pageIndex + 1} из ${pageCount}`;
 }
 
+/** @deprecated используйте buildServiceEventColumns */
 export function buildWeekEventColumns(
   eventsByDate: Map<string, MediaEvent[]>,
   daysWithEvents: Date[],
@@ -80,26 +98,4 @@ export function buildWeekEventColumns(
     }
   }
   return cols;
-}
-
-export function formatWeekViewHeader(daysWithEvents: Date[], weekStart: Date, weekEnd: Date): string {
-  if (daysWithEvents.length === 0) {
-    return `${format(weekStart, 'd', { locale: ru })}–${format(weekEnd, 'd MMMM yyyy', { locale: ru })}`;
-  }
-  if (daysWithEvents.length === 1) {
-    const day = daysWithEvents[0]!;
-    return format(day, 'd MMMM yyyy, EEEE', { locale: ru });
-  }
-  const first = daysWithEvents[0]!;
-  const last = daysWithEvents[daysWithEvents.length - 1]!;
-  if (isSameMonth(first, last)) {
-    return `${format(first, 'd', { locale: ru })}–${format(last, 'd MMMM yyyy', { locale: ru })}`;
-  }
-  return `${format(first, 'd MMM', { locale: ru })} – ${format(last, 'd MMM yyyy', { locale: ru })}`;
-}
-
-export function weekHasEvents(events: MediaEvent[], weekStart: Date, weekEnd: Date): boolean {
-  const from = format(weekStart, 'yyyy-MM-dd');
-  const to = format(weekEnd, 'yyyy-MM-dd');
-  return events.some((ev) => ev.event_date >= from && ev.event_date <= to);
 }

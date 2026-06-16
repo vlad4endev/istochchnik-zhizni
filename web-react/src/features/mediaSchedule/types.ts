@@ -49,7 +49,7 @@ export interface MediaScheduleMember {
   email?: string | null;
 }
 
-export type MediaScheduleViewMode = 'month' | 'week';
+export type MediaScheduleViewMode = 'month' | 'assemblies';
 
 export function formatPlannerEventLabel(ev: {
   title: string;

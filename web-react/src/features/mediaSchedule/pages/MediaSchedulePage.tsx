@@ -3,12 +3,10 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useSearchParams } from 'react-router-dom';
 import {
   addMonths,
-  addWeeks,
   eachDayOfInterval,
   endOfMonth,
   endOfWeek,
   format,
-  isSameDay,
   isSameMonth,
   isSunday,
   isToday,
@@ -56,13 +54,11 @@ import {
 import { MinistryScheduleSwitcher } from '../../schedules/components/MinistryScheduleSwitcher';
 import type { MediaEvent, MediaScheduleViewMode } from '../types';
 import {
-  buildNavigableWeekStarts,
-  buildWeekEventColumns,
-  findNavigableWeekIndex,
-  formatWeekViewHeader,
-  getWeekDaysWithEvents,
-  snapCursorToNearestServiceWeek,
-  weekHasEvents,
+  ASSEMBLY_PAGE_SIZE,
+  buildServiceEventColumns,
+  findAssemblyPageForDate,
+  formatAssemblyViewHeader,
+  paginateAssemblyColumns,
 } from '../utils/mediaScheduleWeekView';
 
 const WEEKDAY_LABELS = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
@@ -139,10 +135,9 @@ export function MediaSchedulePage() {
   const canManage = canManageMediaSchedule(role, meQ.data?.ministry_role, rolesAuth);
   const canEditRoles = canManageMediaRoles(role, rolesAuth);
 
-  const [viewMode, setViewMode] = useState<MediaScheduleViewMode>(() =>
-    typeof window !== 'undefined' && window.matchMedia('(max-width: 1023px)').matches ? 'week' : 'month',
-  );
+  const [viewMode, setViewMode] = useState<MediaScheduleViewMode>('assemblies');
   const [cursor, setCursor] = useState(() => new Date());
+  const [assemblyPage, setAssemblyPage] = useState(0);
   const [assignmentPlanId, setAssignmentPlanId] = useState<number | null>(null);
   const [plannerPickerOpen, setPlannerPickerOpen] = useState(false);
   const [rolesModalOpen, setRolesModalOpen] = useState(false);
@@ -160,11 +155,15 @@ export function MediaSchedulePage() {
   const monthEnd = endOfMonth(cursor);
   const gridStart = startOfWeek(monthStart, { weekStartsOn: 1 });
   const gridEnd = endOfWeek(monthEnd, { weekStartsOn: 1 });
-  const weekStart = startOfWeek(cursor, { weekStartsOn: 1 });
-  const weekEnd = endOfWeek(cursor, { weekStartsOn: 1 });
 
-  const rangeFrom = viewMode === 'month' ? gridStart : startOfWeek(addMonths(cursor, -6), { weekStartsOn: 1 });
-  const rangeTo = viewMode === 'month' ? gridEnd : endOfWeek(addMonths(cursor, 6), { weekStartsOn: 1 });
+  const rangeFrom =
+    viewMode === 'month'
+      ? gridStart
+      : startOfMonth(addMonths(new Date(), -3));
+  const rangeTo =
+    viewMode === 'month'
+      ? gridEnd
+      : endOfMonth(addMonths(new Date(), 12));
 
   const eventsQ = useQuery({
     queryKey: ['media-schedule', 'events', ymd(rangeFrom), ymd(rangeTo)],
@@ -226,31 +225,31 @@ export function MediaSchedulePage() {
     [gridStart, gridEnd],
   );
 
-  const navigableWeekStarts = useMemo(() => buildNavigableWeekStarts(events), [events]);
+  const assemblyEventColumns = useMemo(() => buildServiceEventColumns(events), [events]);
 
-  const weekDaysWithEvents = useMemo(
-    () => getWeekDaysWithEvents(events, weekStart, weekEnd),
-    [events, weekStart, weekEnd],
+  const assemblyPagination = useMemo(
+    () => paginateAssemblyColumns(assemblyEventColumns, assemblyPage, ASSEMBLY_PAGE_SIZE),
+    [assemblyEventColumns, assemblyPage],
   );
 
-  const weekEventColumns = useMemo(
-    () => buildWeekEventColumns(eventsByDate, weekDaysWithEvents),
-    [eventsByDate, weekDaysWithEvents],
-  );
-
-  const navigableWeekIndex = useMemo(
-    () => findNavigableWeekIndex(navigableWeekStarts, cursor),
-    [navigableWeekStarts, cursor],
-  );
+  const visibleAssemblyColumns = assemblyPagination.page;
 
   useEffect(() => {
-    if (viewMode !== 'week' || eventsQ.isLoading || events.length === 0) return;
-    if (weekHasEvents(events, weekStart, weekEnd)) return;
-    const snapped = snapCursorToNearestServiceWeek(cursor, navigableWeekStarts);
-    if (format(snapped, 'yyyy-MM-dd') !== format(weekStart, 'yyyy-MM-dd')) {
-      setCursor(snapped);
+    if (viewMode !== 'assemblies' || eventsQ.isLoading) return;
+    if (assemblyPagination.pageCount === 0) {
+      setAssemblyPage(0);
+      return;
     }
-  }, [viewMode, eventsQ.isLoading, events, weekStart, weekEnd, cursor, navigableWeekStarts]);
+    if (assemblyPage > assemblyPagination.pageCount - 1) {
+      setAssemblyPage(assemblyPagination.pageCount - 1);
+    }
+  }, [viewMode, eventsQ.isLoading, assemblyPagination.pageCount, assemblyPage]);
+
+  useEffect(() => {
+    if (viewMode !== 'assemblies' || eventsQ.isLoading || assemblyEventColumns.length === 0) return;
+    setAssemblyPage(findAssemblyPageForDate(assemblyEventColumns, new Date(), ASSEMBLY_PAGE_SIZE));
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- snap only when entering assemblies view
+  }, [viewMode]);
 
   const upcomingCount = useMemo(() => {
     const today = ymd(new Date());
@@ -292,39 +291,22 @@ export function MediaSchedulePage() {
   const headerLabel =
     viewMode === 'month'
       ? capitalizeRuMonthTitle(format(cursor, 'LLLL yyyy', { locale: ru }))
-      : formatWeekViewHeader(weekDaysWithEvents, weekStart, weekEnd);
+      : formatAssemblyViewHeader(
+          visibleAssemblyColumns,
+          assemblyPagination.pageIndex,
+          assemblyPagination.pageCount,
+        );
 
-  function goWeekPrev() {
-    if (navigableWeekStarts.length === 0) {
-      setCursor((d) => addWeeks(d, -1));
-      return;
-    }
-    if (navigableWeekIndex > 0) {
-      setCursor(navigableWeekStarts[navigableWeekIndex - 1]!);
-      return;
-    }
-    setCursor(navigableWeekStarts[0]!);
+  function goAssemblyPrev() {
+    setAssemblyPage((p) => Math.max(0, p - 1));
   }
 
-  function goWeekNext() {
-    if (navigableWeekStarts.length === 0) {
-      setCursor((d) => addWeeks(d, 1));
-      return;
-    }
-    if (navigableWeekIndex >= 0 && navigableWeekIndex < navigableWeekStarts.length - 1) {
-      setCursor(navigableWeekStarts[navigableWeekIndex + 1]!);
-      return;
-    }
-    setCursor(navigableWeekStarts[navigableWeekStarts.length - 1]!);
+  function goAssemblyNext() {
+    setAssemblyPage((p) => Math.min(Math.max(0, assemblyPagination.pageCount - 1), p + 1));
   }
 
-  function goWeekToday() {
-    const today = new Date();
-    if (navigableWeekStarts.length === 0) {
-      setCursor(today);
-      return;
-    }
-    setCursor(snapCursorToNearestServiceWeek(today, navigableWeekStarts));
+  function goAssemblyToday() {
+    setAssemblyPage(findAssemblyPageForDate(assemblyEventColumns, new Date(), ASSEMBLY_PAGE_SIZE));
   }
 
   function openPlannerPicker() {
@@ -409,8 +391,8 @@ export function MediaSchedulePage() {
           >
             {(
               [
-                ['month', 'Месяц'],
-                ['week', 'Неделя'],
+                ['assemblies', 'План'],
+                ['month', 'Календарь'],
               ] as const
             ).map(([id, label]) => (
               <button
@@ -420,9 +402,10 @@ export function MediaSchedulePage() {
                 aria-selected={viewMode === id}
                 onClick={() => {
                   setViewMode(id);
-                  if (id === 'week' && events.length > 0) {
-                    const starts = buildNavigableWeekStarts(events);
-                    setCursor((current) => snapCursorToNearestServiceWeek(current, starts));
+                  if (id === 'assemblies' && events.length > 0) {
+                    setAssemblyPage(
+                      findAssemblyPageForDate(assemblyEventColumns, new Date(), ASSEMBLY_PAGE_SIZE),
+                    );
                   }
                 }}
                 className={[
@@ -444,8 +427,8 @@ export function MediaSchedulePage() {
             <div className="flex items-center justify-center gap-1.5 sm:shrink-0">
               <button
                 type="button"
-                onClick={() => (viewMode === 'month' ? setCursor((d) => addMonths(d, -1)) : goWeekPrev())}
-                disabled={viewMode === 'week' && navigableWeekStarts.length > 0 && navigableWeekIndex <= 0}
+                onClick={() => (viewMode === 'month' ? setCursor((d) => addMonths(d, -1)) : goAssemblyPrev())}
+                disabled={viewMode === 'assemblies' && assemblyPagination.pageIndex <= 0}
                 className="tap-highlight-transparent grid h-11 w-11 place-items-center rounded-xl border border-stone-200 bg-white text-stone-800 hover:bg-stone-50 active:bg-stone-100 disabled:cursor-not-allowed disabled:opacity-40"
                 aria-label="Назад"
               >
@@ -453,18 +436,18 @@ export function MediaSchedulePage() {
               </button>
               <button
                 type="button"
-                onClick={() => (viewMode === 'month' ? setCursor(new Date()) : goWeekToday())}
+                onClick={() => (viewMode === 'month' ? setCursor(new Date()) : goAssemblyToday())}
                 className="tap-highlight-transparent min-h-[44px] flex-1 rounded-xl border border-primary/20 bg-gradient-to-br from-primary/5 to-primary/10 px-4 text-sm font-extrabold text-primary hover:brightness-[1.02] active:brightness-[0.98] sm:flex-initial sm:px-3"
               >
                 Сегодня
               </button>
               <button
                 type="button"
-                onClick={() => (viewMode === 'month' ? setCursor((d) => addMonths(d, 1)) : goWeekNext())}
+                onClick={() => (viewMode === 'month' ? setCursor((d) => addMonths(d, 1)) : goAssemblyNext())}
                 disabled={
-                  viewMode === 'week' &&
-                  navigableWeekStarts.length > 0 &&
-                  navigableWeekIndex >= navigableWeekStarts.length - 1
+                  viewMode === 'assemblies' &&
+                  assemblyPagination.pageCount > 0 &&
+                  assemblyPagination.pageIndex >= assemblyPagination.pageCount - 1
                 }
                 className="tap-highlight-transparent grid h-11 w-11 place-items-center rounded-xl border border-stone-200 bg-white text-stone-800 hover:bg-stone-50 active:bg-stone-100 disabled:cursor-not-allowed disabled:opacity-40"
                 aria-label="Вперёд"
@@ -741,11 +724,11 @@ export function MediaSchedulePage() {
           </>
         ) : (
           <>
-            {weekDaysWithEvents.length === 0 ? (
+            {assemblyEventColumns.length === 0 ? (
               <div className="rounded-2xl border border-dashed border-stone-200 bg-white px-4 py-14 text-center shadow-[var(--shadow-card)]">
-                <p className="text-sm font-extrabold text-stone-700">Нет служений в выбранном периоде</p>
+                <p className="text-sm font-extrabold text-stone-700">Нет собраний с программой</p>
                 <p className="mt-1 text-xs font-semibold text-stone-500">
-                  Переключите неделю или добавьте программу из планировщика
+                  Добавьте программу из планировщика служения — каждое собрание появится отдельной колонкой
                 </p>
                 {canManage ? (
                   <button
@@ -759,268 +742,139 @@ export function MediaSchedulePage() {
                 ) : null}
               </div>
             ) : (
-              <>
-            <section className="space-y-3 lg:hidden">
-              {weekDaysWithEvents.map((day) => {
-                const key = ymd(day);
-                const dayEvents = eventsByDate.get(key) ?? [];
-                const today = isSameDay(day, new Date());
-                return (
-                  <div
-                    key={key}
-                    className="overflow-hidden rounded-2xl border border-stone-200/80 bg-white shadow-[var(--shadow-card)]"
-                  >
-                    <div className="flex items-center justify-between gap-3 border-b border-stone-100 px-4 py-3">
-                      <div>
-                        <p className="text-[11px] font-extrabold uppercase tracking-wide text-stone-500">
-                          {format(day, 'EEEE', { locale: ru })}
-                        </p>
-                        <p className={`mt-0.5 text-lg font-extrabold ${today ? 'text-primary' : 'text-stone-900'}`}>
-                          {format(day, 'd MMMM', { locale: ru })}
-                        </p>
-                      </div>
-                      {today ? (
-                        <span className="rounded-full bg-primary/10 px-2.5 py-1 text-[11px] font-extrabold text-primary">
-                          Сегодня
-                        </span>
-                      ) : null}
-                    </div>
-                    <ul className="divide-y divide-stone-100">
-                        {dayEvents.map((ev) => {
-                          const tone = EVENT_TONE_STYLES[eventToneIndex(ev.id)];
-                          const coverage = assignmentCoverage(ev, activeRoles.length);
-                          return (
-                            <li key={ev.id}>
-                              <button
-                                type="button"
-                                onClick={() => openAssignmentModal(ev.id)}
-                                className={[
-                                  'tap-highlight-transparent flex w-full flex-col gap-3 px-4 py-3 text-left active:bg-stone-50',
-                                ].join(' ')}
-                              >
-                                <div className="flex items-start gap-3">
-                                  <span className={['mt-1 h-10 w-1 shrink-0 rounded-full', tone.stripe].join(' ')} />
-                                  <div className="min-w-0 flex-1">
-                                    <p className="font-extrabold text-stone-900">{ev.title}</p>
-                                    {ev.start_time ? (
-                                      <p className="mt-0.5 text-xs font-semibold text-stone-500">{ev.start_time}</p>
-                                    ) : null}
-                                    {activeRoles.length > 0 ? (
-                                      <p className="mt-1 text-[11px] font-bold text-stone-500">
-                                        Назначено {coverage.filled} из {coverage.total} ролей
-                                      </p>
-                                    ) : null}
-                                  </div>
-                                </div>
-                                <div className="space-y-2 pl-4">
-                                  {activeRoles.map((roleRow) => {
-                                    const assignment = ev.assignments.find((a) => a.role_id === roleRow.id);
-                                    if (assignment) {
-                                      return (
-                                        <div
-                                          key={roleRow.id}
-                                          className="flex min-h-[48px] items-center gap-2.5 rounded-xl border border-stone-200 bg-stone-50 px-3 py-2"
-                                        >
-                                          <span
-                                            className="h-2.5 w-2.5 shrink-0 rounded-full"
-                                            style={{ backgroundColor: roleRow.color }}
-                                          />
-                                          <AppAvatar
-                                            src={assignment.member.avatar_url}
-                                            fallback={
-                                              <span className="text-[9px] font-bold text-white">
-                                                {assignment.member.name.slice(0, 1)}
-                                              </span>
-                                            }
-                                            initialsFallbackText={assignment.member.name}
-                                            className="grid h-8 w-8 shrink-0 place-items-center overflow-hidden rounded-full"
-                                          />
-                                          <div className="min-w-0 flex-1">
-                                            <span className="block truncate text-sm font-extrabold text-stone-900">
-                                              {assignment.member.name}
-                                            </span>
-                                            <span className="text-[11px] font-semibold text-stone-500">{roleRow.name}</span>
-                                          </div>
-                                          {canManage ? (
-                                            <button
-                                              type="button"
-                                              onClick={(e) => {
-                                                e.stopPropagation();
-                                                setContextMenu({ assignmentId: assignment.id, eventId: ev.id });
-                                              }}
-                                              className="tap-highlight-transparent shrink-0 rounded-lg px-2 py-1 text-[11px] font-bold text-stone-500"
-                                            >
-                                              ···
-                                            </button>
-                                          ) : null}
-                                        </div>
-                                      );
-                                    }
-                                    if (canManage) {
-                                      return (
-                                        <button
-                                          key={roleRow.id}
-                                          type="button"
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            setAssignModal({ event: ev, roleId: roleRow.id });
-                                          }}
-                                          className="tap-highlight-transparent flex min-h-[48px] w-full items-center gap-2.5 rounded-xl border border-dashed border-stone-200 bg-white px-3 py-2 text-left active:bg-primary/5"
-                                        >
-                                          <span
-                                            className="h-2.5 w-2.5 shrink-0 rounded-full"
-                                            style={{ backgroundColor: roleRow.color }}
-                                          />
-                                          <span className="text-sm font-semibold text-stone-400">{roleRow.name}</span>
-                                          <LuPlus className="ml-auto h-4 w-4 text-primary" />
-                                        </button>
-                                      );
-                                    }
-                                    return (
-                                      <div
-                                        key={roleRow.id}
-                                        className="flex min-h-[44px] items-center gap-2 rounded-xl border border-dashed border-stone-100 px-3 py-2"
-                                      >
-                                        <span
-                                          className="h-2 w-2 shrink-0 rounded-full opacity-50"
-                                          style={{ backgroundColor: roleRow.color }}
-                                        />
-                                        <span className="text-xs font-semibold text-stone-300">{roleRow.name}</span>
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                              </button>
-                            </li>
-                          );
-                        })}
-                    </ul>
-                  </div>
-                );
-              })}
-            </section>
-
-            <section className="hidden overflow-hidden rounded-2xl border border-stone-200/80 bg-white shadow-[var(--shadow-card)] lg:block">
-              <div className="overflow-x-auto">
-                <table className="min-w-[800px] w-full border-collapse text-sm">
-                  <thead>
-                    <tr className="bg-stone-50/90">
-                      <th className="sticky left-0 z-10 border-b border-stone-100 bg-stone-50/95 px-4 py-3 text-left text-[11px] font-extrabold uppercase tracking-wide text-stone-500">
-                        Роль
-                      </th>
-                      {weekEventColumns.map(({ day, event: ev }) => {
-                        const key = ymd(day);
-                        const tone = EVENT_TONE_STYLES[eventToneIndex(ev.id)];
-                        return (
-                          <th
-                            key={`${key}-${ev.id}`}
-                            className="min-w-[120px] border-b border-stone-100 px-3 py-3 text-center"
-                          >
-                            <div className="text-[11px] font-extrabold uppercase tracking-wide text-stone-500">
-                              {format(day, 'EEE d', { locale: ru })}
-                            </div>
-                            <div className={['mt-0.5 truncate text-xs font-extrabold', tone.title].join(' ')}>
-                              {ev.title}
-                            </div>
-                          </th>
-                        );
-                      })}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {activeRoles.map((roleRow) => (
-                      <tr key={roleRow.id} className="group/row">
-                        <td className="sticky left-0 z-10 border-b border-stone-100 bg-white px-4 py-2 group-hover/row:bg-stone-50/50">
-                          <div className="flex items-center gap-2.5">
-                            <span
-                              className="h-3 w-3 shrink-0 rounded-full shadow-sm"
-                              style={{ backgroundColor: roleRow.color }}
-                            />
-                            <span className="text-xs font-extrabold text-stone-800">{roleRow.name}</span>
-                          </div>
-                        </td>
-                        {weekEventColumns.map(({ day, event: ev }) => {
+              <section className="overflow-hidden rounded-2xl border border-stone-200/80 bg-white shadow-[var(--shadow-card)]">
+                <div className="overflow-x-auto">
+                  <table className="min-w-[640px] w-full border-collapse text-sm">
+                    <thead>
+                      <tr className="bg-stone-50/90">
+                        <th className="sticky left-0 z-10 border-b border-stone-100 bg-stone-50/95 px-3 py-3 text-left text-[11px] font-extrabold uppercase tracking-wide text-stone-500 sm:px-4">
+                          Роль
+                        </th>
+                        {visibleAssemblyColumns.map(({ day, event: ev }) => {
                           const key = ymd(day);
-                          const assignment = ev.assignments.find((a) => a.role_id === roleRow.id) ?? null;
-                          const cellKey = `${key}-${ev.id}-${roleRow.id}`;
-                          const today = isToday(day);
+                          const tone = EVENT_TONE_STYLES[eventToneIndex(ev.id)];
                           return (
-                            <td
-                              key={cellKey}
-                              className={[
-                                'border-b border-stone-100 px-2 py-2 align-top',
-                                today ? 'bg-primary/[0.02]' : '',
-                              ].join(' ')}
+                            <th
+                              key={`${key}-${ev.id}`}
+                              className="min-w-[108px] border-b border-stone-100 px-2 py-3 text-center sm:min-w-[120px] sm:px-3"
                             >
-                              {assignment ? (
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    setContextMenu({ assignmentId: assignment.id, eventId: ev.id })
-                                  }
-                                  className="flex w-full items-center gap-2 rounded-xl border bg-white px-2.5 py-2 text-left shadow-sm transition-all hover:shadow-md active:scale-[0.99]"
-                                  style={{
-                                    borderColor: assignmentStatusBorderColor(assignment.status),
-                                  }}
-                                >
-                                  <AppAvatar
-                                    src={assignment.member.avatar_url}
-                                    fallback={
-                                      <span className="text-[9px] font-bold text-white">
-                                        {assignment.member.name.slice(0, 1)}
-                                      </span>
-                                    }
-                                    initialsFallbackText={assignment.member.name}
-                                    className="grid h-7 w-7 shrink-0 place-items-center overflow-hidden rounded-full"
-                                  />
-                                  <div className="min-w-0">
-                                    <p className="truncate text-xs font-extrabold text-stone-900">
-                                      {assignment.member.name}
-                                    </p>
-                                    <p
-                                      className="text-[10px] font-semibold"
-                                      style={{ color: assignmentStatusBorderColor(assignment.status) }}
-                                    >
-                                      {assignmentStatusLabel(assignment.status)}
-                                    </p>
-                                  </div>
-                                </button>
-                              ) : canManage ? (
-                                <button
-                                  type="button"
-                                  onClick={() => setAssignModal({ event: ev, roleId: roleRow.id })}
-                                  className="grid h-11 w-full place-items-center rounded-xl border border-dashed border-stone-200 text-stone-400 transition-colors hover:border-primary hover:bg-primary/5 hover:text-primary"
-                                  aria-label={`Назначить на ${roleRow.name}`}
-                                >
-                                  <LuPlus className="h-4 w-4" />
-                                </button>
-                              ) : (
-                                <span className="block py-3 text-center text-stone-300">—</span>
-                              )}
-                            </td>
+                              <div className="text-[10px] font-extrabold uppercase tracking-wide text-stone-500 sm:text-[11px]">
+                                {format(day, 'EEE d MMM', { locale: ru })}
+                              </div>
+                              <div className={['mt-0.5 truncate text-[11px] font-extrabold sm:text-xs', tone.title].join(' ')}>
+                                {ev.template_name?.trim() || ev.title}
+                              </div>
+                              {ev.start_time ? (
+                                <div className="mt-0.5 text-[10px] font-semibold text-stone-500">{ev.start_time}</div>
+                              ) : null}
+                            </th>
                           );
                         })}
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              <div className="flex flex-wrap items-center gap-4 border-t border-stone-100 bg-stone-50/50 px-4 py-2.5 text-[11px] font-semibold text-stone-500">
-                <span className="inline-flex items-center gap-1.5">
-                  <span className="h-2 w-2 rounded-full bg-[var(--btn-success-bg,#16a34a)]" />
-                  Подтверждено
-                </span>
-                <span className="inline-flex items-center gap-1.5">
-                  <span className="h-2 w-2 rounded-full bg-amber-500" />
-                  Ожидает
-                </span>
-                <span className="inline-flex items-center gap-1.5">
-                  <span className="h-2 w-2 rounded-full bg-rose-500" />
-                  Отказ
-                </span>
-              </div>
-            </section>
-              </>
+                    </thead>
+                    <tbody>
+                      {activeRoles.map((roleRow) => (
+                        <tr key={roleRow.id} className="group/row">
+                          <td className="sticky left-0 z-10 border-b border-stone-100 bg-white px-3 py-2 group-hover/row:bg-stone-50/50 sm:px-4">
+                            <div className="flex items-center gap-2">
+                              <span
+                                className="h-3 w-3 shrink-0 rounded-full shadow-sm"
+                                style={{ backgroundColor: roleRow.color }}
+                              />
+                              <span className="text-[11px] font-extrabold text-stone-800 sm:text-xs">{roleRow.name}</span>
+                            </div>
+                          </td>
+                          {visibleAssemblyColumns.map(({ day, event: ev }) => {
+                            const key = ymd(day);
+                            const assignment = ev.assignments.find((a) => a.role_id === roleRow.id) ?? null;
+                            const cellKey = `${key}-${ev.id}-${roleRow.id}`;
+                            const today = isToday(day);
+                            return (
+                              <td
+                                key={cellKey}
+                                className={[
+                                  'border-b border-stone-100 px-1.5 py-2 align-top sm:px-2',
+                                  today ? 'bg-primary/[0.02]' : '',
+                                ].join(' ')}
+                              >
+                                {assignment ? (
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setContextMenu({ assignmentId: assignment.id, eventId: ev.id })
+                                    }
+                                    className="flex w-full items-center gap-1.5 rounded-xl border bg-white px-2 py-2 text-left shadow-sm transition-all hover:shadow-md active:scale-[0.99] sm:gap-2 sm:px-2.5"
+                                    style={{
+                                      borderColor: assignmentStatusBorderColor(assignment.status),
+                                    }}
+                                  >
+                                    <AppAvatar
+                                      src={assignment.member.avatar_url}
+                                      fallback={
+                                        <span className="text-[9px] font-bold text-white">
+                                          {assignment.member.name.slice(0, 1)}
+                                        </span>
+                                      }
+                                      initialsFallbackText={assignment.member.name}
+                                      className="grid h-7 w-7 shrink-0 place-items-center overflow-hidden rounded-full"
+                                    />
+                                    <div className="min-w-0">
+                                      <p className="truncate text-[11px] font-extrabold text-stone-900 sm:text-xs">
+                                        {assignment.member.name}
+                                      </p>
+                                      <p
+                                        className="hidden text-[10px] font-semibold sm:block"
+                                        style={{ color: assignmentStatusBorderColor(assignment.status) }}
+                                      >
+                                        {assignmentStatusLabel(assignment.status)}
+                                      </p>
+                                    </div>
+                                  </button>
+                                ) : canManage ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => setAssignModal({ event: ev, roleId: roleRow.id })}
+                                    className="grid h-10 w-full place-items-center rounded-xl border border-dashed border-stone-200 text-stone-400 transition-colors hover:border-primary hover:bg-primary/5 hover:text-primary sm:h-11"
+                                    aria-label={`Назначить на ${roleRow.name}`}
+                                  >
+                                    <LuPlus className="h-4 w-4" />
+                                  </button>
+                                ) : (
+                                  <span className="block py-3 text-center text-stone-300">—</span>
+                                )}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <div className="flex flex-wrap items-center justify-between gap-3 border-t border-stone-100 bg-stone-50/50 px-3 py-2.5 sm:px-4">
+                  <div className="flex flex-wrap items-center gap-3 text-[11px] font-semibold text-stone-500">
+                    <span className="inline-flex items-center gap-1.5">
+                      <span className="h-2 w-2 rounded-full bg-[var(--btn-success-bg,#16a34a)]" />
+                      Подтверждено
+                    </span>
+                    <span className="inline-flex items-center gap-1.5">
+                      <span className="h-2 w-2 rounded-full bg-amber-500" />
+                      Ожидает
+                    </span>
+                    <span className="inline-flex items-center gap-1.5">
+                      <span className="h-2 w-2 rounded-full bg-rose-500" />
+                      Отказ
+                    </span>
+                  </div>
+                  {assemblyPagination.pageCount > 1 ? (
+                    <p className="text-[11px] font-bold text-stone-500">
+                      {assemblyPagination.pageIndex + 1} / {assemblyPagination.pageCount} · всего {assemblyPagination.total}
+                    </p>
+                  ) : null}
+                </div>
+                <p className="border-t border-stone-100 px-3 py-3 text-xs text-stone-500 sm:px-4">
+                  Каждая колонка — отдельное собрание с программой. На экране до {ASSEMBLY_PAGE_SIZE} служений; листайте стрелками, чтобы увидеть следующие.
+                </p>
+              </section>
             )}
           </>
         )}
