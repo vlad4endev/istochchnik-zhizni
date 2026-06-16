@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
+import axios from 'axios';
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
@@ -176,9 +177,22 @@ export function ServicePlanSongUsagePage() {
   if (q.isLoading) return <SongListSkeleton variant="studio" />;
 
   if (q.isError) {
+    const apiError =
+      axios.isAxiosError(q.error) && typeof q.error.response?.data?.error === 'string'
+        ? q.error.response.data.error
+        : null;
     return (
-      <div className="mx-auto max-w-3xl rounded-xl border border-red-200 bg-red-50 px-4 py-6 text-sm text-red-900">
-        Не удалось загрузить аналитику. Проверьте подключение и попробуйте обновить страницу.
+      <div className="mx-auto max-w-3xl space-y-3 rounded-xl border border-red-200 bg-red-50 px-4 py-6 text-sm text-red-900">
+        <p className="font-semibold">Не удалось загрузить аналитику</p>
+        {apiError ? <p className="text-red-800">{apiError}</p> : null}
+        <p className="text-red-800/90">Проверьте подключение и попробуйте обновить страницу.</p>
+        <button
+          type="button"
+          onClick={() => void q.refetch()}
+          className="inline-flex min-h-[40px] items-center rounded-xl border border-red-300 bg-white px-4 text-sm font-semibold text-red-900 hover:bg-red-100"
+        >
+          Повторить
+        </button>
       </div>
     );
   }

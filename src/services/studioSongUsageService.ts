@@ -1,14 +1,18 @@
 import { query } from '../config/db';
 
-const SONG_BLOCK_JOIN = `
+const SONG_BLOCK_FROM = `
   FROM public.service_blocks b
   INNER JOIN public.block_types bt ON bt.id = b.block_type_id
   INNER JOIN public.service_plans sp ON sp.id = b.service_plan_id
   INNER JOIN public.songs s ON s.id = b.song_id
-  WHERE lower(coalesce(bt.code, '')) = 'song'
+`;
+
+function songBlockWhere(periodFilter: string): string {
+  return `WHERE lower(coalesce(bt.code, '')) = 'song'
     AND b.song_id IS NOT NULL
     AND coalesce(sp.is_archived, false) = false
-`;
+    ${periodFilter}`;
+}
 
 const LEADER_NAME_SQL = `coalesce(
   nullif(trim(concat(coalesce(leader.first_name, ''), ' ', coalesce(leader.last_name, ''))), ''),
@@ -89,14 +93,15 @@ export async function getServicePlanSongUsageReport(
   const since = periodStartDate(periodMonths);
   const periodFilter = since ? `AND sp.service_date >= $1::date` : '';
   const params = since ? [since] : [];
+  const whereClause = songBlockWhere(periodFilter);
 
   const statsRes = await query(
     `SELECT
        count(distinct sp.id)::int AS services_with_songs,
        count(*)::int AS total_song_slots,
        count(distinct s.id)::int AS unique_songs
-     ${SONG_BLOCK_JOIN}
-     ${periodFilter}`,
+     ${SONG_BLOCK_FROM}
+     ${whereClause}`,
     params,
   );
   const statsRow = statsRes.rows[0] as Record<string, unknown> | undefined;
@@ -115,8 +120,8 @@ export async function getServicePlanSongUsageReport(
        count(*)::int AS usage_count,
        max(sp.service_date)::text AS last_used_date,
        min(sp.service_date)::text AS first_used_date
-     ${SONG_BLOCK_JOIN}
-     ${periodFilter}
+     ${SONG_BLOCK_FROM}
+     ${whereClause}
      GROUP BY s.id, s.title, s.song_number, s.default_key
      ORDER BY usage_count DESC, last_used_date DESC, s.title ASC
      LIMIT 25`,
@@ -133,9 +138,9 @@ export async function getServicePlanSongUsageReport(
        sp.service_date::text AS service_date,
        sp.status AS plan_status,
        ${LEADER_NAME_SQL} AS leader_name
-     ${SONG_BLOCK_JOIN}
+     ${SONG_BLOCK_FROM}
      LEFT JOIN public.members leader ON leader.id = sp.leader_member_id
-     ${periodFilter}
+     ${whereClause}
      ORDER BY sp.service_date DESC, b.order_index ASC, b.id ASC
      LIMIT 40`,
     params,
@@ -143,6 +148,7 @@ export async function getServicePlanSongUsageReport(
 
   let staleSongs: ServicePlanSongUsageItem[] = [];
   if (since) {
+    const baseWhere = songBlockWhere('');
     const staleRes = await query(
       `WITH all_time AS (
          SELECT
@@ -153,13 +159,14 @@ export async function getServicePlanSongUsageReport(
            count(*)::int AS usage_count,
            max(sp.service_date)::text AS last_used_date,
            min(sp.service_date)::text AS first_used_date
-         ${SONG_BLOCK_JOIN}
+         ${SONG_BLOCK_FROM}
+         ${baseWhere}
          GROUP BY s.id, s.title, s.song_number, s.default_key
        ),
        in_period AS (
          SELECT distinct s.id AS song_id
-         ${SONG_BLOCK_JOIN}
-         AND sp.service_date >= $1::date
+         ${SONG_BLOCK_FROM}
+         ${songBlockWhere('AND sp.service_date >= $1::date')}
        )
        SELECT a.*
        FROM all_time a

@@ -355,7 +355,8 @@ export async function servicePlanSongUsage(req: Request, res: Response): Promise
     res.json(await getServicePlanSongUsageReport(periodMonths));
   } catch (e) {
     console.error('[studio] service-plan-song-usage error:', e);
-    res.status(500).json({ error: 'Не удалось загрузить аналитику' });
+    const detail = e instanceof Error ? e.message : 'Не удалось загрузить аналитику';
+    res.status(500).json({ error: detail });
   }
 }
 
