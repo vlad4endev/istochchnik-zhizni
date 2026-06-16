@@ -58,16 +58,6 @@ function buildFromAnchors(chords: ChordAnchor[]): string {
   return cells.join('').trimEnd();
 }
 
-function groupChordsByPosition(chords: ChordAnchor[]): Map<number, string[]> {
-  const map = new Map<number, string[]>();
-  for (const chord of chords) {
-    const list = map.get(chord.position) ?? [];
-    list.push(chord.chord);
-    map.set(chord.position, list);
-  }
-  return map;
-}
-
 export function SongLine({ line, chordsVisible, chordTone, layoutMode, className = '' }: SongLineProps) {
   const text = typeof line.text === 'string' ? line.text : '';
   const graphemes = splitGraphemeClusters(text);
@@ -104,8 +94,9 @@ export function SongLine({ line, chordsVisible, chordTone, layoutMode, className
     );
   }
 
+  const chordLine = buildChordLine(text, normalizedChords);
+
   if (layoutMode === 'mono') {
-    const chordLine = buildChordLine(text, normalizedChords);
     return (
       <div className={rootClassName} data-layout-mode={layoutMode}>
         {chordLine.trim() !== '' && (
@@ -120,43 +111,14 @@ export function SongLine({ line, chordsVisible, chordTone, layoutMode, className
     );
   }
 
-  const anchorChords = line.chords ?? [];
-  const chordsByPosition = groupChordsByPosition(anchorChords);
-
-  if (anchorChords.length === 0) {
-    return (
-      <div className={rootClassName} data-layout-mode={layoutMode}>
-        <p className="lyric-line m-0 overflow-visible p-0 whitespace-pre-wrap">{text}</p>
-      </div>
-    );
-  }
-
   return (
     <div className={rootClassName} data-layout-mode={layoutMode}>
-      <div className="lyric-chord-line lyric-chord-line--with-chords">
-        {graphemes.map((grapheme, index) => {
-          const labels = chordsByPosition.get(index) ?? [];
-          const hasLabel = labels.length > 0;
-          return (
-            <span
-              key={index}
-              className="lyric-chord-column relative inline-block align-bottom leading-none"
-            >
-              {hasLabel ? (
-                <span
-                  className={[
-                    'chord-slot pointer-events-none absolute bottom-full left-0 mb-[2px] whitespace-nowrap font-semibold leading-none',
-                    chordToneClass,
-                  ].join(' ')}
-                >
-                  {labels.join(' ')}
-                </span>
-              ) : null}
-              <span className="lyric-grapheme whitespace-pre">{grapheme === ' ' ? '\u00a0' : grapheme}</span>
-            </span>
-          );
-        })}
-      </div>
+      {chordLine.trim() !== '' && (
+        <pre className={['chord-line m-0 overflow-visible p-0 whitespace-pre', chordToneClass].join(' ')}>
+          {chordLine}
+        </pre>
+      )}
+      <p className="lyric-line m-0 overflow-visible p-0 whitespace-pre-wrap">{text}</p>
     </div>
   );
 }

@@ -6,25 +6,22 @@ import { parseChordLine } from '../src/features/songbook/utils/chordSegments';
 import { buildChordLine, resolveOverlaps } from '../src/components/shared/SongRenderer/SongLine';
 
 describe('ChordLine render regression', () => {
-  it('renders measured chord columns above lyric graphemes', () => {
+  it('renders measured chord row above proportional lyric line', () => {
     const line = parseChordLine('[Am]Когда [C]качаются');
     const html = renderToStaticMarkup(
       <ChordLine line={line} chordsVisible layoutMode="measured" chordTone="light" />,
     );
 
-    expect(html).toContain('lyric-chord-line');
-    expect(html).toContain('chord-slot');
-    expect(html).toContain('lyric-grapheme');
+    expect(html).toContain('chord-line');
+    expect(html).toContain('lyric-line');
+    expect(html).not.toContain('lyric-chord-line');
+    expect(html).not.toContain('chord-slot');
     expect(html).toContain('Am');
     expect(html).toContain('C');
-    expect(html).toContain('К');
-    expect(html).toContain('>к<');
-    expect(html).toContain('>я<');
-    expect(html).toContain('absolute bottom-full');
-    expect(html).not.toContain('inline-flex flex-col');
+    expect(html).toContain('Когда качаются');
   });
 
-  it('keeps lyric graphemes in natural order without chord-driven column width', () => {
+  it('keeps slash-bass chords in measured mode', () => {
     const line = parseChordLine('[G/B]утешен [Dm]Как');
     const html = renderToStaticMarkup(
       <ChordLine line={line} chordsVisible layoutMode="measured" chordTone="light" />,
@@ -32,9 +29,8 @@ describe('ChordLine render regression', () => {
 
     expect(html).toContain('G/B');
     expect(html).toContain('Dm');
-    expect(html).toContain('>у<');
-    expect(html).toContain('>К<');
-    expect(html).not.toContain('inline-flex flex-col');
+    expect(html).toContain('утешен');
+    expect(html).not.toContain('lyric-chord-line');
   });
 
   it('renders monospaced chord row and lyric row in mono mode', () => {
@@ -56,7 +52,7 @@ describe('ChordLine render regression', () => {
       <ChordLine line={line} chordsVisible={false} layoutMode="measured" chordTone="light" />,
     );
 
-    expect(html).not.toContain('chord-slot');
+    expect(html).not.toContain('chord-line');
     expect(html).toContain('Когда качаются');
   });
 

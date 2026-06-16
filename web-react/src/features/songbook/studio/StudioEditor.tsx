@@ -1889,6 +1889,7 @@ export function StudioEditor() {
                   <LyricsWithChords
                     text={b.content}
                     transposeSemitones={0}
+                    chordLayoutMode="mono"
                     chordTone={darkUi ? 'dark' : 'light'}
                     fontSizePx={16}
                     className={studioPreviewLyricsClassName(darkUi)}
@@ -1916,6 +1917,7 @@ export function StudioEditor() {
                 <LyricsWithChords
                   text={b.content}
                   transposeSemitones={0}
+                  chordLayoutMode="mono"
                   chordTone={darkUi ? 'dark' : 'light'}
                   fontSizePx={16}
                   className={studioPreviewLyricsClassName(darkUi)}
@@ -2042,6 +2044,7 @@ export function StudioEditor() {
                   <LyricsWithChords
                     text={b.content}
                     transposeSemitones={0}
+                    chordLayoutMode="mono"
                     chordTone={darkUi ? 'dark' : 'light'}
                     fontSizePx={16}
                     className={studioPreviewLyricsClassName(darkUi)}
