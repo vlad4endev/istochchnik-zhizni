@@ -2,9 +2,6 @@
 FROM public.ecr.aws/docker/library/node:22-alpine AS build
 WORKDIR /app
 
-# См. Dockerfile.web: vips + toolchain для sharp (@capacitor/assets).
-RUN apk add --no-cache python3 make g++ vips-dev
-
 ARG VITE_APP_VARIANT=studio
 ENV VITE_APP_VARIANT=$VITE_APP_VARIANT
 ARG VITE_PWA_ORIGIN=
@@ -17,7 +14,9 @@ ARG VITE_SUPABASE_STORAGE_PUBLIC_URL=
 ENV VITE_SUPABASE_STORAGE_PUBLIC_URL=$VITE_SUPABASE_STORAGE_PUBLIC_URL
 
 COPY web-react/package.json web-react/package-lock.json ./web-react/
-RUN cd web-react && npm ci
+RUN cd web-react \
+  && npm ci --ignore-scripts \
+  && npm rebuild esbuild
 
 COPY web-react ./web-react/
 RUN cd web-react && npm run build

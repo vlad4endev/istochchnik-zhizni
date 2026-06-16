@@ -3,12 +3,6 @@
 FROM public.ecr.aws/docker/library/node:20-bookworm-slim AS build
 WORKDIR /app
 
-# sharp обычно ставится из prebuilt-бинаря, но при сетевых таймаутах
-# fallback идет в сборку через node-gyp. Нужны toolchain + vips/glib headers.
-RUN apt-get update \
-  && apt-get install -y --no-install-recommends python3 make g++ pkg-config libvips-dev libglib2.0-dev \
-  && rm -rf /var/lib/apt/lists/*
-
 # Vite: только переменные с префиксом VITE_ доступны в import.meta.env при сборке.
 ARG VITE_PWA_ORIGIN=
 ENV VITE_PWA_ORIGIN=$VITE_PWA_ORIGIN
@@ -25,9 +19,10 @@ ARG GITHUB_SHA=
 ENV GITHUB_SHA=$GITHUB_SHA
 
 COPY web-react/package.json web-react/package-lock.json ./web-react/
-RUN GLIB_CFLAGS="$(pkg-config --cflags glib-2.0)" \
-  && cd web-react \
-  && CPPFLAGS="$GLIB_CFLAGS" CFLAGS="$GLIB_CFLAGS" CXXFLAGS="$GLIB_CFLAGS" SHARP_FORCE_GLOBAL_LIBVIPS=1 npm ci
+# sharp (@capacitor/assets) не нужен для vite build; postinstall качает libvips с GitHub и часто падает по таймауту.
+RUN cd web-react \
+  && npm ci --ignore-scripts \
+  && npm rebuild esbuild
 
 COPY web-react ./web-react/
 RUN cd web-react && npm run build
