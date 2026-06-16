@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { LuLoaderCircle, LuPencil } from 'react-icons/lu';
 
 import { AppAvatar } from '../../../components/AppAvatar';
+import { CollapsibleBroadcastTeamShell } from '../../servicePlanner/components/CollapsibleBroadcastTeamShell';
 import {
   assignmentStatusBorderColor,
   assignmentStatusLabel,
@@ -79,10 +80,12 @@ export function MediaTeamBlock({
 
   if (embedded) {
     return (
-      <div className="mt-3 rounded-xl border border-stone-200 bg-stone-50 px-3 py-2.5">
-        <h3 className="mb-1.5 text-xs font-semibold text-stone-600">{heading}</h3>
+      <CollapsibleBroadcastTeamShell
+        title={heading}
+        count={loading ? null : assignments.length}
+      >
         {content}
-      </div>
+      </CollapsibleBroadcastTeamShell>
     );
   }
 

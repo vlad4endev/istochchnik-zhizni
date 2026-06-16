@@ -1,4 +1,5 @@
 import type { PublicBroadcastAssignment } from '../api';
+import { CollapsibleBroadcastTeamShell } from './CollapsibleBroadcastTeamShell';
 
 type Props = {
   assignments: PublicBroadcastAssignment[];
@@ -9,8 +10,7 @@ export function ShareBroadcastTeamPanel({ assignments }: Props) {
   if (assignments.length === 0) return null;
 
   return (
-    <div className="mt-3 rounded-xl border border-stone-200 bg-stone-50 px-3 py-2.5">
-      <h3 className="mb-1.5 text-xs font-semibold text-stone-600">Участники трансляции</h3>
+    <CollapsibleBroadcastTeamShell count={assignments.length}>
       <ul className="space-y-1">
         {assignments.map((a, index) => (
           <li
@@ -30,6 +30,6 @@ export function ShareBroadcastTeamPanel({ assignments }: Props) {
           </li>
         ))}
       </ul>
-    </div>
+    </CollapsibleBroadcastTeamShell>
   );
 }
