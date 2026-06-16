@@ -53,6 +53,7 @@ import {
   canManageMediaRoles,
   canManageMediaSchedule,
 } from '../mediaAccess';
+import { MinistryScheduleSwitcher } from '../../schedules/components/MinistryScheduleSwitcher';
 import type { MediaEvent, MediaScheduleViewMode } from '../types';
 
 const WEEKDAY_LABELS = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
@@ -287,10 +288,10 @@ export function MediaSchedulePage() {
               Медиа-команда
             </div>
             <h1 className="mt-2 text-xl font-extrabold tracking-tight text-stone-900 sm:text-2xl">
-              Расписание медиа-служения
+              Расписание
             </h1>
             <p className="mt-1 text-[13px] font-semibold leading-snug text-stone-500 sm:text-sm">
-              Службы, репетиции и назначения команды
+              Медиа-служение — службы и назначения команды
               {upcomingCount > 0 ? (
                 <span className="ml-1.5 text-primary">· {upcomingCount} впереди</span>
               ) : null}
@@ -298,7 +299,7 @@ export function MediaSchedulePage() {
           </div>
           <div className="grid grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
             <Link
-              to="/media-schedule/my"
+              to="/schedules/media/my"
               className="tap-highlight-transparent col-span-2 inline-flex min-h-[48px] w-full items-center justify-center gap-2 rounded-xl border border-stone-200 bg-white px-4 text-sm font-extrabold text-stone-700 shadow-sm hover:bg-stone-50 active:bg-stone-100 sm:col-span-1 sm:w-auto"
             >
               <LuClock className="h-4 w-4 shrink-0" aria-hidden />
@@ -328,6 +329,14 @@ export function MediaSchedulePage() {
             ) : null}
           </div>
         </header>
+
+        <MinistryScheduleSwitcher
+          role={role}
+          ministryDirection={meQ.data?.ministry_direction}
+          ministryRole={meQ.data?.ministry_role}
+          roles={rolesAuth}
+          active="media"
+        />
 
         <div className="flex flex-col gap-3 rounded-2xl border border-stone-200/80 bg-white p-3 shadow-[var(--shadow-card)] sm:p-4">
           <div

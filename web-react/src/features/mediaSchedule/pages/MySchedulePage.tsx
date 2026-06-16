@@ -71,7 +71,7 @@ export function MySchedulePage() {
       <div className="mx-auto w-full max-w-2xl space-y-4">
         <div className="flex items-center gap-3">
           <Link
-            to="/media-schedule"
+            to="/schedules/media"
             className="tap-highlight-transparent grid h-11 w-11 place-items-center rounded-xl border border-stone-200 bg-white text-stone-800 shadow-sm hover:bg-stone-50 active:bg-stone-100"
             aria-label="К расписанию"
           >

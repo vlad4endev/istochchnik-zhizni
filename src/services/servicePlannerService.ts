@@ -631,6 +631,50 @@ async function syncSongBlocksMusicMinistryMember(planId: number, memberId: numbe
   );
 }
 
+function sermonBlockTitle(preacherName: string, contentJson: Record<string, unknown>): string {
+  const topicRaw = contentJson.sermon_topic;
+  const topic = typeof topicRaw === 'string' ? topicRaw.trim() : '';
+  return topic ? `${preacherName} - ${topic}` : preacherName;
+}
+
+/** После смены проповедника в настройках плана / расписании — обновить блоки проповеди. */
+async function syncSermonBlocksPreacher(planId: number, preacherMemberId: number | null): Promise<void> {
+  await ensurePlannerSchema();
+
+  let preacherName = 'Проповедник';
+  if (preacherMemberId != null) {
+    const memberRes = await query(
+      `select first_name, last_name, name from public.members where id = $1 limit 1`,
+      [preacherMemberId],
+    );
+    const row = memberRes.rows[0] as
+      | { first_name?: unknown; last_name?: unknown; name?: unknown }
+      | undefined;
+    if (row) preacherName = personName(row);
+  }
+
+  const blocksRes = await query(
+    `select b.id, b.content_json
+     from public.service_blocks b
+     join public.block_types bt on bt.id = b.block_type_id
+     where b.service_plan_id = $1
+       and (bt.code = 'sermon' or lower(bt.name) like '%проповед%')`,
+    [planId],
+  );
+
+  for (const raw of blocksRes.rows as Array<{ id: unknown; content_json: unknown }>) {
+    const blockId = Number(raw.id);
+    const contentJson = asObject(raw.content_json);
+    const title = sermonBlockTitle(preacherName, contentJson);
+    await query(
+      `update public.service_blocks
+       set assigned_member_id = $2, title = $3
+       where id = $1`,
+      [blockId, preacherMemberId, title],
+    );
+  }
+}
+
 function mapTemplateBlockRow(row: DbRecord): PlannerTemplateBlock {
   return {
     id: Number(row.id),
@@ -1533,6 +1577,9 @@ export async function createPlan(input: {
     }
 
     await client.query('commit');
+    if (input.preacher_member_id != null) {
+      await syncSermonBlocksPreacher(planId, input.preacher_member_id);
+    }
     return planId;
   } catch (e) {
     await client.query('rollback');
@@ -1579,6 +1626,8 @@ export async function patchPlan(
   values.push(planId);
   const shouldSyncSongAssignees = patch.music_ministry_member_id !== undefined;
   const nextMusicId = patch.music_ministry_member_id;
+  const shouldSyncPreacherAssignees = patch.preacher_member_id !== undefined;
+  const nextPreacherId = patch.preacher_member_id;
   const res = await query(
     `update public.service_plans
      set ${set.join(', ')}
@@ -1588,6 +1637,9 @@ export async function patchPlan(
   const ok = (res.rowCount ?? 0) > 0;
   if (ok && shouldSyncSongAssignees) {
     await syncSongBlocksMusicMinistryMember(planId, nextMusicId ?? null);
+  }
+  if (ok && shouldSyncPreacherAssignees) {
+    await syncSermonBlocksPreacher(planId, nextPreacherId ?? null);
   }
   return ok;
 }

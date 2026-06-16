@@ -19,6 +19,8 @@ import {
   RequireFullMember,
   RequireMessengerAccess,
   RequireMediaMinistryAccess,
+  RequireAnyScheduleAccess,
+  RequireSundayScheduleAccess,
   RequireSectionAccess,
   RequireStudioAccess,
   RouteFallback,
@@ -188,6 +190,21 @@ const MediaSchedulePage = lazy(async () => {
 const MyMediaSchedulePage = lazy(async () => {
   const m = await import('../features/mediaSchedule/pages/MySchedulePage');
   return { default: m.MySchedulePage };
+});
+
+const ScheduleHubPage = lazy(async () => {
+  const m = await import('../features/schedules/pages/ScheduleHubPage');
+  return { default: m.ScheduleHubPage };
+});
+
+const SundaySchedulePage = lazy(async () => {
+  const m = await import('../features/schedules/pages/SundaySchedulePage');
+  return { default: m.SundaySchedulePage };
+});
+
+const MySundaySchedulePage = lazy(async () => {
+  const m = await import('../features/schedules/pages/MySundaySchedulePage');
+  return { default: m.MySundaySchedulePage };
 });
 
 export function AppRouter() {
@@ -429,7 +446,21 @@ export function AppRouter() {
           }
         />
         <Route
-          path="media-schedule"
+          path="schedules"
+          element={
+            <BlockParishionerGuest>
+              <RequireFullMember>
+                <RequireAnyScheduleAccess>
+                  <Suspense fallback={<RouteFallback />}>
+                    <ScheduleHubPage />
+                  </Suspense>
+                </RequireAnyScheduleAccess>
+              </RequireFullMember>
+            </BlockParishionerGuest>
+          }
+        />
+        <Route
+          path="schedules/media"
           element={
             <BlockParishionerGuest>
               <RequireFullMember>
@@ -443,7 +474,7 @@ export function AppRouter() {
           }
         />
         <Route
-          path="media-schedule/my"
+          path="schedules/media/my"
           element={
             <BlockParishionerGuest>
               <RequireFullMember>
@@ -456,6 +487,36 @@ export function AppRouter() {
             </BlockParishionerGuest>
           }
         />
+        <Route
+          path="schedules/sunday"
+          element={
+            <BlockParishionerGuest>
+              <RequireFullMember>
+                <RequireSundayScheduleAccess>
+                  <Suspense fallback={<RouteFallback />}>
+                    <SundaySchedulePage />
+                  </Suspense>
+                </RequireSundayScheduleAccess>
+              </RequireFullMember>
+            </BlockParishionerGuest>
+          }
+        />
+        <Route
+          path="schedules/sunday/my"
+          element={
+            <BlockParishionerGuest>
+              <RequireFullMember>
+                <RequireSundayScheduleAccess>
+                  <Suspense fallback={<RouteFallback />}>
+                    <MySundaySchedulePage />
+                  </Suspense>
+                </RequireSundayScheduleAccess>
+              </RequireFullMember>
+            </BlockParishionerGuest>
+          }
+        />
+        <Route path="media-schedule" element={<Navigate to="/schedules/media" replace />} />
+        <Route path="media-schedule/my" element={<Navigate to="/schedules/media/my" replace />} />
         <Route
           path="songbook"
           element={
