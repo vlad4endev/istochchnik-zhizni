@@ -1048,7 +1048,25 @@ export function ServicePlannerPage() {
 
   async function handlePrintPlanSheet(): Promise<void> {
     if (!draft || pdfExporting) return;
-    const rows: ServicePlanPrintRow[] = timedBlocks.map((block) => {
+
+    let pdfCursor = parseStartClock(draft.service_date, draft.start_time);
+    const pdfBlocks = draft.blocks
+      .slice()
+      .sort((a, b) => a.order_index - b.order_index)
+      .filter((b) => !isHiddenFromPublic(b))
+      .map((b) => {
+        const startsAt = format(pdfCursor, 'HH:mm');
+        const duration = isSeparatorBlock(b) ? 0 : Math.max(0, b.duration_minutes);
+        pdfCursor = addMinutes(pdfCursor, duration);
+        return { ...b, startsAt };
+      });
+
+    const visibleTotalMinutes = pdfBlocks.reduce(
+      (acc, b) => acc + (isSeparatorBlock(b) ? 0 : Math.max(0, b.duration_minutes)),
+      0,
+    );
+
+    const rows: ServicePlanPrintRow[] = pdfBlocks.map((block) => {
       if (isSeparatorBlock(block)) {
         return { type: 'separator', label: separatorLabel(block) };
       }
@@ -1088,7 +1106,6 @@ export function ServicePlannerPage() {
       }
       const note = getBlockNotePreview(block);
       if (note) details.push(`Заметка: ${note}`);
-      const responsible = getResponsibleLabel(block);
       return {
         type: 'block' as const,
         time: block.startsAt,
@@ -1096,8 +1113,8 @@ export function ServicePlannerPage() {
         subtitle,
         details,
         minutes: block.duration_minutes,
-        responsible,
-        hiddenFromPublic: isHiddenFromPublic(block),
+        responsible: null,
+        hiddenFromPublic: false,
       };
     });
     const dateLine = new Intl.DateTimeFormat('ru-RU', {
@@ -1133,7 +1150,7 @@ export function ServicePlannerPage() {
           heading: 'Программа служения',
           dateLine,
           startTime: draft.start_time,
-          totalMinutes: totalDuration,
+          totalMinutes: visibleTotalMinutes,
           leader: leader ? userLabel(leader) : null,
           preacher: preacher ? userLabel(preacher) : null,
           broadcastAssignments,
