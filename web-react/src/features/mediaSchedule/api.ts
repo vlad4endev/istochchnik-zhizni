@@ -81,8 +81,10 @@ export async function fetchMyMediaSchedule(from: Date, to: Date): Promise<MediaE
   return (data.events ?? []).map(normalizeEvent);
 }
 
-export async function fetchMediaMembers(): Promise<MediaScheduleMember[]> {
-  const { data } = await apiClient.get<{ members: MediaScheduleMember[] }>('/api/media-schedule/members');
+export async function fetchMediaMembers(roleId?: number): Promise<MediaScheduleMember[]> {
+  const { data } = await apiClient.get<{ members: MediaScheduleMember[] }>('/api/media-schedule/members', {
+    params: roleId != null && roleId > 0 ? { role_id: roleId } : undefined,
+  });
   return data.members ?? [];
 }
 
@@ -96,6 +98,7 @@ export async function createMediaRole(body: {
   color?: string;
   icon?: string | null;
   ministry_direction_filter?: string | null;
+  ministry_role_filter?: string | null;
 }): Promise<MediaRole> {
   const { data } = await apiClient.post<{ role: MediaRole }>('/api/media-schedule/roles', body);
   return data.role;
@@ -109,6 +112,7 @@ export async function updateMediaRole(
     icon: string | null;
     is_active: boolean;
     ministry_direction_filter: string | null;
+    ministry_role_filter: string | null;
   }>,
 ): Promise<MediaRole> {
   const { data } = await apiClient.put<{ role: MediaRole }>(`/api/media-schedule/roles/${id}`, body);

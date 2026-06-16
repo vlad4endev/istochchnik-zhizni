@@ -1,28 +1,21 @@
 import { canModerateSongCatalogSession } from '../auth/studioAccess';
 import type { AuthRole } from '../auth/authStore';
+import { hasMediaMinistryDirection, isMediaManager } from './ministryRoleMatch';
 
-function normalizeMinistryDirection(value: unknown): string {
-  return String(value ?? '')
-    .trim()
-    .toLowerCase()
-    .replace(/ё/g, 'е');
-}
-
-export function hasMediaMinistryDirection(ministryDirection: unknown): boolean {
-  const v = normalizeMinistryDirection(ministryDirection);
-  if (!v) return false;
-  return v
-    .split(/[;,]/)
-    .map((s) => normalizeMinistryDirection(s))
-    .some((s) => s.includes('медиа'));
-}
-
-export function canManageMediaSchedule(
+export function canViewMediaSchedule(
   role: AuthRole | undefined,
   ministryDirection: unknown,
   roles?: Array<AuthRole | string | null | undefined>,
 ): boolean {
   return canModerateSongCatalogSession(role, roles) || hasMediaMinistryDirection(ministryDirection);
+}
+
+export function canManageMediaSchedule(
+  role: AuthRole | undefined,
+  ministryRole: unknown,
+  roles?: Array<AuthRole | string | null | undefined>,
+): boolean {
+  return canModerateSongCatalogSession(role, roles) || isMediaManager(ministryRole);
 }
 
 export function canManageMediaRoles(

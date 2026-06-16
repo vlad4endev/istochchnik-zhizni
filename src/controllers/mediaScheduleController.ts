@@ -1,6 +1,7 @@
 import type { Request, Response } from 'express';
 import { query } from '../config/db';
 import { requireAuthSession } from '../middleware/authSession';
+import { hasMediaMinistryDirection, isMediaManager } from '../utils/ministryRoleMatch';
 import {
   assignMember,
   createRole,
@@ -26,39 +27,38 @@ import { sessionCanModerateCatalog, type SessionRoleSource } from '../types/appR
 
 type AuthReq = Request & SessionRoleSource & { authUserId?: number };
 
-function normalizeMinistryDirection(value: unknown): string {
-  return String(value ?? '')
-    .trim()
-    .toLowerCase()
-    .replace(/ё/g, 'е');
-}
-
-function hasMediaMinistryDirectionValue(raw: unknown): boolean {
-  const v = normalizeMinistryDirection(raw);
-  if (!v) return false;
-  return v
-    .split(/[;,]/)
-    .map((s) => normalizeMinistryDirection(s))
-    .some((s) => s.includes('медиа'));
-}
-
-async function hasMediaMinistryDirection(memberId: number): Promise<boolean> {
-  const r = await query(`SELECT ministry_direction FROM members WHERE id = $1 LIMIT 1`, [memberId]);
-  const row = r.rows[0] as { ministry_direction?: string | null } | undefined;
-  return hasMediaMinistryDirectionValue(row?.ministry_direction);
-}
-
 async function canManageMediaSchedule(req: Request): Promise<boolean> {
   const r = req as AuthReq;
   if (sessionCanModerateCatalog(r)) return true;
   if (!r.authUserId) return false;
-  return hasMediaMinistryDirection(r.authUserId);
+  const result = await query(`SELECT ministry_role FROM members WHERE id = $1 LIMIT 1`, [r.authUserId]);
+  const row = result.rows[0] as { ministry_role?: string | null } | undefined;
+  return isMediaManager(row?.ministry_role);
+}
+
+async function canViewMediaSchedule(req: Request): Promise<boolean> {
+  const r = req as AuthReq;
+  if (sessionCanModerateCatalog(r)) return true;
+  if (!r.authUserId) return false;
+  const result = await query(`SELECT ministry_direction FROM members WHERE id = $1 LIMIT 1`, [r.authUserId]);
+  const row = result.rows[0] as { ministry_direction?: string | null } | undefined;
+  return hasMediaMinistryDirection(row?.ministry_direction);
 }
 
 async function ensureAuth(req: Request, res: Response): Promise<number | null> {
   const userId = (req as AuthReq).authUserId;
   if (!userId) {
     res.status(401).json({ error: 'Требуется авторизация' });
+    return null;
+  }
+  return userId;
+}
+
+async function ensureMediaScheduleView(req: Request, res: Response): Promise<number | null> {
+  const userId = await ensureAuth(req, res);
+  if (userId == null) return null;
+  if (!(await canViewMediaSchedule(req))) {
+    res.status(403).json({ error: 'Раздел доступен только служителям медиа-направления' });
     return null;
   }
   return userId;
@@ -130,7 +130,7 @@ function handleServiceError(res: Response, err: unknown, context: string): void 
 }
 
 export async function getEvents(req: Request, res: Response): Promise<void> {
-  if (!(await ensureAuth(req, res))) return;
+  if (!(await ensureMediaScheduleView(req, res))) return;
   try {
     const range = parseRangeQuery(req) ?? defaultMonthRange();
     const events = await getEventsWithAssignments(range.from, range.to);
@@ -144,7 +144,7 @@ export async function getEvents(req: Request, res: Response): Promise<void> {
 }
 
 export async function getEventByPlanHandler(req: Request, res: Response): Promise<void> {
-  if (!(await ensureAuth(req, res))) return;
+  if (!(await ensureMediaScheduleView(req, res))) return;
   const planId = parsePositiveInt(req.params.id);
   if (planId == null) {
     res.status(400).json({ error: 'Некорректный id плана' });
@@ -163,7 +163,7 @@ export async function getEventByPlanHandler(req: Request, res: Response): Promis
 }
 
 export async function getAssignmentsForPlanHandler(req: Request, res: Response): Promise<void> {
-  if (!(await ensureAuth(req, res))) return;
+  if (!(await ensureMediaScheduleView(req, res))) return;
   const planId = parsePositiveInt(req.params.id);
   if (planId == null) {
     res.status(400).json({ error: 'Некорректный id плана' });
@@ -261,7 +261,8 @@ export async function updateAssignmentStatusHandler(req: Request, res: Response)
 }
 
 export async function getMySchedule(req: Request, res: Response): Promise<void> {
-  const userId = await ensureAuth(req, res);
+  if (!(await ensureMediaScheduleView(req, res))) return;
+  const userId = (req as AuthReq).authUserId;
   if (userId == null) return;
   try {
     const range = parseRangeQuery(req) ?? (() => {
@@ -277,7 +278,8 @@ export async function getMySchedule(req: Request, res: Response): Promise<void> 
   }
 }
 
-export async function getRolesHandler(_req: Request, res: Response): Promise<void> {
+export async function getRolesHandler(req: Request, res: Response): Promise<void> {
+  if (!(await ensureMediaScheduleView(req, res))) return;
   try {
     const roles = await getRoles();
     res.json({ roles });
@@ -301,6 +303,7 @@ export async function createRoleHandler(req: Request, res: Response): Promise<vo
       sort_order: req.body?.sort_order,
       is_active: req.body?.is_active,
       ministry_direction_filter: req.body?.ministry_direction_filter ?? null,
+      ministry_role_filter: req.body?.ministry_role_filter ?? null,
     });
     res.status(201).json({ role });
   } catch (err) {
@@ -328,6 +331,7 @@ export async function updateRoleHandler(req: Request, res: Response): Promise<vo
       sort_order: req.body?.sort_order,
       is_active: req.body?.is_active,
       ministry_direction_filter: req.body?.ministry_direction_filter,
+      ministry_role_filter: req.body?.ministry_role_filter,
     });
     res.json({ role });
   } catch (err) {
@@ -380,9 +384,13 @@ export async function reorderRolesHandler(req: Request, res: Response): Promise<
 }
 
 export async function getMediaMembersHandler(req: Request, res: Response): Promise<void> {
-  if (!(await ensureAuth(req, res))) return;
+  if (!(await ensureMediaScheduleView(req, res))) return;
+  const roleIdRaw = req.query.role_id;
+  const roleIdStr =
+    typeof roleIdRaw === 'string' ? roleIdRaw : Array.isArray(roleIdRaw) ? roleIdRaw[0] : '';
+  const roleId = parsePositiveInt(roleIdStr);
   try {
-    const members = await getMediaMembers();
+    const members = await getMediaMembers(roleId ?? undefined);
     res.json({ members });
   } catch (err) {
     handleServiceError(res, err, 'getMediaMembers');

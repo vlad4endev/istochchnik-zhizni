@@ -2055,6 +2055,7 @@ CREATE TABLE IF NOT EXISTS media_roles (
   sort_order  INTEGER NOT NULL DEFAULT 0,
   is_active   BOOLEAN NOT NULL DEFAULT TRUE,
   ministry_direction_filter TEXT,
+  ministry_role_filter TEXT,
   created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 

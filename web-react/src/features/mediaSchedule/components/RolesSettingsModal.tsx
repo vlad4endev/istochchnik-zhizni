@@ -19,10 +19,10 @@ type Props = {
   open: boolean;
   onClose: () => void;
   roles: MediaRole[];
-  onCreate: (input: { name: string; color: string; ministry_direction_filter?: string | null }) => Promise<void>;
+  onCreate: (input: { name: string; color: string; ministry_role_filter?: string | null }) => Promise<void>;
   onUpdate: (
     id: number,
-    input: { name: string; color: string; ministry_direction_filter?: string | null },
+    input: { name: string; color: string; ministry_role_filter?: string | null },
   ) => Promise<void>;
   onDelete: (id: number) => Promise<void>;
   onReorder: (ids: number[]) => Promise<void>;
@@ -40,11 +40,11 @@ export function RolesSettingsModal({
   const [ordered, setOrdered] = useState<MediaRole[]>(roles);
   const [newName, setNewName] = useState('');
   const [newColor, setNewColor] = useState(COLOR_PRESETS[0]);
-  const [newDirectionFilter, setNewDirectionFilter] = useState('');
+  const [newRoleFilter, setNewRoleFilter] = useState('');
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editName, setEditName] = useState('');
   const [editColor, setEditColor] = useState(COLOR_PRESETS[0]);
-  const [editDirectionFilter, setEditDirectionFilter] = useState('');
+  const [editRoleFilter, setEditRoleFilter] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -86,11 +86,11 @@ export function RolesSettingsModal({
       await onCreate({
         name,
         color: newColor,
-        ministry_direction_filter: newDirectionFilter.trim() || null,
+        ministry_role_filter: newRoleFilter.trim() || null,
       });
       setNewName('');
       setNewColor(COLOR_PRESETS[0]);
-      setNewDirectionFilter('');
+      setNewRoleFilter('');
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Не удалось создать роль');
     } finally {
@@ -107,7 +107,7 @@ export function RolesSettingsModal({
       await onUpdate(id, {
         name,
         color: editColor,
-        ministry_direction_filter: editDirectionFilter.trim() || null,
+        ministry_role_filter: editRoleFilter.trim() || null,
       });
       setEditingId(null);
     } catch (e) {
@@ -136,14 +136,21 @@ export function RolesSettingsModal({
       <div
         role="dialog"
         aria-modal="true"
-        className="relative z-[81] flex max-h-[min(90dvh,700px)] w-full max-w-lg flex-col overflow-hidden rounded-t-2xl border border-[var(--border)] bg-[var(--surface-elevated)] shadow-2xl sm:rounded-2xl"
+        className="relative z-[81] flex max-h-[min(92dvh,700px)] w-full max-w-lg flex-col overflow-hidden rounded-t-3xl border border-stone-200/80 bg-white shadow-2xl sm:max-h-[min(90dvh,700px)] sm:rounded-2xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between border-b border-[var(--border)] px-4 py-3">
-          <h2 className="text-base font-semibold">Роли медиа-служения</h2>
-          <button type="button" onClick={onClose} className="grid h-9 w-9 place-items-center rounded-full hover:bg-black/5">
-            <LuX className="h-5 w-5" />
-          </button>
+        <div className="shrink-0 border-b border-stone-100 px-4 py-3">
+          <div className="mx-auto mb-2 h-1 w-10 rounded-full bg-stone-200 sm:hidden" />
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="text-base font-extrabold text-stone-900">Роли медиа-служения</h2>
+            <button
+              type="button"
+              onClick={onClose}
+              className="tap-highlight-transparent grid h-11 w-11 place-items-center rounded-full bg-stone-100 text-stone-600"
+            >
+              <LuX className="h-5 w-5" />
+            </button>
+          </div>
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
@@ -192,18 +199,18 @@ export function RolesSettingsModal({
                                 </button>
                               </div>
                               <input
-                                value={editDirectionFilter}
-                                onChange={(e) => setEditDirectionFilter(e.target.value)}
-                                placeholder="Направление служения (фильтр)"
+                                value={editRoleFilter}
+                                onChange={(e) => setEditRoleFilter(e.target.value)}
+                                placeholder="Роль в карточке (если пусто — как название слота)"
                                 className="w-full rounded-lg border border-[var(--border)] px-2 py-1 text-xs"
                               />
                             </div>
                           ) : (
                             <div className="min-w-0 flex-1">
                               <span className="block truncate text-sm font-medium">{role.name}</span>
-                              {role.ministry_direction_filter ? (
+                              {role.ministry_role_filter ? (
                                 <span className="block truncate text-[10px] text-[var(--text-muted)]">
-                                  {role.ministry_direction_filter}
+                                  {role.ministry_role_filter}
                                 </span>
                               ) : null}
                             </div>
@@ -214,7 +221,7 @@ export function RolesSettingsModal({
                               setEditingId(role.id);
                               setEditName(role.name);
                               setEditColor(role.color);
-                              setEditDirectionFilter(role.ministry_direction_filter ?? '');
+                              setEditRoleFilter(role.ministry_role_filter ?? '');
                             }}
                             className="grid h-8 w-8 place-items-center rounded-lg hover:bg-black/5"
                           >
@@ -250,9 +257,9 @@ export function RolesSettingsModal({
               />
               <ColorPicker value={newColor} onChange={setNewColor} />
               <input
-                value={newDirectionFilter}
-                onChange={(e) => setNewDirectionFilter(e.target.value)}
-                placeholder="Направление (фильтр)"
+                value={newRoleFilter}
+                onChange={(e) => setNewRoleFilter(e.target.value)}
+                placeholder="Роль в карточке (если пусто — как название слота)"
                 className="min-w-[140px] flex-1 rounded-lg border border-[var(--border)] px-2 py-1.5 text-sm"
               />
               <button
@@ -267,12 +274,12 @@ export function RolesSettingsModal({
           </div>
         </div>
 
-        <div className="border-t border-[var(--border)] px-4 py-3">
+        <div className="shrink-0 border-t border-stone-100 bg-white px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
           <button
             type="button"
             disabled={busy}
             onClick={() => void saveOrder()}
-            className="flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--text)] px-4 py-2.5 text-sm font-semibold text-[var(--surface-elevated)] disabled:opacity-50"
+            className="tap-highlight-transparent flex w-full min-h-[48px] items-center justify-center gap-2 rounded-xl bg-stone-900 text-sm font-extrabold text-white disabled:opacity-50"
           >
             {busy ? <LuLoaderCircle className="h-4 w-4 animate-spin" /> : null}
             Сохранить порядок

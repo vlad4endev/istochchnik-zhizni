@@ -30,6 +30,8 @@ import {
 
 import { apiErrorMessage, updateAdminEvent } from '@/features/admin/api';
 import { useAuthStore } from '@/features/auth/authStore';
+import { canManageMediaSchedule } from '@/features/mediaSchedule/mediaAccess';
+import { useMe } from '@/hooks/useMe';
 import {
   deleteOccurrenceOverrideForDate,
   getActiveEvents,
@@ -160,6 +162,10 @@ function EventDetailSheet({
   existingOverride: ChurchEventOccurrenceOverride | null;
 }) {
   const queryClient = useQueryClient();
+  const authRole = useAuthStore((s) => s.role);
+  const authRoles = useAuthStore((s) => s.roles);
+  const meQ = useMe();
+  const canManageMedia = canManageMediaSchedule(authRole, meQ.data?.ministry_role, authRoles);
   const { item, startsAt, occurrenceDateKey } = occurrence;
   const tone = EVENT_TONE_STYLES[eventToneIndex(item.id)];
   const poster = resolvePublicUrl(item.poster_url ?? null);
@@ -384,7 +390,7 @@ function EventDetailSheet({
             <p className="mt-4 text-sm font-medium leading-relaxed text-stone-700">{descriptionText}</p>
             {planIdQ.data ? (
               <div className="mt-4">
-                <MediaTeamBlock planId={planIdQ.data} canManage={isAdmin} compact />
+                <MediaTeamBlock planId={planIdQ.data} canManage={canManageMedia} compact />
               </div>
             ) : null}
             <div className="mt-6 flex flex-wrap justify-end gap-2">

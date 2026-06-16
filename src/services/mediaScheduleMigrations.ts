@@ -14,6 +14,13 @@ export function mediaScheduleMigrationsDir(): string {
 
 /** Идемпотентно создаёт media_roles / media_assignments (IF NOT EXISTS). */
 export async function ensureMediaScheduleSchema(): Promise<void> {
+  const dir = mediaScheduleMigrationsDir();
+
+  const patchPath = join(dir, '20260615160000_media_roles_ministry_role_filter.sql');
+  if (existsSync(patchPath)) {
+    await query(readFileSync(patchPath, 'utf8'));
+  }
+
   const exists = await query(
     `SELECT EXISTS (
        SELECT 1 FROM information_schema.tables
@@ -24,7 +31,6 @@ export async function ensureMediaScheduleSchema(): Promise<void> {
     return;
   }
 
-  const dir = mediaScheduleMigrationsDir();
   for (const file of MEDIA_SCHEDULE_MIGRATION_FILES) {
     const path = join(dir, file);
     if (!existsSync(path)) {

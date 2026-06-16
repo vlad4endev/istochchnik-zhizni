@@ -6,6 +6,7 @@ export interface MediaRole {
   sort_order: number;
   is_active: boolean;
   ministry_direction_filter?: string | null;
+  ministry_role_filter?: string | null;
 }
 
 export interface MediaAssignment {
@@ -43,6 +44,7 @@ export interface MediaScheduleMember {
   name: string;
   avatar_url?: string | null;
   ministry_direction?: string | null;
+  ministry_role?: string | null;
   phone?: string | null;
   email?: string | null;
 }

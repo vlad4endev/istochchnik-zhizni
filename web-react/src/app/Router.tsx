@@ -18,6 +18,7 @@ import {
   RequireCatalogModerator,
   RequireFullMember,
   RequireMessengerAccess,
+  RequireMediaMinistryAccess,
   RequireSectionAccess,
   RequireStudioAccess,
   RouteFallback,
@@ -419,9 +420,11 @@ export function AppRouter() {
           element={
             <BlockParishionerGuest>
               <RequireFullMember>
-                <Suspense fallback={<RouteFallback />}>
-                  <MediaSchedulePage />
-                </Suspense>
+                <RequireMediaMinistryAccess>
+                  <Suspense fallback={<RouteFallback />}>
+                    <MediaSchedulePage />
+                  </Suspense>
+                </RequireMediaMinistryAccess>
               </RequireFullMember>
             </BlockParishionerGuest>
           }
@@ -431,9 +434,11 @@ export function AppRouter() {
           element={
             <BlockParishionerGuest>
               <RequireFullMember>
-                <Suspense fallback={<RouteFallback />}>
-                  <MyMediaSchedulePage />
-                </Suspense>
+                <RequireMediaMinistryAccess>
+                  <Suspense fallback={<RouteFallback />}>
+                    <MyMediaSchedulePage />
+                  </Suspense>
+                </RequireMediaMinistryAccess>
               </RequireFullMember>
             </BlockParishionerGuest>
           }

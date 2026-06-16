@@ -47,6 +47,7 @@ import { IncomingCallToast } from '../features/calls/IncomingCallToast';
 import { useBrowserNotificationScheduler } from '../features/notifications/useBrowserNotificationScheduler';
 import { useProfileDraftStore } from '../features/profile/profileDraftStore';
 import { canAccessStudio } from '../features/auth/studioAccess';
+import { canViewMediaSchedule } from '../features/mediaSchedule/mediaAccess';
 import { LAYOUT_MAIN_CHROME_EVENT } from './layoutChrome';
 import { AppAvatar } from '../components/AppAvatar';
 import { CoordinatorDashboardNoteFab } from '../features/dashboard/components/CoordinatorDashboardNoteFab';
@@ -70,6 +71,7 @@ type NavItem = {
   studioOnly?: boolean;
   sectionId?: AppSectionId;
   adminOrMediaMinistryOnly?: boolean;
+  mediaMinistryOnly?: boolean;
 };
 
 const NAV_ITEMS: NavItem[] = [
@@ -78,7 +80,7 @@ const NAV_ITEMS: NavItem[] = [
   { to: '/prayer', label: 'Молитва', Icon: LuChurch, sectionId: 'prayer' },
   { to: '/songbook', label: 'Песенник', Icon: LuMusic2, sectionId: 'songbook' },
   { to: '/service-planner', label: 'Служение', Icon: LuCalendarDays, sectionId: 'service_planner' },
-  { to: '/media-schedule', label: 'Расписание', Icon: LuCalendarClock },
+  { to: '/media-schedule', label: 'Расписание', Icon: LuCalendarClock, mediaMinistryOnly: true },
   { to: '/studio', label: 'Студия', Icon: LuDisc3, studioOnly: true, sectionId: 'studio' },
   { to: '/sermons', label: 'Проповеди', Icon: LuMic, sectionId: 'sermons' },
   { to: '/messenger', label: 'Чаты', Icon: LuMessageCircle, sectionId: 'messenger' },
@@ -586,6 +588,7 @@ export function Layout() {
   const isAdmin = (role ?? 'member').toLowerCase() === 'admin';
   const meQ = useMe(Boolean(token));
   const canSeeBroadcastNav = isAdmin || normalizeMinistryDirection(meQ.data?.ministry_direction) === 'медиа служения';
+  const canSeeMediaScheduleNav = canViewMediaSchedule(role, meQ.data?.ministry_direction, roles);
   const canSeeStudioNav = canAccessStudio(role, meQ.data?.ministry_direction, roles);
   const registrationStatus = useAuthStore((s) => s.registrationStatus ?? 'active');
   const profileUsername = useAuthStore((s) => s.username ?? '');
@@ -601,7 +604,7 @@ export function Layout() {
 
   const items = useMemo(() => {
     if (isParishionerGuest) {
-      const parishionerPaths = new Set(['/dashboard', '/events', '/messenger', '/sermons', '/media-schedule']);
+      const parishionerPaths = new Set(['/dashboard', '/events', '/messenger', '/sermons']);
       return NAV_ITEMS.filter(
         (item) =>
           parishionerPaths.has(item.to) &&
@@ -621,6 +624,7 @@ export function Layout() {
         (!item.adminOnly || isAdmin) &&
         (!item.studioOnly || canSeeStudioNav) &&
         (!item.adminOrMediaMinistryOnly || canSeeBroadcastNav) &&
+        (!item.mediaMinistryOnly || canSeeMediaScheduleNav) &&
         (!item.sectionId ||
           isAdmin ||
           canRoleAccessSection(sectionVisibilityQ.data, item.sectionId, role, roles)),
@@ -633,6 +637,7 @@ export function Layout() {
     roles,
     sectionVisibilityQ.data,
     canSeeBroadcastNav,
+    canSeeMediaScheduleNav,
     canSeeStudioNav,
   ]);
   const sidebarItems = items;

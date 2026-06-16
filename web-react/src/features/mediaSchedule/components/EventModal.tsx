@@ -143,41 +143,50 @@ export function EventModal({
         <div
           role="dialog"
           aria-modal="true"
-          className="relative z-[76] flex max-h-[min(92dvh,720px)] w-full max-w-xl flex-col overflow-hidden rounded-t-2xl border border-[var(--border)] bg-[var(--surface-elevated)] shadow-2xl sm:rounded-2xl"
+          className="relative z-[76] flex max-h-[min(92dvh,720px)] w-full max-w-xl flex-col overflow-hidden rounded-t-3xl border border-stone-200/80 bg-white shadow-2xl sm:max-h-[min(92dvh,720px)] sm:rounded-2xl"
           onClick={(e) => e.stopPropagation()}
         >
-          <div className="flex items-center justify-between border-b border-[var(--border)] px-4 py-3">
-            <div className="min-w-0">
-              <h2 className="truncate text-base font-semibold">Назначения медиа-команды</h2>
-              <p className="truncate text-xs text-[var(--text-muted)]">{headerLabel}</p>
+          <div className="shrink-0 border-b border-stone-100 px-4 py-3 sm:py-4">
+            <div className="mx-auto mb-2 h-1 w-10 rounded-full bg-stone-200 sm:hidden" />
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <h2 className="truncate text-base font-extrabold text-stone-900">Назначения медиа-команды</h2>
+                <p className="truncate text-xs font-semibold text-stone-500">{headerLabel}</p>
+              </div>
+              <button
+                type="button"
+                onClick={onClose}
+                className="tap-highlight-transparent grid h-11 w-11 shrink-0 place-items-center rounded-full bg-stone-100 text-stone-600"
+              >
+                <LuX className="h-5 w-5" />
+              </button>
             </div>
-            <button type="button" onClick={onClose} className="grid h-9 w-9 place-items-center rounded-full hover:bg-black/5">
-              <LuX className="h-5 w-5" />
-            </button>
           </div>
 
-          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-4">
-            {error ? <p className="text-sm text-rose-600">{error}</p> : null}
+          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain px-4 py-4">
+            {error ? <p className="rounded-xl bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-700">{error}</p> : null}
 
             {localEvent ? (
-              <div className="space-y-1 text-sm">
-                <p className="text-lg font-semibold">{localEvent.title}</p>
-                <p className="text-[var(--text-muted)]">
+              <div className="rounded-2xl border border-stone-200/80 bg-gradient-to-br from-stone-50 to-white p-4 shadow-sm">
+                <p className="text-lg font-extrabold text-stone-900">{localEvent.title}</p>
+                <p className="mt-1 text-sm font-semibold text-stone-500">
                   {format(parseISO(localEvent.event_date), 'd MMMM yyyy, EEEE', { locale: ru })}
                   {localEvent.start_time ? ` · ${localEvent.start_time}` : ''}
                 </p>
-                {localEvent.notes ? <p className="whitespace-pre-wrap text-[var(--text-muted)]">{localEvent.notes}</p> : null}
+                {localEvent.notes ? (
+                  <p className="mt-2 whitespace-pre-wrap text-sm text-stone-600">{localEvent.notes}</p>
+                ) : null}
               </div>
             ) : (
               <div className="flex justify-center py-8">
-                <LuLoaderCircle className="h-7 w-7 animate-spin text-[var(--text-muted)]" />
+                <LuLoaderCircle className="h-7 w-7 animate-spin text-stone-400" />
               </div>
             )}
 
             {localEvent ? (
               <div>
-                <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">
-                  Роли
+                <h3 className="mb-2 text-[11px] font-extrabold uppercase tracking-wide text-stone-500">
+                  Роли команды
                 </h3>
                 <ul className="space-y-2">
                   {roles.map((role) => {
@@ -185,13 +194,13 @@ export function EventModal({
                     return (
                       <li
                         key={role.id}
-                        className="flex items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2"
+                        className="flex min-h-[52px] items-center gap-2 rounded-2xl border border-stone-200/80 bg-white px-3 py-2.5 shadow-sm"
                       >
                         <span
                           className="h-2.5 w-2.5 shrink-0 rounded-full"
                           style={{ backgroundColor: role.color }}
                         />
-                        <span className="w-24 shrink-0 truncate text-xs font-semibold text-[var(--text-muted)]">
+                        <span className="w-24 shrink-0 truncate text-xs font-extrabold text-stone-500">
                           {role.name}
                         </span>
                         {assignment ? (
@@ -207,7 +216,7 @@ export function EventModal({
                               className="grid h-7 w-7 shrink-0 place-items-center overflow-hidden rounded-full"
                             />
                             <div className="min-w-0 flex-1">
-                              <p className="truncate text-sm font-medium">{assignment.member.name}</p>
+                              <p className="truncate text-sm font-extrabold text-stone-900">{assignment.member.name}</p>
                               <p
                                 className="text-[11px]"
                                 style={{ color: assignmentStatusBorderColor(assignment.status) }}
@@ -232,7 +241,7 @@ export function EventModal({
                               setPickerRoleId(role.id);
                               setPickerOpen(true);
                             }}
-                            className="ml-auto flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-semibold text-primary hover:bg-primary/10"
+                            className="ml-auto flex items-center gap-1 rounded-xl bg-primary/10 px-2.5 py-1.5 text-xs font-extrabold text-primary hover:bg-primary/15"
                           >
                             <LuPlus className="h-4 w-4" /> Назначить
                           </button>
@@ -247,8 +256,8 @@ export function EventModal({
             ) : null}
 
             {!canManage && myAssignments.length > 0 ? (
-              <div className="rounded-xl bg-[var(--surface)] p-3 ring-1 ring-[var(--border)]">
-                <p className="mb-2 text-sm font-semibold">Ваши назначения</p>
+              <div className="rounded-2xl border border-primary/15 bg-primary/5 p-4">
+                <p className="mb-2 text-sm font-extrabold text-stone-900">Ваши назначения</p>
                 {myAssignments.map((a) => (
                   <div key={a.id} className="mb-2 flex flex-wrap items-center gap-2 last:mb-0">
                     <span className="text-sm" style={{ color: a.role.color }}>
@@ -283,11 +292,11 @@ export function EventModal({
             ) : null}
           </div>
 
-          <div className="flex flex-wrap gap-2 border-t border-[var(--border)] px-4 py-3">
+          <div className="flex shrink-0 flex-wrap gap-2 border-t border-stone-100 bg-white px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
             <button
               type="button"
               onClick={onClose}
-              className="w-full rounded-xl border border-[var(--border)] px-4 py-2.5 text-sm font-semibold sm:w-auto"
+              className="tap-highlight-transparent w-full min-h-[48px] rounded-xl border border-stone-200 bg-white text-sm font-extrabold text-stone-800 shadow-sm sm:w-auto sm:px-4"
             >
               Закрыть
             </button>

@@ -1,4 +1,5 @@
 import { query } from '../config/db';
+import { memberHasMinistryRole, mediaRoleMemberMatchToken } from '../utils/ministryRoleMatch';
 import { sendPush } from './pushService';
 
 export type AssignmentStatus = 'assigned' | 'confirmed' | 'declined' | 'pending';
@@ -11,6 +12,7 @@ export interface MediaRole {
   sort_order: number;
   is_active: boolean;
   ministry_direction_filter: string | null;
+  ministry_role_filter: string | null;
   created_at?: string;
 }
 
@@ -56,6 +58,7 @@ export interface MediaScheduleMember {
   name: string;
   avatar_url: string | null;
   ministry_direction: string | null;
+  ministry_role: string | null;
   phone: string | null;
   email: string | null;
 }
@@ -67,6 +70,7 @@ export interface CreateRoleInput {
   sort_order?: number;
   is_active?: boolean;
   ministry_direction_filter?: string | null;
+  ministry_role_filter?: string | null;
 }
 
 export type UpdateRoleInput = Partial<CreateRoleInput>;
@@ -153,6 +157,8 @@ function mapRoleRow(row: Record<string, unknown>): MediaRole {
     is_active: row.is_active !== false,
     ministry_direction_filter:
       row.ministry_direction_filter == null ? null : String(row.ministry_direction_filter),
+    ministry_role_filter:
+      row.ministry_role_filter == null ? null : String(row.ministry_role_filter),
     created_at: row.created_at == null ? undefined : String(row.created_at),
   };
 }
@@ -249,7 +255,8 @@ async function fetchAssignmentsForPlanIds(planIds: number[]): Promise<Map<number
        r.icon AS role_icon,
        r.sort_order AS role_sort_order,
        r.is_active AS role_is_active,
-       r.ministry_direction_filter AS role_ministry_direction_filter
+       r.ministry_direction_filter AS role_ministry_direction_filter,
+       r.ministry_role_filter AS role_ministry_role_filter
      FROM media_assignments a
      JOIN members m ON m.id = a.member_id
      JOIN media_roles r ON r.id = a.role_id
@@ -271,6 +278,8 @@ async function fetchAssignmentsForPlanIds(planIds: number[]): Promise<Map<number
         raw.role_ministry_direction_filter == null
           ? null
           : String(raw.role_ministry_direction_filter),
+      ministry_role_filter:
+        raw.role_ministry_role_filter == null ? null : String(raw.role_ministry_role_filter),
     };
     const assignment: MediaAssignment = {
       id: Number(raw.id),
@@ -502,7 +511,8 @@ export async function getAssignmentById(assignmentId: number): Promise<MediaAssi
        r.icon AS role_icon,
        r.sort_order AS role_sort_order,
        r.is_active AS role_is_active,
-       r.ministry_direction_filter AS role_ministry_direction_filter
+       r.ministry_direction_filter AS role_ministry_direction_filter,
+       r.ministry_role_filter AS role_ministry_role_filter
      FROM media_assignments a
      JOIN members m ON m.id = a.member_id
      JOIN media_roles r ON r.id = a.role_id
@@ -535,6 +545,8 @@ export async function getAssignmentById(assignmentId: number): Promise<MediaAssi
         raw.role_ministry_direction_filter == null
           ? null
           : String(raw.role_ministry_direction_filter),
+      ministry_role_filter:
+        raw.role_ministry_role_filter == null ? null : String(raw.role_ministry_role_filter),
     },
   };
 }
@@ -669,8 +681,8 @@ export async function createRole(input: CreateRoleInput): Promise<MediaRole> {
     input.sort_order ?? Number((maxOrder.rows[0] as { m?: number } | undefined)?.m ?? 0) + 1;
 
   const result = await query(
-    `INSERT INTO media_roles (name, color, icon, sort_order, is_active, ministry_direction_filter)
-     VALUES ($1, $2, $3, $4, COALESCE($5, TRUE), $6)
+    `INSERT INTO media_roles (name, color, icon, sort_order, is_active, ministry_direction_filter, ministry_role_filter)
+     VALUES ($1, $2, $3, $4, COALESCE($5, TRUE), $6, $7)
      RETURNING *`,
     [
       name,
@@ -679,6 +691,7 @@ export async function createRole(input: CreateRoleInput): Promise<MediaRole> {
       nextOrder,
       input.is_active ?? true,
       input.ministry_direction_filter?.trim() || null,
+      input.ministry_role_filter?.trim() || null,
     ],
   );
   return mapRoleRow(result.rows[0] as Record<string, unknown>);
@@ -714,6 +727,10 @@ export async function updateRole(id: number, input: UpdateRoleInput): Promise<Me
   if (input.ministry_direction_filter !== undefined) {
     fields.push(`ministry_direction_filter = $${idx++}`);
     values.push(input.ministry_direction_filter?.trim() || null);
+  }
+  if (input.ministry_role_filter !== undefined) {
+    fields.push(`ministry_role_filter = $${idx++}`);
+    values.push(input.ministry_role_filter?.trim() || null);
   }
 
   if (fields.length === 0) {
@@ -751,7 +768,7 @@ export async function reorderRoles(ids: number[]): Promise<void> {
   }
 }
 
-export async function getMediaMembers(): Promise<MediaScheduleMember[]> {
+export async function getMediaMembers(roleId?: number): Promise<MediaScheduleMember[]> {
   const directionClause = MEDIA_MEMBER_DIRECTION_PATTERNS.map(
     (_, i) => `lower(COALESCE(m.ministry_direction, '')) LIKE $${i + 1}`,
   ).join(' OR ');
@@ -761,6 +778,7 @@ export async function getMediaMembers(): Promise<MediaScheduleMember[]> {
     name: memberDisplayName(row),
     avatar_url: row.avatar_url == null ? null : String(row.avatar_url),
     ministry_direction: row.ministry_direction == null ? null : String(row.ministry_direction),
+    ministry_role: row.ministry_role == null ? null : String(row.ministry_role),
     phone: row.phone_number == null ? null : String(row.phone_number),
     email: row.email == null ? null : String(row.email),
   });
@@ -772,6 +790,7 @@ export async function getMediaMembers(): Promise<MediaScheduleMember[]> {
        m.last_name,
        m.avatar_url,
        m.ministry_direction,
+       m.ministry_role,
        m.phone_number,
        m.email`;
 
@@ -784,19 +803,37 @@ export async function getMediaMembers(): Promise<MediaScheduleMember[]> {
     MEDIA_MEMBER_DIRECTION_PATTERNS,
   );
 
-  const rows = filtered.rows as Record<string, unknown>[];
-  if (rows.length > 0) {
-    return rows.map(mapMemberRow);
+  let rows = filtered.rows as Record<string, unknown>[];
+  if (rows.length === 0) {
+    const all = await query(
+      `SELECT ${MEMBER_SELECT}
+       FROM members m
+       WHERE m.is_active = TRUE
+       ORDER BY m.first_name NULLS LAST, m.last_name NULLS LAST, m.name ASC`,
+    );
+    rows = all.rows as Record<string, unknown>[];
   }
 
-  const all = await query(
-    `SELECT ${MEMBER_SELECT}
-     FROM members m
-     WHERE m.is_active = TRUE
-     ORDER BY m.first_name NULLS LAST, m.last_name NULLS LAST, m.name ASC`,
-  );
+  let members = rows.map(mapMemberRow);
 
-  return (all.rows as Record<string, unknown>[]).map(mapMemberRow);
+  if (roleId != null && roleId > 0) {
+    const roleResult = await query(`SELECT name, ministry_role_filter FROM media_roles WHERE id = $1 LIMIT 1`, [
+      roleId,
+    ]);
+    const roleRow = roleResult.rows[0] as { name?: string; ministry_role_filter?: string | null } | undefined;
+    if (roleRow) {
+      const matchToken = mediaRoleMemberMatchToken({
+        name: String(roleRow.name ?? ''),
+        ministry_role_filter: roleRow.ministry_role_filter ?? null,
+      });
+      const matched = members.filter((m) => memberHasMinistryRole(m.ministry_role, matchToken));
+      if (matched.length > 0) {
+        members = matched;
+      }
+    }
+  }
+
+  return members;
 }
 
 export { parseDateYmd, parsePositiveInt };
