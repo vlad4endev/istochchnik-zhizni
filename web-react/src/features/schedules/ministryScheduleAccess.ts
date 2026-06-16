@@ -14,6 +14,26 @@ export const SCHEDULE_MINISTRY_LABELS: Record<ScheduleMinistryKey, string> = {
   sunday: 'Воскресное служение',
 };
 
+function normalizeAppRoleToken(role: unknown): string {
+  return String(role ?? '').trim().toLowerCase();
+}
+
+export function isAdminAppRole(
+  role: AuthRole | undefined,
+  roles?: Array<AuthRole | string | null | undefined>,
+): boolean {
+  if (normalizeAppRoleToken(role) === 'admin') return true;
+  return (roles ?? []).some((r) => normalizeAppRoleToken(r) === 'admin');
+}
+
+export function isPastorAppRole(
+  role: AuthRole | undefined,
+  roles?: Array<AuthRole | string | null | undefined>,
+): boolean {
+  if (normalizeAppRoleToken(role) === 'pastor') return true;
+  return (roles ?? []).some((r) => normalizeAppRoleToken(r) === 'pastor');
+}
+
 export function parseMinistryDirections(ministryDirection: unknown): string[] {
   return Array.from(
     new Set(
@@ -96,19 +116,15 @@ export function canManageMediaSchedule(
   ministryRole: unknown,
   roles?: Array<AuthRole | string | null | undefined>,
 ): boolean {
-  return canModerateSongCatalogSession(role, roles) || isMediaManager(ministryRole);
+  return isAdminAppRole(role, roles) || isMediaManager(ministryRole);
 }
 
 export function canManageSundaySchedule(
   role: AuthRole | undefined,
-  ministryRole: unknown,
+  _ministryRole: unknown,
   roles?: Array<AuthRole | string | null | undefined>,
 ): boolean {
-  const elevated =
-    canModerateSongCatalogSession(role, roles) ||
-    (role ?? '').toLowerCase() === 'minister' ||
-    (roles ?? []).some((r) => String(r ?? '').toLowerCase() === 'minister');
-  return elevated || memberHasMinistryRole(ministryRole, 'Ведущий');
+  return isPastorAppRole(role, roles);
 }
 
 export function schedulePathForMinistry(key: ScheduleMinistryKey): string {

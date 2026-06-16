@@ -1,7 +1,7 @@
 import type { Request, Response } from 'express';
 import { query } from '../config/db';
 import { requireAuthSession } from '../middleware/authSession';
-import { hasMediaMinistryDirection, isMediaManager } from '../utils/ministryRoleMatch';
+import { hasMediaMinistryDirection } from '../utils/ministryRoleMatch';
 import {
   assignMember,
   createRole,
@@ -23,17 +23,26 @@ import {
   updateRole,
   type AssignmentStatus,
 } from '../services/mediaScheduleService';
-import { sessionCanModerateCatalog, type SessionRoleSource } from '../types/appRole';
+import { sessionCanModerateCatalog, rolesOfSession, type SessionRoleSource } from '../types/appRole';
+import { canManageMediaSchedule as canManageMediaScheduleByProfile } from '../utils/ministryScheduleAccess';
 
 type AuthReq = Request & SessionRoleSource & { authUserId?: number };
 
 async function canManageMediaSchedule(req: Request): Promise<boolean> {
   const r = req as AuthReq;
-  if (sessionCanModerateCatalog(r)) return true;
   if (!r.authUserId) return false;
+  const sessionRoles = rolesOfSession(r);
   const result = await query(`SELECT ministry_role FROM members WHERE id = $1 LIMIT 1`, [r.authUserId]);
   const row = result.rows[0] as { ministry_role?: string | null } | undefined;
-  return isMediaManager(row?.ministry_role);
+  return canManageMediaScheduleByProfile({
+    app_role: r.authUserRole,
+    app_roles: sessionRoles,
+    ministry_role: row?.ministry_role,
+  });
+}
+
+function isAdminSession(req: Request): boolean {
+  return rolesOfSession(req as AuthReq).includes('admin');
 }
 
 async function canViewMediaSchedule(req: Request): Promise<boolean> {
@@ -291,7 +300,7 @@ export async function getRolesHandler(req: Request, res: Response): Promise<void
 export async function createRoleHandler(req: Request, res: Response): Promise<void> {
   const r = req as AuthReq;
   if (!(await ensureAuth(req, res))) return;
-  if (!sessionCanModerateCatalog(r)) {
+  if (!isAdminSession(req)) {
     res.status(403).json({ error: 'Недостаточно прав для управления ролями' });
     return;
   }
@@ -314,7 +323,7 @@ export async function createRoleHandler(req: Request, res: Response): Promise<vo
 export async function updateRoleHandler(req: Request, res: Response): Promise<void> {
   const r = req as AuthReq;
   if (!(await ensureAuth(req, res))) return;
-  if (!sessionCanModerateCatalog(r)) {
+  if (!isAdminSession(req)) {
     res.status(403).json({ error: 'Недостаточно прав для управления ролями' });
     return;
   }
@@ -342,7 +351,7 @@ export async function updateRoleHandler(req: Request, res: Response): Promise<vo
 export async function deleteRoleHandler(req: Request, res: Response): Promise<void> {
   const r = req as AuthReq;
   if (!(await ensureAuth(req, res))) return;
-  if (!sessionCanModerateCatalog(r)) {
+  if (!isAdminSession(req)) {
     res.status(403).json({ error: 'Недостаточно прав для управления ролями' });
     return;
   }
@@ -362,7 +371,7 @@ export async function deleteRoleHandler(req: Request, res: Response): Promise<vo
 export async function reorderRolesHandler(req: Request, res: Response): Promise<void> {
   const r = req as AuthReq;
   if (!(await ensureAuth(req, res))) return;
-  if (!sessionCanModerateCatalog(r)) {
+  if (!isAdminSession(req)) {
     res.status(403).json({ error: 'Недостаточно прав для управления ролями' });
     return;
   }

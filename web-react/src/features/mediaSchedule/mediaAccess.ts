@@ -1,6 +1,7 @@
 import { canModerateSongCatalogSession } from '../auth/studioAccess';
 import type { AuthRole } from '../auth/authStore';
 import { hasMediaMinistryDirection, isMediaManager } from './ministryRoleMatch';
+import { isAdminAppRole } from '../schedules/ministryScheduleAccess';
 
 export function canViewMediaSchedule(
   role: AuthRole | undefined,
@@ -15,14 +16,15 @@ export function canManageMediaSchedule(
   ministryRole: unknown,
   roles?: Array<AuthRole | string | null | undefined>,
 ): boolean {
-  return canModerateSongCatalogSession(role, roles) || isMediaManager(ministryRole);
+  return isAdminAppRole(role, roles) || isMediaManager(ministryRole);
 }
 
+/** Настройка ролей медиа-расписания — только администратор. */
 export function canManageMediaRoles(
   role: AuthRole | undefined,
   roles?: Array<AuthRole | string | null | undefined>,
 ): boolean {
-  return canModerateSongCatalogSession(role, roles);
+  return isAdminAppRole(role, roles);
 }
 
 export function assignmentStatusBorderColor(status: string): string {

@@ -321,7 +321,7 @@ export function SundaySchedulePage() {
                     {patchMut.isPending ? 'Сохранение…' : 'Сохранить'}
                   </button>
                 ) : (
-                  <p className="text-sm text-stone-600">Редактирование доступно ведущим и координаторам.</p>
+                  <p className="text-sm text-stone-600">Редактирование доступно только пастору.</p>
                 )}
                 <Link
                   to="/service-planner"

@@ -89,9 +89,23 @@ export function canViewAnySchedule(input: {
 }
 
 export function canManageSundaySchedule(input: {
-  ministry_role?: unknown;
-  canPlannerManage?: boolean;
+  app_role?: unknown;
+  app_roles?: unknown;
 }): boolean {
-  if (input.canPlannerManage) return true;
-  return memberHasMinistryRole(input.ministry_role, 'Ведущий');
+  const primary = String(input.app_role ?? '').trim().toLowerCase();
+  if (primary === 'pastor') return true;
+  const extra = Array.isArray(input.app_roles) ? input.app_roles : [];
+  return extra.some((r) => String(r ?? '').trim().toLowerCase() === 'pastor');
+}
+
+export function canManageMediaSchedule(input: {
+  app_role?: unknown;
+  app_roles?: unknown;
+  ministry_role?: unknown;
+}): boolean {
+  const primary = String(input.app_role ?? '').trim().toLowerCase();
+  if (primary === 'admin') return true;
+  const extra = Array.isArray(input.app_roles) ? input.app_roles : [];
+  if (extra.some((r) => String(r ?? '').trim().toLowerCase() === 'admin')) return true;
+  return memberHasMinistryRole(input.ministry_role, 'Медиа менеджер');
 }

@@ -43,7 +43,9 @@ export function canManageMediaSchedule(
   ministryRole: unknown,
   roles?: Array<AuthRole | string | null | undefined>,
 ): boolean {
-  return canModerateCatalog(role, roles) || isMediaManager(ministryRole);
+  const normalized = normalizeRoles(role, roles);
+  if (normalized.some((r) => r.toLowerCase() === 'admin')) return true;
+  return isMediaManager(ministryRole);
 }
 
 export function assignmentStatusLabel(status: string): string {

@@ -1,16 +1,14 @@
 import type { Request, Response } from 'express';
 import { query } from '../config/db';
 import { notifyRealtime } from '../realtime/notify';
-import { loadRolePermissionsSettings } from '../services/rolePermissionsSettingsService';
 import {
   listMySundaySchedulePlans,
   listSundayScheduleMembers,
   listSundaySchedulePlans,
   patchSundayScheduleAssignments,
 } from '../services/sundayScheduleService';
-import { normalizeAppRole, normalizeAppRoles, type AppRole } from '../types/appRole';
-import { roleHasPermission } from '../types/appPermissions';
-import { sessionCanModerateCatalog, type SessionRoleSource } from '../types/appRole';
+import { rolesOfSession, type SessionRoleSource } from '../types/appRole';
+import { sessionCanModerateCatalog } from '../types/appRole';
 import {
   canManageSundaySchedule,
   canViewSundaySchedule,
@@ -28,19 +26,6 @@ function parseId(raw: unknown): number | null {
   const n = Number(raw);
   if (!Number.isInteger(n) || n <= 0) return null;
   return n;
-}
-
-function plannerSessionRoles(req: Request): AppRole[] {
-  const rawRoles = Array.isArray(req.authUserRoles) ? req.authUserRoles : [];
-  return normalizeAppRoles(rawRoles, req.authUserRole);
-}
-
-async function hasPlannerManagePermission(req: Request): Promise<boolean> {
-  const primaryRole = normalizeAppRole(req.authUserRole);
-  if (primaryRole === 'admin' || primaryRole === 'minister') return true;
-  if (plannerSessionRoles(req).some((role) => role === 'admin' || role === 'minister')) return true;
-  const permissions = await loadRolePermissionsSettings();
-  return roleHasPermission(permissions, plannerSessionRoles(req), 'planner.manage');
 }
 
 async function getMemberProfile(
@@ -89,15 +74,15 @@ async function ensureSundayScheduleView(req: Request, res: Response): Promise<nu
 async function ensureSundayScheduleManage(req: Request, res: Response): Promise<number | null> {
   const userId = await ensureAuth(req, res);
   if (userId == null) return null;
-  const canPlannerManage = await hasPlannerManagePermission(req);
-  const profile = await getMemberProfile(userId);
+  const r = req as AuthReq;
+  const sessionRoles = rolesOfSession(r);
   if (
     !canManageSundaySchedule({
-      ministry_role: profile?.ministry_role,
-      canPlannerManage,
+      app_role: r.authUserRole,
+      app_roles: sessionRoles,
     })
   ) {
-    res.status(403).json({ error: 'Недостаточно прав для управления расписанием' });
+    res.status(403).json({ error: 'Редактирование доступно только пастору' });
     return null;
   }
   return userId;
