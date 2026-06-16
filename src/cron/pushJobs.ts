@@ -6,6 +6,7 @@ import { DistributionService } from '../services/DistributionService';
 import { sendPush } from '../services/pushService';
 import { dispatchDueSermonFeedbackNotifications } from '../services/sermonFeedbackService';
 import { sendMediaScheduleReminders } from '../services/mediaScheduleService';
+import { sendMusicScheduleReminders } from '../services/musicScheduleService';
 
 type CuratorWeekKind = 'current' | 'next';
 
@@ -149,6 +150,25 @@ export function initPushCronJobs() {
       }
     },
     { timezone: process.env.MEDIA_SCHEDULE_REMINDER_TZ?.trim() || 'Europe/Moscow' },
+  );
+
+  /** Раз в сутки в 18:00 МСК: напоминания музыкальной команде о службе завтра. */
+  cron.schedule(
+    process.env.MUSIC_SCHEDULE_REMINDER_CRON ?? '0 18 * * *',
+    async () => {
+      if (process.env.DISABLE_MUSIC_SCHEDULE_REMINDER_CRON === 'true') {
+        return;
+      }
+      try {
+        const sent = await sendMusicScheduleReminders();
+        if (sent > 0) {
+          console.log(`[CRON] music schedule reminders sent: ${sent}`);
+        }
+      } catch (e) {
+        console.error('[CRON] music schedule reminders', e);
+      }
+    },
+    { timezone: process.env.MUSIC_SCHEDULE_REMINDER_TZ?.trim() || 'Europe/Moscow' },
   );
 
   /** Раз в 10 минут: по истечении 5 часов после собрания отправляем проповеднику комментарии к проповеди. */

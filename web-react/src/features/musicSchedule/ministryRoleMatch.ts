@@ -16,7 +16,6 @@ export function parseMinistryRoles(value: unknown): string[] {
   );
 }
 
-/** Совпадение с галочкой роли в карточке участника (ministry_role). */
 export function memberHasMinistryRole(ministryRole: unknown, matchRole: unknown): boolean {
   const target = normalizeMinistryToken(matchRole);
   if (!target) return false;
@@ -28,29 +27,11 @@ export function memberHasMinistryRole(ministryRole: unknown, matchRole: unknown)
   });
 }
 
-export function isMediaManager(ministryRole: unknown): boolean {
-  return parseMinistryRoles(ministryRole).some((part) => {
-    const p = normalizeMinistryToken(part);
-    return p.includes('медиа менеджер');
-  });
-}
-
 export function isMusicManager(ministryRole: unknown): boolean {
   return parseMinistryRoles(ministryRole).some((part) => {
     const p = normalizeMinistryToken(part);
     return p.includes('музыкальный менеджер') || p.includes('лидер поклонения');
   });
-}
-
-/** Направление служения «Медиа служение» (или другое с «медиа» в названии). */
-export function hasMediaMinistryDirection(ministryDirection: unknown): boolean {
-  const v = normalizeMinistryToken(ministryDirection);
-  if (!v) return false;
-  const target = normalizeMinistryToken('Медиа служение');
-  return v
-    .split(/[;,]/)
-    .map((s) => normalizeMinistryToken(s))
-    .some((s) => s === target || s.includes('медиа'));
 }
 
 export function hasMusicMinistryDirection(ministryDirection: unknown): boolean {
@@ -61,14 +42,6 @@ export function hasMusicMinistryDirection(ministryDirection: unknown): boolean {
     .split(/[;,]/)
     .map((s) => normalizeMinistryToken(s))
     .some((s) => s === target || s.includes('музык') || target.includes(s));
-}
-
-export function mediaRoleMemberMatchToken(role: {
-  name: string;
-  ministry_role_filter?: string | null;
-}): string {
-  const custom = role.ministry_role_filter?.trim();
-  return custom || role.name.trim();
 }
 
 export function musicRoleMemberMatchToken(role: {

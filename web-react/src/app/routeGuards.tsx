@@ -5,6 +5,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useAuthStore } from '../features/auth/authStore';
 import { canAccessStudio, canModerateSongCatalogSession } from '../features/auth/studioAccess';
 import { canViewMediaSchedule } from '../features/mediaSchedule/mediaAccess';
+import { canViewMusicSchedule } from '../features/musicSchedule/musicAccess';
 import { canViewAnySchedule, canViewSundaySchedule } from '../features/schedules/ministryScheduleAccess';
 import { SkeletonBox } from '@/components/ui/SkeletonBox';
 import {
@@ -160,6 +161,18 @@ export function RequireMediaMinistryAccess({ children }: { children: ReactNode }
   const meQ = useMe(Boolean(token));
   if (meQ.isLoading) return <RouteFallback />;
   if (!canViewMediaSchedule(role, meQ.data?.ministry_direction, roles)) {
+    return <Navigate to="/dashboard" replace />;
+  }
+  return <>{children}</>;
+}
+
+export function RequireMusicMinistryAccess({ children }: { children: ReactNode }) {
+  const role = useAuthStore((s) => s.role);
+  const roles = useAuthStore((s) => s.roles ?? [s.role]);
+  const token = useAuthStore((s) => s.token);
+  const meQ = useMe(Boolean(token));
+  if (meQ.isLoading) return <RouteFallback />;
+  if (!canViewMusicSchedule(role, meQ.data?.ministry_direction, roles)) {
     return <Navigate to="/dashboard" replace />;
   }
   return <>{children}</>;

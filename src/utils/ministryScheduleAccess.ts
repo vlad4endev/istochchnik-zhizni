@@ -1,9 +1,10 @@
-import { normalizeMinistryToken, parseMinistryRoles, memberHasMinistryRole, hasMediaMinistryDirection } from './ministryRoleMatch';
+import { normalizeMinistryToken, parseMinistryRoles, memberHasMinistryRole, hasMediaMinistryDirection, hasMusicMinistryDirection } from './ministryRoleMatch';
 
-export type ScheduleMinistryKey = 'media' | 'sunday';
+export type ScheduleMinistryKey = 'media' | 'music' | 'sunday';
 
 export const SCHEDULE_MINISTRY_LABELS: Record<ScheduleMinistryKey, string> = {
   media: 'Медиа служение',
+  music: 'Музыкальное служение',
   sunday: 'Воскресное служение',
 };
 
@@ -41,6 +42,16 @@ export function hasSundayMinistryRole(ministryRole: unknown): boolean {
   );
 }
 
+export function canViewMusicSchedule(input: {
+  ministry_direction?: unknown;
+  ministry_role?: unknown;
+  canModerateCatalog?: boolean;
+}): boolean {
+  if (input.canModerateCatalog) return true;
+  if (hasMusicMinistryDirection(input.ministry_direction)) return true;
+  return false;
+}
+
 export function listAccessibleScheduleMinistries(input: {
   ministry_direction?: unknown;
   ministry_role?: unknown;
@@ -55,6 +66,17 @@ export function listAccessibleScheduleMinistries(input: {
     memberHasMinistryRole(input.ministry_role, 'Медиа менеджер')
   ) {
     out.push('media');
+  }
+  if (
+    canViewMusicSchedule({
+      ministry_direction: input.ministry_direction,
+      ministry_role: input.ministry_role,
+      canModerateCatalog: input.canModerateCatalog,
+    }) ||
+    memberHasMinistryRole(input.ministry_role, 'Музыкальный менеджер') ||
+    memberHasMinistryRole(input.ministry_role, 'Лидер поклонения')
+  ) {
+    out.push('music');
   }
   if (
     canViewSundaySchedule({
@@ -95,6 +117,9 @@ export function canViewAnySchedule(input: {
   if (
     hasMediaMinistryDirection(input.ministry_direction) ||
     memberHasMinistryRole(input.ministry_role, 'Медиа менеджер') ||
+    hasMusicMinistryDirection(input.ministry_direction) ||
+    memberHasMinistryRole(input.ministry_role, 'Музыкальный менеджер') ||
+    memberHasMinistryRole(input.ministry_role, 'Лидер поклонения') ||
     canManageSundaySchedule({ app_role: input.app_role, app_roles: input.app_roles }) ||
     hasSundayMinistryDirection(input.ministry_direction) ||
     hasSundayMinistryRole(input.ministry_role)
@@ -127,4 +152,19 @@ export function canManageMediaSchedule(input: {
   const extra = Array.isArray(input.app_roles) ? input.app_roles : [];
   if (extra.some((r) => String(r ?? '').trim().toLowerCase() === 'admin')) return true;
   return memberHasMinistryRole(input.ministry_role, 'Медиа менеджер');
+}
+
+export function canManageMusicSchedule(input: {
+  app_role?: unknown;
+  app_roles?: unknown;
+  ministry_role?: unknown;
+}): boolean {
+  const primary = String(input.app_role ?? '').trim().toLowerCase();
+  if (primary === 'admin') return true;
+  const extra = Array.isArray(input.app_roles) ? input.app_roles : [];
+  if (extra.some((r) => String(r ?? '').trim().toLowerCase() === 'admin')) return true;
+  return (
+    memberHasMinistryRole(input.ministry_role, 'Музыкальный менеджер') ||
+    memberHasMinistryRole(input.ministry_role, 'Лидер поклонения')
+  );
 }

@@ -19,6 +19,7 @@ import {
   RequireFullMember,
   RequireMessengerAccess,
   RequireMediaMinistryAccess,
+  RequireMusicMinistryAccess,
   RequireAnyScheduleAccess,
   RequireSundayScheduleAccess,
   RequireSectionAccess,
@@ -189,6 +190,16 @@ const MediaSchedulePage = lazy(async () => {
 
 const MyMediaSchedulePage = lazy(async () => {
   const m = await import('../features/mediaSchedule/pages/MySchedulePage');
+  return { default: m.MySchedulePage };
+});
+
+const MusicSchedulePage = lazy(async () => {
+  const m = await import('../features/musicSchedule/pages/MusicSchedulePage');
+  return { default: m.MusicSchedulePage };
+});
+
+const MyMusicSchedulePage = lazy(async () => {
+  const m = await import('../features/musicSchedule/pages/MySchedulePage');
   return { default: m.MySchedulePage };
 });
 
@@ -488,6 +499,34 @@ export function AppRouter() {
           }
         />
         <Route
+          path="schedules/music"
+          element={
+            <BlockParishionerGuest>
+              <RequireFullMember>
+                <RequireMusicMinistryAccess>
+                  <Suspense fallback={<RouteFallback />}>
+                    <MusicSchedulePage />
+                  </Suspense>
+                </RequireMusicMinistryAccess>
+              </RequireFullMember>
+            </BlockParishionerGuest>
+          }
+        />
+        <Route
+          path="schedules/music/my"
+          element={
+            <BlockParishionerGuest>
+              <RequireFullMember>
+                <RequireMusicMinistryAccess>
+                  <Suspense fallback={<RouteFallback />}>
+                    <MyMusicSchedulePage />
+                  </Suspense>
+                </RequireMusicMinistryAccess>
+              </RequireFullMember>
+            </BlockParishionerGuest>
+          }
+        />
+        <Route
           path="schedules/sunday"
           element={
             <BlockParishionerGuest>
@@ -517,6 +556,8 @@ export function AppRouter() {
         />
         <Route path="media-schedule" element={<Navigate to="/schedules/media" replace />} />
         <Route path="media-schedule/my" element={<Navigate to="/schedules/media/my" replace />} />
+        <Route path="music-schedule" element={<Navigate to="/schedules/music" replace />} />
+        <Route path="music-schedule/my" element={<Navigate to="/schedules/music/my" replace />} />
         <Route
           path="songbook"
           element={

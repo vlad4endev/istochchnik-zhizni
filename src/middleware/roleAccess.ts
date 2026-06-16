@@ -56,12 +56,20 @@ const MEMBER_ALLOWED_PATCH =
 const MEMBER_ALLOWED_MEDIA_SCHEDULE_STATUS_PATCH =
   /^\/api\/media-schedule\/assignments\/\d+\/status\/?$/;
 
+/** Подтверждение/отказ по своему назначению в музыкальном расписании (проверка в контроллере). */
+const MEMBER_ALLOWED_MUSIC_SCHEDULE_STATUS_PATCH =
+  /^\/api\/music-schedule\/assignments\/\d+\/status\/?$/;
+
 /** Назначения ведущего/проповедника — проверка pastor/admin в контроллере. */
 const SUNDAY_SCHEDULE_PLAN_PATCH = /^\/api\/sunday-schedule\/plans\/\d+\/?$/;
 const SUNDAY_SCHEDULE_DATE_PATCH = /^\/api\/sunday-schedule\/dates\/\d{4}-\d{2}-\d{2}\/?$/;
 
 function isMediaScheduleAssignmentStatusPatch(method: string, path: string): boolean {
   return method === 'PATCH' && MEMBER_ALLOWED_MEDIA_SCHEDULE_STATUS_PATCH.test(path);
+}
+
+function isMusicScheduleAssignmentStatusPatch(method: string, path: string): boolean {
+  return method === 'PATCH' && MEMBER_ALLOWED_MUSIC_SCHEDULE_STATUS_PATCH.test(path);
 }
 
 function isSundaySchedulePlanPatch(method: string, path: string): boolean {
@@ -202,10 +210,16 @@ function isStandardParticipantMutation(
     if (isMediaScheduleAssignmentStatusPatch(method, path) && authUserId) {
       return true;
     }
+    if (isMusicScheduleAssignmentStatusPatch(method, path) && authUserId) {
+      return true;
+    }
     return false;
   }
 
   if (isMediaScheduleAssignmentStatusPatch(method, path) && authUserId) {
+    return true;
+  }
+  if (isMusicScheduleAssignmentStatusPatch(method, path) && authUserId) {
     return true;
   }
   if (role !== 'member' && role !== 'pastor' && role !== 'musician' && role !== 'editor') {
@@ -255,6 +269,11 @@ export function enforceRoleAccess(req: Request, res: Response, next: NextFunctio
   }
 
   if (isMediaScheduleAssignmentStatusPatch(req.method, fullPath)) {
+    next();
+    return;
+  }
+
+  if (isMusicScheduleAssignmentStatusPatch(req.method, fullPath)) {
     next();
     return;
   }

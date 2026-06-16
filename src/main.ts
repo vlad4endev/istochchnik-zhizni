@@ -14,6 +14,7 @@ import { pool } from './config/db';
 import { initDb } from './config/initDb';
 import { ensurePrayerCycleAnchor } from './config/prayerCycleAnchor';
 import { ensureMediaScheduleSchema } from './services/mediaScheduleMigrations';
+import { ensureMusicScheduleSchema } from './services/musicScheduleMigrations';
 import { resolveAuthSession } from './middleware/authSession';
 import { enforceRoleAccess, resolveUserRole } from './middleware/roleAccess';
 import routes from './routes';
@@ -32,6 +33,7 @@ import settingsRoutes from './routes/settingsRoutes';
 import messengerRoutes from './routes/messengerRoutes';
 import servicePlannerRoutes from './routes/servicePlannerRoutes';
 import mediaScheduleRoutes from './routes/mediaScheduleRoutes';
+import musicScheduleRoutes from './routes/musicScheduleRoutes';
 import sundayScheduleRoutes from './routes/sundayScheduleRoutes';
 import analyticsRoutes from './routes/analyticsRoutes';
 import impersonationRoutes from './routes/impersonationRoutes';
@@ -360,6 +362,7 @@ app.use('/api/calendar', calendarRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/messenger', messengerRoutes);
 app.use('/api/media-schedule', mediaScheduleRoutes);
+app.use('/api/music-schedule', musicScheduleRoutes);
 app.use('/api/sunday-schedule', sundayScheduleRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api', servicePlannerRoutes);
@@ -480,6 +483,12 @@ async function start(): Promise<void> {
           '[media-schedule] ensureMediaScheduleSchema failed (run: node dist/cli/applyMediaScheduleMigrations.js):',
           e,
         );
+      }
+      try {
+        await ensureMusicScheduleSchema();
+        console.log('[music-schedule] schema ensured');
+      } catch (e) {
+        console.warn('[music-schedule] ensureMusicScheduleSchema failed:', e);
       }
     }
   }

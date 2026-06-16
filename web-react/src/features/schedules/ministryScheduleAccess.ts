@@ -6,11 +6,13 @@ import {
   memberHasMinistryRole,
   normalizeMinistryToken,
 } from '../mediaSchedule/ministryRoleMatch';
+import { hasMusicMinistryDirection, isMusicManager } from '../musicSchedule/ministryRoleMatch';
 
-export type ScheduleMinistryKey = 'media' | 'sunday';
+export type ScheduleMinistryKey = 'media' | 'music' | 'sunday';
 
 export const SCHEDULE_MINISTRY_LABELS: Record<ScheduleMinistryKey, string> = {
   media: 'Медиа служение',
+  music: 'Музыкальное служение',
   sunday: 'Воскресное служение',
 };
 
@@ -72,6 +74,14 @@ export function canViewMediaSchedule(
   return canModerateSongCatalogSession(role, roles) || hasMediaMinistryDirection(ministryDirection);
 }
 
+export function canViewMusicSchedule(
+  role: AuthRole | undefined,
+  ministryDirection: unknown,
+  roles?: Array<AuthRole | string | null | undefined>,
+): boolean {
+  return canModerateSongCatalogSession(role, roles) || hasMusicMinistryDirection(ministryDirection);
+}
+
 export function canViewSundaySchedule(
   role: AuthRole | undefined,
   ministryDirection: unknown,
@@ -95,6 +105,7 @@ export function canViewAnySchedule(
 ): boolean {
   return (
     canViewMediaSchedule(role, ministryDirection, roles) ||
+    canViewMusicSchedule(role, ministryDirection, roles) ||
     canViewSundaySchedule(role, ministryDirection, ministryRole, roles)
   );
 }
@@ -107,6 +118,7 @@ export function listAccessibleScheduleMinistries(
 ): ScheduleMinistryKey[] {
   const out: ScheduleMinistryKey[] = [];
   if (canViewMediaSchedule(role, ministryDirection, roles)) out.push('media');
+  if (canViewMusicSchedule(role, ministryDirection, roles)) out.push('music');
   if (canViewSundaySchedule(role, ministryDirection, ministryRole, roles)) out.push('sunday');
   return out;
 }
@@ -119,6 +131,14 @@ export function canManageMediaSchedule(
   return isAdminAppRole(role, roles) || isMediaManager(ministryRole);
 }
 
+export function canManageMusicSchedule(
+  role: AuthRole | undefined,
+  ministryRole: unknown,
+  roles?: Array<AuthRole | string | null | undefined>,
+): boolean {
+  return isAdminAppRole(role, roles) || isMusicManager(ministryRole);
+}
+
 export function canManageSundaySchedule(
   role: AuthRole | undefined,
   _ministryRole: unknown,
@@ -128,5 +148,7 @@ export function canManageSundaySchedule(
 }
 
 export function schedulePathForMinistry(key: ScheduleMinistryKey): string {
-  return key === 'media' ? '/schedules/media' : '/schedules/sunday';
+  if (key === 'media') return '/schedules/media';
+  if (key === 'music') return '/schedules/music';
+  return '/schedules/sunday';
 }
