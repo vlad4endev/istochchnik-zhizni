@@ -52,6 +52,10 @@ export function resolveUserRole(req: Request, _res: Response, next: NextFunction
 const MEMBER_ALLOWED_PATCH =
   /^\/api\/calendar\/(?:cycle\/collection-claims|next-week\/collection|member-cycle-prayer)\/?$/;
 
+/** Подтверждение/отказ по своему назначению в медиа-расписании (проверка в контроллере). */
+const MEMBER_ALLOWED_MEDIA_SCHEDULE_STATUS_PATCH =
+  /^\/api\/media-schedule\/assignments\/\d+\/status\/?$/;
+
 /** То же для координаторов: POST улучшения текста нужды — проверка роли в контроллере. */
 const MEMBER_ALLOWED_CALENDAR_POST =
   /^\/api\/calendar\/(?:prayer-need\/improve-text|prayer-section\/visit)\/?$/;
@@ -224,6 +228,11 @@ export function enforceRoleAccess(req: Request, res: Response, next: NextFunctio
   }
 
   if (req.method === 'PATCH' && MEMBER_ALLOWED_PATCH.test(fullPath)) {
+    next();
+    return;
+  }
+
+  if (req.method === 'PATCH' && MEMBER_ALLOWED_MEDIA_SCHEDULE_STATUS_PATCH.test(fullPath)) {
     next();
     return;
   }
