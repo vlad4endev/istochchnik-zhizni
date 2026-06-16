@@ -65,8 +65,17 @@ const upload = multer({
 
 const authLoginRateLimit = createIpRateLimiter({
   windowMs: 15 * 60 * 1000,
-  maxRequests: 10,
-  // SECURITY FIX: ограничиваем брутфорс попытки логина по IP.
+  maxRequests: 12,
+  keyPrefix: 'auth-login',
+  // Лимит по IP + телефону: за одним NAT сидит вся церковь — общий потолок по IP блокировал всех после ~10 попыток.
+  resolveKeySuffix: (req) => {
+    const body = req.body;
+    if (!body || typeof body !== 'object') return 'phone:unknown';
+    const raw =
+      (body as Record<string, unknown>).phone_number ?? (body as Record<string, unknown>).login;
+    const digits = typeof raw === 'string' ? raw.replace(/\D+/g, '') : '';
+    return digits ? `phone:${digits}` : 'phone:unknown';
+  },
   message: 'Too many login attempts. Please try again later.',
 });
 

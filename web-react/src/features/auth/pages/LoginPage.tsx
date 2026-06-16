@@ -172,6 +172,18 @@ export function LoginPage() {
         setStatusIsError(true);
         return;
       }
+      if (response.status === 429) {
+        const retryRaw = response.headers['retry-after'];
+        const retrySec =
+          typeof retryRaw === 'string' ? parseInt(retryRaw, 10) : Number(retryRaw);
+        const wait =
+          Number.isFinite(retrySec) && retrySec > 0 ? formatRetryWait(retrySec) : '15 мин';
+        setStatusText(
+          `Слишком много попыток входа. Подождите ${wait} и попробуйте снова (не нажимайте «Войти» много раз подряд).`,
+        );
+        setStatusIsError(true);
+        return;
+      }
       if (response.status === 428 && response.data?.code === 'password_reset_required') {
         setShowResetForm(true);
         setAdminForcedResetMode(true);

@@ -6,6 +6,8 @@ type RateLimitOptions = {
   maxRequests: number;
   message?: string;
   keyPrefix?: string;
+  /** Доп. сегмент ключа (например телефон на /login), чтобы один NAT не блокировал всех. */
+  resolveKeySuffix?: (req: Request) => string;
 };
 
 let redisClient: Redis | null = null;
@@ -71,9 +73,11 @@ function redisStatus(client: Redis): string {
   return String((client as unknown as { status?: string }).status ?? '');
 }
 
-function clientKey(req: Request): string {
+function clientKey(req: Request, suffix?: string): string {
   const ip = req.ip || req.socket.remoteAddress || 'unknown';
-  return `${ip}:${req.method}:${req.path}`;
+  const base = `${ip}:${req.method}:${req.path}`;
+  const trimmedSuffix = suffix?.trim();
+  return trimmedSuffix ? `${base}:${trimmedSuffix}` : base;
 }
 
 function isRedisEnabled(): boolean {
@@ -188,9 +192,11 @@ export function createIpRateLimiter(options: RateLimitOptions) {
   const maxRequests = Math.max(1, Math.floor(options.maxRequests));
   const message = options.message ?? 'Too many requests';
   const keyPrefix = options.keyPrefix ?? 'rate-limit';
+  const resolveKeySuffix = options.resolveKeySuffix;
 
   return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-    const fullKey = `${keyPrefix}:${clientKey(req)}`;
+    const suffix = resolveKeySuffix?.(req);
+    const fullKey = `${keyPrefix}:${clientKey(req, suffix)}`;
     const redis = await getRedisClient();
     if (!redis) {
       warnInMemoryFallback('Redis unavailable or not configured');

@@ -235,11 +235,19 @@ function getPhoneDigitsVariants(phoneOrDigits: string): string[] {
   }
 
   const variants = new Set<string>([digits]);
-  if (digits.length === 11 && digits.startsWith('8')) {
-    variants.add(`7${digits.slice(1)}`);
+
+  // Российские номера: в БД часто 10 цифр (902…), в форме — +7 (902)… → 7902…
+  if (digits.length === 11 && (digits.startsWith('7') || digits.startsWith('8'))) {
+    const national = digits.slice(1);
+    if (national.length === 10) {
+      variants.add(national);
+      variants.add(`7${national}`);
+      variants.add(`8${national}`);
+    }
   }
-  if (digits.length === 11 && digits.startsWith('7')) {
-    variants.add(`8${digits.slice(1)}`);
+  if (digits.length === 10) {
+    variants.add(`7${digits}`);
+    variants.add(`8${digits}`);
   }
 
   return Array.from(variants);
