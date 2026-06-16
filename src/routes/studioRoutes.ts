@@ -17,8 +17,11 @@ import {
   performanceGet,
   postAiChordPlacement,
   postAiSongCleanup,
+  postServicePlanSongPick,
+  postServicePlanSongPickApply,
   putVersion,
   recentSongsList,
+  servicePlanSongUsage,
   setlistItemsAdd,
   setlistItemsList,
   setlistItemsRemove,
@@ -36,6 +39,9 @@ const router = Router();
 router.use(requireAuthSession);
 
 router.get('/recent-songs', recentSongsList);
+router.get('/service-plan-song-usage', servicePlanSongUsage);
+router.post('/service-plan-song-pick', postServicePlanSongPick);
+router.post('/service-plan-song-pick/apply', postServicePlanSongPickApply);
 router.get('/imported-songs', importedSongsList);
 router.get('/public-catalog-sync-status', publicCatalogSyncStatus);
 router.post('/sync-to-public-catalog', syncToPublicCatalog);

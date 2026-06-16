@@ -51,6 +51,11 @@ const StudioInstrumentsPage = lazy(async () => {
   return { default: m.InstrumentsPage };
 });
 
+const StudioSongUsagePage = lazy(async () => {
+  const m = await import('../features/studio/pages/ServicePlanSongUsagePage');
+  return { default: m.ServicePlanSongUsagePage };
+});
+
 const StudioEditor = lazy(async () => {
   const m = await import('../features/songbook/studio/StudioEditor');
   return { default: m.StudioEditor };
@@ -174,6 +179,14 @@ export function AppRouterStudio() {
             element={
               <Suspense fallback={<RouteFallback />}>
                 <StudioSetlistDetailPage />
+              </Suspense>
+            }
+          />
+          <Route
+            path="song-usage"
+            element={
+              <Suspense fallback={<RouteFallback />}>
+                <StudioSongUsagePage />
               </Suspense>
             }
           />

@@ -1,11 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { LuChartColumnIncreasing } from 'react-icons/lu';
 
 import { emitAppToast } from '../../../lib/uiFeedback';
 import { SongListSkeleton } from '@/components/skeletons/SongListSkeleton';
 import { createSetlist, deleteSetlist, fetchSetlists } from '../api';
-import { studioSetlistDetailPath, studioSetlistPerformPath, useStudioModuleSurface } from '../studioPaths';
+import { ServicePlanSongPickButton } from '../components/ServicePlanSongPickButton';
+import { studioSetlistDetailPath, studioSetlistPerformPath, studioSongUsagePath, useStudioModuleSurface } from '../studioPaths';
 
 export function SetlistsPage() {
   const surface = useStudioModuleSurface();
@@ -48,6 +50,14 @@ export function SetlistsPage() {
         <p className={`text-sm leading-relaxed ${inStudioShell ? 'text-[var(--studio-editor-mute)]' : 'text-[var(--text-secondary)]'}`}>
           Создайте программу, добавьте песни, затем откройте выступление или PDF.
         </p>
+        <Link
+          to={studioSongUsagePath(surface)}
+          className="inline-flex min-h-[40px] items-center gap-2 rounded-xl border border-[var(--studio-editor-border)] bg-[var(--studio-editor-block)] px-3 text-sm font-semibold text-[var(--studio-editor-accent)] shadow-sm transition hover:bg-[var(--studio-nav-active-bg)]"
+        >
+          <LuChartColumnIncreasing className="h-4 w-4" aria-hidden />
+          Аналитика песен в служениях
+        </Link>
+        <ServicePlanSongPickButton />
       </header>
 
       <section className="space-y-3" aria-labelledby="setlists-new-heading">

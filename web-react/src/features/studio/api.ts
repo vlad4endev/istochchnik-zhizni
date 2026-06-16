@@ -206,6 +206,102 @@ export async function fetchRecentSongs(limit = 8): Promise<SongListItem[]> {
   return data;
 }
 
+export type ServicePlanSongUsageItem = {
+  song_id: number;
+  title: string;
+  song_number: number | null;
+  default_key: string | null;
+  usage_count: number;
+  last_used_date: string | null;
+  first_used_date: string | null;
+};
+
+export type ServicePlanSongRecentUsage = {
+  song_id: number;
+  title: string;
+  song_number: number | null;
+  default_key: string | null;
+  service_plan_id: number;
+  service_date: string;
+  plan_status: string;
+  leader_name: string | null;
+};
+
+export type ServicePlanSongUsageReport = {
+  period_months: number | null;
+  stats: {
+    services_with_songs: number;
+    total_song_slots: number;
+    unique_songs: number;
+    avg_songs_per_service: number;
+  };
+  top_songs: ServicePlanSongUsageItem[];
+  recent_usages: ServicePlanSongRecentUsage[];
+  stale_songs: ServicePlanSongUsageItem[];
+};
+
+export type ServicePlanSongUsagePeriod = 3 | 6 | 12 | 'all';
+
+export async function fetchServicePlanSongUsage(
+  months: ServicePlanSongUsagePeriod = 12,
+): Promise<ServicePlanSongUsageReport> {
+  const param = months === 'all' ? 'all' : String(months);
+  const { data } = await apiClient.get<ServicePlanSongUsageReport>(
+    `${STUDIO}/service-plan-song-usage?months=${encodeURIComponent(param)}`,
+  );
+  return data;
+}
+
+export type ServicePlanSongPickResult = {
+  plan: {
+    id: number;
+    service_date: string;
+    start_time: string;
+    template_name: string | null;
+    status: string;
+  };
+  sermon: {
+    topic: string;
+    scripture: string;
+    preacher_name: string | null;
+  };
+  song_blocks: Array<{
+    block_id: number;
+    order_index: number;
+    title: string;
+    current_song_id: number | null;
+    current_song_title: string | null;
+  }>;
+  picks: Array<{
+    block_id: number;
+    order_index: number;
+    song_id: number;
+    song_title: string;
+    song_number: number | null;
+    default_key: string | null;
+    reason: string;
+  }>;
+  ai_summary: string;
+};
+
+export async function pickServicePlanSongs(planId?: number): Promise<ServicePlanSongPickResult> {
+  const { data } = await apiClient.post<ServicePlanSongPickResult>(`${STUDIO}/service-plan-song-pick`, {
+    plan_id: planId ?? undefined,
+  });
+  return data;
+}
+
+export async function applyServicePlanSongPicks(
+  planId: number,
+  assignments: Array<{ block_id: number; song_id: number }>,
+): Promise<{ applied: number }> {
+  const { data } = await apiClient.post<{ applied: number }>(`${STUDIO}/service-plan-song-pick/apply`, {
+    plan_id: planId,
+    assignments,
+  });
+  return data;
+}
+
 export async function patchSetlist(
   id: number,
   body: Partial<{ title: string; event_date: string | null; is_public: boolean }>,

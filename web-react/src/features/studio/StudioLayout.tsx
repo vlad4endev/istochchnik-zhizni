@@ -1,5 +1,5 @@
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { LuArrowLeft, LuBookOpen, LuCirclePlus, LuEllipsis, LuGuitar, LuListMusic, LuMusic2 } from 'react-icons/lu';
+import { LuArrowLeft, LuBookOpen, LuChartColumnIncreasing, LuCirclePlus, LuEllipsis, LuGuitar, LuListMusic, LuMusic2 } from 'react-icons/lu';
 
 import { useAuthStore } from '../auth/authStore';
 import { canModerateSongCatalogSession } from '../auth/studioAccess';
@@ -93,6 +93,14 @@ function buildNavGroups(showAddSong: boolean): NavGroup[] {
           Icon: LuListMusic,
           mobilePrimary: true,
         },
+        {
+          to: '/studio/song-usage',
+          label: 'Аналитика песен',
+          shortLabel: 'Аналитика',
+          hint: 'Какие песни чаще поём в программах служений',
+          Icon: LuChartColumnIncreasing,
+          mobilePrimary: false,
+        },
       ],
     },
     {
@@ -122,6 +130,7 @@ function studioRouteTitle(pathname: string): string {
   if (pathname.startsWith('/studio/my-songs')) return 'Мои версии';
   if (pathname.includes('/perform')) return 'Выступление';
   if (pathname.startsWith('/studio/setlists')) return 'Сетлисты';
+  if (pathname.startsWith('/studio/song-usage')) return 'Аналитика песен';
   if (pathname.startsWith('/studio/instruments')) return 'Инструменты';
   return 'Студия';
 }

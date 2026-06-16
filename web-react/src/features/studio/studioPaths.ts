@@ -40,6 +40,10 @@ export function studioSetlistPerformPath(surface: StudioModuleSurface, id: numbe
   return surface === 'songbook' ? `/songbook/setlists/${id}/perform` : `/studio/setlists/${id}/perform`;
 }
 
+export function studioSongUsagePath(surface: StudioModuleSurface): string {
+  return surface === 'songbook' ? '/songbook/song-usage' : '/studio/song-usage';
+}
+
 /** База путей для страниц, общих для `/songbook/...` и `/studio/...`. */
 export function useStudioModuleSurface(): StudioModuleSurface {
   const { pathname } = useLocation();

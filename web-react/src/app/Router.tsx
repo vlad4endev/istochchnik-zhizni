@@ -130,6 +130,11 @@ const StudioInstrumentsPage = lazy(async () => {
   return { default: m.InstrumentsPage };
 });
 
+const StudioSongUsagePage = lazy(async () => {
+  const m = await import('../features/studio/pages/ServicePlanSongUsagePage');
+  return { default: m.ServicePlanSongUsagePage };
+});
+
 const SongbookPage = lazy(async () => {
   const m = await import('../features/songbook/pages/SongbookPage');
   return { default: m.SongbookPage };
@@ -281,6 +286,14 @@ export function AppRouter() {
             element={
               <Suspense fallback={<RouteFallback />}>
                 <StudioSetlistDetailPage />
+              </Suspense>
+            }
+          />
+          <Route
+            path="song-usage"
+            element={
+              <Suspense fallback={<RouteFallback />}>
+                <StudioSongUsagePage />
               </Suspense>
             }
           />
@@ -535,6 +548,16 @@ export function AppRouter() {
               <RequireStudioAccess>
                 <Suspense fallback={<RouteFallback />}>
                   <StudioSetlistsPage />
+                </Suspense>
+              </RequireStudioAccess>
+            }
+          />
+          <Route
+            path="song-usage"
+            element={
+              <RequireStudioAccess>
+                <Suspense fallback={<RouteFallback />}>
+                  <StudioSongUsagePage />
                 </Suspense>
               </RequireStudioAccess>
             }

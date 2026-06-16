@@ -39,6 +39,12 @@ import {
 } from '../services/studioService';
 import { AiAgentError, improveChordPlacementWithAi } from '../services/studioAiChordService';
 import { cleanupSongWithAi } from '../services/studioAiCleanupService';
+import { getServicePlanSongUsageReport } from '../services/studioSongUsageService';
+import {
+  applyServicePlanSongPicks,
+  pickSongsForNearestServicePlan,
+  AiAgentError as SongPickAiError,
+} from '../services/studioSongPickService';
 
 type AuthReq = Request & SessionRoleSource & { authUserId?: number; authUserRole?: AppRole };
 
@@ -254,6 +260,102 @@ export async function instrumentsPatch(req: Request, res: Response): Promise<voi
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: 'Ошибка' });
+  }
+}
+
+/** POST /api/studio/service-plan-song-pick — ИИ-подбор песен под ближайшую программу. */
+export async function postServicePlanSongPick(req: Request, res: Response): Promise<void> {
+  try {
+    const r = req as AuthReq;
+    if (!(await ensureStudio(r, res))) return;
+
+    const body = (req.body ?? {}) as { plan_id?: unknown };
+    const planIdRaw = body.plan_id;
+    const planId =
+      planIdRaw == null
+        ? undefined
+        : Number.isInteger(Number(planIdRaw)) && Number(planIdRaw) > 0
+          ? Number(planIdRaw)
+          : null;
+    if (planIdRaw != null && planId === null) {
+      res.status(400).json({ error: 'Некорректный plan_id' });
+      return;
+    }
+
+    const result = await pickSongsForNearestServicePlan(planId ?? undefined);
+    res.json(result);
+  } catch (e) {
+    if (e instanceof SongPickAiError) {
+      const mapped = mapStudioAiError(e, 'ИИ недоступен');
+      if (mapped) {
+        res.status(mapped.status).json(mapped.body);
+        return;
+      }
+    }
+    const msg = e instanceof Error ? e.message : 'Не удалось подобрать песни';
+    const status = /не найден|нет предстоящ|заполните|нет музыкальных|нет опубликованных/i.test(msg) ? 400 : 500;
+    console.error('[studio] service-plan-song-pick error:', e);
+    res.status(status).json({ error: msg });
+  }
+}
+
+/** POST /api/studio/service-plan-song-pick/apply — записать подобранные песни в блоки программы. */
+export async function postServicePlanSongPickApply(req: Request, res: Response): Promise<void> {
+  try {
+    const r = req as AuthReq;
+    if (!(await ensureStudio(r, res))) return;
+
+    const body = (req.body ?? {}) as {
+      plan_id?: unknown;
+      assignments?: unknown;
+    };
+    const planId = Number(body.plan_id);
+    if (!Number.isInteger(planId) || planId <= 0) {
+      res.status(400).json({ error: 'Нужен plan_id' });
+      return;
+    }
+    const raw = Array.isArray(body.assignments) ? body.assignments : [];
+    const assignments: Array<{ block_id: number; song_id: number }> = [];
+    for (const item of raw) {
+      if (!item || typeof item !== 'object') continue;
+      const block_id = Number((item as { block_id?: unknown }).block_id);
+      const song_id = Number((item as { song_id?: unknown }).song_id);
+      if (Number.isInteger(block_id) && block_id > 0 && Number.isInteger(song_id) && song_id > 0) {
+        assignments.push({ block_id, song_id });
+      }
+    }
+    if (!assignments.length) {
+      res.status(400).json({ error: 'Нужен непустой assignments: [{ block_id, song_id }]' });
+      return;
+    }
+
+    const result = await applyServicePlanSongPicks(r.authUserId!, planId, assignments);
+    res.json(result);
+  } catch (e) {
+    console.error('[studio] service-plan-song-pick apply error:', e);
+    res.status(500).json({ error: 'Не удалось применить подбор' });
+  }
+}
+
+/** GET /api/studio/service-plan-song-usage — аналитика песен из программ служений. */
+export async function servicePlanSongUsage(req: Request, res: Response): Promise<void> {
+  try {
+    const r = req as AuthReq;
+    if (!(await ensureStudio(r, res))) return;
+
+    const raw = req.query.months;
+    let periodMonths: number | null = 12;
+    if (raw === 'all' || raw === '0') {
+      periodMonths = null;
+    } else if (typeof raw === 'string') {
+      const n = Number(raw);
+      if (Number.isInteger(n) && n > 0 && n <= 120) periodMonths = n;
+    }
+
+    res.json(await getServicePlanSongUsageReport(periodMonths));
+  } catch (e) {
+    console.error('[studio] service-plan-song-usage error:', e);
+    res.status(500).json({ error: 'Не удалось загрузить аналитику' });
   }
 }
 
