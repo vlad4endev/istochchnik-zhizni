@@ -52,6 +52,8 @@
     "db:diagnose:auth:docker": "docker compose exec -T api node dist/cli/diagnoseAuth.js",
     "db:reset-password": "npm run build && node dist/cli/resetMemberPassword.js",
     "db:reset-password:docker": "docker compose exec -T api node dist/cli/resetMemberPassword.js",
+    "db:upsert-admin": "npm run build && node dist/cli/upsertAdminMember.js",
+    "db:upsert-admin:docker": "docker compose exec -T api node dist/cli/upsertAdminMember.js",
     "db:repair:catalog:docker": "docker compose exec -T api node dist/cli/repairAllCatalogSongs.js",
     "analytics:dedupe": "npx ts-node scripts/cleanupAnalyticsDuplicates.ts",
     "analytics:dedupe:apply": "npx ts-node scripts/cleanupAnalyticsDuplicates.ts --apply",

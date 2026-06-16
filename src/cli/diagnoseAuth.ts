@@ -7,26 +7,7 @@
 import pg from 'pg';
 
 import { loadEnvFromDotenv } from './loadEnv';
-
-function phoneDigitsVariants(phoneOrDigits: string): string[] {
-  const digits = phoneOrDigits.replace(/\D+/g, '');
-  if (!digits) return [];
-
-  const variants = new Set<string>([digits]);
-  if (digits.length === 11 && (digits.startsWith('7') || digits.startsWith('8'))) {
-    const national = digits.slice(1);
-    if (national.length === 10) {
-      variants.add(national);
-      variants.add(`7${national}`);
-      variants.add(`8${national}`);
-    }
-  }
-  if (digits.length === 10) {
-    variants.add(`7${digits}`);
-    variants.add(`8${digits}`);
-  }
-  return Array.from(variants);
-}
+import { phoneDigitsVariants } from './phoneDigits';
 
 function buildClient(): pg.Client {
   loadEnvFromDotenv();
