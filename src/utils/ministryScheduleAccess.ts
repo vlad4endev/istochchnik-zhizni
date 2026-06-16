@@ -93,9 +93,12 @@ export function canManageSundaySchedule(input: {
   app_roles?: unknown;
 }): boolean {
   const primary = String(input.app_role ?? '').trim().toLowerCase();
-  if (primary === 'pastor') return true;
+  if (primary === 'pastor' || primary === 'admin') return true;
   const extra = Array.isArray(input.app_roles) ? input.app_roles : [];
-  return extra.some((r) => String(r ?? '').trim().toLowerCase() === 'pastor');
+  return extra.some((r) => {
+    const v = String(r ?? '').trim().toLowerCase();
+    return v === 'pastor' || v === 'admin';
+  });
 }
 
 export function canManageMediaSchedule(input: {

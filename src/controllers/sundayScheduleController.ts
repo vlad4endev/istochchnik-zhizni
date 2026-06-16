@@ -82,7 +82,7 @@ async function ensureSundayScheduleManage(req: Request, res: Response): Promise<
       app_roles: sessionRoles,
     })
   ) {
-    res.status(403).json({ error: 'Редактирование доступно только пастору' });
+    res.status(403).json({ error: 'Редактирование доступно только пастору и администратору' });
     return null;
   }
   return userId;

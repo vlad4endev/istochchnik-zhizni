@@ -124,7 +124,7 @@ export function canManageSundaySchedule(
   _ministryRole: unknown,
   roles?: Array<AuthRole | string | null | undefined>,
 ): boolean {
-  return isPastorAppRole(role, roles);
+  return isPastorAppRole(role, roles) || isAdminAppRole(role, roles);
 }
 
 export function schedulePathForMinistry(key: ScheduleMinistryKey): string {
