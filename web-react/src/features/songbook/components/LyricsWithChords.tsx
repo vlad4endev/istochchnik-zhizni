@@ -1,7 +1,4 @@
-import {
-  normalizeDetachedChordBeforeCyrillicInText,
-  normalizeSplitWordChordsInText,
-} from '../addSong/chordProConversion';
+import { polishSongContent } from '../addSong/polishSongContent';
 import { transposeChordSymbol } from '../chordUtils';
 import { parseSectionTitle, stripHiddenChordProDirectives } from '../utils/sectionMarkers';
 import { SongRenderer } from '../../../components/shared/SongRenderer';
@@ -33,26 +30,6 @@ function normalizeChordSlash(input: string): string {
   // Some imported sources escape slash as backslash in chord baselines, e.g. "H\\D#".
   // Normalize to "H/D#" so chord parser can recognize it.
   return input.replace(/\\+/g, '/');
-}
-
-function stripImportedSongbookHeader(input: string): string {
-  const source = typeof input === 'string' ? input : '';
-  if (!source.trim()) return source;
-  const lines = source.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n');
-  const l0 = (lines[0] ?? '').trim();
-  const l1 = (lines[1] ?? '').trim();
-
-  const looksLikeTitleLine = l0.length > 0 && (/[🎵♪]/.test(l0) || l0.length <= 80);
-  const looksLikeSongbookLine =
-    l1.length > 0 &&
-    /(сборник\s+песен|источник\s+жизни|«источник\s+жизни»|source\s+of\s+life)/i.test(l1);
-
-  if (!looksLikeTitleLine || !looksLikeSongbookLine) return source;
-
-  let cut = 2;
-  // skip additional empty lines after header
-  while (cut < lines.length && !lines[cut]?.trim()) cut += 1;
-  return lines.slice(cut).join('\n');
 }
 
 type Props = {
@@ -87,12 +64,8 @@ export function LyricsWithChords({
       chordTone={chordTone}
       parseSectionTitle={parseSectionTitle}
       preprocessText={(source) =>
-        normalizeDetachedChordBeforeCyrillicInText(
-          normalizeSplitWordChordsInText(
-            stripImportedSongbookHeader(
-              normalizeChordSlash(stripHiddenChordProDirectives(decodeHtmlEntities(source))),
-            ),
-          ),
+        polishSongContent(
+          normalizeChordSlash(stripHiddenChordProDirectives(decodeHtmlEntities(source))),
         )
       }
       transposeChordSymbol={transposeChordSymbol}

@@ -418,7 +418,6 @@ export function convertStackedChordsToChordPro(raw: string): string {
 
   while (i < lines.length) {
     const line = lines[i];
-    const next = lines[i + 1];
 
     if (line.trim() === '') {
       out.push('');
@@ -426,16 +425,27 @@ export function convertStackedChordsToChordPro(raw: string): string {
       continue;
     }
 
-    if (
-      next !== undefined &&
-      isChordOnlyLine(line) &&
-      !looksLikeChordPro(line) &&
-      !isChordOnlyLine(next) &&
-      hasLyricLetters(next)
-    ) {
-      out.push(mergeChordLineWithLyrics(line, next));
-      i += 2;
-      continue;
+    if (!looksLikeChordPro(line) && isChordOnlyLine(line)) {
+      let chordIdx = i;
+      let j = i + 1;
+      while (j < lines.length && lines[j]?.trim() === '') j += 1;
+      while (j < lines.length && isChordOnlyLine(lines[j] ?? '') && !looksLikeChordPro(lines[j] ?? '')) {
+        chordIdx = j;
+        j += 1;
+        while (j < lines.length && lines[j]?.trim() === '') j += 1;
+      }
+      const lyricLine = lines[j];
+      if (
+        lyricLine !== undefined &&
+        lyricLine.trim() !== '' &&
+        !looksLikeChordPro(lyricLine) &&
+        !isChordOnlyLine(lyricLine) &&
+        hasLyricLetters(lyricLine)
+      ) {
+        out.push(mergeChordLineWithLyrics(lines[chordIdx] ?? line, lyricLine));
+        i = j + 1;
+        continue;
+      }
     }
 
     out.push(line);

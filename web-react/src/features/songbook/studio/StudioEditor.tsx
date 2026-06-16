@@ -27,6 +27,7 @@ import { SkeletonBox } from '@/components/ui/SkeletonBox';
 import { keys } from '@/lib/queryKeys';
 import { deleteSong, updateSong } from '../api';
 import { convertToChordPro } from '../addSong/chordProConversion';
+import { polishSongContent } from '../addSong/polishSongContent';
 import { extractChordsFromText, guessKeyFromChords } from '../addSong/keyDetection';
 import { SmartImportModal, type SmartImportSourceTab } from '../addSong/SmartImportModal';
 import { LyricsWithChords } from '../components/LyricsWithChords';
@@ -603,14 +604,14 @@ export function StudioEditor() {
   const aiSongCleanupMut = useMutation({
     mutationFn: (content: string) => aiSongCleanup(content),
     onSuccess: (result) => {
-      const raw = decodeHtmlEntities(result.chordPro ?? '');
-      if (!raw.trim()) {
+      const polished = polishSongContent(decodeHtmlEntities(result.chordPro ?? ''));
+      if (!polished.trim()) {
         emitAppToast({ kind: 'error', message: 'ИИ вернул пустой результат' });
         return;
       }
-      const parsed = chordProToBlocks(raw).map((block) => ({
+      const parsed = chordProToBlocks(polished).map((block) => ({
         ...block,
-        content: convertToChordPro(block.content),
+        content: polishSongContent(block.content),
       }));
       const nextChordPro = blocksToChordPro(parsed);
       const prevChordPro = blocksToChordPro(blocks);
@@ -847,7 +848,7 @@ export function StudioEditor() {
     }
     if (
       !window.confirm(
-        'ИИ приведёт текст в порядок: уберёт лишнее (источники, примечания, ссылки), расставит аккорды в формате ChordPro и разложит по секциям. Слова песни сохранятся. Продолжить?',
+        'ИИ приведёт текст в порядок: уберёт лишнее (источники, «Сборник песен…», примечания), встроит аккорды в строки в формате [G]слово и разложит по секциям. Продолжить?',
       )
     ) {
       return;

@@ -36,10 +36,21 @@ const CLEANUP_SYSTEM_PROMPT = [
   '   — примечания автора/редактора, переводческие сноски, теги жанра;',
   '   — повторяющиеся пустые строки и мусорные символы.',
   '2) СОХРАНИТЬ все слова песни (куплеты, припев, бридж и т.д.) — не переписывай, не «улучшай» стихи.',
-  '3) АККОРДЫ:',
-  '   — приведи к формату ChordPro в квадратных скобках: [Am], [G/B], [F#m7];',
-  '   — если аккорды стоят отдельной строкой над текстом — встрой их в строку текста в правильные позиции;',
+  '3) АККОРДЫ — обязательный формат ChordPro:',
+  '   — каждый аккорд ТОЛЬКО в квадратных скобках перед слогом: [G]Простую [D]песню;',
+  '   — ЗАПРЕЩЕНО оставлять аккорды отдельной строкой над текстом;',
+  '   — если аккорды «над строкой» — встрой их в строку текста по позициям;',
+  '   — не дублируй строку аккордов и строку с теми же [аккордами] в тексте;',
   '   — не выдумывай аккорды, если их нет в исходнике.',
+  '',
+  'Пример преобразования:',
+  'БЫЛО:',
+  'G        D',
+  'Простую песню о любви',
+  'Сборник песен церкви «Источник жизни»',
+  'СТАЛО:',
+  '{sec:Куплет 1}',
+  '[G]Простую [D]песню о любви',
   '4) СТРУКТУРА: разметь секции директивами {sec:НАЗВАНИЕ} на отдельной строке перед блоком:',
   '   — Интро / Вступление, Куплет 1, Куплет 2, …, Предприпев, Припев, Бридж / Мост, Соло, Аутро / Финал;',
   '   — нумеруй куплеты последовательно;',
@@ -50,6 +61,26 @@ const CLEANUP_SYSTEM_PROMPT = [
   '— Не добавляй новых слов песни.',
   '— Не исправляй орфографию и пунктуацию слов песни.',
 ].join('\n');
+
+function stripNonLyricLinesServer(text: string): string {
+  const patterns = [
+    /^(?:сборник\s+песен|songbook)/i,
+    /(?:«\s*)?источник\s+жизни(?:\s*»)?/i,
+    /source\s+of\s+life/i,
+    /https?:\/\//i,
+    /^www\./i,
+    /holychords|kgmusic|worshiptogether/i,
+    /^[🎵♪🎶]/,
+  ];
+  return normalizeNewlines(text)
+    .split('\n')
+    .filter((line) => {
+      const t = line.trim();
+      if (!t) return true;
+      return !patterns.some((re) => re.test(t));
+    })
+    .join('\n');
+}
 
 export async function cleanupSongWithAi(content: string): Promise<StudioAiCleanupResult> {
   const source = normalizeNewlines(content).trim();
@@ -74,6 +105,7 @@ export async function cleanupSongWithAi(content: string): Promise<StudioAiCleanu
   );
 
   let out = ensureSectionHeaders(stripMarkdownFences(String(reply ?? '')));
+  out = stripNonLyricLinesServer(out);
   if (!out.trim()) {
     throw new Error('ИИ вернул пустой ответ. Попробуйте ещё раз.');
   }
