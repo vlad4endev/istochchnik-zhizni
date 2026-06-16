@@ -1,7 +1,10 @@
 import {
   convertToChordPro,
+  expandTabsToSpaces,
   hasLyricLetters,
   isChordOnlyLine,
+  isChordToken,
+  isNoChordPlaceholder,
   looksLikeChordPro,
   mergeChordLineWithLyrics,
 } from './chordProConversion';
@@ -48,6 +51,45 @@ function stripRepeatMarkers(text: string): string {
 
 function collapseExtraBlankLines(text: string): string {
   return text.replace(/\n{3,}/g, '\n\n');
+}
+
+/** Убрать лишние «(» перед словами после сбоя импорта/склейки. */
+function repairStrayOpenParentheses(text: string): string {
+  return text
+    .replace(/([–—-])\s*\(/g, '$1 ')
+    .replace(/(^|\s)\(([А-Яа-яЁё])/g, '$1$2');
+}
+
+/** Оставить в строке аккордов только валидные токены. */
+function sanitizeChordOnlyLine(line: string): string {
+  const parts = expandTabsToSpaces(line, 8)
+    .replace(/\|/g, ' ')
+    .split(/\s+/)
+    .filter(Boolean)
+    .filter((p) => !isNoChordPlaceholder(p) && isChordToken(p));
+  return parts.join('  ');
+}
+
+/** Почистить строки аккордов от мусорных токенов до конвертации. */
+function sanitizeStackedChordLines(text: string): string {
+  return normalizeNewlines(text)
+    .split('\n')
+    .map((line) => {
+      const trimmed = line.trim();
+      if (!trimmed || looksLikeChordPro(line)) return line;
+      const parts = trimmed.split(/\s+/).filter(Boolean);
+      const chordish = parts.filter((p) => isChordToken(p));
+      if (chordish.length >= 2 && chordish.length >= parts.length * 0.5) {
+        const cleaned = sanitizeChordOnlyLine(line);
+        return cleaned || line;
+      }
+      if (isChordOnlyLine(line)) {
+        const cleaned = sanitizeChordOnlyLine(line);
+        return cleaned || line;
+      }
+      return line;
+    })
+    .join('\n');
 }
 
 /** Убрать строку аккордов, если ниже уже есть ChordPro с [аккордами]. */
@@ -113,8 +155,11 @@ export function polishSongContent(raw: string): string {
   text = stripHiddenChordProDirectives(text);
   text = stripNonLyricLines(text);
   text = stripRepeatMarkers(text);
+  text = repairStrayOpenParentheses(text);
+  text = sanitizeStackedChordLines(text);
   text = removeStackedChordsOverChordPro(text);
   text = convertToChordPro(text);
+  text = repairStrayOpenParentheses(text);
   text = fixOrphanChordRows(text);
   text = collapseExtraBlankLines(text);
   return text.trimEnd();

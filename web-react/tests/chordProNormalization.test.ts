@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { convertToChordPro, normalizeChordSymbolForCatalog } from '../src/features/songbook/addSong/chordProConversion';
+import { convertToChordPro, mergeChordLineWithLyrics, normalizeChordSymbolForCatalog } from '../src/features/songbook/addSong/chordProConversion';
 
 describe('normalizeChordSymbolForCatalog (import quirks)', () => {
   it('normalizes German H and backslash bass', () => {
@@ -13,6 +13,18 @@ describe('normalizeChordSymbolForCatalog (import quirks)', () => {
   it('normalizes Cyrillic-looking chord letters', () => {
     // "С#m" (кириллическая "С") -> "C#m"
     expect(normalizeChordSymbolForCatalog('С#m')).toBe('C#m');
+  });
+});
+
+describe('mergeChordLineWithLyrics', () => {
+  it('aligns four chords across six lyric words', () => {
+    const out = mergeChordLineWithLyrics(
+      'Dm    Em    C    G',
+      'Это мой Бог – великий Творец,',
+    );
+    expect(out).toContain('[Dm]Это');
+    expect(out).toContain('[G]');
+    expect(out).not.toContain('GA)Ote');
   });
 });
 

@@ -93,12 +93,27 @@ function normalizeChordTokenLoose(raw: string): string | null {
   const bassRoot = (m[4] ?? '').toUpperCase();
   const bassAcc = (m[5] ?? '') as '' | '#' | 'b';
 
+  // Мусор от PDF/слияния с текстом: GA)Ote, CD)m, фрагменты слов.
+  if (/\)[A-Za-zА-Яа-яЁё]/.test(base) || /[A-Za-zА-Яа-яЁё]\)[A-Za-zА-Яа-яЁё]/.test(base)) {
+    return null;
+  }
+  if (/[А-Яа-яЁё]/.test(base)) {
+    return null;
+  }
+
   // Быстрая валидация хвоста: только типичные символы аккордов.
-  if (tail && !/^[a-z0-9()+\-_.:]*$/i.test(tail.replace(/\s+/g, ''))) {
+  if (tail && !/^[a-z0-9()+\-_.:°øΔ^]*$/i.test(tail.replace(/\s+/g, ''))) {
+    return null;
+  }
+  if (tail && /\)[A-Za-zА-Яа-яЁё]{2,}/.test(tail)) {
     return null;
   }
 
   const head = `${root}${acc}${tail}`;
+  // Две подряд ноты без качества (CD, GA) — не один аккорд.
+  if (!bassRoot && /^[A-G][#b]?[A-G][#b]?$/i.test(head)) {
+    return null;
+  }
   if (bassRoot) {
     return `${head}/${bassRoot}${bassAcc}`;
   }
@@ -199,7 +214,13 @@ export function normalizeChordSymbolForCatalog(raw: string): string | null {
 
 /** Распознавание токена аккорда (расширенные варианты записи). */
 export function isChordToken(raw: string): boolean {
-  return normalizeChordSymbolForCatalog(raw) != null || normalizeChordTokenLoose(raw) != null;
+  if (normalizeChordSymbolForCatalog(raw) != null) return true;
+  const loose = normalizeChordTokenLoose(raw);
+  if (!loose) return false;
+  if (/[\\/]/.test(raw) || /^[Hh]/.test(loose)) {
+    return /^[A-GH](?:#|b)?(?:m|maj|dim|aug|sus|add|6|7|9|11|13|m7b5|ø|o)*(?:\/[A-GH](?:#|b)?)?$/i.test(loose);
+  }
+  return !Chord.get(loose).empty;
 }
 
 function tokenizeChordLine(line: string): string[] {
@@ -377,6 +398,44 @@ function mergeByColumnPositions(chordLine: string, lyricLine: string): string | 
 }
 
 /**
+ * Встроить аккорды в начала слов (когда их меньше, чем слов в строке).
+ */
+function mergeChordsByWordAlignment(chords: string[], lyricLine: string): string | null {
+  if (chords.length === 0) return null;
+  const words = lyricLine.trim().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return null;
+
+  const letterWordIndexes: number[] = [];
+  words.forEach((word, index) => {
+    if (/[A-Za-zА-Яа-яЁё]/.test(word)) letterWordIndexes.push(index);
+  });
+  if (letterWordIndexes.length === 0) return null;
+
+  const targetIndexes: number[] = [];
+  if (chords.length === letterWordIndexes.length) {
+    targetIndexes.push(...letterWordIndexes);
+  } else if (chords.length < letterWordIndexes.length) {
+    for (let c = 0; c < chords.length; c += 1) {
+      const slot =
+        chords.length === 1
+          ? letterWordIndexes[0]!
+          : letterWordIndexes[Math.round((c * (letterWordIndexes.length - 1)) / (chords.length - 1))]!;
+      targetIndexes.push(slot);
+    }
+  } else {
+    return null;
+  }
+
+  const chordAt = new Map<number, string>();
+  chords.forEach((chord, i) => {
+    const idx = targetIndexes[i];
+    if (idx != null) chordAt.set(idx, chord);
+  });
+
+  return words.map((word, i) => (chordAt.has(i) ? `[${chordAt.get(i)!}]${word}` : word)).join(' ');
+}
+
+/**
  * Склеить пару «строка аккордов» + «строка текста» в ChordPro.
  */
 export function mergeChordLineWithLyrics(chordLine: string, lyricLine: string): string {
@@ -392,8 +451,11 @@ export function mergeChordLineWithLyrics(chordLine: string, lyricLine: string): 
     return chords.map((c, i) => `[${c}]${words[i]}`).join(' ');
   }
 
+  const byWords = mergeChordsByWordAlignment(chords, trimmedLyric);
+  if (byWords != null) return byWords;
+
   const column = mergeByColumnPositions(chordExp, lyricExp);
-  if (column != null) return column;
+  if (column != null && !/\[[^\]]*[\)][A-Za-zА-Яа-яЁё]/.test(column)) return column;
 
   if (chords.length === 1) {
     return `[${chords[0]}]${trimmedLyric}`;

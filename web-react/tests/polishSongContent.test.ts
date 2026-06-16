@@ -33,6 +33,22 @@ describe('polishSongContent', () => {
     const src = 'Строка текста (2р)';
     expect(polishSongContent(src)).toBe('Строка текста');
   });
+
+  it('merges chorus-style lines with 4 chords over more words', () => {
+    const src = [
+      'Dm    Em    C    G',
+      'Это мой Бог – (великий Творец,',
+      'Dm    Em    CD    C    GA)Ote',
+      'Это мой Бог – (пастырь (ценный',
+    ].join('\n');
+
+    const out = polishSongContent(src);
+    expect(out).not.toMatch(/GA\)Ote|CD\)/);
+    expect(out).toContain('[Dm]');
+    expect(out).toContain('[Em]');
+    expect(out).not.toMatch(/^\s*[A-G]/m);
+    expect(out).not.toMatch(/–\s*\(/);
+  });
 });
 
 describe('stripNonLyricLines', () => {
