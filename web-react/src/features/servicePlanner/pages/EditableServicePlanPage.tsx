@@ -200,20 +200,6 @@ function normalizeText(v: string): string {
   return v.trim().toLowerCase().replace(/ё/g, 'е');
 }
 
-function roleLabel(u: EditableMember): string {
-  const ministryRoles = String(u.ministry_role ?? '')
-    .split(/[;,]/)
-    .map((s) => s.trim())
-    .filter((s, idx, arr) => s.length > 0 && arr.indexOf(s) === idx);
-  if (ministryRoles.length > 0) return ministryRoles.join(', ');
-  if (u.app_role === 'admin') return 'Админ';
-  if (u.app_role === 'minister') return 'Служитель';
-  if (u.app_role === 'pastor') return 'Пастор';
-  if (u.app_role === 'editor') return 'Редактор';
-  if (u.app_role === 'musician') return 'Музыкант';
-  return 'Участник';
-}
-
 function hasMinistryRole(u: EditableMember, roleName: string): boolean {
   const target = normalizeText(roleName);
   if (!target) return false;
@@ -298,8 +284,6 @@ function getBlockExtraDisplayRows(b: EditableBlock): ExtraDisplayRow[] {
     if (topic) rows.push({ label: 'Тема проповеди', value: topic });
     if (scripture) rows.push({ label: 'Писание', value: scripture });
   }
-  const direction = typeof cj.direction === 'string' ? cj.direction.trim() : '';
-  if (direction) rows.push({ label: 'Направление', value: direction });
   for (const [key, v] of Object.entries(cj)) {
     if (isInternalContentStringKey(key)) continue;
     if (typeof v !== 'string' || !v.trim()) continue;
@@ -311,12 +295,10 @@ function getBlockExtraDisplayRows(b: EditableBlock): ExtraDisplayRow[] {
   return rows;
 }
 
-/** В форме редактирования: направление и прочие строки без дублирования полей стиха/проповеди/заметки. */
+/** В форме редактирования: прочие строки без дублирования полей стиха/проповеди/заметки. */
 function getEditFormAuxiliaryRows(b: EditableBlock): ExtraDisplayRow[] {
   const cj = asPlainContentJson(b.content_json);
   const rows: ExtraDisplayRow[] = [];
-  const direction = typeof cj.direction === 'string' ? cj.direction.trim() : '';
-  if (direction) rows.push({ label: 'Направление', value: direction });
   for (const [key, v] of Object.entries(cj)) {
     if (isInternalContentStringKey(key)) continue;
     if (typeof v !== 'string' || !v.trim()) continue;
@@ -931,7 +913,7 @@ export function EditableServicePlanPage() {
                               </option>
                               {responsibleCandidates.map((u) => (
                                 <option key={u.id} value={u.id}>
-                                  {userLabel(u)} ({roleLabel(u)})
+                                  {userLabel(u)}
                                 </option>
                               ))}
                             </>

@@ -162,22 +162,6 @@ function reorderTemplateBlocks<
   return next.map((b, idx) => ({ ...b, order_index: idx }));
 }
 
-function roleLabel(u: AppUser): string {
-  const ministryRoles = String(u.ministry_role ?? '')
-    .split(/[;,]/)
-    .map((s) => s.trim())
-    .filter((s, idx, arr) => s.length > 0 && arr.indexOf(s) === idx);
-  if (ministryRoles.length > 0) {
-    return ministryRoles.join(', ');
-  }
-  if (u.app_role === 'admin') return 'Админ';
-  if (u.app_role === 'minister') return 'Служитель';
-  if (u.app_role === 'pastor') return 'Пастор';
-  if (u.app_role === 'editor') return 'Редактор';
-  if (u.app_role === 'musician') return 'Музыкант';
-  return 'Участник';
-}
-
 function hasMinistryRole(u: AppUser, roleName: string): boolean {
   const normalize = (v: string) => v.trim().toLowerCase().replace(/ё/g, 'е');
   const target = normalize(roleName);
@@ -1011,17 +995,6 @@ export function ServicePlannerPage() {
     return assigned ? userLabel(assigned) : null;
   }
 
-  function getDirectionLabel(block: ServicePlanBlock): string | null {
-    const fromContent = block.content_json?.direction;
-    if (typeof fromContent === 'string' && fromContent.trim()) return fromContent.trim();
-    const responsibleId = block.assigned_member_id;
-    if (!responsibleId) return null;
-    const member = usersById.get(responsibleId);
-    if (!member?.ministry_direction) return null;
-    const direction = member.ministry_direction.trim();
-    return direction || null;
-  }
-
   function getBlockNotePreview(block: ServicePlanBlock): string | null {
     const cj = block.content_json ?? {};
     const noteRaw = typeof cj.notes === 'string' ? cj.notes : '';
@@ -1113,9 +1086,7 @@ export function ServicePlannerPage() {
       }
       const note = getBlockNotePreview(block);
       if (note) details.push(`Заметка: ${note}`);
-      const resp = getResponsibleLabel(block);
-      const dir = getDirectionLabel(block);
-      const responsible = resp && dir ? `${resp} · ${dir}` : resp || dir;
+      const responsible = getResponsibleLabel(block);
       return {
         type: 'block' as const,
         time: block.startsAt,
@@ -2278,7 +2249,7 @@ export function ServicePlannerPage() {
                           : users
                       ).map((u) => (
                         <option key={u.id} value={u.id}>
-                          {userLabel(u)} ({roleLabel(u)})
+                          {userLabel(u)}
                         </option>
                       ))}
                     </select>
@@ -3069,14 +3040,9 @@ export function ServicePlannerPage() {
                               {!isSeparatorBlock(block) ? (
                                 <BlockStageSetupPreview contentJson={block.content_json} />
                               ) : null}
-                              {!isSeparatorBlock(block) &&
-                              (getResponsibleLabel(block) || getDirectionLabel(block)) ? (
+                              {!isSeparatorBlock(block) && getResponsibleLabel(block) ? (
                                 <p className="text-[11px] leading-snug text-stone-500 sm:text-xs">
-                                  {getResponsibleLabel(block)
-                                    ? `${isSermonBlock(block) ? 'Проповедник' : 'Ответственный'}: ${getResponsibleLabel(block)}`
-                                    : ''}
-                                  {getResponsibleLabel(block) && getDirectionLabel(block) ? ' • ' : ''}
-                                  {getDirectionLabel(block) ? `Направление: ${getDirectionLabel(block)}` : ''}
+                                  {isSermonBlock(block) ? 'Проповедник' : 'Ответственный'}: {getResponsibleLabel(block)}
                                 </p>
                               ) : null}
                               {!isSeparatorBlock(block) && getBlockNotePreview(block) ? (
@@ -3541,7 +3507,7 @@ export function ServicePlannerPage() {
                         </option>
                         {(users).map((u) => (
                           <option key={u.id} value={u.id}>
-                            {userLabel(u)} ({roleLabel(u)})
+                            {userLabel(u)}
                           </option>
                         ))}
                       </>
