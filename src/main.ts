@@ -13,6 +13,7 @@ import type { Request as ExpressRequest } from 'express';
 import { pool } from './config/db';
 import { initDb } from './config/initDb';
 import { ensurePrayerCycleAnchor } from './config/prayerCycleAnchor';
+import { ensureMediaScheduleSchema } from './services/mediaScheduleMigrations';
 import { resolveAuthSession } from './middleware/authSession';
 import { enforceRoleAccess, resolveUserRole } from './middleware/roleAccess';
 import routes from './routes';
@@ -466,6 +467,18 @@ async function start(): Promise<void> {
       void ensureAccessRequestsMessengerChannel().catch((e) =>
         console.warn('[messenger] ensureAccessRequestsMessengerChannel on boot:', e),
       );
+    }
+
+    if (pool) {
+      try {
+        await ensureMediaScheduleSchema();
+        console.log('[media-schedule] schema ensured');
+      } catch (e) {
+        console.warn(
+          '[media-schedule] ensureMediaScheduleSchema failed (run: node dist/cli/applyMediaScheduleMigrations.js):',
+          e,
+        );
+      }
     }
   }
 

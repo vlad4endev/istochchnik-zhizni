@@ -23,10 +23,9 @@ ON CONFLICT (name) DO NOTHING;
 ALTER TABLE public.media_roles
   ADD COLUMN IF NOT EXISTS ministry_direction_filter TEXT;
 
-DROP TABLE IF EXISTS public.media_assignments;
 DROP TABLE IF EXISTS public.media_events;
 
-CREATE TABLE public.media_assignments (
+CREATE TABLE IF NOT EXISTS public.media_assignments (
   id            BIGSERIAL PRIMARY KEY,
   event_ref_id  BIGINT NOT NULL REFERENCES public.service_plans(id) ON DELETE CASCADE,
   member_id     BIGINT NOT NULL REFERENCES public.members(id) ON DELETE CASCADE,

@@ -756,16 +756,27 @@ export async function getMediaMembers(): Promise<MediaScheduleMember[]> {
     (_, i) => `lower(COALESCE(m.ministry_direction, '')) LIKE $${i + 1}`,
   ).join(' OR ');
 
-  const filtered = await query(
-    `SELECT
+  const mapMemberRow = (row: Record<string, unknown>): MediaScheduleMember => ({
+    id: Number(row.id),
+    name: memberDisplayName(row),
+    avatar_url: row.avatar_url == null ? null : String(row.avatar_url),
+    ministry_direction: row.ministry_direction == null ? null : String(row.ministry_direction),
+    phone: row.phone_number == null ? null : String(row.phone_number),
+    email: row.email == null ? null : String(row.email),
+  });
+
+  const MEMBER_SELECT = `
        m.id,
        m.name,
        m.first_name,
        m.last_name,
        m.avatar_url,
        m.ministry_direction,
-       m.phone,
-       m.email
+       m.phone_number,
+       m.email`;
+
+  const filtered = await query(
+    `SELECT ${MEMBER_SELECT}
      FROM members m
      WHERE m.is_active = TRUE
        AND (${directionClause})
@@ -775,39 +786,17 @@ export async function getMediaMembers(): Promise<MediaScheduleMember[]> {
 
   const rows = filtered.rows as Record<string, unknown>[];
   if (rows.length > 0) {
-    return rows.map((row) => ({
-      id: Number(row.id),
-      name: memberDisplayName(row),
-      avatar_url: row.avatar_url == null ? null : String(row.avatar_url),
-      ministry_direction: row.ministry_direction == null ? null : String(row.ministry_direction),
-      phone: row.phone == null ? null : String(row.phone),
-      email: row.email == null ? null : String(row.email),
-    }));
+    return rows.map(mapMemberRow);
   }
 
   const all = await query(
-    `SELECT
-       m.id,
-       m.name,
-       m.first_name,
-       m.last_name,
-       m.avatar_url,
-       m.ministry_direction,
-       m.phone,
-       m.email
+    `SELECT ${MEMBER_SELECT}
      FROM members m
      WHERE m.is_active = TRUE
      ORDER BY m.first_name NULLS LAST, m.last_name NULLS LAST, m.name ASC`,
   );
 
-  return (all.rows as Record<string, unknown>[]).map((row) => ({
-    id: Number(row.id),
-    name: memberDisplayName(row),
-    avatar_url: row.avatar_url == null ? null : String(row.avatar_url),
-    ministry_direction: row.ministry_direction == null ? null : String(row.ministry_direction),
-    phone: row.phone == null ? null : String(row.phone),
-    email: row.email == null ? null : String(row.email),
-  }));
+  return (all.rows as Record<string, unknown>[]).map(mapMemberRow);
 }
 
 export { parseDateYmd, parsePositiveInt };
