@@ -920,36 +920,6 @@ export function StudioEditor() {
     }, 10000);
   };
 
-  const runLocalAutoFallback = (reason: string) => {
-    const donor = blocks.find((block) => hasAnyChordsInBlock(block));
-    if (!donor) {
-      emitAppToast(reason);
-      return;
-    }
-    const targetIds = blocks.filter((block) => block.id !== donor.id).map((block) => block.id);
-    if (targetIds.length === 0) {
-      emitAppToast(reason);
-      return;
-    }
-    const fallback = autoDistributeChords(blocks, donor.id, targetIds);
-    const changedCount = fallback.reduce((acc, block, idx) => acc + (block.content !== (blocks[idx]?.content ?? '') ? 1 : 0), 0);
-    if (changedCount === 0) {
-      emitAppToast(reason);
-      return;
-    }
-    const previousBlocks = blocks;
-    setBlocks(fallback);
-    emitAppToast({ kind: 'success', message: `Применён резервный автопаттерн: изменено ${changedCount} блоков ✓` });
-    if (undoTimeoutRef.current) clearTimeout(undoTimeoutRef.current);
-    const expiresAt = Date.now() + 10000;
-    setChordAutoUndo({ previousBlocks, appliedCount: changedCount, expiresAt });
-    setUndoNow(Date.now());
-    undoTimeoutRef.current = setTimeout(() => {
-      setChordAutoUndo(null);
-      undoTimeoutRef.current = null;
-    }, 10000);
-  };
-
   const handleAutoChordDonorChange = (donorId: string) => {
     setAutoChordDonorId(donorId);
     const donor = blocks.find((block) => block.id === donorId);
