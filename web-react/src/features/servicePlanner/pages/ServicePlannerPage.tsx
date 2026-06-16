@@ -1061,7 +1061,7 @@ export function ServicePlannerPage() {
       const { title: blockTitle, key: blockKey } = splitHeadingAndKey(heading);
       const title = blockKey ? `${blockTitle} [${blockKey}]` : blockTitle;
       const blockTypeLabel = blockTypes.find((t) => t.id === block.block_type_id)?.name ?? 'Блок';
-      const subtitle = `${blockTypeLabel} · ${block.duration_minutes} мин`;
+      const subtitle = blockTypeLabel;
       const details: string[] = [];
       if (isPoemBlock(block)) {
         const sub = poemSubline(block);

@@ -1,4 +1,4 @@
-/** Экспорт программы служения в PDF (скачивание файла). */
+/** Экспорт программы служения в PDF — один лист A4, время + блок. */
 
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
@@ -30,7 +30,6 @@ export type ServicePlanPrintPayload = {
 
 const PDF_PAGE_WIDTH_PX = 794;
 const PDF_PAGE_HEIGHT_PX = 1123;
-const PDF_ROW_UNITS_PER_PAGE = 24;
 
 function escapeHtml(s: string): string {
   return s
@@ -41,66 +40,27 @@ function escapeHtml(s: string): string {
     .replace(/'/g, '&#39;');
 }
 
-/** Грубая оценка «веса» строк для подбора кегля. */
-export function estimateServicePlanPrintBaseFontPx(rows: ServicePlanPrintRow[]): number {
-  let units = 0;
+/** Подбор кегля под один лист A4 (2 колонки: время + блок). */
+export function resolveServicePlanPdfFontPx(rows: ServicePlanPrintRow[]): number {
+  let units = 4.2;
   for (const r of rows) {
     if (r.type === 'separator') {
-      units += 1.15;
+      units += 1.05;
       continue;
     }
-    units += 1.25;
-    units += Math.min(3, r.details.length) * 0.42;
-    const titleExtra = Math.max(0, Math.ceil(r.title.length / 52) - 1);
-    units += titleExtra * 0.45;
-    if (r.responsible && r.responsible.length > 28) units += 0.35;
+    units += 1.15;
+    units += Math.min(r.details.length, 5) * 0.32;
+    units += Math.max(0, Math.ceil(r.title.length / 58) - 1) * 0.38;
   }
-  const u = Math.max(units, 6);
-  const px = Math.round((198 / u) * 10) / 10;
-  return Math.max(8, Math.min(13.5, px));
-}
-
-/** Стабильный кегль для PDF: читаемо, без сжатия в один лист. */
-export function resolveServicePlanPdfFontPx(rows: ServicePlanPrintRow[]): number {
-  const compact = estimateServicePlanPrintBaseFontPx(rows);
-  return Math.max(9.5, Math.min(11.5, compact));
-}
-
-function estimateRowUnits(row: ServicePlanPrintRow): number {
-  if (row.type === 'separator') return 1.35;
-  let units = 1.45;
-  units += Math.min(row.details.length, 8) * 0.42;
-  units += Math.max(0, Math.ceil(row.title.length / 46) - 1) * 0.48;
-  if (row.responsible && row.responsible.length > 26) units += 0.38;
-  return units;
-}
-
-function paginateRows(rows: ServicePlanPrintRow[]): ServicePlanPrintRow[][] {
-  const pages: ServicePlanPrintRow[][] = [];
-  let current: ServicePlanPrintRow[] = [];
-  let units = 0;
-
-  for (const row of rows) {
-    const rowUnits = estimateRowUnits(row);
-    if (current.length > 0 && units + rowUnits > PDF_ROW_UNITS_PER_PAGE) {
-      pages.push(current);
-      current = [row];
-      units = rowUnits;
-      continue;
-    }
-    current.push(row);
-    units += rowUnits;
-  }
-
-  if (current.length > 0) pages.push(current);
-  return pages.length > 0 ? pages : [[]];
+  const px = Math.round((46 / Math.max(units, 6)) * 12.5 * 10) / 10;
+  return Math.max(10.5, Math.min(15, px));
 }
 
 function buildRowsHtml(rows: ServicePlanPrintRow[]): string {
   return rows
     .map((r) => {
       if (r.type === 'separator') {
-        return `<tr class="sep"><td colspan="4">${escapeHtml(r.label)}</td></tr>`;
+        return `<tr class="sep"><td colspan="2">${escapeHtml(r.label)}</td></tr>`;
       }
       const details =
         r.details.length > 0
@@ -108,7 +68,6 @@ function buildRowsHtml(rows: ServicePlanPrintRow[]): string {
           : '';
       const sub = r.subtitle ? `<div class="sub">${escapeHtml(r.subtitle)}</div>` : '';
       const hidden = r.hiddenFromPublic ? `<div class="hidden-flag">Не в публичной ссылке</div>` : '';
-      const who = r.responsible ? escapeHtml(r.responsible) : '—';
       return `<tr>
         <td class="t-time">${escapeHtml(r.time)}</td>
         <td class="t-title">
@@ -117,17 +76,15 @@ function buildRowsHtml(rows: ServicePlanPrintRow[]): string {
           ${details}
           ${hidden}
         </td>
-        <td class="t-min">${r.minutes}′</td>
-        <td class="t-who">${who}</td>
       </tr>`;
     })
     .join('');
 }
 
 function buildSheetStyles(baseFontPx: number): string {
-  const fsSm = Math.max(8, baseFontPx - 1.5);
-  const fsXs = Math.max(7.5, baseFontPx - 2.5);
-  const fsH = Math.min(22, baseFontPx + 9);
+  const fsSm = Math.max(9.5, baseFontPx - 1);
+  const fsXs = Math.max(9, baseFontPx - 1.75);
+  const fsH = Math.min(26, baseFontPx + 11);
 
   return `
     :root {
@@ -137,38 +94,40 @@ function buildSheetStyles(baseFontPx: number): string {
       --fs-h: ${fsH}px;
     }
     * { box-sizing: border-box; }
+    .pdf-frame {
+      width: ${PDF_PAGE_WIDTH_PX}px;
+      height: ${PDF_PAGE_HEIGHT_PX}px;
+      overflow: hidden;
+      background: #fff;
+    }
     .pdf-sheet {
       width: ${PDF_PAGE_WIDTH_PX}px;
-      min-height: ${PDF_PAGE_HEIGHT_PX}px;
-      padding: 28px 32px 24px;
+      padding: 22px 28px 18px;
       background: #fff;
       color: #0c0a09;
       font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+      transform-origin: top left;
     }
     h1 {
       font-size: var(--fs-h);
       font-weight: 800;
-      margin: 0 0 4px;
+      margin: 0 0 6px;
       letter-spacing: -0.02em;
-      line-height: 1.1;
+      line-height: 1.12;
     }
     .meta {
       font-size: var(--fs-sm);
-      color: #57534e;
-      margin-bottom: 8px;
-      line-height: 1.35;
+      color: #44403c;
+      margin-bottom: 10px;
+      line-height: 1.4;
+      font-weight: 500;
     }
     .roles {
       font-size: var(--fs-sm);
-      color: #44403c;
-      margin: 4px 0 12px;
-      font-weight: 600;
-    }
-    .page-continue {
-      font-size: var(--fs-sm);
-      color: #78716c;
-      margin: 0 0 10px;
+      color: #292524;
+      margin: 0 0 14px;
       font-weight: 700;
+      line-height: 1.35;
     }
     table {
       width: 100%;
@@ -179,53 +138,61 @@ function buildSheetStyles(baseFontPx: number): string {
       text-align: left;
       font-size: var(--fs-xs);
       text-transform: uppercase;
-      letter-spacing: 0.05em;
-      color: #78716c;
-      border-bottom: 2px solid #d6d3d1;
-      padding: 4px 6px 6px 0;
+      letter-spacing: 0.06em;
+      color: #57534e;
+      border-bottom: 2.5px solid #d6d3d1;
+      padding: 5px 8px 7px 0;
       font-weight: 800;
     }
     tbody td {
       vertical-align: top;
-      padding: 5px 6px 5px 0;
-      border-bottom: 1px solid #f5f5f4;
+      padding: 6px 8px 6px 0;
+      border-bottom: 1px solid #e7e5e4;
     }
     .t-time {
-      width: 12%;
+      width: 14%;
       font-weight: 800;
       font-variant-numeric: tabular-nums;
       white-space: nowrap;
+      font-size: calc(var(--fs) + 1px);
+      color: #1c1917;
+    }
+    .t-title { width: 86%; }
+    .title-main {
+      font-weight: 800;
+      line-height: 1.28;
       font-size: calc(var(--fs) + 0.5px);
     }
-    .t-title { width: 56%; }
-    .t-min {
-      width: 10%;
-      text-align: right;
-      font-weight: 800;
-      font-variant-numeric: tabular-nums;
+    .sub {
+      font-size: var(--fs-xs);
+      color: #78716c;
+      margin-top: 3px;
+      font-weight: 600;
     }
-    .t-who {
-      width: 22%;
-      font-size: var(--fs-sm);
-      color: #44403c;
-      line-height: 1.25;
-      word-break: break-word;
+    .details {
+      font-size: var(--fs-xs);
+      color: #57534e;
+      margin-top: 4px;
+      line-height: 1.38;
     }
-    .title-main { font-weight: 800; line-height: 1.2; }
-    .sub { font-size: var(--fs-xs); color: #78716c; margin-top: 2px; }
-    .details { font-size: var(--fs-xs); color: #57534e; margin-top: 3px; line-height: 1.3; }
-    .details div + div { margin-top: 1px; }
-    .hidden-flag { font-size: calc(var(--fs-xs) - 0.5px); color: #a8a29e; font-weight: 700; margin-top: 3px; }
+    .details div + div { margin-top: 2px; }
+    .hidden-flag {
+      font-size: calc(var(--fs-xs) - 0.5px);
+      color: #a8a29e;
+      font-weight: 700;
+      margin-top: 4px;
+    }
     tr.sep td {
       font-weight: 800;
       text-align: center;
-      padding: 7px 4px;
+      padding: 8px 6px;
       background: #f5f5f4;
-      border-bottom: 1px solid #e7e5e4;
-      font-size: calc(var(--fs) + 0.5px);
+      border-bottom: 1px solid #d6d3d1;
+      font-size: calc(var(--fs) + 1px);
+      letter-spacing: 0.02em;
     }
     .footer {
-      margin-top: 12px;
+      margin-top: 10px;
       font-size: var(--fs-xs);
       color: #a8a29e;
       text-align: center;
@@ -233,16 +200,9 @@ function buildSheetStyles(baseFontPx: number): string {
   `;
 }
 
-type PdfPageOptions = {
-  showFullHeader: boolean;
-  showFooter: boolean;
-  pageNum: number;
-  totalPages: number;
-};
-
-function buildPdfPageHtml(payload: ServicePlanPrintPayload, rows: ServicePlanPrintRow[], opts: PdfPageOptions): string {
+function buildPdfSheetHtml(payload: ServicePlanPrintPayload): string {
   const leaderLine =
-    opts.showFullHeader && (payload.leader || payload.preacher)
+    payload.leader || payload.preacher
       ? `<div class="roles">${[
           payload.leader ? `Ведущий: ${escapeHtml(payload.leader)}` : '',
           payload.preacher ? `Проповедник: ${escapeHtml(payload.preacher)}` : '',
@@ -251,82 +211,73 @@ function buildPdfPageHtml(payload: ServicePlanPrintPayload, rows: ServicePlanPri
           .join(' · ')}</div>`
       : '';
 
-  const header = opts.showFullHeader
-    ? `<h1>${escapeHtml(payload.heading)}</h1>
-       <div class="meta">${escapeHtml(payload.dateLine)} · начало ${escapeHtml(payload.startTime)} · всего ${payload.totalMinutes} мин</div>
-       ${leaderLine}`
-    : `<p class="page-continue">${escapeHtml(payload.heading)} · стр. ${opts.pageNum} из ${opts.totalPages}</p>`;
-
-  const footer = opts.showFooter
-    ? `<p class="footer">План служения · Источник жизни</p>`
-    : '';
-
   return `<style>${buildSheetStyles(payload.baseFontPx)}</style>
-    <div class="pdf-sheet">
-      ${header}
-      <table>
-        <thead>
-          <tr>
-            <th class="t-time">Время</th>
-            <th class="t-title">Блок</th>
-            <th class="t-min">Мин</th>
-            <th class="t-who">Ответственный</th>
-          </tr>
-        </thead>
-        <tbody>${buildRowsHtml(rows)}</tbody>
-      </table>
-      ${footer}
+    <div class="pdf-frame">
+      <div class="pdf-sheet">
+        <h1>${escapeHtml(payload.heading)}</h1>
+        <div class="meta">${escapeHtml(payload.dateLine)} · начало ${escapeHtml(payload.startTime)} · всего ${payload.totalMinutes} мин</div>
+        ${leaderLine}
+        <table>
+          <thead>
+            <tr>
+              <th class="t-time">Время</th>
+              <th class="t-title">Блок</th>
+            </tr>
+          </thead>
+          <tbody>${buildRowsHtml(payload.rows)}</tbody>
+        </table>
+        <p class="footer">План служения · Источник жизни</p>
+      </div>
     </div>`;
 }
 
+function fitSheetToOnePage(sheet: HTMLElement): void {
+  const naturalHeight = sheet.scrollHeight;
+  const maxHeight = PDF_PAGE_HEIGHT_PX - 4;
+  if (naturalHeight <= maxHeight) return;
+
+  let scale = maxHeight / naturalHeight;
+  if (scale < 0.7) scale = 0.7;
+  sheet.style.transform = `scale(${scale})`;
+  sheet.style.width = `${PDF_PAGE_WIDTH_PX / scale}px`;
+}
+
 /**
- * Формирует PDF и сразу скачивает файл (без всплывающих окон и диалога печати).
+ * Формирует PDF на одном листе A4 и сразу скачивает файл.
  */
 export async function downloadServicePlanPdf(payload: ServicePlanPrintPayload, fileName: string): Promise<void> {
-  const pageChunks = paginateRows(payload.rows);
   const host = document.createElement('div');
   host.setAttribute('aria-hidden', 'true');
   host.style.cssText = 'position:fixed;left:-14000px;top:0;pointer-events:none;opacity:0;z-index:-1;';
   document.body.appendChild(host);
 
   const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
-  const marginMm = 0;
   const pageWidthMm = 210;
+  const pageHeightMm = 297;
 
   try {
-    for (let i = 0; i < pageChunks.length; i++) {
-      const rows = pageChunks[i] ?? [];
-      host.innerHTML = buildPdfPageHtml(payload, rows, {
-        showFullHeader: i === 0,
-        showFooter: i === pageChunks.length - 1,
-        pageNum: i + 1,
-        totalPages: pageChunks.length,
-      });
-
-      const sheet = host.querySelector('.pdf-sheet');
-      if (!(sheet instanceof HTMLElement)) {
-        throw new Error('Не удалось собрать макет PDF');
-      }
-
-      sheet.style.minHeight = 'auto';
-      const captureHeight = Math.min(PDF_PAGE_HEIGHT_PX, Math.max(sheet.scrollHeight + 8, 240));
-
-      const canvas = await html2canvas(sheet, {
-        scale: 2,
-        useCORS: true,
-        backgroundColor: '#ffffff',
-        logging: false,
-        width: PDF_PAGE_WIDTH_PX,
-        height: captureHeight,
-        windowWidth: PDF_PAGE_WIDTH_PX,
-        windowHeight: captureHeight,
-      });
-
-      const imgData = canvas.toDataURL('image/jpeg', 0.94);
-      if (i > 0) doc.addPage();
-      const imgHeightMm = (canvas.height * pageWidthMm) / canvas.width;
-      doc.addImage(imgData, 'JPEG', marginMm, marginMm, pageWidthMm, imgHeightMm);
+    host.innerHTML = buildPdfSheetHtml(payload);
+    const frame = host.querySelector('.pdf-frame');
+    const sheet = host.querySelector('.pdf-sheet');
+    if (!(frame instanceof HTMLElement) || !(sheet instanceof HTMLElement)) {
+      throw new Error('Не удалось собрать макет PDF');
     }
+
+    fitSheetToOnePage(sheet);
+
+    const canvas = await html2canvas(frame, {
+      scale: 2,
+      useCORS: true,
+      backgroundColor: '#ffffff',
+      logging: false,
+      width: PDF_PAGE_WIDTH_PX,
+      height: PDF_PAGE_HEIGHT_PX,
+      windowWidth: PDF_PAGE_WIDTH_PX,
+      windowHeight: PDF_PAGE_HEIGHT_PX,
+    });
+
+    const imgData = canvas.toDataURL('image/jpeg', 0.94);
+    doc.addImage(imgData, 'JPEG', 0, 0, pageWidthMm, pageHeightMm);
 
     const out = fileName.endsWith('.pdf') ? fileName : `${fileName}.pdf`;
     doc.save(out);
