@@ -142,7 +142,7 @@ async function archiveLegacyMemberPrayerRequestsToHistory(ciNow: number): Promis
     `INSERT INTO member_prayer_request_history (member_id, prayer_request, cycle_index, created_at)
      SELECT m.id,
             trim(m.prayer_request),
-            $2,
+            $1,
             NOW()
        FROM members m
       WHERE NULLIF(trim(COALESCE(m.prayer_request, '')), '') IS NOT NULL
@@ -150,10 +150,10 @@ async function archiveLegacyMemberPrayerRequestsToHistory(ciNow: number): Promis
           SELECT 1
             FROM member_prayer_request_history h
            WHERE h.member_id = m.id
-             AND h.cycle_index IS NOT DISTINCT FROM $2
+             AND h.cycle_index IS NOT DISTINCT FROM $1
              AND trim(h.prayer_request) = trim(m.prayer_request)
         )`,
-    [ciNow, archiveCycle],
+    [archiveCycle],
   );
   await query(
     `UPDATE members
