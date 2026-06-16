@@ -18,7 +18,7 @@ import {
   type ServicePlanSongUsagePeriod,
 } from '../api';
 import { ServicePlanSongPickButton } from '../components/ServicePlanSongPickButton';
-import { studioEditSongPath, useStudioModuleSurface } from '../studioPaths';
+import { studioEditSongLink, useStudioEditorBackTo, useStudioModuleSurface } from '../studioPaths';
 
 const PERIOD_OPTIONS: { value: ServicePlanSongUsagePeriod; label: string }[] = [
   { value: 3, label: '3 мес' },
@@ -87,10 +87,12 @@ function TopSongRow({
   song,
   rank,
   maxCount,
+  editorBackTo,
 }: {
   song: ServicePlanSongUsageItem;
   rank: number;
   maxCount: number;
+  editorBackTo: string;
 }) {
   const widthPct = maxCount > 0 ? Math.max(8, Math.round((song.usage_count / maxCount) * 100)) : 0;
 
@@ -106,7 +108,7 @@ function TopSongRow({
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-baseline justify-between gap-2">
             <Link
-              to={studioEditSongPath(song.song_id)}
+              {...studioEditSongLink(song.song_id, editorBackTo)}
               className="truncate text-sm font-semibold text-[var(--studio-editor-text)] hover:text-[var(--studio-editor-accent)]"
             >
               {songLabel(song)}
@@ -148,6 +150,7 @@ function groupRecentByDate(entries: ServicePlanSongRecentUsage[]): { date: strin
 
 export function ServicePlanSongUsagePage() {
   const surface = useStudioModuleSurface();
+  const editorBackTo = useStudioEditorBackTo();
   const inStudioShell = surface !== 'songbook';
   const [period, setPeriod] = useState<ServicePlanSongUsagePeriod>(12);
 
@@ -308,7 +311,7 @@ export function ServicePlanSongUsagePage() {
             </div>
             <ul className="space-y-2">
               {data.top_songs.map((song, i) => (
-                <TopSongRow key={song.song_id} song={song} rank={i + 1} maxCount={maxTopCount} />
+                <TopSongRow key={song.song_id} song={song} rank={i + 1} maxCount={maxTopCount} editorBackTo={editorBackTo} />
               ))}
             </ul>
           </section>
@@ -338,7 +341,7 @@ export function ServicePlanSongUsagePage() {
                     {group.items.map((item, idx) => (
                       <li key={`${item.service_plan_id}-${item.song_id}-${idx}`} className="flex flex-wrap items-center justify-between gap-2 px-4 py-3">
                         <Link
-                          to={studioEditSongPath(item.song_id)}
+                          {...studioEditSongLink(item.song_id, editorBackTo)}
                           className="min-w-0 flex-1 text-sm font-medium text-[var(--studio-editor-text)] hover:text-[var(--studio-editor-accent)]"
                         >
                           {songLabel(item)}
@@ -384,7 +387,7 @@ export function ServicePlanSongUsagePage() {
                     className="rounded-xl border border-[var(--studio-editor-border)] bg-[var(--studio-editor-block)] px-4 py-3 shadow-sm"
                   >
                     <Link
-                      to={studioEditSongPath(song.song_id)}
+                      {...studioEditSongLink(song.song_id, editorBackTo)}
                       className="text-sm font-semibold text-[var(--studio-editor-text)] hover:text-[var(--studio-editor-accent)]"
                     >
                       {songLabel(song)}

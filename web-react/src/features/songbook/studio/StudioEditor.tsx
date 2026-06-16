@@ -35,7 +35,7 @@ import { quickChordsForKey } from '../addSong/quickChords';
 import { extractCommonChords } from '../chordProEngine';
 import { aiSongCleanup, fetchStudioCatalogSong, fetchVersionForSong, saveVersion } from '../../studio/api';
 import { usePublishSong } from '../../studio/usePublishSong';
-import { studioMySongsPath, getStudioModuleSurface } from '../../studio/studioPaths';
+import { studioMySongsPath, getStudioModuleSurface, resolveStudioEditorBackTo } from '../../studio/studioPaths';
 import { useStudioAppChrome } from '../../studio/useStudioAppChrome';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { useSongbookChrome } from '../SongbookChromeContext';
@@ -640,7 +640,7 @@ export function StudioEditor() {
       void qc.invalidateQueries({ queryKey: ['studio', 'versions'] });
       void qc.invalidateQueries({ queryKey: ['studio', 'setlists'] });
       emitAppToast({ kind: 'success', message: 'Песня удалена из каталога' });
-      navigate(studioMySongsPath(surface));
+      navigate(backTo);
     },
     onError: () => emitAppToast('Не удалось удалить песню'),
   });
@@ -1026,7 +1026,7 @@ export function StudioEditor() {
     clearLocalDraft(id);
     setDraftRecovery(null);
   };
-  const backTo = studioMySongsPath(surface);
+  const backTo = resolveStudioEditorBackTo(location.state, surface);
   const showEditorPane = mobilePane === 'editor';
   const showPreviewPane = showPreview && mobilePane === 'preview';
   const presentTypes = useMemo(() => new Set(blocks.map((b) => b.type)), [blocks]);

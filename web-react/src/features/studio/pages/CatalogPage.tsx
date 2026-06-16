@@ -13,10 +13,11 @@ import {
   fetchPublicCatalogSyncStatus,
   syncStudioToPublicCatalog,
 } from '../api';
-import { studioEditSongPath, useStudioModuleSurface } from '../studioPaths';
+import { studioEditSongLink, useStudioEditorBackTo, useStudioModuleSurface } from '../studioPaths';
 
 export function CatalogPage() {
   const surface = useStudioModuleSurface();
+  const editorBackTo = useStudioEditorBackTo();
   const qc = useQueryClient();
   const role = useAuthStore((s) => s.role);
   const roles = useAuthStore((s) => s.roles ?? [s.role]);
@@ -146,7 +147,7 @@ export function CatalogPage() {
               <li key={s.id} className="border-b border-[var(--studio-editor-border)] last:border-b-0">
                 <div className="studio-list-row flex min-h-[52px] items-center gap-2 px-3 py-2">
                   <Link
-                    to={studioEditSongPath(Number(s.id))}
+                    {...studioEditSongLink(Number(s.id), editorBackTo)}
                     className="flex min-w-0 flex-1 items-center gap-2.5"
                   >
                     <span className="w-[26px] shrink-0 text-right text-xs font-medium text-[var(--studio-editor-mute)]">
@@ -162,7 +163,7 @@ export function CatalogPage() {
                     </span>
                   ) : null}
                   <Link
-                    to={studioEditSongPath(Number(s.id))}
+                    {...studioEditSongLink(Number(s.id), editorBackTo)}
                     className="studio-touch-target inline-flex shrink-0 items-center justify-center rounded-lg text-[var(--studio-editor-mute)] hover:bg-[var(--studio-nav-active-bg)]/40 hover:text-[var(--studio-editor-accent)]"
                     aria-label="Открыть в редакторе"
                     title="Открыть в редакторе"

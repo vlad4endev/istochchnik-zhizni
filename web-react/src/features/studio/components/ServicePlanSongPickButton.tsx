@@ -9,7 +9,7 @@ import {
   pickServicePlanSongs,
   type ServicePlanSongPickResult,
 } from '../api';
-import { studioEditSongPath } from '../studioPaths';
+import { studioEditSongLink, useStudioEditorBackTo } from '../studioPaths';
 
 const dateFmt = new Intl.DateTimeFormat('ru-RU', {
   weekday: 'long',
@@ -32,10 +32,12 @@ function PickResults({
   result,
   onClose,
   onApplied,
+  editorBackTo,
 }: {
   result: ServicePlanSongPickResult;
   onClose: () => void;
   onApplied: () => void;
+  editorBackTo: string;
 }) {
   const applyMut = useMutation({
     mutationFn: () =>
@@ -128,7 +130,7 @@ function PickResults({
                         {slot?.title ?? 'Блок песни'}
                       </p>
                       <Link
-                        to={studioEditSongPath(pick.song_id)}
+                        {...studioEditSongLink(pick.song_id, editorBackTo)}
                         className="mt-1 block text-base font-semibold text-[var(--studio-editor-text)] hover:text-[var(--studio-editor-accent)]"
                       >
                         {songLabel(pick)}
@@ -174,6 +176,7 @@ function PickResults({
 
 export function ServicePlanSongPickButton({ onApplied }: { onApplied?: () => void }) {
   const [result, setResult] = useState<ServicePlanSongPickResult | null>(null);
+  const editorBackTo = useStudioEditorBackTo();
 
   const pickMut = useMutation({
     mutationFn: () => pickServicePlanSongs(),
@@ -208,6 +211,7 @@ export function ServicePlanSongPickButton({ onApplied }: { onApplied?: () => voi
           result={result}
           onClose={() => setResult(null)}
           onApplied={() => onApplied?.()}
+          editorBackTo={editorBackTo}
         />
       ) : null}
     </>

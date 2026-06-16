@@ -17,7 +17,7 @@ import {
   type StudioDraft,
   type StudioVersionListItem,
 } from '../api';
-import { studioAddSongPath, studioCatalogPath, studioEditSongPath, useStudioModuleSurface } from '../studioPaths';
+import { studioAddSongPath, studioCatalogPath, studioEditSongLink, useStudioEditorBackTo, useStudioModuleSurface } from '../studioPaths';
 import { type SongListItem } from '../../songbook/api';
 import { usePublishSong } from '../usePublishSong';
 import { emitAppToast } from '../../../lib/uiFeedback';
@@ -32,19 +32,19 @@ function parseMySongsTab(searchParams: URLSearchParams): MySongsTab {
 
 const MISSING_TEXT_TAG = 'нет_текста';
 
-function ImportedSongRow({ song }: { song: SongListItem }) {
+function ImportedSongRow({ song, editorBackTo }: { song: SongListItem; editorBackTo: string }) {
   const publishMut = usePublishSong();
 
   const isMissingText = (song.tags ?? []).includes(MISSING_TEXT_TAG) || !song.content?.trim();
 
-  const editHref = studioEditSongPath(Number(song.id));
+  const editLink = studioEditSongLink(Number(song.id), editorBackTo);
 
   return (
     <li className="studio-list-row rounded-xl border border-[var(--studio-editor-border)] bg-[var(--studio-editor-block)] px-4 py-3 shadow-sm">
       <div className="flex items-start justify-between gap-3">
         <div className="flex min-w-0 flex-1 items-start gap-2 sm:gap-3">
           <Link
-            to={editHref}
+            {...editLink}
             className="min-w-0 flex-1 rounded-lg text-left outline-none ring-sky-400 focus-visible:ring-2"
           >
             <p className="truncate text-sm font-semibold text-[var(--studio-editor-text)] hover:text-[var(--studio-editor-accent)]">
@@ -65,7 +65,7 @@ function ImportedSongRow({ song }: { song: SongListItem }) {
             </div>
           </Link>
           <Link
-            to={editHref}
+            {...editLink}
             className="inline-flex shrink-0 items-center gap-1 text-sm font-semibold text-[var(--studio-editor-accent)] hover:text-[var(--studio-editor-accent)]"
           >
             <LuPenLine className="h-4 w-4" aria-hidden />
@@ -105,14 +105,14 @@ function ImportedSongRow({ song }: { song: SongListItem }) {
   );
 }
 
-function SavedVersionRow({ version }: { version: StudioVersionListItem }) {
+function SavedVersionRow({ version, editorBackTo }: { version: StudioVersionListItem; editorBackTo: string }) {
   const publishMut = usePublishSong();
-  const editHref = studioEditSongPath(Number(version.song_id));
+  const editLink = studioEditSongLink(Number(version.song_id), editorBackTo);
 
   return (
     <li className="studio-list-row rounded-xl border border-[var(--studio-editor-border)] bg-[var(--studio-editor-block)] px-4 py-3 shadow-sm">
       <div className="flex min-h-[52px] items-center justify-between gap-3">
-        <Link to={editHref} className="min-w-0 flex-1">
+        <Link {...editLink} className="min-w-0 flex-1">
           <p className="truncate font-medium text-[var(--studio-editor-text)] hover:text-[var(--studio-editor-accent)]">{version.song_title}</p>
           <p className="mt-0.5 text-xs text-[var(--studio-editor-mute)]">
             {version.custom_key ?? '—'} · {new Date(version.updated_at).toLocaleString()}
@@ -146,7 +146,7 @@ function SavedVersionRow({ version }: { version: StudioVersionListItem }) {
             </span>
           )}
           <Link
-            to={editHref}
+            {...editLink}
             className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center text-[var(--studio-editor-mute)] hover:text-[var(--studio-editor-accent)]"
             aria-label="Редактор"
           >
@@ -205,6 +205,7 @@ function DraftRow({
 
 export function MySongsPage() {
   const surface = useStudioModuleSurface();
+  const editorBackTo = useStudioEditorBackTo();
   const qc = useQueryClient();
   const role = useAuthStore((s) => s.role);
   void role;
@@ -472,7 +473,7 @@ export function MySongsPage() {
                       {s.title}
                     </Link>
                     <Link
-                      to={studioEditSongPath(Number(s.id))}
+                      {...studioEditSongLink(Number(s.id), editorBackTo)}
                       className="inline-flex shrink-0 items-center gap-1 text-sm font-semibold text-[var(--studio-editor-accent)] hover:text-[var(--studio-editor-accent)]"
                     >
                       <LuPenLine className="h-4 w-4" aria-hidden />
@@ -518,7 +519,7 @@ export function MySongsPage() {
                 ) : (
                   <ul className="flex flex-col gap-2">
                     {filteredRows.map((v) => (
-                      <SavedVersionRow key={v.id} version={v} />
+                      <SavedVersionRow key={v.id} version={v} editorBackTo={editorBackTo} />
                     ))}
                   </ul>
                 )}
@@ -560,7 +561,7 @@ export function MySongsPage() {
             ) : (
               <ul className="flex flex-col gap-2">
                 {importedFiltered.map((s) => (
-                  <ImportedSongRow key={s.id} song={s} />
+                  <ImportedSongRow key={s.id} song={s} editorBackTo={editorBackTo} />
                 ))}
               </ul>
             )}

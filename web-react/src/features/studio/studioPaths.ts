@@ -1,8 +1,16 @@
 import { useLocation } from 'react-router-dom';
 
+import { isStudioDeploy } from '../../lib/appVariant';
+
 export type StudioModuleSurface = 'songbook' | 'legacy';
 
+export type StudioEditorLocationState = {
+  backTo?: string;
+};
+
+/** На поддомене студии редактор живёт под `/songbook/studio/edit`, но навигация — `/studio/...`. */
 export function getStudioModuleSurface(pathname: string): StudioModuleSurface {
+  if (isStudioDeploy()) return 'legacy';
   return pathname.startsWith('/songbook') ? 'songbook' : 'legacy';
 }
 
@@ -26,6 +34,32 @@ export function studioAddSongPath(surface: StudioModuleSurface): string {
 /** Единый URL редактора студии (внутри раздела песенника). */
 export function studioEditSongPath(songId: number): string {
   return `/songbook/studio/edit/${songId}`;
+}
+
+/** Пропсы Link для перехода в редактор с запоминанием экрана, откуда открыли. */
+export type StudioEditSongLinkProps = {
+  to: string;
+  state?: StudioEditorLocationState;
+};
+
+export function studioEditSongLink(songId: number, backTo?: string): StudioEditSongLinkProps {
+  const to = studioEditSongPath(songId);
+  if (!backTo?.startsWith('/')) return { to };
+  return { to, state: { backTo } };
+}
+export function resolveStudioEditorBackTo(
+  locationState: unknown,
+  surface: StudioModuleSurface,
+): string {
+  const backTo = (locationState as StudioEditorLocationState | null)?.backTo;
+  if (typeof backTo === 'string' && backTo.startsWith('/')) return backTo;
+  return studioMySongsPath(surface);
+}
+
+/** Текущий URL — куда вернуться из редактора при открытии отсюда. */
+export function useStudioEditorBackTo(): string {
+  const { pathname, search } = useLocation();
+  return `${pathname}${search}`;
 }
 
 export function studioSetlistsIndexPath(surface: StudioModuleSurface): string {
