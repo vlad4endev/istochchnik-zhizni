@@ -50,6 +50,8 @@
     "db:apply:media-schedule:docker": "docker compose exec -T api node dist/cli/applyMediaScheduleMigrations.js",
     "db:diagnose:catalog:docker": "docker compose exec -T api node dist/cli/diagnoseMemberCatalogSongs.js",
     "db:diagnose:auth:docker": "docker compose exec -T api node dist/cli/diagnoseAuth.js",
+    "db:reset-password": "npm run build && node dist/cli/resetMemberPassword.js",
+    "db:reset-password:docker": "docker compose exec -T api node dist/cli/resetMemberPassword.js",
     "db:repair:catalog:docker": "docker compose exec -T api node dist/cli/repairAllCatalogSongs.js",
     "analytics:dedupe": "npx ts-node scripts/cleanupAnalyticsDuplicates.ts",
     "analytics:dedupe:apply": "npx ts-node scripts/cleanupAnalyticsDuplicates.ts --apply",

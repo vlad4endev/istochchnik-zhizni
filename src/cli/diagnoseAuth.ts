@@ -73,6 +73,35 @@ async function main(): Promise<void> {
       console.log('[diagnose-auth] matches:', found.rows);
       if (found.rows.length === 0) {
         console.log('[diagnose-auth] Нет записи с такими цифрами — вход даст 401.');
+      } else if (found.rows.length === 1) {
+        const m = found.rows[0] as {
+          is_active: boolean;
+          registration_status: string;
+          has_password: boolean;
+          password_reset_required: boolean;
+        };
+        const reg = String(m.registration_status ?? '').trim().toLowerCase();
+        const mayAuth =
+          reg === 'rejected' ||
+          (Boolean(m.is_active) && (reg === 'active' || reg === 'pending_review'));
+        const reasons: string[] = [];
+        if (!mayAuth) {
+          reasons.push(`аккаунт недоступен (is_active=${m.is_active}, registration_status=${reg})`);
+        }
+        if (m.password_reset_required) {
+          console.log(
+            '[diagnose-auth] Вход: оставьте пароль пустым → откроется форма нового пароля (ответ 428).',
+          );
+        } else if (!m.has_password) {
+          reasons.push('нет password_hash и password_reset_required=false — нужен сброс админом или регистрация');
+        }
+        if (reasons.length) {
+          console.log('[diagnose-auth] Почему 401 «Неверный телефон или пароль»:', reasons.join('; '));
+        } else if (m.has_password) {
+          console.log(
+            '[diagnose-auth] Запись есть, пароль задан — 401 значит неверный пароль или API без фикса сопоставления телефонов (пересоберите api).',
+          );
+        }
       }
     } else {
       const sample = await client.query(`
