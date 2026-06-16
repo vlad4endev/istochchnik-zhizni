@@ -1,7 +1,7 @@
 import { useColorScheme } from 'react-native';
 import { useMemo } from 'react';
 
-import { getColorScheme } from '../lib/storage';
+import { useSettingsStore } from '../stores/settingsStore';
 
 export interface ThemeColors {
   primary: string;
@@ -58,7 +58,7 @@ export interface Theme {
 
 export function useTheme(): Theme {
   const systemScheme = useColorScheme();
-  const preference = getColorScheme();
+  const preference = useSettingsStore((s) => s.colorScheme);
 
   const isDark = useMemo(() => {
     if (preference === 'dark') return true;

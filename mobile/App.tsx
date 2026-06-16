@@ -1,20 +1,46 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { StatusBar } from 'expo-status-bar';
-import { StyleSheet, Text, View } from 'react-native';
+import { useEffect } from 'react';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 
-export default function App() {
+import { MessengerWsProvider } from './src/contexts/MessengerWsContext';
+import { RootNavigator } from './src/navigation/RootNavigator';
+import { useSettingsStore } from './src/stores/settingsStore';
+import { useTheme } from './src/theme';
+
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 60_000,
+      retry: 1,
+    },
+  },
+});
+
+function AppInner() {
+  const { isDark } = useTheme();
+  const hydrateSettings = useSettingsStore((s) => s.hydrate);
+
+  useEffect(() => {
+    hydrateSettings();
+  }, [hydrateSettings]);
+
   return (
-    <View style={styles.container}>
-      <Text>Open up App.tsx to start working on your app!</Text>
-      <StatusBar style="auto" />
-    </View>
+    <>
+      <StatusBar style={isDark ? 'light' : 'dark'} />
+      <RootNavigator />
+    </>
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#fff',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-});
+export default function App() {
+  return (
+    <SafeAreaProvider>
+      <QueryClientProvider client={queryClient}>
+        <MessengerWsProvider>
+          <AppInner />
+        </MessengerWsProvider>
+      </QueryClientProvider>
+    </SafeAreaProvider>
+  );
+}

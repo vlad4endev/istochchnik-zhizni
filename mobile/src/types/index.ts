@@ -61,19 +61,7 @@ export interface NextWeekMemberDay {
   member: Member | null;
 }
 
-// Навигация
-export type RootStackParamList = {
-  Main: undefined;
-  PrayerDetail: { date: string };
-};
-
-export type BottomTabParamList = {
-  Prayer: undefined;
-  Admin: undefined;
-  Settings: undefined;
-};
-
-// Локальные настройки (хранятся в MMKV)
+// Навигация — см. src/navigation/types.ts
 export interface AppSettings {
   apiBaseUrl: string;
   colorScheme: 'system' | 'light' | 'dark';
