@@ -1,5 +1,6 @@
 import { format, isToday, isYesterday } from 'date-fns';
 import { ru } from 'date-fns/locale';
+import { Platform } from 'react-native';
 
 import type { ConversationListItem, MessagePayloadType, MessageWithSender } from '../api/messenger';
 
@@ -36,6 +37,13 @@ export function normalizeChatDisplayText(text: string): string {
   }
   s = s.replace(/(\d{1,2})\s*:\s*(\d{1,2})/g, '$1:$2');
   return s;
+}
+
+/** Android BiDi: LTR marks around digit runs so «в 10» does not render as «в 1 0». */
+export function displayMessengerText(text: string): string {
+  const normalized = normalizeChatDisplayText(text);
+  if (Platform.OS !== 'android') return normalized;
+  return normalized.replace(/(\d+)/g, '\u200E$1\u200E');
 }
 
 export function getAvatarColor(seed: string): string {

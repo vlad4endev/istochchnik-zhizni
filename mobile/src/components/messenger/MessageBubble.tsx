@@ -6,7 +6,6 @@ import {
   PanResponder,
   Platform,
   StyleSheet,
-  Text,
   Vibration,
   View,
 } from 'react-native';
@@ -22,9 +21,9 @@ import { getAuthToken } from '../../lib/storage';
 import {
   formatMessageTime,
   messagePreviewText,
-  normalizeChatDisplayText,
 } from '../../lib/messengerUtils';
-import { MESSENGER_BRAND, messengerTextProps } from '../../theme/messenger';
+import { MESSENGER_BRAND } from '../../theme/messenger';
+import { MessengerText, MessengerTimeText } from './MessengerText';
 import { useTheme } from '../../theme';
 
 const SWIPE_REPLY_THRESHOLD = 52;
@@ -70,7 +69,7 @@ export function MessageBubble({
   const bodyText = message.is_deleted
     ? 'Сообщение удалено'
     : payloadType === 'text'
-      ? normalizeChatDisplayText(message.content)
+      ? String(message.content ?? '')
       : messagePreviewText(message);
 
   const clearLongPressTimer = () => {
@@ -149,21 +148,21 @@ export function MessageBubble({
   const bubble = (
     <View style={[styles.bubble, isOwn ? styles.bubbleOwn : styles.bubbleOther]}>
       {showSenderName && !isOwn ? (
-        <Text {...messengerTextProps} style={styles.senderName}>
+        <MessengerText numberOfLines={1} style={styles.senderName}>
           {message.sender_name || message.sender_first_name || 'Участник'}
-        </Text>
+        </MessengerText>
       ) : null}
 
       {message.reply_preview && !message.is_deleted ? (
         <View style={styles.reply}>
-          <Text {...messengerTextProps} style={styles.replyAuthor} numberOfLines={1}>
+          <MessengerText style={styles.replyAuthor} numberOfLines={1}>
             {message.reply_preview.sender_name || 'Ответ'}
-          </Text>
-          <Text {...messengerTextProps} style={styles.replyText} numberOfLines={2}>
+          </MessengerText>
+          <MessengerText style={styles.replyText} numberOfLines={2}>
             {message.reply_preview.is_deleted
               ? 'Сообщение удалено'
-              : normalizeChatDisplayText(message.reply_preview.content)}
-          </Text>
+              : String(message.reply_preview.content ?? '')}
+          </MessengerText>
         </View>
       ) : null}
 
@@ -171,24 +170,24 @@ export function MessageBubble({
         <Image source={imageUri} style={styles.image} contentFit="cover" />
       ) : null}
 
-      <Text {...messengerTextProps} style={[styles.text, message.is_deleted && styles.deletedText]}>
+      <MessengerText style={[styles.text, message.is_deleted && styles.deletedText]}>
         {bodyText}
-      </Text>
+      </MessengerText>
 
       <View style={styles.meta}>
         {message.is_edited && !message.is_deleted ? (
-          <Text {...messengerTextProps} style={styles.metaText}>
+          <MessengerText bidiSafe={false} style={styles.metaText}>
             изм.
-          </Text>
+          </MessengerText>
         ) : null}
-        <Text {...messengerTextProps} style={styles.metaText}>
+        <MessengerTimeText style={styles.metaText}>
           {formatMessageTime(message.created_at)}
-        </Text>
+        </MessengerTimeText>
         {isPending ? <ActivityIndicator size="small" color={colors.textMuted} /> : null}
         {isError ? (
-          <Text {...messengerTextProps} style={styles.errorText}>
+          <MessengerText bidiSafe={false} style={styles.errorText}>
             !
-          </Text>
+          </MessengerText>
         ) : null}
       </View>
     </View>

@@ -18,6 +18,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { fetchConversations, type ConversationListItem } from '../api/messenger';
 import { ChatAvatar } from '../components/messenger/ChatAvatar';
 import { ChatFilterTabs } from '../components/messenger/ChatFilterTabs';
+import { MessengerText, MessengerTimeText } from '../components/messenger/MessengerText';
 import { SearchBar } from '../components/messenger/SearchBar';
 import { ErrorView } from '../components/ErrorView';
 import { LoadingView } from '../components/LoadingView';
@@ -213,20 +214,18 @@ function ChatRow({
       />
       <View style={{ flex: 1, minWidth: 0 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-          <Text
-            {...messengerTextProps}
+          <MessengerText
             style={{ flex: 1, fontSize: 16, fontWeight: '700', color: colors.text }}
             numberOfLines={1}
           >
             {title}
-          </Text>
-          <Text {...messengerTextProps} style={{ fontSize: 12, color: colors.textMuted }}>
+          </MessengerText>
+          <MessengerTimeText style={{ fontSize: 12, color: colors.textMuted }}>
             {formatChatTime(time)}
-          </Text>
+          </MessengerTimeText>
         </View>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4 }}>
-          <Text
-            {...messengerTextProps}
+          <MessengerText
             style={{
               flex: 1,
               fontSize: 14,
@@ -236,7 +235,7 @@ function ChatRow({
             numberOfLines={1}
           >
             {preview}
-          </Text>
+          </MessengerText>
           {unread ? (
             <View
               style={{
@@ -249,12 +248,11 @@ function ChatRow({
                 justifyContent: 'center',
               }}
             >
-              <Text
-                {...messengerTextProps}
+              <MessengerTimeText
                 style={{ fontSize: 11, fontWeight: '800', color: colors.textOnPrimary }}
               >
-                {conv.unread_count > 99 ? '99+' : conv.unread_count}
-              </Text>
+                {conv.unread_count > 99 ? '99+' : String(conv.unread_count)}
+              </MessengerTimeText>
             </View>
           ) : null}
         </View>

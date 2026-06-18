@@ -1,11 +1,11 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useMemo } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 import Animated, { SlideInDown, SlideOutDown } from 'react-native-reanimated';
 
 import type { MessageWithSender } from '../../api/messenger';
-import { normalizeChatDisplayText } from '../../lib/messengerUtils';
-import { androidRipple, MESSENGER_BRAND, messengerTextProps } from '../../theme/messenger';
+import { androidRipple, MESSENGER_BRAND } from '../../theme/messenger';
+import { MessengerText } from './MessengerText';
 
 interface ReplyBarProps {
   replyTo: MessageWithSender | null;
@@ -23,7 +23,7 @@ export function ReplyBar({ replyTo, onCancel }: ReplyBarProps) {
     'Сообщение';
   const text = replyTo.is_deleted
     ? 'Сообщение удалено'
-    : normalizeChatDisplayText(replyTo.content);
+    : String(replyTo.content ?? '');
 
   return (
     <Animated.View
@@ -33,12 +33,12 @@ export function ReplyBar({ replyTo, onCancel }: ReplyBarProps) {
     >
       <View style={styles.replyBarAccent} />
       <View style={styles.replyBarBody}>
-        <Text {...messengerTextProps} style={styles.replyBarName}>
+        <MessengerText numberOfLines={1} style={styles.replyBarName}>
           {from}
-        </Text>
-        <Text {...messengerTextProps} numberOfLines={1} style={styles.replyBarText}>
+        </MessengerText>
+        <MessengerText numberOfLines={1} style={styles.replyBarText}>
           {text}
-        </Text>
+        </MessengerText>
       </View>
       <Pressable
         onPress={onCancel}
