@@ -1943,6 +1943,26 @@ html[data-mantine-color-scheme='dark'] .tg-input-banner {
   unicode-bidi: isolate;
   font-variant-numeric: tabular-nums;
   letter-spacing: 0;
+  display: inline;
+}
+
+/* Android Chrome / WebView / Capacitor: Roboto + без переносов внутри цифр */
+html[data-android-messenger='1'] .tg-messenger .messenger-bidi-text,
+html[data-android-messenger='1'] .tg-messenger .msg-content,
+html[data-android-messenger='1'] .tg-messenger .mention-rich-text,
+html[data-android-messenger='1'] .tg-messenger .msg-reply-text,
+html[data-android-messenger='1'] .tg-messenger .chatlist-preview,
+html[data-android-messenger='1'] .tg-messenger .chatlist-time {
+  font-family: Roboto, 'Noto Sans', system-ui, sans-serif;
+  -webkit-hyphens: none;
+  hyphens: none;
+  line-break: auto;
+  word-break: normal;
+}
+
+html[data-android-messenger='1'] .tg-messenger .messenger-digit-run {
+  unicode-bidi: isolate !important;
+  direction: ltr !important;
 }
 
 .msg-content .tabular-nums,

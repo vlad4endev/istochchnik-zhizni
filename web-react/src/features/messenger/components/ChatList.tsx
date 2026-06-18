@@ -5,7 +5,7 @@ import type { ConversationListItem, PatchMyConversationUiBody } from '../api/mes
 import { AppAvatar } from '../../../components/AppAvatar';
 import { SkeletonBox } from '@/components/ui/SkeletonBox';
 import { getAvatarColor, getAvatarInitial } from '../avatarUtils';
-import { displayMessengerText } from '../normalizeChatDisplayText';
+import { MessengerPlainText, renderMessengerPlainText } from '../messengerPlainText';
 import { LuPin, LuVolume2, LuVolumeX, LuFolderOpen, LuEraser, LuTrash2, LuSearch } from 'react-icons/lu';
 import { IoCheckmark, IoCheckmarkDone } from 'react-icons/io5';
 
@@ -387,9 +387,7 @@ function ChatListItem({
     lastMsg?.sender_id != null &&
     currentMemberId != null &&
     Number(lastMsg.sender_id) === Number(currentMemberId);
-  const previewContent = lastMsg?.content
-    ? displayMessengerText(String(lastMsg.content))
-    : '';
+  const previewContent = lastMsg?.content ? String(lastMsg.content) : '';
   const previewLineRaw = isTyping
     ? (() => {
         const names = typingUsers.map((u) => u.memberName.split(' ')[0]).filter(Boolean);
@@ -405,7 +403,6 @@ function ChatListItem({
             ? `${lastMsg.sender_name.split(' ')[0]}: ${previewContent}`
             : previewContent
       : 'Нет сообщений';
-  const previewLine = displayMessengerText(previewLineRaw);
   const showUnreadBadge = conv.unread_count > 0 && !isActive;
   const showOutgoingChecks = lastFromMe && !showUnreadBadge && !isTyping;
   const outgoingReadByOthers = (() => {
@@ -502,7 +499,7 @@ function ChatListItem({
                 className="chatlist-time shrink-0 whitespace-nowrap text-xs text-[var(--text-secondary)] tabular-nums messenger-bidi-text"
                 dateTime={lastMsg.created_at}
               >
-                {formatTime(lastMsg.created_at)}
+                <MessengerPlainText text={formatTime(lastMsg.created_at)} keyPrefix="time" />
               </time>
             ) : null}
           </div>
@@ -514,7 +511,7 @@ function ChatListItem({
                 isTyping ? 'font-medium text-primary' : 'text-[var(--text-secondary)]',
               ].join(' ')}
             >
-              {previewLine}
+              {renderMessengerPlainText(previewLineRaw, 'preview')}
             </p>
             <div className="flex shrink-0 items-center justify-end">
               {showUnreadBadge ? (

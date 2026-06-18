@@ -2019,7 +2019,9 @@ function MessageBubbleInner({
   const bubbleMeta = (
     <div className={metaRowClass}>
       {message.is_edited ? <span className="msg-edited">ред.</span> : null}
-      <span className="tabular-nums messenger-bidi-text">{formattedTime}</span>
+      <span className="tabular-nums messenger-bidi-text">
+        {renderMessengerPlainText(formattedTime, 'meta-time')}
+      </span>
       {isMine ? (
         <>
           {status === 'sending' ? (
@@ -2204,7 +2206,7 @@ function MessageBubbleInner({
             <div className="msg-reply-text messenger-bidi-text">
               {message.reply_preview.is_deleted
                 ? 'Сообщение удалено'
-                : displayMessengerText(String(message.reply_preview.content ?? ''))}
+                : renderMessengerPlainText(String(message.reply_preview.content ?? ''), 'reply')}
             </div>
           </button>
         )}

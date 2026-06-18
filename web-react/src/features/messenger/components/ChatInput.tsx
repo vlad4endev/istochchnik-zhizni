@@ -24,7 +24,7 @@ import {
   normalizeMentionsToCanonical,
 } from '../mentionUtils';
 import { compressImageForMessengerUpload } from '../compressImageForUpload';
-import { displayMessengerText } from '../normalizeChatDisplayText';
+import { MessengerPlainText } from '../messengerPlainText';
 import axios from 'axios';
 import { emitAppToast } from '../../../lib/uiFeedback';
 import {
@@ -1693,12 +1693,16 @@ export function ChatInput({
         <div className="tg-input-banner">
           <div className="tg-input-banner-bar" aria-hidden />
           <div className="tg-input-banner-content">
-            <div className="tg-input-banner-title messenger-bidi-text">
-              {displayMessengerText(replyingTo.sender_name || 'Сообщение')}
-            </div>
-            <div className="tg-input-banner-text messenger-bidi-text">
-              {displayMessengerText(String(replyingTo.content || '').trim() || '—')}
-            </div>
+            <MessengerPlainText
+              className="tg-input-banner-title messenger-bidi-text"
+              text={replyingTo.sender_name || 'Сообщение'}
+              keyPrefix="reply-title"
+            />
+            <MessengerPlainText
+              className="tg-input-banner-text messenger-bidi-text"
+              text={String(replyingTo.content || '').trim() || '—'}
+              keyPrefix="reply-body"
+            />
           </div>
           <button
             type="button"
