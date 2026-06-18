@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { format, parse, startOfDay } from 'date-fns';
 import { ru } from 'date-fns/locale';
 import { FaCakeCandles } from 'react-icons/fa6';
-import { LuUsers, LuMessageCircle } from 'react-icons/lu';
+import { LuMessageCircle } from 'react-icons/lu';
 import type { BirthdayWeekItem } from '../../calendar/api';
 
 const BRAND = '#7D3640';
@@ -45,11 +45,6 @@ function formatBirthdayDate(weekDateYMD: string): string {
   return format(d, 'EEE, d MMMM', { locale: ru });
 }
 
-function pluralizeN(n: number): string {
-  if (n === 1) return '';
-  if (n >= 2 && n <= 4) return 'а';
-  return 'ов';
-}
 
 function getStatus(weekDateYMD: string, today: Date): BirthdayStatus | null {
   const d = parse(weekDateYMD, 'yyyy-MM-dd', new Date());
@@ -113,14 +108,6 @@ export function BirthdayBlock({
         ))}
       </div>
 
-      {/* Footer */}
-      <div className="mt-2.5 flex items-center justify-center gap-1 text-xs text-[#BBB]">
-        <LuUsers size={13} aria-hidden />
-        <span style={{ color: '#999', fontWeight: 500 }}>
-          {thisWeek.length}&nbsp;именинник{pluralizeN(thisWeek.length)}
-        </span>
-        &nbsp;на этой неделе
-      </div>
     </section>
   );
 }
