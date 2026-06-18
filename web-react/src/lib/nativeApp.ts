@@ -24,7 +24,9 @@ export async function requestNativePushPermission(): Promise<NativePermissionSta
   try {
     const perm = await PushNotifications.requestPermissions();
     if (perm.receive === 'granted') {
-      await PushNotifications.register();
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('app:native-push-permissions-granted'));
+      }
       return 'granted';
     }
     if (perm.receive === 'denied') return 'denied';

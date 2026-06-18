@@ -135,6 +135,7 @@ router.post('/save-token', requireAuthSession, async (req: Request, res: Respons
 
   try {
     await saveFcmToken(memberId, device_id, fcm_token);
+    console.info('[notifications] save-token ok', { memberId, deviceId: device_id.slice(0, 12) });
     res.status(201).json({ ok: true });
   } catch (e) {
     console.error('[notifications] save-token error:', e);

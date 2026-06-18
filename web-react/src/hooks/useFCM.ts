@@ -13,6 +13,9 @@ const GENERAL_CHANNEL_ID = 'general';
 const GENERAL_CHANNEL_NAME = 'Уведомления';
 const GENERAL_CHANNEL_DESCRIPTION = 'Напоминания и системные уведомления';
 
+/** Последний FCM-токен с устройства — пересохраняем при входе, если registration уже прошёл. */
+let lastRegisteredFcmToken: string | null = null;
+
 function getOrCreateDeviceId(): string {
   if (typeof localStorage === 'undefined') {
     return typeof crypto !== 'undefined' && crypto.randomUUID
@@ -85,6 +88,13 @@ async function ensurePushChannels(): Promise<void> {
   }).catch(() => {});
 }
 
+async function ensureNotificationPermission(): Promise<boolean> {
+  const current = await PushNotifications.checkPermissions();
+  if (current.receive === 'granted') return true;
+  const perm = await PushNotifications.requestPermissions();
+  return perm.receive === 'granted';
+}
+
 /**
  * Нативные FCM-пуши (Capacitor). На веб/PWA не выполняется.
  * Токен отправляется на POST /api/notifications/save-token при наличии сессии.
@@ -102,65 +112,91 @@ export function useFCM(): void {
 
     const deviceId = getOrCreateDeviceId();
     let cancelled = false;
+    const removeListeners: Array<() => void> = [];
+
+    const registerForPush = async (): Promise<void> => {
+      if (cancelled) return;
+      if (!(await ensureNotificationPermission())) {
+        console.warn('[fcm] notification permission not granted');
+        return;
+      }
+      if (lastRegisteredFcmToken) {
+        await saveFcmTokenToServer(lastRegisteredFcmToken, deviceId);
+      }
+      await PushNotifications.register();
+    };
 
     void (async () => {
       try {
         await ensurePushChannels();
-        const perm = await PushNotifications.requestPermissions();
-        if (cancelled) return;
-        if (perm.receive !== 'granted') {
-          console.warn('[fcm] notification permission not granted');
-          return;
-        }
-        await PushNotifications.register();
+
+        const regListener = await PushNotifications.addListener('registration', async (ev) => {
+          const fcmToken = ev.value?.trim();
+          if (!fcmToken) return;
+          lastRegisteredFcmToken = fcmToken;
+          await saveFcmTokenToServer(fcmToken, deviceId);
+        });
+        removeListeners.push(() => {
+          void regListener.remove();
+        });
+
+        const regErrorListener = await PushNotifications.addListener('registrationError', (err) => {
+          console.warn('[fcm] registrationError', err);
+        });
+        removeListeners.push(() => {
+          void regErrorListener.remove();
+        });
+
+        const receivedListener = await PushNotifications.addListener('pushNotificationReceived', (notification) => {
+          const title =
+            typeof notification.notification?.title === 'string'
+              ? notification.notification.title
+              : typeof notification.data?.title === 'string'
+                ? notification.data.title
+                : '';
+          const body =
+            typeof notification.notification?.body === 'string'
+              ? notification.notification.body
+              : typeof notification.data?.body === 'string'
+                ? notification.data.body
+                : '';
+          showForegroundNotification(title, body);
+        });
+        removeListeners.push(() => {
+          void receivedListener.remove();
+        });
+
+        const actionListener = await PushNotifications.addListener('pushNotificationActionPerformed', (action) => {
+          const data = action.notification?.data ?? {};
+          const url = typeof data.url === 'string' ? data.url : '';
+          const conversationId = typeof data.conversationId === 'string' ? data.conversationId : '';
+          window.dispatchEvent(
+            new CustomEvent('app:native-push-navigate', {
+              detail: { url, conversationId },
+            }),
+          );
+        });
+        removeListeners.push(() => {
+          void actionListener.remove();
+        });
+
+        await registerForPush();
       } catch (e) {
-        console.warn('[fcm] request/register failed', e);
+        console.warn('[fcm] setup/register failed', e);
       }
     })();
 
-    const regListener = PushNotifications.addListener('registration', async (ev) => {
-      const fcmToken = ev.value?.trim();
-      if (!fcmToken) return;
-      await saveFcmTokenToServer(fcmToken, deviceId);
-    });
-
-    const regErrorListener = PushNotifications.addListener('registrationError', (err) => {
-      console.warn('[fcm] registrationError', err);
-    });
-
-    const receivedListener = PushNotifications.addListener('pushNotificationReceived', (notification) => {
-      const title =
-        typeof notification.notification?.title === 'string'
-          ? notification.notification.title
-          : typeof notification.data?.title === 'string'
-            ? notification.data.title
-            : '';
-      const body =
-        typeof notification.notification?.body === 'string'
-          ? notification.notification.body
-          : typeof notification.data?.body === 'string'
-            ? notification.data.body
-            : '';
-      showForegroundNotification(title, body);
-    });
-
-    const actionListener = PushNotifications.addListener('pushNotificationActionPerformed', (action) => {
-      const data = action.notification?.data ?? {};
-      const url = typeof data.url === 'string' ? data.url : '';
-      const conversationId = typeof data.conversationId === 'string' ? data.conversationId : '';
-      window.dispatchEvent(
-        new CustomEvent('app:native-push-navigate', {
-          detail: { url, conversationId },
-        }),
-      );
-    });
+    const onPermissionsGranted = (): void => {
+      void registerForPush();
+    };
+    window.addEventListener('app:native-push-permissions-granted', onPermissionsGranted);
 
     return () => {
       cancelled = true;
-      void regListener.then((h) => h.remove());
-      void regErrorListener.then((h) => h.remove());
-      void receivedListener.then((h) => h.remove());
-      void actionListener.then((h) => h.remove());
+      window.removeEventListener('app:native-push-permissions-granted', onPermissionsGranted);
+      for (const remove of removeListeners) {
+        remove();
+      }
     };
   }, [token]);
 }
