@@ -28,7 +28,6 @@ import {
 
 import { isAppAdministratorSession, useAuthStore } from '../features/auth/authStore';
 import { useBrandingStore } from '../features/branding/brandingStore';
-import { useFCM } from '../hooks/useFCM';
 import { useWebPushSync } from '../hooks/useWebPushSync';
 import { useRealtimeQuerySync } from '../hooks/useRealtimeQuerySync';
 import { useRealtimeWsConnection } from '../lib/realtimeWsClient';
@@ -126,7 +125,7 @@ function ConnectivityBanner() {
     <div
       role="status"
       aria-live="polite"
-      className="flex shrink-0 items-center justify-center gap-2.5 border-b border-white/[0.07] bg-zinc-950/88 px-3 py-2.5 text-center backdrop-blur-xl supports-[backdrop-filter]:bg-zinc-950/72 sm:gap-3 sm:px-4"
+      className="pointer-events-none fixed inset-x-0 bottom-0 z-[9998] flex items-center justify-center gap-2.5 border-t border-white/[0.07] bg-zinc-950/88 px-3 py-2.5 text-center backdrop-blur-xl supports-[backdrop-filter]:bg-zinc-950/72 sm:gap-3 sm:px-4 [padding-bottom:max(0.625rem,env(safe-area-inset-bottom,0px))]"
     >
       <span className="relative flex h-2 w-2 shrink-0" aria-hidden>
         <span className="absolute inline-flex h-full w-full motion-reduce:hidden animate-ping rounded-full bg-rose-400/45" />
@@ -134,7 +133,7 @@ function ConnectivityBanner() {
       </span>
       <LuWifiOff className="h-4 w-4 shrink-0 text-zinc-400" strokeWidth={2} aria-hidden />
       <p className="min-w-0 max-w-[min(100%,40rem)] text-[13px] font-medium leading-snug text-zinc-100">
-        Нет сети — данные могут быть неактуальны, действия не сохранятся до восстановления связи.
+        Нет подключения — работаем офлайн
       </p>
     </div>
   );
@@ -540,7 +539,6 @@ const NAV_PREFETCH_BY_PATH: Record<
 };
 export function Layout() {
   useSyncServerRole();
-  useFCM();
   useWebPushSync();
   const token = useAuthStore((s) => s.token);
   const queryClient = useQueryClient();
@@ -744,13 +742,20 @@ export function Layout() {
     if (!token) return;
     if (registrationStatus !== 'active') return;
     void markAllDeliveriesOpened();
-    const onVis = () => {
-      if (document.visibilityState !== 'visible') return;
+    const onResume = () => {
       void refreshUnread();
       void markAllDeliveriesOpened();
     };
+    const onVis = () => {
+      if (document.visibilityState !== 'visible') return;
+      onResume();
+    };
     document.addEventListener('visibilitychange', onVis);
-    return () => document.removeEventListener('visibilitychange', onVis);
+    window.addEventListener('app:background-resume', onResume);
+    return () => {
+      document.removeEventListener('visibilitychange', onVis);
+      window.removeEventListener('app:background-resume', onResume);
+    };
   }, [token, registrationStatus, refreshUnread, markAllDeliveriesOpened]);
 
   useEffect(() => {
@@ -875,9 +880,7 @@ export function Layout() {
           'flex min-h-0 min-w-0 w-full max-w-full flex-1 flex-col box-border',
         ].join(' ')}
       >
-      <div className="shrink-0">
-        <ConnectivityBanner />
-      </div>
+      <ConnectivityBanner />
       <div className="relative flex min-h-0 w-full min-w-0 max-w-full flex-1 flex-col overflow-x-hidden">
       {/* Десктоп (lg+): фиксированный сайдбар. До lg — нижняя навигация (как мобильная сетка дашборда). */}
       <aside

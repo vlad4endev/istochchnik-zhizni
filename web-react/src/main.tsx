@@ -19,6 +19,8 @@ import { TopLoader } from './components/ui/TopLoader';
 import { AccessibilityProvider } from './lib/accessibility/AccessibilityProvider';
 import { getAppVariant } from './lib/appVariant';
 import { SessionKeepAlive } from './hooks/SessionKeepAlive';
+import { useFCM } from './hooks/useFCM';
+import { useBackgroundDataSync } from './hooks/useBackgroundDataSync';
 import { ImpersonationBanner } from './features/admin/components/ImpersonationBanner';
 import { initAuthCrossTabLocalStorageSync } from './features/auth/authStore';
 import { useViewportHeight } from './hooks/useViewportHeight';
@@ -232,6 +234,16 @@ function RootRouter() {
   return <AppRouter />;
 }
 
+function BackgroundDataSyncBridge() {
+  useBackgroundDataSync();
+  return null;
+}
+
+function NativePushBridge() {
+  useFCM();
+  return null;
+}
+
 function PwaUpdateListener() {
   useAppUpdate();
   return null;
@@ -298,12 +310,14 @@ if (!rootEl) {
             <QueryClientProvider client={queryClient}>
               {import.meta.env.PROD ? <PWAUpdatePrompt /> : null}
               <PwaUpdateListener />
+              <BackgroundDataSyncBridge />
               <ViewportHeightBridge />
               <TopLoader />
               <BrowserRouter>
                 <AccessibilityProvider>
                   <ImpersonationBanner />
                   <SessionKeepAlive />
+                  <NativePushBridge />
                   <RootRouter />
                   <MediaViewer />
                 </AccessibilityProvider>

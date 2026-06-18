@@ -3,6 +3,8 @@ import { Capacitor } from '@capacitor/core';
 import { PushNotifications } from '@capacitor/push-notifications';
 
 import { useAuthStore } from '../features/auth/authStore';
+import { isCookieOnlySessionToken } from '../lib/authSessionConstants';
+import { resolveAxiosBaseURL } from '../lib/config';
 import { apiClient } from '../lib/apiClient';
 import { emitAppToast } from '../lib/uiFeedback';
 
@@ -44,6 +46,31 @@ function showForegroundNotification(title: string, body: string): void {
   );
 }
 
+async function postSaveTokenRequest(
+  fcmToken: string,
+  deviceId: string,
+  sessionToken: string,
+): Promise<boolean> {
+  const base = resolveAxiosBaseURL().trim();
+  if (!base) return false;
+
+  const headers: Record<string, string> = {
+    Accept: 'application/json',
+    'Content-Type': 'application/json',
+  };
+  if (!isCookieOnlySessionToken(sessionToken)) {
+    headers.Authorization = `Bearer ${sessionToken}`;
+  }
+
+  const res = await fetch(`${base}/api/notifications/save-token`, {
+    method: 'POST',
+    headers,
+    credentials: 'include',
+    body: JSON.stringify({ fcm_token: fcmToken, device_id: deviceId }),
+  });
+  return res.ok;
+}
+
 async function saveFcmTokenToServer(fcmToken: string, deviceId: string): Promise<boolean> {
   const session = useAuthStore.getState().token;
   if (!session?.trim()) return false;
@@ -58,10 +85,17 @@ async function saveFcmTokenToServer(fcmToken: string, deviceId: string): Promise
       return true;
     } catch (err) {
       lastErr = err;
+      try {
+        if (await postSaveTokenRequest(fcmToken, deviceId, session)) {
+          return true;
+        }
+      } catch (fetchErr) {
+        lastErr = fetchErr;
+      }
       await new Promise((r) => setTimeout(r, 400 * (attempt + 1)));
     }
   }
-  console.warn('[fcm] save-token failed after retries', lastErr);
+  console.warn('[fcm] save-token failed after retries', lastErr, resolveAxiosBaseURL());
   emitAppToast('Не удалось отправить push-токен на сервер. Проверьте интернет и войдите снова.', 'error');
   return false;
 }
