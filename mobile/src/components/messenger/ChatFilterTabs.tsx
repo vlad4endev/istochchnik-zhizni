@@ -44,9 +44,10 @@ export function ChatFilterTabs({ activeTab, onChange, conversations }: ChatFilte
             key={tab.id}
             onPress={() => onChange(tab.id)}
             android_ripple={androidRipple}
-            style={[
+            style={({ pressed }) => [
               styles.tabButton,
               isActive ? styles.tabButtonActive : styles.tabButtonInactive,
+              pressed && (isActive ? styles.tabButtonActivePressed : styles.tabButtonInactivePressed),
             ]}
           >
             <Text
@@ -104,8 +105,16 @@ function createStyles() {
     tabButtonActive: {
       backgroundColor: MESSENGER_BRAND,
     },
+    tabButtonActivePressed: {
+      backgroundColor: '#741616',
+      opacity: 1,
+    },
     tabButtonInactive: {
       backgroundColor: tabInactiveBg,
+    },
+    tabButtonInactivePressed: {
+      backgroundColor: 'rgba(0,0,0,0.12)',
+      opacity: 1,
     },
     tabButtonText: {
       fontSize: 13,

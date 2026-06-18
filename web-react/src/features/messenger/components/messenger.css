@@ -156,6 +156,9 @@ html[data-mantine-color-scheme='dark'] .tg-chatlist-search {
   touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
   transition: background-color 0.15s ease, color 0.15s ease;
+  /* mobile.css: button:active { opacity: 0.7 } — не делаем вкладки «прозрачными» */
+  opacity: 1 !important;
+  transform: none !important;
 }
 
 html[data-mantine-color-scheme='dark'] .tg-smart-tab {
@@ -163,8 +166,14 @@ html[data-mantine-color-scheme='dark'] .tg-smart-tab {
   color: var(--tg-text-secondary);
 }
 
-.tg-smart-tab:active {
-  opacity: 0.9;
+.tg-smart-tab:not(.tg-smart-tab--active):active {
+  background: rgba(0, 0, 0, 0.12);
+  opacity: 1 !important;
+  transform: none !important;
+}
+
+html[data-mantine-color-scheme='dark'] .tg-smart-tab:not(.tg-smart-tab--active):active {
+  background: rgba(255, 255, 255, 0.14);
 }
 
 .tg-smart-tab--active {
@@ -174,8 +183,10 @@ html[data-mantine-color-scheme='dark'] .tg-smart-tab {
 }
 
 .tg-smart-tab--active:active {
-  background: var(--messenger-brand, #8b1a1a);
+  background: #741616;
   color: #fff;
+  opacity: 1 !important;
+  transform: none !important;
 }
 
 .tg-smart-tab__badge {
@@ -199,6 +210,35 @@ html[data-mantine-color-scheme='dark'] .tg-smart-tab {
 .tg-smart-tab__badge--active {
   background: rgba(255, 255, 255, 0.25);
   color: #fff;
+}
+
+/* PWA / touch: не даём глобальному mobile.css гасить opacity у контролов мессенджера */
+@media (max-width: 1023px) {
+  .tg-messenger :is(
+      button,
+      .sendBtn,
+      .tg-icon-btn,
+      .tg-send-btn,
+      .tg-smart-tab,
+      .msg-actions button,
+      .msg-quick-reaction,
+      .msg-reaction-floating__emoji,
+      .tg-input-banner-close
+    ):active {
+    opacity: 1 !important;
+  }
+
+  .tg-messenger .sendBtn:active:not(:disabled) {
+    transform: scale(0.92) !important;
+  }
+
+  .tg-messenger .tg-send-btn:active:not(:disabled) {
+    transform: scale(0.96) !important;
+  }
+
+  .tg-messenger .tg-icon-btn:active {
+    transform: scale(0.96) !important;
+  }
 }
 
 .tg-main {

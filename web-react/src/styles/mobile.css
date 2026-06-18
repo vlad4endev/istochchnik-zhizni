@@ -602,9 +602,9 @@
     }
   }
 
-  button:active,
+  /* Тактильный отклик без opacity: 0.7 — на PWA/iOS кнопки (отправка, голос, вкладки) выглядели «прозрачными». */
+  button:active:not(:disabled),
   .tappable:active {
-    opacity: 0.7 !important;
     transform: scale(0.98) !important;
   }
   * {
