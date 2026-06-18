@@ -6,7 +6,7 @@ import { AppAvatar } from '../../../components/AppAvatar';
 import { SkeletonBox } from '@/components/ui/SkeletonBox';
 import { getAvatarColor, getAvatarInitial } from '../avatarUtils';
 import { normalizeChatDisplayText } from '../normalizeChatDisplayText';
-import { LuPin, LuVolume2, LuVolumeX, LuFolderOpen, LuEraser, LuTrash2 } from 'react-icons/lu';
+import { LuPin, LuVolume2, LuVolumeX, LuFolderOpen, LuEraser, LuTrash2, LuSearch } from 'react-icons/lu';
 import { IoCheckmark, IoCheckmarkDone } from 'react-icons/io5';
 
 interface ChatListProps {
@@ -57,13 +57,16 @@ export const ChatList = memo(function ChatList({ onSelect, activeId }: ChatListP
   const setActiveTab = useChatStore((s) => s.setActiveTab);
   const getUnreadForTab = useChatStore((s) => s.getUnreadForTab);
   const getConversationsForActiveTab = useChatStore((s) => s.getConversationsForActiveTab);
+  const [listSearchQuery, setListSearchQuery] = useState('');
 
   const filtered = useMemo(() => getConversationsForActiveTab() || EMPTY_ARRAY, [getConversationsForActiveTab, conversations, activeTab]);
 
-  const visibleChats = useMemo(
-    () => filtered.filter((c) => !isHiddenTestConversation(c)),
-    [filtered],
-  );
+  const visibleChats = useMemo(() => {
+    const base = filtered.filter((c) => !isHiddenTestConversation(c));
+    const q = listSearchQuery.trim().toLowerCase();
+    if (!q) return base;
+    return base.filter((c) => getConversationName(c).toLowerCase().includes(q));
+  }, [filtered, listSearchQuery]);
 
   if (conversationsLoading && !conversationsLoaded) {
     return (
@@ -102,7 +105,8 @@ export const ChatList = memo(function ChatList({ onSelect, activeId }: ChatListP
 
   return (
     <div className="tg-chatlist-root flex min-h-0 flex-1 flex-col bg-[var(--surface-elevated)]">
-      <div className="shrink-0 border-b border-stone-200/60 px-3 pb-2 pt-2 md:px-4">
+      <div className="tg-chatlist-toolbar shrink-0">
+        <ChatListSearch value={listSearchQuery} onChange={setListSearchQuery} />
         <SmartTabs
           activeTab={activeTab}
           onChange={setActiveTab}
@@ -129,13 +133,39 @@ export const ChatList = memo(function ChatList({ onSelect, activeId }: ChatListP
         </ul>
         {visibleChats.length === 0 ? (
           <div className="px-4 py-10 text-center">
-            <p className="text-sm font-semibold text-[var(--text-secondary)]">Здесь пока пусто</p>
+            <p className="text-sm font-semibold text-[var(--text-secondary)]">
+              {listSearchQuery.trim() ? 'Ничего не найдено' : 'Здесь пока пусто'}
+            </p>
           </div>
         ) : null}
       </div>
     </div>
   );
 });
+
+function ChatListSearch({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <label className="tg-chatlist-search">
+      <LuSearch size={16} className="tg-chatlist-search__icon" aria-hidden />
+      <input
+        type="search"
+        className="tg-chatlist-search__input"
+        placeholder="Поиск"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        enterKeyHint="search"
+        autoComplete="off"
+        aria-label="Поиск чатов"
+      />
+    </label>
+  );
+}
 
 function SmartTabs({
   activeTab,
@@ -160,48 +190,32 @@ function SmartTabs({
   ];
 
   return (
-    <div className="isolate max-[768px]:-mx-1 max-[768px]:overflow-x-auto max-[768px]:overflow-y-visible max-[768px]:px-1 max-[768px]:scrollbar-hide min-[769px]:overflow-visible">
-      <div
-        className="flex min-w-max items-center gap-1 rounded-2xl border border-stone-200/70 bg-[var(--surface-elevated,#fafaf9)] p-1 shadow-sm [contain:layout] min-[769px]:min-w-0 min-[769px]:w-full"
-        style={{ WebkitFontSmoothing: 'subpixel-antialiased' }}
-      >
-        {tabs.map((t) => {
-          const isActive = t.id === activeTab;
-          return (
-            <button
-              key={t.id}
-              type="button"
-              onClick={() => onChange(t.id)}
-              style={{ WebkitTapHighlightColor: 'transparent' }}
-              className={[
-                // Тач: без «серой» подсветки WebKit; :active не должен сбрасывать фон активной вкладки.
-                'relative z-[1] inline-flex min-h-[32px] shrink-0 touch-manipulation select-none items-center justify-center gap-1.5 rounded-xl px-2 py-1.5 text-[11px] font-semibold subpixel-antialiased [-webkit-tap-highlight-color:transparent] min-[769px]:min-w-0 min-[769px]:flex-1 min-[769px]:text-xs',
-                'min-[769px]:transition-colors min-[769px]:duration-200',
-                isActive
-                  ? 'bg-[var(--text,#1c1917)] text-[var(--surface-elevated,#fafaf9)] shadow-sm active:bg-[var(--text,#1c1917)] active:text-[var(--surface-elevated,#fafaf9)] active:shadow-sm'
-                  : [
-                      'text-[var(--text-secondary,#57534e)]',
-                      'active:bg-stone-200/80 active:text-[var(--text,#1c1917)]',
-                      // Hover только с мыши (≥769px): на телефоне липкий :hover ломает вид после тапа.
-                      'min-[769px]:hover:bg-[var(--surface)] min-[769px]:hover:text-[var(--text,#1c1917)]',
-                    ].join(' '),
-              ].join(' ')}
-            >
-              <span className="whitespace-nowrap">{t.label}</span>
-              {t.unread > 0 ? (
-                <span
-                  className={[
-                    'inline-flex min-w-[18px] items-center justify-center rounded-full px-1 py-px text-xs font-bold',
-                    isActive ? 'bg-white/20 text-white' : 'bg-primary/10 text-primary',
-                  ].join(' ')}
-                >
-                  {t.unread > 99 ? '99+' : t.unread}
-                </span>
-              ) : null}
-            </button>
-          );
-        })}
-      </div>
+    <div className="tg-smart-tabs-scroll" role="tablist" aria-label="Фильтр чатов">
+      {tabs.map((t) => {
+        const isActive = t.id === activeTab;
+        return (
+          <button
+            key={t.id}
+            type="button"
+            role="tab"
+            aria-selected={isActive}
+            onClick={() => onChange(t.id)}
+            className={['tg-smart-tab', isActive ? 'tg-smart-tab--active' : ''].filter(Boolean).join(' ')}
+          >
+            <span className="whitespace-nowrap">{t.label}</span>
+            {t.unread > 0 ? (
+              <span
+                className={[
+                  'tg-smart-tab__badge',
+                  isActive ? 'tg-smart-tab__badge--active' : 'tg-smart-tab__badge--inactive',
+                ].join(' ')}
+              >
+                {t.unread > 99 ? '99+' : t.unread}
+              </span>
+            ) : null}
+          </button>
+        );
+      })}
     </div>
   );
 }

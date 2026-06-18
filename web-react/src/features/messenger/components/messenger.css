@@ -17,6 +17,9 @@
   --tg-primary: #7d3640;
   --tg-primary-hover: #5c2830;
   --tg-primary-light: rgba(125, 54, 64, 0.12);
+  /* Chrome мессенджера (вкладки, reply-bar) — не трогает аватары и пузыри */
+  --messenger-brand: #8b1a1a;
+  --messenger-brand-light: rgba(139, 26, 26, 0.1);
   --tg-bg: #f0ebe6;
   --tg-surface: #ffffff;
   --tg-surface-elevated: #faf8f6;
@@ -76,6 +79,126 @@
   font-feature-settings: 'kern' 1, 'liga' 1;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+/* ─── Список чатов: поиск + вкладки-пилюли (PWA / mobile web) ─── */
+.tg-chatlist-toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px 12px 10px;
+  border-bottom: 1px solid rgba(28, 25, 23, 0.06);
+  background: var(--tg-surface-elevated, #fafaf9);
+}
+
+.tg-chatlist-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.07);
+}
+
+html[data-mantine-color-scheme='dark'] .tg-chatlist-search {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.tg-chatlist-search__icon {
+  flex-shrink: 0;
+  color: #aaa;
+}
+
+.tg-chatlist-search__input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-size: 15px;
+  color: var(--tg-text, #111);
+  padding: 0;
+  margin: 0;
+}
+
+.tg-chatlist-search__input::placeholder {
+  color: #aaa;
+}
+
+.tg-smart-tabs-scroll {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  padding-bottom: 2px;
+}
+
+.tg-smart-tabs-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.tg-smart-tab {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 6px 14px;
+  border: none;
+  border-radius: 20px;
+  background: rgba(0, 0, 0, 0.07);
+  color: #555;
+  font-size: 13px;
+  font-weight: 400;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+html[data-mantine-color-scheme='dark'] .tg-smart-tab {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--tg-text-secondary);
+}
+
+.tg-smart-tab:active {
+  opacity: 0.9;
+}
+
+.tg-smart-tab--active {
+  background: var(--messenger-brand, #8b1a1a);
+  color: #fff;
+  font-weight: 600;
+}
+
+.tg-smart-tab--active:active {
+  background: var(--messenger-brand, #8b1a1a);
+  color: #fff;
+}
+
+.tg-smart-tab__badge {
+  display: inline-flex;
+  min-width: 18px;
+  height: 18px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9px;
+  padding: 0 5px;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.tg-smart-tab__badge--inactive {
+  background: var(--messenger-brand, #8b1a1a);
+  color: #fff;
+}
+
+.tg-smart-tab__badge--active {
+  background: rgba(255, 255, 255, 0.25);
+  color: #fff;
 }
 
 .tg-main {
@@ -1309,7 +1432,7 @@ html[data-mantine-color-scheme='dark'] .tg-input-banner {
   width: 3px;
   min-height: 32px;
   border-radius: 3px;
-  background: var(--tg-primary);
+  background: var(--messenger-brand, #8b1a1a);
   flex-shrink: 0;
 }
 
@@ -1321,7 +1444,7 @@ html[data-mantine-color-scheme='dark'] .tg-input-banner {
 .tg-input-banner-title {
   font-size: 12px;
   font-weight: 700;
-  color: var(--tg-primary);
+  color: var(--messenger-brand, #8b1a1a);
   margin-bottom: 1px;
 }
 

@@ -1689,24 +1689,24 @@ export function ChatInput({
 
       {/* Swipe-to-reply preview */}
       {replyingTo ? (
-        <div className="mb-1.5 flex items-start gap-2 border-b border-stone-200/45 pb-2 dark:border-white/12">
-          <div className="mt-0.5 w-0.5 shrink-0 self-stretch rounded-full bg-blue-500" aria-hidden />
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-[11px] font-semibold uppercase tracking-wide text-[var(--text-secondary)]">
+        <div className="tg-input-banner">
+          <div className="tg-input-banner-bar" aria-hidden />
+          <div className="tg-input-banner-content">
+            <div className="tg-input-banner-title">
               {replyingTo.sender_name || 'Сообщение'}
-            </p>
-            <p className="mt-0.5 truncate text-sm text-[var(--text)]">
+            </div>
+            <div className="tg-input-banner-text">
               {String(replyingTo.content || '').trim() || '—'}
-            </p>
+            </div>
           </div>
           <button
             type="button"
+            className="tg-input-banner-close"
             onClick={() => setReplyingTo(null)}
-            className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[var(--text-secondary)] transition-colors duration-200 hover:bg-black/5 dark:hover:bg-white/10"
             aria-label="Отменить ответ"
             title="Отменить"
           >
-            <LuX />
+            ✕
           </button>
         </div>
       ) : null}
