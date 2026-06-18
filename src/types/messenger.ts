@@ -240,4 +240,6 @@ export type WsMessengerEvent =
   | { type: 'call:signal'; callId: string; data: unknown }
   | { type: 'call:peer_video'; callId: string; userId: number; enabled: boolean }
   | { type: 'call:peer_audio'; callId: string; userId: number; enabled: boolean }
-  | { type: 'call:peer_screen'; callId: string; enabled: boolean };
+  | { type: 'call:peer_screen'; callId: string; enabled: boolean }
+  /** Количество уникальных зрителей, смотрящих трансляцию прямо сейчас. */
+  | { type: 'broadcast:viewer_count'; count: number };

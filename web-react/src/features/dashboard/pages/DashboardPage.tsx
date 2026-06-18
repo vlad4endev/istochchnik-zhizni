@@ -11,6 +11,7 @@ import {
   LuCheck,
   LuChurch,
   LuExternalLink,
+  LuEye,
   LuHandHeart,
   LuHeadphones,
   LuMic,
@@ -24,6 +25,7 @@ import {
 import type { IconType } from 'react-icons';
 
 import { fetchActiveBroadcast, type BroadcastData } from '../../../api/broadcast';
+import { useBroadcastViewers } from '../../../hooks/useBroadcastViewers';
 import {
   BROADCAST_SLOT_MS,
   formatBroadcastMainTimer,
@@ -434,12 +436,14 @@ function BroadcastCompactCard({
   timerText,
   uiMode,
   endsAtFormatted,
+  viewerCount,
   onOpen,
 }: {
   broadcast: BroadcastData | null;
   timerText: string;
   uiMode: BroadcastUiMode;
   endsAtFormatted: string | null;
+  viewerCount?: number | null;
   onOpen: () => void;
 }) {
   const isOnAir = uiMode === 'onair';
@@ -448,6 +452,7 @@ function BroadcastCompactCard({
   const timerLabel = isOnAir ? 'Идёт трансляция' : 'До начала';
   const dateLabel = isOnAir ? 'Началась' : 'Начало';
   const description = (broadcast?.description ?? '').trim() || '—';
+  const showViewers = isOnAir && typeof viewerCount === 'number' && viewerCount > 0;
   const statusBadge = isOnAir
     ? (
       <span className="inline-flex items-center gap-1 rounded-full bg-[#D64035] px-2 py-0.5 text-[10px] font-bold text-white">
@@ -465,9 +470,15 @@ function BroadcastCompactCard({
         </div>
         <div className="min-w-0 flex-1">
           <p className="line-clamp-2 break-words text-sm font-bold leading-snug text-white">{title}</p>
-          <div className="mt-1 flex min-w-0 items-center gap-2">
+          <div className="mt-1 flex min-w-0 flex-wrap items-center gap-2">
             <span className="shrink-0">{statusBadge}</span>
             <span className="min-w-0 truncate text-[11px] font-medium text-white/70">{platform}</span>
+            {showViewers && (
+              <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-white/15 px-2 py-0.5 text-[10px] font-semibold text-white/90">
+                <LuEye className="h-3 w-3 shrink-0" aria-hidden />
+                {viewerCount}
+              </span>
+            )}
           </div>
         </div>
       </div>
@@ -869,6 +880,7 @@ function DashboardMain() {
   const broadcastUiMode = getBroadcastUiMode(broadcastNowMs, activeBroadcast);
   const broadcastTimerText = formatBroadcastMainTimer(broadcastNowMs, activeBroadcast);
   const showBroadcastWidget = shouldShowBroadcastWidget(broadcastNowMs, activeBroadcast);
+  const broadcastViewerCount = useBroadcastViewers();
   const announcementNote = dashboardNotesQ.data?.announcement ?? null;
   const hasAnnouncement = announcementNote != null;
   const displayAnnouncement = hasAnnouncement && !isParishionerGuest;
@@ -1308,6 +1320,7 @@ function DashboardMain() {
                   timerText={broadcastTimerText}
                   uiMode={broadcastUiMode}
                   endsAtFormatted={broadcastEndsLabel}
+                  viewerCount={broadcastViewerCount}
                   onOpen={() => navigate('/broadcast')}
                 />
               </div>
@@ -1593,6 +1606,7 @@ function DashboardMain() {
                 timerText={broadcastTimerText}
                 uiMode={broadcastUiMode}
                 endsAtFormatted={broadcastEndsLabel}
+                viewerCount={broadcastViewerCount}
                 onOpen={() => navigate('/broadcast')}
               />
             </div>

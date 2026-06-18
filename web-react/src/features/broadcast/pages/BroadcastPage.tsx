@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { format } from 'date-fns';
 import { ru } from 'date-fns/locale';
-import { LuBell, LuExpand, LuPlay, LuTv } from 'react-icons/lu';
+import { LuBell, LuExpand, LuEye, LuPlay, LuTv } from 'react-icons/lu';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useBroadcastViewers } from '../../../hooks/useBroadcastViewers';
 import { createBroadcast, fetchActiveBroadcast, fetchFinishedBroadcasts, patchBroadcast, type BroadcastData } from '../../../api/broadcast';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { sectionHeroStickyClass } from '../../../lib/sectionHeroChrome';
@@ -101,6 +102,7 @@ export function BroadcastPage() {
     return () => window.clearInterval(id);
   }, []);
 
+  const viewerCount = useBroadcastViewers({ watching: true });
   const broadcastUiMode = getBroadcastUiMode(broadcastTickMs, activeBroadcast);
   const broadcastMainTimer = formatBroadcastMainTimer(broadcastTickMs, activeBroadcast);
   const countdownPhrase = formatBroadcastCountdownPhrase(broadcastTickMs, activeBroadcast?.starts_at ?? null);
@@ -233,10 +235,18 @@ export function BroadcastPage() {
                 <p className="text-sm font-semibold text-stone-600">Запланированный эфир завершён (прошло 2 ч с указанного начала).</p>
               ) : broadcastUiMode === 'onair' ? (
                 <>
-                  <span className="inline-flex items-center gap-1.5 rounded-full bg-red-600 px-3 py-1 text-xs font-extrabold text-white">
-                    <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-white" aria-hidden />
-                    В эфире
-                  </span>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="inline-flex items-center gap-1.5 rounded-full bg-red-600 px-3 py-1 text-xs font-extrabold text-white">
+                      <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-white" aria-hidden />
+                      В эфире
+                    </span>
+                    {viewerCount !== null && viewerCount > 0 && (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-stone-100 px-2.5 py-1 text-xs font-semibold text-stone-600">
+                        <LuEye className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                        {viewerCount} {viewerCount === 1 ? 'смотрит' : viewerCount >= 2 && viewerCount <= 4 ? 'смотрят' : 'смотрят'}
+                      </span>
+                    )}
+                  </div>
                   <p className="text-sm font-semibold text-stone-800 tabular-nums">Идёт: {broadcastMainTimer}</p>
                 </>
               ) : (

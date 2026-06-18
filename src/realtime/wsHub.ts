@@ -611,6 +611,20 @@ async function handleClientMessage(client: AuthenticatedClient, msg: ClientInbou
       }
       break;
     }
+    case 'watch_broadcast': {
+      if (!client.rooms.has(BROADCAST_WATCH_ROOM)) {
+        joinRoom(client, BROADCAST_WATCH_ROOM);
+        pushBroadcastViewerCount();
+      }
+      break;
+    }
+    case 'unwatch_broadcast': {
+      if (client.rooms.has(BROADCAST_WATCH_ROOM)) {
+        leaveRoom(client, BROADCAST_WATCH_ROOM);
+        pushBroadcastViewerCount();
+      }
+      break;
+    }
     case 'msg:delivered_signal': {
       const convId =
         typeof msg.conversationId === 'string' && msg.conversationId.trim()
@@ -654,6 +668,22 @@ async function handleClientMessage(client: AuthenticatedClient, msg: ClientInbou
       break;
     }
   }
+}
+
+// ─── Broadcast viewer presence ────────────────────────────────
+
+const BROADCAST_WATCH_ROOM = 'broadcast:watch';
+
+function getBroadcastViewerCount(): number {
+  const room = rooms.get(BROADCAST_WATCH_ROOM);
+  if (!room || room.size === 0) return 0;
+  const uniqueMembers = new Set<number>();
+  for (const c of room) uniqueMembers.add(c.memberId);
+  return uniqueMembers.size;
+}
+
+function pushBroadcastViewerCount(): void {
+  broadcastRealtime({ type: 'broadcast:viewer_count', count: getBroadcastViewerCount() });
 }
 
 // ─── Room management ──────────────────────────────────────────
@@ -709,6 +739,7 @@ function removeClient(ws: WebSocket): void {
   }
 
   const servicePlanRoomsToRefresh = new Set<string>();
+  const wasWatcher = client.rooms.has(BROADCAST_WATCH_ROOM);
   for (const roomId of client.rooms) {
     if (roomId.startsWith('sp:')) {
       servicePlanRoomsToRefresh.add(roomId);
@@ -726,6 +757,10 @@ function removeClient(ws: WebSocket): void {
 
   for (const roomId of servicePlanRoomsToRefresh) {
     broadcastServicePlanRoomPresence(roomId);
+  }
+
+  if (wasWatcher) {
+    pushBroadcastViewerCount();
   }
 
   // Remove from member index
