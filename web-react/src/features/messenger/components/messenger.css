@@ -155,10 +155,12 @@ html[data-mantine-color-scheme='dark'] .tg-chatlist-search {
   cursor: pointer;
   touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
-  transition: background-color 0.15s ease, color 0.15s ease;
-  /* mobile.css: button:active { opacity: 0.7 } — не делаем вкладки «прозрачными» */
-  opacity: 1 !important;
-  transform: none !important;
+  -webkit-appearance: none;
+  appearance: none;
+  opacity: 1;
+  transform: translateZ(0);
+  transition: background-color 0.18s ease;
+  will-change: background-color;
 }
 
 html[data-mantine-color-scheme='dark'] .tg-smart-tab {
@@ -166,13 +168,13 @@ html[data-mantine-color-scheme='dark'] .tg-smart-tab {
   color: var(--tg-text-secondary);
 }
 
-.tg-smart-tab:not(.tg-smart-tab--active):active {
+.tg-smart-tab:not(.tg-smart-tab--active):is(:active, .tg-smart-tab--pressed) {
   background: rgba(0, 0, 0, 0.12);
   opacity: 1 !important;
-  transform: none !important;
+  transform: scale(0.97) translateZ(0) !important;
 }
 
-html[data-mantine-color-scheme='dark'] .tg-smart-tab:not(.tg-smart-tab--active):active {
+html[data-mantine-color-scheme='dark'] .tg-smart-tab:not(.tg-smart-tab--active):is(:active, .tg-smart-tab--pressed) {
   background: rgba(255, 255, 255, 0.14);
 }
 
@@ -182,11 +184,23 @@ html[data-mantine-color-scheme='dark'] .tg-smart-tab:not(.tg-smart-tab--active):
   font-weight: 600;
 }
 
-.tg-smart-tab--active:active {
-  background: #741616;
-  color: #fff;
+.tg-smart-tab--active:is(:active, .tg-smart-tab--pressed) {
+  background: #741616 !important;
+  color: #fff !important;
   opacity: 1 !important;
-  transform: none !important;
+  transform: scale(0.97) translateZ(0) !important;
+}
+
+/* iOS Safari PWA: Safari сбрасывает opacity кнопок при :active */
+html[data-pwa-standalone='1'] .tab-filter-button,
+html[data-apple-mobile='1'] .tab-filter-button {
+  opacity: 1 !important;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html[data-pwa-standalone='1'] .tab-filter-button:is(:active, .tg-smart-tab--pressed, .tg-smart-tab--active),
+html[data-apple-mobile='1'] .tab-filter-button:is(:active, .tg-smart-tab--pressed, .tg-smart-tab--active) {
+  opacity: 1 !important;
 }
 
 .tg-smart-tab__badge {
@@ -238,6 +252,10 @@ html[data-mantine-color-scheme='dark'] .tg-smart-tab:not(.tg-smart-tab--active):
 
   .tg-messenger .tg-icon-btn:active {
     transform: scale(0.96) !important;
+  }
+
+  .tg-messenger .tg-smart-tab:is(:active, .tg-smart-tab--pressed) {
+    opacity: 1 !important;
   }
 }
 
@@ -1416,6 +1434,7 @@ html[data-mantine-color-scheme='dark'] .tg-smart-tab:not(.tg-smart-tab--active):
 
 .chat-back-btn {
   display: none;
+  color: var(--tg-primary);
 }
 
 .tg-send-btn {
@@ -1889,14 +1908,41 @@ html[data-mantine-color-scheme='dark'] .tg-input-banner {
   word-wrap: break-word;
   word-break: normal;
   letter-spacing: normal;
+  font-family: var(--tg-font-family);
   font: inherit;
-  font-variant-numeric: proportional-nums;
+  font-variant-numeric: normal;
   font-variant-emoji: emoji;
   font-feature-settings: 'kern' 1, 'liga' 1;
   font-optical-sizing: auto;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+/* BiDi + шрифт: цифры в кириллице не разъезжаются (PWA iOS/Android, десктоп). */
+.tg-messenger .messenger-bidi-text,
+.tg-messenger .msg-content,
+.tg-messenger .mention-rich-text,
+.tg-messenger .msg-reply-text,
+.tg-messenger .msg-reply-author,
+.tg-messenger .chatlist-preview,
+.tg-messenger .chatlist-name,
+.tg-messenger .chatlist-time,
+.tg-messenger .tg-input-banner-title,
+.tg-messenger .tg-input-banner-text,
+.tg-messenger .sender-name {
+  direction: ltr;
+  unicode-bidi: plaintext;
+  font-family: var(--tg-font-family);
+  letter-spacing: normal;
+  font-variant-numeric: normal;
+}
+
+.messenger-digit-run {
+  direction: ltr;
+  unicode-bidi: isolate;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
 }
 
 .msg-content .tabular-nums,
@@ -1912,22 +1958,6 @@ html[data-mantine-color-scheme='dark'] .tg-input-banner {
 .tg-header-status {
   font-family: var(--tg-font-family);
   letter-spacing: normal;
-}
-
-/* Android WebView / PWA: BiDi не разбивает цифры в кириллическом тексте («в 10» → не «в 1 0»). */
-html[data-android-messenger='1'] .messenger-bidi-text,
-html[data-android-messenger='1'] .msg-content,
-html[data-android-messenger='1'] .mention-rich-text,
-html[data-android-messenger='1'] .msg-reply-text,
-html[data-android-messenger='1'] .msg-reply-author,
-html[data-android-messenger='1'] .chatlist-preview,
-html[data-android-messenger='1'] .chatlist-name,
-html[data-android-messenger='1'] .chatlist-time,
-html[data-android-messenger='1'] .tg-input-banner-title,
-html[data-android-messenger='1'] .tg-input-banner-text,
-html[data-android-messenger='1'] .sender-name {
-  direction: ltr;
-  unicode-bidi: plaintext;
 }
 
 .msg-edited {

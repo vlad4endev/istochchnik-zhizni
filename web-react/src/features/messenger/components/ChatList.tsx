@@ -182,6 +182,8 @@ function SmartTabs({
   unreadServices: number;
   unreadNotifications: number;
 }) {
+  const [pressedId, setPressedId] = useState<ChatTab | null>(null);
+
   const tabs: { id: ChatTab; label: string; unread: number }[] = [
     { id: 'all', label: 'Все', unread: unreadAll },
     { id: 'personal', label: 'Личные', unread: unreadPersonal },
@@ -200,7 +202,18 @@ function SmartTabs({
             role="tab"
             aria-selected={isActive}
             onClick={() => onChange(t.id)}
-            className={['tg-smart-tab', isActive ? 'tg-smart-tab--active' : ''].filter(Boolean).join(' ')}
+            onPointerDown={() => setPressedId(t.id)}
+            onPointerUp={() => setPressedId(null)}
+            onPointerCancel={() => setPressedId(null)}
+            onPointerLeave={() => setPressedId(null)}
+            className={[
+              'tg-smart-tab',
+              'tab-filter-button',
+              isActive ? 'tg-smart-tab--active active' : '',
+              pressedId === t.id ? 'tg-smart-tab--pressed' : '',
+            ]
+              .filter(Boolean)
+              .join(' ')}
           >
             <span className="whitespace-nowrap">{t.label}</span>
             {t.unread > 0 ? (

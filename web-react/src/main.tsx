@@ -32,7 +32,7 @@ import '@mantine/notifications/styles.css';
 import './index.css';
 import './styles/mobile.css';
 
-const CLIENT_BUILD_VERSION = '2026-06-18-android-bidi-fix-1';
+const CLIENT_BUILD_VERSION = '2026-06-18-messenger-bidi-v2';
 const CLIENT_BUILD_VERSION_KEY = 'app:client-build-version';
 const CLIENT_BUILD_RELOAD_KEY = 'app:client-build-reload-once';
 

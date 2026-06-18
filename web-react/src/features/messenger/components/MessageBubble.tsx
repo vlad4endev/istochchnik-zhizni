@@ -1,5 +1,6 @@
 import { memo, useState, useRef, useMemo, useEffect, useCallback, type ReactNode } from 'react';
 import { displayMessengerText } from '../normalizeChatDisplayText';
+import { renderMessengerPlainText } from '../messengerPlainText';
 import { useQueryClient } from '@tanstack/react-query';
 import { useChatStore } from '../chatStore';
 import {
@@ -64,7 +65,7 @@ function MentionRichText({
         }
         const m = part.match(/^@\[(\d+)\]$/);
         if (!m) {
-          return <span key={i}>{part}</span>;
+          return <span key={i}>{renderMessengerPlainText(part, `p${i}`)}</span>;
         }
         const id = Number(m[1]);
         const name = namesById?.[id] ?? `участник ${id}`;
@@ -1208,8 +1209,8 @@ function MessageBubbleInner({
                 <div className={['text-xs font-extrabold tracking-wide', isMine ? 'text-white/75' : 'text-[var(--text-secondary)]'].join(' ')}>
                   Молитвенная нужда
                 </div>
-                <div className={['mt-1 whitespace-pre-wrap break-words text-sm leading-5', isMine ? 'text-white/95' : 'text-[var(--text)]'].join(' ')}>
-                  {text || '—'}
+                <div className={['mt-1 whitespace-pre-wrap break-words text-sm leading-5 messenger-bidi-text', isMine ? 'text-white/95' : 'text-[var(--text)]'].join(' ')}>
+                  {text ? renderMessengerPlainText(text, 'prayer') : '—'}
                 </div>
               </div>
             </div>
@@ -2239,14 +2240,14 @@ function MessageBubbleInner({
           </>
         ) : useInlineTextMeta ? (
           <div className="flex min-w-0 flex-row flex-wrap items-end gap-x-2 gap-y-0.5">
-            <div className="msg-content min-w-0 flex-1">
+            <div className="msg-content messenger-bidi-text min-w-0 flex-1">
               {renderContent()}
             </div>
             <div className="ml-auto">{bubbleMeta}</div>
           </div>
         ) : (
           <>
-            <div className="msg-content">{renderContent()}</div>
+            <div className="msg-content messenger-bidi-text">{renderContent()}</div>
             {message.is_pinned ? (
               <div
                 className={['mt-1 text-xs font-bold uppercase tracking-wide', isMine ? 'text-white/60' : 'text-amber-600'].join(' ')}

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
-  applyAndroidBidiLtrMarkers,
+  applyBidiLtrMarkers,
+  displayMessengerText,
   normalizeChatDisplayText,
 } from '../src/features/messenger/normalizeChatDisplayText';
 
@@ -23,9 +24,15 @@ describe('normalizeChatDisplayText', () => {
   });
 });
 
-describe('applyAndroidBidiLtrMarkers', () => {
+describe('applyBidiLtrMarkers', () => {
   it('wraps digit runs with LTR marks', () => {
-    expect(applyAndroidBidiLtrMarkers('в 10?')).toBe('в \u200E10\u200E?');
-    expect(applyAndroidBidiLtrMarkers('14:36')).toBe('\u200E14\u200E:\u200E36\u200E');
+    expect(applyBidiLtrMarkers('в 10?')).toBe('в \u200E10\u200E?');
+    expect(applyBidiLtrMarkers('14:36')).toBe('\u200E14\u200E:\u200E36\u200E');
+  });
+});
+
+describe('displayMessengerText', () => {
+  it('normalizes and wraps digits on all platforms', () => {
+    expect(displayMessengerText('в 1 0 ?')).toBe('в \u200E10\u200E ?');
   });
 });

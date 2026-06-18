@@ -173,6 +173,8 @@ export function MainStack() {
         headerTintColor: colors.textOnPrimary,
         headerTitleStyle: { fontWeight: '700' },
         contentStyle: { backgroundColor: colors.surface },
+        headerBackButtonDisplayMode: 'minimal',
+        headerBackTitle: '',
       }}
     >
       <Stack.Screen

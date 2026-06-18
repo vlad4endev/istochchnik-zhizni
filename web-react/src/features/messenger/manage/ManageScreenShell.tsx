@@ -21,10 +21,10 @@ export function ManageScreenShell({ children, trailing }: ManageScreenShellProps
           <button
             type="button"
             onClick={() => navigate(-1)}
-            className="flex min-h-[44px] max-w-[50%] items-center gap-0.5 rounded-lg py-2 pl-1 pr-2 text-lg leading-none text-blue-500 transition-colors active:bg-black/[0.04] dark:text-[var(--text-secondary)] dark:hover:bg-[var(--bg-hover)] dark:active:bg-[var(--bg-interactive)]"
+            className="tg-icon-btn tg-header-back shrink-0"
+            aria-label="Назад"
           >
             <LuChevronRight className="h-[22px] w-[22px] shrink-0 rotate-180" strokeWidth={2.2} aria-hidden />
-            <span className="truncate font-normal">Назад</span>
           </button>
           <div className="flex min-w-0 shrink-0 items-center gap-1.5">
             {trailing}

@@ -42,14 +42,15 @@ export function isAndroidMessengerClient(): boolean {
   return /Android/i.test(navigator.userAgent);
 }
 
-/** LTR-маркеры вокруг цифр — BiDi на Android не разбивает «10» на «1 0». */
-export function applyAndroidBidiLtrMarkers(text: string): string {
+/** LTR-маркеры вокруг цифр — BiDi не разбивает «10» на «1 0» (Android WebView, iOS PWA). */
+export function applyBidiLtrMarkers(text: string): string {
   return text.replace(/(\d+)/g, '\u200E$1\u200E');
 }
 
-/** Нормализация + Android BiDi для отображения в пузырях и списке чатов. */
+/** @deprecated alias */
+export const applyAndroidBidiLtrMarkers = applyBidiLtrMarkers;
+
+/** Нормализация + BiDi для отображения в пузырях и списке чатов. */
 export function displayMessengerText(text: string): string {
-  const normalized = normalizeChatDisplayText(text);
-  if (!isAndroidMessengerClient()) return normalized;
-  return applyAndroidBidiLtrMarkers(normalized);
+  return applyBidiLtrMarkers(normalizeChatDisplayText(text));
 }

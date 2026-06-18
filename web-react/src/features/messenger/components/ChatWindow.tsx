@@ -8,13 +8,10 @@ import * as api from '../api/messengerApi';
 import { MessageBubble } from './MessageBubble';
 import { ChatInput } from './ChatInput';
 import { SearchChat } from './SearchChat';
-import { LuArrowLeft, LuLayers, LuPhone, LuSearch, LuVideo } from 'react-icons/lu';
+import { LuChevronLeft, LuPhone, LuSearch, LuVideo } from 'react-icons/lu';
 import { AppAvatar } from '../../../components/AppAvatar';
-import { resolvePublicUrl } from '../../../lib/resolvePublicUrl';
-import { ChatMediaGallery } from './ChatMediaGallery';
 import { formatMessengerLastSeen } from '../lastSeenUtils';
 import { groupMessages } from '../groupMessages';
-import { getAlbumImageUrl, getPrimaryAttachmentUrl, inferMessengerPayloadType } from '../payloadMedia';
 import { getAvatarColor, getAvatarInitial } from '../avatarUtils';
 import { isAccessRequestsMessengerChannel } from '../messengerChannelKinds';
 import { isAppAdministratorRole } from '../manage/messengerManageAccess';
@@ -82,7 +79,6 @@ export function ChatWindow({
   const [showSearch, setShowSearch] = useState(false);
   /** Плашка «к новым», если лента уехала вверх и пришло чужое сообщение. */
   const [showNewBelow, setShowNewBelow] = useState(false);
-  const [showMediaGallery, setShowMediaGallery] = useState(false);
   /** Меню звонка в шапке (аудио / видео). */
   const [callHeaderMenuOpen, setCallHeaderMenuOpen] = useState(false);
   const callHeaderMenuRef = useRef<HTMLDivElement>(null);
@@ -576,28 +572,6 @@ export function ChatWindow({
     return null;
   }, [messages, chatMeta, currentMemberId, isDraft]);
 
-  const mediaItems = useMemo(() => {
-    const out: { messageId: string; src: string }[] = [];
-    for (const m of messages) {
-      if (m.is_deleted || inferMessengerPayloadType(m) !== 'image') continue;
-      const payload = (m.payload ?? {}) as Record<string, unknown>;
-      const album = Array.isArray(payload.images) ? payload.images : [];
-      if (album.length > 0) {
-        for (const img of album) {
-          const row = typeof img === 'object' && img !== null ? (img as Record<string, unknown>) : {};
-          const raw = getAlbumImageUrl(row);
-          const src = resolvePublicUrl(raw) ?? raw;
-          if (src) out.push({ messageId: String(m.id), src });
-        }
-        continue;
-      }
-      const raw = getPrimaryAttachmentUrl(payload);
-      const src = resolvePublicUrl(raw) ?? raw;
-      if (src) out.push({ messageId: String(m.id), src });
-    }
-    return out;
-  }, [messages]);
-
   useLayoutEffect(() => {
     if (isDraft || chatMeta == null) return;
     const unread = conv?.unread_count ?? 0;
@@ -898,20 +872,19 @@ export function ChatWindow({
       {/* Safe-area только на корне (.tg-chat-window) в messenger.css для iOS — не дублировать здесь */}
       <header className="chat-header sticky top-0 z-[100] w-full min-w-0 shrink-0 border-b border-gray-200/60 bg-[var(--surface-elevated)]">
         <div className="mx-auto flex min-h-[52px] w-full min-w-0 max-w-full items-center gap-1 px-1 py-1.5 sm:gap-2 sm:px-2 sm:py-2">
-          {/* Слева: «Назад» — только мобилка; на ПК список чатов всегда слева. */}
+          {/* Слева: назад — только мобилка; на ПК список чатов всегда слева. */}
           <div className="flex shrink-0 items-center lg:hidden">
             <button
               type="button"
               onClick={onBack}
               aria-label="Назад к списку чатов"
-              className="chat-back-btn flex max-w-[min(7rem,28vw)] items-center gap-0.5 rounded-lg py-1.5 pl-1 pr-1 text-lg leading-none text-blue-500 transition-colors active:bg-[var(--surface)] sm:max-w-[7.5rem] sm:pl-1.5 sm:pr-2"
+              className="chat-back-btn tg-header-back tg-icon-btn"
             >
-              <LuArrowLeft className="h-[22px] w-[22px] shrink-0" strokeWidth={2.2} aria-hidden />
-              <span className="truncate font-normal">Назад</span>
+              <LuChevronLeft size={26} strokeWidth={2.2} aria-hidden />
             </button>
           </div>
 
-          {/* Рядом с «Назад»: аватар + имя/статус в одну линию по горизонтали (как в Telegram). */}
+          {/* Рядом со стрелкой: аватар + имя/статус в одну линию по горизонтали (как в Telegram). */}
           <div
             role="button"
             tabIndex={0}
@@ -978,7 +951,6 @@ export function ChatWindow({
               <>
                 <span className="tg-chat-header-skeleton tg-chat-header-skeleton--action rounded-full" aria-hidden />
                 <span className="tg-chat-header-skeleton tg-chat-header-skeleton--action rounded-full" aria-hidden />
-                <span className="tg-chat-header-skeleton tg-chat-header-skeleton--action rounded-full" aria-hidden />
               </>
             ) : (
               <>
@@ -991,17 +963,6 @@ export function ChatWindow({
                     className="inline-flex h-10 min-w-[2rem] items-center justify-center rounded-full px-1.5 text-sm font-extrabold text-primary transition-colors hover:bg-primary/10 active:bg-primary/15"
                   >
                     ↓
-                  </button>
-                ) : null}
-                {!isDraft && mediaItems.length > 0 ? (
-                  <button
-                    type="button"
-                    onClick={() => setShowMediaGallery(true)}
-                    aria-label="Медиа в этом чате"
-                    title="Медиа"
-                    className="inline-flex h-10 w-10 items-center justify-center rounded-full text-[var(--text-secondary)] transition-colors active:bg-[var(--surface)]"
-                  >
-                    <LuLayers size={20} strokeWidth={2.25} />
                   </button>
                 ) : null}
                 {!isDraft && canShowPrivateCallToAdmin ? (
@@ -1277,15 +1238,6 @@ export function ChatWindow({
             document.body,
           )
         : null}
-
-      {!isDraft ? (
-        <ChatMediaGallery
-          open={showMediaGallery}
-          onClose={() => setShowMediaGallery(false)}
-          items={mediaItems}
-          onOpenMessage={(id) => jumpToMessage(id)}
-        />
-      ) : null}
     </div>
   );
 }
