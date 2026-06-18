@@ -209,12 +209,6 @@ function pickUpcomingEvent(now: Date, items: ChurchEventItem[]): DashboardEvent 
   return toDashboardEvent(now, nearestAny.item, nearestAny.dt);
 }
 
-function formatBirthdayChipDate(ymd: string): string {
-  const d = new Date(`${ymd}T00:00:00`);
-  if (Number.isNaN(d.getTime())) return '';
-  return format(d, 'EEE, d MMM', { locale: ru });
-}
-
 function formatWeekDayChip(ymd: string): string {
   const d = parse(ymd, 'yyyy-MM-dd', new Date());
   if (Number.isNaN(d.getTime())) return ymd;
@@ -1200,7 +1194,7 @@ function DashboardMain() {
               {birthdaysThisWeek.length > 0 ? (
                 <BirthdayBlock
                   birthdays={birthdaysThisWeek}
-                  onMessage={(person) => navigate(`/messenger`)}
+                  onMessage={(_person) => navigate(`/messenger`)}
                   onSeeAll={() => navigate('/members')}
                 />
               ) : (
@@ -1445,7 +1439,7 @@ function DashboardMain() {
             <div className="min-[769px]:col-span-2">
               <BirthdayBlock
                 birthdays={birthdaysThisWeek}
-                onMessage={(person) => navigate(`/messenger`)}
+                onMessage={(_person) => navigate(`/messenger`)}
                 onSeeAll={() => navigate('/members')}
               />
             </div>
