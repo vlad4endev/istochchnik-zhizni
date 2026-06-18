@@ -36,7 +36,11 @@ export default defineConfig(({ mode }) => {
     .toString()
     .trim()
     .slice(0, 12);
-  const runtimeCacheSuffix = deployCacheTag || 'dev';
+  /**
+   * Docker не выставляет переменные CI — падаем на buildStamp (уникальный на каждую сборку),
+   * а не на 'dev', иначе кэш не инвалидируется между деплоями.
+   */
+  const runtimeCacheSuffix = deployCacheTag || buildStamp.replace(/[^a-z0-9]/gi, '-');
 
   const apiProxy = {
     '/api': {
@@ -203,7 +207,13 @@ export default defineConfig(({ mode }) => {
             /** `includeAssets`; тот же конфликт с `*.ico` в glob. */
             '**/favicon.ico',
           ],
-          skipWaiting: false,
+          /**
+           * true: новый SW вызывает skipWaiting() сразу при установке и захватывает все вкладки.
+           * PWAUpdatePrompt всё равно показывает баннер — пользователь жмёт «Обновить» и
+           * страница перезагружается с новыми ассетами. Без этого пользователи видят старый
+           * CSS до тех пор, пока не закроют ВСЕ вкладки приложения.
+           */
+          skipWaiting: true,
           clientsClaim: true,
           navigateFallback: '/index.html',
           /**
