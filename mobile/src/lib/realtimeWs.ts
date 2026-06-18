@@ -20,6 +20,10 @@ function clearReconnectTimer(): void {
   }
 }
 
+export function sendRealtimeJson(payload: Record<string, unknown>): void {
+  sendJson(payload);
+}
+
 function sendJson(payload: Record<string, unknown>): void {
   if (!ws || ws.readyState !== WebSocket.OPEN) return;
   try {

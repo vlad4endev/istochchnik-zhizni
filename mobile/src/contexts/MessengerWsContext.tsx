@@ -7,12 +7,14 @@ import {
   subscribeRealtimeWs,
 } from '../lib/realtimeWs';
 import { useAuthStore } from '../stores/authStore';
+import { useMessengerRealtimeStore } from '../stores/messengerRealtimeStore';
 
 const MessengerWsContext = createContext(true);
 
 export function MessengerWsProvider({ children }: { children: ReactNode }) {
   const token = useAuthStore((s) => s.token);
   const queryClient = useQueryClient();
+  const handleWsMessage = useMessengerRealtimeStore((s) => s.handleWsMessage);
 
   useEffect(() => {
     if (!token) {
@@ -30,6 +32,8 @@ export function MessengerWsProvider({ children }: { children: ReactNode }) {
 
     return subscribeRealtimeWs((msg) => {
       const type = typeof msg.type === 'string' ? msg.type : '';
+
+      handleWsMessage(msg);
 
       if (
         type === 'msg:new' ||
@@ -53,7 +57,7 @@ export function MessengerWsProvider({ children }: { children: ReactNode }) {
         void queryClient.invalidateQueries({ queryKey: ['messenger', 'unread'] });
       }
     });
-  }, [token, queryClient]);
+  }, [token, queryClient, handleWsMessage]);
 
   return <MessengerWsContext.Provider value={true}>{children}</MessengerWsContext.Provider>;
 }

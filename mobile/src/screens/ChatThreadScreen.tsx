@@ -5,29 +5,42 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
+  KeyboardAvoidingView,
+  Platform,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import {
+  addReaction,
+  deleteMessage,
+  fetchConversations,
   fetchMessages,
   markConversationRead,
+  removeReaction,
   sendMessage,
   type MessageWithSender,
 } from '../api/messenger';
 import { ChatInput } from '../components/messenger/ChatInput';
 import { MessageBubble } from '../components/messenger/MessageBubble';
+import { MessageContextMenu } from '../components/messenger/MessageContextMenu';
+import { ReplyBar } from '../components/messenger/ReplyBar';
+import { TypingIndicator } from '../components/messenger/TypingIndicator';
 import { ErrorView } from '../components/ErrorView';
 import { LoadingView } from '../components/LoadingView';
-import { setActiveMessengerConversation } from '../lib/realtimeWs';
 import {
   createClientMsgId,
+  getConversationAvatarUrl,
+  getConversationTitle,
   sortMessagesChronological,
 } from '../lib/messengerUtils';
+import { setActiveMessengerConversation } from '../lib/realtimeWs';
 import type { RootStackParamList } from '../navigation/types';
 import { useAuthStore } from '../stores/authStore';
+import { useMessengerRealtimeStore } from '../stores/messengerRealtimeStore';
+import { messengerTextProps } from '../theme/messenger';
 import { useTheme } from '../theme';
 
 type ChatRoute = RouteProp<RootStackParamList, 'ChatThread'>;
@@ -35,6 +48,7 @@ type ChatRoute = RouteProp<RootStackParamList, 'ChatThread'>;
 export function ChatThreadScreen() {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
+  const insets = useSafeAreaInsets();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const route = useRoute<ChatRoute>();
   const { conversationId, title, isGroup = false } = route.params;
@@ -44,6 +58,28 @@ export function ChatThreadScreen() {
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const [optimistic, setOptimistic] = useState<MessageWithSender[]>([]);
+  const [replyTo, setReplyTo] = useState<MessageWithSender | null>(null);
+  const [menuMessage, setMenuMessage] = useState<{
+    message: MessageWithSender;
+    isOwn: boolean;
+  } | null>(null);
+
+  const typingUsers = useMessengerRealtimeStore((s) => s.typingByConv[conversationId] ?? []);
+
+  const conversationsQuery = useQuery({
+    queryKey: ['messenger', 'conversations'],
+    queryFn: fetchConversations,
+    staleTime: 30_000,
+  });
+
+  const conversation = useMemo(
+    () => conversationsQuery.data?.find((c) => c.id === conversationId) ?? null,
+    [conversationsQuery.data, conversationId],
+  );
+
+  const typingUser = useMemo(() => {
+    return typingUsers.find((u) => u.memberId !== memberId) ?? null;
+  }, [typingUsers, memberId]);
 
   useEffect(() => {
     navigation.setOptions({ title: title || 'Чат' });
@@ -95,6 +131,7 @@ export function ChatThreadScreen() {
   const sendMutation = useMutation({
     mutationFn: async (content: string) => {
       const clientMsgId = createClientMsgId();
+      const replyId = replyTo?.id ?? null;
       const optimisticMsg: MessageWithSender = {
         id: clientMsgId,
         conversation_id: conversationId,
@@ -102,7 +139,7 @@ export function ChatThreadScreen() {
         client_msg_id: clientMsgId,
         content,
         payload_type: 'text',
-        reply_to_message_id: null,
+        reply_to_message_id: replyId,
         is_edited: false,
         is_deleted: false,
         created_at: new Date().toISOString(),
@@ -110,15 +147,23 @@ export function ChatThreadScreen() {
         sender_name: null,
         sender_first_name: null,
         sender_last_name: null,
-        reply_preview: null,
+        reply_preview: replyTo
+          ? {
+              id: replyTo.id,
+              content: replyTo.content,
+              sender_name: replyTo.sender_name,
+              is_deleted: replyTo.is_deleted,
+            }
+          : null,
         reactions: [],
         status: 'sending',
       };
       setOptimistic((prev) => [...prev, optimisticMsg]);
 
       try {
-        const saved = await sendMessage(conversationId, content, clientMsgId);
+        const saved = await sendMessage(conversationId, content, clientMsgId, replyId);
         setOptimistic((prev) => prev.filter((m) => m.client_msg_id !== clientMsgId));
+        setReplyTo(null);
         await queryClient.invalidateQueries({ queryKey: ['messenger', 'messages', conversationId] });
         await queryClient.invalidateQueries({ queryKey: ['messenger', 'conversations'] });
         return saved;
@@ -128,6 +173,29 @@ export function ChatThreadScreen() {
         );
         throw e;
       }
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: deleteMessage,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['messenger', 'messages', conversationId] });
+      void queryClient.invalidateQueries({ queryKey: ['messenger', 'conversations'] });
+    },
+  });
+
+  const reactMutation = useMutation({
+    mutationFn: async ({ messageId, emoji }: { messageId: string; emoji: string }) => {
+      const msg = mergedMessages.find((m) => m.id === messageId);
+      const existing = msg?.reactions.find((r) => r.emoji === emoji);
+      if (existing?.reacted_by_me) {
+        await removeReaction(messageId, emoji);
+      } else {
+        await addReaction(messageId, emoji);
+      }
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['messenger', 'messages', conversationId] });
     },
   });
 
@@ -157,37 +225,67 @@ export function ChatThreadScreen() {
     }
   }, [conversationId, hasMore, loadingOlder, mergedMessages, queryClient]);
 
+  const handleLongPress = useCallback(
+    (message: MessageWithSender) => {
+      const isOwn = message.sender_id != null && memberId != null && message.sender_id === memberId;
+      setMenuMessage({ message, isOwn });
+    },
+    [memberId],
+  );
+
+  const convTitle = conversation ? getConversationTitle(conversation) : title || 'Чат';
+  const convAvatarUrl = conversation ? getConversationAvatarUrl(conversation) : null;
+
+  const typingAvatarName = typingUser?.memberName ?? convTitle;
+  const typingAvatarSeed = typingUser ? String(typingUser.memberId) : conversationId;
+
   if (messagesQuery.isLoading) {
     return (
-      <SafeAreaView style={styles.safe} edges={['bottom']}>
+      <View style={styles.safe}>
         <LoadingView />
-      </SafeAreaView>
+      </View>
     );
   }
 
   if (messagesQuery.isError) {
     return (
-      <SafeAreaView style={styles.safe} edges={['bottom']}>
+      <View style={styles.safe}>
         <ErrorView
           message={
             messagesQuery.error instanceof Error ? messagesQuery.error.message : 'Ошибка'
           }
           onRetry={() => void messagesQuery.refetch()}
         />
-      </SafeAreaView>
+      </View>
     );
   }
 
   return (
-    <SafeAreaView style={styles.safe} edges={['bottom']}>
+    <KeyboardAvoidingView
+      style={styles.safe}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+    >
       <FlatList
         ref={listRef}
         data={displayMessages}
         keyExtractor={(item) => item.client_msg_id ?? item.id}
         inverted
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
         contentContainerStyle={displayMessages.length === 0 ? styles.emptyList : styles.list}
         onEndReached={() => void loadOlder()}
         onEndReachedThreshold={0.2}
+        ListHeaderComponent={
+          typingUser ? (
+            <TypingIndicator
+              typingUser={typingUser}
+              avatarName={typingAvatarName}
+              avatarSeed={typingAvatarSeed}
+              avatarUrl={!isGroup ? convAvatarUrl : null}
+            />
+          ) : null
+        }
         ListFooterComponent={
           loadingOlder ? (
             <View style={styles.loader}>
@@ -197,7 +295,9 @@ export function ChatThreadScreen() {
         }
         ListEmptyComponent={
           <View style={styles.empty}>
-            <Text style={styles.emptyText}>Напишите первое сообщение</Text>
+            <Text {...messengerTextProps} style={styles.emptyText}>
+              Напишите первое сообщение
+            </Text>
           </View>
         }
         renderItem={({ item, index }) => {
@@ -208,17 +308,41 @@ export function ChatThreadScreen() {
             !isOwn &&
             (prev == null || prev.sender_id !== item.sender_id);
           return (
-            <MessageBubble message={item} isOwn={isOwn} showSenderName={showSender} />
+            <MessageBubble
+              message={item}
+              isOwn={isOwn}
+              showSenderName={showSender}
+              onLongPress={handleLongPress}
+            />
           );
         }}
       />
-      <ChatInput
-        onSend={async (text) => {
-          await sendMutation.mutateAsync(text);
+
+      <View style={{ paddingBottom: insets.bottom }}>
+        <ReplyBar replyTo={replyTo} onCancel={() => setReplyTo(null)} />
+        <ChatInput
+          conversationId={conversationId}
+          onSend={async (text) => {
+            await sendMutation.mutateAsync(text);
+          }}
+          disabled={sendMutation.isPending}
+        />
+      </View>
+
+      <MessageContextMenu
+        visible={menuMessage != null}
+        message={menuMessage?.message ?? null}
+        isOwn={menuMessage?.isOwn ?? false}
+        onClose={() => setMenuMessage(null)}
+        onReply={(message) => setReplyTo(message)}
+        onReact={(messageId, emoji) => {
+          void reactMutation.mutateAsync({ messageId, emoji });
         }}
-        disabled={sendMutation.isPending}
+        onDelete={(messageId) => {
+          void deleteMutation.mutateAsync(messageId);
+        }}
       />
-    </SafeAreaView>
+    </KeyboardAvoidingView>
   );
 }
 

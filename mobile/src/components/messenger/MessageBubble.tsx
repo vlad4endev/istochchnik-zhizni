@@ -1,6 +1,6 @@
 import { Image } from 'expo-image';
 import { useMemo } from 'react';
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import type { MessageWithSender } from '../../api/messenger';
 import { resolveApiOrigin } from '../../lib/config';
@@ -10,15 +10,22 @@ import {
   messagePreviewText,
   normalizeChatDisplayText,
 } from '../../lib/messengerUtils';
+import { androidRipple, messengerTextProps } from '../../theme/messenger';
 import { useTheme } from '../../theme';
 
 interface MessageBubbleProps {
   message: MessageWithSender;
   isOwn: boolean;
   showSenderName: boolean;
+  onLongPress?: (message: MessageWithSender) => void;
 }
 
-export function MessageBubble({ message, isOwn, showSenderName }: MessageBubbleProps) {
+export function MessageBubble({
+  message,
+  isOwn,
+  showSenderName,
+  onLongPress,
+}: MessageBubbleProps) {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors, isOwn), [colors, isOwn]);
 
@@ -43,43 +50,67 @@ export function MessageBubble({ message, isOwn, showSenderName }: MessageBubbleP
       ? normalizeChatDisplayText(message.content)
       : messagePreviewText(message);
 
-  return (
-    <View style={[styles.row, isOwn ? styles.rowOwn : styles.rowOther]}>
-      <View style={[styles.bubble, isOwn ? styles.bubbleOwn : styles.bubbleOther]}>
-        {showSenderName && !isOwn ? (
-          <Text style={styles.senderName}>
-            {message.sender_name || message.sender_first_name || 'Участник'}
+  const bubble = (
+    <View style={[styles.bubble, isOwn ? styles.bubbleOwn : styles.bubbleOther]}>
+      {showSenderName && !isOwn ? (
+        <Text {...messengerTextProps} style={styles.senderName}>
+          {message.sender_name || message.sender_first_name || 'Участник'}
+        </Text>
+      ) : null}
+
+      {message.reply_preview && !message.is_deleted ? (
+        <View style={styles.reply}>
+          <Text {...messengerTextProps} style={styles.replyAuthor} numberOfLines={1}>
+            {message.reply_preview.sender_name || 'Ответ'}
+          </Text>
+          <Text {...messengerTextProps} style={styles.replyText} numberOfLines={2}>
+            {message.reply_preview.is_deleted
+              ? 'Сообщение удалено'
+              : normalizeChatDisplayText(message.reply_preview.content)}
+          </Text>
+        </View>
+      ) : null}
+
+      {showImage && imageUri ? (
+        <Image source={imageUri} style={styles.image} contentFit="cover" />
+      ) : null}
+
+      <Text {...messengerTextProps} style={[styles.text, message.is_deleted && styles.deletedText]}>
+        {bodyText}
+      </Text>
+
+      <View style={styles.meta}>
+        {message.is_edited && !message.is_deleted ? (
+          <Text {...messengerTextProps} style={styles.metaText}>
+            изм.
           </Text>
         ) : null}
-
-        {message.reply_preview && !message.is_deleted ? (
-          <View style={styles.reply}>
-            <Text style={styles.replyAuthor} numberOfLines={1}>
-              {message.reply_preview.sender_name || 'Ответ'}
-            </Text>
-            <Text style={styles.replyText} numberOfLines={2}>
-              {message.reply_preview.is_deleted
-                ? 'Сообщение удалено'
-                : normalizeChatDisplayText(message.reply_preview.content)}
-            </Text>
-          </View>
+        <Text {...messengerTextProps} style={styles.metaText}>
+          {formatMessageTime(message.created_at)}
+        </Text>
+        {isPending ? <ActivityIndicator size="small" color={colors.textMuted} /> : null}
+        {isError ? (
+          <Text {...messengerTextProps} style={styles.errorText}>
+            !
+          </Text>
         ) : null}
-
-        {showImage && imageUri ? (
-          <Image source={imageUri} style={styles.image} contentFit="cover" />
-        ) : null}
-
-        <Text style={[styles.text, message.is_deleted && styles.deletedText]}>{bodyText}</Text>
-
-        <View style={styles.meta}>
-          {message.is_edited && !message.is_deleted ? (
-            <Text style={styles.metaText}>изм.</Text>
-          ) : null}
-          <Text style={styles.metaText}>{formatMessageTime(message.created_at)}</Text>
-          {isPending ? <ActivityIndicator size="small" color={colors.textMuted} /> : null}
-          {isError ? <Text style={styles.errorText}>!</Text> : null}
-        </View>
       </View>
+    </View>
+  );
+
+  return (
+    <View style={[styles.row, isOwn ? styles.rowOwn : styles.rowOther]}>
+      {onLongPress ? (
+        <Pressable
+          onLongPress={() => onLongPress(message)}
+          android_ripple={androidRipple}
+          style={({ pressed }) => [pressed ? { opacity: 0.92 } : null]}
+        >
+          {bubble}
+        </Pressable>
+      ) : (
+        bubble
+      )}
     </View>
   );
 }

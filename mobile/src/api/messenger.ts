@@ -40,6 +40,7 @@ export interface ConversationListItem {
   } | null;
   my_muted?: boolean;
   my_ui_pinned?: boolean;
+  my_ui_folder?: 'personal' | 'ministry' | null;
 }
 
 export interface MessageWithSender {
@@ -171,4 +172,18 @@ export function buildAttachmentFileUrl(
   }
   const suffix = qs.toString() ? `?${qs.toString()}` : '';
   return `${BASE}/messages/${encodeURIComponent(messageId)}/attachment-file${suffix}`;
+}
+
+export async function deleteMessage(messageId: string): Promise<void> {
+  await apiClient.delete(`${BASE}/messages/${messageId}`);
+}
+
+export async function addReaction(messageId: string, emoji: string): Promise<void> {
+  await apiClient.post(`${BASE}/messages/${messageId}/reactions`, { emoji });
+}
+
+export async function removeReaction(messageId: string, emoji: string): Promise<void> {
+  await apiClient.delete(
+    `${BASE}/messages/${messageId}/reactions/${encodeURIComponent(emoji)}`,
+  );
 }

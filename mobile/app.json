@@ -30,7 +30,8 @@
     },
     "plugins": [
       "expo-status-bar",
-      "expo-audio"
+      "expo-audio",
+      "react-native-reanimated"
     ]
   }
 }
