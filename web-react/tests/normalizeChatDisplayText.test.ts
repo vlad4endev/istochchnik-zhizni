@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { normalizeChatDisplayText } from '../src/features/messenger/normalizeChatDisplayText';
+import {
+  applyAndroidBidiLtrMarkers,
+  normalizeChatDisplayText,
+} from '../src/features/messenger/normalizeChatDisplayText';
 
 describe('normalizeChatDisplayText', () => {
   it('collapses spaces between digits in dates and times', () => {
@@ -17,5 +20,12 @@ describe('normalizeChatDisplayText', () => {
   it('leaves mention markup untouched', () => {
     const raw = 'Привет @[Иван](12) в 1 0 : 0 0';
     expect(normalizeChatDisplayText(raw)).toBe('Привет @[Иван](12) в 10:00');
+  });
+});
+
+describe('applyAndroidBidiLtrMarkers', () => {
+  it('wraps digit runs with LTR marks', () => {
+    expect(applyAndroidBidiLtrMarkers('в 10?')).toBe('в \u200E10\u200E?');
+    expect(applyAndroidBidiLtrMarkers('14:36')).toBe('\u200E14\u200E:\u200E36\u200E');
   });
 });

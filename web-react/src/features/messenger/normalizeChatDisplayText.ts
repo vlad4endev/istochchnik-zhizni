@@ -35,3 +35,21 @@ export function normalizeChatDisplayText(text: string): string {
 
   return s;
 }
+
+/** Android WebView / Chrome: UA или нативная оболочка Capacitor. */
+export function isAndroidMessengerClient(): boolean {
+  if (typeof navigator === 'undefined') return false;
+  return /Android/i.test(navigator.userAgent);
+}
+
+/** LTR-маркеры вокруг цифр — BiDi на Android не разбивает «10» на «1 0». */
+export function applyAndroidBidiLtrMarkers(text: string): string {
+  return text.replace(/(\d+)/g, '\u200E$1\u200E');
+}
+
+/** Нормализация + Android BiDi для отображения в пузырях и списке чатов. */
+export function displayMessengerText(text: string): string {
+  const normalized = normalizeChatDisplayText(text);
+  if (!isAndroidMessengerClient()) return normalized;
+  return applyAndroidBidiLtrMarkers(normalized);
+}

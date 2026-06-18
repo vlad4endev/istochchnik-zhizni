@@ -1,5 +1,5 @@
 import { memo, useState, useRef, useMemo, useEffect, useCallback, type ReactNode } from 'react';
-import { normalizeChatDisplayText } from '../normalizeChatDisplayText';
+import { displayMessengerText } from '../normalizeChatDisplayText';
 import { useQueryClient } from '@tanstack/react-query';
 import { useChatStore } from '../chatStore';
 import {
@@ -41,10 +41,10 @@ function MentionRichText({
   namesById?: Record<number, string>;
   isMine: boolean;
 }) {
-  const displayText = useMemo(() => normalizeChatDisplayText(text), [text]);
+  const displayText = useMemo(() => displayMessengerText(text), [text]);
   const parts = displayText.split(/(@\[[^\]]+\]\(\d+\)|@\[\d+\])/g);
   return (
-    <span className="mention-rich-text">
+    <span className="mention-rich-text messenger-bidi-text">
       {parts.map((part, i) => {
         const mFriendly = part.match(/^@\[([^\]]+)\]\((\d+)\)$/);
         if (mFriendly) {
@@ -2018,7 +2018,7 @@ function MessageBubbleInner({
   const bubbleMeta = (
     <div className={metaRowClass}>
       {message.is_edited ? <span className="msg-edited">ред.</span> : null}
-      <span className="tabular-nums">{formattedTime}</span>
+      <span className="tabular-nums messenger-bidi-text">{formattedTime}</span>
       {isMine ? (
         <>
           {status === 'sending' ? (
@@ -2200,10 +2200,10 @@ function MessageBubbleInner({
               {message.reply_preview.sender_name || 'Удалённый пользователь'}
               </span>
             </div>
-            <div className="msg-reply-text">
+            <div className="msg-reply-text messenger-bidi-text">
               {message.reply_preview.is_deleted
                 ? 'Сообщение удалено'
-                : normalizeChatDisplayText(String(message.reply_preview.content ?? ''))}
+                : displayMessengerText(String(message.reply_preview.content ?? ''))}
             </div>
           </button>
         )}

@@ -1914,6 +1914,22 @@ html[data-mantine-color-scheme='dark'] .tg-input-banner {
   letter-spacing: normal;
 }
 
+/* Android WebView / PWA: BiDi не разбивает цифры в кириллическом тексте («в 10» → не «в 1 0»). */
+html[data-android-messenger='1'] .messenger-bidi-text,
+html[data-android-messenger='1'] .msg-content,
+html[data-android-messenger='1'] .mention-rich-text,
+html[data-android-messenger='1'] .msg-reply-text,
+html[data-android-messenger='1'] .msg-reply-author,
+html[data-android-messenger='1'] .chatlist-preview,
+html[data-android-messenger='1'] .chatlist-name,
+html[data-android-messenger='1'] .chatlist-time,
+html[data-android-messenger='1'] .tg-input-banner-title,
+html[data-android-messenger='1'] .tg-input-banner-text,
+html[data-android-messenger='1'] .sender-name {
+  direction: ltr;
+  unicode-bidi: plaintext;
+}
+
 .msg-edited {
   margin-right: 4px;
   font-style: italic;

@@ -5,7 +5,7 @@ import type { ConversationListItem, PatchMyConversationUiBody } from '../api/mes
 import { AppAvatar } from '../../../components/AppAvatar';
 import { SkeletonBox } from '@/components/ui/SkeletonBox';
 import { getAvatarColor, getAvatarInitial } from '../avatarUtils';
-import { normalizeChatDisplayText } from '../normalizeChatDisplayText';
+import { displayMessengerText } from '../normalizeChatDisplayText';
 import { LuPin, LuVolume2, LuVolumeX, LuFolderOpen, LuEraser, LuTrash2, LuSearch } from 'react-icons/lu';
 import { IoCheckmark, IoCheckmarkDone } from 'react-icons/io5';
 
@@ -375,9 +375,9 @@ function ChatListItem({
     currentMemberId != null &&
     Number(lastMsg.sender_id) === Number(currentMemberId);
   const previewContent = lastMsg?.content
-    ? normalizeChatDisplayText(String(lastMsg.content))
+    ? displayMessengerText(String(lastMsg.content))
     : '';
-  const previewLine = isTyping
+  const previewLineRaw = isTyping
     ? (() => {
         const names = typingUsers.map((u) => u.memberName.split(' ')[0]).filter(Boolean);
         const verb = names.length > 1 ? 'печатают' : 'печатает';
@@ -392,6 +392,7 @@ function ChatListItem({
             ? `${lastMsg.sender_name.split(' ')[0]}: ${previewContent}`
             : previewContent
       : 'Нет сообщений';
+  const previewLine = displayMessengerText(previewLineRaw);
   const showUnreadBadge = conv.unread_count > 0 && !isActive;
   const showOutgoingChecks = lastFromMe && !showUnreadBadge && !isTyping;
   const outgoingReadByOthers = (() => {
@@ -481,11 +482,11 @@ function ChatListItem({
               {isMuted ? (
                 <LuVolumeX className="h-3.5 w-3.5 shrink-0 text-gray-400" aria-hidden />
               ) : null}
-              <span className="truncate font-semibold text-[var(--text)]">{displayName}</span>
+              <span className="chatlist-name truncate font-semibold text-[var(--text)]">{displayName}</span>
             </div>
             {lastMsg ? (
               <time
-                className="shrink-0 whitespace-nowrap text-xs text-[var(--text-secondary)] tabular-nums"
+                className="chatlist-time shrink-0 whitespace-nowrap text-xs text-[var(--text-secondary)] tabular-nums messenger-bidi-text"
                 dateTime={lastMsg.created_at}
               >
                 {formatTime(lastMsg.created_at)}
@@ -496,7 +497,7 @@ function ChatListItem({
           <div className="mt-0.5 flex min-w-0 items-center gap-2">
             <p
               className={[
-                'min-w-0 flex-1 truncate text-sm leading-snug',
+                'chatlist-preview messenger-bidi-text min-w-0 flex-1 truncate text-sm leading-snug',
                 isTyping ? 'font-medium text-primary' : 'text-[var(--text-secondary)]',
               ].join(' ')}
             >

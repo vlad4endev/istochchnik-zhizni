@@ -37,6 +37,17 @@ export function syncAppleMobileWebHtmlDataset(): void {
   document.documentElement.dataset.appleMobile = isAppleMobileWeb() ? '1' : '0';
 }
 
+/** Android WebView / PWA on Android — CSS BiDi fixes for messenger text. */
+export function isAndroidWeb(): boolean {
+  if (typeof navigator === 'undefined') return false;
+  return /Android/i.test(navigator.userAgent);
+}
+
+export function syncAndroidWebHtmlDataset(): void {
+  if (typeof document === 'undefined') return;
+  document.documentElement.dataset.androidMessenger = isAndroidWeb() ? '1' : '0';
+}
+
 const DISPLAY_MODE_QUERIES = [
   '(display-mode: standalone)',
   '(display-mode: fullscreen)',
@@ -48,6 +59,7 @@ export function initPwaStandaloneHtmlHint(): void {
   if (typeof window === 'undefined' || typeof document === 'undefined') return;
   syncPwaStandaloneHtmlDataset();
   syncAppleMobileWebHtmlDataset();
+  syncAndroidWebHtmlDataset();
   for (const q of DISPLAY_MODE_QUERIES) {
     try {
       const mql = window.matchMedia(q);
