@@ -1194,7 +1194,7 @@ function DashboardMain() {
               {birthdaysThisWeek.length > 0 ? (
                 <BirthdayBlock
                   birthdays={birthdaysThisWeek}
-                  onMessage={(_person) => navigate(`/messenger`)}
+                  onMessage={(person) => navigate(`/messenger?conversationId=draft:${person.id}`)}
                   onSeeAll={() => navigate('/members')}
                 />
               ) : (
@@ -1439,7 +1439,7 @@ function DashboardMain() {
             <div className="min-[769px]:col-span-2">
               <BirthdayBlock
                 birthdays={birthdaysThisWeek}
-                onMessage={(_person) => navigate(`/messenger`)}
+                onMessage={(person) => navigate(`/messenger?conversationId=draft:${person.id}`)}
                 onSeeAll={() => navigate('/members')}
               />
             </div>
