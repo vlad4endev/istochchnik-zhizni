@@ -9,6 +9,9 @@ const DEVICE_ID_KEY = 'fcm_push_device_id';
 const MESSAGES_CHANNEL_ID = 'messages';
 const MESSAGES_CHANNEL_NAME = 'Сообщения';
 const MESSAGES_CHANNEL_DESCRIPTION = 'Личные и групповые сообщения';
+const GENERAL_CHANNEL_ID = 'general';
+const GENERAL_CHANNEL_NAME = 'Уведомления';
+const GENERAL_CHANNEL_DESCRIPTION = 'Напоминания и системные уведомления';
 
 function getOrCreateDeviceId(): string {
   if (typeof localStorage === 'undefined') {
@@ -37,6 +40,51 @@ function showForegroundNotification(title: string, body: string): void {
   );
 }
 
+async function saveFcmTokenToServer(fcmToken: string, deviceId: string): Promise<void> {
+  const session = useAuthStore.getState().token;
+  if (!session?.trim()) return;
+
+  let lastErr: unknown;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      await apiClient.post('/api/notifications/save-token', {
+        fcm_token: fcmToken,
+        device_id: deviceId,
+      });
+      return;
+    } catch (err) {
+      lastErr = err;
+      await new Promise((r) => setTimeout(r, 400 * (attempt + 1)));
+    }
+  }
+  console.warn('[fcm] save-token failed after retries', lastErr);
+}
+
+async function ensurePushChannels(): Promise<void> {
+  await PushNotifications.createChannel({
+    id: MESSAGES_CHANNEL_ID,
+    name: MESSAGES_CHANNEL_NAME,
+    description: MESSAGES_CHANNEL_DESCRIPTION,
+    importance: 5,
+    visibility: 1,
+    vibration: true,
+    sound: 'default',
+    lights: true,
+    lightColor: '#7d3640',
+  }).catch(() => {});
+
+  await PushNotifications.createChannel({
+    id: GENERAL_CHANNEL_ID,
+    name: GENERAL_CHANNEL_NAME,
+    description: GENERAL_CHANNEL_DESCRIPTION,
+    importance: 4,
+    visibility: 1,
+    vibration: true,
+    sound: 'default',
+    lights: false,
+  }).catch(() => {});
+}
+
 /**
  * Нативные FCM-пуши (Capacitor). На веб/PWA не выполняется.
  * Токен отправляется на POST /api/notifications/save-token при наличии сессии.
@@ -53,28 +101,15 @@ export function useFCM(): void {
     }
 
     const deviceId = getOrCreateDeviceId();
-
     let cancelled = false;
 
     void (async () => {
       try {
-        // Отдельный канал для чатов: высокий приоритет + звук/вибрация.
-        await PushNotifications.createChannel({
-          id: MESSAGES_CHANNEL_ID,
-          name: MESSAGES_CHANNEL_NAME,
-          description: MESSAGES_CHANNEL_DESCRIPTION,
-          importance: 5,
-          visibility: 1,
-          vibration: true,
-          sound: 'default',
-          lights: true,
-          lightColor: '#2dd4bf',
-        }).catch(() => {
-          // Канал мог уже существовать.
-        });
+        await ensurePushChannels();
         const perm = await PushNotifications.requestPermissions();
         if (cancelled) return;
         if (perm.receive !== 'granted') {
+          console.warn('[fcm] notification permission not granted');
           return;
         }
         await PushNotifications.register();
@@ -86,16 +121,7 @@ export function useFCM(): void {
     const regListener = PushNotifications.addListener('registration', async (ev) => {
       const fcmToken = ev.value?.trim();
       if (!fcmToken) return;
-      const session = useAuthStore.getState().token;
-      if (!session?.trim()) return;
-      try {
-        await apiClient.post('/api/notifications/save-token', {
-          fcm_token: fcmToken,
-          device_id: deviceId,
-        });
-      } catch (err) {
-        console.warn('[fcm] save-token failed', err);
-      }
+      await saveFcmTokenToServer(fcmToken, deviceId);
     });
 
     const regErrorListener = PushNotifications.addListener('registrationError', (err) => {
@@ -118,11 +144,23 @@ export function useFCM(): void {
       showForegroundNotification(title, body);
     });
 
+    const actionListener = PushNotifications.addListener('pushNotificationActionPerformed', (action) => {
+      const data = action.notification?.data ?? {};
+      const url = typeof data.url === 'string' ? data.url : '';
+      const conversationId = typeof data.conversationId === 'string' ? data.conversationId : '';
+      window.dispatchEvent(
+        new CustomEvent('app:native-push-navigate', {
+          detail: { url, conversationId },
+        }),
+      );
+    });
+
     return () => {
       cancelled = true;
       void regListener.then((h) => h.remove());
       void regErrorListener.then((h) => h.remove());
       void receivedListener.then((h) => h.remove());
+      void actionListener.then((h) => h.remove());
     };
   }, [token]);
 }

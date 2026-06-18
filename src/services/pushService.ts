@@ -371,11 +371,18 @@ export async function sendPush(
 
   for (let i = 0; i < tokens.length; i += FCM_MULTICAST_CHUNK) {
     const slice = tokens.slice(i, i + FCM_MULTICAST_CHUNK);
+    const channelId = isMessengerLikePush ? 'messages' : 'general';
     const res = await messaging.sendEachForMulticast({
       tokens: slice,
+      notification: { title, body },
       data: dataStrings,
       android: {
         priority: 'high',
+        notification: {
+          channelId,
+          sound: 'default',
+          priority: 'high',
+        },
       },
       apns: {
         headers: {

@@ -8,6 +8,7 @@ import {
   type MessageWithSender,
   type SearchMember,
 } from './api/messengerApi';
+import { onAppBackgroundResume } from '../../lib/appBackgroundResume';
 import { emitAppToast } from '../../lib/uiFeedback';
 import { playAudio } from '../../utils/audio';
 import { extractMentionMemberIdsFromText, normalizeMentionsToCanonical } from './mentionUtils';
@@ -306,12 +307,12 @@ function saveSnapshot(state: ChatState): void {
     // Filter out temporary/pending messages from snapshot
     const cleanMessagesByConv: Record<string, MessageWithSender[]> = {};
     for (const [convId, msgs] of Object.entries(state.messagesByConv || {})) {
-      cleanMessagesByConv[convId] = msgs.filter(
-        (m) =>
-          !String(m.id).startsWith('temp-') &&
-          !String(m.id).startsWith('pending-') &&
-          m.status !== 'sending',
-      );
+      cleanMessagesByConv[convId] = msgs.filter((m) => {
+        const id = String(m.id);
+        const provisional = id.startsWith('temp-') || id.startsWith('pending-');
+        if (provisional) return m.status === 'error';
+        return m.status !== 'sending';
+      });
     }
 
     const snap: MessengerSnapshot = {
@@ -362,6 +363,124 @@ function dequeueOutbox(get: () => ChatState, queueId: string): number {
     stopOutboxPump();
   }
   return inMemoryOutbox.length;
+}
+
+function buildMessageFromOutboxItem(item: OutboxItem, memberId: number | null): MessageWithSender {
+  const pt = item.payloadType;
+  const pollOptsLen =
+    pt === 'poll' && Array.isArray((item.payload as { options?: unknown[] }).options)
+      ? (item.payload as { options: unknown[] }).options.length
+      : 0;
+
+  return {
+    id: item.tempId,
+    conversation_id: item.conversationId,
+    sender_id: memberId,
+    client_msg_id: item.clientMsgId,
+    content: item.content,
+    payload_type: pt,
+    payload:
+      pt === 'text'
+        ? (() => {
+            const mids = extractMentionMemberIdsFromText(item.content);
+            return mids.length
+              ? { text: item.content, mention_member_ids: mids }
+              : { text: item.content };
+          })()
+        : item.payload,
+    poll_tallies: pt === 'poll' && pollOptsLen > 0 ? Array(pollOptsLen).fill(0) : undefined,
+    poll_my_options: pt === 'poll' ? [] : undefined,
+    interaction_count: 0,
+    reply_to_message_id: item.replyToId,
+    is_edited: false,
+    is_deleted: false,
+    status: 'error',
+    created_at: item.createdAt,
+    updated_at: item.createdAt,
+    sender_name: 'Вы',
+    sender_first_name: null,
+    sender_last_name: null,
+    reply_preview: null,
+    reactions: [],
+  };
+}
+
+function restoreOutboxMessagesIntoStore(
+  set: (partial: Partial<ChatState> | ((state: ChatState) => Partial<ChatState>)) => void,
+  get: () => ChatState,
+): void {
+  if (inMemoryOutbox.length === 0) return;
+
+  const state = get();
+  const patch: Record<string, MessageWithSender[]> = {};
+  let changed = false;
+
+  for (const item of inMemoryOutbox) {
+    const list = state.messagesByConv[item.conversationId] || [];
+    if (list.some((m) => m.id === item.tempId)) continue;
+    patch[item.conversationId] = [...(patch[item.conversationId] ?? list), buildMessageFromOutboxItem(item, state.currentMemberId)];
+    changed = true;
+  }
+
+  if (!changed) return;
+
+  set((s) => {
+    const next = { ...s.messagesByConv };
+    for (const [convId, msgs] of Object.entries(patch)) {
+      next[convId] = msgs;
+    }
+    return { messagesByConv: next };
+  });
+}
+
+async function sendOutboxItemDirectly(get: () => ChatState, item: OutboxItem): Promise<void> {
+  const clientMsgId = item.clientMsgId?.trim() || newClientMsgId();
+  const serverReplyId =
+    item.replyToId != null && /^\d+$/.test(String(item.replyToId)) ? item.replyToId : null;
+
+  try {
+    const real = await api.sendMessage(
+      item.conversationId,
+      item.content,
+      serverReplyId,
+      clientMsgId,
+      item.payloadType,
+      item.payload,
+    );
+    dequeueOutbox(get, item.queueId);
+    get().handleNewMessage(item.conversationId, { ...real, status: 'sent' });
+    saveSnapshot(get());
+    retrySendForbiddenToastOnce.delete(`${item.conversationId}\0${item.tempId}`);
+  } catch (e) {
+    console.error('[chatStore] sendOutboxItemDirectly error:', e);
+    if (axios.isAxiosError(e) && e.response?.status === 403) {
+      const dedupeKey = `${item.conversationId}\0${item.tempId}`;
+      if (!retrySendForbiddenToastOnce.has(dedupeKey)) {
+        retrySendForbiddenToastOnce.add(dedupeKey);
+        emitAppToast(messengerApiErrorText(e) ?? 'Нет доступа к отправке в этот чат', 'error');
+      }
+    }
+  }
+}
+
+async function retryOutboxItem(get: () => ChatState, item: OutboxItem): Promise<void> {
+  const { conversationId, tempId } = item;
+  const list = get().messagesByConv[conversationId] || [];
+  const msg = list.find((m) => m.id === tempId) || null;
+
+  if (!msg) {
+    await sendOutboxItemDirectly(get, item);
+    return;
+  }
+
+  if (msg.status !== 'error') {
+    if (msg.status === 'sent' || msg.status === 'delivered') {
+      dequeueOutbox(get, item.queueId);
+    }
+    return;
+  }
+
+  await get().retrySendMessage(conversationId, tempId);
 }
 
 function readSnapshot(userId: number | null): MessengerSnapshot | null {
@@ -418,7 +537,7 @@ async function flushOutbox(get: () => ChatState) {
   for (const item of queue) {
     if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
     // eslint-disable-next-line no-await-in-loop
-    await get().retrySendMessage(item.conversationId, item.tempId);
+    await retryOutboxItem(get, item);
     // eslint-disable-next-line no-await-in-loop
     await new Promise((r) => setTimeout(r, 180));
   }
@@ -455,7 +574,10 @@ function clearAllTypingTimers(typingByConv: Record<string, TypingUser[]>): void 
   }
 }
 
-function hydrateFromCacheIntoStore(set: (partial: Partial<ChatState>) => void, get: () => ChatState) {
+function hydrateFromCacheIntoStore(
+  set: (partial: Partial<ChatState> | ((state: ChatState) => Partial<ChatState>)) => void,
+  get: () => ChatState,
+) {
   const s = get();
   const snap = readSnapshot(s.currentMemberId);
   if (!snap) return;
@@ -471,6 +593,7 @@ function hydrateFromCacheIntoStore(set: (partial: Partial<ChatState>) => void, g
     hasMore: snap.hasMore || {},
     totalUnread: Number(snap.totalUnread || 0),
   });
+  restoreOutboxMessagesIntoStore(set, get);
   ensureOutboxPump(get);
 
   // Outbox recovery: если вкладка только что открылась с уже накопленной очередью
@@ -2183,15 +2306,27 @@ function createWsBatchRuntime(
   };
 }
 
-// Auto-retry failed optimistic messages when network is back.
+async function drainPendingMessengerQueue(get: () => ChatState): Promise<void> {
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
+  await flushOutbox(get);
+  await runRetryAllFailed(get);
+}
+
+function refreshMessengerAfterResume(get: () => ChatState): void {
+  const state = get();
+  if (!state.currentMemberId) return;
+  if (state.conversationsLoaded || state.conversations.length > 0) {
+    void state.loadConversations();
+  }
+}
+
+// Auto-retry failed messages when network is back or app returns to foreground (iOS PWA).
 if (typeof window !== 'undefined' && !onlineRetryBound) {
   onlineRetryBound = true;
-  window.addEventListener('online', () => {
-    void (async () => {
-      const getState = useChatStore.getState;
-      await flushOutbox(getState);
-      await runRetryAllFailed(getState);
-    })();
+  onAppBackgroundResume(() => {
+    const getState = useChatStore.getState;
+    void drainPendingMessengerQueue(getState);
+    refreshMessengerAfterResume(getState);
   });
 }
 

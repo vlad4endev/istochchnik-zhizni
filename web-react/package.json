@@ -19,7 +19,8 @@
     "cap:open:ios": "cap open ios",
     "cap:build": "npm run build && cap sync",
     "mobile:icons": "npx @capacitor/assets generate --ios --android --iconBackgroundColor '#7d3640' --iconBackgroundColorDark '#5c2830' --splashBackgroundColor '#f4f1ed' --splashBackgroundColorDark '#1c1917'",
-    "mobile:build": "npm run build && cap sync"
+    "mobile:build": "npm run build && cap sync",
+    "android:apk": "VITE_RELATIVE_BASE=true VITE_API_BASE_URL=https://app.church-tambov.ru npm run build:prod && cd android && ./gradlew assembleDebug"
   },
   "dependencies": {
     "@capacitor/android": "^7.2.0",
@@ -56,6 +57,7 @@
     "react-icons": "^5.6.0",
     "react-router-dom": "^6.28.0",
     "recharts": "^3.8.1",
+    "sharp": "^0.35.1",
     "simple-peer": "^9.11.1",
     "svguitar": "^2.5.1",
     "zustand": "^5.0.3"

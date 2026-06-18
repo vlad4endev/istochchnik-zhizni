@@ -11,11 +11,16 @@ import androidx.annotation.NonNull;
 import androidx.core.app.NotificationCompat;
 import androidx.core.app.NotificationManagerCompat;
 import androidx.core.app.Person;
+import com.capacitorjs.plugins.pushnotifications.PushNotificationsPlugin;
 import com.google.firebase.messaging.FirebaseMessagingService;
 import com.google.firebase.messaging.RemoteMessage;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * Единый FCM-сервис: показывает уведомление для data-only пушей (фон)
+ * и передаёт событие в Capacitor PushNotifications (JS listeners, токен).
+ */
 public class AppFirebaseMessagingService extends FirebaseMessagingService {
   private static final String CHANNEL_MESSAGES_ID = "messages";
   private static final String CHANNEL_MESSAGES_NAME = "Сообщения";
@@ -25,12 +30,30 @@ public class AppFirebaseMessagingService extends FirebaseMessagingService {
   private static final String CHANNEL_GENERAL_DESC = "Напоминания и системные уведомления";
 
   @Override
+  public void onNewToken(@NonNull String token) {
+    PushNotificationsPlugin.onNewToken(token);
+  }
+
+  @Override
   public void onMessageReceived(@NonNull RemoteMessage remoteMessage) {
+    PushNotificationsPlugin.sendRemoteMessage(remoteMessage);
+
+    // notification payload — Android показывает сам в фоне; дублировать не нужно
+    if (remoteMessage.getNotification() != null) {
+      return;
+    }
+
     final Map<String, String> data = remoteMessage.getData();
-    if (data == null || data.isEmpty()) return;
+    if (data == null || data.isEmpty()) {
+      return;
+    }
 
     final String title = valueOrDefault(data.get("title"), "Уведомление");
     final String body = valueOrDefault(data.get("body"), "");
+    if (body.isEmpty() && title.equals("Уведомление")) {
+      return;
+    }
+
     final String conversationId = valueOrEmpty(data.get("conversationId"));
     final String tag = valueOrEmpty(data.get("tag"));
     final String senderName = valueOrDefault(data.get("senderName"), title);
@@ -51,9 +74,17 @@ public class AppFirebaseMessagingService extends FirebaseMessagingService {
     final int pendingFlags = Build.VERSION.SDK_INT >= Build.VERSION_CODES.M
       ? PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
       : PendingIntent.FLAG_UPDATE_CURRENT;
-    final PendingIntent pendingIntent = PendingIntent.getActivity(this, stableRequestCode(tag, conversationId), launchIntent, pendingFlags);
+    final PendingIntent pendingIntent = PendingIntent.getActivity(
+      this,
+      stableRequestCode(tag, conversationId),
+      launchIntent,
+      pendingFlags
+    );
 
-    final NotificationCompat.Builder builder = new NotificationCompat.Builder(this, isChat ? CHANNEL_MESSAGES_ID : CHANNEL_GENERAL_ID)
+    final NotificationCompat.Builder builder = new NotificationCompat.Builder(
+      this,
+      isChat ? CHANNEL_MESSAGES_ID : CHANNEL_GENERAL_ID
+    )
       .setSmallIcon(R.mipmap.ic_launcher)
       .setContentTitle(title)
       .setContentText(body)

@@ -1,9 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { emitAppToast } from '../lib/uiFeedback';
+import {
+  isCapacitorNative,
+  queryNativePushPermission,
+  requestNativePushPermission,
+  type NativePermissionState,
+} from '../lib/nativeApp';
 import { useAuthStore } from '../features/auth/authStore';
 
-type PermissionStateLike = 'granted' | 'denied' | 'prompt' | 'unknown';
+type PermissionStateLike = NativePermissionState;
 
 const LS_DISMISSED_KEY = 'app:permissions-prompt-dismissed:v1';
 
@@ -11,12 +17,21 @@ async function queryPermission(name: 'camera' | 'microphone'): Promise<Permissio
   const perms = (navigator as Navigator & { permissions?: Permissions })?.permissions;
   if (!perms?.query) return 'unknown';
   try {
-    // TS lib.dom.d.ts doesn't always include camera/microphone in PermissionName.
     const res = await perms.query(({ name } as unknown) as PermissionDescriptor);
     return (res?.state as PermissionStateLike) ?? 'unknown';
   } catch {
     return 'unknown';
   }
+}
+
+async function queryNotificationPermission(): Promise<PermissionStateLike> {
+  if (isCapacitorNative()) {
+    return queryNativePushPermission();
+  }
+  if (typeof Notification !== 'undefined') {
+    return Notification.permission as PermissionStateLike;
+  }
+  return 'unknown';
 }
 
 export function PermissionsRequestModal() {
@@ -43,11 +58,11 @@ export function PermissionsRequestModal() {
 
     let alive = true;
     void (async () => {
-      const [c, m] = await Promise.all([queryPermission('camera'), queryPermission('microphone')]);
-      const n: PermissionStateLike =
-        typeof Notification !== 'undefined'
-          ? (Notification.permission as PermissionStateLike)
-          : 'unknown';
+      const [c, m, n] = await Promise.all([
+        queryPermission('camera'),
+        queryPermission('microphone'),
+        queryNotificationPermission(),
+      ]);
       if (!alive) return;
       setCam(c);
       setMic(m);
@@ -55,7 +70,7 @@ export function PermissionsRequestModal() {
       const needs =
         c !== 'granted' ||
         m !== 'granted' ||
-        (typeof Notification !== 'undefined' && Notification.permission !== 'granted');
+        n !== 'granted';
       setOpen(needs);
     })();
     return () => {
@@ -67,7 +82,7 @@ export function PermissionsRequestModal() {
     const missing: string[] = [];
     if (cam !== 'granted') missing.push('камера');
     if (mic !== 'granted') missing.push('микрофон');
-    if (typeof Notification !== 'undefined' && notif !== 'granted') missing.push('уведомления');
+    if (notif !== 'granted') missing.push('уведомления');
     return missing.length > 0 ? missing.join(', ') : '';
   }, [cam, mic, notif]);
 
@@ -84,24 +99,27 @@ export function PermissionsRequestModal() {
     if (busy) return;
     setBusy(true);
     try {
-      // Камера/микрофон: запрос с user gesture.
       if (navigator.mediaDevices?.getUserMedia) {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
         stream.getTracks().forEach((t) => t.stop());
       }
-      // Уведомления: best-effort, в некоторых браузерах тоже требует gesture (у нас он есть).
-      if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
+
+      let n: PermissionStateLike = 'unknown';
+      if (isCapacitorNative()) {
+        n = await requestNativePushPermission();
+      } else if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
         try {
           await Notification.requestPermission();
         } catch {
           /* ignore */
         }
+        n = Notification.permission as PermissionStateLike;
       }
+
       const [c, m] = await Promise.all([queryPermission('camera'), queryPermission('microphone')]);
-      const n: PermissionStateLike =
-        typeof Notification !== 'undefined'
-          ? (Notification.permission as PermissionStateLike)
-          : 'unknown';
+      if (n === 'unknown') {
+        n = await queryNotificationPermission();
+      }
       setCam(c);
       setMic(m);
       setNotif(n);
@@ -109,17 +127,27 @@ export function PermissionsRequestModal() {
       const ok =
         c === 'granted' &&
         m === 'granted' &&
-        (typeof Notification === 'undefined' || Notification.permission === 'granted');
+        n === 'granted';
       if (ok) {
         emitAppToast('Разрешения получены', 'success');
         dismiss();
+      } else if (isCapacitorNative()) {
+        emitAppToast(
+          'Не все разрешения выданы. Откройте Настройки → Приложения → Источник жизни → Разрешения.',
+          'error',
+        );
       } else {
         emitAppToast('Разрешения не выданы. Проверьте настройки браузера.', 'error');
       }
     } catch (e) {
       const name = e && typeof e === 'object' && 'name' in e ? String((e as { name?: unknown }).name) : '';
       if (name === 'NotAllowedError') {
-        emitAppToast('Доступ к камере/микрофону запрещён. Разрешите в настройках сайта.', 'error');
+        emitAppToast(
+          isCapacitorNative()
+            ? 'Доступ запрещён. Разрешите камеру и микрофон в настройках Android.'
+            : 'Доступ к камере/микрофону запрещён. Разрешите в настройках сайта.',
+          'error',
+        );
       } else if (name === 'NotFoundError') {
         emitAppToast('Камера или микрофон не найдены.', 'error');
       } else if (name === 'NotReadableError') {
@@ -153,7 +181,8 @@ export function PermissionsRequestModal() {
           Разрешите доступ
         </p>
         <p className="mt-2 text-[13px] leading-relaxed text-zinc-200/90">
-          Для звонков и уведомлений нужны разрешения: <span className="font-semibold">{needsText || 'камера, микрофон, уведомления'}</span>.
+          Для звонков, сообщений и уведомлений нужны разрешения:{' '}
+          <span className="font-semibold">{needsText || 'камера, микрофон, уведомления'}</span>.
         </p>
         <div className="mt-4 flex flex-col gap-2">
           <button
@@ -176,4 +205,3 @@ export function PermissionsRequestModal() {
     </div>
   );
 }
-
