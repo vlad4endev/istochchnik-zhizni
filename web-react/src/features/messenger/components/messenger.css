@@ -1936,6 +1936,10 @@ html[data-mantine-color-scheme='dark'] .tg-input-banner {
   font-family: var(--tg-font-family);
   letter-spacing: normal;
   font-variant-numeric: normal;
+  /* Android Chrome BiDi: prevent digit-breaking in Cyrillic+numeric strings */
+  word-break: normal;
+  -webkit-hyphens: none;
+  hyphens: none;
 }
 
 .messenger-digit-run {
@@ -3491,10 +3495,18 @@ html.dark .msg-videonote-circle--placeholder {
   background-color: var(--tg-primary, #2AABEE);
   -webkit-tap-highlight-color: transparent;
   touch-action: none;
+  /* PWA iOS/Android: prevent button going transparent on keyboard open */
+  opacity: 1;
+  -webkit-appearance: none;
+  appearance: none;
+  outline: none;
+  /* New stacking context: isolates from layout shift when keyboard opens */
+  transform: translateZ(0);
+  will-change: background-color;
 }
 
 .sendBtn:active:not(:disabled) {
-  transform: scale(0.92);
+  transform: translateZ(0) scale(0.92);
 }
 
 .sendBtn.recording {

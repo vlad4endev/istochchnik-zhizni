@@ -328,6 +328,33 @@ html[data-pwa-standalone='1'] {
   }
 }
 
+/*
+ * PWA iOS Safari + Android Chrome: prevent buttons from going transparent
+ * when the keyboard opens or an input is focused.
+ * Safari applies a default :active opacity and can drop it to 0 during
+ * layout shifts caused by the virtual keyboard.
+ */
+@media (hover: none) and (pointer: coarse) {
+  button,
+  [role='button'] {
+    opacity: 1;
+  }
+
+  button:active,
+  [role='button']:active {
+    opacity: 1 !important;
+  }
+
+  /* Button adjacent to / sibling of a focused input must stay visible */
+  input:focus ~ button,
+  input:focus + button,
+  textarea:focus ~ button,
+  textarea:focus + button {
+    opacity: 1 !important;
+    visibility: visible !important;
+  }
+}
+
 /* Раньше здесь был overflow-y:hidden на #root в standalone — на части устройств ломалась ширина flex-цепочки (узкая колонка + обрезание таббара). Скролл: main / страницы. */
 
 body {

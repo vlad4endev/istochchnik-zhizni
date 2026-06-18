@@ -32,7 +32,7 @@ import '@mantine/notifications/styles.css';
 import './index.css';
 import './styles/mobile.css';
 
-const CLIENT_BUILD_VERSION = '2026-06-18-android-messenger-bidi-v3';
+const CLIENT_BUILD_VERSION = '2026-06-18-android-messenger-bidi-v4';
 const CLIENT_BUILD_VERSION_KEY = 'app:client-build-version';
 const CLIENT_BUILD_RELOAD_KEY = 'app:client-build-reload-once';
 
@@ -187,6 +187,17 @@ if (import.meta.env.DEV) {
 applyNativeShellViewportLock();
 window.addEventListener('load', () => applyNativeShellViewportLock());
 initPwaStandaloneHtmlHint();
+
+/**
+ * Android BiDi: устанавливаем атрибут, по которому messenger.css включает
+ * Roboto + отключает hyphens для корректного рендера цифр в кириллице.
+ */
+(function initAndroidMessengerBidiAttr() {
+  if (typeof navigator === 'undefined') return;
+  if (/Android/i.test(navigator.userAgent)) {
+    document.documentElement.setAttribute('data-android-messenger', '1');
+  }
+})();
 initAppearance();
 void forceClientRefreshOnVersionChange();
 void Promise.race([
