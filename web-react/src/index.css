@@ -1518,3 +1518,36 @@ html.dark .songbook-reader .chorus-block {
     background-position: -200% 0;
   }
 }
+
+/* Stream player: live indicator pulse */
+@keyframes livePulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.2; }
+}
+
+.live-dot-pulse {
+  animation: livePulse 1.4s ease-in-out infinite;
+}
+
+/* PWA: prevent semi-transparent button flash on tap (iOS/Android) */
+button {
+  -webkit-tap-highlight-color: transparent;
+  -webkit-appearance: none;
+}
+
+/* Android BiDi fix — use on stream text where numbers follow RTL chars */
+.stream-text {
+  unicode-bidi: plaintext;
+  direction: ltr;
+  text-break-strategy: simple;
+}
+
+/* CSS variable for reliable viewport height in iOS PWA (set via JS) */
+:root {
+  --app-height: 100dvh;
+}
+
+/* Stream player iframe: prevent accidental page-scroll on mobile */
+.player-wrap-mobile iframe {
+  touch-action: none;
+}

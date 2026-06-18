@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { format } from 'date-fns';
 import { ru } from 'date-fns/locale';
-import { LuBell, LuExpand, LuEye, LuPlay, LuTv } from 'react-icons/lu';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useBroadcastViewers } from '../../../hooks/useBroadcastViewers';
 import { createBroadcast, fetchActiveBroadcast, fetchFinishedBroadcasts, patchBroadcast, type BroadcastData } from '../../../api/broadcast';
@@ -23,25 +22,10 @@ import {
 import { emitAppToast } from '../../../lib/uiFeedback';
 import { useMe } from '@/hooks/useMe';
 import { keys } from '@/lib/queryKeys';
-import { SkeletonBox } from '@/components/ui/SkeletonBox';
 
-function btnPrimary(c = '') { return `flex h-10 items-center justify-center rounded-xl bg-primary px-4 text-sm font-bold text-white shadow hover:border-transparent hover:!bg-[#e34254] disabled:pointer-events-none disabled:opacity-50 transition-colors ${c}`; }
-function btnSecondary(c = '') { return `flex h-10 items-center justify-center rounded-xl border border-stone-200 bg-white px-4 text-sm font-bold text-stone-700 hover:bg-stone-50 disabled:pointer-events-none disabled:opacity-50 transition-colors ${c}`; }
-function fieldClass() { return 'w-full rounded-xl border border-stone-200 bg-stone-50 px-3 py-2 text-sm text-stone-900 outline-none focus:border-primary focus:bg-white transition-colors'; }
-
-function platformIcon(platform: string): string {
-  if (platform === 'youtube') return '▶️';
-  if (platform === 'rutube') return '📺';
-  if (platform === 'vk') return '🟦';
-  return '🎬';
-}
-
-function platformLabel(platform: string): string {
-  if (platform === 'youtube') return 'YouTube';
-  if (platform === 'rutube') return 'RuTube';
-  if (platform === 'vk') return 'VK Видео';
-  return 'Не определена';
-}
+import { StreamPlayer } from '../components/StreamPlayer';
+import { PastStreams } from '../components/PastStreams';
+import { StreamSettings } from '../components/StreamSettings';
 
 export function BroadcastPage() {
   const qc = useQueryClient();
@@ -49,11 +33,13 @@ export function BroadcastPage() {
   const meQ = useMe();
   const ministryDirection = String(meQ.data?.ministry_direction ?? '').trim().toLowerCase().replace(/ё/g, 'е');
   const isAdmin = role === 'admin' || role === 'minister' || ministryDirection.includes('медиа');
+
   const { data, isLoading: broadcastLoading, error } = useQuery({
     queryKey: keys.broadcast,
     queryFn: fetchActiveBroadcast,
   });
   const activeBroadcast = data?.broadcast ?? null;
+
   const [playerUrl, setPlayerUrl] = useState<string | null>(null);
   const [broadcastTickMs, setBroadcastTickMs] = useState(() => Date.now());
   const [datePart, setDatePart] = useState('');
@@ -161,15 +147,6 @@ export function BroadcastPage() {
     });
   };
 
-  const onReminder = () => {
-    if (!activeBroadcast?.starts_at) {
-      emitAppToast({ kind: 'info', message: 'Время начала пока не задано' });
-      return;
-    }
-    localStorage.setItem('broadcast_reminder_at', activeBroadcast.starts_at);
-    emitAppToast({ kind: 'success', message: 'Напоминание сохранено' });
-  };
-
   const applySmartEmbedInput = () => {
     const parsed = parseBroadcastInputToEmbed(smartInput);
     if (!parsed) {
@@ -186,215 +163,125 @@ export function BroadcastPage() {
       platform: detectPlatform(parsed),
     }));
     setPlayerUrl(parsed);
+    setSmartInput('');
     emitAppToast({ kind: 'success', message: 'Ссылка распознана и подставлена в трансляцию' });
   };
 
+  // Compute player time-line text
+  const playerTimeLine = useMemo(() => {
+    if (broadcastUiMode === 'post') return 'Запланированный эфир завершён';
+    if (broadcastUiMode === 'onair') return `В эфире: ${broadcastMainTimer}`;
+    if (countdownPhrase) return countdownPhrase;
+    if (
+      activeBroadcast?.starts_at &&
+      Number.isFinite(parseBroadcastStartsAt(activeBroadcast.starts_at)?.getTime() ?? NaN) &&
+      broadcastTickMs >= (parseBroadcastStartsAt(activeBroadcast.starts_at)?.getTime() ?? 0)
+    ) {
+      return 'Время начала наступило — вставьте ссылку в настройках.';
+    }
+    return 'До начала: время уточняется';
+  }, [broadcastUiMode, broadcastMainTimer, countdownPhrase, activeBroadcast?.starts_at, broadcastTickMs]);
+
+  const playerTimeLineSub = broadcastEndsLabel ? `Окончание эфира: ${broadcastEndsLabel}` : null;
+
+  // The player uses the active broadcast URL (or what admin selected from archive)
+  const displayUrl = playerUrl ?? activeBroadcast?.stream_url ?? null;
+
   return (
     <div className="min-h-full bg-[var(--surface)] max-lg:pb-0 lg:pb-8">
+      {/* ❌ НЕ ТРОГАТЬ — шапка раздела */}
       <div className={sectionHeroStickyClass}>
         <PageHeader title="Трансляция" />
       </div>
 
-      <div className="px-3 py-6 sm:px-4 sm:py-8 md:px-6 lg:px-8 xl:px-10">
-        <div className="mx-auto flex w-full max-w-lg flex-col gap-6 sm:gap-8 md:max-w-xl lg:max-w-4xl xl:max-w-6xl">
-          <section className="rounded-[1.35rem] border border-stone-200/70 bg-[var(--surface-elevated)] p-4 shadow-[var(--shadow-card)] sm:rounded-3xl sm:p-6 sm:shadow-[var(--shadow)] lg:p-8 shell:p-8" aria-labelledby="broadcast-heading">
-            <div className="mb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-              <h2 id="broadcast-heading" className="flex items-center gap-3 text-base font-extrabold text-stone-900 sm:text-lg md:text-xl">
-                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/[0.08] text-primary/80 shrink-0">
-                  <LuTv className="h-6 w-6" strokeWidth={2} aria-hidden />
-                </div>
-                <span className="leading-tight">Прямой эфир</span>
-              </h2>
-            </div>
+      <div className="px-3 py-4 sm:px-4 sm:py-6 md:px-6 lg:px-8 xl:px-10">
+        <div className="mx-auto flex w-full max-w-lg flex-col gap-4 md:max-w-xl lg:max-w-3xl xl:max-w-5xl">
 
-            <div className="player-ratio-box">
-              {broadcastLoading ? (
-                <div className="absolute inset-0 bg-stone-950/50 p-6">
-                  <div className="mx-auto flex h-full w-full max-w-xl flex-col justify-center gap-3">
-                    <SkeletonBox height="18px" width="42%" />
-                    <SkeletonBox height="12px" width="86%" />
-                    <SkeletonBox height="12px" width="58%" />
-                  </div>
-                </div>
-              ) : error ? (
-                <div className="absolute inset-0 flex flex-col items-center justify-center text-red-400 p-6 text-center bg-stone-950/50">
-                  <p className="text-sm font-medium">Не удалось загрузить данные трансляции</p>
-                </div>
-              ) : playerUrl ? (
-                <iframe src={playerUrl} allow="autoplay; encrypted-media; fullscreen; picture-in-picture" allowFullScreen title="Трансляция" />
-              ) : (
-                <div className="absolute inset-0 flex flex-col items-center justify-center text-stone-400 p-6 text-center bg-stone-950/50">
-                  <img src="/assets/logo.svg" alt="Логотип церкви" className="mb-4 h-14 w-14 opacity-70" />
-                  <p className="text-sm font-medium">Трансляция скоро начнётся</p>
-                </div>
-              )}
-            </div>
-
-            <div className="mt-4 space-y-1">
-              {broadcastUiMode === 'post' ? (
-                <p className="text-sm font-semibold text-stone-600">Запланированный эфир завершён (прошло 2 ч с указанного начала).</p>
-              ) : broadcastUiMode === 'onair' ? (
-                <>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="inline-flex items-center gap-1.5 rounded-full bg-red-600 px-3 py-1 text-xs font-extrabold text-white">
-                      <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-white" aria-hidden />
-                      В эфире
-                    </span>
-                    {viewerCount !== null && viewerCount > 0 && (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-stone-100 px-2.5 py-1 text-xs font-semibold text-stone-600">
-                        <LuEye className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                        {viewerCount} {viewerCount === 1 ? 'смотрит' : viewerCount >= 2 && viewerCount <= 4 ? 'смотрят' : 'смотрят'}
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-sm font-semibold text-stone-800 tabular-nums">Идёт: {broadcastMainTimer}</p>
-                </>
-              ) : (
-                <p className="text-sm font-semibold text-stone-700">
-                  {countdownPhrase
-                    ?? (activeBroadcast?.starts_at
-                      && Number.isFinite(parseBroadcastStartsAt(activeBroadcast.starts_at)?.getTime() ?? NaN)
-                      && broadcastTickMs >= (parseBroadcastStartsAt(activeBroadcast.starts_at)?.getTime() ?? 0)
-                      ? 'Время начала наступило — вставьте ссылку на трансляцию в настройках.'
-                      : 'До начала: время уточняется')}
-                </p>
-              )}
-              {broadcastEndsLabel ? (
-                <p className="text-xs font-medium text-stone-500">Окончание эфира: {broadcastEndsLabel}</p>
-              ) : null}
-            </div>
-
-            <div className="mt-4 flex flex-wrap gap-3">
-              <button type="button" className={btnSecondary('gap-2')} onClick={() => document.documentElement.requestFullscreen?.().catch(() => undefined)}>
-                <LuExpand className="h-4 w-4" />
-                На весь экран
-              </button>
-              <button type="button" className={btnSecondary('gap-2')} onClick={onReminder}>
-                <LuBell className="h-4 w-4" />
-                Напомнить
-              </button>
-            </div>
-
-            {isAdmin && (
-              <div className="mt-8 space-y-4">
-                <div className="inline-flex items-center rounded-full bg-amber-100 px-3 py-1 text-xs font-bold text-amber-800">🔒 Только для администраторов</div>
-
-                <section className="rounded-2xl border border-stone-200 bg-white p-5 shadow-[var(--shadow-card)]">
-                  <h3 className="mb-4 text-base font-extrabold text-stone-900">Настройки трансляции</h3>
-                  <div className="mb-4 rounded-xl border border-stone-200 bg-stone-50/70 p-3">
-                    <p className="text-xs font-semibold text-stone-700">Умное добавление плеера</p>
-                    <p className="mt-1 text-xs text-stone-500">
-                      Вставьте ссылку YouTube/RuTube/VK или готовый iframe. Мы автоматически извлечем embed-ссылку.
-                    </p>
-                    <div className="mt-2 flex flex-col gap-2 sm:flex-row">
-                      <textarea
-                        className={`${fieldClass()} min-h-[74px] flex-1`}
-                        placeholder='Например: https://youtu.be/... или <iframe src="..."></iframe>'
-                        value={smartInput}
-                        onChange={(e) => setSmartInput(e.target.value)}
-                      />
-                      <button type="button" className={btnSecondary('shrink-0')} onClick={applySmartEmbedInput}>
-                        Применить
-                      </button>
-                    </div>
-                  </div>
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <label className="text-xs font-semibold text-stone-600">
-                      Название
-                      <input className={fieldClass()} value={formState.title} onChange={(e) => setFormState((prev) => ({ ...prev, title: e.target.value }))} />
-                    </label>
-                    <label className="text-xs font-semibold text-stone-600 sm:col-span-2">
-                      URL трансляции
-                      <input
-                        className={fieldClass()}
-                        value={formState.stream_url}
-                        onChange={(e) => {
-                          const value = e.target.value;
-                          setFormState((prev) => ({ ...prev, stream_url: value }));
-                          if (!value.trim()) {
-                            setStreamUrlError(null);
-                            return;
-                          }
-                          const parsed = parseBroadcastInputToEmbed(value);
-                          setStreamUrlError(parsed ? null : 'Ссылка не распознана. Вставьте URL или iframe-код.');
-                        }}
-                        onBlur={(e) => {
-                          const embed = getEmbedUrl(e.target.value);
-                          setFormState((prev) => ({
-                            ...prev,
-                            stream_url: embed ?? e.target.value,
-                            platform: detectPlatform(embed ?? e.target.value),
-                          }));
-                          if (!e.target.value.trim()) {
-                            setStreamUrlError(null);
-                            return;
-                          }
-                          const parsed = parseBroadcastInputToEmbed(e.target.value);
-                          setStreamUrlError(parsed ? null : 'Ссылка не распознана. Вставьте URL или iframe-код.');
-                        }}
-                      />
-                      <div className="mt-1 flex flex-wrap items-center gap-2">
-                        <span className="rounded-full bg-stone-100 px-2 py-0.5 text-[11px] font-semibold text-stone-700">
-                          Платформа: {platformIcon(formState.platform)} {platformLabel(formState.platform)}
-                        </span>
-                        {streamUrlError ? (
-                          <span className="text-[11px] font-semibold text-red-600">{streamUrlError}</span>
-                        ) : null}
-                      </div>
-                    </label>
-                    <label className="text-xs font-semibold text-stone-600">
-                      Дата начала
-                      <input type="date" className={fieldClass()} value={datePart} onChange={(e) => setDatePart(e.target.value)} />
-                    </label>
-                    <label className="text-xs font-semibold text-stone-600">
-                      Время начала
-                      <input type="time" className={fieldClass()} value={timePart} onChange={(e) => setTimePart(e.target.value)} />
-                    </label>
-                    <label className="text-xs font-semibold text-stone-600 sm:col-span-2">
-                      Описание
-                      <textarea className={`${fieldClass()} min-h-24 resize-y`} value={formState.description} onChange={(e) => setFormState((prev) => ({ ...prev, description: e.target.value }))} />
-                    </label>
-                    <label className="flex items-center gap-2 text-xs font-semibold text-stone-700">
-                      <input type="checkbox" checked={formState.notify_members} onChange={(e) => setFormState((prev) => ({ ...prev, notify_members: e.target.checked }))} />
-                      Уведомить участников
-                    </label>
-                    <label className="flex items-center gap-2 text-xs font-semibold text-stone-700">
-                      <input type="checkbox" checked={formState.is_public} onChange={(e) => setFormState((prev) => ({ ...prev, is_public: e.target.checked }))} />
-                      Публичная трансляция
-                    </label>
-                  </div>
-                  <button
-                    type="button"
-                    className={btnPrimary('mt-4 w-full sm:w-auto')}
-                    onClick={onSave}
-                    disabled={saveMutation.isPending || Boolean(streamUrlError)}
-                  >
-                    {saveMutation.isPending ? 'Сохранение...' : 'Сохранить'}
-                  </button>
-                </section>
-
-                <section className="rounded-2xl border border-stone-200 bg-white p-5 shadow-[var(--shadow-card)]">
-                  <h3 className="mb-4 text-base font-extrabold text-stone-900">Архив трансляций</h3>
-                  <div className="space-y-2">
-                    {(archiveData?.items ?? []).map((item) => (
-                      <div key={item.id} className="flex items-center justify-between rounded-xl border border-stone-200 px-3 py-2">
-                        <div>
-                          <p className="text-sm font-semibold text-stone-900">{item.title ?? 'Без названия'}</p>
-                          <p className="text-xs text-stone-500">{item.starts_at ? new Date(item.starts_at).toLocaleString('ru-RU') : 'Дата не задана'} • {platformIcon(item.platform)} {item.platform}</p>
-                        </div>
-                        <button type="button" className={btnSecondary('h-9 px-3 gap-1')} onClick={() => setPlayerUrl(getEmbedUrl(item.stream_url ?? '') ?? item.stream_url)}>
-                          <LuPlay className="h-4 w-4" />
-                          Смотреть
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                </section>
+          {/* Player card — shown for all users */}
+          {broadcastLoading ? (
+            <div style={skeletonStyle}>
+              <div style={{ background: '#1a0808', width: '100%', aspectRatio: '16/9', borderRadius: '20px 20px 0 0' }} />
+              <div style={{ padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <div style={{ height: 16, background: '#eee', borderRadius: 8, width: '55%' }} />
+                <div style={{ height: 36, background: '#F4F0EE', borderRadius: 10, width: '100%' }} />
               </div>
-            )}
-          </section>
+            </div>
+          ) : error ? (
+            <div style={{ ...skeletonStyle, padding: 24, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <span style={{ fontSize: 13, color: '#999' }}>Не удалось загрузить данные трансляции</span>
+            </div>
+          ) : (
+            <StreamPlayer
+              url={displayUrl}
+              title={activeBroadcast?.title ?? null}
+              viewersCount={viewerCount}
+              isLive={broadcastUiMode === 'onair'}
+              timeLine={playerTimeLine}
+              timeLineSub={playerTimeLineSub}
+            />
+          )}
+
+          {/* Past streams + admin settings — admin only */}
+          {isAdmin && (
+            <>
+              <PastStreams
+                items={archiveData?.items ?? []}
+                onOpen={(item) => setPlayerUrl(getEmbedUrl(item.stream_url ?? '') ?? item.stream_url)}
+              />
+
+              <StreamSettings
+                formTitle={formState.title}
+                formStreamUrl={formState.stream_url}
+                formDescription={formState.description}
+                formNotifyMembers={formState.notify_members}
+                formIsPublic={formState.is_public}
+                formPlatform={formState.platform}
+                datePart={datePart}
+                timePart={timePart}
+                smartInput={smartInput}
+                streamUrlError={streamUrlError}
+                isSaving={saveMutation.isPending}
+
+                onTitleChange={(v) => setFormState((p) => ({ ...p, title: v }))}
+                onStreamUrlChange={(v) => {
+                  setFormState((p) => ({ ...p, stream_url: v }));
+                  if (!v.trim()) { setStreamUrlError(null); return; }
+                  const parsed = parseBroadcastInputToEmbed(v);
+                  setStreamUrlError(parsed ? null : 'Ссылка не распознана. Вставьте URL или iframe-код.');
+                }}
+                onStreamUrlBlur={(v) => {
+                  const embed = getEmbedUrl(v);
+                  setFormState((p) => ({
+                    ...p,
+                    stream_url: embed ?? v,
+                    platform: detectPlatform(embed ?? v),
+                  }));
+                  if (!v.trim()) { setStreamUrlError(null); return; }
+                  const parsed = parseBroadcastInputToEmbed(v);
+                  setStreamUrlError(parsed ? null : 'Ссылка не распознана. Вставьте URL или iframe-код.');
+                }}
+                onDescriptionChange={(v) => setFormState((p) => ({ ...p, description: v }))}
+                onNotifyMembersChange={(v) => setFormState((p) => ({ ...p, notify_members: v }))}
+                onIsPublicChange={(v) => setFormState((p) => ({ ...p, is_public: v }))}
+                onDateChange={setDatePart}
+                onTimeChange={setTimePart}
+                onSmartInputChange={setSmartInput}
+                onApplySmartInput={applySmartEmbedInput}
+                onSave={onSave}
+              />
+            </>
+          )}
+
         </div>
       </div>
     </div>
   );
 }
+
+const skeletonStyle: React.CSSProperties = {
+  background: '#fff',
+  borderRadius: 20,
+  border: '1px solid rgba(0,0,0,0.07)',
+  overflow: 'hidden',
+  width: '100%',
+};
