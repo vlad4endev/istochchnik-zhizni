@@ -173,15 +173,18 @@ function parseCommaSeparatedOrigins(raw: string | undefined): string[] {
 function resolveAllowedOrigins(): string[] {
   const capacitorOrigins = parseCommaSeparatedOrigins(process.env.CORS_CAPACITOR_ORIGINS);
 
+  /** Capacitor Android (androidScheme https) и iOS — без этого CORS режет API с нативного WebView. */
+  const builtinCapacitorOrigins = ['https://localhost', 'capacitor://localhost'];
+
   const devOnlyOrigins =
     process.env.NODE_ENV !== 'production'
-      ? ['capacitor://localhost', 'http://localhost']
+      ? ['http://localhost']
       : [];
 
   const raw = (process.env.CORS_ALLOWED_ORIGINS ?? process.env.CORS_ORIGIN ?? '').trim();
   const out = new Set<string>();
 
-  for (const o of [...capacitorOrigins, ...devOnlyOrigins]) {
+  for (const o of [...builtinCapacitorOrigins, ...capacitorOrigins, ...devOnlyOrigins]) {
     if (o) {
       out.add(o);
     }

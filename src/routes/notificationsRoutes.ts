@@ -1,4 +1,4 @@
-import { Router, type Request, type Response } from 'express';
+import { Router, type NextFunction, type Request, type Response } from 'express';
 import { requireAuthSession } from '../middleware/authSession';
 import { saveFcmToken } from '../services/fcmSubscriptionService';
 import {
@@ -115,33 +115,47 @@ router.post('/unsubscribe', requireAuthSession, async (req: Request, res: Respon
  * POST /api/notifications/save-token
  * Body: { fcm_token: string, device_id: string } — нативное FCM (Capacitor).
  */
-router.post('/save-token', requireAuthSession, async (req: Request, res: Response) => {
-  const memberId = (req as AuthReq).authUserId;
-  if (!memberId) {
-    res.status(401).json({ error: 'Unauthorized' });
-    return;
-  }
+router.post(
+  '/save-token',
+  (req: Request, _res: Response, next: NextFunction) => {
+    const authId = (req as AuthReq).authUserId;
+    console.info('[notifications] save-token attempt', {
+      memberId: authId ?? null,
+      hasFcmToken: typeof req.body?.fcm_token === 'string' && req.body.fcm_token.trim().length > 0,
+      hasDeviceId: typeof req.body?.device_id === 'string' && req.body.device_id.trim().length > 0,
+      origin: req.header('origin') ?? null,
+    });
+    next();
+  },
+  requireAuthSession,
+  async (req: Request, res: Response) => {
+    const memberId = (req as AuthReq).authUserId;
+    if (!memberId) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
 
-  const fcm_token = typeof req.body?.fcm_token === 'string' ? req.body.fcm_token.trim() : '';
-  const device_id = typeof req.body?.device_id === 'string' ? req.body.device_id.trim() : '';
-  if (!fcm_token || !device_id) {
-    res.status(400).json({ error: 'Fields fcm_token and device_id are required' });
-    return;
-  }
-  if (fcm_token.length > 4096 || device_id.length > 512) {
-    res.status(400).json({ error: 'Invalid field length' });
-    return;
-  }
+    const fcm_token = typeof req.body?.fcm_token === 'string' ? req.body.fcm_token.trim() : '';
+    const device_id = typeof req.body?.device_id === 'string' ? req.body.device_id.trim() : '';
+    if (!fcm_token || !device_id) {
+      res.status(400).json({ error: 'Fields fcm_token and device_id are required' });
+      return;
+    }
+    if (fcm_token.length > 4096 || device_id.length > 512) {
+      res.status(400).json({ error: 'Invalid field length' });
+      return;
+    }
 
-  try {
-    await saveFcmToken(memberId, device_id, fcm_token);
-    console.info('[notifications] save-token ok', { memberId, deviceId: device_id.slice(0, 12) });
-    res.status(201).json({ ok: true });
-  } catch (e) {
-    console.error('[notifications] save-token error:', e);
-    res.status(500).json({ error: 'Failed to save token' });
-  }
-});
+    try {
+      await saveFcmToken(memberId, device_id, fcm_token);
+      console.info('[notifications] save-token ok', { memberId, deviceId: device_id.slice(0, 12) });
+      res.status(201).json({ ok: true });
+    } catch (e) {
+      console.error('[notifications] save-token error:', e);
+      res.status(500).json({ error: 'Failed to save token' });
+    }
+  },
+);
 
 /**
  * GET /api/notifications/unread-deliveries-count
