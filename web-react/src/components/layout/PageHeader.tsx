@@ -1,7 +1,7 @@
 /** Единая плоская шапка экрана: только заголовок. */
 export function PageHeader({ title }: { title: string }) {
   return (
-    <header className="flex h-12 w-full items-center bg-primary pl-[max(1rem,env(safe-area-inset-left,0px))] pr-[max(1rem,env(safe-area-inset-right,0px))]">
+    <header className="flex h-12 w-full items-center rounded-b-[20px] bg-primary pl-[max(1rem,env(safe-area-inset-left,0px))] pr-[max(1rem,env(safe-area-inset-right,0px))]">
       <h1 className="min-w-0 flex-1 truncate text-[17px] font-semibold tracking-tight text-white">{title}</h1>
     </header>
   );

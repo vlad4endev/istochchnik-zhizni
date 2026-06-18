@@ -1,10 +1,13 @@
 /**
- * Липкая обёртка `PageHeader`: сплошной primary + overflow на скруглении.
- * Без backdrop-filter / полупрозрачного surface — на старых Android WebView при скролле
- * под шапкой появляются горизонтальные артефакты.
+ * Липкая обёртка `PageHeader`.
+ *
+ * НЕ используем overflow-hidden + border-radius на sticky-контейнере:
+ * на Android WebView это вызывает горизонтальные артефакты при скролле
+ * из-за некорректной GPU-компоновки слоёв. Скругление вместо этого
+ * применяется напрямую к header-элементу внутри PageHeader.
  */
 const sectionHeroStickyBase =
-  'section-hero-sticky [position:-webkit-sticky] sticky top-0 z-20 w-full max-w-full self-start flex-shrink-0 overflow-hidden rounded-b-[20px] bg-primary';
+  'section-hero-sticky [position:-webkit-sticky] sticky top-0 z-20 w-full max-w-full self-start flex-shrink-0';
 
 /** Липкая полоса — без горизонтального inset, чтобы `PageHeader` был во всю ширину экрана */
 export const sectionHeroStickyClass = sectionHeroStickyBase;
