@@ -4,6 +4,7 @@ import { PushNotifications } from '@capacitor/push-notifications';
 
 import { useAuthStore } from '../features/auth/authStore';
 import { apiClient } from '../lib/apiClient';
+import { emitAppToast } from '../lib/uiFeedback';
 
 const DEVICE_ID_KEY = 'fcm_push_device_id';
 const MESSAGES_CHANNEL_ID = 'messages';
@@ -43,9 +44,9 @@ function showForegroundNotification(title: string, body: string): void {
   );
 }
 
-async function saveFcmTokenToServer(fcmToken: string, deviceId: string): Promise<void> {
+async function saveFcmTokenToServer(fcmToken: string, deviceId: string): Promise<boolean> {
   const session = useAuthStore.getState().token;
-  if (!session?.trim()) return;
+  if (!session?.trim()) return false;
 
   let lastErr: unknown;
   for (let attempt = 0; attempt < 3; attempt += 1) {
@@ -54,13 +55,15 @@ async function saveFcmTokenToServer(fcmToken: string, deviceId: string): Promise
         fcm_token: fcmToken,
         device_id: deviceId,
       });
-      return;
+      return true;
     } catch (err) {
       lastErr = err;
       await new Promise((r) => setTimeout(r, 400 * (attempt + 1)));
     }
   }
   console.warn('[fcm] save-token failed after retries', lastErr);
+  emitAppToast('Не удалось отправить push-токен на сервер. Проверьте интернет и войдите снова.', 'error');
+  return false;
 }
 
 async function ensurePushChannels(): Promise<void> {
@@ -118,10 +121,17 @@ export function useFCM(): void {
       if (cancelled) return;
       if (!(await ensureNotificationPermission())) {
         console.warn('[fcm] notification permission not granted');
+        emitAppToast(
+          'Уведомления отключены. Настройки → Приложения → Источник жизни → Уведомления → разрешить.',
+          'error',
+        );
         return;
       }
       if (lastRegisteredFcmToken) {
-        await saveFcmTokenToServer(lastRegisteredFcmToken, deviceId);
+        const ok = await saveFcmTokenToServer(lastRegisteredFcmToken, deviceId);
+        if (ok) {
+          emitAppToast('Push-уведомления подключены', 'success');
+        }
       }
       await PushNotifications.register();
     };
@@ -134,7 +144,10 @@ export function useFCM(): void {
           const fcmToken = ev.value?.trim();
           if (!fcmToken) return;
           lastRegisteredFcmToken = fcmToken;
-          await saveFcmTokenToServer(fcmToken, deviceId);
+          const ok = await saveFcmTokenToServer(fcmToken, deviceId);
+          if (ok) {
+            emitAppToast('Push-уведомления подключены', 'success');
+          }
         });
         removeListeners.push(() => {
           void regListener.remove();
@@ -142,6 +155,11 @@ export function useFCM(): void {
 
         const regErrorListener = await PushNotifications.addListener('registrationError', (err) => {
           console.warn('[fcm] registrationError', err);
+          const msg =
+            err && typeof err === 'object' && 'error' in err && typeof (err as { error?: unknown }).error === 'string'
+              ? (err as { error: string }).error
+              : 'FCM registration failed';
+          emitAppToast(`Ошибка регистрации push: ${msg}`, 'error');
         });
         removeListeners.push(() => {
           void regErrorListener.remove();
