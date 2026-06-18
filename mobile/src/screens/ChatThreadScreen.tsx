@@ -233,6 +233,10 @@ export function ChatThreadScreen() {
     [memberId],
   );
 
+  const handleSwipeReply = useCallback((message: MessageWithSender) => {
+    setReplyTo(message);
+  }, []);
+
   const convTitle = conversation ? getConversationTitle(conversation) : title || 'Чат';
   const convAvatarUrl = conversation ? getConversationAvatarUrl(conversation) : null;
 
@@ -313,6 +317,7 @@ export function ChatThreadScreen() {
               isOwn={isOwn}
               showSenderName={showSender}
               onLongPress={handleLongPress}
+              onSwipeReply={handleSwipeReply}
             />
           );
         }}

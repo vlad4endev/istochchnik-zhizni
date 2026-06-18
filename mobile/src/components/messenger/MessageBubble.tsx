@@ -1,6 +1,20 @@
+import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
-import { useMemo } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useMemo, useRef } from 'react';
+import {
+  ActivityIndicator,
+  PanResponder,
+  Platform,
+  StyleSheet,
+  Text,
+  Vibration,
+  View,
+} from 'react-native';
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+} from 'react-native-reanimated';
 
 import type { MessageWithSender } from '../../api/messenger';
 import { resolveApiOrigin } from '../../lib/config';
@@ -10,14 +24,18 @@ import {
   messagePreviewText,
   normalizeChatDisplayText,
 } from '../../lib/messengerUtils';
-import { androidRipple, messengerTextProps } from '../../theme/messenger';
+import { MESSENGER_BRAND, messengerTextProps } from '../../theme/messenger';
 import { useTheme } from '../../theme';
+
+const SWIPE_REPLY_THRESHOLD = 52;
+const LONG_PRESS_MS = 520;
 
 interface MessageBubbleProps {
   message: MessageWithSender;
   isOwn: boolean;
   showSenderName: boolean;
   onLongPress?: (message: MessageWithSender) => void;
+  onSwipeReply?: (message: MessageWithSender) => void;
 }
 
 export function MessageBubble({
@@ -25,9 +43,14 @@ export function MessageBubble({
   isOwn,
   showSenderName,
   onLongPress,
+  onSwipeReply,
 }: MessageBubbleProps) {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors, isOwn), [colors, isOwn]);
+  const translateX = useSharedValue(0);
+  const replyOpacity = useSharedValue(0);
+  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const didSwipe = useRef(false);
 
   const isPending = message.status === 'sending';
   const isError = message.status === 'error';
@@ -49,6 +72,79 @@ export function MessageBubble({
     : payloadType === 'text'
       ? normalizeChatDisplayText(message.content)
       : messagePreviewText(message);
+
+  const clearLongPressTimer = () => {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
+  };
+
+  const panResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onStartShouldSetPanResponder: () => false,
+        onMoveShouldSetPanResponder: (_, gesture) =>
+          Math.abs(gesture.dx) > 10 && Math.abs(gesture.dx) > Math.abs(gesture.dy) * 1.8,
+        onPanResponderTerminationRequest: () => false,
+        onPanResponderGrant: () => {
+          didSwipe.current = false;
+          if (!onLongPress) return;
+          longPressTimer.current = setTimeout(() => {
+            if (!didSwipe.current) {
+              onLongPress(message);
+            }
+          }, LONG_PRESS_MS);
+        },
+        onPanResponderMove: (_, gesture) => {
+          if (Math.abs(gesture.dx) > 12) {
+            didSwipe.current = true;
+            clearLongPressTimer();
+          }
+
+          let dx = gesture.dx;
+          if (isOwn) {
+            dx = Math.min(0, dx);
+            dx = Math.max(dx, -72);
+          } else {
+            dx = Math.max(0, dx);
+            dx = Math.min(dx, 72);
+          }
+
+          translateX.value = dx;
+          replyOpacity.value = Math.min(1, Math.abs(dx) / SWIPE_REPLY_THRESHOLD);
+        },
+        onPanResponderRelease: (_, gesture) => {
+          clearLongPressTimer();
+          const triggered = isOwn
+            ? gesture.dx < -SWIPE_REPLY_THRESHOLD
+            : gesture.dx > SWIPE_REPLY_THRESHOLD;
+          if (triggered && onSwipeReply) {
+            onSwipeReply(message);
+            if (Platform.OS !== 'web') {
+              Vibration.vibrate(45);
+            }
+          }
+          translateX.value = withSpring(0, { stiffness: 420, damping: 32 });
+          replyOpacity.value = withSpring(0);
+        },
+        onPanResponderTerminate: () => {
+          clearLongPressTimer();
+          translateX.value = withSpring(0, { stiffness: 420, damping: 32 });
+          replyOpacity.value = withSpring(0);
+        },
+      }),
+    [isOwn, message, onLongPress, onSwipeReply, replyOpacity, translateX],
+  );
+
+  const bubbleAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: translateX.value }],
+  }));
+
+  const replyIconAnimatedStyle = useAnimatedStyle(() => ({
+    opacity: replyOpacity.value,
+    transform: [{ scale: 0.85 + replyOpacity.value * 0.15 }],
+  }));
 
   const bubble = (
     <View style={[styles.bubble, isOwn ? styles.bubbleOwn : styles.bubbleOther]}>
@@ -98,19 +194,32 @@ export function MessageBubble({
     </View>
   );
 
+  const interactive = onLongPress || onSwipeReply;
+
   return (
     <View style={[styles.row, isOwn ? styles.rowOwn : styles.rowOther]}>
-      {onLongPress ? (
-        <Pressable
-          onLongPress={() => onLongPress(message)}
-          android_ripple={androidRipple}
-          style={({ pressed }) => [pressed ? { opacity: 0.92 } : null]}
+      <View style={styles.swipeWrap}>
+        <Animated.View
+          style={[
+            styles.replyIcon,
+            isOwn ? styles.replyIconOwn : styles.replyIconOther,
+            replyIconAnimatedStyle,
+          ]}
+          pointerEvents="none"
         >
-          {bubble}
-        </Pressable>
-      ) : (
-        bubble
-      )}
+          <View style={styles.replyIconCircle}>
+            <Ionicons name="arrow-undo" size={18} color={MESSENGER_BRAND} />
+          </View>
+        </Animated.View>
+
+        {interactive ? (
+          <Animated.View style={bubbleAnimatedStyle} {...panResponder.panHandlers}>
+            {bubble}
+          </Animated.View>
+        ) : (
+          bubble
+        )}
+      </View>
     </View>
   );
 }
@@ -128,12 +237,39 @@ function createStyles(colors: ReturnType<typeof useTheme>['colors'], isOwn: bool
     rowOther: {
       justifyContent: 'flex-start',
     },
+    swipeWrap: {
+      position: 'relative',
+      maxWidth: '88%',
+    },
+    replyIcon: {
+      position: 'absolute',
+      top: '50%',
+      marginTop: -18,
+      zIndex: 0,
+    },
+    replyIconOwn: {
+      right: 8,
+    },
+    replyIconOther: {
+      left: 8,
+    },
+    replyIconCircle: {
+      width: 36,
+      height: 36,
+      borderRadius: 18,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: 'rgba(139,26,26,0.1)',
+      borderWidth: 1,
+      borderColor: 'rgba(139,26,26,0.2)',
+    },
     bubble: {
-      maxWidth: '82%',
+      maxWidth: '100%',
       borderRadius: 16,
       paddingHorizontal: 12,
       paddingVertical: 8,
       gap: 4,
+      zIndex: 1,
     },
     bubbleOwn: {
       backgroundColor: colors.primary,
