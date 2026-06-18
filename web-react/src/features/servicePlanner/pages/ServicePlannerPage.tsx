@@ -2611,7 +2611,7 @@ export function ServicePlannerPage() {
           >
             {draft.status === 'published' ? 'Опубликован' : 'Черновик'}
           </span>
-          <span className="inline-flex items-center gap-1">
+          <span className="hidden items-center gap-1 sm:inline-flex">
             <LuUsers className="h-4 w-4" /> {timedBlocks.length} блоков / {totalDuration} мин
           </span>
         </div>
@@ -2770,26 +2770,32 @@ export function ServicePlannerPage() {
       </section>
 
       <section className="rounded-2xl border border-stone-200 bg-white p-3 shadow-sm">
-        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-stone-500 max-lg:hidden">Составление программы</p>
-        <div className="relative">
-          {/* UX #5: маска справа намекает на горизонтальный скролл кнопок на узком экране */}
-          <div className="flex gap-2 overflow-x-auto pb-1 [mask-image:linear-gradient(to_right,black_85%,transparent_100%)] md:grid md:grid-cols-4 md:overflow-visible md:pb-0 md:[mask-image:none]">
+        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-stone-500 max-lg:hidden">
+          Составление программы
+        </p>
+        <div className="mb-3 flex items-center justify-between gap-2 lg:hidden">
+          <p className="text-sm font-bold text-stone-900">Программа</p>
+          <span className="text-xs font-semibold text-stone-500">
+            {timedBlocks.length} блоков · {totalDuration} мин
+          </span>
+        </div>
+        <div className="mb-3 grid grid-cols-2 gap-2 md:grid-cols-4">
           <button
             type="button"
             onClick={addPlanBlock}
             disabled={createBlockMut.isPending || blockTypes.length === 0}
-            className="inline-flex min-h-[40px] shrink-0 items-center justify-center gap-2 rounded-xl border border-stone-300 px-3 py-2 text-sm font-semibold text-stone-700 enabled:hover:border-primary enabled:hover:text-primary disabled:cursor-not-allowed disabled:opacity-60 md:min-h-[44px] md:min-w-0"
+            className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-xl border border-stone-300 px-3 py-2 text-sm font-semibold text-stone-700 enabled:hover:border-primary enabled:hover:text-primary disabled:cursor-not-allowed disabled:opacity-60"
           >
-            <LuPlus className="h-4 w-4" />
+            <LuPlus className="h-4 w-4 shrink-0" />
             Добавить блок
           </button>
           <button
             type="button"
             onClick={addSeparatorBlock}
             disabled={createBlockMut.isPending || blockTypes.length === 0}
-            className="inline-flex min-h-[40px] shrink-0 items-center justify-center gap-2 rounded-xl border border-stone-300 px-3 py-2 text-sm font-semibold text-stone-700 enabled:hover:border-primary enabled:hover:text-primary disabled:cursor-not-allowed disabled:opacity-60 md:min-h-[44px] md:min-w-0"
+            className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-xl border border-stone-300 px-3 py-2 text-sm font-semibold text-stone-700 enabled:hover:border-primary enabled:hover:text-primary disabled:cursor-not-allowed disabled:opacity-60"
           >
-            <LuPlus className="h-4 w-4" />
+            <LuPlus className="h-4 w-4 shrink-0" />
             Разделитель
           </button>
           <button
@@ -2800,7 +2806,7 @@ export function ServicePlannerPage() {
               void updatePlanMut.mutateAsync({ id: draft.id, body: { status } });
             }}
             className={[
-              'inline-flex min-h-[40px] shrink-0 items-center justify-center gap-2 rounded-xl border px-3 py-2 text-sm font-semibold md:min-h-[44px] md:min-w-0',
+              'col-span-2 inline-flex min-h-[44px] items-center justify-center gap-2 rounded-xl border px-3 py-2 text-sm font-semibold md:col-span-1',
               draft.status === 'draft'
                 ? 'border-emerald-300 text-emerald-700 hover:bg-emerald-50'
                 : 'border-amber-300 text-amber-700 hover:bg-amber-50',
@@ -2808,9 +2814,8 @@ export function ServicePlannerPage() {
           >
             {draft.status === 'draft' ? 'Опубликовать' : 'Вернуть в черновик'}
           </button>
-          </div>
         </div>
-        <div className="mt-2 hidden md:block">
+        <div className="mb-3 hidden md:block">
           {isBlocksOnlyEditor ? (
             <p className="mb-2 text-xs text-stone-500">Сохраняются изменения в блоках (настройки плана недоступны).</p>
           ) : null}
@@ -2826,15 +2831,6 @@ export function ServicePlannerPage() {
             <LuSave className="h-4 w-4" />
             {isBlocksOnlyEditor ? 'Сохранить блоки' : 'Сохранить сейчас'}
           </button>
-        </div>
-      </section>
-
-      <section className="rounded-2xl border border-stone-200 bg-white p-2 shadow-sm max-lg:border-primary/20 max-lg:bg-primary/[0.02] sm:p-3">
-        <div className="mb-2 flex items-center justify-between gap-2 lg:hidden">
-          <p className="text-sm font-bold text-stone-900">Программа</p>
-          <span className="text-xs font-semibold text-stone-500">
-            {timedBlocks.length} блоков · {totalDuration} мин
-          </span>
         </div>
         <DragDropContext onDragEnd={onDragEnd}>
           <Droppable droppableId="service-planner-blocks">
