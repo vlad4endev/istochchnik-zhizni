@@ -64,6 +64,7 @@ import { useAuthStore } from '../../auth/authStore';
 import { useProfileDraftStore } from '../../profile/profileDraftStore';
 import { useCoordinatorNoteEditorRequestStore } from '../coordinatorNoteEditorRequestStore';
 import { LimitedRegistrationDashboard } from '../components/LimitedRegistrationDashboard';
+import { BirthdayBlock } from '../components/BirthdayBlock';
 import { DashboardSkeleton } from '@/components/skeletons/DashboardSkeleton';
 import { keys } from '@/lib/queryKeys';
 import { fetchServicePlan, fetchServicePlans, type ServicePlanDetails, type ServicePlanListItem } from '../../servicePlanner/api';
@@ -1190,27 +1191,25 @@ function DashboardMain() {
               </div>
             </button>
 
-            <section
+            <div
               className={[
-                'order-3 rounded-[14px] border border-[#F9C0D0] bg-gradient-to-br from-[#FFF0F3] to-[#FFE4EC] p-4 transition hover:-translate-y-0.5 hover:shadow-[0_4px_16px_rgba(107,45,62,0.1)]',
+                'order-3',
                 showNearestPreacherWidget ? 'col-span-2' : 'col-span-4',
               ].join(' ')}
             >
-              <p className="text-[11px] font-semibold tracking-[0.02em] text-[#C23D57]">Дни рождения</p>
-              {birthdaysThisWeek[0] ? (
-                <div className="mt-3 flex items-start gap-3">
-                  <div className="grid h-[42px] w-[42px] shrink-0 place-items-center rounded-[11px] bg-[#E8536B] text-white">
-                    <span className="text-lg" aria-hidden>🎂</span>
-                  </div>
-                  <div className="min-w-0">
-                    <p className="truncate text-[14px] font-semibold text-[#3D1520]">{birthdaysThisWeek[0].name}</p>
-                    <p className="mt-1 text-xs text-[#C23D57]">{formatBirthdayChipDate(birthdaysThisWeek[0].week_date)}</p>
-                  </div>
-                </div>
+              {birthdaysThisWeek.length > 0 ? (
+                <BirthdayBlock
+                  birthdays={birthdaysThisWeek}
+                  onMessage={(person) => navigate(`/messenger`)}
+                  onSeeAll={() => navigate('/members')}
+                />
               ) : (
-                <p className="mt-3 text-sm font-medium text-[#C23D57]">На этой неделе дней рождения не запланировано.</p>
+                <section className="h-full rounded-[14px] border border-[#F9C0D0] bg-gradient-to-br from-[#FFF0F3] to-[#FFE4EC] p-4">
+                  <p className="text-[11px] font-semibold tracking-[0.02em] text-[#C23D57]">Дни рождения</p>
+                  <p className="mt-3 text-sm font-medium text-[#C23D57]">На этой неделе дней рождения не запланировано.</p>
+                </section>
               )}
-            </section>
+            </div>
 
             {!isParishionerGuest ? (
               <button
@@ -1443,23 +1442,13 @@ function DashboardMain() {
 
         <div className="dashboard-grid grid grid-cols-1 gap-3.5 min-[769px]:grid-cols-2 min-[769px]:gap-4 lg:hidden [&>*]:min-w-0 [&>*]:max-lg:w-full">
           {birthdaysThisWeek.length > 0 ? (
-            <section className="overflow-hidden rounded-2xl border border-[#F9C0D0] bg-gradient-to-br from-[#FFF0F3] to-[#FFE4EC] p-4 shadow-[var(--shadow-card)] min-[769px]:col-span-2 sm:p-5">
-              <p className="text-[11px] font-semibold tracking-[0.02em] text-[#C23D57]">
-                Предстоящие дни рождения на этой неделе
-              </p>
-              <div className="mt-3 flex flex-wrap gap-2">
-                {birthdaysThisWeek.map((row) => (
-                  <span
-                    key={`${row.id}-${row.week_date}`}
-                    className="inline-flex items-center gap-2 rounded-2xl border border-[#F9C0D0] bg-white/90 px-3 py-2 text-sm font-bold text-[#3D1520]"
-                  >
-                    <span aria-hidden>🎉</span>
-                    <span>{row.name}</span>
-                    <span className="text-[#C23D57]">{formatBirthdayChipDate(row.week_date)}</span>
-                  </span>
-                ))}
-              </div>
-            </section>
+            <div className="min-[769px]:col-span-2">
+              <BirthdayBlock
+                birthdays={birthdaysThisWeek}
+                onMessage={(person) => navigate(`/messenger`)}
+                onSeeAll={() => navigate('/members')}
+              />
+            </div>
           ) : null}
 
           {showNearestPreacherWidget ? (

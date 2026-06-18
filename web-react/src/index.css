@@ -1087,6 +1087,23 @@ nav.app-bottom-nav {
   animation: bpm-pulse var(--bpm-duration, 0.5s) ease-in-out infinite;
 }
 
+/* === BirthdayBlock: пульсирующее кольцо вокруг аватара именинника «Сегодня» === */
+@keyframes bdayRing {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: 0.35; transform: scale(1.07); }
+}
+.bday-ring {
+  position: absolute;
+  inset: -3px;
+  border-radius: 50%;
+  border: 2px solid #7D3640;
+  animation: bdayRing 2s ease-in-out infinite;
+  pointer-events: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .bday-ring { animation: none; }
+}
+
 /* === PWA: safe-area поддержка === */
 .studio-layout {
   /* safe-area только в StudioTopBar / dock — не дублируем на корне */
