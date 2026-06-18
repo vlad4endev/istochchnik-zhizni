@@ -501,11 +501,6 @@ html.app-keyboard-open main.app-main-content.page-content {
   padding-bottom: 0;
 }
 
-/* Планировщик: панель «Сохранить сейчас» привязана к высоте таббара; при клавиатуре таббар скрыт — убираем зазор снизу. */
-html.app-keyboard-open .service-planner-mobile-save {
-  bottom: 0 !important;
-}
-
 html.dark .rounded-2xl,
 html.dark .rounded-xl {
   background-color: var(--bg-card);
