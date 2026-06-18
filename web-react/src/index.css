@@ -1089,14 +1089,22 @@ nav.app-bottom-nav {
 
 /* === BirthdayBlock: пульсирующее кольцо вокруг аватара именинника «Сегодня» === */
 @keyframes bdayRing {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50%       { opacity: 0.35; transform: scale(1.07); }
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.2; }
 }
 .bday-ring {
   position: absolute;
-  inset: -3px;
+  top: -3px;
+  right: -3px;
+  bottom: -3px;
+  left: -3px;
   border-radius: 50%;
   border: 2px solid #7D3640;
+  /* Изолируем анимацию в отдельный compositing layer — без этого на Android
+     Chrome animation во время скролла вызывает repaint всего scroll-container. */
+  -webkit-transform: translateZ(0);
+  transform: translateZ(0);
+  will-change: opacity;
   animation: bdayRing 2s ease-in-out infinite;
   pointer-events: none;
 }

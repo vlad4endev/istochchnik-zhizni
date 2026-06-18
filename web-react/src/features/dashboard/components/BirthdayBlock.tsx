@@ -93,10 +93,10 @@ export function BirthdayBlock({
         Дни рождения
       </div>
 
-      {/* Card */}
+      {/* Card — translateZ(0) изолирует overflow:hidden+border-radius от scroll-repaint на Android */}
       <div
         className="overflow-hidden rounded-[20px] bg-white"
-        style={{ border: '1px solid rgba(0,0,0,0.07)' }}
+        style={{ border: '1px solid rgba(0,0,0,0.07)', transform: 'translateZ(0)', WebkitTransform: 'translateZ(0)' }}
       >
         {thisWeek.map((person, i) => (
           <BirthdayRow
@@ -178,7 +178,7 @@ function BirthdayRow({
             alignItems: 'center',
             gap: 7,
             marginBottom: 3,
-            flexWrap: 'wrap',
+            overflow: 'hidden',
           }}
         >
           <span
