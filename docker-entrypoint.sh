@@ -7,6 +7,12 @@ if [ "$(id -u)" = "0" ]; then
   if ! chown -R app:app "$UPLOADS_ROOT" 2>/dev/null; then
     echo "[entrypoint] warning: chown $UPLOADS_ROOT failed (NFS/special FS?); uploads may break for user app"
   fi
+  SECRETS_ROOT="${SECRETS_DIR:-/app/secrets}"
+  if [ -d "$SECRETS_ROOT" ]; then
+    if ! chown -R app:app "$SECRETS_ROOT" 2>/dev/null; then
+      echo "[entrypoint] warning: chown $SECRETS_ROOT failed; Firebase key may be unreadable for user app"
+    fi
+  fi
   exec su-exec app "$@"
 fi
 exec "$@"
