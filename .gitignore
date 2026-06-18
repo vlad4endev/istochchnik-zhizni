@@ -13,6 +13,10 @@ backups/
 supabase/.temp/
 istochchnik-zhizni/
 
+# Firebase / секреты (ключи не в git)
+secrets/*.json
+!secrets/.gitkeep
+
 # Артефакты для Dockerfile.web.prebuilt (генерируются локально)
 release/web/*
 !release/web/.gitkeep

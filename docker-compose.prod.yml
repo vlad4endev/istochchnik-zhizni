@@ -43,6 +43,7 @@ services:
         condition: service_healthy
     volumes:
       - api_uploads_prod:/app/uploads
+      - ./secrets:/app/secrets:ro
       # Либо каталог на VPS (проще бэкапить): раскомментируйте и задайте UPLOADS_DIR=/data/uploads
       # - /var/lib/istochnik/uploads:/data/uploads
     environment:
@@ -59,6 +60,8 @@ services:
       VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
       VAPID_SUBJECT: ${VAPID_SUBJECT:-}
       FIREBASE_SERVICE_ACCOUNT_JSON: ${FIREBASE_SERVICE_ACCOUNT_JSON:-}
+      FIREBASE_SERVICE_ACCOUNT_PATH: ${FIREBASE_SERVICE_ACCOUNT_PATH:-/app/secrets/firebase-sa.json}
+      GOOGLE_APPLICATION_CREDENTIALS: ${GOOGLE_APPLICATION_CREDENTIALS:-/app/secrets/firebase-sa.json}
       TRUST_PROXY: ${TRUST_PROXY:-true}
       # Если задано redis://redis:6379, в стеке должен быть сервис redis (иначе getaddrinfo EAI_AGAIN redis).
       # Варианты: подключить docker-compose.redis-addon.yml ИЛИ очистить REDIS_URL и оставить REDIS_REALTIME_ENABLED=false.

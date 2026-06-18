@@ -7,6 +7,7 @@ services:
     restart: unless-stopped
     volumes:
       - ./uploads:/app/uploads
+      - ./secrets:/app/secrets:ro
     environment:
       PORT: "40978"
       DATABASE_URL: ${DATABASE_URL:?DATABASE_URL must be set}
@@ -35,6 +36,8 @@ services:
       VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
       VAPID_SUBJECT: ${VAPID_SUBJECT:-}
       FIREBASE_SERVICE_ACCOUNT_JSON: ${FIREBASE_SERVICE_ACCOUNT_JSON:-}
+      FIREBASE_SERVICE_ACCOUNT_PATH: ${FIREBASE_SERVICE_ACCOUNT_PATH:-/app/secrets/firebase-sa.json}
+      GOOGLE_APPLICATION_CREDENTIALS: ${GOOGLE_APPLICATION_CREDENTIALS:-/app/secrets/firebase-sa.json}
       # Хост RSS-фида для DNS healthcheck подкастов.
       PODCAST_RSS_HEALTH_HOST: ${PODCAST_RSS_HEALTH_HOST:-rss.castbox.fm}
     networks:

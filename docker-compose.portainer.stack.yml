@@ -33,6 +33,7 @@ services:
     restart: unless-stopped
     volumes:
       - istochnik_app_uploads:/app/uploads
+      - ./secrets:/app/secrets:ro
     environment:
       PORT: "40978"
       UPLOADS_DIR: ${UPLOADS_DIR:-}
@@ -48,6 +49,8 @@ services:
       VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
       VAPID_SUBJECT: ${VAPID_SUBJECT:-}
       FIREBASE_SERVICE_ACCOUNT_JSON: ${FIREBASE_SERVICE_ACCOUNT_JSON:-}
+      FIREBASE_SERVICE_ACCOUNT_PATH: ${FIREBASE_SERVICE_ACCOUNT_PATH:-/app/secrets/firebase-sa.json}
+      GOOGLE_APPLICATION_CREDENTIALS: ${GOOGLE_APPLICATION_CREDENTIALS:-/app/secrets/firebase-sa.json}
       TRUST_PROXY: ${TRUST_PROXY:-true}
       REDIS_REALTIME_ENABLED: ${REDIS_REALTIME_ENABLED:-false}
       REDIS_URL: ${REDIS_URL:-}
