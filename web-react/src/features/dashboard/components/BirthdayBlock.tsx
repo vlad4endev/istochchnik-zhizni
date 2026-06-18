@@ -70,11 +70,9 @@ const STATUS_ORDER: Record<BirthdayStatus, number> = { today: 0, tomorrow: 1, so
 export function BirthdayBlock({
   birthdays,
   onMessage,
-  onSeeAll,
 }: {
   birthdays: BirthdayWeekItem[];
   onMessage: (person: BirthdayWeekItem) => void;
-  onSeeAll: () => void;
 }) {
   const thisWeek = useMemo<BirthdayWithStatus[]>(() => {
     const today = new Date();
@@ -91,23 +89,13 @@ export function BirthdayBlock({
   return (
     <section>
       {/* Section header */}
-      <div className="mb-2.5 flex items-center justify-between">
-        <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[0.07em] text-[#888]">
-          <FaCakeCandles
-            size={13}
-            style={{ color: BRAND, flexShrink: 0 }}
-            aria-hidden
-          />
-          Дни рождения
-        </div>
-        <button
-          type="button"
-          onClick={onSeeAll}
-          className="tap-highlight-transparent touch-manipulation rounded-lg border-0 px-2.5 py-1 text-xs font-semibold"
-          style={{ background: BRAND_LIGHT, color: BRAND, cursor: 'pointer' }}
-        >
-          Все →
-        </button>
+      <div className="mb-2.5 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[0.07em] text-[#888]">
+        <FaCakeCandles
+          size={13}
+          style={{ color: BRAND, flexShrink: 0 }}
+          aria-hidden
+        />
+        Дни рождения
       </div>
 
       {/* Card */}

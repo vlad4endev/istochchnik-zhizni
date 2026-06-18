@@ -1195,7 +1195,6 @@ function DashboardMain() {
                 <BirthdayBlock
                   birthdays={birthdaysThisWeek}
                   onMessage={(person) => navigate(`/messenger?conversationId=draft:${person.id}`)}
-                  onSeeAll={() => navigate('/members')}
                 />
               ) : (
                 <section className="h-full rounded-[14px] border border-[#F9C0D0] bg-gradient-to-br from-[#FFF0F3] to-[#FFE4EC] p-4">
@@ -1440,7 +1439,6 @@ function DashboardMain() {
               <BirthdayBlock
                 birthdays={birthdaysThisWeek}
                 onMessage={(person) => navigate(`/messenger?conversationId=draft:${person.id}`)}
-                onSeeAll={() => navigate('/members')}
               />
             </div>
           ) : null}
