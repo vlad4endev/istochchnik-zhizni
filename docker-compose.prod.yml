@@ -58,6 +58,7 @@ services:
       VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
       VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
       VAPID_SUBJECT: ${VAPID_SUBJECT:-}
+      FIREBASE_SERVICE_ACCOUNT_JSON: ${FIREBASE_SERVICE_ACCOUNT_JSON:-}
       TRUST_PROXY: ${TRUST_PROXY:-true}
       # Если задано redis://redis:6379, в стеке должен быть сервис redis (иначе getaddrinfo EAI_AGAIN redis).
       # Варианты: подключить docker-compose.redis-addon.yml ИЛИ очистить REDIS_URL и оставить REDIS_REALTIME_ENABLED=false.
