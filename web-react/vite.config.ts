@@ -87,7 +87,7 @@ export default defineConfig(({ mode }) => {
       VitePWA({
         registerType: 'prompt',
         injectRegister: false,
-        includeAssets: ['assets/favicon.ico', 'assets/apple-touch-icon-180x180.png'],
+        includeAssets: ['assets/favicon.ico', 'assets/apple-touch-icon-180x180.png', 'offline.html'],
         manifest: {
           id: pwaManifestId,
           name: 'Моя церковь - цифровая платформа',
