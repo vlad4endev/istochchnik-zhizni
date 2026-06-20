@@ -14,7 +14,7 @@ export function SearchBar({ value, onChange }: SearchBarProps) {
 
   return (
     <View style={styles.searchContainer}>
-      <Ionicons name="search" size={16} color="#aaa" />
+      <Ionicons name="search" size={14} color="#aaa" />
       <TextInput
         value={value}
         onChangeText={onChange}
@@ -34,17 +34,19 @@ function createStyles() {
     searchContainer: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 8,
+      gap: 6,
       backgroundColor: searchBarBg,
-      borderRadius: 12,
-      paddingHorizontal: 12,
-      paddingVertical: Platform.select({ ios: 8, android: 6, default: 8 }),
+      borderRadius: 10,
+      paddingHorizontal: 10,
+      paddingVertical: Platform.select({ ios: 6, android: 4, default: 6 }),
+      minHeight: 32,
       marginHorizontal: 16,
-      marginBottom: 8,
+      marginBottom: 6,
     },
     searchInput: {
       flex: 1,
-      fontSize: 15,
+      fontSize: 14,
+      lineHeight: 18,
       color: '#111',
       padding: 0,
       margin: 0,

@@ -152,7 +152,7 @@ function ChatListSearch({
 }) {
   return (
     <label className="tg-chatlist-search">
-      <LuSearch size={16} className="tg-chatlist-search__icon" aria-hidden />
+      <LuSearch size={14} className="tg-chatlist-search__icon" aria-hidden />
       <input
         type="search"
         className="tg-chatlist-search__input"
